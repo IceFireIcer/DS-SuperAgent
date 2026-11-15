@@ -92,7 +92,7 @@ export class Attentions {
   }
 
   async answer(tx: AsyncTx, request: { ticketId: string; attentionId: string; text: string; commandId: string; actorId: string;
-    sourceEventId?: string; expectedAssignmentId?: string; expectedVersion?: number }) {
+    sourceEventId?: string; expectedGeneration?: string; expectedVersion?: number }) {
     identifier(request.ticketId, 'ticketId'); identifier(request.attentionId, 'attentionId'); identifier(request.commandId, 'commandId'); identifier(request.actorId, 'actorId')
     if (!request.text.trim() || Buffer.byteLength(request.text) > 65536) throw new CoreError('INVALID_INPUT', 'An Attention answer needs bounded nonempty text.')
     const attention = await tx.get<Attention>('attention', request.attentionId)
@@ -104,7 +104,10 @@ export class Attentions {
     if (attention.ticketId !== request.ticketId || head.attentionId !== attention.id || !waitingCurrent) {
       throw new CoreError('ATTENTION_STALE', 'This question is no longer the current waiting-human constraint.')
     }
-    if (request.expectedAssignmentId !== undefined && attention.assignmentId !== request.expectedAssignmentId
+    const assignment = request.expectedGeneration === undefined ? undefined
+      : await tx.get<{ id: string; generation: string }>('assignment', request.ticketId)
+    if (request.expectedGeneration !== undefined && (!assignment || assignment.generation !== request.expectedGeneration
+      || attention.assignmentId !== assignment.id)
       || request.expectedVersion !== undefined && attention.sequence !== request.expectedVersion) {
       throw new CoreError('ATTENTION_STALE', 'This question version no longer matches the work card.')
     }

@@ -2142,19 +2142,19 @@ export class Engine {
   }
 
   async answerAttention(command: { commandId: string; attentionId: string; text: string; sourceEventId?: string;
-    ticketId?: string; expectedAssignmentId?: string; expectedVersion?: number }, receiver?: Engine) {
+    ticketId?: string; expectedGeneration?: string; expectedVersion?: number }, receiver?: Engine) {
     await this.ensurePolicy()
     if (receiver) {
       if (!(receiver instanceof Engine) || receiver.instanceId !== this.instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The answer receiver must be a trusted Engine in this Instance.')
       await receiver.ensurePolicy()
     }
-    if (!command || Object.keys(command).some(key => !['commandId', 'attentionId', 'text', 'sourceEventId', 'ticketId', 'expectedAssignmentId', 'expectedVersion'].includes(key))) {
+    if (!command || Object.keys(command).some(key => !['commandId', 'attentionId', 'text', 'sourceEventId', 'ticketId', 'expectedGeneration', 'expectedVersion'].includes(key))) {
       throw new CoreError('INVALID_INPUT', 'Answering Attention accepts one exact question and bounded answer only.')
     }
     identifier(command.commandId, 'commandId'); identifier(command.attentionId, 'attentionId')
     if (command.sourceEventId !== undefined) identifier(command.sourceEventId, 'sourceEventId')
     if (command.ticketId !== undefined) identifier(command.ticketId, 'ticketId')
-    if (command.expectedAssignmentId !== undefined) identifier(command.expectedAssignmentId, 'expectedAssignmentId')
+    if (command.expectedGeneration !== undefined) identifier(command.expectedGeneration, 'expectedGeneration')
     if (command.expectedVersion !== undefined && (!Number.isSafeInteger(command.expectedVersion) || command.expectedVersion < 1)) {
       throw new CoreError('INVALID_INPUT', 'The Attention version must be a positive integer.')
     }
@@ -2162,7 +2162,7 @@ export class Engine {
     const commandKey = this.commandKey(command.commandId)
     const fingerprint = createHash('sha256').update(canonicalJson(['attention-answer-v2', this.source.sourceInstanceId, this.source.actorId,
       command.attentionId, command.text, command.sourceEventId ?? null, command.ticketId ?? null,
-      command.expectedAssignmentId ?? null, command.expectedVersion ?? null,
+      command.expectedGeneration ?? null, command.expectedVersion ?? null,
       ...(receiver ? [receiver.source.sourceInstanceId, receiver.source.actorId] : [])])).digest('hex')
     return commandTransaction(this.storage, this.instanceId, async tx => {
       const existing = await tx.get<{ fingerprint: string; attentionId: string; inputId: string }>('work-command', commandKey)
@@ -2236,7 +2236,7 @@ export class Engine {
       if (!foreign && !originTicket && !managedOrigin && actorId !== attention.destination.actorId) throw new CoreError('ANSWER_ACTOR_MISMATCH', 'The current actor does not match the question recipient.')
       const result = await this.attentions.answer(tx, { ticketId: attention.ticketId, attentionId: attention.id, text: answerText,
         commandId: command.commandId, actorId, ...(command.sourceEventId ? { sourceEventId: command.sourceEventId } : {}),
-        ...(command.expectedAssignmentId === undefined ? {} : { expectedAssignmentId: command.expectedAssignmentId }),
+        ...(command.expectedGeneration === undefined ? {} : { expectedGeneration: command.expectedGeneration }),
         ...(command.expectedVersion === undefined ? {} : { expectedVersion: command.expectedVersion }) })
       if (command.sourceEventId && crossQuestionInput?.association) {
         result.input = { ...result.input, association: { ...crossQuestionInput.association, sourceActorId: actorId,
@@ -2248,14 +2248,13 @@ export class Engine {
     })
   }
 
-  private async requireMainWorkControl(request: { instanceId: string; workItemId: string; ticketId: string; expectedGeneration: string }) {
+  private async requireMainWorkControl(request: { instanceId: string; workItemId: string; ticketId: string }) {
     if (request.instanceId !== this.instanceId || !this.source.allowedActorIds.includes(this.source.actorId)) {
       throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The work control is outside the authorized Main Instance.')
     }
     if (!this.execution) throw new CoreError('WORKER_NOT_ENABLED', 'Work controls require a configured native runtime.')
     identifier(request.workItemId, 'workItemId')
     identifier(request.ticketId, 'ticketId')
-    identifier(request.expectedGeneration, 'expectedGeneration')
     const binding = await this.main.open({ instanceId: request.instanceId })
     await this.storage.transaction(this.instanceId, async tx => {
       const item = await tx.get<MainWorkItem>('work-item', request.workItemId)
@@ -2267,12 +2266,6 @@ export class Engine {
         throw new CoreError('NOT_FOUND', 'The named work card does not match this Main Instance.')
       }
     })
-    const conversation = await this.execution.conversation(request.ticketId)
-    const current = conversation.assignments[0]
-    if (!current || current.generation !== request.expectedGeneration) {
-      throw new CoreError('WORK_VERSION_STALE', 'The work card changed before this command; refresh before trying again.')
-    }
-    return { conversation, current }
   }
 
   async answerMainAttention(command: { instanceId: string; commandId: string; workItemId: string; ticketId: string;
@@ -2282,17 +2275,12 @@ export class Engine {
       throw new CoreError('INVALID_INPUT', 'Answering a Main work card accepts only its exact current question and text.')
     }
     identifier(command.attentionId, 'attentionId')
-    const { current } = await this.requireMainWorkControl(command)
-    const attention = await this.attentions.get(command.attentionId)
-    if (!attention || attention.instanceId !== this.instanceId || attention.ticketId !== command.ticketId
-      || attention.assignmentId !== current.id || attention.sequence !== command.attentionVersion) {
-      throw new CoreError('ATTENTION_STALE', 'The work card question changed before this answer.')
-    }
+    await this.requireMainWorkControl(command)
     const result = await this.answerAttention({
       commandId: command.commandId,
       attentionId: command.attentionId,
       ticketId: command.ticketId,
-      expectedAssignmentId: current.id,
+      expectedGeneration: command.expectedGeneration,
       expectedVersion: command.attentionVersion,
       text: command.text,
     })

@@ -97,6 +97,28 @@ test('stopping the current Main reply leaves the committed delegated work runnin
   const work = page.works.find(item => item.outcome?.status === 'success')
   assert.equal(work?.control?.permissions.actorId, 'alice')
   assert.equal(work?.control?.assignment?.generation.length > 0, true)
+  const initialGeneration = work.control.assignment.generation
+  const stopReplay = { instanceId: 'personal', commandId: 'idempotent-stop', workItemId: work.brief.workItemId,
+    ticketId: work.receipt.ticketId, expectedGeneration: initialGeneration, reason: 'Exercise stop replay.' }
+  const resumeReplay = { instanceId: 'personal', commandId: 'idempotent-resume', workItemId: work.brief.workItemId,
+    ticketId: work.receipt.ticketId, expectedGeneration: initialGeneration }
+  await engine.stopMainWork(stopReplay)
+  await engine.resumeMainWork(resumeReplay)
+  await until(async () => (await engine.conversation(work.receipt.ticketId)).assignments[0].generation !== initialGeneration,
+    'the resumed generation')
+  const resumedGeneration = (await engine.conversation(work.receipt.ticketId)).assignments[0].generation
+  await engine.stopMainWork(stopReplay)
+  await engine.resumeMainWork(resumeReplay)
+  assert.equal((await engine.conversation(work.receipt.ticketId)).assignments[0].generation, resumedGeneration)
+  await until(async () => (await engine.conversation(work.receipt.ticketId)).status === 'ready', 'the resumed result')
+  const retryReplay = { instanceId: 'personal', commandId: 'idempotent-retry', workItemId: work.brief.workItemId,
+    ticketId: work.receipt.ticketId, expectedGeneration: resumedGeneration, reason: 'Exercise retry replay.' }
+  await engine.retryMainWork(retryReplay)
+  await until(async () => (await engine.conversation(work.receipt.ticketId)).assignments[0].generation !== resumedGeneration,
+    'the retried generation')
+  const retriedGeneration = (await engine.conversation(work.receipt.ticketId)).assignments[0].generation
+  await engine.retryMainWork(retryReplay)
+  assert.equal((await engine.conversation(work.receipt.ticketId)).assignments[0].generation, retriedGeneration)
   for (const action of [
     () => engine.stopTicket({ commandId: 'direct-stale-stop', ticketId: work.receipt.ticketId,
       reason: 'Reject the raced stop.', expectedGeneration: 'stale-generation' }),
@@ -235,7 +257,7 @@ test('a Main work card answers only the exact current Attention and records the 
   await engine.setProcessingPaused({ commandId: 'pause-answer-continuation', paused: true })
   await assert.rejects(intruder.answerMainAttention(command), error => ['ANSWER_ACTOR_MISMATCH', 'SOURCE_NOT_AUTHORIZED'].includes(error.code))
   await assert.rejects(engine.answerMainAttention({ ...command, commandId: 'stale-version', attentionVersion: 99 }), { code: 'ATTENTION_STALE' })
-  await assert.rejects(engine.answerMainAttention({ ...command, commandId: 'stale-generation', expectedGeneration: 'old-generation' }), { code: 'WORK_VERSION_STALE' })
+  await assert.rejects(engine.answerMainAttention({ ...command, commandId: 'stale-generation', expectedGeneration: 'old-generation' }), { code: 'ATTENTION_STALE' })
   const answered = await engine.answerMainAttention(command)
   assert.equal(answered.attention.status, 'answered')
   assert.equal(answered.attention.assignmentId, assignment.id)
@@ -250,8 +272,15 @@ test('a Main work card answers only the exact current Attention and records the 
   assert.equal(final?.control?.attention?.answerText, 'Yes')
   assert.equal(final?.control?.permissions.canAnswer, false)
   assert.match(final?.update?.summary ?? '', /Authorized answer v1/u)
+  await engine.retryMainWork({ instanceId: 'personal', commandId: 'answer-card-rollover', workItemId: waiting.brief.workItemId,
+    ticketId: waiting.receipt.ticketId, expectedGeneration: assignment.generation, reason: 'Advance the answered Assignment.' })
+  await until(async () => (await engine.conversation(waiting.receipt.ticketId)).assignments[0].generation !== assignment.generation,
+    'the answered Assignment rollover')
+  const rolledGeneration = (await engine.conversation(waiting.receipt.ticketId)).assignments[0].generation
+  const rolledReplay = await engine.answerMainAttention(command)
+  assert.equal(rolledReplay.input.id, answered.input.id)
   await engine.stopMainWork({ instanceId: 'personal', commandId: 'stop-answered-card', workItemId: waiting.brief.workItemId,
-    ticketId: waiting.receipt.ticketId, expectedGeneration: assignment.generation, reason: 'Stop after the answer.' })
+    ticketId: waiting.receipt.ticketId, expectedGeneration: rolledGeneration, reason: 'Stop after the answer.' })
   const stopped = (await engine.getMainConversation({ instanceId: 'personal' })).works[0]
   assert.equal(stopped?.status, 'stopped')
   assert.equal(stopped?.control?.permissions.canAnswer, false)
