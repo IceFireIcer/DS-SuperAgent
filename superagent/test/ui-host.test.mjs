@@ -100,7 +100,7 @@ test('the product HTTP boundary chats with Main and refuses cross-scope and unav
   assert.equal(JSON.stringify(keyResult).includes(secret), false)
   assert.equal(JSON.stringify(await call('settings', { instanceId })).includes(secret), false)
   credentialFailure = true
-  const failedSecret = 'sk-sensitive-provider-error'
+  const failedSecret = 'sk-test-provider-error'
   const failedKey = await call('provider-key', { instanceId, provider: 'mock', value: failedSecret })
   assert.equal(failedKey.error.code, 'INVALID_CONFIG')
   assert.equal(JSON.stringify(failedKey).includes(failedSecret), false)
