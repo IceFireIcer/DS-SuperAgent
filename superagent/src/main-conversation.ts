@@ -11,7 +11,7 @@ import type { MainSourceHandoff, MainSourceView } from './main-source.js'
 export interface MainBinding { instanceId: string; mainId: string; mainSessionId: string; routerSessionId: string; generation: number }
 interface MainState extends MainBinding { sequence: number; activeCommand?: string }
 export type MainMessageStatus = 'queued' | 'running' | 'stopping' | 'stopped' | 'completed' | 'interrupted' | 'failed'
-export interface MainMessageSource {
+export interface MainExternalSource {
   kind: 'github' | 'feishu' | 'schedule'
   sourceInstanceId: string
   eventId: string
@@ -20,6 +20,7 @@ export interface MainMessageSource {
   authorId: string
   reference: string
 }
+export type MainMessageSource = MainExternalSource | { kind: 'client'; clientId: string }
 export interface MainMessage {
   id: string
   sequence: number
@@ -111,7 +112,7 @@ export interface MainHealth {
   errorCode?: string
 }
 export interface MainAddress { instanceId: string }
-export interface MainSend extends MainAddress { commandId: string; text: string; environmentId?: string }
+export interface MainSend extends MainAddress { commandId: string; text: string; environmentId?: string; clientId?: string }
 export interface MainSessionRollover {
   id: string
   mainId: string
@@ -331,12 +332,16 @@ export class MainConversation {
   async send(request: MainSend) {
     this.authorize(request)
     identifier(request.commandId, 'commandId')
+    if (request.clientId !== undefined) identifier(request.clientId, 'clientId')
     if (request.environmentId !== undefined) identifier(request.environmentId, 'environmentId')
     if (typeof request.text !== 'string' || !request.text.trim() || Buffer.byteLength(request.text) > 32768) throw new CoreError('INVALID_INPUT', 'Send a nonempty Main message of at most 32768 bytes.')
     const binding = await this.open(request)
-    const key = createHash('sha256').update(canonicalJson([this.source.sourceInstanceId, this.source.actorId, request.commandId])).digest('hex')
+    const key = createHash('sha256').update(canonicalJson(request.clientId
+      ? [this.source.sourceInstanceId, this.source.actorId, request.clientId, request.commandId]
+      : [this.source.sourceInstanceId, this.source.actorId, request.commandId])).digest('hex')
     const fingerprint = createHash('sha256').update(canonicalJson([request.instanceId, request.text,
-      ...(request.environmentId === undefined ? [] : [request.environmentId])])).digest('hex')
+      ...(request.environmentId === undefined ? [] : [request.environmentId]),
+      ...(request.clientId === undefined ? [] : [request.clientId])])).digest('hex')
     await commandTransaction(this.storage, this.instanceId, async tx => {
       const prior = await tx.get<MainCommand>('main-command', key)
       if (prior) {
@@ -352,7 +357,8 @@ export class MainConversation {
       const sequence = state.sequence + 1
       const messageId = `main-input-${randomUUID()}`
       const environmentId = request.environmentId ?? await this.defaultEnvironment?.(tx) ?? null
-      await tx.insert<MainMessage>('main-message', messageKey(sequence), { id: messageId, sequence, role: 'user', text: request.text, createdAt: Date.now(), status: 'queued' })
+      await tx.insert<MainMessage>('main-message', messageKey(sequence), { id: messageId, sequence, role: 'user', text: request.text,
+        createdAt: Date.now(), status: 'queued', ...(request.clientId ? { source: { kind: 'client', clientId: request.clientId } as const } : {}) })
       const command: MainCommand = { fingerprint, messageId, userSequence: sequence, status: 'queued', updatedAt: Date.now(),
         environmentId }
       await tx.insert<MainCommand>('main-command', key, command)

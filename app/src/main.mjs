@@ -25,6 +25,7 @@ import { HostProcess } from './host-process.mjs'
 import { copySessions, findTeam, importTeam, teamInUse, userDshHome } from './import.mjs'
 import { copyData, moveProblem } from './move-data.mjs'
 import { CHECK_PROFILE, SUPERAGENT_PROFILE, activeProfile, profileHome } from './profile.mjs'
+import { RemoteProductClient } from './remote-product-client.mjs'
 import { createShell, SHELL_TEXT } from './shell.mjs'
 import { UPDATE_TEXT, watchReleases, watchUpdates } from './updates.mjs'
 import { createDeferredPrompt } from './update-prompt.mjs'
@@ -45,6 +46,8 @@ const IPC = {
   appUpdateState: 'ds-bot:app-update-state', appUpdateCheck: 'ds-bot:app-update-check',
   appUpdateInstall: 'ds-bot:app-update-install', appUpdateOpen: 'ds-bot:app-update-open',
   appUpdateChanged: 'ds-bot:app-update-changed',
+  productConnect: 'ds-superagent:client-connect', productDisconnect: 'ds-superagent:client-disconnect',
+  productStatus: 'ds-superagent:client-status', productCall: 'ds-superagent:client-call', productEvents: 'ds-superagent:client-events',
 }
 // A cookie export larger than this is not a cookie export.
 const IMPORT_FILE_MAX = 32 * 1024 * 1024
@@ -109,6 +112,7 @@ const botViews = new BotViews({
   onChange: state => mainWindow?.webContents.send(IPC.browserViewChanged, state),
 })
 const cookieImports = new CookieImports()
+const remoteProduct = new RemoteProductClient()
 
 // The window and the tray: closing the window hides it, the tray is the way back to it and
 // the tray's Quit is the one ordinary way out.
@@ -313,6 +317,11 @@ async function start() {
     assertWindow(event)
     return fixed ? false : moveData(typeof workspace === 'string' && isAbsolute(workspace) ? workspace : places.workspace)
   })
+  ipcMain.handle(IPC.productConnect, (event, connection) => { assertWindow(event); return remoteProduct.connect(connection) })
+  ipcMain.handle(IPC.productDisconnect, (event) => { assertWindow(event); return remoteProduct.disconnect() })
+  ipcMain.handle(IPC.productStatus, (event) => { assertWindow(event); return remoteProduct.status() })
+  ipcMain.handle(IPC.productCall, (event, endpoint, payload) => { assertWindow(event); return remoteProduct.call(endpoint, payload) })
+  ipcMain.handle(IPC.productEvents, (event) => { assertWindow(event); return remoteProduct.events() })
   // ds-bot's Bot browsers: one webview per lease, in the storage of the Bot's key.
   ipcMain.handle(IPC.browserAcquire, (event, key) => {
     assertWindow(event)

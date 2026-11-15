@@ -15,7 +15,19 @@ import { installLocale, t } from './i18n.js'
 import { allThemes, themeCss } from './themes.js'
 import { SHELL_CSS, CONVERSATION_CSS, installCompiledStyles, installStyles } from './styles.js'
 
+const clientBridge = () => window.dsBotApp?.productClient
+let activeHost = 'local'
+
 export async function productCall(endpoint, payload = {}) {
+  const bridge = clientBridge()
+  if (activeHost === 'remote') {
+    if (!bridge) throw new Error(t('The remote Host connection is unavailable.'))
+    return bridge.call(endpoint, payload)
+  }
+  if (bridge && (await bridge.status()).connected) {
+    activeHost = 'remote'
+    return bridge.call(endpoint, payload)
+  }
   const response = await fetch('api/product', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint, payload }) })
   let result
   try { result = await response.json() } catch { throw new Error(t('Could not reach Main. Check that the app is running.')) }
@@ -55,6 +67,8 @@ export function applyProduct(ctx) {
     activityLoading: false,
     activityError: null,
     settingsOpen: false,
+    connection: null,
+    connectOpen: false,
     directoryOptions: null,
     directoryOverride: null,
     directoryBusy: false,
@@ -223,10 +237,19 @@ export function applyProduct(ctx) {
 
   const refresh = async () => {
     try {
+      const bridge = clientBridge()
+      const connection = bridge ? await bridge.status() : { connected: false }
+      const previous = view.getSnapshot().connection
+      if (previous && (previous.connected !== connection.connected
+        || previous.connected && (previous.address !== connection.address || previous.instanceId !== connection.instanceId
+          || previous.client.id !== connection.client.id))) { location.reload(); return }
+      if (connection.connected) activeHost = 'remote'
+      if (!stopped) view.set(state => ({ ...state, connection }))
+      if (connection.connected) await bridge.events()
       const current = view.getSnapshot()
       const binding = current.binding ?? await productCall('open')
       if (current.route === 'main') await refreshMain(binding)
-      await loadDirectories(binding)
+      if (!connection.connected) await loadDirectories(binding)
       await loadObservations(binding)
       const selected = view.getSnapshot().route === 'observe' ? view.getSnapshot().selectedObservation : null
       if (selected) await loadObservation(binding, selected)
@@ -264,6 +287,7 @@ export function applyProduct(ctx) {
     merged: t('Pull request merged'), closed: t('Pull request closed') })[state] ?? state
   function MainWorkCard({ work, onEvidence }) {
     const state = useView()
+    const canCommand = !state.connection?.connected || state.connection.capabilities.includes('command')
     const [controlBusy, setControlBusy] = useState(null)
     const [controlError, setControlError] = useState(null)
     const [attentionDraft, setAttentionDraft] = useState('')
@@ -332,7 +356,7 @@ export function applyProduct(ctx) {
       attention ? h('div', { className: 'bt-main-work-attention' },
         h('p', { className: 'bt-main-work-id' }, `${t('Question version')} ${attention.version} · ${attention.status}`),
         h('p', null, attention.question),
-        attention.status === 'waiting' && control.permissions.canAnswer && assignment
+        attention.status === 'waiting' && canCommand && control.permissions.canAnswer && assignment
           ? h('form', { className: 'bt-main-work-answer', onSubmit: answer },
             attention.options.length ? h('div', { className: 'bt-main-work-options' }, attention.options.map(option =>
               h('button', { key: option, type: 'button', className: 'bt-soft', onClick: () => setAttentionDraft(option) }, option))) : null,
@@ -363,7 +387,7 @@ export function applyProduct(ctx) {
         h('p', { className: 'bt-main-work-detail' }, `${t('Next step')}: ${work.outcome.nextStep}`),
         work.outcome.artifacts.map(artifact => h('p', { key: artifact.path, className: 'bt-main-work-artifact' },
           h('code', null, artifact.path), ' ', h('span', null, `${artifact.bytes} ${t('bytes')} · ${artifact.sha256.slice(0, 12)}`)))) : null,
-      control ? h('div', { className: 'bt-main-work-controls' },
+      control && canCommand ? h('div', { className: 'bt-main-work-controls' },
         control.permissions.canStop ? h('button', { type: 'button', className: 'bt-soft',
           disabled: Boolean(controlBusy), onClick: () => runControl('work-stop') },
         controlBusy === 'work-stop' ? t('Stopping…') : t('Stop work')) : null,
@@ -377,7 +401,7 @@ export function applyProduct(ctx) {
         h('button', { type: 'button', className: 'bt-soft', onClick: () => onEvidence(work) }, t('View original request'))) : null)
   }
 
-  function MainSourceCard({ source, instanceId, onRefresh }) {
+  function MainSourceCard({ source, instanceId, onRefresh, canCommand }) {
     const [receipts, setReceipts] = useState(source.deliveries ?? [])
     const [receiptCursor, setReceiptCursor] = useState(source.deliveryCursor ?? null)
     const [receiptsBusy, setReceiptsBusy] = useState(false)
@@ -434,7 +458,7 @@ export function applyProduct(ctx) {
         },
         h('p', null, `${deliveryPurposeCopy(delivery.purpose)}: ${deliveryCopy(delivery.state)}${delivery.reason ? ` · ${delivery.reason}` : ''}`),
         h('p', null, `${delivery.destination.sourceInstanceId} · ${delivery.destination.eventId}${delivery.destination.threadId ? ` · ${delivery.destination.threadId}` : ''} · @${delivery.destination.actorId}`),
-        delivery.state === 'unknown' || (delivery.state === 'pending' && delivery.attempts > 0) ? h('button', { type: 'button', className: 'bt-soft',
+        canCommand && (delivery.state === 'unknown' || (delivery.state === 'pending' && delivery.attempts > 0)) ? h('button', { type: 'button', className: 'bt-soft',
           disabled: reconciling === delivery.id, onClick: () => void reconcile(delivery) },
         reconciling === delivery.id ? t('Reconciling…') : t('Reconcile delivery')) : null)),
         receiptCursor ? h('button', { type: 'button', className: 'bt-soft', disabled: receiptsBusy,
@@ -447,6 +471,7 @@ export function applyProduct(ctx) {
 
   function MainConversation() {
     const state = useView()
+    const canCommand = !state.connection?.connected || state.connection.capabilities.includes('command')
     const [sending, setSending] = useState(false)
     const [sendError, setSendError] = useState(null)
     const bottom = useRef(null)
@@ -462,7 +487,8 @@ export function applyProduct(ctx) {
     }, [state.messages.length])
     const send = async text => {
       if (!state.binding) return false
-      const storageKey = `superagent:pending:${state.binding.instanceId}`
+      const storageKey = `superagent:pending:${state.connection?.connected
+        ? `${state.connection.address}:${state.connection.client.id}` : 'local'}:${state.binding.instanceId}`
       try {
         setSending(true); setSendError(null)
         if (!pending.current) {
@@ -512,8 +538,12 @@ export function applyProduct(ctx) {
           mainHealthCopy(state.health)),
         state.health?.queuedInputs ? h('span', { className: 'bt-main-health-detail' },
           t('{count} inputs queued', { count: state.health.queuedInputs })) : null,
-        h('button', { type: 'button', className: 'bt-icon-btn bt-main-settings', title: t('Settings'),
-          'aria-label': t('Settings'), onClick: () => view.set(current => ({ ...current, settingsOpen: true })) }, h(SlidersIcon))),
+        state.connection?.connected ? h('span', { className: 'bt-main-remote', title: state.connection.address },
+          `${t('Remote Host')} · ${state.connection.client.label}`) : null,
+        clientBridge() ? h('button', { type: 'button', className: 'bt-soft', onClick: () => view.set(current => ({ ...current, connectOpen: true })) },
+          state.connection?.connected ? t('Connection') : t('Connect to Host')) : null,
+        !state.connection?.connected ? h('button', { type: 'button', className: 'bt-icon-btn bt-main-settings', title: t('Settings'),
+          'aria-label': t('Settings'), onClick: () => view.set(current => ({ ...current, settingsOpen: true })) }, h(SlidersIcon)) : null),
       state.health?.state === 'degraded' ? h('p', { className: 'bt-main-health-warning', role: 'alert' },
         t('Main model failed. Durable work facts remain available.')) : null,
       h('div', { className: 'bt-main-history', ref: scroll, onScroll: () => { const node = scroll.current; follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80 } },
@@ -531,14 +561,16 @@ export function applyProduct(ctx) {
                 h('span', null, t('System fact')), h('p', null, message.text))
               : h('div', null,
                 message.source ? h('p', { className: 'bt-main-source-label' },
-                  message.source.kind === 'schedule' ? `${t('Scheduled occurrence')} · ${message.source.objectId}`
-                    : `${t(message.source.kind === 'feishu' ? 'Feishu' : 'GitHub')} · @${message.source.authorId} · ${message.source.objectId}`) : null,
+                  message.source.kind === 'client' ? `${t('Client')} · ${message.source.clientId}`
+                    : message.source.kind === 'schedule' ? `${t('Scheduled occurrence')} · ${message.source.objectId}`
+                      : `${t(message.source.kind === 'feishu' ? 'Feishu' : 'GitHub')} · @${message.source.authorId} · ${message.source.objectId}`) : null,
                 h(ChatRows, { items: [{ kind: message.role === 'main' ? 'bot' : 'user', text: message.text, time: message.createdAt }],
                   sessionId: 'main', roster: emptyRoster, actions: {} }),
                 message.status === 'failed' ? h('p', { className: 'bt-main-error', role: 'status' },
                   t('Main could not finish this reply. Your message is saved.')) : null))),
-          h(FeishuSourceStatus, { instanceId: state.binding?.instanceId, call: productCall }),
-          state.sources.map(source => h(MainSourceCard, { key: source.id, source, instanceId: state.binding?.instanceId, onRefresh: refresh })),
+          !state.connection?.connected ? h(FeishuSourceStatus, { instanceId: state.binding?.instanceId, call: productCall }) : null,
+          state.sources.map(source => h(MainSourceCard, { key: source.id, source, instanceId: state.binding?.instanceId,
+            onRefresh: refresh, canCommand })),
           state.works.map(work => h(MainWorkCard, { key: work.brief.workItemId ?? work.brief.id, work,
             onEvidence: selected => { if (state.binding) void loadMainEvidence(state.binding, selected) } })),
           state.mainEvidenceError && !state.mainEvidence
@@ -556,9 +588,10 @@ export function applyProduct(ctx) {
           stopping ? h('p', { className: 'bt-main-status', role: 'status' }, t('Stopping this Main reply…')) : busy
             ? h('p', { className: 'bt-main-status', role: 'status' }, t('Main is replying…')) : null,
           h('div', { ref: bottom }))),
-      h(MainComposer, { onSend: send, onStop: state.activeTurn ? stop : undefined, busy, stopping, error: sendError ?? state.error,
+      h(MainComposer, { onSend: send, onStop: canCommand && state.activeTurn ? stop : undefined, busy, stopping, readOnly: !canCommand,
+        error: sendError ?? state.error,
         value: state.mainDraft, onValueChange: mainDraft => view.set(current => ({ ...current, mainDraft })),
-        directoryControl: options?.default ? h('div', { className: 'bt-main-directory' },
+        directoryControl: !state.connection?.connected && options?.default ? h('div', { className: 'bt-main-directory' },
           h('span', { className: 'bt-main-label' }, t('Work directory')),
           h(FolderMenu, { value: override?.root, label: t('Work directory'), fallbackLabel: t('Instance default'),
             actions: directoryActions(state.binding), run: promise => void Promise.resolve(promise).catch(error =>
@@ -611,8 +644,8 @@ export function applyProduct(ctx) {
           h('span', { className: 'bt-observation-role' }, observation?.role === 'router' ? 'Router' : 'Worker'),
           h('strong', null, observation?.title ?? state.selectedObservation?.title ?? '')),
         h('span', { className: 'bt-observation-readonly' }, t('Read-only')),
-        h('button', { type: 'button', className: 'bt-icon-btn', title: t('Settings'), 'aria-label': t('Settings'),
-          onClick: () => view.set(current => ({ ...current, settingsOpen: true })) }, h(SlidersIcon))),
+        !state.connection?.connected ? h('button', { type: 'button', className: 'bt-icon-btn', title: t('Settings'), 'aria-label': t('Settings'),
+          onClick: () => view.set(current => ({ ...current, settingsOpen: true })) }, h(SlidersIcon)) : null),
       h('div', { className: 'bt-observation-body' },
         state.observationLoading && !observation ? h('p', { role: 'status', className: 'bt-main-status' }, t('Loading history…')) : null,
         state.observationError ? h('p', { role: 'alert', className: 'bt-main-error' }, state.observationError) : null,
@@ -708,6 +741,9 @@ export function applyProduct(ctx) {
           void refresh()
           setTimeout(() => document.querySelector('#main-message, .bt-main-composer textarea')?.focus(), 0)
         } }, h(BrandMark, { size: 24 }), 'Main'),
+      clientBridge() ? h('button', { type: 'button', className: 'bt-soft',
+        onClick: () => view.set(current => ({ ...current, connectOpen: true })) },
+        state.connection?.connected ? `${t('Remote Host')} · ${state.connection.client.label}` : t('Connect to Host')) : null,
       h('div', { className: 'bt-observation-search' },
         h('label', { htmlFor: 'work-observation-search' }, t('Find activity')),
         h('input', { id: 'work-observation-search', type: 'search', value: search, placeholder: t('Search Router and Worker history'),
@@ -731,6 +767,70 @@ export function applyProduct(ctx) {
       state.observationCursor ? h('button', { type: 'button', className: 'bt-soft bt-observation-more',
         disabled: state.activityLoading, onClick: () => { if (state.binding) void loadObservations(state.binding, { append: true }) } },
       state.activityLoading ? t('Loading…') : t('Load more activity')) : null)
+  }
+
+  function ClientSettings({ binding }) {
+    const [clients, setClients] = useState([])
+    const [label, setLabel] = useState('')
+    const [readOnly, setReadOnly] = useState(false)
+    const [issued, setIssued] = useState(null)
+    const [busy, setBusy] = useState(false)
+    const [error, setError] = useState(null)
+    const pending = useRef(null)
+    const load = async () => setClients(await productCall('clients-list', { instanceId: binding.instanceId }))
+    useEffect(() => { void load().catch(failure => setError(failure.message)) }, [binding.instanceId])
+    const enroll = async event => {
+      event.preventDefault()
+      if (!label.trim() || busy) return
+      setBusy(true); setError(null); setIssued(null)
+      try {
+        const capabilities = readOnly ? ['read'] : ['read', 'command']
+        if (!pending.current || pending.current.label !== label.trim() || pending.current.readOnly !== readOnly) {
+          pending.current = { commandId: crypto.randomUUID(), label: label.trim(), readOnly }
+        }
+        const result = await productCall('client-enroll', { instanceId: binding.instanceId, commandId: pending.current.commandId,
+          label: pending.current.label, capabilities })
+        pending.current = null
+        setLabel('')
+        if (result.token) setIssued(result.token)
+        else setError(t('This enrollment already completed. Its credential cannot be shown again; revoke it and create a new client.'))
+        await load()
+      } catch (failure) { setError(failure.message) }
+      finally { setBusy(false) }
+    }
+    const revoke = async client => {
+      if (busy || !confirm(t('Revoke this client’s access now?'))) return
+      setBusy(true); setError(null); setIssued(null)
+      try {
+        await productCall('client-revoke', { instanceId: binding.instanceId,
+          commandId: `revoke-client:${client.id}`, clientId: client.id, reason: 'Revoked from the product settings.' })
+        await load()
+      } catch (failure) { setError(failure.message) }
+      finally { setBusy(false) }
+    }
+    return h(Card, { title: t('Authorized clients') },
+      h('form', { className: 'bt-main-client-form', onSubmit: event => { void enroll(event) } },
+        h('label', { htmlFor: 'client-label' }, t('Client name')),
+        h('input', { id: 'client-label', className: 'bt-bs-input', value: label, maxLength: 128, required: true,
+          onChange: event => setLabel(event.currentTarget.value) }),
+        h('label', { htmlFor: 'client-scope' }, t('Client access')),
+        h('select', { id: 'client-scope', className: 'bt-select', value: readOnly ? 'read' : 'command',
+          onChange: event => setReadOnly(event.currentTarget.value === 'read') },
+          h('option', { value: 'command' }, t('Read and command')),
+          h('option', { value: 'read' }, t('Read-only'))),
+        h('button', { type: 'submit', className: 'bt-soft', disabled: busy || !label.trim() }, t('Issue credential'))),
+      issued ? h('div', { className: 'bt-main-client-issued', role: 'status' },
+        h('p', null, t('This credential is shown once. Transfer it to the desktop client securely.')),
+        h('input', { type: 'password', readOnly: true, value: issued, 'aria-label': t('Issued client credential') }),
+        h('button', { type: 'button', className: 'bt-soft', onClick: () => {
+          void navigator.clipboard.writeText(issued).catch(() => setError(t('Could not copy the credential.')))
+        } }, t('Copy credential'))) : null,
+      error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
+      clients.map(client => h('div', { key: client.id, className: 'bt-main-client-row' },
+        h('div', null, h('strong', null, client.label), h('span', null, client.id),
+          h('span', null, client.revokedAt ? t('Revoked') : client.grants[0]?.capabilities.includes('command') ? t('Read and command') : t('Read-only'))),
+        client.revokedAt ? null : h('button', { type: 'button', className: 'bt-soft', disabled: busy,
+          onClick: () => { void revoke(client) } }, t('Revoke')))))
   }
 
   function SettingsDialog({ binding, onClose }) {
@@ -974,6 +1074,7 @@ export function applyProduct(ctx) {
                     provider.key.configured ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm bt-bs-danger',
                       disabled: saving, onClick: () => { void saveKey(provider.id, null) } }, t('Remove key')) : null) : h('span', null, t('Set outside this product'))) : null))
                 : h('p', { className: 'bt-main-status' }, t('No provider catalog is available. Configure providers in DSH settings.'))),
+            h(ClientSettings, { binding }),
             h(Card, { title: t('Recent configuration uses') },
               snapshot.uses.length ? snapshot.uses.slice(0, 20).map(use => h('div', { key: use.id, className: 'bt-main-settings-use' },
                 h('span', { className: 'bt-observation-role' }, use.role),
@@ -985,12 +1086,67 @@ export function applyProduct(ctx) {
           close)))
   }
 
+  function ConnectionDialog({ connection, onClose }) {
+    const [address, setAddress] = useState('')
+    const [instanceId, setInstanceId] = useState('personal')
+    const [credential, setCredential] = useState('')
+    const [busy, setBusy] = useState(false)
+    const [error, setError] = useState(null)
+    useEffect(() => { document.getElementById('product-host-address')?.focus() }, [])
+    const connect = async event => {
+      event.preventDefault()
+      if (busy) return
+      setBusy(true); setError(null)
+      try {
+        await clientBridge().connect({ address: address.trim(), instanceId: instanceId.trim(), credential: credential.trim() })
+        setCredential('')
+        location.reload()
+      } catch (failure) {
+        setCredential('')
+        setError(failure.message)
+        setBusy(false)
+      }
+    }
+    const disconnect = async () => {
+      setBusy(true); setError(null)
+      try { await clientBridge().disconnect(); location.reload() }
+      catch (failure) { setError(failure.message); setBusy(false) }
+    }
+    return h('div', { className: 'bt-settings-layer' },
+      h('div', { className: 'bt-scrim', onMouseDown: onClose }),
+      h('div', { className: 'bt-settings bt-main-connect-dialog', role: 'dialog', 'aria-modal': true,
+        'aria-label': t('Host connection'), onKeyDown: event => { if (event.key === 'Escape') onClose() } },
+        h('div', { className: 'bt-settings-main' },
+          h('div', { className: 'bt-settings-head' }, h('h2', null, t('Host connection'))),
+          connection?.connected ? h('div', { className: 'bt-main-connect-body' },
+            h('p', { role: 'status' }, `${t('Remote Host')} · ${connection.address} · ${connection.instanceId}`),
+            h('p', null, `${t('Client')} · ${connection.client.label} · ${connection.capabilities.includes('command') ? t('Read and command') : t('Read-only')}`),
+            error ? h('p', { role: 'alert', className: 'bt-main-error' }, error) : null,
+            h('button', { type: 'button', className: 'bt-soft', disabled: busy, onClick: () => void disconnect() }, t('Disconnect'))) :
+            h('form', { className: 'bt-main-connect-body', onSubmit: event => { void connect(event) } },
+              h('label', { htmlFor: 'product-host-address' }, t('Host address')),
+              h('input', { id: 'product-host-address', type: 'url', required: true, value: address,
+                placeholder: 'https://host.example:8443', onChange: event => setAddress(event.currentTarget.value) }),
+              h('label', { htmlFor: 'product-host-instance' }, t('Instance')),
+              h('input', { id: 'product-host-instance', required: true, value: instanceId,
+                onChange: event => setInstanceId(event.currentTarget.value) }),
+              h('label', { htmlFor: 'product-host-credential' }, t('Client credential')),
+              h('input', { id: 'product-host-credential', type: 'password', required: true, autoComplete: 'off', value: credential,
+                onChange: event => setCredential(event.currentTarget.value) }),
+              h('p', { className: 'bt-main-status' }, t('Use HTTPS or an authorized local SSH tunnel. The credential stays in this app process until disconnect or quit.')),
+              error ? h('p', { role: 'alert', className: 'bt-main-error' }, error) : null,
+              h('button', { type: 'submit', className: 'bt-soft', disabled: busy }, busy ? t('Connecting…') : t('Connect')))),
+          h('button', { type: 'button', className: 'bt-settings-close', 'aria-label': t('Close connection'), onClick: onClose }, h(CloseIcon))))
+  }
+
   function ProductSurface() {
     const state = useView()
     return h(Fragment, null,
       state.route === 'observe' ? h(ObservationConversation) : h(MainConversation),
-      state.settingsOpen && state.binding ? h(SettingsDialog, { binding: state.binding,
-        onClose: () => view.set(current => ({ ...current, settingsOpen: false })) }) : null)
+      state.settingsOpen && state.binding && !state.connection?.connected ? h(SettingsDialog, { binding: state.binding,
+        onClose: () => view.set(current => ({ ...current, settingsOpen: false })) }) : null,
+      state.connectOpen && clientBridge() ? h(ConnectionDialog, { connection: state.connection,
+        onClose: () => view.set(current => ({ ...current, connectOpen: false })) }) : null)
   }
   const shadow = (name, component) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200 }, component))
   ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SCHEDULE_CSS + MODEL_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS, 'main'), 'superagent: existing chat styles')
@@ -1015,6 +1171,22 @@ const PRODUCT_CSS = `
 .bt-main-health-running{border-color:var(--bt-accent);color:var(--bt-ink)}
 .bt-main-health-degraded{border-color:var(--bt-danger);color:var(--bt-danger)}
 .bt-main-health-detail{color:var(--bt-ink-2);font-size:11px;font-weight:400}
+.bt-main-remote{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--bt-ink-2);font-size:11px;font-weight:400}
+.bt-main-connect-dialog{--bt-set-w:min(480px,calc(100vw - 32px));--bt-set-h:auto;width:var(--bt-set-w);height:auto;max-height:calc(100vh - 32px);overflow:auto}
+.bt-main-connect-dialog .bt-settings-main{width:100%;height:auto}
+.bt-main-connect-body{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:16px;color:var(--bt-ink);font-size:13px;line-height:18px}
+.bt-main-connect-body label{font-size:12px;color:var(--bt-ink-2)}
+.bt-main-connect-body input{width:100%;height:36px;box-sizing:border-box;padding:0 10px;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card);color:var(--bt-ink);font:inherit}
+.bt-main-connect-body input:focus-visible{outline:2px solid var(--bt-accent);outline-offset:1px}
+.bt-main-connect-body p{margin:4px 0;overflow-wrap:anywhere}
+.bt-main-connect-body button{min-height:36px}
+.bt-main-client-form{display:flex;align-items:flex-end;flex-wrap:wrap;gap:8px;padding:10px 12px;font-size:12px}
+.bt-main-client-form label{align-self:center;color:var(--bt-ink-2)}
+.bt-main-client-form input{max-width:190px}.bt-main-client-form select{max-width:170px}
+.bt-main-client-issued{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 12px;border-top:1px solid var(--bt-line);font-size:12px}
+.bt-main-client-issued p{width:100%;margin:0}.bt-main-client-issued input{max-width:300px;min-width:0;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card);color:var(--bt-ink);padding:8px}
+.bt-main-client-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border-top:1px solid var(--bt-line);font-size:12px}
+.bt-main-client-row>div{min-width:0;display:flex;flex-direction:column;gap:2px}.bt-main-client-row span{color:var(--bt-ink-2);overflow-wrap:anywhere}
 .bt-main-health-warning{margin:0;padding:8px 24px;border-bottom:.5px solid var(--bt-line-2);background:var(--bt-card);color:var(--bt-danger);font-size:12px;line-height:18px}
 .bt-main-settings{margin-left:2px}
 .bt-main-history{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:24px}

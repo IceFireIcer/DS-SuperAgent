@@ -18,7 +18,7 @@ export interface ClientEnrollment { client: ClientIdentity; token?: string }
 export interface ClientEvent {
   seq: number
   key: string
-  kind: 'receipt' | 'state' | 'attention' | 'result'
+  kind: 'receipt' | 'state' | 'attention' | 'result' | 'product-receipt' | 'main' | 'work' | 'observation'
   ticketId?: string
   at: number
   data: unknown
@@ -53,6 +53,7 @@ interface SupervisionItem {
 }
 
 const capabilities: ClientCapability[] = ['read', 'command']
+const productEvents = new Set<ClientEvent['kind']>(['product-receipt', 'main', 'work', 'observation'])
 const credentialPattern = /^sc1\.([A-Za-z0-9-]{8,64})\.([A-Za-z0-9_-]{32,128})$/u
 const sequenceDigits = 12
 
@@ -222,6 +223,27 @@ export class ClientAccess {
     })
   }
 
+  async readProductEvents(after?: string, limit = 100): Promise<ClientEventPage> {
+    let cursor = cursorValue(after)
+    if (!Number.isInteger(limit) || limit < 1 || limit > 500) throw new CoreError('INVALID_INPUT', 'The client event page must be between 1 and 500 items.')
+    return this.storage.transaction(this.instanceId, async transaction => {
+      const items: ClientEvent[] = []
+      let hasMore = false
+      for (let pageCount = 0; pageCount < 10; pageCount++) {
+        const page = await transaction.scan<ClientEvent>('client-event', { limit: 100, ...(cursor ? { after: cursor } : {}) })
+        for (const event of page.items) {
+          cursor = event.id
+          if (productEvents.has(event.value.kind)) items.push(event.value)
+          if (items.length === limit) break
+        }
+        hasMore = items.length === limit
+          ? page.cursor !== undefined || cursor !== page.items.at(-1)?.id : page.cursor !== undefined
+        if (items.length === limit || !page.cursor) break
+      }
+      return { items, cursor: String(cursor ? Number(cursor) : 0), hasMore }
+    })
+  }
+
   /** Appends only facts that are new for their stable key, so reconnecting clients see each transition once. */
   async record(entries: ClientEventInput[]): Promise<string> {
     if (!Array.isArray(entries) || entries.length > 1000) throw new CoreError('INVALID_INPUT', 'Client events must be a bounded list.')
@@ -229,10 +251,36 @@ export class ClientAccess {
     return this.storage.transaction(this.instanceId, transaction => this.append(transaction, entries))
   }
 
-  recordReceipt(commandId: string, receipt: unknown, clientId: string): Promise<string> {
+  recordReceipt(commandId: string, receipt: unknown, clientId: string, scoped = false): Promise<string> {
     const ticketId = this.ticketOf(receipt)
-    return this.record([{ key: `receipt:${digest(commandId).toString('hex')}`, kind: 'receipt',
+    return this.record([{ key: `${scoped ? 'product-receipt' : 'receipt'}:${digest(scoped ? canonicalJson([clientId, commandId]) : commandId).toString('hex')}`,
+      kind: scoped ? 'product-receipt' : 'receipt',
       ...(ticketId ? { ticketId } : {}), data: { commandId, receipt, clientId } }])
+  }
+
+  async recordProductSnapshot(history: { messages: Array<{ id: string; sequence: number; status: string }>;
+    works: Array<{ brief: { workItemId: string }; status: string; receipt: { status: string }; control?: { ticketId: string;
+      attention?: { id: string; version: number; status: string }; stop?: { state: string } }; outcome?: { summary: string } }> },
+  observations: { items: Array<{ id: string; role: string; status: string; generation?: string }> }): Promise<void> {
+    const entries: ClientEventInput[] = []
+    for (const message of history.messages) {
+      entries.push({ key: `main:${digest(canonicalJson([message.id, message.status])).toString('hex')}`, kind: 'main',
+        data: { id: message.id, sequence: message.sequence, status: message.status } })
+    }
+    for (const work of history.works) {
+      const data = { workItemId: work.brief.workItemId, status: work.status, receipt: work.receipt.status,
+        ...(work.control?.attention ? { attention: { id: work.control.attention.id, version: work.control.attention.version,
+          status: work.control.attention.status } } : {}),
+        ...(work.control?.stop ? { stop: work.control.stop.state } : {}),
+        ...(work.outcome ? { outcome: work.outcome.summary } : {}) }
+      entries.push({ key: `work:${digest(canonicalJson(data)).toString('hex')}`, kind: 'work',
+        ...(work.control?.ticketId ? { ticketId: work.control.ticketId } : {}), data })
+    }
+    for (const item of observations.items) {
+      const data = { id: item.id, role: item.role, status: item.status, generation: item.generation ?? null }
+      entries.push({ key: `observation:${digest(canonicalJson(data)).toString('hex')}`, kind: 'observation', data })
+    }
+    for (let start = 0; start < entries.length; start += 1000) await this.record(entries.slice(start, start + 1000))
   }
 
   /** Projects supervision changes into the journal; the journal itself stays the durable cursor source. */
@@ -267,7 +315,7 @@ export class ClientAccess {
     let added = 0
     for (const entry of entries) {
       if (typeof entry.key !== 'string' || !entry.key || Buffer.byteLength(entry.key) > 512) throw new CoreError('INVALID_INPUT', 'A client event key must be a bounded nonempty string.')
-      if (!['receipt', 'state', 'attention', 'result'].includes(entry.kind)) throw new CoreError('INVALID_INPUT', 'Unknown client event kind.')
+      if (!['receipt', 'state', 'attention', 'result', 'product-receipt', 'main', 'work', 'observation'].includes(entry.kind)) throw new CoreError('INVALID_INPUT', 'Unknown client event kind.')
       if (await transaction.get('client-event-key', entry.key)) continue
       seq += 1
       await transaction.insert<ClientEvent>('client-event', sequenceId(seq), { seq, key: entry.key, kind: entry.kind,

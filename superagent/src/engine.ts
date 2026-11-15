@@ -1435,17 +1435,24 @@ export class Engine {
     }
   }
 
+  private requireProductScheduleActor() {
+    if ((this.source.kind ?? 'desktop') !== 'desktop' || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Only an authorized product actor can manage schedules.')
+    }
+    this.assertAuthoringActor()
+  }
+
   async createSchedule(request: ScheduleCreate) {
-    if (!this.source.allowedActorIds.includes(this.source.actorId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This actor cannot create schedules.')
+    this.requireProductScheduleActor()
     await this.main.open({ instanceId: request?.instanceId })
     return this.schedules.create(request)
   }
-  cancelSchedule(request: { instanceId: string; commandId: string; ruleId: string }) { return this.schedules.cancel(request) }
-  listSchedules(request: { instanceId: string }) { return this.schedules.list(request) }
-  getSchedule(request: { instanceId: string; ruleId: string }) { return this.schedules.get(request) }
-  getScheduleSource(request: { instanceId: string }) { return this.schedules.sourceState(request) }
-  setScheduleSource(request: { instanceId: string; commandId: string; enabled: boolean }) { return this.schedules.setSource(request) }
-  tickSchedules(now?: number) { return this.schedules.tick(now) }
+  cancelSchedule(request: { instanceId: string; commandId: string; ruleId: string }) { this.requireProductScheduleActor(); return this.schedules.cancel(request) }
+  listSchedules(request: { instanceId: string }) { this.requireProductScheduleActor(); return this.schedules.list(request) }
+  getSchedule(request: { instanceId: string; ruleId: string }) { this.requireProductScheduleActor(); return this.schedules.get(request) }
+  getScheduleSource(request: { instanceId: string }) { this.requireProductScheduleActor(); return this.schedules.sourceState(request) }
+  setScheduleSource(request: { instanceId: string; commandId: string; enabled: boolean }) { this.requireProductScheduleActor(); return this.schedules.setSource(request) }
+  tickSchedules(now?: number) { this.requireProductScheduleActor(); return this.schedules.tick(now) }
 
   private async receiveScheduledOccurrence(rule: ProductSchedule, occurrence: ScheduledOccurrence): Promise<Partial<ScheduledOccurrence>> {
     await this.ensurePolicy()
