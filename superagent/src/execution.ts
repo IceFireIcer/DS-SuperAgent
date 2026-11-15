@@ -773,7 +773,7 @@ export class Execution {
       if (ticket.constraint.kind === 'stopped') {
         if (assignment && assignment.state !== 'ended') await this.saveAssignment(transaction, { ...assignment, state: 'ended' })
         const stop = await this.activeStop(transaction, ticketId)
-        const live = await this.hasBackgroundWork(transaction, ticketId) || await this.previewCleanupPending(transaction, ticketId)
+        const live = await this.stopCleanupPending(transaction, ticketId)
         // Background work that is only now being cancelled is not evidence of a quiet range; confirm it below.
         if (stop && !stop.pendingDeviceConfirmation && !live) {
           await transaction.replace('stop-state', stop.id, { ...stop, state: 'stopped', cancellationConfirmedAt: stop.cancellationConfirmedAt ?? Date.now() })
@@ -1061,22 +1061,35 @@ export class Execution {
     })) : []
     // Background work outlives the turn: the tool returns a job identity at once, and the completion event
     // arrives as a later turn on this same Session instead of holding the Router or this step open.
-    const startLocalJob = async (name: string, start: () => Promise<LocalJob>) => {
+    const startLocalJob = async (name: string, start: (jobId: string) => Promise<LocalJob>) => {
       if (reported) throw new CoreError('REPORT_SEALED', 'Background work is sealed after the ready report.')
       if (askedAttention) throw new CoreError('ATTENTION_ACTIVE', 'Background work is sealed after asking a human question.')
-      const job = await start()
-      let record: JobRecord | undefined
+      const jobId = randomUUID()
+      this.jobs!.reserveLocalStart(jobId)
+      let job: LocalJob | undefined
       try {
-        record = await this.storage.transaction(this.instanceId, async transaction => {
+        await this.storage.transaction(this.instanceId, async transaction => {
           const current = await transaction.get<Assignment>('assignment', ticketId)
           if (current?.id !== assignment.id || current.state !== 'running') throw new CoreError('STALE_ASSIGNMENT', 'The starting Assignment is no longer current.')
-          return this.jobs!.start(transaction, { ticketId, assignmentId: assignment.id, generation: assignment.generation,
-            environmentId: assignment.environment!.id, environmentKind: environment?.kind ?? 'local', command: name, job })
+          return this.jobs!.beginLocal(transaction, { ticketId, assignmentId: assignment.id, generation: assignment.generation,
+            environmentId: assignment.environment!.id, environmentKind: environment?.kind ?? 'local', command: name, jobId })
         })
-      } catch (error) { this.jobs!.abandon(job); throw error }
-      if (!record) throw new CoreError('INCOMPLETE_STATE', 'The background job start did not record a job.')
-      this.jobs!.attach(record)
-      return JSON.stringify({ jobId: record.id, command: record.command, state: record.state, startedAt: record.startedAt })
+        job = await start(jobId)
+        this.jobs!.provideLocalStart(jobId, job)
+        const record = await this.storage.transaction(this.instanceId, async transaction => {
+          const current = await transaction.get<Assignment>('assignment', ticketId)
+          if (current?.id !== assignment.id || current.state !== 'running') return undefined
+          return this.jobs!.activateLocal(transaction, { ticketId, jobId, job: job! })
+        })
+        if (!record || record.state !== 'running') throw new CoreError('STALE_ASSIGNMENT', 'The starting Assignment is no longer current.')
+        this.jobs!.attach(record)
+        if (this.jobs!.localStartWasStopped(jobId)) throw new CoreError('STALE_ASSIGNMENT', 'The starting Assignment was stopped.')
+        return JSON.stringify({ jobId: record.id, command: record.command, state: record.state, startedAt: record.startedAt })
+      } catch (error) {
+        if (job) await this.jobs!.abandon(job)
+        await this.storage.transaction(this.instanceId, transaction => this.jobs!.failLocalStart(transaction, ticketId, jobId)).catch(() => undefined)
+        throw error
+      } finally { this.jobs!.finishLocalStart(jobId) }
     }
     const jobTools: NativeTool[] = bound && this.jobs && hasCommand
       && (bound.startCommand || bound.startShell || bound.startTerminal) ? [
@@ -1107,7 +1120,7 @@ export class Execution {
               record = await this.storage.transaction(this.instanceId, transaction => this.jobs!.activateRemote(transaction, {
                 ticketId, jobId: intent.id, job, ...(job.remote ? { remote: job.remote } : {}) }))
             } catch (error) {
-              this.jobs!.abandon(job)
+              await this.jobs!.abandon(job)
               await this.storage.transaction(this.instanceId, transaction => this.jobs!.failRemoteStart(transaction, {
                 ticketId, jobId: intent.id,
                 reason: error instanceof CoreError ? error.message : 'The device start response could not be activated.' })).catch(() => {})
@@ -1117,18 +1130,18 @@ export class Execution {
             this.jobs!.attach(record)
             return JSON.stringify({ jobId: record.id, command: record.command, state: record.state, startedAt: record.startedAt })
           }
-          return startLocalJob(args.name!, () => bound!.startCommand!(args.name!))
+          return startLocalJob(args.name!, jobId => bound!.startCommand!(args.name!, jobId))
         },
       }] : []),
       ...(bound.startShell ? [{
         name: 'start_shell', description: 'Start a bounded shell command as a managed background job in this Assignment directory. Its completion returns to this Worker.',
         parameters: { command: { type: 'string' as const, required: true as const } },
-        execute: (args: Record<string, string>) => startLocalJob('shell', () => bound.startShell!(args.command!)),
+        execute: (args: Record<string, string>) => startLocalJob('shell', jobId => bound.startShell!(args.command!, jobId)),
       }] : []),
       ...(bound.startTerminal ? [{
         name: 'start_terminal', description: 'Start a managed PTY command in this Assignment directory. Its output and confirmed exit return to this Worker as a background job.',
         parameters: { command: { type: 'string' as const, required: true as const } },
-        execute: (args: Record<string, string>) => startLocalJob('terminal', () => bound.startTerminal!(args.command!)),
+        execute: (args: Record<string, string>) => startLocalJob('terminal', jobId => bound.startTerminal!(args.command!, jobId)),
       }] : []),
       {
         name: 'job_status',
@@ -1510,7 +1523,7 @@ export class Execution {
       })
       if (await this.activeStop(transaction, ticketId)) {
         // Background work is cancelled and confirmed after this transaction; claiming `stopped` here would be a lie.
-        if (!await this.hasBackgroundWork(transaction, ticketId) && !await this.previewCleanupPending(transaction, ticketId)) {
+        if (!await this.stopCleanupPending(transaction, ticketId)) {
           await this.confirmStop(assignment.id, ticketId, transaction)
         }
         await this.slots?.release(transaction, { ticketId, assignmentId: assignment.id })
@@ -1798,6 +1811,15 @@ export class Execution {
     return this.subagents ? this.subagents.hasActive(transaction, ticketId, assignmentId) : false
   }
 
+  private async stopCleanupPending(transaction: AsyncTx, ticketId: string) {
+    if (await this.hasBackgroundWork(transaction, ticketId) || await this.previewCleanupPending(transaction, ticketId)) return true
+    if (!this.jobs) return false
+    for (const job of await this.jobs.listIn(transaction, ticketId)) {
+      if (job.state === 'unknown' && !await this.jobs.isPreview(transaction, ticketId, job.id)) return true
+    }
+    return false
+  }
+
   private async activePreviewJobs(transaction: AsyncTx, ticketId: string): Promise<string[]> {
     if (!this.previews) return []
     return (await this.previews.pending(transaction, ticketId))
@@ -1910,6 +1932,7 @@ export class Execution {
       const stop = await this.activeStop(transaction, ticketId)
       if (!stop) return
       if (stop.pendingDeviceConfirmation && !remoteConfirmed) return
+      if (await this.stopCleanupPending(transaction, ticketId)) return
       const current = await transaction.get<Assignment>('assignment', ticketId)
       if (current && (assignmentId === undefined || current.id === assignmentId) && current.state !== 'ended') {
         await this.saveAssignment(transaction, { ...current, state: 'ended' })
@@ -1964,10 +1987,9 @@ export class Execution {
       }
       // A turn ends while its background jobs still hold the slot, so a running Assignment is not proof of a live
       // local turn; background process ranges are cancelled with the stop and confirm quiescence below.
-      const liveBackground = await this.hasBackgroundWork(transaction, command.ticketId)
-        || await this.previewCleanupPending(transaction, command.ticketId)
-      const running = liveBackground || assignment?.state === 'running' && this.workerControllers.has(command.ticketId)
+      const liveBackground = await this.stopCleanupPending(transaction, command.ticketId)
       const activeJobs = this.jobs ? await this.jobs.listIn(transaction, command.ticketId) : []
+      const running = liveBackground || assignment?.state === 'running' && this.workerControllers.has(command.ticketId)
       const remoteJobIds = activeJobs.filter(job => job.environmentKind === 'remote' && ['starting', 'running', 'cancelling', 'unknown'].includes(job.state))
         .map(job => job.id)
       const remotePending = assignment?.environment?.kind === 'remote' && running
