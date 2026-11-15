@@ -21,6 +21,8 @@ export function reconcileSuperagentProfile(profile, enabled) {
   writeFileSync(file, stringify([
     { id: 'bot', config: { product: true } },
     { id: 'session-log-download', disabled: true },
+    { id: 'session-reference', disabled: true },
+    { id: 'ui-reference', disabled: true },
   ]), 'utf8')
   return [file]
 }

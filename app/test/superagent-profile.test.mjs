@@ -30,4 +30,5 @@ test('the real ds-superagent profile boots Main and verifies delegated local wor
   assert.equal(result.observationWriteRejected, true)
   assert.equal(result.nativeSessionAccessDenied, true)
   assert.equal(result.nativeSessionExportDenied, true)
+  assert.equal(result.nativeSessionReferenceDenied, true)
 })

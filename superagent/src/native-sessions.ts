@@ -15,10 +15,10 @@ export interface NativeTool {
   /** `agent` is the exact caller DSH reports for this call, used to parent a delegated child Agent. */
   execute(args: Record<string, any>, signal: AbortSignal, agent?: Agent): Promise<string>
 }
-export interface NativeSessionRequest { sessionId: string; role: 'main' | 'router' | 'worker'; text: string; tools: NativeTool[]; cwd?: string; signal?: AbortSignal; onDelivered?: () => Promise<void>; coalesce?: boolean; messageId?: string; onMessagePersisted?: (seq: number) => Promise<void>; instructions?: string; skills?: string[]; profile?: RoleProfile }
+export interface NativeSessionRequest { sessionId: string; role: 'main' | 'router' | 'worker'; text: string; tools: NativeTool[]; cwd?: string; signal?: AbortSignal; onDelivered?: () => Promise<void>; coalesce?: boolean; messageId?: string; onMessagePersisted?: (seq: number) => Promise<void>; instructions?: string; skills?: string[]; profile?: RoleProfile; stepBudget?: number }
 export interface NativeSessionsOptions { main?: AgentOptions; router: AgentOptions; worker: AgentOptions; timeoutMs?: number }
 interface NativeSessionResult { sessionId: string; status: string; events: readonly unknown[]; forkedSessionId?: string
-  turnStartSeq?: number; turnEndSeq?: number }
+  turnStartSeq?: number; turnEndSeq?: number; stepCount: number }
 interface RouterTask { request: NativeSessionRequest; resolve: (value: NativeSessionResult) => void; reject: (error: unknown) => void }
 const maxCoalescedRouterTools = 7
 const maxCoalescedRouterBytes = 100000
@@ -137,16 +137,25 @@ export class NativeSessions {
   private async execute(request: NativeSessionRequest) {
     if (this.closed) throw new CoreError('RUNTIME_CLOSED', 'The native Session adapter is closed.')
     if (!this.context.get('sessionPersistence')) throw new CoreError('PERSISTENCE_REQUIRED', 'A native Session persistence provider is required before execution.')
+    if (request.stepBudget !== undefined && (!Number.isInteger(request.stepBudget) || request.stepBudget < 1 || request.stepBudget > 100)) {
+      throw new CoreError('INVALID_INPUT', 'A Session step budget must be an integer between 1 and 100.')
+    }
     const configured = structuredClone(request.profile ?? { model: this.routes[request.role], ...this.roleInstructions[request.role] })
     const route = configured.model
     if (!route) throw new CoreError('ROLE_NOT_CONFIGURED', 'The requested role has no model route.')
     let steps = 0
+    let stepBudgetExceeded = false
     const creation = {
       sessionId: SessionId(request.sessionId), agentOptions: { ...this.options[request.role], provider: route.provider, model: route.model },
       ...(request.cwd ? { meta: { cwd: request.cwd } } : {}),
       setup: ((scoped, agent) => {
         scoped.on('agent/request', async (_payload, next) => {
-          if (++steps > 8) { agent.cancel({ kind: 'hook', reason: 'Super-agent step budget exhausted.' }); throw new CoreError('STEP_BUDGET', 'The Session step budget was exhausted.') }
+          steps++
+          if (request.stepBudget !== undefined && steps > request.stepBudget) {
+            stepBudgetExceeded = true
+            agent.cancel({ kind: 'hook', reason: 'Super-agent step budget exhausted.' })
+            throw new CoreError('STEP_BUDGET', 'The Session step budget was exhausted.')
+          }
           return next()
         })
         scoped.tools.restrict({ allow: [] })
@@ -203,9 +212,9 @@ export class NativeSessions {
       if ((event.data as { id?: string }).id !== messageId) return
       resolveAppended(Number(event.seq))
     }) : () => {}
+    const previousLastSeq = handle.agent.session.snapshotEvents()
+      .reduce((last, event) => Math.max(last, Number.isSafeInteger((event as { seq?: unknown }).seq) ? Number((event as { seq?: unknown }).seq) : -1), -1)
     try {
-      const previousLastSeq = handle.agent.session.snapshotEvents()
-        .reduce((last, event) => Math.max(last, Number.isSafeInteger((event as { seq?: unknown }).seq) ? Number((event as { seq?: unknown }).seq) : -1), -1)
       request.signal?.throwIfAborted()
       await request.onDelivered?.()
       handle.agent.followup({ id: MessageId(messageId), role: 'user', content: [{ type: 'text', text: request.text }], source: { kind: 'user' } })
@@ -218,6 +227,7 @@ export class NativeSessions {
       }
       await handle.agent.whenIdle()
       if (!await this.context.sessions.flush(handle.agent.session)) throw new CoreError('PERSISTENCE_REQUIRED', 'No persistence provider confirmed this Session flush.')
+      if (stepBudgetExceeded) throw new CoreError('STEP_BUDGET', 'The Session step budget was exhausted.')
       if (receipt && appendedSeq === undefined) {
         const stored = handle.agent.session.snapshotEvents().find(event => event.type === 'user/message' && (event.data as { id?: string }).id === messageId)
         if (stored) {
@@ -242,7 +252,16 @@ export class NativeSessions {
       }
       return { sessionId: request.sessionId, status: handle.agent.status, events: structuredClone(events),
         ...(forkedSessionId ? { forkedSessionId } : {}),
-        ...(turnStartSeq === undefined ? {} : { turnStartSeq }), ...(turnEndSeq === undefined ? {} : { turnEndSeq }) }
+        ...(turnStartSeq === undefined ? {} : { turnStartSeq }), ...(turnEndSeq === undefined ? {} : { turnEndSeq }), stepCount: steps }
+    } catch (error) {
+      const events = handle.agent.session.snapshotEvents()
+      const turnEvents = events.filter(event => Number((event as { seq?: unknown }).seq) > previousLastSeq)
+      const turnStartSeq = turnEvents.length ? Number((turnEvents[0] as { seq?: unknown }).seq) : undefined
+      const turnEndSeq = turnEvents.length ? Number((turnEvents.at(-1) as { seq?: unknown }).seq) : undefined
+      if (error instanceof CoreError) Object.assign(error, {
+        ...(turnStartSeq === undefined ? {} : { turnStartSeq }), ...(turnEndSeq === undefined ? {} : { turnEndSeq }), stepCount: steps,
+      })
+      throw error
     } finally {
       off(); clearTimeout(timer); request.signal?.removeEventListener('abort', abort)
       await handle.dispose(); this.handles.delete(handle); this.agents.delete(request.sessionId)

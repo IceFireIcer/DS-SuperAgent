@@ -36,6 +36,9 @@ export function applyProduct(ctx) {
     observation: null,
     observationLoading: false,
     observationError: null,
+    observationDetail: null,
+    observationDetailLoading: false,
+    observationDetailError: null,
     activityLoading: false,
     activityError: null,
   })
@@ -43,6 +46,7 @@ export function applyProduct(ctx) {
   let stopped = false
   let observationListRequest = 0
   let observationRequest = 0
+  let observationDetailRequest = 0
 
   const refreshMain = async binding => {
     try {
@@ -110,7 +114,9 @@ export function applyProduct(ctx) {
       if (stopped || request !== observationRequest || view.getSnapshot().selectedObservation?.id !== item.id
         || view.getSnapshot().observationGeneration !== generation) return
       view.set(state => {
-        if (reset || !state.observation) return { ...state, observation: detail, observationLoading: false, observationError: null }
+        if (reset) return { ...state, observation: detail, observationLoading: false, observationError: null,
+          observationDetail: null, observationDetailLoading: false, observationDetailError: null }
+        if (!state.observation) return { ...state, observation: detail, observationLoading: false, observationError: null }
         const events = new Map(state.observation.events.map(event => [event.seq, event]))
         for (const event of detail.events) events.set(event.seq, event)
         return { ...state, observation: { ...detail, events: [...events.values()].sort((left, right) => left.seq - right.seq) },
@@ -119,6 +125,32 @@ export function applyProduct(ctx) {
     } catch (error) {
       if (!stopped && request === observationRequest) {
         view.set(state => ({ ...state, observationLoading: false, observationError: error.message }))
+      }
+    }
+  }
+
+  const loadObservationDetail = async (binding, item, detailId, { append = false } = {}) => {
+    const current = view.getSnapshot()
+    if (!item || !detailId) return
+    const same = current.observationDetail?.detailId === detailId
+    if (append && (!same || !current.observationDetail?.hasMore)) return
+    const generation = current.observationGeneration ?? item.generation
+    const request = ++observationDetailRequest
+    try {
+      view.set(state => ({ ...state, observationDetailLoading: true, observationDetailError: null }))
+      const page = await productCall('observe-detail', { instanceId: binding.instanceId, observationId: item.id,
+        detailId, limit: 8192, ...(generation ? { generation } : {}),
+        ...(append && same ? { offset: current.observationDetail.next } : {}) })
+      if (stopped || request !== observationDetailRequest || view.getSnapshot().selectedObservation?.id !== item.id
+        || view.getSnapshot().observationGeneration !== generation) return
+      view.set(state => {
+        const text = append && state.observationDetail?.detailId === detailId
+          ? state.observationDetail.text + page.text : page.text
+        return { ...state, observationDetail: { ...page, text }, observationDetailLoading: false, observationDetailError: null }
+      })
+    } catch (error) {
+      if (!stopped && request === observationDetailRequest) {
+        view.set(state => ({ ...state, observationDetailLoading: false, observationDetailError: error.message }))
       }
     }
   }
@@ -239,10 +271,16 @@ export function applyProduct(ctx) {
   function ObservationConversation() {
     const state = useView()
     const [copyState, setCopyState] = useState('idle')
+    const [detailCopyState, setDetailCopyState] = useState('idle')
     const observation = state.observation
+    const openDetail = (detailId, append = false) => {
+      if (state.binding && state.selectedObservation) {
+        void loadObservationDetail(state.binding, state.selectedObservation, detailId, { append })
+      }
+    }
     const backToMain = () => {
       view.set(current => ({ ...current, route: 'main', selectedObservation: null, observationGeneration: null,
-        observation: null, observationError: null }))
+        observation: null, observationError: null, observationDetail: null, observationDetailError: null }))
       void refresh()
       setTimeout(() => document.querySelector('#main-message, .bt-main-composer textarea')?.focus(), 0)
     }
@@ -254,6 +292,16 @@ export function applyProduct(ctx) {
         setTimeout(() => setCopyState('idle'), 1600)
       } catch {
         setCopyState('failed')
+      }
+    }
+    const copyDetail = async () => {
+      if (!state.observationDetail) return
+      try {
+        await navigator.clipboard.writeText(state.observationDetail.text)
+        setDetailCopyState('copied')
+        setTimeout(() => setDetailCopyState('idle'), 1600)
+      } catch {
+        setDetailCopyState('failed')
       }
     }
     return h('section', { className: 'bt-observation', 'aria-label': t('Read-only work activity') },
@@ -272,11 +320,30 @@ export function applyProduct(ctx) {
               `${statusCopy(observation.status)}${observation.generation && !observation.current ? ` · ${t('Historical generation')}` : ''}`),
               h('p', null, t(observation.summary)),
               h('p', { className: 'bt-main-work-detail' }, `${t('Next step')}: ${t(observation.nextStep)}`)),
+              observation.historyStatus === 'missing' ? h('p', { className: 'bt-main-error', role: 'alert' },
+                t('The Session history is missing. Durable work facts remain available.')) : null,
+              observation.historyStatus === 'not-started' ? h('p', { className: 'bt-main-status', role: 'status' },
+                t('The assigned Session has not started.')) : null,
             h('div', { className: 'bt-observation-actions' },
               h('button', { type: 'button', className: 'bt-soft', onClick: copy },
                 copyState === 'copied' ? t('Copied') : copyState === 'failed' ? t('Copy failed') : t('Copy details')))),
-          h('dl', { className: 'bt-observation-facts' }, observation.facts.map(fact => h('div', { key: fact.label },
-            h('dt', null, t(fact.label)), h('dd', null, t(fact.value))))),
+          h('dl', { className: 'bt-observation-facts' }, observation.facts.map((fact, index) => h('div', { key: `${fact.label}:${index}` },
+            h('dt', null, t(fact.label)), h('dd', null,
+              h('span', null, t(fact.value)),
+              fact.detailId ? h('button', { type: 'button', className: 'bt-soft bt-observation-detail-open',
+                onClick: () => openDetail(fact.detailId) },
+              `${t('View full detail')}${fact.detailBytes ? ` · ${fact.detailBytes} ${t('bytes')}` : ''}`) : null)))),
+          state.observationDetail ? h('section', { className: 'bt-observation-detail', 'aria-label': t('Full detail') },
+            h('div', { className: 'bt-observation-detail-head' }, h('h2', null, t(state.observationDetail.label)),
+              h('span', null, `${state.observationDetail.bytes} ${t('bytes')}`)),
+            h('pre', null, redactObservationText(state.observationDetail.text)),
+            h('div', { className: 'bt-observation-detail-actions' },
+              state.observationDetail.hasMore ? h('button', { type: 'button', className: 'bt-soft',
+                disabled: state.observationDetailLoading, onClick: () => openDetail(state.observationDetail.detailId, true) },
+              state.observationDetailLoading ? t('Loading…') : t('Load more detail')) : null,
+              h('button', { type: 'button', className: 'bt-soft', onClick: copyDetail },
+                detailCopyState === 'copied' ? t('Copied') : detailCopyState === 'failed' ? t('Copy failed') : t('Copy loaded detail'))),
+            state.observationDetailError ? h('p', { role: 'alert', className: 'bt-main-error' }, state.observationDetailError) : null) : null,
           observation.generations.length > 1 ? h('section', { className: 'bt-observation-generations', 'aria-label': t('Assignment generations') },
             h('h2', null, t('Assignment generations')),
             observation.generations.map(generation => h('button', { key: generation.assignmentId, type: 'button',
@@ -285,7 +352,8 @@ export function applyProduct(ctx) {
               disabled: generation.generation === observation.generation,
               onClick: () => {
                 if (!state.binding || !state.selectedObservation) return
-                view.set(current => ({ ...current, observationGeneration: generation.generation }))
+                view.set(current => ({ ...current, observationGeneration: generation.generation, observationDetail: null,
+                  observationDetailError: null }))
                 void loadObservation(state.binding, state.selectedObservation, { reset: true })
               } },
             h('span', null, generation.generation), h('span', null, generation.current ? t('Current generation') : t('Historical generation')),
@@ -302,8 +370,14 @@ export function applyProduct(ctx) {
                   : event.kind === 'turn' && event.reason ? t('Turn ended: {reason}.', { reason: event.reason })
                     : redactObservationText(event.text)),
               event.detail ? h('p', { className: 'bt-main-work-detail' }, redactObservationText(event.detail)) : null,
+              event.detailId ? h('button', { type: 'button', className: 'bt-soft bt-observation-detail-open',
+                onClick: () => openDetail(event.detailId) },
+              `${t('View full detail')}${event.detailBytes ? ` · ${event.detailBytes} ${t('bytes')}` : ''}`) : null,
               event.argumentKeys?.length ? h('p', { className: 'bt-main-work-detail' }, `${t('Arguments')}: ${event.argumentKeys.join(', ')}`) : null))
-              : h('p', { className: 'bt-main-status' }, t('No execution history has been recorded yet.')),
+              : h('p', { className: 'bt-main-status' }, observation.historyStatus === 'missing'
+                ? t('The Session history is missing. Durable work facts remain available.')
+                : observation.historyStatus === 'not-started' ? t('The assigned Session has not started.')
+                  : t('No execution history has been recorded yet.')),
             observation.hasMore ? h('button', { type: 'button', className: 'bt-soft bt-observation-more', onClick: () => {
               if (state.binding && state.selectedObservation) void loadObservation(state.binding, state.selectedObservation, { older: true })
             } }, t('Load more history')) : null)) : null))
@@ -327,7 +401,7 @@ export function applyProduct(ctx) {
       h('button', { type: 'button', className: 'bt-soft', 'aria-current': state.route === 'main' ? 'page' : undefined,
         onClick: () => {
           view.set(current => ({ ...current, route: 'main', selectedObservation: null, observationGeneration: null,
-            observation: null, observationError: null }))
+            observation: null, observationError: null, observationDetail: null, observationDetailError: null }))
           void refresh()
           setTimeout(() => document.querySelector('#main-message, .bt-main-composer textarea')?.focus(), 0)
         } }, h(BrandMark, { size: 24 }), 'Main'),
@@ -344,7 +418,7 @@ export function applyProduct(ctx) {
         'aria-current': state.route === 'observe' && state.selectedObservation?.id === item.id ? 'page' : undefined,
         onClick: () => {
           view.set(current => ({ ...current, route: 'observe', selectedObservation: item, observationGeneration: item.generation ?? null,
-            observation: null, observationError: null }))
+            observation: null, observationError: null, observationDetail: null, observationDetailError: null }))
           if (state.binding) void loadObservation(state.binding, item, { reset: true })
         },
       }, h('span', { className: 'bt-observation-role' }, item.role === 'router' ? 'Router' : 'Worker'),
@@ -430,6 +504,12 @@ const PRODUCT_CSS = `
 .bt-observation-facts>div{min-width:0;padding:10px 12px;background:var(--bt-card)}
 .bt-observation-facts dt{color:var(--bt-ink-2);font-size:11px;line-height:16px}
 .bt-observation-facts dd{margin:2px 0 0;overflow-wrap:anywhere;font-size:12px;line-height:18px}
+.bt-observation-detail-open{display:block;margin-top:8px}.bt-observation-detail-open:focus-visible{outline:2px solid var(--bt-accent);outline-offset:1px}
+.bt-observation-detail{padding:12px;border:1px solid var(--bt-line);border-radius:10px;background:var(--bt-card)}
+.bt-observation-detail-head,.bt-observation-detail-actions{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.bt-observation-detail-head h2{margin:0;font-size:13px;line-height:20px}.bt-observation-detail-head span{color:var(--bt-ink-2);font-size:11px}
+.bt-observation-detail pre{margin:10px 0;padding:10px;max-height:360px;overflow:auto;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-main);color:var(--bt-ink);font:12px/18px ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+.bt-observation-detail-actions{justify-content:flex-end;flex-wrap:wrap}
 .bt-observation-generations,.bt-observation-history{display:flex;flex-direction:column;gap:8px}
 .bt-observation-generations h2,.bt-observation-history h2{margin:0;font-size:13px;line-height:20px}
 .bt-observation-generation{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;padding:8px 10px;border:1px solid var(--bt-line);border-radius:8px;background:transparent;color:var(--bt-ink-2);font:inherit;font-size:11px;text-align:left;overflow-wrap:anywhere}

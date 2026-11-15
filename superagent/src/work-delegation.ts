@@ -208,10 +208,15 @@ interface WorkRouterTurn {
   id: string
   workBriefId: string
   sessionId: string
-  startSeq: number
-  endSeq: number
   phase: 'route' | 'update'
+  status: 'pending' | 'completed' | 'failed'
+  startSeq?: number
+  endSeq?: number
+  stepCount?: number
+  budget: number
+  errorCode?: string
   createdAt: number
+  updatedAt: number
 }
 
 export interface MainWorkTicketSnapshot {
@@ -247,6 +252,7 @@ const followUpCardStatus: Record<MainWorkFollowUpStatus, MainWorkStatus> = {
   queued: 'pending', delivering: 'running', persisted: 'running', ready: 'success',
   waiting: 'waiting', 'handed-back': 'waiting', stopped: 'stopped', expired: 'unknown',
 }
+const routerStepBudget = 8
 
 function boundedText(value: unknown, label: string, maximum: number) {
   if (typeof value !== 'string' || !value.trim() || Buffer.byteLength(value) > maximum) {
@@ -384,10 +390,18 @@ export class WorkDelegation {
         return JSON.stringify(await this.plan(brief.mainId, brief.id))
       },
     }
-    const result = await this.options.sessions.run({ sessionId: brief.routerSessionId, role: 'router', signal,
-      profile: structuredClone(profile), text: `Decide the independent work items for this one versioned Main WorkBrief. Preserve the one original source event. Establish each missing local Ticket and report only durable receipts.\n${JSON.stringify(brief)}`,
-      tools: [tool] })
-    await this.recordRouterTurn(brief, result, 'route')
+    const attempt = await this.startRouterTurn(brief, 'route')
+    let result
+    try {
+      result = await this.options.sessions.run({ sessionId: brief.routerSessionId, role: 'router', signal,
+        stepBudget: routerStepBudget,
+        profile: structuredClone(profile), text: `Decide the independent work items for this one versioned Main WorkBrief. Preserve the one original source event. Establish each missing local Ticket and report only durable receipts.\n${JSON.stringify(brief)}`,
+        tools: [tool] })
+      await this.finishRouterTurn(attempt, { ...result, status: 'completed' })
+    } catch (error) {
+      await this.finishRouterTurn(attempt, { status: 'failed', error }).catch(() => {})
+      throw error
+    }
     await this.options.recordRouterUse(result.sessionId, revision, profile)
     const split = await this.readSplit(brief.id)
     if (!split) throw new CoreError('ROUTER_NOTICE_UNHANDLED', 'Router did not establish a durable work plan.')
@@ -629,13 +643,21 @@ export class WorkDelegation {
     if (await this.options.storage.transaction(this.options.instanceId, tx => tx.get('work-update', updateId))) return
     const { revision, profile } = await this.options.routerProfile()
     let recorded = false
-    const result = await this.options.sessions.run({ role: 'router', sessionId: source.brief.routerSessionId, signal, profile,
-      text: `Return this bounded, verified work item state to Main. Keep its source, stable item identity and follow-up delivery facts; no Worker transcript is included.\n${JSON.stringify({
-        workBriefId: source.brief.id, workItemId: source.item.id, receipt, outcome, followUps,
-      })}`,
-      tools: [{ name: 'record_work_update', description: 'Record the supplied work status and evidence exactly and notify Main once.', parameters: {},
-        execute: async () => { await this.publishUpdate(source.brief, source.item, receipt, outcome, followUps); recorded = true; return 'The bounded work update is queued for Main.' } }] })
-    await this.recordRouterTurn(source.brief, result, 'update')
+    const attempt = await this.startRouterTurn(source.brief, 'update')
+    let result
+    try {
+      result = await this.options.sessions.run({ role: 'router', sessionId: source.brief.routerSessionId, signal, profile,
+        stepBudget: routerStepBudget,
+        text: `Return this bounded, verified work item state to Main. Keep its source, stable item identity and follow-up delivery facts; no Worker transcript is included.\n${JSON.stringify({
+          workBriefId: source.brief.id, workItemId: source.item.id, receipt, outcome, followUps,
+        })}`,
+        tools: [{ name: 'record_work_update', description: 'Record the supplied work status and evidence exactly and notify Main once.', parameters: {},
+          execute: async () => { await this.publishUpdate(source.brief, source.item, receipt, outcome, followUps); recorded = true; return 'The bounded work update is queued for Main.' } }] })
+      await this.finishRouterTurn(attempt, { ...result, status: 'completed' })
+    } catch (error) {
+      await this.finishRouterTurn(attempt, { status: 'failed', error }).catch(() => {})
+      throw error
+    }
     await this.options.recordRouterUse(result.sessionId, revision, profile)
     if (!recorded) throw new CoreError('ROUTER_NOTICE_UNHANDLED', 'Router did not record the bounded work result.')
   }
@@ -649,15 +671,33 @@ export class WorkDelegation {
     return createHash('sha256').update(canonicalJson([workBriefId, workItemId, receipt, facts, followUpFacts])).digest('hex')
   }
 
-  private recordRouterTurn(brief: MainWorkBrief, result: { sessionId: string; turnStartSeq?: number; turnEndSeq?: number },
-    phase: WorkRouterTurn['phase']) {
-    if (result.turnStartSeq === undefined || result.turnEndSeq === undefined) return Promise.resolve()
+  private async startRouterTurn(brief: MainWorkBrief, phase: WorkRouterTurn['phase']) {
     const prefix = `${JSON.stringify(['work-router-turn', brief.id])}:`
-    const id = `${prefix}${String(result.turnStartSeq).padStart(16, '0')}:${String(result.turnEndSeq).padStart(16, '0')}`
-    const turn: WorkRouterTurn = { version: 1, id, workBriefId: brief.id, sessionId: result.sessionId,
-      startSeq: result.turnStartSeq, endSeq: result.turnEndSeq, phase, createdAt: this.now() }
+    const id = `${prefix}${randomUUID()}`
+    const turn: WorkRouterTurn = { version: 1, id, workBriefId: brief.id, sessionId: brief.routerSessionId,
+      phase, status: 'pending', budget: routerStepBudget, createdAt: this.now(), updatedAt: this.now() }
+    await this.options.storage.transaction(this.options.instanceId,
+      transaction => transaction.insert('work-router-turn', id, turn))
+    return turn
+  }
+
+  private finishRouterTurn(turn: WorkRouterTurn, result: { status: 'completed' | 'failed'; sessionId?: string
+    turnStartSeq?: number; turnEndSeq?: number; stepCount?: number; error?: unknown }) {
+    const failure = result.error && typeof result.error === 'object' ? result.error as { code?: unknown } : undefined
+    const finished: WorkRouterTurn = {
+      ...turn,
+      status: result.status,
+      ...(result.sessionId ? { sessionId: result.sessionId } : {}),
+      ...(result.turnStartSeq === undefined ? {} : { startSeq: result.turnStartSeq }),
+      ...(result.turnEndSeq === undefined ? {} : { endSeq: result.turnEndSeq }),
+      ...(result.stepCount === undefined ? {} : { stepCount: result.stepCount }),
+      ...(result.status === 'failed' && typeof failure?.code === 'string' ? { errorCode: failure.code } : {}),
+      updatedAt: this.now(),
+    }
     return this.options.storage.transaction(this.options.instanceId, async transaction => {
-      if (!await transaction.replace('work-router-turn', id, turn)) await transaction.insert('work-router-turn', id, turn)
+      if (!await transaction.replace('work-router-turn', turn.id, finished)) {
+        throw new CoreError('INCOMPLETE_STATE', 'The Router observation attempt disappeared before completion.')
+      }
     })
   }
 

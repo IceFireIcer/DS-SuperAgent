@@ -53,6 +53,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
         const fields = endpoint === 'send' ? ['instanceId', 'commandId', 'text']
           : endpoint === 'observe-list' ? ['instanceId', 'after', 'limit', 'query']
             : endpoint === 'observe-read' ? ['instanceId', 'observationId', 'generation', 'after', 'limit']
+              : endpoint === 'observe-detail' ? ['instanceId', 'observationId', 'generation', 'detailId', 'offset', 'limit']
               : endpoint === 'history' ? ['instanceId', 'after', 'before', 'limit']
                 : undefined
         if (!fields) throw new CoreError('UNAVAILABLE', 'This product capability is not connected yet.')
@@ -73,6 +74,11 @@ export async function createProductHost(context: Context, config: ProductHostCon
         if (endpoint === 'observe-read') return engine!.readWorkObservation({ instanceId, observationId: payload.observationId as string,
           ...(payload.generation === undefined ? {} : { generation: payload.generation as string }),
           ...(payload.after === undefined ? {} : { after: payload.after as number }),
+          ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
+        if (endpoint === 'observe-detail') return engine!.readWorkObservationDetail({ instanceId,
+          observationId: payload.observationId as string, detailId: payload.detailId as string,
+          ...(payload.generation === undefined ? {} : { generation: payload.generation as string }),
+          ...(payload.offset === undefined ? {} : { offset: payload.offset as number }),
           ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
         throw new CoreError('UNAVAILABLE', 'This product capability is not connected yet.')
       },

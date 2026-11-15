@@ -102,6 +102,19 @@ var ZH = {
   "Generation ended": "代次已结束",
   "Copy details": "复制详情",
   "Copy failed": "复制失败",
+  "Copy loaded detail": "复制已加载详情",
+  "View full detail": "查看完整详情",
+  "Load more detail": "加载更多详情",
+  "Full detail": "完整详情",
+  "Tool output": "工具输出",
+  "Tool fact: {tool}": "工具事实：{tool}",
+  "The Session history is missing. Durable work facts remain available.": "Session 历史缺失，持久工作事实仍可查看。",
+  "The assigned Session has not started.": "分配的执行 Session 尚未开始。",
+  Session: "会话",
+  Generation: "代次",
+  Mandate: "授权",
+  Goal: "目标",
+  "Router turns": "Router 回合",
   "Assignment generations": "Assignment 代次",
   "Observation history": "观察历史",
   Response: "回复",
@@ -20741,6 +20754,9 @@ function applyProduct(ctx) {
     observation: null,
     observationLoading: false,
     observationError: null,
+    observationDetail: null,
+    observationDetailLoading: false,
+    observationDetailError: null,
     activityLoading: false,
     activityError: null
   });
@@ -20748,6 +20764,7 @@ function applyProduct(ctx) {
   let stopped = false;
   let observationListRequest = 0;
   let observationRequest = 0;
+  let observationDetailRequest = 0;
   const refreshMain = async (binding) => {
     try {
       const page = await productCall("history", { instanceId: binding.instanceId, limit: 100 });
@@ -20832,7 +20849,16 @@ function applyProduct(ctx) {
       });
       if (stopped || request !== observationRequest || view.getSnapshot().selectedObservation?.id !== item.id || view.getSnapshot().observationGeneration !== generation) return;
       view.set((state) => {
-        if (reset || !state.observation) return { ...state, observation: detail, observationLoading: false, observationError: null };
+        if (reset) return {
+          ...state,
+          observation: detail,
+          observationLoading: false,
+          observationError: null,
+          observationDetail: null,
+          observationDetailLoading: false,
+          observationDetailError: null
+        };
+        if (!state.observation) return { ...state, observation: detail, observationLoading: false, observationError: null };
         const events = new Map(state.observation.events.map((event) => [event.seq, event]));
         for (const event of detail.events) events.set(event.seq, event);
         return {
@@ -20845,6 +20871,34 @@ function applyProduct(ctx) {
     } catch (error) {
       if (!stopped && request === observationRequest) {
         view.set((state) => ({ ...state, observationLoading: false, observationError: error.message }));
+      }
+    }
+  };
+  const loadObservationDetail = async (binding, item, detailId, { append = false } = {}) => {
+    const current = view.getSnapshot();
+    if (!item || !detailId) return;
+    const same = current.observationDetail?.detailId === detailId;
+    if (append && (!same || !current.observationDetail?.hasMore)) return;
+    const generation = current.observationGeneration ?? item.generation;
+    const request = ++observationDetailRequest;
+    try {
+      view.set((state) => ({ ...state, observationDetailLoading: true, observationDetailError: null }));
+      const page = await productCall("observe-detail", {
+        instanceId: binding.instanceId,
+        observationId: item.id,
+        detailId,
+        limit: 8192,
+        ...generation ? { generation } : {},
+        ...append && same ? { offset: current.observationDetail.next } : {}
+      });
+      if (stopped || request !== observationDetailRequest || view.getSnapshot().selectedObservation?.id !== item.id || view.getSnapshot().observationGeneration !== generation) return;
+      view.set((state) => {
+        const text = append && state.observationDetail?.detailId === detailId ? state.observationDetail.text + page.text : page.text;
+        return { ...state, observationDetail: { ...page, text }, observationDetailLoading: false, observationDetailError: null };
+      });
+    } catch (error) {
+      if (!stopped && request === observationDetailRequest) {
+        view.set((state) => ({ ...state, observationDetailLoading: false, observationDetailError: error.message }));
       }
     }
   };
@@ -21047,7 +21101,13 @@ function applyProduct(ctx) {
   function ObservationConversation() {
     const state = useView();
     const [copyState, setCopyState] = (0, import_react53.useState)("idle");
+    const [detailCopyState, setDetailCopyState] = (0, import_react53.useState)("idle");
     const observation = state.observation;
+    const openDetail = (detailId, append = false) => {
+      if (state.binding && state.selectedObservation) {
+        void loadObservationDetail(state.binding, state.selectedObservation, detailId, { append });
+      }
+    };
     const backToMain = () => {
       view.set((current) => ({
         ...current,
@@ -21055,7 +21115,9 @@ function applyProduct(ctx) {
         selectedObservation: null,
         observationGeneration: null,
         observation: null,
-        observationError: null
+        observationError: null,
+        observationDetail: null,
+        observationDetailError: null
       }));
       void refresh();
       setTimeout(() => document.querySelector("#main-message, .bt-main-composer textarea")?.focus(), 0);
@@ -21068,6 +21130,16 @@ function applyProduct(ctx) {
         setTimeout(() => setCopyState("idle"), 1600);
       } catch {
         setCopyState("failed");
+      }
+    };
+    const copyDetail = async () => {
+      if (!state.observationDetail) return;
+      try {
+        await navigator.clipboard.writeText(state.observationDetail.text);
+        setDetailCopyState("copied");
+        setTimeout(() => setDetailCopyState("idle"), 1600);
+      } catch {
+        setDetailCopyState("failed");
       }
     };
     return (0, import_react53.createElement)(
@@ -21107,6 +21179,16 @@ function applyProduct(ctx) {
               (0, import_react53.createElement)("p", null, t(observation.summary)),
               (0, import_react53.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${t(observation.nextStep)}`)
             ),
+            observation.historyStatus === "missing" ? (0, import_react53.createElement)(
+              "p",
+              { className: "bt-main-error", role: "alert" },
+              t("The Session history is missing. Durable work facts remain available.")
+            ) : null,
+            observation.historyStatus === "not-started" ? (0, import_react53.createElement)(
+              "p",
+              { className: "bt-main-status", role: "status" },
+              t("The assigned Session has not started.")
+            ) : null,
             (0, import_react53.createElement)(
               "div",
               { className: "bt-observation-actions" },
@@ -21117,12 +21199,56 @@ function applyProduct(ctx) {
               )
             )
           ),
-          (0, import_react53.createElement)("dl", { className: "bt-observation-facts" }, observation.facts.map((fact) => (0, import_react53.createElement)(
+          (0, import_react53.createElement)("dl", { className: "bt-observation-facts" }, observation.facts.map((fact, index) => (0, import_react53.createElement)(
             "div",
-            { key: fact.label },
+            { key: `${fact.label}:${index}` },
             (0, import_react53.createElement)("dt", null, t(fact.label)),
-            (0, import_react53.createElement)("dd", null, t(fact.value))
+            (0, import_react53.createElement)(
+              "dd",
+              null,
+              (0, import_react53.createElement)("span", null, t(fact.value)),
+              fact.detailId ? (0, import_react53.createElement)(
+                "button",
+                {
+                  type: "button",
+                  className: "bt-soft bt-observation-detail-open",
+                  onClick: () => openDetail(fact.detailId)
+                },
+                `${t("View full detail")}${fact.detailBytes ? ` · ${fact.detailBytes} ${t("bytes")}` : ""}`
+              ) : null
+            )
           ))),
+          state.observationDetail ? (0, import_react53.createElement)(
+            "section",
+            { className: "bt-observation-detail", "aria-label": t("Full detail") },
+            (0, import_react53.createElement)(
+              "div",
+              { className: "bt-observation-detail-head" },
+              (0, import_react53.createElement)("h2", null, t(state.observationDetail.label)),
+              (0, import_react53.createElement)("span", null, `${state.observationDetail.bytes} ${t("bytes")}`)
+            ),
+            (0, import_react53.createElement)("pre", null, redactObservationText(state.observationDetail.text)),
+            (0, import_react53.createElement)(
+              "div",
+              { className: "bt-observation-detail-actions" },
+              state.observationDetail.hasMore ? (0, import_react53.createElement)(
+                "button",
+                {
+                  type: "button",
+                  className: "bt-soft",
+                  disabled: state.observationDetailLoading,
+                  onClick: () => openDetail(state.observationDetail.detailId, true)
+                },
+                state.observationDetailLoading ? t("Loading…") : t("Load more detail")
+              ) : null,
+              (0, import_react53.createElement)(
+                "button",
+                { type: "button", className: "bt-soft", onClick: copyDetail },
+                detailCopyState === "copied" ? t("Copied") : detailCopyState === "failed" ? t("Copy failed") : t("Copy loaded detail")
+              )
+            ),
+            state.observationDetailError ? (0, import_react53.createElement)("p", { role: "alert", className: "bt-main-error" }, state.observationDetailError) : null
+          ) : null,
           observation.generations.length > 1 ? (0, import_react53.createElement)(
             "section",
             { className: "bt-observation-generations", "aria-label": t("Assignment generations") },
@@ -21138,7 +21264,12 @@ function applyProduct(ctx) {
                 disabled: generation.generation === observation.generation,
                 onClick: () => {
                   if (!state.binding || !state.selectedObservation) return;
-                  view.set((current) => ({ ...current, observationGeneration: generation.generation }));
+                  view.set((current) => ({
+                    ...current,
+                    observationGeneration: generation.generation,
+                    observationDetail: null,
+                    observationDetailError: null
+                  }));
                   void loadObservation(state.binding, state.selectedObservation, { reset: true });
                 }
               },
@@ -21162,8 +21293,17 @@ function applyProduct(ctx) {
               ),
               (0, import_react53.createElement)("p", null, event.kind === "tool-call" ? t("Called {tool}.", { tool: event.tool ?? "tool" }) : event.kind === "tool-result" ? t(event.isError ? "Tool call failed." : "Tool call completed.") : event.kind === "turn" && event.reason ? t("Turn ended: {reason}.", { reason: event.reason }) : redactObservationText(event.text)),
               event.detail ? (0, import_react53.createElement)("p", { className: "bt-main-work-detail" }, redactObservationText(event.detail)) : null,
+              event.detailId ? (0, import_react53.createElement)(
+                "button",
+                {
+                  type: "button",
+                  className: "bt-soft bt-observation-detail-open",
+                  onClick: () => openDetail(event.detailId)
+                },
+                `${t("View full detail")}${event.detailBytes ? ` · ${event.detailBytes} ${t("bytes")}` : ""}`
+              ) : null,
               event.argumentKeys?.length ? (0, import_react53.createElement)("p", { className: "bt-main-work-detail" }, `${t("Arguments")}: ${event.argumentKeys.join(", ")}`) : null
-            )) : (0, import_react53.createElement)("p", { className: "bt-main-status" }, t("No execution history has been recorded yet.")),
+            )) : (0, import_react53.createElement)("p", { className: "bt-main-status" }, observation.historyStatus === "missing" ? t("The Session history is missing. Durable work facts remain available.") : observation.historyStatus === "not-started" ? t("The assigned Session has not started.") : t("No execution history has been recorded yet.")),
             observation.hasMore ? (0, import_react53.createElement)("button", { type: "button", className: "bt-soft bt-observation-more", onClick: () => {
               if (state.binding && state.selectedObservation) void loadObservation(state.binding, state.selectedObservation, { older: true });
             } }, t("Load more history")) : null
@@ -21200,7 +21340,9 @@ function applyProduct(ctx) {
             selectedObservation: null,
             observationGeneration: null,
             observation: null,
-            observationError: null
+            observationError: null,
+            observationDetail: null,
+            observationDetailError: null
           }));
           void refresh();
           setTimeout(() => document.querySelector("#main-message, .bt-main-composer textarea")?.focus(), 0);
@@ -21238,7 +21380,9 @@ function applyProduct(ctx) {
               selectedObservation: item,
               observationGeneration: item.generation ?? null,
               observation: null,
-              observationError: null
+              observationError: null,
+              observationDetail: null,
+              observationDetailError: null
             }));
             if (state.binding) void loadObservation(state.binding, item, { reset: true });
           }
@@ -21337,6 +21481,12 @@ var PRODUCT_CSS = `
 .bt-observation-facts>div{min-width:0;padding:10px 12px;background:var(--bt-card)}
 .bt-observation-facts dt{color:var(--bt-ink-2);font-size:11px;line-height:16px}
 .bt-observation-facts dd{margin:2px 0 0;overflow-wrap:anywhere;font-size:12px;line-height:18px}
+.bt-observation-detail-open{display:block;margin-top:8px}.bt-observation-detail-open:focus-visible{outline:2px solid var(--bt-accent);outline-offset:1px}
+.bt-observation-detail{padding:12px;border:1px solid var(--bt-line);border-radius:10px;background:var(--bt-card)}
+.bt-observation-detail-head,.bt-observation-detail-actions{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.bt-observation-detail-head h2{margin:0;font-size:13px;line-height:20px}.bt-observation-detail-head span{color:var(--bt-ink-2);font-size:11px}
+.bt-observation-detail pre{margin:10px 0;padding:10px;max-height:360px;overflow:auto;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-main);color:var(--bt-ink);font:12px/18px ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+.bt-observation-detail-actions{justify-content:flex-end;flex-wrap:wrap}
 .bt-observation-generations,.bt-observation-history{display:flex;flex-direction:column;gap:8px}
 .bt-observation-generations h2,.bt-observation-history h2{margin:0;font-size:13px;line-height:20px}
 .bt-observation-generation{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;padding:8px 10px;border:1px solid var(--bt-line);border-radius:8px;background:transparent;color:var(--bt-ink-2);font:inherit;font-size:11px;text-align:left;overflow-wrap:anywhere}

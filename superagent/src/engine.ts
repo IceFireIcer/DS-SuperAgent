@@ -1319,6 +1319,26 @@ export class Engine {
       ...(request.limit === undefined ? {} : { limit: request.limit }) })
   }
 
+  async readWorkObservationDetail(request: MainAddress & { observationId: string; generation?: string;
+    detailId: string; offset?: number; limit?: number }) {
+    if (!request || Object.keys(request).some(key =>
+      !['instanceId', 'observationId', 'generation', 'detailId', 'offset', 'limit'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Work detail accepts one authorized observation and a bounded page.')
+    }
+    if (request.instanceId !== this.instanceId || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Work detail is outside the authorized Main Instance.')
+    }
+    if (!this.workObservations) throw new CoreError('NOT_FOUND', 'The requested work detail is unavailable.')
+    const binding = await this.main.open({ instanceId: request.instanceId })
+    return this.workObservations.detail(binding.mainId, {
+      observationId: request.observationId,
+      detailId: request.detailId,
+      ...(request.generation === undefined ? {} : { generation: request.generation }),
+      ...(request.offset === undefined ? {} : { offset: request.offset }),
+      ...(request.limit === undefined ? {} : { limit: request.limit }),
+    })
+  }
+
   async getRoleConfig(): Promise<RoleConfigView> {
     const config = await this.roleConfig.ensure()
     this.roleConfigRevision = config.revision

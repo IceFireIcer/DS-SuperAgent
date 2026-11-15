@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -35,8 +35,10 @@ test('work observations auto-discover bounded Router and Worker history with sta
         return
       }
       if (calls === 0) {
-        yield* toolResponse('delegate_work', text.includes('gamma')
-          ? { items: [{ goal: 'Investigate observation gamma.', constraints: 'Write only observed-gamma.txt.', acceptanceCriteria: 'Read observed-gamma.txt back.' }] }
+        yield* toolResponse('delegate_work', text.includes('budget failure')
+          ? { items: [{ goal: 'Exercise Router budget failure.', constraints: 'Keep the failure visible.', acceptanceCriteria: 'Record the failed Router attempt.' }] }
+          : text.includes('gamma')
+            ? { items: [{ goal: 'Investigate observation gamma.', constraints: 'Write only observed-gamma.txt.', acceptanceCriteria: 'Read observed-gamma.txt back.' }] }
           : {
             items: [
               { goal: 'Prepare observation alpha.', constraints: 'Write only observed-alpha.txt.', acceptanceCriteria: 'Read observed-alpha.txt back.' },
@@ -49,6 +51,13 @@ test('work observations auto-discover bounded Router and Worker history with sta
       return
     }
     if (options.model === 'router') {
+      if (text.includes('budget failure')) {
+        const tool = options.tools?.[0]
+        const brief = JSON.parse(text.slice(text.indexOf('{')).trim())
+        if (tool) yield* toolResponse(tool.name, { items: brief.requestedItems }, 'router-budget')
+        else yield* textResponse('No Router tool was available.')
+        return
+      }
       yield* routerResponse(options)
       return
     }
@@ -58,10 +67,13 @@ test('work observations auto-discover bounded Router and Worker history with sta
     }
     const goal = goalFromWorkerPrompt(text)
     const file = goal.includes('alpha') ? 'observed-alpha.txt' : goal.includes('gamma') ? 'observed-gamma.txt' : 'observed-beta.txt'
-    if (calls === 0) yield* toolResponse('write_file', { path: file, text: `${file}\n` })
+    if (calls === 0) yield* toolResponse('write_file', { path: file,
+      text: file.includes('alpha') ? `${file}\n${'observed alpha output '.repeat(600)}` : `${file}\n` })
     else if (calls === 1) yield* toolResponse('read_file', { path: file })
     else if (calls === 2) yield* toolResponse('report_ready', {
-      result: `${file} was observed.`, evidence: `Read ${file} after writing it.`, artifacts: file,
+      result: `${file} was observed.`,
+      evidence: `Read ${file} after writing it. ${'Verified output line.\n'.repeat(600)}`,
+      artifacts: file,
     })
     else yield* textResponse('No verified result was recorded.')
   }
@@ -118,6 +130,7 @@ test('work observations auto-discover bounded Router and Worker history with sta
   const detail = await engine.readWorkObservation({ instanceId: 'personal', observationId: alpha.id,
     generation: alpha.generation, limit: 100 })
   assert.equal(detail.current, true)
+  assert.equal(detail.historyStatus, 'available')
   assert.equal(detail.ticketId, alpha.ticketId)
   assert.equal(detail.events.some(event => event.kind === 'tool-call'), true)
   assert.equal(detail.events.some(event => event.kind === 'tool-result'), true)
@@ -128,6 +141,29 @@ test('work observations auto-discover bounded Router and Worker history with sta
   assert.equal(detail.facts.some(fact => fact.label === 'Environment' && fact.value === 'product-workspace'), true)
   assert.equal(detail.facts.some(fact => fact.label === 'Evidence' && fact.value.includes('observed-alpha.txt')), true)
   assert.equal(detail.facts.some(fact => fact.label === 'Artifacts' && fact.value.includes('observed-alpha.txt')), true)
+  const oversizedEvent = detail.events.find(event => event.kind === 'tool-result' && event.detailId)
+  assert.ok(oversizedEvent?.detailId)
+  const eventDetail = await engine.readWorkObservationDetail({ instanceId: 'personal', observationId: alpha.id,
+    generation: alpha.generation, detailId: oversizedEvent.detailId, limit: 700 })
+  assert.equal(eventDetail.label, 'Tool output')
+  assert.equal(eventDetail.text.length, 700)
+  assert.ok(eventDetail.bytes > 700)
+  assert.equal(eventDetail.hasMore, true)
+  assert.equal(typeof eventDetail.next, 'number')
+  const eventDetailNext = await engine.readWorkObservationDetail({ instanceId: 'personal', observationId: alpha.id,
+    generation: alpha.generation, detailId: oversizedEvent.detailId, offset: eventDetail.next, limit: 700 })
+  assert.notEqual(eventDetailNext.text, eventDetail.text)
+  const evidenceFact = detail.facts.find(fact => fact.label === 'Evidence' && fact.detailId)
+  assert.ok(evidenceFact?.detailId)
+  const evidenceDetail = await engine.readWorkObservationDetail({ instanceId: 'personal', observationId: alpha.id,
+    generation: alpha.generation, detailId: evidenceFact.detailId, limit: 1200 })
+  assert.equal(evidenceDetail.label, 'Evidence')
+  assert.equal(evidenceDetail.text.includes('Verified output line.'), true)
+  assert.equal(evidenceDetail.bytes > evidenceDetail.text.length, true)
+  const eventLocator = JSON.parse(Buffer.from(oversizedEvent.detailId, 'base64url').toString('utf8'))
+  const guessedEventDetail = Buffer.from(JSON.stringify({ ...eventLocator, seq: eventLocator.seq + 100000 })).toString('base64url')
+  await assert.rejects(engine.readWorkObservationDetail({ instanceId: 'personal', observationId: alpha.id,
+    generation: alpha.generation, detailId: guessedEventDetail }), { code: 'NOT_FOUND' })
 
   const firstGeneration = alpha.generation
   await engine.stopTicket({ commandId: 'observe-stop', ticketId: alpha.ticketId, reason: 'Create a retained generation.' })
@@ -165,6 +201,25 @@ test('work observations auto-discover bounded Router and Worker history with sta
     'a Router observation excludes another WorkBrief from the shared Router Session')
   assert.equal(JSON.stringify(gammaRouterHistory.events).includes('observation gamma'), true)
   assert.equal(JSON.stringify(gammaRouterHistory.events).includes('observation alpha'), false)
+
+  const routerCount = routerObservations.length
+  await engine.sendMainMessage({ instanceId: 'personal', commandId: 'router-budget-failure', text: 'Trigger Router budget failure.' })
+  await until(async () => (await engine.getWorkObservations({ instanceId: 'personal', limit: 100 })).items
+    .filter(item => item.role === 'router').length > routerCount, 'the failed Router attempt record')
+  const failedRouter = (await engine.getWorkObservations({ instanceId: 'personal', limit: 100 })).items
+    .filter(item => item.role === 'router').sort((left, right) => right.createdAt - left.createdAt)[0]
+  await until(async () => (await engine.readWorkObservation({ instanceId: 'personal', observationId: failedRouter.id, limit: 100 }))
+    .facts.some(fact => fact.label === 'Router turns' && fact.value.includes('failed') && fact.value.includes('STEP_BUDGET')),
+  'the failed Router turn audit')
+
+  const sessionRoot = join(directory, 'sessions')
+  const sessionFiles = (await readdir(sessionRoot, { recursive: true }))
+    .filter(file => file.includes(firstRouterHistory.sessionId) && !file.endsWith(firstRouterHistory.sessionId))
+  assert.ok(sessionFiles.length > 0)
+  await Promise.all(sessionFiles.map(file => rm(join(sessionRoot, file), { force: true })))
+  const missing = await engine.readWorkObservation({ instanceId: 'personal', observationId: firstRouter.id, limit: 100 })
+  assert.equal(missing.historyStatus, 'missing')
+  assert.deepEqual(missing.events, [])
 
   await assert.rejects(engine.readWorkObservation({ instanceId: 'personal', observationId: alpha.id, generation: 'guessed-generation' }), { code: 'NOT_FOUND' })
   await assert.rejects(engine.getWorkObservations({ instanceId: 'team' }), { code: 'SOURCE_NOT_AUTHORIZED' })

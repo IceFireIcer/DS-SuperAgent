@@ -13,11 +13,18 @@ interface WorkSplit {
 }
 
 interface WorkRouterTurn {
+  id: string
   workBriefId: string
   sessionId: string
-  startSeq: number
-  endSeq: number
+  phase: 'route' | 'update'
+  status: 'pending' | 'completed' | 'failed'
+  startSeq?: number
+  endSeq?: number
+  stepCount?: number
+  budget: number
+  errorCode?: string
   createdAt: number
+  updatedAt: number
 }
 
 interface ReadyReport {
@@ -50,6 +57,8 @@ interface WorkObservationItem {
 interface WorkObservationFact {
   label: string
   value: string
+  detailId?: string
+  detailBytes?: number
 }
 
 interface WorkObservationGeneration {
@@ -78,6 +87,8 @@ interface WorkObservationEvent {
   isError?: boolean
   reason?: string
   detail?: string
+  detailId?: string
+  detailBytes?: number
 }
 
 export interface WorkObservationPage {
@@ -98,12 +109,27 @@ export interface WorkObservationHistory {
   sessionId?: string
   generation?: string
   current: boolean
+  historyStatus: 'available' | 'not-started' | 'missing'
   facts: WorkObservationFact[]
   generations: WorkObservationGeneration[]
   events: WorkObservationEvent[]
   next?: number
   hasMore: boolean
 }
+
+export interface WorkObservationDetailPage {
+  detailId: string
+  label: string
+  text: string
+  bytes: number
+  next?: number
+  hasMore: boolean
+}
+
+type WorkObservationDetailLocator =
+  | { version: 1; kind: 'event'; sessionId: string; seq: number }
+  | { version: 1; kind: 'report'; ticketId: string; reportId: string; assignmentId: string
+      source: 'result' | 'evidence' | 'tool'; index?: number }
 
 interface ObservationAddress {
   version: 1
@@ -122,6 +148,7 @@ interface ObservationCursor {
 
 const observationId = (address: ObservationAddress) => Buffer.from(JSON.stringify(address)).toString('base64url')
 const encodeCursor = (cursor: ObservationCursor) => Buffer.from(JSON.stringify(cursor)).toString('base64url')
+const encodeDetailId = (locator: WorkObservationDetailLocator) => Buffer.from(JSON.stringify(locator)).toString('base64url')
 const messageText = (content: unknown) => Array.isArray(content) ? content
   .filter(block => block && typeof block === 'object' && (block as { type?: unknown }).type === 'text')
   .map(block => (block as { text?: unknown }).text)
@@ -177,7 +204,37 @@ function decodeCursor(value: unknown): ObservationCursor | undefined {
   }
 }
 
-function projectEvent(raw: unknown): WorkObservationEvent | undefined {
+function decodeDetailId(value: unknown): WorkObservationDetailLocator {
+  if (typeof value !== 'string' || value.length < 8 || value.length > 4096) {
+    throw new CoreError('NOT_FOUND', 'The requested work detail is unavailable.')
+  }
+  try {
+    const decoded = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as Partial<WorkObservationDetailLocator>
+    if (decoded.version !== 1 || !['event', 'report'].includes(decoded.kind ?? '')) throw new Error('invalid detail')
+    if (decoded.kind === 'event') {
+      if (typeof decoded.sessionId !== 'string' || !decoded.sessionId
+        || !Number.isSafeInteger(decoded.seq) || decoded.seq! < 0) throw new Error('invalid event detail')
+    } else if (decoded.kind === 'report') {
+      if (typeof decoded.ticketId !== 'string' || !decoded.ticketId
+        || typeof decoded.reportId !== 'string' || !decoded.reportId
+        || typeof decoded.assignmentId !== 'string' || !decoded.assignmentId
+        || !['result', 'evidence', 'tool'].includes(decoded.source ?? '')
+        || decoded.source === 'tool' && (!Number.isSafeInteger(decoded.index) || decoded.index! < 0)) {
+        throw new Error('invalid report detail')
+      }
+    }
+    return decoded as WorkObservationDetailLocator
+  } catch {
+    throw new CoreError('NOT_FOUND', 'The requested work detail is unavailable.')
+  }
+}
+
+function detailFact(label: string, value: string, locator: WorkObservationDetailLocator, maximum = 512): WorkObservationFact {
+  const bytes = Buffer.byteLength(value)
+  return { label, value: summary(value, maximum), ...(bytes > maximum ? { detailId: encodeDetailId(locator), detailBytes: bytes } : {}) }
+}
+
+function projectEvent(raw: unknown, sessionId: string): WorkObservationEvent | undefined {
   if (!raw || typeof raw !== 'object') return undefined
   const event = raw as { seq?: unknown; time?: unknown; type?: unknown; data?: Record<string, unknown> }
   const seq = Number(event.seq)
@@ -207,9 +264,11 @@ function projectEvent(raw: unknown): WorkObservationEvent | undefined {
   if (event.type === 'tool/result') {
     const message = event.data?.message as { isError?: unknown; content?: unknown } | undefined
     const output = redact(messageText(message?.content)).trim()
+    const detailId = Buffer.byteLength(output) > 1024 ? encodeDetailId({ version: 1, kind: 'event', sessionId, seq }) : undefined
     return { ...common, kind: 'tool-result', isError: message?.isError === true,
       text: message?.isError === true ? 'Tool call failed.' : 'Tool call completed.',
-      ...(output ? { detail: summary(output, 1024) } : {}) }
+      ...(output ? { detail: summary(output, 1024) } : {}),
+      ...(detailId ? { detailId, detailBytes: Buffer.byteLength(output) } : {}) }
   }
   if (event.type === 'turn/end') {
     const reason = event.data?.reason as { kind?: unknown } | undefined
@@ -290,10 +349,69 @@ export class WorkObservations {
     const address = decodeObservationId(request.observationId)
     const resolved = await this.storage.transaction(this.instanceId,
       transaction => this.readFacts(transaction, mainId, address, request.generation))
-    const { ranges, ...facts } = resolved
-    const history = await this.readSession(facts.sessionId, ranges, after, limit)
-    return { id: observationId(address), ...facts, events: history.events,
+    const { ranges, sessionExpectedToExist, ...facts } = resolved
+    const history = await this.readSession(facts.sessionId, ranges, sessionExpectedToExist, after, limit)
+    return { id: observationId(address), ...facts, historyStatus: history.historyStatus, events: history.events,
       ...(history.next === undefined ? {} : { next: history.next }), hasMore: history.hasMore }
+  }
+
+  async detail(mainId: string, request: { observationId: string; generation?: string; detailId: string;
+    offset?: number; limit?: number }): Promise<WorkObservationDetailPage> {
+    identifier(mainId, 'mainId')
+    const offset = request.offset ?? 0
+    const limit = request.limit ?? 8192
+    if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isInteger(limit) || limit < 1 || limit > 16384) {
+      throw new CoreError('INVALID_INPUT', 'Work detail needs a bounded page and non-negative offset.')
+    }
+    const address = decodeObservationId(request.observationId)
+    const locator = decodeDetailId(request.detailId)
+    const resolved = await this.storage.transaction(this.instanceId,
+      transaction => this.readFacts(transaction, mainId, address, request.generation))
+    let label: string
+    let text: string
+    if (locator.kind === 'event') {
+      if (locator.sessionId !== resolved.sessionId || !this.inRanges(locator.seq, resolved.ranges)) {
+        throw new CoreError('NOT_FOUND', 'The requested work detail is unavailable.')
+      }
+      let raw: unknown
+      try {
+        const page = await this.sessions.readSession(locator.sessionId, { limit: 2, after: locator.seq - 1 })
+        raw = page.events.find(event => Number((event as { seq?: unknown }).seq) === locator.seq)
+      } catch (error) {
+        if (error instanceof CoreError && error.code === 'NOT_FOUND') {
+          throw new CoreError('NOT_FOUND', 'The requested Session detail is missing.')
+        }
+        throw error
+      }
+      const event = raw as { type?: unknown; data?: Record<string, unknown> } | undefined
+      const message = event?.data?.message as { content?: unknown } | undefined
+      text = event?.type === 'tool/result' ? redact(messageText(message?.content)).trim() : ''
+      if (!text) throw new CoreError('NOT_FOUND', 'The requested work detail is unavailable.')
+      label = 'Tool output'
+    } else {
+      if (address.role !== 'worker' || resolved.role !== 'worker' || locator.ticketId !== resolved.ticketId) {
+        throw new CoreError('NOT_FOUND', 'The requested work detail is unavailable.')
+      }
+      const report = (await this.storage.transaction(this.instanceId,
+        transaction => this.reports(transaction, locator.ticketId)))
+        .find(candidate => candidate.id === locator.reportId && candidate.assignmentId === locator.assignmentId)
+      if (!report) throw new CoreError('NOT_FOUND', 'The requested work detail is unavailable.')
+      if (locator.source === 'result') {
+        label = 'Result'
+        text = redact(report.result)
+      } else if (locator.source === 'evidence') {
+        label = 'Evidence'
+        text = redact(report.evidence)
+      } else {
+        const toolFact = locator.index === undefined ? undefined : report.toolFacts[locator.index]
+        if (!toolFact) throw new CoreError('NOT_FOUND', 'The requested work detail is unavailable.')
+        label = `Tool fact: ${toolFact.tool}`
+        text = redact(JSON.stringify({ outcome: toolFact.outcome, output: toolFact.output }, null, 2))
+      }
+    }
+    const end = Math.min(text.length, offset + limit)
+    return { detailId: request.detailId, label, text: text.slice(offset, end), bytes: Buffer.byteLength(text),
+      ...(end < text.length ? { next: end } : {}), hasMore: end < text.length }
   }
 
   private async listIn(transaction: AsyncTx, mainId: string) {
@@ -381,7 +499,7 @@ export class WorkObservations {
       const status = receipts.some(value => value?.status === 'rejected') ? 'rejected'
         : receipts.some(value => value?.status === 'routing') ? 'routing' : receipts.length && receipts.every(value => value?.status === 'accepted')
           ? 'accepted' : 'routing'
-      const ranges = await this.routerRanges(transaction, brief)
+      const { ranges, turns } = await this.routerRanges(transaction, brief)
       const plan: string[] = []
       if (split) {
         for (const [position, itemId] of split.itemIds.entries()) {
@@ -403,6 +521,8 @@ export class WorkObservations {
         { label: 'Goal', value: summary(brief.goal) },
         { label: 'Constraints', value: summary(brief.constraints) },
         { label: 'Acceptance criteria', value: summary(brief.acceptanceCriteria) },
+        ...(turns.length ? [{ label: 'Router turns', value: summary(turns.map(turn =>
+          `${turn.phase}: ${turn.status}, steps ${turn.stepCount ?? 0}/${turn.budget}${turn.errorCode ? `, ${turn.errorCode}` : ''}`).join('\n'), 2048) }] : []),
         ...(plan.length ? [{ label: 'Decomposition', value: summary(plan.join('\n'), 2048) }] : []),
         ...(conflict ? [{ label: 'Conflict', value: summary(conflict.message, 1024) }] : []),
       ]
@@ -418,6 +538,7 @@ export class WorkObservations {
         facts,
         generations: [],
         ranges,
+        sessionExpectedToExist: turns.some(turn => turn.status !== 'pending' || turn.startSeq !== undefined || turn.endSeq !== undefined),
       }
     }
     if (!address.workItemId || !address.ticketId) throw new CoreError('NOT_FOUND', 'The requested work observation is unavailable.')
@@ -490,16 +611,21 @@ export class WorkObservations {
         { label: 'Constraints', value: summary(item.constraints) },
         { label: 'Acceptance criteria', value: summary(item.acceptanceCriteria) },
         ...(report ? [
-          { label: 'Result', value: summary(report.result) },
-          { label: 'Evidence', value: summary(report.evidence) },
+          detailFact('Result', report.result, { version: 1, kind: 'report', ticketId, reportId: report.id,
+            assignmentId: selected.id, source: 'result' }),
+          detailFact('Evidence', report.evidence, { version: 1, kind: 'report', ticketId, reportId: report.id,
+            assignmentId: selected.id, source: 'evidence' }),
           { label: 'Artifacts', value: summary(report.artifacts.map(artifact =>
             `${artifact.path} (${artifact.bytes} bytes, sha256:${artifact.sha256.slice(0, 16)}…)`).join('\n'), 2048) },
-          { label: 'Tool facts', value: summary(report.toolFacts.map(toolFact =>
-            `${toolFact.tool}: ${toolFact.outcome}`).join('\n'), 1024) },
+          ...report.toolFacts.map((toolFact, index) => detailFact(`Tool fact ${index + 1}: ${toolFact.tool}`,
+            redact(JSON.stringify({ outcome: toolFact.outcome, output: toolFact.output }, null, 2)),
+            { version: 1, kind: 'report', ticketId, reportId: report.id, assignmentId: selected.id, source: 'tool', index })),
         ] : []),
       ],
       generations,
       ranges: [range],
+      sessionExpectedToExist: selected.state !== 'pending' || selected.sessionStartSeq !== undefined
+        || selected.sessionEndSeq !== undefined || !!report,
     }
   }
 
@@ -517,12 +643,19 @@ export class WorkObservations {
       after = page.cursor
       if (pageCount === 9) throw new CoreError('ROUTER_OBSERVATION_BUDGET', 'Router observation history exceeds its 1000-turn budget.')
     }
-    if (turns.length) return turns.sort((left, right) => left.startSeq - right.startSeq).map(turn => ({
-      startSeq: turn.startSeq, endSeq: turn.endSeq, startTime: brief.createdAt,
-    }))
+    const ordered = turns.sort((left, right) => left.createdAt - right.createdAt || left.id.localeCompare(right.id))
+    if (ordered.length) return {
+      turns: ordered,
+      ranges: ordered.map(turn => ({
+        ...(turn.startSeq === undefined ? {} : { startSeq: turn.startSeq }),
+        ...(turn.endSeq === undefined ? {} : { endSeq: turn.endSeq }),
+        startTime: turn.createdAt,
+        ...(turn.status === 'pending' ? {} : { endTime: turn.updatedAt }),
+      })),
+    }
 
     const next = await this.nextRouterBrief(transaction, brief)
-    return [{ startTime: brief.createdAt, ...(next ? { endTime: next.createdAt } : {}) }]
+    return { turns: [], ranges: [{ startTime: brief.createdAt, ...(next ? { endTime: next.createdAt } : {}) }] }
   }
 
   private async nextRouterBrief(transaction: AsyncTx, brief: MainWorkBrief) {
@@ -578,8 +711,9 @@ export class WorkObservations {
     return [...records.values()].sort((left, right) => left.createdAt - right.createdAt || left.id.localeCompare(right.id))
   }
 
-  private async readSession(sessionId: string | undefined, ranges: WorkObservationRange[], after: number | undefined, limit: number) {
-    if (!sessionId) return { events: [] as WorkObservationEvent[], next: after, hasMore: false }
+  private async readSession(sessionId: string | undefined, ranges: WorkObservationRange[], sessionExpectedToExist: boolean,
+    after: number | undefined, limit: number) {
+    if (!sessionId) return { historyStatus: 'not-started' as const, events: [] as WorkObservationEvent[], next: after, hasMore: false }
     const events: WorkObservationEvent[] = []
     const orderedRanges = ranges.sort((left, right) => left.startTime - right.startTime || (left.startSeq ?? Infinity) - (right.startSeq ?? Infinity))
     const firstStart = orderedRanges.find(range => range.startSeq !== undefined)?.startSeq
@@ -597,20 +731,29 @@ export class WorkObservations {
             ? (range.startSeq === undefined || seq >= range.startSeq) && (range.endSeq === undefined || seq <= range.endSeq)
             : Number.isFinite(time) && time >= range.startTime && (range.endTime === undefined || time < range.endTime))
           if (!inRange) continue
-          const event = projectEvent(raw)
+          const event = projectEvent(raw, sessionId)
           if (event) events.push(event)
           if (events.length === limit) {
-            return { events, next, hasMore: index < page.events.length - 1 || page.cursor !== undefined }
+            return { historyStatus: 'available' as const, events, next, hasMore: index < page.events.length - 1 || page.cursor !== undefined }
           }
         }
-        if (!page.cursor) return { events, next, hasMore: false }
+        if (!page.cursor) return { historyStatus: 'available' as const, events, next, hasMore: false }
         rawAfter = page.cursor
-        if (pageCount === 9) return { events, next, hasMore: true }
+        if (pageCount === 9) return { historyStatus: 'available' as const, events, next, hasMore: true }
       }
     } catch (error) {
-      if (error instanceof CoreError && error.code === 'NOT_FOUND') return { events, next, hasMore: false }
+      if (error instanceof CoreError && error.code === 'NOT_FOUND') {
+        return { historyStatus: sessionExpectedToExist ? 'missing' as const : 'not-started' as const,
+          events: [], next: after, hasMore: false }
+      }
       throw error
     }
-    return { events, next, hasMore: true }
+    return { historyStatus: 'available' as const, events, next, hasMore: true }
+  }
+
+  private inRanges(seq: number, ranges: WorkObservationRange[]) {
+    return ranges.some(range => range.startSeq !== undefined || range.endSeq !== undefined
+      ? (range.startSeq === undefined || seq >= range.startSeq) && (range.endSeq === undefined || seq <= range.endSeq)
+      : false)
   }
 }
