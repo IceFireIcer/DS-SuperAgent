@@ -34,6 +34,14 @@ function secretValue(value: unknown): asserts value is string {
   }
 }
 
+function stableUuid(instanceId: string, commandId: string) {
+  const bytes = createHash('sha256').update(JSON.stringify([instanceId, commandId])).digest()
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80
+  const hex = bytes.subarray(0, 16).toString('hex')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
 /** Host-only adapter. Record keys cannot resolve ambient env or profile credentials. */
 export class ProductCredentialVault implements CredentialVault {
   constructor(private readonly records: ProductCredentialRecords) {
@@ -41,12 +49,23 @@ export class ProductCredentialVault implements CredentialVault {
       || typeof records.deleteRecord !== 'function') throw unavailable()
   }
 
-  async create(instanceId: string, value: string): Promise<string> {
+  referenceFor(instanceId: string, commandId: string) {
+    identifier(instanceId, 'instanceId'); identifier(commandId, 'commandId')
+    return `${owner}/vault-${createHash('sha256').update(instanceId).digest('hex')}-${stableUuid(instanceId, commandId)}`
+  }
+
+  async create(instanceId: string, value: string, commandId?: string): Promise<string> {
     identifier(instanceId, 'instanceId'); secretValue(value)
-    const reference = `${owner}/vault-${createHash('sha256').update(instanceId).digest('hex')}-${randomUUID()}`
+    if (commandId !== undefined) identifier(commandId, 'commandId')
+    const reference = commandId === undefined
+      ? `${owner}/vault-${createHash('sha256').update(instanceId).digest('hex')}-${randomUUID()}`
+      : this.referenceFor(instanceId, commandId)
     try {
       await this.records.modifyRecord(reference, async current => {
-        if (current !== undefined) throw writeFailed()
+        if (current !== undefined) {
+          if (current.kind === 'api-key' && current.env === undefined && current.key === value) return current
+          throw writeFailed()
+        }
         return { kind: 'api-key', key: value }
       })
       if (await this.readSecret(instanceId, reference) !== value) throw writeFailed()
@@ -84,6 +103,14 @@ export class ProductCredentialVault implements CredentialVault {
   async revoke(instanceId: string, reference: string): Promise<void> {
     const key = keyFor(instanceId, reference)
     await this.readSecret(instanceId, reference)
+    try {
+      await this.records.deleteRecord(key)
+      if (await this.records.readRecord(key) !== undefined) throw writeFailed()
+    } catch { throw writeFailed() }
+  }
+
+  async ensureRevoked(instanceId: string, reference: string): Promise<void> {
+    const key = keyFor(instanceId, reference)
     try {
       await this.records.deleteRecord(key)
       if (await this.records.readRecord(key) !== undefined) throw writeFailed()

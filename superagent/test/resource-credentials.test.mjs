@@ -137,6 +137,7 @@ test('rotation changes only the trusted vault reference, deletion is a persisten
   const deleted = await credentials.delete({ instanceId: 'personal', commandId: 'delete', resourceId: resource.id,
     expectedRevision: 3 })
   assert.equal(deleted.status, 'deleted')
+  assert.equal(deleted.cleanupPending, true)
   assert.deepEqual(deleted.grants, [])
   assert.deepEqual(await credentials.delete({ instanceId: 'personal', commandId: 'delete', resourceId: resource.id,
     expectedRevision: 3 }), deleted)
@@ -144,6 +145,13 @@ test('rotation changes only the trusted vault reference, deletion is a persisten
   connections.push(reopenedStorage)
   const reopened = new ResourceCredentials(reopenedStorage, 'personal', adapter)
   await assert.rejects(reopened.use(use, async () => {}), { code: 'RESOURCE_UNAVAILABLE' })
+  const pending = await reopened.pendingVaultDeletes({ instanceId: 'personal' })
+  assert.deepEqual(pending.items, [{ resourceId: resource.id, reference: 'vault:rotated' }])
+  await assert.rejects(reopened.pendingVaultDeletes({ instanceId: 'other' }), { code: 'SOURCE_NOT_AUTHORIZED' })
+  vault.delete(pending.items[0].reference)
+  await reopened.confirmVaultDeletion({ instanceId: 'personal', ...pending.items[0] })
+  assert.deepEqual((await reopened.pendingVaultDeletes({ instanceId: 'personal' })).items, [])
+  assert.equal((await reopened.get({ instanceId: 'personal', resourceId: resource.id })).cleanupPending, undefined)
   await assert.rejects(reopened.grant({ instanceId: 'personal', commandId: 'later', resourceId: resource.id,
     expectedRevision: 4, scope: { role: 'worker' }, purposes: ['tool'] }), { code: 'RESOURCE_UNAVAILABLE' })
   assert.equal(granted.grants.length, 1)

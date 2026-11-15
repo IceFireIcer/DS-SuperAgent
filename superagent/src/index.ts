@@ -68,6 +68,7 @@ export { createChatServer } from './chat-server.js'
 export { ClientAccess } from './client-access.js'
 export type { ClientCapability, ClientEnrollment, ClientEvent, ClientEventInput, ClientEventPage, ClientGrant, ClientIdentity } from './client-access.js'
 export { ResourceCredentials } from './resource-credentials.js'
+export { ProductCredentialManager } from './product-credential-manager.js'
 export type { CredentialGrant, CredentialPurpose, CredentialRequest, CredentialResourceView, CredentialRole, CredentialScope,
   CredentialUse, CredentialVault } from './resource-credentials.js'
 export { createClientGateway } from './client-gateway.js'
