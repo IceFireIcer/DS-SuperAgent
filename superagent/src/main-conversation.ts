@@ -723,7 +723,6 @@ export class MainConversation {
         : text
       await this.updateCommand(key, 'running', undefined, { attempts, run: { attempts, messageId, sessionId: current.mainSessionId,
         generation: state.generation, startedAt: Date.now() } })
-      const controller = new AbortController()
       this.turnControllers.set(key, controller)
       const stopping = await commandTransaction(this.storage, this.instanceId,
         tx => tx.get<MainTurnStop>('main-turn-stop', command.messageId))
