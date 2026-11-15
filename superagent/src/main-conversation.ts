@@ -522,7 +522,8 @@ export class MainConversation {
         environmentId: command.environmentId ?? '', ids: command.attachmentIds! }))
     }
     return [
-      { name: 'delegate_work', description: 'Create one durable local WorkBrief for one to four independent items. Give every item a clear goal, strict constraints and observable acceptance criteria. The Router decides and establishes the Tickets; this tool does not mean any Worker started or completed.',
+      { name: 'delegate_work', description: 'Create one durable local WorkBrief for one to four independent items. Give every item a clear goal, strict constraints and observable acceptance criteria. When attachments are present, assign their exact IDs to each item with attachmentIds; an item without attachments uses an empty array. The Router cannot expand these grants. The Router decides and establishes the Tickets; this tool does not mean any Worker started or completed.'
+          + (command.attachmentIds?.length ? ` Available attachments: ${JSON.stringify(command.attachmentIds.map((id, index) => ({ id, name: command.assets?.[index]?.name ?? '' })))}.` : ''),
         parameters: {
           items: {
             type: 'array',
@@ -532,6 +533,7 @@ export class MainConversation {
                 goal: { type: 'string', required: true },
                 constraints: { type: 'string' },
                 acceptanceCriteria: { type: 'string' },
+                attachmentIds: { type: 'array', items: { type: 'string' } },
               },
             },
           },
@@ -548,18 +550,25 @@ export class MainConversation {
               goal: value.goal,
               constraints: value.constraints ?? args.constraints,
               acceptanceCriteria: value.acceptanceCriteria ?? args.acceptanceCriteria,
+              ...(value.attachmentIds === undefined ? {} : { attachmentIds: value.attachmentIds }),
             }
           }) as MainWorkIntent[] : undefined
-          if (command.assets?.length && items?.length !== 1 && items !== undefined) {
+          if (command.assets?.length && items && items.length > 1
+            && items.some(item => !Array.isArray(item.attachmentIds))) {
             return JSON.stringify({ status: 'rejected', code: 'ATTACHMENT_SCOPE_AMBIGUOUS', ticketCreated: false,
-              message: 'Attached resources can be delegated to one work item only.' })
+              message: 'Assign the original attachment IDs to each work item explicitly.' })
           }
           await checkAttachments()
+          const content = command.content?.filter(block => block.type !== 'text')
+          if (command.attachmentIds?.length && (command.assets?.length !== command.attachmentIds.length
+            || content?.length !== command.attachmentIds.length)) {
+            throw new CoreError('INCOMPLETE_STATE', 'The Main attachment catalog no longer matches the admitted input.')
+          }
+          const attachments = command.attachmentIds?.map((id, index) => ({ id, asset: command.assets![index]!,
+            ...(content?.[index]?.type === 'image' ? { image: content[index].attachment } : {}) }))
           const brief = await work.create({ commandId: `main-work:${command.messageId}`, mainId: binding.mainId,
             mainSessionId: binding.mainSessionId, routerSessionId: binding.routerSessionId, mainMessageId: command.messageId,
-            originalUserText, ...(command.assets?.length ? { resources: command.assets } : {}),
-            ...(command.content?.some(block => block.type === 'image')
-              ? { images: command.content.filter(block => block.type === 'image').map(block => block.attachment) } : {}),
+            originalUserText, ...(attachments?.length ? { attachments } : {}),
             ...(items ? { items } : { goal: args.goal ?? '', constraints: args.constraints ?? '', acceptanceCriteria: args.acceptanceCriteria ?? '' }),
             configurationRevision, ...(command.environmentId ? { environmentId: command.environmentId } : {}) })
           return JSON.stringify(await work.query(binding.mainId, { workBriefId: brief.id }))

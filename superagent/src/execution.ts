@@ -26,6 +26,8 @@ import { environmentHandoffPrompt, handoffCopyBlockers, isEnvironmentHandoffActi
   type EnvironmentHandoffView, type HandoffBlocker } from './environment-handoff.js'
 import { assertHostTakeoverSettled, hostTakeoverKey, isHostTakeoverPending, loadHostTakeover, type HostTakeoverBlocker, type HostTakeoverRecord,
   type HostTakeoverTicket } from './host-takeover.js'
+import { assertReferenceShape, type EnvironmentAssetReference } from './environment-assets.js'
+import type { MainWorkBrief, MainWorkItem } from './work-delegation.js'
 
 const maxRecoveryAttempts = 3
 const maxDeliveryAttempts = 5
@@ -947,6 +949,38 @@ export class Execution {
       }
     }
     if (!environment) await this.storage.transaction(this.instanceId, transaction => this.slots?.phase(transaction, { ticketId, assignmentId: assignment.id, phase: 'turn' }) ?? Promise.resolve())
+    // Tool-created grants use the existing work-command record kind on both storage backends.
+    const grantKey = (id: string) => JSON.stringify(['work-asset-grant', ticketId, id])
+    const sameAttachment = (reference: EnvironmentAssetReference, args: Record<string, string>) =>
+      reference.kind === 'attachment' && reference.id === args.id && reference.sha256 === args.sha256
+        && reference.bytes === Number(args.bytes) && reference.environmentId === environment?.config.id
+        && reference.environmentKind === environment?.kind
+    const authorizeAssetRead = async (args: Record<string, string>) => {
+      if (args.kind !== 'attachment') return
+      await this.storage.transaction(this.instanceId, async tx => {
+        const link = await tx.get<{ workBriefId: string; workItemId: string }>('work-ticket', ticketId)
+        const item = link ? await tx.get<MainWorkItem>('work-item', link.workItemId) : undefined
+        const brief = item ? await tx.get<MainWorkBrief>('work-brief', item.workBriefId) : undefined
+        const admitted = brief?.attachments?.some(attachment => attachment.id === args.attachmentId
+          && item?.attachmentIds?.includes(attachment.id)
+          && sameAttachment(attachment.asset, args))
+          || !brief?.attachments && brief?.resources?.some(reference => sameAttachment(reference, args))
+        const saved = args.attachmentId ? undefined
+          : await tx.get<EnvironmentAssetReference>('work-command', grantKey(args.id ?? ''))
+        if (!admitted && (!saved || !sameAttachment(saved, args))) {
+          throw new CoreError('RESOURCE_NOT_AUTHORIZED', 'This attachment was not granted to this work item.')
+        }
+      })
+    }
+    const recordSavedAsset = async (output: Record<string, unknown>) => {
+      assertReferenceShape(output)
+      if (output.kind !== 'attachment') throw new CoreError('INCOMPLETE_STATE', 'The Environment did not return an attachment.')
+      await this.storage.transaction(this.instanceId, async tx => {
+        const current = await tx.get<Assignment>('assignment', ticketId)
+        if (current?.id !== assignment.id || current.state !== 'running') throw new CoreError('STALE_ASSIGNMENT', 'The saving Assignment is no longer current.')
+        if (!await tx.get('work-command', grantKey(output.id))) await tx.insert('work-command', grantKey(output.id), output)
+      })
+    }
     const environmentTool = async (name: string, args: Record<string, string>, signal: AbortSignal) => {
       if (!bound) throw new CoreError('ENVIRONMENT_DENIED', 'No Environment is bound to this Assignment.')
       if (reported) throw new CoreError('REPORT_SEALED', 'Environment tools are sealed after the ready report; no later mutation is authorized.')
@@ -1000,7 +1034,9 @@ export class Execution {
         }
       }
       try {
+        if (name === 'read_asset') await authorizeAssetRead(args)
         const output = await bound.invoke(name, args, signal)
+        if (name === 'save_attachment') await recordSavedAsset(output)
         const success = name !== 'run_command' && name !== 'run_shell'
           || output.exitCode === 0 && !output.cancelled && !output.truncated
         const summary = JSON.parse(JSON.stringify(output, (_key, value) => typeof value === 'string' ? value.slice(0, 2000) : value))
@@ -1020,10 +1056,10 @@ export class Execution {
       parameters: { name: { type: 'string', required: true }, data: { type: 'string', required: true }, encoding: { type: 'string', required: true },
         mediaType: { type: 'string', required: true } },
       execute: (args, signal) => environmentTool('save_attachment', args, signal) }
-    const readAssetTool: NativeTool = { name: 'read_asset', description: 'Read one bounded byte page from an attachment, artifact, spill or skill reference inside the same execution world. Use nextOffset for the next page; a truncated page is not the full object.',
+    const readAssetTool: NativeTool = { name: 'read_asset', description: 'Read one bounded byte page from an attachment, artifact, spill or skill reference inside the same execution world. Include attachmentId from the work grant for an admitted attachment. Use nextOffset for the next page; a truncated page is not the full object.',
       parameters: { kind: { type: 'string', required: true }, id: { type: 'string', required: true }, sha256: { type: 'string', required: true },
         bytes: { type: 'string', required: true }, offset: { type: 'string', required: true }, maxBytes: { type: 'string', required: true },
-        path: { type: 'string', required: true } },
+        path: { type: 'string', required: true }, attachmentId: { type: 'string' } },
       execute: (args, signal) => environmentTool('read_asset', args, signal) }
     const listSkillsTool: NativeTool = { name: 'list_skills', description: 'List the model-invocable skills discovered by the bound Environment\'s public skill provider. A name is not loaded content; read it with read_asset kind=skill.',
       parameters: {}, execute: (_args, signal) => environmentTool('list_skills', {}, signal) }
@@ -1057,7 +1093,12 @@ export class Execution {
      */
     const childTools = (): NativeTool[] => bound ? environmentTools.map(tool => ({
       name: tool.name, description: tool.description, parameters: tool.parameters,
-      execute: async (args: Record<string, string>, signal: AbortSignal) => JSON.stringify(await bound!.invoke(tool.name, args, signal)),
+      execute: async (args: Record<string, string>, signal: AbortSignal) => {
+        if (tool.name === 'read_asset') await authorizeAssetRead(args)
+        const output = await bound!.invoke(tool.name, args, signal)
+        if (tool.name === 'save_attachment') await recordSavedAsset(output)
+        return JSON.stringify(output)
+      },
     })) : []
     // Background work outlives the turn: the tool returns a job identity at once, and the completion event
     // arrives as a later turn on this same Session instead of holding the Router or this step open.

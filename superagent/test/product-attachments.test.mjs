@@ -100,7 +100,7 @@ test('Main passes admitted resources to one Worker and serves only its recorded 
       const reference = JSON.parse(matched[1]).find(item => item.name === 'note.txt')
       assert.ok(reference)
       yield* toolResponse('read_asset', { kind: reference.kind, id: reference.id, sha256: reference.sha256,
-        bytes: String(reference.bytes), path: '', offset: '0', maxBytes: '1024' }, 'read-attached')
+        attachmentId: reference.attachmentId, bytes: String(reference.bytes), path: '', offset: '0', maxBytes: '1024' }, 'read-attached')
     } else if (count === 1) {
       readText = JSON.stringify(options.messages.filter(message => message.role === 'tool').at(-1)?.content)
       yield* toolResponse('write_file', { path: 'derived.txt', text: 'verified from attachment\n' }, 'write-derived')
@@ -207,4 +207,122 @@ test('a revoked attachment is not delivered by a queued Main input', { timeout: 
   const session = await reader.readSession(binding.mainSessionId, { limit: 100 })
   assert.equal(session.events.some(event => event.type === 'user/message'
     && event.data?.content?.some(block => block.type === 'file')), false)
+})
+
+test('one attached request grants two Workers only their own file or native image', { timeout: 30000 }, async t => {
+  const root = await mkdtemp(join(tmpdir(), 'r5-item-attachments-'))
+  const work = join(root, 'work')
+  const core = join(root, 'core')
+  await Promise.all([mkdir(work), mkdir(core)])
+  let fileA, imageA, fileB, imageB, duplicateB, fileReference, deniedRead = '', ownReads = []
+  const native = await nativeContext(join(root, 'sessions'), function* (options) {
+    const count = completedToolCount(options)
+    if (options.model === 'main') {
+      if (lastUserText(options).startsWith('[Work update]')) { yield* textResponse('Both items are complete.'); return }
+      if (count === 0) yield* toolResponse('delegate_work', { items: [
+        { goal: 'Read file A.', constraints: 'Use only A resources.', acceptanceCriteria: 'Verify A.', attachmentIds: [fileA.id, imageA.id] },
+        { goal: 'Read image B.', constraints: 'Use only B resources.', acceptanceCriteria: 'Verify B.', attachmentIds: [fileB.id, imageB.id, duplicateB.id] },
+      ] })
+      else yield* textResponse('Both items were delegated.')
+      return
+    }
+    if (options.model === 'router') { yield* routerResponse(options); return }
+    const isB = lastUserText(options).includes('Goal:\nRead image B.')
+    assert.match(lastUserText(options), /Original Main request:\nRead A and B independently\./u)
+    const matched = /Attached resources for this work[^\n]*\n(\[[^\n]+\])/u.exec(lastUserText(options))
+    assert.ok(matched)
+    const references = JSON.parse(matched[1])
+    assert.deepEqual(references.map(reference => reference.name).sort(), isB ? ['B.png', 'B.txt', 'duplicate.txt'] : ['A.png', 'A.txt'])
+    const ownReference = references.find(reference => reference.name === (isB ? 'B.txt' : 'A.txt'))
+    assert.ok(ownReference)
+    const read = reference => ({ kind: reference.kind, id: reference.id, sha256: reference.sha256, attachmentId: reference.attachmentId,
+      bytes: String(reference.bytes), path: '', offset: '0', maxBytes: '1024' })
+    if (count === 0) yield* toolResponse('read_asset', read(isB ? fileReference : ownReference), isB ? 'foreign' : 'own-a')
+    else if (isB && count === 1) {
+      deniedRead = JSON.stringify(options.messages.filter(message => message.role === 'tool').at(-1)?.content)
+      yield* toolResponse('read_asset', read(ownReference), 'own-b')
+    } else if (count === (isB ? 2 : 1)) {
+      ownReads.push(JSON.stringify(options.messages.filter(message => message.role === 'tool').at(-1)?.content))
+      yield* toolResponse('write_file', { path: isB ? 'derived-b.txt' : 'derived-a.txt', text: isB ? 'B verified\n' : 'A verified\n' }, 'write')
+    } else if (count === (isB ? 3 : 2)) yield* toolResponse('run_shell', {
+      command: `node -e "if(require('fs').readFileSync('${isB ? 'derived-b.txt' : 'derived-a.txt'}','utf8').trim() !== '${isB ? 'B' : 'A'} verified') process.exit(1)"`,
+    }, 'verify')
+    else if (count === (isB ? 4 : 3)) yield* toolResponse('report_ready', { result: isB ? 'Image B processed.' : 'File A processed.',
+      evidence: 'Read the authorized resource and checked the derived file.', artifacts: isB ? 'derived-b.txt' : 'derived-a.txt' }, 'report')
+    else yield* textResponse('Finished.')
+  })
+  await native.plugin(LocalAttachmentStore, { dshHome: join(root, 'harness-home') })
+  let host, reader
+  t.after(async () => { await reader?.close(); await host?.close(); await native.fiber.dispose(); await rm(root, { recursive: true, force: true }) })
+  host = await createProductHost(native, { databasePath: join(core, 'state.sqlite'), workspaceRoot: work,
+    instanceId: 'personal', actorId: 'alice', main: { provider: 'mock', model: 'main' },
+    router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  const instanceId = 'personal'
+  const directory = await host.dispatch('directory-options', { instanceId })
+  fileA = await host.dispatch('attachment-upload', { instanceId, commandId: 'item-file-a',
+    environmentId: directory.default.environmentId, kind: 'file', name: 'A.txt', data: Buffer.from('Only A may read this.').toString('base64') })
+  fileB = await host.dispatch('attachment-upload', { instanceId, commandId: 'item-file-b',
+    environmentId: directory.default.environmentId, kind: 'file', name: 'B.txt', data: Buffer.from('Only B may read this.').toString('base64') })
+  duplicateB = await host.dispatch('attachment-upload', { instanceId, commandId: 'item-file-duplicate',
+    environmentId: directory.default.environmentId, kind: 'file', name: 'duplicate.txt', data: Buffer.from('Only A may read this.').toString('base64') })
+  imageA = await host.dispatch('attachment-upload', { instanceId, commandId: 'item-image-a',
+    environmentId: directory.default.environmentId, kind: 'image', name: 'A.png', mediaType: 'image/png',
+    data: (await sharp({ create: { width: 2, height: 2, channels: 4,
+      background: { r: 0, g: 170, b: 220, alpha: 1 } } }).png().toBuffer()).toString('base64') })
+  imageB = await host.dispatch('attachment-upload', { instanceId, commandId: 'item-image-b',
+    environmentId: directory.default.environmentId, kind: 'image', name: 'B.png', mediaType: 'image/png',
+    data: (await sharp({ create: { width: 2, height: 2, channels: 4,
+      background: { r: 180, g: 30, b: 10, alpha: 1 } } }).png().toBuffer()).toString('base64') })
+  const original = await host.dispatch('attachment-read', { instanceId, id: fileA.id })
+  assert.equal(original.text, 'Only A may read this.')
+  fileReference = { ...original.reference, attachmentId: fileA.id }
+  assert.equal((await host.dispatch('attachment-read', { instanceId, id: duplicateB.id })).sha256, fileReference.sha256)
+  const request = { instanceId, commandId: 'two-items', text: 'Read A and B independently.', attachments: [fileA.id, imageA.id, fileB.id, imageB.id, duplicateB.id] }
+  await host.dispatch('send', request)
+  await host.dispatch('send', request)
+  let history
+  for (let attempt = 0; attempt < 100; attempt++) {
+    history = await host.dispatch('history', { instanceId })
+    if (history.works.length === 2 && history.works.every(item => item.receipt.ticketId)) break
+    await sleep(50)
+  }
+  assert.equal(history.messages.filter(message => message.role === 'user' && message.text === 'Read A and B independently.').length, 1)
+  assert.equal(history.works.length, 2)
+  const a = history.works.find(item => item.brief.goal === 'Read file A.')
+  const b = history.works.find(item => item.brief.goal === 'Read image B.')
+  assert.ok(a?.receipt.ticketId && b?.receipt.ticketId,
+    `both item tickets must be established: ${JSON.stringify(history.works.map(item => ({ brief: item.brief, receipt: item.receipt })))}`)
+  assert.notEqual(a.receipt.ticketId, b.receipt.ticketId)
+  assert.equal(a.brief.sourceEventId, b.brief.sourceEventId)
+  assert.deepEqual(a.brief.attachmentIds, [fileA.id, imageA.id].sort())
+  assert.deepEqual(b.brief.attachmentIds, [fileB.id, imageB.id, duplicateB.id].sort())
+  assert.ok(fileReference)
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const page = await host.dispatch('history', { instanceId })
+    if (page.works.every(item => item.outcome?.status === 'success')) break
+    await sleep(50)
+  }
+  const completed = await host.dispatch('history', { instanceId })
+  assert.equal(completed.works.filter(item => item.outcome?.status === 'success').length, 2)
+  assert.match(deniedRead, /Error: The bound Environment operation failed/u)
+  assert.equal(deniedRead.includes('Only A may read this.'), false)
+  assert.equal(ownReads.some(read => read.includes('Only A may read this.')), true)
+  assert.equal(ownReads.some(read => read.includes('Only B may read this.')), true)
+  assert.equal(ownReads.length, 2)
+  const observation = (await host.dispatch('observe-list', { instanceId, query: 'Read image B.' })).items
+    .find(item => item.role === 'worker' && item.ticketId === b.receipt.ticketId)
+  assert.ok(observation)
+  const detail = await host.dispatch('observe-read', { instanceId, observationId: observation.id, generation: observation.generation })
+  assert.equal(detail.facts.some(fact => fact.label === 'Tool fact 1: read_asset'
+    && fact.value.includes('RESOURCE_NOT_AUTHORIZED')), true, 'the server records the cross-work rejection')
+  assert.equal(JSON.stringify(detail).includes('Only A may read this.'), false)
+  reader = new NativeSessions(native, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  const aSession = await reader.readSession(completed.works.find(item => item.brief.goal === 'Read file A.').control.assignment.sessionId, { limit: 100 })
+  const bSession = await reader.readSession(completed.works.find(item => item.brief.goal === 'Read image B.').control.assignment.sessionId, { limit: 100 })
+  const nativeImages = session => session.events.filter(event => event.type === 'user/message')
+    .flatMap(event => event.data?.content?.filter(block => block.type === 'image').map(block => block.attachment.attachmentId) ?? [])
+  assert.equal(nativeImages(aSession).length, 1)
+  assert.equal(nativeImages(bSession).length, 1)
+  assert.notDeepEqual(nativeImages(aSession), nativeImages(bSession))
+  assert.equal((await host.dispatch('artifact-read', { instanceId, workItemId: b.brief.workItemId, path: 'derived-b.txt' })).text, 'B verified\n')
 })
