@@ -391,7 +391,7 @@ export function applyProduct(ctx) {
         },
         h('p', null, `${deliveryPurposeCopy(delivery.purpose)}: ${deliveryCopy(delivery.state)}${delivery.reason ? ` · ${delivery.reason}` : ''}`),
         h('p', null, `${delivery.destination.sourceInstanceId} · ${delivery.destination.eventId}${delivery.destination.threadId ? ` · ${delivery.destination.threadId}` : ''} · @${delivery.destination.actorId}`),
-        delivery.state === 'unknown' ? h('button', { type: 'button', className: 'bt-soft',
+        delivery.state === 'unknown' || (delivery.state === 'pending' && delivery.attempts > 0) ? h('button', { type: 'button', className: 'bt-soft',
           disabled: reconciling === delivery.id, onClick: () => void reconcile(delivery) },
         reconciling === delivery.id ? t('Reconciling…') : t('Reconcile delivery')) : null)),
         receiptCursor ? h('button', { type: 'button', className: 'bt-soft', disabled: receiptsBusy,

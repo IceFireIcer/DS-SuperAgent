@@ -55,6 +55,35 @@ test('GitHub bot and CI actor kinds stay consistent for Issues, PRs and reviews'
   assert.equal(byKind.review[0].authorKind, 'bot')
 })
 
+test('edited and closed GitHub events use the native change actor instead of the creator', async () => {
+  const transport = new core.GitHubCliTransport()
+  const responses = new Map([
+    [issuesPath, [
+      { id: 71, number: 7, state: 'open', title: 'Collaborator edit', body: 'Edited', created_at: '2026-01-07T00:00:00Z',
+        updated_at: '2026-01-07T00:01:00Z', user: { login: 'alice', type: 'User' },
+        sender: { login: 'mallory', type: 'User' } },
+      { id: 72, number: 8, state: 'closed', title: 'Bot close', body: 'Closed', created_at: '2026-01-08T00:00:00Z',
+        updated_at: '2026-01-08T00:01:00Z', user: { login: 'alice', type: 'User' },
+        closed_by: { login: 'close-bot[bot]', type: 'Bot' } },
+      { id: 73, number: 9, state: 'closed', title: 'CI PR close', body: 'Closed', created_at: '2026-01-09T00:00:00Z',
+        updated_at: '2026-01-09T00:01:00Z', user: { login: 'alice', type: 'User' },
+        sender: { login: 'github-actions[bot]', type: 'Bot' }, pull_request: { url: 'https://api.github.com/repos/acme/repo/pulls/9' } },
+    ]],
+    ['repos/acme/repo/pulls/9', { id: 73, number: 9, state: 'closed', title: 'CI PR close', body: 'Closed',
+      created_at: '2026-01-09T00:00:00Z', updated_at: '2026-01-09T00:01:00Z', user: { login: 'alice', type: 'User' },
+      sender: { login: 'github-actions[bot]', type: 'Bot' }, head: { sha: 'sha-9' } }],
+    ['repos/acme/repo/pulls/9/reviews', []],
+    ['repos/acme/repo/commits/sha-9/check-runs?per_page=100', { check_runs: [] }],
+  ])
+  const events = await transport.mapEvents(async path => responses.get(path), 'acme', 'repo')
+  const edited = events.find(event => event.kind === 'issue' && event.number === 7)
+  const closed = events.find(event => event.kind === 'issue' && event.number === 8)
+  const ciClosed = events.find(event => event.kind === 'pull_request' && event.number === 9)
+  assert.deepEqual([edited.action, edited.authorId, edited.authorKind], ['edited', 'mallory', 'human'])
+  assert.deepEqual([closed.action, closed.authorId, closed.authorKind], ['closed', 'close-bot[bot]', 'bot'])
+  assert.deepEqual([ciClosed.action, ciClosed.authorId, ciClosed.authorKind], ['closed', 'github-actions[bot]', 'ci'])
+})
+
 test('the GitHub CLI transport pages through the issue list and refuses to overrun its budget', async () => {
   const transport = new core.GitHubCliTransport()
   const pages = []

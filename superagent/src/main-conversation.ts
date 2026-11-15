@@ -63,7 +63,7 @@ interface MainUpdateCommand {
   error?: string
   run?: { sessionId: string; generation: number }
 }
-interface MainSourceCommand { state: 'running' | 'failed' | 'completed'; messageId: string; userSequence: number; attempt: number }
+interface MainSourceCommand { state: 'running' | 'failed' | 'completed'; messageId: string; turnMessageId: string; userSequence: number; attempt: number }
 export interface MainHealth {
   state: 'ready' | 'running' | 'degraded'
   queuedInputs: number
@@ -97,6 +97,7 @@ export interface MainPage extends MainBinding {
 export interface MainRunResult extends MainBinding { messageId: string; status: MainMessage['status'] }
 interface MainEvent { type: string; data: { id?: string; message?: { content?: { type: string; text?: string }[] }; reason?: { kind?: string } } }
 const messageKey = (sequence: number) => String(sequence).padStart(16, '0')
+const sourceRecoveryMessageId = (handoffId: string, attempt: number) => `main-source-recovery:${handoffId}:${attempt}`
 
 /** Business facts stay separate from the native Session; no transaction spans a model turn. */
 export class MainConversation {
@@ -534,9 +535,9 @@ export class MainConversation {
         throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The source handoff belongs to another Main.')
       }
       const key = `main-source:${handoff.id}`
-      const prepared = await commandTransaction(this.storage, this.instanceId, async tx => {
+      let prepared = await commandTransaction(this.storage, this.instanceId, async tx => {
         const prior = await tx.get<MainSourceCommand>('main-source-command', key)
-        if (prior) return prior
+        if (prior) return { ...prior, turnMessageId: prior.turnMessageId ?? prior.messageId }
         const state = await this.state(tx)
         const sequence = state.sequence + 1
         const messageId = `main-source-message:${handoff.id}`
@@ -544,24 +545,45 @@ export class MainConversation {
           createdAt: Date.now(), status: 'running', source: { kind: 'github', sourceInstanceId: handoff.sourceInstanceId,
             eventId: handoff.sourceEventId, objectId: handoff.objectId, threadId: handoff.threadId, authorId: handoff.authorId, reference: handoff.reference } })
         await tx.replace('main-state', 'main', { ...state, sequence })
-        const command: MainSourceCommand = { state: 'running', messageId, userSequence: sequence, attempt: 1 }
+        const command: MainSourceCommand = { state: 'running', messageId, turnMessageId: messageId, userSequence: sequence, attempt: 1 }
         await tx.insert('main-source-command', key, command)
         return command
       })
       if (prepared.state === 'completed') return
       let answer: string | undefined
-      if ((await this.sessions!.hasMessage(binding.mainSessionId, prepared.messageId)).found) {
-        answer = await this.readReply(binding, prepared.messageId)
-      } else {
+      const persistedTurn = await this.sessions!.hasMessage(binding.mainSessionId, prepared.turnMessageId)
+      if (persistedTurn.found) {
+        answer = await this.readReply(binding, prepared.turnMessageId)
+      }
+      if (!answer && persistedTurn.found) {
+        prepared = await commandTransaction(this.storage, this.instanceId, async tx => {
+          const current = await tx.get<MainSourceCommand>('main-source-command', key)
+          if (!current || current.state === 'completed') throw new CoreError('MAIN_SOURCE_FAILED', 'The source recovery receipt disappeared.')
+          if (current.attempt >= 10) throw new CoreError('MAIN_SOURCE_FAILED', 'The source Main recovery budget is exhausted.')
+          const attempt = current.attempt + 1
+          const command: MainSourceCommand = { ...current, state: 'running', attempt,
+            turnMessageId: sourceRecoveryMessageId(handoff.id, attempt) }
+          await tx.replace('main-source-command', key, command)
+          const user = await tx.get<MainMessage>('main-message', messageKey(current.userSequence))
+          if (user) {
+            const { error: _error, ...retry } = user
+            await tx.replace('main-message', messageKey(current.userSequence), { ...retry, status: 'running' })
+          }
+          return command
+        })
+      }
+      if (!answer) {
         const configured = await this.prepare?.(binding.mainSessionId)
-        const result = await this.sessions!.run({ role: 'main', sessionId: binding.mainSessionId, messageId: prepared.messageId, signal,
-          text: `[GitHub request]\nThis is one authorized source handoff, not a private transcript. When the request is actionable, use delegate_work and preserve the source reference. If no work is justified, explain that only in Main; no source message is sent without established work.\n${JSON.stringify({
-            sourceEventId: handoff.sourceEventId, sourceInstanceId: handoff.sourceInstanceId, threadId: handoff.threadId, objectId: handoff.objectId,
-            authorId: handoff.authorId, reference: handoff.reference, text: handoff.text,
-          })}`,
+        const result = await this.sessions!.run({ role: 'main', sessionId: binding.mainSessionId, messageId: prepared.turnMessageId, signal,
+          text: `[GitHub request${prepared.attempt > 1 ? ' recovery' : ''}]\nThis is one authorized source handoff, not a private transcript. ${prepared.attempt > 1
+            ? 'The previous Main turn ended without a reply. Continue the same durable request and produce one safe reply; do not repeat completed side effects. '
+            : 'When the request is actionable, use delegate_work and preserve the source reference. If no work is justified, explain that only in Main; no source message is sent without established work.'}\n${JSON.stringify({
+              sourceEventId: handoff.sourceEventId, sourceInstanceId: handoff.sourceInstanceId, threadId: handoff.threadId, objectId: handoff.objectId,
+              authorId: handoff.authorId, reference: handoff.reference, text: handoff.text,
+            })}`,
           tools: [this.sourceTool(binding, handoff, prepared.messageId, configured?.revision ?? 1)],
           ...(configured ? { profile: configured.profile } : {}) })
-        answer = this.reply(result.events as MainEvent[], prepared.messageId)
+        answer = this.reply(result.events as MainEvent[], prepared.turnMessageId)
       }
       if (!answer) throw new CoreError('MAIN_SOURCE_FAILED', 'Main ended the source handoff without a visible reply.')
       signal.throwIfAborted()
@@ -573,7 +595,10 @@ export class MainConversation {
         await tx.insert<MainMessage>('main-message', messageKey(sequence), { id: `source-reply:${handoff.id}`, sequence, role: 'main',
           text: answer, createdAt: Date.now(), status: 'completed' })
         const user = await tx.get<MainMessage>('main-message', messageKey(command.userSequence))
-        if (user) await tx.replace('main-message', messageKey(command.userSequence), { ...user, status: 'completed' })
+        if (user) {
+          const { error: _error, ...settledUser } = user
+          await tx.replace('main-message', messageKey(command.userSequence), { ...settledUser, status: 'completed' })
+        }
         await tx.replace('main-state', 'main', { ...state, sequence })
         await tx.replace('main-source-command', key, { ...command, state: 'completed' })
         const current = await tx.get<MainSourceHandoff>('main-source-handoff', handoff.id)
@@ -598,7 +623,7 @@ export class MainConversation {
           }
         }
       }).catch(() => {})
-      throw error
+      throw new CoreError('MAIN_SOURCE_FAILED', error instanceof Error ? error.message : 'Main could not recover the GitHub request.')
     }).finally(() => { this.pendingTurns-- })
     this.tail = turn.catch(() => {})
     return turn

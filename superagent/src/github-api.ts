@@ -169,16 +169,20 @@ function cursorFor(updatedAt: string, kind: string, id: unknown) {
 function issueEvent(issue: Record<string, any>, repository: string): GitHubEvent {
   const edited = typeof issue.created_at === 'string' && String(issue.updated_at) > issue.created_at
   const action = issue.state === 'closed' ? 'closed' : issue.state_reason === 'reopened' ? 'reopened' : edited ? 'edited' : 'created'
+  const actor = eventActor(issue, action, issue.user)
   return { deliveryId: `issue-${issue.id}-${issue.updated_at}`, cursor: cursorFor(issue.updated_at, 'issue', issue.number), repo: repository,
-    kind: 'issue', action, number: issue.number, id: String(issue.id), authorId: issue.user?.login ?? 'github', authorKind: actorKind(issue.user),
+    kind: 'issue', action, number: issue.number, id: String(issue.id), ...actor,
     title: issue.title, body: issue.body ?? '', updatedAt: issue.updated_at, state: issue.state }
 }
 
 function pullEvent(pull: Record<string, any>, repository: string): GitHubEvent {
   const state = pull.merged_at ? 'merged' : pull.state === 'closed' ? 'closed' : 'open'
+  const edited = typeof pull.created_at === 'string' && String(pull.updated_at) > pull.created_at
+  const action = pull.state === 'closed' ? 'closed' : edited ? 'edited' : 'created'
+  const actor = eventActor(pull, action, pull.user)
   return { deliveryId: `pr-${pull.id}-${pull.updated_at}`, cursor: cursorFor(pull.updated_at, 'pr', pull.number), repo: repository,
-    kind: 'pull_request', action: pull.state === 'closed' ? 'closed' : 'created', number: pull.number, id: String(pull.id),
-    authorId: pull.user?.login ?? 'github', authorKind: actorKind(pull.user), title: pull.title, body: pull.body ?? '', updatedAt: pull.updated_at,
+    kind: 'pull_request', action, number: pull.number, id: String(pull.id),
+    ...actor, title: pull.title, body: pull.body ?? '', updatedAt: pull.updated_at,
     draft: Boolean(pull.draft), state }
 }
 
@@ -199,10 +203,19 @@ function checkRunEvent(checkRun: Record<string, any>, number: number, repository
 }
 
 function deletedPullEvent(issue: Record<string, any>, repository: string): GitHubEvent {
+  const actor = eventActor(issue, 'deleted', issue.user)
   return { deliveryId: `pr-deleted-${issue.id}-${issue.updated_at}`, cursor: cursorFor(issue.updated_at, 'deleted', issue.number),
     repo: repository, kind: 'pull_request', action: 'deleted', number: issue.number, id: String(issue.id),
-    authorId: issue.user?.login ?? 'github', authorKind: actorKind(issue.user), title: issue.title, updatedAt: issue.updated_at,
+    ...actor, title: issue.title, updatedAt: issue.updated_at,
     deletionEvidence: `GitHub returned 404 for pull request #${issue.number} while the repository listing still contained it.` }
+}
+
+function eventActor(record: Record<string, any>, action: string, creator: Record<string, any> | undefined): Pick<GitHubEvent, 'authorId' | 'authorKind'> {
+  if (action === 'created') return { authorId: String(creator?.login ?? 'github'), authorKind: actorKind(creator) }
+  const actor = record.sender ?? record.actor ?? record.closed_by ?? record.merged_by
+  return actor
+    ? { authorId: String(actor.login ?? 'github'), authorKind: actorKind(actor) }
+    : { authorId: 'github', authorKind: 'system' }
 }
 
 function actorKind(user: Record<string, any> | undefined): NonNullable<GitHubEvent['authorKind']> {

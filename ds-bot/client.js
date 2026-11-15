@@ -21399,7 +21399,7 @@ function applyProduct(ctx) {
           },
           (0, import_react53.createElement)("p", null, `${deliveryPurposeCopy(delivery.purpose)}: ${deliveryCopy(delivery.state)}${delivery.reason ? ` · ${delivery.reason}` : ""}`),
           (0, import_react53.createElement)("p", null, `${delivery.destination.sourceInstanceId} · ${delivery.destination.eventId}${delivery.destination.threadId ? ` · ${delivery.destination.threadId}` : ""} · @${delivery.destination.actorId}`),
-          delivery.state === "unknown" ? (0, import_react53.createElement)(
+          delivery.state === "unknown" || delivery.state === "pending" && delivery.attempts > 0 ? (0, import_react53.createElement)(
             "button",
             {
               type: "button",

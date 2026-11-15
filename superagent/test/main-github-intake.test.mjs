@@ -209,3 +209,59 @@ test('pending Main handoffs recheck native currentness and authorization before 
       ['issue:10', 'discarded', 'SOURCE_EVENT_SUPERSEDED']])
   assert.equal((await desktop.listTickets()).items.length, 1, 'only the current edited request may create work')
 })
+
+test('a failed source Main turn recovers with a new stable turn while keeping the source request identity', { timeout: 25000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-main-github-recovery-'))
+  const workspace = join(directory, 'workspace')
+  await mkdir(workspace)
+  let storage, native, sessions, desktop, github, sourceTurns = 0
+  t.after(async () => {
+    const errors = []
+    for (const dispose of [() => desktop?.effects.stop(), () => github?.effects.stop(), () => desktop?.shutdown(), () => github?.shutdown(),
+      () => sessions?.close(), () => native?.fiber.dispose(), () => storage?.close(),
+      async () => { assert.ok(directory.startsWith(join(tmpdir(), 'ds-bot-main-github-recovery-'))); await rm(directory, { recursive: true, force: true }) }]) {
+      try { await dispose() } catch (error) { errors.push(error) }
+    }
+    if (errors.length) throw new AggregateError(errors, 'Main source recovery fixture cleanup failed.')
+  })
+  native = await nativeContext(join(directory, 'sessions'), function* (options) {
+    const completed = completedToolCount(options)
+    if (options.model === 'main') {
+      if (lastUserText(options).includes('[GitHub request') && completed === 0) {
+        sourceTurns++
+        if (sourceTurns === 1) throw new Error('First Main source turn failed.')
+        yield* toolResponse('delegate_work', { items: [{ goal: 'Recover the GitHub request.', constraints: 'Continue the same source request.',
+          acceptanceCriteria: 'Return a verified result.' }] })
+      } else yield* textResponse('Recovered the source request.')
+      return
+    }
+    if (options.model === 'router') yield* routerResponse(options)
+    else yield* textResponse('Worker pending.')
+  })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  sessions = new core.NativeSessions(native, { main: { provider: 'mock', model: 'main' },
+    router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  const environment = await core.LocalEnvironment.open({ id: 'workspace', instanceId: 'private', root: workspace,
+    allowedActorIds: ['desktop-owner'], permissions: ['read', 'write'], commands: {} })
+  desktop = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'desktop-owner', allowedActorIds: ['desktop-owner'] },
+    { retryDelayMs: 1 }, sessions, [environment], {}, {}, {}, { channel: { deliver: async () => ({ type: 'success' }) } })
+  github = new core.Engine(storage, 'private', { kind: 'github', sourceInstanceId: 'github:acme/repo', actorId: 'github-receiver',
+    allowedActorIds: ['github-receiver'], allowedThreadPrefixes: ['github:acme/repo#'], versionOrder: 'sequence',
+    intake: { mode: 'auto', maxBatchSize: 5, maxAttempts: 1, timeoutMs: 5000, allowedRequesterIds: ['alice'], allowedBotActorIds: [], rules: [] } },
+    {}, sessions)
+  await desktop.openMain({ instanceId: 'private' })
+  const source = new core.GitHubSource(storage, 'private', github, { owner: 'acme', repo: 'repo', mainIntake: true })
+  await source.receive({ deliveryId: 'recovery-created', cursor: '1', repo: 'acme/repo', kind: 'issue', action: 'created', number: 11,
+    id: 'issue-11', authorId: 'alice', title: 'Recovery request', body: 'Run this once.', updatedAt: '2026-11-15T02:00:00Z' })
+  await desktop.effects.drain()
+  await new Promise(resolve => setTimeout(resolve, 10))
+  for (let index = 0; index < 10; index++) await desktop.effects.drain()
+  const handoff = (await desktop.getMainSources({ instanceId: 'private' })).items[0]
+  assert.equal(handoff.state, 'delegated')
+  const page = await desktop.getRecentMainConversation({ instanceId: 'private', limit: 20 })
+  const sourceMessages = page.messages.filter(message => message.source?.eventId === handoff.sourceEventId)
+  assert.equal(sourceMessages.length, 1)
+  assert.equal(sourceMessages[0].status, 'completed')
+  assert.equal(page.messages.some(message => message.role === 'main' && message.text === 'Recovered the source request.'), true)
+  assert.equal(sourceTurns, 2)
+})

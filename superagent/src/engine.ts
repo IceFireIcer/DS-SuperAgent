@@ -2038,24 +2038,56 @@ export class Engine {
     }
     identifier(command.commandId, 'commandId'); identifier(command.ticketId, 'ticketId'); identifier(command.deliveryId, 'deliveryId')
     await this.assertTicketReadable(command.ticketId)
-    const delivery = await this.storage.transaction(this.instanceId, tx => this.deliveries.get(tx, command.deliveryId))
-    if (!delivery || delivery.ticketId !== command.ticketId) throw new CoreError('NOT_FOUND', 'The delivery does not belong to this Ticket.')
+    const initial = await this.storage.transaction(this.instanceId, async tx => {
+      const delivery = await this.deliveries.get(tx, command.deliveryId)
+      return delivery ? { delivery, view: await this.deliveries.view(tx, delivery) } : undefined
+    })
+    if (!initial || initial.delivery.ticketId !== command.ticketId) throw new CoreError('NOT_FOUND', 'The delivery does not belong to this Ticket.')
+    const delivery = initial.delivery
     const key = this.commandKey(command.commandId)
     const fingerprint = createHash('sha256').update(canonicalJson(['delivery-reconcile-v1', command.ticketId, command.deliveryId])).digest('hex')
-    await commandTransaction(this.storage, this.instanceId, async tx => {
-      const prior = await tx.get<{ fingerprint: string }>('work-command', key)
+    const begun = await commandTransaction(this.storage, this.instanceId, async tx => {
+      const prior = await tx.get<{ fingerprint: string; state: 'running' | 'failed' | 'completed'; attempt: number }>('work-command', key)
       if (prior) {
         if (prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The delivery reconciliation command was reused for different input.')
-        return
+        if (prior.state === 'completed') return { replayed: true }
       }
-      await tx.insert('work-command', key, { fingerprint, ticketId: command.ticketId, deliveryId: command.deliveryId })
+      const attempt = (prior?.attempt ?? 0) + 1
+      const next = { fingerprint, ticketId: command.ticketId, deliveryId: command.deliveryId, state: 'running' as const, attempt }
+      if (prior) await tx.replace('work-command', key, next)
+      else await tx.insert('work-command', key, next)
+      return { replayed: false }
     })
-    await this.effects.reconcile(delivery.effectId, delivery.effectGeneration)
-    return this.storage.transaction(this.instanceId, async tx => {
+    const currentView = () => this.storage.transaction(this.instanceId, async tx => {
       const current = await this.deliveries.get(tx, command.deliveryId)
       if (!current) throw new CoreError('INCOMPLETE_STATE', 'The reconciled delivery record disappeared.')
       return this.deliveries.view(tx, current)
     })
+    if (begun.replayed) return currentView()
+    let view: DeliveryView
+    try {
+      await this.effects.reconcile(delivery.effectId, delivery.effectGeneration,
+        { allowPending: initial.view.state === 'pending' && (initial.view.attempts ?? 0) > 0 })
+      view = await currentView()
+    } catch (error) {
+      await commandTransaction(this.storage, this.instanceId, async tx => {
+        const prior = await tx.get<{ fingerprint: string; state: 'running' | 'failed' | 'completed'; attempt: number }>('work-command', key)
+        if (prior?.fingerprint === fingerprint && prior.state === 'running') {
+          await tx.replace('work-command', key, { ...prior, state: 'failed',
+            reason: error instanceof Error ? error.message.slice(0, 1024) : 'DELIVERY_RECONCILE_FAILED' })
+        }
+      }).catch(() => {})
+      throw error
+    }
+    await commandTransaction(this.storage, this.instanceId, async tx => {
+      const prior = await tx.get<{ fingerprint: string; state: 'running' | 'failed' | 'completed'; attempt: number }>('work-command', key)
+      if (!prior || prior.fingerprint !== fingerprint) throw new CoreError('INCOMPLETE_STATE', 'The delivery reconciliation receipt disappeared.')
+      const terminal = view.state === 'sent' || view.state === 'dropped'
+      const next = { ...prior, state: terminal ? 'completed' as const : 'failed' as const,
+        ...(terminal ? {} : { reason: view.reason ?? 'DELIVERY_RECONCILE_NOT_CONFIRMED' }) }
+      await tx.replace('work-command', key, next)
+    })
+    return view
   }
 
   async readContext(request: ContextRequest): Promise<ContextCard> {

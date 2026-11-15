@@ -235,14 +235,15 @@ export class Effects {
   }
 
   /** Reconcile one unknown external outcome under its original Effect identity and idempotency key. */
-  async reconcile(id: string, generation: string): Promise<boolean> {
+  async reconcile(id: string, generation: string, options: { allowPending?: boolean } = {}): Promise<boolean> {
     identifier(id, 'effect ID')
     identifier(generation, 'effect generation')
     let queueKey: string | undefined
     let cursor: string | undefined
     for (let pageCount = 0; pageCount < 10 && queueKey === undefined; pageCount++) {
       const page = await this.list(cursor)
-      const match = page.items.find(effect => effect.id === id && effect.generation === generation && effect.state === 'unknown')
+      const match = page.items.find(effect => effect.id === id && effect.generation === generation
+        && (effect.state === 'unknown' || options.allowPending && effect.state === 'pending' && effect.attempts > 0))
       if (match) queueKey = match.queueKey
       else if (page.cursor === undefined) break
       else cursor = page.cursor
@@ -250,7 +251,8 @@ export class Effects {
     if (queueKey === undefined) return false
     const claimed = await this.storage.transaction(this.instanceId, async transaction => {
       const current = await transaction.get<Effect>('effect', queueKey!)
-      if (!current || current.state !== 'unknown' || current.id !== id || current.generation !== generation) return undefined
+      if (!current || current.id !== id || current.generation !== generation
+        || (current.state !== 'unknown' && !(options.allowPending && current.state === 'pending' && current.attempts > 0))) return undefined
       if (current.availableAt > this.now()) {
         current.availableAt = this.now()
         await transaction.replace('effect', queueKey!, current)
