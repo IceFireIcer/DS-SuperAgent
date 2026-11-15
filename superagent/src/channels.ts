@@ -287,7 +287,7 @@ function localBoundary(instant: number, timeZone: string, interval: number) {
   return Math.floor((instant + zoneOffsetMs(timeZone, instant)) / interval) * interval
 }
 
-function zoneOffsetMs(timeZone: string, instant: number) {
+export function zoneOffsetMs(timeZone: string, instant: number) {
   const second = instant - (((instant % 1000) + 1000) % 1000)
   const parts = new Intl.DateTimeFormat('en-US', { timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(new Date(second))
@@ -296,7 +296,7 @@ function zoneOffsetMs(timeZone: string, instant: number) {
 }
 
 /** Return the real instant for a local wall time, or undefined when the local time never existed. */
-function localToInstant(local: number, timeZone: string) {
+export function localToInstant(local: number, timeZone: string) {
   const first = local - zoneOffsetMs(timeZone, local)
   if (first + zoneOffsetMs(timeZone, first) === local) return first
   const second = local - zoneOffsetMs(timeZone, first)

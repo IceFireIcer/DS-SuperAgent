@@ -41,6 +41,8 @@ import { MainConversation, type MainAddress, type MainSend } from './main-conver
 import { WorkDelegation, type MainEvidenceCard, type MainWorkCard, type MainWorkControl, type MainWorkItem } from './work-delegation.js'
 import { WorkObservations } from './work-observations.js'
 import { MainSourceHandoffs, type MainSourceDeliveryPage, type MainSourceHandoff, type MainSourceView } from './main-source.js'
+import { ProductSchedules, authorizedScheduleEvent, scheduledOccurrenceKey,
+  type ProductSchedule, type ScheduleCreate, type ScheduleTarget, type ScheduledOccurrence } from './product-schedules.js'
 
 interface StoredPolicy { revision: number; configuration: Omit<IntakePolicy, 'assess'>; origin: 'bootstrap' | 'manual' | 'sync'; sourceRevision?: string; updatedAt: number }
 interface ProcessingState { paused: boolean; revision: number; updatedAt: number }
@@ -53,6 +55,7 @@ export class Engine {
   private readonly workDelegation?: WorkDelegation
   private readonly workObservations: WorkObservations | undefined
   private readonly mainSources: MainSourceHandoffs
+  private readonly schedules: ProductSchedules
   private readonly slots: Slots | undefined
   private readonly jobs: Jobs | undefined
   private readonly previews: Previews | undefined
@@ -256,6 +259,9 @@ export class Engine {
     delete sourceBinding.intake
     this.sourceEvents = new SourceEvents(storage, instanceId, sourceBinding)
     this.mainSources = new MainSourceHandoffs(storage, instanceId, Date.now)
+    this.schedules = new ProductSchedules(storage, instanceId, source.actorId,
+      (tx, target) => this.authorizeScheduledTarget(tx, target),
+      (rule, occurrence) => this.receiveScheduledOccurrence(rule, occurrence))
     this.membership = new SourceMembership(storage, instanceId, this.source.sourceInstanceId, Date.now)
     this.deliveryState = new DeliveryState(storage, instanceId, this.sourceEvents, Date.now)
     this.proactive = proactiveOptions ? new Proactive(storage, instanceId, proactiveOptions) : undefined
@@ -642,11 +648,14 @@ export class Engine {
       const handoff = await tx.get<MainSourceHandoff>('main-source-handoff', brief.sourceHandoffId!)
       const event = handoff ? await tx.get<SourceEvent>('source-event', handoff.sourceEventId) : undefined
       const policy = handoff ? await tx.get<StoredPolicy>('policy-state', JSON.stringify(['policy-state', handoff.sourceInstanceId])) : undefined
+      const scheduled = event?.source.kind === 'schedule'
+        ? await authorizedScheduleEvent(tx, event, this.source.actorId, 'main').catch(() => undefined) : undefined
       if (!handoff || handoff.mainId !== brief.mainId || handoff.workBriefId !== brief.id || handoff.state !== 'delegated'
         || !event || !await isCurrentSourceEvent(tx, event) || event.authorId !== handoff.authorId
-        || !policy?.configuration.allowedRequesterIds.includes(event.authorId)) {
+        || (event.source.kind === 'schedule' ? !scheduled : !policy?.configuration.allowedRequesterIds.includes(event.authorId))) {
         throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The delegated Ticket no longer has a current authorized Main source.')
       }
+      if (scheduled) return undefined
       return { sourceEventId: event.id, source: event.source, authorId: event.authorId, eventId: event.objectId,
         ...(event.threadId ? { threadId: event.threadId } : {}), nativeVersion: event.version, reference: handoff.reference }
     }) : undefined
@@ -1407,6 +1416,82 @@ export class Engine {
     const binding = await this.main.open(request)
     if (this.sessions) this.sessions.routerSessionId = binding.routerSessionId
     return binding
+  }
+  private async authorizeScheduledTarget(tx: AsyncTx, target: ScheduleTarget) {
+    const binding = await tx.get<{ mainId: string }>('main-state', 'main')
+    if (!binding) throw new CoreError('MAIN_NOT_CONFIGURED', 'Open the authorized Main before creating schedules.')
+    if (target.kind === 'main') return
+    const item = await tx.get<MainWorkItem>('work-item', target.workItemId)
+    const brief = item ? await tx.get<import('./work-delegation.js').MainWorkBrief>('work-brief', item.workBriefId) : undefined
+    const receipt = await tx.get<import('./work-delegation.js').MainWorkReceipt>('work-receipt', target.workItemId)
+    const index = await tx.get<{ ticketId: string }>('work-item-ticket', target.workItemId)
+    const ticket = await tx.get<Work['ticket']>('ticket', target.ticketId)
+    const mandate = ticket ? await tx.get<Work['mandate']>('mandate', ticket.mandateId) : undefined
+    const decision = mandate ? await tx.get<Work['decision']>('decision', mandate.decisionId) : undefined
+    if (!item || !brief || brief.instanceId !== this.instanceId || brief.mainId !== binding.mainId
+      || receipt?.status !== 'accepted' || (receipt.ticketId ?? index?.ticketId) !== target.ticketId
+      || !ticket || !mandate || !decision || mandate.scope !== item.goal || decision.outcome !== 'accept') {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The scheduled target is not an established authorized Main work item.')
+    }
+  }
+
+  async createSchedule(request: ScheduleCreate) {
+    if (!this.source.allowedActorIds.includes(this.source.actorId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This actor cannot create schedules.')
+    await this.main.open({ instanceId: request?.instanceId })
+    return this.schedules.create(request)
+  }
+  cancelSchedule(request: { instanceId: string; commandId: string; ruleId: string }) { return this.schedules.cancel(request) }
+  listSchedules(request: { instanceId: string }) { return this.schedules.list(request) }
+  getSchedule(request: { instanceId: string; ruleId: string }) { return this.schedules.get(request) }
+  getScheduleSource(request: { instanceId: string }) { return this.schedules.sourceState(request) }
+  setScheduleSource(request: { instanceId: string; commandId: string; enabled: boolean }) { return this.schedules.setSource(request) }
+  tickSchedules(now?: number) { return this.schedules.tick(now) }
+
+  private async receiveScheduledOccurrence(rule: ProductSchedule, occurrence: ScheduledOccurrence): Promise<Partial<ScheduledOccurrence>> {
+    await this.ensurePolicy()
+    await this.assertActivationCurrent()
+    await this.assertHostAdmission()
+    const source = new SourceEvents(this.storage, this.instanceId, { kind: 'schedule', sourceInstanceId: `schedule:${rule.ruleId}`,
+      actorId: 'schedule', allowedActorIds: ['schedule'], allowedThreadIds: [`schedule:${rule.ruleId}`], versionOrder: 'sequence' })
+    const receipt = await source.receive({ commandId: `schedule:${rule.ruleId}:${occurrence.dueAt}`,
+      threadId: `schedule:${rule.ruleId}`, objectId: `occurrence:${occurrence.dueAt}`, type: 'created',
+      version: String(occurrence.dueAt), text: rule.text, authorId: 'schedule', authorKind: 'system', addressing: 'direct' },
+    async (tx, event) => {
+      const current = await authorizedScheduleEvent(tx, event, this.source.actorId, rule.target.kind)
+      const key = scheduledOccurrenceKey(rule.ruleId, occurrence.dueAt)
+      const pending = await tx.get<ScheduledOccurrence>('product-schedule-occurrence', key)
+      if (!pending) throw new CoreError('INCOMPLETE_STATE', 'The scheduled occurrence is missing.')
+      let state: Partial<ScheduledOccurrence>
+      if (this.processingPaused) state = { status: 'blocked', reason: 'PROCESSING_PAUSED' }
+      else if (current.target.kind === 'main') {
+        const binding = await tx.get<{ mainId: string }>('main-state', 'main')
+        if (!binding) throw new CoreError('MAIN_NOT_CONFIGURED', 'The scheduled Main is unavailable.')
+        const handoff = await this.mainSources.create(tx, { event, mainId: binding.mainId,
+          commandId: `schedule-handoff:${event.id}`, authorizedBy: this.source.actorId })
+        await this.effects.enqueue(tx, { key: `handoff:${handoff.id}`, stream: 'notice', scope: `main:${binding.mainId}`,
+          payload: { type: 'main-source-handoff', handoffId: handoff.id } })
+        state = { status: 'accepted', handoffId: handoff.id }
+      } else {
+        await this.authorizeScheduledTarget(tx, current.target)
+        const ticket = await tx.get<Work['ticket']>('ticket', current.target.ticketId)
+        if (ticket?.constraint) state = { status: 'blocked', reason: `TICKET_${ticket.constraint.kind.toUpperCase().replace('-', '_')}` }
+        else {
+          const reference = `superagent://${encodeURIComponent(this.instanceId)}/schedules/${encodeURIComponent(rule.ruleId)}/occurrences/${occurrence.dueAt}`
+          const input = await this.inputs.attachAssociated(tx, current.target.ticketId, event,
+            { reference, source: event.source, sourceActorId: event.authorId, authorizedBy: this.source.actorId,
+              ownerSourceInstanceId: this.source.sourceInstanceId, reason: `Authorized schedule ${rule.ruleId}`, checkedAt: Date.now() },
+            { schedule: true })
+          state = { status: 'accepted', ticketIds: [current.target.ticketId], inputId: input.id }
+        }
+      }
+      await tx.replace('product-schedule-occurrence', key, { ...pending, ...state, eventId: event.id, updatedAt: Date.now() })
+    })
+    if (receipt.status === 'filtered') return { status: 'blocked', reason: receipt.reason ?? 'SOURCE_FILTERED' }
+    return this.storage.transaction(this.instanceId, async tx => {
+      const recorded = await tx.get<ScheduledOccurrence>('product-schedule-occurrence', scheduledOccurrenceKey(rule.ruleId, occurrence.dueAt))
+      if (!recorded || !recorded.eventId) throw new CoreError('INCOMPLETE_STATE', 'The scheduled source receipt is missing.')
+      return recorded
+    })
   }
   private async instanceDirectoryIn(transaction: AsyncTx) {
     const current = await transaction.get<{ revision: number; environmentId: string; updatedAt: number }>('instance-directory', 'default')

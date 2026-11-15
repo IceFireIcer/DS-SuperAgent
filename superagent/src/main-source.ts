@@ -3,6 +3,7 @@ import { canonicalJson } from './commands.js'
 import { CoreError, identifier } from './model.js'
 import type { AsyncTx, Storage } from './storage.js'
 import { isCurrentSourceEvent, type SourceEvent } from './source-events.js'
+import { authorizedScheduleEvent } from './product-schedules.js'
 
 export type MainSourceHandoffState = 'pending' | 'presented' | 'delegated' | 'discarded'
 
@@ -64,15 +65,18 @@ const commandKey = (eventId: string) => `main-source:${createHash('sha256').upda
 export class MainSourceHandoffs {
   constructor(private readonly storage: Storage, private readonly instanceId: string, private readonly now: () => number = Date.now) {}
 
-  async create(transaction: AsyncTx, request: { event: SourceEvent; mainId: string; commandId: string }): Promise<MainSourceHandoff> {
+  async create(transaction: AsyncTx, request: { event: SourceEvent; mainId: string; commandId: string; authorizedBy?: string }): Promise<MainSourceHandoff> {
     identifier(request.mainId, 'mainId')
     identifier(request.commandId, 'commandId')
     const { event } = request
     if (event.instanceId !== this.instanceId || !await isCurrentSourceEvent(transaction, event)) {
       throw new CoreError('SOURCE_NOT_CURRENT', 'Only a current source event can be handed to Main.')
     }
-    if (event.authorKind !== 'human' || event.addressing === 'ambient' || event.text === undefined || !event.text.trim()) {
-      throw new CoreError('ACTOR_NOT_ALLOWED', 'Main source work requires an addressed current human request.')
+    const scheduled = event.source.kind === 'schedule' && request.authorizedBy
+      ? await authorizedScheduleEvent(transaction, event, request.authorizedBy, 'main') : undefined
+    if ((event.source.kind === 'schedule' ? !scheduled : event.authorKind !== 'human')
+      || event.addressing === 'ambient' || event.text === undefined || !event.text.trim()) {
+      throw new CoreError('ACTOR_NOT_ALLOWED', 'Main source work requires an addressed human request or an authorized schedule rule.')
     }
     const id = mainSourceHandoffID(event.id)
     const prior = await transaction.get<MainSourceHandoff>('main-source-handoff', id)

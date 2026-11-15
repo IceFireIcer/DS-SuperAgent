@@ -17,7 +17,8 @@ import type { RoleConfig, RoleModel } from './config.js'
 export interface ProductHostConfig { databasePath: string; workspaceRoot?: string; instanceId?: string; actorId?: string; main?: RoleModel; router?: RoleModel; worker?: RoleModel; timeoutMs?: number;
   clientGateway?: Omit<ClientGatewayOptions, 'product'>;
   /** Supplied by a trusted Host, never by the window or a model turn. */
-  feishu?: Omit<FeishuRuntimeOptions, 'storage' | 'instanceId' | 'mainIntake'> }
+  feishu?: Omit<FeishuRuntimeOptions, 'storage' | 'instanceId' | 'mainIntake'>;
+  feishuConfigurationError?: 'INVALID_CONFIG' }
 export interface ProductHost {
   dispatch(endpoint: string, payload?: Record<string, unknown>, client?: ClientIdentity): Promise<unknown>
   clients: ClientAccess
@@ -67,6 +68,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
   let feishuRuntime: FeishuRuntime | undefined
   let feishuEngine: Engine | undefined
   let closing: Promise<void> | undefined
+  let scheduleTimer: ReturnType<typeof setInterval> | undefined
   const picker = () => {
     try {
       const service = (context as unknown as { get(name: string): { capability(): DirectoryPicker | undefined } | undefined }).get('directoryPicker')
@@ -181,6 +183,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
     return { provider, configured: value !== null }
   }
   async function dispose() {
+    if (scheduleTimer) clearInterval(scheduleTimer)
     const failures: unknown[] = []
     for (const close of [() => gateway?.close(), () => feishuRuntime?.stop(), () => engine?.effects.stop(),
       () => feishuEngine?.effects.stop(), () => engine?.shutdown(), () => feishuEngine?.shutdown(),
@@ -228,6 +231,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
     await engine.acquireHost()
     await engine.openMain({ instanceId })
     engine.effects.start()
+    void engine.tickSchedules().catch(() => { /* Rules and failed occurrences remain available for the next check. */ })
+    scheduleTimer = setInterval(() => { void engine?.tickSchedules().catch(() => {}) }, 30_000)
+    scheduleTimer.unref()
     if (feishuRuntime) void feishuRuntime.start().catch(() => { /* Health retains the setup failure; Main stays available. */ })
     void engine.resumeMainInputs({ instanceId }).catch(() => { /* The persisted input and failed health remain visible for retry. */ })
     const clients = engine.createClientAccess()
@@ -241,7 +247,12 @@ export async function createProductHost(context: Context, config: ProductHostCon
           return engine!.openMain({ instanceId })
         }
         if (payload.instanceId !== instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This request is outside the authorized Instance.')
-        const fields = endpoint === 'send' ? ['instanceId', 'commandId', 'text', 'environmentId']
+        const fields = endpoint === 'schedule-list' || endpoint === 'schedule-source-read' ? ['instanceId']
+          : endpoint === 'schedule-source-set' ? ['instanceId', 'commandId', 'enabled']
+            : endpoint === 'schedule-read' ? ['instanceId', 'ruleId']
+              : endpoint === 'schedule-create' ? ['instanceId', 'commandId', 'title', 'text', 'timezone', 'when', 'target']
+                : endpoint === 'schedule-cancel' ? ['instanceId', 'commandId', 'ruleId']
+                  : endpoint === 'send' ? ['instanceId', 'commandId', 'text', 'environmentId']
           : endpoint === 'clients-list' ? ['instanceId']
             : endpoint === 'client-enroll' ? ['instanceId', 'commandId', 'label', 'capabilities']
               : endpoint === 'client-revoke' ? ['instanceId', 'commandId', 'clientId', 'reason']
@@ -271,6 +282,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
                                         : undefined
         if (!fields) throw new CoreError('UNAVAILABLE', 'This product capability is not connected yet.')
         if (Object.keys(payload).some(key => !fields.includes(key))) throw new CoreError('INVALID_INPUT', 'The product request contains unsupported fields.')
+        if (client && endpoint.startsWith('schedule-')) {
+          throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Schedule administration requires the local authorized product settings.')
+        }
         if (endpoint === 'clients-list' || endpoint === 'client-enroll' || endpoint === 'client-revoke') {
           if (client) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Client administration requires the local authorized product settings.')
           if (endpoint === 'clients-list') return clients.list()
@@ -282,9 +296,23 @@ export async function createProductHost(context: Context, config: ProductHostCon
         const commandId = client && payload.commandId !== undefined
           ? (() => { identifier(payload.commandId, 'commandId'); return `client:${client.id}:${createHash('sha256').update(payload.commandId).digest('hex')}` })()
           : payload.commandId as string
+        if (endpoint === 'schedule-list') return engine!.listSchedules({ instanceId })
+        if (endpoint === 'schedule-source-read') return engine!.getScheduleSource({ instanceId })
+        if (endpoint === 'schedule-source-set') return engine!.setScheduleSource({ instanceId,
+          commandId: payload.commandId as string, enabled: payload.enabled as boolean })
+        if (endpoint === 'schedule-read') return engine!.getSchedule({ instanceId, ruleId: payload.ruleId as string })
+        if (endpoint === 'schedule-create') return engine!.createSchedule({ instanceId, commandId: payload.commandId as string,
+          title: payload.title as string, text: payload.text as string, timezone: payload.timezone as string,
+          when: payload.when as import('./product-schedules.js').ScheduleWhen,
+          target: payload.target as import('./product-schedules.js').ScheduleTarget })
+        if (endpoint === 'schedule-cancel') return engine!.cancelSchedule({ instanceId,
+          commandId: payload.commandId as string, ruleId: payload.ruleId as string })
         if (endpoint === 'feishu-status' || endpoint === 'feishu-start' || endpoint === 'feishu-stop') {
           if (!feishuRuntime) {
-            if (endpoint === 'feishu-status') return { configured: false, state: 'unavailable' }
+            if (endpoint === 'feishu-status') return config.feishuConfigurationError
+              ? { configured: false, state: 'failed', lastError: config.feishuConfigurationError }
+              : { configured: false, state: 'unavailable' }
+            if (config.feishuConfigurationError) throw new CoreError('INVALID_CONFIG', 'The Feishu source configuration is incomplete.')
             throw new CoreError('UNAVAILABLE', 'No Feishu source is configured for this product Host.')
           }
           if (endpoint === 'feishu-start' && !['setup', 'polling'].includes(feishuRuntime.health().state)) {

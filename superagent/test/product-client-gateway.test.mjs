@@ -97,6 +97,8 @@ test('read-only client routes cannot write, guessed routes cannot bypass product
   assert.equal((await direct(address, viewer.token, 'product/settings-save', {})).status, 404)
   assert.equal((await direct(address, viewer.token, 'product/client-enroll', {})).status, 404)
   assert.equal((await direct(address, viewer.token, 'product/client-revoke', {})).status, 404)
+  assert.equal((await direct(address, viewer.token, 'product/schedule-list', { instanceId: 'personal' })).status, 404)
+  assert.equal((await direct(address, viewer.token, 'product/schedule-create', { instanceId: 'personal' })).status, 404)
   assert.equal((await direct(address, viewer.token, 'commands/submit', {})).status, 404)
   assert.equal((await direct(address, viewer.token, 'product/observe-read', { instanceId: 'personal', observationId: 'guessed', text: 'write' })).status, 400)
   const other = await fetch(`${address}/instances/other/product/snapshot`, { headers: { authorization: `Bearer ${viewer.token}` } })

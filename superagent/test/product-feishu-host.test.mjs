@@ -32,18 +32,24 @@ test('the product Host exposes Feishu health, stop and reconnection without disc
       mentions: [{ id: 'ou_bot' }], body: { content: '{"text":"Please read this."}' } }], has_more: false })
     throw new Error(`Unexpected Feishu fixture request: ${path}`)
   }
-  host = await core.createProductHost(native, { databasePath: join(directory, 'data', 'state.sqlite'), workspaceRoot,
+  const config = { databasePath: join(directory, 'data', 'state.sqlite'), workspaceRoot,
     instanceId: 'private', actorId: 'desktop-owner', main: { provider: 'mock', model: 'main' },
     router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' },
     feishu: { tenantKey: 'tenant', chatIds: ['group'], actorId: 'receiver', selfActorIds: ['ou_bot'],
       allowedActorIds: ['receiver'], intake: { mode: 'auto', maxBatchSize: 5, maxAttempts: 1, timeoutMs: 5000,
         allowedRequesterIds: ['alice'], allowedBotActorIds: [], rules: [] },
-      api: { appId: 'cli_test', appSecret: 'fixture-secret', fetch }, intervalMs: 1000 } })
+      api: { appId: 'cli_test', appSecret: 'fixture-secret', fetch }, intervalMs: 1000 } }
+  host = await core.createProductHost(native, config)
   const read = async () => host.dispatch('feishu-status', { instanceId: 'private' })
   const directories = await host.dispatch('directory-options', { instanceId: 'private' })
   const canonicalWorkspace = await realpath(workspaceRoot)
   assert.equal(directories.default.root, canonicalWorkspace)
   assert.deepEqual(directories.directories.map(item => item.root), [canonicalWorkspace])
+  assert.equal((await host.dispatch('schedule-source-read', { instanceId: 'private' })).enabled, true)
+  const schedule = await host.dispatch('schedule-create', { instanceId: 'private', commandId: 'feishu-host-schedule',
+    title: 'Check work', text: 'Check the authorized work.', timezone: 'UTC',
+    when: { kind: 'at', at: Date.now() + 60_000 }, target: { kind: 'main' } })
+  assert.deepEqual((await host.dispatch('schedule-list', { instanceId: 'private' })).items.map(item => item.ruleId), [schedule.ruleId])
   for (let attempt = 0; attempt < 40 && (await host.dispatch('history', { instanceId: 'private' })).sources.length === 0; attempt++) {
     await new Promise(resolve => setTimeout(resolve, 25))
   }
@@ -57,4 +63,12 @@ test('the product Host exposes Feishu health, stop and reconnection without disc
   for (let attempt = 0; attempt < 40 && (await read()).passes === 0; attempt++) await new Promise(resolve => setTimeout(resolve, 25))
   assert.equal((await host.dispatch('history', { instanceId: 'private' })).sources.length, 1)
   assert.equal((await read()).state, 'polling')
+  const originalMain = await host.dispatch('open')
+  await host.close()
+  host = await core.createProductHost(native, config)
+  for (let attempt = 0; attempt < 40 && (await read()).passes === 0; attempt++) await new Promise(resolve => setTimeout(resolve, 25))
+  assert.equal((await read()).state, 'polling')
+  assert.equal((await host.dispatch('open')).mainId, originalMain.mainId)
+  assert.equal((await host.dispatch('history', { instanceId: 'private' })).sources.length, 1,
+    'Host restart must keep the original Feishu request instead of adding another Main handoff')
 })
