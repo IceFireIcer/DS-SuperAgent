@@ -13,7 +13,7 @@ async function until(check, label) {
   const deadline = Date.now() + 20_000
   while (!await check()) {
     if (Date.now() >= deadline) throw new Error(`Work observation did not reach ${label}.`)
-    await sleep(20)
+    await sleep(50)
   }
 }
 
@@ -86,7 +86,7 @@ test('work observations auto-discover bounded Router and Worker history with sta
     main: { provider: 'mock', model: 'main' }, router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' },
   })
   const engine = new Engine(storage, 'personal', { sourceInstanceId: 'product-desktop', actorId: 'alice', allowedActorIds: ['alice'] },
-    { scanIntervalMs: 10, retryDelayMs: 10 }, sessions, [environment])
+    { scanIntervalMs: 25, retryDelayMs: 10 }, sessions, [environment])
   t.after(async () => {
     await engine.effects.stop()
     await engine.shutdown()
