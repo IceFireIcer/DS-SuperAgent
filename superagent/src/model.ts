@@ -89,7 +89,8 @@ export const recordKinds = [...coreRecordKinds, 'main-state', 'main-message', 'm
   'work-brief', 'work-brief-command',
   'work-split', 'work-plan-conflict', 'work-plan-conflict-head', 'work-item', 'work-item-ticket', 'work-receipt',
   'work-ticket', 'work-router-turn', 'work-follow-up', 'work-follow-up-command', 'work-update', 'work-update-head',
-  'work-attention-answer', 'work-outcome', 'instance-directory', 'instance-directory-command', 'product-directory'] as const
+  'work-attention-answer', 'work-outcome', 'instance-directory', 'instance-directory-command', 'product-directory',
+  'resource-credential', 'resource-command', 'resource-request', 'product-attachment'] as const
 export type RecordKind = typeof recordKinds[number]
 
 export function identifier(value: unknown, label: string): asserts value is string {
