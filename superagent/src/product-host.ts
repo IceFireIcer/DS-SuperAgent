@@ -316,7 +316,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
                         ? ['instanceId', 'after', 'limit']
                         : endpoint === 'preset-create' ? ['instanceId', 'commandId', 'preset']
                           : endpoint === 'preset-preview' ? ['instanceId', 'commandId', 'copy']
-                            : endpoint === 'preset-select' ? ['instanceId', 'commandId', 'previewId', 'decision', 'copy', 'preset']
+                            : endpoint === 'preset-select' ? ['instanceId', 'commandId', 'previewId', 'decision', 'copy', 'preset', 'expectedDecisionId']
                               : endpoint === 'preset-apply' ? ['instanceId', 'commandId', 'presetId', 'targetRole', 'expectedRevision']
                                 : endpoint === 'preset-application-read' ? ['instanceId', 'commandId']
                                   : endpoint === 'preset-preview-read' ? ['instanceId', 'previewId']
@@ -533,9 +533,10 @@ export async function createProductHost(context: Context, config: ProductHostCon
         if (endpoint === 'preset-preview') return engine!.previewRolePreset({ instanceId, commandId: payload.commandId as string,
           copy: payload.copy as LegacyPresetCopy })
         if (endpoint === 'preset-select') return engine!.selectRolePreset({ instanceId, commandId: payload.commandId as string,
-          previewId: payload.previewId as string, decision: payload.decision as 'select' | 'skip',
+          previewId: payload.previewId as string, decision: payload.decision as 'select' | 'replace' | 'skip',
           ...(payload.copy === undefined ? {} : { copy: payload.copy as LegacyPresetCopy }),
-          ...(payload.preset === undefined ? {} : { preset: payload.preset }) })
+          ...(payload.preset === undefined ? {} : { preset: payload.preset }),
+          ...(payload.expectedDecisionId === undefined ? {} : { expectedDecisionId: payload.expectedDecisionId as string }) })
         if (endpoint === 'preset-apply') return engine!.applyRolePreset({ instanceId, commandId: payload.commandId as string,
           presetId: payload.presetId as string, targetRole: payload.targetRole as PresetRole,
           expectedRevision: payload.expectedRevision as number }, { verify: verifyRoles })

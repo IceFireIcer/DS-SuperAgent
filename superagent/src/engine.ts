@@ -1931,8 +1931,8 @@ export class Engine {
     return this.rolePresets.getPreview(request)
   }
 
-  selectRolePreset(command: { instanceId: string; commandId: string; previewId: string; decision: 'select' | 'skip';
-    copy?: LegacyPresetCopy; preset?: unknown }) {
+  selectRolePreset(command: { instanceId: string; commandId: string; previewId: string; decision: 'select' | 'replace' | 'skip';
+    copy?: LegacyPresetCopy; preset?: unknown; expectedDecisionId?: string }) {
     this.assertPresetAccess(command?.instanceId, true)
     identifier(command.commandId, 'commandId')
     return this.rolePresets.decideImport({ ...command, commandId: this.commandKey(command.commandId) })

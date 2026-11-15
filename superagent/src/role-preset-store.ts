@@ -30,7 +30,7 @@ export interface RolePresetImportRecord {
   key: string
   source: LegacyPresetSource
   targetRole: PresetRole
-  status: 'selected' | 'skipped' | 'duplicate' | 'conflict'
+  status: 'selected' | 'replaced' | 'skipped' | 'duplicate' | 'conflict'
   presetId?: string
   duplicateOf?: string
   conflictWith?: string
@@ -275,19 +275,23 @@ export class RolePresetStore {
   }
 
   /** Skipping cancels this preview; a later explicit preview may still select the same source. */
-  async decideImport(input: { instanceId: string; commandId: string; previewId: string; decision: 'select' | 'skip';
-    copy?: LegacyPresetCopy; preset?: unknown }): Promise<RolePresetImportRecord> {
-    fields(input, ['instanceId', 'commandId', 'previewId', 'decision', 'copy', 'preset'], 'import decision')
+  async decideImport(input: { instanceId: string; commandId: string; previewId: string; decision: 'select' | 'replace' | 'skip';
+    copy?: LegacyPresetCopy; preset?: unknown; expectedDecisionId?: string }): Promise<RolePresetImportRecord> {
+    fields(input, ['instanceId', 'commandId', 'previewId', 'decision', 'copy', 'preset', 'expectedDecisionId'], 'import decision')
     this.assertInstance(input.instanceId); identifier(input.previewId, 'previewId')
-    if (input.decision !== 'select' && input.decision !== 'skip') throw new CoreError('INVALID_INPUT', 'Select or skip the import explicitly.')
-    if (input.decision === 'skip' && (input.copy !== undefined || input.preset !== undefined)) throw new CoreError('INVALID_INPUT', 'A skipped import carries no source copy or preset.')
-    if (input.decision === 'select' && input.copy === undefined) throw new CoreError('INVALID_INPUT', 'Selection requires a fresh explicit source copy.')
-    const preset = input.decision === 'select' ? createRolePreset(input.preset) : undefined
+    if (!['select', 'replace', 'skip'].includes(input.decision)) throw new CoreError('INVALID_INPUT', 'Select, replace or skip the import explicitly.')
+    if (input.decision === 'skip' && (input.copy !== undefined || input.preset !== undefined || input.expectedDecisionId !== undefined)) {
+      throw new CoreError('INVALID_INPUT', 'A skipped import carries no source copy or preset.')
+    }
+    if (input.decision !== 'skip' && input.copy === undefined) throw new CoreError('INVALID_INPUT', 'Selection requires a fresh explicit source copy.')
+    if (input.decision === 'replace') identifier(input.expectedDecisionId, 'expectedDecisionId')
+    else if (input.expectedDecisionId !== undefined) throw new CoreError('INVALID_INPUT', 'Only replacement may identify an earlier decision.')
+    const preset = input.decision !== 'skip' ? createRolePreset(input.preset) : undefined
     const observed = input.copy === undefined ? undefined : previewLegacyRolePreset(input.copy)
     const selectedFingerprint = preset && observed ? prepareLegacyPresetDecision({ ...input.copy!, expectedDigest: observed.source.digest,
       decision: 'select', preset }).fingerprint : undefined
     return this.command(input.commandId, ['decide', input.previewId, input.decision, observed?.key ?? null,
-      observed?.source.digest ?? null, preset ?? null], async tx => {
+      observed?.source.digest ?? null, preset ?? null, input.expectedDecisionId ?? null], async tx => {
       const saved = await tx.get<StoredPreview>('role-preset-preview', input.previewId)
       if (!saved) throw new CoreError('PRESET_UNAVAILABLE', 'The import preview is unavailable.')
       const { preview } = saved
@@ -296,19 +300,25 @@ export class RolePresetStore {
           ? selectedFingerprint!
           : hash([preview.key, observed?.source.digest, 'source-conflict', preset])
       const priorReview = await tx.get<ReviewIndex>('role-preset-review', input.previewId)
-      const origin = input.decision === 'select' ? await tx.get<SourceIndex>('role-preset-source', hash(preview.key)) : undefined
+      const origin = input.decision !== 'skip' ? await tx.get<SourceIndex>('role-preset-source', hash(preview.key)) : undefined
       const currentOrigin = origin ? await tx.get<StoredPreset>('role-preset', origin.presetId) : undefined
       const sourceUnchanged = !origin || currentOrigin?.status === 'active' && currentOrigin.revision === 1
       let status: RolePresetImportRecord['status'] = input.decision === 'skip' ? 'skipped' : 'selected'
       let reason: RolePresetImportRecord['reason']
       let duplicateOf: string | undefined
       let conflictWith: string | undefined
-      if (input.decision === 'select' && (observed?.key !== preview.key || observed.source.digest !== preview.source.digest)) {
+      if (input.decision !== 'skip' && (observed?.key !== preview.key || observed.source.digest !== preview.source.digest)) {
         status = 'conflict'; reason = 'PRESET_SOURCE_CONFLICT'
       } else if (priorReview) {
         status = priorReview.fingerprint === fingerprint && (input.decision === 'skip' || sourceUnchanged) ? 'duplicate' : 'conflict'
         if (status === 'duplicate') duplicateOf = priorReview.decisionId
         else { reason = sourceUnchanged ? 'PRESET_REVIEW_CONFLICT' : 'PRESET_CONTENT_CONFLICT'; conflictWith = priorReview.decisionId }
+      } else if (input.decision === 'replace') {
+        if (!origin || origin.decisionId !== input.expectedDecisionId) {
+          status = 'conflict'; reason = 'PRESET_CONTENT_CONFLICT'; conflictWith = origin?.decisionId
+        } else if (preset && await tx.get<StoredPreset>('role-preset', preset.id)) {
+          status = 'conflict'; reason = 'PRESET_ID_CONFLICT'
+        } else { status = 'replaced'; conflictWith = origin.decisionId }
       } else if (origin) {
         status = origin.key === preview.key && origin.fingerprint === fingerprint && sourceUnchanged ? 'duplicate' : 'conflict'
         if (status === 'duplicate') duplicateOf = origin.decisionId
@@ -320,12 +330,14 @@ export class RolePresetStore {
       const earlier = duplicateOf ? await tx.get<RolePresetImportRecord>('role-preset-import', duplicateOf) : undefined
       const result: RolePresetImportRecord = { id, instanceId: this.instanceId, previewId: saved.id, key: preview.key,
         source: preview.source, targetRole: preview.targetRole, status,
-        ...(status === 'selected' ? { presetId: preset!.id } : earlier?.presetId ? { presetId: earlier.presetId } : {}),
+        ...(['selected', 'replaced'].includes(status) ? { presetId: preset!.id } : earlier?.presetId ? { presetId: earlier.presetId } : {}),
         ...(duplicateOf ? { duplicateOf } : {}), ...(conflictWith ? { conflictWith } : {}), ...(reason ? { reason } : {}),
         ...(reason === 'PRESET_SOURCE_CONFLICT' && observed ? { observedDigest: observed.source.digest } : {}), createdAt: this.now() }
-      if (status === 'selected') {
+      if (status === 'selected' || status === 'replaced') {
         await this.savePreset(tx, preset!, { key: preview.key, source: preview.source, targetRole: preview.targetRole })
-        await tx.insert('role-preset-source', hash(preview.key), { key: preview.key, decisionId: id, presetId: preset!.id, fingerprint })
+        const index: SourceIndex = { key: preview.key, decisionId: id, presetId: preset!.id, fingerprint }
+        if (status === 'replaced') await tx.replace('role-preset-source', hash(preview.key), index)
+        else await tx.insert('role-preset-source', hash(preview.key), index)
       }
       if (!priorReview && status !== 'conflict') await tx.insert('role-preset-review', input.previewId, { decisionId: id, fingerprint })
       await tx.insert('role-preset-import', id, result)

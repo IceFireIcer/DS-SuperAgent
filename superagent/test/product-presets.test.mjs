@@ -71,11 +71,19 @@ test('product Host authorizes preset commands and persists reviewed choices and 
   const conflict = await host.dispatch('preset-select', { instanceId, commandId: 'select-conflict', previewId: conflictPreview.id,
     decision: 'select', copy: imported, preset: { ...preset('from-old'), name: 'Changed' } })
   assert.equal(conflict.status, 'conflict')
+  const replaced = await host.dispatch('preset-select', { instanceId, commandId: 'replace-source', previewId: conflictPreview.id,
+    decision: 'replace', expectedDecisionId: selected.id, copy: imported, preset: preset('from-updated') })
+  assert.equal(replaced.status, 'replaced')
+  assert.equal(replaced.conflictWith, selected.id)
+  assert.equal((await host.dispatch('preset-list', { instanceId })).items.find(item => item.id === 'from-old')?.status, 'active')
+  await assert.rejects(host.dispatch('preset-select', { instanceId, commandId: 'remote-replace', previewId: conflictPreview.id,
+    decision: 'replace', expectedDecisionId: selected.id, copy: imported, preset: preset('other') }, { id: 'remote' }),
+  { code: 'SOURCE_NOT_AUTHORIZED' })
   const skippedPreview = await host.dispatch('preset-preview', { instanceId, commandId: 'preview-skip', copy: copy('another-export') })
   const skipped = await host.dispatch('preset-select', { instanceId, commandId: 'skip-one', previewId: skippedPreview.id, decision: 'skip' })
   assert.equal(skipped.status, 'skipped')
   assert.deepEqual((await host.dispatch('preset-imports', { instanceId })).items.map(item => item.status).sort(),
-    ['conflict', 'duplicate', 'selected', 'skipped'])
+    ['conflict', 'duplicate', 'replaced', 'selected', 'skipped'])
   const initial = await host.dispatch('settings', { instanceId })
   const application = { instanceId, commandId: 'apply-one', presetId: created.id, targetRole: 'worker', expectedRevision: initial.revision }
   const appliedResponse = await http('preset-apply', application)
@@ -96,7 +104,7 @@ test('product Host authorizes preset commands and persists reviewed choices and 
   assert.deepEqual((await reopened.dispatch('preset-applications', { instanceId })).items, [applied])
   assert.equal((await reopened.dispatch('preset-preview-read', { instanceId, previewId: preview.id })).id, preview.id)
   assert.equal((await reopened.dispatch('preset-import-read', { instanceId, importId: skipped.id })).status, 'skipped')
-  assert.equal((await reopened.dispatch('preset-list', { instanceId })).items.length, 2)
+  assert.equal((await reopened.dispatch('preset-list', { instanceId })).items.length, 3)
 })
 
 test('Engine reconciles a lost preset-apply commit by its original command identity', async t => {

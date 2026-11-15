@@ -171,6 +171,39 @@ test('editing an imported preset makes another extraction an inspectable content
   assert.equal((await store.get({ instanceId: 'personal', presetId: 'writer' })).preset.name, 'Changed')
 })
 
+test('explicit source replacement keeps the old preset and rejects a stale decision', async t => {
+  const { store, reopen } = await fixture(t)
+  const state = legacy()
+  const firstPreview = await store.recordPreview({ instanceId: 'personal', commandId: 'preview-one', copy: copy(state) })
+  const first = await store.decideImport({ instanceId: 'personal', commandId: 'select-one', previewId: firstPreview.id,
+    decision: 'select', copy: copy(state), preset: preset() })
+  const replacementPreview = await store.recordPreview({ instanceId: 'personal', commandId: 'preview-two', copy: copy(state) })
+  const attempt = { instanceId: 'personal', previewId: replacementPreview.id, copy: copy(state), preset: preset('new-writer') }
+  const conflict = await store.decideImport({ ...attempt, commandId: 'select-two', decision: 'select' })
+  assert.equal(conflict.reason, 'PRESET_CONTENT_CONFLICT')
+  assert.equal(conflict.conflictWith, first.id)
+  const replaced = await store.decideImport({ ...attempt, commandId: 'replace-one', decision: 'replace', expectedDecisionId: first.id })
+  assert.equal(replaced.status, 'replaced')
+  assert.equal(replaced.conflictWith, first.id)
+  assert.equal(replaced.presetId, 'new-writer')
+  assert.deepEqual(await store.decideImport({ ...attempt, commandId: 'replace-one', decision: 'replace', expectedDecisionId: first.id }), replaced)
+  await assert.rejects(store.decideImport({ ...attempt, commandId: 'replace-one', decision: 'replace', expectedDecisionId: 'changed' }),
+    { code: 'IDENTITY_CONFLICT' })
+  const stalePreview = await store.recordPreview({ instanceId: 'personal', commandId: 'preview-three', copy: copy(state) })
+  const stale = await store.decideImport({ instanceId: 'personal', commandId: 'replace-stale', previewId: stalePreview.id,
+    decision: 'replace', expectedDecisionId: first.id, copy: copy(state), preset: preset('third-writer') })
+  assert.equal(stale.status, 'conflict')
+  assert.equal(stale.conflictWith, replaced.id)
+  const restarted = new RolePresetStore(await reopen(), 'personal')
+  assert.equal((await restarted.get({ instanceId: 'personal', presetId: 'writer' })).status, 'active')
+  assert.equal((await restarted.get({ instanceId: 'personal', presetId: 'new-writer' })).status, 'active')
+  const newPreview = await restarted.recordPreview({ instanceId: 'personal', commandId: 'preview-four', copy: copy(state) })
+  const duplicate = await restarted.decideImport({ instanceId: 'personal', commandId: 'select-four', previewId: newPreview.id,
+    decision: 'select', copy: copy(state), preset: preset('new-writer') })
+  assert.equal(duplicate.status, 'duplicate')
+  assert.equal(duplicate.duplicateOf, replaced.id)
+})
+
 test('PostgreSQL uses the same records for previews, images and command replay', {
   skip: process.platform === 'win32' && 'The embedded PostgreSQL fixture does not start on this Windows host.',
   timeout: 120000,
