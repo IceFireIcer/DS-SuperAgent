@@ -43,6 +43,11 @@ test('Feishu profile opt-in needs explicit tenant, chats, identities and a reque
     DS_SUPERAGENT_FEISHU_TENANT_KEY: 'tenant', DS_SUPERAGENT_FEISHU_CHAT_IDS: 'chat-a',
     DS_SUPERAGENT_FEISHU_SELF_ACTOR_IDS: 'bot-1', DS_SUPERAGENT_FEISHU_ALLOWED_REQUESTER_IDS: ' ',
   }), { code: 'INVALID_CONFIG' })
+  assert.throws(() => feishuProfileConfig({
+    DS_SUPERAGENT_FEISHU_APP_ID: 'invalid app', DS_SUPERAGENT_FEISHU_APP_SECRET: 'fixture-value',
+    DS_SUPERAGENT_FEISHU_TENANT_KEY: 'tenant', DS_SUPERAGENT_FEISHU_CHAT_IDS: 'chat-a',
+    DS_SUPERAGENT_FEISHU_SELF_ACTOR_IDS: 'bot-1', DS_SUPERAGENT_FEISHU_ALLOWED_REQUESTER_IDS: 'alice',
+  }), { code: 'INVALID_CONFIG' })
 })
 
 test('an incomplete Feishu opt-in leaves Main running and shows a bounded source error', async t => {

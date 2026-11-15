@@ -35,8 +35,11 @@ export function feishuProfileConfig(env: NodeJS.ProcessEnv = process.env): Produ
   const [appId, appSecret, tenantKey, chats, bots, requesters] = values as string[]
   const ids = (value: string) => value.split(',').map(id => id.trim())
   const chatIds = ids(chats!), selfActorIds = ids(bots!), allowedRequesterIds = ids(requesters!)
-  if ([chatIds, selfActorIds, allowedRequesterIds].some(list => list.some(id => !/^[\w-]{1,256}$/u.test(id)) || new Set(list).size !== list.length)) {
-    throw new CoreError('INVALID_CONFIG', 'A Feishu source needs distinct native chat, bot and requester IDs.')
+  if (![appId, tenantKey].every(id => /^[\w-]{1,256}$/u.test(id!.trim()))
+    || !appSecret || Buffer.byteLength(appSecret) > 16384 || /[\r\n]/u.test(appSecret)
+    || chatIds.length > 20 || selfActorIds.length > 100 || allowedRequesterIds.length > 100
+    || [chatIds, selfActorIds, allowedRequesterIds].some(list => list.some(id => !/^[\w-]{1,256}$/u.test(id)) || new Set(list).size !== list.length)) {
+    throw new CoreError('INVALID_CONFIG', 'A Feishu source needs valid bounded app, tenant, chat, bot and requester settings.')
   }
   return {
     tenantKey: tenantKey!.trim(), chatIds, actorId: 'feishu-receiver', selfActorIds,
