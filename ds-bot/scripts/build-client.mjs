@@ -20,6 +20,7 @@ export async function bundleClient() {
   const result = await build({
     // Region comments name sources relative to the plugin, wherever the script runs from.
     absWorkingDir: PLUGIN,
+    preserveSymlinks: true,
     entryPoints: ['src/client/index.js'],
     bundle: true,
     format: 'cjs',
@@ -55,6 +56,7 @@ const OFFICE_OUTPUT = join(PLUGIN, 'office.js')
 export async function bundleOffice() {
   const result = await build({
     absWorkingDir: PLUGIN,
+    preserveSymlinks: true,
     entryPoints: ['src/office/cli.js'],
     bundle: true,
     format: 'esm',

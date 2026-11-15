@@ -85,6 +85,8 @@ export async function apply(context: Context, config: SuperagentProfileConfig = 
   }
   const host = await createProductHost(context, {
     ...config,
+    ...(config.watchdogStatusPath === undefined && process.env.DS_SUPERAGENT_WATCHDOG_STATUS_PATH
+      ? { watchdogStatusPath: process.env.DS_SUPERAGENT_WATCHDOG_STATUS_PATH } : {}),
     ...(config.workspaceRoot === undefined && workspaceRoot ? { workspaceRoot } : {}),
     ...(clientGateway ? { clientGateway } : {}),
     ...(feishu ? { feishu } : {}),

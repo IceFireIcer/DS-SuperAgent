@@ -44,11 +44,14 @@ test('the independent supervisor Session records one semantic result through the
 
 test('the supervisor Session receives report, tool and delivery content', async t => {
   let prompt = ''
+  let calls = 0
   const { sessions } = await context(t, options => {
+    calls += 1
     if (prompt === '') {
       prompt = options.messages.flatMap(message => message.content).filter(block => block.type === 'text').map(block => block.text).join('\n')
     }
-    return toolResponse('record_supervision', { kind: 'normal', reason: 'The report is progressing.', recommendation: '', action: '' }, 'supervision-content')
+    return calls === 1 ? toolResponse('record_supervision', { kind: 'normal', reason: 'The report is progressing.', recommendation: '', action: '' }, 'supervision-content')
+      : textResponse('Recorded.')
   })
   const assess = createSessionAssessor(sessions, { sessionId: 'supervisor-content' })
   await assess({

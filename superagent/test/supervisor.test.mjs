@@ -18,6 +18,10 @@ const base = () => ({
 async function open(t, { assess, maxProposals = 2 } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-supervisor-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  await storage.transaction('private', async tx => {
+    await tx.insert('ticket', 't1', { id: 't1', state: 'open', directionVersion: 1 })
+    await tx.insert('assignment', 't1', { id: 'a1', generation: 'g1', state: 'running' })
+  })
   t.after(async () => { await storage.close().catch(() => {}); await rm(directory, { recursive: true, force: true }) })
   let item = base()
   let paused = false
@@ -171,7 +175,26 @@ test('approval of a correction adds an authorized direction input and records it
   assert.equal(approved.status, 'approved')
   assert.equal(approved.action.kind, 'direction')
   assert.equal(approved.action.id, 'input-1')
-  assert.deepEqual(app.calls.directions, [{ commandId: 'decision-correct:direction', ticketId: 't1', text: 'Return to the original request.', reason: 'The direction drifted.' }])
+  assert.deepEqual(app.calls.directions, [{ commandId: 'decision-correct:direction', ticketId: 't1', text: 'Return to the original request.', reason: 'The direction drifted.', expectedDirectionVersion: 1, expectedGeneration: 'g1' }])
+})
+
+test('a changed direction or human stop rejects an old proposal before it acts', async t => {
+  const app = await open(t, { assess: async () => ({ kind: 'deviation', reason: 'Outside the requested scope.', recommendation: 'Return to scope.', action: 'correct' }) })
+  const proposal = (await app.supervisor.inspect()).proposals[0]
+  await app.storage.transaction('private', async tx => {
+    const ticket = await tx.get('ticket', 't1')
+    await tx.replace('ticket', 't1', { ...ticket, directionVersion: 2 })
+  })
+  await assert.rejects(app.supervisor.decide({ commandId: 'stale-direction', proposalId: proposal.id, decision: 'approve' }), { code: 'PROPOSAL_STALE' })
+  await app.storage.transaction('private', async tx => {
+    const ticket = await tx.get('ticket', 't1')
+    await tx.replace('ticket', 't1', { ...ticket, directionVersion: 1 })
+    await tx.insert('stop-head', JSON.stringify(['stop-head', 't1']), { stopId: 'human-stop' })
+    await tx.insert('stop-state', 'human-stop', { state: 'stopped' })
+  })
+  await assert.rejects(app.supervisor.decide({ commandId: 'stale-stop', proposalId: proposal.id, decision: 'approve' }), { code: 'PROPOSAL_STALE' })
+  assert.deepEqual(app.calls.directions, [])
+  assert.equal((await app.supervisor.getProposal(proposal.id)).status, 'proposed')
 })
 
 test('rejection executes nothing and keeps the reason', async t => {

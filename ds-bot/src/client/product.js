@@ -11,6 +11,7 @@ import { SCHEDULE_CSS } from './schedules.js'
 import { ProductScheduleSettings, PRODUCT_SCHEDULE_CSS } from './product-schedules.js'
 import { ProductPresetSettings, PRODUCT_PRESET_CSS } from './product-presets.js'
 import { ProductCredentialSettings, PRODUCT_CREDENTIAL_CSS } from './product-credentials.js'
+import { ProductSupervisionSettings, PRODUCT_SUPERVISION_CSS } from './product-supervision.js'
 import { FolderMenu, FOLDER_CSS } from './folder-menu.js'
 import { MODEL_CSS } from './model-menu.js'
 import { createSource } from './sources.js'
@@ -1113,15 +1114,18 @@ export function applyProduct(ctx) {
             'aria-current': page === 'schedules' ? 'page' : undefined, onClick: () => setPage('schedules') }, h(ClockIcon), t('Scheduled tasks')),
           h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
             'aria-current': page === 'presets' ? 'page' : undefined, onClick: () => setPage('presets') }, h(SlidersIcon), t('Role presets')),
+          !viewState.connection?.connected ? h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
+            'aria-current': page === 'supervision' ? 'page' : undefined, onClick: () => setPage('supervision') }, h(SlidersIcon), t('Supervision')) : null,
           h('span', { className: 'bt-main-settings-revision' }, `${t('Configuration')} v${snapshot.revision}`)),
         h('div', { className: 'bt-settings-main' },
           h('div', { className: 'bt-settings-head' }, h('h2', null, page === 'schedules' ? t('Scheduled tasks')
-            : page === 'presets' ? t('Role presets') : t('Super-agent settings'))),
+            : page === 'presets' ? t('Role presets') : page === 'supervision' ? t('Supervision') : t('Super-agent settings'))),
           h('div', { className: 'bt-settings-scroll' },
             page === 'schedules' ? h(ProductScheduleSettings, { binding, works: view.getSnapshot().works, call: productCall,
               onViewWork: () => { onClose(); view.set(current => ({ ...current, route: 'main' })); void refreshMain(binding) } })
               : page === 'presets' ? h(ProductPresetSettings, { binding, call: productCall,
-                settingsRevision: snapshot.revision, onApplied: refreshAfterPreset, onReload: refreshAfterPreset }) : h(Fragment, null,
+                settingsRevision: snapshot.revision, onApplied: refreshAfterPreset, onReload: refreshAfterPreset })
+                : page === 'supervision' ? h(ProductSupervisionSettings, { binding, call: productCall }) : h(Fragment, null,
             error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
             viewState.directoryError ? h('p', { className: 'bt-main-error', role: 'alert' }, viewState.directoryError) : null,
             conflict ? h('div', { className: 'bt-main-settings-conflict', role: 'status' },
@@ -1253,7 +1257,7 @@ export function applyProduct(ctx) {
         onClose: () => view.set(current => ({ ...current, connectOpen: false })) }) : null)
   }
   const shadow = (name, component) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200 }, component))
-  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SCHEDULE_CSS + MODEL_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + PRODUCT_PRESET_CSS, 'main'), 'superagent: existing chat styles')
+  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SCHEDULE_CSS + MODEL_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + PRODUCT_PRESET_CSS + PRODUCT_SUPERVISION_CSS, 'main'), 'superagent: existing chat styles')
   ctx.effect(() => { const style = installStyles(themeCss(allThemes().deepseek), 'main-theme'); return () => style.remove() }, 'superagent: existing theme')
   shadow('main.conversation', ProductSurface)
   shadow('sidebar.workspaces', MainNavigation)
