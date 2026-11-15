@@ -309,16 +309,16 @@ export class RolePresetStore {
       let conflictWith: string | undefined
       if (input.decision !== 'skip' && (observed?.key !== preview.key || observed.source.digest !== preview.source.digest)) {
         status = 'conflict'; reason = 'PRESET_SOURCE_CONFLICT'
+      } else if (input.decision === 'replace' && (!origin || origin.decisionId !== input.expectedDecisionId)) {
+        status = 'conflict'; reason = 'PRESET_CONTENT_CONFLICT'; conflictWith = origin?.decisionId
       } else if (priorReview) {
         status = priorReview.fingerprint === fingerprint && (input.decision === 'skip' || sourceUnchanged) ? 'duplicate' : 'conflict'
         if (status === 'duplicate') duplicateOf = priorReview.decisionId
         else { reason = sourceUnchanged ? 'PRESET_REVIEW_CONFLICT' : 'PRESET_CONTENT_CONFLICT'; conflictWith = priorReview.decisionId }
       } else if (input.decision === 'replace') {
-        if (!origin || origin.decisionId !== input.expectedDecisionId) {
-          status = 'conflict'; reason = 'PRESET_CONTENT_CONFLICT'; conflictWith = origin?.decisionId
-        } else if (preset && await tx.get<StoredPreset>('role-preset', preset.id)) {
+        if (preset && await tx.get<StoredPreset>('role-preset', preset.id)) {
           status = 'conflict'; reason = 'PRESET_ID_CONFLICT'
-        } else { status = 'replaced'; conflictWith = origin.decisionId }
+        } else { status = 'replaced'; conflictWith = input.expectedDecisionId }
       } else if (origin) {
         status = origin.key === preview.key && origin.fingerprint === fingerprint && sourceUnchanged ? 'duplicate' : 'conflict'
         if (status === 'duplicate') duplicateOf = origin.decisionId
