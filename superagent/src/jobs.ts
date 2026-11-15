@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto'
 import { CoreError, identifier } from './model.js'
 import type { AsyncTx, Storage } from './storage.js'
 import type { Artifact, LocalJob, LocalJobResult, RemoteJobObservation } from './local-environment.js'
@@ -41,7 +40,7 @@ export interface JobStart {
   environmentId: string
   environmentKind?: 'local' | 'remote'
   command: string
-  job: LocalJob
+  jobId: string
 }
 
 export interface JobsOptions {
@@ -97,6 +96,8 @@ export class Jobs {
   readonly maxRecords = 100
   private readonly handles = new Map<string, { job: LocalJob; record: JobRecord }>()
   private readonly pending = new Map<string, { job: LocalJob; record: JobRecord }>()
+  private readonly starting = new Map<string, { ready: Promise<LocalJob | undefined>; resolve: (job?: LocalJob) => void;
+    stopRequested: boolean; provided: boolean }>()
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>()
   private readonly claims = new Set<string>()
   private readonly index: BackgroundWork
@@ -137,22 +138,65 @@ export class Jobs {
     return entries
   }
 
-  /** Records the start fact. The process is only watched once this transaction commits; see `attach`. */
-  async start(tx: AsyncTx, request: JobStart): Promise<JobRecord> {
+  /** Reserve a stable identity before a local start can create a process range. */
+  reserveLocalStart(jobId: string) {
+    identifier(jobId, 'jobId')
+    let resolve!: (job?: LocalJob) => void
+    const ready = new Promise<LocalJob | undefined>(finish => { resolve = finish })
+    this.starting.set(jobId, { ready, resolve, stopRequested: false, provided: false })
+  }
+
+  /** Publishes a late start to a waiting stop, terminating it immediately if cancellation already won. */
+  provideLocalStart(jobId: string, job: LocalJob) {
+    const start = this.starting.get(jobId)
+    if (!start) { job.terminate(); return }
+    if (start.stopRequested) job.terminate()
+    start.provided = true
+    start.resolve(job)
+  }
+
+  localStartWasStopped(jobId: string) { return this.starting.get(jobId)?.stopRequested === true }
+
+  finishLocalStart(jobId: string) {
+    const start = this.starting.get(jobId)
+    if (start && !start.provided) start.resolve()
+    this.starting.delete(jobId)
+  }
+
+  /** Persist the start intent and capacity before the provider is allowed to spawn. */
+  async beginLocal(tx: AsyncTx, request: JobStart): Promise<JobRecord> {
     identifier(request.ticketId, 'ticketId'); identifier(request.assignmentId, 'assignmentId'); identifier(request.environmentId, 'environmentId')
     await this.assertCapacity(tx, request.ticketId)
-    const record: JobRecord = { id: request.job.jobId ?? randomUUID(), ticketId: request.ticketId, assignmentId: request.assignmentId, generation: request.generation,
-      environmentId: request.environmentId, ...(request.environmentKind ? { environmentKind: request.environmentKind } : {}),
-      command: request.command, state: 'running', startedAt: this.now(), runtimeToken: this.runtimeToken,
-      ...(request.job.remote ? { remote: request.job.remote } : {}) }
+    const record: JobRecord = { id: request.jobId, ticketId: request.ticketId, assignmentId: request.assignmentId,
+      generation: request.generation, environmentId: request.environmentId,
+      ...(request.environmentKind ? { environmentKind: request.environmentKind } : {}),
+      command: request.command, state: 'starting', startedAt: this.now(), runtimeToken: this.runtimeToken }
     await tx.insert('job', jobKey(record.ticketId, record.id), record)
     await this.index.add(tx, record.ticketId, { id: record.id, assignmentId: record.assignmentId })
     await this.remember(tx, record.ticketId, record.id)
     if (request.environmentKind === 'remote') {
       await tx.insert('remote-job', remoteKey(record.ticketId, record.id), { ticketId: record.ticketId, jobId: record.id })
     }
-    this.pending.set(record.id, { job: request.job, record })
     return record
+  }
+
+  /** The committed intent can become running only while its original Assignment still owns it. */
+  async activateLocal(tx: AsyncTx, request: { ticketId: string; jobId: string; job: LocalJob }) {
+    const record = await tx.get<JobRecord>('job', jobKey(request.ticketId, request.jobId))
+    if (this.closing || !record || record.state !== 'starting' || record.runtimeToken !== this.runtimeToken) return record
+    const active: JobRecord = { ...record, state: 'running', ...(request.job.remote ? { remote: request.job.remote } : {}) }
+    await tx.replace('job', jobKey(request.ticketId, request.jobId), active)
+    this.pending.set(active.id, { job: request.job, record: active })
+    return active
+  }
+
+  /** A failed start leaves an auditable unknown outcome unless a concurrent stop owns cancellation. */
+  async failLocalStart(tx: AsyncTx, ticketId: string, jobId: string) {
+    const record = await tx.get<JobRecord>('job', jobKey(ticketId, jobId))
+    if (!record || record.state === 'cancelling' || !['starting', 'running'].includes(record.state)) return
+    await tx.replace('job', jobKey(ticketId, jobId), { ...record, state: 'unknown', finishedAt: this.now(),
+      reason: 'The local start did not confirm a managed process range; its outcome is unknown.' })
+    await this.index.remove(tx, ticketId, jobId)
   }
 
   /** Persists the original remote identity before any start request can leave the Host. */
@@ -210,9 +254,10 @@ export class Jobs {
   }
 
   /** A start whose record did not commit: the process range is ended and nothing comes to life in memory. */
-  abandon(job: LocalJob) {
+  async abandon(job: LocalJob) {
     for (const [jobId, pending] of this.pending) if (pending.job === job) this.pending.delete(jobId)
     job.terminate()
+    return job.waitForExit(AbortSignal.timeout(5000)).catch(() => false)
   }
 
   async get(tx: AsyncTx, ticketId: string, jobId: string): Promise<JobRecord | undefined> {
@@ -242,7 +287,9 @@ export class Jobs {
   }
 
   listViews(ticketId: string) {
-    return this.storage.transaction(this.instanceId, async tx => (await this.listIn(tx, ticketId)).map(record => this.viewOf(record)))
+    return this.storage.transaction(this.instanceId, async tx => (await this.listIn(tx, ticketId))
+      .filter(record => record.state !== 'starting' || record.environmentKind === 'remote')
+      .map(record => this.viewOf(record)))
   }
 
   async hasActive(tx: AsyncTx, request: { ticketId: string; assignmentId?: string }) {
@@ -445,7 +492,7 @@ export class Jobs {
   }
 
   private hasHandle(jobId: string) {
-    return this.handles.has(jobId) || this.pending.has(jobId) || this.claims.has(jobId)
+    return this.handles.has(jobId) || this.pending.has(jobId) || this.starting.has(jobId) || this.claims.has(jobId)
   }
 
   hasLiveRange(jobId: string) {
@@ -469,19 +516,25 @@ export class Jobs {
    */
   async stopRanges(jobIds: string[]): Promise<{ jobId: string; output?: JobOutput }[]> {
     const ranges = jobIds.flatMap(jobId => {
+      const starting = this.starting.get(jobId)
+      if (starting) starting.stopRequested = true
       const handle = this.handles.get(jobId)
-      if (handle) return [{ jobId, job: handle.job }]
+      if (handle) return [{ jobId, job: handle.job, starting }]
       // A committed start can be stopped before `attach` receives its process handle.
       const pending = this.pending.get(jobId)
-      return pending ? [{ jobId, job: pending.job }] : []
+      return pending || starting ? [{ jobId, job: pending?.job, starting }] : []
     })
     // The ids stay claimed while the ranges settle, so a concurrent read cannot mistake a job that is being
     // stopped for one this process no longer holds.
     for (const { jobId } of ranges) this.claim(jobId)
-    const outcomes = await Promise.all(ranges.map(async ({ jobId, job }) => {
-      job.terminate()
-      const quiescent = await job.waitForExit(AbortSignal.timeout(5000)).catch(() => false)
-      const output = quiescent ? { stdout: readWindow(job, 'stdout'), stderr: readWindow(job, 'stderr') } : undefined
+    const outcomes = await Promise.all(ranges.map(async ({ jobId, job, starting }) => {
+      const deadline = AbortSignal.timeout(5000)
+      const range = job ?? (starting ? await Promise.race([starting.ready,
+        new Promise<undefined>(resolve => deadline.addEventListener('abort', () => resolve(undefined), { once: true }))]) : undefined)
+      if (!range) return undefined
+      range.terminate()
+      const quiescent = await range.waitForExit(deadline).catch(() => false)
+      const output = quiescent ? { stdout: readWindow(range, 'stdout'), stderr: readWindow(range, 'stderr') } : undefined
       return quiescent ? { jobId, ...(output ? { output } : {}) } : undefined
     }))
     for (const { jobId } of ranges) this.release(jobId, true)
@@ -496,6 +549,7 @@ export class Jobs {
   /** Terminates every managed range without writing business facts; used when this runtime shuts down. */
   shutdown() {
     this.closing = true
+    for (const start of this.starting.values()) start.stopRequested = true
     for (const { job } of this.handles.values()) job.terminate()
     for (const { job } of this.pending.values()) job.terminate()
     for (const timer of this.timers.values()) clearTimeout(timer)
