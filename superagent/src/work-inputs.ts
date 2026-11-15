@@ -89,7 +89,7 @@ export interface WorkOwnership {
   inputId: string
   subscriptionId: string
   state: 'owned' | 'handed-back' | 'requeued'
-  basis: 'fanout' | 'explicit-attach' | 'attention-answer' | 'supervisor-correction'
+  basis: 'fanout' | 'explicit-attach' | 'attention-answer' | 'supervisor-correction' | 'main-follow-up'
   reason?: string
   requeueCommandId?: string
   assignedAt: number
@@ -108,6 +108,22 @@ export interface RequeueDecision {
   createdAt: number
   claimedAt?: number
   consumedAt?: number
+}
+
+export interface MainFollowUpAttachment {
+  status: 'attached' | 'waiting' | 'stopped'
+  directionVersion: number
+  inputId?: string
+  ownershipId?: string
+  reason?: string
+}
+
+export interface MainFollowUpAttachmentRequest {
+  ticketId: string
+  followUpId: string
+  text: string
+  authorId: string
+  reason: string
 }
 
 export interface WorkNote {
@@ -291,7 +307,7 @@ export class WorkInputs {
       }
       const directionVersion = (ticket.directionVersion ?? 1) + 1
       const previousState = ticket.state
-      const recoveryDecisionId = previousState === 'ended' ? await this.recordRecovery(tx, ticket, event, id) : undefined
+      const recoveryDecisionId = previousState === 'ended' ? await this.recordRecovery(tx, ticket, event.id, id) : undefined
       const input: WorkInput = { id, instanceId: this.instanceId, ticketId: ticket.id, sourceEventId: event.id, threadId: event.threadId, objectId: event.objectId,
         text: event.text!, authorId: event.authorId, ownership: 'worker', directionVersion, state: 'pending', ...(recoveryDecisionId ? { recoveryDecisionId } : {}), receivedAt: this.now() }
       await this.insertInput(tx, input)
@@ -365,6 +381,74 @@ export class WorkInputs {
     await tx.replace('intent', ticket.id, { ...intent, state: 'pending', reason: 'followup-pending' })
     if (request.dispatch !== false) await this.enqueue(tx, { key: `followup:${id}`, stream: 'relay', scope: ticket.id, payload: { ticketId: ticket.id, inputId: id } })
     return input
+  }
+
+  /**
+   * A Main-owned follow-up may continue only the exact original Ticket and Session.
+   * Waiting and stop remain constraints; a naturally ended Ticket requires a new recovery decision.
+   */
+  async attachMainFollowUp(tx: AsyncTx, request: MainFollowUpAttachmentRequest): Promise<MainFollowUpAttachment> {
+    identifier(request.ticketId, 'ticketId')
+    identifier(request.followUpId, 'followUpId')
+    identifier(request.authorId, 'authorId')
+    if (!request.text.trim() || Buffer.byteLength(request.text) > 32768) {
+      throw new CoreError('INVALID_INPUT', 'A Main follow-up needs nonempty text of at most 32768 bytes.')
+    }
+    if (!request.reason.trim() || Buffer.byteLength(request.reason) > 2048) {
+      throw new CoreError('INVALID_INPUT', 'A Main follow-up needs a bounded reason.')
+    }
+    const ticket = await this.authorizedTicket(tx, request.ticketId)
+    const previousState = ticket.state
+    const directionVersion = ticket.directionVersion ?? 1
+    if (!this.allowedRequesterIds.includes(request.authorId)) {
+      throw new CoreError('ACTOR_NOT_ALLOWED', 'The Main actor is not currently authorized for this work.')
+    }
+    if (ticket.constraint) {
+      return {
+        status: ticket.constraint.kind === 'stopped' ? 'stopped' : 'waiting',
+        directionVersion,
+        reason: ticket.constraint.reason ?? ticket.constraint.kind,
+      }
+    }
+    const sourceEventId = `main-follow-up:${request.followUpId}`
+    const id = inputKey(ticket.id, sourceEventId)
+    const existing = await tx.get<WorkInput>('work-input', id)
+    if (existing) {
+      const ownership = (await this.ownershipsForEvent(tx, sourceEventId))[0]
+      return { status: 'attached', directionVersion: existing.directionVersion, inputId: existing.id,
+        ...(ownership ? { ownershipId: ownership.id } : {}) }
+    }
+    const trigger = await tx.get<Work['trigger']>('trigger', ticket.triggerId)
+    if (!trigger) throw new CoreError('INCOMPLETE_STATE', 'The Main follow-up Ticket trigger is missing.')
+    const nextDirectionVersion = directionVersion + 1
+    const recoveryDecisionId = previousState === 'ended'
+      ? await this.recordRecovery(tx, ticket, sourceEventId, id)
+      : undefined
+    const input: WorkInput = {
+      id,
+      instanceId: this.instanceId,
+      ticketId: ticket.id,
+      sourceEventId,
+      threadId: trigger.threadId ?? `main-follow-up:${ticket.id}`,
+      objectId: sourceEventId,
+      text: request.text.trim(),
+      authorId: request.authorId,
+      ownership: 'worker',
+      directionVersion: nextDirectionVersion,
+      state: 'pending',
+      ...(recoveryDecisionId ? { recoveryDecisionId } : {}),
+      receivedAt: this.now(),
+    }
+    await this.insertInput(tx, input)
+    const ownership = await this.addOwnership(tx, ticket.id, sourceEventId, id, `main-follow-up:${request.followUpId}`, 'main-follow-up', request.reason)
+    ticket.state = 'open'
+    ticket.directionVersion = nextDirectionVersion
+    await tx.replace('ticket', ticket.id, ticket)
+    const intent = await tx.get<Work['intent']>('intent', ticket.id)
+    if (!intent) throw new CoreError('INCOMPLETE_STATE', 'The Main follow-up is missing the Ticket intent.')
+    await tx.replace('intent', ticket.id, { ...intent, state: 'pending', reason: 'followup-pending' })
+    await this.enqueue(tx, { key: `followup:${id}`, stream: 'relay', scope: ticket.id, payload: { ticketId: ticket.id, inputId: id } })
+    return { status: 'attached', directionVersion: nextDirectionVersion, inputId: input.id, ownershipId: ownership.id }
   }
 
   /** The owning Engine has verified both grants and the native event; this grants ownership of only that event. */
@@ -674,12 +758,12 @@ export class WorkInputs {
     return this.scanAll<WorkOwnership>(tx, 'event-work-ownership', eventOwnershipPrefix(eventId), ownership => ownership.sourceEventId === eventId, 'WORK_OWNERSHIP_BUDGET')
   }
 
-  private async recordRecovery(tx: AsyncTx, ticket: Work['ticket'], event: SourceEvent, inputId: string) {
+  private async recordRecovery(tx: AsyncTx, ticket: Work['ticket'], sourceEventId: string, inputId: string) {
     const mandate = await tx.get<Work['mandate']>('mandate', ticket.mandateId)
     const decision = mandate && await tx.get<Work['decision']>('decision', mandate.decisionId)
     if (!mandate || !decision) throw new CoreError('INCOMPLETE_STATE', 'Recovering a Ticket requires its original Mandate and Decision.')
     const id = recoveryKey(ticket.id, inputId)
-    const recovery: RecoveryDecision = { id, instanceId: this.instanceId, ticketId: ticket.id, inputId, sourceEventId: event.id,
+    const recovery: RecoveryDecision = { id, instanceId: this.instanceId, ticketId: ticket.id, inputId, sourceEventId,
       mandateId: mandate.id, mandateDecisionId: decision.id, policyVersion: decision.policyVersion, currentPolicyVersion: this.policyVersion(),
       reason: 'AUTHORIZED_HUMAN_FOLLOWUP', checkedAt: this.now() }
     if (!await tx.replace('recovery-decision', id, recovery)) await tx.insert('recovery-decision', id, recovery)
@@ -695,7 +779,14 @@ export class WorkInputs {
     const decision = mandate && await tx.get<Work['decision']>('decision', mandate.decisionId)
     const trigger = await tx.get<Work['trigger']>('trigger', ticket.triggerId)
     if (!mandate || !decision || !trigger) throw new CoreError('INCOMPLETE_STATE', 'Recovering a Ticket requires its Mandate, Decision and Trigger.')
-    if (mandate.scope !== trigger.text || !['local', 'remote', 'auto'].includes(mandate.environment) || subscription.sourceInstanceId !== this.source.sourceInstanceId) return false
+    let scopeMatchesSource = mandate.scope === trigger.text
+    if (!scopeMatchesSource) {
+      const link = await tx.get<{ workBriefId: string; workItemId: string }>('work-ticket', ticket.id)
+      const item = link ? await tx.get<{ workBriefId: string; goal: string }>('work-item', link.workItemId) : undefined
+      scopeMatchesSource = !!link && !!item && item.workBriefId === link.workBriefId && mandate.scope === item.goal
+    }
+    if (!scopeMatchesSource || !['local', 'remote', 'auto'].includes(mandate.environment)
+      || subscription.sourceInstanceId !== this.source.sourceInstanceId) return false
     if (!['explicit', 'inferred'].includes(mandate.strength) || decision.outcome !== 'accept') return false
     if (event.authorKind !== 'human' || !this.allowedRequesterIds.includes(event.authorId)) return false
     return this.policyVersion() !== '' && trigger.source.sourceInstanceId === this.source.sourceInstanceId

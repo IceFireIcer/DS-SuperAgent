@@ -56,6 +56,19 @@ test('PostgreSQL persists a split Main WorkPlan, every Ticket receipt and verifi
           { goal: 'Create postgres-beta.txt.', constraints: 'Write only inside the configured workspace.', acceptanceCriteria: 'Read back postgres-beta.txt before success.' },
         ],
       })
+      else if (text === 'Revise the PostgreSQL alpha result.' && completedToolCount(options) === 0) {
+        const item = options.messages.flatMap(message => {
+          const content = message.content.filter(block => block.type === 'text').map(block => block.text).join('')
+          try {
+            const value = message.role === 'user' && content.startsWith('[Work update]')
+              ? JSON.parse(content.split('\n').at(-1)) : message.role === 'tool' ? JSON.parse(content) : undefined
+            const workItemId = value?.receipt?.workItemId ?? value?.brief?.workItemId
+            return workItemId ? [{ workItemId, text: content }] : []
+          } catch { return [] }
+        }).find(value => value.text.includes('postgres-alpha'))
+        if (!item) throw new Error('PostgreSQL Main did not retain the alpha work identity.')
+        yield* toolResponse('follow_up_work', { workItemId: item.workItemId, text: 'Also update postgres-alpha.txt.' })
+      }
       else yield* textResponse('The local work result is available.')
       return
     }
@@ -118,6 +131,31 @@ test('PostgreSQL persists a split Main WorkPlan, every Ticket receipt and verifi
   assert.deepEqual(restored.works.map(work => work.outcome.reportId).sort(), history.works.map(work => work.outcome.reportId).sort())
   assert.deepEqual((await engine.getMainWorkPlan({ instanceId: 'postgres-work', workBriefId: plan.workBriefId })).items.map(item => [item.id, item.ticketId]), identities)
   assert.equal((await engine.listTickets()).items.length, 2)
+
+  const alpha = restored.works.find(work => work.brief.goal === 'Create postgres-alpha.txt.')
+  assert.ok(alpha?.receipt.ticketId)
+  const alphaSession = (await engine.conversation(alpha.receipt.ticketId)).assignments[0].sessionId
+  await engine.sendMainMessage({ instanceId: 'postgres-work', commandId: 'postgres-followup', text: 'Revise the PostgreSQL alpha result.' })
+  let followed
+  for (let attempt = 0; attempt < 500; attempt++) {
+    followed = await engine.getMainConversation({ instanceId: 'postgres-work' })
+    if (followed.works.find(work => work.brief.workItemId === alpha.brief.workItemId)?.followUps?.at(-1)?.status === 'ready') break
+    await new Promise(resolve => setTimeout(resolve, 20))
+  }
+  const followedAlpha = followed.works.find(work => work.brief.workItemId === alpha.brief.workItemId)
+  assert.equal(followedAlpha?.followUps?.at(-1)?.persisted, true)
+  assert.equal(followedAlpha?.followUps?.at(-1)?.adopted, true)
+  assert.equal((await engine.conversation(alpha.receipt.ticketId)).assignments[0].sessionId, alphaSession)
+  assert.equal((await engine.listTickets()).items.length, 2)
+
+  await close()
+  await open()
+  const afterRestart = await engine.getMainConversation({ instanceId: 'postgres-work' })
+  const afterRestartAlpha = afterRestart.works.find(work => work.brief.workItemId === alpha.brief.workItemId)
+  assert.equal(afterRestartAlpha?.receipt.ticketId, alpha.receipt.ticketId)
+  assert.equal(afterRestartAlpha?.followUps?.at(-1)?.status, 'ready')
+  assert.equal(afterRestartAlpha?.followUps?.at(-1)?.persisted, true)
+  assert.equal((await engine.conversation(alpha.receipt.ticketId)).assignments[0].sessionId, alphaSession)
 })
 
 after(async () => {

@@ -45,6 +45,10 @@ export function applyProduct(ctx) {
   const statusCopy = status => ({ routing: t('Routing work'), pending: t('Pending work'), running: t('Running work'),
     waiting: t('Waiting for an answer'), blocked: t('Blocked work'), stopped: t('Stopped work'), success: t('Work complete'),
     failed: t('Work failed'), rejected: t('Work declined'), unknown: t('Work result unknown') })[status] ?? status
+  const followUpCopy = status => ({ queued: t('Follow-up queued'), persisted: t('Follow-up persisted'),
+    delivering: t('Follow-up delivery started'), ready: t('Direction completed'), waiting: t('Direction waiting'),
+    'handed-back': t('Direction handed back'), stopped: t('Direction blocked by stop'),
+    expired: t('Follow-up delivery expired') })[status] ?? status
   const receiptCopy = status => ({ routing: t('Router is routing'), accepted: t('Accepted by Router'), rejected: t('Not accepted') })[status] ?? status
   function MainWorkCard({ work }) {
     return h('article', { className: 'bt-main-work', 'aria-label': t('Work item: {goal}', { goal: work.brief.goal }) },
@@ -57,6 +61,15 @@ export function applyProduct(ctx) {
       work.receipt.status === 'routing' ? h('p', { className: 'bt-main-work-detail' }, `${t('Next step')}: ${work.receipt.nextStep}`) : null,
       h('p', { className: 'bt-main-work-detail' }, `${t('Constraints')}: ${work.brief.constraints}`),
       h('p', { className: 'bt-main-work-detail' }, `${t('Acceptance criteria')}: ${work.brief.acceptanceCriteria}`),
+      work.followUps?.length ? h('div', { className: 'bt-main-work-followups', 'aria-label': t('Follow-up history') },
+        work.followUps.map(followUp => h('div', { key: followUp.id, className: 'bt-main-work-followup' },
+          h('p', null, `${t('Direction v{version}', { version: followUp.directionVersion })}: ${followUpCopy(followUp.status)}`),
+          h('p', { className: 'bt-main-work-detail' }, followUp.text),
+          h('p', { className: 'bt-main-work-detail' },
+            `${followUp.persisted ? t('Input persisted') : t('Input not yet persisted')} · ${followUp.adopted
+              ? t('Direction adopted by Worker') : t('Direction not yet adopted')}`),
+          followUp.displayReason
+            ? h('p', { className: 'bt-main-work-detail' }, `${t('Reason')}: ${followUp.displayReason}`) : null))) : null,
       work.outcome ? h('div', { className: 'bt-main-work-result' },
         h('p', null, work.outcome.summary), h('p', { className: 'bt-main-work-detail' }, `${t('Verification')}: ${work.outcome.evidence}`),
         h('p', { className: 'bt-main-work-detail' }, `${t('Next step')}: ${work.outcome.nextStep}`),
@@ -134,6 +147,10 @@ const PRODUCT_CSS = `
 .bt-main-work-head strong{min-width:0;overflow-wrap:anywhere;font-weight:600}
 .bt-main-work-status{flex:none;color:var(--bt-ink-2);font-size:12px;line-height:16px}
 .bt-main-work-id,.bt-main-work-detail,.bt-main-work-artifact{margin:6px 0 0;color:var(--bt-ink-2);font-size:12px;line-height:16px;overflow-wrap:anywhere}
+.bt-main-work-followups{margin-top:8px;padding-top:8px;border-top:.5px solid var(--bt-line-2)}
+.bt-main-work-followup{padding:6px 0;color:var(--bt-ink);font-size:12px;line-height:16px;overflow-wrap:anywhere}
+.bt-main-work-followup+.bt-main-work-followup{border-top:.5px solid var(--bt-line-2)}
+.bt-main-work-followup p{margin:0}
 .bt-main-work-result{margin-top:8px;padding-top:8px;border-top:.5px solid var(--bt-line-2);color:var(--bt-ink);font-size:13px;line-height:18px;overflow-wrap:anywhere}
 .bt-main-work-result p{margin:0 0 6px}.bt-main-work-result p:last-child{margin-bottom:0}
 .bt-main-work-artifact code{font:inherit;color:var(--bt-ink)}

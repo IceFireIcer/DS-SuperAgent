@@ -18,7 +18,8 @@ export type { ProductHost, ProductHostConfig } from './product-host.js'
 export type { MainAddress, MainBinding, MainMessage, MainPage, MainSend } from './main-conversation.js'
 export { WorkDelegation } from './work-delegation.js'
 export type { MainWorkBrief, MainWorkCard, MainWorkCardBrief, MainWorkIntent, MainWorkItem, MainWorkNotification, MainWorkOutcome,
-  MainWorkPlan, MainWorkPlanConflict, MainWorkPlanItem, MainWorkReceipt, MainWorkRequest, MainWorkSplit, MainWorkStatus, MainWorkTicketSnapshot, MainWorkUpdate } from './work-delegation.js'
+  MainWorkFollowUp, MainWorkFollowUpRequest, MainWorkFollowUpStatus, MainWorkFollowUpView, MainWorkPlan, MainWorkPlanConflict,
+  MainWorkPlanItem, MainWorkReceipt, MainWorkRequest, MainWorkSplit, MainWorkStatus, MainWorkTicketSnapshot, MainWorkUpdate } from './work-delegation.js'
 export { LocalEnvironment, BoundLocalEnvironment, LocalSetupError } from './local-environment.js'
 export type { LocalEnvironmentConfig, LocalCommand, LocalPermission, LocalToolFact, Artifact, LocalJob, LocalJobResult, LocalJobOutput, RemoteJobObservation } from './local-environment.js'
 export type { EnvironmentConfig, EnvironmentKind, EnvironmentLocation, EnvironmentProbe, ExecutionEnvironment, PreparedEnvironment } from './environment.js'

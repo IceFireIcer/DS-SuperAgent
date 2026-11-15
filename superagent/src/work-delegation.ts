@@ -5,6 +5,7 @@ import type { RoleProfile } from './config.js'
 import type { NativeSessions, NativeTool } from './native-sessions.js'
 import type { AsyncTx, Storage } from './storage.js'
 import type { Effect, EffectHandler, EffectResult, Effects } from './effects.js'
+import type { InputDelivery, MainFollowUpAttachment, MainFollowUpAttachmentRequest, WorkInput, WorkOwnership } from './work-inputs.js'
 
 export interface MainWorkIntent {
   goal: string
@@ -77,6 +78,7 @@ export interface MainWorkNotification {
   receipt: MainWorkReceipt
   update: MainWorkUpdate
   outcome?: MainWorkOutcome
+  followUps?: MainWorkFollowUpView[]
 }
 export interface MainWorkCardBrief extends MainWorkIntent {
   id: string
@@ -92,6 +94,7 @@ export interface MainWorkCard {
   status: MainWorkStatus
   update?: MainWorkUpdate
   outcome?: MainWorkOutcome
+  followUps?: MainWorkFollowUpView[]
 }
 
 export interface MainWorkRequest {
@@ -106,6 +109,53 @@ export interface MainWorkRequest {
   constraints?: string
   acceptanceCriteria?: string
   configurationRevision: number
+}
+
+export interface MainWorkFollowUpRequest {
+  commandId: string
+  mainId: string
+  mainSessionId: string
+  mainMessageId: string
+  originalUserText: string
+  workItemId: string
+  text: string
+  reason?: string
+}
+
+export interface MainWorkFollowUp {
+  id: string
+  version: 1
+  instanceId: string
+  commandId: string
+  authorization: { kind: 'authorized-main-actor'; sourceInstanceId: string; actorId: string }
+  mainId: string
+  mainSessionId: string
+  originalUserText: string
+  workBriefId: string
+  workItemId: string
+  originalSourceEventId: string
+  ticketId: string
+  text: string
+  reason: string
+  source: { kind: 'main-message'; id: string }
+  routing: 'direct-to-original'
+  directionVersion: number
+  attachment: 'attached' | 'waiting' | 'stopped'
+  inputId?: string
+  ownershipId?: string
+  blockedReason?: string
+  createdAt: number
+}
+
+export type MainWorkFollowUpStatus = 'queued' | 'delivering' | 'persisted' | 'ready' | 'waiting' | 'handed-back' | 'stopped' | 'expired'
+
+export interface MainWorkFollowUpView extends MainWorkFollowUp {
+  status: MainWorkFollowUpStatus
+  persisted: boolean
+  adopted: boolean
+  delivery?: InputDelivery
+  ownership?: WorkOwnership
+  displayReason?: string
 }
 
 export interface MainWorkItem extends MainWorkIntent {
@@ -175,10 +225,17 @@ export interface WorkDelegationOptions {
   routerProfile(): Promise<{ revision: number; profile: RoleProfile }>
   recordRouterUse(sessionId: string, revision: number, profile: RoleProfile): Promise<void>
   notifyMain(notification: MainWorkNotification, signal: AbortSignal, isCurrent: (transaction?: AsyncTx) => Promise<boolean>): Promise<void>
+  applyFollowUp(tx: AsyncTx, request: MainFollowUpAttachmentRequest): Promise<MainFollowUpAttachment>
 }
 
 const commandKey = (source: DesktopSource, commandId: string) => createHash('sha256')
   .update(canonicalJson([source.sourceInstanceId, source.actorId, commandId])).digest('hex')
+const followUpPrefix = (workItemId: string) => JSON.stringify(['work-follow-up', workItemId])
+const followUpKey = (workItemId: string, followUpId: string) => `${followUpPrefix(workItemId)}:${createHash('sha256').update(followUpId).digest('hex')}`
+const followUpCardStatus: Record<MainWorkFollowUpStatus, MainWorkStatus> = {
+  queued: 'pending', delivering: 'running', persisted: 'running', ready: 'success',
+  waiting: 'waiting', 'handed-back': 'waiting', stopped: 'stopped', expired: 'unknown',
+}
 
 function boundedText(value: unknown, label: string, maximum: number) {
   if (typeof value !== 'string' || !value.trim() || Buffer.byteLength(value) > maximum) {
@@ -548,31 +605,41 @@ export class WorkDelegation {
     if (!source) return
     const snapshot = await this.options.readTicket(ticketId)
     const outcome = this.outcome(source.brief.id, source.item.id, snapshot)
-    if (!outcome) return
+    const followUps = await this.options.storage.transaction(this.options.instanceId,
+      transaction => this.followUpsForItem(transaction, source.item))
+    const latestFollowUp = followUps.at(-1)
+    if (!outcome && latestFollowUp?.status !== 'handed-back') return
     let receipt = await this.itemReceipt(source.item.id)
       ?? await this.options.storage.transaction(this.options.instanceId, tx => tx.get<MainWorkReceipt>('work-receipt', source.brief.id))
     if (!receipt) throw new CoreError('INCOMPLETE_STATE', 'The work receipt is missing.')
     if (receipt.status !== 'accepted' || receipt.ticketId !== ticketId) receipt = await this.acceptItem(source.brief, source.item, ticketId)
-    const updateId = this.updateId(source.brief.id, source.item.id, receipt, outcome)
+    const updateId = this.updateId(source.brief.id, source.item.id, receipt, outcome, followUps)
     if (await this.options.storage.transaction(this.options.instanceId, tx => tx.get('work-update', updateId))) return
     const { revision, profile } = await this.options.routerProfile()
     let recorded = false
     const result = await this.options.sessions.run({ role: 'router', sessionId: source.brief.routerSessionId, signal, profile,
-      text: `Return this bounded, verified work item state to Main. Keep its source and stable item identity; no Worker transcript is included.\n${JSON.stringify({ workBriefId: source.brief.id, workItemId: source.item.id, receipt, outcome })}`,
+      text: `Return this bounded, verified work item state to Main. Keep its source, stable item identity and follow-up delivery facts; no Worker transcript is included.\n${JSON.stringify({
+        workBriefId: source.brief.id, workItemId: source.item.id, receipt, outcome, followUps,
+      })}`,
       tools: [{ name: 'record_work_update', description: 'Record the supplied work status and evidence exactly and notify Main once.', parameters: {},
-        execute: async () => { await this.publishUpdate(source.brief, source.item, receipt, outcome); recorded = true; return 'The bounded work update is queued for Main.' } }] })
+        execute: async () => { await this.publishUpdate(source.brief, source.item, receipt, outcome, followUps); recorded = true; return 'The bounded work update is queued for Main.' } }] })
     await this.options.recordRouterUse(result.sessionId, revision, profile)
     if (!recorded) throw new CoreError('ROUTER_NOTICE_UNHANDLED', 'Router did not record the bounded work result.')
   }
 
-  private updateId(workBriefId: string, workItemId: string, receipt: MainWorkReceipt, outcome?: MainWorkOutcome) {
+  private updateId(workBriefId: string, workItemId: string, receipt: MainWorkReceipt, outcome?: MainWorkOutcome,
+    followUps: MainWorkFollowUpView[] = []) {
     const { updatedAt: _time, ...facts } = outcome ?? {}
-    return createHash('sha256').update(canonicalJson([workBriefId, workItemId, receipt, facts])).digest('hex')
+    const followUpFacts = followUps.map(followUp => ({ id: followUp.id, status: followUp.status,
+      persisted: followUp.persisted, adopted: followUp.adopted, delivery: followUp.delivery?.outcome,
+      ownership: followUp.ownership?.state, reason: followUp.ownership?.reason ?? followUp.blockedReason }))
+    return createHash('sha256').update(canonicalJson([workBriefId, workItemId, receipt, facts, followUpFacts])).digest('hex')
   }
 
-  private async publishUpdate(brief: MainWorkBrief, item: MainWorkItem, receipt: MainWorkReceipt, outcome?: MainWorkOutcome) {
+  private async publishUpdate(brief: MainWorkBrief, item: MainWorkItem, receipt: MainWorkReceipt, outcome?: MainWorkOutcome,
+    followUps: MainWorkFollowUpView[] = []) {
     return commandTransaction(this.options.storage, this.options.instanceId, async tx => {
-      const id = this.updateId(brief.id, item.id, receipt, outcome)
+      const id = this.updateId(brief.id, item.id, receipt, outcome, followUps)
       if (await tx.get('work-update', id)) return
       if (outcome?.status === 'success') {
         const ticket = await tx.get<Work['ticket']>('ticket', outcome.ticketId)
@@ -580,12 +647,17 @@ export class WorkDelegation {
         const assignment = await tx.get<{ id: string }>('assignment', outcome.ticketId)
         if (!ticket || ticket.constraint || !report || report.id !== outcome.reportId || report.assignmentId !== assignment?.id) return
       }
-      const status = outcome?.status ?? receipt.status
+      const latestFollowUp = followUps.at(-1)
+      const followUpHandback = latestFollowUp?.status === 'handed-back'
+      const status = outcome?.status ?? (followUpHandback ? 'waiting' : receipt.status)
       const update: MainWorkUpdate = { version: 1, id, workBriefId: brief.id, workItemId: item.id, ...(receipt.ticketId ? { ticketId: receipt.ticketId } : {}),
-        status, owner: outcome ? (['waiting', 'blocked', 'unknown'].includes(outcome.status) ? 'user' : 'router') : 'router',
-        summary: outcome?.summary ?? (status === 'accepted' ? 'Router accepted this independent work item.' : 'Router declined this independent work item.'),
+        status, owner: outcome ? (['waiting', 'blocked', 'unknown'].includes(outcome.status) ? 'user' : 'router') : followUpHandback ? 'user' : 'router',
+        summary: outcome?.summary ?? (followUpHandback && latestFollowUp
+          ? `Worker handed back the follow-up: ${latestFollowUp.ownership?.reason ?? 'This direction is outside the original work.'}`
+          : status === 'accepted' ? 'Router accepted this independent work item.' : 'Router declined this independent work item.'),
         needsDecision: ['waiting', 'blocked', 'unknown', 'rejected'].includes(status), createdAt: this.now() }
-      const notification: MainWorkNotification = { mainId: brief.mainId, receipt, update, ...(outcome ? { outcome } : {}) }
+      const notification: MainWorkNotification = { mainId: brief.mainId, receipt, update, ...(outcome ? { outcome } : {}),
+        ...(followUps.length ? { followUps } : {}) }
       await tx.insert('work-update', id, notification)
       if (!await tx.replace('work-update-head', item.id, update)) await tx.insert('work-update-head', item.id, update)
       if (outcome && !await tx.replace('work-outcome', item.id, outcome)) await tx.insert('work-outcome', item.id, outcome)
@@ -645,6 +717,179 @@ export class WorkDelegation {
     return this.card(brief, this.legacyItem(brief))
   }
 
+  async followUp(request: MainWorkFollowUpRequest): Promise<MainWorkFollowUpView> {
+    if (!request || Object.keys(request).some(key => !['commandId', 'mainId', 'mainSessionId', 'mainMessageId',
+      'originalUserText', 'workItemId', 'text', 'reason'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'A Main follow-up accepts only its source and one exact work item.')
+    }
+    identifier(request.commandId, 'commandId')
+    identifier(request.mainId, 'mainId')
+    identifier(request.mainSessionId, 'mainSessionId')
+    identifier(request.mainMessageId, 'mainMessageId')
+    identifier(request.workItemId, 'workItemId')
+    if (!this.options.source.allowedActorIds.includes(this.options.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This actor cannot follow up Main work.')
+    }
+    const originalUserText = boundedText(request.originalUserText, 'The Main follow-up source text', 32768)
+    const text = boundedText(request.text, 'The Main follow-up direction', 32768)
+    const reason = request.reason === undefined ? 'The user explicitly directed this work item from its Main conversation.'
+      : boundedText(request.reason, 'The Main follow-up reason', 2048)
+    const key = commandKey(this.options.source, request.commandId)
+    return commandTransaction(this.options.storage, this.options.instanceId, async transaction => {
+      await this.verifyFollowUpSource(transaction, request, originalUserText)
+      const { item, brief, ticketId } = await this.followUpTarget(transaction, request)
+      const fingerprint = this.followUpFingerprint(request, originalUserText, item, ticketId, text, reason)
+      const prior = await transaction.get<{ fingerprint: string; followUpId: string }>('work-follow-up-command', key)
+      if (prior) {
+        if (prior.fingerprint !== fingerprint) {
+          throw new CoreError('IDENTITY_CONFLICT', 'This Main follow-up identity was already used for different direction.')
+        }
+        const record = await transaction.get<MainWorkFollowUp>('work-follow-up', followUpKey(item.id, prior.followUpId))
+        if (!record) throw new CoreError('INCOMPLETE_STATE', 'The accepted Main follow-up is missing.')
+        return this.followUpView(transaction, record)
+      }
+      const followUpId = randomUUID()
+      const attachment = await this.options.applyFollowUp(transaction, {
+        ticketId,
+        followUpId,
+        text,
+        authorId: this.options.source.actorId,
+        reason,
+      })
+      const record = this.followUpRecord(followUpId, request, originalUserText, item, brief, ticketId, text, reason, attachment)
+      await transaction.insert('work-follow-up', followUpKey(item.id, record.id), record)
+      await transaction.insert('work-follow-up-command', key, { fingerprint, followUpId: record.id })
+      return this.followUpView(transaction, record)
+    })
+  }
+
+  private async verifyFollowUpSource(transaction: AsyncTx, request: MainWorkFollowUpRequest, originalUserText: string) {
+    const mainState = await transaction.get<{ mainId: string; mainSessionId: string }>('main-state', 'main')
+    if (mainState?.mainId !== request.mainId || mainState.mainSessionId !== request.mainSessionId) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The Main follow-up source does not belong to the current Main conversation.')
+    }
+    let sourceMessage: { role: 'user' | 'main'; text: string } | undefined
+    let cursor: string | undefined
+    for (let pageCount = 0; pageCount < 10; pageCount++) {
+      const page = await transaction.scan<{ id: string; role: 'user' | 'main'; text: string }>('main-message',
+        { limit: 100, ...(cursor === undefined ? {} : { after: cursor }) })
+      sourceMessage = page.items.find(entry => entry.value.id === request.mainMessageId)?.value
+      if (sourceMessage || !page.cursor) break
+      cursor = page.cursor
+      if (pageCount === 9) throw new CoreError('MAIN_HISTORY_BUDGET', 'The Main follow-up source scan exceeded its 1000-message budget.')
+    }
+    if (!sourceMessage || sourceMessage.role !== 'user' || sourceMessage.text.trim() !== originalUserText) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'A Main follow-up must cite the exact current Main user message.')
+    }
+  }
+
+  private async followUpTarget(transaction: AsyncTx, request: MainWorkFollowUpRequest) {
+    const item = await transaction.get<MainWorkItem>('work-item', request.workItemId)
+    const brief = item ? await transaction.get<MainWorkBrief>('work-brief', item.workBriefId) : undefined
+    if (!item || !brief || brief.mainId !== request.mainId || brief.instanceId !== this.options.instanceId) {
+      throw new CoreError('NOT_FOUND', 'The named work item is not available in the current Main Instance.')
+    }
+    const receipt = await transaction.get<MainWorkReceipt>('work-receipt', item.id)
+      ?? await transaction.get<MainWorkReceipt>('work-receipt', brief.id)
+    const ticketIndex = await transaction.get<{ ticketId: string }>('work-item-ticket', item.id)
+    const ticketId = receipt?.status === 'accepted' ? receipt.ticketId ?? ticketIndex?.ticketId : undefined
+    if (!receipt || receipt.status !== 'accepted' || !ticketId) {
+      throw new CoreError('WORK_NOT_ACCEPTED', 'Only accepted, established work can receive a Main follow-up.')
+    }
+    return { item, brief, ticketId }
+  }
+
+  private followUpFingerprint(request: MainWorkFollowUpRequest, originalUserText: string, item: MainWorkItem,
+    ticketId: string, text: string, reason: string) {
+    return createHash('sha256').update(canonicalJson(['main-work-follow-up-v1', this.options.instanceId,
+      request.mainId, request.mainSessionId, request.mainMessageId, originalUserText, item.id, item.workBriefId,
+      item.sourceEventId, ticketId, text, reason])).digest('hex')
+  }
+
+  private followUpRecord(followUpId: string, request: MainWorkFollowUpRequest, originalUserText: string, item: MainWorkItem,
+    brief: MainWorkBrief, ticketId: string, text: string, reason: string, attachment: MainFollowUpAttachment): MainWorkFollowUp {
+    return {
+      id: followUpId,
+      version: 1,
+      instanceId: this.options.instanceId,
+      commandId: request.commandId,
+      authorization: { kind: 'authorized-main-actor', sourceInstanceId: this.options.source.sourceInstanceId,
+        actorId: this.options.source.actorId },
+      mainId: brief.mainId,
+      mainSessionId: request.mainSessionId,
+      originalUserText,
+      workBriefId: brief.id,
+      workItemId: item.id,
+      originalSourceEventId: item.sourceEventId,
+      ticketId,
+      text,
+      reason,
+      source: { kind: 'main-message', id: request.mainMessageId },
+      routing: 'direct-to-original',
+      directionVersion: attachment.directionVersion,
+      attachment: attachment.status,
+      ...(attachment.inputId ? { inputId: attachment.inputId } : {}),
+      ...(attachment.ownershipId ? { ownershipId: attachment.ownershipId } : {}),
+      ...(attachment.reason ? { blockedReason: attachment.reason } : {}),
+      createdAt: this.now(),
+    }
+  }
+
+  private async followUpView(transaction: AsyncTx, record: MainWorkFollowUp): Promise<MainWorkFollowUpView> {
+    const input = record.inputId ? await transaction.get<WorkInput>('work-input', record.inputId) : undefined
+    const ownership = record.ownershipId
+      ? await transaction.get<WorkOwnership>('work-ownership', record.ownershipId)
+      : undefined
+    const delivery = input?.delivery
+    const completed = delivery?.completedAt !== undefined
+    const status: MainWorkFollowUpStatus = record.attachment === 'stopped' ? 'stopped'
+      : record.attachment === 'waiting' ? 'waiting'
+        : delivery?.exhaustedAt !== undefined ? 'expired'
+          : completed && delivery.outcome === 'ready' ? 'ready'
+            : completed && delivery.outcome === 'attention' ? 'waiting'
+              : completed && delivery?.outcome === 'handback' || ownership?.state === 'handed-back' ? 'handed-back'
+                : delivery?.persistedAt !== undefined ? 'persisted'
+                  : delivery?.claimedAt !== undefined ? 'delivering'
+                    : 'queued'
+    return {
+      ...record,
+      status,
+      persisted: delivery?.persistedAt !== undefined,
+      adopted: completed,
+      ...(delivery ? { delivery: structuredClone(delivery) } : {}),
+      ...(ownership ? { ownership: structuredClone(ownership) } : {}),
+      ...(ownership?.reason || record.blockedReason
+        ? { displayReason: ownership?.reason ?? record.blockedReason } : {}),
+    }
+  }
+
+  private async followUpsForItem(transaction: AsyncTx, item: MainWorkItem): Promise<MainWorkFollowUpView[]> {
+    const records = await this.readFollowUpsForItem(transaction, item.id)
+    const views: MainWorkFollowUpView[] = []
+    for (const record of records.sort((left, right) => left.createdAt - right.createdAt).slice(-10)) {
+      views.push(await this.followUpView(transaction, record))
+    }
+    return views
+  }
+
+  private async readFollowUpsForItem(transaction: AsyncTx, workItemId: string): Promise<MainWorkFollowUp[]> {
+    const prefix = followUpPrefix(workItemId)
+    const records: MainWorkFollowUp[] = []
+    let cursor = prefix
+    for (let pageCount = 0; pageCount < 10; pageCount++) {
+      const page = await transaction.scan<MainWorkFollowUp>('work-follow-up', { limit: 100, after: cursor })
+      for (const entry of page.items) {
+        if (!entry.id.startsWith(prefix)) return records
+        const record = entry.value
+        records.push(record)
+      }
+      if (!page.cursor || !page.cursor.startsWith(prefix)) break
+      cursor = page.cursor
+      if (pageCount === 9) throw new CoreError('WORK_FOLLOW_UP_BUDGET', 'The Main follow-up list exceeds its 1000-record budget.')
+    }
+    return records
+  }
+
   private async card(brief: MainWorkBrief, item: MainWorkItem): Promise<MainWorkCard | undefined> {
     const receipt = await this.itemReceipt(item.id)
       ?? await this.options.storage.transaction(this.options.instanceId, tx => tx.get<MainWorkReceipt>('work-receipt', brief.id))
@@ -654,16 +899,22 @@ export class WorkDelegation {
       createdAt: brief.createdAt }
     const projection = await this.options.storage.transaction(this.options.instanceId, async tx => ({
       update: await tx.get<MainWorkUpdate>('work-update-head', item.id), outcome: await tx.get<MainWorkOutcome>('work-outcome', item.id),
+      followUps: await this.followUpsForItem(tx, item),
     }))
-    if (!receipt.ticketId) return { brief: cardBrief, receipt, status: receipt.status, ...(projection.update ? { update: projection.update } : {}) }
+    const followUps = projection.followUps.length ? { followUps: projection.followUps } : {}
+    if (!receipt.ticketId) return { brief: cardBrief, receipt, status: receipt.status,
+      ...(projection.update ? { update: projection.update } : {}), ...followUps }
     const snapshot = await this.options.readTicket(receipt.ticketId)
     const current = this.outcome(brief.id, item.id, snapshot)
     const persisted = !!current && projection.outcome?.status === current.status && projection.outcome.reportId === current.reportId
     const outcome = persisted ? projection.outcome : current
     const update = !current ? projection.update : persisted ? projection.update : undefined
-    const status = this.status(snapshot)
-    return { brief: cardBrief, receipt, status: outcome?.status ?? (status === 'success' ? 'running' : status),
-      ...(update ? { update } : {}), ...(outcome ? { outcome } : {}) }
+    const latestFollowUp = projection.followUps.at(-1)
+    const snapshotStatus = this.status(snapshot)
+    const status = latestFollowUp ? followUpCardStatus[latestFollowUp.status]
+      : outcome?.status ?? (snapshotStatus === 'success' ? 'running' : snapshotStatus)
+    return { brief: cardBrief, receipt, status,
+      ...(update ? { update } : {}), ...(outcome ? { outcome } : {}), ...followUps }
   }
 
   private legacyItem(brief: MainWorkBrief): MainWorkItem {

@@ -137,6 +137,26 @@ export class MainConversation {
           }))
             : JSON.stringify({ status: 'unavailable', code: 'DELEGATION_UNAVAILABLE', ticketCreated: false })
         } },
+      { name: 'follow_up_work', description: 'Send an explicit user follow-up or direction change to exactly one existing workItemId. Use this only when the user unambiguously identifies that displayed work item. Never substitute the current page, focus, recency, a Worker, or another item. If the target is unclear, ask the user which work item they mean.',
+        parameters: {
+          workItemId: { type: 'string', required: true },
+          text: { type: 'string', required: true },
+          reason: { type: 'string' },
+        },
+        execute: async args => {
+          const work = this.work?.()
+          if (!work) return JSON.stringify({ status: 'unavailable', code: 'DELEGATION_UNAVAILABLE', ticketCreated: false })
+          return JSON.stringify(await work.followUp({
+            commandId: `main-follow-up:${command.messageId}:${args.workItemId}`,
+            mainId: binding.mainId,
+            mainSessionId: binding.mainSessionId,
+            mainMessageId: command.messageId,
+            originalUserText,
+            workItemId: args.workItemId ?? '',
+            text: args.text ?? '',
+            ...(args.reason ? { reason: args.reason } : {}),
+          }))
+        } },
     ]
   }
 

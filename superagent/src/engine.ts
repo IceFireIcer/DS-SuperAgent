@@ -309,6 +309,7 @@ export class Engine {
             ...(config.roles.main ? { main: config.roles.main.model } : {}), router: profile.model, worker: config.roles.worker.model }))
         },
         notifyMain: (notification, signal, isCurrent) => this.main.notify(notification, signal, isCurrent),
+        applyFollowUp: (tx, request) => this.inputs.attachMainFollowUp(tx, request),
       })
     }
     const handlers = this.execution?.handlers()

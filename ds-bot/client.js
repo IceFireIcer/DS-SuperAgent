@@ -71,6 +71,21 @@ var ZH = {
   Constraints: "约束",
   "Acceptance criteria": "验收标准",
   Verification: "验证证据",
+  "Follow-up history": "跟进记录",
+  "Follow-up queued": "跟进已排队",
+  "Follow-up delivery started": "跟进开始投递",
+  "Follow-up persisted": "跟进已持久写入",
+  "Direction completed": "方向变更已完成",
+  "Direction waiting": "方向变更等待中",
+  "Direction handed back": "方向变更已交回",
+  "Direction blocked by stop": "方向变更被停止约束阻止",
+  "Follow-up delivery expired": "跟进投递已过期",
+  "Direction v{version}": "方向 v{version}",
+  "Input persisted": "输入已持久写入",
+  "Input not yet persisted": "输入尚未持久写入",
+  "Direction adopted by Worker": "Worker 已采用方向",
+  "Direction not yet adopted": "Worker 尚未采用方向",
+  Reason: "原因",
   bytes: "字节",
   // Shared
   "Main Bot": "主 Bot",
@@ -20665,6 +20680,16 @@ function applyProduct(ctx) {
     rejected: t("Work declined"),
     unknown: t("Work result unknown")
   })[status] ?? status;
+  const followUpCopy = (status) => ({
+    queued: t("Follow-up queued"),
+    persisted: t("Follow-up persisted"),
+    delivering: t("Follow-up delivery started"),
+    ready: t("Direction completed"),
+    waiting: t("Direction waiting"),
+    "handed-back": t("Direction handed back"),
+    stopped: t("Direction blocked by stop"),
+    expired: t("Follow-up delivery expired")
+  })[status] ?? status;
   const receiptCopy = (status) => ({ routing: t("Router is routing"), accepted: t("Accepted by Router"), rejected: t("Not accepted") })[status] ?? status;
   function MainWorkCard({ work }) {
     return (0, import_react53.createElement)(
@@ -20683,6 +20708,22 @@ function applyProduct(ctx) {
       work.receipt.status === "routing" ? (0, import_react53.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${work.receipt.nextStep}`) : null,
       (0, import_react53.createElement)("p", { className: "bt-main-work-detail" }, `${t("Constraints")}: ${work.brief.constraints}`),
       (0, import_react53.createElement)("p", { className: "bt-main-work-detail" }, `${t("Acceptance criteria")}: ${work.brief.acceptanceCriteria}`),
+      work.followUps?.length ? (0, import_react53.createElement)(
+        "div",
+        { className: "bt-main-work-followups", "aria-label": t("Follow-up history") },
+        work.followUps.map((followUp) => (0, import_react53.createElement)(
+          "div",
+          { key: followUp.id, className: "bt-main-work-followup" },
+          (0, import_react53.createElement)("p", null, `${t("Direction v{version}", { version: followUp.directionVersion })}: ${followUpCopy(followUp.status)}`),
+          (0, import_react53.createElement)("p", { className: "bt-main-work-detail" }, followUp.text),
+          (0, import_react53.createElement)(
+            "p",
+            { className: "bt-main-work-detail" },
+            `${followUp.persisted ? t("Input persisted") : t("Input not yet persisted")} · ${followUp.adopted ? t("Direction adopted by Worker") : t("Direction not yet adopted")}`
+          ),
+          followUp.displayReason ? (0, import_react53.createElement)("p", { className: "bt-main-work-detail" }, `${t("Reason")}: ${followUp.displayReason}`) : null
+        ))
+      ) : null,
       work.outcome ? (0, import_react53.createElement)(
         "div",
         { className: "bt-main-work-result" },
@@ -20809,6 +20850,10 @@ var PRODUCT_CSS = `
 .bt-main-work-head strong{min-width:0;overflow-wrap:anywhere;font-weight:600}
 .bt-main-work-status{flex:none;color:var(--bt-ink-2);font-size:12px;line-height:16px}
 .bt-main-work-id,.bt-main-work-detail,.bt-main-work-artifact{margin:6px 0 0;color:var(--bt-ink-2);font-size:12px;line-height:16px;overflow-wrap:anywhere}
+.bt-main-work-followups{margin-top:8px;padding-top:8px;border-top:.5px solid var(--bt-line-2)}
+.bt-main-work-followup{padding:6px 0;color:var(--bt-ink);font-size:12px;line-height:16px;overflow-wrap:anywhere}
+.bt-main-work-followup+.bt-main-work-followup{border-top:.5px solid var(--bt-line-2)}
+.bt-main-work-followup p{margin:0}
 .bt-main-work-result{margin-top:8px;padding-top:8px;border-top:.5px solid var(--bt-line-2);color:var(--bt-ink);font-size:13px;line-height:18px;overflow-wrap:anywhere}
 .bt-main-work-result p{margin:0 0 6px}.bt-main-work-result p:last-child{margin-bottom:0}
 .bt-main-work-artifact code{font:inherit;color:var(--bt-ink)}
