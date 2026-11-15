@@ -24,6 +24,8 @@ import { Outbox } from './outbox.js'
 import { HostLease, type HostOptions } from './host.js'
 import { ClientAccess } from './client-access.js'
 import { feishuQuestionCode } from './feishu-delivery.js'
+import { ProductCredentialManager } from './product-credential-manager.js'
+import type { ProductCredentialRecords } from './product-credential-vault.js'
 import type { ProductAttachments } from './product-attachments.js'
 import { listSupervisorProposals, Supervisor, type SupervisorOptions, type SupervisorProposal } from './supervisor.js'
 import { assertHostTakeoverSettled, loadHostTakeover, type HostTakeoverRecord, type HostTakeoverTicket } from './host-takeover.js'
@@ -1475,6 +1477,14 @@ export class Engine {
       throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Only an authorized product actor can manage schedules.')
     }
     this.assertAuthoringActor()
+  }
+
+  createProductCredentialManager(records: ProductCredentialRecords) {
+    if ((this.source.kind ?? 'desktop') !== 'desktop' || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Only an authorized product actor can manage credential resources.')
+    }
+    this.assertAuthoringActor()
+    return new ProductCredentialManager(this.storage, this.instanceId, records)
   }
 
   async createSchedule(request: ScheduleCreate) {

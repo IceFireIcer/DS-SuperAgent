@@ -3,6 +3,8 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { Context } from '@deepseek-ai/cordis'
+import LocalCredentials from '@deepseek-ai/dsh-credentials-local'
 import { build } from 'esbuild'
 import { fileURLToPath } from 'node:url'
 import { ResourceCredentials } from '../dist/index.js'
@@ -75,6 +77,37 @@ test('creation does not acknowledge a provider that saved a different value', as
   }
   const vault = new ProductCredentialVault(service)
   await assert.rejects(vault.create('personal', 'fictional-intended-value'), { code: 'CREDENTIAL_WRITE_FAILED' })
+})
+
+test('a repeated creation command recovers its one stored record after a lost response', async () => {
+  const service = records()
+  const vault = new ProductCredentialVault(service)
+  const first = await vault.create('personal', 'fictional-private-value', 'create-one')
+  const retry = await vault.create('personal', 'fictional-private-value', 'create-one')
+  assert.equal(first, retry)
+  assert.equal(service.stored.size, 1)
+  await assert.rejects(vault.create('personal', 'fictional-other-value', 'create-one'), { code: 'CREDENTIAL_WRITE_FAILED' })
+  assert.equal(await vault.withSecret('personal', first, async value => value), 'fictional-private-value')
+})
+
+test('the public DSH local credential record provider persists one Instance-scoped reference', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'r5-product-vault-provider-'))
+  const path = join(directory, 'credentials.yaml')
+  let context = new Context()
+  t.after(async () => { await context.fiber.dispose(); await rm(directory, { recursive: true, force: true }) })
+  await context.plugin(LocalCredentials, { path, watch: false })
+  const first = new ProductCredentialVault(context.credentials)
+  const reference = await first.create('personal', 'fictional-provider-value', 'one-command')
+  assert.equal(await first.withSecret('personal', reference, async value => value === 'fictional-provider-value'), true)
+  await context.fiber.dispose()
+  context = new Context()
+  await context.plugin(LocalCredentials, { path, watch: false })
+  const resumed = new ProductCredentialVault(context.credentials)
+  assert.equal(await resumed.create('personal', 'fictional-provider-value', 'one-command'), reference)
+  await assert.rejects(resumed.assertReference('other', reference), { code: 'RESOURCE_UNAVAILABLE' })
+  await resumed.revoke('personal', reference)
+  await assert.rejects(resumed.assertReference('personal', reference), { code: 'RESOURCE_UNAVAILABLE' })
+  await resumed.ensureRevoked('personal', reference)
 })
 
 test('provider and consumer failures cannot return secret-bearing diagnostics', async () => {

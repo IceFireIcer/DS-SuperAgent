@@ -9,6 +9,7 @@ import { Card, Row } from './bot-settings.js'
 import { ClockIcon, CloseIcon, SlidersIcon } from './icons.js'
 import { SCHEDULE_CSS } from './schedules.js'
 import { ProductScheduleSettings, PRODUCT_SCHEDULE_CSS } from './product-schedules.js'
+import { ProductCredentialSettings, PRODUCT_CREDENTIAL_CSS } from './product-credentials.js'
 import { FolderMenu, FOLDER_CSS } from './folder-menu.js'
 import { MODEL_CSS } from './model-menu.js'
 import { createSource } from './sources.js'
@@ -1164,6 +1165,7 @@ export function applyProduct(ctx) {
                     provider.key.configured ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm bt-bs-danger',
                       disabled: saving, onClick: () => { void saveKey(provider.id, null) } }, t('Remove key')) : null) : h('span', null, t('Set outside this product'))) : null))
                 : h('p', { className: 'bt-main-status' }, t('No provider catalog is available. Configure providers in DSH settings.'))),
+            h(ProductCredentialSettings, { binding, call: productCall }),
             h(ClientSettings, { binding }),
             h(Card, { title: t('Recent configuration uses') },
               snapshot.uses.length ? snapshot.uses.slice(0, 20).map(use => h('div', { key: use.id, className: 'bt-main-settings-use' },
@@ -1239,7 +1241,7 @@ export function applyProduct(ctx) {
         onClose: () => view.set(current => ({ ...current, connectOpen: false })) }) : null)
   }
   const shadow = (name, component) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200 }, component))
-  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SCHEDULE_CSS + MODEL_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS, 'main'), 'superagent: existing chat styles')
+  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SCHEDULE_CSS + MODEL_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS, 'main'), 'superagent: existing chat styles')
   ctx.effect(() => { const style = installStyles(themeCss(allThemes().deepseek), 'main-theme'); return () => style.remove() }, 'superagent: existing theme')
   shadow('main.conversation', ProductSurface)
   shadow('sidebar.workspaces', MainNavigation)

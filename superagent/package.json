@@ -125,6 +125,7 @@
     "@deepseek-ai/dsh-agent-loop": "0.2.1-rc.4",
     "@deepseek-ai/dsh-attachment": "0.2.1-rc.4",
     "@deepseek-ai/dsh-attachment-local": "0.2.1-rc.4",
+    "@deepseek-ai/dsh-credentials-local": "0.2.1-rc.4",
     "@deepseek-ai/dsh-fs": "0.2.1-rc.4",
     "@deepseek-ai/dsh-fs-local": "0.2.1-rc.4",
     "@deepseek-ai/dsh-llm": "0.2.1-rc.4",
