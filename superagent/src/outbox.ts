@@ -1,5 +1,5 @@
 import { CoreError } from './model.js'
-import type { Work } from './model.js'
+import { triggerDeliveryTarget, type Work } from './model.js'
 import type { AsyncTx, Storage } from './storage.js'
 import type { Effect, EffectHandler, EffectResult } from './effects.js'
 import type { SourceEvent, SourceEvents } from './source-events.js'
@@ -81,7 +81,8 @@ export class Outbox {
     const purpose = effect.payload.purpose
     if (purpose !== 'acknowledgement' && purpose !== 'result' && purpose !== 'attention' && purpose !== 'policy') return undefined
     const ticketId = String(effect.payload.ticketId)
-    const destination = { ...trigger.source, eventId: trigger.eventId, ...(trigger.threadId ? { threadId: trigger.threadId } : {}) }
+    const target = triggerDeliveryTarget(trigger)
+    const destination = { ...target.source, eventId: target.eventId, ...(target.threadId ? { threadId: target.threadId } : {}) }
     if (purpose === 'acknowledgement') return { id: `${ticketId}:acknowledgement`, ticketId, purpose,
       text: 'Request accepted.', destination, basis: { kind: 'accepted-request', triggerId: trigger.id },
       effectId: effect.id, effectGeneration: effect.generation }
@@ -107,11 +108,22 @@ export class Outbox {
   private async validateDelivery(transaction: AsyncTx, delivery: Delivery, trigger: Work['trigger']): Promise<string | undefined> {
     if (!await transaction.get<Work['ticket']>('ticket', delivery.ticketId)) return 'NOT_FOUND: the delivery Ticket does not exist.'
     const authorizedTarget = delivery.purpose === 'result' ? await this.deliveryState.target(transaction, delivery.ticketId, 'result') : undefined
-    const foreign = delivery.destination.sourceInstanceId !== trigger.source.sourceInstanceId
+    const defaultTarget = triggerDeliveryTarget(trigger)
+    const foreign = delivery.destination.sourceInstanceId !== defaultTarget.source.sourceInstanceId
+    const originEvent = trigger.deliveryOrigin
+      ? await transaction.get<SourceEvent>('source-event', trigger.deliveryOrigin.sourceEventId) : undefined
+    const originPolicy = trigger.deliveryOrigin
+      ? await transaction.get<{ configuration: { allowedRequesterIds: string[] } }>('policy-state',
+        JSON.stringify(['policy-state', trigger.deliveryOrigin.source.sourceInstanceId])) : undefined
+    if (trigger.deliveryOrigin && (!originEvent || !await isCurrentSourceEvent(transaction, originEvent)
+      || originEvent.authorId !== trigger.deliveryOrigin.authorId
+      || originPolicy && !originPolicy.configuration.allowedRequesterIds.includes(originEvent.authorId))) {
+      return 'SOURCE_NOT_CURRENT: the original Main source is no longer current and authorized.'
+    }
     if (foreign && !authorizedTarget && delivery.purpose !== 'attention' && delivery.purpose !== 'answer') return 'SOURCE_MISMATCH: the delivery destination belongs to another source instance.'
     if (delivery.purpose === 'acknowledgement') {
       if (delivery.basis.kind !== 'accepted-request' || delivery.basis.triggerId !== trigger.id) return 'INVALID_DELIVERY: an acknowledgement needs the accepted request.'
-      if (delivery.destination.eventId !== trigger.eventId || delivery.destination.threadId !== trigger.threadId) {
+      if (delivery.destination.eventId !== defaultTarget.eventId || delivery.destination.threadId !== defaultTarget.threadId) {
         return 'DESTINATION_MISMATCH: an acknowledgement returns to the original request.'
       }
       return undefined
@@ -138,8 +150,8 @@ export class Outbox {
       if (!ticket) return 'INCOMPLETE_STATE: result delivery is missing its Ticket.'
       if (ticket.constraint?.kind === 'stopped') return 'TICKET_STOPPED: a stopped Ticket cannot deliver a result.'
       if (ticket.constraint) return 'TICKET_CONSTRAINED: the Ticket is waiting for a person before delivery.'
-      const authorizedEventId = authorizedTarget?.destination.objectId ?? trigger.eventId
-      const authorizedThreadId = authorizedTarget?.destination.threadId ?? trigger.threadId
+      const authorizedEventId = authorizedTarget?.destination.objectId ?? defaultTarget.eventId
+      const authorizedThreadId = authorizedTarget?.destination.threadId ?? defaultTarget.threadId
       if (delivery.destination.eventId !== authorizedEventId || delivery.destination.threadId !== authorizedThreadId) {
         return 'DESTINATION_MISMATCH: the result destination has not been authorized to change.'
       }

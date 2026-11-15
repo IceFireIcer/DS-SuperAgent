@@ -5,11 +5,30 @@ import type { NativeSessions, NativeTool } from './native-sessions.js'
 import type { AsyncTx, Storage } from './storage.js'
 import type { RoleProfile } from './config.js'
 import type { MainWorkCard, MainWorkIntent, MainWorkNotification, WorkDelegation } from './work-delegation.js'
+import type { MainSourceHandoff, MainSourceView } from './main-source.js'
 
 export interface MainBinding { instanceId: string; mainId: string; mainSessionId: string; routerSessionId: string }
 interface MainState extends MainBinding { generation: number; sequence: number; activeCommand?: string }
 export type MainMessageStatus = 'queued' | 'running' | 'stopping' | 'stopped' | 'completed' | 'failed'
-export interface MainMessage { id: string; sequence: number; role: 'user' | 'main'; text: string; createdAt: number; status: MainMessageStatus; error?: string }
+export interface MainMessageSource {
+  kind: 'github'
+  sourceInstanceId: string
+  eventId: string
+  objectId: string
+  threadId: string
+  authorId: string
+  reference: string
+}
+export interface MainMessage {
+  id: string
+  sequence: number
+  role: 'user' | 'main'
+  text: string
+  createdAt: number
+  status: MainMessageStatus
+  error?: string
+  source?: MainMessageSource
+}
 export interface MainTurnStop {
   id: string
   version: 1
@@ -43,6 +62,7 @@ interface MainUpdateCommand {
   error?: string
   run?: { sessionId: string; generation: number }
 }
+interface MainSourceCommand { state: 'running' | 'failed' | 'completed'; messageId: string; userSequence: number; attempt: number }
 export interface MainHealth {
   state: 'ready' | 'running' | 'degraded'
   queuedInputs: number
@@ -59,6 +79,7 @@ export interface MainPage extends MainBinding {
   cursor?: number
   works?: MainWorkCard[]
   activeTurn?: MainTurnView
+  sources?: MainSourceView[]
 }
 export interface MainRunResult extends MainBinding { messageId: string; status: MainMessage['status'] }
 interface MainEvent { type: string; data: { id?: string; message?: { content?: { type: string; text?: string }[] }; reason?: { kind?: string } } }
@@ -400,6 +421,130 @@ export class MainConversation {
           }))
         } },
     ]
+  }
+
+  private sourceTool(binding: MainBinding, handoff: MainSourceHandoff, messageId: string, configurationRevision: number): NativeTool {
+    return {
+      name: 'delegate_work',
+      description: 'Delegate this one authorized GitHub request to one to four independent work items. The original source remains the default acknowledgement and result audience until a separately verified authority changes it.',
+      parameters: {
+        items: {
+          type: 'array',
+          items: {
+            type: 'object', additionalProperties: false,
+            properties: {
+              goal: { type: 'string', required: true },
+              constraints: { type: 'string' },
+              acceptanceCriteria: { type: 'string' },
+            },
+          },
+        },
+        goal: { type: 'string' },
+        constraints: { type: 'string' },
+        acceptanceCriteria: { type: 'string' },
+      },
+      execute: async args => {
+        const work = this.work?.()
+        if (!work) return JSON.stringify({ status: 'rejected', code: 'DELEGATION_UNAVAILABLE', ticketCreated: false })
+        const items = Array.isArray(args.items) ? args.items.map(item => {
+          const value = item && typeof item === 'object' ? item as Record<string, unknown> : {}
+          return { goal: value.goal, constraints: value.constraints ?? args.constraints, acceptanceCriteria: value.acceptanceCriteria ?? args.acceptanceCriteria }
+        }) as MainWorkIntent[] : undefined
+        const brief = await work.create({
+          commandId: `main-source-work:${handoff.id}`,
+          mainId: binding.mainId,
+          mainSessionId: binding.mainSessionId,
+          routerSessionId: binding.routerSessionId,
+          mainMessageId: messageId,
+          originalUserText: handoff.text,
+          sourceHandoffId: handoff.id,
+          ...(items ? { items } : { goal: args.goal ?? '', constraints: args.constraints ?? '', acceptanceCriteria: args.acceptanceCriteria ?? '' }),
+          configurationRevision,
+        })
+        return JSON.stringify(await work.query(binding.mainId, { workBriefId: brief.id }))
+      },
+    }
+  }
+
+  notifySource(handoff: MainSourceHandoff, signal: AbortSignal) {
+    signal.throwIfAborted()
+    if (this.pendingTurns) throw new CoreError('MAIN_BUSY', 'Main is handling another turn; keep this source handoff queued.')
+    this.pendingTurns++
+    const turn = this.tail.then(async () => {
+      signal.throwIfAborted()
+      const binding = await this.open({ instanceId: this.instanceId })
+      if (handoff.mainId !== binding.mainId || handoff.instanceId !== this.instanceId) {
+        throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The source handoff belongs to another Main.')
+      }
+      const key = `main-source:${handoff.id}`
+      const prepared = await commandTransaction(this.storage, this.instanceId, async tx => {
+        const prior = await tx.get<MainSourceCommand>('main-source-command', key)
+        if (prior) return prior
+        const state = await this.state(tx)
+        const sequence = state.sequence + 1
+        const messageId = `main-source-message:${handoff.id}`
+        await tx.insert<MainMessage>('main-message', messageKey(sequence), { id: messageId, sequence, role: 'user', text: handoff.text,
+          createdAt: Date.now(), status: 'running', source: { kind: 'github', sourceInstanceId: handoff.sourceInstanceId,
+            eventId: handoff.sourceEventId, objectId: handoff.objectId, threadId: handoff.threadId, authorId: handoff.authorId, reference: handoff.reference } })
+        await tx.replace('main-state', 'main', { ...state, sequence })
+        const command: MainSourceCommand = { state: 'running', messageId, userSequence: sequence, attempt: 1 }
+        await tx.insert('main-source-command', key, command)
+        return command
+      })
+      if (prepared.state === 'completed') return
+      let answer: string | undefined
+      if ((await this.sessions!.hasMessage(binding.mainSessionId, prepared.messageId)).found) {
+        answer = await this.readReply(binding, prepared.messageId)
+      } else {
+        const configured = await this.prepare?.(binding.mainSessionId)
+        const result = await this.sessions!.run({ role: 'main', sessionId: binding.mainSessionId, messageId: prepared.messageId, signal,
+          text: `[GitHub request]\nThis is one authorized source handoff, not a private transcript. When the request is actionable, use delegate_work and preserve the source reference. If no work is justified, explain that only in Main; no source message is sent without established work.\n${JSON.stringify({
+            sourceEventId: handoff.sourceEventId, sourceInstanceId: handoff.sourceInstanceId, threadId: handoff.threadId, objectId: handoff.objectId,
+            authorId: handoff.authorId, reference: handoff.reference, text: handoff.text,
+          })}`,
+          tools: [this.sourceTool(binding, handoff, prepared.messageId, configured?.revision ?? 1)],
+          ...(configured ? { profile: configured.profile } : {}) })
+        answer = this.reply(result.events as MainEvent[], prepared.messageId)
+      }
+      if (!answer) throw new CoreError('MAIN_SOURCE_FAILED', 'Main ended the source handoff without a visible reply.')
+      signal.throwIfAborted()
+      await commandTransaction(this.storage, this.instanceId, async tx => {
+        const command = await tx.get<MainSourceCommand>('main-source-command', key)
+        if (!command || command.state === 'completed') return
+        const state = await this.state(tx)
+        const sequence = state.sequence + 1
+        await tx.insert<MainMessage>('main-message', messageKey(sequence), { id: `source-reply:${handoff.id}`, sequence, role: 'main',
+          text: answer, createdAt: Date.now(), status: 'completed' })
+        const user = await tx.get<MainMessage>('main-message', messageKey(command.userSequence))
+        if (user) await tx.replace('main-message', messageKey(command.userSequence), { ...user, status: 'completed' })
+        await tx.replace('main-state', 'main', { ...state, sequence })
+        await tx.replace('main-source-command', key, { ...command, state: 'completed' })
+        const current = await tx.get<MainSourceHandoff>('main-source-handoff', handoff.id)
+        if (current && current.state !== 'discarded') {
+          const { lastError: _error, ...settled } = current
+          await tx.replace('main-source-handoff', handoff.id,
+            { ...settled, state: current.state === 'delegated' ? 'delegated' : 'presented', mainMessageId: prepared.messageId, updatedAt: Date.now() })
+        }
+      })
+    }).catch(async error => {
+      await this.storage.transaction(this.instanceId, async tx => {
+        const key = `main-source:${handoff.id}`
+        const command = await tx.get<MainSourceCommand>('main-source-command', key)
+        if (command && command.state !== 'completed') {
+          await tx.replace('main-source-command', key, { ...command, state: 'failed' })
+          const user = await tx.get<MainMessage>('main-message', messageKey(command.userSequence))
+          if (user) await tx.replace('main-message', messageKey(command.userSequence), { ...user, status: 'failed' })
+          const current = await tx.get<MainSourceHandoff>('main-source-handoff', handoff.id)
+          if (current && current.state !== 'delegated' && current.state !== 'discarded') {
+            await tx.replace('main-source-handoff', handoff.id, { ...current,
+              lastError: error instanceof Error ? error.message.slice(0, 1024) : 'MAIN_SOURCE_FAILED', updatedAt: Date.now() })
+          }
+        }
+      }).catch(() => {})
+      throw error
+    }).finally(() => { this.pendingTurns-- })
+    this.tail = turn.catch(() => {})
+    return turn
   }
 
   private async run(binding: MainBinding, key: string, text: string) {

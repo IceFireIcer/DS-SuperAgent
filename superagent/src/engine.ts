@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { CoreError, identifier, type CommandRecord, type DesktopSource, type EventRecord, type IntakePolicy, type Receipt, type Source, type SubmitRequest, type Work } from './model.js'
+import { CoreError, identifier, triggerDeliveryTarget, type CommandRecord, type DesktopSource, type EventRecord, type IntakePolicy, type Receipt, type Source, type SubmitRequest, type Work } from './model.js'
 import { capabilityLocations, validateHostCapabilities, validateRequiredCapabilities,
   type CapabilityPlanView, type HostCapabilities } from './capability-locations.js'
 import type { AsyncTx, Storage } from './storage.js'
@@ -40,6 +40,7 @@ import type { ActivationGate } from './activation.js'
 import { MainConversation, type MainAddress, type MainSend } from './main-conversation.js'
 import { WorkDelegation, type MainWorkCard, type MainWorkControl, type MainWorkItem } from './work-delegation.js'
 import { WorkObservations } from './work-observations.js'
+import { MainSourceHandoffs, type MainSourceHandoff, type MainSourceView } from './main-source.js'
 
 interface StoredPolicy { revision: number; configuration: Omit<IntakePolicy, 'assess'>; origin: 'bootstrap' | 'manual' | 'sync'; sourceRevision?: string; updatedAt: number }
 interface ProcessingState { paused: boolean; revision: number; updatedAt: number }
@@ -50,6 +51,7 @@ export class Engine {
   private readonly main: MainConversation
   private readonly workDelegation?: WorkDelegation
   private readonly workObservations: WorkObservations | undefined
+  private readonly mainSources: MainSourceHandoffs
   private readonly slots: Slots | undefined
   private readonly jobs: Jobs | undefined
   private readonly previews: Previews | undefined
@@ -242,6 +244,7 @@ export class Engine {
     const sourceBinding = { ...this.source }
     delete sourceBinding.intake
     this.sourceEvents = new SourceEvents(storage, instanceId, sourceBinding)
+    this.mainSources = new MainSourceHandoffs(storage, instanceId, Date.now)
     this.membership = new SourceMembership(storage, instanceId, this.source.sourceInstanceId, Date.now)
     this.deliveryState = new DeliveryState(storage, instanceId, this.sourceEvents, Date.now)
     this.proactive = proactiveOptions ? new Proactive(storage, instanceId, proactiveOptions) : undefined
@@ -260,7 +263,8 @@ export class Engine {
         instanceId, source: event.source, eventId: event.objectId, threadId: event.threadId, nativeVersion: event.version, text: event.text!,
         ...(capabilities?.length ? { capabilities } : {}),
       }, `intake:${strength}:${policyVersion}:${event.id}`, { strength, policyVersion }), Date.now, assessor,
-      (tx, event) => this.inputs.owns(tx, event), (tx, eventId) => this.inputs.hasPendingRequeue(tx, eventId),
+      async (tx, event) => await this.inputs.owns(tx, event) || !!(await this.mainSources.has(tx, event.id)),
+      (tx, eventId) => this.inputs.hasPendingRequeue(tx, eventId),
       (tx, eventId, evaluationId) => this.inputs.claimRequeue(tx, eventId, evaluationId),
       (tx, eventId, evaluationId) => this.inputs.consumeRequeue(tx, eventId, evaluationId),
       (tx, eventId, evaluationId) => this.inputs.releaseRequeue(tx, eventId, evaluationId)) : undefined
@@ -340,6 +344,7 @@ export class Engine {
             ...(config.roles.main ? { main: config.roles.main.model } : {}), router: profile.model, worker: config.roles.worker.model }))
         },
         notifyMain: (notification, signal, isCurrent) => this.main.notify(notification, signal, isCurrent),
+        notifyMainSource: (handoff, signal) => this.main.notifySource(handoff, signal),
         applyFollowUp: (tx, request) => this.inputs.attachMainFollowUp(tx, request),
       })
     }
@@ -362,6 +367,80 @@ export class Engine {
         authorKind: event.authorKind ?? 'human', addressing: event.addressing ?? 'direct' }).catch(() => {})
     }
     return receipt
+  }
+
+  /**
+   * Source-local Main intake. A Thread with existing ownership keeps normal fan-out; every other
+   * authorized human request becomes a Main handoff without starting an Eval or Ticket.
+   */
+  async receiveSourceForMain(event: ReceiveSourceEvent) {
+    await this.ensurePolicy()
+    await this.assertActivationCurrent()
+    await this.assertHostAdmission()
+    const binding = await this.main.open({ instanceId: this.instanceId })
+    const allowed = await this.storage.transaction(this.instanceId, async tx => {
+      const policy = await tx.get<StoredPolicy>('policy-state', this.policyKey())
+      return policy?.configuration.allowedRequesterIds ?? this.source.intake?.allowedRequesterIds ?? this.source.allowedActorIds
+    })
+    const receipt = await this.sourceEvents.receive(event, async (tx, sourceEvent) => {
+      if (await this.inputs.threadHasWorkerSubscriptions(tx, sourceEvent.threadId) || await this.inputs.owns(tx, sourceEvent)) {
+        await this.inputs.recordFanout(tx, sourceEvent)
+        await this.answerFromSourceEvent(tx, sourceEvent)
+        return
+      }
+      if (sourceEvent.authorKind !== 'human' || sourceEvent.addressing === 'ambient' || !allowed.includes(sourceEvent.authorId)) return
+      const handoff = await this.mainSources.create(tx, { event: sourceEvent, mainId: binding.mainId, commandId: `main-source:${sourceEvent.id}` })
+      await this.effects.enqueue(tx, { key: `handoff:${handoff.id}`, stream: 'notice', scope: `main:${binding.mainId}`,
+        payload: { type: 'main-source-handoff', handoffId: handoff.id } })
+    })
+    // A replay can observe a source event committed by an earlier process before its handoff transaction.
+    const authorId = event.authorId ?? this.source.actorId
+    const authorKind = event.authorKind ?? 'human'
+    if (receipt.status === 'recorded' && receipt.eventId && authorKind === 'human' && (event.addressing ?? 'direct') !== 'ambient'
+      && allowed.includes(authorId)) {
+      await this.handOffSourceToMain({ commandId: `main-source:${receipt.eventId}`, eventId: receipt.eventId })
+    }
+    return receipt
+  }
+
+  /** Route one trusted new human source event to the logical Main; owned events stay on their Ticket. */
+  async handOffSourceToMain(command: { commandId: string; eventId: string }): Promise<
+    { kind: 'main-source'; handoff: MainSourceHandoff } | { kind: 'existing-work'; eventId: string }> {
+    await this.ensurePolicy()
+    if (!command || Object.keys(command).some(key => !['commandId', 'eventId'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'A Main source handoff accepts commandId and eventId only.')
+    }
+    identifier(command.commandId, 'commandId'); identifier(command.eventId, 'eventId')
+    const binding = await this.main.open({ instanceId: this.instanceId })
+    const key = this.commandKey(command.commandId)
+    const fingerprint = createHash('sha256').update(canonicalJson(['main-source-handoff-v1', command.eventId, binding.mainId])).digest('hex')
+    const result = await commandTransaction(this.storage, this.instanceId, async tx => {
+      const prior = await tx.get<{ fingerprint: string; handoffId?: string; kind: 'main-source' | 'existing-work'; eventId: string }>('work-command', key)
+      if (prior) {
+        if (prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The Main source handoff command was reused for different input.')
+        if (prior.kind === 'existing-work') return { kind: 'existing-work' as const, eventId: prior.eventId }
+        const handoff = prior.handoffId ? await this.mainSources.get(tx, prior.handoffId) : undefined
+        if (!handoff) throw new CoreError('INCOMPLETE_STATE', 'The persisted Main source handoff is missing.')
+        return { kind: 'main-source' as const, handoff }
+      }
+      const event = await tx.get<SourceEvent>('source-event', command.eventId)
+      if (!event || !this.sourceEvents.belongsToSource(event)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The source event belongs to another adapter.')
+      if (await this.inputs.owns(tx, event)) {
+        await tx.insert('work-command', key, { fingerprint, kind: 'existing-work', eventId: event.id })
+        return { kind: 'existing-work' as const, eventId: event.id }
+      }
+      const policy = await tx.get<StoredPolicy>('policy-state', this.policyKey())
+      const allowed = policy?.configuration.allowedRequesterIds ?? this.source.intake?.allowedRequesterIds ?? this.source.allowedActorIds
+      if (event.authorKind !== 'human' || event.addressing === 'ambient' || !allowed.includes(event.authorId)) {
+        throw new CoreError('ACTOR_NOT_ALLOWED', 'Only a currently authorized addressed human request can enter Main.')
+      }
+      const handoff = await this.mainSources.create(tx, { event, mainId: binding.mainId, commandId: command.commandId })
+      await this.effects.enqueue(tx, { key: `handoff:${handoff.id}`, stream: 'notice', scope: `main:${binding.mainId}`,
+        payload: { type: 'main-source-handoff', handoffId: handoff.id } })
+      await tx.insert('work-command', key, { fingerprint, kind: 'main-source', eventId: event.id, handoffId: handoff.id })
+      return { kind: 'main-source' as const, handoff }
+    })
+    return result
   }
 
   /** A trusted human reply in a waiting question's Thread answers that question and resumes the work. */
@@ -540,11 +619,24 @@ export class Engine {
     const source: Source = { kind: this.source.kind ?? 'desktop', sourceInstanceId: this.source.sourceInstanceId, actorId: this.source.actorId }
     const triggerId = JSON.stringify([this.instanceId, source.kind, source.sourceInstanceId, brief.sourceEventId, item.id, 'main-work-item'])
     const text = `Original Main request:\n${brief.originalUserText}\n\nGoal:\n${item.goal}\n\nConstraints:\n${item.constraints}\n\nAcceptance criteria:\n${item.acceptanceCriteria}`
+    const deliveryOrigin = brief.sourceHandoffId ? await this.storage.transaction(this.instanceId, async tx => {
+      const handoff = await tx.get<MainSourceHandoff>('main-source-handoff', brief.sourceHandoffId!)
+      const event = handoff ? await tx.get<SourceEvent>('source-event', handoff.sourceEventId) : undefined
+      const policy = handoff ? await tx.get<StoredPolicy>('policy-state', JSON.stringify(['policy-state', handoff.sourceInstanceId])) : undefined
+      if (!handoff || handoff.mainId !== brief.mainId || handoff.workBriefId !== brief.id || handoff.state !== 'delegated'
+        || !event || !await isCurrentSourceEvent(tx, event) || event.authorId !== handoff.authorId
+        || !policy?.configuration.allowedRequesterIds.includes(event.authorId)) {
+        throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The delegated Ticket no longer has a current authorized Main source.')
+      }
+      return { sourceEventId: event.id, source: event.source, authorId: event.authorId, eventId: event.objectId,
+        ...(event.threadId ? { threadId: event.threadId } : {}), nativeVersion: event.version, reference: handoff.reference }
+    }) : undefined
     const trigger: Work['trigger'] = { id: triggerId, instanceId: this.instanceId, source, eventId: brief.sourceEventId,
-      text, environmentId: brief.environmentId, target: 'local-only', targetSource: 'ticket' }
+      text, environmentId: brief.environmentId, target: 'local-only', targetSource: 'ticket', ...(deliveryOrigin ? { deliveryOrigin } : {}) }
     const commandId = `main-work-ticket:${brief.id}:${item.id}`
     const fingerprint = `sha256:main-work-item-v1:${createHash('sha256').update(canonicalJson([
       this.instanceId, source, brief.sourceEventId, item.id, item.goal, item.constraints, item.acceptanceCriteria, brief.environmentId,
+      deliveryOrigin?.sourceEventId ?? null,
     ])).digest('hex')}`
     return commandTransaction(this.storage, this.instanceId, async transaction => {
       await this.sourceEvents.requireDirectMode(transaction)
@@ -563,7 +655,6 @@ export class Engine {
   private async accept(tx: AsyncTx, commandId: string, trigger: Work['trigger'], fingerprint: string,
     options: { strength?: 'explicit' | 'inferred'; policyVersion?: string; mandateScope?: string; linkTicket?: (tx: AsyncTx, receipt: Receipt) => Promise<void> } = {}): Promise<Receipt> {
     const triggerId = trigger.id
-    const source = trigger.source
     await this.assertActivationIn(tx)
     const event = await tx.get<EventRecord>('event', triggerId)
     if (event) {
@@ -603,7 +694,8 @@ export class Engine {
     await options.linkTicket?.(tx, receipt)
     await this.effects.enqueue(tx, { key: ticketId, stream: 'notice', scope: 'router', payload: { type: 'request-accepted', ticketId, triggerId } })
     const deliveryId = `${ticketId}:acknowledgement`
-    const destination = { ...source, eventId: trigger.eventId, ...(trigger.threadId ? { threadId: trigger.threadId } : {}) }
+    const delivery = triggerDeliveryTarget(persistedTrigger)
+    const destination = { ...delivery.source, eventId: delivery.eventId, ...(delivery.threadId ? { threadId: delivery.threadId } : {}) }
     const effect = await this.effects.enqueue(tx, { key: ticketId, stream: 'outbox', scope: ticketId, payload: {
       purpose: 'acknowledgement', text: 'Request accepted.', ticketId, deliveryId, destination,
     } })
@@ -1301,12 +1393,45 @@ export class Engine {
   resumeMainInputs(request: MainAddress) { return this.main.resume(request) }
   async getMainConversation(request: MainAddress & { limit?: number; after?: number }) {
     const page = await this.main.page(request)
-    return { ...page, works: this.workDelegation ? await this.workDelegation.list(page.mainId) : [] as MainWorkCard[] }
+    return { ...page, works: this.workDelegation ? await this.workDelegation.list(page.mainId) : [] as MainWorkCard[],
+      sources: await this.mainSourceViews((await this.mainSources.list(page.mainId, { limit: 20 })).items) }
   }
 
   async getRecentMainConversation(request: MainAddress & { limit?: number; before?: number }) {
     const page = await this.main.recentPage(request)
-    return { ...page, works: this.workDelegation ? await this.workDelegation.list(page.mainId) : [] as MainWorkCard[] }
+    return { ...page, works: this.workDelegation ? await this.workDelegation.list(page.mainId) : [] as MainWorkCard[],
+      sources: await this.mainSourceViews((await this.mainSources.list(page.mainId, { limit: 20 })).items) }
+  }
+
+  async getMainSources(request: MainAddress & { limit?: number; after?: string }) {
+    if (!request || Object.keys(request).some(key => !['instanceId', 'limit', 'after'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Main source history accepts an Instance and a bounded page.')
+    }
+    if (request.instanceId !== this.instanceId || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Main source history is outside the authorized Instance.')
+    }
+    const binding = await this.main.open({ instanceId: request.instanceId })
+    const page = await this.mainSources.list(binding.mainId, { ...(request.limit === undefined ? {} : { limit: request.limit }),
+      ...(request.after === undefined ? {} : { after: request.after }) })
+    return { ...page, items: await this.mainSourceViews(page.items) }
+  }
+
+  private mainSourceViews(handoffs: MainSourceHandoff[]): Promise<MainSourceView[]> {
+    return this.storage.transaction(this.instanceId, async transaction => Promise.all(handoffs.map(async handoff => {
+      const split = handoff.workBriefId ? await transaction.get<{ itemIds: string[] }>('work-split', handoff.workBriefId) : undefined
+      const workItemIds = split?.itemIds ?? []
+      const receipts = await Promise.all(workItemIds.map(id => transaction.get<{ ticketId?: string }>('work-receipt', id)))
+      const ticketIds = [...new Set(receipts.flatMap(receipt => receipt?.ticketId ? [receipt.ticketId] : []))]
+      const deliveries = (await Promise.all(ticketIds.map(ticketId => this.deliveries.list(transaction, ticketId)))).flat()
+        .sort((left, right) => right.sequence - left.sequence).slice(0, 10)
+        .map(delivery => ({ id: delivery.id, ticketId: delivery.ticketId, purpose: delivery.purpose, state: delivery.state,
+          reconcileRequired: delivery.reconcileRequired, ...(delivery.attempts === undefined ? {} : { attempts: delivery.attempts }),
+          ...(delivery.reason ? { reason: delivery.reason } : {}), destination: delivery.destination }))
+      const conditions = (await Promise.all(ticketIds.map(ticketId => this.deliveryState.list(transaction, ticketId)))).flat()
+        .map(condition => ({ ticketId: condition.ticketId, number: condition.number, state: condition.state,
+          ...(condition.result ? { result: condition.result } : {}), ...(condition.reason ? { reason: condition.reason } : {}) }))
+      return { ...structuredClone(handoff), workItemIds, ticketIds, deliveries, conditions }
+    })))
   }
 
   async getMainWorkPlan(request: MainAddress & { workBriefId: string }) {
@@ -1964,7 +2089,19 @@ export class Engine {
       await this.assertHostAdmissionIn(tx)
       const attention = await tx.get<Attention>('attention', command.attentionId)
       if (!attention) throw new CoreError('NOT_FOUND', 'The Attention does not exist.')
-      const foreign = attention.destination.sourceInstanceId !== this.source.sourceInstanceId
+      const ticket = await tx.get<Work['ticket']>('ticket', attention.ticketId)
+      const trigger = ticket && await tx.get<Work['trigger']>('trigger', ticket.triggerId)
+      if (!ticket || !trigger || trigger.source.sourceInstanceId !== this.source.sourceInstanceId
+        && trigger.deliveryOrigin?.source.sourceInstanceId !== this.source.sourceInstanceId) {
+        throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The Attention Ticket belongs to a different source instance.')
+      }
+      const managedOrigin = !!trigger.deliveryOrigin
+        && attention.destination.sourceInstanceId === trigger.deliveryOrigin.source.sourceInstanceId
+        && attention.destination.actorId === trigger.deliveryOrigin.authorId
+        && attention.destination.eventId === trigger.deliveryOrigin.eventId
+        && attention.destination.threadId === trigger.deliveryOrigin.threadId
+      const originTicket = !!trigger.deliveryOrigin && attention.destination.sourceInstanceId === trigger.deliveryOrigin.source.sourceInstanceId
+      const foreign = attention.destination.sourceInstanceId !== this.source.sourceInstanceId && !originTicket
       let crossQuestionInput: WorkInput | undefined
       if (foreign) {
         await this.associationOwner(tx, attention.ticketId)
@@ -1976,10 +2113,18 @@ export class Engine {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'A cross-source Attention answer needs its exact owner-authorized question provenance.')
         }
         crossQuestionInput = input
+      } else if (originTicket && attention.questionSourceEventId) {
+        const question = await tx.get<SourceEvent>('source-event', attention.questionSourceEventId)
+        const ownerships = await this.inputs.ownershipsForEventInTransaction(tx, attention.questionSourceEventId)
+        const ownership = ownerships.find(candidate => candidate.ticketId === attention.ticketId && candidate.state === 'owned')
+        const input = ownership ? await this.inputs.getInput(tx, ownership.inputId) : undefined
+        if (!question || !input || !await isCurrentSourceEvent(tx, question)
+          || question.source.sourceInstanceId !== attention.destination.sourceInstanceId
+          || question.authorId !== attention.destination.actorId || question.objectId !== attention.destination.eventId
+          || question.threadId !== attention.destination.threadId) {
+          throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The original-source Attention is no longer backed by an active human Input.')
+        }
       }
-      const ticket = await tx.get<Work['ticket']>('ticket', attention.ticketId)
-      const trigger = ticket && await tx.get<Work['trigger']>('trigger', ticket.triggerId)
-      if (!ticket || !trigger || trigger.source.sourceInstanceId !== this.source.sourceInstanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The Attention Ticket belongs to a different source instance.')
       const answerers = this.source.intake?.allowedRequesterIds ?? this.source.allowedActorIds
       let actorId = this.source.actorId
       let answerText = command.text
@@ -1998,7 +2143,7 @@ export class Engine {
         answerText = event.text!
       }
       if (!command.sourceEventId && !answerers.includes(actorId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This actor cannot answer work questions.')
-      if (!foreign && actorId !== attention.destination.actorId) throw new CoreError('ANSWER_ACTOR_MISMATCH', 'The current actor does not match the question recipient.')
+      if (!foreign && !originTicket && !managedOrigin && actorId !== attention.destination.actorId) throw new CoreError('ANSWER_ACTOR_MISMATCH', 'The current actor does not match the question recipient.')
       const result = await this.attentions.answer(tx, { ticketId: attention.ticketId, attentionId: attention.id, text: answerText,
         commandId: command.commandId, actorId, ...(command.sourceEventId ? { sourceEventId: command.sourceEventId } : {}) })
       if (command.sourceEventId && crossQuestionInput?.association) {

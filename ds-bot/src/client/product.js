@@ -26,6 +26,7 @@ export function applyProduct(ctx) {
     works: [],
     activeTurn: null,
     health: null,
+    sources: [],
     error: null,
     mainDraft: '',
     messageBefore: null,
@@ -61,6 +62,7 @@ export function applyProduct(ctx) {
           works: page.works ?? state.works,
           activeTurn: page.activeTurn ?? null,
           health: page.health ?? state.health,
+          sources: page.sources ?? state.sources,
           messageBefore: state.messagesComplete ? null : state.messageBefore ?? page.cursor ?? null,
           messagesComplete: state.messagesComplete || page.cursor === undefined, error: null }
       })
@@ -194,6 +196,14 @@ export function applyProduct(ctx) {
   const receiptCopy = status => ({ routing: t('Router is routing'), accepted: t('Accepted by Router'), rejected: t('Not accepted') })[status] ?? status
   const mainHealthCopy = health => health?.state === 'running' ? t('Main running')
     : health?.state === 'degraded' ? t('Main degraded') : t('Main ready')
+  const sourceStatusCopy = status => ({ pending: t('Waiting for Main'), presented: t('Reviewed by Main'),
+    delegated: t('Delegated by Main'), discarded: t('Dismissed by Main') })[status] ?? status
+  const deliveryCopy = status => ({ pending: t('Delivery pending'), sent: t('Delivery sent'),
+    dropped: t('Delivery dropped'), unknown: t('Delivery needs reconciliation') })[status] ?? status
+  const deliveryPurposeCopy = purpose => ({ acknowledgement: t('Acknowledgement'), answer: t('Answer'),
+    attention: t('Question'), result: t('Result'), policy: t('Policy update') })[purpose] ?? purpose
+  const conditionCopy = state => ({ open: t('Pull request open'), draft: t('Pull request draft'),
+    merged: t('Pull request merged'), closed: t('Pull request closed') })[state] ?? state
   function MainWorkCard({ work }) {
     const state = useView()
     const [controlBusy, setControlBusy] = useState(null)
@@ -265,6 +275,23 @@ export function applyProduct(ctx) {
         controlBusy === 'work-retry' ? t('Retrying…') : t('Retry work')) : null) : null)
   }
 
+  function MainSourceCard({ source }) {
+    return h('article', { className: 'bt-main-source', 'aria-label': t('GitHub source request') },
+      h('div', { className: 'bt-main-work-head' }, h('strong', null, t('GitHub request')),
+        h('span', { className: 'bt-main-work-status', role: 'status' }, sourceStatusCopy(source.state))),
+      h('p', { className: 'bt-main-work-detail' }, `${source.objectId} · @${source.authorId}`),
+      h('p', { className: 'bt-main-work-detail' }, source.text),
+      h('code', { className: 'bt-main-source-reference' }, source.reference),
+      source.lastError ? h('p', { className: 'bt-main-error', role: 'status' }, `${t('Main source failed')}: ${source.lastError}`) : null,
+      source.deliveries.length ? h('div', { className: 'bt-main-source-deliveries', 'aria-label': t('Delivery receipts') },
+        source.deliveries.map(delivery => h('p', {
+          key: delivery.id, className: delivery.state === 'unknown' ? 'bt-main-error' : 'bt-main-work-detail',
+        }, `${deliveryPurposeCopy(delivery.purpose)}: ${deliveryCopy(delivery.state)}${delivery.reason ? ` · ${delivery.reason}` : ''}`))) : null,
+      source.conditions.length ? h('div', { className: 'bt-main-source-deliveries', 'aria-label': t('Pull request conditions') },
+        source.conditions.map(condition => h('p', { key: `${condition.ticketId}:${condition.number}`, className: 'bt-main-work-detail' },
+          `#${condition.number}: ${conditionCopy(condition.state)}${condition.reason ? ` · ${condition.reason}` : ''}`))) : null)
+  }
+
   function MainConversation() {
     const state = useView()
     const [sending, setSending] = useState(false)
@@ -332,8 +359,11 @@ export function applyProduct(ctx) {
             } }, state.messagesLoading ? t('Loading…') : t('Load earlier messages')) : null,
           state.messages.length === 0 ? h('p', { className: 'bt-main-empty' }, t('What would you like to discuss?')) : null,
           state.messages.map(message => h('div', { key: message.id },
+            message.source ? h('p', { className: 'bt-main-source-label' },
+              `${t('GitHub')} · @${message.source.authorId} · ${message.source.objectId}`) : null,
             h(ChatRows, { items: [{ kind: message.role === 'main' ? 'bot' : 'user', text: message.text, time: message.createdAt }], sessionId: 'main', roster: emptyRoster, actions: {} }),
             message.status === 'failed' ? h('p', { className: 'bt-main-error', role: 'status' }, t('Main could not finish this reply. Your message is saved.')) : null)),
+          state.sources.map(source => h(MainSourceCard, { key: source.id, source })),
           state.works.map(work => h(MainWorkCard, { key: work.brief.workItemId ?? work.brief.id, work })),
           stopping ? h('p', { className: 'bt-main-status', role: 'status' }, t('Stopping this Main reply…')) : busy
             ? h('p', { className: 'bt-main-status', role: 'status' }, t('Main is replying…')) : null,
@@ -748,13 +778,16 @@ const PRODUCT_CSS = `
 .bt-main-empty{margin:48px 0;color:var(--bt-ink-2);font-size:14px;line-height:22px;text-align:center}
 .bt-main-error{margin:8px 0;color:var(--bt-danger);font-size:13px;line-height:18px}
 .bt-main-status{color:var(--bt-ink-2);font-size:13px;line-height:18px}
-.bt-main-work{max-width:800px;margin:0 auto;width:calc(100% - 32px);padding:12px;border:1px solid var(--bt-line);border-radius:6px;background:var(--bt-card);box-sizing:border-box}
+.bt-main-work,.bt-main-source{max-width:800px;margin:0 auto;width:calc(100% - 32px);padding:12px;border:1px solid var(--bt-line);border-radius:6px;background:var(--bt-card);box-sizing:border-box}
 .bt-main-work-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;color:var(--bt-ink);font-size:14px;line-height:20px}
 .bt-main-work-title{min-width:0;display:flex;flex-direction:column;gap:2px}
 .bt-main-work-source{color:var(--bt-ink-2);font-size:10px;line-height:14px;text-transform:uppercase;letter-spacing:.05em}
 .bt-main-work-head strong{min-width:0;overflow-wrap:anywhere;font-weight:600}
 .bt-main-work-status{flex:none;color:var(--bt-ink-2);font-size:12px;line-height:16px}
-.bt-main-work-id,.bt-main-work-detail,.bt-main-work-artifact{margin:6px 0 0;color:var(--bt-ink-2);font-size:12px;line-height:16px;overflow-wrap:anywhere}
+.bt-main-work-id,.bt-main-work-detail,.bt-main-work-artifact,.bt-main-source-label{margin:6px 0 0;color:var(--bt-ink-2);font-size:12px;line-height:16px;overflow-wrap:anywhere}
+.bt-main-source-label{font-weight:600}
+.bt-main-source-reference{display:block;margin:6px 0 0;overflow-wrap:anywhere;color:var(--bt-ink-2);font:11px/16px ui-monospace,SFMono-Regular,Consolas,monospace}
+.bt-main-source-deliveries{margin-top:8px;padding-top:6px;border-top:1px solid var(--bt-line)}
 .bt-main-work-followups{margin-top:8px;padding-top:8px;border-top:.5px solid var(--bt-line-2)}
 .bt-main-work-followup{padding:6px 0;color:var(--bt-ink);font-size:12px;line-height:16px;overflow-wrap:anywhere}
 .bt-main-work-followup+.bt-main-work-followup{border-top:.5px solid var(--bt-line-2)}

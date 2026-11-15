@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { CoreError, identifier, type Work } from './model.js'
+import { CoreError, identifier, triggerDeliveryTarget, type Work } from './model.js'
 import type { Storage, AsyncTx } from './storage.js'
 import type { Effects, Effect, EffectHandler, EffectResult } from './effects.js'
 import type { NativeSessions, NativeTool } from './native-sessions.js'
@@ -672,7 +672,8 @@ export class Execution {
         if (!current || current.id !== args.reportId || current.assignmentId !== assignment?.id) throw new CoreError('NOT_READY', 'Only the current Assignment ready report may be delivered.')
         const trigger = await this.trigger(transaction, ticketId)
         const deliveryId = `${ticketId}:result`
-        const destination = { ...trigger.source, eventId: trigger.eventId, ...(trigger.threadId ? { threadId: trigger.threadId } : {}) }
+        const target = triggerDeliveryTarget(trigger)
+        const destination = { ...target.source, eventId: target.eventId, ...(target.threadId ? { threadId: target.threadId } : {}) }
         const effect = await this.effects.enqueue(transaction, { key: `${ticketId}:result`, stream: 'outbox', scope: ticketId,
           payload: { purpose: 'result', ticketId, reportId: current.id, deliveryId } })
         await this.deliveries.record(transaction, { id: deliveryId, ticketId, purpose: 'result', text: current.result, destination,

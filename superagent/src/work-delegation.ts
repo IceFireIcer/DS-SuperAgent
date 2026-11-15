@@ -6,6 +6,8 @@ import type { NativeSessions, NativeTool } from './native-sessions.js'
 import type { AsyncTx, Storage } from './storage.js'
 import type { Effect, EffectHandler, EffectResult, Effects } from './effects.js'
 import type { InputDelivery, MainFollowUpAttachment, MainFollowUpAttachmentRequest, WorkInput, WorkOwnership } from './work-inputs.js'
+import type { MainSourceHandoff } from './main-source.js'
+import { isCurrentSourceEvent, type SourceEvent } from './source-events.js'
 
 export interface MainWorkIntent {
   goal: string
@@ -31,6 +33,7 @@ export interface MainWorkBrief {
   evidence: { kind: 'main-message'; id: string }
   environmentId: string
   configurationRevision: number
+  sourceHandoffId?: string
   createdAt: number
 }
 
@@ -110,6 +113,7 @@ export interface MainWorkRequest {
   constraints?: string
   acceptanceCriteria?: string
   configurationRevision: number
+  sourceHandoffId?: string
 }
 
 export interface MainWorkFollowUpRequest {
@@ -270,6 +274,7 @@ export interface WorkDelegationOptions {
   routerProfile(): Promise<{ revision: number; profile: RoleProfile }>
   recordRouterUse(sessionId: string, revision: number, profile: RoleProfile): Promise<void>
   notifyMain(notification: MainWorkNotification, signal: AbortSignal, isCurrent: (transaction?: AsyncTx) => Promise<boolean>): Promise<void>
+  notifyMainSource(handoff: MainSourceHandoff, signal: AbortSignal): Promise<void>
   applyFollowUp(tx: AsyncTx, request: MainFollowUpAttachmentRequest): Promise<MainFollowUpAttachment>
 }
 
@@ -325,7 +330,7 @@ export class WorkDelegation {
 
   async create(request: MainWorkRequest) {
     if (!request || Object.keys(request).some(key => !['commandId', 'mainId', 'mainSessionId', 'routerSessionId', 'mainMessageId', 'originalUserText',
-      'items', 'goal', 'constraints', 'acceptanceCriteria', 'configurationRevision'].includes(key))) {
+      'items', 'goal', 'constraints', 'acceptanceCriteria', 'configurationRevision', 'sourceHandoffId'].includes(key))) {
       throw new CoreError('INVALID_INPUT', 'A Main delegation accepts only its source and independent work items.')
     }
     if (request.items !== undefined && (request.goal !== undefined || request.constraints !== undefined || request.acceptanceCriteria !== undefined)) {
@@ -333,6 +338,7 @@ export class WorkDelegation {
     }
     identifier(request.commandId, 'commandId'); identifier(request.mainId, 'mainId'); identifier(request.mainSessionId, 'mainSessionId')
     identifier(request.routerSessionId, 'routerSessionId'); identifier(request.mainMessageId, 'mainMessageId')
+    if (request.sourceHandoffId !== undefined) identifier(request.sourceHandoffId, 'sourceHandoffId')
     if (!this.options.source.allowedActorIds.includes(this.options.source.actorId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This actor cannot delegate work in the Main Instance.')
     identifier(this.options.environmentId, 'environmentId')
     if (!Number.isSafeInteger(request.configurationRevision) || request.configurationRevision < 1) throw new CoreError('INVALID_INPUT', 'A delegation needs its Main role configuration revision.')
@@ -344,7 +350,7 @@ export class WorkDelegation {
     const acceptanceCriteria = single?.acceptanceCriteria ?? 'Each item has its own observable acceptance criteria.'
     const fingerprint = createHash('sha256').update(canonicalJson(['main-work-brief-v2', this.options.instanceId, request.mainId,
       request.mainSessionId, request.routerSessionId, request.mainMessageId, originalUserText, requestedItems,
-      this.options.environmentId, request.configurationRevision])).digest('hex')
+      this.options.environmentId, request.configurationRevision, request.sourceHandoffId ?? null])).digest('hex')
     const key = commandKey(this.options.source, request.commandId)
     return commandTransaction(this.options.storage, this.options.instanceId, async transaction => {
       const existing = await transaction.get<{ fingerprint: string; workBriefId: string }>('work-brief-command', key)
@@ -355,16 +361,33 @@ export class WorkDelegation {
         return brief
       }
       const id = randomUUID()
+      let sourceHandoff: MainSourceHandoff | undefined
+      if (request.sourceHandoffId) {
+        sourceHandoff = await transaction.get<MainSourceHandoff>('main-source-handoff', request.sourceHandoffId)
+        if (!sourceHandoff || sourceHandoff.instanceId !== this.options.instanceId || sourceHandoff.mainId !== request.mainId
+          || !['pending', 'presented'].includes(sourceHandoff.state)) {
+          throw new CoreError('NOT_FOUND', 'The Main source handoff is unavailable or belongs to another Main.')
+        }
+        const sourceEvent = await transaction.get<SourceEvent>('source-event', sourceHandoff.sourceEventId)
+        const policy = await transaction.get<{ configuration: { allowedRequesterIds: string[] } }>('policy-state',
+          JSON.stringify(['policy-state', sourceHandoff.sourceInstanceId]))
+        if (!sourceEvent || !await isCurrentSourceEvent(transaction, sourceEvent) || sourceEvent.authorId !== sourceHandoff.authorId || sourceEvent.source.sourceInstanceId !== sourceHandoff.sourceInstanceId
+          || !policy?.configuration.allowedRequesterIds.includes(sourceEvent.authorId)) {
+          throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The Main source handoff is no longer current and authorized.')
+        }
+      }
       const brief: MainWorkBrief = { id, version: 1, instanceId: this.options.instanceId,
         mainId: request.mainId, mainSessionId: request.mainSessionId, routerSessionId: request.routerSessionId,
         mainMessageId: request.mainMessageId, originalUserText,
         authorization: { kind: 'authorized-main-actor', sourceInstanceId: this.options.source.sourceInstanceId, actorId: this.options.source.actorId },
         goal, constraints, acceptanceCriteria, requestedItems, sourceEventId: `main-work-source:${id}`,
         evidence: { kind: 'main-message', id: request.mainMessageId }, environmentId: this.options.environmentId,
-        configurationRevision: request.configurationRevision, createdAt: this.now() }
+        configurationRevision: request.configurationRevision, ...(sourceHandoff ? { sourceHandoffId: sourceHandoff.id } : {}), createdAt: this.now() }
       const receipt: MainWorkReceipt = { version: 1, workBriefId: brief.id, status: 'routing',
         nextStep: 'Router is deciding the independent work items.', createdAt: this.now() }
       await transaction.insert('work-brief', brief.id, brief)
+      if (sourceHandoff) await transaction.replace('main-source-handoff', sourceHandoff.id,
+        { ...sourceHandoff, state: 'delegated', workBriefId: brief.id, updatedAt: this.now() })
       await transaction.insert('work-receipt', brief.id, receipt)
       await transaction.insert('work-brief-command', key, { fingerprint, workBriefId: brief.id })
       await this.options.effects.enqueue(transaction, { key: brief.id, stream: 'notice', scope: brief.mainId,
@@ -460,7 +483,12 @@ export class WorkDelegation {
   handlers(base: Record<'notice' | 'relay', EffectHandler>): Record<'notice' | 'relay', EffectHandler> {
     const execute = async (effect: Effect, context: { idempotencyKey: string; signal: AbortSignal }, handler: EffectHandler): Promise<EffectResult> => {
       try {
-        if (effect.payload.type === 'main-work-brief') await this.route(String(effect.payload.workBriefId), context.signal)
+        if (effect.payload.type === 'main-source-handoff') {
+          const handoff = await this.options.storage.transaction(this.options.instanceId,
+            tx => tx.get<MainSourceHandoff>('main-source-handoff', String(effect.payload.handoffId)))
+          if (!handoff) throw new CoreError('INCOMPLETE_STATE', 'The Main source handoff is missing.')
+          if (handoff.state === 'pending' || handoff.state === 'presented') await this.options.notifyMainSource(handoff, context.signal)
+        } else if (effect.payload.type === 'main-work-brief') await this.route(String(effect.payload.workBriefId), context.signal)
         else if (effect.payload.type === 'main-work-update') {
           const notification = await this.options.storage.transaction(this.options.instanceId,
             tx => tx.get<MainWorkNotification>('work-update', String(effect.payload.updateId)))
@@ -474,7 +502,9 @@ export class WorkDelegation {
         return { type: 'success' }
       } catch (error) {
         if (error instanceof CoreError && error.code === 'MAIN_BUSY') return { type: 'defer', reason: error.message }
-        if (error instanceof CoreError && error.code === 'MAIN_UPDATE_FAILED') return { type: effect.state === 'unknown' ? 'not-applied' : 'transient', reason: error.message }
+        if (error instanceof CoreError && (error.code === 'MAIN_UPDATE_FAILED' || error.code === 'MAIN_SOURCE_FAILED')) {
+          return { type: effect.state === 'unknown' ? 'not-applied' : 'transient', reason: error.message }
+        }
         if (error instanceof CoreError && error.code === 'ROUTER_NOTICE_UNHANDLED') return { type: 'transient', reason: error.message }
         throw error
       }

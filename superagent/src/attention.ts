@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { CoreError, identifier, type Work } from './model.js'
+import { CoreError, identifier, triggerDeliveryTarget, type Work } from './model.js'
 import type { AsyncTx, Storage } from './storage.js'
 import type { SourceEvent, SourceEvents } from './source-events.js'
 import type { Effects } from './effects.js'
@@ -55,11 +55,13 @@ export class Attentions {
     if (ticket.constraint?.kind === 'stopped') throw new CoreError('TICKET_STOPPED', 'A stopped Ticket cannot ask another question.')
     const previousHead = await tx.get<AttentionHead>('attention-head', headKey(request.ticketId))
     const inputEvent = request.input && await tx.get<SourceEvent>('source-event', request.input.sourceEventId)
-    const originalEvent = !inputEvent && trigger.threadId ? await this.sources.candidate(tx, { threadId: trigger.threadId, objectId: trigger.eventId }) : undefined
+    const defaultTarget = triggerDeliveryTarget(trigger)
+    const originalEvent = !inputEvent && trigger.deliveryOrigin ? await tx.get<SourceEvent>('source-event', trigger.deliveryOrigin.sourceEventId)
+      : !inputEvent && trigger.threadId ? await this.sources.candidate(tx, { threadId: trigger.threadId, objectId: trigger.eventId }) : undefined
     const destination = inputEvent
       ? { sourceInstanceId: inputEvent.source.sourceInstanceId, actorId: inputEvent.authorId, eventId: inputEvent.objectId, ...(inputEvent.threadId ? { threadId: inputEvent.threadId } : {}) }
-      : { sourceInstanceId: originalEvent?.source.sourceInstanceId ?? trigger.source.sourceInstanceId, actorId: originalEvent?.authorId ?? trigger.source.actorId,
-        eventId: originalEvent?.objectId ?? trigger.eventId, ...(trigger.threadId ? { threadId: trigger.threadId } : {}) }
+      : { sourceInstanceId: originalEvent?.source.sourceInstanceId ?? defaultTarget.source.sourceInstanceId, actorId: originalEvent?.authorId ?? defaultTarget.source.actorId,
+        eventId: originalEvent?.objectId ?? defaultTarget.eventId, ...(defaultTarget.threadId ? { threadId: defaultTarget.threadId } : {}) }
     const id = `${historyPrefix(request.ticketId)}:${randomUUID()}`
     const sequenceKey = JSON.stringify(['attention-meta', request.ticketId])
     const sequence = (await tx.get<number>('attention-meta', sequenceKey) ?? 0) + 1
