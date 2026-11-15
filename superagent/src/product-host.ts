@@ -157,8 +157,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
                         : endpoint === 'observe-list' ? ['instanceId', 'after', 'limit', 'query']
                           : endpoint === 'observe-read' ? ['instanceId', 'observationId', 'generation', 'after', 'limit']
                             : endpoint === 'observe-detail' ? ['instanceId', 'observationId', 'generation', 'detailId', 'offset', 'limit']
-                              : endpoint === 'history' ? ['instanceId', 'after', 'before', 'limit']
-                                : undefined
+                              : endpoint === 'evidence' ? ['instanceId', 'workItemId', 'ref', 'after', 'maxBytes']
+                                : endpoint === 'history' ? ['instanceId', 'after', 'before', 'limit']
+                                  : undefined
         if (!fields) throw new CoreError('UNAVAILABLE', 'This product capability is not connected yet.')
         if (Object.keys(payload).some(key => !fields.includes(key))) throw new CoreError('INVALID_INPUT', 'The product request contains unsupported fields.')
         if (endpoint === 'history') {
@@ -194,6 +195,11 @@ export async function createProductHost(context: Context, config: ProductHostCon
             ...(effort.description ? { description: effort.description } : {}) })), ...(info?.reasoning?.defaultEffort ? { defaultEffort: info.reasoning.defaultEffort } : {}) }
         }
         if (endpoint === 'provider-key') return setProviderKey(payload.provider as string, payload.value)
+        if (endpoint === 'evidence') return engine!.readMainEvidence({ instanceId, workItemId: payload.workItemId as string,
+          ref: payload.ref as { kind: 'ticket' | 'trigger' | 'decision' | 'mandate' | 'report' | 'attention' | 'delivery' | 'source-event' | 'source-thread';
+            id?: string; threadId?: string; objectId?: string },
+          ...(payload.after === undefined ? {} : { after: payload.after as string }),
+          ...(payload.maxBytes === undefined ? {} : { maxBytes: payload.maxBytes as number }) })
         if (endpoint === 'observe-list') return engine!.getWorkObservations({ instanceId,
           ...(payload.after === undefined ? {} : { after: payload.after as string }),
           ...(payload.limit === undefined ? {} : { limit: payload.limit as number }),

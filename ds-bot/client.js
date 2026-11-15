@@ -67,6 +67,12 @@ var ZH = {
   "{count} inputs queued": "{count} 条输入排队中",
   "Main model failed. Durable work facts remain available.": "Main 模型异常，持久工作事实仍可查看。",
   "System work fact": "系统工作事实",
+  "System fact": "系统事实",
+  "View original request": "查看原始请求",
+  "Original request evidence": "原始请求证据",
+  "Partial evidence": "部分证据",
+  "Complete evidence": "完整证据",
+  "Load more evidence": "加载更多证据",
   "Main is unavailable.": "Main 暂不可用。",
   "Main could not finish this reply. Your message is saved.": "Main 未能完成回复，你的消息已保存。",
   "Could not reach Main. Check that the app is running.": "无法连接 Main，请检查应用是否仍在运行。",
@@ -20850,6 +20856,9 @@ function applyProduct(ctx) {
     activeTurn: null,
     health: null,
     sources: [],
+    mainEvidence: null,
+    mainEvidenceLoading: false,
+    mainEvidenceError: null,
     error: null,
     mainDraft: "",
     messageBefore: null,
@@ -20915,6 +20924,35 @@ function applyProduct(ctx) {
       });
     } catch (error) {
       if (!stopped) view.set((state) => ({ ...state, messagesLoading: false, error: error.message }));
+    }
+  };
+  const loadMainEvidence = async (binding, work, { append = false } = {}) => {
+    const current = view.getSnapshot().mainEvidence;
+    const same = current?.workItemId === work.brief.workItemId;
+    if (append && (!same || !current.pagination?.truncated || !current.pagination?.cursor)) return;
+    try {
+      view.set((state) => ({ ...state, mainEvidenceLoading: true, mainEvidenceError: null }));
+      const page = await productCall("evidence", {
+        instanceId: binding.instanceId,
+        workItemId: work.brief.workItemId,
+        ref: { kind: "trigger" },
+        maxBytes: 4096,
+        ...append && same ? { after: current.pagination.cursor } : {}
+      });
+      if (stopped) return;
+      view.set((state) => ({
+        ...state,
+        mainEvidence: {
+          ...page,
+          workItemId: work.brief.workItemId,
+          goal: work.brief.goal,
+          text: append && state.mainEvidence?.workItemId === work.brief.workItemId ? state.mainEvidence.text + page.text : page.text
+        },
+        mainEvidenceLoading: false,
+        mainEvidenceError: null
+      }));
+    } catch (error) {
+      if (!stopped) view.set((state) => ({ ...state, mainEvidenceLoading: false, mainEvidenceError: error.message }));
     }
   };
   const loadObservations = async (binding, { append = false, reset = false } = {}) => {
@@ -21092,7 +21130,7 @@ function applyProduct(ctx) {
     merged: t("Pull request merged"),
     closed: t("Pull request closed")
   })[state] ?? state;
-  function MainWorkCard({ work }) {
+  function MainWorkCard({ work, onEvidence }) {
     const state = useView();
     const [controlBusy, setControlBusy] = (0, import_react53.useState)(null);
     const [controlError, setControlError] = (0, import_react53.useState)(null);
@@ -21214,6 +21252,11 @@ function applyProduct(ctx) {
           },
           controlBusy === "work-retry" ? t("Retrying…") : t("Retry work")
         ) : null
+      ) : null,
+      work.receipt.status === "accepted" ? (0, import_react53.createElement)(
+        "div",
+        { className: "bt-main-work-evidence-actions" },
+        (0, import_react53.createElement)("button", { type: "button", className: "bt-soft", onClick: () => onEvidence(work) }, t("View original request"))
       ) : null
     );
   }
@@ -21369,16 +21412,74 @@ function applyProduct(ctx) {
           state.messages.map((message) => (0, import_react53.createElement)(
             "div",
             { key: message.id },
-            message.source ? (0, import_react53.createElement)(
-              "p",
-              { className: "bt-main-source-label" },
-              `${t("GitHub")} · @${message.source.authorId} · ${message.source.objectId}`
-            ) : null,
-            (0, import_react53.createElement)(ChatRows, { items: [{ kind: message.role === "main" ? "bot" : "user", text: message.text, time: message.createdAt }], sessionId: "main", roster: emptyRoster, actions: {} }),
-            message.status === "failed" ? (0, import_react53.createElement)("p", { className: "bt-main-error", role: "status" }, t("Main could not finish this reply. Your message is saved.")) : null
+            message.role === "system" ? (0, import_react53.createElement)(
+              "div",
+              { className: "bt-main-system-fact", role: "status" },
+              (0, import_react53.createElement)("span", null, t("System fact")),
+              (0, import_react53.createElement)("p", null, message.text)
+            ) : (0, import_react53.createElement)(
+              "div",
+              null,
+              message.source ? (0, import_react53.createElement)(
+                "p",
+                { className: "bt-main-source-label" },
+                `${t("GitHub")} · @${message.source.authorId} · ${message.source.objectId}`
+              ) : null,
+              (0, import_react53.createElement)(ChatRows, {
+                items: [{ kind: message.role === "main" ? "bot" : "user", text: message.text, time: message.createdAt }],
+                sessionId: "main",
+                roster: emptyRoster,
+                actions: {}
+              }),
+              message.status === "failed" ? (0, import_react53.createElement)(
+                "p",
+                { className: "bt-main-error", role: "status" },
+                t("Main could not finish this reply. Your message is saved.")
+              ) : null
+            )
           )),
           state.sources.map((source) => (0, import_react53.createElement)(MainSourceCard, { key: source.id, source })),
-          state.works.map((work) => (0, import_react53.createElement)(MainWorkCard, { key: work.brief.workItemId ?? work.brief.id, work })),
+          state.works.map((work) => (0, import_react53.createElement)(MainWorkCard, {
+            key: work.brief.workItemId ?? work.brief.id,
+            work,
+            onEvidence: (selected) => {
+              if (state.binding) void loadMainEvidence(state.binding, selected);
+            }
+          })),
+          state.mainEvidenceError && !state.mainEvidence ? (0, import_react53.createElement)("p", { role: "alert", className: "bt-main-error" }, state.mainEvidenceError) : null,
+          state.mainEvidence ? (0, import_react53.createElement)(
+            "section",
+            { className: "bt-main-evidence", "aria-label": t("Original request evidence") },
+            (0, import_react53.createElement)(
+              "div",
+              { className: "bt-main-evidence-head" },
+              (0, import_react53.createElement)(
+                "div",
+                null,
+                (0, import_react53.createElement)("strong", null, t("Original request evidence")),
+                (0, import_react53.createElement)("p", null, t(state.mainEvidence.goal))
+              ),
+              (0, import_react53.createElement)("span", null, t(state.mainEvidence.pagination.truncated ? "Partial evidence" : "Complete evidence"))
+            ),
+            (0, import_react53.createElement)("pre", null, redactObservationText(state.mainEvidence.text)),
+            state.mainEvidenceError ? (0, import_react53.createElement)("p", { role: "alert", className: "bt-main-error" }, state.mainEvidenceError) : null,
+            state.mainEvidence.pagination.truncated ? (0, import_react53.createElement)(
+              "button",
+              {
+                type: "button",
+                className: "bt-soft",
+                disabled: state.mainEvidenceLoading,
+                onClick: () => {
+                  if (state.binding) void loadMainEvidence(
+                    state.binding,
+                    { brief: { workItemId: state.mainEvidence.workItemId, goal: state.mainEvidence.goal } },
+                    { append: true }
+                  );
+                }
+              },
+              state.mainEvidenceLoading ? t("Loading…") : t("Load more evidence")
+            ) : null
+          ) : null,
           stopping ? (0, import_react53.createElement)("p", { className: "bt-main-status", role: "status" }, t("Stopping this Main reply…")) : busy ? (0, import_react53.createElement)("p", { className: "bt-main-status", role: "status" }, t("Main is replying…")) : null,
           (0, import_react53.createElement)("div", { ref: bottom })
         )
@@ -22105,6 +22206,8 @@ var PRODUCT_CSS = `
 .bt-main-empty{margin:48px 0;color:var(--bt-ink-2);font-size:14px;line-height:22px;text-align:center}
 .bt-main-error{margin:8px 0;color:var(--bt-danger);font-size:13px;line-height:18px}
 .bt-main-status{color:var(--bt-ink-2);font-size:13px;line-height:18px}
+.bt-main-system-fact{padding:10px 12px;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card);color:var(--bt-ink-2);font-size:12px;line-height:18px}
+.bt-main-system-fact>span{display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.05em;font-size:10px}.bt-main-system-fact p{margin:0;color:var(--bt-ink)}
 .bt-main-work,.bt-main-source{max-width:800px;margin:0 auto;width:calc(100% - 32px);padding:12px;border:1px solid var(--bt-line);border-radius:6px;background:var(--bt-card);box-sizing:border-box}
 .bt-main-work-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;color:var(--bt-ink);font-size:14px;line-height:20px}
 .bt-main-work-title{min-width:0;display:flex;flex-direction:column;gap:2px}
@@ -22124,6 +22227,11 @@ var PRODUCT_CSS = `
 .bt-main-work-result{margin-top:8px;padding-top:8px;border-top:.5px solid var(--bt-line-2);color:var(--bt-ink);font-size:13px;line-height:18px;overflow-wrap:anywhere}
 .bt-main-work-result p{margin:0 0 6px}.bt-main-work-result p:last-child{margin-bottom:0}
 .bt-main-work-artifact code{font:inherit;color:var(--bt-ink)}
+.bt-main-work-evidence-actions{margin-top:10px}.bt-main-work-evidence-actions button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:1px}
+.bt-main-evidence{grid-column:1/-1;padding:14px;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card)}
+.bt-main-evidence-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.bt-main-evidence-head>div{min-width:0}
+.bt-main-evidence-head strong{font-size:13px}.bt-main-evidence-head p{margin:3px 0 0;color:var(--bt-ink-2);font-size:12px;line-height:18px}.bt-main-evidence-head>span{flex:none;color:var(--bt-ink-2);font-size:11px}
+.bt-main-evidence pre{margin:10px 0;padding:10px;max-height:360px;overflow:auto;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-main);color:var(--bt-ink);font:12px/18px ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
 .bt-main-history-more{display:block;margin:0 auto 8px}
 .bt-main-nav{padding:12px;display:flex;flex-direction:column;gap:6px}
 .bt-main-nav>button,.bt-observation-nav-item{width:100%;display:flex;align-items:center;gap:10px;justify-content:flex-start;min-height:40px;text-align:left}

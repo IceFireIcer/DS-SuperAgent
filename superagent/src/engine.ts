@@ -25,7 +25,7 @@ import { HostLease, type HostOptions } from './host.js'
 import { ClientAccess } from './client-access.js'
 import { listSupervisorProposals, Supervisor, type SupervisorOptions, type SupervisorProposal } from './supervisor.js'
 import { assertHostTakeoverSettled, loadHostTakeover, type HostTakeoverRecord, type HostTakeoverTicket } from './host-takeover.js'
-import { ContextReader, type ContextCandidate, type ContextCard, type ContextRequest } from './context.js'
+import { ContextReader, type ContextCandidate, type ContextCard, type ContextRef, type ContextRequest } from './context.js'
 import { RoleConfigStore, validateRoleConfig, type RoleConfig, type RoleConfigUse, type RoleConfigView } from './config.js'
 import { draftKey, instructionKey, validateBehaviorChange, type BehaviorChange, type BehaviorInterpreter,
   type BehaviorInstructionRecord, type ConfigDraft } from './config-instructions.js'
@@ -346,6 +346,7 @@ export class Engine {
         notifyMain: (notification, signal, isCurrent) => this.main.notify(notification, signal, isCurrent),
         notifyMainSource: (handoff, signal) => this.main.notifySource(handoff, signal),
         applyFollowUp: (tx, request) => this.inputs.attachMainFollowUp(tx, request),
+        readContext: request => this.context.read(request),
       })
     }
     const handlers = this.execution?.handlers()
@@ -1441,6 +1442,31 @@ export class Engine {
     }
     const binding = await this.main.open({ instanceId: request.instanceId })
     return this.workDelegation.plan(binding.mainId, request.workBriefId)
+  }
+
+  async readMainEvidence(request: MainAddress & { workItemId: string; ref: Omit<ContextRef, 'ticketId'>;
+    after?: string; maxBytes?: number }): Promise<ContextCard> {
+    if (!request || Object.keys(request).some(key => !['instanceId', 'workItemId', 'ref', 'after', 'maxBytes'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Main evidence accepts one authorized work item and a bounded reference page.')
+    }
+    if (request.instanceId !== this.instanceId || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Main evidence is outside the authorized Instance.')
+    }
+    if (!request.ref || typeof request.ref !== 'object' || Array.isArray(request.ref)) {
+      throw new CoreError('INVALID_INPUT', 'Main evidence needs one context reference.')
+    }
+    if (Object.keys(request.ref).some(key => !['kind', 'id', 'threadId', 'objectId'].includes(key))
+      || !['ticket', 'trigger', 'decision', 'mandate', 'report', 'attention', 'delivery', 'source-event', 'source-thread'].includes(request.ref.kind)) {
+      throw new CoreError('INVALID_INPUT', 'Main evidence accepts one known context reference shape.')
+    }
+    if (!this.workDelegation) throw new CoreError('DELEGATION_UNAVAILABLE', 'Main evidence requires authorized local work.')
+    const binding = await this.main.open({ instanceId: request.instanceId })
+    return this.workDelegation.evidence(binding.mainId, {
+      workItemId: request.workItemId,
+      ref: request.ref,
+      ...(request.after === undefined ? {} : { after: request.after }),
+      ...(request.maxBytes === undefined ? {} : { maxBytes: request.maxBytes }),
+    })
   }
 
   async getWorkObservations(request: MainAddress & { limit?: number; after?: string; query?: string }) {

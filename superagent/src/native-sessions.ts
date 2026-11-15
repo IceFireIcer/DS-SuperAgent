@@ -15,7 +15,7 @@ export interface NativeTool {
   /** `agent` is the exact caller DSH reports for this call, used to parent a delegated child Agent. */
   execute(args: Record<string, any>, signal: AbortSignal, agent?: Agent): Promise<string>
 }
-export interface NativeSessionRequest { sessionId: string; role: 'main' | 'router' | 'worker'; text: string; tools: NativeTool[]; cwd?: string; signal?: AbortSignal; onDelivered?: () => Promise<void>; coalesce?: boolean; messageId?: string; onMessagePersisted?: (seq: number) => Promise<void>; instructions?: string; skills?: string[]; profile?: RoleProfile; stepBudget?: number }
+export interface NativeSessionRequest { sessionId: string; role: 'main' | 'router' | 'worker'; text: string; tools: NativeTool[]; cwd?: string; signal?: AbortSignal; onDelivered?: () => Promise<void>; coalesce?: boolean; messageId?: string; onMessagePersisted?: (seq: number) => Promise<void>; onForkPrepared?: (sessionId: string) => Promise<void>; instructions?: string; skills?: string[]; profile?: RoleProfile; stepBudget?: number }
 export interface NativeSessionsOptions { main?: AgentOptions; router: AgentOptions; worker: AgentOptions; timeoutMs?: number }
 interface NativeSessionResult { sessionId: string; status: string; events: readonly unknown[]; forkedSessionId?: string
   turnStartSeq?: number; turnEndSeq?: number; stepCount: number }
@@ -37,7 +37,6 @@ export class NativeSessions {
   private readonly handles = new Set<AgentHandle>()
   private readonly agents = new Map<string, Agent>()
   private readonly routerQueue: RouterTask[] = []
-  private readonly pendingSeeds = new Map<string, { seed: readonly SessionEvent[]; parentSession: string; inheritedEventCount: number; cwd?: string }>()
   private routerDraining = false
   private closed = false
   constructor(readonly context: Context, private readonly options: NativeSessionsOptions) {
@@ -185,17 +184,10 @@ export class NativeSessions {
         }) satisfies ToolDefinition)
       }) satisfies NonNullable<Parameters<Context['agents']['create']>[0]['setup']>,
     }
-    const pending = this.pendingSeeds.get(request.sessionId)
-    const persisted = pending ? undefined : await this.context.sessionPersistence!.stat(SessionId(request.sessionId))
-    const handle = pending
-      ? await this.context.agents.create({ sessionId: creation.sessionId, agentOptions: creation.agentOptions,
-          seed: pending.seed, inheritedEventCount: SessionLogOffset(pending.inheritedEventCount),
-          meta: { ...(pending.cwd ?? request.cwd ? { cwd: pending.cwd ?? request.cwd! } : {}), parentSession: SessionId(pending.parentSession), isSeeded: true },
-          setup: creation.setup })
-      : persisted
-        ? await this.context.agents.resume({ resumeSessionId: creation.sessionId, agentOptions: creation.agentOptions, setup: creation.setup })
-        : await this.context.agents.create(creation)
-    if (pending) this.pendingSeeds.delete(request.sessionId)
+    const persisted = await this.context.sessionPersistence!.stat(SessionId(request.sessionId))
+    const handle = persisted
+      ? await this.context.agents.resume({ resumeSessionId: creation.sessionId, agentOptions: creation.agentOptions, setup: creation.setup })
+      : await this.context.agents.create(creation)
     if (this.closed) { await handle.dispose(); throw new CoreError('RUNTIME_CLOSED', 'The native Session adapter closed during creation.') }
     this.handles.add(handle)
     this.agents.set(request.sessionId, handle.agent)
@@ -249,13 +241,21 @@ export class NativeSessions {
       const turnEndSeq = turnEvents.length ? Number((turnEvents.at(-1) as { seq?: unknown }).seq) : undefined
       const turnEnd = events.findLast(event => (event as { type?: string }).type === 'turn/end') as { data?: { reason?: { kind?: string } } } | undefined
       let forkedSessionId: string | undefined
-      if (request.role === 'worker' && turnEnd?.data?.reason?.kind === 'max-tokens') {
-        const childSessionId = `worker-${randomUUID()}`
+      if ((request.role === 'worker' || request.role === 'main') && turnEnd?.data?.reason?.kind === 'max-tokens') {
+        const childSessionId = request.role === 'main' ? `main-session-${randomUUID()}` : `worker-${randomUUID()}`
         const last = events.at(-1)
         if (last) {
-          this.pendingSeeds.set(childSessionId, { seed: buildForkSeed(events, last.seq), parentSession: request.sessionId,
-            inheritedEventCount: Number(last.seq) + 1, ...(request.cwd ? { cwd: request.cwd } : {}) })
+          const child = await this.context.agents.create({ sessionId: SessionId(childSessionId), agentOptions: creation.agentOptions,
+            seed: buildForkSeed(events, last.seq), inheritedEventCount: SessionLogOffset(Number(last.seq) + 1),
+            meta: { ...(request.cwd ? { cwd: request.cwd } : {}), parentSession: SessionId(request.sessionId), isSeeded: true },
+            setup: creation.setup })
+          try {
+            if (!await this.context.sessions.flush(child.agent.session)) {
+              throw new CoreError('PERSISTENCE_REQUIRED', 'No persistence provider confirmed the forked Session seed.')
+            }
+          } finally { await child.dispose() }
           forkedSessionId = childSessionId
+          await request.onForkPrepared?.(childSessionId)
         }
       }
       return { sessionId: request.sessionId, status: handle.agent.status, events: structuredClone(events),

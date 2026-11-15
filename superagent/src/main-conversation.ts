@@ -4,12 +4,13 @@ import { CoreError, identifier, type DesktopSource } from './model.js'
 import type { NativeSessions, NativeTool } from './native-sessions.js'
 import type { AsyncTx, Storage } from './storage.js'
 import type { RoleProfile } from './config.js'
-import type { MainWorkCard, MainWorkIntent, MainWorkNotification, WorkDelegation } from './work-delegation.js'
+import type { ContextRef } from './context.js'
+import type { MainWorkCard, MainWorkHandoff, MainWorkIntent, MainWorkNotification, WorkDelegation } from './work-delegation.js'
 import type { MainSourceHandoff, MainSourceView } from './main-source.js'
 
-export interface MainBinding { instanceId: string; mainId: string; mainSessionId: string; routerSessionId: string }
-interface MainState extends MainBinding { generation: number; sequence: number; activeCommand?: string }
-export type MainMessageStatus = 'queued' | 'running' | 'stopping' | 'stopped' | 'completed' | 'failed'
+export interface MainBinding { instanceId: string; mainId: string; mainSessionId: string; routerSessionId: string; generation: number }
+interface MainState extends MainBinding { sequence: number; activeCommand?: string }
+export type MainMessageStatus = 'queued' | 'running' | 'stopping' | 'stopped' | 'completed' | 'interrupted' | 'failed'
 export interface MainMessageSource {
   kind: 'github'
   sourceInstanceId: string
@@ -22,7 +23,7 @@ export interface MainMessageSource {
 export interface MainMessage {
   id: string
   sequence: number
-  role: 'user' | 'main'
+  role: 'user' | 'main' | 'system'
   text: string
   createdAt: number
   status: MainMessageStatus
@@ -72,14 +73,26 @@ export interface MainHealth {
 }
 export interface MainAddress { instanceId: string }
 export interface MainSend extends MainAddress { commandId: string; text: string }
-export interface MainPage extends MainBinding {
+export interface MainSessionRollover {
+  id: string
+  mainId: string
+  previousSessionId: string
+  sessionId: string
   generation: number
+  forked: boolean
+  workIndex: MainWorkHandoff['workIndex']
+  evidenceRefs: ContextRef[]
+  unreadInputs: { id: string; sequence: number; text: string }[]
+  createdAt: number
+}
+export interface MainPage extends MainBinding {
   messages: MainMessage[]
   health: MainHealth
   cursor?: number
   works?: MainWorkCard[]
   activeTurn?: MainTurnView
   sources?: MainSourceView[]
+  mainRollover?: MainSessionRollover
 }
 export interface MainRunResult extends MainBinding { messageId: string; status: MainMessage['status'] }
 interface MainEvent { type: string; data: { id?: string; message?: { content?: { type: string; text?: string }[] }; reason?: { kind?: string } } }
@@ -157,7 +170,22 @@ export class MainConversation {
   }
 
   private binding(state: MainState): MainBinding {
-    return { instanceId: state.instanceId, mainId: state.mainId, mainSessionId: state.mainSessionId, routerSessionId: state.routerSessionId }
+    return { instanceId: state.instanceId, mainId: state.mainId, mainSessionId: state.mainSessionId,
+      routerSessionId: state.routerSessionId, generation: state.generation }
+  }
+
+  private async latestRollover(tx: AsyncTx): Promise<MainSessionRollover | undefined> {
+    let latest: MainSessionRollover | undefined
+    let after: string | undefined
+    for (let pageCount = 0; pageCount < 10; pageCount++) {
+      const page = await tx.scan<MainSessionRollover>('main-session-rollover', { limit: 100,
+        ...(after === undefined ? {} : { after }) })
+      for (const item of page.items) if (!latest || item.value.createdAt > latest.createdAt) latest = item.value
+      if (!page.cursor) break
+      after = page.cursor
+      if (pageCount === 9) throw new CoreError('MAIN_ROLLOVER_BUDGET', 'Main rollover history exceeds its 1000-record budget.')
+    }
+    return latest
   }
 
   async open(request: MainAddress): Promise<MainBinding> {
@@ -183,7 +211,9 @@ export class MainConversation {
       const { sequence: _sequence, activeCommand: _active, ...binding } = current
       const page = await tx.scan<MainMessage>('main-message', { limit, ...(request.after === undefined ? {} : { after: messageKey(request.after) }) })
       const activeTurn = current.activeCommand ? await this.activeTurnIn(tx, current.activeCommand) : undefined
+      const mainRollover = await this.latestRollover(tx)
       return { ...binding, messages: page.items.map(item => item.value), health: await this.health(tx, current),
+        ...(mainRollover ? { mainRollover } : {}),
         ...(page.cursor ? { cursor: Number(page.cursor) } : {}),
         ...(activeTurn ? { activeTurn } : {}) }
     })
@@ -211,7 +241,9 @@ export class MainConversation {
         if (message) messages.push(message)
       }
       const activeTurn = current.activeCommand ? await this.activeTurnIn(tx, current.activeCommand) : undefined
-      return { ...binding, messages, health: await this.health(tx, current), ...(start > 1 ? { cursor: start } : {}),
+      const mainRollover = await this.latestRollover(tx)
+      return { ...binding, messages, health: await this.health(tx, current), ...(mainRollover ? { mainRollover } : {}),
+        ...(start > 1 ? { cursor: start } : {}),
         ...(activeTurn ? { activeTurn } : {}) }
     })
   }
@@ -400,6 +432,31 @@ export class MainConversation {
           }))
             : JSON.stringify({ status: 'unavailable', code: 'DELEGATION_UNAVAILABLE', ticketCreated: false })
         } },
+      { name: 'read_work_evidence', description: 'Read one bounded page of original authorized evidence for a work item visible in this Main conversation. Use the returned cursor to continue when truncated; do not treat a summary as the original request or full tool output.',
+        parameters: {
+          workItemId: { type: 'string', required: true },
+          kind: { type: 'string', required: true },
+          id: { type: 'string' },
+          threadId: { type: 'string' },
+          objectId: { type: 'string' },
+          after: { type: 'string' },
+          maxBytes: { type: 'number' },
+        },
+        execute: async args => {
+          const work = this.work?.()
+          if (!work) return JSON.stringify({ status: 'unavailable', code: 'DELEGATION_UNAVAILABLE' })
+          return JSON.stringify(await work.evidence(binding.mainId, {
+            workItemId: args.workItemId ?? '',
+            ref: {
+              kind: args.kind,
+              ...(args.id ? { id: args.id } : {}),
+              ...(args.threadId ? { threadId: args.threadId } : {}),
+              ...(args.objectId ? { objectId: args.objectId } : {}),
+            },
+            ...(args.after ? { after: args.after } : {}),
+            ...(args.maxBytes === undefined ? {} : { maxBytes: args.maxBytes }),
+          }))
+        } },
       { name: 'follow_up_work', description: 'Send an explicit user follow-up or direction change to exactly one existing workItemId. Use this only when the user unambiguously identifies that displayed work item. Never substitute the current page, focus, recency, a Worker, or another item. If the target is unclear, ask the user which work item they mean.',
         parameters: {
           workItemId: { type: 'string', required: true },
@@ -582,13 +639,22 @@ export class MainConversation {
       const prepared = await this.prepare?.(current.mainSessionId)
       const result = await this.sessions!.run({ role: 'main', sessionId: current.mainSessionId, text: turnText,
         tools: this.tools(current, command, text, prepared?.revision ?? 1), messageId, signal: controller.signal,
+        onForkPrepared: async childSessionId => { await this.rollover(key, current, childSessionId) },
         ...(prepared ? { profile: prepared.profile } : {}) })
       if (await this.confirmStopped(key, command.messageId, 'runtime-cancelled')) {
         return { ...current, messageId: command.messageId, status: 'stopped' as const }
       }
       const answer = this.reply(result.events as MainEvent[], messageId)
+      if (result.forkedSessionId) {
+        await this.rollover(key, current, result.forkedSessionId)
+        state = await commandTransaction(this.storage, this.instanceId, tx => this.state(tx))
+        current = this.binding(state)
+        return { ...current, messageId: command.messageId, status: 'interrupted' as const }
+      }
       if (!answer) throw new CoreError('MAIN_TURN_FAILED', 'Main did not produce a completed visible reply.')
-      await this.publish(key, answer, { sessionId: current.mainSessionId, generation: state.generation })
+      if (!await this.publish(key, answer, { sessionId: current.mainSessionId, generation: state.generation })) {
+        throw new CoreError('MAIN_TURN_STALE', 'An older Main generation cannot advance the current conversation.')
+      }
       state = await commandTransaction(this.storage, this.instanceId, tx => this.state(tx))
       current = this.binding(state)
       return { ...current, messageId: command.messageId, status: 'completed' as const }
@@ -603,6 +669,66 @@ export class MainConversation {
     } finally {
       this.turnControllers.delete(key)
     }
+  }
+
+  private async rollover(key: string, run: MainBinding, newSessionId: string) {
+    const rolloverId = `main-session-rollover:${newSessionId}`
+    const existing = await commandTransaction(this.storage, this.instanceId, tx =>
+      tx.get<MainSessionRollover>('main-session-rollover', rolloverId))
+    if (existing) return existing
+    const work = this.work?.()
+    const handoff = work ? await work.handoff(run.mainId) : { workIndex: [], evidenceRefs: [] } satisfies MainWorkHandoff
+    return commandTransaction(this.storage, this.instanceId, async tx => {
+      const prior = await tx.get<MainSessionRollover>('main-session-rollover', rolloverId)
+      if (prior) return prior
+      const state = await this.state(tx)
+      const command = await tx.get<MainCommand>('main-command', key)
+      if (!command || state.mainId !== run.mainId || state.mainSessionId !== run.mainSessionId || state.generation !== run.generation) {
+        if (command) await this.updateCommandIn(tx, key, { ...command, status: 'failed', error: 'MAIN_TURN_STALE', updatedAt: Date.now() })
+        return undefined
+      }
+      const unreadInputs: MainSessionRollover['unreadInputs'] = []
+      let after: string | undefined
+      for (let pageCount = 0; pageCount < 10; pageCount++) {
+        const page = await tx.scan<MainCommand>('main-command', { limit: 100, ...(after === undefined ? {} : { after }) })
+        for (const entry of page.items) {
+          if (entry.value.userSequence <= command.userSequence || entry.value.status !== 'queued' && entry.value.status !== 'running') continue
+          const message = await tx.get<MainMessage>('main-message', messageKey(entry.value.userSequence))
+          if (message?.role === 'user') unreadInputs.push({ id: message.id, sequence: message.sequence, text: message.text })
+        }
+        if (!page.cursor) break
+        after = page.cursor
+        if (pageCount === 9) throw new CoreError('MAIN_QUEUE_BUDGET', 'The Main input queue exceeds its 1000-command budget.')
+      }
+      const record: MainSessionRollover = {
+        id: rolloverId,
+        mainId: state.mainId,
+        previousSessionId: state.mainSessionId,
+        sessionId: newSessionId,
+        generation: state.generation + 1,
+        forked: true,
+        workIndex: structuredClone(handoff.workIndex),
+        evidenceRefs: structuredClone(handoff.evidenceRefs),
+        unreadInputs: structuredClone(unreadInputs.slice(-20)),
+        createdAt: Date.now(),
+      }
+      const sequence = state.sequence + 1
+      await tx.insert<MainSessionRollover>('main-session-rollover', rolloverId, record)
+      await tx.insert<MainMessage>('main-message', messageKey(sequence), {
+        id: rolloverId,
+        sequence,
+        role: 'system',
+        text: `Main context rolled over to generation ${record.generation}. The logical Main, durable work index and evidence references are preserved.`,
+        createdAt: record.createdAt,
+        status: 'completed',
+      })
+      const { activeCommand: _active, ...settledState } = state
+      await tx.replace('main-state', 'main', { ...settledState, mainSessionId: newSessionId,
+        generation: record.generation, sequence })
+      const { error: _error, ...settledCommand } = command
+      await this.updateCommandIn(tx, key, { ...settledCommand, status: 'interrupted', updatedAt: Date.now() })
+      return record
+    })
   }
 
   notify(notification: MainWorkNotification, signal: AbortSignal, isCurrent: (transaction?: AsyncTx) => Promise<boolean>) {
@@ -726,8 +852,7 @@ export class MainConversation {
     if (!(await this.sessions.hasMessage(sessionId, messageId)).found) return false
     const answer = await this.readReply({ ...binding, mainSessionId: sessionId }, messageId)
     if (answer) {
-      await this.publish(key, answer, command.run ? { sessionId: command.run.sessionId, generation: command.run.generation } : undefined)
-      return true
+      return await this.publish(key, answer, command.run ? { sessionId: command.run.sessionId, generation: command.run.generation } : undefined)
     }
     return false
   }
@@ -759,17 +884,20 @@ export class MainConversation {
   private publish(key: string, answer: string, run?: { sessionId: string; generation: number }) {
     return commandTransaction(this.storage, this.instanceId, async tx => {
       const prior = await tx.get<MainCommand>('main-command', key)
-      if (!prior || prior.status === 'completed' || prior.status === 'stopped' || prior.status === 'stopping') return
+      if (!prior) return false
+      if (prior.status === 'completed') return true
+      if (prior.status === 'stopped' || prior.status === 'stopping') return false
       const state = await this.state(tx)
       if (run && (state.mainSessionId !== run.sessionId || state.generation !== run.generation)) {
         await this.updateCommandIn(tx, key, { ...prior, status: 'failed', updatedAt: Date.now(), error: 'MAIN_TURN_STALE' })
-        return
+        return false
       }
       const sequence = state.sequence + 1
       await tx.insert<MainMessage>('main-message', messageKey(sequence), { id: `reply:${prior.messageId}`, sequence, role: 'main', text: answer, createdAt: Date.now(), status: 'completed' })
       await tx.replace('main-state', 'main', { ...state, sequence })
       const { error: _error, ...settled } = prior
       await this.updateCommandIn(tx, key, { ...settled, status: 'completed', replySequence: sequence, updatedAt: Date.now() })
+      return true
     })
   }
 

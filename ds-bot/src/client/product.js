@@ -27,6 +27,9 @@ export function applyProduct(ctx) {
     activeTurn: null,
     health: null,
     sources: [],
+    mainEvidence: null,
+    mainEvidenceLoading: false,
+    mainEvidenceError: null,
     error: null,
     mainDraft: '',
     messageBefore: null,
@@ -84,6 +87,26 @@ export function applyProduct(ctx) {
       })
     } catch (error) {
       if (!stopped) view.set(state => ({ ...state, messagesLoading: false, error: error.message }))
+    }
+  }
+
+  const loadMainEvidence = async (binding, work, { append = false } = {}) => {
+    const current = view.getSnapshot().mainEvidence
+    const same = current?.workItemId === work.brief.workItemId
+    if (append && (!same || !current.pagination?.truncated || !current.pagination?.cursor)) return
+    try {
+      view.set(state => ({ ...state, mainEvidenceLoading: true, mainEvidenceError: null }))
+      const page = await productCall('evidence', { instanceId: binding.instanceId, workItemId: work.brief.workItemId,
+        ref: { kind: 'trigger' }, maxBytes: 4096, ...(append && same ? { after: current.pagination.cursor } : {}) })
+      if (stopped) return
+      view.set(state => ({ ...state,
+        mainEvidence: { ...page, workItemId: work.brief.workItemId, goal: work.brief.goal,
+          text: append && state.mainEvidence?.workItemId === work.brief.workItemId
+            ? state.mainEvidence.text + page.text : page.text },
+        mainEvidenceLoading: false, mainEvidenceError: null,
+      }))
+    } catch (error) {
+      if (!stopped) view.set(state => ({ ...state, mainEvidenceLoading: false, mainEvidenceError: error.message }))
     }
   }
 
@@ -204,7 +227,7 @@ export function applyProduct(ctx) {
     attention: t('Question'), result: t('Result'), policy: t('Policy update') })[purpose] ?? purpose
   const conditionCopy = state => ({ open: t('Pull request open'), draft: t('Pull request draft'),
     merged: t('Pull request merged'), closed: t('Pull request closed') })[state] ?? state
-  function MainWorkCard({ work }) {
+  function MainWorkCard({ work, onEvidence }) {
     const state = useView()
     const [controlBusy, setControlBusy] = useState(null)
     const [controlError, setControlError] = useState(null)
@@ -272,7 +295,9 @@ export function applyProduct(ctx) {
         controlBusy === 'work-resume' ? t('Resuming…') : t('Resume work')) : null,
         assignment && control.permissions.canRetry ? h('button', { type: 'button', className: 'bt-soft',
           disabled: Boolean(controlBusy), onClick: () => runControl('work-retry') },
-        controlBusy === 'work-retry' ? t('Retrying…') : t('Retry work')) : null) : null)
+        controlBusy === 'work-retry' ? t('Retrying…') : t('Retry work')) : null) : null,
+      work.receipt.status === 'accepted' ? h('div', { className: 'bt-main-work-evidence-actions' },
+        h('button', { type: 'button', className: 'bt-soft', onClick: () => onEvidence(work) }, t('View original request'))) : null)
   }
 
   function MainSourceCard({ source }) {
@@ -359,12 +384,31 @@ export function applyProduct(ctx) {
             } }, state.messagesLoading ? t('Loading…') : t('Load earlier messages')) : null,
           state.messages.length === 0 ? h('p', { className: 'bt-main-empty' }, t('What would you like to discuss?')) : null,
           state.messages.map(message => h('div', { key: message.id },
-            message.source ? h('p', { className: 'bt-main-source-label' },
-              `${t('GitHub')} · @${message.source.authorId} · ${message.source.objectId}`) : null,
-            h(ChatRows, { items: [{ kind: message.role === 'main' ? 'bot' : 'user', text: message.text, time: message.createdAt }], sessionId: 'main', roster: emptyRoster, actions: {} }),
-            message.status === 'failed' ? h('p', { className: 'bt-main-error', role: 'status' }, t('Main could not finish this reply. Your message is saved.')) : null)),
+            message.role === 'system'
+              ? h('div', { className: 'bt-main-system-fact', role: 'status' },
+                h('span', null, t('System fact')), h('p', null, message.text))
+              : h('div', null,
+                message.source ? h('p', { className: 'bt-main-source-label' },
+                  `${t('GitHub')} · @${message.source.authorId} · ${message.source.objectId}`) : null,
+                h(ChatRows, { items: [{ kind: message.role === 'main' ? 'bot' : 'user', text: message.text, time: message.createdAt }],
+                  sessionId: 'main', roster: emptyRoster, actions: {} }),
+                message.status === 'failed' ? h('p', { className: 'bt-main-error', role: 'status' },
+                  t('Main could not finish this reply. Your message is saved.')) : null))),
           state.sources.map(source => h(MainSourceCard, { key: source.id, source })),
-          state.works.map(work => h(MainWorkCard, { key: work.brief.workItemId ?? work.brief.id, work })),
+          state.works.map(work => h(MainWorkCard, { key: work.brief.workItemId ?? work.brief.id, work,
+            onEvidence: selected => { if (state.binding) void loadMainEvidence(state.binding, selected) } })),
+          state.mainEvidenceError && !state.mainEvidence
+            ? h('p', { role: 'alert', className: 'bt-main-error' }, state.mainEvidenceError) : null,
+          state.mainEvidence ? h('section', { className: 'bt-main-evidence', 'aria-label': t('Original request evidence') },
+            h('div', { className: 'bt-main-evidence-head' }, h('div', null,
+              h('strong', null, t('Original request evidence')), h('p', null, t(state.mainEvidence.goal))),
+              h('span', null, t(state.mainEvidence.pagination.truncated ? 'Partial evidence' : 'Complete evidence'))),
+            h('pre', null, redactObservationText(state.mainEvidence.text)),
+            state.mainEvidenceError ? h('p', { role: 'alert', className: 'bt-main-error' }, state.mainEvidenceError) : null,
+            state.mainEvidence.pagination.truncated ? h('button', { type: 'button', className: 'bt-soft',
+              disabled: state.mainEvidenceLoading, onClick: () => { if (state.binding) void loadMainEvidence(state.binding,
+                { brief: { workItemId: state.mainEvidence.workItemId, goal: state.mainEvidence.goal } }, { append: true }) } },
+            state.mainEvidenceLoading ? t('Loading…') : t('Load more evidence')) : null) : null,
           stopping ? h('p', { className: 'bt-main-status', role: 'status' }, t('Stopping this Main reply…')) : busy
             ? h('p', { className: 'bt-main-status', role: 'status' }, t('Main is replying…')) : null,
           h('div', { ref: bottom }))),
@@ -778,6 +822,8 @@ const PRODUCT_CSS = `
 .bt-main-empty{margin:48px 0;color:var(--bt-ink-2);font-size:14px;line-height:22px;text-align:center}
 .bt-main-error{margin:8px 0;color:var(--bt-danger);font-size:13px;line-height:18px}
 .bt-main-status{color:var(--bt-ink-2);font-size:13px;line-height:18px}
+.bt-main-system-fact{padding:10px 12px;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card);color:var(--bt-ink-2);font-size:12px;line-height:18px}
+.bt-main-system-fact>span{display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.05em;font-size:10px}.bt-main-system-fact p{margin:0;color:var(--bt-ink)}
 .bt-main-work,.bt-main-source{max-width:800px;margin:0 auto;width:calc(100% - 32px);padding:12px;border:1px solid var(--bt-line);border-radius:6px;background:var(--bt-card);box-sizing:border-box}
 .bt-main-work-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;color:var(--bt-ink);font-size:14px;line-height:20px}
 .bt-main-work-title{min-width:0;display:flex;flex-direction:column;gap:2px}
@@ -797,6 +843,11 @@ const PRODUCT_CSS = `
 .bt-main-work-result{margin-top:8px;padding-top:8px;border-top:.5px solid var(--bt-line-2);color:var(--bt-ink);font-size:13px;line-height:18px;overflow-wrap:anywhere}
 .bt-main-work-result p{margin:0 0 6px}.bt-main-work-result p:last-child{margin-bottom:0}
 .bt-main-work-artifact code{font:inherit;color:var(--bt-ink)}
+.bt-main-work-evidence-actions{margin-top:10px}.bt-main-work-evidence-actions button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:1px}
+.bt-main-evidence{grid-column:1/-1;padding:14px;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card)}
+.bt-main-evidence-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.bt-main-evidence-head>div{min-width:0}
+.bt-main-evidence-head strong{font-size:13px}.bt-main-evidence-head p{margin:3px 0 0;color:var(--bt-ink-2);font-size:12px;line-height:18px}.bt-main-evidence-head>span{flex:none;color:var(--bt-ink-2);font-size:11px}
+.bt-main-evidence pre{margin:10px 0;padding:10px;max-height:360px;overflow:auto;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-main);color:var(--bt-ink);font:12px/18px ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
 .bt-main-history-more{display:block;margin:0 auto 8px}
 .bt-main-nav{padding:12px;display:flex;flex-direction:column;gap:6px}
 .bt-main-nav>button,.bt-observation-nav-item{width:100%;display:flex;align-items:center;gap:10px;justify-content:flex-start;min-height:40px;text-align:left}

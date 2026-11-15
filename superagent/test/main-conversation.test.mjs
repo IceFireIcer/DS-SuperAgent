@@ -49,7 +49,7 @@ test('one Instance keeps a distinct Main conversation across windows and restart
   assert.deepEqual(earlier.messages.map(message => message.text), ['What is my name?'])
   assert.equal(requests.length, 2)
   assert.ok(requests.every(request => request.model === 'main'))
-  assert.deepEqual(requests[0].tools.map(tool => tool.name).sort(), ['delegate_work', 'follow_up_work', 'query_work'])
+  assert.deepEqual(requests[0].tools.map(tool => tool.name).sort(), ['delegate_work', 'follow_up_work', 'query_work', 'read_work_evidence'])
   assert.deepEqual((await engine.getRoleConfigUses(first.mainSessionId)).map(use => [use.role, use.revision, use.main.model]), [['main', 1, 'main'], ['main', 1, 'main']])
   assert.deepEqual((await engine.listTickets()).items, [])
 })

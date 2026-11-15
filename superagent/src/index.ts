@@ -15,10 +15,11 @@ import type { ProactiveOptions } from './proactive.js'
 export { Engine } from './engine.js'
 export { createProductHost } from './product-host.js'
 export type { ProductHost, ProductHostConfig } from './product-host.js'
-export type { MainAddress, MainBinding, MainHealth, MainMessage, MainMessageSource, MainPage, MainSend, MainTurnStop, MainTurnView } from './main-conversation.js'
+export type { MainAddress, MainBinding, MainHealth, MainMessage, MainMessageSource, MainPage, MainRunResult, MainSend,
+  MainSessionRollover, MainTurnStop, MainTurnView } from './main-conversation.js'
 export type { MainSourceDeliveryView, MainSourceHandoff, MainSourceHandoffState, MainSourceView } from './main-source.js'
 export { WorkDelegation } from './work-delegation.js'
-export type { MainWorkBrief, MainWorkCard, MainWorkCardBrief, MainWorkIntent, MainWorkItem, MainWorkNotification, MainWorkOutcome,
+export type { MainEvidenceRequest, MainWorkBrief, MainWorkCard, MainWorkCardBrief, MainWorkHandoff, MainWorkIntent, MainWorkItem, MainWorkNotification, MainWorkOutcome,
   MainWorkFollowUp, MainWorkFollowUpRequest, MainWorkFollowUpStatus, MainWorkFollowUpView, MainWorkPlan, MainWorkPlanConflict,
   MainWorkPlanItem, MainWorkReceipt, MainWorkRequest, MainWorkSplit, MainWorkStatus, MainWorkTicketSnapshot, MainWorkUpdate } from './work-delegation.js'
 export { LocalEnvironment, BoundLocalEnvironment, LocalSetupError } from './local-environment.js'

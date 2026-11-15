@@ -8,6 +8,7 @@ import type { Effect, EffectHandler, EffectResult, Effects } from './effects.js'
 import type { InputDelivery, MainFollowUpAttachment, MainFollowUpAttachmentRequest, WorkInput, WorkOwnership } from './work-inputs.js'
 import type { MainSourceHandoff } from './main-source.js'
 import { isCurrentSourceEvent, type SourceEvent } from './source-events.js'
+import type { ContextCard, ContextRef, ContextRequest } from './context.js'
 
 export interface MainWorkIntent {
   goal: string
@@ -99,6 +100,27 @@ export interface MainWorkCard {
   outcome?: MainWorkOutcome
   followUps?: MainWorkFollowUpView[]
   control?: MainWorkControl
+}
+
+export interface MainWorkHandoff {
+  workIndex: {
+    workBriefId: string
+    workItemId: string
+    ticketId?: string
+    goal: string
+    constraints: string
+    acceptanceCriteria: string
+    status: MainWorkStatus
+    evidenceRefs: ContextRef[]
+  }[]
+  evidenceRefs: ContextRef[]
+}
+
+export interface MainEvidenceRequest {
+  workItemId: string
+  ref: Omit<ContextRef, 'ticketId'>
+  after?: string
+  maxBytes?: number
 }
 
 export interface MainWorkRequest {
@@ -276,6 +298,7 @@ export interface WorkDelegationOptions {
   notifyMain(notification: MainWorkNotification, signal: AbortSignal, isCurrent: (transaction?: AsyncTx) => Promise<boolean>): Promise<void>
   notifyMainSource(handoff: MainSourceHandoff, signal: AbortSignal): Promise<void>
   applyFollowUp(tx: AsyncTx, request: MainFollowUpAttachmentRequest): Promise<MainFollowUpAttachment>
+  readContext(request: ContextRequest): Promise<ContextCard>
 }
 
 const commandKey = (source: DesktopSource, commandId: string) => createHash('sha256')
@@ -810,6 +833,61 @@ export class WorkDelegation {
     return cards.filter((card): card is MainWorkCard => !!card)
       .sort((left, right) => left.brief.createdAt - right.brief.createdAt || left.brief.position - right.brief.position)
       .slice(-20)
+  }
+
+  async handoff(mainId: string): Promise<MainWorkHandoff> {
+    const cards = await this.list(mainId)
+    const refs = new Map<string, ContextRef>()
+    const workIndex = cards.map(card => {
+      const ticketId = card.receipt.ticketId
+      const evidenceRefs: ContextRef[] = ticketId ? [
+        { kind: 'ticket', ticketId },
+        { kind: 'trigger', ticketId },
+        ...(card.outcome?.reportId ? [{ kind: 'report' as const, ticketId, id: card.outcome.reportId }] : []),
+        ...(card.status === 'waiting' ? [{ kind: 'attention' as const, ticketId }] : []),
+      ] : []
+      for (const ref of evidenceRefs) refs.set(canonicalJson(ref), structuredClone(ref))
+      return {
+        workBriefId: card.brief.id,
+        workItemId: card.brief.workItemId,
+        ...(ticketId ? { ticketId } : {}),
+        goal: card.brief.goal,
+        constraints: card.brief.constraints,
+        acceptanceCriteria: card.brief.acceptanceCriteria,
+        status: card.status,
+        evidenceRefs,
+      }
+    })
+    return { workIndex, evidenceRefs: [...refs.values()] }
+  }
+
+  async evidence(mainId: string, request: MainEvidenceRequest): Promise<ContextCard> {
+    if (!request || Object.keys(request).some(key => !['workItemId', 'ref', 'after', 'maxBytes'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Main evidence accepts one workItemId, reference and bounded page only.')
+    }
+    identifier(mainId, 'mainId')
+    identifier(request.workItemId, 'workItemId')
+    const { item, brief, receipt } = await this.options.storage.transaction(this.options.instanceId, async tx => {
+      const item = await tx.get<MainWorkItem>('work-item', request.workItemId)
+      return {
+        item,
+        brief: item ? await tx.get<MainWorkBrief>('work-brief', item.workBriefId) : undefined,
+        receipt: await tx.get<MainWorkReceipt>('work-receipt', request.workItemId),
+      }
+    })
+    if (!item) throw new CoreError('NOT_FOUND', 'The requested Main work item is unavailable.')
+    if (!brief || brief.mainId !== mainId || brief.instanceId !== this.options.instanceId) {
+      throw new CoreError('NOT_FOUND', 'The requested Main work item is unavailable.')
+    }
+    if (!receipt || receipt.status !== 'accepted' || !receipt.ticketId) {
+      throw new CoreError('WORK_NOT_ACCEPTED', 'Evidence is available only after the Router accepts this work item.')
+    }
+    return this.options.readContext({
+      ticketId: receipt.ticketId,
+      ref: { ...request.ref, ticketId: receipt.ticketId },
+      ...(request.after === undefined ? {} : { after: request.after }),
+      ...(request.maxBytes === undefined ? {} : { maxBytes: request.maxBytes }),
+    })
   }
 
   async query(mainId: string, selector: { workBriefId?: string; workItemId?: string }) {
