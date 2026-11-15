@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 // This is a smoke selection, not an assertion that indirect regressions are covered.
 export const smokeTests = [
   'effects', 'execution', 'main-conversation', 'main-delegation', 'main-parallel-delegation', 'policy', 'storage',
+  't59-profile', 'work-observations',
 ].map(name => `test/${name}.test.mjs`)
 
 // Central runtime and shared fixture edits are exercised by the product smoke.
@@ -19,7 +20,9 @@ const sharedModules = new Set([
   'src/main-conversation.ts',
   'src/model.ts',
   'src/native-sessions.ts',
+  'src/product-host.ts',
   'src/work-delegation.ts',
+  'src/work-observations.ts',
 ])
 
 export function selectSuperagentTests(paths, tests) {

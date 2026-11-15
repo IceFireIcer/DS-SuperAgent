@@ -87,6 +87,54 @@ var ZH = {
   "Direction not yet adopted": "Worker 尚未采用方向",
   Reason: "原因",
   bytes: "字节",
+  "Work navigation": "工作导航",
+  "Work activity": "工作活动",
+  "Read-only": "只读",
+  "Back to Main": "返回 Main",
+  "Find activity": "查找活动",
+  "Search Router and Worker history": "搜索 Router 与 Worker 历史",
+  "No Router or Worker activity yet.": "还没有 Router 或 Worker 活动。",
+  "Load more activity": "加载更多活动",
+  "Read-only work activity": "只读工作活动",
+  "Loading history…": "正在加载历史…",
+  "Historical generation": "历史代次",
+  "Current generation": "当前代次",
+  "Generation ended": "代次已结束",
+  "Copy details": "复制详情",
+  "Copy failed": "复制失败",
+  "Assignment generations": "Assignment 代次",
+  "Observation history": "观察历史",
+  Response: "回复",
+  "Tool call": "工具调用",
+  "Tool result": "工具结果",
+  Turn: "回合",
+  Arguments: "参数",
+  "No execution history has been recorded yet.": "还没有记录执行历史。",
+  "Load more history": "加载更多历史",
+  "Router is coordinating the durable work plan.": "Router 正在协调持久工作计划。",
+  "Router is deciding the work plan.": "Router 正在决定工作计划。",
+  "Router has not established a durable work plan.": "Router 尚未建立持久工作计划。",
+  "This Assignment generation is retained in history.": "这个 Assignment 代次已保留在历史中。",
+  "Return to the current generation for the next executable step.": "返回当前代次查看下一步可执行操作。",
+  "Review the independent Worker activity.": "查看各个 Worker 的独立活动。",
+  "Answer the current work question.": "回答当前工作问题。",
+  "Review the stop before resuming.": "恢复前先核查停止状态。",
+  "Resolve the execution blocker.": "解决执行阻塞。",
+  "Reconcile the original work before retrying.": "重试前先核对原工作状态。",
+  "Review the failure before deciding whether to retry.": "决定是否重试前先检查失败原因。",
+  "Inspect the execution history or wait for the next update.": "查看执行历史，或等待下一次更新。",
+  "Wait for the next durable work update.": "等待下一次持久工作更新。",
+  "Review the verified result and evidence.": "查看已验证结果和证据。",
+  "Review the verified result and artifact references.": "查看已验证结果和产物引用。",
+  "Wait for Router to establish the remaining durable work.": "等待 Router 建立剩余持久工作。",
+  "Wait for Router to establish the durable work plan.": "等待 Router 建立持久工作计划。",
+  "The Ticket is stopped.": "该 Ticket 已停止。",
+  "The Worker is waiting for an answer.": "Worker 正在等待回答。",
+  "The Worker recorded a verified result.": "Worker 已记录验证结果。",
+  "The Worker ended without a verified result.": "Worker 已结束，但没有验证结果。",
+  "The execution environment is not ready.": "执行环境尚未就绪。",
+  "The Worker is executing this Ticket.": "Worker 正在执行该 Ticket。",
+  "The Ticket is waiting for Worker execution.": "该 Ticket 正在等待 Worker 执行。",
   // Shared
   "Main Bot": "主 Bot",
   Working: "工作中",
@@ -4441,7 +4489,7 @@ var HANDOFF_CSS = `
 .bt-handoff .bt-q-foot{flex-wrap:wrap}
 `;
 
-// node_modules/deep-view/src/react/ui.js
+// ../../../ds-bot/node_modules/deep-view/src/react/ui.js
 var import_react8 = require("react");
 var FallbackMarkdown = ({ text }) => (0, import_react8.createElement)("span", null, String(text ?? ""));
 var ViewUi = (0, import_react8.createContext)({ t: (key) => key, Markdown: FallbackMarkdown });
@@ -4508,7 +4556,7 @@ function useOptionKeys2(count, onPick, ownRef) {
   return count > 0 && listening <= 1;
 }
 
-// node_modules/deep-view/src/core/formula.js
+// ../../../ds-bot/node_modules/deep-view/src/core/formula.js
 var FUNCTIONS = {
   min: { args: [1, Infinity], run: (...values) => Math.min(...values.map(num)) },
   max: { args: [1, Infinity], run: (...values) => Math.max(...values.map(num)) },
@@ -4789,7 +4837,7 @@ function evaluate(tree, lookup) {
   }
 }
 
-// node_modules/deep-view/src/core/views.js
+// ../../../ds-bot/node_modules/deep-view/src/core/views.js
 var LAYOUT = ["stack", "row"];
 var DISPLAY = ["text", "metric", "table", "chart", "progress", "callout", "sources", "html"];
 var INPUT_TYPES = ["slider", "choice", "toggle", "number"];
@@ -5409,7 +5457,7 @@ function validateForm(node, values) {
   return { fields };
 }
 
-// node_modules/deep-view/src/react/chart.js
+// ../../../ds-bot/node_modules/deep-view/src/react/chart.js
 var import_react9 = require("react");
 var PALETTE = ["var(--dv-accent)", "var(--dv-ink-tangerine)", "var(--dv-ink-green)", "var(--dv-ink-violet)", "var(--dv-ink-sky)", "var(--dv-ink-rose)", "var(--dv-ink-yellow)", "var(--dv-ink-cyan)", "var(--dv-ink-magenta)"];
 var colorAt = (index) => PALETTE[index % PALETTE.length];
@@ -5848,7 +5896,7 @@ var CHART_CSS = `
 @media (prefers-reduced-motion:reduce){.dv-chart-mark,.dv-chart-dot{transition:none}.dv-chart-tip{animation:none}}
 `;
 
-// node_modules/deep-view/src/react/frame.js
+// ../../../ds-bot/node_modules/deep-view/src/react/frame.js
 var import_react10 = require("react");
 var THEME_VARS = [
   ["--view-ink", "--bt-ink", "--dv-ink"],
@@ -5930,7 +5978,7 @@ var HTML_CSS = `
 .dv-view-frame-stopped{margin:0;font-size:13px;line-height:18px;color:var(--dv-ink-2)}
 `;
 
-// node_modules/deep-view/src/react/card.js
+// ../../../ds-bot/node_modules/deep-view/src/react/card.js
 var import_react11 = require("react");
 var mdLabels = (ui2) => ({ code: { copyLabel: ui2.t("Copy"), copiedLabel: ui2.t("Copied") }, footnotes: ui2.t("Footnotes") });
 var TONES2 = ["good", "warn", "bad"];
@@ -6599,7 +6647,7 @@ ${CHART_CSS}
 ${HTML_CSS}
 `;
 
-// node_modules/deep-view/src/react/styles.js
+// ../../../ds-bot/node_modules/deep-view/src/react/styles.js
 var THEME_CSS = `
 body{
 --dv-ink:var(--dsw-alias-label-primary);
@@ -6696,10 +6744,10 @@ button.dv-q-opt:active{background:var(--dv-active)}
 @media (prefers-reduced-motion:reduce){.dv-q,.dv-view-bare,.dv-q-submit,.dv-menu,.dv-q-check{animation:none}}
 `;
 
-// node_modules/deep-view/src/react/index.js
+// ../../../ds-bot/node_modules/deep-view/src/react/index.js
 var DEEP_VIEW_CSS = THEME_CSS + QUESTION_CSS + WIDGET_CSS;
 
-// node_modules/deep-view/src/core/reply.js
+// ../../../ds-bot/node_modules/deep-view/src/core/reply.js
 var REPLY_KIND = "user-question-reply";
 function viewCardText(args) {
   let card = args;
@@ -20635,12 +20683,28 @@ async function productCall(endpoint, payload = {}) {
 }
 function applyProduct(ctx) {
   ctx.effect(() => installLocale(ctx.get("locale")), "superagent: interface copy");
-  const view = createSource({ binding: null, messages: [], works: [], error: null });
+  const view = createSource({
+    binding: null,
+    messages: [],
+    works: [],
+    error: null,
+    route: "main",
+    observations: [],
+    observationCursor: null,
+    observationQuery: "",
+    selectedObservation: null,
+    observation: null,
+    observationLoading: false,
+    observationError: null,
+    activityLoading: false,
+    activityError: null
+  });
   const useView = () => (0, import_react53.useSyncExternalStore)(view.subscribe, view.getSnapshot);
   let stopped = false;
-  const refresh = async () => {
+  let observationListRequest = 0;
+  let observationRequest = 0;
+  const refreshMain = async (binding) => {
     try {
-      const binding = view.getSnapshot().binding ?? await productCall("open");
       const messages = [];
       let works = [];
       let after;
@@ -20650,7 +20714,82 @@ function applyProduct(ctx) {
         if (after === void 0) works = page.works ?? [];
         after = page.cursor;
       } while (after !== void 0 && !stopped);
-      if (!stopped) view.set({ binding, messages, works, error: null });
+      if (!stopped) view.set((state) => ({ ...state, binding, messages, works, error: null }));
+    } catch (error) {
+      if (!stopped) view.set((state) => ({ ...state, error: error.message }));
+    }
+  };
+  const loadObservations = async (binding, { append = false } = {}) => {
+    const current = view.getSnapshot();
+    const query = current.observationQuery;
+    const request = ++observationListRequest;
+    try {
+      if (!append) view.set((state) => ({ ...state, activityLoading: true, activityError: null }));
+      const page = await productCall("observe-list", {
+        instanceId: binding.instanceId,
+        limit: 30,
+        ...query ? { query } : {},
+        ...append && current.observationCursor ? { after: current.observationCursor } : {}
+      });
+      if (stopped || request !== observationListRequest || view.getSnapshot().observationQuery !== query) return;
+      view.set((state) => {
+        const byId = new Map((append ? state.observations : []).map((item) => [item.id, item]));
+        for (const item of page.items) byId.set(item.id, item);
+        const selectedObservation = state.selectedObservation ? page.items.find((item) => item.id === state.selectedObservation.id) ?? state.selectedObservation : null;
+        return {
+          ...state,
+          observations: [...byId.values()],
+          observationCursor: page.cursor ?? null,
+          selectedObservation,
+          activityLoading: false,
+          activityError: null
+        };
+      });
+    } catch (error) {
+      if (!stopped) view.set((state) => ({ ...state, activityLoading: false, activityError: error.message }));
+    }
+  };
+  const loadObservation = async (binding, item, { reset = false, older = false } = {}) => {
+    const current = view.getSnapshot();
+    if (!item) return;
+    if (!reset && !older && current.observation?.hasMore) return;
+    const after = reset ? void 0 : older || !current.observation?.hasMore ? current.observation?.next : void 0;
+    const request = ++observationRequest;
+    try {
+      if (reset) view.set((state) => ({ ...state, observationLoading: true, observationError: null }));
+      const detail = await productCall("observe-read", {
+        instanceId: binding.instanceId,
+        observationId: item.id,
+        ...item.generation ? { generation: item.generation } : {},
+        limit: 50,
+        ...after === void 0 ? {} : { after }
+      });
+      if (stopped || request !== observationRequest || view.getSnapshot().selectedObservation?.id !== item.id) return;
+      view.set((state) => {
+        if (reset || !state.observation) return { ...state, observation: detail, observationLoading: false, observationError: null };
+        const events = new Map(state.observation.events.map((event) => [event.seq, event]));
+        for (const event of detail.events) events.set(event.seq, event);
+        return {
+          ...state,
+          observation: { ...detail, events: [...events.values()].sort((left, right) => left.seq - right.seq) },
+          observationLoading: false,
+          observationError: null
+        };
+      });
+    } catch (error) {
+      if (!stopped && request === observationRequest) {
+        view.set((state) => ({ ...state, observationLoading: false, observationError: error.message }));
+      }
+    }
+  };
+  const refresh = async () => {
+    try {
+      const current = view.getSnapshot();
+      const binding = current.binding ?? await productCall("open");
+      if (current.route === "main") await refreshMain(binding);
+      await loadObservations(binding);
+      const selected = view.getSnapshot().route === "observe" ? view.getSnapshot().selectedObservation : null;
+      if (selected) await loadObservation(binding, selected);
     } catch (error) {
       if (!stopped) view.set((state) => ({ ...state, error: error.message }));
     }
@@ -20678,6 +20817,8 @@ function applyProduct(ctx) {
     success: t("Work complete"),
     failed: t("Work failed"),
     rejected: t("Work declined"),
+    accepted: t("Accepted by Router"),
+    ended: t("Generation ended"),
     unknown: t("Work result unknown")
   })[status] ?? status;
   const followUpCopy = (status) => ({
@@ -20774,7 +20915,7 @@ function applyProduct(ctx) {
           sessionStorage.removeItem(storageKey);
         } catch {
         }
-        await refresh();
+        await refreshMain(state.binding);
         if (result.status === "failed") {
           setSendError(t("Main could not finish this reply. Your message is saved."));
           return false;
@@ -20782,7 +20923,7 @@ function applyProduct(ctx) {
         return true;
       } catch (error) {
         setSendError(error.message);
-        await refresh();
+        await refreshMain(state.binding);
         return false;
       } finally {
         setSending(false);
@@ -20817,8 +20958,190 @@ function applyProduct(ctx) {
       (0, import_react53.createElement)(MainComposer, { onSend: send, busy: sending || !state.binding, error: sendError ?? state.error })
     );
   }
+  function ObservationConversation() {
+    const state = useView();
+    const [copyState, setCopyState] = (0, import_react53.useState)("idle");
+    const observation = state.observation;
+    const backToMain = () => {
+      view.set((current) => ({ ...current, route: "main", selectedObservation: null, observation: null, observationError: null }));
+      void refresh();
+      setTimeout(() => document.querySelector("#main-message, .bt-main-composer textarea")?.focus(), 0);
+    };
+    const copy2 = async () => {
+      if (!observation || !state.binding) return;
+      try {
+        await navigator.clipboard.writeText(JSON.stringify({ ...observation, instanceId: state.binding.instanceId }, null, 2));
+        setCopyState("copied");
+        setTimeout(() => setCopyState("idle"), 1600);
+      } catch {
+        setCopyState("failed");
+      }
+    };
+    return (0, import_react53.createElement)(
+      "section",
+      { className: "bt-observation", "aria-label": t("Read-only work activity") },
+      (0, import_react53.createElement)(
+        "header",
+        { className: "bt-observation-header" },
+        (0, import_react53.createElement)("button", { type: "button", className: "bt-soft", onClick: backToMain }, t("Back to Main")),
+        (0, import_react53.createElement)(
+          "div",
+          { className: "bt-observation-heading" },
+          (0, import_react53.createElement)("span", { className: "bt-observation-role" }, observation?.role === "router" ? "Router" : "Worker"),
+          (0, import_react53.createElement)("strong", null, observation?.title ?? state.selectedObservation?.title ?? "")
+        ),
+        (0, import_react53.createElement)("span", { className: "bt-observation-readonly" }, t("Read-only"))
+      ),
+      (0, import_react53.createElement)(
+        "div",
+        { className: "bt-observation-body" },
+        state.observationLoading && !observation ? (0, import_react53.createElement)("p", { role: "status", className: "bt-main-status" }, t("Loading history…")) : null,
+        state.observationError ? (0, import_react53.createElement)("p", { role: "alert", className: "bt-main-error" }, state.observationError) : null,
+        observation ? (0, import_react53.createElement)(
+          "div",
+          { className: "bt-observation-content" },
+          (0, import_react53.createElement)(
+            "div",
+            { className: "bt-observation-summary" },
+            (0, import_react53.createElement)(
+              "div",
+              null,
+              (0, import_react53.createElement)(
+                "p",
+                { className: "bt-observation-status", role: "status" },
+                `${statusCopy(observation.status)}${observation.generation && !observation.current ? ` · ${t("Historical generation")}` : ""}`
+              ),
+              (0, import_react53.createElement)("p", null, observation.summary),
+              (0, import_react53.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${t(observation.nextStep)}`)
+            ),
+            (0, import_react53.createElement)(
+              "div",
+              { className: "bt-observation-actions" },
+              (0, import_react53.createElement)(
+                "button",
+                { type: "button", className: "bt-soft", onClick: copy2 },
+                copyState === "copied" ? t("Copied") : copyState === "failed" ? t("Copy failed") : t("Copy details")
+              )
+            )
+          ),
+          (0, import_react53.createElement)("dl", { className: "bt-observation-facts" }, observation.facts.map((fact) => (0, import_react53.createElement)(
+            "div",
+            { key: fact.label },
+            (0, import_react53.createElement)("dt", null, t(fact.label)),
+            (0, import_react53.createElement)("dd", null, fact.value)
+          ))),
+          observation.generations.length > 1 ? (0, import_react53.createElement)(
+            "section",
+            { className: "bt-observation-generations", "aria-label": t("Assignment generations") },
+            (0, import_react53.createElement)("h2", null, t("Assignment generations")),
+            observation.generations.map((generation) => (0, import_react53.createElement)(
+              "div",
+              { key: generation.assignmentId, "aria-current": generation.current ? "true" : void 0 },
+              (0, import_react53.createElement)("span", null, generation.generation),
+              (0, import_react53.createElement)("span", null, generation.current ? t("Current generation") : t("Historical generation")),
+              (0, import_react53.createElement)("span", null, statusCopy(generation.state))
+            ))
+          ) : null,
+          (0, import_react53.createElement)(
+            "section",
+            { className: "bt-observation-history", "aria-label": t("Observation history") },
+            (0, import_react53.createElement)("h2", null, t("Observation history")),
+            observation.events.length ? observation.events.map((event) => (0, import_react53.createElement)(
+              "article",
+              { key: event.seq, className: "bt-observation-event" },
+              (0, import_react53.createElement)(
+                "div",
+                { className: "bt-observation-event-head" },
+                (0, import_react53.createElement)("span", null, event.kind === "user-message" ? t("Input") : event.kind === "assistant-message" ? t("Response") : event.kind === "tool-call" ? t("Tool call") : event.kind === "tool-result" ? t("Tool result") : t("Turn")),
+                (0, import_react53.createElement)("time", null, event.time ? new Date(event.time).toLocaleTimeString() : "")
+              ),
+              (0, import_react53.createElement)("p", null, redactObservationText(event.text)),
+              event.argumentKeys?.length ? (0, import_react53.createElement)("p", { className: "bt-main-work-detail" }, `${t("Arguments")}: ${event.argumentKeys.join(", ")}`) : null
+            )) : (0, import_react53.createElement)("p", { className: "bt-main-status" }, t("No execution history has been recorded yet.")),
+            observation.hasMore ? (0, import_react53.createElement)("button", { type: "button", className: "bt-soft bt-observation-more", onClick: () => {
+              if (state.binding && state.selectedObservation) void loadObservation(state.binding, state.selectedObservation, { older: true });
+            } }, t("Load more history")) : null
+          )
+        ) : null
+      )
+    );
+  }
   function MainNavigation() {
-    return (0, import_react53.createElement)("nav", { className: "bt-main-nav", "aria-label": t("Conversations") }, (0, import_react53.createElement)("button", { type: "button", className: "bt-soft", "aria-current": "page", onClick: () => document.getElementById("main-message")?.focus() }, (0, import_react53.createElement)(BrandMark, { size: 24 }), "Main"));
+    const state = useView();
+    const [search, setSearch] = (0, import_react53.useState)(state.observationQuery);
+    const timer = (0, import_react53.useRef)(null);
+    (0, import_react53.useEffect)(() => () => clearTimeout(timer.current), []);
+    const changeSearch = (value) => {
+      setSearch(value);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => {
+        if (!state.binding) return;
+        view.set((current) => ({ ...current, observationQuery: value, observationCursor: null }));
+        void loadObservations(state.binding);
+      }, 180);
+    };
+    return (0, import_react53.createElement)(
+      "nav",
+      { className: "bt-main-nav", "aria-label": t("Work navigation") },
+      (0, import_react53.createElement)("button", {
+        type: "button",
+        className: "bt-soft",
+        "aria-current": state.route === "main" ? "page" : void 0,
+        onClick: () => {
+          view.set((current) => ({ ...current, route: "main", selectedObservation: null, observation: null, observationError: null }));
+          void refresh();
+        }
+      }, (0, import_react53.createElement)(BrandMark, { size: 24 }), "Main"),
+      (0, import_react53.createElement)(
+        "div",
+        { className: "bt-observation-search" },
+        (0, import_react53.createElement)("label", { htmlFor: "work-observation-search" }, t("Find activity")),
+        (0, import_react53.createElement)("input", {
+          id: "work-observation-search",
+          type: "search",
+          value: search,
+          placeholder: t("Search Router and Worker history"),
+          onChange: (event) => changeSearch(event.currentTarget.value)
+        })
+      ),
+      (0, import_react53.createElement)(
+        "div",
+        { className: "bt-observation-nav-head" },
+        (0, import_react53.createElement)("span", null, t("Work activity")),
+        (0, import_react53.createElement)("span", null, t("Read-only"))
+      ),
+      state.observations.length ? state.observations.map((item) => (0, import_react53.createElement)(
+        "button",
+        {
+          key: item.id,
+          type: "button",
+          className: "bt-observation-nav-item",
+          "aria-current": state.route === "observe" && state.selectedObservation?.id === item.id ? "page" : void 0,
+          onClick: () => {
+            view.set((current) => ({ ...current, route: "observe", selectedObservation: item, observation: null, observationError: null }));
+            if (state.binding) void loadObservation(state.binding, item, { reset: true });
+          }
+        },
+        (0, import_react53.createElement)("span", { className: "bt-observation-role" }, item.role === "router" ? "Router" : "Worker"),
+        (0, import_react53.createElement)("span", { className: "bt-observation-nav-copy" }, (0, import_react53.createElement)("strong", null, item.title), (0, import_react53.createElement)("span", null, statusCopy(item.status)))
+      )) : (0, import_react53.createElement)("p", { className: "bt-observation-empty" }, t("No Router or Worker activity yet.")),
+      state.activityError ? (0, import_react53.createElement)("p", { role: "alert", className: "bt-main-error" }, state.activityError) : null,
+      state.observationCursor ? (0, import_react53.createElement)(
+        "button",
+        {
+          type: "button",
+          className: "bt-soft bt-observation-more",
+          disabled: state.activityLoading,
+          onClick: () => {
+            if (state.binding) void loadObservations(state.binding, { append: true });
+          }
+        },
+        state.activityLoading ? t("Loading…") : t("Load more activity")
+      ) : null
+    );
+  }
+  function ProductSurface() {
+    return useView().route === "observe" ? (0, import_react53.createElement)(ObservationConversation) : (0, import_react53.createElement)(MainConversation);
   }
   const shadow = (name, component) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200 }, component));
   ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + PRODUCT_CSS, "main"), "superagent: existing chat styles");
@@ -20826,10 +21149,13 @@ function applyProduct(ctx) {
     const style = installStyles(themeCss(allThemes().deepseek), "main-theme");
     return () => style.remove();
   }, "superagent: existing theme");
-  shadow("main.conversation", MainConversation);
+  shadow("main.conversation", ProductSurface);
   shadow("sidebar.workspaces", MainNavigation);
   shadow("sidebar.brand.name", () => (0, import_react53.createElement)("span", null, "DS-SuperAgent"));
   shadow("sidebar.brand.mark", BrandMark);
+}
+function redactObservationText(value) {
+  return String(value).replace(/\b(Bearer\s+)[A-Za-z0-9._~+\x2f-]+=*/giu, "$1[redacted]").replace(/\b(api[_-]?key|token|secret|password)(\s*[:=]\s*)[^\s,;]+/giu, "$1$2[redacted]");
 }
 var PRODUCT_CSS = `
 .bt-main-conversation{height:100%;min-height:0;display:flex;flex-direction:column;background:var(--bt-main);color:var(--bt-ink);font-family:var(--bt-font)}
@@ -20857,8 +21183,46 @@ var PRODUCT_CSS = `
 .bt-main-work-result{margin-top:8px;padding-top:8px;border-top:.5px solid var(--bt-line-2);color:var(--bt-ink);font-size:13px;line-height:18px;overflow-wrap:anywhere}
 .bt-main-work-result p{margin:0 0 6px}.bt-main-work-result p:last-child{margin-bottom:0}
 .bt-main-work-artifact code{font:inherit;color:var(--bt-ink)}
-.bt-main-nav{padding:12px}.bt-main-nav button{width:100%;display:flex;align-items:center;gap:10px;justify-content:flex-start;min-height:40px}
-@media(max-width:640px){.bt-main-history{padding:16px}.bt-main-header{padding:0 16px}}
+.bt-main-nav{padding:12px;display:flex;flex-direction:column;gap:6px}
+.bt-main-nav>button,.bt-observation-nav-item{width:100%;display:flex;align-items:center;gap:10px;justify-content:flex-start;min-height:40px;text-align:left}
+.bt-observation-search{margin:8px 0 4px;color:var(--bt-ink-2);font-size:12px}
+.bt-observation-search label{display:block;margin:0 0 5px}
+.bt-observation-search input{width:100%;height:34px;box-sizing:border-box;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card);color:var(--bt-ink);padding:0 9px;font:inherit}
+.bt-observation-search input:focus-visible{outline:2px solid var(--bt-accent);outline-offset:1px}
+.bt-observation-nav-head{display:flex;justify-content:space-between;gap:8px;margin:8px 2px 2px;color:var(--bt-ink-2);font-size:11px;line-height:16px;text-transform:uppercase;letter-spacing:.04em}
+.bt-observation-nav-item{align-items:flex-start;padding:8px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--bt-ink)}
+.bt-observation-nav-item:hover,.bt-observation-nav-item:focus-visible,.bt-observation-nav-item[aria-current=page]{border-color:var(--bt-line);background:var(--bt-card)}
+.bt-observation-role{flex:none;padding:1px 6px;border:1px solid var(--bt-line);border-radius:999px;color:var(--bt-ink-2);font-size:10px;line-height:16px;text-transform:uppercase;letter-spacing:.04em}
+.bt-observation-nav-copy{min-width:0;display:flex;flex-direction:column;gap:2px;font-size:12px;line-height:16px}
+.bt-observation-nav-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.bt-observation-nav-copy>span{color:var(--bt-ink-2);font-size:11px}
+.bt-observation-empty{margin:8px;color:var(--bt-ink-2);font-size:12px;line-height:18px}
+.bt-observation-more{margin-top:8px}
+.bt-observation{height:100%;min-height:0;display:flex;flex-direction:column;background:var(--bt-main);color:var(--bt-ink);font-family:var(--bt-font)}
+.bt-observation-header{min-height:56px;flex-shrink:0;display:flex;align-items:center;gap:12px;padding:8px 24px;border-bottom:.5px solid var(--bt-line-2);box-sizing:border-box}
+.bt-observation-heading{min-width:0;flex:1;display:flex;align-items:center;gap:8px}
+.bt-observation-heading strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px}
+.bt-observation-readonly{flex:none;padding:2px 8px;border:1px solid var(--bt-line);border-radius:999px;color:var(--bt-ink-2);font-size:11px}
+.bt-observation-body{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:24px}
+.bt-observation-content{max-width:880px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+.bt-observation-summary{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:16px;border:1px solid var(--bt-line);border-radius:10px;background:var(--bt-card);font-size:14px;line-height:22px}
+.bt-observation-summary>div:first-child{min-width:0}
+.bt-observation-summary p{margin:0 0 6px;overflow-wrap:anywhere}.bt-observation-summary p:last-child{margin-bottom:0}
+.bt-observation-status{font-size:12px;line-height:18px;color:var(--bt-ink-2);font-weight:600}
+.bt-observation-actions{flex:none}
+.bt-observation-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;margin:0;overflow:hidden;border:1px solid var(--bt-line);border-radius:10px;background:var(--bt-line)}
+.bt-observation-facts>div{min-width:0;padding:10px 12px;background:var(--bt-card)}
+.bt-observation-facts dt{color:var(--bt-ink-2);font-size:11px;line-height:16px}
+.bt-observation-facts dd{margin:2px 0 0;overflow-wrap:anywhere;font-size:12px;line-height:18px}
+.bt-observation-generations,.bt-observation-history{display:flex;flex-direction:column;gap:8px}
+.bt-observation-generations h2,.bt-observation-history h2{margin:0;font-size:13px;line-height:20px}
+.bt-observation-generations>div{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;padding:8px 10px;border:1px solid var(--bt-line);border-radius:8px;color:var(--bt-ink-2);font-size:11px;overflow-wrap:anywhere}
+.bt-observation-generations>div[aria-current=true]{border-color:var(--bt-accent);color:var(--bt-ink)}
+.bt-observation-event{padding:10px 12px;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card)}
+.bt-observation-event-head{display:flex;justify-content:space-between;gap:12px;color:var(--bt-ink-2);font-size:11px;line-height:16px}
+.bt-observation-event-head>span{font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.bt-observation-event p{margin:5px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:20px}
+@media(max-width:640px){.bt-main-history,.bt-observation-body{padding:16px}.bt-main-header,.bt-observation-header{padding-left:16px;padding-right:16px}.bt-observation-header{align-items:flex-start;flex-wrap:wrap}.bt-observation-heading{order:3;width:100%}.bt-observation-summary{flex-direction:column}.bt-observation-facts{grid-template-columns:1fr}.bt-observation-generations>div{grid-template-columns:1fr}}
 `;
 
 // src/client/index.js

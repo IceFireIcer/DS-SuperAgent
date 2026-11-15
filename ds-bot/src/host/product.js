@@ -33,8 +33,12 @@ export function installProduct(ctx) {
           const message = code === 'SOURCE_NOT_AUTHORIZED' ? 'This conversation is outside the authorized workspace.'
             : code === 'IDENTITY_CONFLICT' ? 'This message identity was already used for different text.'
               : code === 'INVALID_INPUT' ? 'Check the message and history page fields.'
-                : 'Main is unavailable. Your accepted messages remain in the conversation.'
-          return Response.json({ ok: false, error: { code, message } }, { status: code === 'SOURCE_NOT_AUTHORIZED' ? 403 : 400 })
+                : code === 'NOT_FOUND' ? 'The requested work activity is unavailable.'
+                  : code === 'UNAVAILABLE' ? 'This product capability is not connected yet.'
+                    : code === 'RUNTIME_CLOSED' ? 'The product Host is closed.'
+                      : 'Main is unavailable. Your accepted messages remain in the conversation.'
+          const status = code === 'SOURCE_NOT_AUTHORIZED' ? 403 : code === 'NOT_FOUND' ? 404 : code === 'RUNTIME_CLOSED' ? 503 : 400
+          return Response.json({ ok: false, error: { code, message } }, { status })
         }
       },
     }), 'superagent: product commands and queries')

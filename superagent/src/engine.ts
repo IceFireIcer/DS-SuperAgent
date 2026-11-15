@@ -39,6 +39,7 @@ import { compareWorkCopy, WorkCopyUnsupported, workCopyGaps,
 import type { ActivationGate } from './activation.js'
 import { MainConversation, type MainAddress, type MainSend } from './main-conversation.js'
 import { WorkDelegation, type MainWorkCard, type MainWorkItem } from './work-delegation.js'
+import { WorkObservations } from './work-observations.js'
 
 interface StoredPolicy { revision: number; configuration: Omit<IntakePolicy, 'assess'>; origin: 'bootstrap' | 'manual' | 'sync'; sourceRevision?: string; updatedAt: number }
 interface ProcessingState { paused: boolean; revision: number; updatedAt: number }
@@ -48,6 +49,7 @@ export class Engine {
   readonly effects: Effects
   private readonly main: MainConversation
   private readonly workDelegation?: WorkDelegation
+  private readonly workObservations: WorkObservations | undefined
   private readonly slots: Slots | undefined
   private readonly jobs: Jobs | undefined
   private readonly previews: Previews | undefined
@@ -203,6 +205,7 @@ export class Engine {
     const storage = this.host.guard(rawStorage)
     this.storage = storage
     this.sessions = sessions
+    this.workObservations = sessions ? new WorkObservations(storage, instanceId, sessions) : undefined
     this.main = new MainConversation(storage, instanceId, source, sessions, async sessionId => {
       const config = await this.getRoleConfig()
       if (!config.roles.main) throw new CoreError('ROLE_NOT_CONFIGURED', 'Main needs its own role profile.')
@@ -1279,6 +1282,38 @@ export class Engine {
     const binding = await this.main.open({ instanceId: request.instanceId })
     return this.workDelegation.plan(binding.mainId, request.workBriefId)
   }
+
+  async getWorkObservations(request: MainAddress & { limit?: number; after?: string; query?: string }) {
+    if (!request || Object.keys(request).some(key => !['instanceId', 'limit', 'after', 'query'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Work activity accepts an Instance, a bounded page and an optional search.')
+    }
+    if (request.instanceId !== this.instanceId || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Work activity is outside the authorized Main Instance.')
+    }
+    const binding = await this.main.open({ instanceId: request.instanceId })
+    if (!this.workObservations) return { items: [] }
+    return this.workObservations.list(binding.mainId, {
+      ...(request.limit === undefined ? {} : { limit: request.limit }),
+      ...(request.after === undefined ? {} : { after: request.after }),
+      ...(request.query === undefined ? {} : { query: request.query }),
+    })
+  }
+
+  async readWorkObservation(request: MainAddress & { observationId: string; generation?: string; after?: number; limit?: number }) {
+    if (!request || Object.keys(request).some(key => !['instanceId', 'observationId', 'generation', 'after', 'limit'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Work observation history accepts one authorized observation and a bounded page.')
+    }
+    if (request.instanceId !== this.instanceId || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Work observation history is outside the authorized Main Instance.')
+    }
+    if (!this.workObservations) throw new CoreError('NOT_FOUND', 'The requested work observation is unavailable.')
+    const binding = await this.main.open({ instanceId: request.instanceId })
+    return this.workObservations.read(binding.mainId, { observationId: request.observationId,
+      ...(request.generation === undefined ? {} : { generation: request.generation }),
+      ...(request.after === undefined ? {} : { after: request.after }),
+      ...(request.limit === undefined ? {} : { limit: request.limit }) })
+  }
+
   async getRoleConfig(): Promise<RoleConfigView> {
     const config = await this.roleConfig.ensure()
     this.roleConfigRevision = config.revision

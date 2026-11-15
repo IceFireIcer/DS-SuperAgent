@@ -45,12 +45,28 @@ export async function createProductHost(context: Context, config: ProductHostCon
       async dispatch(endpoint, payload = {}) {
         if (closing) throw new CoreError('RUNTIME_CLOSED', 'The product Host is closed.')
         // The Host supplies identity; a window can only address this authorization scope.
-        if (endpoint === 'open' && Object.keys(payload).length === 0) return engine!.openMain({ instanceId })
+        if (endpoint === 'open') {
+          if (Object.keys(payload).length !== 0) throw new CoreError('INVALID_INPUT', 'Opening the product Main accepts no fields.')
+          return engine!.openMain({ instanceId })
+        }
         if (payload.instanceId !== instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This request is outside the authorized Instance.')
-        const fields = endpoint === 'send' ? ['instanceId', 'commandId', 'text'] : ['instanceId', 'after', 'limit']
+        const fields = endpoint === 'send' ? ['instanceId', 'commandId', 'text']
+          : endpoint === 'observe-list' ? ['instanceId', 'after', 'limit', 'query']
+            : endpoint === 'observe-read' ? ['instanceId', 'observationId', 'generation', 'after', 'limit']
+              : endpoint === 'history' ? ['instanceId', 'after', 'limit']
+                : undefined
+        if (!fields) throw new CoreError('UNAVAILABLE', 'This product capability is not connected yet.')
         if (Object.keys(payload).some(key => !fields.includes(key))) throw new CoreError('INVALID_INPUT', 'The product request contains unsupported fields.')
         if (endpoint === 'history') return engine!.getMainConversation({ instanceId, ...(payload.after === undefined ? {} : { after: payload.after as number }), ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
         if (endpoint === 'send') return engine!.sendMainMessage({ instanceId, commandId: payload.commandId as string, text: payload.text as string })
+        if (endpoint === 'observe-list') return engine!.getWorkObservations({ instanceId,
+          ...(payload.after === undefined ? {} : { after: payload.after as string }),
+          ...(payload.limit === undefined ? {} : { limit: payload.limit as number }),
+          ...(payload.query === undefined ? {} : { query: payload.query as string }) })
+        if (endpoint === 'observe-read') return engine!.readWorkObservation({ instanceId, observationId: payload.observationId as string,
+          ...(payload.generation === undefined ? {} : { generation: payload.generation as string }),
+          ...(payload.after === undefined ? {} : { after: payload.after as number }),
+          ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
         throw new CoreError('UNAVAILABLE', 'This product capability is not connected yet.')
       },
       close() {

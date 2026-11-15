@@ -23,11 +23,19 @@ try {
   const otherWindow = await product.dispatch('open')
   await product.dispatch('send', { instanceId: binding.instanceId, commandId: 'profile-message', text: 'Hello Main.' })
   const history = await product.dispatch('history', { instanceId: binding.instanceId })
+  const observations = await product.dispatch('observe-list', { instanceId: binding.instanceId, limit: 10 })
   let crossInstanceDenied = false
   try { await product.dispatch('history', { instanceId: 'another-private-scope' }) }
   catch (error) { crossInstanceDenied = error.code === 'SOURCE_NOT_AUTHORIZED' }
+  let observationWriteDenied = false
+  try { await product.dispatch('observe-read', { instanceId: binding.instanceId, observationId: 'guessed', text: 'write' }) }
+  catch (error) { observationWriteDenied = error.code === 'INVALID_INPUT' }
+  let unknownCommandDenied = false
+  try { await product.dispatch('send-from-observation', { instanceId: binding.instanceId }) }
+  catch (error) { unknownCommandDenied = error.code === 'UNAVAILABLE' }
   console.log(JSON.stringify({ mainId: binding.mainId, sameMain: otherWindow.mainId === binding.mainId,
     userMessages: history.messages.filter(message => message.role === 'user').length,
     mainMessages: history.messages.filter(message => message.role === 'main').length,
+    observationItems: observations.items.length, observationWriteDenied, unknownCommandDenied,
     legacyAdapter: native.get('botExecutionAdapter') !== undefined, crossInstanceDenied }))
 } finally { await native?.fiber.dispose() }

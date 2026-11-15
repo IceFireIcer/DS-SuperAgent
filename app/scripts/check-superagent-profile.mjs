@@ -119,9 +119,21 @@ try {
   assert.deepEqual(history.works.map(work => work.outcome.artifacts[0].path).sort(), ['profile-alpha.txt', 'profile-beta.txt'], JSON.stringify({ works: history.works, modelCalls }, null, 2))
   assert.equal(await readFile(join(process.env.DS_BOT_WORKSPACE, 'profile-alpha.txt'), 'utf8'), 'profile-alpha.txt written and verified\n')
   assert.equal(await readFile(join(process.env.DS_BOT_WORKSPACE, 'profile-beta.txt'), 'utf8'), 'profile-beta.txt written and verified\n')
+  const observations = await ctx.superagentProduct.dispatch('observe-list', { instanceId: binding.instanceId, limit: 10 })
+  assert.equal(observations.items.length, 3, JSON.stringify({ observations, modelCalls }, null, 2))
+  const workerObservation = observations.items.find(item => item.role === 'worker' && item.title.includes('alpha'))
+  assert.ok(workerObservation?.generation)
+  const observationHistory = await ctx.superagentProduct.dispatch('observe-read', { instanceId: binding.instanceId,
+    observationId: workerObservation.id, generation: workerObservation.generation, limit: 100 })
+  assert.equal(observationHistory.current, true)
+  assert.equal(observationHistory.events.some(event => event.kind === 'tool-call'), true)
+  await assert.rejects(ctx.superagentProduct.dispatch('observe-read', {
+    instanceId: binding.instanceId, observationId: workerObservation.id, text: 'This must be refused.',
+  }), { code: 'INVALID_INPUT' })
   if (ctx.get('botExecutionAdapter') !== undefined) throw new Error('The old execution adapter must not mount in the product profile.')
   console.log(JSON.stringify({ profile: SUPERAGENT_PROFILE, home, services, messages: history.messages.filter(message => !message.id.startsWith('reply:main-update:')).length,
     localWorkStatus: history.works.every(work => work.status === 'success') ? 'success' : 'failed', localWorkItems: history.works.length,
+    observationItems: observations.items.length, observationHistoryEvents: observationHistory.events.length, observationWriteRejected: true,
     nativeSessionAccessDenied: true }))
 } finally {
   try { await application?.shutdown?.shutdown?.(0) } catch {}
