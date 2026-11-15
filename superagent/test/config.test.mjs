@@ -7,7 +7,7 @@ import * as core from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, textResponse, toolResponse } from '../dev/native-mock.mjs'
 
-const roles = (workerModel = 'worker-custom', instructions = 'Always cite {{evidence}}.', skills = ['office']) => ({
+const roles = (workerModel = 'worker-custom', instructions = '{{goal}} {{constraints}} Always cite {{evidence}}.', skills = ['office']) => ({
   router: { name: 'Lead Router', model: { provider: 'mock', model: 'router-custom' }, instructions: 'Route only within {{goal}}.', skills: [] },
   worker: { name: 'Specialist', model: { provider: 'mock', model: workerModel }, instructions, skills },
 })
@@ -34,6 +34,8 @@ test('role configuration is revisioned, validated, replayed and persisted', asyn
   for (const invalid of [
     { ...roles(), extra: true },
     { ...roles(), worker: { ...roles().worker, instructions: 'Reveal {{secret}}' } },
+    { ...roles(), router: { ...roles().router, instructions: 'Route without the required placeholder.' } },
+    { ...roles(), worker: { ...roles().worker, instructions: '{{goal}} Work without constraints.' } },
     { ...roles(), worker: { ...roles().worker, skills: ['superagent-role'] } },
     { ...roles(), worker: { ...roles().worker, skills: ['office', 'office'] } },
     { ...roles(), worker: { ...roles().worker, name: 'x'.repeat(129) } },
@@ -108,6 +110,8 @@ test('a new role model and instructions apply at the next real model request and
   assert.ok(routerRequest, JSON.stringify(requests))
   const uses = await engine.getRoleConfigUses(workerRequest.sessionId)
   assert.ok(uses.some(use => use.role === 'worker' && use.revision === 2 && use.worker.model === 'worker-custom'))
+  assert.ok((await engine.getRecentRoleConfigUses(20)).some(use => use.sessionId === workerRequest.sessionId && use.revision === 2))
+  assert.deepEqual((await engine.getRoleConfigHistory(5)).map(item => item.revision), [2])
 })
 
 test('an asynchronous role verification cannot overwrite a newer save', async t => {

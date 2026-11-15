@@ -1374,7 +1374,49 @@ var HOST_ZH = {
   "Nothing to open": "没有要打开的内容",
   "Nothing to cancel": "没有要取消的内容",
   "Nothing to close": "没有要关闭的内容",
-  "DS Bot is still loading this chat.": "DS Bot 还在加载这个对话。"
+  "DS Bot is still loading this chat.": "DS Bot 还在加载这个对话。",
+  "Configuration version": "配置版本",
+  "Settings": "设置",
+  "Super-agent settings": "Super-agent 设置",
+  "Loading configuration…": "正在加载配置…",
+  "Configuration is unavailable.": "配置当前不可用。",
+  "Roles and providers": "角色与服务商",
+  "Configuration": "配置",
+  "Model": "模型",
+  "The provider and model this role uses. New turns use the saved version.": "这个角色使用的服务商和模型。新回合使用已保存的版本。",
+  "Thinking effort": "思考强度",
+  "Kept with the model route and recorded in configuration uses.": "随模型路由保存，并记录在配置使用历史中。",
+  "Provider default": "服务商默认",
+  "Instructions": "指令",
+  "Role prompts are versioned. Router keeps {{goal}}; Worker keeps {{goal}} and {{constraints}}.": "角色提示词会版本化。Router 保留 {{goal}}；Worker 保留 {{goal}} 和 {{constraints}}。",
+  "Profile": "配置档",
+  "No reserved skills": "没有保留技能",
+  "Skills: {skills}": "技能：{skills}",
+  "Save configuration": "保存配置",
+  "Saving…": "正在保存…",
+  "Newer settings exist. Rebase only your changed fields, then review and save.": "已有更新的设置。请只把你的修改重接到新版本上，检查后再保存。",
+  "Rebase my edits": "重接我的修改",
+  "Configuration v{revision} is active for new turns.": "配置 v{revision} 已对新回合生效。",
+  "The configuration changed elsewhere. Your edits are still here.": "配置已在别处更新。你的修改仍保留在这里。",
+  "Your changed fields were applied over configuration v{revision}. Review and save.": "你的改动已重接到配置 v{revision} 上，请检查后保存。",
+  "Providers": "服务商",
+  "{count} models": "{count} 个模型",
+  "API key configured": "API key 已配置",
+  "API key missing": "缺少 API key",
+  "{provider} API key": "{provider} API key",
+  "Paste a new key": "粘贴新的密钥",
+  "Save key": "保存密钥",
+  "Remove key": "移除密钥",
+  "Set outside this product": "在此产品之外设置",
+  "No provider catalog is available. Configure providers in DSH settings.": "没有可用的服务商目录。请在 DSH 设置中配置服务商。",
+  "Recent configuration uses": "最近的配置使用",
+  "No role turn has recorded a configuration version yet.": "还没有角色回合记录配置版本。",
+  "Configuration versions apply at request boundaries. A turn already running keeps the version it started with.": "配置版本在模型请求边界生效。已经开始的回合继续使用它启动时的版本。",
+  "Provider key saved.": "服务商密钥已保存。",
+  "Provider key removed.": "服务商密钥已移除。",
+  "{role} model": "{role} 模型",
+  "{role} thinking effort": "{role} 思考强度",
+  "{role} instructions": "{role} 指令"
 };
 Object.assign(ZH, HOST_ZH);
 var fill = (text, params) => params ? text.replace(/\{(\w+)\}/g, (match, name) => name in params ? String(params[name]) : match) : text;
@@ -20750,6 +20792,19 @@ function mergeMessages(existing, incoming) {
   for (const message of incoming) byId.set(message.id, message);
   return [...byId.values()].sort((left, right) => left.sequence - right.sequence);
 }
+function rebaseRoleDraft(base, draft, latest) {
+  const merged = JSON.parse(JSON.stringify(latest));
+  for (const role of ["main", "router", "worker"]) {
+    if (!draft[role]) continue;
+    for (const field of ["provider", "model", "effort"]) {
+      if (draft[role].model?.[field] === base[role].model?.[field]) continue;
+      if (draft[role].model?.[field] === void 0) delete merged[role].model[field];
+      else merged[role].model[field] = draft[role].model[field];
+    }
+    if (draft[role].instructions !== base[role].instructions) merged[role].instructions = draft[role].instructions;
+  }
+  return merged;
+}
 
 // src/client/product.js
 var import_react53 = require("react");
@@ -20790,7 +20845,8 @@ function applyProduct(ctx) {
     observationDetailLoading: false,
     observationDetailError: null,
     activityLoading: false,
-    activityError: null
+    activityError: null,
+    settingsOpen: false
   });
   const useView = () => (0, import_react53.useSyncExternalStore)(view.subscribe, view.getSnapshot);
   let stopped = false;
@@ -21032,6 +21088,11 @@ function applyProduct(ctx) {
         (0, import_react53.createElement)("span", { className: "bt-main-work-status", role: "status" }, statusCopy(work.status))
       ),
       (0, import_react53.createElement)("p", { className: "bt-main-work-id" }, `${t("Work brief")} ${work.brief.id}`),
+      work.brief.configurationRevision ? (0, import_react53.createElement)(
+        "p",
+        { className: "bt-main-work-id" },
+        `${t("Configuration version")} v${work.brief.configurationRevision}`
+      ) : null,
       (0, import_react53.createElement)("p", { className: "bt-main-work-id" }, `${t("Receipt")}: ${receiptCopy(work.receipt.status)}`),
       work.receipt.ticketId ? (0, import_react53.createElement)("p", { className: "bt-main-work-id" }, `${t("Ticket")} ${work.receipt.ticketId}`) : null,
       assignment ? (0, import_react53.createElement)("p", { className: "bt-main-work-id" }, `${t("Execution version")}: ${assignment.generation}`) : null,
@@ -21189,7 +21250,14 @@ function applyProduct(ctx) {
           "span",
           { className: "bt-main-health-detail" },
           t("{count} inputs queued", { count: state.health.queuedInputs })
-        ) : null
+        ) : null,
+        (0, import_react53.createElement)("button", {
+          type: "button",
+          className: "bt-icon-btn bt-main-settings",
+          title: t("Settings"),
+          "aria-label": t("Settings"),
+          onClick: () => view.set((current) => ({ ...current, settingsOpen: true }))
+        }, (0, import_react53.createElement)(SlidersIcon))
       ),
       state.health?.state === "degraded" ? (0, import_react53.createElement)(
         "p",
@@ -21295,7 +21363,14 @@ function applyProduct(ctx) {
           (0, import_react53.createElement)("span", { className: "bt-observation-role" }, observation?.role === "router" ? "Router" : "Worker"),
           (0, import_react53.createElement)("strong", null, observation?.title ?? state.selectedObservation?.title ?? "")
         ),
-        (0, import_react53.createElement)("span", { className: "bt-observation-readonly" }, t("Read-only"))
+        (0, import_react53.createElement)("span", { className: "bt-observation-readonly" }, t("Read-only")),
+        (0, import_react53.createElement)("button", {
+          type: "button",
+          className: "bt-icon-btn",
+          title: t("Settings"),
+          "aria-label": t("Settings"),
+          onClick: () => view.set((current) => ({ ...current, settingsOpen: true }))
+        }, (0, import_react53.createElement)(SlidersIcon))
       ),
       (0, import_react53.createElement)(
         "div",
@@ -21545,8 +21620,368 @@ function applyProduct(ctx) {
       ) : null
     );
   }
+  function SettingsDialog2({ binding, onClose }) {
+    const [snapshot, setSnapshot] = (0, import_react53.useState)(null);
+    const [draft, setDraft] = (0, import_react53.useState)(null);
+    const [base, setBase] = (0, import_react53.useState)(null);
+    const [efforts, setEfforts] = (0, import_react53.useState)({});
+    const [keyDrafts, setKeyDrafts] = (0, import_react53.useState)({});
+    const [error, setError] = (0, import_react53.useState)(null);
+    const [notice, setNotice] = (0, import_react53.useState)(null);
+    const [conflict, setConflict] = (0, import_react53.useState)(false);
+    const [loading, setLoading] = (0, import_react53.useState)(true);
+    const [saving, setSaving] = (0, import_react53.useState)(false);
+    const clone = (value) => JSON.parse(JSON.stringify(value));
+    const roleRows = [["main", "Main"], ["router", "Router"], ["worker", "Worker"]];
+    const refOf = (model) => `${model.provider}/${model.model}`;
+    const loadEfforts = async (roles) => {
+      const refs = [...new Set([roles.main, roles.router, roles.worker].filter(Boolean).map((profile) => refOf(profile.model)))];
+      const values = await Promise.all(refs.map(async (ref) => {
+        const [provider, ...model] = ref.split("/");
+        try {
+          return [ref, await productCall("settings-efforts", { instanceId: binding.instanceId, provider, model: model.join("/") })];
+        } catch {
+          return [ref, { efforts: [] }];
+        }
+      }));
+      setEfforts(Object.fromEntries(values));
+    };
+    const applySnapshot = (value, preserve = false) => {
+      setSnapshot(value);
+      if (!preserve) {
+        setDraft(clone(value.roles));
+        setBase(clone(value.roles));
+        void loadEfforts(value.roles);
+      }
+    };
+    const load = async ({ preserve = false } = {}) => {
+      setLoading(true);
+      try {
+        const value = await productCall("settings", { instanceId: binding.instanceId, limit: 50 });
+        applySnapshot(value, preserve);
+        setError(null);
+      } catch (failure) {
+        setError(failure.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    (0, import_react53.useEffect)(() => {
+      void load();
+    }, [binding.instanceId]);
+    (0, import_react53.useEffect)(() => {
+      const close2 = (event) => {
+        if (event.key === "Escape") onClose();
+      };
+      window.addEventListener("keydown", close2);
+      return () => window.removeEventListener("keydown", close2);
+    }, [onClose]);
+    const updateRole = (role, change) => setDraft((current) => {
+      const next = clone(current);
+      next[role] = { ...next[role], ...change };
+      return next;
+    });
+    const updateModel = async (role, ref) => {
+      const [provider, ...model] = ref.split("/");
+      updateRole(role, { model: { provider, model: model.join("/") } });
+      if (!efforts[ref]) {
+        try {
+          const value = await productCall("settings-efforts", { instanceId: binding.instanceId, provider, model: model.join("/") });
+          setEfforts((current) => ({ ...current, [ref]: value }));
+        } catch {
+        }
+      }
+    };
+    const updateEffort = (role, effort) => {
+      const current = draft[role];
+      updateRole(role, { model: { ...current.model, ...effort ? { effort } : {} } });
+      if (!effort) setDraft((latest) => {
+        const next = clone(latest);
+        delete next[role].model.effort;
+        return next;
+      });
+    };
+    const validate = () => {
+      if (draft.router.instructions.trim() && !draft.router.instructions.includes("{{goal}}")) return "The Router prompt must keep the {{goal}} placeholder.";
+      if (draft.worker.instructions.trim() && (!draft.worker.instructions.includes("{{goal}}") || !draft.worker.instructions.includes("{{constraints}}"))) {
+        return "The Worker prompt must keep the {{goal}} and {{constraints}} placeholders.";
+      }
+      return null;
+    };
+    const save = async () => {
+      const problem = validate();
+      if (problem) {
+        setError(problem);
+        return;
+      }
+      setSaving(true);
+      setError(null);
+      setNotice(null);
+      try {
+        const value = await productCall("settings-save", {
+          instanceId: binding.instanceId,
+          commandId: crypto.randomUUID(),
+          expectedRevision: snapshot.revision,
+          roles: draft
+        });
+        setSnapshot((current) => ({ ...current, ...value }));
+        setDraft(clone(value.roles));
+        setBase(clone(value.roles));
+        setConflict(false);
+        setNotice(t("Configuration v{revision} is active for new turns.", { revision: value.revision }));
+        const latest = await productCall("settings", { instanceId: binding.instanceId, limit: 50 });
+        applySnapshot(latest);
+      } catch (failure) {
+        if (failure.code === "CONFIG_REVISION_CONFLICT") {
+          setConflict(true);
+          setError(t("The configuration changed elsewhere. Your edits are still here."));
+        } else setError(failure.message);
+      } finally {
+        setSaving(false);
+      }
+    };
+    const rebase = async () => {
+      setSaving(true);
+      setError(null);
+      try {
+        const latest = await productCall("settings", { instanceId: binding.instanceId, limit: 50 });
+        const merged = rebaseRoleDraft(base, draft, latest.roles);
+        applySnapshot(latest);
+        setDraft(merged);
+        setBase(clone(latest.roles));
+        setConflict(false);
+        setNotice(t("Your changed fields were applied over configuration v{revision}. Review and save.", { revision: latest.revision }));
+      } catch (failure) {
+        setError(failure.message);
+      } finally {
+        setSaving(false);
+      }
+    };
+    const saveKey = async (provider, value) => {
+      if (value === void 0) return;
+      setError(null);
+      setNotice(null);
+      try {
+        const result = await productCall("provider-key", { instanceId: binding.instanceId, provider, value });
+        setKeyDrafts((current) => ({ ...current, [provider]: "" }));
+        setSnapshot((current) => ({ ...current, providers: current.providers.map((item) => item.id === provider ? { ...item, key: { ...item.key, configured: result.configured } } : item) }));
+        setNotice(value === null ? t("Provider key removed.") : t("Provider key saved."));
+      } catch (failure) {
+        setKeyDrafts((current) => ({ ...current, [provider]: "" }));
+        setError(failure.message);
+      }
+    };
+    const close = (0, import_react53.createElement)("button", { type: "button", className: "bt-settings-close", "aria-label": t("Close settings"), onClick: onClose }, (0, import_react53.createElement)(CloseIcon));
+    if (loading && !draft) return (0, import_react53.createElement)(
+      "div",
+      { className: "bt-settings-layer" },
+      (0, import_react53.createElement)("div", { className: "bt-scrim", onMouseDown: onClose }),
+      (0, import_react53.createElement)(
+        "div",
+        { className: "bt-settings bt-main-settings-dialog", role: "dialog", "aria-modal": true, "aria-label": t("Super-agent settings") },
+        (0, import_react53.createElement)(
+          "div",
+          { className: "bt-settings-main" },
+          (0, import_react53.createElement)("div", { className: "bt-settings-head" }, (0, import_react53.createElement)("h2", null, t("Super-agent settings"))),
+          (0, import_react53.createElement)("div", { className: "bt-settings-scroll" }, (0, import_react53.createElement)("p", { className: "bt-main-status", role: "status" }, t("Loading configuration…")))
+        ),
+        close
+      )
+    );
+    if (!draft) return (0, import_react53.createElement)(
+      "div",
+      { className: "bt-settings-layer" },
+      (0, import_react53.createElement)("div", { className: "bt-scrim", onMouseDown: onClose }),
+      (0, import_react53.createElement)(
+        "div",
+        { className: "bt-settings bt-main-settings-dialog", role: "dialog", "aria-modal": true, "aria-label": t("Super-agent settings") },
+        (0, import_react53.createElement)(
+          "div",
+          { className: "bt-settings-main" },
+          (0, import_react53.createElement)("div", { className: "bt-settings-head" }, (0, import_react53.createElement)("h2", null, t("Super-agent settings"))),
+          (0, import_react53.createElement)("div", { className: "bt-settings-scroll" }, (0, import_react53.createElement)("p", { className: "bt-main-error", role: "alert" }, error ?? t("Configuration is unavailable.")))
+        ),
+        close
+      )
+    );
+    const models = snapshot.providers.flatMap((provider) => provider.models);
+    return (0, import_react53.createElement)(
+      "div",
+      { className: "bt-settings-layer" },
+      (0, import_react53.createElement)("div", { className: "bt-scrim", onMouseDown: onClose }),
+      (0, import_react53.createElement)(
+        "div",
+        { className: "bt-settings bt-main-settings-dialog", role: "dialog", "aria-modal": true, "aria-label": t("Super-agent settings") },
+        (0, import_react53.createElement)(
+          "nav",
+          { className: "bt-settings-nav", "aria-label": t("Settings pages") },
+          (0, import_react53.createElement)("span", { className: "bt-settings-item", "aria-current": "page" }, (0, import_react53.createElement)(SlidersIcon), t("Roles and providers")),
+          (0, import_react53.createElement)("span", { className: "bt-main-settings-revision" }, `${t("Configuration")} v${snapshot.revision}`)
+        ),
+        (0, import_react53.createElement)(
+          "div",
+          { className: "bt-settings-main" },
+          (0, import_react53.createElement)("div", { className: "bt-settings-head" }, (0, import_react53.createElement)("h2", null, t("Super-agent settings"))),
+          (0, import_react53.createElement)(
+            "div",
+            { className: "bt-settings-scroll" },
+            error ? (0, import_react53.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+            conflict ? (0, import_react53.createElement)(
+              "div",
+              { className: "bt-main-settings-conflict", role: "status" },
+              (0, import_react53.createElement)("p", null, t("Newer settings exist. Rebase only your changed fields, then review and save.")),
+              (0, import_react53.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", disabled: saving, onClick: () => {
+                void rebase();
+              } }, t("Rebase my edits"))
+            ) : null,
+            notice ? (0, import_react53.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
+            roleRows.map(([role, label]) => {
+              const profile = draft[role];
+              if (!profile) return null;
+              const ref = refOf(profile.model);
+              const reasoning = efforts[ref];
+              return (0, import_react53.createElement)(
+                Card2,
+                { key: role, title: label },
+                (0, import_react53.createElement)(
+                  Row,
+                  { label: t("Model"), hint: t("The provider and model this role uses. New turns use the saved version.") },
+                  (0, import_react53.createElement)(
+                    "select",
+                    {
+                      className: "bt-select bt-main-settings-select",
+                      "aria-label": t("{role} model", { role: label }),
+                      value: ref,
+                      onChange: (event) => {
+                        void updateModel(role, event.target.value);
+                      }
+                    },
+                    !models.some((model) => model.ref === ref) ? (0, import_react53.createElement)("option", { value: ref }, ref) : null,
+                    snapshot.providers.map((provider) => (0, import_react53.createElement)(
+                      "optgroup",
+                      { key: provider.id, label: provider.name },
+                      provider.models.map((model) => (0, import_react53.createElement)("option", { key: model.ref, value: model.ref }, model.name))
+                    ))
+                  )
+                ),
+                reasoning?.efforts?.length ? (0, import_react53.createElement)(
+                  Row,
+                  { label: t("Thinking effort"), hint: t("Kept with the model route and recorded in configuration uses.") },
+                  (0, import_react53.createElement)(
+                    "select",
+                    {
+                      className: "bt-select bt-main-settings-select",
+                      "aria-label": t("{role} thinking effort", { role: label }),
+                      value: profile.model.effort ?? "",
+                      onChange: (event) => updateEffort(role, event.target.value)
+                    },
+                    (0, import_react53.createElement)("option", { value: "" }, t("Provider default")),
+                    reasoning.efforts.map((effort) => (0, import_react53.createElement)("option", { key: effort.id, value: effort.id }, effort.name))
+                  )
+                ) : null,
+                (0, import_react53.createElement)(
+                  Row,
+                  { label: t("Instructions"), hint: t("Role prompts are versioned. Router keeps {{goal}}; Worker keeps {{goal}} and {{constraints}}."), stack: true },
+                  (0, import_react53.createElement)("textarea", {
+                    className: "bt-bs-input bt-bs-area bt-main-settings-prompt",
+                    value: profile.instructions,
+                    maxLength: 16384,
+                    spellCheck: false,
+                    "aria-label": t("{role} instructions", { role: label }),
+                    onChange: (event) => updateRole(role, { instructions: event.target.value })
+                  })
+                ),
+                (0, import_react53.createElement)(
+                  Row,
+                  { label: t("Profile"), hint: `${profile.name} · ${profile.skills.length ? t("Skills: {skills}", { skills: profile.skills.join(", ") }) : t("No reserved skills")}` },
+                  (0, import_react53.createElement)("span", { className: "bt-main-settings-route" }, ref)
+                )
+              );
+            }),
+            (0, import_react53.createElement)(
+              "div",
+              { className: "bt-actions bt-main-settings-save" },
+              (0, import_react53.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", disabled: saving, onClick: onClose }, t("Cancel")),
+              (0, import_react53.createElement)(
+                "button",
+                { type: "button", className: "bt-send bt-soft bt-soft-sm", disabled: saving, onClick: () => {
+                  void save();
+                } },
+                saving ? t("Saving…") : t("Save configuration")
+              )
+            ),
+            (0, import_react53.createElement)(
+              Card2,
+              { title: t("Providers") },
+              snapshot.providers.length ? snapshot.providers.map((provider) => (0, import_react53.createElement)(
+                "div",
+                { key: provider.id, className: "bt-main-provider" },
+                (0, import_react53.createElement)("div", { className: "bt-main-provider-copy" }, (0, import_react53.createElement)("strong", null, provider.name), (0, import_react53.createElement)("span", null, t("{count} models", { count: provider.models.length }))),
+                provider.key ? (0, import_react53.createElement)(
+                  "div",
+                  { className: "bt-main-provider-key" },
+                  (0, import_react53.createElement)("span", { role: "status" }, provider.key.configured ? t("API key configured") : t("API key missing")),
+                  provider.key.writable ? (0, import_react53.createElement)(
+                    import_react53.Fragment,
+                    null,
+                    (0, import_react53.createElement)("input", {
+                      type: "password",
+                      value: keyDrafts[provider.id] ?? "",
+                      autoComplete: "off",
+                      "aria-label": t("{provider} API key", { provider: provider.name }),
+                      placeholder: t("Paste a new key"),
+                      onChange: (event) => setKeyDrafts((current) => ({ ...current, [provider.id]: event.target.value }))
+                    }),
+                    (0, import_react53.createElement)("button", {
+                      type: "button",
+                      className: "bt-soft bt-soft-sm",
+                      disabled: !(keyDrafts[provider.id] ?? "").trim(),
+                      onClick: () => {
+                        void saveKey(provider.id, keyDrafts[provider.id]);
+                      }
+                    }, t("Save key")),
+                    provider.key.configured ? (0, import_react53.createElement)("button", {
+                      type: "button",
+                      className: "bt-soft bt-soft-sm bt-bs-danger",
+                      onClick: () => {
+                        void saveKey(provider.id, null);
+                      }
+                    }, t("Remove key")) : null
+                  ) : (0, import_react53.createElement)("span", null, t("Set outside this product"))
+                ) : null
+              )) : (0, import_react53.createElement)("p", { className: "bt-main-status" }, t("No provider catalog is available. Configure providers in DSH settings."))
+            ),
+            (0, import_react53.createElement)(
+              Card2,
+              { title: t("Recent configuration uses") },
+              snapshot.uses.length ? snapshot.uses.slice(0, 20).map((use) => (0, import_react53.createElement)(
+                "div",
+                { key: use.id, className: "bt-main-settings-use" },
+                (0, import_react53.createElement)("span", { className: "bt-observation-role" }, use.role),
+                (0, import_react53.createElement)("span", null, `${t("Configuration")} v${use.revision}`),
+                (0, import_react53.createElement)("span", null, refOf(use[use.role] ?? use.worker ?? use.router)),
+                (0, import_react53.createElement)("span", { className: "bt-main-settings-use-session", title: use.sessionId }, use.sessionId),
+                (0, import_react53.createElement)("time", null, new Date(use.createdAt).toLocaleString())
+              )) : (0, import_react53.createElement)("p", { className: "bt-main-status" }, t("No role turn has recorded a configuration version yet."))
+            ),
+            (0, import_react53.createElement)("p", { className: "bt-main-status" }, t("Configuration versions apply at request boundaries. A turn already running keeps the version it started with."))
+          ),
+          close
+        )
+      )
+    );
+  }
   function ProductSurface() {
-    return useView().route === "observe" ? (0, import_react53.createElement)(ObservationConversation) : (0, import_react53.createElement)(MainConversation);
+    const state = useView();
+    return (0, import_react53.createElement)(
+      import_react53.Fragment,
+      null,
+      state.route === "observe" ? (0, import_react53.createElement)(ObservationConversation) : (0, import_react53.createElement)(MainConversation),
+      state.settingsOpen && state.binding ? (0, import_react53.createElement)(SettingsDialog2, {
+        binding: state.binding,
+        onClose: () => view.set((current) => ({ ...current, settingsOpen: false }))
+      }) : null
+    );
   }
   const shadow = (name, component) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200 }, component));
   ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + PRODUCT_CSS, "main"), "superagent: existing chat styles");
@@ -21570,6 +22005,7 @@ var PRODUCT_CSS = `
 .bt-main-health-degraded{border-color:var(--bt-danger);color:var(--bt-danger)}
 .bt-main-health-detail{color:var(--bt-ink-2);font-size:11px;font-weight:400}
 .bt-main-health-warning{margin:0;padding:8px 24px;border-bottom:.5px solid var(--bt-line-2);background:var(--bt-card);color:var(--bt-danger);font-size:12px;line-height:18px}
+.bt-main-settings{margin-left:2px}
 .bt-main-history{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:24px}
 .bt-main-messages{max-width:800px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
 .bt-main-composer{width:min(800px,100% - 32px);margin:16px auto 20px;padding:12px;border:1px solid var(--bt-line);border-radius:16px;background:var(--bt-card)}
@@ -21645,7 +22081,24 @@ var PRODUCT_CSS = `
 .bt-observation-event-head{display:flex;justify-content:space-between;gap:12px;color:var(--bt-ink-2);font-size:11px;line-height:16px}
 .bt-observation-event-head>span{font-weight:600;text-transform:uppercase;letter-spacing:.04em}
 .bt-observation-event p{margin:5px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:20px}
-@media(max-width:640px){.bt-main-history,.bt-observation-body{padding:16px}.bt-main-header,.bt-observation-header{padding-left:16px;padding-right:16px}.bt-main-header{flex-wrap:wrap;height:auto;min-height:56px}.bt-main-health-detail{width:100%;margin-left:38px}.bt-main-health-warning{padding-left:16px;padding-right:16px}.bt-observation-header{align-items:flex-start;flex-wrap:wrap}.bt-observation-heading{order:3;width:100%}.bt-observation-summary{flex-direction:column}.bt-observation-facts{grid-template-columns:1fr}.bt-observation-generation{grid-template-columns:1fr}}
+.bt-main-settings-revision{margin-top:auto;padding:12px 8px 4px;color:var(--bt-ink-2);font-size:11px;line-height:16px}
+.bt-main-settings-select{max-width:min(100%,360px)}
+.bt-main-settings-prompt{width:100%;min-height:120px;box-sizing:border-box;resize:vertical;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-main);color:var(--bt-ink);padding:9px;font:inherit;font-size:13px;line-height:19px}
+.bt-main-settings-prompt:focus-visible{outline:2px solid var(--bt-accent);outline-offset:1px}
+.bt-main-settings-route{max-width:58%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--bt-ink-2);font-size:12px}
+.bt-main-settings-save{justify-content:flex-end;gap:8px}
+.bt-main-settings-conflict{margin:0;padding:10px 12px;border:1px solid var(--bt-danger);border-radius:10px;background:color-mix(in srgb,var(--bt-danger) 7%,transparent);font-size:13px;line-height:19px}
+.bt-main-settings-conflict p{margin:0 0 8px}
+.bt-main-provider{padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.bt-main-provider+.bt-main-provider{border-top:.5px solid var(--bt-line)}
+.bt-main-provider-copy{min-width:0;display:flex;flex-direction:column;gap:2px}
+.bt-main-provider-copy strong{font-size:13px}.bt-main-provider-copy span,.bt-main-provider-key>span{color:var(--bt-ink-2);font-size:11px;line-height:16px}
+.bt-main-provider-key{min-width:0;display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}
+.bt-main-provider-key input{width:160px;height:32px;box-sizing:border-box;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-main);color:var(--bt-ink);padding:0 8px;font:inherit;font-size:12px}
+.bt-main-settings-use{display:grid;grid-template-columns:auto auto minmax(0,1fr) minmax(80px,1.5fr) auto;align-items:center;gap:8px;padding:8px 12px;font-size:11px;line-height:16px;color:var(--bt-ink-2)}
+.bt-main-settings-use+.bt-main-settings-use{border-top:.5px solid var(--bt-line)}
+.bt-main-settings-use-session{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:640px){.bt-main-history,.bt-observation-body{padding:16px}.bt-main-header,.bt-observation-header{padding-left:16px;padding-right:16px}.bt-main-header{flex-wrap:wrap;height:auto;min-height:56px}.bt-main-health-detail{width:100%;margin-left:38px}.bt-main-health-warning{padding-left:16px;padding-right:16px}.bt-observation-header{align-items:flex-start;flex-wrap:wrap}.bt-observation-heading{order:3;width:100%}.bt-observation-summary{flex-direction:column}.bt-observation-facts{grid-template-columns:1fr}.bt-observation-generation{grid-template-columns:1fr}.bt-main-settings-dialog .bt-settings-nav{height:auto}.bt-main-settings-revision{padding:4px 8px}.bt-main-provider{align-items:stretch;flex-direction:column}.bt-main-provider-key{justify-content:flex-start}.bt-main-settings-use{grid-template-columns:auto auto minmax(0,1fr)}.bt-main-settings-use-session,.bt-main-settings-use time{grid-column:1/-1}.bt-main-settings-route{max-width:100%}}
 `;
 
 // src/client/index.js

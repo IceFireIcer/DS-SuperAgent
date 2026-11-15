@@ -1,9 +1,11 @@
-import { createElement as h, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { Fragment, createElement as h, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { ChatRows } from './cells.js'
 import { MainComposer } from './composer.js'
 import { BrandMark } from './sidebar.js'
+import { Card, Row } from './bot-settings.js'
+import { CloseIcon, SlidersIcon } from './icons.js'
 import { createSource } from './sources.js'
-import { mergeMessages, mergeObservationItems } from './product-state.js'
+import { mergeMessages, mergeObservationItems, rebaseRoleDraft } from './product-state.js'
 import { installLocale, t } from './i18n.js'
 import { allThemes, themeCss } from './themes.js'
 import { SHELL_CSS, CONVERSATION_CSS, installCompiledStyles, installStyles } from './styles.js'
@@ -43,6 +45,7 @@ export function applyProduct(ctx) {
     observationDetailError: null,
     activityLoading: false,
     activityError: null,
+    settingsOpen: false,
   })
   const useView = () => useSyncExternalStore(view.subscribe, view.getSnapshot)
   let stopped = false
@@ -221,6 +224,8 @@ export function applyProduct(ctx) {
         h('span', { className: 'bt-main-work-source' }, t('System work fact')), h('strong', null, work.brief.goal)),
         h('span', { className: 'bt-main-work-status', role: 'status' }, statusCopy(work.status))),
       h('p', { className: 'bt-main-work-id' }, `${t('Work brief')} ${work.brief.id}`),
+      work.brief.configurationRevision ? h('p', { className: 'bt-main-work-id' },
+        `${t('Configuration version')} v${work.brief.configurationRevision}`) : null,
       h('p', { className: 'bt-main-work-id' }, `${t('Receipt')}: ${receiptCopy(work.receipt.status)}`),
       work.receipt.ticketId ? h('p', { className: 'bt-main-work-id' }, `${t('Ticket')} ${work.receipt.ticketId}`) : null,
       assignment ? h('p', { className: 'bt-main-work-id' }, `${t('Execution version')}: ${assignment.generation}`) : null,
@@ -312,7 +317,9 @@ export function applyProduct(ctx) {
         h('span', { className: `bt-main-health bt-main-health-${state.health?.state ?? 'ready'}`, role: 'status' },
           mainHealthCopy(state.health)),
         state.health?.queuedInputs ? h('span', { className: 'bt-main-health-detail' },
-          t('{count} inputs queued', { count: state.health.queuedInputs })) : null),
+          t('{count} inputs queued', { count: state.health.queuedInputs })) : null,
+        h('button', { type: 'button', className: 'bt-icon-btn bt-main-settings', title: t('Settings'),
+          'aria-label': t('Settings'), onClick: () => view.set(current => ({ ...current, settingsOpen: true })) }, h(SlidersIcon))),
       state.health?.state === 'degraded' ? h('p', { className: 'bt-main-health-warning', role: 'alert' },
         t('Main model failed. Durable work facts remain available.')) : null,
       h('div', { className: 'bt-main-history', ref: scroll, onScroll: () => { const node = scroll.current; follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80 } },
@@ -377,7 +384,9 @@ export function applyProduct(ctx) {
         h('div', { className: 'bt-observation-heading' },
           h('span', { className: 'bt-observation-role' }, observation?.role === 'router' ? 'Router' : 'Worker'),
           h('strong', null, observation?.title ?? state.selectedObservation?.title ?? '')),
-        h('span', { className: 'bt-observation-readonly' }, t('Read-only'))),
+        h('span', { className: 'bt-observation-readonly' }, t('Read-only')),
+        h('button', { type: 'button', className: 'bt-icon-btn', title: t('Settings'), 'aria-label': t('Settings'),
+          onClick: () => view.set(current => ({ ...current, settingsOpen: true })) }, h(SlidersIcon))),
       h('div', { className: 'bt-observation-body' },
         state.observationLoading && !observation ? h('p', { role: 'status', className: 'bt-main-status' }, t('Loading history…')) : null,
         state.observationError ? h('p', { role: 'alert', className: 'bt-main-error' }, state.observationError) : null,
@@ -497,7 +506,214 @@ export function applyProduct(ctx) {
       state.activityLoading ? t('Loading…') : t('Load more activity')) : null)
   }
 
-  function ProductSurface() { return useView().route === 'observe' ? h(ObservationConversation) : h(MainConversation) }
+  function SettingsDialog({ binding, onClose }) {
+    const [snapshot, setSnapshot] = useState(null)
+    const [draft, setDraft] = useState(null)
+    const [base, setBase] = useState(null)
+    const [efforts, setEfforts] = useState({})
+    const [keyDrafts, setKeyDrafts] = useState({})
+    const [error, setError] = useState(null)
+    const [notice, setNotice] = useState(null)
+    const [conflict, setConflict] = useState(false)
+    const [loading, setLoading] = useState(true)
+    const [saving, setSaving] = useState(false)
+    const clone = value => JSON.parse(JSON.stringify(value))
+    const roleRows = [['main', 'Main'], ['router', 'Router'], ['worker', 'Worker']]
+    const refOf = model => `${model.provider}/${model.model}`
+    const loadEfforts = async (roles) => {
+      const refs = [...new Set([roles.main, roles.router, roles.worker].filter(Boolean).map(profile => refOf(profile.model)))]
+      const values = await Promise.all(refs.map(async ref => {
+        const [provider, ...model] = ref.split('/')
+        try { return [ref, await productCall('settings-efforts', { instanceId: binding.instanceId, provider, model: model.join('/') })] }
+        catch { return [ref, { efforts: [] }] }
+      }))
+      setEfforts(Object.fromEntries(values))
+    }
+    const applySnapshot = (value, preserve = false) => {
+      setSnapshot(value)
+      if (!preserve) {
+        setDraft(clone(value.roles))
+        setBase(clone(value.roles))
+        void loadEfforts(value.roles)
+      }
+    }
+    const load = async ({ preserve = false } = {}) => {
+      setLoading(true)
+      try {
+        const value = await productCall('settings', { instanceId: binding.instanceId, limit: 50 })
+        applySnapshot(value, preserve)
+        setError(null)
+      } catch (failure) { setError(failure.message) }
+      finally { setLoading(false) }
+    }
+    useEffect(() => { void load() }, [binding.instanceId])
+    useEffect(() => {
+      const close = event => { if (event.key === 'Escape') onClose() }
+      window.addEventListener('keydown', close)
+      return () => window.removeEventListener('keydown', close)
+    }, [onClose])
+    const updateRole = (role, change) => setDraft(current => {
+      const next = clone(current)
+      next[role] = { ...next[role], ...change }
+      return next
+    })
+    const updateModel = async (role, ref) => {
+      const [provider, ...model] = ref.split('/')
+      updateRole(role, { model: { provider, model: model.join('/') } })
+      if (!efforts[ref]) {
+        try {
+          const value = await productCall('settings-efforts', { instanceId: binding.instanceId, provider, model: model.join('/') })
+          setEfforts(current => ({ ...current, [ref]: value }))
+        } catch { /* A model without a readable effort list uses its provider default. */ }
+      }
+    }
+    const updateEffort = (role, effort) => {
+      const current = draft[role]
+      updateRole(role, { model: { ...current.model, ...(effort ? { effort } : {}) } })
+      if (!effort) setDraft(latest => {
+        const next = clone(latest)
+        delete next[role].model.effort
+        return next
+      })
+    }
+    const validate = () => {
+      if (draft.router.instructions.trim() && !draft.router.instructions.includes('{{goal}}')) return 'The Router prompt must keep the {{goal}} placeholder.'
+      if (draft.worker.instructions.trim() && (!draft.worker.instructions.includes('{{goal}}') || !draft.worker.instructions.includes('{{constraints}}'))) {
+        return 'The Worker prompt must keep the {{goal}} and {{constraints}} placeholders.'
+      }
+      return null
+    }
+    const save = async () => {
+      const problem = validate()
+      if (problem) { setError(problem); return }
+      setSaving(true); setError(null); setNotice(null)
+      try {
+        const value = await productCall('settings-save', { instanceId: binding.instanceId, commandId: crypto.randomUUID(),
+          expectedRevision: snapshot.revision, roles: draft })
+        setSnapshot(current => ({ ...current, ...value }))
+        setDraft(clone(value.roles)); setBase(clone(value.roles)); setConflict(false)
+        setNotice(t('Configuration v{revision} is active for new turns.', { revision: value.revision }))
+        const latest = await productCall('settings', { instanceId: binding.instanceId, limit: 50 })
+        applySnapshot(latest)
+      } catch (failure) {
+        if (failure.code === 'CONFIG_REVISION_CONFLICT') {
+          setConflict(true)
+          setError(t('The configuration changed elsewhere. Your edits are still here.'))
+        } else setError(failure.message)
+      } finally { setSaving(false) }
+    }
+    const rebase = async () => {
+      setSaving(true); setError(null)
+      try {
+        const latest = await productCall('settings', { instanceId: binding.instanceId, limit: 50 })
+        const merged = rebaseRoleDraft(base, draft, latest.roles)
+        applySnapshot(latest)
+        setDraft(merged); setBase(clone(latest.roles)); setConflict(false)
+        setNotice(t('Your changed fields were applied over configuration v{revision}. Review and save.', { revision: latest.revision }))
+      } catch (failure) { setError(failure.message) }
+      finally { setSaving(false) }
+    }
+    const saveKey = async (provider, value) => {
+      if (value === undefined) return
+      setError(null); setNotice(null)
+      try {
+        const result = await productCall('provider-key', { instanceId: binding.instanceId, provider, value })
+        setKeyDrafts(current => ({ ...current, [provider]: '' }))
+        setSnapshot(current => ({ ...current, providers: current.providers.map(item => item.id === provider
+          ? { ...item, key: { ...item.key, configured: result.configured } } : item) }))
+        setNotice(value === null ? t('Provider key removed.') : t('Provider key saved.'))
+      } catch (failure) {
+        setKeyDrafts(current => ({ ...current, [provider]: '' }))
+        setError(failure.message)
+      }
+    }
+    const close = h('button', { type: 'button', className: 'bt-settings-close', 'aria-label': t('Close settings'), onClick: onClose }, h(CloseIcon))
+    if (loading && !draft) return h('div', { className: 'bt-settings-layer' },
+      h('div', { className: 'bt-scrim', onMouseDown: onClose }),
+      h('div', { className: 'bt-settings bt-main-settings-dialog', role: 'dialog', 'aria-modal': true, 'aria-label': t('Super-agent settings') },
+        h('div', { className: 'bt-settings-main' }, h('div', { className: 'bt-settings-head' }, h('h2', null, t('Super-agent settings'))),
+          h('div', { className: 'bt-settings-scroll' }, h('p', { className: 'bt-main-status', role: 'status' }, t('Loading configuration…')))),
+        close))
+    if (!draft) return h('div', { className: 'bt-settings-layer' },
+      h('div', { className: 'bt-scrim', onMouseDown: onClose }),
+      h('div', { className: 'bt-settings bt-main-settings-dialog', role: 'dialog', 'aria-modal': true, 'aria-label': t('Super-agent settings') },
+        h('div', { className: 'bt-settings-main' }, h('div', { className: 'bt-settings-head' }, h('h2', null, t('Super-agent settings'))),
+          h('div', { className: 'bt-settings-scroll' }, h('p', { className: 'bt-main-error', role: 'alert' }, error ?? t('Configuration is unavailable.')))),
+        close))
+    const models = snapshot.providers.flatMap(provider => provider.models)
+    return h('div', { className: 'bt-settings-layer' },
+      h('div', { className: 'bt-scrim', onMouseDown: onClose }),
+      h('div', { className: 'bt-settings bt-main-settings-dialog', role: 'dialog', 'aria-modal': true, 'aria-label': t('Super-agent settings') },
+        h('nav', { className: 'bt-settings-nav', 'aria-label': t('Settings pages') },
+          h('span', { className: 'bt-settings-item', 'aria-current': 'page' }, h(SlidersIcon), t('Roles and providers')),
+          h('span', { className: 'bt-main-settings-revision' }, `${t('Configuration')} v${snapshot.revision}`)),
+        h('div', { className: 'bt-settings-main' },
+          h('div', { className: 'bt-settings-head' }, h('h2', null, t('Super-agent settings'))),
+          h('div', { className: 'bt-settings-scroll' },
+            error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
+            conflict ? h('div', { className: 'bt-main-settings-conflict', role: 'status' },
+              h('p', null, t('Newer settings exist. Rebase only your changed fields, then review and save.')),
+              h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: saving, onClick: () => { void rebase() } }, t('Rebase my edits'))) : null,
+            notice ? h('p', { className: 'bt-main-status', role: 'status' }, notice) : null,
+            roleRows.map(([role, label]) => {
+              const profile = draft[role]
+              if (!profile) return null
+              const ref = refOf(profile.model)
+              const reasoning = efforts[ref]
+              return h(Card, { key: role, title: label },
+                h(Row, { label: t('Model'), hint: t('The provider and model this role uses. New turns use the saved version.') },
+                  h('select', { className: 'bt-select bt-main-settings-select', 'aria-label': t('{role} model', { role: label }), value: ref,
+                    onChange: event => { void updateModel(role, event.target.value) } },
+                  !models.some(model => model.ref === ref) ? h('option', { value: ref }, ref) : null,
+                  snapshot.providers.map(provider => h('optgroup', { key: provider.id, label: provider.name },
+                    provider.models.map(model => h('option', { key: model.ref, value: model.ref }, model.name)))))),
+                reasoning?.efforts?.length ? h(Row, { label: t('Thinking effort'), hint: t('Kept with the model route and recorded in configuration uses.') },
+                  h('select', { className: 'bt-select bt-main-settings-select', 'aria-label': t('{role} thinking effort', { role: label }),
+                    value: profile.model.effort ?? '', onChange: event => updateEffort(role, event.target.value) },
+                  h('option', { value: '' }, t('Provider default')),
+                  reasoning.efforts.map(effort => h('option', { key: effort.id, value: effort.id }, effort.name)))) : null,
+                h(Row, { label: t('Instructions'), hint: t('Role prompts are versioned. Router keeps {{goal}}; Worker keeps {{goal}} and {{constraints}}.'), stack: true },
+                  h('textarea', { className: 'bt-bs-input bt-bs-area bt-main-settings-prompt', value: profile.instructions,
+                    maxLength: 16384, spellCheck: false, 'aria-label': t('{role} instructions', { role: label }),
+                    onChange: event => updateRole(role, { instructions: event.target.value }) })),
+                h(Row, { label: t('Profile'), hint: `${profile.name} · ${profile.skills.length ? t('Skills: {skills}', { skills: profile.skills.join(', ') }) : t('No reserved skills')}` },
+                  h('span', { className: 'bt-main-settings-route' }, ref)))
+            }),
+            h('div', { className: 'bt-actions bt-main-settings-save' },
+              h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: saving, onClick: onClose }, t('Cancel')),
+              h('button', { type: 'button', className: 'bt-send bt-soft bt-soft-sm', disabled: saving, onClick: () => { void save() } },
+                saving ? t('Saving…') : t('Save configuration'))),
+            h(Card, { title: t('Providers') },
+              snapshot.providers.length ? snapshot.providers.map(provider => h('div', { key: provider.id, className: 'bt-main-provider' },
+                h('div', { className: 'bt-main-provider-copy' }, h('strong', null, provider.name), h('span', null, t('{count} models', { count: provider.models.length }))),
+                provider.key ? h('div', { className: 'bt-main-provider-key' },
+                  h('span', { role: 'status' }, provider.key.configured ? t('API key configured') : t('API key missing')),
+                  provider.key.writable ? h(Fragment, null,
+                    h('input', { type: 'password', value: keyDrafts[provider.id] ?? '', autoComplete: 'off', 'aria-label': t('{provider} API key', { provider: provider.name }),
+                      placeholder: t('Paste a new key'), onChange: event => setKeyDrafts(current => ({ ...current, [provider.id]: event.target.value })) }),
+                    h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: !(keyDrafts[provider.id] ?? '').trim(),
+                      onClick: () => { void saveKey(provider.id, keyDrafts[provider.id]) } }, t('Save key')),
+                    provider.key.configured ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm bt-bs-danger',
+                      onClick: () => { void saveKey(provider.id, null) } }, t('Remove key')) : null) : h('span', null, t('Set outside this product'))) : null))
+                : h('p', { className: 'bt-main-status' }, t('No provider catalog is available. Configure providers in DSH settings.'))),
+            h(Card, { title: t('Recent configuration uses') },
+              snapshot.uses.length ? snapshot.uses.slice(0, 20).map(use => h('div', { key: use.id, className: 'bt-main-settings-use' },
+                h('span', { className: 'bt-observation-role' }, use.role),
+                h('span', null, `${t('Configuration')} v${use.revision}`),
+                h('span', null, refOf(use[use.role] ?? use.worker ?? use.router)),
+                h('span', { className: 'bt-main-settings-use-session', title: use.sessionId }, use.sessionId),
+                h('time', null, new Date(use.createdAt).toLocaleString()))) : h('p', { className: 'bt-main-status' }, t('No role turn has recorded a configuration version yet.'))),
+            h('p', { className: 'bt-main-status' }, t('Configuration versions apply at request boundaries. A turn already running keeps the version it started with.'))),
+          close)))
+  }
+
+  function ProductSurface() {
+    const state = useView()
+    return h(Fragment, null,
+      state.route === 'observe' ? h(ObservationConversation) : h(MainConversation),
+      state.settingsOpen && state.binding ? h(SettingsDialog, { binding: state.binding,
+        onClose: () => view.set(current => ({ ...current, settingsOpen: false })) }) : null)
+  }
   const shadow = (name, component) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200 }, component))
   ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + PRODUCT_CSS, 'main'), 'superagent: existing chat styles')
   ctx.effect(() => { const style = installStyles(themeCss(allThemes().deepseek), 'main-theme'); return () => style.remove() }, 'superagent: existing theme')
@@ -520,6 +736,7 @@ const PRODUCT_CSS = `
 .bt-main-health-degraded{border-color:var(--bt-danger);color:var(--bt-danger)}
 .bt-main-health-detail{color:var(--bt-ink-2);font-size:11px;font-weight:400}
 .bt-main-health-warning{margin:0;padding:8px 24px;border-bottom:.5px solid var(--bt-line-2);background:var(--bt-card);color:var(--bt-danger);font-size:12px;line-height:18px}
+.bt-main-settings{margin-left:2px}
 .bt-main-history{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:24px}
 .bt-main-messages{max-width:800px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
 .bt-main-composer{width:min(800px,100% - 32px);margin:16px auto 20px;padding:12px;border:1px solid var(--bt-line);border-radius:16px;background:var(--bt-card)}
@@ -595,5 +812,22 @@ const PRODUCT_CSS = `
 .bt-observation-event-head{display:flex;justify-content:space-between;gap:12px;color:var(--bt-ink-2);font-size:11px;line-height:16px}
 .bt-observation-event-head>span{font-weight:600;text-transform:uppercase;letter-spacing:.04em}
 .bt-observation-event p{margin:5px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:20px}
-@media(max-width:640px){.bt-main-history,.bt-observation-body{padding:16px}.bt-main-header,.bt-observation-header{padding-left:16px;padding-right:16px}.bt-main-header{flex-wrap:wrap;height:auto;min-height:56px}.bt-main-health-detail{width:100%;margin-left:38px}.bt-main-health-warning{padding-left:16px;padding-right:16px}.bt-observation-header{align-items:flex-start;flex-wrap:wrap}.bt-observation-heading{order:3;width:100%}.bt-observation-summary{flex-direction:column}.bt-observation-facts{grid-template-columns:1fr}.bt-observation-generation{grid-template-columns:1fr}}
+.bt-main-settings-revision{margin-top:auto;padding:12px 8px 4px;color:var(--bt-ink-2);font-size:11px;line-height:16px}
+.bt-main-settings-select{max-width:min(100%,360px)}
+.bt-main-settings-prompt{width:100%;min-height:120px;box-sizing:border-box;resize:vertical;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-main);color:var(--bt-ink);padding:9px;font:inherit;font-size:13px;line-height:19px}
+.bt-main-settings-prompt:focus-visible{outline:2px solid var(--bt-accent);outline-offset:1px}
+.bt-main-settings-route{max-width:58%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--bt-ink-2);font-size:12px}
+.bt-main-settings-save{justify-content:flex-end;gap:8px}
+.bt-main-settings-conflict{margin:0;padding:10px 12px;border:1px solid var(--bt-danger);border-radius:10px;background:color-mix(in srgb,var(--bt-danger) 7%,transparent);font-size:13px;line-height:19px}
+.bt-main-settings-conflict p{margin:0 0 8px}
+.bt-main-provider{padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.bt-main-provider+.bt-main-provider{border-top:.5px solid var(--bt-line)}
+.bt-main-provider-copy{min-width:0;display:flex;flex-direction:column;gap:2px}
+.bt-main-provider-copy strong{font-size:13px}.bt-main-provider-copy span,.bt-main-provider-key>span{color:var(--bt-ink-2);font-size:11px;line-height:16px}
+.bt-main-provider-key{min-width:0;display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}
+.bt-main-provider-key input{width:160px;height:32px;box-sizing:border-box;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-main);color:var(--bt-ink);padding:0 8px;font:inherit;font-size:12px}
+.bt-main-settings-use{display:grid;grid-template-columns:auto auto minmax(0,1fr) minmax(80px,1.5fr) auto;align-items:center;gap:8px;padding:8px 12px;font-size:11px;line-height:16px;color:var(--bt-ink-2)}
+.bt-main-settings-use+.bt-main-settings-use{border-top:.5px solid var(--bt-line)}
+.bt-main-settings-use-session{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:640px){.bt-main-history,.bt-observation-body{padding:16px}.bt-main-header,.bt-observation-header{padding-left:16px;padding-right:16px}.bt-main-header{flex-wrap:wrap;height:auto;min-height:56px}.bt-main-health-detail{width:100%;margin-left:38px}.bt-main-health-warning{padding-left:16px;padding-right:16px}.bt-observation-header{align-items:flex-start;flex-wrap:wrap}.bt-observation-heading{order:3;width:100%}.bt-observation-summary{flex-direction:column}.bt-observation-facts{grid-template-columns:1fr}.bt-observation-generation{grid-template-columns:1fr}.bt-main-settings-dialog .bt-settings-nav{height:auto}.bt-main-settings-revision{padding:4px 8px}.bt-main-provider{align-items:stretch;flex-direction:column}.bt-main-provider-key{justify-content:flex-start}.bt-main-settings-use{grid-template-columns:auto auto minmax(0,1fr)}.bt-main-settings-use-session,.bt-main-settings-use time{grid-column:1/-1}.bt-main-settings-route{max-width:100%}}
 `

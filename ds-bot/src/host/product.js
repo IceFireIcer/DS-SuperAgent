@@ -32,7 +32,9 @@ export function installProduct(ctx) {
           const code = typeof error?.code === 'string' ? error.code : 'PRODUCT_UNAVAILABLE'
           const message = code === 'SOURCE_NOT_AUTHORIZED' ? 'This conversation is outside the authorized workspace.'
             : code === 'IDENTITY_CONFLICT' ? 'This message identity was already used for different text.'
-              : code === 'INVALID_INPUT' ? 'Check the message and history page fields.'
+              : code === 'CONFIG_REVISION_CONFLICT' ? 'The configuration changed elsewhere. Your draft is still here.'
+                : code === 'INVALID_CONFIG' ? String(error?.message ?? 'Check the role configuration.')
+              : code === 'INVALID_INPUT' ? String(error?.message ?? 'Check the request fields.')
                 : code === 'NOT_FOUND' ? 'The requested work activity is unavailable.'
                   : code === 'UNAVAILABLE' ? 'This product capability is not connected yet.'
                     : code === 'RUNTIME_CLOSED' ? 'The product Host is closed.'

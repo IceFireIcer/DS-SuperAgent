@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { mergeMessages, mergeObservationItems } from '../src/client/product-state.js'
+import { mergeMessages, mergeObservationItems, rebaseRoleDraft } from '../src/client/product-state.js'
 
 test('observation polling merges a new first page without discarding older loaded pages', () => {
   const older = Array.from({ length: 31 }, (_, index) => ({
@@ -33,4 +33,18 @@ test('Main history merging keeps loaded older pages in sequence order and update
     { id: 'middle', sequence: 2, status: 'completed' },
     { id: 'new', sequence: 3, status: 'completed' },
   ])
+})
+
+test('a revision conflict rebases only locally changed role fields over the newer settings', () => {
+  const profile = (provider, model, instructions) => ({ name: 'Role', model: { provider, model }, instructions, skills: [] })
+  const base = { main: profile('p', 'one', 'Base main.'), router: profile('p', 'router', '{{goal}} Base router.'), worker: profile('p', 'worker', '{{goal}} {{constraints}} Base worker.') }
+  const draft = structuredClone(base)
+  draft.worker.instructions = '{{goal}} {{constraints}} My draft.'
+  const latest = structuredClone(base)
+  latest.worker.instructions = '{{goal}} {{constraints}} Newer worker.'
+  latest.router.model = { provider: 'q', model: 'router-next' }
+  const merged = rebaseRoleDraft(base, draft, latest)
+  assert.equal(merged.worker.instructions, '{{goal}} {{constraints}} My draft.')
+  assert.deepEqual(merged.router.model, { provider: 'q', model: 'router-next' })
+  assert.equal(draft.worker.instructions, '{{goal}} {{constraints}} My draft.', 'rebase leaves the saved draft intact')
 })

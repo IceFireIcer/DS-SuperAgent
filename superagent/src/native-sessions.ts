@@ -1,7 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { randomUUID } from 'node:crypto'
 import type { Agent, AgentHandle, AgentOptions } from '@deepseek-ai/dsh-agent'
-import { MessageId } from '@deepseek-ai/dsh-llm'
+import { MessageId, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { buildForkSeed, SessionId, SessionLogOffset, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { defineTool, type ParameterSchemaSpec, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { CoreError, type IntakeAssessment } from './model.js'
@@ -46,10 +46,10 @@ export class NativeSessions {
     for (const route of [options.router, options.worker]) if (!route.provider || !route.model) throw new CoreError('INVALID_CONFIG', 'Both roles require an explicit provider and model route.')
     this.options = structuredClone(options)
     this.timeoutMs = timeout
-    this.workerRoute = { provider: options.worker.provider!, model: options.worker.model! }
-    this.routerRoute = { provider: options.router.provider!, model: options.router.model! }
+    this.workerRoute = { provider: options.worker.provider!, model: options.worker.model!, ...(options.worker.reasoningEffort ? { effort: String(options.worker.reasoningEffort) } : {}) }
+    this.routerRoute = { provider: options.router.provider!, model: options.router.model!, ...(options.router.reasoningEffort ? { effort: String(options.router.reasoningEffort) } : {}) }
     if (options.main && (!options.main.provider || !options.main.model)) throw new CoreError('INVALID_CONFIG', 'Main requires an explicit provider and model route.')
-    this.mainRoute = options.main ? { provider: options.main.provider!, model: options.main.model! } : undefined
+    this.mainRoute = options.main ? { provider: options.main.provider!, model: options.main.model!, ...(options.main.reasoningEffort ? { effort: String(options.main.reasoningEffort) } : {}) } : undefined
     this.routes = { ...(this.mainRoute ? { main: { ...this.mainRoute } } : {}), router: { ...this.routerRoute }, worker: { ...this.workerRoute } }
   }
 
@@ -59,8 +59,12 @@ export class NativeSessions {
       if (!route?.provider || !route?.model) throw new CoreError('INVALID_CONFIG', `${label} route needs provider and model.`)
     }
     this.routes.router = { ...router }; this.routes.worker = { ...worker }
-    this.options.router = { ...this.options.router, provider: router.provider, model: router.model }
-    this.options.worker = { ...this.options.worker, provider: worker.provider, model: worker.model }
+    const { reasoningEffort: _routerEffort, ...routerOptions } = this.options.router
+    const { reasoningEffort: _workerEffort, ...workerOptions } = this.options.worker
+    this.options.router = { ...routerOptions, provider: router.provider, model: router.model,
+      ...(router.effort ? { reasoningEffort: ReasoningEffortId(router.effort) } : {}) }
+    this.options.worker = { ...workerOptions, provider: worker.provider, model: worker.model,
+      ...(worker.effort ? { reasoningEffort: ReasoningEffortId(worker.effort) } : {}) }
   }
 
   getRoutes() { return structuredClone(this.routes) }
@@ -145,8 +149,12 @@ export class NativeSessions {
     if (!route) throw new CoreError('ROLE_NOT_CONFIGURED', 'The requested role has no model route.')
     let steps = 0
     let stepBudgetExceeded = false
+    const baseOptions = this.options[request.role]
+    if (!baseOptions) throw new CoreError('ROLE_NOT_CONFIGURED', `The ${request.role} role has no Session options.`)
+    const { reasoningEffort: _existingEffort, ...agentOptions } = baseOptions
     const creation = {
-      sessionId: SessionId(request.sessionId), agentOptions: { ...this.options[request.role], provider: route.provider, model: route.model },
+      sessionId: SessionId(request.sessionId), agentOptions: { ...agentOptions, provider: route.provider, model: route.model,
+        ...(route.effort ? { reasoningEffort: ReasoningEffortId(route.effort) } : {}) },
       ...(request.cwd ? { meta: { cwd: request.cwd } } : {}),
       setup: ((scoped, agent) => {
         scoped.on('agent/request', async (_payload, next) => {

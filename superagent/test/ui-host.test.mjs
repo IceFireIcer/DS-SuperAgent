@@ -24,6 +24,24 @@ test('the product HTTP boundary chats with Main and refuses cross-scope and unav
     await rm(directory, { recursive: true, force: true })
   })
   const routes = new Map()
+  let providerKey = ''
+  let credentialFailure = false
+  native.llm.listProviders = () => [{ id: 'mock', name: 'Mock' }]
+  native.llm.listModels = async provider => {
+    assert.equal(provider, 'mock')
+    return [{ id: 'main' }, { id: 'router' }, { id: 'worker' }]
+  }
+  native.llm.resolveModelInfo = async () => ({ reasoning: { efforts: [] } })
+  native.llm.listConfigurableProviders = () => [{ provider: 'mock', displayName: 'Mock', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'mock'] }]
+  native.provide('settings', { describe: () => [{ ns: 'llm-pi-ai', value: { providers: { mock: { apiKeyEnv: 'MOCK_API_KEY' } } } }] })
+  native.provide('credentials', {
+    describe: async reference => ({ configured: providerKey !== '' && reference === 'MOCK_API_KEY', writable: true }),
+    set: async (reference, value) => {
+      if (credentialFailure) throw new Error(`provider rejected ${value}`)
+      assert.equal(reference, 'MOCK_API_KEY'); providerKey = value
+    },
+    unset: async reference => { assert.equal(reference, 'MOCK_API_KEY'); providerKey = '' },
+  })
   native.provide('connection', { fetch: { register(route) { routes.set(route.path, route); return () => routes.delete(route.path) } } })
   await native.plugin(Profile, { main: { provider: 'mock', model: 'main' }, router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
   await native.plugin({ name: 'product-http', inject: ['connection', 'superagentProduct'], apply: installProduct })
@@ -44,6 +62,40 @@ test('the product HTTP boundary chats with Main and refuses cross-scope and unav
   assert.deepEqual(history.value.messages.map(message => [message.role, message.text]), [
     ['user', 'Hello Main.'], ['main', 'Main answered through the product boundary.'],
   ])
+  const settings = await call('settings', { instanceId })
+  assert.equal(settings.value.revision, 1)
+  assert.ok(settings.value.providers.some(provider => provider.id === 'mock'))
+  assert.ok(settings.value.uses.some(use => use.role === 'main' && use.revision === 1))
+  const changed = {
+    ...settings.value.roles,
+    router: { ...settings.value.roles.router, instructions: 'Route {{goal}} within the current constraints.' },
+    worker: { ...settings.value.roles.worker, instructions: '{{goal}} under {{constraints}}; cite {{evidence}}.' },
+  }
+  const saved = await call('settings-save', { instanceId, commandId: 'save-settings', expectedRevision: 1, roles: changed })
+  assert.equal(saved.ok, true, JSON.stringify(saved))
+  assert.equal(saved.value.revision, 2)
+  assert.equal((await call('settings', { instanceId })).value.roles.worker.instructions, changed.worker.instructions)
+  const conflict = await call('settings-save', { instanceId, commandId: 'stale-settings', expectedRevision: 1, roles: changed })
+  assert.equal(conflict.error.code, 'CONFIG_REVISION_CONFLICT')
+  const invalidTemplate = await call('settings-save', { instanceId, commandId: 'invalid-template', expectedRevision: 2,
+    roles: { ...changed, router: { ...changed.router, instructions: 'No required placeholder.' } } })
+  assert.equal(invalidTemplate.error.code, 'INVALID_CONFIG')
+  const invalidEffort = await call('settings-save', { instanceId, commandId: 'invalid-effort', expectedRevision: 2,
+    roles: { ...changed, main: { ...changed.main, model: { ...changed.main.model, effort: 'not-served' } } } })
+  assert.equal(invalidEffort.error.code, 'INVALID_CONFIG')
+  const secret = 'sk-test-never-return-this'
+  const keyResult = await call('provider-key', { instanceId, provider: 'mock', value: secret })
+  assert.deepEqual(keyResult.value, { provider: 'mock', configured: true })
+  assert.equal(providerKey, secret)
+  assert.equal(JSON.stringify(keyResult).includes(secret), false)
+  assert.equal(JSON.stringify(await call('settings', { instanceId })).includes(secret), false)
+  credentialFailure = true
+  const failedSecret = 'sk-sensitive-provider-error'
+  const failedKey = await call('provider-key', { instanceId, provider: 'mock', value: failedSecret })
+  assert.equal(failedKey.error.code, 'INVALID_CONFIG')
+  assert.equal(JSON.stringify(failedKey).includes(failedSecret), false)
+  assert.doesNotMatch(JSON.stringify(failedKey), /provider rejected/u)
+  assert.equal((await call('history', { instanceId, limit: 100 })).value.works.length, 0)
   for (const endpoint of ['history', 'send']) {
     const denied = await call(endpoint, { instanceId: 'another-private-scope', commandId: 'guess', text: 'Guessing does not authorize access.' })
     assert.equal(denied.status, 403)

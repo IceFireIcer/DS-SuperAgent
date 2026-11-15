@@ -9,3 +9,17 @@ export function mergeMessages(existing, incoming) {
   for (const message of incoming) byId.set(message.id, message)
   return [...byId.values()].sort((left, right) => left.sequence - right.sequence)
 }
+
+export function rebaseRoleDraft(base, draft, latest) {
+  const merged = JSON.parse(JSON.stringify(latest))
+  for (const role of ['main', 'router', 'worker']) {
+    if (!draft[role]) continue
+    for (const field of ['provider', 'model', 'effort']) {
+      if (draft[role].model?.[field] === base[role].model?.[field]) continue
+      if (draft[role].model?.[field] === undefined) delete merged[role].model[field]
+      else merged[role].model[field] = draft[role].model[field]
+    }
+    if (draft[role].instructions !== base[role].instructions) merged[role].instructions = draft[role].instructions
+  }
+  return merged
+}

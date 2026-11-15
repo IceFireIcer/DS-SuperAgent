@@ -603,6 +603,7 @@ export class WorkObservations {
         { label: 'Mandate', value: ticket.mandateId },
         { label: 'Session', value: selected.sessionId },
         { label: 'Generation', value: selected.generation },
+        { label: 'Configuration revision', value: String(brief.configurationRevision) },
         { label: 'Generation state', value: current ? 'Current' : 'Historical' },
         { label: 'Environment', value: selected.environment?.id ?? 'unknown' },
         ...(selected.environment?.deviceId ? [{ label: 'Device', value: selected.environment.deviceId }] : []),

@@ -1409,6 +1409,14 @@ export class Engine {
     return this.roleConfig.uses(sessionId)
   }
 
+  getRecentRoleConfigUses(limit = 50): Promise<RoleConfigUse[]> {
+    return this.roleConfig.recentUses(limit)
+  }
+
+  getRoleConfigHistory(limit = 20) {
+    return this.roleConfig.history(limit)
+  }
+
   async getIntakePolicy(): Promise<{ revision: number; policy: Omit<IntakePolicy, 'assess'>; processingPaused: boolean }> {
     await this.ensurePolicy()
     const stored = await this.storage.transaction(this.instanceId, transaction => transaction.get<StoredPolicy>('policy-state', this.policyKey()))
