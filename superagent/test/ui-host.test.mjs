@@ -26,6 +26,7 @@ test('the product HTTP boundary chats with Main and refuses cross-scope and unav
   const routes = new Map()
   let providerKey = ''
   let credentialFailure = false
+  const settingsMutations = []
   native.llm.listProviders = () => [{ id: 'mock', name: 'Mock' }]
   native.llm.listModels = async provider => {
     assert.equal(provider, 'mock')
@@ -33,7 +34,10 @@ test('the product HTTP boundary chats with Main and refuses cross-scope and unav
   }
   native.llm.resolveModelInfo = async () => ({ reasoning: { efforts: [] } })
   native.llm.listConfigurableProviders = () => [{ provider: 'mock', displayName: 'Mock', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'mock'] }]
-  native.provide('settings', { describe: () => [{ ns: 'llm-pi-ai', value: { providers: { mock: { apiKeyEnv: 'MOCK_API_KEY' } } } }] })
+  native.provide('settings', {
+    describe: () => [{ ns: 'llm-pi-ai', value: { providers: { mock: {} } }, revision: 3 }],
+    mutate: async (ns, operations, revision) => { settingsMutations.push({ ns, operations, revision }) },
+  })
   native.provide('credentials', {
     describe: async reference => ({ configured: providerKey !== '' && reference === 'MOCK_API_KEY', writable: true }),
     set: async (reference, value) => {
@@ -87,6 +91,8 @@ test('the product HTTP boundary chats with Main and refuses cross-scope and unav
   const keyResult = await call('provider-key', { instanceId, provider: 'mock', value: secret })
   assert.deepEqual(keyResult.value, { provider: 'mock', configured: true })
   assert.equal(providerKey, secret)
+  assert.deepEqual(settingsMutations, [{ ns: 'llm-pi-ai', revision: 3,
+    operations: [{ op: 'set', path: ['providers', 'mock', 'apiKeyEnv'], value: 'MOCK_API_KEY' }] }])
   assert.equal(JSON.stringify(keyResult).includes(secret), false)
   assert.equal(JSON.stringify(await call('settings', { instanceId })).includes(secret), false)
   credentialFailure = true

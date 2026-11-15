@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
-import { MessageId } from '@deepseek-ai/dsh-llm'
+import { MessageId, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { SessionId, type TurnEndReason } from '@deepseek-ai/dsh-session'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { Context } from '@deepseek-ai/cordis'
@@ -8,6 +8,7 @@ import { CoreError, identifier } from './model.js'
 import type { AsyncTx, Storage } from './storage.js'
 import type { NativeTool } from './native-sessions.js'
 import { BackgroundWork } from './background.js'
+import type { RoleModel } from './config.js'
 
 export type SubagentState = 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled' | 'unknown'
 export type SubagentCancelReason = 'human' | 'worker' | 'stop' | 'assignment-ended' | 'deadline'
@@ -74,7 +75,7 @@ export interface SubagentScope {
   mandateId: string
   /** Tools that are safe to hand down. Router-only and delivery tools are never in this list. */
   tools: NativeTool[]
-  model: { provider: string; model: string }
+  model: RoleModel
   /** Read-only look at the durable facts, used before a subtask may start. */
   authorize(tx: AsyncTx): Promise<void>
   /** Re-checks, before every child tool call, that this subtask is still the live one. */
@@ -303,7 +304,8 @@ export class Subagents {
         sessionId: SessionId(record.sessionId),
         parentAgent: scope.parent,
         meta: { cwd: scope.cwd, origin: 'subagent', delegationDepth: 1, parentSession: scope.parent.id },
-        agentOptions: scope.model,
+        agentOptions: { provider: scope.model.provider, model: scope.model.model,
+          ...(scope.model.effort ? { reasoningEffort: ReasoningEffortId(scope.model.effort) } : {}) },
         setup: scoped => {
           // The child inherits only the parent's already-authorised work tools; a fresh scope, never a global one.
           scoped.tools.restrict({ allow: [] })

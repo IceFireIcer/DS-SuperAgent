@@ -48,3 +48,15 @@ test('a revision conflict rebases only locally changed role fields over the newe
   assert.deepEqual(merged.router.model, { provider: 'q', model: 'router-next' })
   assert.equal(draft.worker.instructions, '{{goal}} {{constraints}} My draft.', 'rebase leaves the saved draft intact')
 })
+
+test('an edit made while a save is pending survives the saved server response', () => {
+  const profile = (model, instructions) => ({ name: 'Role', model: { provider: 'mock', model }, instructions, skills: [] })
+  const submitted = { main: profile('main', 'Main'), router: profile('router', '{{goal}} Router'), worker: profile('worker', '{{goal}} {{constraints}} Worker') }
+  const editedWhileSaving = structuredClone(submitted)
+  editedWhileSaving.main.instructions = 'Edited after Save was pressed.'
+  const saved = structuredClone(submitted)
+  saved.worker.instructions = '{{goal}} {{constraints}} Saved newer Worker.'
+  const next = rebaseRoleDraft(submitted, editedWhileSaving, saved)
+  assert.equal(next.main.instructions, 'Edited after Save was pressed.')
+  assert.equal(next.worker.instructions, '{{goal}} {{constraints}} Saved newer Worker.')
+})

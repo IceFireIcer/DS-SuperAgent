@@ -19,6 +19,7 @@ interface WorkRouterTurn {
   sessionId: string
   phase: 'route' | 'update'
   status: 'pending' | 'completed' | 'failed'
+  configurationRevision?: number
   startSeq?: number
   endSeq?: number
   stepCount?: number
@@ -67,6 +68,7 @@ interface WorkObservationGeneration {
   generation: string
   sessionId: string
   state: Assignment['state']
+  configurationRevision?: number
   current: boolean
   createdAt: number
 }
@@ -513,17 +515,18 @@ export class WorkObservations {
       const conflictHead = await transaction.get<{ conflictId: string }>('work-plan-conflict-head', brief.id)
       const conflict = conflictHead
         ? await transaction.get<MainWorkPlanConflict>('work-plan-conflict', conflictHead.conflictId) : undefined
+      const routerRevision = turns.at(-1)?.configurationRevision
       const facts = [
         { label: 'Role', value: 'Router' },
         { label: 'Work brief', value: brief.id },
         { label: 'Session', value: brief.routerSessionId },
-        { label: 'Configuration revision', value: String(brief.configurationRevision) },
+        { label: 'Configuration revision', value: routerRevision === undefined ? 'unknown' : String(routerRevision) },
         { label: 'Receipt', value: status },
         { label: 'Goal', value: summary(brief.goal) },
         { label: 'Constraints', value: summary(brief.constraints) },
         { label: 'Acceptance criteria', value: summary(brief.acceptanceCriteria) },
         ...(turns.length ? [{ label: 'Router turns', value: summary(turns.map(turn =>
-          `${turn.phase}: ${turn.status}, steps ${turn.stepCount ?? 0}/${turn.budget}${turn.errorCode ? `, ${turn.errorCode}` : ''}`).join('\n'), 2048) }] : []),
+          `${turn.phase}@v${turn.configurationRevision ?? '?'}: ${turn.status}, steps ${turn.stepCount ?? 0}/${turn.budget}${turn.errorCode ? `, ${turn.errorCode}` : ''}`).join('\n'), 2048) }] : []),
         ...(plan.length ? [{ label: 'Decomposition', value: summary(plan.join('\n'), 2048) }] : []),
         ...(conflict ? [{ label: 'Conflict', value: summary(conflict.message, 1024) }] : []),
       ]
@@ -589,6 +592,7 @@ export class WorkObservations {
       generation: assignment.generation,
       sessionId: assignment.sessionId,
       state: assignment.state,
+      ...(assignment.configurationRevision === undefined ? {} : { configurationRevision: assignment.configurationRevision }),
       current: currentAssignment?.generation === assignment.generation,
       createdAt: assignment.createdAt,
     }))
@@ -609,7 +613,8 @@ export class WorkObservations {
         { label: 'Mandate', value: ticket.mandateId },
         { label: 'Session', value: selected.sessionId },
         { label: 'Generation', value: selected.generation },
-        { label: 'Configuration revision', value: String(brief.configurationRevision) },
+        { label: 'Configuration revision', value: selected.configurationRevision === undefined
+          ? 'unknown' : String(selected.configurationRevision) },
         { label: 'Generation state', value: current ? 'Current' : 'Historical' },
         { label: 'Environment', value: selected.environment?.id ?? 'unknown' },
         ...(selected.environment?.deviceId ? [{ label: 'Device', value: selected.environment.deviceId }] : []),

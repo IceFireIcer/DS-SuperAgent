@@ -133,3 +133,23 @@ test('an asynchronous role verification cannot overwrite a newer save', async t 
   assert.equal(current.revision, 2)
   assert.equal(current.roles.worker.model.model, 'worker-newer')
 })
+
+test('recent configuration uses stay bounded after more than one thousand append-only records', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-config-recent-'))
+  const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
+  const store = new core.RoleConfigStore(storage, 'recent', roles())
+  let latest
+  await storage.transaction('recent', async transaction => {
+    for (let index = 0; index < 1005; index++) {
+      latest = await store.recordUse(transaction, { sessionId: `worker-${index}`, role: 'worker', revision: 2,
+        router: roles().router.model, worker: roles().worker.model })
+    }
+  })
+  const recent = await store.recentUses(100)
+  assert.equal(recent.length, 100)
+  assert.equal(recent[0].id, latest.id)
+  assert.equal(recent.at(-1).sessionId, 'worker-905')
+  const index = await storage.transaction('recent', transaction => transaction.scan('role-config-use-recent', { limit: 100 }))
+  assert.equal(index.items.length, 100)
+})

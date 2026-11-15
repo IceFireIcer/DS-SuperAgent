@@ -119,7 +119,7 @@ test('work observations auto-discover bounded Router and Worker history with sta
   const freshThird = freshSecond.cursor
     ? await engine.getWorkObservations({ instanceId: 'personal', limit: 2, after: freshSecond.cursor }) : { items: [] }
   const discovered = [...freshFirst.items, ...freshSecond.items, ...freshThird.items]
-  assert.equal(discovered.length, 5)
+  assert.equal(discovered.length, 5, JSON.stringify(discovered.map(item => [item.role, item.workBriefId, item.workItemId, item.title])))
   assert.equal(new Set(discovered.map(item => item.id)).size, 5)
   assert.deepEqual(new Set(discovered.map(item => item.role)), new Set(['router', 'worker']))
   assert.equal(discovered.filter(item => item.role === 'worker').every(item => item.ticketId && item.generation && item.sessionId), true)
@@ -141,6 +141,7 @@ test('work observations auto-discover bounded Router and Worker history with sta
   assert.equal(detail.facts.some(fact => fact.label === 'Environment' && fact.value === 'product-workspace'), true)
   assert.equal(detail.facts.some(fact => fact.label === 'Evidence' && fact.value.includes('observed-alpha.txt')), true)
   assert.equal(detail.facts.some(fact => fact.label === 'Artifacts' && fact.value.includes('observed-alpha.txt')), true)
+  assert.equal(detail.facts.some(fact => fact.label === 'Configuration revision' && fact.value === '1'), true)
   const oversizedEvent = detail.events.find(event => event.kind === 'tool-result' && event.detailId)
   assert.ok(oversizedEvent?.detailId)
   const eventDetail = await engine.readWorkObservationDetail({ instanceId: 'personal', observationId: alpha.id,
@@ -166,6 +167,10 @@ test('work observations auto-discover bounded Router and Worker history with sta
     generation: alpha.generation, detailId: guessedEventDetail }), { code: 'NOT_FOUND' })
 
   const firstGeneration = alpha.generation
+  const config = await engine.getRoleConfig()
+  await engine.updateRoleConfig({ commandId: 'observe-config-v2', expectedRevision: config.revision,
+    roles: { ...config.roles, worker: { ...config.roles.worker,
+      instructions: '{{goal}} {{constraints}} Use the replacement configuration.' } } })
   await engine.stopTicket({ commandId: 'observe-stop', ticketId: alpha.ticketId, reason: 'Create a retained generation.' })
   await engine.resumeTicket({ commandId: 'observe-resume', ticketId: alpha.ticketId })
   await until(async () => {
@@ -184,6 +189,9 @@ test('work observations auto-discover bounded Router and Worker history with sta
   assert.equal(old.generations.some(generation => generation.generation === refreshed.generation && generation.current), true)
   const current = await engine.readWorkObservation({ instanceId: 'personal', observationId: alpha.id, generation: refreshed.generation })
   assert.equal(current.current, true)
+  assert.equal(current.facts.some(fact => fact.label === 'Configuration revision' && fact.value === '2'), true)
+  const alphaWork = (await engine.getMainConversation({ instanceId: 'personal' })).works.find(work => work.brief.goal.includes('alpha'))
+  assert.equal(alphaWork.brief.configurationRevision, 1, 'the Worker projection does not reuse the earlier Main revision')
   assert.equal(current.events.some(event => event.text.includes('Prepare observation alpha.')), false,
     'the replacement generation does not expose the earlier generation transcript')
 
@@ -199,6 +207,7 @@ test('work observations auto-discover bounded Router and Worker history with sta
   const gammaRouterHistory = await engine.readWorkObservation({ instanceId: 'personal', observationId: gammaRouter.id, limit: 100 })
   assert.equal(JSON.stringify(firstRouterHistory.events).includes('observation gamma'), false,
     'a Router observation excludes another WorkBrief from the shared Router Session')
+  assert.equal(firstRouterHistory.facts.some(fact => fact.label === 'Configuration revision' && fact.value === '1'), true)
   assert.equal(JSON.stringify(gammaRouterHistory.events).includes('observation gamma'), true)
   assert.equal(JSON.stringify(gammaRouterHistory.events).includes('observation alpha'), false)
 

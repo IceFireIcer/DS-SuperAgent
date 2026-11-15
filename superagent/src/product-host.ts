@@ -21,6 +21,7 @@ interface PublicLlm {
 }
 interface PublicSettings {
   describe(options: { redactSecrets: boolean }): Array<{ ns: string; value?: Record<string, unknown>; user?: Record<string, unknown>; base?: Record<string, unknown>; revision?: number }>
+  mutate(ns: string, operations: Array<{ op: 'set'; path: string[]; value: unknown }>, revision?: number): Promise<unknown>
 }
 interface PublicCredentials {
   describe(reference: string): Promise<{ configured?: boolean; writable?: boolean }>
@@ -45,14 +46,17 @@ export async function createProductHost(context: Context, config: ProductHostCon
   let closing: Promise<void> | undefined
   const publicLlm = () => context.get('llm') as unknown as PublicLlm
   const settingsSections = (settings: PublicSettings) => new Map(settings.describe({ redactSecrets: true }).map(section => [section.ns, section]))
+  const derivedKeyRef = (provider: string) => `${provider.toUpperCase().replace(/[^A-Z0-9]+/gu, '_')}_API_KEY`
   const keyRefFor = (provider: string, sections: Map<string, SettingsSection>) => {
     const entry = publicLlm().listConfigurableProviders?.().find(item => item.provider === provider)
     const section = entry ? sections.get(entry.settingsNs) : undefined
-    if (!entry || !section) return undefined
+    if (!entry) return undefined
     const value = entry.settingsPath.reduce<unknown>((current, key) =>
-      current && typeof current === 'object' ? (current as Record<string, unknown>)[key] : undefined, section.value)
+      current && typeof current === 'object' ? (current as Record<string, unknown>)[key] : undefined, section?.value)
     const reference = value && typeof value === 'object' ? (value as Record<string, unknown>).apiKeyEnv : undefined
-    return typeof reference === 'string' && reference ? reference : undefined
+    return { reference: typeof reference === 'string' && reference ? reference : derivedKeyRef(provider),
+      explicit: typeof reference === 'string' && reference !== '', ns: entry.settingsNs, path: entry.settingsPath,
+      ...(section?.revision === undefined ? {} : { revision: section.revision }) }
   }
   const providerCatalog = async () => {
     const llm = publicLlm()
@@ -64,11 +68,11 @@ export async function createProductHost(context: Context, config: ProductHostCon
       let models: Array<{ id: string; name?: string }> = []
       try { models = await llm.listModels(provider.id) }
       catch { /* A provider that cannot enumerate models now exposes none. */ }
-      const reference = keyRefFor(provider.id, sections)
-      const keyInfo = reference && credentials ? await credentials.describe(reference).catch(() => undefined) : undefined
+      const keyRef = keyRefFor(provider.id, sections)
+      const keyInfo = keyRef && credentials ? await credentials.describe(keyRef.reference).catch(() => undefined) : undefined
       providers.push({ id: provider.id, name: provider.name ?? provider.id,
         models: models.map(model => ({ provider: provider.id, model: model.id, ref: `${provider.id}/${model.id}`, name: model.name ?? model.id })),
-        ...(reference || keyInfo ? { key: { configured: keyInfo?.configured === true, writable: keyInfo?.writable !== false } } : {}) })
+        ...(keyRef || keyInfo ? { key: { configured: keyInfo?.configured === true, writable: keyInfo?.writable !== false } } : {}) })
     }
     return providers
   }
@@ -103,17 +107,19 @@ export async function createProductHost(context: Context, config: ProductHostCon
     const settings = context.get('settings') as unknown as PublicSettings | undefined
     const credentials = context.get('credentials') as unknown as PublicCredentials | undefined
     if (!settings || !credentials) throw new CoreError('INVALID_CONFIG', 'This DSH cannot store provider credentials.')
-    const reference = keyRefFor(provider, settingsSections(settings))
-    if (!reference) throw new CoreError('INVALID_CONFIG', `${provider} does not use a writable API key here.`)
-    const info = await credentials.describe(reference)
+    const keyRef = keyRefFor(provider, settingsSections(settings))
+    if (!keyRef) throw new CoreError('INVALID_CONFIG', `${provider} does not use a writable API key here.`)
+    const info = await credentials.describe(keyRef.reference)
     if (info.writable === false) throw new CoreError('INVALID_CONFIG', `The API key for ${provider} is set outside this product.`)
     try {
-      if (value === null) await credentials.unset(reference)
+      if (value === null) await credentials.unset(keyRef.reference)
       else {
         if (typeof value !== 'string' || !value.trim() || Buffer.byteLength(value) > 16384 || /[\r\n]/u.test(value)) {
           throw new CoreError('INVALID_INPUT', 'Enter one nonempty API key without line breaks.')
         }
-        await credentials.set(reference, value.trim())
+        if (!keyRef.explicit) await settings.mutate(keyRef.ns,
+          [{ op: 'set', path: [...keyRef.path, 'apiKeyEnv'], value: keyRef.reference }], keyRef.revision)
+        await credentials.set(keyRef.reference, value.trim())
       }
     } catch (error) {
       if (error instanceof CoreError) throw error

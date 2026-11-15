@@ -591,7 +591,8 @@ export function applyProduct(ctx) {
                   observationDetailError: null }))
                 void loadObservation(state.binding, state.selectedObservation, { reset: true })
               } },
-            h('span', null, generation.generation), h('span', null, generation.current ? t('Current generation') : t('Historical generation')),
+            h('span', null, generation.generation), h('span', null,
+              `${generation.configurationRevision ? `${t('Configuration')} v${generation.configurationRevision} · ` : ''}${generation.current ? t('Current generation') : t('Historical generation')}`),
             h('span', null, statusCopy(generation.state))))) : null,
           h('section', { className: 'bt-observation-history', 'aria-label': t('Observation history') },
             h('h2', null, t('Observation history')),
@@ -676,6 +677,9 @@ export function applyProduct(ctx) {
     const [conflict, setConflict] = useState(false)
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
+    const draftRef = useRef(draft)
+    const draftVersion = useRef(0)
+    const savingRef = useRef(false)
     const clone = value => JSON.parse(JSON.stringify(value))
     const roleRows = [['main', 'Main'], ['router', 'Router'], ['worker', 'Worker']]
     const refOf = model => `${model.provider}/${model.model}`
@@ -691,7 +695,10 @@ export function applyProduct(ctx) {
     const applySnapshot = (value, preserve = false) => {
       setSnapshot(value)
       if (!preserve) {
-        setDraft(clone(value.roles))
+        const nextDraft = clone(value.roles)
+        draftRef.current = nextDraft
+        draftVersion.current += 1
+        setDraft(nextDraft)
         setBase(clone(value.roles))
         void loadEfforts(value.roles)
       }
@@ -711,12 +718,18 @@ export function applyProduct(ctx) {
       window.addEventListener('keydown', close)
       return () => window.removeEventListener('keydown', close)
     }, [onClose])
-    const updateRole = (role, change) => setDraft(current => {
+    const updateRole = (role, change) => {
+      if (savingRef.current) return
+      draftVersion.current += 1
+      setDraft(current => {
       const next = clone(current)
       next[role] = { ...next[role], ...change }
+      draftRef.current = next
       return next
-    })
+      })
+    }
     const updateModel = async (role, ref) => {
+      if (savingRef.current) return
       const [provider, ...model] = ref.split('/')
       updateRole(role, { model: { provider, model: model.join('/') } })
       if (!efforts[ref]) {
@@ -727,11 +740,13 @@ export function applyProduct(ctx) {
       }
     }
     const updateEffort = (role, effort) => {
+      if (savingRef.current) return
       const current = draft[role]
       updateRole(role, { model: { ...current.model, ...(effort ? { effort } : {}) } })
       if (!effort) setDraft(latest => {
         const next = clone(latest)
         delete next[role].model.effort
+        draftRef.current = next
         return next
       })
     }
@@ -743,23 +758,31 @@ export function applyProduct(ctx) {
       return null
     }
     const save = async () => {
+      if (savingRef.current) return
       const problem = validate()
       if (problem) { setError(problem); return }
+      const submitted = clone(draftRef.current)
+      const submittedVersion = draftVersion.current
+      savingRef.current = true
       setSaving(true); setError(null); setNotice(null)
       try {
         const value = await productCall('settings-save', { instanceId: binding.instanceId, commandId: crypto.randomUUID(),
-          expectedRevision: snapshot.revision, roles: draft })
-        setSnapshot(current => ({ ...current, ...value }))
-        setDraft(clone(value.roles)); setBase(clone(value.roles)); setConflict(false)
+          expectedRevision: snapshot.revision, roles: submitted })
+        const editedDuringSave = draftVersion.current !== submittedVersion
+        const nextDraft = editedDuringSave ? rebaseRoleDraft(submitted, draftRef.current, value.roles) : clone(value.roles)
+        setSnapshot(current => ({ ...current, ...value, providers: current.providers, history: current.history }))
+        setBase(clone(value.roles)); setDraft(nextDraft); draftRef.current = nextDraft
+        draftVersion.current += 1
+        setConflict(false)
         setNotice(t('Configuration v{revision} is active for new turns.', { revision: value.revision }))
         const latest = await productCall('settings', { instanceId: binding.instanceId, limit: 50 })
-        applySnapshot(latest)
+        applySnapshot(latest, true)
       } catch (failure) {
         if (failure.code === 'CONFIG_REVISION_CONFLICT') {
           setConflict(true)
           setError(t('The configuration changed elsewhere. Your edits are still here.'))
         } else setError(failure.message)
-      } finally { setSaving(false) }
+      } finally { savingRef.current = false; setSaving(false) }
     }
     const rebase = async () => {
       setSaving(true); setError(null)
@@ -767,6 +790,8 @@ export function applyProduct(ctx) {
         const latest = await productCall('settings', { instanceId: binding.instanceId, limit: 50 })
         const merged = rebaseRoleDraft(base, draft, latest.roles)
         applySnapshot(latest)
+        draftRef.current = merged
+        draftVersion.current += 1
         setDraft(merged); setBase(clone(latest.roles)); setConflict(false)
         setNotice(t('Your changed fields were applied over configuration v{revision}. Review and save.', { revision: latest.revision }))
       } catch (failure) { setError(failure.message) }
@@ -822,18 +847,19 @@ export function applyProduct(ctx) {
               return h(Card, { key: role, title: label },
                 h(Row, { label: t('Model'), hint: t('The provider and model this role uses. New turns use the saved version.') },
                   h('select', { className: 'bt-select bt-main-settings-select', 'aria-label': t('{role} model', { role: label }), value: ref,
+                    disabled: saving,
                     onChange: event => { void updateModel(role, event.target.value) } },
                   !models.some(model => model.ref === ref) ? h('option', { value: ref }, ref) : null,
                   snapshot.providers.map(provider => h('optgroup', { key: provider.id, label: provider.name },
                     provider.models.map(model => h('option', { key: model.ref, value: model.ref }, model.name)))))),
                 reasoning?.efforts?.length ? h(Row, { label: t('Thinking effort'), hint: t('Kept with the model route and recorded in configuration uses.') },
                   h('select', { className: 'bt-select bt-main-settings-select', 'aria-label': t('{role} thinking effort', { role: label }),
-                    value: profile.model.effort ?? '', onChange: event => updateEffort(role, event.target.value) },
+                    value: profile.model.effort ?? '', disabled: saving, onChange: event => updateEffort(role, event.target.value) },
                   h('option', { value: '' }, t('Provider default')),
                   reasoning.efforts.map(effort => h('option', { key: effort.id, value: effort.id }, effort.name)))) : null,
                 h(Row, { label: t('Instructions'), hint: t('Role prompts are versioned. Router keeps {{goal}}; Worker keeps {{goal}} and {{constraints}}.'), stack: true },
                   h('textarea', { className: 'bt-bs-input bt-bs-area bt-main-settings-prompt', value: profile.instructions,
-                    maxLength: 16384, spellCheck: false, 'aria-label': t('{role} instructions', { role: label }),
+                    maxLength: 16384, spellCheck: false, disabled: saving, 'aria-label': t('{role} instructions', { role: label }),
                     onChange: event => updateRole(role, { instructions: event.target.value }) })),
                 h(Row, { label: t('Profile'), hint: `${profile.name} · ${profile.skills.length ? t('Skills: {skills}', { skills: profile.skills.join(', ') }) : t('No reserved skills')}` },
                   h('span', { className: 'bt-main-settings-route' }, ref)))
@@ -849,11 +875,11 @@ export function applyProduct(ctx) {
                   h('span', { role: 'status' }, provider.key.configured ? t('API key configured') : t('API key missing')),
                   provider.key.writable ? h(Fragment, null,
                     h('input', { type: 'password', value: keyDrafts[provider.id] ?? '', autoComplete: 'off', 'aria-label': t('{provider} API key', { provider: provider.name }),
-                      placeholder: t('Paste a new key'), onChange: event => setKeyDrafts(current => ({ ...current, [provider.id]: event.target.value })) }),
-                    h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: !(keyDrafts[provider.id] ?? '').trim(),
+                      disabled: saving, placeholder: t('Paste a new key'), onChange: event => setKeyDrafts(current => ({ ...current, [provider.id]: event.target.value })) }),
+                    h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: saving || !(keyDrafts[provider.id] ?? '').trim(),
                       onClick: () => { void saveKey(provider.id, keyDrafts[provider.id]) } }, t('Save key')),
                     provider.key.configured ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm bt-bs-danger',
-                      onClick: () => { void saveKey(provider.id, null) } }, t('Remove key')) : null) : h('span', null, t('Set outside this product'))) : null))
+                      disabled: saving, onClick: () => { void saveKey(provider.id, null) } }, t('Remove key')) : null) : h('span', null, t('Set outside this product'))) : null))
                 : h('p', { className: 'bt-main-status' }, t('No provider catalog is available. Configure providers in DSH settings.'))),
             h(Card, { title: t('Recent configuration uses') },
               snapshot.uses.length ? snapshot.uses.slice(0, 20).map(use => h('div', { key: use.id, className: 'bt-main-settings-use' },

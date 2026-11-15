@@ -336,15 +336,11 @@ export class Engine {
             control }
         },
         routerProfile: async () => {
-          const config = await this.getRoleConfig()
-          this.sessions!.setRoutes(config.roles.router.model, config.roles.worker.model)
-          this.sessions!.setRoleInstructions(config.roles.router, config.roles.worker)
-          return { revision: config.revision, profile: structuredClone(config.roles.router) }
+          return this.roleConfig.currentView()
         },
-        recordRouterUse: async (sessionId, revision, profile) => {
-          const config = await this.roleConfig.currentView()
-          await storage.transaction(instanceId, tx => this.roleConfig.recordUse(tx, { sessionId, role: 'router', revision,
-            ...(config.roles.main ? { main: config.roles.main.model } : {}), router: profile.model, worker: config.roles.worker.model }))
+        recordRouterUse: async (sessionId, config) => {
+          await storage.transaction(instanceId, tx => this.roleConfig.recordUse(tx, { sessionId, role: 'router', revision: config.revision,
+            ...(config.roles.main ? { main: config.roles.main.model } : {}), router: config.roles.router.model, worker: config.roles.worker.model }))
         },
         notifyMain: (notification, signal, isCurrent) => this.main.notify(notification, signal, isCurrent),
         notifyMainSource: (handoff, signal) => this.main.notifySource(handoff, signal),

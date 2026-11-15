@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { canonicalJson, commandTransaction } from './commands.js'
 import { CoreError, identifier, type DesktopSource, type Work } from './model.js'
-import type { RoleProfile } from './config.js'
+import type { RoleConfigView } from './config.js'
 import type { NativeSessions, NativeTool } from './native-sessions.js'
 import type { AsyncTx, Storage } from './storage.js'
 import type { Effect, EffectHandler, EffectResult, Effects } from './effects.js'
@@ -90,6 +90,7 @@ export interface MainWorkCardBrief extends MainWorkIntent {
   sourceEventId: string
   position: number
   mainMessageId: string
+  configurationRevision?: number
   createdAt: number
 }
 export interface MainWorkCard {
@@ -237,6 +238,7 @@ interface WorkRouterTurn {
   sessionId: string
   phase: 'route' | 'update'
   status: 'pending' | 'completed' | 'failed'
+  configurationRevision: number
   startSeq?: number
   endSeq?: number
   stepCount?: number
@@ -296,8 +298,8 @@ export interface WorkDelegationOptions {
   now?: () => number
   createTicket(brief: MainWorkBrief, item: MainWorkItem): Promise<{ ticketId: string }>
   readTicket(ticketId: string): Promise<MainWorkTicketSnapshot>
-  routerProfile(): Promise<{ revision: number; profile: RoleProfile }>
-  recordRouterUse(sessionId: string, revision: number, profile: RoleProfile): Promise<void>
+  routerProfile(): Promise<RoleConfigView>
+  recordRouterUse(sessionId: string, config: RoleConfigView): Promise<void>
   notifyMain(notification: MainWorkNotification, signal: AbortSignal, isCurrent: (transaction?: AsyncTx) => Promise<boolean>): Promise<void>
   notifyMainSource(handoff: MainSourceHandoff, signal: AbortSignal): Promise<void>
   applyFollowUp(tx: AsyncTx, request: MainFollowUpAttachmentRequest): Promise<MainFollowUpAttachment>
@@ -440,7 +442,7 @@ export class WorkDelegation {
       return
     }
 
-    const { revision, profile } = await this.options.routerProfile()
+    const config = await this.options.routerProfile()
     this.options.sessions.routerSessionId = brief.routerSessionId
     const tool: NativeTool = {
       name: 'establish_work_plan',
@@ -468,19 +470,19 @@ export class WorkDelegation {
         return JSON.stringify(await this.plan(brief.mainId, brief.id))
       },
     }
-    const attempt = await this.startRouterTurn(brief, 'route')
+    const attempt = await this.startRouterTurn(brief, 'route', config.revision)
     let result
     try {
       result = await this.options.sessions.run({ sessionId: brief.routerSessionId, role: 'router', signal,
         stepBudget: routerStepBudget,
-        profile: structuredClone(profile), text: `Decide the independent work items for this one versioned Main WorkBrief. Preserve the one original source event. Establish each missing local Ticket and report only durable receipts.\n${JSON.stringify(brief)}`,
+        profile: structuredClone(config.roles.router), text: `Decide the independent work items for this one versioned Main WorkBrief. Preserve the one original source event. Establish each missing local Ticket and report only durable receipts.\n${JSON.stringify(brief)}`,
         tools: [tool] })
       await this.finishRouterTurn(attempt, { ...result, status: 'completed' })
     } catch (error) {
       await this.finishRouterTurn(attempt, { status: 'failed', error }).catch(() => {})
       throw error
     }
-    await this.options.recordRouterUse(result.sessionId, revision, profile)
+    await this.options.recordRouterUse(result.sessionId, config)
     const split = await this.readSplit(brief.id)
     if (!split) throw new CoreError('ROUTER_NOTICE_UNHANDLED', 'Router did not establish a durable work plan.')
     const receipts = await Promise.all(split.items.map(item => this.itemReceipt(item.id)))
@@ -743,12 +745,12 @@ export class WorkDelegation {
     if (receipt.status !== 'accepted' || receipt.ticketId !== ticketId) receipt = await this.acceptItem(source.brief, source.item, ticketId)
     const updateId = this.updateId(source.brief.id, source.item.id, receipt, outcome, followUps)
     if (await this.options.storage.transaction(this.options.instanceId, tx => tx.get('work-update', updateId))) return
-    const { revision, profile } = await this.options.routerProfile()
+    const config = await this.options.routerProfile()
     let recorded = false
-    const attempt = await this.startRouterTurn(source.brief, 'update')
+    const attempt = await this.startRouterTurn(source.brief, 'update', config.revision)
     let result
     try {
-      result = await this.options.sessions.run({ role: 'router', sessionId: source.brief.routerSessionId, signal, profile,
+      result = await this.options.sessions.run({ role: 'router', sessionId: source.brief.routerSessionId, signal, profile: structuredClone(config.roles.router),
         stepBudget: routerStepBudget,
         text: `Return this bounded, verified work item state to Main. Keep its source, stable item identity and follow-up delivery facts; no Worker transcript is included.\n${JSON.stringify({
           workBriefId: source.brief.id, workItemId: source.item.id, receipt, outcome, followUps,
@@ -760,7 +762,7 @@ export class WorkDelegation {
       await this.finishRouterTurn(attempt, { status: 'failed', error }).catch(() => {})
       throw error
     }
-    await this.options.recordRouterUse(result.sessionId, revision, profile)
+    await this.options.recordRouterUse(result.sessionId, config)
     if (!recorded) throw new CoreError('ROUTER_NOTICE_UNHANDLED', 'Router did not record the bounded work result.')
   }
 
@@ -773,11 +775,11 @@ export class WorkDelegation {
     return createHash('sha256').update(canonicalJson([workBriefId, workItemId, receipt, facts, followUpFacts])).digest('hex')
   }
 
-  private async startRouterTurn(brief: MainWorkBrief, phase: WorkRouterTurn['phase']) {
+  private async startRouterTurn(brief: MainWorkBrief, phase: WorkRouterTurn['phase'], configurationRevision: number) {
     const prefix = `${JSON.stringify(['work-router-turn', brief.id])}:`
     const id = `${prefix}${randomUUID()}`
     const turn: WorkRouterTurn = { version: 1, id, workBriefId: brief.id, sessionId: brief.routerSessionId,
-      phase, status: 'pending', budget: routerStepBudget, createdAt: this.now(), updatedAt: this.now() }
+      phase, status: 'pending', configurationRevision, budget: routerStepBudget, createdAt: this.now(), updatedAt: this.now() }
     await this.options.storage.transaction(this.options.instanceId,
       transaction => transaction.insert('work-router-turn', id, turn))
     return turn
@@ -1148,7 +1150,7 @@ export class WorkDelegation {
     if (!receipt) return undefined
     const cardBrief: MainWorkCardBrief = { id: brief.id, workItemId: item.id, sourceEventId: item.sourceEventId,
       position: item.position, mainMessageId: brief.mainMessageId, goal: item.goal, constraints: item.constraints, acceptanceCriteria: item.acceptanceCriteria,
-      createdAt: brief.createdAt }
+      configurationRevision: brief.configurationRevision, createdAt: brief.createdAt }
     const projection = await this.options.storage.transaction(this.options.instanceId, async tx => ({
       update: await tx.get<MainWorkUpdate>('work-update-head', item.id), outcome: await tx.get<MainWorkOutcome>('work-outcome', item.id),
       followUps: await this.followUpsForItem(tx, item),

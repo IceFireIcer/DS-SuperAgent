@@ -21814,7 +21814,11 @@ function applyProduct(ctx) {
                 }
               },
               (0, import_react53.createElement)("span", null, generation.generation),
-              (0, import_react53.createElement)("span", null, generation.current ? t("Current generation") : t("Historical generation")),
+              (0, import_react53.createElement)(
+                "span",
+                null,
+                `${generation.configurationRevision ? `${t("Configuration")} v${generation.configurationRevision} · ` : ""}${generation.current ? t("Current generation") : t("Historical generation")}`
+              ),
               (0, import_react53.createElement)("span", null, statusCopy(generation.state))
             ))
           ) : null,
@@ -21956,6 +21960,9 @@ function applyProduct(ctx) {
     const [conflict, setConflict] = (0, import_react53.useState)(false);
     const [loading, setLoading] = (0, import_react53.useState)(true);
     const [saving, setSaving] = (0, import_react53.useState)(false);
+    const draftRef = (0, import_react53.useRef)(draft);
+    const draftVersion = (0, import_react53.useRef)(0);
+    const savingRef = (0, import_react53.useRef)(false);
     const clone = (value) => JSON.parse(JSON.stringify(value));
     const roleRows = [["main", "Main"], ["router", "Router"], ["worker", "Worker"]];
     const refOf = (model) => `${model.provider}/${model.model}`;
@@ -21974,7 +21981,10 @@ function applyProduct(ctx) {
     const applySnapshot = (value, preserve = false) => {
       setSnapshot(value);
       if (!preserve) {
-        setDraft(clone(value.roles));
+        const nextDraft = clone(value.roles);
+        draftRef.current = nextDraft;
+        draftVersion.current += 1;
+        setDraft(nextDraft);
         setBase(clone(value.roles));
         void loadEfforts(value.roles);
       }
@@ -22001,12 +22011,18 @@ function applyProduct(ctx) {
       window.addEventListener("keydown", close2);
       return () => window.removeEventListener("keydown", close2);
     }, [onClose]);
-    const updateRole = (role, change) => setDraft((current) => {
-      const next = clone(current);
-      next[role] = { ...next[role], ...change };
-      return next;
-    });
+    const updateRole = (role, change) => {
+      if (savingRef.current) return;
+      draftVersion.current += 1;
+      setDraft((current) => {
+        const next = clone(current);
+        next[role] = { ...next[role], ...change };
+        draftRef.current = next;
+        return next;
+      });
+    };
     const updateModel = async (role, ref) => {
+      if (savingRef.current) return;
       const [provider, ...model] = ref.split("/");
       updateRole(role, { model: { provider, model: model.join("/") } });
       if (!efforts[ref]) {
@@ -22018,11 +22034,13 @@ function applyProduct(ctx) {
       }
     };
     const updateEffort = (role, effort) => {
+      if (savingRef.current) return;
       const current = draft[role];
       updateRole(role, { model: { ...current.model, ...effort ? { effort } : {} } });
       if (!effort) setDraft((latest) => {
         const next = clone(latest);
         delete next[role].model.effort;
+        draftRef.current = next;
         return next;
       });
     };
@@ -22034,11 +22052,15 @@ function applyProduct(ctx) {
       return null;
     };
     const save = async () => {
+      if (savingRef.current) return;
       const problem = validate();
       if (problem) {
         setError(problem);
         return;
       }
+      const submitted = clone(draftRef.current);
+      const submittedVersion = draftVersion.current;
+      savingRef.current = true;
       setSaving(true);
       setError(null);
       setNotice(null);
@@ -22047,21 +22069,26 @@ function applyProduct(ctx) {
           instanceId: binding.instanceId,
           commandId: crypto.randomUUID(),
           expectedRevision: snapshot.revision,
-          roles: draft
+          roles: submitted
         });
-        setSnapshot((current) => ({ ...current, ...value }));
-        setDraft(clone(value.roles));
+        const editedDuringSave = draftVersion.current !== submittedVersion;
+        const nextDraft = editedDuringSave ? rebaseRoleDraft(submitted, draftRef.current, value.roles) : clone(value.roles);
+        setSnapshot((current) => ({ ...current, ...value, providers: current.providers, history: current.history }));
         setBase(clone(value.roles));
+        setDraft(nextDraft);
+        draftRef.current = nextDraft;
+        draftVersion.current += 1;
         setConflict(false);
         setNotice(t("Configuration v{revision} is active for new turns.", { revision: value.revision }));
         const latest = await productCall("settings", { instanceId: binding.instanceId, limit: 50 });
-        applySnapshot(latest);
+        applySnapshot(latest, true);
       } catch (failure) {
         if (failure.code === "CONFIG_REVISION_CONFLICT") {
           setConflict(true);
           setError(t("The configuration changed elsewhere. Your edits are still here."));
         } else setError(failure.message);
       } finally {
+        savingRef.current = false;
         setSaving(false);
       }
     };
@@ -22072,6 +22099,8 @@ function applyProduct(ctx) {
         const latest = await productCall("settings", { instanceId: binding.instanceId, limit: 50 });
         const merged = rebaseRoleDraft(base, draft, latest.roles);
         applySnapshot(latest);
+        draftRef.current = merged;
+        draftVersion.current += 1;
         setDraft(merged);
         setBase(clone(latest.roles));
         setConflict(false);
@@ -22177,6 +22206,7 @@ function applyProduct(ctx) {
                       className: "bt-select bt-main-settings-select",
                       "aria-label": t("{role} model", { role: label }),
                       value: ref,
+                      disabled: saving,
                       onChange: (event) => {
                         void updateModel(role, event.target.value);
                       }
@@ -22198,6 +22228,7 @@ function applyProduct(ctx) {
                       className: "bt-select bt-main-settings-select",
                       "aria-label": t("{role} thinking effort", { role: label }),
                       value: profile.model.effort ?? "",
+                      disabled: saving,
                       onChange: (event) => updateEffort(role, event.target.value)
                     },
                     (0, import_react53.createElement)("option", { value: "" }, t("Provider default")),
@@ -22212,6 +22243,7 @@ function applyProduct(ctx) {
                     value: profile.instructions,
                     maxLength: 16384,
                     spellCheck: false,
+                    disabled: saving,
                     "aria-label": t("{role} instructions", { role: label }),
                     onChange: (event) => updateRole(role, { instructions: event.target.value })
                   })
@@ -22254,13 +22286,14 @@ function applyProduct(ctx) {
                       value: keyDrafts[provider.id] ?? "",
                       autoComplete: "off",
                       "aria-label": t("{provider} API key", { provider: provider.name }),
+                      disabled: saving,
                       placeholder: t("Paste a new key"),
                       onChange: (event) => setKeyDrafts((current) => ({ ...current, [provider.id]: event.target.value }))
                     }),
                     (0, import_react53.createElement)("button", {
                       type: "button",
                       className: "bt-soft bt-soft-sm",
-                      disabled: !(keyDrafts[provider.id] ?? "").trim(),
+                      disabled: saving || !(keyDrafts[provider.id] ?? "").trim(),
                       onClick: () => {
                         void saveKey(provider.id, keyDrafts[provider.id]);
                       }
@@ -22268,6 +22301,7 @@ function applyProduct(ctx) {
                     provider.key.configured ? (0, import_react53.createElement)("button", {
                       type: "button",
                       className: "bt-soft bt-soft-sm bt-bs-danger",
+                      disabled: saving,
                       onClick: () => {
                         void saveKey(provider.id, null);
                       }

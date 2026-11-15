@@ -111,6 +111,50 @@ test('idle Worker text never becomes a result and cannot invoke Router-only deli
   assert.equal(visible.some(name => name === 'assign_worker' || name === 'deliver_result'), false)
 })
 
+test('a Router batch keeps the configuration captured at its request boundary', { timeout: 20000 }, async context => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-router-config-snapshot-'))
+  let native, storage, sessions, engine, release, entered
+  const gate = new Promise(resolve => { release = resolve })
+  const started = new Promise(resolve => { entered = resolve })
+  const routerModels = []
+  context.after(async () => {
+    release()
+    await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+  native = await nativeContext(join(directory, 'sessions'), async function* (options) {
+    if (options.model === 'worker') { yield* textResponse('Worker is not complete.'); return }
+    routerModels.push(options.model)
+    const user = options.messages.filter(message => message.role === 'user').at(-1)
+    const text = user.content.map(block => block.text ?? '').join('')
+    const results = options.messages.slice(options.messages.lastIndexOf(user) + 1).filter(message => message.role === 'tool')
+    if (!results.length && text.includes('Snapshot alpha.') && text.includes('Snapshot beta.')) {
+      entered()
+      await gate
+    }
+    const tool = options.tools[results.length]
+    if (tool) yield* toolResponse(tool.name, {}, `snapshot-${results.length}`)
+    else yield* textResponse('Assigned.')
+  })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  sessions = new core.NativeSessions(native, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] }, { retryDelayMs: 1 }, sessions)
+  const alpha = await engine.submit({ commandId: 'snapshot-alpha', eventId: 'snapshot-alpha', text: 'Snapshot alpha.' })
+  const beta = await engine.submit({ commandId: 'snapshot-beta', eventId: 'snapshot-beta', text: 'Snapshot beta.' })
+  const running = engine.effects.drain()
+  await started
+  const current = await engine.getRoleConfig()
+  await engine.updateRoleConfig({ commandId: 'snapshot-next', expectedRevision: current.revision,
+    roles: { ...current.roles, router: { ...current.roles.router, model: { provider: 'mock', model: 'router-next' } } } })
+  release()
+  await running
+  assert.equal(routerModels.length > 0, true)
+  assert.deepEqual(new Set(routerModels), new Set(['router']))
+  const uses = await engine.getRoleConfigUses(sessions.routerSessionId)
+  assert.equal(uses.some(use => use.role === 'router' && use.revision === 1 && use.router.model === 'router'), true)
+  assert.ok([alpha.ticketId, beta.ticketId].every(Boolean))
+})
+
 for (const partial of [false, true]) test(`Engine notices share the next busy Router turn and ${partial ? 'retry an unhandled item' : 'keep individual receipts'}`, { timeout: 10000 }, async context => {
   const directory = await mkdtemp(join(tmpdir(), 'ds-bot-engine-burst-'))
   let native, storage, sessions, engine, release, entered

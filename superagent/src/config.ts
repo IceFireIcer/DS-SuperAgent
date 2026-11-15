@@ -18,10 +18,15 @@ export interface RoleConfigUse {
   main?: RoleModel
   createdAt: number
 }
+interface RoleConfigUseIndexMeta { sequence: number }
 
 const configKey = 'role-config'
 const historyKey = (revision: number) => `${JSON.stringify(['role-config-history'])}:${String(revision).padStart(10, '0')}`
 const usePrefix = (sessionId: string) => `${JSON.stringify(['role-config-use', sessionId])}:`
+const recentUsePrefix = JSON.stringify(['role-config-use-recent'])
+const recentUseMetaKey = JSON.stringify(['role-config-use-meta'])
+const recentUseKey = (sequence: number) => `${recentUsePrefix}:${String(sequence).padStart(16, '0')}`
+const recentUseLimit = 100
 const allowedPlaceholders = new Set(['goal', 'constraints', 'evidence'])
 const reservedSkills = new Set(['superagent-role', 'superagent-skills'])
 
@@ -103,6 +108,12 @@ export class RoleConfigStore {
   async recordUse(transaction: AsyncTx, request: { sessionId: string; role: 'main' | 'router' | 'worker'; revision: number; router: RoleModel; worker: RoleModel; main?: RoleModel }) {
     const use: RoleConfigUse = { id: `${usePrefix(request.sessionId)}${randomUUID()}`, instanceId: this.instanceId, ...request, createdAt: this.now() }
     await transaction.insert('role-config-use', use.id, use)
+    const prior = await transaction.get<RoleConfigUseIndexMeta>('role-config-use-meta', recentUseMetaKey)
+    const sequence = (prior?.sequence ?? 0) + 1
+    await transaction.insert('role-config-use-recent', recentUseKey(sequence), use)
+    const meta: RoleConfigUseIndexMeta = { sequence }
+    if (!await transaction.replace('role-config-use-meta', recentUseMetaKey, meta)) await transaction.insert('role-config-use-meta', recentUseMetaKey, meta)
+    if (sequence > recentUseLimit) await transaction.remove('role-config-use-recent', recentUseKey(sequence - recentUseLimit))
     return use
   }
 
@@ -123,19 +134,14 @@ export class RoleConfigStore {
 
   async recentUses(limit = 50): Promise<RoleConfigUse[]> {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new CoreError('INVALID_CONFIG', 'Role configuration use history needs a limit from 1 to 100.')
-    const uses = await this.storage.transaction(this.instanceId, async transaction => {
-      const items: RoleConfigUse[] = []
-      let cursor: string | undefined
-      for (let pageCount = 0; pageCount < 10; pageCount++) {
-        const page = await transaction.scan<RoleConfigUse>('role-config-use', { limit: 100, ...(cursor === undefined ? {} : { after: cursor }) })
-        items.push(...page.items.map(item => item.value))
-        if (!page.cursor) break
-        cursor = page.cursor
-        if (pageCount === 9) throw new CoreError('CONFIG_BUDGET', 'The Session role-config history exceeds its 1000-record budget.')
-      }
-      return items
+    return this.storage.transaction(this.instanceId, async transaction => {
+      const meta = await transaction.get<RoleConfigUseIndexMeta>('role-config-use-meta', recentUseMetaKey)
+      if (!meta?.sequence) return []
+      const first = Math.max(1, meta.sequence - limit + 1)
+      const page = await transaction.scan<RoleConfigUse>('role-config-use-recent', { limit,
+        after: recentUseKey(first - 1) })
+      return page.items.map(item => item.value).reverse()
     })
-    return uses.sort((left, right) => right.createdAt - left.createdAt || right.id.localeCompare(left.id)).slice(0, limit)
   }
 
   async history(limit = 20): Promise<StoredRoleConfig[]> {

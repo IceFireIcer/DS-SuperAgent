@@ -16,7 +16,7 @@ import { Previews, type PreviewView } from './previews.js'
 import { Subagents, type SubagentRecord, type SubagentView } from './subagents.js'
 import { type Deliveries, type DeliveryView } from './deliveries.js'
 import type { ContextKind, ContextReader } from './context.js'
-import type { RoleConfigStore } from './config.js'
+import type { RoleConfigStore, RoleConfigView } from './config.js'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { ExecutionPolicyStore, loadExecutionSelection, saveExecutionSelection, selectExecutionTarget } from './execution-target.js'
 import { capabilityLocations, type CapabilityPlanView, type HostCapabilities } from './capability-locations.js'
@@ -56,6 +56,7 @@ export interface Assignment {
   state: 'pending' | 'running' | 'stopping' | 'ended'
   generation: string
   createdAt: number
+  configurationRevision?: number
   sessionStartSeq?: number
   sessionEndSeq?: number
   runtimeToken?: string
@@ -692,24 +693,24 @@ export class Execution {
   }
 
   private async router(ticketId: string, ready: boolean, signal: AbortSignal) {
+    const config = await this.roleConfig.currentView()
     const request = await this.routerRequest(ticketId, ready)
     if (!request) return
-    const config = await this.roleConfig.currentView()
-    this.sessions.setRoutes(config.roles.router.model, config.roles.worker.model)
-    this.sessions.setRoleInstructions(config.roles.router, config.roles.worker)
-    const result = await this.sessions.run({ ...request, signal, instructions: config.roles.router.instructions, skills: config.roles.router.skills })
+    const result = await this.sessions.run({ ...request, signal, profile: structuredClone(config.roles.router) })
     await this.recordRouterSession(result)
-    await this.storage.transaction(this.instanceId, transaction => this.roleConfig.recordUse(transaction, { sessionId: result.sessionId, role: 'router',
-      revision: config.revision, router: config.roles.router.model, worker: config.roles.worker.model }))
+    await this.recordRouterUse(result.sessionId, config)
   }
 
   private async routerBatch(effects: Effect[], signal: AbortSignal): Promise<EffectResult[]> {
+    const config = await this.roleConfig.currentView()
     const requests = await Promise.allSettled(effects.map(effect => this.routerRequest(String(effect.payload.ticketId), effect.payload.type === 'report-ready')))
     return Promise.all(requests.map(async request => {
       if (request.status === 'rejected') return { type: 'unknown' as const, reason: 'The Router notification could not be prepared.' }
       if (!request.value) return { type: 'success' as const }
       try {
-        await this.recordRouterSession(await this.sessions.run({ ...request.value, signal }))
+        const result = await this.sessions.run({ ...request.value, signal, profile: structuredClone(config.roles.router) })
+        await this.recordRouterSession(result)
+        await this.recordRouterUse(result.sessionId, config)
         return { type: 'success' as const }
       } catch (error) {
         return error instanceof CoreError && error.code === 'ROUTER_NOTICE_UNHANDLED'
@@ -726,8 +727,15 @@ export class Execution {
     })
   }
 
+  private recordRouterUse(sessionId: string, config: RoleConfigView) {
+    return this.storage.transaction(this.instanceId, transaction => this.roleConfig.recordUse(transaction, { sessionId, role: 'router',
+      revision: config.revision, router: config.roles.router.model, worker: config.roles.worker.model,
+      ...(config.roles.main ? { main: config.roles.main.model } : {}) }))
+  }
+
   private async worker(request: WorkerTurnRequest) {
     const { ticketId, inputId, resume = false, takeover = false, status = false, jobId, subagentId, contextHandoff = false, environmentHandoffId } = request
+    const activeConfig = await this.roleConfig.currentView()
     const gate = await this.storage.transaction(this.instanceId, async transaction => ({
       takeoverPending: await isHostTakeoverPending(transaction, this.instanceId, this.hostEpoch?.()),
       record: await loadEnvironmentHandoff(transaction, ticketId),
@@ -851,7 +859,7 @@ export class Execution {
         : cause === 'launch' ? 'launch' : 'resume'
       if (!await this.admitSlot(transaction, assignment, { ticketId, activation })) return { outcome: 'waiting' as const }
       if (environmentHandoffId) await saveEnvironmentHandoffIn(transaction, { ...handoff!, promptStartedAt: Date.now() })
-      assignment.state = 'running'
+      assignment = { ...assignment, state: 'running', configurationRevision: activeConfig.revision }
       await this.saveAssignment(transaction, assignment)
       await transaction.replace('intent', ticketId, { ...intent, state: 'running', reason: 'worker-running' })
       const claimed = input ? await this.inputs.claimDelivery(transaction, input, { assignmentId: assignment.id, sessionId: assignment.sessionId }) : undefined
@@ -864,16 +872,16 @@ export class Execution {
     if (admitted.outcome === 'waiting') return 'waiting' as const
     const { assignment, trigger, environment, input, job, subagent, cause } = admitted
     try {
-      return await this.runTurn({ ticketId, assignment, trigger, environment, input, cause, status, job, subagent })
+      return await this.runTurn({ ticketId, assignment, trigger, environment, input, cause, status, job, subagent, configuration: activeConfig })
     } catch (error) {
       await this.releaseSlot(ticketId, assignment.id)
       throw error
     }
   }
 
-  private async runTurn({ ticketId, assignment: initialAssignment, trigger, environment, input, cause, status, job, subagent }: {
+  private async runTurn({ ticketId, assignment: initialAssignment, trigger, environment, input, cause, status, job, subagent, configuration }: {
     ticketId: string; assignment: Assignment; trigger: Work['trigger']; environment: ExecutionEnvironment | undefined; input: WorkInput | undefined
-    cause: TurnCause; status: boolean; job: JobRecord | undefined; subagent: SubagentRecord | undefined
+    cause: TurnCause; status: boolean; job: JobRecord | undefined; subagent: SubagentRecord | undefined; configuration: RoleConfigView
   }) {
     let assignment = initialAssignment
     const controller = new AbortController()
@@ -1188,7 +1196,7 @@ export class Execution {
           const ticket = (await this.storage.transaction(this.instanceId, transaction => transaction.get<Work['ticket']>('ticket', ticketId)))!
           const scope = {
             parent, cwd: bound!.cwd, environmentId: assignment.environment!.id, mandateId: ticket.mandateId, tools,
-            model: this.sessions.workerRoute,
+            model: configuration.roles.worker.model,
             authorize: async (tx: AsyncTx) => {
               const current = await tx.get<Assignment>('assignment', ticketId)
               if (current?.id !== assignment.id || current.state !== 'running') throw new CoreError('STALE_ASSIGNMENT', 'The delegating Assignment is no longer current.')
@@ -1297,9 +1305,6 @@ export class Execution {
         turnText = input.text
       }
     }
-    const activeConfig = await this.roleConfig.currentView()
-    this.sessions.setRoutes(activeConfig.roles.router.model, activeConfig.roles.worker.model)
-    this.sessions.setRoleInstructions(activeConfig.roles.router, activeConfig.roles.worker)
     let outcome
     try {
       outcome = await this.sessions.run({ sessionId: assignment.sessionId, role: 'worker',
@@ -1308,7 +1313,7 @@ export class Execution {
           await this.storage.transaction(this.instanceId, transaction => this.inputs.recordPersisted(transaction, input.id, turnMessageId!, seq))
         } } : {}),
         text: turnText ?? await this.turnTextFor(cause, ticketId, trigger, input, job, subagent),
-        instructions: activeConfig.roles.worker.instructions, skills: activeConfig.roles.worker.skills,
+        profile: structuredClone(configuration.roles.worker),
         ...(bound ? { cwd: bound.cwd } : {}), signal: controller.signal, tools: status ? statusTools : [
       contextTool,
       ...environmentTools,
@@ -1469,8 +1474,8 @@ export class Execution {
       }
       const sessionMetadata = { id: outcome.sessionId, eventCount: outcome.events.length, ticketId, role: 'worker', status: outcome.status }
       if (!await transaction.replace('session', outcome.sessionId, sessionMetadata)) await transaction.insert('session', outcome.sessionId, sessionMetadata)
-      await this.roleConfig.recordUse(transaction, { sessionId: outcome.sessionId, role: 'worker', revision: activeConfig.revision,
-        router: activeConfig.roles.router.model, worker: activeConfig.roles.worker.model })
+      await this.roleConfig.recordUse(transaction, { sessionId: outcome.sessionId, role: 'worker', revision: configuration.revision,
+        router: configuration.roles.router.model, worker: configuration.roles.worker.model })
       if (status && statusFact) {
         const fact: StatusReport = { id: `${JSON.stringify(['status-report', ticketId])}:${randomUUID()}`, ticketId, assignmentId: assignment.id, text: statusFact, createdAt: Date.now() }
         if (!await transaction.replace('status-report', `${JSON.stringify(['status-report', ticketId])}:current`, fact)) await transaction.insert('status-report', `${JSON.stringify(['status-report', ticketId])}:current`, fact)
