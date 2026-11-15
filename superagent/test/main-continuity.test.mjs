@@ -114,6 +114,10 @@ test('pending Main input resumes after restart without creating the work twice',
     await transaction.insert('main-command', commandKey, {
       fingerprint, messageId, userSequence: sequence, status: 'queued', updatedAt: Date.now(),
     })
+    await transaction.insert('main-active-command', JSON.stringify(['main-active-command', String(sequence).padStart(16, '0'), commandKey]), {
+      key: commandKey, userSequence: sequence, status: 'queued',
+    })
+    await transaction.insert('main-health', 'main', { queuedInputs: 1, failedInputs: 0, lastStatus: 'queued', updatedAt: Date.now() })
     await transaction.replace('main-state', 'main', { ...state, sequence })
   })
   engine.effects.start()
@@ -125,4 +129,32 @@ test('pending Main input resumes after restart without creating the work twice',
   assert.equal(history.health.queuedInputs, 0)
   assert.equal(history.generation, 0)
   assert.equal(history.mainId, binding.mainId)
+})
+
+test('more than one thousand completed Main commands do not burden an empty active queue', { timeout: 15_000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'r5-main-command-history-'))
+  const native = await nativeContext(join(directory, 'sessions'), () => textResponse('Unused.'))
+  const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  const sessions = new NativeSessions(native, routes)
+  const engine = new Engine(storage, 'personal', source, {}, sessions)
+  t.after(async () => {
+    await engine.shutdown(); await sessions.close(); await native.fiber.dispose(); await storage.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+  const binding = await engine.openMain({ instanceId: 'personal' })
+  await storage.transaction('personal', async transaction => {
+    const state = await transaction.get('main-state', 'main')
+    for (let index = 1; index <= 1001; index++) {
+      await transaction.insert('main-command', `history-${index}`, {
+        fingerprint: `fingerprint-${index}`, messageId: `message-${index}`, userSequence: index,
+        status: 'completed', updatedAt: Date.now() - 1001 + index,
+      })
+    }
+    await transaction.replace('main-state', 'main', { ...state, sequence: 1001 })
+  })
+  const history = await engine.getMainConversation({ instanceId: 'personal', limit: 10 })
+  assert.equal(history.health.queuedInputs, 0)
+  assert.equal(history.health.failedInputs, 0)
+  assert.equal(history.generation, binding.generation)
+  assert.deepEqual(await engine.resumeMainInputs({ instanceId: 'personal' }), { resumed: 0 })
 })

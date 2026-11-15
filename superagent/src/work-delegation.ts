@@ -124,6 +124,11 @@ export interface MainEvidenceRequest {
   maxBytes?: number
 }
 
+export interface MainEvidenceCard extends ContextCard {
+  factsBytes: number
+  factsTruncated: boolean
+}
+
 export interface MainWorkRequest {
   commandId: string
   mainId: string
@@ -570,6 +575,7 @@ export class WorkDelegation {
         if (error instanceof CoreError && (error.code === 'MAIN_UPDATE_FAILED' || error.code === 'MAIN_SOURCE_FAILED')) {
           return { type: effect.state === 'unknown' ? 'not-applied' : 'transient', reason: error.message }
         }
+        if (error instanceof CoreError && error.code === 'MAIN_UPDATE_INTERRUPTED') return { type: 'transient', reason: error.message }
         if (error instanceof CoreError && error.code === 'ROUTER_NOTICE_UNHANDLED') return { type: 'transient', reason: error.message }
         throw error
       }
@@ -908,32 +914,66 @@ export class WorkDelegation {
   }
 
   async handoff(mainId: string): Promise<MainWorkHandoff> {
-    const cards = await this.list(mainId)
+    identifier(mainId, 'mainId')
+    const briefs: MainWorkBrief[] = []
+    let cursor: string | undefined
+    for (let pageCount = 0; pageCount < 10; pageCount++) {
+      const page = await this.options.storage.transaction(this.options.instanceId,
+        transaction => transaction.scan<MainWorkBrief>('work-brief', { limit: 100, ...(cursor === undefined ? {} : { after: cursor }) }))
+      briefs.push(...page.items.map(item => item.value).filter(brief => brief.mainId === mainId))
+      if (page.cursor === undefined) break
+      cursor = page.cursor
+      if (pageCount === 9) throw new CoreError('WORK_HANDOFF_BUDGET', 'The Main handoff exceeds its 1000-WorkBrief budget.')
+    }
     const refs = new Map<string, ContextRef>()
-    const workIndex = cards.map(card => {
-      const ticketId = card.receipt.ticketId
-      const evidenceRefs: ContextRef[] = ticketId ? [
-        { kind: 'ticket', ticketId },
-        { kind: 'trigger', ticketId },
-        ...(card.outcome?.reportId ? [{ kind: 'report' as const, ticketId, id: card.outcome.reportId }] : []),
-        ...(card.status === 'waiting' ? [{ kind: 'attention' as const, ticketId }] : []),
-      ] : []
-      for (const ref of evidenceRefs) refs.set(canonicalJson(ref), structuredClone(ref))
-      return {
-        workBriefId: card.brief.id,
-        workItemId: card.brief.workItemId,
-        ...(ticketId ? { ticketId } : {}),
-        goal: card.brief.goal,
-        constraints: card.brief.constraints,
-        acceptanceCriteria: card.brief.acceptanceCriteria,
-        status: card.status,
-        evidenceRefs,
+    const workIndex: MainWorkHandoff['workIndex'] = []
+    for (const brief of briefs.sort((left, right) => left.createdAt - right.createdAt || left.id.localeCompare(right.id))) {
+      const split = await this.readSplit(brief.id)
+      const items = split?.items ?? [this.legacyItem(brief)]
+      for (const item of items) {
+        if (workIndex.length >= 1000) throw new CoreError('WORK_HANDOFF_BUDGET', 'The Main handoff exceeds its 1000-work-item budget.')
+        const receipt = await this.itemReceipt(item.id)
+          ?? await this.options.storage.transaction(this.options.instanceId, tx => tx.get<MainWorkReceipt>('work-receipt', brief.id))
+        if (!receipt) throw new CoreError('INCOMPLETE_STATE', 'A Main work receipt is missing during handoff.')
+        const projection = await this.options.storage.transaction(this.options.instanceId, async tx => {
+          const ticketId = receipt.ticketId
+          return {
+            update: await tx.get<MainWorkUpdate>('work-update-head', item.id),
+            outcome: await tx.get<MainWorkOutcome>('work-outcome', item.id),
+            ticket: ticketId ? await tx.get<Work['ticket']>('ticket', ticketId) : undefined,
+            intent: ticketId ? await tx.get<Work['intent']>('intent', ticketId) : undefined,
+            setup: ticketId ? await tx.get<{ state?: string }>('setup', ticketId) : undefined,
+          }
+        })
+        const ticketId = receipt.ticketId
+        const status: MainWorkStatus = projection.ticket?.constraint?.kind === 'stopped' ? 'stopped'
+          : projection.ticket?.constraint?.kind === 'waiting-human' ? 'waiting'
+            : projection.setup?.state === 'failed' ? 'blocked'
+              : projection.intent?.reason === 'recovery-blocked' || projection.intent?.reason === 'recovery-exhausted' ? 'unknown'
+                : projection.outcome?.status ?? projection.update?.status ?? receipt.status
+        const evidenceRefs: ContextRef[] = ticketId ? [
+          { kind: 'ticket', ticketId },
+          { kind: 'trigger', ticketId },
+          ...(projection.outcome?.reportId ? [{ kind: 'report' as const, ticketId, id: projection.outcome.reportId }] : []),
+          ...(status === 'waiting' ? [{ kind: 'attention' as const, ticketId }] : []),
+        ] : []
+        for (const ref of evidenceRefs) refs.set(canonicalJson(ref), structuredClone(ref))
+        workIndex.push({
+          workBriefId: brief.id,
+          workItemId: item.id,
+          ...(ticketId ? { ticketId } : {}),
+          goal: item.goal,
+          constraints: item.constraints,
+          acceptanceCriteria: item.acceptanceCriteria,
+          status,
+          evidenceRefs,
+        })
       }
-    })
+    }
     return { workIndex, evidenceRefs: [...refs.values()] }
   }
 
-  async evidence(mainId: string, request: MainEvidenceRequest): Promise<ContextCard> {
+  async evidence(mainId: string, request: MainEvidenceRequest): Promise<MainEvidenceCard> {
     if (!request || Object.keys(request).some(key => !['workItemId', 'ref', 'after', 'maxBytes'].includes(key))) {
       throw new CoreError('INVALID_INPUT', 'Main evidence accepts one workItemId, reference and bounded page only.')
     }
@@ -954,12 +994,37 @@ export class WorkDelegation {
     if (!receipt || receipt.status !== 'accepted' || !receipt.ticketId) {
       throw new CoreError('WORK_NOT_ACCEPTED', 'Evidence is available only after the Router accepts this work item.')
     }
-    return this.options.readContext({
+    const card = await this.options.readContext({
       ticketId: receipt.ticketId,
       ref: { ...request.ref, ticketId: receipt.ticketId },
       ...(request.after === undefined ? {} : { after: request.after }),
       ...(request.maxBytes === undefined ? {} : { maxBytes: request.maxBytes }),
     })
+    const originalBytes = Buffer.byteLength(JSON.stringify(card.facts))
+    if (originalBytes <= 4096) return { ...card, factsBytes: originalBytes, factsTruncated: false }
+    const facts: Record<string, unknown> = {}
+    const entries = Object.entries(card.facts)
+    for (const [key, value] of entries.slice(0, 7)) {
+      const encoded = JSON.stringify(value)
+      const bytes = Buffer.byteLength(encoded)
+      facts[key] = bytes <= 512 ? value : {
+        kind: 'truncated-fact',
+        type: Array.isArray(value) ? 'array' : value === null ? 'null' : typeof value,
+        ...(Array.isArray(value) ? { count: value.length } : {}),
+        bytes,
+        preview: encoded.slice(0, 96),
+      }
+    }
+    if (entries.length > 7) facts.truncatedKeys = {
+      keys: entries.slice(7, 27).map(([key]) => key),
+      omitted: Math.max(0, entries.length - 27),
+    }
+    const boundedBytes = Buffer.byteLength(JSON.stringify(facts))
+    if (boundedBytes > 4096) {
+      const fallback = { truncated: true, originalBytes }
+      return { ...card, facts: fallback, factsBytes: Buffer.byteLength(JSON.stringify(fallback)), factsTruncated: true }
+    }
+    return { ...card, facts, factsBytes: boundedBytes, factsTruncated: true }
   }
 
   async query(mainId: string, selector: { workBriefId?: string; workItemId?: string }) {
@@ -1241,8 +1306,10 @@ export class WorkDelegation {
     const update = !current ? projection.update : persisted ? projection.update : undefined
     const latestFollowUp = projection.followUps.at(-1)
     const snapshotStatus = this.status(snapshot)
-    const status = latestFollowUp ? followUpCardStatus[latestFollowUp.status]
-      : outcome?.status ?? (snapshotStatus === 'success' ? 'running' : snapshotStatus)
+    const authoritative = ['stopped', 'waiting', 'blocked', 'unknown'].includes(snapshotStatus)
+    const status = authoritative ? snapshotStatus
+      : latestFollowUp ? followUpCardStatus[latestFollowUp.status]
+        : outcome?.status ?? (snapshotStatus === 'success' ? 'running' : snapshotStatus)
     return { brief: cardBrief, receipt, status,
       ...(update ? { update } : {}), ...(outcome ? { outcome } : {}), ...followUps,
       ...(snapshot.control ? { control: { ...snapshot.control, workItemId: item.id } } : {}) }

@@ -38,7 +38,7 @@ import { compareWorkCopy, WorkCopyUnsupported, workCopyGaps,
   uniqueBlockers, type HandoffCopyView, type WorkCopyBlocker, type WorkCopyComparison, type WorkCopyFile, type WorkCopySnapshot } from './work-copy.js'
 import type { ActivationGate } from './activation.js'
 import { MainConversation, type MainAddress, type MainSend } from './main-conversation.js'
-import { WorkDelegation, type MainWorkCard, type MainWorkControl, type MainWorkItem } from './work-delegation.js'
+import { WorkDelegation, type MainEvidenceCard, type MainWorkCard, type MainWorkControl, type MainWorkItem } from './work-delegation.js'
 import { WorkObservations } from './work-observations.js'
 import { MainSourceHandoffs, type MainSourceDeliveryPage, type MainSourceHandoff, type MainSourceView } from './main-source.js'
 
@@ -1497,7 +1497,7 @@ export class Engine {
   }
 
   async readMainEvidence(request: MainAddress & { workItemId: string; ref: Omit<ContextRef, 'ticketId'>;
-    after?: string; maxBytes?: number }): Promise<ContextCard> {
+    after?: string; maxBytes?: number }): Promise<MainEvidenceCard> {
     if (!request || Object.keys(request).some(key => !['instanceId', 'workItemId', 'ref', 'after', 'maxBytes'].includes(key))) {
       throw new CoreError('INVALID_INPUT', 'Main evidence accepts one authorized work item and a bounded reference page.')
     }

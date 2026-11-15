@@ -56,7 +56,7 @@ interface MainCommand {
 }
 interface MainUpdateCommand {
   attempt: number
-  state: 'running' | 'failed' | 'completed' | 'discarded'
+  state: 'running' | 'failed' | 'completed' | 'discarded' | 'interrupted'
   messageId: string
   sequence?: number
   updatedAt?: number
@@ -64,6 +64,18 @@ interface MainUpdateCommand {
   run?: { sessionId: string; generation: number }
 }
 interface MainSourceCommand { state: 'running' | 'failed' | 'completed'; messageId: string; turnMessageId: string; userSequence: number; attempt: number }
+interface MainActiveCommand {
+  key: string
+  userSequence: number
+  status: 'queued' | 'running'
+}
+interface MainHealthHead {
+  queuedInputs: number
+  failedInputs: number
+  lastStatus?: MainMessage['status']
+  errorCode?: string
+  updatedAt: number
+}
 export interface MainHealth {
   state: 'ready' | 'running' | 'degraded'
   queuedInputs: number
@@ -83,6 +95,8 @@ export interface MainSessionRollover {
   workIndex: MainWorkHandoff['workIndex']
   evidenceRefs: ContextRef[]
   unreadInputs: { id: string; sequence: number; text: string }[]
+  unreadInputCount: number
+  unreadInputsTruncated: boolean
   createdAt: number
 }
 export interface MainPage extends MainBinding {
@@ -98,12 +112,17 @@ export interface MainRunResult extends MainBinding { messageId: string; status: 
 interface MainEvent { type: string; data: { id?: string; message?: { content?: { type: string; text?: string }[] }; reason?: { kind?: string } } }
 const messageKey = (sequence: number) => String(sequence).padStart(16, '0')
 const sourceRecoveryMessageId = (handoffId: string, attempt: number) => `main-source-recovery:${handoffId}:${attempt}`
+const activeCommandKey = (sequence: number, key: string) => JSON.stringify(['main-active-command', messageKey(sequence), key])
+const reconcileCommandKey = (key: string) => JSON.stringify(['main-reconcile-command', key])
 
 /** Business facts stay separate from the native Session; no transaction spans a model turn. */
 export class MainConversation {
   private tail: Promise<unknown> = Promise.resolve()
   private readonly scheduled = new Map<string, Promise<MainRunResult>>()
+  private readonly controllers = new Set<AbortController>()
+  private closing = false
   private closed = false
+  private closingTurn: Promise<void> | undefined
   private pendingTurns = 0
   private readonly turnControllers = new Map<string, AbortController>()
   constructor(private readonly storage: Storage, private readonly instanceId: string, private readonly source: DesktopSource,
@@ -134,39 +153,70 @@ export class MainConversation {
     return initial
   }
 
+  private async healthHead(tx: AsyncTx): Promise<MainHealthHead> {
+    return await tx.get<MainHealthHead>('main-health', 'main') ?? { queuedInputs: 0, failedInputs: 0, updatedAt: 0 }
+  }
+
+  private async saveHealthHead(tx: AsyncTx, health: MainHealthHead) {
+    if (!await tx.replace('main-health', 'main', health)) await tx.insert('main-health', 'main', health)
+  }
+
+  private async updateHealthTransition(tx: AsyncTx, before: MainCommand['status'] | undefined,
+    after: MainCommand['status'], error?: string) {
+    const health = await this.healthHead(tx)
+    const next: MainHealthHead = {
+      ...health,
+      queuedInputs: Math.max(0, health.queuedInputs + (after === 'queued' ? 1 : 0) - (before === 'queued' ? 1 : 0)),
+      failedInputs: Math.max(0, health.failedInputs + (after === 'failed' ? 1 : 0) - (before === 'failed' ? 1 : 0)),
+      lastStatus: after,
+      updatedAt: Date.now(),
+      ...(error ? { errorCode: error } : {}),
+    }
+    if (!error) delete next.errorCode
+    await this.saveHealthHead(tx, next)
+  }
+
+  private async updateHealthState(tx: AsyncTx, status: MainHealthHead['lastStatus'], error?: string) {
+    const health = await this.healthHead(tx)
+    const next: MainHealthHead = { ...health, ...(status ? { lastStatus: status } : {}), updatedAt: Date.now(),
+      ...(error ? { errorCode: error } : {}) }
+    if (!error) delete next.errorCode
+    await this.saveHealthHead(tx, next)
+  }
+
+  private async activeCommand(tx: AsyncTx, command: MainCommand & { key: string }) {
+    const active: MainActiveCommand = { key: command.key, userSequence: command.userSequence, status: 'queued' }
+    const id = activeCommandKey(command.userSequence, command.key)
+    if (!await tx.replace('main-active-command', id, active)) await tx.insert('main-active-command', id, active)
+  }
+
+  private async runningCommand(tx: AsyncTx, command: MainCommand & { key: string }) {
+    const active: MainActiveCommand = { key: command.key, userSequence: command.userSequence, status: 'running' }
+    const id = activeCommandKey(command.userSequence, command.key)
+    if (!await tx.replace('main-active-command', id, active)) await tx.insert('main-active-command', id, active)
+  }
+
+  private async removeActiveCommand(tx: AsyncTx, command: MainCommand, key: string) {
+    await tx.remove('main-active-command', activeCommandKey(command.userSequence, key))
+  }
+
+  private async reconcileIndex(tx: AsyncTx, command: MainCommand, key: string, present: boolean) {
+    const id = reconcileCommandKey(key)
+    if (present) {
+      const value = { key, userSequence: command.userSequence }
+      if (!await tx.replace('main-reconcile-command', id, value)) await tx.insert('main-reconcile-command', id, value)
+    } else await tx.remove('main-reconcile-command', id)
+  }
+
   private async health(tx: AsyncTx, state: MainState): Promise<MainHealth> {
-    const commands: MainCommand[] = []
-    const updates: MainUpdateCommand[] = []
-    let commandAfter: string | undefined
-    for (let pageCount = 0; pageCount < 10; pageCount++) {
-      const page = await tx.scan<MainCommand>('main-command', { limit: 100, ...(commandAfter === undefined ? {} : { after: commandAfter }) })
-      commands.push(...page.items.map(item => item.value))
-      if (!page.cursor) break
-      commandAfter = page.cursor
-      if (pageCount === 9) throw new CoreError('MAIN_QUEUE_BUDGET', 'The Main input queue exceeds its 1000-command budget.')
-    }
-    let updateAfter: string | undefined
-    for (let pageCount = 0; pageCount < 10; pageCount++) {
-      const updatePage = await tx.scan<MainUpdateCommand>('main-update-command', { limit: 100, ...(updateAfter === undefined ? {} : { after: updateAfter }) })
-      updates.push(...updatePage.items.map(item => item.value))
-      if (!updatePage.cursor) break
-      updateAfter = updatePage.cursor
-      if (pageCount === 9) throw new CoreError('MAIN_QUEUE_BUDGET', 'The Main notification queue exceeds its 1000-command budget.')
-    }
-    const latestCommand = commands.sort((left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0))[0]
-    const latestUpdate = updates.sort((left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0))[0]
-    const latest = (latestCommand?.updatedAt ?? 0) >= (latestUpdate?.updatedAt ?? 0)
-      ? { status: latestCommand?.status, error: latestCommand?.error, updatedAt: latestCommand?.updatedAt }
-      : { status: latestUpdate?.state === 'failed' ? 'failed' as const : latestUpdate?.state === 'running' ? 'running' as const
-        : 'completed' as const, error: latestUpdate?.error, updatedAt: latestUpdate?.updatedAt }
-    const queuedInputs = commands.filter(command => command.status === 'queued').length
-    const failedInputs = commands.filter(command => command.status === 'failed').length
+    const head = await this.healthHead(tx)
     return {
-      state: state.activeCommand || latest.status === 'running' ? 'running' : latest.status === 'failed' ? 'degraded' : 'ready',
-      queuedInputs,
-      failedInputs,
-      updatedAt: latest.updatedAt ?? Date.now(),
-      ...(latest.error ? { errorCode: latest.error } : {}),
+      state: state.activeCommand || head.queuedInputs || head.lastStatus === 'queued' || head.lastStatus === 'running'
+        ? 'running' : head.lastStatus === 'failed' ? 'degraded' : 'ready',
+      queuedInputs: head.queuedInputs,
+      failedInputs: head.failedInputs,
+      updatedAt: head.updatedAt || Date.now(),
+      ...(head.errorCode ? { errorCode: head.errorCode } : {}),
     }
   }
 
@@ -260,14 +310,23 @@ export class MainConversation {
       const prior = await tx.get<MainCommand>('main-command', key)
       if (prior) {
         if (prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'This Main message identity was already used for different text.')
+        if (prior.status === 'queued' || prior.status === 'running') await this.activeCommand(tx, { ...prior, key })
+        else if (prior.status === 'failed' || prior.status === 'interrupted') {
+          const { error: _error, ...current } = prior
+          await this.updateCommandIn(tx, key, { ...current, status: 'queued', updatedAt: Date.now() })
+        }
         return
       }
       const state = await this.state(tx)
       const sequence = state.sequence + 1
       const messageId = `main-input-${randomUUID()}`
       await tx.insert<MainMessage>('main-message', messageKey(sequence), { id: messageId, sequence, role: 'user', text: request.text, createdAt: Date.now(), status: 'queued' })
-      await tx.insert<MainCommand>('main-command', key, { fingerprint, messageId, userSequence: sequence, status: 'queued', updatedAt: Date.now() })
+      const command: MainCommand = { fingerprint, messageId, userSequence: sequence, status: 'queued', updatedAt: Date.now() }
+      await tx.insert<MainCommand>('main-command', key, command)
       await tx.insert('main-message-command', messageId, { commandKey: key })
+      await this.activeCommand(tx, { ...command, key })
+      const health = await this.healthHead(tx)
+      await this.saveHealthHead(tx, { ...health, queuedInputs: health.queuedInputs + 1, lastStatus: 'queued', updatedAt: Date.now() })
       await tx.replace('main-state', 'main', { ...state, sequence })
     })
     return this.enqueue(binding, key, request.text)
@@ -279,15 +338,19 @@ export class MainConversation {
     await commandTransaction(this.storage, this.instanceId, async tx => {
       let after: string | undefined
       for (let pageCount = 0; pageCount < 10; pageCount++) {
-        const page = await tx.scan<MainCommand>('main-command', { limit: 100, ...(after === undefined ? {} : { after }) })
+        const page = await tx.scan<MainActiveCommand>('main-active-command', { limit: 100, ...(after === undefined ? {} : { after }) })
         for (const item of page.items) {
-          if (item.value.status !== 'queued' && item.value.status !== 'running') continue
-          const message = await tx.get<MainMessage>('main-message', messageKey(item.value.userSequence))
-          if (message?.role === 'user') commands.push({ key: item.id, command: item.value, text: message.text })
+          const command = await tx.get<MainCommand>('main-command', item.value.key)
+          if (!command || command.status !== 'queued' && command.status !== 'running') {
+            await tx.remove('main-active-command', item.id)
+            continue
+          }
+          const message = await tx.get<MainMessage>('main-message', messageKey(command.userSequence))
+          if (message?.role === 'user') commands.push({ key: item.value.key, command, text: message.text })
         }
         if (!page.cursor) break
         after = page.cursor
-        if (pageCount === 9) throw new CoreError('MAIN_QUEUE_BUDGET', 'The Main input queue exceeds its 1000-command budget.')
+        if (pageCount === 9) throw new CoreError('MAIN_QUEUE_BUDGET', 'The Main active input queue exceeds its 1000-command budget.')
       }
     })
     commands.sort((left, right) => left.command.userSequence - right.command.userSequence)
@@ -305,14 +368,16 @@ export class MainConversation {
     await commandTransaction(this.storage, this.instanceId, async tx => {
       let after: string | undefined
       for (let pageCount = 0; pageCount < 10; pageCount++) {
-        const page = await tx.scan<MainCommand>('main-command', { limit: 100, ...(after === undefined ? {} : { after }) })
+        const page = await tx.scan<{ key: string; userSequence: number }>('main-reconcile-command', { limit: 100,
+          ...(after === undefined ? {} : { after }) })
         for (const item of page.items) {
-          if (item.value.status !== 'failed' && item.value.status !== 'running') continue
-          commands.push({ key: item.id, command: item.value })
+          const command = await tx.get<MainCommand>('main-command', item.value.key)
+          if (command?.status === 'failed') commands.push({ key: item.value.key, command })
+          else await tx.remove('main-reconcile-command', item.id)
         }
         if (!page.cursor) break
         after = page.cursor
-        if (pageCount === 9) throw new CoreError('MAIN_QUEUE_BUDGET', 'The Main input queue exceeds its 1000-command budget.')
+        if (pageCount === 9) throw new CoreError('MAIN_RECONCILE_BUDGET', 'The Main recovery index exceeds its 1000-command budget.')
       }
     })
     for (const entry of commands.sort((left, right) => left.command.userSequence - right.command.userSequence)) {
@@ -637,6 +702,8 @@ export class MainConversation {
     const command = await commandTransaction(this.storage, this.instanceId, tx => tx.get<MainCommand>('main-command', key))
     if (!command) throw new CoreError('INCOMPLETE_STATE', 'The Main input receipt is missing.')
     if (command.status === 'completed') return { ...current, messageId: command.messageId, status: command.status }
+    const controller = new AbortController()
+    this.controllers.add(controller)
     try {
       if (state.activeCommand && state.activeCommand !== key) {
         if (!await this.reconcile(current, state.activeCommand)) {
@@ -671,7 +738,6 @@ export class MainConversation {
       }
       const answer = this.reply(result.events as MainEvent[], messageId)
       if (result.forkedSessionId) {
-        await this.rollover(key, current, result.forkedSessionId)
         state = await commandTransaction(this.storage, this.instanceId, tx => this.state(tx))
         current = this.binding(state)
         return { ...current, messageId: command.messageId, status: 'interrupted' as const }
@@ -689,14 +755,41 @@ export class MainConversation {
         return { ...binding, messageId: current.messageId, status: 'stopped' as const }
       }
       const code = error instanceof CoreError ? error.code : 'MAIN_TURN_FAILED'
+      if (this.closing && controller.signal.aborted) {
+        await this.updateCommand(key, 'running', 'HOST_SHUTDOWN')
+        throw new CoreError('HOST_SHUTDOWN', 'The Host stopped the Main turn; it will resume after reopen.')
+      }
       await this.updateCommand(key, 'failed', code)
       throw new CoreError(code, 'Main could not finish this reply. Your message remains in the conversation.')
     } finally {
+      this.controllers.delete(controller)
       this.turnControllers.delete(key)
     }
   }
 
   private async rollover(key: string, run: MainBinding, newSessionId: string) {
+    const command = await commandTransaction(this.storage, this.instanceId, tx => tx.get<MainCommand>('main-command', key))
+    if (!command) throw new CoreError('INCOMPLETE_STATE', 'The Main input receipt is missing during rollover.')
+    return this.commitRollover(run, newSessionId, async (tx, record) => {
+      const current = await tx.get<MainCommand>('main-command', key)
+      if (!current) throw new CoreError('INCOMPLETE_STATE', 'The Main input receipt is missing during rollover.')
+      const { error: _error, ...settled } = current
+      await this.updateCommandIn(tx, key, { ...settled, status: 'interrupted', updatedAt: record.createdAt })
+    }, messageKey(command.userSequence))
+  }
+
+  private async rolloverUpdate(key: string, run: MainBinding, newSessionId: string) {
+    return this.commitRollover(run, newSessionId, async (tx, record) => {
+      const prior = await tx.get<MainUpdateCommand>('main-update-command', key)
+      if (!prior) throw new CoreError('INCOMPLETE_STATE', 'The Main update receipt is missing during rollover.')
+      const next: MainUpdateCommand = { ...prior, state: 'interrupted', updatedAt: record.createdAt }
+      await tx.replace('main-update-command', key, next)
+      await this.updateHealthState(tx, 'interrupted')
+    })
+  }
+
+  private async commitRollover(run: MainBinding, newSessionId: string,
+    settle: (tx: AsyncTx, record: MainSessionRollover) => Promise<void>, activeAfterSequence?: string) {
     const rolloverId = `main-session-rollover:${newSessionId}`
     const existing = await commandTransaction(this.storage, this.instanceId, tx =>
       tx.get<MainSessionRollover>('main-session-rollover', rolloverId))
@@ -707,17 +800,15 @@ export class MainConversation {
       const prior = await tx.get<MainSessionRollover>('main-session-rollover', rolloverId)
       if (prior) return prior
       const state = await this.state(tx)
-      const command = await tx.get<MainCommand>('main-command', key)
-      if (!command || state.mainId !== run.mainId || state.mainSessionId !== run.mainSessionId || state.generation !== run.generation) {
-        if (command) await this.updateCommandIn(tx, key, { ...command, status: 'failed', error: 'MAIN_TURN_STALE', updatedAt: Date.now() })
+      if (state.mainId !== run.mainId || state.mainSessionId !== run.mainSessionId || state.generation !== run.generation) {
         return undefined
       }
       const unreadInputs: MainSessionRollover['unreadInputs'] = []
       let after: string | undefined
       for (let pageCount = 0; pageCount < 10; pageCount++) {
-        const page = await tx.scan<MainCommand>('main-command', { limit: 100, ...(after === undefined ? {} : { after }) })
+        const page = await tx.scan<MainActiveCommand>('main-active-command', { limit: 100, ...(after === undefined ? {} : { after }) })
         for (const entry of page.items) {
-          if (entry.value.userSequence <= command.userSequence || entry.value.status !== 'queued' && entry.value.status !== 'running') continue
+          if (activeAfterSequence && messageKey(entry.value.userSequence) <= activeAfterSequence) continue
           const message = await tx.get<MainMessage>('main-message', messageKey(entry.value.userSequence))
           if (message?.role === 'user') unreadInputs.push({ id: message.id, sequence: message.sequence, text: message.text })
         }
@@ -735,6 +826,8 @@ export class MainConversation {
         workIndex: structuredClone(handoff.workIndex),
         evidenceRefs: structuredClone(handoff.evidenceRefs),
         unreadInputs: structuredClone(unreadInputs.slice(-20)),
+        unreadInputCount: unreadInputs.length,
+        unreadInputsTruncated: unreadInputs.length > 20,
         createdAt: Date.now(),
       }
       const sequence = state.sequence + 1
@@ -750,8 +843,7 @@ export class MainConversation {
       const { activeCommand: _active, ...settledState } = state
       await tx.replace('main-state', 'main', { ...settledState, mainSessionId: newSessionId,
         generation: record.generation, sequence })
-      const { error: _error, ...settledCommand } = command
-      await this.updateCommandIn(tx, key, { ...settledCommand, status: 'interrupted', updatedAt: Date.now() })
+      await settle(tx, record)
       return record
     })
   }
@@ -774,13 +866,16 @@ export class MainConversation {
           return
         }
       }
-      const attempt = prior?.state === 'failed' || prior?.state === 'running' ? prior.attempt + 1 : prior?.attempt ?? 0
+      const attempt = prior?.state === 'failed' || prior?.state === 'running' || prior?.state === 'interrupted'
+        ? prior.attempt + 1 : prior?.attempt ?? 0
       const messageId = `main-update:${key}:${attempt}`
       const record = (state: MainUpdateCommand['state']) => commandTransaction(this.storage, this.instanceId, async tx => {
         const current = await this.state(tx)
         const next: MainUpdateCommand = { attempt, state, messageId, updatedAt: Date.now(),
           ...(state === 'running' ? { run: { sessionId: current.mainSessionId, generation: current.generation } } : {}) }
         if (!await tx.replace('main-update-command', key, next)) await tx.insert('main-update-command', key, next)
+        await this.updateHealthState(tx, state === 'failed' ? 'failed' : state === 'running' ? 'running'
+          : state === 'interrupted' ? 'interrupted' : 'completed')
       })
       if (!await isCurrent()) { await record('discarded'); return }
       let answer: string | undefined
@@ -794,15 +889,22 @@ export class MainConversation {
         if (!await isCurrent()) { await record('discarded'); return }
         signal.throwIfAborted()
         await record('running')
+        let forkedSessionId: string | undefined
         try {
           const result = await this.sessions!.run({ role: 'main', sessionId: binding.mainSessionId, messageId, tools: [], signal,
             text: `[Work update]\nThis is a bounded Router notification, not a new user request. Explain the receipt or result briefly. Do not claim more than its evidence.\n${JSON.stringify(notification)}`,
             ...(prepared ? { profile: prepared.profile } : {}) })
-          answer = this.reply(result.events as MainEvent[], messageId)
+          forkedSessionId = result.forkedSessionId
+          if (forkedSessionId) answer = undefined
+          else answer = this.reply(result.events as MainEvent[], messageId)
         } catch (error) {
           const turn = await this.readTurn(binding, messageId)
           if (!turn.ended) throw error
           answer = turn.answer
+        }
+        if (forkedSessionId) {
+          await this.rolloverUpdate(key, binding, forkedSessionId)
+          throw new CoreError('MAIN_UPDATE_INTERRUPTED', 'Main rolled over while handling this work update.')
         }
         if (!answer) { await record('failed'); throw new CoreError('MAIN_UPDATE_FAILED', 'Main ended this notification without a visible reply.') }
       }
@@ -813,10 +915,11 @@ export class MainConversation {
       await commandTransaction(this.storage, this.instanceId, async tx => {
         const key = notification.update.id
         const prior = await tx.get<MainUpdateCommand>('main-update-command', key)
-        if (prior?.state === 'completed' || prior?.state === 'discarded') return
+        if (prior?.state === 'completed' || prior?.state === 'discarded' || prior?.state === 'interrupted') return
         const next: MainUpdateCommand = { ...(prior ?? { attempt: 0, messageId: `main-update:${key}:0` }), state: 'failed',
           error: code, updatedAt: Date.now() }
         if (!await tx.replace('main-update-command', key, next)) await tx.insert('main-update-command', key, next)
+        await this.updateHealthState(tx, 'failed', code)
       })
       throw error
     }).finally(() => { this.pendingTurns-- })
@@ -838,6 +941,7 @@ export class MainConversation {
       const next: MainUpdateCommand = { messageId, sequence, attempt, state: live ? 'completed' : 'discarded', updatedAt: Date.now() }
       if (live) await tx.replace('main-state', 'main', { ...state, sequence })
       if (!await tx.replace('main-update-command', key, next)) await tx.insert('main-update-command', key, next)
+      await this.updateHealthState(tx, live ? 'completed' : 'interrupted')
     })
   }
 
@@ -874,11 +978,17 @@ export class MainConversation {
       return true
     }
     if (!this.sessions) return false
-    if (!(await this.sessions.hasMessage(sessionId, messageId)).found) return false
+    if (!(await this.sessions.hasMessage(sessionId, messageId)).found) {
+      if (command.status === 'failed') await commandTransaction(this.storage, this.instanceId, tx =>
+        tx.remove('main-reconcile-command', reconcileCommandKey(key)))
+      return false
+    }
     const answer = await this.readReply({ ...binding, mainSessionId: sessionId }, messageId)
     if (answer) {
       return await this.publish(key, answer, command.run ? { sessionId: command.run.sessionId, generation: command.run.generation } : undefined)
     }
+    if (command.status === 'failed') await commandTransaction(this.storage, this.instanceId, tx =>
+      tx.remove('main-reconcile-command', reconcileCommandKey(key)))
     return false
   }
 
@@ -927,9 +1037,15 @@ export class MainConversation {
   }
 
   private async updateCommandIn(tx: AsyncTx, key: string, command: MainCommand, error?: string) {
+    const before = await tx.get<MainCommand>('main-command', key)
     await tx.replace('main-command', key, command)
     const message = await tx.get<MainMessage>('main-message', messageKey(command.userSequence))
     if (message) await tx.replace('main-message', messageKey(command.userSequence), { ...message, status: command.status, ...(error ? { error } : {}) })
+    if (command.status === 'queued') await this.activeCommand(tx, { ...command, key })
+    else if (command.status === 'running') await this.runningCommand(tx, { ...command, key })
+    else await this.removeActiveCommand(tx, command, key)
+    await this.reconcileIndex(tx, command, key, command.status === 'failed')
+    await this.updateHealthTransition(tx, before?.status, command.status, error)
     const state = await this.state(tx)
     if (command.status === 'running') await tx.replace('main-state', 'main', { ...state, activeCommand: key })
     else if (state.activeCommand === key && command.status !== 'stopping') {
@@ -979,9 +1095,13 @@ export class MainConversation {
     })
   }
 
-  async close() {
+  close() {
+    if (this.closingTurn) return this.closingTurn
+    this.closing = true
     this.closed = true
+    for (const controller of this.controllers) controller.abort()
     for (const controller of this.turnControllers.values()) controller.abort()
-    await this.tail
+    this.closingTurn = this.tail.then(() => undefined)
+    return this.closingTurn
   }
 }
