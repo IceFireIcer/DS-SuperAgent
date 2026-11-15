@@ -24,6 +24,7 @@ export interface CredentialResourceView {
   status: 'active' | 'deleted'
   revision: number
   grants: CredentialGrant[]
+  cleanupPending?: boolean
   createdAt: number
   updatedAt: number
 }
@@ -104,7 +105,8 @@ function grantPurposes(value: unknown, target: CredentialScope): CredentialPurpo
 
 function view(record: StoredResource): CredentialResourceView {
   const { id, instanceId, label: name, status, revision: version, grants, createdAt, updatedAt } = record
-  return { id, instanceId, label: name, status, revision: version, grants: structuredClone(grants), createdAt, updatedAt }
+  return { id, instanceId, label: name, status, revision: version, grants: structuredClone(grants), createdAt, updatedAt,
+    ...(status === 'deleted' && record.vaultReference ? { cleanupPending: true } : {}) }
 }
 
 function fingerprint(value: unknown): string { return createHash('sha256').update(canonicalJson(value)).digest('hex') }
@@ -144,12 +146,35 @@ export class ResourceCredentials {
     return record
   }
 
-  async create(input: { instanceId: string; commandId: string; label: string; vaultReference: string }): Promise<CredentialResourceView> {
-    fields(input, ['instanceId', 'commandId', 'label', 'vaultReference'], 'resource creation')
+  async creationReceipt(input: { instanceId: string; commandId: string; label: string; vaultReference: string }) {
+    this.assertInstance(input.instanceId); identifier(input.commandId, 'commandId')
+    const name = label(input.label)
+    identifier(input.vaultReference, 'vaultReference')
+    const expected = fingerprint(['create', this.instanceId, name, input.vaultReference])
+    return this.storage.transaction(this.instanceId, async tx => {
+      const receipt = await tx.get<CommandReceipt>('resource-command', input.commandId)
+      if (!receipt) return undefined
+      if (receipt.fingerprint !== expected || !('id' in receipt.result)) {
+        throw new CoreError('IDENTITY_CONFLICT', 'The resource creation command changed.')
+      }
+      return receipt.result as CredentialResourceView
+    })
+  }
+
+  async create(input: { instanceId: string; commandId: string; label: string; vaultReference: string;
+    intentCommandId?: string }): Promise<CredentialResourceView> {
+    fields(input, ['instanceId', 'commandId', 'label', 'vaultReference', 'intentCommandId'], 'resource creation')
     this.assertInstance(input.instanceId)
     const name = label(input.label)
     identifier(input.vaultReference, 'vaultReference')
+    if (input.intentCommandId !== undefined) identifier(input.intentCommandId, 'intentCommandId')
     return this.command(input.commandId, ['create', this.instanceId, name, input.vaultReference], async tx => {
+      if (input.intentCommandId !== undefined) {
+        const intent = await tx.get<{ status: string; reference: string }>('resource-vault-intent', input.intentCommandId)
+        if (intent?.status !== 'pending' || intent.reference !== input.vaultReference) {
+          throw new CoreError('RESOURCE_UNAVAILABLE', 'This credential creation is no longer authorized.')
+        }
+      }
       await this.assertVault(input.vaultReference)
       const at = this.now()
       const record: StoredResource = { id: randomUUID(), instanceId: this.instanceId, label: name,
@@ -256,10 +281,45 @@ export class ResourceCredentials {
     return this.command(input.commandId, ['delete', input.resourceId, input.expectedRevision], async tx => {
       const current = await this.active(tx, input.resourceId)
       this.assertRevision(current, input.expectedRevision)
-      const { vaultReference: _reference, ...publicRecord } = current
-      const next: StoredResource = { ...publicRecord, status: 'deleted', grants: [], revision: current.revision + 1, updatedAt: this.now() }
+      const next: StoredResource = { ...current, status: 'deleted', grants: [], revision: current.revision + 1, updatedAt: this.now() }
       await tx.replace('resource-credential', current.id, next)
       return view(next)
+    })
+  }
+
+  /** Only a trusted Host may drain deleted vault references; no user projection includes them. */
+  async pendingVaultDeletes(input: { instanceId: string; after?: string; limit?: number }) {
+    this.assertInstance(input.instanceId)
+    if (input.after !== undefined) identifier(input.after, 'after')
+    const limit = input.limit ?? 50
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new CoreError('INVALID_INPUT', 'Use a bounded cleanup page.')
+    return this.storage.transaction(this.instanceId, async tx => {
+      const page = await tx.scan<StoredResource>('resource-credential', { limit,
+        ...(input.after === undefined ? {} : { after: input.after }) })
+      return { items: page.items.filter(item => item.value.status === 'deleted' && item.value.vaultReference)
+        .map(item => ({ resourceId: item.value.id, reference: item.value.vaultReference! })),
+        ...(page.cursor ? { cursor: page.cursor } : {}) }
+    })
+  }
+
+  async deletedVaultReference(input: { instanceId: string; resourceId: string }) {
+    this.assertInstance(input.instanceId); identifier(input.resourceId, 'resourceId')
+    return this.storage.transaction(this.instanceId, async tx => {
+      const record = await tx.get<StoredResource>('resource-credential', input.resourceId)
+      if (!record || record.status !== 'deleted') throw new CoreError('RESOURCE_UNAVAILABLE', 'The deleted resource is unavailable.')
+      return record.vaultReference
+    })
+  }
+
+  async confirmVaultDeletion(input: { instanceId: string; resourceId: string; reference: string }) {
+    this.assertInstance(input.instanceId); identifier(input.resourceId, 'resourceId'); identifier(input.reference, 'reference')
+    return commandTransaction(this.storage, this.instanceId, async tx => {
+      const current = await tx.get<StoredResource>('resource-credential', input.resourceId)
+      if (!current || current.status !== 'deleted') throw new CoreError('RESOURCE_UNAVAILABLE', 'The deleted resource is unavailable.')
+      if (current.vaultReference === undefined) return
+      if (current.vaultReference !== input.reference) throw new CoreError('RESOURCE_UNAVAILABLE', 'The vault reference changed.')
+      const { vaultReference: _reference, ...cleaned } = current
+      await tx.replace('resource-credential', current.id, cleaned)
     })
   }
 

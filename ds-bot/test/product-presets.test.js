@@ -11,7 +11,7 @@ const harness = process.env.DSH_HARNESS ?? join(plugin, 'dev', 'harness')
 const requireHarness = createRequire(join(harness, 'package.json'))
 const { JSDOM } = requireHarness('jsdom')
 
-async function withPresets(call, settingsRevision, inspect) {
+async function withPresets(call, settingsRevision, inspect, onReload) {
   const dom = new JSDOM('<!doctype html><html><body><main id="root"></main></body></html>', { url: 'http://localhost/' })
   const previous = { window: globalThis.window, document: globalThis.document, navigator: globalThis.navigator,
     HTMLElement: globalThis.HTMLElement, IS_REACT_ACT_ENVIRONMENT: globalThis.IS_REACT_ACT_ENVIRONMENT }
@@ -37,7 +37,7 @@ async function withPresets(call, settingsRevision, inspect) {
     const applied = []
     const render = async revision => React.act(async () => {
       root.render(React.createElement(module.exports.ProductPresetSettings, { binding: { instanceId: 'personal' },
-        call, settingsRevision: revision, onApplied: result => applied.push(result) }))
+        call, settingsRevision: revision, onApplied: result => applied.push(result), onReload }))
     })
     const clickNode = async button => React.act(async () => {
       button.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
@@ -114,6 +114,34 @@ test('new presets retain the draft and command ID on failure, then apply only af
     assert.equal(application.expectedRevision, 7)
     assert.equal(applied[0].revision, 8)
     assert.match(doc.body.textContent, /Configuration v8 is active for new turns/u)
+  })
+})
+
+test('preset activity shows decisions and applications, and an unknown apply result is reconciled', async () => {
+  const calls = []
+  const call = async (endpoint, payload) => {
+    calls.push([endpoint, payload])
+    if (endpoint === 'preset-list') return { items: [{ id: 'preset-one', revision: 1, status: 'active',
+      preset: { id: 'preset-one', name: 'Reviewer', model: { provider: 'mock', model: 'one' }, instructions: '', skills: [] } }] }
+    if (endpoint === 'preset-imports') return { items: [{ id: 'decision-one', status: 'skipped',
+      source: { identity: 'copy-one', botId: 'old-bot', digest: 'abc' }, targetRole: 'worker' }] }
+    if (endpoint === 'preset-applications') return { items: [{ commandId: 'previous', sourceInstanceId: 'desktop', actorId: 'user',
+      presetId: 'preset-one', presetRevision: 1, targetRole: 'router', revision: 3 }] }
+    if (endpoint === 'preset-apply') throw Object.assign(new Error('Commit outcome unknown'), { code: 'COMMIT_UNKNOWN' })
+    if (endpoint === 'preset-application-read') return { commandId: payload.commandId, presetId: 'preset-one',
+      targetRole: 'worker', revision: 4 }
+    throw new Error(`Unexpected endpoint: ${endpoint}`)
+  }
+  await withPresets(call, 3, async ({ doc, click, applied }) => {
+    await click('Preset activity')
+    assert.match(doc.body.textContent, /copy-one \/ old-bot → worker: skipped/u)
+    assert.match(doc.body.textContent, /preset-one v1 → router: Configuration v3/u)
+    await click('Apply preset')
+    assert.equal(applied[0].revision, 4)
+    assert.match(doc.body.textContent, /Configuration v4 is active for new turns/u)
+    assert.equal(calls.filter(([endpoint]) => endpoint === 'preset-apply').length, 1)
+    assert.equal(calls.find(([endpoint]) => endpoint === 'preset-application-read')[1].commandId,
+      calls.find(([endpoint]) => endpoint === 'preset-apply')[1].commandId)
   })
 })
 
@@ -228,6 +256,7 @@ test('a confirmed selection creates one preset; repeating the same source report
 
 test('unavailable list and conflicting application stay visible without a success claim', async () => {
   let available = false
+  let reloads = 0
   const calls = []
   const preset = { id: 'saved', name: 'Ready', model: { provider: 'mock', model: 'one' },
     instructions: '', skills: [] }
@@ -240,7 +269,7 @@ test('unavailable list and conflicting application stay visible without a succes
     if (endpoint === 'preset-apply') throw Object.assign(new Error('Configuration changed'), { code: 'CONFIG_REVISION_CONFLICT' })
     throw new Error(`Unexpected endpoint: ${endpoint}`)
   }
-  await withPresets(call, 2, async ({ doc, click, applied }) => {
+  await withPresets(call, 2, async ({ doc, click, applied, render }) => {
     assert.match(doc.querySelector('[role="alert"]').textContent, /Endpoint not connected/u)
     assert.equal([...doc.querySelectorAll('button')].find(button => button.textContent === 'New preset').disabled, true)
     available = true
@@ -250,5 +279,9 @@ test('unavailable list and conflicting application stay visible without a succes
     assert.equal([...doc.querySelectorAll('button')].find(button => button.textContent === 'Apply preset').disabled, true)
     assert.equal(applied.length, 0)
     assert.doesNotMatch(doc.body.textContent, /active for new turns/u)
-  })
+    await click('Reload settings')
+    assert.equal(reloads, 1)
+    await render(3)
+    assert.equal([...doc.querySelectorAll('button')].find(button => button.textContent === 'Apply preset').disabled, false)
+  }, async () => { reloads++ })
 })

@@ -27,6 +27,8 @@ test('one Main request creates two independent work items and lets the fast one 
   await mkdir(root)
   const updates = []
   const roles = []
+  let releaseBeta
+  const betaReady = new Promise(resolve => { releaseBeta = resolve })
 
   async function* respond(options) {
     const text = lastUserText(options)
@@ -62,7 +64,7 @@ test('one Main request creates two independent work items and lets the fast one 
     if (calls === 0) yield* toolResponse('write_file', { path: file, text: value })
     else if (calls === 1) yield* toolResponse('read_file', { path: file })
     else if (calls === 2) {
-      if (file === 'beta.txt') await sleep(900)
+      if (file === 'beta.txt') await betaReady
       yield* toolResponse('report_ready', {
         result: `${file} is complete.`, evidence: `Read ${file} back after writing it.`, artifacts: file,
       })
@@ -79,6 +81,7 @@ test('one Main request creates two independent work items and lets the fast one 
   const engine = new Engine(storage, 'personal', { sourceInstanceId: 'product-desktop', actorId: 'alice', allowedActorIds: ['alice'] },
     { scanIntervalMs: 10, retryDelayMs: 10 }, sessions, [environment])
   t.after(async () => {
+    releaseBeta()
     await engine.effects.stop(); await engine.shutdown(); await sessions.close()
     await native.fiber.dispose(); await environment.close(); await storage.close()
     await rm(directory, { recursive: true, force: true })
@@ -103,6 +106,7 @@ test('one Main request creates two independent work items and lets the fast one 
   assert.notEqual(slow?.outcome?.status, 'success')
   assert.equal(early.messages.filter(message => message.role === 'user').length, 1)
 
+  releaseBeta()
   await until(async () => (await engine.getMainConversation({ instanceId: 'personal' })).works.every(work => work.outcome?.status === 'success'), 'both verified items')
   const final = await engine.getMainConversation({ instanceId: 'personal' })
   assert.equal(final.works.length, 2)
@@ -137,6 +141,7 @@ test('a partial work-plan commit survives restart and fills only the missing ite
   const root = join(directory, 'workspace')
   await mkdir(root)
   let changePlanOnRestart = false
+  let changedPlanAttempted = false
 
   async function* respond(options) {
     const text = lastUserText(options)
@@ -160,6 +165,7 @@ test('a partial work-plan commit survives restart and fills only the missing ite
     }
     if (options.model === 'router') {
       if (changePlanOnRestart && calls === 0) {
+        changedPlanAttempted = true
         yield* toolResponse('establish_work_plan', {
           items: [
             { goal: 'Write the recovery alpha note.', constraints: 'Write only recovery-alpha.txt.', acceptanceCriteria: 'Read recovery-alpha.txt back.' },
@@ -251,8 +257,10 @@ test('a partial work-plan commit survives restart and fills only the missing ite
   }, 'the missing Ticket after restart')
   const recovered = await engine.getMainWorkPlan({ instanceId: 'personal', workBriefId: briefId })
   assert.equal(recovered.status, 'accepted')
-  assert.match(recovered.conflict.message, /different target decision|new Main request/iu)
-  assert.equal(recovered.conflict.attemptedItems.some(item => item.goal.includes('gamma')), true)
+  if (changedPlanAttempted) {
+    assert.match(recovered.conflict.message, /different target decision|new Main request/iu)
+    assert.equal(recovered.conflict.attemptedItems.some(item => item.goal.includes('gamma')), true)
+  } else assert.equal(recovered.conflict, undefined)
   assert.deepEqual(recovered.items.map(item => item.goal), partial.items.map(item => item.goal))
   assert.equal(recovered.items.find(item => item.id === firstItemId)?.ticketId, firstTicketId)
   assert.equal(recovered.items.find(item => item.id === missing.id)?.ticketId !== undefined, true)

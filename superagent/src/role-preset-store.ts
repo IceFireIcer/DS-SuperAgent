@@ -39,6 +39,18 @@ export interface RolePresetImportRecord {
   createdAt: number
 }
 
+export interface RolePresetApplication {
+  instanceId: string
+  commandId: string
+  sourceInstanceId: string
+  actorId: string
+  presetId: string
+  presetRevision: number
+  targetRole: PresetRole
+  revision: number
+  appliedAt: number
+}
+
 interface StoredPreset extends RolePresetEntry { imageChunks: number }
 interface StoredPreview extends RolePresetPreviewRecord { imageChunks: number }
 type CommandTarget = { kind: 'preset'; id: string; revision: number } | { kind: 'preview' | 'import'; id: string }
@@ -207,6 +219,12 @@ export class RolePresetStore {
       const record = await tx.get<StoredPreset>('role-preset', input.presetId)
       return record && this.presetView(tx, record)
     })
+  }
+
+  async assertCurrent(tx: AsyncTx, presetId: string, expectedRevision: number): Promise<void> {
+    const current = await tx.get<StoredPreset>('role-preset', presetId)
+    if (!current || current.status !== 'active') throw new CoreError('PRESET_UNAVAILABLE', 'The preset is unavailable.')
+    if (current.revision !== expectedRevision) throw new CoreError('PRESET_REVISION_CONFLICT', 'The preset changed while its application was prepared.')
   }
 
   async list(input: { instanceId: string; after?: string; limit?: number }): Promise<{ items: RolePresetEntry[]; cursor?: string }> {

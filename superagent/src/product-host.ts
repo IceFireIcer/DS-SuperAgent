@@ -13,9 +13,12 @@ import { SqliteStorage } from './storage.js'
 import { LocalEnvironment } from './local-environment.js'
 import { FeishuRuntime, type FeishuRuntimeOptions } from './feishu-runtime.js'
 import { ProductAttachments } from './product-attachments.js'
+import type { ProductCredentialRecords } from './product-credential-vault.js'
+import type { ProductCredentialManager } from './product-credential-manager.js'
 import { assertReferenceShape } from './environment-assets.js'
 import { localDeliveryChannel, type DeliveryChannel } from './deliveries.js'
 import type { RoleConfig, RoleModel } from './config.js'
+import type { LegacyPresetCopy, PresetRole } from './role-presets.js'
 
 export interface ProductHostConfig { databasePath: string; workspaceRoot?: string; instanceId?: string; actorId?: string; main?: RoleModel; router?: RoleModel; worker?: RoleModel; timeoutMs?: number;
   clientGateway?: Omit<ClientGatewayOptions, 'product'>;
@@ -54,6 +57,18 @@ interface DirectoryPicker {
 }
 type SettingsSection = ReturnType<PublicSettings['describe']>[number]
 
+const resourceFields: Record<string, string[]> = {
+  'resource-list': ['instanceId', 'after', 'limit'], 'resource-read': ['instanceId', 'resourceId'],
+  'resource-create': ['instanceId', 'commandId', 'label', 'value'],
+  'resource-rename': ['instanceId', 'commandId', 'resourceId', 'expectedRevision', 'label'],
+  'resource-delete': ['instanceId', 'commandId', 'resourceId', 'expectedRevision'],
+  'resource-request': ['instanceId', 'commandId', 'resourceId', 'scope', 'purpose'],
+  'resource-request-read': ['instanceId', 'requestId'], 'resource-cancel': ['instanceId', 'commandId', 'requestId'],
+  'resource-grant': ['instanceId', 'commandId', 'resourceId', 'expectedRevision', 'scope', 'purposes', 'requestId'],
+  'resource-revoke': ['instanceId', 'commandId', 'resourceId', 'grantId', 'expectedRevision'],
+  'resource-cleanup': ['instanceId', 'resourceId'],
+}
+
 export async function createProductHost(context: Context, config: ProductHostConfig): Promise<ProductHost> {
   const instanceId = config.instanceId ?? 'personal'
   const actorId = config.actorId ?? 'local-user'
@@ -73,8 +88,18 @@ export async function createProductHost(context: Context, config: ProductHostCon
   let gateway: Awaited<ReturnType<typeof createClientGateway>> | undefined
   let feishuRuntime: FeishuRuntime | undefined
   let feishuEngine: Engine | undefined
+  let resourceManager: ProductCredentialManager | undefined
   let closing: Promise<void> | undefined
   let scheduleTimer: ReturnType<typeof setInterval> | undefined
+  let credentialRecovery: Promise<void> | undefined
+  const recoverCredentials = () => {
+    if (!resourceManager || closing || credentialRecovery) return credentialRecovery
+    credentialRecovery = (async () => {
+      try { await resourceManager!.resumeCreations() } catch { /* Retain the intent for the next bounded scan. */ }
+      try { await resourceManager!.resumeCleanup() } catch { /* Keep deleted resources visible until cleanup succeeds. */ }
+    })().finally(() => { credentialRecovery = undefined })
+    return credentialRecovery
+  }
   const picker = () => {
     try {
       const service = (context as unknown as { get(name: string): { capability(): DirectoryPicker | undefined } | undefined }).get('directoryPicker')
@@ -232,13 +257,20 @@ export async function createProductHost(context: Context, config: ProductHostCon
     } : undefined
     engine = new Engine(storage, instanceId, { sourceInstanceId: 'product-desktop', actorId, allowedActorIds: [actorId] }, {}, sessions,
       environments, {}, {}, {}, channel ? { channel } : {}, {}, undefined, attachments)
+    const records = context.get('credentials') as ProductCredentialRecords | undefined
+    if (records && typeof records.readRecord === 'function' && typeof records.modifyRecord === 'function'
+      && typeof records.deleteRecord === 'function') resourceManager = engine.createProductCredentialManager(records)
     if (environments[0] && config.workspaceRoot) await engine.addWorkDirectory({ instanceId,
       commandId: `bootstrap:${environments[0].config.id}`, environment: environments[0] })
     await engine.acquireHost()
+    await recoverCredentials()
     await engine.openMain({ instanceId })
     engine.effects.start()
     void engine.tickSchedules().catch(() => { /* Rules and failed occurrences remain available for the next check. */ })
-    scheduleTimer = setInterval(() => { void engine?.tickSchedules().catch(() => {}) }, 30_000)
+    scheduleTimer = setInterval(() => {
+      void engine?.tickSchedules().catch(() => {})
+      void recoverCredentials()
+    }, 30_000)
     scheduleTimer.unref()
     if (feishuRuntime) void feishuRuntime.start().catch(() => { /* Health retains the setup failure; Main stays available. */ })
     void engine.resumeMainInputs({ instanceId }).catch(() => { /* The persisted input and failed health remain visible for retry. */ })
@@ -253,7 +285,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
           return engine!.openMain({ instanceId })
         }
         if (payload.instanceId !== instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This request is outside the authorized Instance.')
-        const fields = endpoint === 'schedule-list' || endpoint === 'schedule-source-read' ? ['instanceId']
+        const fields = resourceFields[endpoint] ?? (endpoint === 'schedule-list' || endpoint === 'schedule-source-read' ? ['instanceId']
           : endpoint === 'schedule-source-set' ? ['instanceId', 'commandId', 'enabled']
             : endpoint === 'schedule-read' ? ['instanceId', 'ruleId']
               : endpoint === 'schedule-create' ? ['instanceId', 'commandId', 'title', 'text', 'timezone', 'when', 'target']
@@ -280,6 +312,15 @@ export async function createProductHost(context: Context, config: ProductHostCon
                 : endpoint === 'work-answer' ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'attentionId', 'attentionVersion', 'text']
                   : endpoint === 'settings' ? ['instanceId', 'limit']
                     : endpoint === 'settings-save' ? ['instanceId', 'commandId', 'expectedRevision', 'roles']
+                      : endpoint === 'preset-list' || endpoint === 'preset-imports' || endpoint === 'preset-applications'
+                        ? ['instanceId', 'after', 'limit']
+                        : endpoint === 'preset-create' ? ['instanceId', 'commandId', 'preset']
+                          : endpoint === 'preset-preview' ? ['instanceId', 'commandId', 'copy']
+                            : endpoint === 'preset-select' ? ['instanceId', 'commandId', 'previewId', 'decision', 'copy', 'preset']
+                              : endpoint === 'preset-apply' ? ['instanceId', 'commandId', 'presetId', 'targetRole', 'expectedRevision']
+                                : endpoint === 'preset-application-read' ? ['instanceId', 'commandId']
+                                  : endpoint === 'preset-preview-read' ? ['instanceId', 'previewId']
+                                    : endpoint === 'preset-import-read' ? ['instanceId', 'importId']
                       : endpoint === 'settings-efforts' ? ['instanceId', 'provider', 'model']
                         : endpoint === 'provider-key' ? ['instanceId', 'provider', 'value']
                           : endpoint === 'reconcile-delivery' ? ['instanceId', 'commandId', 'ticketId', 'deliveryId']
@@ -289,11 +330,17 @@ export async function createProductHost(context: Context, config: ProductHostCon
                                   : endpoint === 'observe-detail' ? ['instanceId', 'observationId', 'generation', 'detailId', 'offset', 'limit']
                                     : endpoint === 'evidence' ? ['instanceId', 'workItemId', 'ref', 'after', 'maxBytes']
                                       : endpoint === 'history' ? ['instanceId', 'after', 'before', 'limit']
-                                        : undefined
+                                        : undefined)
         if (!fields) throw new CoreError('UNAVAILABLE', 'This product capability is not connected yet.')
         if (Object.keys(payload).some(key => !fields.includes(key))) throw new CoreError('INVALID_INPUT', 'The product request contains unsupported fields.')
         if (client && endpoint.startsWith('schedule-')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Schedule administration requires the local authorized product settings.')
+        }
+        if (client && endpoint.startsWith('preset-')) {
+          throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Role presets require the local authorized product settings.')
+        }
+        if (client && endpoint.startsWith('resource-')) {
+          throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Credential resources require the local authorized product settings.')
         }
         if (client && (endpoint.startsWith('attachment-') || endpoint === 'artifact-read')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'File access requires the local authorized product window.')
@@ -309,6 +356,45 @@ export async function createProductHost(context: Context, config: ProductHostCon
         const commandId = client && payload.commandId !== undefined
           ? (() => { identifier(payload.commandId, 'commandId'); return `client:${client.id}:${createHash('sha256').update(payload.commandId).digest('hex')}` })()
           : payload.commandId as string
+        if (endpoint.startsWith('resource-')) {
+          if (!resourceManager) throw new CoreError('UNAVAILABLE', 'This DSH profile has no durable credential record service.')
+          const manager = resourceManager
+          if (endpoint === 'resource-list') return manager.list({ instanceId,
+            ...(payload.after === undefined ? {} : { after: payload.after as string }),
+            ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
+          if (endpoint === 'resource-read') {
+            const resource = await manager.get({ instanceId, resourceId: payload.resourceId as string })
+            if (!resource) throw new CoreError('NOT_FOUND', 'The credential resource is unavailable.')
+            return resource
+          }
+          if (endpoint === 'resource-create') return manager.create({ instanceId, commandId, label: payload.label as string,
+            value: payload.value as string })
+          if (endpoint === 'resource-rename') return manager.rename({ instanceId, commandId,
+            resourceId: payload.resourceId as string, expectedRevision: payload.expectedRevision as number,
+            label: payload.label as string })
+          if (endpoint === 'resource-delete') return manager.delete({ instanceId, commandId,
+            resourceId: payload.resourceId as string, expectedRevision: payload.expectedRevision as number })
+          if (endpoint === 'resource-request') return manager.request({ instanceId, commandId,
+            resourceId: payload.resourceId as string, scope: payload.scope as import('./resource-credentials.js').CredentialScope,
+            purpose: payload.purpose as import('./resource-credentials.js').CredentialPurpose })
+          if (endpoint === 'resource-request-read') {
+            const request = await manager.getRequest({ instanceId, requestId: payload.requestId as string })
+            if (!request) throw new CoreError('NOT_FOUND', 'The credential request is unavailable.')
+            return request
+          }
+          if (endpoint === 'resource-cancel') return manager.cancel({ instanceId, commandId, requestId: payload.requestId as string })
+          if (endpoint === 'resource-grant') return manager.grant({ instanceId, commandId,
+            resourceId: payload.resourceId as string, expectedRevision: payload.expectedRevision as number,
+            scope: payload.scope as import('./resource-credentials.js').CredentialScope,
+            purposes: payload.purposes as import('./resource-credentials.js').CredentialPurpose[],
+            ...(payload.requestId === undefined ? {} : { requestId: payload.requestId as string }) })
+          if (endpoint === 'resource-revoke') return manager.revokeGrant({ instanceId, commandId,
+            resourceId: payload.resourceId as string, grantId: payload.grantId as string,
+            expectedRevision: payload.expectedRevision as number })
+          if (endpoint === 'resource-cleanup') return payload.resourceId === undefined
+            ? { creations: await manager.resumeCreations(), deletions: await manager.resumeCleanup() }
+            : manager.cleanupDeleted({ instanceId, resourceId: payload.resourceId as string })
+        }
         if (endpoint === 'schedule-list') return engine!.listSchedules({ instanceId })
         if (endpoint === 'schedule-source-read') return engine!.getScheduleSource({ instanceId })
         if (endpoint === 'schedule-source-set') return engine!.setScheduleSource({ instanceId,
@@ -430,6 +516,29 @@ export async function createProductHost(context: Context, config: ProductHostCon
           workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
           expectedGeneration: payload.expectedGeneration as string, reason: payload.reason as string })
         if (endpoint === 'settings') return roleSettings(payload.limit === undefined ? 50 : payload.limit as number)
+        if (endpoint === 'preset-list') return engine!.listRolePresets({ instanceId,
+          ...(payload.after === undefined ? {} : { after: payload.after as string }),
+          ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
+        if (endpoint === 'preset-imports') return engine!.listRolePresetImports({ instanceId,
+          ...(payload.after === undefined ? {} : { after: payload.after as string }),
+          ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
+        if (endpoint === 'preset-applications') return engine!.listRolePresetApplications({ instanceId,
+          ...(payload.after === undefined ? {} : { after: payload.after as string }),
+          ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
+        if (endpoint === 'preset-preview-read') return await engine!.getRolePresetPreview({ instanceId, previewId: payload.previewId as string }) ?? null
+        if (endpoint === 'preset-import-read') return await engine!.getRolePresetImport({ instanceId, importId: payload.importId as string }) ?? null
+        if (endpoint === 'preset-application-read') return await engine!.getRolePresetApplication({ instanceId,
+          commandId: payload.commandId as string }) ?? null
+        if (endpoint === 'preset-create') return engine!.createRolePreset({ instanceId, commandId: payload.commandId as string, preset: payload.preset })
+        if (endpoint === 'preset-preview') return engine!.previewRolePreset({ instanceId, commandId: payload.commandId as string,
+          copy: payload.copy as LegacyPresetCopy })
+        if (endpoint === 'preset-select') return engine!.selectRolePreset({ instanceId, commandId: payload.commandId as string,
+          previewId: payload.previewId as string, decision: payload.decision as 'select' | 'skip',
+          ...(payload.copy === undefined ? {} : { copy: payload.copy as LegacyPresetCopy }),
+          ...(payload.preset === undefined ? {} : { preset: payload.preset }) })
+        if (endpoint === 'preset-apply') return engine!.applyRolePreset({ instanceId, commandId: payload.commandId as string,
+          presetId: payload.presetId as string, targetRole: payload.targetRole as PresetRole,
+          expectedRevision: payload.expectedRevision as number }, { verify: verifyRoles })
         if (endpoint === 'settings-save') {
           const roles = payload.roles as RoleConfig
           if (!roles || typeof roles !== 'object' || !roles.main || !roles.router || !roles.worker) {

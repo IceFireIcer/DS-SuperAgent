@@ -24,11 +24,15 @@ import { Outbox } from './outbox.js'
 import { HostLease, type HostOptions } from './host.js'
 import { ClientAccess } from './client-access.js'
 import { feishuQuestionCode } from './feishu-delivery.js'
+import { ProductCredentialManager } from './product-credential-manager.js'
+import type { ProductCredentialRecords } from './product-credential-vault.js'
 import type { ProductAttachments } from './product-attachments.js'
 import { listSupervisorProposals, Supervisor, type SupervisorOptions, type SupervisorProposal } from './supervisor.js'
 import { assertHostTakeoverSettled, loadHostTakeover, type HostTakeoverRecord, type HostTakeoverTicket } from './host-takeover.js'
 import { ContextReader, type ContextCandidate, type ContextCard, type ContextRef, type ContextRequest } from './context.js'
 import { RoleConfigStore, validateRoleConfig, type RoleConfig, type RoleConfigUse, type RoleConfigView } from './config.js'
+import { RolePresetStore, type RolePresetApplication } from './role-preset-store.js'
+import { prepareRolePresetApplication, type LegacyPresetCopy, type PresetRole } from './role-presets.js'
 import { draftKey, instructionKey, validateBehaviorChange, type BehaviorChange, type BehaviorInterpreter,
   type BehaviorInstructionRecord, type ConfigDraft } from './config-instructions.js'
 import { DeliveryState, type DeliveryCondition, type DeliveryTarget } from './delivery-state.js'
@@ -75,6 +79,7 @@ export class Engine {
   private readonly context: ContextReader
   private readonly sessions: NativeSessions | undefined
   private readonly roleConfig: RoleConfigStore
+  private readonly rolePresets: RolePresetStore
   private readonly executionPolicy: ExecutionPolicyStore
   private readonly hostCapabilities: HostCapabilities
   private readonly deliveryState: DeliveryState
@@ -236,6 +241,7 @@ export class Engine {
       router: { name: 'Router', model: sessions?.routerRoute ?? { provider: 'unconfigured', model: 'unconfigured' }, instructions: '', skills: [] },
       worker: { name: 'Worker', model: sessions?.workerRoute ?? { provider: 'unconfigured', model: 'unconfigured' }, instructions: '', skills: [] },
     }, Date.now)
+    this.rolePresets = new RolePresetStore(storage, instanceId)
     this.executionPolicy = new ExecutionPolicyStore(storage, instanceId, Date.now)
     if (!Array.isArray(source.allowedActorIds)) throw new CoreError('INVALID_CONFIG', 'allowedActorIds must be explicitly configured.')
     for (const actor of source.allowedActorIds) identifier(actor, 'allowedActorId')
@@ -1477,6 +1483,14 @@ export class Engine {
     this.assertAuthoringActor()
   }
 
+  createProductCredentialManager(records: ProductCredentialRecords) {
+    if ((this.source.kind ?? 'desktop') !== 'desktop' || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Only an authorized product actor can manage credential resources.')
+    }
+    this.assertAuthoringActor()
+    return new ProductCredentialManager(this.storage, this.instanceId, records)
+  }
+
   async createSchedule(request: ScheduleCreate) {
     this.requireProductScheduleActor()
     await this.main.open({ instanceId: request?.instanceId })
@@ -1881,6 +1895,136 @@ export class Engine {
 
   getRoleConfigHistory(limit = 20) {
     return this.roleConfig.history(limit)
+  }
+
+  private assertPresetAccess(instanceId: string, write = false) {
+    if (instanceId !== this.instanceId || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This actor cannot access presets in this Instance.')
+    }
+    if (write) this.assertAuthoringActor()
+  }
+
+  createRolePreset(command: { instanceId: string; commandId: string; preset: unknown }) {
+    this.assertPresetAccess(command?.instanceId, true)
+    identifier(command.commandId, 'commandId')
+    return this.rolePresets.create({ ...command, commandId: this.commandKey(command.commandId) })
+  }
+
+  getRolePreset(request: { instanceId: string; presetId: string }) {
+    this.assertPresetAccess(request?.instanceId)
+    return this.rolePresets.get(request)
+  }
+
+  listRolePresets(request: { instanceId: string; after?: string; limit?: number }) {
+    this.assertPresetAccess(request?.instanceId)
+    return this.rolePresets.list(request)
+  }
+
+  previewRolePreset(command: { instanceId: string; commandId: string; copy: LegacyPresetCopy }) {
+    this.assertPresetAccess(command?.instanceId, true)
+    identifier(command.commandId, 'commandId')
+    return this.rolePresets.recordPreview({ ...command, commandId: this.commandKey(command.commandId) })
+  }
+
+  getRolePresetPreview(request: { instanceId: string; previewId: string }) {
+    this.assertPresetAccess(request?.instanceId)
+    return this.rolePresets.getPreview(request)
+  }
+
+  selectRolePreset(command: { instanceId: string; commandId: string; previewId: string; decision: 'select' | 'skip';
+    copy?: LegacyPresetCopy; preset?: unknown }) {
+    this.assertPresetAccess(command?.instanceId, true)
+    identifier(command.commandId, 'commandId')
+    return this.rolePresets.decideImport({ ...command, commandId: this.commandKey(command.commandId) })
+  }
+
+  getRolePresetImport(request: { instanceId: string; importId: string }) {
+    this.assertPresetAccess(request?.instanceId)
+    return this.rolePresets.getImport(request)
+  }
+
+  listRolePresetImports(request: { instanceId: string; after?: string; limit?: number }) {
+    this.assertPresetAccess(request?.instanceId)
+    return this.rolePresets.listImports(request)
+  }
+
+  async applyRolePreset(command: { instanceId: string; commandId: string; presetId: string; targetRole: PresetRole;
+    expectedRevision: number }, options: { verify?: (roles: RoleConfig, signal: AbortSignal) => Promise<void> } = {}): Promise<RolePresetApplication> {
+    this.assertPresetAccess(command?.instanceId, true)
+    if (!command || Object.keys(command).some(key => !['instanceId', 'commandId', 'presetId', 'targetRole', 'expectedRevision'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'A preset application accepts one preset, role and expected revision.')
+    }
+    identifier(command.commandId, 'commandId'); identifier(command.presetId, 'presetId')
+    const fingerprint = createHash('sha256').update(canonicalJson(['role-preset-apply-v1', command.presetId,
+      command.targetRole, command.expectedRevision])).digest('hex')
+    const key = this.commandKey(command.commandId)
+    const prior = await this.storage.transaction(this.instanceId, async tx => {
+      const receipt = await tx.get<{ fingerprint: string }>('work-command', key)
+      if (!receipt) return undefined
+      if (receipt.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The preset command was reused with different input.')
+      const application = await tx.get<RolePresetApplication>('role-preset-application', key)
+      if (!application) throw new CoreError('INCOMPLETE_STATE', 'The committed preset application is missing its role revision.')
+      return application
+    })
+    if (prior) {
+      await this.getRoleConfig()
+      return prior
+    }
+    const current = await this.getRoleConfig()
+    if (current.revision !== command.expectedRevision) throw new CoreError('CONFIG_REVISION_CONFLICT', 'The role configuration changed after this preset was selected.')
+    const entry = await this.rolePresets.get({ instanceId: this.instanceId, presetId: command.presetId })
+    if (!entry || entry.status !== 'active') throw new CoreError('PRESET_UNAVAILABLE', 'The preset is unavailable.')
+    const prepared = prepareRolePresetApplication({ commandId: command.commandId, current,
+      targetRole: command.targetRole, preset: entry.preset })
+    if (options.verify) {
+      const controller = new AbortController()
+      try { await options.verify(structuredClone(prepared.roles), controller.signal) }
+      finally { controller.abort() }
+    }
+    const result = await commandTransaction(this.storage, this.instanceId, async tx => {
+      const receipt = await tx.get<{ fingerprint: string }>('work-command', key)
+      if (receipt) {
+        if (receipt.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The preset command was reused with different input.')
+        const application = await tx.get<RolePresetApplication>('role-preset-application', key)
+        if (!application) throw new CoreError('INCOMPLETE_STATE', 'The committed preset application is missing its role revision.')
+        return { application }
+      }
+      await this.rolePresets.assertCurrent(tx, entry.id, entry.revision)
+      const view = await this.roleConfig.write(tx, prepared.expectedRevision, prepared.roles)
+      const application: RolePresetApplication = { instanceId: this.instanceId, commandId: command.commandId,
+        sourceInstanceId: this.source.sourceInstanceId, actorId: this.source.actorId, presetId: entry.id,
+        presetRevision: entry.revision, targetRole: command.targetRole, revision: view.revision, appliedAt: Date.now() }
+      await tx.insert('role-preset-application', key, application)
+      await tx.insert('work-command', key, { fingerprint, revision: view.revision })
+      return { application, view }
+    })
+    if (result.view) {
+      this.roleConfigRevision = result.view.revision
+      this.applyRoleRoutes(result.view)
+    } else await this.getRoleConfig()
+    return result.application
+  }
+
+  async getRolePresetApplication(request: { instanceId: string; commandId: string }) {
+    this.assertPresetAccess(request?.instanceId)
+    if (!request || Object.keys(request).some(key => !['instanceId', 'commandId'].includes(key))) throw new CoreError('INVALID_INPUT', 'A preset application query needs a command ID.')
+    identifier(request.commandId, 'commandId')
+    const application = await this.storage.transaction(this.instanceId,
+      tx => tx.get<RolePresetApplication>('role-preset-application', this.commandKey(request.commandId)))
+    if (application) await this.getRoleConfig()
+    return application
+  }
+
+  async listRolePresetApplications(request: { instanceId: string; after?: string; limit?: number }) {
+    this.assertPresetAccess(request?.instanceId)
+    if (!request || Object.keys(request).some(key => !['instanceId', 'after', 'limit'].includes(key))) throw new CoreError('INVALID_INPUT', 'Invalid preset application query.')
+    if (request.after !== undefined) identifier(request.after, 'after')
+    const limit = request.limit ?? 50
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new CoreError('INVALID_INPUT', 'A page limit from 1 to 100 is required.')
+    return this.storage.transaction(this.instanceId, async tx => {
+      const found = await tx.scan<RolePresetApplication>('role-preset-application', { limit, ...(request.after ? { after: request.after } : {}) })
+      return { items: found.items.map(item => item.value), ...(found.cursor ? { cursor: found.cursor } : {}) }
+    })
   }
 
   async getIntakePolicy(): Promise<{ revision: number; policy: Omit<IntakePolicy, 'assess'>; processingPaused: boolean }> {

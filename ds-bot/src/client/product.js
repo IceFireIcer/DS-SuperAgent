@@ -9,6 +9,8 @@ import { Card, Row } from './bot-settings.js'
 import { ClockIcon, CloseIcon, SlidersIcon } from './icons.js'
 import { SCHEDULE_CSS } from './schedules.js'
 import { ProductScheduleSettings, PRODUCT_SCHEDULE_CSS } from './product-schedules.js'
+import { ProductPresetSettings, PRODUCT_PRESET_CSS } from './product-presets.js'
+import { ProductCredentialSettings, PRODUCT_CREDENTIAL_CSS } from './product-credentials.js'
 import { FolderMenu, FOLDER_CSS } from './folder-menu.js'
 import { MODEL_CSS } from './model-menu.js'
 import { createSource } from './sources.js'
@@ -1056,6 +1058,12 @@ export function applyProduct(ctx) {
       } catch (failure) { setError(failure.message) }
       finally { setSaving(false) }
     }
+    const refreshAfterPreset = async () => {
+      const latest = await productCall('settings', { instanceId: binding.instanceId, limit: 50 })
+      applySnapshot(latest)
+      setConflict(false)
+      setError(null)
+    }
     const saveKey = async (provider, value) => {
       if (value === undefined) return
       setError(null); setNotice(null)
@@ -1103,12 +1111,17 @@ export function applyProduct(ctx) {
             'aria-current': page === 'roles' ? 'page' : undefined, onClick: () => setPage('roles') }, h(SlidersIcon), t('Roles and providers')),
           h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
             'aria-current': page === 'schedules' ? 'page' : undefined, onClick: () => setPage('schedules') }, h(ClockIcon), t('Scheduled tasks')),
+          h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
+            'aria-current': page === 'presets' ? 'page' : undefined, onClick: () => setPage('presets') }, h(SlidersIcon), t('Role presets')),
           h('span', { className: 'bt-main-settings-revision' }, `${t('Configuration')} v${snapshot.revision}`)),
         h('div', { className: 'bt-settings-main' },
-          h('div', { className: 'bt-settings-head' }, h('h2', null, page === 'schedules' ? t('Scheduled tasks') : t('Super-agent settings'))),
+          h('div', { className: 'bt-settings-head' }, h('h2', null, page === 'schedules' ? t('Scheduled tasks')
+            : page === 'presets' ? t('Role presets') : t('Super-agent settings'))),
           h('div', { className: 'bt-settings-scroll' },
             page === 'schedules' ? h(ProductScheduleSettings, { binding, works: view.getSnapshot().works, call: productCall,
-              onViewWork: () => { onClose(); view.set(current => ({ ...current, route: 'main' })); void refreshMain(binding) } }) : h(Fragment, null,
+              onViewWork: () => { onClose(); view.set(current => ({ ...current, route: 'main' })); void refreshMain(binding) } })
+              : page === 'presets' ? h(ProductPresetSettings, { binding, call: productCall,
+                settingsRevision: snapshot.revision, onApplied: refreshAfterPreset, onReload: refreshAfterPreset }) : h(Fragment, null,
             error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
             viewState.directoryError ? h('p', { className: 'bt-main-error', role: 'alert' }, viewState.directoryError) : null,
             conflict ? h('div', { className: 'bt-main-settings-conflict', role: 'status' },
@@ -1164,6 +1177,7 @@ export function applyProduct(ctx) {
                     provider.key.configured ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm bt-bs-danger',
                       disabled: saving, onClick: () => { void saveKey(provider.id, null) } }, t('Remove key')) : null) : h('span', null, t('Set outside this product'))) : null))
                 : h('p', { className: 'bt-main-status' }, t('No provider catalog is available. Configure providers in DSH settings.'))),
+            h(ProductCredentialSettings, { binding, call: productCall }),
             h(ClientSettings, { binding }),
             h(Card, { title: t('Recent configuration uses') },
               snapshot.uses.length ? snapshot.uses.slice(0, 20).map(use => h('div', { key: use.id, className: 'bt-main-settings-use' },
@@ -1239,7 +1253,7 @@ export function applyProduct(ctx) {
         onClose: () => view.set(current => ({ ...current, connectOpen: false })) }) : null)
   }
   const shadow = (name, component) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200 }, component))
-  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SCHEDULE_CSS + MODEL_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS, 'main'), 'superagent: existing chat styles')
+  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SCHEDULE_CSS + MODEL_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + PRODUCT_PRESET_CSS, 'main'), 'superagent: existing chat styles')
   ctx.effect(() => { const style = installStyles(themeCss(allThemes().deepseek), 'main-theme'); return () => style.remove() }, 'superagent: existing theme')
   shadow('main.conversation', ProductSurface)
   shadow('sidebar.workspaces', MainNavigation)
