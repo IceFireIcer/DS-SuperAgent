@@ -91,7 +91,7 @@ test('read-only client routes cannot write, guessed routes cannot bypass product
   await client.connect({ address, instanceId: 'personal', credential: viewer.token })
   assert.deepEqual((await client.call('observe-list', { instanceId: 'personal' })).items, [])
   await assert.rejects(client.call('send', { instanceId: 'personal', commandId: 'blocked', text: 'No.' }), /not authorized/u)
-  for (const endpoint of ['send', 'stop-main', 'work-stop', 'work-answer', 'work-resume', 'work-retry', 'reconcile-delivery']) {
+  for (const endpoint of ['send', 'stop-main', 'work-stop', 'work-answer', 'work-resume', 'work-retry', 'reconcile-delivery', 'proactive-stop']) {
     assert.equal((await direct(address, viewer.token, `product/${endpoint}`, { instanceId: 'personal', commandId: 'no' })).status, 403)
   }
   assert.equal((await direct(address, viewer.token, 'product/settings-save', {})).status, 404)
@@ -99,6 +99,8 @@ test('read-only client routes cannot write, guessed routes cannot bypass product
   assert.equal((await direct(address, viewer.token, 'product/client-revoke', {})).status, 404)
   assert.equal((await direct(address, viewer.token, 'product/schedule-list', { instanceId: 'personal' })).status, 404)
   assert.equal((await direct(address, viewer.token, 'product/schedule-create', { instanceId: 'personal' })).status, 404)
+  assert.equal((await direct(address, viewer.token, 'product/proactive-save', { instanceId: 'personal' })).status, 404)
+  assert.deepEqual((await client.call('proactive-list', { instanceId: 'personal' })).items, [])
   assert.equal((await direct(address, viewer.token, 'commands/submit', {})).status, 404)
   assert.equal((await direct(address, viewer.token, 'product/observe-read', { instanceId: 'personal', observationId: 'guessed', text: 'write' })).status, 400)
   const other = await fetch(`${address}/instances/other/product/snapshot`, { headers: { authorization: `Bearer ${viewer.token}` } })

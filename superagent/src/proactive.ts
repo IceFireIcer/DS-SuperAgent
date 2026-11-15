@@ -9,6 +9,7 @@ export interface ProactiveMatch {
   actorKinds: ('human' | 'bot' | 'ci' | 'system')[]
   addressing: ('direct' | 'mention' | 'ambient')[]
   textPattern?: string
+  sourceInstanceIds?: string[]
 }
 export interface ProactiveBudget { maxRuns: number; windowMs: number; maxArtifactBytes?: number }
 export interface ProactiveRule {
@@ -34,6 +35,8 @@ export interface ProactiveCandidate {
 export interface ProactiveArtifact { path: string; bytes: number; sha256: string }
 export interface ProactivePreparation {
   summary: string
+  evidence?: string
+  modelSteps?: number
   artifacts?: ProactiveArtifact[]
 }
 export interface ProactiveRun {
@@ -44,7 +47,7 @@ export interface ProactiveRun {
   eventId: string
   sourceInstanceId: string
   mode: ProactiveMode
-  state: 'running' | 'observed' | 'prepared' | 'silent' | 'suppressed' | 'budget-exhausted' | 'failed'
+  state: 'running' | 'observed' | 'prepared' | 'silent' | 'suppressed' | 'budget-exhausted' | 'failed' | 'stopped'
   text: string
   authorId: string
   authorKind: ProactiveCandidate['authorKind']
@@ -52,6 +55,8 @@ export interface ProactiveRun {
   communication: ProactiveRule['communication']
   isolatedDirectory?: string
   summary?: string
+  evidence?: string
+  modelSteps?: number
   artifacts?: ProactiveArtifact[]
   reason?: string
   createdAt: number
@@ -59,11 +64,16 @@ export interface ProactiveRun {
 interface StoredRules { revision: number; rules: ProactiveRule[]; updatedAt: number }
 export interface ProactiveOptions {
   rootDirectory: string
-  prepare?: (request: { rule: ProactiveRule; candidate: ProactiveCandidate; isolatedDirectory: string; remainingRuns: number }, signal: AbortSignal) => Promise<ProactivePreparation | undefined>
+  prepare?: (request: { runId: string; ruleRevision: number; rule: ProactiveRule; candidate: ProactiveCandidate; isolatedDirectory: string; remainingRuns: number }, signal: AbortSignal) => Promise<ProactivePreparation | undefined>
   prepareTimeoutMs?: number
   now?: () => number
+  /** Recheck source ownership and durable controls inside the reservation and settlement transactions. */
+  guard?: (tx: AsyncTx, candidate: ProactiveCandidate) => Promise<string | undefined>
+  pauseSourceInstanceId?: string
 }
 const ruleKey = 'proactive-rules'
+const controlKey = 'proactive-control'
+const noticeKey = 'recent'
 const runPrefix = (ruleId: string) => `${JSON.stringify(['proactive-run', ruleId])}:`
 const historyKey = (revision: number) => `${JSON.stringify(['proactive-rule-history'])}:${String(revision).padStart(10, '0')}`
 const metric = (value: string) => createHash('sha256').update(value).digest('hex')
@@ -76,7 +86,12 @@ function validateRule(rule: ProactiveRule) {
   if (!/^[a-z0-9][a-z0-9-]{0,63}$/u.test(rule.id)) throw new CoreError('INVALID_CONFIG', 'A proactive rule ID must be a lowercase slug used as a directory name.')
   if (typeof rule.name !== 'string' || !rule.name.trim() || Buffer.byteLength(rule.name) > 128) throw new CoreError('INVALID_CONFIG', 'A proactive rule needs a bounded name.')
   if (rule.mode !== 'observe' && rule.mode !== 'auto') throw new CoreError('INVALID_CONFIG', 'A proactive rule mode is observe or auto.')
-  if (!rule.match || Object.keys(rule.match).some(key => !['actorKinds', 'addressing', 'textPattern'].includes(key))) throw new CoreError('INVALID_CONFIG', 'A proactive match accepts actorKinds, addressing and textPattern only.')
+  if (!rule.match || Object.keys(rule.match).some(key => !['actorKinds', 'addressing', 'textPattern', 'sourceInstanceIds'].includes(key))) throw new CoreError('INVALID_CONFIG', 'A proactive match accepts actor kinds, addressing, text pattern and source instances only.')
+  if (rule.match.sourceInstanceIds !== undefined && (!Array.isArray(rule.match.sourceInstanceIds) || !rule.match.sourceInstanceIds.length
+    || rule.match.sourceInstanceIds.length > 20 || new Set(rule.match.sourceInstanceIds).size !== rule.match.sourceInstanceIds.length)) {
+    throw new CoreError('INVALID_CONFIG', 'A proactive match needs distinct, bounded source instances.')
+  }
+  for (const source of rule.match.sourceInstanceIds ?? []) identifier(source, 'proactive source instance')
   if (!Array.isArray(rule.match.actorKinds) || !rule.match.actorKinds.length || rule.match.actorKinds.some(kind => !['human', 'bot', 'ci', 'system'].includes(kind))) throw new CoreError('INVALID_CONFIG', 'A proactive match needs supported actor kinds.')
   if (!Array.isArray(rule.match.addressing) || !rule.match.addressing.length || rule.match.addressing.some(kind => !['direct', 'mention', 'ambient'].includes(kind))) throw new CoreError('INVALID_CONFIG', 'A proactive match needs supported addressing kinds.')
   if (rule.match.textPattern !== undefined) {
@@ -104,10 +119,15 @@ export class Proactive {
   private readonly timeoutMs: number
   private readonly now: () => number
   private readonly rootDirectory: string
+  private readonly guard: ProactiveOptions['guard']
+  private readonly pauseSourceInstanceId: string | undefined
+  private readonly controllers = new Map<string, AbortController>()
   constructor(private readonly storage: Storage, private readonly instanceId: string, options: ProactiveOptions) {
     if (!options?.rootDirectory || !isAbsolute(options.rootDirectory)) throw new CoreError('INVALID_CONFIG', 'A proactive root directory must be explicit and absolute.')
     this.rootDirectory = options.rootDirectory
     this.prepare = options.prepare
+    this.guard = options.guard
+    this.pauseSourceInstanceId = options.pauseSourceInstanceId
     this.timeoutMs = options.prepareTimeoutMs ?? 10000
     if (!Number.isInteger(this.timeoutMs) || this.timeoutMs < 100 || this.timeoutMs > 60000) throw new CoreError('INVALID_CONFIG', 'The proactive preparation timeout must be 100–60000 ms.')
     this.now = options.now ?? Date.now
@@ -118,6 +138,35 @@ export class Proactive {
     return stored ? { revision: stored.revision, rules: stored.rules } : { revision: 1, rules: [] }
   }
 
+  async control(): Promise<{ paused: boolean; revision: number }> {
+    return await this.storage.transaction(this.instanceId, tx => tx.get<{ paused: boolean; revision: number }>('proactive-control', controlKey))
+      ?? { paused: false, revision: 1 }
+  }
+
+  async setPaused(command: { commandId: string; paused: boolean }) {
+    identifier(command?.commandId, 'commandId')
+    if (typeof command.paused !== 'boolean') throw new CoreError('INVALID_INPUT', 'A proactive pause needs a boolean value.')
+    const fingerprint = metric(JSON.stringify(['proactive-pause-v1', command.paused]))
+    const control = await this.storage.transaction(this.instanceId, async tx => {
+      const key = `proactive-pause:${command.commandId}`
+      const prior = await tx.get<{ fingerprint: string; control: { paused: boolean; revision: number } }>('work-command', key)
+      if (prior) {
+        if (prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The pause command changed its value.')
+        return prior.control
+      }
+      const current = await tx.get<{ paused: boolean; revision: number }>('proactive-control', controlKey)
+      const next = { paused: command.paused, revision: (current?.revision ?? 1) + 1 }
+      if (!await tx.replace('proactive-control', controlKey, next)) await tx.insert('proactive-control', controlKey, next)
+      if (command.paused) for (const run of await this.scanRuns(tx, `${JSON.stringify(['proactive-run']).slice(0, -1)},`)) {
+        if (run.state === 'running') await tx.replace('proactive-run', run.id, { ...run, state: 'suppressed', reason: 'PROACTIVE_PAUSED' })
+      }
+      await tx.insert('work-command', key, { fingerprint, control: next })
+      return next
+    })
+    if (control.paused) for (const controller of this.controllers.values()) controller.abort()
+    return control
+  }
+
   async setRules(transaction: AsyncTx, expectedRevision: number, rules: ProactiveRule[]): Promise<{ revision: number; rules: ProactiveRule[] }> {
     if (!Array.isArray(rules) || rules.length > 50) throw new CoreError('INVALID_CONFIG', 'At most fifty proactive rules are supported.')
     if (new Set(rules.map(rule => rule.id)).size !== rules.length) throw new CoreError('INVALID_CONFIG', 'Proactive rule IDs must be unique.')
@@ -126,6 +175,11 @@ export class Proactive {
     const current = await transaction.get<StoredRules>('proactive-rule', ruleKey)
     if ((current?.revision ?? 1) !== expectedRevision) throw new CoreError('CONFIG_REVISION_CONFLICT', 'The proactive rules changed after this update was prepared.')
     const next: StoredRules = { revision: (current?.revision ?? 1) + 1, rules: structuredClone(rules), updatedAt: this.now() }
+    for (const run of await this.scanRuns(transaction, `${JSON.stringify(['proactive-run']).slice(0, -1)},`)) {
+      if (run.state === 'running' || run.state === 'prepared') {
+        await transaction.replace('proactive-run', run.id, { ...run, state: 'suppressed', reason: 'RULE_CHANGED' })
+      }
+    }
     if (!await transaction.replace('proactive-rule', ruleKey, next)) await transaction.insert('proactive-rule', ruleKey, next)
     await transaction.insert('proactive-rule-history', historyKey(next.revision), next)
     return { revision: next.revision, rules: next.rules }
@@ -138,6 +192,7 @@ export class Proactive {
     const runs: ProactiveRun[] = []
     for (const rule of configured.rules) {
       if (!rule.enabled) continue
+      if (rule.match.sourceInstanceIds && !rule.match.sourceInstanceIds.includes(candidate.sourceInstanceId)) continue
       if (!rule.match.actorKinds.includes(candidate.authorKind)) continue
       if (!rule.match.addressing.includes(candidate.addressing)) continue
       if (rule.match.textPattern && !new RegExp(rule.match.textPattern, 'iu').test(candidate.text)) continue
@@ -150,6 +205,12 @@ export class Proactive {
         const base = { id, instanceId: this.instanceId, ruleId: rule.id, ruleRevision: revision, eventId: candidate.eventId,
           sourceInstanceId: candidate.sourceInstanceId, mode: rule.mode, text: candidate.text.slice(0, 4096), authorId: candidate.authorId,
           authorKind: candidate.authorKind, addressing: candidate.addressing, communication: rule.communication, createdAt: this.now() }
+        const locallyPaused = (await tx.get<{ paused: boolean }>('proactive-control', controlKey))?.paused
+        const paused = locallyPaused || this.pauseSourceInstanceId && (await tx.get<{ paused: boolean }>('processing-state',
+          JSON.stringify(['processing-state', this.pauseSourceInstanceId])))?.paused
+        const blocked = paused ? 'PROCESSING_PAUSED' : (await tx.get<StoredRules>('proactive-rule', ruleKey))?.revision !== configured.revision
+          ? 'RULE_CHANGED' : await this.guard?.(tx, candidate)
+        if (blocked) return { run: await this.insert(tx, { ...base, state: 'suppressed', reason: blocked }) }
         if (rule.mode === 'observe') return { run: await this.insert(tx, { ...base, state: 'observed' }) }
         if (echo) return { run: await this.insertOrReplace(tx, { ...base, state: 'suppressed', reason: ambient ? 'AMBIENT' : 'REPEATED_ECHO' }) }
         const used = await this.countRuns(tx, rule.id, rule.budget.windowMs)
@@ -164,27 +225,50 @@ export class Proactive {
       if (reserved.run!.state !== 'running') { runs.push(reserved.run!); continue }
       const base = reserved.run!
       let final: ProactiveRun
+      const controller = new AbortController()
+      this.controllers.set(base.id, controller)
       if (!this.prepare) final = { ...base, state: 'silent', reason: 'NO_PREPARATION_ADAPTER' }
       else {
-        await mkdir(base.isolatedDirectory!, { recursive: true })
-        const controller = new AbortController()
         let timer: ReturnType<typeof setTimeout> | undefined
         try {
+          await mkdir(base.isolatedDirectory!, { recursive: true })
           const prepared = await Promise.race([
-            this.prepare({ rule, candidate, isolatedDirectory: base.isolatedDirectory!, remainingRuns: reserved.remaining! }, controller.signal),
+            this.prepare({ runId: base.id, ruleRevision: revision, rule, candidate, isolatedDirectory: base.isolatedDirectory!, remainingRuns: reserved.remaining! }, controller.signal),
             new Promise<undefined>(resolve => { timer = setTimeout(() => { controller.abort(); resolve(undefined) }, this.timeoutMs) }),
           ])
-          if (!prepared?.summary?.trim()) final = { ...base, state: 'silent', reason: 'NO_USEFUL_RESULT' }
+          if (!prepared?.summary?.trim()) final = { ...base, state: 'silent', reason: controller.signal.aborted ? 'PREPARATION_TIMED_OUT' : 'NO_USEFUL_RESULT' }
           else {
             const artifacts = prepared.artifacts ? await this.verifyArtifacts(base.isolatedDirectory!, prepared.artifacts,
               rule.budget.maxArtifactBytes ?? 5 * 1024 * 1024) : undefined
-            final = { ...base, state: 'prepared', summary: prepared.summary.slice(0, 4096), ...(artifacts ? { artifacts } : {}) }
+            if (prepared.evidence !== undefined && (typeof prepared.evidence !== 'string' || Buffer.byteLength(prepared.evidence) > 4096)
+              || prepared.modelSteps !== undefined && (!Number.isInteger(prepared.modelSteps) || prepared.modelSteps < 0 || prepared.modelSteps > 100)) {
+              throw new CoreError('INVALID_INPUT', 'Preparation evidence and model steps must be bounded.')
+            }
+            final = { ...base, state: 'prepared', summary: prepared.summary.slice(0, 4096),
+              ...(prepared.evidence ? { evidence: prepared.evidence } : {}),
+              ...(prepared.modelSteps === undefined ? {} : { modelSteps: prepared.modelSteps }), ...(artifacts ? { artifacts } : {}) }
           }
         } catch (error) {
           final = { ...base, state: 'failed', reason: error instanceof CoreError ? error.code : 'PREPARATION_FAILED' }
         } finally { if (timer) clearTimeout(timer) }
       }
-      const settled = await this.storage.transaction(this.instanceId, tx => this.insertOrReplace(tx, final))
+      this.controllers.delete(base.id)
+      const settled = await this.storage.transaction(this.instanceId, async tx => {
+        const current = await tx.get<ProactiveRun>('proactive-run', base.id)
+        if (!current || current.state !== 'running') return current ?? final
+        const changed = (await tx.get<StoredRules>('proactive-rule', ruleKey))?.revision !== base.ruleRevision
+        const locallyPaused = (await tx.get<{ paused: boolean }>('proactive-control', controlKey))?.paused
+        const paused = locallyPaused || this.pauseSourceInstanceId && (await tx.get<{ paused: boolean }>('processing-state',
+          JSON.stringify(['processing-state', this.pauseSourceInstanceId])))?.paused
+        const blocked = paused ? 'PROCESSING_PAUSED' : changed ? 'RULE_CHANGED' : await this.guard?.(tx, candidate)
+        const result = await this.insertOrReplace(tx, blocked ? { ...base, state: 'suppressed', reason: blocked } : final)
+        if (result.state === 'prepared' && result.communication === 'notify') {
+          const previous = await tx.get<string[]>('proactive-notice', noticeKey) ?? []
+          const ids = [result.id, ...previous.filter(id => id !== result.id)].slice(0, 10)
+          if (!await tx.replace('proactive-notice', noticeKey, ids)) await tx.insert('proactive-notice', noticeKey, ids)
+        }
+        return result
+      })
       runs.push(settled)
     }
     return runs
@@ -209,7 +293,96 @@ export class Proactive {
   async listRuns(ruleId?: string): Promise<ProactiveRun[]> {
     const prefix = ruleId ? runPrefix(ruleId) : `${JSON.stringify(['proactive-run']).slice(0, -1)},`
     return this.storage.transaction(this.instanceId, async tx =>
-      (await this.scanRuns(tx, prefix)).sort((left, right) => left.createdAt - right.createdAt))
+      (await this.scanRuns(tx, prefix)).sort((left, right) => left.createdAt - right.createdAt || left.id.localeCompare(right.id)))
+  }
+
+  async getRun(id: string): Promise<ProactiveRun | undefined> {
+    identifier(id, 'proactive run ID')
+    return this.storage.transaction(this.instanceId, tx => tx.get<ProactiveRun>('proactive-run', id))
+  }
+
+  async recentNotices(): Promise<ProactiveRun[]> {
+    return this.storage.transaction(this.instanceId, async tx => {
+      const ids = await tx.get<string[]>('proactive-notice', noticeKey) ?? []
+      const runs = await Promise.all(ids.map(id => tx.get<ProactiveRun>('proactive-run', id)))
+      return runs.filter((run): run is ProactiveRun => run?.state === 'prepared' && run.communication === 'notify')
+    })
+  }
+
+  async readArtifact(runId: string, path: string, offset = 0, maxBytes = 8192) {
+    const run = await this.getRun(runId)
+    const artifact = run?.artifacts?.find(item => item.path === path)
+    if (!artifact || !run?.isolatedDirectory || !['prepared', 'suppressed', 'stopped'].includes(run.state)) {
+      throw new CoreError('NOT_FOUND', 'This preparation has no verified artifact at that path.')
+    }
+    if (!Number.isSafeInteger(offset) || offset < 0 || offset > artifact.bytes || !Number.isInteger(maxBytes)
+      || maxBytes < 1 || maxBytes > 8192) throw new CoreError('INVALID_INPUT', 'Use a bounded artifact page.')
+    const base = await realpath(run.isolatedDirectory)
+    const target = await realpath(resolve(base, path))
+    const inside = relative(base, target)
+    if (inside !== path.split('/').join(sep) || !inside || inside.startsWith('..') || isAbsolute(inside)) {
+      throw new CoreError('ARTIFACT_UNVERIFIED', 'The artifact is no longer inside its preparation directory.')
+    }
+    const info = await stat(target)
+    if (!info.isFile() || info.size !== artifact.bytes) {
+      throw new CoreError('ARTIFACT_UNVERIFIED', 'The artifact changed since it was prepared.')
+    }
+    const bytes = await readFile(target)
+    if (createHash('sha256').update(bytes).digest('hex') !== artifact.sha256) {
+      throw new CoreError('ARTIFACT_UNVERIFIED', 'The artifact changed since it was prepared.')
+    }
+    const next = Math.min(offset + maxBytes, bytes.length)
+    return { runId, path, text: bytes.subarray(offset, next).toString('utf8'), nextOffset: next,
+      hasMore: next < bytes.length, bytes: artifact.bytes, sha256: artifact.sha256 }
+  }
+
+  async recoverInterrupted(): Promise<number> {
+    return this.storage.transaction(this.instanceId, async tx => {
+      let recovered = 0
+      for (const run of await this.scanRuns(tx, `${JSON.stringify(['proactive-run']).slice(0, -1)},`)) {
+        if (run.state !== 'running') continue
+        await tx.replace('proactive-run', run.id, { ...run, state: 'failed', reason: 'HOST_RESTART' })
+        recovered++
+      }
+      return recovered
+    })
+  }
+
+  abortActive() { for (const controller of this.controllers.values()) controller.abort() }
+
+  async stop(command: { commandId: string; runId: string; reason: string }): Promise<ProactiveRun> {
+    identifier(command?.commandId, 'commandId'); identifier(command?.runId, 'proactive run ID')
+    if (typeof command.reason !== 'string' || !command.reason.trim() || Buffer.byteLength(command.reason) > 2048) {
+      throw new CoreError('INVALID_INPUT', 'Stopping a preparation needs a bounded reason.')
+    }
+    const key = `proactive-stop:${command.commandId}`
+    const fingerprint = metric(JSON.stringify([command.runId, command.reason]))
+    const run = await this.storage.transaction(this.instanceId, async tx => {
+      const prior = await tx.get<{ fingerprint: string; runId: string }>('work-command', key)
+      if (prior?.fingerprint !== undefined && prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The stop command changed its target.')
+      const current = await tx.get<ProactiveRun>('proactive-run', prior?.runId ?? command.runId)
+      if (!current) throw new CoreError('NOT_FOUND', 'The preparation does not exist.')
+      if (!prior) await tx.insert('work-command', key, { fingerprint, runId: command.runId })
+      if (current.state !== 'running' && current.state !== 'prepared') return current
+      const stopped: ProactiveRun = { ...current, state: 'stopped', reason: command.reason }
+      await tx.replace('proactive-run', current.id, stopped)
+      return stopped
+    })
+    this.controllers.get(run.id)?.abort()
+    return run
+  }
+
+  async assertCurrent(candidate: ProactiveCandidate, ruleRevision: number, runId: string) {
+    const blocked = await this.storage.transaction(this.instanceId, async tx => {
+      const run = await tx.get<ProactiveRun>('proactive-run', runId)
+      if (run?.state !== 'running') return 'PREPARATION_STOPPED'
+      if ((await tx.get<StoredRules>('proactive-rule', ruleKey))?.revision !== ruleRevision) return 'RULE_CHANGED'
+      if ((await tx.get<{ paused: boolean }>('proactive-control', controlKey))?.paused) return 'PROACTIVE_PAUSED'
+      if (this.pauseSourceInstanceId && (await tx.get<{ paused: boolean }>('processing-state',
+        JSON.stringify(['processing-state', this.pauseSourceInstanceId])))?.paused) return 'PROCESSING_PAUSED'
+      return this.guard?.(tx, candidate)
+    })
+    if (blocked) throw new CoreError(blocked, 'This preparation no longer has a current authorization.')
   }
 
   private async verifyArtifacts(directory: string, artifacts: ProactiveArtifact[], maxBytes: number) {
@@ -247,7 +420,8 @@ export class Proactive {
 
   private async countRuns(tx: AsyncTx, ruleId: string, windowMs: number) {
     const since = this.now() - windowMs
-    return (await this.listRunsIn(tx, ruleId, since)).filter(run => ['running', 'prepared', 'silent', 'failed'].includes(run.state)).length
+    return (await this.listRunsIn(tx, ruleId, since)).filter(run => Boolean(run.isolatedDirectory)
+      || ['running', 'prepared', 'silent', 'failed'].includes(run.state)).length
   }
 
   private async scanRuns(tx: AsyncTx, prefix: string, since?: number) {
