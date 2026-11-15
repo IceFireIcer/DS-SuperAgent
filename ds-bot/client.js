@@ -59,6 +59,13 @@ var ZH = {
   "Stopping · waiting for the current execution to become quiet.": "正在停止 · 等待当前执行静止。",
   "Stopped · execution cancellation confirmed.": "已停止 · 已确认执行取消。",
   "Stopped · cancellation confirmation is unavailable.": "已停止 · 无法确认取消范围已静止。",
+  "Question version": "问题版本",
+  "Answer this work question": "回答这个工作问题",
+  "Type an answer…": "输入回答…",
+  "Sending answer…": "正在提交回答…",
+  "Send answer": "提交回答",
+  "Answered by": "回答者",
+  "This question is no longer active.": "这个问题已不再有效。",
   "What would you like to discuss?": "想聊些什么？",
   "Main is replying…": "Main 正在回复…",
   "Main ready": "Main 就绪",
@@ -21137,6 +21144,7 @@ function applyProduct(ctx) {
     const state = useView();
     const [controlBusy, setControlBusy] = (0, import_react53.useState)(null);
     const [controlError, setControlError] = (0, import_react53.useState)(null);
+    const [attentionDraft, setAttentionDraft] = (0, import_react53.useState)("");
     const control = work.control;
     const assignment = control?.assignment;
     const runControl = async (endpoint) => {
@@ -21163,6 +21171,33 @@ function applyProduct(ctx) {
       }
     };
     const stop = control?.stop;
+    const attention = control?.attention;
+    const answer = async (event) => {
+      event.preventDefault();
+      const text = attentionDraft.trim();
+      if (!state.binding || !control || !assignment || !attention || attention.status !== "waiting" || !text) return;
+      setControlBusy("work-answer");
+      setControlError(null);
+      try {
+        await productCall("work-answer", {
+          instanceId: state.binding.instanceId,
+          commandId: crypto.randomUUID(),
+          workItemId: control.workItemId,
+          ticketId: control.ticketId,
+          expectedGeneration: assignment.generation,
+          attentionId: attention.id,
+          attentionVersion: attention.version,
+          text
+        });
+        setAttentionDraft("");
+        await refreshMain(state.binding);
+      } catch (error) {
+        setControlError(error.message);
+        await refreshMain(state.binding);
+      } finally {
+        setControlBusy(null);
+      }
+    };
     return (0, import_react53.createElement)(
       "article",
       { className: "bt-main-work", "aria-label": t("Work item: {goal}", { goal: work.brief.goal }) },
@@ -21187,6 +21222,31 @@ function applyProduct(ctx) {
       work.receipt.ticketId ? (0, import_react53.createElement)("p", { className: "bt-main-work-id" }, `${t("Ticket")} ${work.receipt.ticketId}`) : null,
       assignment ? (0, import_react53.createElement)("p", { className: "bt-main-work-id" }, `${t("Execution version")}: ${assignment.generation}`) : null,
       stop ? (0, import_react53.createElement)("p", { className: "bt-main-work-detail" }, stop.state === "stopping" ? stop.pendingDeviceConfirmation ? t("Stopping · waiting for device cancellation confirmation.") : t("Stopping · waiting for the current execution to become quiet.") : stop.cancellationConfirmedAt ? t("Stopped · execution cancellation confirmed.") : t("Stopped · cancellation confirmation is unavailable.")) : null,
+      attention ? (0, import_react53.createElement)(
+        "div",
+        { className: "bt-main-work-attention" },
+        (0, import_react53.createElement)("p", { className: "bt-main-work-id" }, `${t("Question version")} ${attention.version} · ${attention.status}`),
+        (0, import_react53.createElement)("p", null, attention.question),
+        attention.status === "waiting" && control.permissions.canAnswer && assignment ? (0, import_react53.createElement)(
+          "form",
+          { className: "bt-main-work-answer", onSubmit: answer },
+          attention.options.length ? (0, import_react53.createElement)("div", { className: "bt-main-work-options" }, attention.options.map((option) => (0, import_react53.createElement)("button", { key: option, type: "button", className: "bt-soft", onClick: () => setAttentionDraft(option) }, option))) : null,
+          (0, import_react53.createElement)("label", { htmlFor: `work-answer-${attention.id}` }, t("Answer this work question")),
+          (0, import_react53.createElement)("textarea", {
+            id: `work-answer-${attention.id}`,
+            value: attentionDraft,
+            maxLength: 65536,
+            rows: 2,
+            placeholder: t("Type an answer…"),
+            onChange: (event) => setAttentionDraft(event.currentTarget.value)
+          }),
+          (0, import_react53.createElement)(
+            "button",
+            { type: "submit", className: "bt-soft", disabled: Boolean(controlBusy) || !attentionDraft.trim() },
+            controlBusy === "work-answer" ? t("Sending answer…") : t("Send answer")
+          )
+        ) : (0, import_react53.createElement)("p", { className: "bt-main-work-detail" }, attention.status === "answered" ? `${t("Answered by")} ${attention.answeredBy ?? control.permissions.actorId}${attention.answerText ? `: ${attention.answerText}` : ""}` : t("This question is no longer active."))
+      ) : null,
       controlError ? (0, import_react53.createElement)("p", { className: "bt-main-error", role: "alert" }, controlError) : null,
       work.receipt.reason ? (0, import_react53.createElement)("p", { className: "bt-main-error" }, `${t("Work receipt")}: ${work.receipt.reason}`) : null,
       work.receipt.status === "routing" ? (0, import_react53.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${work.receipt.nextStep}`) : null,
@@ -22301,6 +22361,12 @@ var PRODUCT_CSS = `
 .bt-main-work-followup p{margin:0}
 .bt-main-work-controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;padding-top:8px;border-top:.5px solid var(--bt-line-2)}
 .bt-main-work-controls button{height:32px}
+.bt-main-work-attention{margin-top:10px;padding:10px;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-main);font-size:13px;line-height:18px;overflow-wrap:anywhere}
+.bt-main-work-attention p{margin:0 0 8px}.bt-main-work-options{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.bt-main-work-answer label{display:block;margin-bottom:6px;font-size:12px;color:var(--bt-ink-2)}
+.bt-main-work-answer textarea{display:block;width:100%;min-height:58px;box-sizing:border-box;resize:vertical;padding:8px;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card);color:var(--bt-ink);font:inherit}
+.bt-main-work-answer textarea:focus-visible{outline:2px solid var(--bt-accent);outline-offset:1px}
+.bt-main-work-answer>button{margin-top:8px}
 .bt-main-work-result{margin-top:8px;padding-top:8px;border-top:.5px solid var(--bt-line-2);color:var(--bt-ink);font-size:13px;line-height:18px;overflow-wrap:anywhere}
 .bt-main-work-result p{margin:0 0 6px}.bt-main-work-result p:last-child{margin-bottom:0}
 .bt-main-work-artifact code{font:inherit;color:var(--bt-ink)}

@@ -218,22 +218,14 @@ export class NativeSessions {
       request.signal?.throwIfAborted()
       await request.onDelivered?.()
       handle.agent.followup({ id: MessageId(messageId), role: 'user', content: [{ type: 'text', text: request.text }], source: { kind: 'user' } })
-      if (receipt) {
-        appendedSeq = await Promise.race([appended, deadline])
-        if (appendedSeq !== undefined) {
-          if (!await this.context.sessions.flush(handle.agent.session)) throw new CoreError('PERSISTENCE_REQUIRED', 'No persistence provider confirmed this Session flush.')
-          await request.onMessagePersisted?.(appendedSeq)
-        }
-      }
       await handle.agent.whenIdle()
       if (!await this.context.sessions.flush(handle.agent.session)) throw new CoreError('PERSISTENCE_REQUIRED', 'No persistence provider confirmed this Session flush.')
       if (stepBudgetExceeded) throw new CoreError('STEP_BUDGET', 'The Session step budget was exhausted.')
-      if (receipt && appendedSeq === undefined) {
+      if (receipt) {
         const stored = handle.agent.session.snapshotEvents().find(event => event.type === 'user/message' && (event.data as { id?: string }).id === messageId)
-        if (stored) {
-          appendedSeq = Number(stored.seq)
-          await request.onMessagePersisted?.(appendedSeq)
-        }
+        appendedSeq = stored ? Number(stored.seq) : await Promise.race([appended, deadline])
+        if (appendedSeq === undefined) throw new CoreError('PERSISTENCE_REQUIRED', 'The turn did not confirm its user message identity.')
+        await request.onMessagePersisted?.(appendedSeq)
       }
       const events = handle.agent.session.snapshotEvents()
       const turnEvents = events.filter(event => Number((event as { seq?: unknown }).seq) > previousLastSeq)

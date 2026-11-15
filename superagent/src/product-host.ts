@@ -150,18 +150,19 @@ export async function createProductHost(context: Context, config: ProductHostCon
             : endpoint === 'work-stop' || endpoint === 'work-retry'
               ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'reason']
               : endpoint === 'work-resume' ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration']
-                : endpoint === 'settings' ? ['instanceId', 'limit']
-                  : endpoint === 'settings-save' ? ['instanceId', 'commandId', 'expectedRevision', 'roles']
-                    : endpoint === 'settings-efforts' ? ['instanceId', 'provider', 'model']
-                      : endpoint === 'provider-key' ? ['instanceId', 'provider', 'value']
-                        : endpoint === 'reconcile-delivery' ? ['instanceId', 'commandId', 'ticketId', 'deliveryId']
-                          : endpoint === 'source-deliveries' ? ['instanceId', 'sourceId', 'after', 'limit']
-                            : endpoint === 'observe-list' ? ['instanceId', 'after', 'limit', 'query']
-                              : endpoint === 'observe-read' ? ['instanceId', 'observationId', 'generation', 'after', 'limit']
-                                : endpoint === 'observe-detail' ? ['instanceId', 'observationId', 'generation', 'detailId', 'offset', 'limit']
-                                  : endpoint === 'evidence' ? ['instanceId', 'workItemId', 'ref', 'after', 'maxBytes']
-                                    : endpoint === 'history' ? ['instanceId', 'after', 'before', 'limit']
-                                      : undefined
+                : endpoint === 'work-answer' ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'attentionId', 'attentionVersion', 'text']
+                  : endpoint === 'settings' ? ['instanceId', 'limit']
+                    : endpoint === 'settings-save' ? ['instanceId', 'commandId', 'expectedRevision', 'roles']
+                      : endpoint === 'settings-efforts' ? ['instanceId', 'provider', 'model']
+                        : endpoint === 'provider-key' ? ['instanceId', 'provider', 'value']
+                          : endpoint === 'reconcile-delivery' ? ['instanceId', 'commandId', 'ticketId', 'deliveryId']
+                            : endpoint === 'source-deliveries' ? ['instanceId', 'sourceId', 'after', 'limit']
+                              : endpoint === 'observe-list' ? ['instanceId', 'after', 'limit', 'query']
+                                : endpoint === 'observe-read' ? ['instanceId', 'observationId', 'generation', 'after', 'limit']
+                                  : endpoint === 'observe-detail' ? ['instanceId', 'observationId', 'generation', 'detailId', 'offset', 'limit']
+                                    : endpoint === 'evidence' ? ['instanceId', 'workItemId', 'ref', 'after', 'maxBytes']
+                                      : endpoint === 'history' ? ['instanceId', 'after', 'before', 'limit']
+                                        : undefined
         if (!fields) throw new CoreError('UNAVAILABLE', 'This product capability is not connected yet.')
         if (Object.keys(payload).some(key => !fields.includes(key))) throw new CoreError('INVALID_INPUT', 'The product request contains unsupported fields.')
         if (endpoint === 'history') {
@@ -180,6 +181,10 @@ export async function createProductHost(context: Context, config: ProductHostCon
         if (endpoint === 'work-resume') return engine!.resumeMainWork({ instanceId, commandId: payload.commandId as string,
           workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
           expectedGeneration: payload.expectedGeneration as string })
+        if (endpoint === 'work-answer') return engine!.answerMainAttention({ instanceId, commandId: payload.commandId as string,
+          workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
+          expectedGeneration: payload.expectedGeneration as string, attentionId: payload.attentionId as string,
+          attentionVersion: payload.attentionVersion as number, text: payload.text as string })
         if (endpoint === 'work-retry') return engine!.retryMainWork({ instanceId, commandId: payload.commandId as string,
           workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
           expectedGeneration: payload.expectedGeneration as string, reason: payload.reason as string })

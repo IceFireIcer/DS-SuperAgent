@@ -285,7 +285,7 @@ test('answering before a question Outbox is delivered records a confirmed stale 
   assert.equal(dropped?.delivery, 'dropped')
 })
 
-test('a waiting-human question survives stop but cannot be bypassed by resume', { timeout: 15000 }, async t => {
+test('an explicit stop retires a waiting-human question and rejects its late answer', { timeout: 15000 }, async t => {
   const { engine } = await runtimeFixture(t)
   const receipt = await engine.submit({ commandId: 'stopped-question', eventId: 'stopped-question-message', text: 'Request a human decision.' })
   for (let index = 0; index < 6; index++) await engine.effects.drain()
@@ -293,11 +293,13 @@ test('a waiting-human question survives stop but cannot be bypassed by resume', 
   const stopped = await engine.stopTicket({ commandId: 'stop-question', ticketId: receipt.ticketId, reason: 'Pause all work.' })
   assert.equal(stopped.status, 'stopped')
   assert.equal(stopped.stop?.previousConstraint?.kind, 'waiting-human')
-  await assert.rejects(engine.resumeTicket({ commandId: 'resume-question', ticketId: receipt.ticketId }), { code: 'WAITING_HUMAN' })
-  const answered = await engine.answerAttention({ commandId: 'answer-stopped-question', attentionId: stopped.attention.id, text: 'Use the blue option.' })
-  assert.equal(answered.attention.status, 'answered')
+  assert.equal(stopped.attention?.status, 'superseded')
+  await assert.rejects(engine.answerAttention({ commandId: 'answer-stopped-question', attentionId: stopped.attention.id, text: 'Use the blue option.' }),
+    { code: 'TICKET_STOPPED' })
   assert.equal((await engine.getTicketDirection(receipt.ticketId)).constraint?.kind, 'stopped')
-  await engine.resumeTicket({ commandId: 'resume-after-answer', ticketId: receipt.ticketId })
-  for (let index = 0; index < 6; index++) await engine.effects.drain()
-  assert.equal((await engine.conversation(receipt.ticketId)).status, 'ready')
+  await engine.resumeTicket({ commandId: 'resume-after-stop', ticketId: receipt.ticketId })
+  const resumed = await engine.conversation(receipt.ticketId)
+  assert.equal(resumed.lifecycle, 'open')
+  assert.equal(resumed.attention?.status, 'superseded')
+  assert.equal((await engine.getTicketDirection(receipt.ticketId)).constraint, undefined)
 })

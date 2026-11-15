@@ -270,6 +270,9 @@ export interface MainWorkControl {
     freeText: true
     assignmentId: string
     sessionId: string
+    answeredAt?: number
+    answeredBy?: string
+    answerText?: string
   }
   stop?: {
     id: string
@@ -979,6 +982,36 @@ export class WorkDelegation {
       await transaction.insert('work-follow-up', followUpKey(item.id, record.id), record)
       await transaction.insert('work-follow-up-command', key, { fingerprint, followUpId: record.id })
       return this.followUpView(transaction, record)
+    })
+  }
+
+  async recordAttentionAnswer(event: { ticketId: string; attentionId: string; attentionVersion: number;
+    assignmentId: string; sessionId: string; commandId: string; actorId: string; answer: string; answeredAt: number; inputId: string }) {
+    return commandTransaction(this.options.storage, this.options.instanceId, async tx => {
+      const index = await tx.get<{ workBriefId: string; workItemId: string }>('work-ticket', event.ticketId)
+      if (!index?.workItemId) return
+      const brief = await tx.get<MainWorkBrief>('work-brief', index.workBriefId)
+      const item = await tx.get<MainWorkItem>('work-item', index.workItemId)
+      const receipt = await tx.get<MainWorkReceipt>('work-receipt', index.workItemId)
+      if (!brief || !item || receipt?.status !== 'accepted' || receipt.ticketId !== event.ticketId) return
+      const id = createHash('sha256').update(canonicalJson(['main-attention-answer-v1', this.options.instanceId,
+        event.ticketId, event.attentionId, event.attentionVersion, event.commandId])).digest('hex')
+      if (await tx.get<MainWorkUpdate>('work-update', id)) return
+      const update: MainWorkUpdate = {
+        version: 1,
+        id,
+        workBriefId: brief.id,
+        workItemId: item.id,
+        ticketId: event.ticketId,
+        status: 'running',
+        owner: 'user',
+        summary: `Authorized answer v${event.attentionVersion} was recorded for ${event.attentionId}; the same Worker Assignment continues.`,
+        needsDecision: false,
+        createdAt: event.answeredAt,
+      }
+      const notification: MainWorkNotification = { mainId: brief.mainId, receipt, update }
+      await tx.insert('work-update', id, notification)
+      if (!await tx.replace('work-update-head', item.id, update)) await tx.insert('work-update-head', item.id, update)
     })
   }
 

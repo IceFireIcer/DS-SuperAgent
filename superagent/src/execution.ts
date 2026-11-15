@@ -1922,6 +1922,7 @@ export class Execution {
       await transaction.insert('stop-state', stopId, stop)
       if (!await transaction.replace('stop-head', this.stopHeadKey(command.ticketId), { stopId })) await transaction.insert('stop-head', this.stopHeadKey(command.ticketId), { stopId })
       await transaction.insert('stop-history', `${JSON.stringify(['stop-history', command.ticketId])}:${stopId}`, stop)
+      await this.attentions.supersedeForStop(transaction, command.ticketId)
       await transaction.replace('ticket', command.ticketId, { ...ticket, constraint: { kind: 'stopped', stopId, reason: command.reason } })
       const intent = (await transaction.get<Work['intent']>('intent', command.ticketId))!
       await transaction.replace('intent', command.ticketId, { ...intent, state: 'pending', reason: running ? 'stopping' : 'stopped' })

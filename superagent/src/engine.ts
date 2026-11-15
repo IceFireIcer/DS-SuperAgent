@@ -320,7 +320,10 @@ export class Engine {
               sessionId: assignment.sessionId, state: assignment.state } } : {}),
             ...(attention ? { attention: { id: attention.id, version: attention.sequence, status: attention.status,
               question: attention.question, options: [...attention.options], freeText: true as const,
-              assignmentId: attention.assignmentId, sessionId: attention.sessionId } } : {}),
+              assignmentId: attention.assignmentId, sessionId: attention.sessionId,
+              ...(attention.answeredAt === undefined ? {} : { answeredAt: attention.answeredAt }),
+              ...(attention.answeredBy === undefined ? {} : { answeredBy: attention.answeredBy }),
+              ...(attention.answerText === undefined ? {} : { answerText: attention.answerText }) } } : {}),
             ...(stop ? { stop: { id: stop.id, state: stop.state, requestedAt: stop.requestedAt,
               requestedBy: stop.requestedBy, reason: stop.reason,
               pendingDeviceConfirmation: stop.pendingDeviceConfirmation === true,
@@ -2142,19 +2145,29 @@ export class Engine {
     return this.storage.transaction(this.instanceId, tx => this.deliveries.view(tx, delivery))
   }
 
-  async answerAttention(command: { commandId: string; attentionId: string; text: string; sourceEventId?: string }, receiver?: Engine) {
+  async answerAttention(command: { commandId: string; attentionId: string; text: string; sourceEventId?: string;
+    ticketId?: string; expectedAssignmentId?: string; expectedVersion?: number }, receiver?: Engine) {
     await this.ensurePolicy()
     if (receiver) {
       if (!(receiver instanceof Engine) || receiver.instanceId !== this.instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The answer receiver must be a trusted Engine in this Instance.')
       await receiver.ensurePolicy()
     }
-    if (!command || Object.keys(command).some(key => !['commandId', 'attentionId', 'text', 'sourceEventId'].includes(key))) throw new CoreError('INVALID_INPUT', 'Answering Attention accepts commandId, attentionId, text and sourceEventId only.')
+    if (!command || Object.keys(command).some(key => !['commandId', 'attentionId', 'text', 'sourceEventId', 'ticketId', 'expectedAssignmentId', 'expectedVersion'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Answering Attention accepts one exact question and bounded answer only.')
+    }
     identifier(command.commandId, 'commandId'); identifier(command.attentionId, 'attentionId')
     if (command.sourceEventId !== undefined) identifier(command.sourceEventId, 'sourceEventId')
+    if (command.ticketId !== undefined) identifier(command.ticketId, 'ticketId')
+    if (command.expectedAssignmentId !== undefined) identifier(command.expectedAssignmentId, 'expectedAssignmentId')
+    if (command.expectedVersion !== undefined && (!Number.isSafeInteger(command.expectedVersion) || command.expectedVersion < 1)) {
+      throw new CoreError('INVALID_INPUT', 'The Attention version must be a positive integer.')
+    }
     if (typeof command.text !== 'string' || !command.text.trim() || Buffer.byteLength(command.text) > 65536) throw new CoreError('INVALID_INPUT', 'An Attention answer needs bounded nonempty text.')
     const commandKey = this.commandKey(command.commandId)
     const fingerprint = createHash('sha256').update(canonicalJson(['attention-answer-v2', this.source.sourceInstanceId, this.source.actorId,
-      command.attentionId, command.text, command.sourceEventId ?? null, ...(receiver ? [receiver.source.sourceInstanceId, receiver.source.actorId] : [])])).digest('hex')
+      command.attentionId, command.text, command.sourceEventId ?? null, command.ticketId ?? null,
+      command.expectedAssignmentId ?? null, command.expectedVersion ?? null,
+      ...(receiver ? [receiver.source.sourceInstanceId, receiver.source.actorId] : [])])).digest('hex')
     return commandTransaction(this.storage, this.instanceId, async tx => {
       const existing = await tx.get<{ fingerprint: string; attentionId: string; inputId: string }>('work-command', commandKey)
       if (existing) {
@@ -2167,6 +2180,9 @@ export class Engine {
       await this.assertHostAdmissionIn(tx)
       const attention = await tx.get<Attention>('attention', command.attentionId)
       if (!attention) throw new CoreError('NOT_FOUND', 'The Attention does not exist.')
+      if (command.ticketId !== undefined && command.ticketId !== attention.ticketId) {
+        throw new CoreError('ATTENTION_STALE', 'The named work no longer owns this question.')
+      }
       const ticket = await tx.get<Work['ticket']>('ticket', attention.ticketId)
       const trigger = ticket && await tx.get<Work['trigger']>('trigger', ticket.triggerId)
       if (!ticket || !trigger || trigger.source.sourceInstanceId !== this.source.sourceInstanceId
@@ -2223,7 +2239,9 @@ export class Engine {
       if (!command.sourceEventId && !answerers.includes(actorId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This actor cannot answer work questions.')
       if (!foreign && !originTicket && !managedOrigin && actorId !== attention.destination.actorId) throw new CoreError('ANSWER_ACTOR_MISMATCH', 'The current actor does not match the question recipient.')
       const result = await this.attentions.answer(tx, { ticketId: attention.ticketId, attentionId: attention.id, text: answerText,
-        commandId: command.commandId, actorId, ...(command.sourceEventId ? { sourceEventId: command.sourceEventId } : {}) })
+        commandId: command.commandId, actorId, ...(command.sourceEventId ? { sourceEventId: command.sourceEventId } : {}),
+        ...(command.expectedAssignmentId === undefined ? {} : { expectedAssignmentId: command.expectedAssignmentId }),
+        ...(command.expectedVersion === undefined ? {} : { expectedVersion: command.expectedVersion }) })
       if (command.sourceEventId && crossQuestionInput?.association) {
         result.input = { ...result.input, association: { ...crossQuestionInput.association, sourceActorId: actorId,
           reason: `Authorized native answer to ${attention.id}`, checkedAt: Date.now() } }
@@ -2258,6 +2276,36 @@ export class Engine {
     if (!current || current.generation !== request.expectedGeneration) {
       throw new CoreError('WORK_VERSION_STALE', 'The work card changed before this command; refresh before trying again.')
     }
+    return { conversation, current }
+  }
+
+  async answerMainAttention(command: { instanceId: string; commandId: string; workItemId: string; ticketId: string;
+    expectedGeneration: string; attentionId: string; attentionVersion: number; text: string }) {
+    if (!command || Object.keys(command).some(key => !['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration',
+      'attentionId', 'attentionVersion', 'text'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Answering a Main work card accepts only its exact current question and text.')
+    }
+    identifier(command.attentionId, 'attentionId')
+    const { current } = await this.requireMainWorkControl(command)
+    const attention = await this.attentions.get(command.attentionId)
+    if (!attention || attention.instanceId !== this.instanceId || attention.ticketId !== command.ticketId
+      || attention.assignmentId !== current.id || attention.sequence !== command.attentionVersion) {
+      throw new CoreError('ATTENTION_STALE', 'The work card question changed before this answer.')
+    }
+    const result = await this.answerAttention({
+      commandId: command.commandId,
+      attentionId: command.attentionId,
+      ticketId: command.ticketId,
+      expectedAssignmentId: current.id,
+      expectedVersion: command.attentionVersion,
+      text: command.text,
+    })
+    await this.workDelegation?.recordAttentionAnswer({ ticketId: command.ticketId, attentionId: result.attention.id,
+      attentionVersion: result.attention.sequence, assignmentId: result.attention.assignmentId,
+      sessionId: result.attention.sessionId, commandId: command.commandId, actorId: result.attention.answeredBy!,
+      answer: result.attention.answerText!, answeredAt: result.attention.answeredAt!, inputId: result.input.id })
+    this.effects.wake()
+    return result
   }
 
   async stopMainWork(command: { instanceId: string; commandId: string; workItemId: string; ticketId: string; expectedGeneration: string; reason: string }) {

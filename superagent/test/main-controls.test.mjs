@@ -151,3 +151,107 @@ test('a stop without a live Main controller becomes a visible host-confirmed sto
   assert.equal(page.messages.find(message => message.id === active.messageId)?.status, 'failed')
   assert.equal(page.messages.some(message => message.text === 'A completed turn after the stop must stay hidden.'), false)
 })
+
+test('a Main work card answers only the exact current Attention and records the fact once', { timeout: 45000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'r5-main-answer-'))
+  const root = join(directory, 'workspace')
+  await mkdir(root)
+  const native = await nativeContext(join(directory, 'sessions'), async function* (options) {
+    const text = lastUserText(options)
+    const calls = completedToolCount(options)
+    if (options.model === 'main') {
+      if (text.startsWith('[Work update]')) {
+        yield* textResponse('The bounded work fact was recorded.')
+        return
+      }
+      if (calls === 0) {
+        yield* toolResponse('delegate_work', {
+          goal: 'Ask the beta question.',
+          constraints: 'Use only an authorized beta answer.',
+          acceptanceCriteria: 'Read the answer and report evidence.',
+        })
+        return
+      }
+      yield* textResponse('The question work was delegated.')
+      return
+    }
+    if (options.model === 'router') {
+      yield* routerResponse(options)
+      return
+    }
+    if (text.includes('Goal:\nAsk the beta question.') && !calls) {
+      yield* toolResponse('ask_human', { question: 'Continue beta?', options: 'Yes\nNo' })
+      return
+    }
+    if (text === 'Yes') {
+      yield* toolResponse('report_ready', {
+        result: 'The authorized answer continued the original work.',
+        evidence: 'The Worker used the exact versioned answer in the same Assignment.',
+      })
+      return
+    }
+    yield* textResponse('No result was recorded.')
+  })
+  const environment = await LocalEnvironment.open({ id: 'product-workspace', instanceId: 'personal', root,
+    allowedActorIds: ['alice'], permissions: ['read', 'write'], commands: {} })
+  const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  const sessions = new NativeSessions(native, routes)
+  const engine = new Engine(storage, 'personal', source, { scanIntervalMs: 10, retryDelayMs: 10 }, sessions, [environment])
+  const intruder = new Engine(storage, 'personal', { ...source, actorId: 'mallory', allowedActorIds: ['mallory'] }, {}, sessions)
+  t.after(async () => {
+    await engine.effects.stop(); await engine.shutdown(); await intruder.shutdown(); await sessions.close()
+    await native.fiber.dispose(); await environment.close(); await storage.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+
+  await engine.openMain({ instanceId: 'personal' })
+  await engine.sendMainMessage({ instanceId: 'personal', commandId: 'answer-card', text: 'Ask before finishing.' })
+  for (let count = 0; count < 12; count++) await engine.effects.drain()
+  await until(async () => (await engine.getMainConversation({ instanceId: 'personal' })).works
+    .some(work => work.control?.attention?.status === 'waiting' && work.control.assignment?.state === 'ended'),
+  'the released waiting-human Assignment')
+  const waiting = (await engine.getMainConversation({ instanceId: 'personal' })).works[0]
+  assert.ok(waiting?.control)
+  const control = waiting.control
+  assert.equal(control?.permissions.canAnswer, true)
+  assert.equal(control?.attention?.question, 'Continue beta?')
+  assert.deepEqual(control?.attention?.options, ['Yes', 'No'])
+  assert.equal(control?.attention?.freeText, true)
+  assert.equal(control?.attention?.version, 1)
+  const assignment = control.assignment
+  const attention = control.attention
+  const command = { instanceId: 'personal', commandId: 'answer-card-yes', workItemId: waiting.brief.workItemId,
+    ticketId: waiting.receipt.ticketId, expectedGeneration: assignment.generation, attentionId: attention.id,
+    attentionVersion: attention.version, text: 'Yes' }
+
+  await engine.setProcessingPaused({ commandId: 'pause-answer-continuation', paused: true })
+  await assert.rejects(intruder.answerMainAttention(command), error => ['ANSWER_ACTOR_MISMATCH', 'SOURCE_NOT_AUTHORIZED'].includes(error.code))
+  await assert.rejects(engine.answerMainAttention({ ...command, commandId: 'stale-version', attentionVersion: 99 }), { code: 'ATTENTION_STALE' })
+  await assert.rejects(engine.answerMainAttention({ ...command, commandId: 'stale-generation', expectedGeneration: 'old-generation' }), { code: 'WORK_VERSION_STALE' })
+  const answered = await engine.answerMainAttention(command)
+  assert.equal(answered.attention.status, 'answered')
+  assert.equal(answered.attention.assignmentId, assignment.id)
+  assert.equal(answered.attention.sessionId, assignment.sessionId)
+  assert.equal(answered.input.text, 'Yes')
+  const replay = await engine.answerMainAttention(command)
+  assert.equal(replay.input.id, answered.input.id)
+  await assert.rejects(engine.answerMainAttention({ ...command, text: 'No' }), { code: 'IDENTITY_CONFLICT' })
+
+  const final = (await engine.getMainConversation({ instanceId: 'personal' })).works[0]
+  assert.equal(final?.control?.attention?.status, 'answered')
+  assert.equal(final?.control?.attention?.answerText, 'Yes')
+  assert.equal(final?.control?.permissions.canAnswer, false)
+  assert.match(final?.update?.summary ?? '', /Authorized answer v1/u)
+  await engine.stopMainWork({ instanceId: 'personal', commandId: 'stop-answered-card', workItemId: waiting.brief.workItemId,
+    ticketId: waiting.receipt.ticketId, expectedGeneration: assignment.generation, reason: 'Stop after the answer.' })
+  const stopped = (await engine.getMainConversation({ instanceId: 'personal' })).works[0]
+  assert.equal(stopped?.status, 'stopped')
+  assert.equal(stopped?.control?.permissions.canAnswer, false)
+  await assert.rejects(engine.answerMainAttention({ ...command, commandId: 'answer-after-stop', text: 'No' }), { code: 'TICKET_STOPPED' })
+  const observations = await engine.getWorkObservations({ instanceId: 'personal', query: 'Ask the beta question' })
+  const workerObservation = observations.items.find(item => item.role === 'worker')
+  assert.ok(workerObservation)
+  const observation = await engine.readWorkObservation({ instanceId: 'personal', observationId: workerObservation.id,
+    generation: workerObservation.generation })
+  assert.equal(observation.facts.some(fact => fact.label === 'Attention v1' && fact.value.includes('Yes')), true)
+})

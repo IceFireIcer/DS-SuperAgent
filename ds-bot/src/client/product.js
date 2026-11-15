@@ -231,6 +231,7 @@ export function applyProduct(ctx) {
     const state = useView()
     const [controlBusy, setControlBusy] = useState(null)
     const [controlError, setControlError] = useState(null)
+    const [attentionDraft, setAttentionDraft] = useState('')
     const control = work.control
     const assignment = control?.assignment
     const runControl = async endpoint => {
@@ -252,6 +253,26 @@ export function applyProduct(ctx) {
       }
     }
     const stop = control?.stop
+    const attention = control?.attention
+    const answer = async event => {
+      event.preventDefault()
+      const text = attentionDraft.trim()
+      if (!state.binding || !control || !assignment || !attention || attention.status !== 'waiting' || !text) return
+      setControlBusy('work-answer')
+      setControlError(null)
+      try {
+        await productCall('work-answer', { instanceId: state.binding.instanceId, commandId: crypto.randomUUID(),
+          workItemId: control.workItemId, ticketId: control.ticketId, expectedGeneration: assignment.generation,
+          attentionId: attention.id, attentionVersion: attention.version, text })
+        setAttentionDraft('')
+        await refreshMain(state.binding)
+      } catch (error) {
+        setControlError(error.message)
+        await refreshMain(state.binding)
+      } finally {
+        setControlBusy(null)
+      }
+    }
     return h('article', { className: 'bt-main-work', 'aria-label': t('Work item: {goal}', { goal: work.brief.goal }) },
       h('div', { className: 'bt-main-work-head' }, h('div', { className: 'bt-main-work-title' },
         h('span', { className: 'bt-main-work-source' }, t('System work fact')), h('strong', null, work.brief.goal)),
@@ -267,6 +288,21 @@ export function applyProduct(ctx) {
           : t('Stopping · waiting for the current execution to become quiet.')
         : stop.cancellationConfirmedAt ? t('Stopped · execution cancellation confirmed.')
           : t('Stopped · cancellation confirmation is unavailable.')) : null,
+      attention ? h('div', { className: 'bt-main-work-attention' },
+        h('p', { className: 'bt-main-work-id' }, `${t('Question version')} ${attention.version} · ${attention.status}`),
+        h('p', null, attention.question),
+        attention.status === 'waiting' && control.permissions.canAnswer && assignment
+          ? h('form', { className: 'bt-main-work-answer', onSubmit: answer },
+            attention.options.length ? h('div', { className: 'bt-main-work-options' }, attention.options.map(option =>
+              h('button', { key: option, type: 'button', className: 'bt-soft', onClick: () => setAttentionDraft(option) }, option))) : null,
+            h('label', { htmlFor: `work-answer-${attention.id}` }, t('Answer this work question')),
+            h('textarea', { id: `work-answer-${attention.id}`, value: attentionDraft, maxLength: 65536, rows: 2,
+              placeholder: t('Type an answer…'), onChange: event => setAttentionDraft(event.currentTarget.value) }),
+            h('button', { type: 'submit', className: 'bt-soft', disabled: Boolean(controlBusy) || !attentionDraft.trim() },
+              controlBusy === 'work-answer' ? t('Sending answer…') : t('Send answer')))
+          : h('p', { className: 'bt-main-work-detail' }, attention.status === 'answered'
+            ? `${t('Answered by')} ${attention.answeredBy ?? control.permissions.actorId}${attention.answerText ? `: ${attention.answerText}` : ''}`
+            : t('This question is no longer active.'))) : null,
       controlError ? h('p', { className: 'bt-main-error', role: 'alert' }, controlError) : null,
       work.receipt.reason ? h('p', { className: 'bt-main-error' }, `${t('Work receipt')}: ${work.receipt.reason}`) : null,
       work.receipt.status === 'routing' ? h('p', { className: 'bt-main-work-detail' }, `${t('Next step')}: ${work.receipt.nextStep}`) : null,
@@ -890,6 +926,12 @@ const PRODUCT_CSS = `
 .bt-main-work-followup p{margin:0}
 .bt-main-work-controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;padding-top:8px;border-top:.5px solid var(--bt-line-2)}
 .bt-main-work-controls button{height:32px}
+.bt-main-work-attention{margin-top:10px;padding:10px;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-main);font-size:13px;line-height:18px;overflow-wrap:anywhere}
+.bt-main-work-attention p{margin:0 0 8px}.bt-main-work-options{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.bt-main-work-answer label{display:block;margin-bottom:6px;font-size:12px;color:var(--bt-ink-2)}
+.bt-main-work-answer textarea{display:block;width:100%;min-height:58px;box-sizing:border-box;resize:vertical;padding:8px;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card);color:var(--bt-ink);font:inherit}
+.bt-main-work-answer textarea:focus-visible{outline:2px solid var(--bt-accent);outline-offset:1px}
+.bt-main-work-answer>button{margin-top:8px}
 .bt-main-work-result{margin-top:8px;padding-top:8px;border-top:.5px solid var(--bt-line-2);color:var(--bt-ink);font-size:13px;line-height:18px;overflow-wrap:anywhere}
 .bt-main-work-result p{margin:0 0 6px}.bt-main-work-result p:last-child{margin-bottom:0}
 .bt-main-work-artifact code{font:inherit;color:var(--bt-ink)}

@@ -3,6 +3,7 @@ import { CoreError, identifier, type Work } from './model.js'
 import type { NativeSessions } from './native-sessions.js'
 import type { AsyncTx, Storage } from './storage.js'
 import type { Assignment } from './execution.js'
+import type { Attention } from './attention.js'
 import type { MainWorkBrief, MainWorkItem, MainWorkOutcome, MainWorkPlanConflict, MainWorkReceipt,
   MainWorkUpdate } from './work-delegation.js'
 
@@ -564,6 +565,11 @@ export class WorkObservations {
     const reports = await this.reports(transaction, ticketId)
     const report = reports.filter(candidate => candidate.assignmentId === selected.id).sort((left, right) => right.createdAt - left.createdAt)[0]
     const currentReport = await transaction.get<ReadyReport>('report', ticketId)
+    const attentionHead = await transaction.get<{ attentionId: string }>('attention-head', JSON.stringify(['attention-head', ticketId]))
+    const attention = attentionHead ? await transaction.get<Attention>('attention', attentionHead.attentionId) : undefined
+    const stopHead = await transaction.get<{ stopId: string }>('stop-head', JSON.stringify(['stop-head', ticketId]))
+    const stop = stopHead ? await transaction.get<{ state?: string; reason?: string; pendingDeviceConfirmation?: boolean;
+      cancellationConfirmedAt?: number }>('stop-state', stopHead.stopId) : undefined
     const currentUpdate = update && update.createdAt >= selected.createdAt ? update : undefined
     const currentOutcome = outcome && currentReport?.assignmentId === selected.id && outcome.reportId === currentReport.id ? outcome : undefined
     const state = current ? workerStatus(ticket, intent, currentUpdate, currentOutcome)
@@ -611,6 +617,13 @@ export class WorkObservations {
         { label: 'Goal', value: summary(item.goal) },
         { label: 'Constraints', value: summary(item.constraints) },
         { label: 'Acceptance criteria', value: summary(item.acceptanceCriteria) },
+        ...(currentUpdate ? [{ label: 'Last Main fact', value: summary(currentUpdate.summary) }] : []),
+        ...(attention ? [{ label: `Attention v${attention.sequence}`, value: summary([
+          attention.status, attention.question, attention.options.length ? `Options: ${attention.options.join(' / ')}` : '',
+          attention.answeredBy ? `Answered by: ${attention.answeredBy}` : '', attention.answerText ? `Answer: ${attention.answerText}` : '',
+        ].filter(Boolean).join('\n')) }] : []),
+        ...(stop ? [{ label: 'Stop', value: [stop.state ?? 'unknown', stop.pendingDeviceConfirmation ? 'device confirmation pending' : '',
+          stop.cancellationConfirmedAt ? 'cancellation confirmed' : '', stop.reason ?? ''].filter(Boolean).join(' · ') }] : []),
         ...(report ? [
           detailFact('Result', report.result, { version: 1, kind: 'report', ticketId, reportId: report.id,
             assignmentId: selected.id, source: 'result' }),
