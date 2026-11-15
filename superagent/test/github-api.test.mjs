@@ -122,6 +122,26 @@ test('changed GitHub snapshots enrich their actor from a bounded native timeline
   assert.deepEqual([byNumber.get(12).authorId, byNumber.get(12).authorKind], ['github', 'system'])
 })
 
+test('exhausted timeline enrichment keeps changed events unknown instead of failing the poll', async () => {
+  const transport = new core.GitHubCliTransport()
+  const issues = Array.from({ length: 61 }, (_, index) => {
+    const createdAt = new Date(Date.UTC(2026, 0, index + 1))
+    return { id: 1000 + index, number: index + 1, state: 'open', title: `Edited request ${index + 1}`, body: 'Edited',
+      created_at: createdAt.toISOString(), updated_at: new Date(createdAt.getTime() + 60_000).toISOString(),
+      user: { login: 'alice', type: 'User' } }
+  })
+  let timelineRequests = 0
+  const events = await transport.mapEvents(async path => {
+    if (path === issuesPath) return issues
+    assert.match(path, /\/issues\/\d+\/timeline\?/u)
+    timelineRequests++
+    return []
+  }, 'acme', 'repo')
+  assert.equal(events.length, 61)
+  assert.equal(timelineRequests, 60)
+  assert.deepEqual(events.map(event => [event.authorId, event.authorKind]), Array.from({ length: 61 }, () => ['github', 'system']))
+})
+
 test('the GitHub CLI transport pages through the issue list and refuses to overrun its budget', async () => {
   const transport = new core.GitHubCliTransport()
   const pages = []

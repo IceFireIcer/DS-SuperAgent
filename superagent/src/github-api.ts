@@ -269,7 +269,7 @@ class ChangedActorEnricher {
       const items: Record<string, any>[] = []
       for (let page = 1; page <= maxTimelinePages; page++) {
         if (this.requests >= maxTimelineRequests) {
-          throw new CoreError('SOURCE_BUDGET', `GitHub changed-actor enrichment exceeded ${maxTimelineRequests} requests.`)
+          return items
         }
         this.requests++
         const batch = await this.run(`${this.base}/issues/${number}/timeline?per_page=${timelinePageSize}&page=${page}`, { allowMissing: true })
