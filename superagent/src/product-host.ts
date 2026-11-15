@@ -21,8 +21,12 @@ import { assertReferenceShape } from './environment-assets.js'
 import { localDeliveryChannel, type DeliveryChannel } from './deliveries.js'
 import type { RoleConfig, RoleModel } from './config.js'
 import type { LegacyPresetCopy, PresetRole } from './role-presets.js'
+import { productStatusPublisher, productWatchdogProbe } from './product-watchdog.js'
+import { createProductSupervision } from './product-supervision.js'
 
 export interface ProductHostConfig { databasePath: string; workspaceRoot?: string; instanceId?: string; actorId?: string; main?: RoleModel; router?: RoleModel; worker?: RoleModel; timeoutMs?: number;
+  /** Trusted process configuration; an external Watchdog reads this atomic status file. */
+  watchdogStatusPath?: string;
   clientGateway?: Omit<ClientGatewayOptions, 'product'>;
   /** Supplied by a trusted Host, never by the window or a model turn. */
   feishu?: Omit<FeishuRuntimeOptions, 'storage' | 'instanceId' | 'mainIntake'>;
@@ -99,6 +103,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
       candidate.sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId
         && feishuRuntime.health().state !== 'polling' ? 'SOURCE_STOPPED' : undefined }
   let resourceManager: ProductCredentialManager | undefined
+  let statusPublisher: ReturnType<typeof productStatusPublisher> | undefined
+  let statusTimer: ReturnType<typeof setInterval> | undefined
+  let supervision: ReturnType<typeof createProductSupervision> | undefined
   let closing: Promise<void> | undefined
   let scheduleTimer: ReturnType<typeof setInterval> | undefined
   let credentialRecovery: Promise<void> | undefined
@@ -225,9 +232,10 @@ export async function createProductHost(context: Context, config: ProductHostCon
   }
   async function dispose() {
     if (scheduleTimer) clearInterval(scheduleTimer)
+    if (statusTimer) clearInterval(statusTimer)
     engine?.abortProactiveRuns(); feishuEngine?.abortProactiveRuns()
     const failures: unknown[] = []
-    for (const close of [() => gateway?.close(), () => feishuRuntime?.stop(), () => engine?.effects.stop(),
+    for (const close of [() => supervision?.close(), () => statusPublisher?.close(), () => gateway?.close(), () => feishuRuntime?.stop(), () => engine?.effects.stop(),
       () => feishuEngine?.effects.stop(), () => engine?.shutdown(), () => feishuEngine?.shutdown(),
       () => sessions.close(), ...environments.map(environment => () => environment.close()), () => storage.close()]) {
       try { await close() } catch (error) { failures.push(error) }
@@ -277,7 +285,25 @@ export async function createProductHost(context: Context, config: ProductHostCon
     await engine.recoverProactiveRuns()
     await recoverCredentials()
     await engine.openMain({ instanceId })
+    supervision = createProductSupervision(engine, sessions, storage, instanceId,
+      { watchdogConfigured: Boolean(config.watchdogStatusPath) })
+    if (config.watchdogStatusPath) {
+      statusPublisher = productStatusPublisher(config.watchdogStatusPath, async () => {
+        const source = feishuRuntime?.health()
+        const run = await storage.transaction(instanceId, tx => tx.get<{ history: { status: string; error?: string }[] }>('supervisor-run', 'product-supervisor'))
+        const error = run && run.history.length >= 3 && run.history.slice(0, 3).every(item => item.status === 'failed')
+          ? run.history[0]?.error : undefined
+        return productWatchdogProbe(engine!, instanceId, source ? {
+          id: feishuRuntime!.sourceBinding.sourceInstanceId, state: source.state,
+          ...(source.lastError ? { error: source.lastError } : {}),
+        } : undefined, config.feishuConfigurationError, error)
+      }, () => engine!.getHostLease())
+      await statusPublisher.publish()
+      statusTimer = setInterval(() => { void statusPublisher?.publish().catch(() => {}) }, 10_000)
+      statusTimer.unref()
+    }
     engine.effects.start()
+    supervision.start()
     void engine.tickSchedules().catch(() => { /* Rules and failed occurrences remain available for the next check. */ })
     scheduleTimer = setInterval(() => {
       void engine?.tickSchedules().catch(() => {})
@@ -333,6 +359,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
               ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'reason']
               : endpoint === 'work-resume' ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration']
                 : endpoint === 'work-answer' ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'attentionId', 'attentionVersion', 'text']
+                : endpoint === 'supervision' ? ['instanceId', 'ticketId']
+                  : endpoint === 'supervision-inspect' ? ['instanceId']
+                    : endpoint === 'supervision-decide' ? ['instanceId', 'commandId', 'proposalId', 'decision', 'fingerprint', 'reason']
                   : endpoint === 'settings' ? ['instanceId', 'limit']
                     : endpoint === 'settings-save' ? ['instanceId', 'commandId', 'expectedRevision', 'roles']
                       : endpoint === 'preset-list' || endpoint === 'preset-imports' || endpoint === 'preset-applications'
@@ -358,6 +387,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
         if (Object.keys(payload).some(key => !fields.includes(key))) throw new CoreError('INVALID_INPUT', 'The product request contains unsupported fields.')
         if (client && endpoint.startsWith('schedule-')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Schedule administration requires the local authorized product settings.')
+        }
+        if (client && endpoint.startsWith('supervision')) {
+          throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Supervision decisions and history require the local authorized product window.')
         }
         if (client && (endpoint === 'proactive-save' || endpoint === 'proactive-pause' || endpoint === 'proactive-artifact')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Preparation settings and files require the local authorized product window.')
@@ -466,6 +498,12 @@ export async function createProductHost(context: Context, config: ProductHostCon
             : manager.cleanupDeleted({ instanceId, resourceId: payload.resourceId as string })
         }
         if (endpoint === 'schedule-list') return engine!.listSchedules({ instanceId })
+        if (endpoint === 'supervision') return supervision!.state(payload.ticketId as string | undefined)
+        if (endpoint === 'supervision-inspect') return supervision!.inspect()
+        if (endpoint === 'supervision-decide') return engine!.decideSupervisorProposal({ instanceId,
+          commandId: commandId, proposalId: payload.proposalId as string, decision: payload.decision as 'approve' | 'reject',
+          fingerprint: payload.fingerprint as string,
+          ...(payload.reason === undefined ? {} : { reason: payload.reason as string }) })
         if (endpoint === 'schedule-source-read') return engine!.getScheduleSource({ instanceId })
         if (endpoint === 'schedule-source-set') return engine!.setScheduleSource({ instanceId,
           commandId: payload.commandId as string, enabled: payload.enabled as boolean })

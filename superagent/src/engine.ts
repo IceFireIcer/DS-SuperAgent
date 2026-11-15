@@ -2403,6 +2403,54 @@ export class Engine {
 
   getSupervisorState(ticketId: string) { return this.createSupervisor().getState(ticketId) }
 
+  private async mainSupervisorTicket(ticketId: string) {
+    identifier(ticketId, 'ticketId')
+    const index = await this.storage.transaction(this.instanceId,
+      tx => tx.get<{ workItemId: string }>('work-ticket', ticketId))
+    if (!index) throw new CoreError('NOT_FOUND', 'This proposal does not belong to an established Main work card.')
+    await this.requireMainWorkControl({ instanceId: this.instanceId, workItemId: index.workItemId, ticketId })
+  }
+
+  async getMainSupervisorProposals(request: { instanceId: string; ticketId?: string }) {
+    if (request.instanceId !== this.instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The supervision history belongs to another Instance.')
+    if (request.ticketId !== undefined) await this.mainSupervisorTicket(request.ticketId)
+    const proposals = await this.getSupervisorProposals(request.ticketId)
+    const visible: SupervisorProposal[] = []
+    for (const proposal of proposals) {
+      try { await this.mainSupervisorTicket(proposal.ticketId); visible.push(proposal) }
+      catch (error) {
+        if (!(error instanceof CoreError) || !['NOT_FOUND', 'SOURCE_NOT_AUTHORIZED'].includes(error.code)) throw error
+      }
+    }
+    return visible
+  }
+
+  async getMainSupervisorState(request: { instanceId: string; ticketId: string }) {
+    if (request.instanceId !== this.instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The supervision history belongs to another Instance.')
+    await this.mainSupervisorTicket(request.ticketId)
+    return this.getSupervisorState(request.ticketId)
+  }
+
+  async decideSupervisorProposal(command: { instanceId: string; commandId: string; proposalId: string;
+    decision: 'approve' | 'reject'; fingerprint: string; reason?: string }) {
+    if (!command || Object.keys(command).some(key => !['instanceId', 'commandId', 'proposalId', 'decision', 'fingerprint', 'reason'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'A supervision decision needs its proposal, fingerprint and choice.')
+    }
+    this.requireProductScheduleActor()
+    if (command.instanceId !== this.instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The proposal belongs to another Instance.')
+    identifier(command.commandId, 'commandId'); identifier(command.proposalId, 'proposalId')
+    const proposal = await this.createSupervisor().getProposal(command.proposalId)
+    if (!proposal || proposal.instanceId !== this.instanceId) throw new CoreError('PROPOSAL_NOT_FOUND', 'The proposal does not exist.')
+    if (proposal.fingerprint !== command.fingerprint) throw new CoreError('PROPOSAL_STALE', 'The proposal evidence changed; reload the current proposal.')
+    if (!proposal.evidence.snapshot.assignmentId || !proposal.evidence.snapshot.generation
+      || !Number.isSafeInteger(proposal.evidence.snapshot.directionVersion) || proposal.evidence.snapshot.stage !== 'running') {
+      throw new CoreError('PROPOSAL_STALE', 'A supervision decision requires a current running Assignment and Ticket version.')
+    }
+    await this.mainSupervisorTicket(proposal.ticketId)
+    return this.createSupervisor().decide({ commandId: command.commandId, proposalId: command.proposalId,
+      decision: command.decision, ...(command.reason === undefined ? {} : { reason: command.reason }) })
+  }
+
   async getTicketDirection(ticketId: string): Promise<TicketDirection | undefined> {
     await this.ensurePolicy()
     await this.assertTicketReadable(ticketId)
@@ -3400,9 +3448,10 @@ export class Engine {
   }
 
   /** An approved semantic correction: one direction input for the Worker, never a tool call by the supervisor. */
-  async correctTicket(command: { commandId: string; ticketId: string; text: string; reason: string }) {
+  async correctTicket(command: { commandId: string; ticketId: string; text: string; reason: string;
+    expectedDirectionVersion?: number; expectedGeneration?: string }) {
     await this.ensurePolicy()
-    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'text', 'reason'].includes(key))) throw new CoreError('INVALID_INPUT', 'A Ticket correction accepts commandId, ticketId, text and reason only.')
+    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'text', 'reason', 'expectedDirectionVersion', 'expectedGeneration'].includes(key))) throw new CoreError('INVALID_INPUT', 'A Ticket correction accepts commandId, ticketId, text, reason and expected version only.')
     identifier(command.commandId, 'commandId'); identifier(command.ticketId, 'ticketId')
     if (typeof command.text !== 'string' || !command.text.trim() || Buffer.byteLength(command.text) > 65_536) throw new CoreError('INVALID_INPUT', 'A correction needs bounded nonempty text.')
     if (typeof command.reason !== 'string' || !command.reason.trim() || Buffer.byteLength(command.reason) > 2_048) throw new CoreError('INVALID_INPUT', 'A correction needs a bounded reason.')
@@ -3418,6 +3467,18 @@ export class Engine {
       const ticket = await tx.get<Work['ticket']>('ticket', command.ticketId)
       if (!ticket) throw new CoreError('NOT_FOUND', 'The Ticket does not exist.')
       if (ticket.constraint) throw new CoreError('TICKET_BLOCKED', 'The Ticket constraint must be resolved before a correction.')
+      const stopHead = await tx.get<{ stopId: string }>('stop-head', JSON.stringify(['stop-head', command.ticketId]))
+      const stop = stopHead && await tx.get<{ resumedAt?: number }>('stop-state', stopHead.stopId)
+      if (stop && !stop.resumedAt) throw new CoreError('TICKET_STOPPED', 'An approved correction cannot undo a human stop.')
+      if (command.expectedDirectionVersion !== undefined && ticket.directionVersion !== command.expectedDirectionVersion) {
+        throw new CoreError('PROPOSAL_STALE', 'The Ticket direction changed after the supervision proposal.')
+      }
+      if (command.expectedGeneration !== undefined) {
+        const assignment = await tx.get<{ generation: string; state: string }>('assignment', command.ticketId)
+        if (assignment?.generation !== command.expectedGeneration || assignment.state !== 'running') {
+          throw new CoreError('PROPOSAL_STALE', 'The Worker generation changed after the supervision proposal.')
+        }
+      }
       const input = await this.inputs.attachSyntheticInput(tx, {
         ticketId: command.ticketId, sourceEventId: JSON.stringify(['supervisor-correction', command.ticketId, command.commandId]),
         threadId: '__supervisor__', text: command.text, authorId: this.source.actorId, reason: command.reason, basis: 'supervisor-correction',

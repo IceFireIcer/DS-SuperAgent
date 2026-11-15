@@ -3,6 +3,41 @@ import { SqliteStorage } from './storage.js'
 import { PostgresStorage } from './postgres-storage.js'
 import { Watchdog } from './watchdog.js'
 import { ProcessWatchdogHost } from './watchdog-process.js'
+import { open, readFile, realpath, unlink } from 'node:fs/promises'
+import { createHash, randomUUID } from 'node:crypto'
+import { CoreError } from './model.js'
+import type { Storage } from './storage.js'
+
+async function exclusiveWatchdog(storage: Storage, instanceId: string, databasePath: string): Promise<{ assert: () => Promise<void>; release: () => Promise<void> }> {
+  if (storage.acquireWriterLease) {
+    const lease = await storage.acquireWriterLease(`watchdog:${instanceId}`)
+    if (!lease) throw new CoreError('WATCHDOG_ACTIVE', 'An independent Watchdog already owns this Instance.')
+    return { assert: async () => {
+      if (!lease.active) throw new CoreError('WATCHDOG_NOT_OWNER', 'The independent Watchdog lost its database lease.')
+    }, release: () => lease.release() }
+  }
+  // SQLite is a single-machine store. A surviving lock after an abnormal exit requires an
+  // operator to verify the old process is gone before removal; never race a live recovery.
+  const path = `${await realpath(databasePath)}.watchdog-${createHash('sha256').update(instanceId).digest('hex').slice(0, 16)}.lock`
+  const token = randomUUID()
+  let handle
+  try { handle = await open(path, 'wx', 0o600) }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new CoreError('WATCHDOG_ACTIVE', 'A Watchdog lock exists for this Host status; verify its owner before recovery.')
+    throw error
+  }
+  try { await handle.writeFile(`${process.pid}:${token}\n`) }
+  catch (error) { await handle.close(); await unlink(path); throw error }
+  const owns = async () => {
+    if ((await readFile(path, 'utf8').catch(() => '')) !== `${process.pid}:${token}\n`) {
+      throw new CoreError('WATCHDOG_NOT_OWNER', 'The independent Watchdog lost its process lock.')
+    }
+  }
+  return { assert: owns, release: async () => {
+    await handle.close()
+    if ((await readFile(path, 'utf8').catch(() => '')) === `${process.pid}:${token}\n`) await unlink(path)
+  } }
+}
 
 const usage = 'Usage: node dist/watchdog-cli.js (--database <absolute-path> | --postgres <json>) --instance <id> --status <absolute-path> --host-command <command> [--host-arg <arg>]... [--interval-ms 3600000] [--grace-ms 300000] [--max-restarts 3] [--restart-window-ms 21600000] [--version <label>] [--once]'
 
@@ -37,6 +72,9 @@ async function main() {
   const command = values.get('host-command')
   if ((database === undefined && postgres === undefined) || instanceId === undefined || statusPath === undefined || command === undefined) throw new Error(usage)
   const storage = postgres === undefined ? await SqliteStorage.open(database!) : await PostgresStorage.open(JSON.parse(postgres))
+  let owner: Awaited<ReturnType<typeof exclusiveWatchdog>> | undefined
+  try {
+    owner = await exclusiveWatchdog(storage, instanceId, database ?? statusPath)
   const graceMs = Number(values.get('grace-ms') ?? '300000')
   const host = new ProcessWatchdogHost({ command, args: hostArgs, statusPath, startTimeoutMs: 120000 })
   const watchdog = new Watchdog({
@@ -46,6 +84,7 @@ async function main() {
     maxRestarts: Number(values.get('max-restarts') ?? '3'),
     restartWindowMs: Number(values.get('restart-window-ms') ?? '21600000'),
     version: values.get('version') ?? 'watchdog-1',
+    assertOwner: owner.assert,
     notify: notification => { console.error(JSON.stringify(notification)) },
     onInspection: inspection => { console.log(JSON.stringify(inspection)) },
   })
@@ -57,7 +96,6 @@ async function main() {
       const outcome = await host.stop({ graceMs, signal: AbortSignal.timeout(graceMs + 1000) })
       if (outcome === 'timeout') console.error('The Host did not stop within the grace period; it was left running.')
     }
-    await storage.close()
     return
   }
   await new Promise<void>((resolve) => {
@@ -71,7 +109,9 @@ async function main() {
     const outcome = await host.stop({ graceMs, signal: AbortSignal.timeout(graceMs + 1000) })
     if (outcome === 'timeout') console.error('The Host did not stop within the grace period; it was left running.')
   }
-  await storage.close()
+  } finally {
+    try { await owner?.release() } finally { await storage.close() }
+  }
 }
 
 main().catch((error: unknown) => {

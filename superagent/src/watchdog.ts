@@ -115,6 +115,8 @@ export interface WatchdogOptions {
   now?: () => number
   notify?: (notification: WatchdogNotification) => void | Promise<void>
   onInspection?: (inspection: WatchdogInspection) => void | Promise<void>
+  /** The external CLI verifies its process/DB ownership before an inspection or Host action. */
+  assertOwner?: () => Promise<void>
   log?: Pick<Console, 'warn' | 'error'>
 }
 
@@ -185,6 +187,7 @@ export class Watchdog {
   private readonly now: () => number
   private readonly notify: (notification: WatchdogNotification) => void | Promise<void>
   private readonly onInspection: (inspection: WatchdogInspection) => void | Promise<void>
+  private readonly assertOwner: () => Promise<void>
   private readonly log: Pick<Console, 'warn' | 'error'>
   private controller: AbortController | undefined
   private loop: Promise<void> | undefined
@@ -205,6 +208,7 @@ export class Watchdog {
     this.now = options.now ?? Date.now
     this.notify = options.notify ?? (() => undefined)
     this.onInspection = options.onInspection ?? (() => undefined)
+    this.assertOwner = options.assertOwner ?? (async () => {})
     this.log = options.log ?? console
   }
 
@@ -242,6 +246,7 @@ export class Watchdog {
   }
 
   private async inspect(): Promise<WatchdogInspection> {
+    await this.assertOwner()
     const at = this.now()
     const state = await this.storage.transaction(this.instanceId, transaction => this.readState(transaction))
     const probe = await this.probe()
@@ -335,6 +340,7 @@ export class Watchdog {
   }
 
   private async restart(probe: WatchdogProbe): Promise<{ inspection: Partial<WatchdogInspection> }> {
+    await this.assertOwner()
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), this.graceMs + 1_000)
     let stopped: 'stopped' | 'timeout' = 'timeout'
@@ -349,6 +355,7 @@ export class Watchdog {
       return { inspection: { kind: 'restart-timeout', result: 'notified', detail, fingerprint: fingerprintOf('restart-timeout', probe, detail) } }
     }
     try {
+      await this.assertOwner()
       await this.withTimeout(this.host.start({ signal: AbortSignal.timeout(this.startTimeoutMs) }), this.startTimeoutMs + 1_000)
     } catch (error) {
       const detail = `The Host did not start: ${error instanceof Error ? error.message : String(error)}`

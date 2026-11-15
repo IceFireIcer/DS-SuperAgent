@@ -129,6 +129,7 @@ export interface SupervisorReport {
   version: string
   observations: SupervisorObservationResult[]
   proposals: SupervisorProposal[]
+  partial?: boolean
 }
 
 /** The narrow Engine surface the Supervisor reads and the two authorized commands it may be approved to run. */
@@ -136,8 +137,8 @@ export interface SupervisorEngine {
   getSupervision(options?: { includeHistory?: boolean }): Promise<{ items: Record<string, unknown>[]; processingPaused?: boolean }>
   getTicket(ticketId: string): Promise<{ mandate: { id: string; scope: string } } | undefined>
   getTicketDirection(ticketId: string): Promise<{ directionVersion: number } | undefined>
-  correctTicket(command: { commandId: string; ticketId: string; text: string; reason: string }): Promise<{ id: string; directionVersion?: number }>
-  stopTicket(command: { commandId: string; ticketId: string; reason: string }): Promise<unknown>
+  correctTicket(command: { commandId: string; ticketId: string; text: string; reason: string; expectedDirectionVersion?: number; expectedGeneration?: string }): Promise<{ id: string; directionVersion?: number }>
+  stopTicket(command: { commandId: string; ticketId: string; reason: string; expectedTicketVersion?: number; expectedGeneration?: string }): Promise<unknown>
   reconcileRemoteWork?(command: { commandId: string; ticketId?: string }): Promise<unknown>
   reconcileStop?(command: { commandId: string; ticketId: string }): Promise<unknown>
 }
@@ -284,16 +285,18 @@ export class Supervisor {
   }
 
   /** Inspect every visible Ticket once. This never executes a proposal. */
-  async inspect(): Promise<SupervisorReport> {
+  async inspect(signal: AbortSignal = new AbortController().signal): Promise<SupervisorReport> {
     const supervision = await this.engine.getSupervision({ includeHistory: true })
     const observations: SupervisorObservationResult[] = []
     const proposals: SupervisorProposal[] = []
     for (const entry of supervision.items.slice(0, 100)) {
-      const result = await this.inspectItem(asRecord(entry), supervision.processingPaused === true)
+      signal.throwIfAborted()
+      const result = await this.inspectItem(asRecord(entry), supervision.processingPaused === true, signal)
       observations.push(result.observation)
       if (result.proposal !== undefined) proposals.push(result.proposal)
     }
-    return { version: this.version, observations, proposals }
+    return { version: this.version, observations, proposals,
+      ...(supervision.items.length > 100 || (supervision as { hasMore?: boolean }).hasMore ? { partial: true } : {}) }
   }
 
   async listProposals(ticketId?: string): Promise<SupervisorProposal[]> {
@@ -332,6 +335,17 @@ export class Supervisor {
       const existing = await transaction.get<SupervisorProposal>('supervisor-proposal', proposalKey(command.proposalId))
       if (existing === undefined) throw new CoreError('PROPOSAL_NOT_FOUND', 'The proposal does not exist.')
       if (existing.status !== 'proposed') throw new CoreError('PROPOSAL_CLOSED', 'The proposal has already been decided.')
+      if (command.decision === 'approve' && existing.evidence.snapshot.assignmentId) {
+        const ticket = await transaction.get<{ directionVersion?: number; constraint?: string; state: string }>('ticket', existing.ticketId)
+        const assignment = await transaction.get<{ id: string; generation: string; state: string }>('assignment', existing.ticketId)
+        const stopHead = await transaction.get<{ stopId: string }>('stop-head', JSON.stringify(['stop-head', existing.ticketId]))
+        const stopped = stopHead && await transaction.get<{ resumedAt?: number }>('stop-state', stopHead.stopId)
+        if (!ticket || ticket.state !== 'open' || ticket.constraint || (ticket.directionVersion ?? 1) !== existing.evidence.snapshot.directionVersion
+          || assignment?.id !== existing.evidence.snapshot.assignmentId || assignment.generation !== existing.evidence.snapshot.generation
+          || assignment.state !== 'running' || stopped && !stopped.resumedAt) {
+          throw new CoreError('PROPOSAL_STALE', 'The Ticket changed or was stopped after this proposal; inspect it again.')
+        }
+      }
       const next: SupervisorProposal = {
         ...existing, status: 'deciding', decidedAt: this.now(), decidedBy: this.actorId,
         decision: command.decision === 'approve' ? 'approved' : 'rejected', decisionCommandId: command.commandId,
@@ -346,10 +360,14 @@ export class Supervisor {
     if (command.decision === 'approve') {
       try {
         if (claimed.kind === 'pause') {
-          const result = await this.engine.stopTicket({ commandId: `${command.commandId}:stop`, ticketId: claimed.ticketId, reason: claimed.recommendation })
+          const result = await this.engine.stopTicket({ commandId: `${command.commandId}:stop`, ticketId: claimed.ticketId, reason: claimed.recommendation,
+            ...(claimed.evidence.snapshot.directionVersion ? { expectedTicketVersion: claimed.evidence.snapshot.directionVersion } : {}),
+            ...(claimed.evidence.snapshot.generation ? { expectedGeneration: claimed.evidence.snapshot.generation } : {}) })
           action = { kind: 'stop', status: 'done', result: summarizeActionResult(result) }
         } else {
-          const input = await this.engine.correctTicket({ commandId: `${command.commandId}:direction`, ticketId: claimed.ticketId, text: claimed.recommendation, reason: claimed.evidence.assessment.reason })
+          const input = await this.engine.correctTicket({ commandId: `${command.commandId}:direction`, ticketId: claimed.ticketId, text: claimed.recommendation, reason: claimed.evidence.assessment.reason,
+            ...(claimed.evidence.snapshot.directionVersion ? { expectedDirectionVersion: claimed.evidence.snapshot.directionVersion } : {}),
+            ...(claimed.evidence.snapshot.generation ? { expectedGeneration: claimed.evidence.snapshot.generation } : {}) })
           action = { kind: 'direction', status: 'done', id: input.id, ...(input.directionVersion === undefined ? {} : { result: { directionVersion: input.directionVersion } }) }
         }
       } catch (error) {
@@ -376,7 +394,7 @@ export class Supervisor {
     })
   }
 
-  private async inspectItem(item: Record<string, unknown>, processingPaused: boolean): Promise<{ observation: SupervisorObservationResult; proposal?: SupervisorProposal }> {
+  private async inspectItem(item: Record<string, unknown>, processingPaused: boolean, signal: AbortSignal): Promise<{ observation: SupervisorObservationResult; proposal?: SupervisorProposal }> {
     const ticketId = asString(item.ticketId)
     if (ticketId === '') throw new CoreError('INCOMPLETE_STATE', 'The supervision item has no Ticket id.')
     const at = this.now()
@@ -404,7 +422,7 @@ export class Supervisor {
         action: 'pause',
       }
     } else if (this.assess !== undefined) {
-      assessment = await this.assess(snapshot, new AbortController().signal)
+      assessment = await this.assess(snapshot, signal)
     }
     if (assessment === undefined || assessment.kind === 'normal') {
       return this.finish(snapshot, 'normal', at, true, assessment, undefined, fingerprint)

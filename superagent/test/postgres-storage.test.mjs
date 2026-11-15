@@ -14,6 +14,21 @@ const postgres = await startPostgres()
 const { directory, port, password, configuration, client, database, newStorage } = postgres
 const proxies = []
 
+test('PostgreSQL retains supervision runs and Watchdog inspections after a new connection', { timeout: 30000 }, async () => {
+  const { storage } = await newStorage()
+  const instance = 'watchdog-contract'
+  const run = { last: { at: 100, version: 'supervisor-r2', status: 'failed', error: 'MODEL_UNAVAILABLE' }, history: [] }
+  const inspection = { instanceId: instance, version: 'watchdog-1', restarts: [100], history: [{ id: 'first', kind: 'recovered', at: 100 }] }
+  await storage.transaction(instance, async tx => {
+    await tx.insert('supervisor-run', 'product-supervisor', run)
+    await tx.insert('watchdog-state', JSON.stringify(['watchdog-state', instance]), inspection)
+  })
+  const reopened = await postgres.register(await storage.reconnect())
+  assert.deepEqual(await reopened.transaction(instance, tx => tx.get('supervisor-run', 'product-supervisor')), run)
+  assert.deepEqual(await reopened.transaction(instance, tx => tx.get('watchdog-state', JSON.stringify(['watchdog-state', instance]))), inspection)
+  assert.equal(await reopened.transaction('another-instance', tx => tx.get('supervisor-run', 'product-supervisor')), undefined)
+})
+
 test('PostgreSQL keeps an Instance work directory after restart without moving an older binding', { timeout: 30000 }, async t => {
   const { storage } = await newStorage()
   const first = join(directory, 'r5-17-postgres-first')
