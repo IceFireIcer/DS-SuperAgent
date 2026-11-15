@@ -32,6 +32,8 @@ export interface MainSourceHandoff {
 export interface MainSourceDeliveryView {
   id: string
   ticketId: string
+  sequence: number
+  createdAt: number
   purpose: 'acknowledgement' | 'answer' | 'attention' | 'result' | 'policy'
   state: 'pending' | 'sent' | 'dropped' | 'unknown'
   reconcileRequired: boolean
@@ -44,7 +46,15 @@ export interface MainSourceView extends MainSourceHandoff {
   workItemIds: string[]
   ticketIds: string[]
   deliveries: MainSourceDeliveryView[]
+  deliveryCursor?: string
+  deliveryHasMore: boolean
   conditions: { ticketId: string; number: number; state: string; result?: string; reason?: string }[]
+}
+
+export interface MainSourceDeliveryPage {
+  items: MainSourceDeliveryView[]
+  cursor?: string
+  hasMore: boolean
 }
 
 export const mainSourceHandoffID = (eventId: string) => `main-source-${createHash('sha256').update(eventId).digest('hex')}`

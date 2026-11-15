@@ -97,6 +97,17 @@ test('a new GitHub request enters Main exclusively and later events stay on the 
   assert.equal(deliveriesForTicket.every(delivery => delivery.state === 'sent'), true)
   assert.deepEqual(sources.items[0].deliveries.map(delivery => [delivery.purpose, delivery.state]),
     [['result', 'sent'], ['acknowledgement', 'sent']])
+  const newestReceipt = await desktop.getMainSourceDeliveries({ instanceId: 'private', sourceId: sources.items[0].id, limit: 1 })
+  assert.deepEqual([newestReceipt.items[0].purpose, newestReceipt.items[0].destination], ['result',
+    { kind: 'github', sourceInstanceId: 'github:acme/repo', actorId: 'alice', eventId: 'issue:7', threadId: 'github:acme/repo#7' }])
+  assert.equal(newestReceipt.hasMore, true)
+  assert.equal(typeof newestReceipt.cursor, 'string')
+  const olderReceipt = await desktop.getMainSourceDeliveries({ instanceId: 'private', sourceId: sources.items[0].id,
+    after: newestReceipt.cursor, limit: 1 })
+  assert.deepEqual(olderReceipt.items.map(delivery => delivery.purpose), ['acknowledgement'])
+  assert.equal(olderReceipt.hasMore, false)
+  await assert.rejects(desktop.getMainSourceDeliveries({ instanceId: 'private', sourceId: sources.items[0].id,
+    after: 'not-a-source-cursor' }), { code: 'INVALID_INPUT' })
   await desktop.bindDeliveryCondition({ commandId: 'bind-source-pr', ticketId: ticket.ticket.id, kind: 'pr',
     sourceInstanceId: 'github:acme/repo', repo: 'acme/repo', number: 70, basis: 'The GitHub request authorized delivery condition tracking.' })
   await desktop.reconcileDeliveryCondition({ commandId: 'merge-source-pr', ticketId: ticket.ticket.id,
@@ -136,4 +147,65 @@ test('a new GitHub request enters Main exclusively and later events stay on the 
   assert.equal((await desktop.getMainSources({ instanceId: 'private' })).items.length, 2,
     'a context-only Thread cannot absorb a new human request')
   assert.equal((await desktop.listTickets()).items.length, 1, 'the context-only request remains a Main handoff')
+})
+
+test('pending Main handoffs recheck native currentness and authorization before notifying Main', { timeout: 25000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-main-github-stale-'))
+  const workspace = join(directory, 'workspace')
+  await mkdir(workspace)
+  let storage, native, sessions, desktop, github
+  t.after(async () => {
+    const errors = []
+    for (const dispose of [() => desktop?.effects.stop(), () => github?.effects.stop(), () => desktop?.shutdown(), () => github?.shutdown(),
+      () => sessions?.close(), () => native?.fiber.dispose(), () => storage?.close(),
+      async () => { assert.ok(directory.startsWith(join(tmpdir(), 'ds-bot-main-github-stale-'))); await rm(directory, { recursive: true, force: true }) }]) {
+      try { await dispose() } catch (error) { errors.push(error) }
+    }
+    if (errors.length) throw new AggregateError(errors, 'Stale Main handoff fixture cleanup failed.')
+  })
+  native = await nativeContext(join(directory, 'sessions'), function* (options) {
+    const completed = completedToolCount(options)
+    if (options.model === 'main') {
+      if (lastUserText(options).includes('[GitHub request]') && completed === 0) {
+        yield* toolResponse('delegate_work', { items: [{ goal: 'Handle the current GitHub request.', constraints: 'Use the current event.',
+          acceptanceCriteria: 'Return a verified result.' }] })
+      } else yield* textResponse('Main handled the current request.')
+      return
+    }
+    if (options.model === 'router') { yield* routerResponse(options); return }
+    if (completed === 0) yield* toolResponse('write_file', { path: 'current-request.txt', text: 'Current request.' })
+    else if (completed === 1) yield* toolResponse('read_file', { path: 'current-request.txt' })
+    else if (completed === 2) yield* toolResponse('report_ready', { result: 'Current request completed.', evidence: 'Read it back.',
+      artifacts: 'current-request.txt' })
+    else yield* textResponse('Recorded.')
+  })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  sessions = new core.NativeSessions(native, { main: { provider: 'mock', model: 'main' },
+    router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  const environment = await core.LocalEnvironment.open({ id: 'workspace', instanceId: 'private', root: workspace,
+    allowedActorIds: ['desktop-owner'], permissions: ['read', 'write'], commands: {} })
+  desktop = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'desktop-owner', allowedActorIds: ['desktop-owner'] },
+    {}, sessions, [environment], {}, {}, {}, { channel: { deliver: async () => ({ type: 'success' }) } })
+  github = new core.Engine(storage, 'private', { kind: 'github', sourceInstanceId: 'github:acme/repo', actorId: 'github-receiver',
+    allowedActorIds: ['github-receiver'], allowedThreadPrefixes: ['github:acme/repo#'], versionOrder: 'sequence',
+    intake: { mode: 'auto', maxBatchSize: 5, maxAttempts: 1, timeoutMs: 5000, allowedRequesterIds: ['alice'], allowedBotActorIds: [], rules: [] } },
+    {}, sessions)
+  await desktop.openMain({ instanceId: 'private' })
+  const source = new core.GitHubSource(storage, 'private', github, { owner: 'acme', repo: 'repo', mainIntake: true })
+  await source.receive({ deliveryId: 'stale-created', cursor: '1', repo: 'acme/repo', kind: 'issue', action: 'created', number: 9,
+    id: 'issue-9', authorId: 'alice', title: 'Old request', body: 'Old body.', updatedAt: '2026-11-15T01:00:00Z' })
+  await source.receive({ deliveryId: 'stale-edited', cursor: '2', repo: 'acme/repo', kind: 'issue', action: 'edited', number: 9,
+    id: 'issue-9', authorId: 'alice', title: 'Current request', body: 'Current body.', updatedAt: '2026-11-15T01:01:00Z' })
+  await source.receive({ deliveryId: 'stale-deleted-created', cursor: '3', repo: 'acme/repo', kind: 'issue', action: 'created', number: 10,
+    id: 'issue-10', authorId: 'alice', title: 'Deleted request', body: 'Delete before Main.', updatedAt: '2026-11-15T01:02:00Z' })
+  await source.receive({ deliveryId: 'stale-deleted', cursor: '4', repo: 'acme/repo', kind: 'issue', action: 'deleted', number: 10,
+    id: 'issue-10', authorId: 'alice', updatedAt: '2026-11-15T01:03:00Z',
+    deletionEvidence: 'GitHub deleted issue 10.' })
+  for (let index = 0; index < 14; index++) await desktop.effects.drain()
+  const handoffs = (await desktop.getMainSources({ instanceId: 'private' })).items.sort((left, right) => left.createdAt - right.createdAt)
+  assert.equal(handoffs.length, 3)
+  assert.deepEqual(handoffs.map(handoff => [handoff.objectId, handoff.state, handoff.lastError]),
+    [['issue:9', 'discarded', 'SOURCE_EVENT_SUPERSEDED'], ['issue:9', 'delegated', undefined],
+      ['issue:10', 'discarded', 'SOURCE_EVENT_SUPERSEDED']])
+  assert.equal((await desktop.listTickets()).items.length, 1, 'only the current edited request may create work')
 })

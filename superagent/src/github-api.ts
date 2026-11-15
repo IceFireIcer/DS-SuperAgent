@@ -170,7 +170,7 @@ function issueEvent(issue: Record<string, any>, repository: string): GitHubEvent
   const edited = typeof issue.created_at === 'string' && String(issue.updated_at) > issue.created_at
   const action = issue.state === 'closed' ? 'closed' : issue.state_reason === 'reopened' ? 'reopened' : edited ? 'edited' : 'created'
   return { deliveryId: `issue-${issue.id}-${issue.updated_at}`, cursor: cursorFor(issue.updated_at, 'issue', issue.number), repo: repository,
-    kind: 'issue', action, number: issue.number, id: String(issue.id), authorId: issue.user?.login ?? 'github', authorKind: 'human',
+    kind: 'issue', action, number: issue.number, id: String(issue.id), authorId: issue.user?.login ?? 'github', authorKind: actorKind(issue.user),
     title: issue.title, body: issue.body ?? '', updatedAt: issue.updated_at, state: issue.state }
 }
 
@@ -178,13 +178,14 @@ function pullEvent(pull: Record<string, any>, repository: string): GitHubEvent {
   const state = pull.merged_at ? 'merged' : pull.state === 'closed' ? 'closed' : 'open'
   return { deliveryId: `pr-${pull.id}-${pull.updated_at}`, cursor: cursorFor(pull.updated_at, 'pr', pull.number), repo: repository,
     kind: 'pull_request', action: pull.state === 'closed' ? 'closed' : 'created', number: pull.number, id: String(pull.id),
-    authorId: pull.user?.login ?? 'github', title: pull.title, body: pull.body ?? '', updatedAt: pull.updated_at,
+    authorId: pull.user?.login ?? 'github', authorKind: actorKind(pull.user), title: pull.title, body: pull.body ?? '', updatedAt: pull.updated_at,
     draft: Boolean(pull.draft), state }
 }
 
 function reviewEvent(review: Record<string, any>, number: number, repository: string): GitHubEvent {
   return { deliveryId: `review-${review.id}-${review.submitted_at}`, cursor: cursorFor(review.submitted_at, 'review', review.id),
     repo: repository, kind: 'review', action: 'reviewed', number, id: String(review.id), authorId: review.user?.login ?? 'github',
+    authorKind: actorKind(review.user),
     body: review.body ?? `Review state ${review.state}`, updatedAt: review.submitted_at }
 }
 
@@ -200,6 +201,12 @@ function checkRunEvent(checkRun: Record<string, any>, number: number, repository
 function deletedPullEvent(issue: Record<string, any>, repository: string): GitHubEvent {
   return { deliveryId: `pr-deleted-${issue.id}-${issue.updated_at}`, cursor: cursorFor(issue.updated_at, 'deleted', issue.number),
     repo: repository, kind: 'pull_request', action: 'deleted', number: issue.number, id: String(issue.id),
-    authorId: issue.user?.login ?? 'github', title: issue.title, updatedAt: issue.updated_at,
+    authorId: issue.user?.login ?? 'github', authorKind: actorKind(issue.user), title: issue.title, updatedAt: issue.updated_at,
     deletionEvidence: `GitHub returned 404 for pull request #${issue.number} while the repository listing still contained it.` }
+}
+
+function actorKind(user: Record<string, any> | undefined): NonNullable<GitHubEvent['authorKind']> {
+  const login = typeof user?.login === 'string' ? user.login : ''
+  if (/^(?:github-actions)(?:\[bot\])?$/iu.test(login) || user?.type === 'Bot' && /(?:actions|ci)/iu.test(login)) return 'ci'
+  return user?.type === 'Bot' || login.endsWith('[bot]') ? 'bot' : 'human'
 }

@@ -30,6 +30,31 @@ test('the GitHub CLI transport maps a real issues/PR/review/CI snapshot into ord
   assert.equal(new Set(events.map(event => event.deliveryId)).size, events.length)
 })
 
+test('GitHub bot and CI actor kinds stay consistent for Issues, PRs and reviews', async () => {
+  const transport = new core.GitHubCliTransport()
+  const responses = new Map([
+    [issuesPath, [
+      { id: 41, number: 4, state: 'open', title: 'Bot issue', body: 'Automation', updated_at: '2026-01-04T00:00:00Z',
+        user: { login: 'release-bot', type: 'Bot' } },
+      { id: 42, number: 5, state: 'open', title: 'CI issue', body: 'Automation', updated_at: '2026-01-04T00:01:00Z',
+        user: { login: 'github-actions[bot]', type: 'Bot' } },
+      { id: 43, number: 6, state: 'open', title: 'Bot PR', body: 'Automation', updated_at: '2026-01-04T00:02:00Z',
+        user: { login: 'release-bot', type: 'Bot' }, pull_request: { url: 'https://api.github.com/repos/acme/repo/pulls/6' } },
+    ]],
+    ['repos/acme/repo/pulls/6', { id: 43, number: 6, state: 'open', title: 'Bot PR', body: 'Automation',
+      updated_at: '2026-01-04T00:02:00Z', user: { login: 'release-bot', type: 'Bot' }, head: { sha: 'sha-6' } }],
+    ['repos/acme/repo/pulls/6/reviews', [{ id: 61, state: 'APPROVED', body: 'Automated review',
+      submitted_at: '2026-01-04T00:03:00Z', user: { login: 'release-bot', type: 'Bot' } }]],
+    ['repos/acme/repo/commits/sha-6/check-runs?per_page=100', { check_runs: [] }],
+  ])
+  const events = await transport.mapEvents(async path => responses.get(path), 'acme', 'repo')
+  const byKind = Object.groupBy(events, event => event.kind)
+  assert.equal(byKind.issue.find(event => event.number === 4).authorKind, 'bot')
+  assert.equal(byKind.issue.find(event => event.number === 5).authorKind, 'ci')
+  assert.equal(byKind.pull_request[0].authorKind, 'bot')
+  assert.equal(byKind.review[0].authorKind, 'bot')
+})
+
 test('the GitHub CLI transport pages through the issue list and refuses to overrun its budget', async () => {
   const transport = new core.GitHubCliTransport()
   const pages = []

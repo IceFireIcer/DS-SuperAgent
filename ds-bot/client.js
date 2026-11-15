@@ -109,6 +109,9 @@ var ZH = {
   "Main source failed": "Main 来源处理失败",
   GitHub: "GitHub",
   "Delivery receipts": "投递回执",
+  "Reconcile delivery": "核查投递结果",
+  "Reconciling…": "正在核查…",
+  "Load earlier receipts": "加载更早回执",
   "Pull request conditions": "Pull Request 条件",
   "Pull request open": "Pull Request 打开",
   "Pull request draft": "Pull Request 草稿",
@@ -21260,7 +21263,58 @@ function applyProduct(ctx) {
       ) : null
     );
   }
-  function MainSourceCard({ source }) {
+  function MainSourceCard({ source, instanceId, onRefresh }) {
+    const [receipts, setReceipts] = (0, import_react53.useState)(source.deliveries ?? []);
+    const [receiptCursor, setReceiptCursor] = (0, import_react53.useState)(source.deliveryCursor ?? null);
+    const [receiptsBusy, setReceiptsBusy] = (0, import_react53.useState)(false);
+    const [receiptsError, setReceiptsError] = (0, import_react53.useState)(null);
+    const [reconciling, setReconciling] = (0, import_react53.useState)(null);
+    const receiptPagesLoaded = (0, import_react53.useRef)(false);
+    (0, import_react53.useEffect)(() => {
+      setReceipts((current) => {
+        const merged = new Map(current.map((receipt) => [`${receipt.ticketId}:${receipt.id}:${receipt.sequence}`, receipt]));
+        for (const receipt of source.deliveries ?? []) merged.set(`${receipt.ticketId}:${receipt.id}:${receipt.sequence}`, receipt);
+        return [...merged.values()].sort((left, right) => right.createdAt - left.createdAt || right.sequence - left.sequence || left.ticketId.localeCompare(right.ticketId) || left.id.localeCompare(right.id));
+      });
+      if (!receiptPagesLoaded.current) setReceiptCursor(source.deliveryCursor ?? null);
+    }, [source.deliveries, source.deliveryCursor]);
+    const loadEarlierReceipts = async () => {
+      if (!receiptCursor || receiptsBusy) return;
+      receiptPagesLoaded.current = true;
+      setReceiptsBusy(true);
+      setReceiptsError(null);
+      try {
+        const page = await productCall("source-deliveries", { instanceId, sourceId: source.id, after: receiptCursor, limit: 10 });
+        setReceipts((current) => {
+          const merged = new Map(current.map((receipt) => [`${receipt.ticketId}:${receipt.id}:${receipt.sequence}`, receipt]));
+          for (const receipt of page.items) merged.set(`${receipt.ticketId}:${receipt.id}:${receipt.sequence}`, receipt);
+          return [...merged.values()].sort((left, right) => right.createdAt - left.createdAt || right.sequence - left.sequence || left.ticketId.localeCompare(right.ticketId) || left.id.localeCompare(right.id));
+        });
+        setReceiptCursor(page.cursor ?? null);
+      } catch (error) {
+        setReceiptsError(error.message);
+      } finally {
+        setReceiptsBusy(false);
+      }
+    };
+    const reconcile = async (receipt) => {
+      if (reconciling) return;
+      setReconciling(receipt.id);
+      setReceiptsError(null);
+      try {
+        await productCall("reconcile-delivery", {
+          instanceId,
+          commandId: `reconcile:${receipt.ticketId}:${receipt.id}:${receipt.sequence}`,
+          ticketId: receipt.ticketId,
+          deliveryId: receipt.id
+        });
+        await onRefresh();
+      } catch (error) {
+        setReceiptsError(error.message);
+      } finally {
+        setReconciling(null);
+      }
+    };
     return (0, import_react53.createElement)(
       "article",
       { className: "bt-main-source", "aria-label": t("GitHub source request") },
@@ -21274,13 +21328,35 @@ function applyProduct(ctx) {
       (0, import_react53.createElement)("p", { className: "bt-main-work-detail" }, source.text),
       (0, import_react53.createElement)("code", { className: "bt-main-source-reference" }, source.reference),
       source.lastError ? (0, import_react53.createElement)("p", { className: "bt-main-error", role: "status" }, `${t("Main source failed")}: ${source.lastError}`) : null,
-      source.deliveries.length ? (0, import_react53.createElement)(
+      receipts.length ? (0, import_react53.createElement)(
         "div",
         { className: "bt-main-source-deliveries", "aria-label": t("Delivery receipts") },
-        source.deliveries.map((delivery) => (0, import_react53.createElement)("p", {
-          key: delivery.id,
-          className: delivery.state === "unknown" ? "bt-main-error" : "bt-main-work-detail"
-        }, `${deliveryPurposeCopy(delivery.purpose)}: ${deliveryCopy(delivery.state)}${delivery.reason ? ` · ${delivery.reason}` : ""}`))
+        receipts.map((delivery) => (0, import_react53.createElement)(
+          "div",
+          {
+            key: `${delivery.ticketId}:${delivery.id}:${delivery.sequence}`,
+            className: delivery.state === "unknown" ? "bt-main-error" : "bt-main-work-detail"
+          },
+          (0, import_react53.createElement)("p", null, `${deliveryPurposeCopy(delivery.purpose)}: ${deliveryCopy(delivery.state)}${delivery.reason ? ` · ${delivery.reason}` : ""}`),
+          (0, import_react53.createElement)("p", null, `${delivery.destination.sourceInstanceId} · ${delivery.destination.eventId}${delivery.destination.threadId ? ` · ${delivery.destination.threadId}` : ""} · @${delivery.destination.actorId}`),
+          delivery.state === "unknown" ? (0, import_react53.createElement)(
+            "button",
+            {
+              type: "button",
+              className: "bt-soft",
+              disabled: reconciling === delivery.id,
+              onClick: () => void reconcile(delivery)
+            },
+            reconciling === delivery.id ? t("Reconciling…") : t("Reconcile delivery")
+          ) : null
+        )),
+        receiptCursor ? (0, import_react53.createElement)("button", {
+          type: "button",
+          className: "bt-soft",
+          disabled: receiptsBusy,
+          onClick: () => void loadEarlierReceipts()
+        }, receiptsBusy ? t("Loading…") : t("Load earlier receipts")) : null,
+        receiptsError ? (0, import_react53.createElement)("p", { className: "bt-main-error", role: "status" }, receiptsError) : null
       ) : null,
       source.conditions.length ? (0, import_react53.createElement)(
         "div",
@@ -21438,7 +21514,7 @@ function applyProduct(ctx) {
               ) : null
             )
           )),
-          state.sources.map((source) => (0, import_react53.createElement)(MainSourceCard, { key: source.id, source })),
+          state.sources.map((source) => (0, import_react53.createElement)(MainSourceCard, { key: source.id, source, instanceId: state.binding?.instanceId, onRefresh: refresh })),
           state.works.map((work) => (0, import_react53.createElement)(MainWorkCard, {
             key: work.brief.workItemId ?? work.brief.id,
             work,
@@ -22217,7 +22293,8 @@ var PRODUCT_CSS = `
 .bt-main-work-id,.bt-main-work-detail,.bt-main-work-artifact,.bt-main-source-label{margin:6px 0 0;color:var(--bt-ink-2);font-size:12px;line-height:16px;overflow-wrap:anywhere}
 .bt-main-source-label{font-weight:600}
 .bt-main-source-reference{display:block;margin:6px 0 0;overflow-wrap:anywhere;color:var(--bt-ink-2);font:11px/16px ui-monospace,SFMono-Regular,Consolas,monospace}
-.bt-main-source-deliveries{margin-top:8px;padding-top:6px;border-top:1px solid var(--bt-line)}
+.bt-main-source-deliveries{display:flex;flex-direction:column;align-items:flex-start;gap:6px;margin-top:8px;padding-top:6px;border-top:1px solid var(--bt-line)}
+.bt-main-source-deliveries p{margin:0}
 .bt-main-work-followups{margin-top:8px;padding-top:8px;border-top:.5px solid var(--bt-line-2)}
 .bt-main-work-followup{padding:6px 0;color:var(--bt-ink);font-size:12px;line-height:16px;overflow-wrap:anywhere}
 .bt-main-work-followup+.bt-main-work-followup{border-top:.5px solid var(--bt-line-2)}

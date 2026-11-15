@@ -38,14 +38,20 @@ export class Outbox {
       const trigger = await this.trigger(transaction, ticketId)
       let delivery = deliveryId ? await this.deliveries.get(transaction, deliveryId) : undefined
       if (!delivery) {
+        if (reconciling) return { invalid: 'INVALID_DELIVERY: reconciliation requires the immutable delivery record.' }
         const legacy = await this.legacyDelivery(transaction, effect, trigger)
         if (!legacy) return { invalid: 'INVALID_DELIVERY: the outbox effect has no delivery record.' }
         delivery = await this.deliveries.record(transaction, legacy, effect)
       }
+      if (reconciling) {
+        const invalid = await this.validateImmutableDelivery(transaction, delivery, effect)
+        if (invalid) return { invalid }
+        return { view: await this.deliveries.view(transaction, delivery) }
+      }
       if (delivery.purpose === 'result') {
         const target = await this.deliveryState.target(transaction, ticketId, 'result')
         if (target) {
-          const redirected: Delivery = { ...delivery, destination: { actorId: delivery.destination.actorId,
+          const redirected: Delivery = { ...delivery, destination: { actorId: target.destination.actorId,
             sourceInstanceId: target.destination.sourceInstanceId, eventId: target.destination.objectId,
             ...(target.destination.threadId ? { threadId: target.destination.threadId } : {}) } }
           delivery = await this.deliveries.record(transaction, redirected, effect)
@@ -68,6 +74,14 @@ export class Outbox {
     const action = reconciling ? this.channel.reconcile?.bind(this.channel) : this.channel.deliver.bind(this.channel)
     if (!action) return { type: 'unknown', reason: 'The delivery channel cannot reconcile an unknown outcome.' }
     return action(prepared.view, context)
+  }
+
+  private async validateImmutableDelivery(transaction: AsyncTx, delivery: Delivery, effect: Effect): Promise<string | undefined> {
+    if (delivery.effectId !== effect.id || delivery.effectGeneration !== effect.generation) {
+      return 'INVALID_DELIVERY: the delivery does not match its original Effect generation.'
+    }
+    if (!await transaction.get<Work['ticket']>('ticket', delivery.ticketId)) return 'NOT_FOUND: the delivery Ticket does not exist.'
+    return undefined
   }
 
   private async trigger(transaction: AsyncTx, ticketId: string) {
@@ -134,7 +148,9 @@ export class Outbox {
         const input = evidence ? await associatedInput(transaction, delivery.ticketId, evidence) : undefined
         if (!input || !evidence || input.association?.ownerSourceInstanceId !== trigger.source.sourceInstanceId
           || evidence.source.sourceInstanceId !== delivery.destination.sourceInstanceId || evidence.threadId !== delivery.destination.threadId
-          || evidence.objectId !== delivery.destination.eventId) return 'ASSOCIATION_REQUIRED: a cross-source result requires its exact authorized native follow-up.'
+          || evidence.objectId !== delivery.destination.eventId || evidence.authorId !== delivery.destination.actorId) {
+          return 'ASSOCIATION_REQUIRED: a cross-source result requires its exact authorized native follow-up.'
+        }
       }
       if (evidence) {
         if (!await isCurrentSourceEvent(transaction, evidence)) return 'SOURCE_NOT_CURRENT: the destination evidence is no longer current.'
@@ -152,7 +168,9 @@ export class Outbox {
       if (ticket.constraint) return 'TICKET_CONSTRAINED: the Ticket is waiting for a person before delivery.'
       const authorizedEventId = authorizedTarget?.destination.objectId ?? defaultTarget.eventId
       const authorizedThreadId = authorizedTarget?.destination.threadId ?? defaultTarget.threadId
-      if (delivery.destination.eventId !== authorizedEventId || delivery.destination.threadId !== authorizedThreadId) {
+      const authorizedActorId = authorizedTarget?.destination.actorId ?? defaultTarget.source.actorId
+      if (delivery.destination.eventId !== authorizedEventId || delivery.destination.threadId !== authorizedThreadId
+        || delivery.destination.actorId !== authorizedActorId) {
         return 'DESTINATION_MISMATCH: the result destination has not been authorized to change.'
       }
       return undefined

@@ -40,7 +40,7 @@ import type { ActivationGate } from './activation.js'
 import { MainConversation, type MainAddress, type MainSend } from './main-conversation.js'
 import { WorkDelegation, type MainWorkCard, type MainWorkControl, type MainWorkItem } from './work-delegation.js'
 import { WorkObservations } from './work-observations.js'
-import { MainSourceHandoffs, type MainSourceHandoff, type MainSourceView } from './main-source.js'
+import { MainSourceHandoffs, type MainSourceDeliveryPage, type MainSourceHandoff, type MainSourceView } from './main-source.js'
 
 interface StoredPolicy { revision: number; configuration: Omit<IntakePolicy, 'assess'>; origin: 'bootstrap' | 'manual' | 'sync'; sourceRevision?: string; updatedAt: number }
 interface ProcessingState { paused: boolean; revision: number; updatedAt: number }
@@ -1417,22 +1417,72 @@ export class Engine {
     return { ...page, items: await this.mainSourceViews(page.items) }
   }
 
+  async getMainSourceDeliveries(request: MainAddress & { sourceId: string; after?: string; limit?: number }): Promise<MainSourceDeliveryPage> {
+    if (!request || Object.keys(request).some(key => !['instanceId', 'sourceId', 'after', 'limit'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Source deliveries accept an Instance, source ID and bounded page.')
+    }
+    if (request.instanceId !== this.instanceId || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Source deliveries are outside the authorized Main Instance.')
+    }
+    identifier(request.sourceId, 'sourceId')
+    const limit = request.limit ?? 10
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100 || request.after !== undefined && request.after.length > 1024) {
+      throw new CoreError('INVALID_INPUT', 'Source delivery history accepts 1–100 rows and a bounded cursor.')
+    }
+    const binding = await this.main.open({ instanceId: request.instanceId })
+    return this.storage.transaction(this.instanceId, async transaction => {
+      const handoff = await this.mainSources.get(transaction, request.sourceId)
+      if (!handoff || handoff.mainId !== binding.mainId) throw new CoreError('NOT_FOUND', 'The Main source handoff is unavailable.')
+      return this.sourceDeliveryPage(transaction, handoff, request.after, limit)
+    })
+  }
+
   private mainSourceViews(handoffs: MainSourceHandoff[]): Promise<MainSourceView[]> {
     return this.storage.transaction(this.instanceId, async transaction => Promise.all(handoffs.map(async handoff => {
       const split = handoff.workBriefId ? await transaction.get<{ itemIds: string[] }>('work-split', handoff.workBriefId) : undefined
       const workItemIds = split?.itemIds ?? []
       const receipts = await Promise.all(workItemIds.map(id => transaction.get<{ ticketId?: string }>('work-receipt', id)))
       const ticketIds = [...new Set(receipts.flatMap(receipt => receipt?.ticketId ? [receipt.ticketId] : []))]
-      const deliveries = (await Promise.all(ticketIds.map(ticketId => this.deliveries.list(transaction, ticketId)))).flat()
-        .sort((left, right) => right.sequence - left.sequence).slice(0, 10)
-        .map(delivery => ({ id: delivery.id, ticketId: delivery.ticketId, purpose: delivery.purpose, state: delivery.state,
-          reconcileRequired: delivery.reconcileRequired, ...(delivery.attempts === undefined ? {} : { attempts: delivery.attempts }),
-          ...(delivery.reason ? { reason: delivery.reason } : {}), destination: delivery.destination }))
+      const deliveryPage = this.deliveryPage(ticketIds, await Promise.all(ticketIds.map(ticketId => this.deliveries.list(transaction, ticketId))), undefined, 10)
       const conditions = (await Promise.all(ticketIds.map(ticketId => this.deliveryState.list(transaction, ticketId)))).flat()
         .map(condition => ({ ticketId: condition.ticketId, number: condition.number, state: condition.state,
           ...(condition.result ? { result: condition.result } : {}), ...(condition.reason ? { reason: condition.reason } : {}) }))
-      return { ...structuredClone(handoff), workItemIds, ticketIds, deliveries, conditions }
+      return { ...structuredClone(handoff), workItemIds, ticketIds, deliveries: deliveryPage.items,
+        deliveryHasMore: deliveryPage.hasMore, ...(deliveryPage.cursor ? { deliveryCursor: deliveryPage.cursor } : {}), conditions }
     })))
+  }
+
+  private async sourceDeliveryPage(transaction: AsyncTx, handoff: MainSourceHandoff, after: string | undefined, limit: number) {
+    const split = handoff.workBriefId ? await transaction.get<{ itemIds: string[] }>('work-split', handoff.workBriefId) : undefined
+    const receipts = await Promise.all((split?.itemIds ?? []).map(id => transaction.get<{ ticketId?: string }>('work-receipt', id)))
+    const ticketIds = [...new Set(receipts.flatMap(receipt => receipt?.ticketId ? [receipt.ticketId] : []))]
+    return this.deliveryPage(ticketIds, await Promise.all(ticketIds.map(ticketId => this.deliveries.list(transaction, ticketId))), after, limit)
+  }
+
+  private deliveryPage(ticketIds: string[], histories: DeliveryView[][], after: string | undefined, limit: number): MainSourceDeliveryPage {
+    const all = histories.flat().sort((left, right) => right.createdAt - left.createdAt || right.sequence - left.sequence
+      || left.ticketId.localeCompare(right.ticketId) || left.id.localeCompare(right.id))
+    let start = 0
+    if (after) {
+      let decoded: unknown
+      try { decoded = JSON.parse(Buffer.from(after, 'base64url').toString('utf8')) } catch { throw new CoreError('INVALID_INPUT', 'Use a source-delivery cursor from this Main source.') }
+      if (!Array.isArray(decoded) || decoded.length !== 4 || decoded.some(value => typeof value !== 'string' && typeof value !== 'number')) {
+        throw new CoreError('INVALID_INPUT', 'Use a source-delivery cursor from this Main source.')
+      }
+      const [createdAt, ticketId, sequence, id] = decoded
+      const index = all.findIndex(delivery => delivery.createdAt === createdAt && delivery.ticketId === ticketId
+        && delivery.sequence === sequence && delivery.id === id && ticketIds.includes(delivery.ticketId))
+      if (index < 0) throw new CoreError('INVALID_INPUT', 'The source-delivery cursor is no longer valid.')
+      start = index + 1
+    }
+    const items = all.slice(start, start + limit).map(delivery => ({ id: delivery.id, ticketId: delivery.ticketId, sequence: delivery.sequence,
+      createdAt: delivery.createdAt, purpose: delivery.purpose, state: delivery.state, reconcileRequired: delivery.reconcileRequired,
+      ...(delivery.attempts === undefined ? {} : { attempts: delivery.attempts }), ...(delivery.reason ? { reason: delivery.reason } : {}),
+      destination: delivery.destination }))
+    const hasMore = start + items.length < all.length
+    const last = items.at(-1)
+    const cursor = hasMore && last ? Buffer.from(JSON.stringify([last.createdAt, last.ticketId, last.sequence, last.id])).toString('base64url') : undefined
+    return { items, hasMore, ...(cursor ? { cursor } : {}) }
   }
 
   async getMainWorkPlan(request: MainAddress & { workBriefId: string }) {
@@ -1638,16 +1688,17 @@ export class Engine {
   }
 
   /** Record an authorized result destination change, with its evidence, for one Ticket. */
-  async setDeliveryTarget(command: { commandId: string; ticketId: string; purpose: 'result' | 'answer'; sourceInstanceId: string; threadId: string; objectId: string; evidence: string; evidenceEventId?: string }) {
+  async setDeliveryTarget(command: { commandId: string; ticketId: string; purpose: 'result' | 'answer'; sourceInstanceId: string; actorId: string; threadId: string; objectId: string; evidence: string; evidenceEventId?: string }) {
     await this.ensurePolicy()
-    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'purpose', 'sourceInstanceId', 'threadId', 'objectId', 'evidence', 'evidenceEventId'].includes(key))) {
-      throw new CoreError('INVALID_INPUT', 'A delivery-target change accepts commandId, ticketId, purpose, sourceInstanceId, threadId, objectId, evidence and optional evidenceEventId only.')
+    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'purpose', 'sourceInstanceId', 'actorId', 'threadId', 'objectId', 'evidence', 'evidenceEventId'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'A delivery-target change accepts commandId, ticketId, purpose, sourceInstanceId, actorId, threadId, objectId, evidence and optional evidenceEventId only.')
     }
-    identifier(command.commandId, 'commandId'); identifier(command.ticketId, 'ticketId')
+    identifier(command.commandId, 'commandId'); identifier(command.ticketId, 'ticketId'); identifier(command.actorId, 'actorId')
     if (!this.source.allowedActorIds?.includes(this.source.actorId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Only a trusted actor may change a delivery destination.')
     const commandKey = this.commandKey(command.commandId)
     if (command.evidenceEventId !== undefined) identifier(command.evidenceEventId, 'evidenceEventId')
-    const fingerprint = createHash('sha256').update(canonicalJson(['delivery-target-v1', command.ticketId, command.purpose, command.sourceInstanceId, command.threadId, command.objectId, command.evidence, command.evidenceEventId ?? null])).digest('hex')
+    const fingerprint = createHash('sha256').update(canonicalJson(['delivery-target-v2', command.ticketId, command.purpose, command.sourceInstanceId,
+      command.actorId, command.threadId, command.objectId, command.evidence, command.evidenceEventId ?? null])).digest('hex')
     const target = await commandTransaction(this.storage, this.instanceId, async tx => {
       const existing = await tx.get<{ fingerprint: string }>('work-command', commandKey)
       if (existing) {
@@ -1668,6 +1719,7 @@ export class Engine {
         if (evidence.source.sourceInstanceId !== command.sourceInstanceId || evidence.threadId !== command.threadId || evidence.objectId !== command.objectId) {
           throw new CoreError('DESTINATION_MISMATCH', 'The evidence event does not belong to the named delivery target.')
         }
+        if (evidence.authorId !== command.actorId) throw new CoreError('ACTOR_MISMATCH', 'The delivery target actor must be the exact evidence author.')
         if (!await isCurrentSourceEvent(tx, evidence)) throw new CoreError('SOURCE_NOT_CURRENT', 'The target follow-up is no longer current.')
         const evidencePolicy = await tx.get<StoredPolicy>('policy-state', JSON.stringify(['policy-state', evidence.source.sourceInstanceId]))
         if (evidencePolicy && !evidencePolicy.configuration.allowedRequesterIds.includes(evidence.authorId)) {
@@ -2666,7 +2718,7 @@ export class Engine {
         sourceActorId: event.authorId, authorizedBy: this.source.actorId, ownerSourceInstanceId: this.source.sourceInstanceId,
         reason: command.reason, checkedAt: Date.now() })
       const target = command.retargetResult ? await this.deliveryState.setTarget(tx, {
-        ticketId: command.ticketId, purpose: 'result', sourceInstanceId: event.source.sourceInstanceId,
+        ticketId: command.ticketId, purpose: 'result', sourceInstanceId: event.source.sourceInstanceId, actorId: event.authorId,
         threadId: event.threadId, objectId: event.objectId, evidence: command.reason, evidenceEventId: event.id, authorizedBy: this.source.actorId,
       }) : undefined
       const result = { input, ...(target ? { target } : {}) }

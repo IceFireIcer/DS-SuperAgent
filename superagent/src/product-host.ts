@@ -154,12 +154,14 @@ export async function createProductHost(context: Context, config: ProductHostCon
                   : endpoint === 'settings-save' ? ['instanceId', 'commandId', 'expectedRevision', 'roles']
                     : endpoint === 'settings-efforts' ? ['instanceId', 'provider', 'model']
                       : endpoint === 'provider-key' ? ['instanceId', 'provider', 'value']
-                        : endpoint === 'observe-list' ? ['instanceId', 'after', 'limit', 'query']
-                          : endpoint === 'observe-read' ? ['instanceId', 'observationId', 'generation', 'after', 'limit']
-                            : endpoint === 'observe-detail' ? ['instanceId', 'observationId', 'generation', 'detailId', 'offset', 'limit']
-                              : endpoint === 'evidence' ? ['instanceId', 'workItemId', 'ref', 'after', 'maxBytes']
-                                : endpoint === 'history' ? ['instanceId', 'after', 'before', 'limit']
-                                  : undefined
+                        : endpoint === 'reconcile-delivery' ? ['instanceId', 'commandId', 'ticketId', 'deliveryId']
+                          : endpoint === 'source-deliveries' ? ['instanceId', 'sourceId', 'after', 'limit']
+                            : endpoint === 'observe-list' ? ['instanceId', 'after', 'limit', 'query']
+                              : endpoint === 'observe-read' ? ['instanceId', 'observationId', 'generation', 'after', 'limit']
+                                : endpoint === 'observe-detail' ? ['instanceId', 'observationId', 'generation', 'detailId', 'offset', 'limit']
+                                  : endpoint === 'evidence' ? ['instanceId', 'workItemId', 'ref', 'after', 'maxBytes']
+                                    : endpoint === 'history' ? ['instanceId', 'after', 'before', 'limit']
+                                      : undefined
         if (!fields) throw new CoreError('UNAVAILABLE', 'This product capability is not connected yet.')
         if (Object.keys(payload).some(key => !fields.includes(key))) throw new CoreError('INVALID_INPUT', 'The product request contains unsupported fields.')
         if (endpoint === 'history') {
@@ -200,6 +202,11 @@ export async function createProductHost(context: Context, config: ProductHostCon
             id?: string; threadId?: string; objectId?: string },
           ...(payload.after === undefined ? {} : { after: payload.after as string }),
           ...(payload.maxBytes === undefined ? {} : { maxBytes: payload.maxBytes as number }) })
+        if (endpoint === 'reconcile-delivery') return engine!.reconcileDelivery({ commandId: payload.commandId as string,
+          ticketId: payload.ticketId as string, deliveryId: payload.deliveryId as string })
+        if (endpoint === 'source-deliveries') return engine!.getMainSourceDeliveries({ instanceId,
+          sourceId: payload.sourceId as string, ...(payload.after === undefined ? {} : { after: payload.after as string }),
+          ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
         if (endpoint === 'observe-list') return engine!.getWorkObservations({ instanceId,
           ...(payload.after === undefined ? {} : { after: payload.after as string }),
           ...(payload.limit === undefined ? {} : { limit: payload.limit as number }),

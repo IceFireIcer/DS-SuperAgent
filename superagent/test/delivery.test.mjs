@@ -98,7 +98,7 @@ test('an unknown platform outcome is visible and reconciles under the original d
       reconcileKeys.push(context.idempotencyKey)
       return { type: 'success' }
     },
-  })
+  }, { maxAttempts: 1 })
   const receipt = await engine.submit({ commandId: 'unknown-request', eventId: 'unknown-message', text: 'Deliver once.' })
   await engine.effects.drain()
   const [unknown] = await engine.getTicketDeliveries(receipt.ticketId)
@@ -115,6 +115,35 @@ test('an unknown platform outcome is visible and reconciles under the original d
   assert.deepEqual(await engine.reconcileDelivery(command), reconciled)
   assert.equal(sentKeys.length, 1)
   assert.equal(reconcileKeys.length, 1)
+})
+
+test('reconciliation uses immutable delivery identity after the live answer basis changes', async t => {
+  const sentKeys = []
+  const reconcileKeys = []
+  const { engine } = await fixture(t, {
+    deliver: async (delivery, context) => {
+      if (delivery.purpose !== 'answer') return { type: 'success' }
+      sentKeys.push(context.idempotencyKey)
+      return { type: 'unknown', reason: 'ANSWER_RESPONSE_LOST' }
+    },
+    reconcile: async (_delivery, context) => {
+      reconcileKeys.push(context.idempotencyKey)
+      return { type: 'success' }
+    },
+  }, {}, true)
+  const question = await engine.receiveSource({ commandId: 'reconcile-question', threadId: 'room', objectId: 'question-reconcile',
+    type: 'created', version: '1', text: 'What changed?', authorId: 'alice', authorKind: 'human', addressing: 'direct' })
+  const receipt = await engine.acceptSource({ commandId: 'accept-reconcile', threadId: 'room', objectId: 'question-reconcile', expectedEventId: question.eventId })
+  await engine.queueAnswer({ commandId: 'answer-reconcile', ticketId: receipt.ticketId, questionEventId: question.eventId,
+    text: 'The original answer.', fact: 'The answer was verified before the question changed.' })
+  await engine.effects.drain()
+  const answer = (await engine.getTicketDeliveries(receipt.ticketId)).find(delivery => delivery.purpose === 'answer')
+  assert.equal(answer.state, 'unknown')
+  await engine.receiveSource({ commandId: 'delete-reconcile-question', threadId: 'room', objectId: 'question-reconcile',
+    type: 'deleted', version: '2', deletionEvidence: 'The question was deleted after the uncertain answer send.' })
+  const reconciled = await engine.reconcileDelivery({ commandId: 'reconcile-answer-after-delete', ticketId: receipt.ticketId, deliveryId: answer.id })
+  assert.equal(reconciled.state, 'sent')
+  assert.deepEqual(reconcileKeys, sentKeys)
 })
 
 test('an answer requires a current human question and returns to that exact message', async t => {

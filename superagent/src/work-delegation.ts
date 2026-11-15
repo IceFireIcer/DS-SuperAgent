@@ -507,10 +507,26 @@ export class WorkDelegation {
     const execute = async (effect: Effect, context: { idempotencyKey: string; signal: AbortSignal }, handler: EffectHandler): Promise<EffectResult> => {
       try {
         if (effect.payload.type === 'main-source-handoff') {
-          const handoff = await this.options.storage.transaction(this.options.instanceId,
-            tx => tx.get<MainSourceHandoff>('main-source-handoff', String(effect.payload.handoffId)))
-          if (!handoff) throw new CoreError('INCOMPLETE_STATE', 'The Main source handoff is missing.')
-          if (handoff.state === 'pending' || handoff.state === 'presented') await this.options.notifyMainSource(handoff, context.signal)
+          const handoff = await this.options.storage.transaction(this.options.instanceId, async tx => {
+            const current = await tx.get<MainSourceHandoff>('main-source-handoff', String(effect.payload.handoffId))
+            if (!current) throw new CoreError('INCOMPLETE_STATE', 'The Main source handoff is missing.')
+            if (current.state !== 'pending' && current.state !== 'presented') return undefined
+            const sourceEvent = await tx.get<SourceEvent>('source-event', current.sourceEventId)
+            const policy = await tx.get<{ configuration: { allowedRequesterIds: string[] } }>('policy-state',
+              JSON.stringify(['policy-state', current.sourceInstanceId]))
+            const staleReason = !sourceEvent ? 'SOURCE_EVENT_MISSING'
+              : !await isCurrentSourceEvent(tx, sourceEvent) ? 'SOURCE_EVENT_SUPERSEDED'
+                : sourceEvent.authorId !== current.authorId || sourceEvent.source.sourceInstanceId !== current.sourceInstanceId ? 'SOURCE_ACTOR_CHANGED'
+                  : sourceEvent.type === 'deleted' || sourceEvent.addressing === 'ambient' || sourceEvent.authorKind !== 'human' ? 'SOURCE_NOT_AUTHORIZED'
+                    : !policy ? 'SOURCE_POLICY_MISSING'
+                      : !policy.configuration.allowedRequesterIds.includes(sourceEvent.authorId) ? 'SOURCE_ACTOR_NOT_ALLOWED' : undefined
+            if (staleReason) {
+              await tx.replace('main-source-handoff', current.id, { ...current, state: 'discarded', lastError: staleReason, updatedAt: this.now() })
+              return undefined
+            }
+            return current
+          })
+          if (handoff) await this.options.notifyMainSource(handoff, context.signal)
         } else if (effect.payload.type === 'main-work-brief') await this.route(String(effect.payload.workBriefId), context.signal)
         else if (effect.payload.type === 'main-work-update') {
           const notification = await this.options.storage.transaction(this.options.instanceId,
@@ -536,7 +552,8 @@ export class WorkDelegation {
       execute: (effect, context) => execute(effect, context, handler),
       reconcile: (effect, context) => execute(effect, context, { ...handler, execute: handler.reconcile ?? handler.execute }),
       ...(handler.batch ? { batch: { maxSize: handler.batch.maxSize, execute: async (effects, context) => {
-        if (effects.some(effect => effect.payload.type === 'main-work-brief' || effect.payload.type === 'main-work-update')) {
+        if (effects.some(effect => effect.payload.type === 'main-source-handoff'
+          || effect.payload.type === 'main-work-brief' || effect.payload.type === 'main-work-update')) {
           return Promise.all(effects.map(effect => execute(effect,
             { idempotencyKey: JSON.stringify([effect.id, effect.generation]), signal: context.signal }, handler)))
         }

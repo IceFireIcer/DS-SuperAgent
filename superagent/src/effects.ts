@@ -12,6 +12,7 @@ export interface Effect extends EffectRequest {
   queueKey: string
   state: 'pending' | 'running' | 'unknown' | 'failed'
   attempts: number
+  reconcileAttempts?: number
   availableAt: number
   token?: string
   leaseUntil?: number
@@ -307,7 +308,7 @@ export class Effects {
       await this.writeReceipt(transaction, effect, 'unknown', effect.reason)
       return undefined
     }
-    if (effect.attempts >= this.maxAttempts) {
+    if ((!recovering && effect.attempts >= this.maxAttempts) || (recovering && (effect.reconcileAttempts ?? 0) >= this.maxAttempts)) {
       effect.state = recovering ? 'unknown' : 'failed'
       effect.reason = 'The effect attempt budget was exhausted.'
       await transaction.replace('effect', queueKey, effect)
@@ -316,6 +317,7 @@ export class Effects {
     }
     effect.state = recovering ? 'unknown' : 'running'
     effect.attempts++
+    if (recovering) effect.reconcileAttempts = (effect.reconcileAttempts ?? 0) + 1
     effect.token = randomUUID()
     effect.leaseUntil = this.now() + this.timeoutMs + 1000
     effect.availableAt = effect.leaseUntil

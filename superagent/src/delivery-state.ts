@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { CoreError, identifier } from './model.js'
 import type { AsyncTx, Storage } from './storage.js'
-import type { SourceEvents } from './source-events.js'
+import type { SourceEvent, SourceEvents } from './source-events.js'
 
 export type DeliveryConditionKind = 'pr'
 export type DeliveryConditionState = 'open' | 'draft' | 'merged' | 'closed'
@@ -28,7 +28,7 @@ export interface DeliveryTarget {
   instanceId: string
   ticketId: string
   purpose: 'result' | 'answer'
-  destination: { sourceInstanceId: string; threadId: string; objectId: string }
+  destination: { sourceInstanceId: string; actorId: string; threadId: string; objectId: string }
   evidence: string
   evidenceEventId?: string
   authorizedBy: string
@@ -105,22 +105,29 @@ export class DeliveryState {
     throw new CoreError('DELIVERY_BUDGET', 'The Ticket delivery-condition history exceeds its 1000-record budget.')
   }
 
-  async setTarget(tx: AsyncTx, request: { ticketId: string; purpose: 'result' | 'answer'; sourceInstanceId: string; threadId: string; objectId: string; evidence: string; evidenceEventId?: string; authorizedBy: string }): Promise<DeliveryTarget> {
+  async setTarget(tx: AsyncTx, request: { ticketId: string; purpose: 'result' | 'answer'; sourceInstanceId: string; actorId: string; threadId: string; objectId: string; evidence: string; evidenceEventId?: string; authorizedBy: string }): Promise<DeliveryTarget> {
     identifier(request.ticketId, 'ticketId'); identifier(request.sourceInstanceId, 'sourceInstanceId')
-    identifier(request.threadId, 'threadId'); identifier(request.objectId, 'objectId')
+    identifier(request.actorId, 'actorId'); identifier(request.threadId, 'threadId'); identifier(request.objectId, 'objectId')
     if (!request.evidence.trim() || Buffer.byteLength(request.evidence) > 4096) throw new CoreError('INVALID_INPUT', 'A delivery-target change needs bounded evidence.')
     identifier(request.authorizedBy, 'authorizedBy')
     const target: DeliveryTarget = { id: `${targetPrefix(request.ticketId)}${request.purpose}`, instanceId: this.instanceId, ticketId: request.ticketId,
-      purpose: request.purpose, destination: { sourceInstanceId: request.sourceInstanceId, threadId: request.threadId, objectId: request.objectId },
+      purpose: request.purpose, destination: { sourceInstanceId: request.sourceInstanceId, actorId: request.actorId,
+        threadId: request.threadId, objectId: request.objectId },
       evidence: request.evidence, ...(request.evidenceEventId ? { evidenceEventId: request.evidenceEventId } : {}), authorizedBy: request.authorizedBy, createdAt: this.now() }
     if (!await tx.replace('delivery-target', target.id, target)) await tx.insert('delivery-target', target.id, target)
-    const decisionKey = `${JSON.stringify(['delivery-target-decision', request.ticketId])}:${createHash('sha256').update(JSON.stringify([request.purpose, request.threadId, request.objectId, request.evidence])).digest('hex')}`
+    const decisionKey = `${JSON.stringify(['delivery-target-decision', request.ticketId])}:${createHash('sha256').update(JSON.stringify([request.purpose, request.sourceInstanceId, request.actorId, request.threadId, request.objectId, request.evidence])).digest('hex')}`
     if (!await tx.get('delivery-target-decision', decisionKey)) await tx.insert('delivery-target-decision', decisionKey, { ...target, recordedAt: this.now() })
     return target
   }
 
   async target(tx: AsyncTx, ticketId: string, purpose: 'result' | 'answer'): Promise<DeliveryTarget | undefined> {
     identifier(ticketId, 'ticketId')
-    return tx.get('delivery-target', `${targetPrefix(ticketId)}${purpose}`)
+    const target = await tx.get<DeliveryTarget>('delivery-target', `${targetPrefix(ticketId)}${purpose}`)
+    if (!target || target.destination.actorId) return target
+    const event = target.evidenceEventId ? await tx.get<SourceEvent>('source-event', target.evidenceEventId) : undefined
+    if (!event?.authorId) throw new CoreError('INCOMPLETE_STATE', 'A stored delivery target is missing its evidence author identity.')
+    const migrated: DeliveryTarget = { ...target, destination: { ...target.destination, actorId: event.authorId } }
+    await tx.replace('delivery-target', target.id, migrated)
+    return migrated
   }
 }

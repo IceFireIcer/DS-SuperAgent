@@ -104,5 +104,12 @@ test('the product HTTP boundary chats with Main and refuses cross-scope and unav
   const unsupported = await call('delegate', { instanceId })
   assert.equal(unsupported.ok, false)
   assert.equal(unsupported.error.code, 'UNAVAILABLE')
+  const missingReconcile = await call('reconcile-delivery', { instanceId, commandId: 'missing-reconcile',
+    ticketId: 'missing-ticket', deliveryId: 'missing-delivery' })
+  assert.equal(missingReconcile.ok, false)
+  assert.equal(missingReconcile.error.code, 'NOT_FOUND')
+  const missingSourceReceipts = await call('source-deliveries', { instanceId, sourceId: 'missing-source', limit: 1 })
+  assert.equal(missingSourceReceipts.ok, false)
+  assert.equal(missingSourceReceipts.error.code, 'NOT_FOUND')
   assert.deepEqual(models, ['main'])
 })
