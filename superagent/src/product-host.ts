@@ -73,6 +73,7 @@ const resourceFields: Record<string, string[]> = {
   'resource-grant': ['instanceId', 'commandId', 'resourceId', 'expectedRevision', 'scope', 'purposes', 'requestId'],
   'resource-revoke': ['instanceId', 'commandId', 'resourceId', 'grantId', 'expectedRevision'],
   'resource-cleanup': ['instanceId', 'resourceId'],
+  'resource-select-feishu': ['instanceId', 'commandId', 'resourceId'],
 }
 
 export async function createProductHost(context: Context, config: ProductHostConfig): Promise<ProductHost> {
@@ -94,6 +95,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
   let gateway: Awaited<ReturnType<typeof createClientGateway>> | undefined
   let feishuRuntime: FeishuRuntime | undefined
   let feishuEngine: Engine | undefined
+  let feishuLegacyConflict = false
+  let feishuSelectionActive = false
   const proactiveRoot = join(dirname(config.databasePath), 'proactive-preparations')
   const proactive = { rootDirectory: proactiveRoot, prepareTimeoutMs: 30_000, pauseSourceInstanceId: 'product-desktop',
     prepare: productProactivePreparation({ instanceId, actorId, sessions,
@@ -260,7 +263,18 @@ export async function createProductHost(context: Context, config: ProductHostCon
     ]
     for (const root of new Set(roots)) environments.push(await openDirectory(root))
     if (config.feishu) {
-      feishuRuntime = new FeishuRuntime({ ...config.feishu, storage, instanceId, mainIntake: true })
+      const { withCredential: _externalCredential, ...api } = config.feishu.api
+      feishuRuntime = new FeishuRuntime({ ...config.feishu, api: api.appSecret ? api : {
+        ...api, withCredential: async (purpose, consume) => {
+          const manager = resourceManager
+          const sourceInstanceId = feishuRuntime?.sourceBinding.sourceInstanceId
+          if (!manager || !sourceInstanceId) throw new CoreError('RESOURCE_UNAVAILABLE', 'No Feishu credential resource is available.')
+          const resourceId = await manager.selectedFeishuCredential(sourceInstanceId)
+          if (!resourceId) throw new CoreError('RESOURCE_UNAVAILABLE', 'Select a Feishu credential resource in product settings.')
+          return manager.use({ instanceId, resourceId, sourceInstanceId,
+            role: purpose === 'source' ? 'main' : 'router', purpose }, consume)
+        },
+      }, storage, instanceId, mainIntake: true })
       feishuEngine = new Engine(storage, instanceId, feishuRuntime.sourceBinding, {}, sessions, [], {}, {}, {}, {}, {}, proactive)
       feishuRuntime.bind(feishuEngine)
     }
@@ -282,6 +296,11 @@ export async function createProductHost(context: Context, config: ProductHostCon
     if (environments[0] && config.workspaceRoot) await engine.addWorkDirectory({ instanceId,
       commandId: `bootstrap:${environments[0].config.id}`, environment: environments[0] })
     await engine.acquireHost()
+    if (feishuRuntime && config.feishu?.api.appSecret) {
+      const selected = await storage.transaction(instanceId, tx => tx.get<{ resourceId: string | null }>(
+        'product-feishu-credential', feishuRuntime!.sourceBinding.sourceInstanceId))
+      feishuLegacyConflict = Boolean(selected?.resourceId)
+    }
     await engine.recoverProactiveRuns()
     await recoverCredentials()
     await engine.openMain({ instanceId })
@@ -312,7 +331,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
       void recoverCredentials()
     }, 30_000)
     scheduleTimer.unref()
-    if (feishuRuntime) void feishuRuntime.start().then(() => feishuEngine?.reconcileProactiveCandidates()).catch(() => {
+    if (feishuRuntime && !feishuLegacyConflict) void feishuRuntime.start().then(() => feishuEngine?.reconcileProactiveCandidates()).catch(() => {
       /* Health and durable candidates retain a failed source pass for the next attempt. */
     })
     void engine.resumeMainInputs({ instanceId }).catch(() => { /* The persisted input and failed health remain visible for retry. */ })
@@ -496,6 +515,28 @@ export async function createProductHost(context: Context, config: ProductHostCon
           if (endpoint === 'resource-cleanup') return payload.resourceId === undefined
             ? { creations: await manager.resumeCreations(), deletions: await manager.resumeCleanup() }
             : manager.cleanupDeleted({ instanceId, resourceId: payload.resourceId as string })
+          if (endpoint === 'resource-select-feishu') {
+            if (!feishuRuntime || config.feishu?.api.appSecret) throw new CoreError('UNAVAILABLE', 'Managed Feishu credentials are not enabled for this source.')
+            if (payload.resourceId !== null && typeof payload.resourceId !== 'string') throw new CoreError('INVALID_INPUT', 'Choose a credential resource or clear the selection.')
+            if (payload.resourceId !== null && (await manager.get({ instanceId, resourceId: payload.resourceId }))?.status !== 'active') {
+              throw new CoreError('RESOURCE_UNAVAILABLE', 'Select an active credential resource.')
+            }
+            if (feishuSelectionActive) throw new CoreError('RUNTIME_ACTIVE', 'Another Feishu resource selection is in progress.')
+            feishuSelectionActive = true
+            try {
+              await feishuRuntime.stop()
+              let selected: { resourceId: string | null }
+              try {
+                selected = await manager.selectFeishuCredential({ instanceId, sourceInstanceId: feishuRuntime.sourceBinding.sourceInstanceId,
+                  commandId, resourceId: payload.resourceId })
+              } catch (error) {
+                await feishuRuntime.start().catch(() => { /* Restore the previous selection when the command was rejected. */ })
+                throw error
+              }
+              await feishuRuntime.start().catch(() => { /* Health retains an unavailable or denied grant. */ })
+              return { ...selected, sourceInstanceId: feishuRuntime.sourceBinding.sourceInstanceId, ...feishuRuntime.health() }
+            } finally { feishuSelectionActive = false }
+          }
         }
         if (endpoint === 'schedule-list') return engine!.listSchedules({ instanceId })
         if (endpoint === 'supervision') return supervision!.state(payload.ticketId as string | undefined)
@@ -515,6 +556,12 @@ export async function createProductHost(context: Context, config: ProductHostCon
         if (endpoint === 'schedule-cancel') return engine!.cancelSchedule({ instanceId,
           commandId: payload.commandId as string, ruleId: payload.ruleId as string })
         if (endpoint === 'feishu-status' || endpoint === 'feishu-start' || endpoint === 'feishu-stop') {
+          if (feishuSelectionActive && endpoint !== 'feishu-status') throw new CoreError('RUNTIME_ACTIVE', 'The Feishu resource selection is in progress.')
+          if (feishuLegacyConflict) {
+            if (endpoint === 'feishu-status') return { configured: true, credentialMode: 'legacy',
+              sourceInstanceId: feishuRuntime!.sourceBinding.sourceInstanceId, state: 'failed', passes: 0, lastError: 'INVALID_CONFIG' }
+            if (endpoint === 'feishu-start') throw new CoreError('INVALID_CONFIG', 'Remove the legacy Feishu secret before using a selected resource.')
+          }
           if (!feishuRuntime) {
             if (endpoint === 'feishu-status') return config.feishuConfigurationError
               ? { configured: false, state: 'failed', lastError: config.feishuConfigurationError }
@@ -530,7 +577,10 @@ export async function createProductHost(context: Context, config: ProductHostCon
           if (endpoint === 'feishu-stop') {
             feishuEngine?.abortProactiveRuns(); await feishuEngine?.discardProactiveCandidates(); await feishuRuntime.stop()
           }
-          return { configured: true, sourceInstanceId: feishuRuntime.sourceBinding.sourceInstanceId, ...feishuRuntime.health() }
+          return { configured: true, sourceInstanceId: feishuRuntime.sourceBinding.sourceInstanceId,
+            credentialMode: config.feishu!.api.appSecret ? 'legacy' : 'managed',
+            ...(config.feishu!.api.appSecret ? {} : { resourceId: await resourceManager?.selectedFeishuCredential(feishuRuntime.sourceBinding.sourceInstanceId) ?? null }),
+            ...feishuRuntime.health() }
         }
         if (endpoint === 'history') {
           if (payload.after !== undefined && payload.before !== undefined) throw new CoreError('INVALID_INPUT', 'Main history accepts one direction cursor.')

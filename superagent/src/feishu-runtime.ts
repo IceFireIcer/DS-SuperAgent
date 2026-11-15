@@ -208,7 +208,7 @@ export class FeishuRuntime {
     const threadId = delivery.destination.threadId
     const prefix = this.config.chatIds.find(id => threadId === `feishu:${this.config.tenantKey}:${id}` || threadId?.startsWith(`feishu:${this.config.tenantKey}:${id}:message:`))
     if (!prefix) return { type: 'permanent', reason: 'DESTINATION_THREAD_DENIED' }
-    const scope = await this.trackDelivery(this.api.messageChat(delivery.destination.eventId.slice('message:'.length), AbortSignal.any([signal, this.controller.signal])))
+    const scope = await this.trackDelivery(this.api.messageChat(delivery.destination.eventId.slice('message:'.length), AbortSignal.any([signal, this.controller.signal]), 'outbound'))
     if (scope !== prefix) return { type: 'permanent', reason: 'DESTINATION_CHAT_DENIED' }
     if (this.state !== 'running') return { type: 'transient', reason: 'FEISHU_SOURCE_DISABLED' }
     return undefined

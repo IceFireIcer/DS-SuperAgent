@@ -107,6 +107,10 @@ export class FeishuDeliveryChannel implements DeliveryChannel {
     if (error instanceof CoreError && (error.code === 'INVALID_INPUT' || error.code === 'INVALID_CONFIG')) {
       return { type: 'permanent', reason: error.code }
     }
+    if (error instanceof CoreError && ['GRANT_DENIED', 'RESOURCE_UNAVAILABLE', 'HOST_LEASED'].includes(error.code)) {
+      // These checks run before the authorized callback can issue the HTTP request.
+      return { type: 'transient', reason: error.code }
+    }
     // A transport failure, timeout, stop or unreadable response may happen after Feishu took the
     // reply; only a failure before the request was made proves the reply does not exist.
     if (mayHaveSent) return { type: 'unknown', reason: error instanceof CoreError ? `FEISHU_${error.code}` : 'FEISHU_REQUEST_UNKNOWN' }

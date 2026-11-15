@@ -4,6 +4,7 @@ import { t } from './i18n.js'
 
 export function ProductCredentialSettings({ binding, call }) {
   const [resources, setResources] = useState(null)
+  const [feishu, setFeishu] = useState(null)
   const [selectedId, setSelectedId] = useState(null)
   const [label, setLabel] = useState('')
   const [value, setValue] = useState('')
@@ -33,11 +34,18 @@ export function ProductCredentialSettings({ binding, call }) {
   const refresh = async () => {
     const items = await load()
     setResources(items)
+    const status = await call('feishu-status', { instanceId }).catch(() => null)
+    setFeishu(status)
+    if (status?.credentialMode === 'managed') setSourceInstanceId(current => current || status.sourceInstanceId)
     return items
   }
   useEffect(() => {
     let live = true
-    load().then(items => { if (live) setResources(items) },
+    Promise.all([load(), call('feishu-status', { instanceId }).catch(() => null)]).then(([items, status]) => {
+      if (!live) return
+      setResources(items); setFeishu(status)
+      if (status?.credentialMode === 'managed') setSourceInstanceId(current => current || status.sourceInstanceId)
+    },
       failure => { if (live) setError(failure.message) })
     return () => { live = false }
   }, [call, instanceId])
@@ -81,9 +89,24 @@ export function ProductCredentialSettings({ binding, call }) {
       : call('resource-delete', { instanceId, commandId: crypto.randomUUID(), resourceId: resource.id,
         expectedRevision: resource.revision }), 'Resource deletion recorded.')
   }
+  const selectFeishu = resourceId => {
+    if (busy) return
+    void run('select-feishu', () => call('resource-select-feishu', { instanceId, commandId: crypto.randomUUID(), resourceId }),
+      'Feishu credential selection saved.')
+  }
 
   return h(Card, { title: t('Credential resources') },
-    h('p', { className: 'bt-product-resource-note' }, t('Saved authorizations are not yet available to source, tool or delivery consumers.')),
+    h('p', { className: 'bt-product-resource-note' }, t('Managed Feishu source and delivery use separate grants when configured. Tool use is not connected yet.')),
+    feishu?.credentialMode === 'managed' ? h('div', { className: 'bt-product-resource-selected' },
+      h('p', { className: 'bt-product-resource-note' }, `${t('Feishu source Instance')}: ${feishu.sourceInstanceId}`),
+      h('p', { className: 'bt-product-resource-note' }, t('Grant Main/source and Router/outbound for this exact source Instance, then reconnect.')),
+      h('p', { role: 'status' }, `${t('Selected Feishu resource')}: ${feishu.resourceId
+        ? resources?.find(item => item.id === feishu.resourceId)?.label ?? t('Unavailable resource')
+        : t('No Feishu resource selected')} · ${feishu.state}${feishu.lastError ? ` · ${feishu.lastError}` : ''}`),
+      feishu.resourceId ? h('button', { className: 'bt-soft', type: 'button', disabled: Boolean(busy), onClick: () => selectFeishu(null) }, t('Clear Feishu selection')) : null)
+      : feishu?.credentialMode === 'legacy' ? h('p', { className: 'bt-product-resource-note' },
+        t('Feishu uses an explicit legacy Host secret. Remove it and restart the Host to select a managed resource.'),
+        feishu.lastError ? ` · ${feishu.lastError}` : '') : null,
     error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
     notice ? h('p', { className: 'bt-main-status', role: 'status' }, notice) : null,
     h('form', { className: 'bt-product-resource-create', onSubmit: create },
@@ -104,6 +127,8 @@ export function ProductCredentialSettings({ binding, call }) {
           t(resource.status === 'deleted' ? 'Retry cleanup' : 'Delete resource'))))),
     selected?.status === 'active' ? h('div', { className: 'bt-product-resource-selected' },
       h('h3', null, selected.label),
+      feishu?.credentialMode === 'managed' ? h('button', { className: 'bt-soft', type: 'button', disabled: Boolean(busy),
+        onClick: () => selectFeishu(selected.id) }, t(feishu.resourceId === selected.id ? 'Reconnect Feishu with this resource' : 'Use for Feishu')) : null,
       h('form', { onSubmit: event => { event.preventDefault(); if (!rename.trim() || busy) return
         void run('rename', () => call('resource-rename', { instanceId, commandId: crypto.randomUUID(), resourceId: selected.id,
           expectedRevision: selected.revision, label: rename.trim() }), 'Resource name changed.') } },

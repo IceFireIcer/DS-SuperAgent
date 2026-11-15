@@ -9,7 +9,10 @@ const tokenPath = '/open-apis/auth/v3/tenant_access_token/internal'
 
 export interface FeishuApiOptions {
   appId: string
-  appSecret: string
+  /** Explicit legacy Host configuration; mutually exclusive with managed credentials. */
+  appSecret?: string
+  /** Supplied only by the trusted Host, never from a source event or delivery payload. */
+  withCredential?: <T>(purpose: 'source' | 'outbound', consume: (secret: string) => Promise<T>) => Promise<T>
   baseUrl?: string
   fetch?: typeof fetch
   now?: () => number
@@ -48,7 +51,7 @@ export class FeishuOpenApi implements FeishuTransport {
   private readonly memberPageSize: number
   private readonly maxMemberPages: number
   private readonly lookbackSeconds: number
-  private token: { value: string; expiresAt: number } | undefined
+  private token: { value: string; expiresAt: number; credential: string } | undefined
   private readonly chats = new Map<string, FeishuChatInfo>()
   private readonly pageTokens = new Map<string, string>()
   private readonly pageStarts = new Map<string, number | undefined>()
@@ -57,7 +60,9 @@ export class FeishuOpenApi implements FeishuTransport {
   private readonly requestTimeoutMs: number
 
   constructor(private readonly options: FeishuApiOptions) {
-    if (!options.appId || !options.appSecret) throw new CoreError('INVALID_CONFIG', 'A Feishu app needs an app ID and secret.')
+    if (!options.appId || Boolean(options.appSecret) === Boolean(options.withCredential)) {
+      throw new CoreError('INVALID_CONFIG', 'A Feishu app needs exactly one trusted credential source.')
+    }
     this.baseUrl = (options.baseUrl ?? defaultBaseUrl).replace(/\/$/u, '')
     this.fetchImpl = options.fetch ?? fetch
     this.now = options.now ?? Date.now
@@ -89,7 +94,6 @@ export class FeishuOpenApi implements FeishuTransport {
 
   /** Setup check: the token works and every configured chat is reachable by this app. */
   async check(chatIds: string[], signal: AbortSignal): Promise<FeishuChatInfo[]> {
-    await this.ensureToken(signal)
     return Promise.all(chatIds.map(chatId => this.chatInfo(chatId, signal)))
   }
 
@@ -146,8 +150,8 @@ export class FeishuOpenApi implements FeishuTransport {
   acknowledgePage(): void { this.pendingPage?.commit(); this.pendingPage = undefined }
 
   /** Verify the native message scope before an authorized outbound reply. */
-  async messageChat(messageId: string, signal: AbortSignal): Promise<string> {
-    const data = await this.call<{ items?: Record<string, unknown>[] }>(`/open-apis/im/v1/messages/${encodeURIComponent(messageId)}`, { signal })
+  async messageChat(messageId: string, signal: AbortSignal, purpose: 'source' | 'outbound' = 'source'): Promise<string> {
+    const data = await this.call<{ items?: Record<string, unknown>[] }>(`/open-apis/im/v1/messages/${encodeURIComponent(messageId)}`, { signal }, purpose)
     const message = data?.items?.find(item => item.message_id === messageId)
     const chatId = asString(message?.chat_id)
     if (!chatId) throw new CoreError('SOURCE_FAILED', 'Feishu did not return a verifiable message scope.')
@@ -187,7 +191,7 @@ export class FeishuOpenApi implements FeishuTransport {
     if (typeof request.text !== 'string' || !request.text.trim()) throw new CoreError('INVALID_INPUT', 'A Feishu reply needs nonempty text.')
     if (typeof request.uuid !== 'string' || !request.uuid || request.uuid.length > 50) throw new CoreError('INVALID_INPUT', 'A Feishu reply uuid must be at most 50 characters.')
     const body = await this.call<{ message_id?: string }>(`/open-apis/im/v1/messages/${encodeURIComponent(request.messageId)}/reply`,
-      { method: 'POST', body: { content: JSON.stringify({ text: request.text }), msg_type: 'text', uuid: request.uuid }, signal: request.signal })
+      { method: 'POST', body: { content: JSON.stringify({ text: request.text }), msg_type: 'text', uuid: request.uuid }, signal: request.signal }, 'outbound')
     if (typeof body?.message_id !== 'string' || !body.message_id) throw new CoreError('SOURCE_FAILED', 'Feishu accepted the reply without returning a message ID.')
     return { messageId: body.message_id }
   }
@@ -247,28 +251,52 @@ export class FeishuOpenApi implements FeishuTransport {
     }
   }
 
-  private async ensureToken(signal: AbortSignal): Promise<string> {
-    if (this.token && this.token.expiresAt > this.now()) return this.token.value
+  private async ensureToken(signal: AbortSignal, secret: string): Promise<string> {
+    // Even a cached tenant token belongs to one credential value; a selection change must refresh it.
+    const credential = createHash('sha256').update(secret).digest('hex')
+    if (this.token && this.token.credential === credential && this.token.expiresAt > this.now()) return this.token.value
+    this.token = undefined
     const body = await this.fetchJson(`${this.baseUrl}${tokenPath}`, { method: 'POST', signal,
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify({ app_id: this.options.appId, app_secret: this.options.appSecret }) })
+      body: JSON.stringify({ app_id: this.options.appId, app_secret: secret }) })
     if (body?.code !== 0 || typeof body?.tenant_access_token !== 'string' || !body.tenant_access_token) {
       throw new CoreError('SOURCE_FAILED', 'Feishu token request failed.')
     }
     const expire = Number(body.expire)
     const lifetime = Number.isFinite(expire) && expire > 0 ? Math.max(1, expire - 60) : 60
-    this.token = { value: body.tenant_access_token, expiresAt: this.now() + lifetime * 1000 }
+    this.token = { value: body.tenant_access_token, expiresAt: this.now() + lifetime * 1000, credential }
     return this.token.value
   }
 
-  private async call<T>(path: string, init: { method?: string; body?: unknown; signal: AbortSignal }, allowRefresh = true): Promise<T> {
-    const token = await this.ensureToken(init.signal)
+  private call<T>(path: string, init: { method?: string; body?: unknown; signal: AbortSignal }, purpose: 'source' | 'outbound' = 'source'): Promise<T> {
+    if (this.options.withCredential) return this.callWithCredential<T>(path, init, purpose)
+    return this.callWithSecret<T>(path, init, this.options.appSecret!)
+  }
+
+  private async callWithCredential<T>(path: string, init: { method?: string; body?: unknown; signal: AbortSignal }, purpose: 'source' | 'outbound'): Promise<T> {
+    const result = await this.options.withCredential!(purpose, async secret => {
+      try { return { ok: true as const, value: await this.callWithSecret<T>(path, init, secret) } }
+      catch (error) {
+        if (error instanceof FeishuApiError) return { ok: false as const, type: 'api' as const,
+          feishuCode: error.feishuCode, httpStatus: error.httpStatus }
+        const code = error instanceof CoreError && ['SOURCE_FAILED', 'SOURCE_TIMEOUT', 'SOURCE_STOPPED', 'SOURCE_BUDGET'].includes(error.code)
+          ? error.code : 'SOURCE_FAILED'
+        return { ok: false as const, type: 'core' as const, code }
+      }
+    })
+    if (result.ok) return result.value
+    if (result.type === 'api') throw new FeishuApiError(result.feishuCode, result.httpStatus, 'Feishu API request failed.')
+    throw new CoreError(result.code, 'Feishu API request failed.')
+  }
+
+  private async callWithSecret<T>(path: string, init: { method?: string; body?: unknown; signal: AbortSignal }, secret: string, allowRefresh = true): Promise<T> {
+    const token = await this.ensureToken(init.signal, secret)
     const body = await this.fetchJson(`${this.baseUrl}${path}`, { method: init.method ?? 'GET', signal: init.signal,
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json; charset=utf-8' },
       ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }) })
     if (body?.code === 99991663 && allowRefresh) {
       this.token = undefined
-      return this.call<T>(path, init, false)
+      return this.callWithSecret<T>(path, init, secret, false)
     }
     if (body?.code !== 0) {
       const code = typeof body?.code === 'number' ? body.code : Number(body?.code)

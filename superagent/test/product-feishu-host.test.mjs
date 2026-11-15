@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import LocalCredentials from '@deepseek-ai/dsh-credentials-local'
 import * as core from '../dist/index.js'
 import { nativeContext, textResponse } from '../dev/native-mock.mjs'
 
@@ -15,6 +16,7 @@ test('the product Host exposes Feishu health, stop and reconnection without disc
     await rm(directory, { recursive: true, force: true })
   })
   native = await nativeContext(join(directory, 'sessions'), function* () { yield* textResponse('Main received the request.') })
+  await native.plugin(LocalCredentials, { path: join(directory, 'credentials.yaml'), watch: false })
   const workspaceRoot = join(directory, 'workspace')
   await mkdir(join(directory, 'data'))
   await mkdir(workspaceRoot)
@@ -55,6 +57,9 @@ test('the product Host exposes Feishu health, stop and reconnection without disc
   }
   assert.equal((await host.dispatch('history', { instanceId: 'private' })).sources.length, 1)
   assert.equal((await read()).state, 'polling')
+  assert.equal((await read()).credentialMode, 'legacy')
+  await assert.rejects(host.dispatch('resource-select-feishu', { instanceId: 'private', commandId: 'legacy-select', resourceId: null }),
+    { code: 'UNAVAILABLE' })
   assert.doesNotMatch(JSON.stringify(await read()), /fixture-secret|fixture-token/u)
   await assert.rejects(host.dispatch('feishu-status', { instanceId: 'another' }), { code: 'SOURCE_NOT_AUTHORIZED' })
   await host.dispatch('feishu-stop', { instanceId: 'private' })
