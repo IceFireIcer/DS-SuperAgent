@@ -15,6 +15,13 @@ if (host !== undefined && location.origin === host) {
     // The Bot browsers, in the shape of DSH Desktop's browser bridge so that ds-bot drives both
     // alike; `forget` clears a key's storage, which here outlives the app.
     browser: browserBridge(),
+    productClient: {
+      connect: connection => ipcRenderer.invoke('ds-superagent:client-connect', connection),
+      disconnect: () => ipcRenderer.invoke('ds-superagent:client-disconnect'),
+      status: () => ipcRenderer.invoke('ds-superagent:client-status'),
+      call: (endpoint, payload) => ipcRenderer.invoke('ds-superagent:client-call', endpoint, payload),
+      events: () => ipcRenderer.invoke('ds-superagent:client-events'),
+    },
     // The app's own updater, for the About row's state and buttons.
     updates: updatesBridge(),
   })

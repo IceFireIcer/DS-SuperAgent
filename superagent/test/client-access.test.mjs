@@ -122,3 +122,20 @@ test('reconciling supervision replays every historical result and Attention, not
   assert.deepEqual(page.items.filter(item => item.kind === 'result').map(item => item.data.id), ['report-1', 'report-2'])
   assert.deepEqual(page.items.filter(item => item.kind === 'attention').map(item => item.data.status), ['waiting', 'answered'])
 })
+
+test('the product cursor skips old Ticket events without dropping later product pages', async t => {
+  const { access } = await fixture(t)
+  await access.record(Array.from({ length: 105 }, (_, index) => ({ key: `old:${index}`, kind: 'state',
+    data: { ticketId: `old-${index}` } })))
+  await access.record([
+    { key: 'main:first', kind: 'main', data: { id: 'first' } },
+    { key: 'old:after', kind: 'receipt', data: { private: 'old receipt' } },
+    { key: 'work:second', kind: 'work', data: { id: 'second' } },
+  ])
+  const first = await access.readProductEvents('0', 1)
+  assert.deepEqual(first.items.map(item => item.key), ['main:first'])
+  assert.equal(first.hasMore, true)
+  const second = await access.readProductEvents(first.cursor, 1)
+  assert.deepEqual(second.items.map(item => item.key), ['work:second'])
+  assert.deepEqual((await access.readProductEvents(second.cursor)).items, [])
+})

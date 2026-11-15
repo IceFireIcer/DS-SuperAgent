@@ -2,6 +2,7 @@ import { createServer as createHttpServer, type IncomingMessage, type ServerResp
 import { createServer as createHttpsServer } from 'node:https'
 import type { Engine } from './engine.js'
 import type { ClientAccess, ClientCapability, ClientIdentity } from './client-access.js'
+import type { ProductHost } from './product-host.js'
 import { CoreError } from './model.js'
 
 export interface ClientGatewayTls { key: string | Buffer; cert: string | Buffer }
@@ -10,6 +11,7 @@ export interface ClientGatewayOptions {
   port?: number
   tls?: ClientGatewayTls
   maxEvents?: number
+  product?: Pick<ProductHost, 'dispatch'>
 }
 
 const loopback = new Set(['127.0.0.1', '::1', 'localhost'])
@@ -21,6 +23,8 @@ const commandRoutes = new Map<string, (engine: Engine, body: Record<string, unkn
   ['retry', (engine, body) => engine.retryTicket(body as never)],
   ['status', (engine, body) => engine.requestStatus(body as never)],
 ])
+const productReads = new Set(['open', 'history', 'observe-list', 'observe-read', 'observe-detail', 'evidence', 'source-deliveries'])
+const productCommands = new Set(['send', 'stop-main', 'work-stop', 'work-answer', 'work-resume', 'work-retry', 'reconcile-delivery'])
 
 function statusOf(error: unknown) {
   if (error instanceof SyntaxError) return 400
@@ -28,7 +32,8 @@ function statusOf(error: unknown) {
   if (error.code === 'CLIENT_UNAUTHORIZED' || error.code === 'CLIENT_REVOKED') return 401
   if (['INSTANCE_NOT_AUTHORIZED', 'SOURCE_NOT_AUTHORIZED', 'ENVIRONMENT_DENIED', 'PATH_DENIED'].includes(error.code)) return 403
   if (error.code === 'NOT_FOUND') return 404
-  if (['INVALID_INPUT', 'INVALID_CONFIG', 'IDENTITY_CONFLICT', 'UNSUPPORTED_CAPABILITY', 'INVALID_OPTIONS'].includes(error.code)) return 400
+  if (['ATTENTION_STALE', 'IDENTITY_CONFLICT', 'TICKET_VERSION_CONFLICT'].includes(error.code)) return 409
+  if (['INVALID_INPUT', 'INVALID_CONFIG', 'UNSUPPORTED_CAPABILITY', 'INVALID_OPTIONS'].includes(error.code)) return 400
   if (error.code === 'CLIENT_JOURNAL_UNAVAILABLE' || error.code === 'STORAGE_UNAVAILABLE' || error.code === 'COMMIT_UNKNOWN') return 503
   return 500
 }
@@ -72,15 +77,57 @@ export async function createClientGateway(engine: Engine, access: ClientAccess, 
   const authorize = (request: IncomingMessage, capability: ClientCapability): Promise<ClientIdentity> =>
     access.authorize(tokenOf(request), instanceId, capability)
 
+  const productSnapshot = async (client: ClientIdentity) => {
+    const cursor = await access.cursor()
+    const [binding, history, observations] = await Promise.all([
+      options.product!.dispatch('open', {}, client),
+      options.product!.dispatch('history', { instanceId, limit: 100 }, client),
+      options.product!.dispatch('observe-list', { instanceId, limit: 100 }, client),
+    ])
+    return { instanceId, client, cursor, binding, history, observations }
+  }
+
   const handler = async (request: IncomingMessage, response: ServerResponse) => {
     response.setHeader('Cache-Control', 'no-store')
     response.setHeader('X-Content-Type-Options', 'nosniff')
     try {
       const url = new URL(request.url ?? '/', 'http://client.invalid')
-      const prefix = `/instances/${instanceId}/`
+      const prefix = `/instances/${encodeURIComponent(instanceId)}/`
       if (!url.pathname.startsWith(prefix)) throw new CoreError('INSTANCE_NOT_AUTHORIZED', 'This client gateway serves one explicit Instance.')
       const route = url.pathname.slice(prefix.length)
       response.setHeader('Content-Type', 'application/json; charset=utf-8')
+      if (options.product) {
+        if (request.method === 'GET' && route === 'product/snapshot') {
+          const client = await authorize(request, 'read')
+          response.end(JSON.stringify(await productSnapshot(client)))
+          return
+        }
+        if (request.method === 'GET' && route === 'product/events') {
+          const client = await authorize(request, 'read')
+          const snapshot = await productSnapshot(client)
+          await access.recordProductSnapshot(snapshot.history as Parameters<ClientAccess['recordProductSnapshot']>[0],
+            snapshot.observations as Parameters<ClientAccess['recordProductSnapshot']>[1])
+          const page = await access.readProductEvents(url.searchParams.get('after') ?? undefined,
+            url.searchParams.has('limit') ? Number(url.searchParams.get('limit')) : maxEvents)
+          response.end(JSON.stringify(page))
+          return
+        }
+        if (request.method === 'POST' && route.startsWith('product/')) {
+          const endpoint = route.slice('product/'.length)
+          const capability = productReads.has(endpoint) ? 'read' : productCommands.has(endpoint) ? 'command' : undefined
+          if (!capability) throw new CoreError('NOT_FOUND', 'Product route not found.')
+          const client = await authorize(request, capability)
+          const body = await bodyOf(request)
+          const result = await options.product.dispatch(endpoint, body, client)
+          if (capability === 'command') {
+            try { await access.recordReceipt(String(body.commandId ?? ''), result, client.id, true) }
+            catch { throw new CoreError('CLIENT_JOURNAL_UNAVAILABLE', 'The command committed but its client event was not recorded; retry the same command ID.') }
+          }
+          response.end(JSON.stringify(result))
+          return
+        }
+        throw new CoreError('NOT_FOUND', 'Product route not found.')
+      }
       if (request.method === 'GET' && route === 'state') {
         const client = await authorize(request, 'read')
         // Read the watermark before the snapshot. A commit that lands while the snapshot is read
