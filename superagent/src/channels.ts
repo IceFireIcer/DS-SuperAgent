@@ -149,6 +149,8 @@ export interface FeishuEvent {
   chatId: string
   chatType?: 'p2p' | 'group'
   messageId: string
+  rootId?: string
+  threadId?: string
   senderId: string
   senderKind?: 'human' | 'bot' | 'system'
   text?: string
@@ -164,6 +166,8 @@ export interface FeishuSourceConfig {
   tenantKey: string
   chatIds: string[]
   selfActorIds?: string[]
+  /** New addressed human requests enter Main; owned discussions remain on their Ticket. */
+  mainIntake?: boolean
 }
 
 export class FeishuSource {
@@ -185,20 +189,23 @@ export class FeishuSource {
       await this.advance(event.cursor)
       return { status: 'filtered', reason: 'SOURCE_SELF' }
     }
-    const threadId = `feishu:${this.config.tenantKey}:${event.chatId}`
+    const threadId = `feishu:${this.config.tenantKey}:${event.chatId}${this.config.mainIntake && event.chatType !== 'p2p'
+      ? `:message:${event.rootId ?? event.messageId}` : ''}`
     const objectId = `message:${event.messageId}`
     const addressed = event.chatType === 'p2p' ? 'direct'
-      : event.mentionIds?.some(id => this.config.selfActorIds?.includes(id)) ? 'mention' : 'ambient'
+      : (this.config.mainIntake && Boolean(event.rootId)) || event.mentionIds?.some(id => this.config.selfActorIds?.includes(id)) ? 'mention' : 'ambient'
     const commandId = `feishu:${event.eventId}`
     const prior = await this.engine.getSourceReceipt(commandId)
     if (prior) {
       await this.advance(event.cursor)
       return { status: 'filtered', reason: 'SOURCE_REPLAY' }
     }
-    const receipt = await this.engine.receiveSource({ commandId, threadId, objectId,
+    const input: ReceiveSourceEvent = { commandId, threadId, objectId,
       type: event.deleted ? 'deleted' : event.edited ? 'edited' : 'created', version: feishuVersion(event),
       ...(event.deleted ? { deletionEvidence: event.deletionEvidence ?? `Feishu deleted message ${event.messageId}.` } : { text: event.text ?? '' }),
-      authorId: event.senderId, authorKind: event.senderKind ?? 'human', addressing: addressed })
+      authorId: event.senderId, authorKind: event.senderKind ?? 'human', addressing: addressed }
+    const receipt = this.config.mainIntake && input.authorKind === 'human' && addressed !== 'ambient' && !event.deleted
+      ? await this.engine.receiveSourceForMain(input) : await this.engine.receiveSource(input)
     await this.advance(event.cursor)
     return receipt
   }

@@ -8,9 +8,13 @@ import { CoreError, identifier } from './model.js'
 import { NativeSessions } from './native-sessions.js'
 import { SqliteStorage } from './storage.js'
 import { LocalEnvironment } from './local-environment.js'
+import { FeishuRuntime, type FeishuRuntimeOptions } from './feishu-runtime.js'
+import { localDeliveryChannel, type DeliveryChannel } from './deliveries.js'
 import type { RoleConfig, RoleModel } from './config.js'
 
-export interface ProductHostConfig { databasePath: string; workspaceRoot?: string; instanceId?: string; actorId?: string; main?: RoleModel; router?: RoleModel; worker?: RoleModel; timeoutMs?: number }
+export interface ProductHostConfig { databasePath: string; workspaceRoot?: string; instanceId?: string; actorId?: string; main?: RoleModel; router?: RoleModel; worker?: RoleModel; timeoutMs?: number;
+  /** Supplied by a trusted Host, never by the window or a model turn. */
+  feishu?: Omit<FeishuRuntimeOptions, 'storage' | 'instanceId' | 'mainIntake'> }
 export interface ProductHost {
   dispatch(endpoint: string, payload?: Record<string, unknown>): Promise<unknown>
   close(): Promise<void>
@@ -54,6 +58,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
   const storage = await SqliteStorage.open(config.databasePath)
   const environments: LocalEnvironment[] = []
   let engine: Engine | undefined
+  let feishuRuntime: FeishuRuntime | undefined
+  let feishuEngine: Engine | undefined
   let closing: Promise<void> | undefined
   const picker = () => {
     try {
@@ -169,7 +175,13 @@ export async function createProductHost(context: Context, config: ProductHostCon
     return { provider, configured: value !== null }
   }
   async function dispose() {
-    try { await engine?.effects.stop(); await engine?.shutdown() }
+    try {
+      await feishuRuntime?.stop()
+      await engine?.effects.stop()
+      await feishuEngine?.effects.stop()
+      await engine?.shutdown()
+      await feishuEngine?.shutdown()
+    }
     finally { try { await sessions.close() } finally {
       try { await Promise.all(environments.map(environment => environment.close())) } finally { await storage.close() }
     } }
@@ -191,13 +203,29 @@ export async function createProductHost(context: Context, config: ProductHostCon
       ...saved.map(item => item.root),
     ]
     for (const root of new Set(roots)) environments.push(await openDirectory(root))
+    if (config.feishu) {
+      feishuRuntime = new FeishuRuntime({ ...config.feishu, storage, instanceId, mainIntake: true })
+      feishuEngine = new Engine(storage, instanceId, feishuRuntime.sourceBinding, {}, sessions)
+      feishuRuntime.bind(feishuEngine)
+    }
+    const channel: DeliveryChannel | undefined = feishuRuntime ? {
+      deliver: (delivery, context) => delivery.destination.sourceInstanceId === feishuRuntime!.sourceBinding.sourceInstanceId
+        ? feishuRuntime!.channel.deliver(delivery, context)
+        : delivery.destination.sourceInstanceId === 'product-desktop' ? localDeliveryChannel.deliver(delivery, context)
+          : Promise.resolve({ type: 'permanent', reason: 'DESTINATION_SOURCE_DISABLED' }),
+      reconcile: (delivery, context) => delivery.destination.sourceInstanceId === feishuRuntime!.sourceBinding.sourceInstanceId
+        ? feishuRuntime!.channel.reconcile(delivery, context)
+        : delivery.destination.sourceInstanceId === 'product-desktop' ? localDeliveryChannel.deliver(delivery, context)
+          : Promise.resolve({ type: 'permanent', reason: 'DESTINATION_SOURCE_DISABLED' }),
+    } : undefined
     engine = new Engine(storage, instanceId, { sourceInstanceId: 'product-desktop', actorId, allowedActorIds: [actorId] }, {}, sessions,
-      environments)
+      environments, {}, {}, {}, channel ? { channel } : {})
     if (environments[0] && config.workspaceRoot) await engine.addWorkDirectory({ instanceId,
       commandId: `bootstrap:${environments[0].config.id}`, environment: environments[0] })
     await engine.acquireHost()
     await engine.openMain({ instanceId })
     engine.effects.start()
+    if (feishuRuntime) void feishuRuntime.start().catch(() => { /* Health retains the setup failure; Main stays available. */ })
     void engine.resumeMainInputs({ instanceId }).catch(() => { /* The persisted input and failed health remain visible for retry. */ })
     return {
       async dispatch(endpoint, payload = {}) {
@@ -213,6 +241,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
             : endpoint === 'directory-list' ? ['instanceId', 'path']
               : endpoint === 'directory-register' ? ['instanceId', 'commandId', 'path']
                 : endpoint === 'directory-default-save' ? ['instanceId', 'commandId', 'expectedRevision', 'environmentId']
+                  : endpoint === 'feishu-status' || endpoint === 'feishu-start' || endpoint === 'feishu-stop' ? ['instanceId']
           : endpoint === 'stop-main' ? ['instanceId', 'commandId', 'messageId']
             : endpoint === 'work-stop'
               ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'expectedTicketVersion', 'reason']
@@ -234,6 +263,18 @@ export async function createProductHost(context: Context, config: ProductHostCon
                                         : undefined
         if (!fields) throw new CoreError('UNAVAILABLE', 'This product capability is not connected yet.')
         if (Object.keys(payload).some(key => !fields.includes(key))) throw new CoreError('INVALID_INPUT', 'The product request contains unsupported fields.')
+        if (endpoint === 'feishu-status' || endpoint === 'feishu-start' || endpoint === 'feishu-stop') {
+          if (!feishuRuntime) {
+            if (endpoint === 'feishu-status') return { configured: false, state: 'unavailable' }
+            throw new CoreError('UNAVAILABLE', 'No Feishu source is configured for this product Host.')
+          }
+          if (endpoint === 'feishu-start' && !['setup', 'polling'].includes(feishuRuntime.health().state)) {
+            await feishuRuntime.stop()
+            await feishuRuntime.start()
+          }
+          if (endpoint === 'feishu-stop') await feishuRuntime.stop()
+          return { configured: true, sourceInstanceId: feishuRuntime.sourceBinding.sourceInstanceId, ...feishuRuntime.health() }
+        }
         if (endpoint === 'history') {
           if (payload.after !== undefined && payload.before !== undefined) throw new CoreError('INVALID_INPUT', 'Main history accepts one direction cursor.')
           if (payload.after !== undefined) return engine!.getMainConversation({ instanceId, after: payload.after as number,
