@@ -32,13 +32,14 @@ test('the product Host exposes Feishu health, stop and reconnection without disc
       mentions: [{ id: 'ou_bot' }], body: { content: '{"text":"Please read this."}' } }], has_more: false })
     throw new Error(`Unexpected Feishu fixture request: ${path}`)
   }
-  host = await core.createProductHost(native, { databasePath: join(directory, 'data', 'state.sqlite'), workspaceRoot,
+  const config = { databasePath: join(directory, 'data', 'state.sqlite'), workspaceRoot,
     instanceId: 'private', actorId: 'desktop-owner', main: { provider: 'mock', model: 'main' },
     router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' },
     feishu: { tenantKey: 'tenant', chatIds: ['group'], actorId: 'receiver', selfActorIds: ['ou_bot'],
       allowedActorIds: ['receiver'], intake: { mode: 'auto', maxBatchSize: 5, maxAttempts: 1, timeoutMs: 5000,
         allowedRequesterIds: ['alice'], allowedBotActorIds: [], rules: [] },
-      api: { appId: 'cli_test', appSecret: 'fixture-secret', fetch }, intervalMs: 1000 } })
+      api: { appId: 'cli_test', appSecret: 'fixture-secret', fetch }, intervalMs: 1000 } }
+  host = await core.createProductHost(native, config)
   const read = async () => host.dispatch('feishu-status', { instanceId: 'private' })
   const directories = await host.dispatch('directory-options', { instanceId: 'private' })
   const canonicalWorkspace = await realpath(workspaceRoot)
@@ -57,4 +58,12 @@ test('the product Host exposes Feishu health, stop and reconnection without disc
   for (let attempt = 0; attempt < 40 && (await read()).passes === 0; attempt++) await new Promise(resolve => setTimeout(resolve, 25))
   assert.equal((await host.dispatch('history', { instanceId: 'private' })).sources.length, 1)
   assert.equal((await read()).state, 'polling')
+  const originalMain = await host.dispatch('open')
+  await host.close()
+  host = await core.createProductHost(native, config)
+  for (let attempt = 0; attempt < 40 && (await read()).passes === 0; attempt++) await new Promise(resolve => setTimeout(resolve, 25))
+  assert.equal((await read()).state, 'polling')
+  assert.equal((await host.dispatch('open')).mainId, originalMain.mainId)
+  assert.equal((await host.dispatch('history', { instanceId: 'private' })).sources.length, 1,
+    'Host restart must keep the original Feishu request instead of adding another Main handoff')
 })

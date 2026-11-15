@@ -21035,7 +21035,7 @@ function FeishuSourceStatus({ instanceId, call: call2 }) {
       clearInterval(timer);
     };
   }, [instanceId, call2]);
-  if (!status?.configured) return null;
+  if (!status?.configured && status?.state !== "failed") return null;
   const running = status.state === "polling" || status.state === "setup";
   const control = async () => {
     if (busy) return;
@@ -21063,7 +21063,7 @@ function FeishuSourceStatus({ instanceId, call: call2 }) {
     error ? (0, import_react53.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
     (0, import_react53.createElement)(
       "button",
-      { type: "button", className: "bt-soft", disabled: busy, onClick: () => void control() },
+      { type: "button", className: "bt-soft", disabled: busy || !status.configured, onClick: () => void control() },
       t(running ? "Stop Feishu" : "Reconnect Feishu")
     )
   );

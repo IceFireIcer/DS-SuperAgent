@@ -14,7 +14,8 @@ import type { RoleConfig, RoleModel } from './config.js'
 
 export interface ProductHostConfig { databasePath: string; workspaceRoot?: string; instanceId?: string; actorId?: string; main?: RoleModel; router?: RoleModel; worker?: RoleModel; timeoutMs?: number;
   /** Supplied by a trusted Host, never by the window or a model turn. */
-  feishu?: Omit<FeishuRuntimeOptions, 'storage' | 'instanceId' | 'mainIntake'> }
+  feishu?: Omit<FeishuRuntimeOptions, 'storage' | 'instanceId' | 'mainIntake'>;
+  feishuConfigurationError?: 'INVALID_CONFIG' }
 export interface ProductHost {
   dispatch(endpoint: string, payload?: Record<string, unknown>): Promise<unknown>
   close(): Promise<void>
@@ -265,7 +266,10 @@ export async function createProductHost(context: Context, config: ProductHostCon
         if (Object.keys(payload).some(key => !fields.includes(key))) throw new CoreError('INVALID_INPUT', 'The product request contains unsupported fields.')
         if (endpoint === 'feishu-status' || endpoint === 'feishu-start' || endpoint === 'feishu-stop') {
           if (!feishuRuntime) {
-            if (endpoint === 'feishu-status') return { configured: false, state: 'unavailable' }
+            if (endpoint === 'feishu-status') return config.feishuConfigurationError
+              ? { configured: false, state: 'failed', lastError: config.feishuConfigurationError }
+              : { configured: false, state: 'unavailable' }
+            if (config.feishuConfigurationError) throw new CoreError('INVALID_CONFIG', 'The Feishu source configuration is incomplete.')
             throw new CoreError('UNAVAILABLE', 'No Feishu source is configured for this product Host.')
           }
           if (endpoint === 'feishu-start' && !['setup', 'polling'].includes(feishuRuntime.health().state)) {

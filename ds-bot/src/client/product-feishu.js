@@ -21,7 +21,7 @@ export function FeishuSourceStatus({ instanceId, call }) {
     const timer = setInterval(() => { void refresh() }, 5000)
     return () => { active = false; clearInterval(timer) }
   }, [instanceId, call])
-  if (!status?.configured) return null
+  if (!status?.configured && status?.state !== 'failed') return null
   const running = status.state === 'polling' || status.state === 'setup'
   const control = async () => {
     if (busy) return
@@ -37,6 +37,6 @@ export function FeishuSourceStatus({ instanceId, call }) {
     status.cursor ? h('p', { className: 'bt-main-work-detail' }, `${t('Source cursor')}: ${status.cursor}`) : null,
     status.lastError ? h('p', { className: 'bt-main-error', role: 'alert' }, status.lastError) : null,
     error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
-    h('button', { type: 'button', className: 'bt-soft', disabled: busy, onClick: () => void control() },
+    h('button', { type: 'button', className: 'bt-soft', disabled: busy || !status.configured, onClick: () => void control() },
       t(running ? 'Stop Feishu' : 'Reconnect Feishu')))
 }

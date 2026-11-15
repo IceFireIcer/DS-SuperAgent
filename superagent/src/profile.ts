@@ -24,6 +24,29 @@ export function profilePaths(env: NodeJS.ProcessEnv = process.env): SuperagentPr
   return { root, databasePath: join(root, 'state.sqlite') }
 }
 
+/** Opt-in source settings come from the trusted Host process, never a model or browser request. */
+export function feishuProfileConfig(env: NodeJS.ProcessEnv = process.env): ProductHostConfig['feishu'] | undefined {
+  const keys = ['APP_ID', 'APP_SECRET', 'TENANT_KEY', 'CHAT_IDS', 'SELF_ACTOR_IDS', 'ALLOWED_REQUESTER_IDS'] as const
+  const values = keys.map(key => env[`DS_SUPERAGENT_FEISHU_${key}`])
+  if (values.every(value => value === undefined || value === '')) return undefined
+  if (values.some(value => typeof value !== 'string' || !value.trim())) {
+    throw new CoreError('INVALID_CONFIG', 'A Feishu source needs its app, tenant, chats, bot identities and requester allowlist.')
+  }
+  const [appId, appSecret, tenantKey, chats, bots, requesters] = values as string[]
+  const ids = (value: string) => value.split(',').map(id => id.trim())
+  const chatIds = ids(chats!), selfActorIds = ids(bots!), allowedRequesterIds = ids(requesters!)
+  if ([chatIds, selfActorIds, allowedRequesterIds].some(list => list.some(id => !/^[\w-]{1,256}$/u.test(id)) || new Set(list).size !== list.length)) {
+    throw new CoreError('INVALID_CONFIG', 'A Feishu source needs distinct native chat, bot and requester IDs.')
+  }
+  return {
+    tenantKey: tenantKey!.trim(), chatIds, actorId: 'feishu-receiver', selfActorIds,
+    allowedActorIds: ['feishu-receiver'],
+    intake: { mode: 'auto', maxBatchSize: 5, maxAttempts: 1, timeoutMs: 5000,
+      allowedRequesterIds, allowedBotActorIds: [], rules: [] },
+    api: { appId: appId!.trim(), appSecret: appSecret!.trim() },
+  }
+}
+
 export const name = 'ds-superagent-profile'
 export const inject = ['sessionPersistence', 'agents', 'sessions']
 
@@ -32,9 +55,20 @@ export async function apply(context: Context, config: SuperagentProfileConfig = 
   mkdirSync(paths.root, { recursive: true })
   const workspaceRoot = config.workspaceRoot ?? process.env.DS_BOT_WORKSPACE
   if (workspaceRoot) mkdirSync(workspaceRoot, { recursive: true })
+  let feishu = config.feishu
+  let feishuConfigurationError: 'INVALID_CONFIG' | undefined
+  if (!feishu) {
+    try { feishu = feishuProfileConfig() }
+    catch (error) {
+      if (!(error instanceof CoreError) || error.code !== 'INVALID_CONFIG') throw error
+      feishuConfigurationError = 'INVALID_CONFIG'
+    }
+  }
   const host = await createProductHost(context, {
     ...config,
     ...(config.workspaceRoot === undefined && workspaceRoot ? { workspaceRoot } : {}),
+    ...(feishu ? { feishu } : {}),
+    ...(feishuConfigurationError ? { feishuConfigurationError } : {}),
     databasePath: paths.databasePath,
   })
   context.provide('superagentProduct', host)
