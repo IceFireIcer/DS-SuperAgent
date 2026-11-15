@@ -1,6 +1,8 @@
 import { Fragment, createElement as h, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { ChatRows } from './cells.js'
 import { MainComposer } from './composer.js'
+import { plainSpeech } from './voice.js'
+import { readProductArtifact, readProductAttachment, uploadPayload, uploadWithRetry } from './product-attachments.js'
 import { FeishuSourceStatus } from './product-feishu.js'
 import { BrandMark } from './sidebar.js'
 import { Card, Row } from './bot-settings.js'
@@ -17,6 +19,13 @@ import { SHELL_CSS, CONVERSATION_CSS, installCompiledStyles, installStyles } fro
 
 const clientBridge = () => window.dsBotApp?.productClient
 let activeHost = 'local'
+
+function offerDownload(data, name, mediaType = 'application/octet-stream') {
+  const url = URL.createObjectURL(new Blob([data], { type: mediaType }))
+  const link = document.createElement('a')
+  link.href = url; link.download = name; link.click()
+  setTimeout(() => URL.revokeObjectURL(url), 10000)
+}
 
 export async function productCall(endpoint, payload = {}) {
   const bridge = clientBridge()
@@ -292,6 +301,17 @@ export function applyProduct(ctx) {
     const [controlError, setControlError] = useState(null)
     const [attentionDraft, setAttentionDraft] = useState('')
     const control = work.control
+    const [artifactBusy, setArtifactBusy] = useState(null)
+    const [artifactError, setArtifactError] = useState(null)
+    const downloadArtifact = async artifact => {
+      if (!state.binding) return
+      setArtifactBusy(artifact.path); setArtifactError(null)
+      try {
+        const data = await readProductArtifact(productCall, state.binding.instanceId, work.brief.workItemId, artifact.path)
+        offerDownload(data, artifact.path.split(/[\\/]/u).at(-1) || 'artifact')
+      } catch (error) { setArtifactError(t(error.message)) }
+      finally { setArtifactBusy(null) }
+    }
     const assignment = control?.assignment
     const runControl = async endpoint => {
       if (!state.binding || !control || !assignment && endpoint !== 'work-stop') return
@@ -386,7 +406,11 @@ export function applyProduct(ctx) {
         h('p', null, work.outcome.summary), h('p', { className: 'bt-main-work-detail' }, `${t('Verification')}: ${work.outcome.evidence}`),
         h('p', { className: 'bt-main-work-detail' }, `${t('Next step')}: ${work.outcome.nextStep}`),
         work.outcome.artifacts.map(artifact => h('p', { key: artifact.path, className: 'bt-main-work-artifact' },
-          h('code', null, artifact.path), ' ', h('span', null, `${artifact.bytes} ${t('bytes')} · ${artifact.sha256.slice(0, 12)}`)))) : null,
+          h('code', null, artifact.path), ' ', h('span', null, `${artifact.bytes} ${t('bytes')} · ${artifact.sha256.slice(0, 12)}`),
+          artifact.reference && !state.connection?.connected ? h('button', { type: 'button', className: 'bt-soft',
+            disabled: artifactBusy === artifact.path, onClick: () => void downloadArtifact(artifact) },
+          artifactBusy === artifact.path ? t('Loading…') : t('Download')) : null))) : null,
+      artifactError ? h('p', { className: 'bt-main-error', role: 'alert' }, artifactError) : null,
       control && canCommand ? h('div', { className: 'bt-main-work-controls' },
         control.permissions.canStop ? h('button', { type: 'button', className: 'bt-soft',
           disabled: Boolean(controlBusy), onClick: () => runControl('work-stop') },
@@ -474,6 +498,10 @@ export function applyProduct(ctx) {
     const canCommand = !state.connection?.connected || state.connection.capabilities.includes('command')
     const [sending, setSending] = useState(false)
     const [sendError, setSendError] = useState(null)
+    const [attachments, setAttachments] = useState([])
+    const [uploading, setUploading] = useState(false)
+    const [speakingId, setSpeakingId] = useState(null)
+    useEffect(() => () => window.speechSynthesis?.cancel(), [])
     const bottom = useRef(null)
     const pending = useRef(null)
     const scroll = useRef(null)
@@ -485,8 +513,53 @@ export function applyProduct(ctx) {
         restoreHeight.current = null
       } else if (follow.current) bottom.current?.scrollIntoView({ block: 'end', behavior: 'instant' })
     }, [state.messages.length])
+    const uploadFiles = async files => {
+      const environmentId = state.directoryOverride ?? state.directoryOptions?.default?.environmentId
+      if (!state.binding || !environmentId) { setSendError(t('Choose a work directory before adding files.')); return }
+      if (attachments.some(attachment => attachment.environmentId !== environmentId)) {
+        setSendError(t('Remove attached files before changing directories.')); return
+      }
+      if (attachments.length + files.length > 10) { setSendError(t('Attach at most ten files.')); return }
+      setUploading(true); setSendError(null)
+      try {
+        for (const file of files) {
+          const payload = await uploadPayload(file)
+          const uploaded = await uploadWithRetry(productCall, sessionStorage, state.binding.instanceId, environmentId, payload)
+          setAttachments(current => current.some(item => item.id === uploaded.id) ? current : [...current, uploaded])
+        }
+      } catch (error) { setSendError(t(error.message)) }
+      finally { setUploading(false) }
+    }
+    const removeAttachment = async attachment => {
+      if (!state.binding) return
+      try {
+        await productCall('attachment-revoke', { instanceId: state.binding.instanceId, id: attachment.id })
+        setAttachments(current => current.filter(item => item.id !== attachment.id))
+      } catch (error) { setSendError(t(error.message)) }
+    }
+    const downloadAttachment = async attachment => {
+      if (!state.binding) return
+      try {
+        const data = await readProductAttachment(productCall, state.binding.instanceId, attachment.id)
+        offerDownload(data, attachment.name, attachment.mediaType)
+      } catch (error) { setSendError(t(error.message)) }
+    }
+    const speakReply = message => {
+      if (speakingId === message.id) { window.speechSynthesis.cancel(); setSpeakingId(null); return }
+      const text = plainSpeech(message.text)
+      if (!text || !window.speechSynthesis) return
+      window.speechSynthesis.cancel()
+      const utterance = new SpeechSynthesisUtterance(text)
+      utterance.lang = /[\u3400-\u9fff]/u.test(text) ? 'zh-CN' : 'en-US'
+      utterance.onend = () => setSpeakingId(current => current === message.id ? null : current)
+      utterance.onerror = utterance.onend
+      window.speechSynthesis.speak(utterance)
+      setSpeakingId(message.id)
+    }
     const send = async text => {
       if (!state.binding) return false
+      const attachmentIds = attachments.map(attachment => attachment.id)
+      const environmentId = attachments[0]?.environmentId ?? state.directoryOverride
       const storageKey = `superagent:pending:${state.connection?.connected
         ? `${state.connection.address}:${state.connection.client.id}` : 'local'}:${state.binding.instanceId}`
       try {
@@ -494,13 +567,18 @@ export function applyProduct(ctx) {
         if (!pending.current) {
           try { pending.current = JSON.parse(sessionStorage.getItem(storageKey) ?? 'null') } catch { /* Draft storage is optional. */ }
         }
-        if (!pending.current || pending.current.text !== text) pending.current = { commandId: crypto.randomUUID(), text,
-          ...(state.directoryOverride ? { environmentId: state.directoryOverride } : {}) }
+        if (!pending.current || pending.current.text !== text
+          || JSON.stringify(pending.current.attachments ?? []) !== JSON.stringify(attachmentIds)) {
+          pending.current = { commandId: crypto.randomUUID(), text,
+          ...(attachmentIds.length ? { attachments: attachmentIds } : {}),
+          ...(environmentId ? { environmentId } : {}) }
+        }
         try { sessionStorage.setItem(storageKey, JSON.stringify(pending.current)) } catch { /* The stable identity still lives until this window closes. */ }
         const result = await productCall('send', { instanceId: state.binding.instanceId, ...pending.current })
         pending.current = null
         try { sessionStorage.removeItem(storageKey) } catch { /* Draft storage is optional. */ }
         await refreshMain(state.binding)
+        setAttachments([])
         view.set(current => ({ ...current, directoryOverride: null }))
         if (result.status === 'failed') { setSendError(t('Main could not finish this reply. Your message is saved.')); return false }
         return true
@@ -524,6 +602,7 @@ export function applyProduct(ctx) {
     const override = options?.directories.find(directory => directory.id === state.directoryOverride)
     const chooseWorkDirectory = async path => {
       if (!state.binding) return
+      if (attachments.length) { setSendError(t('Remove attached files before changing directories.')); return }
       view.set(current => ({ ...current, directoryBusy: true, directoryError: null }))
       try {
         const selected = path ? await registerDirectory(state.binding, path) : null
@@ -566,6 +645,13 @@ export function applyProduct(ctx) {
                       : `${t(message.source.kind === 'feishu' ? 'Feishu' : 'GitHub')} · @${message.source.authorId} · ${message.source.objectId}`) : null,
                 h(ChatRows, { items: [{ kind: message.role === 'main' ? 'bot' : 'user', text: message.text, time: message.createdAt }],
                   sessionId: 'main', roster: emptyRoster, actions: {} }),
+                message.role === 'main' && message.text && window.speechSynthesis
+                  ? h('button', { type: 'button', className: 'bt-soft bt-main-read-aloud',
+                    onClick: () => speakReply(message) }, t(speakingId === message.id ? 'Stop reading' : 'Read aloud')) : null,
+                message.attachments?.length ? h('div', { className: 'bt-main-message-attachments', 'aria-label': t('Attached files') },
+                  message.attachments.map(attachment => h('button', { key: attachment.id, type: 'button', className: 'bt-soft',
+                    disabled: Boolean(state.connection?.connected), onClick: () => void downloadAttachment(attachment) },
+                  `${t('Download')} ${attachment.name} · ${attachment.bytes} ${t('bytes')}`))) : null,
                 message.status === 'failed' ? h('p', { className: 'bt-main-error', role: 'status' },
                   t('Main could not finish this reply. Your message is saved.')) : null))),
           !state.connection?.connected ? h(FeishuSourceStatus, { instanceId: state.binding?.instanceId, call: productCall }) : null,
@@ -591,6 +677,10 @@ export function applyProduct(ctx) {
       h(MainComposer, { onSend: send, onStop: canCommand && state.activeTurn ? stop : undefined, busy, stopping, readOnly: !canCommand,
         error: sendError ?? state.error,
         value: state.mainDraft, onValueChange: mainDraft => view.set(current => ({ ...current, mainDraft })),
+        attachments, uploading, onRemoveAttachment: removeAttachment,
+        speechRemote: () => ctx.get('remote.speech') ?? undefined,
+        onFiles: !state.connection?.connected && (state.directoryOverride || options?.default?.environmentId)
+          ? files => void uploadFiles(files) : undefined,
         directoryControl: !state.connection?.connected && options?.default ? h('div', { className: 'bt-main-directory' },
           h('span', { className: 'bt-main-label' }, t('Work directory')),
           h(FolderMenu, { value: override?.root, label: t('Work directory'), fallbackLabel: t('Instance default'),
@@ -1194,6 +1284,12 @@ const PRODUCT_CSS = `
 .bt-main-composer{width:min(800px,100% - 32px);margin:16px auto 20px;padding:12px;border:1px solid var(--bt-line);border-radius:16px;background:var(--bt-card)}
 .bt-main-composer textarea{display:block;width:100%;resize:vertical;min-height:80px;max-height:200px;padding:4px;border:0;background:transparent;color:var(--bt-ink);font:inherit;font-size:14px;line-height:22px;box-sizing:border-box}
 .bt-main-composer textarea:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px;border-radius:4px}
+.bt-main-attachments,.bt-main-message-attachments{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.bt-main-attachment{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:4px 7px;border:1px solid var(--bt-line);border-radius:6px;color:var(--bt-ink-2);font-size:12px;overflow-wrap:anywhere}
+.bt-main-attachment button{border:0;background:transparent;color:var(--bt-ink);cursor:pointer;font:inherit}
+.bt-main-attachment button:focus-visible,.bt-main-message-attachments button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-main-read-aloud{margin:4px 0 4px 12px}.bt-main-read-aloud:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-main-send button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 .bt-main-directory{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}.bt-main-directory .bt-main-label{margin:0}.bt-main-directory-note{color:var(--bt-ink-2);font-size:11px;line-height:16px}.bt-main-directory .bt-main-error{width:100%;margin:0}
 .bt-main-send{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
 .bt-main-send button{height:36px;min-width:64px}

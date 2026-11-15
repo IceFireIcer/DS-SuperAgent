@@ -6,6 +6,17 @@ export const NAMESPACE = 'ds-bot'
 
 const ZH = {
   'Message Main': '与 Main 对话',
+  'Attached files': '已附文件',
+  'Uploading…': '上传中…',
+  'Choose a work directory before adding files.': '添加文件前请先选择工作目录。',
+  'Attach at most ten files.': '最多添加十个文件。',
+  'Remove attached files before changing directories.': '切换工作目录前请先移除已附文件。',
+  'Choose a nonempty file smaller than 8 MB.': '请选择小于 8 MB 的非空文件。',
+  'Start dictation': '开始听写',
+  'The recording is too long.': '录音过长。',
+  'The speech provider is not ready.': '语音服务尚未就绪。',
+  'Read aloud': '朗读',
+  'Stop reading': '停止朗读',
   'Read-only connection': '只读连接',
   'The remote Host connection is unavailable.': '远程 Host 连接不可用。',
   'Remote Host': '远程 Host',

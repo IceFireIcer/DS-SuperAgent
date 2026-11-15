@@ -7,6 +7,7 @@ import { sanitizeSecrets } from './sanitize.js'
 import type { EnvironmentKind } from './environment.js'
 
 export const maxAssetBytes = 65536
+export const maxProductAttachmentBytes = 8 * 1024 * 1024
 export const maxAssetPageBytes = 65536
 export const maxSpillBytes = 1_048_576
 export const defaultAssetPageBytes = 8192
@@ -292,9 +293,10 @@ export class FileAssetStore {
     return join(this.root, 'spill', this.namespace, `${createHash('sha256').update(key).digest('hex')}.${stream}`)
   }
 
-  async save(input: { name: string; data: Uint8Array; mediaType?: string }) {
+  async save(input: { name: string; data: Uint8Array; mediaType?: string }, maxBytes = maxAssetBytes) {
     if (!(input.data instanceof Uint8Array)) throw new CoreError('INVALID_INPUT', 'An attachment needs exact bytes.')
-    if (input.data.length > maxAssetBytes) throw new CoreError('INVALID_INPUT', `Attachments are limited to ${maxAssetBytes} bytes.`)
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > maxProductAttachmentBytes
+      || input.data.length > maxBytes) throw new CoreError('INVALID_INPUT', `Attachments are limited to ${maxBytes} bytes.`)
     const name = sanitizedName(input.name)
     const sha256 = digest(input.data)
     const file = this.filePath(sha256)

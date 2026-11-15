@@ -12,7 +12,7 @@ import { openCapture, preparationStep, speechCatalog, transcribeWave, turnDetect
 // again. With DSH's Voice Input plugin on, its recognizer hears the user: one
 // recording ends after a pause and is transcribed whole. Otherwise the browser's
 // own speech recognition does. The browser's speech synthesis reads the answer.
-const plainSpeech = text => stripHeader(text).replace(/```[\s\S]*?```/g, ' ').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[*_`#>|~-]+/g, ' ').replace(/\s+/g, ' ').trim()
+export const plainSpeech = text => stripHeader(text).replace(/```[\s\S]*?```/g, ' ').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[*_`#>|~-]+/g, ' ').replace(/\s+/g, ' ').trim()
 const VOICE_LABELS = {
   listening: 'Listening', thinking: 'Thinking', speaking: 'Speaking', paused: 'Paused',
   setup: 'Voice input needs its speech model', preparing: 'Preparing voice input…',

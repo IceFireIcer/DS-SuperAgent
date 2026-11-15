@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
 import { SessionStore } from '@deepseek-ai/dsh-session'
+import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
 import * as core from '../dist/index.js'
 import { Engine } from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
@@ -42,6 +43,20 @@ test('the native Session adapter preserves original input and an idle turn is no
   assert.equal(outcome.sessionId, 'worker-one')
   const resumed = await runtime.run({ sessionId: 'worker-one', role: 'worker', text: 'A second turn in the same Session.', tools: [] })
   assert.ok(resumed.events.length > outcome.events.length)
+})
+
+test('an admitted file remains a native content block in the durable Session', { timeout: 10000 }, async context => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-native-file-'))
+  let native, runtime
+  context.after(async () => { await runtime?.close(); await native?.fiber.dispose(); await rm(directory, { recursive: true, force: true }) })
+  native = await nativeContext(directory, () => textResponse('I received the file reference.'))
+  await native.plugin(LocalAttachmentStore, { dshHome: join(directory, 'dsh') })
+  const attachment = await native.attachments.admitEncodedFile({ data: Buffer.from('original bytes\n').toString('base64'), name: 'note.txt' })
+  runtime = new core.NativeSessions(native, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  const content = [{ type: 'text', text: 'Inspect the attached note.' }, { type: 'file', attachment }]
+  const result = await runtime.run({ sessionId: 'worker-with-file', role: 'worker', text: 'Inspect the attached note.', content, tools: [] })
+  const user = result.events.find(event => event.type === 'user/message' && event.data?.content?.some(block => block.type === 'file'))
+  assert.deepEqual(user?.data.content, content)
 })
 
 test('an unpersisted native Session cannot authorize a completed turn or ready delivery', async context => {

@@ -63,7 +63,7 @@ export interface Receipt {
 }
 
 export interface Work {
-  trigger: { id: string; instanceId: string; source: Source; eventId: string; text: string; environmentId?: string; target?: 'local-only' | 'remote-only' | 'auto'; targetSource?: 'default' | 'ticket' | 'explicit'; capabilities?: CapabilityId[]; threadId?: string; nativeVersion?: { order: 'sequence' | 'opaque'; value: string };
+  trigger: { id: string; instanceId: string; source: Source; eventId: string; text: string; environmentId?: string; target?: 'local-only' | 'remote-only' | 'auto'; targetSource?: 'default' | 'ticket' | 'explicit'; capabilities?: CapabilityId[]; threadId?: string; nativeVersion?: { order: 'sequence' | 'opaque'; value: string }; nativeImages?: import('@deepseek-ai/dsh-attachment').ImageAttachmentRef[];
     deliveryOrigin?: { sourceEventId: string; source: Source; authorId: string; eventId: string; threadId?: string; nativeVersion: { order: 'sequence' | 'opaque'; value: string }; reference: string } }
   decision: { id: string; instanceId: string; triggerId: string; outcome: 'accept'; policyVersion: string }
   mandate: { id: string; instanceId: string; decisionId: string; scope: string; strength: 'explicit' | 'inferred'; environment: 'local' | 'remote' | 'auto'; capabilities?: CapabilityId[] }

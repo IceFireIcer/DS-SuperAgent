@@ -15,7 +15,8 @@ import { inspectWorkCopy } from './work-copy.js'
 import { sanitizeSecrets } from './sanitize.js'
 import type { RemoteJobRecovery } from './remote-protocol.js'
 import { defaultAssetPageBytes, environmentAssetGaps, environmentFingerprint, FileAssetStore, fileAssetId,
-  assetNamespace, assetPageOptions, assetReferenceFromArgs, attachmentToolInput, matchesEnvironment, maxAssetBytes, maxSpillBytes,
+  assetNamespace, assetPageOptions, assetReferenceFromArgs, attachmentToolInput, matchesEnvironment, maxAssetBytes,
+  maxProductAttachmentBytes, maxSpillBytes,
   pageOf, parseSpillAssetId,
   spillAssetId, UnsupportedEnvironmentCombination, unsupportedAssetCapabilities, type EnvironmentAssetCapabilities,
   type EnvironmentAssetPage, type EnvironmentAssetReference, type EnvironmentSkillSummary, type SpillStream } from './environment-assets.js'
@@ -316,7 +317,24 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
     return this.assetReference('attachment', saved)
   }
 
+  async saveProductAttachment(input: { name: string; data: Uint8Array; mediaType?: string }): Promise<EnvironmentAssetReference> {
+    this.permission('write')
+    const saved = await this.store().save(input, maxProductAttachmentBytes)
+    return this.assetReference('attachment', saved)
+  }
+
   async readAsset(reference: EnvironmentAssetReference, options: { offset?: number; maxBytes?: number } = {}): Promise<EnvironmentAssetPage> {
+    return this.readAssetPage(reference, options, true)
+  }
+
+  async readProductAsset(reference: EnvironmentAssetReference, options: { offset?: number; maxBytes?: number } = {}): Promise<EnvironmentAssetPage> {
+    if (reference.kind !== 'attachment' && reference.kind !== 'artifact') {
+      throw new CoreError('INVALID_INPUT', 'A product download needs an attachment or recorded artifact.')
+    }
+    return this.readAssetPage(reference, options, false)
+  }
+
+  private async readAssetPage(reference: EnvironmentAssetReference, options: { offset?: number; maxBytes?: number }, redact: boolean): Promise<EnvironmentAssetPage> {
     this.permission('read')
     if (!matchesEnvironment(reference, this.environmentIdentity())) {
       throw new CoreError('REFERENCE_STALE', 'The reference belongs to a different execution world; read it only through that Environment\'s original identity.')
@@ -332,7 +350,7 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
       if (!full || full.bytes !== reference.bytes || full.sha256 !== reference.sha256) {
         throw new CoreError('REFERENCE_STALE', 'The attachment reference no longer matches the stored object.')
       }
-      return pageOf(reference, read.data, offset, maxBytes, text => this.sanitize(text))
+      return pageOf(reference, read.data, offset, maxBytes, redact ? text => this.sanitize(text) : undefined)
     }
     if (reference.kind === 'spill') {
       const { jobId, stream } = parseSpillAssetId(reference.id)
@@ -347,7 +365,7 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
     }
     if (offset > reference.bytes) throw new CoreError('INVALID_INPUT', 'Asset offsets must address bytes already observed.')
     const window = await this.context.fs.readByteRange(target, { offset, length: Math.min(maxBytes, reference.bytes - offset) }, undefined)
-    return pageOf(reference, window, offset, maxBytes, text => this.sanitize(text))
+    return pageOf(reference, window, offset, maxBytes, redact ? text => this.sanitize(text) : undefined)
   }
 
   async listSkills(): Promise<EnvironmentSkillSummary[]> {
@@ -424,7 +442,7 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
   async artifact(path: string, signal?: AbortSignal): Promise<Artifact> {
     this.permission('read')
     const target = await this.target(path, signal)
-    const bytes = await this.context.fs.readBytes(target, signal, 65536)
+    const bytes = await this.context.fs.readBytes(target, signal, maxProductAttachmentBytes)
     const relativePath = relative(this.cwd, this.context.fs.processPath(target)).split(sep).join('/')
     const sha256 = createHash('sha256').update(bytes).digest('hex')
     return { path: relativePath, bytes: bytes.length, sha256,

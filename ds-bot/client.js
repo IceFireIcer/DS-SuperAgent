@@ -43,6 +43,17 @@ module.exports = __toCommonJS(index_exports);
 var NAMESPACE = "ds-bot";
 var ZH = {
   "Message Main": "与 Main 对话",
+  "Attached files": "已附文件",
+  "Uploading…": "上传中…",
+  "Choose a work directory before adding files.": "添加文件前请先选择工作目录。",
+  "Attach at most ten files.": "最多添加十个文件。",
+  "Remove attached files before changing directories.": "切换工作目录前请先移除已附文件。",
+  "Choose a nonempty file smaller than 8 MB.": "请选择小于 8 MB 的非空文件。",
+  "Start dictation": "开始听写",
+  "The recording is too long.": "录音过长。",
+  "The speech provider is not ready.": "语音服务尚未就绪。",
+  "Read aloud": "朗读",
+  "Stop reading": "停止朗读",
   "Read-only connection": "只读连接",
   "The remote Host connection is unavailable.": "远程 Host 连接不可用。",
   "Remote Host": "远程 Host",
@@ -10932,22 +10943,288 @@ function NewMessagePills({ sessionId, useSessions, useUi, useTurnClock }) {
   );
 }
 
+// src/client/speech.js
+var VOICE_BUNDLE = "@deepseek-ai/dsh-experimental-voice-input-bundle";
+var USABLE = /* @__PURE__ */ new Set(["ready", "standby", "waking"]);
+async function speechCatalog(speech) {
+  const result = await speech.catalog();
+  if (!result?.ok) throw new Error(result?.error?.message ?? "Speech catalog failed");
+  const catalog = result.value;
+  const provider = catalog.providers.find((item) => item.id === catalog.selection.providerId);
+  return { catalog, usable: USABLE.has(provider?.preparation?.phase) };
+}
+async function requestPreparation(speech, providerId) {
+  try {
+    const result = await speech.prepare(providerId);
+    return result?.ok !== false;
+  } catch {
+    return false;
+  }
+}
+function preparationStep(catalog) {
+  const preparation = catalog.providers.find((item) => item.id === catalog.selection.providerId)?.preparation;
+  if (preparation === void 0) return { state: "done", failed: false };
+  if (USABLE.has(preparation.phase)) return { state: "usable" };
+  if (preparation.phase === "failed" || preparation.phase === "cancelled" || preparation.phase === "unprepared") {
+    return { state: "done", failed: preparation.phase === "failed" };
+  }
+  const pct = preparation.phase === "downloading" && preparation.totalBytes ? Math.floor(preparation.completedBytes / preparation.totalBytes * 100) : void 0;
+  return { state: "waiting", pct };
+}
+function waveBytes(samples, rate = 16e3) {
+  const bytes = new Uint8Array(44 + samples.length * 2);
+  const view = new DataView(bytes.buffer);
+  const ascii = (at, text) => {
+    for (let index = 0; index < text.length; index += 1) bytes[at + index] = text.charCodeAt(index);
+  };
+  ascii(0, "RIFF");
+  view.setUint32(4, 36 + samples.length * 2, true);
+  ascii(8, "WAVEfmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true);
+  view.setUint32(28, rate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  ascii(36, "data");
+  view.setUint32(40, samples.length * 2, true);
+  samples.forEach((sample, index) => {
+    const value = Math.max(-1, Math.min(1, sample));
+    view.setInt16(44 + index * 2, value < 0 ? Math.round(value * 32768) : Math.round(value * 32767), true);
+  });
+  return bytes;
+}
+function base64Of(bytes) {
+  let text = "";
+  for (let index = 0; index < bytes.length; index += 32768) text += String.fromCharCode(...bytes.subarray(index, index + 32768));
+  return btoa(text);
+}
+var captureError = (kind, cause) => Object.assign(new Error(kind), { kind, cause });
+async function openCapture() {
+  const devices = navigator.mediaDevices;
+  if (!devices?.getUserMedia || typeof MediaRecorder === "undefined") throw captureError("unavailable");
+  let stream;
+  try {
+    stream = await devices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
+  } catch (error) {
+    throw captureError(error?.name === "NotAllowedError" ? "blocked" : "failed", error);
+  }
+  let audio;
+  let recorder;
+  try {
+    audio = new AudioContext();
+    const analyser = audio.createAnalyser();
+    analyser.fftSize = 512;
+    audio.createMediaStreamSource(stream).connect(analyser);
+    const frame = new Float32Array(analyser.fftSize);
+    recorder = new MediaRecorder(stream);
+    const chunks = [];
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) chunks.push(event.data);
+    };
+    recorder.start();
+    return captureHandle(stream, audio, analyser, frame, recorder, chunks);
+  } catch (error) {
+    try {
+      if (recorder && recorder.state !== "inactive") recorder.stop();
+    } catch {
+    }
+    stream.getTracks().forEach((track) => track.stop());
+    try {
+      void audio?.close().catch(() => {
+      });
+    } catch {
+    }
+    throw captureError("failed", error);
+  }
+}
+function captureHandle(stream, audio, analyser, frame, recorder, chunks) {
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    if (recorder.state !== "inactive") recorder.stop();
+    stream.getTracks().forEach((track) => track.stop());
+    void audio.close().catch(() => {
+    });
+  };
+  return {
+    level() {
+      if (closed) return 0;
+      analyser.getFloatTimeDomainData(frame);
+      let sum = 0;
+      for (const sample of frame) sum += sample * sample;
+      return Math.min(1, Math.sqrt(sum / frame.length) * 4);
+    },
+    cancel: close,
+    async finish(maxSeconds) {
+      if (closed || recorder.state === "inactive") {
+        close();
+        return null;
+      }
+      try {
+        await new Promise((resolve2) => {
+          recorder.onstop = resolve2;
+          recorder.stop();
+        });
+        stream.getTracks().forEach((track) => track.stop());
+        const blob = new Blob(chunks, { type: recorder.mimeType });
+        if (blob.size === 0) return null;
+        const decoded = await audio.decodeAudioData(await blob.arrayBuffer());
+        const length = Math.max(1, Math.floor(Math.min(decoded.duration, maxSeconds) * 16e3));
+        const offline = new OfflineAudioContext(1, length, 16e3);
+        const source = offline.createBufferSource();
+        source.buffer = decoded;
+        source.connect(offline.destination);
+        source.start();
+        return waveBytes((await offline.startRendering()).getChannelData(0));
+      } finally {
+        close();
+      }
+    }
+  };
+}
+async function transcribeWave(speech, catalog, wave, signal) {
+  if (wave.byteLength > catalog.maxAudioBytes) throw captureError("too-long");
+  const result = await speech.transcribe({ audioBase64: base64Of(wave), ...catalog.selection }, signal);
+  if (!result?.ok) throw Object.assign(new Error(result?.error?.message ?? "Transcription failed"), { kind: "service" });
+  return String(result.value?.text ?? "").trim();
+}
+function closingReplyText(chat, turn) {
+  const location2 = chat?.timeline?.turns?.get(turn);
+  if (location2 === void 0) return void 0;
+  const closing = location2.data?.get("turn-tail")?.closing;
+  if (closing === void 0) return void 0;
+  if (closing === null) return "";
+  return (closing.blocks ?? []).filter((block) => block.kind === "text" && block.text.trim() !== "").map((block) => block.text).join("\n\n");
+}
+function turnDetector({ loud = 0.12, quiet = 0.06, quietMs = 1200 } = {}) {
+  let spokeAt = 0;
+  let quietSince = 0;
+  return (level, now) => {
+    if (level >= loud) {
+      spokeAt ||= now;
+      quietSince = 0;
+      return "speech";
+    }
+    if (!spokeAt) return "waiting";
+    if (level < quiet) quietSince ||= now;
+    return quietSince && now - quietSince >= quietMs ? "done" : "speech";
+  };
+}
+
 // src/client/composer.js
 var import_react21 = require("react");
 var import_react_dom5 = require("react-dom");
-function MainComposer({ onSend, onStop, busy, stopping, readOnly = false, error, value, onValueChange, directoryControl }) {
+function MainComposer({
+  onSend,
+  onStop,
+  busy,
+  stopping,
+  readOnly = false,
+  error,
+  value,
+  onValueChange,
+  directoryControl,
+  attachments = [],
+  onFiles,
+  onRemoveAttachment,
+  uploading = false,
+  speechRemote
+}) {
   const [draft, setDraft] = (0, import_react21.useState)("");
+  const [voiceState, setVoiceState] = (0, import_react21.useState)("idle");
+  const [voiceError, setVoiceError] = (0, import_react21.useState)(null);
+  const fileInput = (0, import_react21.useRef)(null);
+  const capture = (0, import_react21.useRef)(null);
+  const voiceGeneration = (0, import_react21.useRef)(0);
   const text = value ?? draft;
   const setText = (next) => onValueChange ? onValueChange(next) : setDraft(next);
+  const latestText = (0, import_react21.useRef)(text);
+  latestText.current = text;
+  const insertTranscript = (words) => {
+    const current = latestText.current;
+    const next = `${current}${current && !/\s$/u.test(current) ? " " : ""}${words}`;
+    latestText.current = next;
+    setText(next);
+  };
+  const dictation = useDictation((words, final) => {
+    if (final) insertTranscript(words.trim());
+  });
+  (0, import_react21.useEffect)(() => () => {
+    voiceGeneration.current += 1;
+    if (capture.current?.timer) clearTimeout(capture.current.timer);
+    capture.current?.controller.abort();
+    capture.current?.handle.cancel();
+  }, []);
+  const finishCapture = async () => {
+    const active = capture.current;
+    if (!active) return;
+    capture.current = null;
+    clearTimeout(active.timer);
+    setVoiceState("transcribing");
+    try {
+      const wave = await active.handle.finish(active.catalog.maxDurationSeconds);
+      const words = wave ? await transcribeWave(active.speech, active.catalog, wave, active.controller.signal) : "";
+      if (voiceGeneration.current === active.generation && words.trim()) insertTranscript(words.trim());
+    } catch (reason) {
+      if (voiceGeneration.current === active.generation) setVoiceError(t(reason?.kind === "too-long" ? "The recording is too long." : "Couldn't hear that"));
+    } finally {
+      if (voiceGeneration.current === active.generation) setVoiceState("idle");
+    }
+  };
+  const toggleVoice = async () => {
+    if (voiceState === "preparing" || voiceState === "transcribing") return;
+    if (capture.current) {
+      await finishCapture();
+      return;
+    }
+    const speech = speechRemote?.();
+    if (!speech) {
+      if (dictation.listening) dictation.stop();
+      else dictation.start();
+      return;
+    }
+    setVoiceError(null);
+    setVoiceState("preparing");
+    const generation = ++voiceGeneration.current;
+    try {
+      const { catalog, usable } = await speechCatalog(speech);
+      if (voiceGeneration.current !== generation) return;
+      if (!usable) {
+        setVoiceError(t("The speech provider is not ready."));
+        setVoiceState("idle");
+        return;
+      }
+      const handle = await openCapture();
+      if (voiceGeneration.current !== generation) {
+        handle.cancel();
+        return;
+      }
+      const timer = setTimeout(() => {
+        void finishCapture();
+      }, catalog.maxDurationSeconds * 1e3);
+      capture.current = { handle, catalog, speech, generation, controller: new AbortController(), timer };
+      setVoiceState("recording");
+    } catch (reason) {
+      if (voiceGeneration.current === generation) {
+        setVoiceError(t(reason?.kind === "blocked" ? "Microphone access is blocked" : "Couldn't start dictation"));
+        setVoiceState("idle");
+      }
+    }
+  };
+  const hasContent = Boolean(text.trim() || attachments.length);
   const submit = async (event) => {
     event.preventDefault();
-    if (busy || readOnly || !text.trim()) return;
+    if (busy || uploading || voiceState !== "idle" || dictation.listening || readOnly || !hasContent) return;
     if (await onSend(text)) setText("");
   };
   return (0, import_react21.createElement)(
     "form",
     { className: "bt-main-composer", onSubmit: submit },
     error ? (0, import_react21.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+    voiceError || dictation.note ? (0, import_react21.createElement)("p", { className: "bt-main-error", role: "status" }, voiceError ?? dictation.note) : null,
     (0, import_react21.createElement)("label", { className: "bt-main-label", htmlFor: "main-message" }, t("Message Main")),
     (0, import_react21.createElement)("textarea", {
       id: "main-message",
@@ -10965,9 +11242,56 @@ function MainComposer({ onSend, onStop, busy, stopping, readOnly = false, error,
       }
     }),
     directoryControl,
+    attachments.length ? (0, import_react21.createElement)(
+      "div",
+      { className: "bt-main-attachments", "aria-label": t("Attached files") },
+      attachments.map((attachment) => (0, import_react21.createElement)(
+        "span",
+        { className: "bt-main-attachment", key: attachment.id },
+        `${attachment.name} · ${attachment.bytes} ${t("bytes")}`,
+        onRemoveAttachment ? (0, import_react21.createElement)("button", {
+          type: "button",
+          disabled: busy || uploading,
+          "aria-label": t("Remove {name}", { name: attachment.name }),
+          onClick: () => onRemoveAttachment(attachment)
+        }, "×") : null
+      ))
+    ) : null,
     (0, import_react21.createElement)(
       "div",
       { className: "bt-main-send" },
+      !readOnly ? (0, import_react21.createElement)("button", {
+        type: "button",
+        className: "bt-soft",
+        disabled: busy || uploading || voiceState === "preparing" || voiceState === "transcribing",
+        "aria-pressed": voiceState === "recording" || dictation.listening,
+        "aria-label": t(voiceState === "recording" || dictation.listening ? "Stop dictation" : "Start dictation"),
+        title: t(voiceState === "recording" ? "Stop dictation" : "Start dictation"),
+        onClick: () => void toggleVoice()
+      }, (0, import_react21.createElement)(MicIcon)) : null,
+      onFiles && !readOnly ? (0, import_react21.createElement)(
+        "span",
+        null,
+        (0, import_react21.createElement)("input", {
+          type: "file",
+          ref: fileInput,
+          multiple: true,
+          hidden: true,
+          onChange: (event) => {
+            const files = [...event.target.files ?? []];
+            event.target.value = "";
+            if (files.length) onFiles(files);
+          }
+        }),
+        (0, import_react21.createElement)("button", {
+          type: "button",
+          className: "bt-soft",
+          disabled: busy || uploading,
+          "aria-label": t("Add files"),
+          title: t("Add files"),
+          onClick: () => fileInput.current?.click()
+        }, (0, import_react21.createElement)(PaperclipIcon))
+      ) : null,
       busy && onStop && !readOnly ? (0, import_react21.createElement)(
         "button",
         { className: "bt-soft", type: "button", disabled: stopping, onClick: onStop },
@@ -10975,8 +11299,8 @@ function MainComposer({ onSend, onStop, busy, stopping, readOnly = false, error,
       ) : null,
       (0, import_react21.createElement)(
         "button",
-        { className: "bt-soft", type: "submit", disabled: busy || readOnly || !text.trim() },
-        readOnly ? t("Read-only") : busy ? t("Sending…") : t("Send")
+        { className: "bt-soft", type: "submit", disabled: busy || uploading || voiceState !== "idle" || dictation.listening || readOnly || !hasContent },
+        readOnly ? t("Read-only") : uploading ? t("Uploading…") : busy ? t("Sending…") : t("Send")
       )
     )
   );
@@ -11578,177 +11902,6 @@ var SIDE_CSS = `
 .bt-pmenu-item svg{flex:none;width:15px;height:15px;color:var(--bt-ink-3)}
 .bt-pmenu-sep{height:.5px;flex:none;margin:4px 8px;background:var(--bt-line-2)}
 `;
-
-// src/client/speech.js
-var VOICE_BUNDLE = "@deepseek-ai/dsh-experimental-voice-input-bundle";
-var USABLE = /* @__PURE__ */ new Set(["ready", "standby", "waking"]);
-async function speechCatalog(speech) {
-  const result = await speech.catalog();
-  if (!result?.ok) throw new Error(result?.error?.message ?? "Speech catalog failed");
-  const catalog = result.value;
-  const provider = catalog.providers.find((item) => item.id === catalog.selection.providerId);
-  return { catalog, usable: USABLE.has(provider?.preparation?.phase) };
-}
-async function requestPreparation(speech, providerId) {
-  try {
-    const result = await speech.prepare(providerId);
-    return result?.ok !== false;
-  } catch {
-    return false;
-  }
-}
-function preparationStep(catalog) {
-  const preparation = catalog.providers.find((item) => item.id === catalog.selection.providerId)?.preparation;
-  if (preparation === void 0) return { state: "done", failed: false };
-  if (USABLE.has(preparation.phase)) return { state: "usable" };
-  if (preparation.phase === "failed" || preparation.phase === "cancelled" || preparation.phase === "unprepared") {
-    return { state: "done", failed: preparation.phase === "failed" };
-  }
-  const pct = preparation.phase === "downloading" && preparation.totalBytes ? Math.floor(preparation.completedBytes / preparation.totalBytes * 100) : void 0;
-  return { state: "waiting", pct };
-}
-function waveBytes(samples, rate = 16e3) {
-  const bytes = new Uint8Array(44 + samples.length * 2);
-  const view = new DataView(bytes.buffer);
-  const ascii = (at, text) => {
-    for (let index = 0; index < text.length; index += 1) bytes[at + index] = text.charCodeAt(index);
-  };
-  ascii(0, "RIFF");
-  view.setUint32(4, 36 + samples.length * 2, true);
-  ascii(8, "WAVEfmt ");
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
-  view.setUint32(24, rate, true);
-  view.setUint32(28, rate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  ascii(36, "data");
-  view.setUint32(40, samples.length * 2, true);
-  samples.forEach((sample, index) => {
-    const value = Math.max(-1, Math.min(1, sample));
-    view.setInt16(44 + index * 2, value < 0 ? Math.round(value * 32768) : Math.round(value * 32767), true);
-  });
-  return bytes;
-}
-function base64Of(bytes) {
-  let text = "";
-  for (let index = 0; index < bytes.length; index += 32768) text += String.fromCharCode(...bytes.subarray(index, index + 32768));
-  return btoa(text);
-}
-var captureError = (kind, cause) => Object.assign(new Error(kind), { kind, cause });
-async function openCapture() {
-  const devices = navigator.mediaDevices;
-  if (!devices?.getUserMedia || typeof MediaRecorder === "undefined") throw captureError("unavailable");
-  let stream;
-  try {
-    stream = await devices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
-  } catch (error) {
-    throw captureError(error?.name === "NotAllowedError" ? "blocked" : "failed", error);
-  }
-  let audio;
-  let recorder;
-  try {
-    audio = new AudioContext();
-    const analyser = audio.createAnalyser();
-    analyser.fftSize = 512;
-    audio.createMediaStreamSource(stream).connect(analyser);
-    const frame = new Float32Array(analyser.fftSize);
-    recorder = new MediaRecorder(stream);
-    const chunks = [];
-    recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) chunks.push(event.data);
-    };
-    recorder.start();
-    return captureHandle(stream, audio, analyser, frame, recorder, chunks);
-  } catch (error) {
-    try {
-      if (recorder && recorder.state !== "inactive") recorder.stop();
-    } catch {
-    }
-    stream.getTracks().forEach((track) => track.stop());
-    try {
-      void audio?.close().catch(() => {
-      });
-    } catch {
-    }
-    throw captureError("failed", error);
-  }
-}
-function captureHandle(stream, audio, analyser, frame, recorder, chunks) {
-  let closed = false;
-  const close = () => {
-    if (closed) return;
-    closed = true;
-    if (recorder.state !== "inactive") recorder.stop();
-    stream.getTracks().forEach((track) => track.stop());
-    void audio.close().catch(() => {
-    });
-  };
-  return {
-    level() {
-      if (closed) return 0;
-      analyser.getFloatTimeDomainData(frame);
-      let sum = 0;
-      for (const sample of frame) sum += sample * sample;
-      return Math.min(1, Math.sqrt(sum / frame.length) * 4);
-    },
-    cancel: close,
-    async finish(maxSeconds) {
-      if (closed || recorder.state === "inactive") {
-        close();
-        return null;
-      }
-      try {
-        await new Promise((resolve2) => {
-          recorder.onstop = resolve2;
-          recorder.stop();
-        });
-        stream.getTracks().forEach((track) => track.stop());
-        const blob = new Blob(chunks, { type: recorder.mimeType });
-        if (blob.size === 0) return null;
-        const decoded = await audio.decodeAudioData(await blob.arrayBuffer());
-        const length = Math.max(1, Math.floor(Math.min(decoded.duration, maxSeconds) * 16e3));
-        const offline = new OfflineAudioContext(1, length, 16e3);
-        const source = offline.createBufferSource();
-        source.buffer = decoded;
-        source.connect(offline.destination);
-        source.start();
-        return waveBytes((await offline.startRendering()).getChannelData(0));
-      } finally {
-        close();
-      }
-    }
-  };
-}
-async function transcribeWave(speech, catalog, wave, signal) {
-  if (wave.byteLength > catalog.maxAudioBytes) throw captureError("too-long");
-  const result = await speech.transcribe({ audioBase64: base64Of(wave), ...catalog.selection }, signal);
-  if (!result?.ok) throw Object.assign(new Error(result?.error?.message ?? "Transcription failed"), { kind: "service" });
-  return String(result.value?.text ?? "").trim();
-}
-function closingReplyText(chat, turn) {
-  const location2 = chat?.timeline?.turns?.get(turn);
-  if (location2 === void 0) return void 0;
-  const closing = location2.data?.get("turn-tail")?.closing;
-  if (closing === void 0) return void 0;
-  if (closing === null) return "";
-  return (closing.blocks ?? []).filter((block) => block.kind === "text" && block.text.trim() !== "").map((block) => block.text).join("\n\n");
-}
-function turnDetector({ loud = 0.12, quiet = 0.06, quietMs = 1200 } = {}) {
-  let spokeAt = 0;
-  let quietSince = 0;
-  return (level, now) => {
-    if (level >= loud) {
-      spokeAt ||= now;
-      quietSince = 0;
-      return "speech";
-    }
-    if (!spokeAt) return "waiting";
-    if (level < quiet) quietSince ||= now;
-    return quietSince && now - quietSince >= quietMs ? "done" : "speech";
-  };
-}
 
 // src/client/surface.js
 function groupsFor({ mode, plain = false }) {
@@ -21060,6 +21213,71 @@ function listedOpener({ list, open, refresh, current }) {
   };
 }
 
+// src/client/product-attachments.js
+var MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+var IMAGE_TYPES = /* @__PURE__ */ new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+var pendingUploads = /* @__PURE__ */ new Map();
+async function uploadPayload(file) {
+  if (!file || file.size < 1 || file.size > MAX_UPLOAD_BYTES) throw new Error("Choose a nonempty file smaller than 8 MB.");
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary2 = "";
+  for (let offset = 0; offset < bytes.length; offset += 32768) binary2 += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
+  return {
+    kind: IMAGE_TYPES.has(file.type) ? "image" : "file",
+    name: file.name,
+    ...file.type ? { mediaType: file.type } : {},
+    data: btoa(binary2)
+  };
+}
+async function uploadFingerprint(payload, environmentId) {
+  const bytes = new TextEncoder().encode(JSON.stringify([environmentId, payload.kind, payload.name, payload.mediaType ?? "", payload.data]));
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+async function uploadWithRetry(call2, store, instanceId, environmentId, payload) {
+  const fingerprint = await uploadFingerprint(payload, environmentId);
+  const key = `superagent:pending-upload:${instanceId}:${fingerprint}`;
+  let commandId = pendingUploads.get(key);
+  if (!commandId) {
+    try {
+      commandId = store.getItem(key);
+    } catch {
+    }
+    commandId ||= crypto.randomUUID();
+    pendingUploads.set(key, commandId);
+    try {
+      store.setItem(key, commandId);
+    } catch {
+    }
+  }
+  const result = await call2("attachment-upload", { instanceId, commandId, environmentId, ...payload });
+  pendingUploads.delete(key);
+  try {
+    store.removeItem(key);
+  } catch {
+  }
+  return result;
+}
+async function readPages(call2, endpoint, request) {
+  const chunks = [];
+  let offset = 0;
+  for (let pageCount = 0; pageCount < 2048; pageCount++) {
+    const page = await call2(endpoint, { ...request, offset, maxBytes: 8192 });
+    if (page.encoding !== "utf8" && page.encoding !== "base64") throw new Error("The attachment page encoding is unavailable.");
+    const bytes = page.encoding === "base64" ? Uint8Array.from(atob(page.text), (character) => character.charCodeAt(0)) : new TextEncoder().encode(page.text);
+    if (page.offset !== offset || page.nextOffset !== offset + bytes.length || page.totalBytes > MAX_UPLOAD_BYTES) {
+      throw new Error("The attachment page does not match the expected bytes.");
+    }
+    chunks.push(bytes);
+    if (page.nextOffset === page.totalBytes) return new Blob(chunks);
+    if (page.nextOffset <= offset) throw new Error("The attachment page did not advance.");
+    offset = page.nextOffset;
+  }
+  throw new Error("The attachment exceeded the bounded page limit.");
+}
+var readProductAttachment = (call2, instanceId, id) => readPages(call2, "attachment-read", { instanceId, id });
+var readProductArtifact = (call2, instanceId, workItemId, path) => readPages(call2, "artifact-read", { instanceId, workItemId, path });
+
 // src/client/product-feishu.js
 var import_react53 = require("react");
 var sourceState = (state) => ({
@@ -21490,6 +21708,14 @@ function rebaseRoleDraft(base, draft, latest) {
 var import_react55 = require("react");
 var clientBridge = () => window.dsBotApp?.productClient;
 var activeHost = "local";
+function offerDownload(data, name, mediaType = "application/octet-stream") {
+  const url = URL.createObjectURL(new Blob([data], { type: mediaType }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1e4);
+}
 async function productCall(endpoint, payload = {}) {
   const bridge = clientBridge();
   if (activeHost === "remote") {
@@ -21844,6 +22070,21 @@ function applyProduct(ctx) {
     const [controlError, setControlError] = (0, import_react55.useState)(null);
     const [attentionDraft, setAttentionDraft] = (0, import_react55.useState)("");
     const control = work.control;
+    const [artifactBusy, setArtifactBusy] = (0, import_react55.useState)(null);
+    const [artifactError, setArtifactError] = (0, import_react55.useState)(null);
+    const downloadArtifact = async (artifact) => {
+      if (!state.binding) return;
+      setArtifactBusy(artifact.path);
+      setArtifactError(null);
+      try {
+        const data = await readProductArtifact(productCall, state.binding.instanceId, work.brief.workItemId, artifact.path);
+        offerDownload(data, artifact.path.split(/[\\/]/u).at(-1) || "artifact");
+      } catch (error) {
+        setArtifactError(t(error.message));
+      } finally {
+        setArtifactBusy(null);
+      }
+    };
     const assignment = control?.assignment;
     const runControl = async (endpoint) => {
       if (!state.binding || !control || !assignment && endpoint !== "work-stop") return;
@@ -21982,9 +22223,20 @@ function applyProduct(ctx) {
           { key: artifact.path, className: "bt-main-work-artifact" },
           (0, import_react55.createElement)("code", null, artifact.path),
           " ",
-          (0, import_react55.createElement)("span", null, `${artifact.bytes} ${t("bytes")} · ${artifact.sha256.slice(0, 12)}`)
+          (0, import_react55.createElement)("span", null, `${artifact.bytes} ${t("bytes")} · ${artifact.sha256.slice(0, 12)}`),
+          artifact.reference && !state.connection?.connected ? (0, import_react55.createElement)(
+            "button",
+            {
+              type: "button",
+              className: "bt-soft",
+              disabled: artifactBusy === artifact.path,
+              onClick: () => void downloadArtifact(artifact)
+            },
+            artifactBusy === artifact.path ? t("Loading…") : t("Download")
+          ) : null
         ))
       ) : null,
+      artifactError ? (0, import_react55.createElement)("p", { className: "bt-main-error", role: "alert" }, artifactError) : null,
       control && canCommand ? (0, import_react55.createElement)(
         "div",
         { className: "bt-main-work-controls" },
@@ -22139,6 +22391,10 @@ function applyProduct(ctx) {
     const canCommand = !state.connection?.connected || state.connection.capabilities.includes("command");
     const [sending, setSending] = (0, import_react55.useState)(false);
     const [sendError, setSendError] = (0, import_react55.useState)(null);
+    const [attachments, setAttachments] = (0, import_react55.useState)([]);
+    const [uploading, setUploading] = (0, import_react55.useState)(false);
+    const [speakingId, setSpeakingId] = (0, import_react55.useState)(null);
+    (0, import_react55.useEffect)(() => () => window.speechSynthesis?.cancel(), []);
     const bottom = (0, import_react55.useRef)(null);
     const pending = (0, import_react55.useRef)(null);
     const scroll = (0, import_react55.useRef)(null);
@@ -22150,8 +22406,72 @@ function applyProduct(ctx) {
         restoreHeight.current = null;
       } else if (follow.current) bottom.current?.scrollIntoView({ block: "end", behavior: "instant" });
     }, [state.messages.length]);
+    const uploadFiles = async (files) => {
+      const environmentId = state.directoryOverride ?? state.directoryOptions?.default?.environmentId;
+      if (!state.binding || !environmentId) {
+        setSendError(t("Choose a work directory before adding files."));
+        return;
+      }
+      if (attachments.some((attachment) => attachment.environmentId !== environmentId)) {
+        setSendError(t("Remove attached files before changing directories."));
+        return;
+      }
+      if (attachments.length + files.length > 10) {
+        setSendError(t("Attach at most ten files."));
+        return;
+      }
+      setUploading(true);
+      setSendError(null);
+      try {
+        for (const file of files) {
+          const payload = await uploadPayload(file);
+          const uploaded = await uploadWithRetry(productCall, sessionStorage, state.binding.instanceId, environmentId, payload);
+          setAttachments((current) => current.some((item) => item.id === uploaded.id) ? current : [...current, uploaded]);
+        }
+      } catch (error) {
+        setSendError(t(error.message));
+      } finally {
+        setUploading(false);
+      }
+    };
+    const removeAttachment = async (attachment) => {
+      if (!state.binding) return;
+      try {
+        await productCall("attachment-revoke", { instanceId: state.binding.instanceId, id: attachment.id });
+        setAttachments((current) => current.filter((item) => item.id !== attachment.id));
+      } catch (error) {
+        setSendError(t(error.message));
+      }
+    };
+    const downloadAttachment = async (attachment) => {
+      if (!state.binding) return;
+      try {
+        const data = await readProductAttachment(productCall, state.binding.instanceId, attachment.id);
+        offerDownload(data, attachment.name, attachment.mediaType);
+      } catch (error) {
+        setSendError(t(error.message));
+      }
+    };
+    const speakReply = (message) => {
+      if (speakingId === message.id) {
+        window.speechSynthesis.cancel();
+        setSpeakingId(null);
+        return;
+      }
+      const text = plainSpeech(message.text);
+      if (!text || !window.speechSynthesis) return;
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = /[\u3400-\u9fff]/u.test(text) ? "zh-CN" : "en-US";
+      utterance.onend = () => setSpeakingId((current) => current === message.id ? null : current);
+      utterance.onerror = utterance.onend;
+      window.speechSynthesis.speak(utterance);
+      setSpeakingId(message.id);
+    };
     const send = async (text) => {
       if (!state.binding) return false;
+      const attachmentIds = attachments.map((attachment) => attachment.id);
+      const environmentId = attachments[0]?.environmentId ?? state.directoryOverride;
       const storageKey = `superagent:pending:${state.connection?.connected ? `${state.connection.address}:${state.connection.client.id}` : "local"}:${state.binding.instanceId}`;
       try {
         setSending(true);
@@ -22162,11 +22482,14 @@ function applyProduct(ctx) {
           } catch {
           }
         }
-        if (!pending.current || pending.current.text !== text) pending.current = {
-          commandId: crypto.randomUUID(),
-          text,
-          ...state.directoryOverride ? { environmentId: state.directoryOverride } : {}
-        };
+        if (!pending.current || pending.current.text !== text || JSON.stringify(pending.current.attachments ?? []) !== JSON.stringify(attachmentIds)) {
+          pending.current = {
+            commandId: crypto.randomUUID(),
+            text,
+            ...attachmentIds.length ? { attachments: attachmentIds } : {},
+            ...environmentId ? { environmentId } : {}
+          };
+        }
         try {
           sessionStorage.setItem(storageKey, JSON.stringify(pending.current));
         } catch {
@@ -22178,6 +22501,7 @@ function applyProduct(ctx) {
         } catch {
         }
         await refreshMain(state.binding);
+        setAttachments([]);
         view.set((current) => ({ ...current, directoryOverride: null }));
         if (result.status === "failed") {
           setSendError(t("Main could not finish this reply. Your message is saved."));
@@ -22209,6 +22533,10 @@ function applyProduct(ctx) {
     const override = options?.directories.find((directory) => directory.id === state.directoryOverride);
     const chooseWorkDirectory = async (path) => {
       if (!state.binding) return;
+      if (attachments.length) {
+        setSendError(t("Remove attached files before changing directories."));
+        return;
+      }
       view.set((current) => ({ ...current, directoryBusy: true, directoryError: null }));
       try {
         const selected = path ? await registerDirectory(state.binding, path) : null;
@@ -22303,6 +22631,26 @@ function applyProduct(ctx) {
                 roster: emptyRoster,
                 actions: {}
               }),
+              message.role === "main" && message.text && window.speechSynthesis ? (0, import_react55.createElement)("button", {
+                type: "button",
+                className: "bt-soft bt-main-read-aloud",
+                onClick: () => speakReply(message)
+              }, t(speakingId === message.id ? "Stop reading" : "Read aloud")) : null,
+              message.attachments?.length ? (0, import_react55.createElement)(
+                "div",
+                { className: "bt-main-message-attachments", "aria-label": t("Attached files") },
+                message.attachments.map((attachment) => (0, import_react55.createElement)(
+                  "button",
+                  {
+                    key: attachment.id,
+                    type: "button",
+                    className: "bt-soft",
+                    disabled: Boolean(state.connection?.connected),
+                    onClick: () => void downloadAttachment(attachment)
+                  },
+                  `${t("Download")} ${attachment.name} · ${attachment.bytes} ${t("bytes")}`
+                ))
+              ) : null,
               message.status === "failed" ? (0, import_react55.createElement)(
                 "p",
                 { className: "bt-main-error", role: "status" },
@@ -22372,6 +22720,11 @@ function applyProduct(ctx) {
         error: sendError ?? state.error,
         value: state.mainDraft,
         onValueChange: (mainDraft) => view.set((current) => ({ ...current, mainDraft })),
+        attachments,
+        uploading,
+        onRemoveAttachment: removeAttachment,
+        speechRemote: () => ctx.get("remote.speech") ?? void 0,
+        onFiles: !state.connection?.connected && (state.directoryOverride || options?.default?.environmentId) ? (files) => void uploadFiles(files) : void 0,
         directoryControl: !state.connection?.connected && options?.default ? (0, import_react55.createElement)(
           "div",
           { className: "bt-main-directory" },
@@ -23447,6 +23800,12 @@ var PRODUCT_CSS = `
 .bt-main-composer{width:min(800px,100% - 32px);margin:16px auto 20px;padding:12px;border:1px solid var(--bt-line);border-radius:16px;background:var(--bt-card)}
 .bt-main-composer textarea{display:block;width:100%;resize:vertical;min-height:80px;max-height:200px;padding:4px;border:0;background:transparent;color:var(--bt-ink);font:inherit;font-size:14px;line-height:22px;box-sizing:border-box}
 .bt-main-composer textarea:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px;border-radius:4px}
+.bt-main-attachments,.bt-main-message-attachments{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.bt-main-attachment{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:4px 7px;border:1px solid var(--bt-line);border-radius:6px;color:var(--bt-ink-2);font-size:12px;overflow-wrap:anywhere}
+.bt-main-attachment button{border:0;background:transparent;color:var(--bt-ink);cursor:pointer;font:inherit}
+.bt-main-attachment button:focus-visible,.bt-main-message-attachments button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-main-read-aloud{margin:4px 0 4px 12px}.bt-main-read-aloud:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-main-send button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 .bt-main-directory{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}.bt-main-directory .bt-main-label{margin:0}.bt-main-directory-note{color:var(--bt-ink-2);font-size:11px;line-height:16px}.bt-main-directory .bt-main-error{width:100%;margin:0}
 .bt-main-send{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
 .bt-main-send button{height:36px;min-width:64px}

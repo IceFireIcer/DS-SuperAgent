@@ -10,6 +10,8 @@ import type { MainSourceHandoff } from './main-source.js'
 import { isCurrentSourceEvent, type SourceEvent } from './source-events.js'
 import { authorizedScheduleEvent } from './product-schedules.js'
 import type { ContextCard, ContextRef, ContextRequest } from './context.js'
+import { assertReferenceShape, type EnvironmentAssetReference } from './environment-assets.js'
+import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 
 export interface MainWorkIntent {
   goal: string
@@ -26,6 +28,8 @@ export interface MainWorkBrief {
   routerSessionId: string
   mainMessageId: string
   originalUserText: string
+  resources?: EnvironmentAssetReference[]
+  images?: ImageAttachmentRef[]
   authorization: { kind: 'authorized-main-actor'; sourceInstanceId: string; actorId: string }
   goal: string
   constraints: string
@@ -139,6 +143,8 @@ export interface MainWorkRequest {
   routerSessionId: string
   mainMessageId: string
   originalUserText: string
+  resources?: EnvironmentAssetReference[]
+  images?: ImageAttachmentRef[]
   items?: MainWorkIntent[]
   goal?: string
   constraints?: string
@@ -388,7 +394,7 @@ export class WorkDelegation {
 
   async create(request: MainWorkRequest) {
     if (!request || Object.keys(request).some(key => !['commandId', 'mainId', 'mainSessionId', 'routerSessionId', 'mainMessageId', 'originalUserText',
-      'items', 'goal', 'constraints', 'acceptanceCriteria', 'configurationRevision', 'sourceHandoffId', 'environmentId'].includes(key))) {
+      'items', 'goal', 'constraints', 'acceptanceCriteria', 'configurationRevision', 'sourceHandoffId', 'environmentId', 'resources', 'images'].includes(key))) {
       throw new CoreError('INVALID_INPUT', 'A Main delegation accepts only its source and independent work items.')
     }
     if (request.items !== undefined && (request.goal !== undefined || request.constraints !== undefined || request.acceptanceCriteria !== undefined)) {
@@ -401,8 +407,28 @@ export class WorkDelegation {
     if (!this.options.source.allowedActorIds.includes(this.options.source.actorId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This actor cannot delegate work in the Main Instance.')
     identifier(this.options.environmentId, 'environmentId')
     if (!Number.isSafeInteger(request.configurationRevision) || request.configurationRevision < 1) throw new CoreError('INVALID_INPUT', 'A delegation needs its Main role configuration revision.')
-    const originalUserText = boundedText(request.originalUserText, 'The original Main request', 32768)
+    if (request.resources !== undefined && (!Array.isArray(request.resources) || request.resources.length < 1 || request.resources.length > 10)) {
+      throw new CoreError('INVALID_INPUT', 'A work request needs at most ten original resources.')
+    }
+    const resources = request.resources?.map(reference => { assertReferenceShape(reference); return structuredClone(reference) })
+    if (request.images !== undefined && (!Array.isArray(request.images) || request.images.length > 10
+      || request.images.some(image => !image || typeof image !== 'object' || typeof image.attachmentId !== 'string'
+        || !Number.isSafeInteger(image.bytes) || image.bytes < 1
+        || !Number.isSafeInteger(image.width) || image.width < 1
+        || !Number.isSafeInteger(image.height) || image.height < 1
+        || !['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(image.mediaType)))) {
+      throw new CoreError('INVALID_INPUT', 'A work image needs a bounded durable attachment reference.')
+    }
+    const images = request.images?.map(image => structuredClone(image))
+    if (images?.length && (!resources?.length || images.length > resources.length)) {
+      throw new CoreError('INVALID_INPUT', 'Work images need their matching Environment resources.')
+    }
+    const originalUserText = request.originalUserText === '' && resources?.length ? ''
+      : boundedText(request.originalUserText, 'The original Main request', 32768)
     const requestedItems = requestIntents(request)
+    if (resources?.length && requestedItems.length !== 1) {
+      throw new CoreError('ATTACHMENT_SCOPE_AMBIGUOUS', 'Select one work item for attached resources; multi-work grants are not available yet.')
+    }
     const single = requestedItems.length === 1 ? requestedItems[0] : undefined
     const goal = single?.goal ?? `${requestedItems.length} independent work items from one Main request.`
     const constraints = single?.constraints ?? 'Each item has its own constraints.'
@@ -417,9 +443,12 @@ export class WorkDelegation {
       if (this.options.environmentRoot && !this.options.environmentRoot(environmentId)) {
         throw new CoreError('ENVIRONMENT_DENIED', 'The selected work directory is no longer authorized for this Instance.')
       }
+      if (resources?.some(reference => reference.environmentId !== environmentId)) {
+        throw new CoreError('ENVIRONMENT_DENIED', 'The attached resources belong to a different work directory.')
+      }
       const fingerprint = createHash('sha256').update(canonicalJson(['main-work-brief-v2', this.options.instanceId, request.mainId,
         request.mainSessionId, request.routerSessionId, request.mainMessageId, originalUserText, requestedItems,
-        environmentId, request.configurationRevision, request.sourceHandoffId ?? null])).digest('hex')
+        environmentId, request.configurationRevision, request.sourceHandoffId ?? null, resources ?? [], images ?? []])).digest('hex')
       if (existing) {
         if (existing.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'This Main delegation identity was already used for different work.')
         const brief = await transaction.get<MainWorkBrief>('work-brief', existing.workBriefId)
@@ -446,7 +475,7 @@ export class WorkDelegation {
       }
       const brief: MainWorkBrief = { id, version: 1, instanceId: this.options.instanceId,
         mainId: request.mainId, mainSessionId: request.mainSessionId, routerSessionId: request.routerSessionId,
-        mainMessageId: request.mainMessageId, originalUserText,
+        mainMessageId: request.mainMessageId, originalUserText, ...(resources ? { resources } : {}), ...(images ? { images } : {}),
         authorization: { kind: 'authorized-main-actor', sourceInstanceId: this.options.source.sourceInstanceId, actorId: this.options.source.actorId },
         goal, constraints, acceptanceCriteria, requestedItems, sourceEventId: `main-work-source:${id}`,
         evidence: { kind: 'main-message', id: request.mainMessageId }, environmentId,
@@ -654,6 +683,9 @@ export class WorkDelegation {
   }
 
   private async persistSplit(brief: MainWorkBrief, suggestions: MainWorkIntent[]) {
+    if (brief.resources?.length && suggestions.length !== 1) {
+      throw new CoreError('ATTACHMENT_SCOPE_AMBIGUOUS', 'This attached request grants resources to one work item only.')
+    }
     const sourceEventId = brief.sourceEventId ?? `main-work-source:${brief.id}`
     const fingerprint = createHash('sha256').update(canonicalJson(['main-work-split-v1', brief.id, sourceEventId, suggestions])).digest('hex')
     return commandTransaction(this.options.storage, this.options.instanceId, async tx => {

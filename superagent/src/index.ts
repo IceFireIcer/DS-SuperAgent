@@ -16,6 +16,8 @@ export { Engine } from './engine.js'
 export { MainConversation } from './main-conversation.js'
 export { createProductHost } from './product-host.js'
 export type { ProductHost, ProductHostConfig } from './product-host.js'
+export { ProductAttachments } from './product-attachments.js'
+export type { ProductAttachmentUpload, ProductAttachmentView } from './product-attachments.js'
 export type { MainAddress, MainBinding, MainHealth, MainMessage, MainMessageSource, MainPage, MainRunResult, MainSend,
   MainSessionRollover, MainTurnStop, MainTurnView } from './main-conversation.js'
 export type { MainSourceDeliveryPage, MainSourceDeliveryView, MainSourceHandoff, MainSourceHandoffState, MainSourceView } from './main-source.js'

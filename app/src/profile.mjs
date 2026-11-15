@@ -11,7 +11,8 @@ export const SUPERAGENT_PROFILE = 'ds-superagent'
 export const BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@deepseek-ai/dsh-experimental-voice-input-bundle', 'ds-bot']
 // The product patch follows the existing UI bundle so it selects product data
 // before Cordis starts either host layer.
-export const SUPERAGENT_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', 'ds-bot', 'ds-superagent']
+export const SUPERAGENT_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app',
+  '@deepseek-ai/dsh-experimental-voice-input-bundle', 'ds-bot', 'ds-superagent']
 // The first-run check reads a copy of the team's chats without the Bot team running on them.
 // DSH reads a log the same way whatever the profile mounts.
 export const CHECK_PROFILE = 'import-check'

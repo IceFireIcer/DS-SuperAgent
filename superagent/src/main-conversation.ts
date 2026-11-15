@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
+import type { AdmittedPromptContentPart } from '@deepseek-ai/dsh-attachment'
 import { canonicalJson, commandTransaction } from './commands.js'
 import { CoreError, identifier, type DesktopSource } from './model.js'
 import type { NativeSessions, NativeTool } from './native-sessions.js'
@@ -7,6 +8,8 @@ import type { RoleProfile } from './config.js'
 import type { ContextRef } from './context.js'
 import type { MainWorkCard, MainWorkHandoff, MainWorkIntent, MainWorkNotification, WorkDelegation } from './work-delegation.js'
 import type { MainSourceHandoff, MainSourceView } from './main-source.js'
+import type { ProductAttachments, ProductAttachmentView } from './product-attachments.js'
+import type { EnvironmentAssetReference } from './environment-assets.js'
 
 export interface MainBinding { instanceId: string; mainId: string; mainSessionId: string; routerSessionId: string; generation: number }
 interface MainState extends MainBinding { sequence: number; activeCommand?: string }
@@ -30,6 +33,7 @@ export interface MainMessage {
   status: MainMessageStatus
   error?: string
   source?: MainMessageSource
+  attachments?: ProductAttachmentView[]
 }
 export interface MainTurnStop {
   id: string
@@ -49,6 +53,10 @@ interface MainCommand {
   messageId: string
   userSequence: number
   environmentId?: string | null
+  content?: AdmittedPromptContentPart[]
+  assets?: EnvironmentAssetReference[]
+  attachmentIds?: string[]
+  clientId?: string
   status: MainMessage['status']
   replySequence?: number
   attempts?: number
@@ -112,7 +120,7 @@ export interface MainHealth {
   errorCode?: string
 }
 export interface MainAddress { instanceId: string }
-export interface MainSend extends MainAddress { commandId: string; text: string; environmentId?: string; clientId?: string }
+export interface MainSend extends MainAddress { commandId: string; text: string; environmentId?: string; clientId?: string; attachments?: string[] }
 export interface MainSessionRollover {
   id: string
   mainId: string
@@ -158,7 +166,8 @@ export class MainConversation {
     private readonly sessions?: NativeSessions,
     private readonly prepare?: (sessionId: string) => Promise<{ profile: RoleProfile; revision: number }>,
     private readonly work?: () => WorkDelegation | undefined,
-    private readonly defaultEnvironment?: (transaction: AsyncTx) => Promise<string | undefined>) {}
+    private readonly defaultEnvironment?: (transaction: AsyncTx) => Promise<string | undefined>,
+    private readonly attachments?: ProductAttachments) {}
 
   private authorize(request: MainAddress) {
     if (!request || request.instanceId !== this.instanceId || !this.source.allowedActorIds.includes(this.source.actorId)) {
@@ -334,12 +343,15 @@ export class MainConversation {
     identifier(request.commandId, 'commandId')
     if (request.clientId !== undefined) identifier(request.clientId, 'clientId')
     if (request.environmentId !== undefined) identifier(request.environmentId, 'environmentId')
-    if (typeof request.text !== 'string' || !request.text.trim() || Buffer.byteLength(request.text) > 32768) throw new CoreError('INVALID_INPUT', 'Send a nonempty Main message of at most 32768 bytes.')
+    if (typeof request.text !== 'string' || Buffer.byteLength(request.text) > 32768
+      || !request.text.trim() && !request.attachments?.length) throw new CoreError('INVALID_INPUT', 'Send text or an authorized attachment within the Main message limit.')
+    if (request.attachments !== undefined && (!Array.isArray(request.attachments) || request.attachments.length > 10
+      || request.attachments.some(id => typeof id !== 'string'))) throw new CoreError('INVALID_INPUT', 'Choose at most ten attachment references.')
     const binding = await this.open(request)
     const key = createHash('sha256').update(canonicalJson(request.clientId
       ? [this.source.sourceInstanceId, this.source.actorId, request.clientId, request.commandId]
       : [this.source.sourceInstanceId, this.source.actorId, request.commandId])).digest('hex')
-    const fingerprint = createHash('sha256').update(canonicalJson([request.instanceId, request.text,
+    const fingerprint = createHash('sha256').update(canonicalJson([request.instanceId, request.text, request.attachments ?? [],
       ...(request.environmentId === undefined ? [] : [request.environmentId]),
       ...(request.clientId === undefined ? [] : [request.clientId])])).digest('hex')
     await commandTransaction(this.storage, this.instanceId, async tx => {
@@ -357,10 +369,18 @@ export class MainConversation {
       const sequence = state.sequence + 1
       const messageId = `main-input-${randomUUID()}`
       const environmentId = request.environmentId ?? await this.defaultEnvironment?.(tx) ?? null
+      const references = request.attachments?.length ? await this.attachments?.resolve(tx, { instanceId: this.instanceId,
+        actorId: this.source.actorId, ...(request.clientId ? { clientId: request.clientId } : {}),
+        environmentId: environmentId ?? '', ids: request.attachments }) : undefined
+      if (request.attachments?.length && !references) throw new CoreError('UNAVAILABLE', 'Attachments are unavailable in this product Host.')
+      const content: AdmittedPromptContentPart[] | undefined = references
+        ? [...(request.text ? [{ type: 'text' as const, text: request.text }] : []), ...references.content] : undefined
       await tx.insert<MainMessage>('main-message', messageKey(sequence), { id: messageId, sequence, role: 'user', text: request.text,
-        createdAt: Date.now(), status: 'queued', ...(request.clientId ? { source: { kind: 'client', clientId: request.clientId } as const } : {}) })
+        createdAt: Date.now(), status: 'queued', ...(references ? { attachments: references.views } : {}),
+        ...(request.clientId ? { source: { kind: 'client', clientId: request.clientId } as const } : {}) })
       const command: MainCommand = { fingerprint, messageId, userSequence: sequence, status: 'queued', updatedAt: Date.now(),
-        environmentId }
+        environmentId, ...(content ? { content, assets: references!.assets, attachmentIds: [...request.attachments!] } : {}),
+        ...(request.clientId ? { clientId: request.clientId } : {}) }
       await tx.insert<MainCommand>('main-command', key, command)
       await tx.insert('main-message-command', messageId, { commandKey: key })
       await this.activeCommand(tx, { ...command, key })
@@ -493,6 +513,14 @@ export class MainConversation {
   }
 
   private tools(binding: MainBinding, command: MainCommand, originalUserText: string, configurationRevision: number): NativeTool[] {
+    const checkAttachments = async () => {
+      if (!command.attachmentIds?.length) return
+      if (!this.attachments) throw new CoreError('UNAVAILABLE', 'The product attachment service is unavailable.')
+      await this.storage.transaction(this.instanceId, tx => this.attachments!.resolve(tx, {
+        instanceId: this.instanceId, actorId: this.source.actorId,
+        ...(command.clientId ? { clientId: command.clientId } : {}),
+        environmentId: command.environmentId ?? '', ids: command.attachmentIds! }))
+    }
     return [
       { name: 'delegate_work', description: 'Create one durable local WorkBrief for one to four independent items. Give every item a clear goal, strict constraints and observable acceptance criteria. The Router decides and establishes the Tickets; this tool does not mean any Worker started or completed.',
         parameters: {
@@ -522,9 +550,17 @@ export class MainConversation {
               acceptanceCriteria: value.acceptanceCriteria ?? args.acceptanceCriteria,
             }
           }) as MainWorkIntent[] : undefined
+          if (command.assets?.length && items?.length !== 1 && items !== undefined) {
+            return JSON.stringify({ status: 'rejected', code: 'ATTACHMENT_SCOPE_AMBIGUOUS', ticketCreated: false,
+              message: 'Attached resources can be delegated to one work item only.' })
+          }
+          await checkAttachments()
           const brief = await work.create({ commandId: `main-work:${command.messageId}`, mainId: binding.mainId,
             mainSessionId: binding.mainSessionId, routerSessionId: binding.routerSessionId, mainMessageId: command.messageId,
-            originalUserText, ...(items ? { items } : { goal: args.goal ?? '', constraints: args.constraints ?? '', acceptanceCriteria: args.acceptanceCriteria ?? '' }),
+            originalUserText, ...(command.assets?.length ? { resources: command.assets } : {}),
+            ...(command.content?.some(block => block.type === 'image')
+              ? { images: command.content.filter(block => block.type === 'image').map(block => block.attachment) } : {}),
+            ...(items ? { items } : { goal: args.goal ?? '', constraints: args.constraints ?? '', acceptanceCriteria: args.acceptanceCriteria ?? '' }),
             configurationRevision, ...(command.environmentId ? { environmentId: command.environmentId } : {}) })
           return JSON.stringify(await work.query(binding.mainId, { workBriefId: brief.id }))
         } },
@@ -819,6 +855,13 @@ export class MainConversation {
       const turnText = priorDelivery.found
         ? `Continue the interrupted Main turn for durable input ${command.messageId}. Use the existing Session history and durable tool receipts. Do not repeat a delegation, follow-up, stop, answer or query that already completed. Reply to the user without restating the original input.`
         : text
+      if (!priorDelivery.found && command.attachmentIds?.length) {
+        if (!this.attachments) throw new CoreError('UNAVAILABLE', 'The product attachment service is unavailable.')
+        await this.storage.transaction(this.instanceId, tx => this.attachments!.resolve(tx, {
+          instanceId: this.instanceId, actorId: this.source.actorId,
+          ...(command.clientId ? { clientId: command.clientId } : {}),
+          environmentId: command.environmentId ?? '', ids: command.attachmentIds! }))
+      }
       await this.updateCommand(key, 'running', undefined, { attempts, run: { attempts, messageId, sessionId: current.mainSessionId,
         generation: state.generation, startedAt: Date.now() } })
       this.turnControllers.set(key, controller)
@@ -827,6 +870,7 @@ export class MainConversation {
       if (stopping) controller.abort()
       const prepared = await this.prepare?.(current.mainSessionId)
       const result = await this.sessions!.run({ role: 'main', sessionId: current.mainSessionId, text: turnText,
+        ...(!priorDelivery.found && command.content ? { content: command.content } : {}),
         tools: this.tools(current, command, text, prepared?.revision ?? 1), messageId, signal: controller.signal,
         onForkPrepared: async childSessionId => { await this.rollover(key, current, childSessionId) },
         ...(prepared ? { profile: prepared.profile } : {}) })

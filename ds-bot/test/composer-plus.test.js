@@ -13,23 +13,32 @@ const { outputFiles } = await build({
   external: ['react', 'react-dom'],
 })
 let hooks = 0
+let effectsEnabled = false
+let cleanups = []
 const react = {
   Fragment: 'fragment',
   createElement: (type, props, ...children) => ({ type, props: props ?? {}, children: children.flat(Infinity) }),
   useState: initial => { hooks += 1; return [initial, () => {}] },
   useRef: current => { hooks += 1; return { current } },
-  useEffect: () => { hooks += 1 },
+  useEffect: effect => {
+    hooks += 1
+    if (effectsEnabled) {
+      const cleanup = effect()
+      if (typeof cleanup === 'function') cleanups.push(cleanup)
+    }
+  },
   useLayoutEffect: () => { hooks += 1 },
   useMemo: make => { hooks += 1; return make() },
 }
 const module = { exports: {} }
 const windowObject = {}
+const navigatorObject = { language: 'en-US' }
 runInNewContext(outputFiles[0].text, {
   module, exports: module.exports,
-  window: windowObject, navigator: { language: 'en-US' },
+  window: windowObject, navigator: navigatorObject,
   require: name => (name === 'react' ? react : name === 'react-dom' ? { createPortal: node => node } : {}),
 })
-const { ComposerPlus, useDictation } = module.exports
+const { ComposerPlus, MainComposer, useDictation } = module.exports
 
 // Renders the "+" for a chat whose Bot is in the roster as `roster` says, and counts its hook calls.
 function render(roster) {
@@ -84,4 +93,32 @@ test('browser dictation drops the final result of a discarded recognition', () =
   first.result('older')
   second.result('second')
   assert.deepEqual(heard, [['first', true], ['second', true]])
+})
+
+test('Main discards a speech catalog that resolves after the composer closes', async () => {
+  let resolveCatalog
+  let microphoneAccesses = 0
+  Object.defineProperty(navigatorObject, 'mediaDevices', { configurable: true,
+    get() { microphoneAccesses += 1; return undefined } })
+  const speech = { catalog: () => new Promise(resolve => { resolveCatalog = resolve }) }
+  effectsEnabled = true
+  cleanups = []
+  const tree = MainComposer({ onSend: async () => true, value: '', speechRemote: () => speech })
+  const buttons = []
+  const visit = node => {
+    if (!node || typeof node !== 'object') return
+    if (node.type === 'button') buttons.push(node)
+    node.children?.forEach(visit)
+  }
+  visit(tree)
+  const microphone = buttons.find(button => button.props['aria-label'] === 'Start dictation')
+  assert.ok(microphone)
+  microphone.props.onClick()
+  cleanups.forEach(cleanup => cleanup())
+  resolveCatalog({ ok: true, value: { providers: [{ id: 'local', preparation: { phase: 'ready' } }],
+    selection: { providerId: 'local' }, maxDurationSeconds: 10 } })
+  await Promise.resolve()
+  await Promise.resolve()
+  assert.equal(microphoneAccesses, 0)
+  effectsEnabled = false
 })

@@ -3,19 +3,86 @@ import { createPortal } from 'react-dom'
 import { ChatsIcon, ClockIcon, MicIcon, PaperclipIcon, PeopleIcon, PlusIcon, WaveIcon } from './icons.js'
 import { BotMark } from './mark.js'
 import { useLinger, useViewport, viewBottom } from './motion.js'
+import { openCapture, speechCatalog, transcribeWave } from './speech.js'
 import { t } from './i18n.js'
 
-export function MainComposer({ onSend, onStop, busy, stopping, readOnly = false, error, value, onValueChange, directoryControl }) {
+export function MainComposer({ onSend, onStop, busy, stopping, readOnly = false, error, value, onValueChange, directoryControl,
+  attachments = [], onFiles, onRemoveAttachment, uploading = false, speechRemote }) {
   const [draft, setDraft] = useState('')
+  const [voiceState, setVoiceState] = useState('idle')
+  const [voiceError, setVoiceError] = useState(null)
+  const fileInput = useRef(null)
+  const capture = useRef(null)
+  const voiceGeneration = useRef(0)
   const text = value ?? draft
   const setText = next => onValueChange ? onValueChange(next) : setDraft(next)
+  const latestText = useRef(text)
+  latestText.current = text
+  const insertTranscript = words => {
+    const current = latestText.current
+    const next = `${current}${current && !/\s$/u.test(current) ? ' ' : ''}${words}`
+    latestText.current = next
+    setText(next)
+  }
+  const dictation = useDictation((words, final) => { if (final) insertTranscript(words.trim()) })
+  useEffect(() => () => {
+    voiceGeneration.current += 1
+    if (capture.current?.timer) clearTimeout(capture.current.timer)
+    capture.current?.controller.abort()
+    capture.current?.handle.cancel()
+  }, [])
+  const finishCapture = async () => {
+    const active = capture.current
+    if (!active) return
+    capture.current = null
+    clearTimeout(active.timer)
+    setVoiceState('transcribing')
+    try {
+      const wave = await active.handle.finish(active.catalog.maxDurationSeconds)
+      const words = wave ? await transcribeWave(active.speech, active.catalog, wave, active.controller.signal) : ''
+      if (voiceGeneration.current === active.generation && words.trim()) insertTranscript(words.trim())
+    } catch (reason) {
+      if (voiceGeneration.current === active.generation) setVoiceError(t(reason?.kind === 'too-long'
+        ? 'The recording is too long.' : "Couldn't hear that"))
+    } finally { if (voiceGeneration.current === active.generation) setVoiceState('idle') }
+  }
+  const toggleVoice = async () => {
+    if (voiceState === 'preparing' || voiceState === 'transcribing') return
+    if (capture.current) { await finishCapture(); return }
+    const speech = speechRemote?.()
+    if (!speech) {
+      if (dictation.listening) dictation.stop()
+      else dictation.start()
+      return
+    }
+    setVoiceError(null)
+    setVoiceState('preparing')
+    const generation = ++voiceGeneration.current
+    try {
+      const { catalog, usable } = await speechCatalog(speech)
+      if (voiceGeneration.current !== generation) return
+      if (!usable) { setVoiceError(t('The speech provider is not ready.')); setVoiceState('idle'); return }
+      const handle = await openCapture()
+      if (voiceGeneration.current !== generation) { handle.cancel(); return }
+      const timer = setTimeout(() => { void finishCapture() }, catalog.maxDurationSeconds * 1000)
+      capture.current = { handle, catalog, speech, generation, controller: new AbortController(), timer }
+      setVoiceState('recording')
+    } catch (reason) {
+      if (voiceGeneration.current === generation) {
+        setVoiceError(t(reason?.kind === 'blocked' ? 'Microphone access is blocked' : "Couldn't start dictation"))
+        setVoiceState('idle')
+      }
+    }
+  }
+  const hasContent = Boolean(text.trim() || attachments.length)
   const submit = async event => {
     event.preventDefault()
-    if (busy || readOnly || !text.trim()) return
+    if (busy || uploading || voiceState !== 'idle' || dictation.listening || readOnly || !hasContent) return
     if (await onSend(text)) setText('')
   }
   return h('form', { className: 'bt-main-composer', onSubmit: submit },
     error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
+    voiceError || dictation.note ? h('p', { className: 'bt-main-error', role: 'status' }, voiceError ?? dictation.note) : null,
     h('label', { className: 'bt-main-label', htmlFor: 'main-message' }, t('Message Main')),
     h('textarea', {
       id: 'main-message', value: text, rows: 2, maxLength: 32768, placeholder: readOnly ? t('Read-only connection') : t('Message Main'), disabled: readOnly,
@@ -23,11 +90,25 @@ export function MainComposer({ onSend, onStop, busy, stopping, readOnly = false,
       onKeyDown: event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(event) } },
     }),
     directoryControl,
+    attachments.length ? h('div', { className: 'bt-main-attachments', 'aria-label': t('Attached files') },
+      attachments.map(attachment => h('span', { className: 'bt-main-attachment', key: attachment.id },
+        `${attachment.name} · ${attachment.bytes} ${t('bytes')}`,
+        onRemoveAttachment ? h('button', { type: 'button', disabled: busy || uploading,
+          'aria-label': t('Remove {name}', { name: attachment.name }), onClick: () => onRemoveAttachment(attachment) }, '×') : null))) : null,
     h('div', { className: 'bt-main-send' },
+      !readOnly ? h('button', { type: 'button', className: 'bt-soft', disabled: busy || uploading || voiceState === 'preparing' || voiceState === 'transcribing',
+        'aria-pressed': voiceState === 'recording' || dictation.listening,
+        'aria-label': t(voiceState === 'recording' || dictation.listening ? 'Stop dictation' : 'Start dictation'),
+        title: t(voiceState === 'recording' ? 'Stop dictation' : 'Start dictation'), onClick: () => void toggleVoice() }, h(MicIcon)) : null,
+      onFiles && !readOnly ? h('span', null,
+        h('input', { type: 'file', ref: fileInput, multiple: true, hidden: true,
+          onChange: event => { const files = [...(event.target.files ?? [])]; event.target.value = ''; if (files.length) onFiles(files) } }),
+        h('button', { type: 'button', className: 'bt-soft', disabled: busy || uploading,
+          'aria-label': t('Add files'), title: t('Add files'), onClick: () => fileInput.current?.click() }, h(PaperclipIcon))) : null,
       busy && onStop && !readOnly ? h('button', { className: 'bt-soft', type: 'button', disabled: stopping, onClick: onStop },
         stopping ? t('Stopping…') : t('Stop reply')) : null,
-      h('button', { className: 'bt-soft', type: 'submit', disabled: busy || readOnly || !text.trim() },
-        readOnly ? t('Read-only') : busy ? t('Sending…') : t('Send'))))
+      h('button', { className: 'bt-soft', type: 'submit', disabled: busy || uploading || voiceState !== 'idle' || dictation.listening || readOnly || !hasContent },
+        readOnly ? t('Read-only') : uploading ? t('Uploading…') : busy ? t('Sending…') : t('Send'))))
 }
 
 // -------------------------------------------------------------------------

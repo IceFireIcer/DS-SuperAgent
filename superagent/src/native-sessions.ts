@@ -1,4 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
+import type { AdmittedPromptContentPart } from '@deepseek-ai/dsh-attachment'
 import { randomUUID } from 'node:crypto'
 import type { Agent, AgentHandle, AgentOptions } from '@deepseek-ai/dsh-agent'
 import { MessageId, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
@@ -15,7 +16,7 @@ export interface NativeTool {
   /** `agent` is the exact caller DSH reports for this call, used to parent a delegated child Agent. */
   execute(args: Record<string, any>, signal: AbortSignal, agent?: Agent): Promise<string>
 }
-export interface NativeSessionRequest { sessionId: string; role: 'main' | 'router' | 'worker'; text: string; tools: NativeTool[]; cwd?: string; signal?: AbortSignal; onBeforeModel?: () => Promise<void>; onDelivered?: () => Promise<void>; coalesce?: boolean; messageId?: string; onMessagePersisted?: (seq: number) => Promise<void>; onForkPrepared?: (sessionId: string) => Promise<void>; instructions?: string; skills?: string[]; profile?: RoleProfile; stepBudget?: number }
+export interface NativeSessionRequest { sessionId: string; role: 'main' | 'router' | 'worker'; text: string; content?: AdmittedPromptContentPart[]; tools: NativeTool[]; cwd?: string; signal?: AbortSignal; onBeforeModel?: () => Promise<void>; onDelivered?: () => Promise<void>; coalesce?: boolean; messageId?: string; onMessagePersisted?: (seq: number) => Promise<void>; onForkPrepared?: (sessionId: string) => Promise<void>; instructions?: string; skills?: string[]; profile?: RoleProfile; stepBudget?: number }
 export interface NativeSessionsOptions { main?: AgentOptions; router: AgentOptions; worker: AgentOptions; timeoutMs?: number }
 interface NativeSessionResult { sessionId: string; status: string; events: readonly unknown[]; forkedSessionId?: string
   turnStartSeq?: number; turnEndSeq?: number; stepCount: number }
@@ -219,7 +220,7 @@ export class NativeSessions {
       request.signal?.throwIfAborted()
       await request.onBeforeModel?.()
       await request.onDelivered?.()
-      handle.agent.followup({ id: MessageId(messageId), role: 'user', content: [{ type: 'text', text: request.text }], source: { kind: 'user' } })
+      handle.agent.followup({ id: MessageId(messageId), role: 'user', content: request.content ?? [{ type: 'text', text: request.text }], source: { kind: 'user' } })
       await handle.agent.whenIdle()
       if (!await this.context.sessions.flush(handle.agent.session)) throw new CoreError('PERSISTENCE_REQUIRED', 'No persistence provider confirmed this Session flush.')
       if (stepBudgetExceeded) throw new CoreError('STEP_BUDGET', 'The Session step budget was exhausted.')

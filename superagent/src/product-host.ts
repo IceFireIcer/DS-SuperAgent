@@ -1,4 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
+import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import { createHash } from 'node:crypto'
 import { realpath, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
@@ -11,6 +12,8 @@ import { NativeSessions } from './native-sessions.js'
 import { SqliteStorage } from './storage.js'
 import { LocalEnvironment } from './local-environment.js'
 import { FeishuRuntime, type FeishuRuntimeOptions } from './feishu-runtime.js'
+import { ProductAttachments } from './product-attachments.js'
+import { assertReferenceShape } from './environment-assets.js'
 import { localDeliveryChannel, type DeliveryChannel } from './deliveries.js'
 import type { RoleConfig, RoleModel } from './config.js'
 
@@ -63,6 +66,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
   const sessions = new NativeSessions(context, { main: route(config.main), router: route(config.router), worker: route(config.worker), ...(config.timeoutMs === undefined ? {} : { timeoutMs: config.timeoutMs }) })
   const storage = await SqliteStorage.open(config.databasePath)
   const environments: LocalEnvironment[] = []
+  const nativeAttachments = context.get('attachments') as AttachmentStore | undefined
+  const attachments = nativeAttachments ? new ProductAttachments(storage, instanceId, nativeAttachments,
+    id => environments.find(environment => environment.config.id === id)) : undefined
   let engine: Engine | undefined
   let gateway: Awaited<ReturnType<typeof createClientGateway>> | undefined
   let feishuRuntime: FeishuRuntime | undefined
@@ -225,7 +231,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
           : Promise.resolve({ type: 'permanent', reason: 'DESTINATION_SOURCE_DISABLED' }),
     } : undefined
     engine = new Engine(storage, instanceId, { sourceInstanceId: 'product-desktop', actorId, allowedActorIds: [actorId] }, {}, sessions,
-      environments, {}, {}, {}, channel ? { channel } : {})
+      environments, {}, {}, {}, channel ? { channel } : {}, {}, undefined, attachments)
     if (environments[0] && config.workspaceRoot) await engine.addWorkDirectory({ instanceId,
       commandId: `bootstrap:${environments[0].config.id}`, environment: environments[0] })
     await engine.acquireHost()
@@ -252,7 +258,11 @@ export async function createProductHost(context: Context, config: ProductHostCon
             : endpoint === 'schedule-read' ? ['instanceId', 'ruleId']
               : endpoint === 'schedule-create' ? ['instanceId', 'commandId', 'title', 'text', 'timezone', 'when', 'target']
                 : endpoint === 'schedule-cancel' ? ['instanceId', 'commandId', 'ruleId']
-                  : endpoint === 'send' ? ['instanceId', 'commandId', 'text', 'environmentId']
+                : endpoint === 'send' ? ['instanceId', 'commandId', 'text', 'environmentId', 'attachments']
+                  : endpoint === 'attachment-upload' ? ['instanceId', 'commandId', 'environmentId', 'kind', 'name', 'mediaType', 'data']
+                    : endpoint === 'attachment-read' ? ['instanceId', 'id', 'offset', 'maxBytes']
+                      : endpoint === 'attachment-revoke' ? ['instanceId', 'id']
+                        : endpoint === 'artifact-read' ? ['instanceId', 'workItemId', 'path', 'offset', 'maxBytes']
           : endpoint === 'clients-list' ? ['instanceId']
             : endpoint === 'client-enroll' ? ['instanceId', 'commandId', 'label', 'capabilities']
               : endpoint === 'client-revoke' ? ['instanceId', 'commandId', 'clientId', 'reason']
@@ -284,6 +294,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
         if (Object.keys(payload).some(key => !fields.includes(key))) throw new CoreError('INVALID_INPUT', 'The product request contains unsupported fields.')
         if (client && endpoint.startsWith('schedule-')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Schedule administration requires the local authorized product settings.')
+        }
+        if (client && (endpoint.startsWith('attachment-') || endpoint === 'artifact-read')) {
+          throw new CoreError('SOURCE_NOT_AUTHORIZED', 'File access requires the local authorized product window.')
         }
         if (endpoint === 'clients-list' || endpoint === 'client-enroll' || endpoint === 'client-revoke') {
           if (client) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Client administration requires the local authorized product settings.')
@@ -370,8 +383,36 @@ export async function createProductHost(context: Context, config: ProductHostCon
         if (endpoint === 'directory-default-save') return engine!.setInstanceDirectory({ instanceId,
           commandId: payload.commandId as string, expectedRevision: payload.expectedRevision as number,
           environmentId: payload.environmentId as string })
+        if (endpoint === 'attachment-upload' || endpoint === 'attachment-read' || endpoint === 'attachment-revoke') {
+          if (!attachments) throw new CoreError('UNAVAILABLE', 'The public DSH attachment service is not mounted in this profile.')
+          if (endpoint === 'attachment-upload') return attachments.upload({ instanceId, actorId,
+            commandId: payload.commandId as string, environmentId: payload.environmentId as string,
+            kind: payload.kind as 'file' | 'image', name: payload.name as string,
+            ...(payload.mediaType === undefined ? {} : { mediaType: payload.mediaType as string }), data: payload.data as string })
+          if (endpoint === 'attachment-read') return attachments.read({ instanceId, actorId, id: payload.id as string,
+            ...(payload.offset === undefined ? {} : { offset: payload.offset as number }),
+            ...(payload.maxBytes === undefined ? {} : { maxBytes: payload.maxBytes as number }) })
+          return attachments.revoke({ instanceId, actorId, id: payload.id as string })
+        }
+        if (endpoint === 'artifact-read') {
+          const work = await engine!.getMainWorkCard({ instanceId, workItemId: payload.workItemId as string })
+          const artifact = work.outcome?.artifacts.find(item => item.path === payload.path)
+          if (!artifact?.reference) throw new CoreError('NOT_FOUND', 'This work has no authorized artifact at that path.')
+          const reference = artifact.reference
+          assertReferenceShape(reference)
+          if (reference.environmentId !== work.brief.environmentId) {
+            throw new CoreError('REFERENCE_STALE', 'The artifact belongs to another work Environment.')
+          }
+          const owner = environments.find(environment => environment.config.id === reference.environmentId)
+          if (!owner) throw new CoreError('ENVIRONMENT_DENIED', 'This artifact belongs to an unavailable work directory.')
+          const bound = await owner.prepare({ instanceId, actorId })
+          return bound.readProductAsset(reference, {
+            ...(payload.offset === undefined ? {} : { offset: payload.offset as number }),
+            ...(payload.maxBytes === undefined ? {} : { maxBytes: payload.maxBytes as number }) })
+        }
         if (endpoint === 'send') return engine!.sendMainMessage({ instanceId, commandId, text: payload.text as string,
           ...(payload.environmentId === undefined ? {} : { environmentId: payload.environmentId as string }),
+          ...(payload.attachments === undefined ? {} : { attachments: payload.attachments as string[] }),
           ...(client ? { clientId: client.id } : {}) })
         if (endpoint === 'stop-main') return engine!.stopMainTurn({ instanceId, commandId, messageId: payload.messageId as string })
         if (endpoint === 'work-stop') return engine!.stopMainWork({ instanceId, commandId,

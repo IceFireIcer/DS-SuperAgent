@@ -24,6 +24,7 @@ import { Outbox } from './outbox.js'
 import { HostLease, type HostOptions } from './host.js'
 import { ClientAccess } from './client-access.js'
 import { feishuQuestionCode } from './feishu-delivery.js'
+import type { ProductAttachments } from './product-attachments.js'
 import { listSupervisorProposals, Supervisor, type SupervisorOptions, type SupervisorProposal } from './supervisor.js'
 import { assertHostTakeoverSettled, loadHostTakeover, type HostTakeoverRecord, type HostTakeoverTicket } from './host-takeover.js'
 import { ContextReader, type ContextCandidate, type ContextCard, type ContextRef, type ContextRequest } from './context.js'
@@ -210,7 +211,7 @@ export class Engine {
       throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This actor cannot change versioned behavior configuration.')
     }
   }
-  constructor(rawStorage: Storage, private readonly instanceId: string, private readonly source: DesktopSource, effectsOptions: EffectsOptions = {}, sessions?: NativeSessions, private readonly environments: ExecutionEnvironment[] = [], slotOptions: SlotOptions = {}, jobOptions: JobsOptions = {}, subagentOptions: SubagentsOptions = {}, deliveryOptions: DeliveryOptions = {}, hostOptions: HostOptions = {}, proactiveOptions?: ProactiveOptions) {
+  constructor(rawStorage: Storage, private readonly instanceId: string, private readonly source: DesktopSource, effectsOptions: EffectsOptions = {}, sessions?: NativeSessions, private readonly environments: ExecutionEnvironment[] = [], slotOptions: SlotOptions = {}, jobOptions: JobsOptions = {}, subagentOptions: SubagentsOptions = {}, deliveryOptions: DeliveryOptions = {}, hostOptions: HostOptions = {}, proactiveOptions?: ProactiveOptions, attachments?: ProductAttachments) {
     identifier(instanceId, 'instanceId')
     identifier(source.sourceInstanceId, 'sourceInstanceId')
     identifier(source.actorId, 'actorId')
@@ -229,7 +230,7 @@ export class Engine {
     }, () => this.environments.some(candidate => candidate.kind === 'local' && candidate.config.instanceId === instanceId
       && candidate.config.allowedActorIds.includes(source.actorId) && candidate.config.permissions.includes('read')
       && candidate.config.permissions.includes('write')) ? this.workDelegation : undefined,
-    async transaction => (await this.instanceDirectoryIn(transaction))?.environmentId)
+    async transaction => (await this.instanceDirectoryIn(transaction))?.environmentId, attachments)
     this.roleConfig = new RoleConfigStore(storage, instanceId, {
       ...(sessions?.mainRoute ? { main: { name: 'Main', model: sessions.mainRoute, instructions: '', skills: [] } } : {}),
       router: { name: 'Router', model: sessions?.routerRoute ?? { provider: 'unconfigured', model: 'unconfigured' }, instructions: '', skills: [] },
@@ -669,6 +670,8 @@ export class Engine {
     const source: Source = { kind: this.source.kind ?? 'desktop', sourceInstanceId: this.source.sourceInstanceId, actorId: this.source.actorId }
     const triggerId = JSON.stringify([this.instanceId, source.kind, source.sourceInstanceId, brief.sourceEventId, item.id, 'main-work-item'])
     const text = `Original Main request:\n${brief.originalUserText}\n\nGoal:\n${item.goal}\n\nConstraints:\n${item.constraints}\n\nAcceptance criteria:\n${item.acceptanceCriteria}`
+      + (brief.resources?.length ? `\n\nAttached resources for this work (read with the bound Environment's read_asset tool):\n${JSON.stringify(brief.resources)}` : '')
+    if (Buffer.byteLength(text) > 32768) throw new CoreError('INVALID_INPUT', 'This work request is too long with its attached resource references.')
     const deliveryOrigin = brief.sourceHandoffId ? await this.storage.transaction(this.instanceId, async tx => {
       const handoff = await tx.get<MainSourceHandoff>('main-source-handoff', brief.sourceHandoffId!)
       const event = handoff ? await tx.get<SourceEvent>('source-event', handoff.sourceEventId) : undefined
@@ -685,7 +688,8 @@ export class Engine {
         ...(event.threadId ? { threadId: event.threadId } : {}), nativeVersion: event.version, reference: handoff.reference }
     }) : undefined
     const trigger: Work['trigger'] = { id: triggerId, instanceId: this.instanceId, source, eventId: brief.sourceEventId,
-      text, environmentId: brief.environmentId, target: 'local-only', targetSource: 'ticket', ...(deliveryOrigin ? { deliveryOrigin } : {}) }
+      text, environmentId: brief.environmentId, target: 'local-only', targetSource: 'ticket',
+      ...(brief.images?.length ? { nativeImages: brief.images } : {}), ...(deliveryOrigin ? { deliveryOrigin } : {}) }
     const commandId = `main-work-ticket:${brief.id}:${item.id}`
     const fingerprint = `sha256:main-work-item-v1:${createHash('sha256').update(canonicalJson([
       this.instanceId, source, brief.sourceEventId, item.id, item.goal, item.constraints, item.acceptanceCriteria, brief.environmentId,
@@ -1729,6 +1733,17 @@ export class Engine {
     }
     const binding = await this.main.open({ instanceId: request.instanceId })
     return this.workDelegation.plan(binding.mainId, request.workBriefId)
+  }
+
+  async getMainWorkCard(request: MainAddress & { workItemId: string }): Promise<MainWorkCard> {
+    if (!this.workDelegation) throw new CoreError('DELEGATION_UNAVAILABLE', 'No authorized local workspace is configured.')
+    if (request.instanceId !== this.instanceId || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This work item is outside the authorized Main Instance.')
+    }
+    const binding = await this.main.open({ instanceId: request.instanceId })
+    const result = await this.workDelegation.query(binding.mainId, { workItemId: request.workItemId })
+    if (!result || !('brief' in result)) throw new CoreError('INCOMPLETE_STATE', 'The work item projection is unavailable.')
+    return result
   }
 
   async readMainEvidence(request: MainAddress & { workItemId: string; ref: Omit<ContextRef, 'ticketId'>;

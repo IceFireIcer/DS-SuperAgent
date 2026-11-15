@@ -1371,6 +1371,9 @@ export class Execution {
           router: configuration.roles.router.model, worker: configuration.roles.worker.model,
         })) },
         text: turnText ?? await this.turnTextFor(cause, ticketId, trigger, input, job, subagent),
+        ...(cause === 'launch' && trigger.nativeImages?.length
+          ? { content: [{ type: 'text' as const, text: turnText ?? trigger.text },
+              ...trigger.nativeImages.map(attachment => ({ type: 'image' as const, attachment }))] } : {}),
         profile: structuredClone(configuration.roles.worker),
         ...(bound ? { cwd: bound.cwd } : {}), signal: controller.signal, tools: status ? statusTools : [
       contextTool,
