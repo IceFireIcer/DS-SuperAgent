@@ -13,6 +13,8 @@ export interface EnvironmentConfig {
   allowedActorIds: string[]
   permissions: LocalPermission[]
   commands: Record<string, LocalCommand>
+  /** Explicitly permits Worker-owned shell and PTY commands in this local execution world. */
+  allowShell?: boolean
   /** Names of device-side commands whose argv never leaves the device. */
   commandNames?: readonly string[]
   /** Deployment-owned verbatim asset store; it must live outside the exposed working directory. */
@@ -58,6 +60,8 @@ export interface PreparedEnvironment {
   inspectWorkCopy?(signal?: AbortSignal): Promise<WorkCopySnapshot>
   planCommand?(name: string, mode?: 'foreground' | 'background'): { jobId: string; remote: RemoteJobObservation }
   startCommand?(name: string, jobId?: string): Promise<LocalJob>
+  startShell?(command: string, jobId?: string): Promise<LocalJob>
+  startTerminal?(command: string, jobId?: string): Promise<LocalJob>
   attachCommand?(jobId: string): Promise<LocalJob>
   inspectRange?(jobId: string): Promise<{ jobId: string; state: string; settled: boolean; cancelled: boolean
     ownerId: string | null; deadlineAt: number | null; recovery?: RemoteJobRecovery
@@ -92,7 +96,7 @@ export function environmentCommandNames(environment: ExecutionEnvironment): stri
 
 export function environmentHasCommand(environment: ExecutionEnvironment | undefined): boolean {
   if (!environment || !environment.config.permissions.includes('command')) return false
-  return environmentCommandNames(environment).some(name => name !== environment.config.setup)
+  return environment.config.allowShell === true || environmentCommandNames(environment).some(name => name !== environment.config.setup)
 }
 
 export function sameEnvironment(location: EnvironmentLocation | undefined, environment: ExecutionEnvironment) {

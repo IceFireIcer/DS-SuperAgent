@@ -47,6 +47,7 @@ interface MainCommand {
   fingerprint: string
   messageId: string
   userSequence: number
+  environmentId?: string | null
   status: MainMessage['status']
   replySequence?: number
   attempts?: number
@@ -110,7 +111,7 @@ export interface MainHealth {
   errorCode?: string
 }
 export interface MainAddress { instanceId: string }
-export interface MainSend extends MainAddress { commandId: string; text: string }
+export interface MainSend extends MainAddress { commandId: string; text: string; environmentId?: string }
 export interface MainSessionRollover {
   id: string
   mainId: string
@@ -155,7 +156,8 @@ export class MainConversation {
   constructor(private readonly storage: Storage, private readonly instanceId: string, private readonly source: DesktopSource,
     private readonly sessions?: NativeSessions,
     private readonly prepare?: (sessionId: string) => Promise<{ profile: RoleProfile; revision: number }>,
-    private readonly work?: () => WorkDelegation | undefined) {}
+    private readonly work?: () => WorkDelegation | undefined,
+    private readonly defaultEnvironment?: (transaction: AsyncTx) => Promise<string | undefined>) {}
 
   private authorize(request: MainAddress) {
     if (!request || request.instanceId !== this.instanceId || !this.source.allowedActorIds.includes(this.source.actorId)) {
@@ -329,10 +331,12 @@ export class MainConversation {
   async send(request: MainSend) {
     this.authorize(request)
     identifier(request.commandId, 'commandId')
+    if (request.environmentId !== undefined) identifier(request.environmentId, 'environmentId')
     if (typeof request.text !== 'string' || !request.text.trim() || Buffer.byteLength(request.text) > 32768) throw new CoreError('INVALID_INPUT', 'Send a nonempty Main message of at most 32768 bytes.')
     const binding = await this.open(request)
     const key = createHash('sha256').update(canonicalJson([this.source.sourceInstanceId, this.source.actorId, request.commandId])).digest('hex')
-    const fingerprint = createHash('sha256').update(canonicalJson([request.instanceId, request.text])).digest('hex')
+    const fingerprint = createHash('sha256').update(canonicalJson([request.instanceId, request.text,
+      ...(request.environmentId === undefined ? [] : [request.environmentId])])).digest('hex')
     await commandTransaction(this.storage, this.instanceId, async tx => {
       const prior = await tx.get<MainCommand>('main-command', key)
       if (prior) {
@@ -347,8 +351,10 @@ export class MainConversation {
       const state = await this.state(tx)
       const sequence = state.sequence + 1
       const messageId = `main-input-${randomUUID()}`
+      const environmentId = request.environmentId ?? await this.defaultEnvironment?.(tx) ?? null
       await tx.insert<MainMessage>('main-message', messageKey(sequence), { id: messageId, sequence, role: 'user', text: request.text, createdAt: Date.now(), status: 'queued' })
-      const command: MainCommand = { fingerprint, messageId, userSequence: sequence, status: 'queued', updatedAt: Date.now() }
+      const command: MainCommand = { fingerprint, messageId, userSequence: sequence, status: 'queued', updatedAt: Date.now(),
+        environmentId }
       await tx.insert<MainCommand>('main-command', key, command)
       await tx.insert('main-message-command', messageId, { commandKey: key })
       await this.activeCommand(tx, { ...command, key })
@@ -501,7 +507,7 @@ export class MainConversation {
         },
         execute: async args => {
           const work = this.work?.()
-          if (!work) return JSON.stringify({ status: 'rejected', code: 'DELEGATION_UNAVAILABLE', ticketCreated: false, message: 'No authorized local workspace is configured; no work was started.' })
+          if (!work || command.environmentId === null) return JSON.stringify({ status: 'rejected', code: 'DELEGATION_UNAVAILABLE', ticketCreated: false, message: 'No authorized local workspace was selected for this input; no work was started.' })
           const items = Array.isArray(args.items) ? args.items.map(item => {
             const value = item && typeof item === 'object' ? item as Record<string, unknown> : {}
             return {
@@ -513,7 +519,7 @@ export class MainConversation {
           const brief = await work.create({ commandId: `main-work:${command.messageId}`, mainId: binding.mainId,
             mainSessionId: binding.mainSessionId, routerSessionId: binding.routerSessionId, mainMessageId: command.messageId,
             originalUserText, ...(items ? { items } : { goal: args.goal ?? '', constraints: args.constraints ?? '', acceptanceCriteria: args.acceptanceCriteria ?? '' }),
-            configurationRevision })
+            configurationRevision, ...(command.environmentId ? { environmentId: command.environmentId } : {}) })
           return JSON.stringify(await work.query(binding.mainId, { workBriefId: brief.id }))
         } },
       { name: 'query_work', description: 'Read a bounded status, receipt and verified result for a work item already visible in the Main conversation.',

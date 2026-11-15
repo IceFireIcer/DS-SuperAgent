@@ -349,6 +349,14 @@ export class FileAssetStore {
     return { id: spillAssetId(key, stream), bytes: bytes.length, sha256 }
   }
 
+  async storeSpillBytes(key: string, stream: SpillStream, data: Uint8Array) {
+    if (data.length > maxSpillBytes) throw new CoreError('SPILL_UNAVAILABLE', 'The complete output exceeded the spill budget.')
+    const bytes = redactSpill(data)
+    if (bytes.length > maxSpillBytes) throw new CoreError('SPILL_UNAVAILABLE', 'The complete output exceeded the spill budget.')
+    await writeFile(this.spillPath(key, stream), bytes, { mode: 0o600 })
+    return { id: spillAssetId(key, stream), bytes: bytes.length, sha256: digest(bytes) }
+  }
+
   async spillInfo(key: string, stream: SpillStream) {
     const file = this.spillPath(key, stream)
     const observed = await stat(file).catch(() => undefined)

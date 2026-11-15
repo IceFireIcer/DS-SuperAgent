@@ -3,7 +3,7 @@ import { CoreError, identifier, triggerDeliveryTarget, type Work } from './model
 import type { Storage, AsyncTx } from './storage.js'
 import type { Effects, Effect, EffectHandler, EffectResult } from './effects.js'
 import type { NativeSessions, NativeTool } from './native-sessions.js'
-import { LocalSetupError, type RemoteJobObservation } from './local-environment.js'
+import { LocalSetupError, type LocalJob, type RemoteJobObservation } from './local-environment.js'
 import { environmentCommandNames, environmentHasCommand, environmentLocation, sameEnvironment,
   type EnvironmentLocation, type ExecutionEnvironment, type PreparedEnvironment } from './environment.js'
 import { commandTransaction } from './commands.js'
@@ -1001,7 +1001,8 @@ export class Execution {
       }
       try {
         const output = await bound.invoke(name, args, signal)
-        const success = name !== 'run_command' || output.exitCode === 0 && !output.cancelled && !output.truncated
+        const success = name !== 'run_command' && name !== 'run_shell'
+          || output.exitCode === 0 && !output.cancelled && !output.truncated
         const summary = JSON.parse(JSON.stringify(output, (_key, value) => typeof value === 'string' ? value.slice(0, 2000) : value))
         toolFacts.push({ tool: name, outcome: success ? 'success' : 'failed', output: summary })
         return JSON.stringify(output)
@@ -1029,6 +1030,8 @@ export class Execution {
     const commandNames = environment ? environmentCommandNames(environment).filter(name => name !== environment.config.setup) : []
     const hasCommand = environmentHasCommand(environment)
     const commandTool: NativeTool = { name: 'run_command', description: `Run one configured command inside the bound Environment: ${commandNames.join(', ')}.`, parameters: { name: { type: 'string', required: true } }, execute: (args, signal) => environmentTool('run_command', args, signal) }
+    const shellTool: NativeTool = { name: 'run_shell', description: 'Run one bounded shell command in this Assignment directory using the public DSH subprocess provider. Its exit and output are facts, not a completed Ticket.',
+      parameters: { command: { type: 'string', required: true } }, execute: (args, signal) => environmentTool('run_shell', args, signal) }
     const allowed = new Set(environment?.config.permissions ?? [])
     const assets = environment?.assetSupport
     const readAsset = Boolean(environment)
@@ -1037,7 +1040,8 @@ export class Execution {
       ...(assets?.attachments ? [saveAttachmentTool] : []),
       ...(readAsset ? [readAssetTool] : []),
       ...(assets?.skills ? [listSkillsTool] : []),
-      ...(hasCommand ? [commandTool] : []),
+      ...(commandNames.length ? [commandTool] : []),
+      ...(environment?.config.allowShell ? [shellTool] : []),
     ] : [
       ...(allowed.has('write') ? [writeTool] : []),
       ...(allowed.has('read') ? [readTool] : []),
@@ -1045,7 +1049,7 @@ export class Execution {
       ...(allowed.has('write') && assets?.attachments ? [saveAttachmentTool] : []),
       ...(allowed.has('read') && readAsset ? [readAssetTool] : []),
       ...(allowed.has('read') && assets?.skills ? [listSkillsTool] : []),
-      ...(hasCommand ? [commandTool] : []),
+      ...(commandNames.length ? [commandTool] : []),
     ] : []
     /**
      * A child gets the same local capabilities but its own accounting: its calls must not consume the parent's
@@ -1057,11 +1061,29 @@ export class Execution {
     })) : []
     // Background work outlives the turn: the tool returns a job identity at once, and the completion event
     // arrives as a later turn on this same Session instead of holding the Router or this step open.
-    const jobTools: NativeTool[] = bound?.startCommand && this.jobs && hasCommand ? [
-      {
+    const startLocalJob = async (name: string, start: () => Promise<LocalJob>) => {
+      if (reported) throw new CoreError('REPORT_SEALED', 'Background work is sealed after the ready report.')
+      if (askedAttention) throw new CoreError('ATTENTION_ACTIVE', 'Background work is sealed after asking a human question.')
+      const job = await start()
+      let record: JobRecord | undefined
+      try {
+        record = await this.storage.transaction(this.instanceId, async transaction => {
+          const current = await transaction.get<Assignment>('assignment', ticketId)
+          if (current?.id !== assignment.id || current.state !== 'running') throw new CoreError('STALE_ASSIGNMENT', 'The starting Assignment is no longer current.')
+          return this.jobs!.start(transaction, { ticketId, assignmentId: assignment.id, generation: assignment.generation,
+            environmentId: assignment.environment!.id, environmentKind: environment?.kind ?? 'local', command: name, job })
+        })
+      } catch (error) { this.jobs!.abandon(job); throw error }
+      if (!record) throw new CoreError('INCOMPLETE_STATE', 'The background job start did not record a job.')
+      this.jobs!.attach(record)
+      return JSON.stringify({ jobId: record.id, command: record.command, state: record.state, startedAt: record.startedAt })
+    }
+    const jobTools: NativeTool[] = bound && this.jobs && hasCommand
+      && (bound.startCommand || bound.startShell || bound.startTerminal) ? [
+      ...(bound.startCommand && commandNames.length ? [{
         name: 'start_command',
         description: `Start one configured command in the background and return its job identity at once: ${commandNames.join(', ')}. Do not wait for it in this turn; its completion arrives as a later event.`,
-        parameters: { name: { type: 'string', required: true } },
+        parameters: { name: { type: 'string' as const, required: true as const } },
         execute: async (args: Record<string, string>) => {
           if (reported) throw new CoreError('REPORT_SEALED', 'Background work is sealed after the ready report; no later mutation is authorized.')
           if (askedAttention) throw new CoreError('ATTENTION_ACTIVE', 'Background work is sealed after asking a human question.')
@@ -1095,24 +1117,19 @@ export class Execution {
             this.jobs!.attach(record)
             return JSON.stringify({ jobId: record.id, command: record.command, state: record.state, startedAt: record.startedAt })
           }
-          const job = await bound!.startCommand!(args.name!)
-          let record: JobRecord | undefined
-          try {
-            record = await this.storage.transaction(this.instanceId, async transaction => {
-              const current = await transaction.get<Assignment>('assignment', ticketId)
-              if (current?.id !== assignment.id || current.state !== 'running') throw new CoreError('STALE_ASSIGNMENT', 'The starting Assignment is no longer current.')
-              return this.jobs!.start(transaction, { ticketId, assignmentId: assignment.id, generation: assignment.generation,
-                environmentId: assignment.environment!.id, environmentKind: environment?.kind ?? 'local', command: args.name!, job })
-            })
-          } catch (error) {
-            this.jobs!.abandon(job)
-            throw error
-          }
-          if (!record) throw new CoreError('INCOMPLETE_STATE', 'The background job start did not record a job.')
-          this.jobs!.attach(record)
-          return JSON.stringify({ jobId: record.id, command: record.command, state: record.state, startedAt: record.startedAt })
+          return startLocalJob(args.name!, () => bound!.startCommand!(args.name!))
         },
-      },
+      }] : []),
+      ...(bound.startShell ? [{
+        name: 'start_shell', description: 'Start a bounded shell command as a managed background job in this Assignment directory. Its completion returns to this Worker.',
+        parameters: { command: { type: 'string' as const, required: true as const } },
+        execute: (args: Record<string, string>) => startLocalJob('shell', () => bound.startShell!(args.command!)),
+      }] : []),
+      ...(bound.startTerminal ? [{
+        name: 'start_terminal', description: 'Start a managed PTY command in this Assignment directory. Its output and confirmed exit return to this Worker as a background job.',
+        parameters: { command: { type: 'string' as const, required: true as const } },
+        execute: (args: Record<string, string>) => startLocalJob('terminal', () => bound.startTerminal!(args.command!)),
+      }] : []),
       {
         name: 'job_status',
         description: 'Read one background job of this Ticket: state, confirmed exit and bounded output. A running job is not a result, and an unconfirmed exit stays unknown.',
@@ -1428,7 +1445,7 @@ export class Execution {
         if (bound) {
           const lastWrite = toolFacts.findLastIndex(fact => fact.tool === 'write_file' && fact.outcome === 'success')
           const verified = hasCommand
-            ? toolFacts.some((fact, index) => index > lastWrite && fact.tool === 'run_command' && fact.outcome === 'success')
+            ? toolFacts.some((fact, index) => index > lastWrite && (fact.tool === 'run_command' || fact.tool === 'run_shell') && fact.outcome === 'success')
             : toolFacts.some((fact, index) => index > lastWrite && (fact.tool === 'read_file' || fact.tool === 'grep') && fact.outcome === 'success')
           if (!verified) throw new CoreError('VERIFICATION_REQUIRED', hasCommand
             ? 'A ready report needs a successful configured verification command after the last file write.'

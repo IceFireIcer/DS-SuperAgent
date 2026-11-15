@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -16,6 +16,7 @@ test('the product Host exposes Feishu health, stop and reconnection without disc
   })
   native = await nativeContext(join(directory, 'sessions'), function* () { yield* textResponse('Main received the request.') })
   const workspaceRoot = join(directory, 'workspace')
+  await mkdir(join(directory, 'data'))
   await mkdir(workspaceRoot)
   const json = data => ({ ok: true, status: 200, json: async () => ({ code: 0, data }) })
   const fetch = async url => {
@@ -31,7 +32,7 @@ test('the product Host exposes Feishu health, stop and reconnection without disc
       mentions: [{ id: 'ou_bot' }], body: { content: '{"text":"Please read this."}' } }], has_more: false })
     throw new Error(`Unexpected Feishu fixture request: ${path}`)
   }
-  host = await core.createProductHost(native, { databasePath: join(directory, 'state.sqlite'), workspaceRoot,
+  host = await core.createProductHost(native, { databasePath: join(directory, 'data', 'state.sqlite'), workspaceRoot,
     instanceId: 'private', actorId: 'desktop-owner', main: { provider: 'mock', model: 'main' },
     router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' },
     feishu: { tenantKey: 'tenant', chatIds: ['group'], actorId: 'receiver', selfActorIds: ['ou_bot'],
@@ -39,6 +40,10 @@ test('the product Host exposes Feishu health, stop and reconnection without disc
         allowedRequesterIds: ['alice'], allowedBotActorIds: [], rules: [] },
       api: { appId: 'cli_test', appSecret: 'fixture-secret', fetch }, intervalMs: 1000 } })
   const read = async () => host.dispatch('feishu-status', { instanceId: 'private' })
+  const directories = await host.dispatch('directory-options', { instanceId: 'private' })
+  const canonicalWorkspace = await realpath(workspaceRoot)
+  assert.equal(directories.default.root, canonicalWorkspace)
+  assert.deepEqual(directories.directories.map(item => item.root), [canonicalWorkspace])
   for (let attempt = 0; attempt < 40 && (await host.dispatch('history', { instanceId: 'private' })).sources.length === 0; attempt++) {
     await new Promise(resolve => setTimeout(resolve, 25))
   }
