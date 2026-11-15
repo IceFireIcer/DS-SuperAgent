@@ -5,27 +5,28 @@ import { BotMark } from './mark.js'
 import { useLinger, useViewport, viewBottom } from './motion.js'
 import { t } from './i18n.js'
 
-export function MainComposer({ onSend, onStop, busy, stopping, error, value, onValueChange }) {
+export function MainComposer({ onSend, onStop, busy, stopping, readOnly = false, error, value, onValueChange }) {
   const [draft, setDraft] = useState('')
   const text = value ?? draft
   const setText = next => onValueChange ? onValueChange(next) : setDraft(next)
   const submit = async event => {
     event.preventDefault()
-    if (busy || !text.trim()) return
+    if (busy || readOnly || !text.trim()) return
     if (await onSend(text)) setText('')
   }
   return h('form', { className: 'bt-main-composer', onSubmit: submit },
     error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
     h('label', { className: 'bt-main-label', htmlFor: 'main-message' }, t('Message Main')),
     h('textarea', {
-      id: 'main-message', value: text, rows: 2, maxLength: 32768, placeholder: t('Message Main'),
+      id: 'main-message', value: text, rows: 2, maxLength: 32768, placeholder: readOnly ? t('Read-only connection') : t('Message Main'), disabled: readOnly,
       onChange: event => setText(event.target.value),
       onKeyDown: event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(event) } },
     }),
     h('div', { className: 'bt-main-send' },
-      busy && onStop ? h('button', { className: 'bt-soft', type: 'button', disabled: stopping, onClick: onStop },
+      busy && onStop && !readOnly ? h('button', { className: 'bt-soft', type: 'button', disabled: stopping, onClick: onStop },
         stopping ? t('Stopping…') : t('Stop reply')) : null,
-      h('button', { className: 'bt-soft', type: 'submit', disabled: busy || !text.trim() }, busy ? t('Sending…') : t('Send'))))
+      h('button', { className: 'bt-soft', type: 'submit', disabled: busy || readOnly || !text.trim() },
+        readOnly ? t('Read-only') : busy ? t('Sending…') : t('Send'))))
 }
 
 // -------------------------------------------------------------------------

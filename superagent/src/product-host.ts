@@ -1,14 +1,20 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { createHash } from 'node:crypto'
 import { Engine } from './engine.js'
 import { CoreError, identifier } from './model.js'
+import { createClientGateway, type ClientGatewayOptions } from './client-gateway.js'
+import type { ClientAccess, ClientCapability, ClientIdentity } from './client-access.js'
 import { NativeSessions } from './native-sessions.js'
 import { SqliteStorage } from './storage.js'
 import { LocalEnvironment } from './local-environment.js'
 import type { RoleConfig, RoleModel } from './config.js'
 
-export interface ProductHostConfig { databasePath: string; workspaceRoot?: string; instanceId?: string; actorId?: string; main?: RoleModel; router?: RoleModel; worker?: RoleModel; timeoutMs?: number }
+export interface ProductHostConfig { databasePath: string; workspaceRoot?: string; instanceId?: string; actorId?: string; main?: RoleModel; router?: RoleModel; worker?: RoleModel; timeoutMs?: number;
+  clientGateway?: Omit<ClientGatewayOptions, 'product'> }
 export interface ProductHost {
-  dispatch(endpoint: string, payload?: Record<string, unknown>): Promise<unknown>
+  dispatch(endpoint: string, payload?: Record<string, unknown>, client?: ClientIdentity): Promise<unknown>
+  clients: ClientAccess
+  clientGateway?: { url: string; secure: boolean }
   close(): Promise<void>
 }
 declare module '@deepseek-ai/cordis' { interface Context { superagentProduct: ProductHost } }
@@ -43,6 +49,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
   const storage = await SqliteStorage.open(config.databasePath)
   let environment: LocalEnvironment | undefined
   let engine: Engine | undefined
+  let gateway: Awaited<ReturnType<typeof createClientGateway>> | undefined
   let closing: Promise<void> | undefined
   const publicLlm = () => context.get('llm') as unknown as PublicLlm
   const settingsSections = (settings: PublicSettings) => new Map(settings.describe({ redactSecrets: true }).map(section => [section.ns, section]))
@@ -128,7 +135,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
     return { provider, configured: value !== null }
   }
   async function dispose() {
-    try { await engine?.effects.stop(); await engine?.shutdown() }
+    try { try { await gateway?.close() } finally { try { await engine?.effects.stop() } finally { await engine?.shutdown() } } }
     finally { try { await sessions.close() } finally { try { await environment?.close() } finally { await storage.close() } } }
   }
   try {
@@ -142,8 +149,10 @@ export async function createProductHost(context: Context, config: ProductHostCon
     await engine.openMain({ instanceId })
     engine.effects.start()
     void engine.resumeMainInputs({ instanceId }).catch(() => { /* The persisted input and failed health remain visible for retry. */ })
-    return {
-      async dispatch(endpoint, payload = {}) {
+    const clients = engine.createClientAccess()
+    const product: ProductHost = {
+      clients,
+      async dispatch(endpoint, payload = {}, client) {
         if (closing) throw new CoreError('RUNTIME_CLOSED', 'The product Host is closed.')
         // The Host supplies identity; a window can only address this authorization scope.
         if (endpoint === 'open') {
@@ -152,6 +161,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
         }
         if (payload.instanceId !== instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This request is outside the authorized Instance.')
         const fields = endpoint === 'send' ? ['instanceId', 'commandId', 'text']
+          : endpoint === 'clients-list' ? ['instanceId']
+            : endpoint === 'client-enroll' ? ['instanceId', 'commandId', 'label', 'capabilities']
+              : endpoint === 'client-revoke' ? ['instanceId', 'commandId', 'clientId', 'reason']
           : endpoint === 'stop-main' ? ['instanceId', 'commandId', 'messageId']
             : endpoint === 'work-stop'
               ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'expectedTicketVersion', 'reason']
@@ -173,6 +185,17 @@ export async function createProductHost(context: Context, config: ProductHostCon
                                         : undefined
         if (!fields) throw new CoreError('UNAVAILABLE', 'This product capability is not connected yet.')
         if (Object.keys(payload).some(key => !fields.includes(key))) throw new CoreError('INVALID_INPUT', 'The product request contains unsupported fields.')
+        if (endpoint === 'clients-list' || endpoint === 'client-enroll' || endpoint === 'client-revoke') {
+          if (client) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Client administration requires the local authorized product settings.')
+          if (endpoint === 'clients-list') return clients.list()
+          if (endpoint === 'client-enroll') return clients.enroll({ commandId: payload.commandId as string,
+            label: payload.label as string, grants: [{ instanceId, capabilities: payload.capabilities as ClientCapability[] }] })
+          return clients.revoke({ commandId: payload.commandId as string, clientId: payload.clientId as string,
+            reason: payload.reason as string })
+        }
+        const commandId = client && payload.commandId !== undefined
+          ? (() => { identifier(payload.commandId, 'commandId'); return `client:${client.id}:${createHash('sha256').update(payload.commandId).digest('hex')}` })()
+          : payload.commandId as string
         if (endpoint === 'history') {
           if (payload.after !== undefined && payload.before !== undefined) throw new CoreError('INVALID_INPUT', 'Main history accepts one direction cursor.')
           if (payload.after !== undefined) return engine!.getMainConversation({ instanceId, after: payload.after as number,
@@ -181,20 +204,21 @@ export async function createProductHost(context: Context, config: ProductHostCon
             ...(payload.before === undefined ? {} : { before: payload.before as number }),
             ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
         }
-        if (endpoint === 'send') return engine!.sendMainMessage({ instanceId, commandId: payload.commandId as string, text: payload.text as string })
-        if (endpoint === 'stop-main') return engine!.stopMainTurn({ instanceId, commandId: payload.commandId as string, messageId: payload.messageId as string })
-        if (endpoint === 'work-stop') return engine!.stopMainWork({ instanceId, commandId: payload.commandId as string,
+        if (endpoint === 'send') return engine!.sendMainMessage({ instanceId, commandId, text: payload.text as string,
+          ...(client ? { clientId: client.id } : {}) })
+        if (endpoint === 'stop-main') return engine!.stopMainTurn({ instanceId, commandId, messageId: payload.messageId as string })
+        if (endpoint === 'work-stop') return engine!.stopMainWork({ instanceId, commandId,
           workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
           ...(payload.expectedGeneration === undefined ? {} : { expectedGeneration: payload.expectedGeneration as string }),
           expectedTicketVersion: payload.expectedTicketVersion as number, reason: payload.reason as string })
-        if (endpoint === 'work-resume') return engine!.resumeMainWork({ instanceId, commandId: payload.commandId as string,
+        if (endpoint === 'work-resume') return engine!.resumeMainWork({ instanceId, commandId,
           workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
           expectedGeneration: payload.expectedGeneration as string })
-        if (endpoint === 'work-answer') return engine!.answerMainAttention({ instanceId, commandId: payload.commandId as string,
+        if (endpoint === 'work-answer') return engine!.answerMainAttention({ instanceId, commandId,
           workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
           expectedGeneration: payload.expectedGeneration as string, attentionId: payload.attentionId as string,
           attentionVersion: payload.attentionVersion as number, text: payload.text as string })
-        if (endpoint === 'work-retry') return engine!.retryMainWork({ instanceId, commandId: payload.commandId as string,
+        if (endpoint === 'work-retry') return engine!.retryMainWork({ instanceId, commandId,
           workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
           expectedGeneration: payload.expectedGeneration as string, reason: payload.reason as string })
         if (endpoint === 'settings') return roleSettings(payload.limit === undefined ? 50 : payload.limit as number)
@@ -220,7 +244,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
             id?: string; threadId?: string; objectId?: string },
           ...(payload.after === undefined ? {} : { after: payload.after as string }),
           ...(payload.maxBytes === undefined ? {} : { maxBytes: payload.maxBytes as number }) })
-        if (endpoint === 'reconcile-delivery') return engine!.reconcileDelivery({ commandId: payload.commandId as string,
+        if (endpoint === 'reconcile-delivery') return engine!.reconcileDelivery({ commandId,
           ticketId: payload.ticketId as string, deliveryId: payload.deliveryId as string })
         if (endpoint === 'source-deliveries') return engine!.getMainSourceDeliveries({ instanceId,
           sourceId: payload.sourceId as string, ...(payload.after === undefined ? {} : { after: payload.after as string }),
@@ -244,6 +268,11 @@ export async function createProductHost(context: Context, config: ProductHostCon
         return closing ??= dispose()
       },
     }
+    if (config.clientGateway) {
+      gateway = await createClientGateway(engine, clients, { ...config.clientGateway, product })
+      product.clientGateway = { url: gateway.url, secure: gateway.secure }
+    }
+    return product
   } catch (error) {
     await dispose()
     throw error

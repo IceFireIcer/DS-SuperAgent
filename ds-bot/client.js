@@ -43,6 +43,30 @@ module.exports = __toCommonJS(index_exports);
 var NAMESPACE = "ds-bot";
 var ZH = {
   "Message Main": "与 Main 对话",
+  "Read-only connection": "只读连接",
+  "The remote Host connection is unavailable.": "远程 Host 连接不可用。",
+  "Remote Host": "远程 Host",
+  "Connect to Host": "连接 Host",
+  "Host connection": "Host 连接",
+  "Host address": "Host 地址",
+  Instance: "工作空间",
+  Client: "客户端",
+  "Client credential": "客户端凭据",
+  "Read and command": "可读取和操作",
+  "Use HTTPS or an authorized local SSH tunnel. The credential stays in this app process until disconnect or quit.": "请使用 HTTPS 或已授权的本地 SSH 隧道。凭据仅保留在本应用进程中，断开或退出时清除。",
+  "Close connection": "关闭连接窗口",
+  "Authorized clients": "已授权客户端",
+  "Client name": "客户端名称",
+  "Client access": "客户端权限",
+  "Issue credential": "签发凭据",
+  "Issued client credential": "已签发的客户端凭据",
+  "This credential is shown once. Transfer it to the desktop client securely.": "凭据仅显示一次，请安全传给桌面客户端。",
+  "This enrollment already completed. Its credential cannot be shown again; revoke it and create a new client.": "此签发已完成，凭据不能再次显示；请撤销并新建客户端。",
+  "Could not copy the credential.": "无法复制凭据。",
+  "Copy credential": "复制凭据",
+  "Revoke this client’s access now?": "现在撤销此客户端的访问权？",
+  Revoked: "已撤销",
+  Revoke: "撤销",
   "Sending…": "正在发送…",
   "Stop reply": "停止本轮回复",
   "Stopping…": "正在停止…",
@@ -7398,7 +7422,7 @@ function ValueEditor({ secret, onSave }) {
   );
 }
 function SecretRow({ secret, roster, actions, run: run2, open, onToggle }) {
-  const [confirm, setConfirm] = (0, import_react14.useState)(false);
+  const [confirm2, setConfirm] = (0, import_react14.useState)(false);
   (0, import_react14.useEffect)(() => {
     if (!open) setConfirm(false);
   }, [open]);
@@ -7432,7 +7456,7 @@ function SecretRow({ secret, roster, actions, run: run2, open, onToggle }) {
       (0, import_react14.createElement)(
         "div",
         { className: "bt-secret-row-actions" },
-        confirm ? [
+        confirm2 ? [
           (0, import_react14.createElement)("span", { key: "q", className: "bt-set-hint" }, t("Delete {name}? Bots lose it at once.", { name: secret.name })),
           (0, import_react14.createElement)("button", { key: "no", type: "button", className: "bt-soft bt-soft-sm", onClick: () => setConfirm(false) }, t("Keep")),
           (0, import_react14.createElement)("button", { key: "yes", type: "button", className: "bt-soft bt-soft-sm bt-secret-danger", onClick: () => run2(actions.secretDelete(secret.name)) }, t("Delete"))
@@ -10406,7 +10430,7 @@ function AccountLauncher({ seat = true, settingsOpen, openSettings, openOnboardi
   const account = (0, import_react19.useSyncExternalStore)(accountSource?.subscribe ?? NO_SUBSCRIBE, accountSource ? () => accountSource.getSnapshot() : NO_SNAPSHOT);
   const signedIn = signIn !== null && typeof ops.signOut === "function" && account?.view?.status === "credential-stored";
   const accountT = actions.accountT?.() ?? ((key) => key);
-  const [confirm, setConfirm] = (0, import_react19.useState)(null);
+  const [confirm2, setConfirm] = (0, import_react19.useState)(null);
   const [busy, setBusy] = (0, import_react19.useState)(false);
   const [signOutError, setSignOutError] = (0, import_react19.useState)("");
   const askSignOut = async () => {
@@ -10477,10 +10501,10 @@ function AccountLauncher({ seat = true, settingsOpen, openSettings, openOnboardi
     open && box ? (0, import_react_dom3.createPortal)((0, import_react19.createElement)(
       "div",
       { className: "bt-menu bt-menu-up bt-account-menu", role: "menu", "aria-label": t("Account"), style: box },
-      confirm !== null ? (0, import_react19.createElement)(
+      confirm2 !== null ? (0, import_react19.createElement)(
         "div",
         { className: "bt-confirm", role: "alertdialog", "aria-label": accountT("signOut") },
-        (0, import_react19.createElement)("p", { className: "bt-confirm-text" }, accountT(confirm === "running" ? "signOutRunningDescription" : confirm === "unknown" ? "signOutUnknownDescription" : "signOutDescription")),
+        (0, import_react19.createElement)("p", { className: "bt-confirm-text" }, accountT(confirm2 === "running" ? "signOutRunningDescription" : confirm2 === "unknown" ? "signOutUnknownDescription" : "signOutDescription")),
         signOutError !== "" ? (0, import_react19.createElement)("p", { className: "bt-confirm-error", role: "alert" }, signOutError) : null,
         (0, import_react19.createElement)(
           "div",
@@ -10869,13 +10893,13 @@ function NewMessagePills({ sessionId, useSessions, useUi, useTurnClock }) {
 // src/client/composer.js
 var import_react21 = require("react");
 var import_react_dom5 = require("react-dom");
-function MainComposer({ onSend, onStop, busy, stopping, error, value, onValueChange }) {
+function MainComposer({ onSend, onStop, busy, stopping, readOnly = false, error, value, onValueChange }) {
   const [draft, setDraft] = (0, import_react21.useState)("");
   const text = value ?? draft;
   const setText = (next) => onValueChange ? onValueChange(next) : setDraft(next);
   const submit = async (event) => {
     event.preventDefault();
-    if (busy || !text.trim()) return;
+    if (busy || readOnly || !text.trim()) return;
     if (await onSend(text)) setText("");
   };
   return (0, import_react21.createElement)(
@@ -10888,7 +10912,8 @@ function MainComposer({ onSend, onStop, busy, stopping, error, value, onValueCha
       value: text,
       rows: 2,
       maxLength: 32768,
-      placeholder: t("Message Main"),
+      placeholder: readOnly ? t("Read-only connection") : t("Message Main"),
+      disabled: readOnly,
       onChange: (event) => setText(event.target.value),
       onKeyDown: (event) => {
         if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -10900,12 +10925,16 @@ function MainComposer({ onSend, onStop, busy, stopping, error, value, onValueCha
     (0, import_react21.createElement)(
       "div",
       { className: "bt-main-send" },
-      busy && onStop ? (0, import_react21.createElement)(
+      busy && onStop && !readOnly ? (0, import_react21.createElement)(
         "button",
         { className: "bt-soft", type: "button", disabled: stopping, onClick: onStop },
         stopping ? t("Stopping…") : t("Stop reply")
       ) : null,
-      (0, import_react21.createElement)("button", { className: "bt-soft", type: "submit", disabled: busy || !text.trim() }, busy ? t("Sending…") : t("Send"))
+      (0, import_react21.createElement)(
+        "button",
+        { className: "bt-soft", type: "submit", disabled: busy || readOnly || !text.trim() },
+        readOnly ? t("Read-only") : busy ? t("Sending…") : t("Send")
+      )
     )
   );
 }
@@ -16987,7 +17016,7 @@ function keyState(key) {
   return key.writable ? ["set", t("Key set")] : ["outside", t("Key set outside DS Bot")];
 }
 function ProviderRow({ provider, apply: apply2, actions, open, onToggle }) {
-  const [confirm, setConfirm] = (0, import_react44.useState)(false);
+  const [confirm2, setConfirm] = (0, import_react44.useState)(false);
   (0, import_react44.useEffect)(() => {
     if (!open) setConfirm(false);
   }, [open]);
@@ -17027,7 +17056,7 @@ function ProviderRow({ provider, apply: apply2, actions, open, onToggle }) {
       provider.removable ? (0, import_react44.createElement)(
         "div",
         { className: "bt-secret-row-actions" },
-        confirm ? [
+        confirm2 ? [
           (0, import_react44.createElement)("span", { key: "q", className: "bt-set-hint" }, t("Remove {name}? Bots on its models need another model.", { name: provider.name })),
           (0, import_react44.createElement)("button", { key: "no", type: "button", className: "bt-soft bt-soft-sm", onClick: () => setConfirm(false) }, t("Keep")),
           (0, import_react44.createElement)("button", { key: "yes", type: "button", className: "bt-soft bt-soft-sm bt-secret-danger", onClick: () => apply2(actions.removeProvider(provider.id)) }, t("Remove"))
@@ -21003,7 +21032,18 @@ function rebaseRoleDraft(base, draft, latest) {
 
 // src/client/product.js
 var import_react53 = require("react");
+var clientBridge = () => window.dsBotApp?.productClient;
+var activeHost = "local";
 async function productCall(endpoint, payload = {}) {
+  const bridge = clientBridge();
+  if (activeHost === "remote") {
+    if (!bridge) throw new Error(t("The remote Host connection is unavailable."));
+    return bridge.call(endpoint, payload);
+  }
+  if (bridge && (await bridge.status()).connected) {
+    activeHost = "remote";
+    return bridge.call(endpoint, payload);
+  }
   const response = await fetch("api/product", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ endpoint, payload }) });
   let result;
   try {
@@ -21045,7 +21085,9 @@ function applyProduct(ctx) {
     observationDetailError: null,
     activityLoading: false,
     activityError: null,
-    settingsOpen: false
+    settingsOpen: false,
+    connection: null,
+    connectOpen: false
   });
   const useView = () => (0, import_react53.useSyncExternalStore)(view.subscribe, view.getSnapshot);
   let stopped = false;
@@ -21223,6 +21265,16 @@ function applyProduct(ctx) {
   };
   const refresh = async () => {
     try {
+      const bridge = clientBridge();
+      const connection = bridge ? await bridge.status() : { connected: false };
+      const previous = view.getSnapshot().connection;
+      if (previous && (previous.connected !== connection.connected || previous.connected && (previous.address !== connection.address || previous.instanceId !== connection.instanceId || previous.client.id !== connection.client.id))) {
+        location.reload();
+        return;
+      }
+      if (connection.connected) activeHost = "remote";
+      if (!stopped) view.set((state) => ({ ...state, connection }));
+      if (connection.connected) await bridge.events();
       const current = view.getSnapshot();
       const binding = current.binding ?? await productCall("open");
       if (current.route === "main") await refreshMain(binding);
@@ -21299,6 +21351,7 @@ function applyProduct(ctx) {
   })[state] ?? state;
   function MainWorkCard({ work, onEvidence }) {
     const state = useView();
+    const canCommand = !state.connection?.connected || state.connection.capabilities.includes("command");
     const [controlBusy, setControlBusy] = (0, import_react53.useState)(null);
     const [controlError, setControlError] = (0, import_react53.useState)(null);
     const [attentionDraft, setAttentionDraft] = (0, import_react53.useState)("");
@@ -21388,7 +21441,7 @@ function applyProduct(ctx) {
         { className: "bt-main-work-attention" },
         (0, import_react53.createElement)("p", { className: "bt-main-work-id" }, `${t("Question version")} ${attention.version} · ${attention.status}`),
         (0, import_react53.createElement)("p", null, attention.question),
-        attention.status === "waiting" && control.permissions.canAnswer && assignment ? (0, import_react53.createElement)(
+        attention.status === "waiting" && canCommand && control.permissions.canAnswer && assignment ? (0, import_react53.createElement)(
           "form",
           { className: "bt-main-work-answer", onSubmit: answer },
           attention.options.length ? (0, import_react53.createElement)("div", { className: "bt-main-work-options" }, attention.options.map((option) => (0, import_react53.createElement)("button", { key: option, type: "button", className: "bt-soft", onClick: () => setAttentionDraft(option) }, option))) : null,
@@ -21443,7 +21496,7 @@ function applyProduct(ctx) {
           (0, import_react53.createElement)("span", null, `${artifact.bytes} ${t("bytes")} · ${artifact.sha256.slice(0, 12)}`)
         ))
       ) : null,
-      control ? (0, import_react53.createElement)(
+      control && canCommand ? (0, import_react53.createElement)(
         "div",
         { className: "bt-main-work-controls" },
         control.permissions.canStop ? (0, import_react53.createElement)(
@@ -21484,7 +21537,7 @@ function applyProduct(ctx) {
       ) : null
     );
   }
-  function MainSourceCard({ source, instanceId, onRefresh }) {
+  function MainSourceCard({ source, instanceId, onRefresh, canCommand }) {
     const [receipts, setReceipts] = (0, import_react53.useState)(source.deliveries ?? []);
     const [receiptCursor, setReceiptCursor] = (0, import_react53.useState)(source.deliveryCursor ?? null);
     const [receiptsBusy, setReceiptsBusy] = (0, import_react53.useState)(false);
@@ -21560,7 +21613,7 @@ function applyProduct(ctx) {
           },
           (0, import_react53.createElement)("p", null, `${deliveryPurposeCopy(delivery.purpose)}: ${deliveryCopy(delivery.state)}${delivery.reason ? ` · ${delivery.reason}` : ""}`),
           (0, import_react53.createElement)("p", null, `${delivery.destination.sourceInstanceId} · ${delivery.destination.eventId}${delivery.destination.threadId ? ` · ${delivery.destination.threadId}` : ""} · @${delivery.destination.actorId}`),
-          delivery.state === "unknown" || delivery.state === "pending" && delivery.attempts > 0 ? (0, import_react53.createElement)(
+          canCommand && (delivery.state === "unknown" || delivery.state === "pending" && delivery.attempts > 0) ? (0, import_react53.createElement)(
             "button",
             {
               type: "button",
@@ -21592,6 +21645,7 @@ function applyProduct(ctx) {
   }
   function MainConversation() {
     const state = useView();
+    const canCommand = !state.connection?.connected || state.connection.capabilities.includes("command");
     const [sending, setSending] = (0, import_react53.useState)(false);
     const [sendError, setSendError] = (0, import_react53.useState)(null);
     const bottom = (0, import_react53.useRef)(null);
@@ -21607,7 +21661,7 @@ function applyProduct(ctx) {
     }, [state.messages.length]);
     const send = async (text) => {
       if (!state.binding) return false;
-      const storageKey = `superagent:pending:${state.binding.instanceId}`;
+      const storageKey = `superagent:pending:${state.connection?.connected ? `${state.connection.address}:${state.connection.client.id}` : "local"}:${state.binding.instanceId}`;
       try {
         setSending(true);
         setSendError(null);
@@ -21673,13 +21727,23 @@ function applyProduct(ctx) {
           { className: "bt-main-health-detail" },
           t("{count} inputs queued", { count: state.health.queuedInputs })
         ) : null,
-        (0, import_react53.createElement)("button", {
+        state.connection?.connected ? (0, import_react53.createElement)(
+          "span",
+          { className: "bt-main-remote", title: state.connection.address },
+          `${t("Remote Host")} · ${state.connection.client.label}`
+        ) : null,
+        clientBridge() ? (0, import_react53.createElement)(
+          "button",
+          { type: "button", className: "bt-soft", onClick: () => view.set((current) => ({ ...current, connectOpen: true })) },
+          state.connection?.connected ? t("Connection") : t("Connect to Host")
+        ) : null,
+        !state.connection?.connected ? (0, import_react53.createElement)("button", {
           type: "button",
           className: "bt-icon-btn bt-main-settings",
           title: t("Settings"),
           "aria-label": t("Settings"),
           onClick: () => view.set((current) => ({ ...current, settingsOpen: true }))
-        }, (0, import_react53.createElement)(SlidersIcon))
+        }, (0, import_react53.createElement)(SlidersIcon)) : null
       ),
       state.health?.state === "degraded" ? (0, import_react53.createElement)(
         "p",
@@ -21717,11 +21781,7 @@ function applyProduct(ctx) {
             ) : (0, import_react53.createElement)(
               "div",
               null,
-              message.source ? (0, import_react53.createElement)(
-                "p",
-                { className: "bt-main-source-label" },
-                `${t("GitHub")} · @${message.source.authorId} · ${message.source.objectId}`
-              ) : null,
+              message.source ? (0, import_react53.createElement)("p", { className: "bt-main-source-label" }, message.source.kind === "client" ? `${t("Client")} · ${message.source.clientId}` : `${t("GitHub")} · @${message.source.authorId} · ${message.source.objectId}`) : null,
               (0, import_react53.createElement)(ChatRows, {
                 items: [{ kind: message.role === "main" ? "bot" : "user", text: message.text, time: message.createdAt }],
                 sessionId: "main",
@@ -21735,7 +21795,13 @@ function applyProduct(ctx) {
               ) : null
             )
           )),
-          state.sources.map((source) => (0, import_react53.createElement)(MainSourceCard, { key: source.id, source, instanceId: state.binding?.instanceId, onRefresh: refresh })),
+          state.sources.map((source) => (0, import_react53.createElement)(MainSourceCard, {
+            key: source.id,
+            source,
+            instanceId: state.binding?.instanceId,
+            onRefresh: refresh,
+            canCommand
+          })),
           state.works.map((work) => (0, import_react53.createElement)(MainWorkCard, {
             key: work.brief.workItemId ?? work.brief.id,
             work,
@@ -21783,9 +21849,10 @@ function applyProduct(ctx) {
       ),
       (0, import_react53.createElement)(MainComposer, {
         onSend: send,
-        onStop: state.activeTurn ? stop : void 0,
+        onStop: canCommand && state.activeTurn ? stop : void 0,
         busy,
         stopping,
+        readOnly: !canCommand,
         error: sendError ?? state.error,
         value: state.mainDraft,
         onValueChange: (mainDraft) => view.set((current) => ({ ...current, mainDraft }))
@@ -21850,13 +21917,13 @@ function applyProduct(ctx) {
           (0, import_react53.createElement)("strong", null, observation?.title ?? state.selectedObservation?.title ?? "")
         ),
         (0, import_react53.createElement)("span", { className: "bt-observation-readonly" }, t("Read-only")),
-        (0, import_react53.createElement)("button", {
+        !state.connection?.connected ? (0, import_react53.createElement)("button", {
           type: "button",
           className: "bt-icon-btn",
           title: t("Settings"),
           "aria-label": t("Settings"),
           onClick: () => view.set((current) => ({ ...current, settingsOpen: true }))
-        }, (0, import_react53.createElement)(SlidersIcon))
+        }, (0, import_react53.createElement)(SlidersIcon)) : null
       ),
       (0, import_react53.createElement)(
         "div",
@@ -22053,6 +22120,15 @@ function applyProduct(ctx) {
           setTimeout(() => document.querySelector("#main-message, .bt-main-composer textarea")?.focus(), 0);
         }
       }, (0, import_react53.createElement)(BrandMark, { size: 24 }), "Main"),
+      clientBridge() ? (0, import_react53.createElement)(
+        "button",
+        {
+          type: "button",
+          className: "bt-soft",
+          onClick: () => view.set((current) => ({ ...current, connectOpen: true }))
+        },
+        state.connection?.connected ? `${t("Remote Host")} · ${state.connection.client.label}` : t("Connect to Host")
+      ) : null,
       (0, import_react53.createElement)(
         "div",
         { className: "bt-observation-search" },
@@ -22108,6 +22184,127 @@ function applyProduct(ctx) {
         },
         state.activityLoading ? t("Loading…") : t("Load more activity")
       ) : null
+    );
+  }
+  function ClientSettings({ binding }) {
+    const [clients, setClients] = (0, import_react53.useState)([]);
+    const [label, setLabel] = (0, import_react53.useState)("");
+    const [readOnly, setReadOnly] = (0, import_react53.useState)(false);
+    const [issued, setIssued] = (0, import_react53.useState)(null);
+    const [busy, setBusy] = (0, import_react53.useState)(false);
+    const [error, setError] = (0, import_react53.useState)(null);
+    const pending = (0, import_react53.useRef)(null);
+    const load = async () => setClients(await productCall("clients-list", { instanceId: binding.instanceId }));
+    (0, import_react53.useEffect)(() => {
+      void load().catch((failure) => setError(failure.message));
+    }, [binding.instanceId]);
+    const enroll = async (event) => {
+      event.preventDefault();
+      if (!label.trim() || busy) return;
+      setBusy(true);
+      setError(null);
+      setIssued(null);
+      try {
+        const capabilities = readOnly ? ["read"] : ["read", "command"];
+        if (!pending.current || pending.current.label !== label.trim() || pending.current.readOnly !== readOnly) {
+          pending.current = { commandId: crypto.randomUUID(), label: label.trim(), readOnly };
+        }
+        const result = await productCall("client-enroll", {
+          instanceId: binding.instanceId,
+          commandId: pending.current.commandId,
+          label: pending.current.label,
+          capabilities
+        });
+        pending.current = null;
+        setLabel("");
+        if (result.token) setIssued(result.token);
+        else setError(t("This enrollment already completed. Its credential cannot be shown again; revoke it and create a new client."));
+        await load();
+      } catch (failure) {
+        setError(failure.message);
+      } finally {
+        setBusy(false);
+      }
+    };
+    const revoke = async (client) => {
+      if (busy || !confirm(t("Revoke this client’s access now?"))) return;
+      setBusy(true);
+      setError(null);
+      setIssued(null);
+      try {
+        await productCall("client-revoke", {
+          instanceId: binding.instanceId,
+          commandId: `revoke-client:${client.id}`,
+          clientId: client.id,
+          reason: "Revoked from the product settings."
+        });
+        await load();
+      } catch (failure) {
+        setError(failure.message);
+      } finally {
+        setBusy(false);
+      }
+    };
+    return (0, import_react53.createElement)(
+      Card2,
+      { title: t("Authorized clients") },
+      (0, import_react53.createElement)(
+        "form",
+        { className: "bt-main-client-form", onSubmit: (event) => {
+          void enroll(event);
+        } },
+        (0, import_react53.createElement)("label", { htmlFor: "client-label" }, t("Client name")),
+        (0, import_react53.createElement)("input", {
+          id: "client-label",
+          className: "bt-bs-input",
+          value: label,
+          maxLength: 128,
+          required: true,
+          onChange: (event) => setLabel(event.currentTarget.value)
+        }),
+        (0, import_react53.createElement)("label", { htmlFor: "client-scope" }, t("Client access")),
+        (0, import_react53.createElement)(
+          "select",
+          {
+            id: "client-scope",
+            className: "bt-select",
+            value: readOnly ? "read" : "command",
+            onChange: (event) => setReadOnly(event.currentTarget.value === "read")
+          },
+          (0, import_react53.createElement)("option", { value: "command" }, t("Read and command")),
+          (0, import_react53.createElement)("option", { value: "read" }, t("Read-only"))
+        ),
+        (0, import_react53.createElement)("button", { type: "submit", className: "bt-soft", disabled: busy || !label.trim() }, t("Issue credential"))
+      ),
+      issued ? (0, import_react53.createElement)(
+        "div",
+        { className: "bt-main-client-issued", role: "status" },
+        (0, import_react53.createElement)("p", null, t("This credential is shown once. Transfer it to the desktop client securely.")),
+        (0, import_react53.createElement)("input", { type: "password", readOnly: true, value: issued, "aria-label": t("Issued client credential") }),
+        (0, import_react53.createElement)("button", { type: "button", className: "bt-soft", onClick: () => {
+          void navigator.clipboard.writeText(issued).catch(() => setError(t("Could not copy the credential.")));
+        } }, t("Copy credential"))
+      ) : null,
+      error ? (0, import_react53.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+      clients.map((client) => (0, import_react53.createElement)(
+        "div",
+        { key: client.id, className: "bt-main-client-row" },
+        (0, import_react53.createElement)(
+          "div",
+          null,
+          (0, import_react53.createElement)("strong", null, client.label),
+          (0, import_react53.createElement)("span", null, client.id),
+          (0, import_react53.createElement)("span", null, client.revokedAt ? t("Revoked") : client.grants[0]?.capabilities.includes("command") ? t("Read and command") : t("Read-only"))
+        ),
+        client.revokedAt ? null : (0, import_react53.createElement)("button", {
+          type: "button",
+          className: "bt-soft",
+          disabled: busy,
+          onClick: () => {
+            void revoke(client);
+          }
+        }, t("Revoke"))
+      ))
     );
   }
   function SettingsDialog2({ binding, onClose }) {
@@ -22471,6 +22668,7 @@ function applyProduct(ctx) {
                 ) : null
               )) : (0, import_react53.createElement)("p", { className: "bt-main-status" }, t("No provider catalog is available. Configure providers in DSH settings."))
             ),
+            (0, import_react53.createElement)(ClientSettings, { binding }),
             (0, import_react53.createElement)(
               Card2,
               { title: t("Recent configuration uses") },
@@ -22491,15 +22689,119 @@ function applyProduct(ctx) {
       )
     );
   }
+  function ConnectionDialog({ connection, onClose }) {
+    const [address, setAddress] = (0, import_react53.useState)("");
+    const [instanceId, setInstanceId] = (0, import_react53.useState)("personal");
+    const [credential, setCredential] = (0, import_react53.useState)("");
+    const [busy, setBusy] = (0, import_react53.useState)(false);
+    const [error, setError] = (0, import_react53.useState)(null);
+    (0, import_react53.useEffect)(() => {
+      document.getElementById("product-host-address")?.focus();
+    }, []);
+    const connect = async (event) => {
+      event.preventDefault();
+      if (busy) return;
+      setBusy(true);
+      setError(null);
+      try {
+        await clientBridge().connect({ address: address.trim(), instanceId: instanceId.trim(), credential: credential.trim() });
+        setCredential("");
+        location.reload();
+      } catch (failure) {
+        setCredential("");
+        setError(failure.message);
+        setBusy(false);
+      }
+    };
+    const disconnect = async () => {
+      setBusy(true);
+      setError(null);
+      try {
+        await clientBridge().disconnect();
+        location.reload();
+      } catch (failure) {
+        setError(failure.message);
+        setBusy(false);
+      }
+    };
+    return (0, import_react53.createElement)(
+      "div",
+      { className: "bt-settings-layer" },
+      (0, import_react53.createElement)("div", { className: "bt-scrim", onMouseDown: onClose }),
+      (0, import_react53.createElement)(
+        "div",
+        {
+          className: "bt-settings bt-main-connect-dialog",
+          role: "dialog",
+          "aria-modal": true,
+          "aria-label": t("Host connection"),
+          onKeyDown: (event) => {
+            if (event.key === "Escape") onClose();
+          }
+        },
+        (0, import_react53.createElement)(
+          "div",
+          { className: "bt-settings-main" },
+          (0, import_react53.createElement)("div", { className: "bt-settings-head" }, (0, import_react53.createElement)("h2", null, t("Host connection"))),
+          connection?.connected ? (0, import_react53.createElement)(
+            "div",
+            { className: "bt-main-connect-body" },
+            (0, import_react53.createElement)("p", { role: "status" }, `${t("Remote Host")} · ${connection.address} · ${connection.instanceId}`),
+            (0, import_react53.createElement)("p", null, `${t("Client")} · ${connection.client.label} · ${connection.capabilities.includes("command") ? t("Read and command") : t("Read-only")}`),
+            error ? (0, import_react53.createElement)("p", { role: "alert", className: "bt-main-error" }, error) : null,
+            (0, import_react53.createElement)("button", { type: "button", className: "bt-soft", disabled: busy, onClick: () => void disconnect() }, t("Disconnect"))
+          ) : (0, import_react53.createElement)(
+            "form",
+            { className: "bt-main-connect-body", onSubmit: (event) => {
+              void connect(event);
+            } },
+            (0, import_react53.createElement)("label", { htmlFor: "product-host-address" }, t("Host address")),
+            (0, import_react53.createElement)("input", {
+              id: "product-host-address",
+              type: "url",
+              required: true,
+              value: address,
+              placeholder: "https://host.example:8443",
+              onChange: (event) => setAddress(event.currentTarget.value)
+            }),
+            (0, import_react53.createElement)("label", { htmlFor: "product-host-instance" }, t("Instance")),
+            (0, import_react53.createElement)("input", {
+              id: "product-host-instance",
+              required: true,
+              value: instanceId,
+              onChange: (event) => setInstanceId(event.currentTarget.value)
+            }),
+            (0, import_react53.createElement)("label", { htmlFor: "product-host-credential" }, t("Client credential")),
+            (0, import_react53.createElement)("input", {
+              id: "product-host-credential",
+              type: "password",
+              required: true,
+              autoComplete: "off",
+              value: credential,
+              onChange: (event) => setCredential(event.currentTarget.value)
+            }),
+            (0, import_react53.createElement)("p", { className: "bt-main-status" }, t("Use HTTPS or an authorized local SSH tunnel. The credential stays in this app process until disconnect or quit.")),
+            error ? (0, import_react53.createElement)("p", { role: "alert", className: "bt-main-error" }, error) : null,
+            (0, import_react53.createElement)("button", { type: "submit", className: "bt-soft", disabled: busy }, busy ? t("Connecting…") : t("Connect"))
+          )
+        ),
+        (0, import_react53.createElement)("button", { type: "button", className: "bt-settings-close", "aria-label": t("Close connection"), onClick: onClose }, (0, import_react53.createElement)(CloseIcon))
+      )
+    );
+  }
   function ProductSurface() {
     const state = useView();
     return (0, import_react53.createElement)(
       import_react53.Fragment,
       null,
       state.route === "observe" ? (0, import_react53.createElement)(ObservationConversation) : (0, import_react53.createElement)(MainConversation),
-      state.settingsOpen && state.binding ? (0, import_react53.createElement)(SettingsDialog2, {
+      state.settingsOpen && state.binding && !state.connection?.connected ? (0, import_react53.createElement)(SettingsDialog2, {
         binding: state.binding,
         onClose: () => view.set((current) => ({ ...current, settingsOpen: false }))
+      }) : null,
+      state.connectOpen && clientBridge() ? (0, import_react53.createElement)(ConnectionDialog, {
+        connection: state.connection,
+        onClose: () => view.set((current) => ({ ...current, connectOpen: false }))
       }) : null
     );
   }
@@ -22524,6 +22826,22 @@ var PRODUCT_CSS = `
 .bt-main-health-running{border-color:var(--bt-accent);color:var(--bt-ink)}
 .bt-main-health-degraded{border-color:var(--bt-danger);color:var(--bt-danger)}
 .bt-main-health-detail{color:var(--bt-ink-2);font-size:11px;font-weight:400}
+.bt-main-remote{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--bt-ink-2);font-size:11px;font-weight:400}
+.bt-main-connect-dialog{--bt-set-w:min(480px,calc(100vw - 32px));--bt-set-h:auto;width:var(--bt-set-w);height:auto;max-height:calc(100vh - 32px);overflow:auto}
+.bt-main-connect-dialog .bt-settings-main{width:100%;height:auto}
+.bt-main-connect-body{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:16px;color:var(--bt-ink);font-size:13px;line-height:18px}
+.bt-main-connect-body label{font-size:12px;color:var(--bt-ink-2)}
+.bt-main-connect-body input{width:100%;height:36px;box-sizing:border-box;padding:0 10px;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card);color:var(--bt-ink);font:inherit}
+.bt-main-connect-body input:focus-visible{outline:2px solid var(--bt-accent);outline-offset:1px}
+.bt-main-connect-body p{margin:4px 0;overflow-wrap:anywhere}
+.bt-main-connect-body button{min-height:36px}
+.bt-main-client-form{display:flex;align-items:flex-end;flex-wrap:wrap;gap:8px;padding:10px 12px;font-size:12px}
+.bt-main-client-form label{align-self:center;color:var(--bt-ink-2)}
+.bt-main-client-form input{max-width:190px}.bt-main-client-form select{max-width:170px}
+.bt-main-client-issued{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 12px;border-top:1px solid var(--bt-line);font-size:12px}
+.bt-main-client-issued p{width:100%;margin:0}.bt-main-client-issued input{max-width:300px;min-width:0;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card);color:var(--bt-ink);padding:8px}
+.bt-main-client-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border-top:1px solid var(--bt-line);font-size:12px}
+.bt-main-client-row>div{min-width:0;display:flex;flex-direction:column;gap:2px}.bt-main-client-row span{color:var(--bt-ink-2);overflow-wrap:anywhere}
 .bt-main-health-warning{margin:0;padding:8px 24px;border-bottom:.5px solid var(--bt-line-2);background:var(--bt-card);color:var(--bt-danger);font-size:12px;line-height:18px}
 .bt-main-settings{margin-left:2px}
 .bt-main-history{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:24px}
