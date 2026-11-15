@@ -153,7 +153,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
         if (payload.instanceId !== instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This request is outside the authorized Instance.')
         const fields = endpoint === 'send' ? ['instanceId', 'commandId', 'text']
           : endpoint === 'stop-main' ? ['instanceId', 'commandId', 'messageId']
-            : endpoint === 'work-stop' || endpoint === 'work-retry'
+            : endpoint === 'work-stop'
+              ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'expectedTicketVersion', 'reason']
+            : endpoint === 'work-retry'
               ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'reason']
               : endpoint === 'work-resume' ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration']
                 : endpoint === 'work-answer' ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'attentionId', 'attentionVersion', 'text']
@@ -183,7 +185,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
         if (endpoint === 'stop-main') return engine!.stopMainTurn({ instanceId, commandId: payload.commandId as string, messageId: payload.messageId as string })
         if (endpoint === 'work-stop') return engine!.stopMainWork({ instanceId, commandId: payload.commandId as string,
           workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
-          expectedGeneration: payload.expectedGeneration as string, reason: payload.reason as string })
+          ...(payload.expectedGeneration === undefined ? {} : { expectedGeneration: payload.expectedGeneration as string }),
+          expectedTicketVersion: payload.expectedTicketVersion as number, reason: payload.reason as string })
         if (endpoint === 'work-resume') return engine!.resumeMainWork({ instanceId, commandId: payload.commandId as string,
           workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
           expectedGeneration: payload.expectedGeneration as string })

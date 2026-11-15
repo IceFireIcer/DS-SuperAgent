@@ -248,6 +248,24 @@ interface WorkRouterTurn {
   updatedAt: number
 }
 
+export interface MainAttentionAnswerFact {
+  version: 1
+  id: string
+  instanceId: string
+  ticketId: string
+  workBriefId: string
+  workItemId: string
+  attentionId: string
+  attentionVersion: number
+  assignmentId: string
+  sessionId: string
+  commandId: string
+  actorId: string
+  answer: string
+  inputId: string
+  answeredAt: number
+}
+
 export interface MainWorkTicketSnapshot {
   ticketId: string
   status: Work['intent']['state'] | 'waiting-human' | 'stopping' | 'stopped'
@@ -261,6 +279,7 @@ export interface MainWorkTicketSnapshot {
 export interface MainWorkControl {
   workItemId: string
   ticketId: string
+  ticketVersion: number
   permissions: { actorId: string; canStop: boolean; canResume: boolean; canRetry: boolean; canAnswer: boolean }
   assignment?: { id: string; generation: string; sessionId: string; state: 'pending' | 'running' | 'stopping' | 'ended' }
   attention?: {
@@ -538,6 +557,8 @@ export class WorkDelegation {
             tx => tx.get<MainWorkNotification>('work-update', String(effect.payload.updateId)))
           if (!notification) throw new CoreError('INCOMPLETE_STATE', 'The Router work update is missing.')
           await this.options.notifyMain(notification, context.signal, transaction => this.isCurrent(notification, transaction))
+        } else if (effect.payload.type === 'work-attention-answer') {
+          await this.routeAttentionAnswer(String(effect.payload.factId), context.signal)
         } else {
           const result = await handler.execute(effect, context)
           if (result.type === 'success' && typeof effect.payload.ticketId === 'string') await this.refreshTicket(effect.payload.ticketId, context.signal)
@@ -557,8 +578,8 @@ export class WorkDelegation {
       execute: (effect, context) => execute(effect, context, handler),
       reconcile: (effect, context) => execute(effect, context, { ...handler, execute: handler.reconcile ?? handler.execute }),
       ...(handler.batch ? { batch: { maxSize: handler.batch.maxSize, execute: async (effects, context) => {
-        if (effects.some(effect => effect.payload.type === 'main-source-handoff'
-          || effect.payload.type === 'main-work-brief' || effect.payload.type === 'main-work-update')) {
+        if (effects.some(effect => ['main-source-handoff', 'main-work-brief', 'main-work-update', 'work-attention-answer']
+          .includes(String(effect.payload.type)))) {
           return Promise.all(effects.map(effect => execute(effect,
             { idempotencyKey: JSON.stringify([effect.id, effect.generation]), signal: context.signal }, handler)))
         }
@@ -572,6 +593,35 @@ export class WorkDelegation {
       } } } : {}),
     })
     return { notice: wrap(base.notice), relay: wrap(base.relay) }
+  }
+
+  private async routeAttentionAnswer(factId: string, signal: AbortSignal) {
+    identifier(factId, 'factId')
+    const fact = await this.options.storage.transaction(this.options.instanceId,
+      tx => tx.get<MainAttentionAnswerFact>('work-attention-answer', factId))
+    if (!fact) throw new CoreError('NOT_FOUND', 'The Attention answer fact is missing.')
+    const brief = await this.options.storage.transaction(this.options.instanceId,
+      tx => tx.get<MainWorkBrief>('work-brief', fact.workBriefId))
+    if (!brief || brief.instanceId !== this.options.instanceId) throw new CoreError('NOT_FOUND', 'The Attention answer Router brief is missing.')
+    const messageId = `attention-router-notice:${fact.id}`
+    if ((await this.options.sessions.hasMessage(brief.routerSessionId, messageId)).found) return
+    const config = await this.options.routerProfile()
+    this.options.sessions.routerSessionId = brief.routerSessionId
+    let acknowledged = false
+    const attempt = await this.startRouterTurn(brief, 'update', config.revision)
+    try {
+      const result = await this.options.sessions.run({ role: 'router', sessionId: brief.routerSessionId, signal,
+        profile: structuredClone(config.roles.router), stepBudget: 2, messageId,
+        onBeforeModel: async () => { await this.options.recordRouterUse(brief.routerSessionId, config) },
+        text: `Record this authorized human answer as a durable Router fact. Do not alter the user's choice.\n${JSON.stringify(fact)}`,
+        tools: [{ name: 'acknowledge_attention_answer', description: 'Acknowledge the supplied authorized Attention answer fact.',
+          parameters: {}, execute: async () => { acknowledged = true; return 'Attention answer fact acknowledged.' } }] })
+      await this.finishRouterTurn(attempt, { ...result, status: 'completed' })
+    } catch (error) {
+      await this.finishRouterTurn(attempt, { status: 'failed', error }).catch(() => {})
+      throw error
+    }
+    if (!acknowledged) throw new CoreError('ROUTER_NOTICE_UNHANDLED', 'Router did not acknowledge the Attention answer fact.')
   }
 
   private async persistSplit(brief: MainWorkBrief, suggestions: MainWorkIntent[]) {
@@ -989,32 +1039,58 @@ export class WorkDelegation {
 
   async recordAttentionAnswer(event: { ticketId: string; attentionId: string; attentionVersion: number;
     assignmentId: string; sessionId: string; commandId: string; actorId: string; answer: string; answeredAt: number; inputId: string }) {
-    return commandTransaction(this.options.storage, this.options.instanceId, async tx => {
-      const index = await tx.get<{ workBriefId: string; workItemId: string }>('work-ticket', event.ticketId)
-      if (!index?.workItemId) return
-      const brief = await tx.get<MainWorkBrief>('work-brief', index.workBriefId)
-      const item = await tx.get<MainWorkItem>('work-item', index.workItemId)
-      const receipt = await tx.get<MainWorkReceipt>('work-receipt', index.workItemId)
-      if (!brief || !item || receipt?.status !== 'accepted' || receipt.ticketId !== event.ticketId) return
-      const id = createHash('sha256').update(canonicalJson(['main-attention-answer-v1', this.options.instanceId,
-        event.ticketId, event.attentionId, event.attentionVersion, event.commandId])).digest('hex')
-      if (await tx.get<MainWorkUpdate>('work-update', id)) return
-      const update: MainWorkUpdate = {
-        version: 1,
-        id,
-        workBriefId: brief.id,
-        workItemId: item.id,
-        ticketId: event.ticketId,
-        status: 'running',
-        owner: 'user',
-        summary: `Authorized answer v${event.attentionVersion} was recorded for ${event.attentionId}; the same Worker Assignment continues.`,
-        needsDecision: false,
-        createdAt: event.answeredAt,
-      }
-      const notification: MainWorkNotification = { mainId: brief.mainId, receipt, update }
-      await tx.insert('work-update', id, notification)
-      if (!await tx.replace('work-update-head', item.id, update)) await tx.insert('work-update-head', item.id, update)
-    })
+    return commandTransaction(this.options.storage, this.options.instanceId,
+      tx => this.recordAttentionAnswerIn(tx, event))
+  }
+
+  async recordAttentionAnswerIn(tx: AsyncTx, event: { ticketId: string; attentionId: string; attentionVersion: number;
+    assignmentId: string; sessionId: string; commandId: string; actorId: string; answer: string; answeredAt: number; inputId: string }) {
+    const index = await tx.get<{ workBriefId: string; workItemId: string }>('work-ticket', event.ticketId)
+    if (!index?.workItemId) return undefined
+    const brief = await tx.get<MainWorkBrief>('work-brief', index.workBriefId)
+    const item = await tx.get<MainWorkItem>('work-item', index.workItemId)
+    const receipt = await tx.get<MainWorkReceipt>('work-receipt', index.workItemId)
+    if (!brief || !item || receipt?.status !== 'accepted' || receipt.ticketId !== event.ticketId) return undefined
+    const id = createHash('sha256').update(canonicalJson(['main-attention-answer-v1', this.options.instanceId,
+      event.ticketId, event.attentionId, event.attentionVersion, event.commandId])).digest('hex')
+    const existing = await tx.get<MainAttentionAnswerFact>('work-attention-answer', id)
+    if (existing) return existing
+    const fact: MainAttentionAnswerFact = {
+      version: 1,
+      id,
+      instanceId: this.options.instanceId,
+      ticketId: event.ticketId,
+      workBriefId: brief.id,
+      workItemId: item.id,
+      attentionId: event.attentionId,
+      attentionVersion: event.attentionVersion,
+      assignmentId: event.assignmentId,
+      sessionId: event.sessionId,
+      commandId: event.commandId,
+      actorId: event.actorId,
+      answer: event.answer.slice(0, 2048),
+      inputId: event.inputId,
+      answeredAt: event.answeredAt,
+    }
+    const update: MainWorkUpdate = {
+      version: 1,
+      id,
+      workBriefId: brief.id,
+      workItemId: item.id,
+      ticketId: event.ticketId,
+      status: 'running',
+      owner: 'user',
+      summary: `Authorized answer v${event.attentionVersion} was recorded for ${event.attentionId}; the same Worker Assignment continues.`,
+      needsDecision: false,
+      createdAt: event.answeredAt,
+    }
+    const notification: MainWorkNotification = { mainId: brief.mainId, receipt, update }
+    await tx.insert('work-attention-answer', id, fact)
+    await tx.insert('work-update', id, notification)
+    if (!await tx.replace('work-update-head', item.id, update)) await tx.insert('work-update-head', item.id, update)
+    await this.options.effects.enqueue(tx, { key: `attention-router:${id}`, stream: 'notice', scope: `router:${event.ticketId}`,
+      payload: { type: 'work-attention-answer', factId: id, ticketId: event.ticketId } })
+    return fact
   }
 
   private async verifyFollowUpSource(transaction: AsyncTx, request: MainWorkFollowUpRequest, originalUserText: string) {

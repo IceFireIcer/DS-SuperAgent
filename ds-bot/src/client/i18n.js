@@ -13,6 +13,7 @@ const ZH = {
   'Retrying…': '正在重试…',
   'Stopping this Main reply…': '正在停止本轮 Main 回复…',
   'Execution version': '执行版本',
+  'Ticket version': '工作项版本',
   'Stop work': '停止工作',
   'Resume work': '恢复工作',
   'Retry work': '重试工作',

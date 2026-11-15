@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { randomUUID } from 'node:crypto'
 import { mkdtemp, mkdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -22,6 +23,37 @@ async function until(check, label) {
     if (Date.now() >= deadline) throw new Error(`Main controls did not reach ${label}.`)
     await sleep(20)
   }
+}
+
+async function seedAcceptedCard({ storage, binding, ticketId, suffix }) {
+  const briefId = `seed-brief-${suffix}`
+  const itemId = `seed-item-${suffix}`
+  const sourceEventId = `seed-source-${suffix}`
+  const now = Date.now()
+  const brief = {
+    id: briefId, version: 1, instanceId: 'personal', mainId: binding.mainId,
+    mainSessionId: binding.mainSessionId, routerSessionId: binding.routerSessionId,
+    mainMessageId: `seed-message-${suffix}`, originalUserText: `Seed ${suffix} work.`,
+    authorization: { kind: 'authorized-main-actor', sourceInstanceId: source.sourceInstanceId, actorId: source.actorId },
+    goal: `Seed ${suffix} work.`, constraints: 'Wait for assignment.', acceptanceCriteria: 'Remain independently stoppable.',
+    sourceEventId, evidence: { kind: 'main-message', id: `seed-message-${suffix}` }, environmentId: 'product-workspace',
+    configurationRevision: 1, createdAt: now,
+  }
+  const item = { id: itemId, version: 1, workBriefId: briefId, sourceEventId, position: 0,
+    goal: brief.goal, constraints: brief.constraints, acceptanceCriteria: brief.acceptanceCriteria, createdAt: now }
+  await storage.transaction('personal', async tx => {
+    await tx.insert('work-brief', briefId, brief)
+    await tx.insert('work-item', itemId, item)
+    await tx.insert('work-split', briefId, { id: briefId, version: 1, workBriefId: briefId, sourceEventId,
+      fingerprint: `seed-fingerprint-${suffix}`, itemIds: [itemId], createdAt: now })
+    await tx.insert('work-receipt', itemId, { version: 1, workBriefId: briefId, workItemId: itemId, status: 'accepted',
+      ticketId, nextStep: 'Wait for the assigned Worker.', createdAt: now })
+    await tx.insert('work-receipt', briefId, { version: 1, workBriefId: briefId, status: 'accepted', ticketIds: [ticketId],
+      nextStep: 'The seeded work was accepted.', createdAt: now })
+    await tx.insert('work-item-ticket', itemId, { workBriefId: briefId, workItemId: itemId, ticketId })
+    await tx.insert('work-ticket', ticketId, { workBriefId: briefId, workItemId: itemId, ticketId })
+  })
+  return { briefId, itemId }
 }
 
 test('stopping the current Main reply leaves the committed delegated work running', { timeout: 45000 }, async t => {
@@ -99,7 +131,8 @@ test('stopping the current Main reply leaves the committed delegated work runnin
   assert.equal(work?.control?.assignment?.generation.length > 0, true)
   const initialGeneration = work.control.assignment.generation
   const stopReplay = { instanceId: 'personal', commandId: 'idempotent-stop', workItemId: work.brief.workItemId,
-    ticketId: work.receipt.ticketId, expectedGeneration: initialGeneration, reason: 'Exercise stop replay.' }
+    ticketId: work.receipt.ticketId, expectedGeneration: initialGeneration, expectedTicketVersion: work.control.ticketVersion,
+    reason: 'Exercise stop replay.' }
   const resumeReplay = { instanceId: 'personal', commandId: 'idempotent-resume', workItemId: work.brief.workItemId,
     ticketId: work.receipt.ticketId, expectedGeneration: initialGeneration }
   await engine.stopMainWork(stopReplay)
@@ -129,6 +162,7 @@ test('stopping the current Main reply leaves the committed delegated work runnin
   ]) await assert.rejects(action(), { code: 'WORK_VERSION_STALE' })
   await assert.rejects(engine.stopMainWork({ instanceId: 'personal', commandId: 'stale-work-stop',
     workItemId: work.brief.workItemId, ticketId: work.receipt.ticketId, expectedGeneration: 'stale-generation',
+    expectedTicketVersion: work.control.ticketVersion,
     reason: 'A stale card must be rejected.' }), { code: 'WORK_VERSION_STALE' })
 })
 
@@ -180,6 +214,65 @@ test('a stop without a live Main controller becomes a visible host-confirmed sto
   assert.equal(page.activeTurn, undefined)
   assert.equal(page.messages.find(message => message.id === active.messageId)?.status, 'failed')
   assert.equal(page.messages.some(message => message.text === 'A completed turn after the stop must stay hidden.'), false)
+})
+
+test('accepted work can be stopped before an Assignment without bypassing the assignment-start race', { timeout: 30000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'r5-main-pending-stop-'))
+  const root = join(directory, 'workspace')
+  await mkdir(root)
+  const native = await nativeContext(join(directory, 'sessions'), function* () {
+    yield* textResponse('Unexpected model turn.')
+    throw new Error('A stopped pre-Assignment card must not start a model turn.')
+  })
+  const environment = await LocalEnvironment.open({ id: 'product-workspace', instanceId: 'personal', root,
+    allowedActorIds: ['alice'], permissions: ['read', 'write'], commands: {} })
+  const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  const sessions = new NativeSessions(native, routes)
+  const engine = new Engine(storage, 'personal', source, {}, sessions, [environment])
+  t.after(async () => {
+    await engine.effects.stop(); await engine.shutdown(); await sessions.close()
+    await native.fiber.dispose(); await environment.close(); await storage.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+  const binding = await engine.openMain({ instanceId: 'personal' })
+  const alpha = await engine.submit({ commandId: 'seed-alpha', eventId: 'seed-alpha', text: 'Seed alpha work.' })
+  const beta = await engine.submit({ commandId: 'seed-beta', eventId: 'seed-beta', text: 'Seed beta work.' })
+  await seedAcceptedCard({ storage, binding, ticketId: alpha.ticketId, suffix: 'alpha' })
+  await seedAcceptedCard({ storage, binding, ticketId: beta.ticketId, suffix: 'beta' })
+  const cards = (await engine.getMainConversation({ instanceId: 'personal' })).works
+  assert.equal(cards.length, 2)
+  assert.equal(cards.every(card => card.control?.assignment === undefined && card.control?.permissions.canStop), true)
+  const alphaCard = cards.find(card => card.receipt.ticketId === alpha.ticketId)
+  const betaCard = cards.find(card => card.receipt.ticketId === beta.ticketId)
+  assert.equal(alphaCard?.control?.ticketVersion, 1)
+  assert.equal(betaCard?.control?.ticketVersion, 1)
+
+  await storage.transaction('personal', tx => tx.insert('assignment', alpha.ticketId, {
+    id: randomUUID(), generation: 'raced-generation', ticketId: alpha.ticketId, sessionId: 'raced-session',
+    state: 'pending', createdAt: Date.now(), runtimeToken: 'raced-runtime',
+  }))
+  await assert.rejects(engine.stopMainWork({ instanceId: 'personal', commandId: 'raced-pending-stop',
+    workItemId: alphaCard.brief.workItemId, ticketId: alpha.ticketId,
+    expectedTicketVersion: alphaCard.control.ticketVersion, reason: 'Reject a pre-Assignment card after start.' }),
+  { code: 'WORK_VERSION_STALE' })
+  assert.equal((await engine.conversation(alpha.ticketId)).lifecycle, 'open')
+
+  const pendingStop = { instanceId: 'personal', commandId: 'pending-stop-beta', workItemId: betaCard.brief.workItemId,
+    ticketId: beta.ticketId, expectedTicketVersion: betaCard.control.ticketVersion, reason: 'Stop before assignment.' }
+  await engine.stopMainWork(pendingStop)
+  const stopped = await engine.conversation(beta.ticketId)
+  assert.equal(stopped.status, 'stopped')
+  assert.equal(stopped.assignments.length, 0)
+  assert.equal(stopped.stop?.assignmentId, undefined)
+  assert.equal((await engine.getMainConversation({ instanceId: 'personal' })).works
+    .find(card => card.receipt.ticketId === beta.ticketId)?.status, 'stopped')
+
+  await storage.transaction('personal', tx => tx.insert('assignment', beta.ticketId, {
+    id: randomUUID(), generation: 'late-generation', ticketId: beta.ticketId, sessionId: 'late-session',
+    state: 'pending', createdAt: Date.now(), runtimeToken: 'late-runtime',
+  }))
+  await engine.stopMainWork(pendingStop)
+  assert.equal((await engine.conversation(beta.ticketId)).assignments[0]?.state, 'pending')
 })
 
 test('a Main work card answers only the exact current Attention and records the fact once', { timeout: 45000 }, async t => {
@@ -263,8 +356,15 @@ test('a Main work card answers only the exact current Attention and records the 
   assert.equal(answered.attention.assignmentId, assignment.id)
   assert.equal(answered.attention.sessionId, assignment.sessionId)
   assert.equal(answered.input.text, 'Yes')
+  const routerNotices = async () => (await engine.effects.list()).items
+    .filter(effect => effect.stream === 'notice' && effect.payload.type === 'work-attention-answer')
+  const notices = await routerNotices()
+  assert.equal(notices.length, 1)
+  assert.equal(notices[0].state, 'pending')
+  assert.equal(notices[0].scope, `router:${waiting.receipt.ticketId}`)
   const replay = await engine.answerMainAttention(command)
   assert.equal(replay.input.id, answered.input.id)
+  assert.equal((await routerNotices()).length, 1)
   await assert.rejects(engine.answerMainAttention({ ...command, text: 'No' }), { code: 'IDENTITY_CONFLICT' })
 
   const final = (await engine.getMainConversation({ instanceId: 'personal' })).works[0]
@@ -279,8 +379,10 @@ test('a Main work card answers only the exact current Attention and records the 
   const rolledGeneration = (await engine.conversation(waiting.receipt.ticketId)).assignments[0].generation
   const rolledReplay = await engine.answerMainAttention(command)
   assert.equal(rolledReplay.input.id, answered.input.id)
+  assert.equal((await routerNotices()).length, 1)
   await engine.stopMainWork({ instanceId: 'personal', commandId: 'stop-answered-card', workItemId: waiting.brief.workItemId,
-    ticketId: waiting.receipt.ticketId, expectedGeneration: rolledGeneration, reason: 'Stop after the answer.' })
+    ticketId: waiting.receipt.ticketId, expectedGeneration: rolledGeneration, expectedTicketVersion: final.control.ticketVersion,
+    reason: 'Stop after the answer.' })
   const stopped = (await engine.getMainConversation({ instanceId: 'personal' })).works[0]
   assert.equal(stopped?.status, 'stopped')
   assert.equal(stopped?.control?.permissions.canAnswer, false)

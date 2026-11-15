@@ -1892,13 +1892,17 @@ export class Execution {
     else await this.storage.transaction(this.instanceId, operation)
   }
 
-  async stopTicket(command: { commandId: string; ticketId: string; reason: string; actorId: string; expectedGeneration?: string }) {
+  async stopTicket(command: { commandId: string; ticketId: string; reason: string; actorId: string;
+    expectedGeneration?: string; expectedTicketVersion?: number }) {
     identifier(command.commandId, 'commandId'); identifier(command.ticketId, 'ticketId'); identifier(command.actorId, 'actorId')
     if (command.expectedGeneration !== undefined) identifier(command.expectedGeneration, 'expectedGeneration')
+    if (command.expectedTicketVersion !== undefined && (!Number.isSafeInteger(command.expectedTicketVersion) || command.expectedTicketVersion < 1)) {
+      throw new CoreError('INVALID_INPUT', 'The Ticket card version must be a positive integer.')
+    }
     if (!command.reason.trim() || Buffer.byteLength(command.reason) > 2048) throw new CoreError('INVALID_INPUT', 'Stop needs a bounded reason.')
     const commandKey = createHash('sha256').update(JSON.stringify(['stop', this.instanceId, command.ticketId, command.actorId, command.commandId])).digest('hex')
-    const fingerprint = createHash('sha256').update(JSON.stringify(['stop-v2', this.instanceId, command.ticketId,
-      command.actorId, command.reason, command.expectedGeneration ?? null])).digest('hex')
+    const fingerprint = createHash('sha256').update(JSON.stringify(['stop-v3', this.instanceId, command.ticketId,
+      command.actorId, command.reason, command.expectedGeneration ?? null, command.expectedTicketVersion ?? null])).digest('hex')
     const outcome = await commandTransaction(this.storage, this.instanceId, async transaction => {
       const prior = await transaction.get<{ stopId: string; assignmentId?: string; fingerprint: string }>('work-command', commandKey)
       if (prior) {
@@ -1908,11 +1912,16 @@ export class Execution {
       const trigger = await this.trigger(transaction, command.ticketId)
       if (trigger.source.sourceInstanceId !== this.sourceEvents.sourceInstanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The stopped Ticket belongs to a different source instance.')
       if (trigger.source.actorId !== command.actorId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Only the trusted source actor may stop this Ticket.')
-      const assignment = await transaction.get<Assignment>('assignment', command.ticketId)
-      if (command.expectedGeneration !== undefined && assignment?.generation !== command.expectedGeneration) {
+      const ticket = (await transaction.get<Work['ticket']>('ticket', command.ticketId))!
+      if (command.expectedTicketVersion !== undefined && ticket.directionVersion !== command.expectedTicketVersion) {
         throw new CoreError('WORK_VERSION_STALE', 'The work card changed before this stop; refresh before trying again.')
       }
-      const ticket = (await transaction.get<Work['ticket']>('ticket', command.ticketId))!
+      const assignment = await transaction.get<Assignment>('assignment', command.ticketId)
+      if (command.expectedGeneration !== undefined
+        ? assignment?.generation !== command.expectedGeneration
+        : command.expectedTicketVersion !== undefined && assignment !== undefined) {
+        throw new CoreError('WORK_VERSION_STALE', 'The work card changed before this stop; refresh before trying again.')
+      }
       const existingHead = await transaction.get<StopHead>('stop-head', this.stopHeadKey(command.ticketId))
       if (existingHead) {
         const existing = await transaction.get<StopState>('stop-state', existingHead.stopId)

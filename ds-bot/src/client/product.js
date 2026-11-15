@@ -235,12 +235,16 @@ export function applyProduct(ctx) {
     const control = work.control
     const assignment = control?.assignment
     const runControl = async endpoint => {
-      if (!state.binding || !control || !assignment) return
+      if (!state.binding || !control || !assignment && endpoint !== 'work-stop') return
       setControlBusy(endpoint)
       setControlError(null)
       const payload = { instanceId: state.binding.instanceId, commandId: crypto.randomUUID(),
-        workItemId: control.workItemId, ticketId: control.ticketId, expectedGeneration: assignment.generation }
-      if (endpoint === 'work-stop') payload.reason = t('Stopped from the Main work card.')
+        workItemId: control.workItemId, ticketId: control.ticketId,
+        ...(assignment ? { expectedGeneration: assignment.generation } : {}) }
+      if (endpoint === 'work-stop') {
+        payload.expectedTicketVersion = control.ticketVersion
+        payload.reason = t('Stopped from the Main work card.')
+      }
       if (endpoint === 'work-retry') payload.reason = t('Retry requested from the Main work card.')
       try {
         await productCall(endpoint, payload)
@@ -282,6 +286,7 @@ export function applyProduct(ctx) {
         `${t('Configuration version')} v${work.brief.configurationRevision}`) : null,
       h('p', { className: 'bt-main-work-id' }, `${t('Receipt')}: ${receiptCopy(work.receipt.status)}`),
       work.receipt.ticketId ? h('p', { className: 'bt-main-work-id' }, `${t('Ticket')} ${work.receipt.ticketId}`) : null,
+      control ? h('p', { className: 'bt-main-work-id' }, `${t('Ticket version')}: ${control.ticketVersion}`) : null,
       assignment ? h('p', { className: 'bt-main-work-id' }, `${t('Execution version')}: ${assignment.generation}`) : null,
       stop ? h('p', { className: 'bt-main-work-detail' }, stop.state === 'stopping'
         ? stop.pendingDeviceConfirmation ? t('Stopping · waiting for device cancellation confirmation.')
@@ -323,7 +328,7 @@ export function applyProduct(ctx) {
         work.outcome.artifacts.map(artifact => h('p', { key: artifact.path, className: 'bt-main-work-artifact' },
           h('code', null, artifact.path), ' ', h('span', null, `${artifact.bytes} ${t('bytes')} · ${artifact.sha256.slice(0, 12)}`)))) : null,
       control ? h('div', { className: 'bt-main-work-controls' },
-        assignment && control.permissions.canStop ? h('button', { type: 'button', className: 'bt-soft',
+        control.permissions.canStop ? h('button', { type: 'button', className: 'bt-soft',
           disabled: Boolean(controlBusy), onClick: () => runControl('work-stop') },
         controlBusy === 'work-stop' ? t('Stopping…') : t('Stop work')) : null,
         assignment && control.permissions.canResume ? h('button', { type: 'button', className: 'bt-soft',

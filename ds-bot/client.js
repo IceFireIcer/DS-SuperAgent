@@ -50,6 +50,7 @@ var ZH = {
   "Retrying…": "正在重试…",
   "Stopping this Main reply…": "正在停止本轮 Main 回复…",
   "Execution version": "执行版本",
+  "Ticket version": "工作项版本",
   "Stop work": "停止工作",
   "Resume work": "恢复工作",
   "Retry work": "重试工作",
@@ -21148,7 +21149,7 @@ function applyProduct(ctx) {
     const control = work.control;
     const assignment = control?.assignment;
     const runControl = async (endpoint) => {
-      if (!state.binding || !control || !assignment) return;
+      if (!state.binding || !control || !assignment && endpoint !== "work-stop") return;
       setControlBusy(endpoint);
       setControlError(null);
       const payload = {
@@ -21156,9 +21157,12 @@ function applyProduct(ctx) {
         commandId: crypto.randomUUID(),
         workItemId: control.workItemId,
         ticketId: control.ticketId,
-        expectedGeneration: assignment.generation
+        ...assignment ? { expectedGeneration: assignment.generation } : {}
       };
-      if (endpoint === "work-stop") payload.reason = t("Stopped from the Main work card.");
+      if (endpoint === "work-stop") {
+        payload.expectedTicketVersion = control.ticketVersion;
+        payload.reason = t("Stopped from the Main work card.");
+      }
       if (endpoint === "work-retry") payload.reason = t("Retry requested from the Main work card.");
       try {
         await productCall(endpoint, payload);
@@ -21220,6 +21224,7 @@ function applyProduct(ctx) {
       ) : null,
       (0, import_react53.createElement)("p", { className: "bt-main-work-id" }, `${t("Receipt")}: ${receiptCopy(work.receipt.status)}`),
       work.receipt.ticketId ? (0, import_react53.createElement)("p", { className: "bt-main-work-id" }, `${t("Ticket")} ${work.receipt.ticketId}`) : null,
+      control ? (0, import_react53.createElement)("p", { className: "bt-main-work-id" }, `${t("Ticket version")}: ${control.ticketVersion}`) : null,
       assignment ? (0, import_react53.createElement)("p", { className: "bt-main-work-id" }, `${t("Execution version")}: ${assignment.generation}`) : null,
       stop ? (0, import_react53.createElement)("p", { className: "bt-main-work-detail" }, stop.state === "stopping" ? stop.pendingDeviceConfirmation ? t("Stopping · waiting for device cancellation confirmation.") : t("Stopping · waiting for the current execution to become quiet.") : stop.cancellationConfirmedAt ? t("Stopped · execution cancellation confirmed.") : t("Stopped · cancellation confirmation is unavailable.")) : null,
       attention ? (0, import_react53.createElement)(
@@ -21285,7 +21290,7 @@ function applyProduct(ctx) {
       control ? (0, import_react53.createElement)(
         "div",
         { className: "bt-main-work-controls" },
-        assignment && control.permissions.canStop ? (0, import_react53.createElement)(
+        control.permissions.canStop ? (0, import_react53.createElement)(
           "button",
           {
             type: "button",

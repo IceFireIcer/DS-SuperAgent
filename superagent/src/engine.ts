@@ -303,10 +303,13 @@ export class Engine {
           const assignment = conversation.assignments[0]
           const attention = conversation.attention
           const stop = conversation.stop
+          const ticketVersion = (await storage.transaction(instanceId,
+            tx => tx.get<Work['ticket']>('ticket', ticketId)))?.directionVersion ?? 1
           const actorAllowed = this.source.allowedActorIds.includes(this.source.actorId)
           const control: MainWorkControl = {
             workItemId: '',
             ticketId,
+            ticketVersion,
             permissions: {
               actorId: this.source.actorId,
               canStop: actorAllowed && !['ready', 'stopped', 'stopping'].includes(status),
@@ -2181,7 +2184,8 @@ export class Engine {
   }
 
   async answerAttention(command: { commandId: string; attentionId: string; text: string; sourceEventId?: string;
-    ticketId?: string; expectedGeneration?: string; expectedVersion?: number }, receiver?: Engine) {
+    ticketId?: string; expectedGeneration?: string; expectedVersion?: number }, receiver?: Engine,
+  requireMainWorkFact = false) {
     await this.ensurePolicy()
     if (receiver) {
       if (!(receiver instanceof Engine) || receiver.instanceId !== this.instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The answer receiver must be a trusted Engine in this Instance.')
@@ -2210,6 +2214,11 @@ export class Engine {
         const answered = await tx.get<Attention>('attention', existing.attentionId)
         const input = await this.inputs.getInput(tx, existing.inputId)
         if (!answered || !input) throw new CoreError('INCOMPLETE_STATE', 'The answered Attention is missing its Input.')
+        const fact = await this.workDelegation?.recordAttentionAnswerIn(tx, { ticketId: answered.ticketId, attentionId: answered.id,
+          attentionVersion: answered.sequence, assignmentId: answered.assignmentId, sessionId: answered.sessionId,
+          commandId: command.commandId, actorId: answered.answeredBy!, answer: answered.answerText!,
+          answeredAt: answered.answeredAt!, inputId: input.id })
+        if (requireMainWorkFact && !fact) throw new CoreError('INCOMPLETE_STATE', 'The Main Attention answer fact is missing.')
         return { attention: answered, input }
       }
       await this.assertHostAdmissionIn(tx)
@@ -2283,6 +2292,12 @@ export class Engine {
         await tx.replace('work-input', result.input.id, result.input)
       }
       await tx.insert('work-command', commandKey, { fingerprint, attentionId: result.attention.id, inputId: result.input.id })
+      const fact = await this.workDelegation?.recordAttentionAnswerIn(tx, { ticketId: result.attention.ticketId,
+        attentionId: result.attention.id, attentionVersion: result.attention.sequence,
+        assignmentId: result.attention.assignmentId, sessionId: result.attention.sessionId,
+        commandId: command.commandId, actorId: result.attention.answeredBy!, answer: result.attention.answerText!,
+        answeredAt: result.attention.answeredAt!, inputId: result.input.id })
+      if (requireMainWorkFact && !fact) throw new CoreError('INCOMPLETE_STATE', 'The Main Attention answer fact is missing.')
       return result
     })
   }
@@ -2322,22 +2337,24 @@ export class Engine {
       expectedGeneration: command.expectedGeneration,
       expectedVersion: command.attentionVersion,
       text: command.text,
-    })
-    await this.workDelegation?.recordAttentionAnswer({ ticketId: command.ticketId, attentionId: result.attention.id,
-      attentionVersion: result.attention.sequence, assignmentId: result.attention.assignmentId,
-      sessionId: result.attention.sessionId, commandId: command.commandId, actorId: result.attention.answeredBy!,
-      answer: result.attention.answerText!, answeredAt: result.attention.answeredAt!, inputId: result.input.id })
+    }, undefined, true)
     this.effects.wake()
     return result
   }
 
-  async stopMainWork(command: { instanceId: string; commandId: string; workItemId: string; ticketId: string; expectedGeneration: string; reason: string }) {
-    if (!command || Object.keys(command).some(key => !['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'reason'].includes(key))) {
+  async stopMainWork(command: { instanceId: string; commandId: string; workItemId: string; ticketId: string;
+    expectedGeneration?: string; expectedTicketVersion: number; reason: string }) {
+    if (!command || Object.keys(command).some(key => !['instanceId', 'commandId', 'workItemId', 'ticketId',
+      'expectedGeneration', 'expectedTicketVersion', 'reason'].includes(key))) {
       throw new CoreError('INVALID_INPUT', 'Stopping work accepts only its exact card target and reason.')
+    }
+    if (!Number.isSafeInteger(command.expectedTicketVersion) || command.expectedTicketVersion < 1) {
+      throw new CoreError('INVALID_INPUT', 'Stopping a Main work card needs its exact Ticket version.')
     }
     await this.requireMainWorkControl(command)
     return this.stopTicket({ commandId: command.commandId, ticketId: command.ticketId, reason: command.reason,
-      expectedGeneration: command.expectedGeneration })
+      ...(command.expectedGeneration === undefined ? {} : { expectedGeneration: command.expectedGeneration }),
+      expectedTicketVersion: command.expectedTicketVersion })
   }
 
   async resumeMainWork(command: { instanceId: string; commandId: string; workItemId: string; ticketId: string; expectedGeneration: string }) {
@@ -2358,14 +2375,18 @@ export class Engine {
       expectedGeneration: command.expectedGeneration })
   }
 
-  async stopTicket(command: { commandId: string; ticketId: string; reason: string; expectedGeneration?: string }) {
+  async stopTicket(command: { commandId: string; ticketId: string; reason: string; expectedGeneration?: string;
+    expectedTicketVersion?: number }) {
     await this.ensurePolicy()
     if (!this.execution) throw new CoreError('WORKER_NOT_ENABLED', 'Stopping work requires a configured native runtime.')
-    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'reason', 'expectedGeneration'].includes(key))) {
+    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'reason', 'expectedGeneration', 'expectedTicketVersion'].includes(key))) {
       throw new CoreError('INVALID_INPUT', 'Stopping work accepts its exact command, Ticket and version only.')
     }
     identifier(command.commandId, 'commandId'); identifier(command.ticketId, 'ticketId')
     if (command.expectedGeneration !== undefined) identifier(command.expectedGeneration, 'expectedGeneration')
+    if (command.expectedTicketVersion !== undefined && (!Number.isSafeInteger(command.expectedTicketVersion) || command.expectedTicketVersion < 1)) {
+      throw new CoreError('INVALID_INPUT', 'The Ticket card version must be a positive integer.')
+    }
     if (typeof command.reason !== 'string' || !command.reason.trim() || Buffer.byteLength(command.reason) > 2048) throw new CoreError('INVALID_INPUT', 'Stopping work needs a bounded reason.')
     if (!this.source.allowedActorIds.includes(this.source.actorId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The source actor cannot stop work.')
     return this.execution.stopTicket({ ...command, actorId: this.source.actorId })
