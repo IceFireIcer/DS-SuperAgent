@@ -52,6 +52,7 @@ test('an addressed Feishu request enters Main while discussion and bot messages 
   await source.receive(event('2', 'om_ambient', { mentionIds: [] }))
   await source.receive(event('3', 'om_bot', { senderId: 'bot', senderKind: 'bot' }))
   await source.receive(event('4', 'om_other', { senderId: 'bob' }))
+  await source.receive(event('5', 'om_unrelated_reply', { rootId: 'om_unrelated_root', mentionIds: [] }))
   assert.equal((await engine.getMainSources({ instanceId: 'private' })).items.length, 1)
   for (let index = 0; index < 8; index++) await engine.effects.drain()
   const page = await engine.getRecentMainConversation({ instanceId: 'private', limit: 20 })
@@ -196,7 +197,7 @@ test('Main delegates a Feishu discussion and the original thread receives the bo
     [['result', 'sent', 'message:om_work'], ['acknowledgement', 'sent', 'message:om_work']])
   await source.receive({ eventId: 'feishu-follow', cursor: '2', tenantKey: 'tenant', chatId: 'group',
     chatType: 'group', rootId: 'om_work', messageId: 'om_follow', senderId: 'alice', senderKind: 'human',
-    text: 'Need approval before continuing.', createTime: '1700000001000', updateTime: '1700000001000' })
+    mentionIds: ['ou_bot'], text: 'Need approval before continuing.', createTime: '1700000001000', updateTime: '1700000001000' })
   assert.equal((await desktop.getMainSources({ instanceId: 'private' })).items.length, 1,
     'an authorized follow-up in the owned discussion does not create a second Main request')
   assert.equal((await desktop.listTickets()).items.length, 1)
@@ -209,11 +210,26 @@ test('Main delegates a Feishu discussion and the original thread receives the bo
     chatType: 'group', rootId: 'om_work', messageId: 'om_other_answer', senderId: 'bob', senderKind: 'human',
     text: 'Yes', createTime: '1700000002000', updateTime: '1700000002000' })
   assert.equal((await desktop.conversation(ticketId)).attention.status, 'waiting')
-  await source.receive({ eventId: 'feishu-owner-answer', cursor: '4', tenantKey: 'tenant', chatId: 'group',
+  await source.receive({ eventId: 'feishu-unrelated-answer', cursor: '4', tenantKey: 'tenant', chatId: 'group',
+    chatType: 'group', rootId: 'om_work', messageId: 'om_unrelated_answer', senderId: 'alice', senderKind: 'human',
+    mentionIds: ['ou_bot'], text: 'This reply is not for the question.', createTime: '1700000003000', updateTime: '1700000003000' })
+  assert.equal((await desktop.conversation(ticketId)).attention.status, 'waiting',
+    'a same-sender group reply cannot answer a question without its exact question code')
+  assert.equal((await desktop.getMainSources({ instanceId: 'private' })).items.length, 1,
+    'discussion while a question waits must not become another Main request')
+  const questionReply = replies.find(reply => reply.text.includes('May this work continue?'))
+  const code = questionReply?.text.match(/Q-([a-f0-9]{16})/u)?.[1]
+  assert.ok(code, 'the delivered Feishu question must include a stable answer code')
+  await source.receive({ eventId: 'feishu-wrong-code', cursor: '5', tenantKey: 'tenant', chatId: 'group',
+    chatType: 'group', rootId: 'om_work', messageId: 'om_wrong_code', senderId: 'alice', senderKind: 'human',
+    text: 'Q-0000000000000000: Yes', createTime: '1700000004000', updateTime: '1700000004000' })
+  assert.equal((await desktop.conversation(ticketId)).attention.status, 'waiting')
+  await source.receive({ eventId: 'feishu-owner-answer', cursor: '6', tenantKey: 'tenant', chatId: 'group',
     chatType: 'group', rootId: 'om_work', messageId: 'om_owner_answer', senderId: 'alice', senderKind: 'human',
-    text: 'Yes', createTime: '1700000003000', updateTime: '1700000003000' })
+    text: `Q-${code}: Yes`, createTime: '1700000005000', updateTime: '1700000005000' })
   for (let index = 0; index < 8; index++) await desktop.effects.drain()
   const answered = await desktop.conversation(ticketId)
   assert.equal(answered.attention.answeredBy, 'alice')
+  assert.equal(answered.attention.answerText, 'Yes')
   assert.equal((await desktop.getMainSources({ instanceId: 'private' })).items.length, 1)
 })

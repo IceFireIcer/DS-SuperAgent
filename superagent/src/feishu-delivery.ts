@@ -18,6 +18,10 @@ export interface FeishuDeliveryChannelOptions {
   findReceipt?: (deliveryId: string, idempotencyKey: string) => Promise<{ messageId: string; fingerprint: string } | undefined>
 }
 
+export function feishuQuestionCode(attentionId: string) {
+  return createHash('sha256').update(attentionId).digest('hex').slice(0, 16)
+}
+
 /**
  * Deliver confirmations, questions, answers and results back into the exact Feishu
  * message that started the work. Feishu deduplicates the same uuid for one hour, so
@@ -49,7 +53,9 @@ export class FeishuDeliveryChannel implements DeliveryChannel {
     }
     const messageId = nativeMessageId(delivery.destination.eventId)
     if (!messageId) return { type: 'permanent', reason: 'DESTINATION_UNSUPPORTED: the target is not a Feishu message.' }
-    const text = this.imText(delivery.text)
+    const answerHint = delivery.purpose === 'attention' && delivery.basis.kind === 'waiting-attention'
+      ? `\n\nReply with Q-${feishuQuestionCode(delivery.basis.attentionId)}: followed by your answer.` : ''
+    const text = this.imText(delivery.text, this.maxTextChars - answerHint.length) + answerHint
     if (Buffer.byteLength(JSON.stringify({ text })) > 150 * 1024) {
       return { type: 'permanent', reason: 'MESSAGE_TOO_LARGE: the reply exceeds the Feishu text limit.' }
     }
@@ -107,10 +113,10 @@ export class FeishuDeliveryChannel implements DeliveryChannel {
     return { type: 'transient', reason: error instanceof CoreError ? error.code : 'FEISHU_REQUEST_NOT_SENT' }
   }
 
-  private imText(text: string) {
-    if (text.length <= this.maxTextChars) return text
+  private imText(text: string, budget = this.maxTextChars) {
+    if (text.length <= budget) return text
     const suffix = '\n\n[Truncated for Feishu. The full text is in the Ticket.]'
-    return text.slice(0, Math.max(0, this.maxTextChars - suffix.length)) + suffix
+    return text.slice(0, Math.max(0, budget - suffix.length)) + suffix
   }
 }
 

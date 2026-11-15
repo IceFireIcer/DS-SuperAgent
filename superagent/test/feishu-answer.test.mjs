@@ -58,11 +58,13 @@ test('a Feishu question and its authorized answer stay in the original discussio
   for (let index = 0; index < 8; index++) await engine.effects.drain()
   let conversation = await engine.conversation(ticketId)
   assert.equal(conversation.status, 'waiting-human', JSON.stringify({ conversation, replies, effects: await engine.effects.list() }))
-  const questionReply = replies.find(reply => reply.text === conversation.attention.question)
+  const questionReply = replies.find(reply => reply.text.startsWith(conversation.attention.question))
   assert.equal(questionReply?.messageId, 'om_q', 'the question replies to the message that started the work')
+  const code = questionReply.text.match(/Q-([a-f0-9]{16})/u)?.[1]
+  assert.ok(code, 'the native question includes a stable reply code')
 
   await source.receive({ eventId: 'feishu-answer', cursor: '2', tenantKey: 'tenant', chatId: 'chat', chatType: 'p2p',
-    messageId: 'om_a', senderId: 'alice', text: 'Use the blue option.', createTime: '1700000001000', updateTime: '1700000001000' })
+    messageId: 'om_a', senderId: 'alice', text: `Q-${code}: Use the blue option.`, createTime: '1700000001000', updateTime: '1700000001000' })
   for (let index = 0; index < 12; index++) await engine.effects.drain()
   const resultReply = replies.find(reply => reply.text === 'Used the blue option.')
   assert.equal(resultReply?.messageId, 'om_q')

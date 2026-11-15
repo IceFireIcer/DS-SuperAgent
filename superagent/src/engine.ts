@@ -23,6 +23,7 @@ import { Deliveries, type Delivery, type DeliveryOptions, type DeliveryView } fr
 import { Outbox } from './outbox.js'
 import { HostLease, type HostOptions } from './host.js'
 import { ClientAccess } from './client-access.js'
+import { feishuQuestionCode } from './feishu-delivery.js'
 import { listSupervisorProposals, Supervisor, type SupervisorOptions, type SupervisorProposal } from './supervisor.js'
 import { assertHostTakeoverSettled, loadHostTakeover, type HostTakeoverRecord, type HostTakeoverTicket } from './host-takeover.js'
 import { ContextReader, type ContextCandidate, type ContextCard, type ContextRef, type ContextRequest } from './context.js'
@@ -408,7 +409,8 @@ export class Engine {
       return policy?.configuration.allowedRequesterIds ?? this.source.intake?.allowedRequesterIds ?? this.source.allowedActorIds
     })
     const receipt = await this.sourceEvents.receive(event, async (tx, sourceEvent) => {
-      if (await this.inputs.threadHasWorkerSubscriptions(tx, sourceEvent.threadId) || await this.inputs.owns(tx, sourceEvent)) {
+      if (await this.inputs.threadHasWorkerSubscriptions(tx, sourceEvent.threadId) || await this.inputs.owns(tx, sourceEvent)
+        || this.source.kind === 'feishu' && await this.hasWaitingSourceAttention(tx, sourceEvent)) {
         await this.inputs.recordFanout(tx, sourceEvent)
         await this.answerFromSourceEvent(tx, sourceEvent)
         return
@@ -454,6 +456,10 @@ export class Engine {
         await tx.insert('work-command', key, { fingerprint, kind: 'existing-work', eventId: event.id })
         return { kind: 'existing-work' as const, eventId: event.id }
       }
+      if (this.source.kind === 'feishu' && await this.hasWaitingSourceAttention(tx, event)) {
+        await tx.insert('work-command', key, { fingerprint, kind: 'existing-work', eventId: event.id })
+        return { kind: 'existing-work' as const, eventId: event.id }
+      }
       const policy = await tx.get<StoredPolicy>('policy-state', this.policyKey())
       const allowed = policy?.configuration.allowedRequesterIds ?? this.source.intake?.allowedRequesterIds ?? this.source.allowedActorIds
       if (event.authorKind !== 'human' || event.addressing === 'ambient' || !allowed.includes(event.authorId)) {
@@ -468,11 +474,29 @@ export class Engine {
     return result
   }
 
-  /** A trusted human reply in a waiting question's Thread answers that question and resumes the work. */
+  private async hasWaitingSourceAttention(tx: AsyncTx, event: SourceEvent) {
+    let cursor = ''
+    for (let page = 0; page < 10; page++) {
+      const batch = await tx.scan<{ attentionId: string }>('attention-head', { limit: 100, after: cursor })
+      for (const head of batch.items) {
+        const attention = await tx.get<Attention>('attention', head.value.attentionId)
+        if (attention?.status === 'waiting' && attention.destination.sourceInstanceId === event.source.sourceInstanceId
+          && attention.destination.threadId === event.threadId && attention.destination.actorId === event.authorId) return true
+      }
+      if (!batch.cursor) return false
+      cursor = batch.cursor
+    }
+    throw new CoreError('ATTENTION_BUDGET', 'The pending question scan exceeded its declared bound.')
+  }
+
+  /** A trusted human reply with the current question code answers and resumes its work. */
   private async answerFromSourceEvent(tx: AsyncTx, event: SourceEvent) {
     if (event.type === 'deleted' || event.text === undefined || !event.text.trim() || event.authorKind !== 'human') return
-    // Only a Feishu reply addressed to the bot is an in-place answer; ordinary discussion stays a follow-up.
-    if (this.source.kind !== 'feishu' || (event.addressing !== 'mention' && event.addressing !== 'direct')) return
+    if (this.source.kind !== 'feishu') return
+    // Feishu topic replies can have the discussion root as parent even when the user replied
+    // to a question. The delivered question code identifies one current Attention instead.
+    const answer = /^Q-([a-f0-9]{16}):\s*([\s\S]+)$/iu.exec(event.text.trim())
+    if (!answer || !answer[2]?.trim()) return
     const answerers = this.source.intake?.allowedRequesterIds ?? this.source.allowedActorIds
     if (!answerers.includes(event.authorId)) return
     const currentEvent = await this.sourceEvents.candidate(tx, event)
@@ -489,7 +513,8 @@ export class Engine {
     for (const head of heads) {
       const attention = await tx.get<Attention>('attention', head.attentionId)
       if (!attention || attention.status !== 'waiting') continue
-      if (attention.destination.threadId !== event.threadId || attention.destination.actorId !== event.authorId) continue
+      if (attention.destination.threadId !== event.threadId || attention.destination.actorId !== event.authorId
+        || feishuQuestionCode(attention.id) !== answer[1]!.toLowerCase()) continue
       if (attention.destination.eventId === event.objectId) continue
       matches.push(attention)
     }
@@ -497,7 +522,7 @@ export class Engine {
     if (matches.length !== 1) return
     const match = matches[0]!
     try {
-      await this.attentions.answer(tx, { ticketId: match.ticketId, attentionId: match.id, text: event.text,
+      await this.attentions.answer(tx, { ticketId: match.ticketId, attentionId: match.id, text: answer[2]!.trim(),
         commandId: `source-answer:${event.id}`, actorId: event.authorId, sourceEventId: event.id })
     } catch (error) {
       if (!(error instanceof CoreError)) throw error

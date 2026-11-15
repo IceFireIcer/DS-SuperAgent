@@ -56,6 +56,19 @@ test('a Feishu IM reply is kept short while the full text stays in the Ticket', 
   assert.match(calls[0].text, /\[Truncated for Feishu\. The full text is in the Ticket\.\]$/u)
 })
 
+test('a long Feishu question retains its exact answer code after truncation', async () => {
+  const calls = []
+  const channel = new core.FeishuDeliveryChannel({ replyMessage: async request => {
+    calls.push(request)
+    return { messageId: 'om_reply' }
+  } }, { maxTextChars: 200, now: () => 1000 })
+  const question = view({ purpose: 'attention', text: 'Question: '.repeat(40),
+    basis: { kind: 'waiting-attention', attentionId: 'attention-1' } })
+  assert.equal((await channel.deliver(question, context)).type, 'success')
+  assert.equal(calls[0].text.length <= 200, true)
+  assert.match(calls[0].text, /Reply with Q-[a-f0-9]{16}: followed by your answer\.$/u)
+})
+
 test('a first send is not blocked by time the Delivery spent waiting in the local queue', async () => {
   const calls = []
   const channel = new core.FeishuDeliveryChannel({ replyMessage: async request => { calls.push(request); return { messageId: 'om_reply' } } },

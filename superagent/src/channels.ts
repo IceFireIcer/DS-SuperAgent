@@ -193,7 +193,7 @@ export class FeishuSource {
       ? `:message:${event.rootId ?? event.messageId}` : ''}`
     const objectId = `message:${event.messageId}`
     const addressed = event.chatType === 'p2p' ? 'direct'
-      : (this.config.mainIntake && Boolean(event.rootId)) || event.mentionIds?.some(id => this.config.selfActorIds?.includes(id)) ? 'mention' : 'ambient'
+      : event.mentionIds?.some(id => this.config.selfActorIds?.includes(id)) ? 'mention' : 'ambient'
     const commandId = `feishu:${event.eventId}`
     const prior = await this.engine.getSourceReceipt(commandId)
     if (prior) {
@@ -204,7 +204,7 @@ export class FeishuSource {
       type: event.deleted ? 'deleted' : event.edited ? 'edited' : 'created', version: feishuVersion(event),
       ...(event.deleted ? { deletionEvidence: event.deletionEvidence ?? `Feishu deleted message ${event.messageId}.` } : { text: event.text ?? '' }),
       authorId: event.senderId, authorKind: event.senderKind ?? 'human', addressing: addressed }
-    const receipt = this.config.mainIntake && input.authorKind === 'human' && addressed !== 'ambient' && !event.deleted
+    const receipt = this.config.mainIntake && input.authorKind === 'human' && !event.deleted
       ? await this.engine.receiveSourceForMain(input) : await this.engine.receiveSource(input)
     await this.advance(event.cursor)
     return receipt

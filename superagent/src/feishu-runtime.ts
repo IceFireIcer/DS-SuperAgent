@@ -243,7 +243,7 @@ class FeishuRuntimeSource extends FeishuSource {
     if (event.tenantKey !== this.scope.tenantKey || !this.scope.chatIds.includes(event.chatId)) throw new CoreError('SOURCE_SCOPE_DENIED', 'The Feishu event is outside the runtime scope.')
     const root = event.rootId ?? event.messageId
     const threadId = `feishu:${event.tenantKey}:${event.chatId}${event.chatType === 'p2p' ? '' : `:message:${root}`}`
-    const addressing = event.chatType === 'p2p' ? 'direct' : event.rootId || event.mentionIds?.some(id => this.scope.selfActorIds?.includes(id)) ? 'mention' : 'ambient'
+    const addressing = event.chatType === 'p2p' ? 'direct' : event.mentionIds?.some(id => this.scope.selfActorIds?.includes(id)) ? 'mention' : 'ambient'
     let receipt: SourceReceipt
     if (this.scope.selfActorIds?.includes(event.senderId)) receipt = { status: 'filtered', reason: 'SOURCE_SELF' }
     else if (event.updateTime === undefined && !event.deleted) {
@@ -274,7 +274,7 @@ class FeishuRuntimeSource extends FeishuSource {
           ...(event.deleted ? { deletionEvidence: event.deletionEvidence ?? `Feishu recalled message ${event.messageId}.` } : { text: event.text ?? '' }),
           authorId: event.senderId, authorKind: event.senderKind ?? 'human',
           addressing } as const
-        receipt = this.scope.mainIntake && input.authorKind === 'human' && addressing !== 'ambient' && !event.deleted
+        receipt = this.scope.mainIntake && input.authorKind === 'human' && !event.deleted
           ? await this.runtimeEngine.receiveSourceForMain(input) : await this.runtimeEngine.receiveSource(input)
       }
     }
