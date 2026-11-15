@@ -5,8 +5,8 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import * as core from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
-import { nativeContext, textResponse } from '../dev/native-mock.mjs'
-import { lastUserText } from './input-support.mjs'
+import { nativeContext, routerResponse, textResponse, toolResponse } from '../dev/native-mock.mjs'
+import { completedToolCount, lastUserText } from './input-support.mjs'
 
 test('an addressed Feishu request enters Main while discussion and bot messages do not', { timeout: 20000 }, async t => {
   const directory = await mkdtemp(join(tmpdir(), 'ds-bot-main-feishu-'))
@@ -118,4 +118,94 @@ test('the Feishu runtime polls a native discussion into the same Main and stops 
   assert.ok(runtime.health().passes >= 1)
   await runtime.stop()
   assert.equal(runtime.health().state, 'stopped')
+})
+
+test('Main delegates a Feishu discussion and the original thread receives the bounded result', { timeout: 25000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-main-feishu-delivery-'))
+  let storage, native, sessions, desktop, feishu, environment
+  const replies = []
+  t.after(async () => {
+    await desktop?.effects.stop()
+    await feishu?.effects.stop()
+    await desktop?.shutdown()
+    await feishu?.shutdown()
+    await sessions?.close()
+    await native?.fiber.dispose()
+    await environment?.close()
+    await storage?.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+  native = await nativeContext(join(directory, 'sessions'), function* (options) {
+    const completed = completedToolCount(options)
+    if (options.model === 'main') {
+      if (lastUserText(options).includes('[Feishu request]') && completed === 0) {
+        yield* toolResponse('delegate_work', { items: [{ goal: 'Verify the requested result.',
+          constraints: 'Use only the source discussion.', acceptanceCriteria: 'Read back the result.' }] })
+      } else yield* textResponse('Main recorded the request privately.')
+      return
+    }
+    if (options.model === 'router') { yield* routerResponse(options); return }
+    if (completed === 0 && lastUserText(options).includes('Need approval')) {
+      yield* toolResponse('ask_human', { question: 'May this work continue?', options: 'Yes\nNo' })
+    } else if (completed === 0) yield* toolResponse('write_file', { path: 'result.txt', text: 'Verified in the authorized workspace.' })
+    else if (completed === 1) yield* toolResponse('read_file', { path: 'result.txt' })
+    else if (completed === 2) yield* toolResponse('report_ready', { result: 'Verified result.', evidence: 'Read back result.txt.', artifacts: 'result.txt' })
+    else yield* textResponse('Work finished.')
+  })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  const workspace = join(directory, 'workspace')
+  await mkdir(workspace)
+  environment = await core.LocalEnvironment.open({ id: 'workspace', instanceId: 'private', root: workspace,
+    allowedActorIds: ['desktop-owner'], permissions: ['read', 'write'], commands: {} })
+  sessions = new core.NativeSessions(native, { main: { provider: 'mock', model: 'main' },
+    router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  const channel = new core.FeishuDeliveryChannel({ replyMessage: async request => {
+    replies.push(request)
+    return { messageId: `reply-${replies.length}` }
+  } })
+  desktop = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'desktop-owner',
+    allowedActorIds: ['desktop-owner'] }, {}, sessions, [environment], {}, {}, {}, { channel })
+  feishu = new core.Engine(storage, 'private', { kind: 'feishu', sourceInstanceId: 'feishu:tenant:group', actorId: 'receiver',
+    allowedActorIds: ['receiver'], allowedThreadPrefixes: ['feishu:tenant:'], versionOrder: 'sequence',
+    intake: { mode: 'auto', maxBatchSize: 5, maxAttempts: 1, timeoutMs: 5000,
+      allowedRequesterIds: ['alice'], allowedBotActorIds: [], rules: [] } }, {}, sessions)
+  await desktop.openMain({ instanceId: 'private' })
+  const source = new core.FeishuSource(storage, 'private', feishu, { tenantKey: 'tenant', chatIds: ['group'],
+    selfActorIds: ['ou_bot'], mainIntake: true })
+  const request = await source.receive({ eventId: 'feishu-work', cursor: '1', tenantKey: 'tenant', chatId: 'group',
+    chatType: 'group', messageId: 'om_work', senderId: 'alice', senderKind: 'human', text: 'Please do this one job.',
+    mentionIds: ['ou_bot'], createTime: '1700000000000', updateTime: '1700000000000' })
+  assert.equal(request.status, 'recorded')
+  for (let index = 0; index < 14; index++) await desktop.effects.drain()
+  const sources = await desktop.getMainSources({ instanceId: 'private' })
+  assert.equal(sources.items.length, 1)
+  assert.equal(sources.items[0].state, 'delegated')
+  assert.equal((await desktop.listTickets()).items.length, 1,
+    JSON.stringify({ sources, effects: await desktop.effects.list(), page: await desktop.getRecentMainConversation({ instanceId: 'private' }) }))
+  assert.deepEqual(replies.map(reply => reply.messageId), ['om_work', 'om_work'])
+  assert.equal(replies.some(reply => reply.text.includes('Main recorded the request privately.')), false)
+  assert.deepEqual(sources.items[0].deliveries.map(delivery => [delivery.purpose, delivery.state, delivery.destination.eventId]),
+    [['result', 'sent', 'message:om_work'], ['acknowledgement', 'sent', 'message:om_work']])
+  await source.receive({ eventId: 'feishu-follow', cursor: '2', tenantKey: 'tenant', chatId: 'group',
+    chatType: 'group', rootId: 'om_work', messageId: 'om_follow', senderId: 'alice', senderKind: 'human',
+    text: 'Need approval before continuing.', createTime: '1700000001000', updateTime: '1700000001000' })
+  assert.equal((await desktop.getMainSources({ instanceId: 'private' })).items.length, 1,
+    'an authorized follow-up in the owned discussion does not create a second Main request')
+  assert.equal((await desktop.listTickets()).items.length, 1)
+  for (let index = 0; index < 8; index++) await desktop.effects.drain()
+  const ticketId = (await desktop.listTickets()).items[0].ticket.id
+  const waiting = await desktop.conversation(ticketId)
+  assert.equal(waiting.status, 'waiting-human')
+  assert.equal(waiting.attention.destination.actorId, 'alice')
+  await source.receive({ eventId: 'feishu-other-answer', cursor: '3', tenantKey: 'tenant', chatId: 'group',
+    chatType: 'group', rootId: 'om_work', messageId: 'om_other_answer', senderId: 'bob', senderKind: 'human',
+    text: 'Yes', createTime: '1700000002000', updateTime: '1700000002000' })
+  assert.equal((await desktop.conversation(ticketId)).attention.status, 'waiting')
+  await source.receive({ eventId: 'feishu-owner-answer', cursor: '4', tenantKey: 'tenant', chatId: 'group',
+    chatType: 'group', rootId: 'om_work', messageId: 'om_owner_answer', senderId: 'alice', senderKind: 'human',
+    text: 'Yes', createTime: '1700000003000', updateTime: '1700000003000' })
+  for (let index = 0; index < 8; index++) await desktop.effects.drain()
+  const answered = await desktop.conversation(ticketId)
+  assert.equal(answered.attention.answeredBy, 'alice')
+  assert.equal((await desktop.getMainSources({ instanceId: 'private' })).items.length, 1)
 })
