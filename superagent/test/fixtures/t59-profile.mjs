@@ -23,6 +23,11 @@ try {
   const otherWindow = await product.dispatch('open')
   await product.dispatch('send', { instanceId: binding.instanceId, commandId: 'profile-message', text: 'Hello Main.' })
   const history = await product.dispatch('history', { instanceId: binding.instanceId })
+  const latest = await product.dispatch('history', { instanceId: binding.instanceId, limit: 1 })
+  const earlier = await product.dispatch('history', { instanceId: binding.instanceId, limit: 1, before: latest.cursor })
+  let directionConflictDenied = false
+  try { await product.dispatch('history', { instanceId: binding.instanceId, after: 0, before: 2 }) }
+  catch (error) { directionConflictDenied = error.code === 'INVALID_INPUT' }
   const observations = await product.dispatch('observe-list', { instanceId: binding.instanceId, limit: 10 })
   let crossInstanceDenied = false
   try { await product.dispatch('history', { instanceId: 'another-private-scope' }) }
@@ -36,6 +41,7 @@ try {
   console.log(JSON.stringify({ mainId: binding.mainId, sameMain: otherWindow.mainId === binding.mainId,
     userMessages: history.messages.filter(message => message.role === 'user').length,
     mainMessages: history.messages.filter(message => message.role === 'main').length,
+    latestRole: latest.messages[0]?.role, earlierRole: earlier.messages[0]?.role, directionConflictDenied,
     observationItems: observations.items.length, observationWriteDenied, unknownCommandDenied,
     legacyAdapter: native.get('botExecutionAdapter') !== undefined, crossInstanceDenied }))
 } finally { await native?.fiber.dispose() }

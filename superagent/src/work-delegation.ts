@@ -203,6 +203,17 @@ export interface MainWorkPlan {
   conflict?: MainWorkPlanConflict
 }
 
+interface WorkRouterTurn {
+  version: 1
+  id: string
+  workBriefId: string
+  sessionId: string
+  startSeq: number
+  endSeq: number
+  phase: 'route' | 'update'
+  createdAt: number
+}
+
 export interface MainWorkTicketSnapshot {
   ticketId: string
   status: Work['intent']['state'] | 'waiting-human' | 'stopping' | 'stopped'
@@ -376,6 +387,7 @@ export class WorkDelegation {
     const result = await this.options.sessions.run({ sessionId: brief.routerSessionId, role: 'router', signal,
       profile: structuredClone(profile), text: `Decide the independent work items for this one versioned Main WorkBrief. Preserve the one original source event. Establish each missing local Ticket and report only durable receipts.\n${JSON.stringify(brief)}`,
       tools: [tool] })
+    await this.recordRouterTurn(brief, result, 'route')
     await this.options.recordRouterUse(result.sessionId, revision, profile)
     const split = await this.readSplit(brief.id)
     if (!split) throw new CoreError('ROUTER_NOTICE_UNHANDLED', 'Router did not establish a durable work plan.')
@@ -623,6 +635,7 @@ export class WorkDelegation {
       })}`,
       tools: [{ name: 'record_work_update', description: 'Record the supplied work status and evidence exactly and notify Main once.', parameters: {},
         execute: async () => { await this.publishUpdate(source.brief, source.item, receipt, outcome, followUps); recorded = true; return 'The bounded work update is queued for Main.' } }] })
+    await this.recordRouterTurn(source.brief, result, 'update')
     await this.options.recordRouterUse(result.sessionId, revision, profile)
     if (!recorded) throw new CoreError('ROUTER_NOTICE_UNHANDLED', 'Router did not record the bounded work result.')
   }
@@ -634,6 +647,18 @@ export class WorkDelegation {
       persisted: followUp.persisted, adopted: followUp.adopted, delivery: followUp.delivery?.outcome,
       ownership: followUp.ownership?.state, reason: followUp.ownership?.reason ?? followUp.blockedReason }))
     return createHash('sha256').update(canonicalJson([workBriefId, workItemId, receipt, facts, followUpFacts])).digest('hex')
+  }
+
+  private recordRouterTurn(brief: MainWorkBrief, result: { sessionId: string; turnStartSeq?: number; turnEndSeq?: number },
+    phase: WorkRouterTurn['phase']) {
+    if (result.turnStartSeq === undefined || result.turnEndSeq === undefined) return Promise.resolve()
+    const prefix = `${JSON.stringify(['work-router-turn', brief.id])}:`
+    const id = `${prefix}${String(result.turnStartSeq).padStart(16, '0')}:${String(result.turnEndSeq).padStart(16, '0')}`
+    const turn: WorkRouterTurn = { version: 1, id, workBriefId: brief.id, sessionId: result.sessionId,
+      startSeq: result.turnStartSeq, endSeq: result.turnEndSeq, phase, createdAt: this.now() }
+    return this.options.storage.transaction(this.options.instanceId, async transaction => {
+      if (!await transaction.replace('work-router-turn', id, turn)) await transaction.insert('work-router-turn', id, turn)
+    })
   }
 
   private async publishUpdate(brief: MainWorkBrief, item: MainWorkItem, receipt: MainWorkReceipt, outcome?: MainWorkOutcome,

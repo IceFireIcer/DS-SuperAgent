@@ -102,6 +102,9 @@ try {
     request: { requestId: 'forbidden-native', sessionId: binding.mainSessionId, mode: 'queue', content: [{ type: 'text', text: 'This must be refused.' }] },
   }, peer: ctx.connection.browserPeer }), { code: 'gateway/service-unavailable' })
   await assert.rejects(ctx.typertGateway.stream({ namespace: 'session', method: 'control', args: {}, peer: ctx.connection.browserPeer }), { code: 'gateway/service-unavailable' })
+  const exportDenied = await ctx.connection.createSharedFetchHandler('/api').fetch(new Request(
+    `http://localhost/api/session.export?sessionId=${binding.mainSessionId}`, { method: 'GET' }), ctx.connection.browserPeer)
+  assert.equal(exportDenied.status, 404)
   await ctx.superagentProduct.dispatch('send', { instanceId: binding.instanceId, commandId: 'profile-smoke', text: 'Hello Main.' })
   let history = await ctx.superagentProduct.dispatch('history', { instanceId: binding.instanceId })
   if (history.messages.length !== 2 || history.messages[1].role !== 'main') throw new Error('Main did not produce a durable reply.')
@@ -134,7 +137,7 @@ try {
   console.log(JSON.stringify({ profile: SUPERAGENT_PROFILE, home, services, messages: history.messages.filter(message => !message.id.startsWith('reply:main-update:')).length,
     localWorkStatus: history.works.every(work => work.status === 'success') ? 'success' : 'failed', localWorkItems: history.works.length,
     observationItems: observations.items.length, observationHistoryEvents: observationHistory.events.length, observationWriteRejected: true,
-    nativeSessionAccessDenied: true }))
+    nativeSessionAccessDenied: true, nativeSessionExportDenied: true }))
 } finally {
   try { await application?.shutdown?.shutdown?.(0) } catch {}
   rmSync(home, { recursive: true, force: true })

@@ -56,6 +56,8 @@ export interface Assignment {
   state: 'pending' | 'running' | 'stopping' | 'ended'
   generation: string
   createdAt: number
+  sessionStartSeq?: number
+  sessionEndSeq?: number
   runtimeToken?: string
   environment?: EnvironmentLocation
   recovery?: { reason: 'HOST_REPLACED'; previousAssignmentId: string; takeoverId: string }
@@ -868,10 +870,11 @@ export class Execution {
     }
   }
 
-  private async runTurn({ ticketId, assignment, trigger, environment, input, cause, status, job, subagent }: {
+  private async runTurn({ ticketId, assignment: initialAssignment, trigger, environment, input, cause, status, job, subagent }: {
     ticketId: string; assignment: Assignment; trigger: Work['trigger']; environment: ExecutionEnvironment | undefined; input: WorkInput | undefined
     cause: TurnCause; status: boolean; job: JobRecord | undefined; subagent: SubagentRecord | undefined
   }) {
+    let assignment = initialAssignment
     const controller = new AbortController()
     const environmentHandoff = cause === 'environment-handoff'
     this.workerControllers.set(ticketId, { assignmentId: assignment.id, controller })
@@ -1430,6 +1433,12 @@ export class Execution {
     } finally {
       this.workerControllers.delete(ticketId)
     }
+    assignment = {
+      ...assignment,
+      ...((assignment.sessionStartSeq ?? outcome.turnStartSeq) === undefined ? {} : { sessionStartSeq: assignment.sessionStartSeq ?? outcome.turnStartSeq }),
+      ...(outcome.turnEndSeq === undefined ? {}
+        : { sessionEndSeq: Math.max(assignment.sessionEndSeq ?? -1, outcome.turnEndSeq) }),
+    }
     const turnEnd = outcome.events.findLast(event => (event as { type?: string }).type === 'turn/end') as { data?: { reason?: { kind?: string } } } | undefined
     if (turnEnd?.data?.reason?.kind === 'max-tokens' && !reported && !askedAttention && !handedBack) {
       const rollover = await this.rolloverSession(ticketId, assignment, trigger, outcome.forkedSessionId)
@@ -1442,6 +1451,12 @@ export class Execution {
     let endedSubagents: string[] = []
     let releasedInTransaction = false
     const keepSlot = await this.storage.transaction(this.instanceId, async transaction => {
+      const currentAssignment = await transaction.get<Assignment>('assignment', ticketId)
+      if (currentAssignment?.id === assignment.id) await this.saveAssignment(transaction, {
+        ...currentAssignment,
+        ...(assignment.sessionStartSeq === undefined ? {} : { sessionStartSeq: assignment.sessionStartSeq }),
+        ...(assignment.sessionEndSeq === undefined ? {} : { sessionEndSeq: assignment.sessionEndSeq }),
+      })
       if (await this.activeStop(transaction, ticketId)) {
         // Background work is cancelled and confirmed after this transaction; claiming `stopped` here would be a lie.
         if (!await this.hasBackgroundWork(transaction, ticketId) && !await this.previewCleanupPending(transaction, ticketId)) {

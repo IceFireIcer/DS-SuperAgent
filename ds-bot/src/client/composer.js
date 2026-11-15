@@ -5,8 +5,10 @@ import { BotMark } from './mark.js'
 import { useLinger, useViewport, viewBottom } from './motion.js'
 import { t } from './i18n.js'
 
-export function MainComposer({ onSend, busy, error }) {
-  const [text, setText] = useState('')
+export function MainComposer({ onSend, busy, error, value, onValueChange }) {
+  const [draft, setDraft] = useState('')
+  const text = value ?? draft
+  const setText = next => onValueChange ? onValueChange(next) : setDraft(next)
   const submit = async event => {
     event.preventDefault()
     if (busy || !text.trim()) return

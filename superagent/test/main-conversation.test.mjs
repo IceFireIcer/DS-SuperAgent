@@ -42,6 +42,11 @@ test('one Instance keeps a distinct Main conversation across windows and restart
     ['user', 'My name is Alice.'], ['main', 'Hello Alice.'], ['user', 'What is my name?'], ['main', 'Your name is Alice.'],
   ])
   assert.equal(new Set(history.messages.map(message => message.id)).size, 4)
+  const latest = await engine.getRecentMainConversation({ instanceId: 'personal', limit: 1 })
+  assert.deepEqual(latest.messages.map(message => message.text), ['Your name is Alice.'])
+  assert.equal(latest.cursor, 4)
+  const earlier = await engine.getRecentMainConversation({ instanceId: 'personal', limit: 1, before: latest.cursor })
+  assert.deepEqual(earlier.messages.map(message => message.text), ['What is my name?'])
   assert.equal(requests.length, 2)
   assert.ok(requests.every(request => request.model === 'main'))
   assert.deepEqual(requests[0].tools.map(tool => tool.name).sort(), ['delegate_work', 'follow_up_work', 'query_work'])

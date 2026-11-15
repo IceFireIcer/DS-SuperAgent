@@ -2,62 +2,32 @@ import { createHash } from 'node:crypto'
 import { CoreError, identifier, type Work } from './model.js'
 import type { NativeSessions } from './native-sessions.js'
 import type { AsyncTx, Storage } from './storage.js'
+import type { Assignment } from './execution.js'
+import type { MainWorkBrief, MainWorkItem, MainWorkOutcome, MainWorkPlanConflict, MainWorkReceipt,
+  MainWorkUpdate } from './work-delegation.js'
 
 type ObservationRole = 'router' | 'worker'
 
-interface MainWorkBrief {
-  id: string
-  instanceId: string
-  mainId: string
-  routerSessionId: string
-  goal: string
-  constraints: string
-  acceptanceCriteria: string
-  configurationRevision: number
-  createdAt: number
-}
-
-interface MainWorkItem {
-  id: string
-  workBriefId: string
-  goal: string
-  constraints: string
-  acceptanceCriteria: string
-  position: number
-  createdAt: number
-}
-
-interface MainWorkReceipt {
-  status: 'routing' | 'accepted' | 'rejected'
-  ticketId?: string
-  reason?: string
-  nextStep: string
-}
-
-interface MainWorkUpdate {
-  status: string
-  summary: string
-  createdAt: number
-}
-
-interface MainWorkOutcome {
-  status: string
-  summary: string
-  nextStep: string
-  updatedAt: number
-}
-
-interface Assignment {
-  id: string
-  ticketId: string
-  sessionId: string
-  state: 'pending' | 'running' | 'stopping' | 'ended'
-  generation: string
-  createdAt: number
-}
-
 interface WorkSplit {
   itemIds: string[]
+}
+
+interface WorkRouterTurn {
+  workBriefId: string
+  sessionId: string
+  startSeq: number
+  endSeq: number
+  createdAt: number
+}
+
+interface ReadyReport {
+  id: string
+  assignmentId: string
+  result: string
+  evidence: string
+  artifacts: { path: string; bytes: number; sha256: string }[]
+  toolFacts: { tool: string; outcome: 'success' | 'failed'; output: Record<string, unknown> }[]
+  createdAt: number
 }
 
 interface WorkObservationItem {
@@ -91,6 +61,13 @@ interface WorkObservationGeneration {
   createdAt: number
 }
 
+interface WorkObservationRange {
+  startSeq?: number
+  endSeq?: number
+  startTime: number
+  endTime?: number
+}
+
 interface WorkObservationEvent {
   seq: number
   time?: number
@@ -100,6 +77,7 @@ interface WorkObservationEvent {
   argumentKeys?: string[]
   isError?: boolean
   reason?: string
+  detail?: string
 }
 
 export interface WorkObservationPage {
@@ -227,9 +205,11 @@ function projectEvent(raw: unknown): WorkObservationEvent | undefined {
       text: `Called ${tool}.` }
   }
   if (event.type === 'tool/result') {
-    const message = event.data?.message as { isError?: unknown } | undefined
+    const message = event.data?.message as { isError?: unknown; content?: unknown } | undefined
+    const output = redact(messageText(message?.content)).trim()
     return { ...common, kind: 'tool-result', isError: message?.isError === true,
-      text: message?.isError === true ? 'Tool call failed.' : 'Tool call completed.' }
+      text: message?.isError === true ? 'Tool call failed.' : 'Tool call completed.',
+      ...(output ? { detail: summary(output, 1024) } : {}) }
   }
   if (event.type === 'turn/end') {
     const reason = event.data?.reason as { kind?: unknown } | undefined
@@ -308,10 +288,12 @@ export class WorkObservations {
       throw new CoreError('INVALID_INPUT', 'Work observation history needs a bounded page and non-negative cursor.')
     }
     const address = decodeObservationId(request.observationId)
-    const facts = await this.storage.transaction(this.instanceId, transaction => this.readFacts(transaction, mainId, address, request.generation))
-    const history = await this.readSession(facts.sessionId, after, limit)
-    return { id: observationId(address), ...facts, events: history.events, ...(history.next === undefined ? {} : { next: history.next }),
-      hasMore: history.hasMore }
+    const resolved = await this.storage.transaction(this.instanceId,
+      transaction => this.readFacts(transaction, mainId, address, request.generation))
+    const { ranges, ...facts } = resolved
+    const history = await this.readSession(facts.sessionId, ranges, after, limit)
+    return { id: observationId(address), ...facts, events: history.events,
+      ...(history.next === undefined ? {} : { next: history.next }), hasMore: history.hasMore }
   }
 
   private async listIn(transaction: AsyncTx, mainId: string) {
@@ -356,11 +338,17 @@ export class WorkObservations {
         const currentAssignment = await transaction.get<Assignment>('assignment', ticketId)
         const generation = currentAssignment?.generation ?? assignments.at(-1)?.generation
         const sessionId = currentAssignment?.sessionId ?? assignments.at(-1)?.sessionId
+        if (!generation || !sessionId) continue
         const ticket = await transaction.get<Work['ticket']>('ticket', ticketId)
         const intent = await transaction.get<Work['intent']>('intent', ticketId)
         const update = await transaction.get<MainWorkUpdate>('work-update-head', item.id)
         const outcome = await transaction.get<MainWorkOutcome>('work-outcome', item.id)
-        const state = workerStatus(ticket, intent, update, outcome)
+        const report = await transaction.get<ReadyReport>('report', ticketId)
+        const latestAssignment = currentAssignment ?? assignments.at(-1)
+        const currentUpdate = update && latestAssignment && update.createdAt >= latestAssignment.createdAt ? update : undefined
+        const currentOutcome = outcome && report && report.assignmentId === latestAssignment?.id && outcome.reportId === report.id
+          ? outcome : undefined
+        const state = workerStatus(ticket, intent, currentUpdate, currentOutcome)
         items.push({
           id: observationId({ version: 1, role: 'worker', workBriefId: brief.id, workItemId: item.id, ticketId }),
           role: 'worker',
@@ -393,6 +381,31 @@ export class WorkObservations {
       const status = receipts.some(value => value?.status === 'rejected') ? 'rejected'
         : receipts.some(value => value?.status === 'routing') ? 'routing' : receipts.length && receipts.every(value => value?.status === 'accepted')
           ? 'accepted' : 'routing'
+      const ranges = await this.routerRanges(transaction, brief)
+      const plan: string[] = []
+      if (split) {
+        for (const [position, itemId] of split.itemIds.entries()) {
+          const item = await transaction.get<MainWorkItem>('work-item', itemId)
+          const receipt = await transaction.get<MainWorkReceipt>('work-receipt', itemId)
+          const ticket = await transaction.get<{ ticketId: string }>('work-item-ticket', itemId)
+          if (item) plan.push(`${position + 1}. ${summary(item.goal, 192)} — ${receipt?.status ?? 'routing'}${ticket?.ticketId ? ` (${ticket.ticketId})` : ''}`)
+        }
+      }
+      const conflictHead = await transaction.get<{ conflictId: string }>('work-plan-conflict-head', brief.id)
+      const conflict = conflictHead
+        ? await transaction.get<MainWorkPlanConflict>('work-plan-conflict', conflictHead.conflictId) : undefined
+      const facts = [
+        { label: 'Role', value: 'Router' },
+        { label: 'Work brief', value: brief.id },
+        { label: 'Session', value: brief.routerSessionId },
+        { label: 'Configuration revision', value: String(brief.configurationRevision) },
+        { label: 'Receipt', value: status },
+        { label: 'Goal', value: summary(brief.goal) },
+        { label: 'Constraints', value: summary(brief.constraints) },
+        { label: 'Acceptance criteria', value: summary(brief.acceptanceCriteria) },
+        ...(plan.length ? [{ label: 'Decomposition', value: summary(plan.join('\n'), 2048) }] : []),
+        ...(conflict ? [{ label: 'Conflict', value: summary(conflict.message, 1024) }] : []),
+      ]
       return {
         role: 'router' as const,
         workBriefId: brief.id,
@@ -402,16 +415,9 @@ export class WorkObservations {
         nextStep: status === 'routing' ? 'Wait for Router to establish the remaining durable work.' : 'Review the independent Worker activity.',
         sessionId: brief.routerSessionId,
         current: true,
-        facts: [
-          { label: 'Role', value: 'Router' },
-          { label: 'Work brief', value: brief.id },
-          { label: 'Session', value: brief.routerSessionId },
-          { label: 'Configuration revision', value: String(brief.configurationRevision) },
-          { label: 'Goal', value: summary(brief.goal) },
-          { label: 'Constraints', value: summary(brief.constraints) },
-          { label: 'Acceptance criteria', value: summary(brief.acceptanceCriteria) },
-        ],
+        facts,
         generations: [],
+        ranges,
       }
     }
     if (!address.workItemId || !address.ticketId) throw new CoreError('NOT_FOUND', 'The requested work observation is unavailable.')
@@ -434,9 +440,23 @@ export class WorkObservations {
     const intent = await transaction.get<Work['intent']>('intent', ticketId)
     const update = await transaction.get<MainWorkUpdate>('work-update-head', item.id)
     const outcome = await transaction.get<MainWorkOutcome>('work-outcome', item.id)
-    const state = current ? workerStatus(ticket, intent, update, outcome)
+    const reports = await this.reports(transaction, ticketId)
+    const report = reports.filter(candidate => candidate.assignmentId === selected.id).sort((left, right) => right.createdAt - left.createdAt)[0]
+    const currentReport = await transaction.get<ReadyReport>('report', ticketId)
+    const currentUpdate = update && update.createdAt >= selected.createdAt ? update : undefined
+    const currentOutcome = outcome && currentReport?.assignmentId === selected.id && outcome.reportId === currentReport.id ? outcome : undefined
+    const state = current ? workerStatus(ticket, intent, currentUpdate, currentOutcome)
       : { status: selected.state, summary: 'This Assignment generation is retained in history.',
         nextStep: 'Return to the current generation for the next executable step.' }
+    const selectedIndex = assignments.findIndex(assignment => assignment.id === selected.id)
+    const nextGeneration = assignments[selectedIndex + 1]
+    const range: WorkObservationRange = {
+      ...(selected.sessionStartSeq === undefined ? {} : { startSeq: selected.sessionStartSeq }),
+      ...((selected.sessionEndSeq ?? (nextGeneration?.sessionStartSeq === undefined ? undefined : nextGeneration.sessionStartSeq - 1)) === undefined ? {}
+        : { endSeq: selected.sessionEndSeq ?? nextGeneration!.sessionStartSeq! - 1 }),
+      startTime: selected.createdAt,
+      ...(nextGeneration ? { endTime: nextGeneration.createdAt } : {}),
+    }
     const generations = assignments.map(assignment => ({
       assignmentId: assignment.id,
       generation: assignment.generation,
@@ -463,12 +483,82 @@ export class WorkObservations {
         { label: 'Session', value: selected.sessionId },
         { label: 'Generation', value: selected.generation },
         { label: 'Generation state', value: current ? 'Current' : 'Historical' },
+        { label: 'Environment', value: selected.environment?.id ?? 'unknown' },
+        ...(selected.environment?.deviceId ? [{ label: 'Device', value: selected.environment.deviceId }] : []),
+        ...(selected.environment?.root ? [{ label: 'Directory', value: selected.environment.root }] : []),
         { label: 'Goal', value: summary(item.goal) },
         { label: 'Constraints', value: summary(item.constraints) },
         { label: 'Acceptance criteria', value: summary(item.acceptanceCriteria) },
+        ...(report ? [
+          { label: 'Result', value: summary(report.result) },
+          { label: 'Evidence', value: summary(report.evidence) },
+          { label: 'Artifacts', value: summary(report.artifacts.map(artifact =>
+            `${artifact.path} (${artifact.bytes} bytes, sha256:${artifact.sha256.slice(0, 16)}…)`).join('\n'), 2048) },
+          { label: 'Tool facts', value: summary(report.toolFacts.map(toolFact =>
+            `${toolFact.tool}: ${toolFact.outcome}`).join('\n'), 1024) },
+        ] : []),
       ],
       generations,
+      ranges: [range],
     }
+  }
+
+  private async routerRanges(transaction: AsyncTx, brief: MainWorkBrief) {
+    const prefix = `${JSON.stringify(['work-router-turn', brief.id])}:`
+    const turns: WorkRouterTurn[] = []
+    let after = prefix
+    for (let pageCount = 0; pageCount < 10; pageCount++) {
+      const page = await transaction.scan<WorkRouterTurn>('work-router-turn', { limit: 100, after })
+      for (const entry of page.items) {
+        if (!entry.id.startsWith(prefix)) break
+        if (entry.value.sessionId === brief.routerSessionId) turns.push(entry.value)
+      }
+      if (!page.cursor || !page.cursor.startsWith(prefix)) break
+      after = page.cursor
+      if (pageCount === 9) throw new CoreError('ROUTER_OBSERVATION_BUDGET', 'Router observation history exceeds its 1000-turn budget.')
+    }
+    if (turns.length) return turns.sort((left, right) => left.startSeq - right.startSeq).map(turn => ({
+      startSeq: turn.startSeq, endSeq: turn.endSeq, startTime: brief.createdAt,
+    }))
+
+    const next = await this.nextRouterBrief(transaction, brief)
+    return [{ startTime: brief.createdAt, ...(next ? { endTime: next.createdAt } : {}) }]
+  }
+
+  private async nextRouterBrief(transaction: AsyncTx, brief: MainWorkBrief) {
+    let next: MainWorkBrief | undefined
+    let after: string | undefined
+    for (let pageCount = 0; pageCount < 10; pageCount++) {
+      const page = await transaction.scan<MainWorkBrief>('work-brief', { limit: 100, ...(after === undefined ? {} : { after }) })
+      for (const item of page.items) {
+        const candidate = item.value
+        if (candidate.id === brief.id || candidate.routerSessionId !== brief.routerSessionId || candidate.createdAt <= brief.createdAt) continue
+        if (!next || candidate.createdAt < next.createdAt) next = candidate
+      }
+      if (!page.cursor) break
+      after = page.cursor
+      if (pageCount === 9) throw new CoreError('WORK_OBSERVATION_BUDGET', 'The Router attribution scan exceeds its 1000-brief budget.')
+    }
+    return next
+  }
+
+  private async reports(transaction: AsyncTx, ticketId: string) {
+    const prefix = `${JSON.stringify(['report-history', ticketId])}:`
+    const reports = new Map<string, ReadyReport>()
+    const current = await transaction.get<ReadyReport>('report', ticketId)
+    if (current) reports.set(current.id, current)
+    let after = prefix
+    for (let pageCount = 0; pageCount < 10; pageCount++) {
+      const page = await transaction.scan<ReadyReport>('report-history', { limit: 100, after })
+      for (const entry of page.items) {
+        if (!entry.id.startsWith(prefix)) break
+        reports.set(entry.value.id, entry.value)
+      }
+      if (!page.cursor || !page.cursor.startsWith(prefix)) break
+      after = page.cursor
+      if (pageCount === 9) throw new CoreError('REPORT_BUDGET', 'The observation report history exceeds its 1000-record budget.')
+    }
+    return [...reports.values()]
   }
 
   private async assignments(transaction: AsyncTx, ticketId: string) {
@@ -488,18 +578,25 @@ export class WorkObservations {
     return [...records.values()].sort((left, right) => left.createdAt - right.createdAt || left.id.localeCompare(right.id))
   }
 
-  private async readSession(sessionId: string | undefined, after: number | undefined, limit: number) {
+  private async readSession(sessionId: string | undefined, ranges: WorkObservationRange[], after: number | undefined, limit: number) {
     if (!sessionId) return { events: [] as WorkObservationEvent[], next: after, hasMore: false }
     const events: WorkObservationEvent[] = []
-    let rawAfter = after
+    const orderedRanges = ranges.sort((left, right) => left.startTime - right.startTime || (left.startSeq ?? Infinity) - (right.startSeq ?? Infinity))
+    const firstStart = orderedRanges.find(range => range.startSeq !== undefined)?.startSeq
+    let rawAfter = after ?? (firstStart === undefined || firstStart === 0 ? undefined : firstStart - 1)
     let next = after
     try {
       for (let pageCount = 0; pageCount < 10; pageCount++) {
         const page = await this.sessions.readSession(sessionId, { limit: 100, ...(rawAfter === undefined ? {} : { after: rawAfter }) })
         for (let index = 0; index < page.events.length; index++) {
-          const raw = page.events[index] as { seq?: unknown }
+          const raw = page.events[index] as { seq?: unknown; time?: unknown }
           const seq = Number(raw.seq)
           if (Number.isSafeInteger(seq) && seq >= 0) next = seq
+          const time = Number(raw.time)
+          const inRange = orderedRanges.some(range => range.startSeq !== undefined || range.endSeq !== undefined
+            ? (range.startSeq === undefined || seq >= range.startSeq) && (range.endSeq === undefined || seq <= range.endSeq)
+            : Number.isFinite(time) && time >= range.startTime && (range.endTime === undefined || time < range.endTime))
+          if (!inRange) continue
           const event = projectEvent(raw)
           if (event) events.push(event)
           if (events.length === limit) {

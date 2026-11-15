@@ -17,7 +17,8 @@ export interface NativeTool {
 }
 export interface NativeSessionRequest { sessionId: string; role: 'main' | 'router' | 'worker'; text: string; tools: NativeTool[]; cwd?: string; signal?: AbortSignal; onDelivered?: () => Promise<void>; coalesce?: boolean; messageId?: string; onMessagePersisted?: (seq: number) => Promise<void>; instructions?: string; skills?: string[]; profile?: RoleProfile }
 export interface NativeSessionsOptions { main?: AgentOptions; router: AgentOptions; worker: AgentOptions; timeoutMs?: number }
-interface NativeSessionResult { sessionId: string; status: string; events: readonly unknown[]; forkedSessionId?: string }
+interface NativeSessionResult { sessionId: string; status: string; events: readonly unknown[]; forkedSessionId?: string
+  turnStartSeq?: number; turnEndSeq?: number }
 interface RouterTask { request: NativeSessionRequest; resolve: (value: NativeSessionResult) => void; reject: (error: unknown) => void }
 const maxCoalescedRouterTools = 7
 const maxCoalescedRouterBytes = 100000
@@ -203,6 +204,8 @@ export class NativeSessions {
       resolveAppended(Number(event.seq))
     }) : () => {}
     try {
+      const previousLastSeq = handle.agent.session.snapshotEvents()
+        .reduce((last, event) => Math.max(last, Number.isSafeInteger((event as { seq?: unknown }).seq) ? Number((event as { seq?: unknown }).seq) : -1), -1)
       request.signal?.throwIfAborted()
       await request.onDelivered?.()
       handle.agent.followup({ id: MessageId(messageId), role: 'user', content: [{ type: 'text', text: request.text }], source: { kind: 'user' } })
@@ -223,6 +226,9 @@ export class NativeSessions {
         }
       }
       const events = handle.agent.session.snapshotEvents()
+      const turnEvents = events.filter(event => Number((event as { seq?: unknown }).seq) > previousLastSeq)
+      const turnStartSeq = turnEvents.length ? Number((turnEvents[0] as { seq?: unknown }).seq) : undefined
+      const turnEndSeq = turnEvents.length ? Number((turnEvents.at(-1) as { seq?: unknown }).seq) : undefined
       const turnEnd = events.findLast(event => (event as { type?: string }).type === 'turn/end') as { data?: { reason?: { kind?: string } } } | undefined
       let forkedSessionId: string | undefined
       if (request.role === 'worker' && turnEnd?.data?.reason?.kind === 'max-tokens') {
@@ -234,7 +240,9 @@ export class NativeSessions {
           forkedSessionId = childSessionId
         }
       }
-      return { sessionId: request.sessionId, status: handle.agent.status, events: structuredClone(events), ...(forkedSessionId ? { forkedSessionId } : {}) }
+      return { sessionId: request.sessionId, status: handle.agent.status, events: structuredClone(events),
+        ...(forkedSessionId ? { forkedSessionId } : {}),
+        ...(turnStartSeq === undefined ? {} : { turnStartSeq }), ...(turnEndSeq === undefined ? {} : { turnEndSeq }) }
     } finally {
       off(); clearTimeout(timer); request.signal?.removeEventListener('abort', abort)
       await handle.dispose(); this.handles.delete(handle); this.agents.delete(request.sessionId)

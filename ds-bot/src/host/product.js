@@ -3,7 +3,7 @@ export function installProduct(ctx) {
   return ctx.inject(['superagentProduct'], scope => {
     scope.effect(() => scope.on('connection/request', async (request, response, next) => {
       const path = new URL(request.url ?? '/', 'http://localhost').pathname
-      if (!path.startsWith('/api/session/')) return next()
+      if (!path.startsWith('/api/session/') && path !== '/api/session.export') return next()
       if (path === '/api/session/list') {
         let text = ''
         for await (const chunk of request) {

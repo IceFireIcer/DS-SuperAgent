@@ -1274,6 +1274,11 @@ export class Engine {
     return { ...page, works: this.workDelegation ? await this.workDelegation.list(page.mainId) : [] as MainWorkCard[] }
   }
 
+  async getRecentMainConversation(request: MainAddress & { limit?: number; before?: number }) {
+    const page = await this.main.recentPage(request)
+    return { ...page, works: this.workDelegation ? await this.workDelegation.list(page.mainId) : [] as MainWorkCard[] }
+  }
+
   async getMainWorkPlan(request: MainAddress & { workBriefId: string }) {
     if (!this.workDelegation) throw new CoreError('DELEGATION_UNAVAILABLE', 'No authorized local workspace is configured.')
     if (request.instanceId !== this.instanceId || !this.source.allowedActorIds.includes(this.source.actorId)) {

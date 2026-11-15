@@ -66,6 +66,30 @@ export class MainConversation {
     })
   }
 
+  async recentPage(request: MainAddress & { before?: number; limit?: number }): Promise<MainPage> {
+    this.authorize(request)
+    const limit = request.limit ?? 50
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100 || request.before !== undefined
+      && (!Number.isSafeInteger(request.before) || request.before < 1)) {
+      throw new CoreError('INVALID_INPUT', 'Recent Main history needs a bounded page and a positive before cursor.')
+    }
+    const state = await commandTransaction(this.storage, this.instanceId, tx => this.state(tx))
+    if (state.activeCommand) await this.reconcile(state, state.activeCommand)
+    return commandTransaction(this.storage, this.instanceId, async tx => {
+      const current = await this.state(tx)
+      const { sequence: _sequence, activeCommand: _active, ...binding } = current
+      const end = request.before ?? current.sequence + 1
+      if (end > current.sequence + 1) throw new CoreError('INVALID_INPUT', 'The Main history cursor is ahead of the durable conversation.')
+      const start = Math.max(1, end - limit)
+      const messages: MainMessage[] = []
+      for (let sequence = start; sequence < end; sequence++) {
+        const message = await tx.get<MainMessage>('main-message', messageKey(sequence))
+        if (message) messages.push(message)
+      }
+      return { ...binding, messages, ...(start > 1 ? { cursor: start } : {}) }
+    })
+  }
+
   async send(request: MainSend) {
     this.authorize(request)
     identifier(request.commandId, 'commandId')

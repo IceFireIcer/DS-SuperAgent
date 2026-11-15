@@ -111,6 +111,7 @@ var ZH = {
   Arguments: "参数",
   "No execution history has been recorded yet.": "还没有记录执行历史。",
   "Load more history": "加载更多历史",
+  "Load earlier messages": "加载更早消息",
   "Router is coordinating the durable work plan.": "Router 正在协调持久工作计划。",
   "Router is deciding the work plan.": "Router 正在决定工作计划。",
   "Router has not established a durable work plan.": "Router 尚未建立持久工作计划。",
@@ -135,6 +136,31 @@ var ZH = {
   "The execution environment is not ready.": "执行环境尚未就绪。",
   "The Worker is executing this Ticket.": "Worker 正在执行该 Ticket。",
   "The Ticket is waiting for Worker execution.": "该 Ticket 正在等待 Worker 执行。",
+  "Called {tool}.": "调用了 {tool}。",
+  "Tool call failed.": "工具调用失败。",
+  "Tool call completed.": "工具调用完成。",
+  "Turn ended: {reason}.": "回合结束：{reason}。",
+  Decomposition: "分解",
+  Conflict: "冲突",
+  Device: "设备",
+  Directory: "目录",
+  Result: "结果",
+  Evidence: "证据",
+  Artifacts: "产物",
+  "Tool facts": "工具事实",
+  Current: "当前",
+  Historical: "历史",
+  routing: "协调中",
+  accepted: "已接收",
+  rejected: "未接单",
+  running: "执行中",
+  pending: "等待执行",
+  stopped: "已停止",
+  success: "已完成",
+  failed: "失败",
+  unknown: "待确认",
+  ended: "已结束",
+  "Wait for the assigned Worker to start.": "等待分配的 Worker 开始执行。",
   // Shared
   "Main Bot": "主 Bot",
   Working: "工作中",
@@ -4489,7 +4515,7 @@ var HANDOFF_CSS = `
 .bt-handoff .bt-q-foot{flex-wrap:wrap}
 `;
 
-// ../../../ds-bot/node_modules/deep-view/src/react/ui.js
+// node_modules/deep-view/src/react/ui.js
 var import_react8 = require("react");
 var FallbackMarkdown = ({ text }) => (0, import_react8.createElement)("span", null, String(text ?? ""));
 var ViewUi = (0, import_react8.createContext)({ t: (key) => key, Markdown: FallbackMarkdown });
@@ -4556,7 +4582,7 @@ function useOptionKeys2(count, onPick, ownRef) {
   return count > 0 && listening <= 1;
 }
 
-// ../../../ds-bot/node_modules/deep-view/src/core/formula.js
+// node_modules/deep-view/src/core/formula.js
 var FUNCTIONS = {
   min: { args: [1, Infinity], run: (...values) => Math.min(...values.map(num)) },
   max: { args: [1, Infinity], run: (...values) => Math.max(...values.map(num)) },
@@ -4837,7 +4863,7 @@ function evaluate(tree, lookup) {
   }
 }
 
-// ../../../ds-bot/node_modules/deep-view/src/core/views.js
+// node_modules/deep-view/src/core/views.js
 var LAYOUT = ["stack", "row"];
 var DISPLAY = ["text", "metric", "table", "chart", "progress", "callout", "sources", "html"];
 var INPUT_TYPES = ["slider", "choice", "toggle", "number"];
@@ -5457,7 +5483,7 @@ function validateForm(node, values) {
   return { fields };
 }
 
-// ../../../ds-bot/node_modules/deep-view/src/react/chart.js
+// node_modules/deep-view/src/react/chart.js
 var import_react9 = require("react");
 var PALETTE = ["var(--dv-accent)", "var(--dv-ink-tangerine)", "var(--dv-ink-green)", "var(--dv-ink-violet)", "var(--dv-ink-sky)", "var(--dv-ink-rose)", "var(--dv-ink-yellow)", "var(--dv-ink-cyan)", "var(--dv-ink-magenta)"];
 var colorAt = (index) => PALETTE[index % PALETTE.length];
@@ -5896,7 +5922,7 @@ var CHART_CSS = `
 @media (prefers-reduced-motion:reduce){.dv-chart-mark,.dv-chart-dot{transition:none}.dv-chart-tip{animation:none}}
 `;
 
-// ../../../ds-bot/node_modules/deep-view/src/react/frame.js
+// node_modules/deep-view/src/react/frame.js
 var import_react10 = require("react");
 var THEME_VARS = [
   ["--view-ink", "--bt-ink", "--dv-ink"],
@@ -5978,7 +6004,7 @@ var HTML_CSS = `
 .dv-view-frame-stopped{margin:0;font-size:13px;line-height:18px;color:var(--dv-ink-2)}
 `;
 
-// ../../../ds-bot/node_modules/deep-view/src/react/card.js
+// node_modules/deep-view/src/react/card.js
 var import_react11 = require("react");
 var mdLabels = (ui2) => ({ code: { copyLabel: ui2.t("Copy"), copiedLabel: ui2.t("Copied") }, footnotes: ui2.t("Footnotes") });
 var TONES2 = ["good", "warn", "bad"];
@@ -6647,7 +6673,7 @@ ${CHART_CSS}
 ${HTML_CSS}
 `;
 
-// ../../../ds-bot/node_modules/deep-view/src/react/styles.js
+// node_modules/deep-view/src/react/styles.js
 var THEME_CSS = `
 body{
 --dv-ink:var(--dsw-alias-label-primary);
@@ -6744,10 +6770,10 @@ button.dv-q-opt:active{background:var(--dv-active)}
 @media (prefers-reduced-motion:reduce){.dv-q,.dv-view-bare,.dv-q-submit,.dv-menu,.dv-q-check{animation:none}}
 `;
 
-// ../../../ds-bot/node_modules/deep-view/src/react/index.js
+// node_modules/deep-view/src/react/index.js
 var DEEP_VIEW_CSS = THEME_CSS + QUESTION_CSS + WIDGET_CSS;
 
-// ../../../ds-bot/node_modules/deep-view/src/core/reply.js
+// node_modules/deep-view/src/core/reply.js
 var REPLY_KIND = "user-question-reply";
 function viewCardText(args) {
   let card = args;
@@ -10718,8 +10744,10 @@ function NewMessagePills({ sessionId, useSessions, useUi, useTurnClock }) {
 // src/client/composer.js
 var import_react21 = require("react");
 var import_react_dom5 = require("react-dom");
-function MainComposer({ onSend, busy, error }) {
-  const [text, setText] = (0, import_react21.useState)("");
+function MainComposer({ onSend, busy, error, value, onValueChange }) {
+  const [draft, setDraft] = (0, import_react21.useState)("");
+  const text = value ?? draft;
+  const setText = (next) => onValueChange ? onValueChange(next) : setDraft(next);
   const submit = async (event) => {
     event.preventDefault();
     if (busy || !text.trim()) return;
@@ -20668,6 +20696,18 @@ function listedOpener({ list, open, refresh, current }) {
   };
 }
 
+// src/client/product-state.js
+function mergeObservationItems(existing, incoming) {
+  const byId = new Map(existing.map((item) => [item.id, item]));
+  for (const item of incoming) byId.set(item.id, item);
+  return [...byId.values()].sort((left, right) => right.createdAt - left.createdAt || right.id.localeCompare(left.id));
+}
+function mergeMessages(existing, incoming) {
+  const byId = new Map(existing.map((message) => [message.id, message]));
+  for (const message of incoming) byId.set(message.id, message);
+  return [...byId.values()].sort((left, right) => left.sequence - right.sequence);
+}
+
 // src/client/product.js
 var import_react53 = require("react");
 async function productCall(endpoint, payload = {}) {
@@ -20688,11 +20728,16 @@ function applyProduct(ctx) {
     messages: [],
     works: [],
     error: null,
+    mainDraft: "",
+    messageBefore: null,
+    messagesComplete: false,
+    messagesLoading: false,
     route: "main",
     observations: [],
     observationCursor: null,
     observationQuery: "",
     selectedObservation: null,
+    observationGeneration: null,
     observation: null,
     observationLoading: false,
     observationError: null,
@@ -20705,26 +20750,48 @@ function applyProduct(ctx) {
   let observationRequest = 0;
   const refreshMain = async (binding) => {
     try {
-      const messages = [];
-      let works = [];
-      let after;
-      do {
-        const page = await productCall("history", { instanceId: binding.instanceId, limit: 100, ...after === void 0 ? {} : { after } });
-        messages.push(...page.messages);
-        if (after === void 0) works = page.works ?? [];
-        after = page.cursor;
-      } while (after !== void 0 && !stopped);
-      if (!stopped) view.set((state) => ({ ...state, binding, messages, works, error: null }));
+      const page = await productCall("history", { instanceId: binding.instanceId, limit: 100 });
+      if (!stopped) view.set((state) => {
+        return {
+          ...state,
+          binding,
+          messages: mergeMessages(state.messages, page.messages),
+          works: page.works ?? state.works,
+          messageBefore: state.messagesComplete ? null : state.messageBefore ?? page.cursor ?? null,
+          messagesComplete: state.messagesComplete || page.cursor === void 0,
+          error: null
+        };
+      });
     } catch (error) {
       if (!stopped) view.set((state) => ({ ...state, error: error.message }));
     }
   };
-  const loadObservations = async (binding, { append = false } = {}) => {
+  const loadEarlierMessages = async (binding) => {
+    const current = view.getSnapshot();
+    if (!current.messageBefore || current.messagesLoading) return;
+    try {
+      view.set((state) => ({ ...state, messagesLoading: true }));
+      const page = await productCall("history", { instanceId: binding.instanceId, before: current.messageBefore, limit: 100 });
+      if (stopped) return;
+      view.set((state) => {
+        return {
+          ...state,
+          messages: mergeMessages(state.messages, page.messages),
+          messageBefore: page.cursor ?? null,
+          messagesComplete: page.cursor === void 0,
+          messagesLoading: false
+        };
+      });
+    } catch (error) {
+      if (!stopped) view.set((state) => ({ ...state, messagesLoading: false, error: error.message }));
+    }
+  };
+  const loadObservations = async (binding, { append = false, reset = false } = {}) => {
     const current = view.getSnapshot();
     const query = current.observationQuery;
     const request = ++observationListRequest;
     try {
-      if (!append) view.set((state) => ({ ...state, activityLoading: true, activityError: null }));
+      view.set((state) => ({ ...state, activityLoading: true, activityError: null }));
       const page = await productCall("observe-list", {
         instanceId: binding.instanceId,
         limit: 30,
@@ -20733,13 +20800,11 @@ function applyProduct(ctx) {
       });
       if (stopped || request !== observationListRequest || view.getSnapshot().observationQuery !== query) return;
       view.set((state) => {
-        const byId = new Map((append ? state.observations : []).map((item) => [item.id, item]));
-        for (const item of page.items) byId.set(item.id, item);
         const selectedObservation = state.selectedObservation ? page.items.find((item) => item.id === state.selectedObservation.id) ?? state.selectedObservation : null;
         return {
           ...state,
-          observations: [...byId.values()],
-          observationCursor: page.cursor ?? null,
+          observations: mergeObservationItems(reset ? [] : state.observations, page.items),
+          observationCursor: reset || append ? page.cursor ?? null : state.observationCursor ?? page.cursor ?? null,
           selectedObservation,
           activityLoading: false,
           activityError: null
@@ -20757,14 +20822,15 @@ function applyProduct(ctx) {
     const request = ++observationRequest;
     try {
       if (reset) view.set((state) => ({ ...state, observationLoading: true, observationError: null }));
+      const generation = current.observationGeneration ?? item.generation;
       const detail = await productCall("observe-read", {
         instanceId: binding.instanceId,
         observationId: item.id,
-        ...item.generation ? { generation: item.generation } : {},
+        ...generation ? { generation } : {},
         limit: 50,
         ...after === void 0 ? {} : { after }
       });
-      if (stopped || request !== observationRequest || view.getSnapshot().selectedObservation?.id !== item.id) return;
+      if (stopped || request !== observationRequest || view.getSnapshot().selectedObservation?.id !== item.id || view.getSnapshot().observationGeneration !== generation) return;
       view.set((state) => {
         if (reset || !state.observation) return { ...state, observation: detail, observationLoading: false, observationError: null };
         const events = new Map(state.observation.events.map((event) => [event.seq, event]));
@@ -20889,8 +20955,12 @@ function applyProduct(ctx) {
     const pending = (0, import_react53.useRef)(null);
     const scroll = (0, import_react53.useRef)(null);
     const follow = (0, import_react53.useRef)(true);
+    const restoreHeight = (0, import_react53.useRef)(null);
     (0, import_react53.useEffect)(() => {
-      if (follow.current) bottom.current?.scrollIntoView({ block: "end", behavior: "instant" });
+      if (restoreHeight.current !== null && scroll.current) {
+        scroll.current.scrollTop += scroll.current.scrollHeight - restoreHeight.current;
+        restoreHeight.current = null;
+      } else if (follow.current) bottom.current?.scrollIntoView({ block: "end", behavior: "instant" });
     }, [state.messages.length]);
     const send = async (text) => {
       if (!state.binding) return false;
@@ -20943,6 +21013,16 @@ function applyProduct(ctx) {
         (0, import_react53.createElement)(
           "div",
           { className: "bt-main-messages" },
+          !state.messagesComplete && state.messageBefore ? (0, import_react53.createElement)("button", {
+            type: "button",
+            className: "bt-soft bt-main-history-more",
+            disabled: state.messagesLoading,
+            onClick: async () => {
+              follow.current = false;
+              restoreHeight.current = scroll.current?.scrollHeight ?? null;
+              await loadEarlierMessages(state.binding);
+            }
+          }, state.messagesLoading ? t("Loading…") : t("Load earlier messages")) : null,
           state.messages.length === 0 ? (0, import_react53.createElement)("p", { className: "bt-main-empty" }, t("What would you like to discuss?")) : null,
           state.messages.map((message) => (0, import_react53.createElement)(
             "div",
@@ -20955,7 +21035,13 @@ function applyProduct(ctx) {
           (0, import_react53.createElement)("div", { ref: bottom })
         )
       ),
-      (0, import_react53.createElement)(MainComposer, { onSend: send, busy: sending || !state.binding, error: sendError ?? state.error })
+      (0, import_react53.createElement)(MainComposer, {
+        onSend: send,
+        busy: sending || !state.binding,
+        error: sendError ?? state.error,
+        value: state.mainDraft,
+        onValueChange: (mainDraft) => view.set((current) => ({ ...current, mainDraft }))
+      })
     );
   }
   function ObservationConversation() {
@@ -20963,7 +21049,14 @@ function applyProduct(ctx) {
     const [copyState, setCopyState] = (0, import_react53.useState)("idle");
     const observation = state.observation;
     const backToMain = () => {
-      view.set((current) => ({ ...current, route: "main", selectedObservation: null, observation: null, observationError: null }));
+      view.set((current) => ({
+        ...current,
+        route: "main",
+        selectedObservation: null,
+        observationGeneration: null,
+        observation: null,
+        observationError: null
+      }));
       void refresh();
       setTimeout(() => document.querySelector("#main-message, .bt-main-composer textarea")?.focus(), 0);
     };
@@ -21011,7 +21104,7 @@ function applyProduct(ctx) {
                 { className: "bt-observation-status", role: "status" },
                 `${statusCopy(observation.status)}${observation.generation && !observation.current ? ` · ${t("Historical generation")}` : ""}`
               ),
-              (0, import_react53.createElement)("p", null, observation.summary),
+              (0, import_react53.createElement)("p", null, t(observation.summary)),
               (0, import_react53.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${t(observation.nextStep)}`)
             ),
             (0, import_react53.createElement)(
@@ -21028,15 +21121,27 @@ function applyProduct(ctx) {
             "div",
             { key: fact.label },
             (0, import_react53.createElement)("dt", null, t(fact.label)),
-            (0, import_react53.createElement)("dd", null, fact.value)
+            (0, import_react53.createElement)("dd", null, t(fact.value))
           ))),
           observation.generations.length > 1 ? (0, import_react53.createElement)(
             "section",
             { className: "bt-observation-generations", "aria-label": t("Assignment generations") },
             (0, import_react53.createElement)("h2", null, t("Assignment generations")),
             observation.generations.map((generation) => (0, import_react53.createElement)(
-              "div",
-              { key: generation.assignmentId, "aria-current": generation.current ? "true" : void 0 },
+              "button",
+              {
+                key: generation.assignmentId,
+                type: "button",
+                className: "bt-observation-generation",
+                "aria-current": generation.current ? "true" : void 0,
+                "aria-pressed": generation.generation === observation.generation ? "true" : "false",
+                disabled: generation.generation === observation.generation,
+                onClick: () => {
+                  if (!state.binding || !state.selectedObservation) return;
+                  view.set((current) => ({ ...current, observationGeneration: generation.generation }));
+                  void loadObservation(state.binding, state.selectedObservation, { reset: true });
+                }
+              },
               (0, import_react53.createElement)("span", null, generation.generation),
               (0, import_react53.createElement)("span", null, generation.current ? t("Current generation") : t("Historical generation")),
               (0, import_react53.createElement)("span", null, statusCopy(generation.state))
@@ -21055,7 +21160,8 @@ function applyProduct(ctx) {
                 (0, import_react53.createElement)("span", null, event.kind === "user-message" ? t("Input") : event.kind === "assistant-message" ? t("Response") : event.kind === "tool-call" ? t("Tool call") : event.kind === "tool-result" ? t("Tool result") : t("Turn")),
                 (0, import_react53.createElement)("time", null, event.time ? new Date(event.time).toLocaleTimeString() : "")
               ),
-              (0, import_react53.createElement)("p", null, redactObservationText(event.text)),
+              (0, import_react53.createElement)("p", null, event.kind === "tool-call" ? t("Called {tool}.", { tool: event.tool ?? "tool" }) : event.kind === "tool-result" ? t(event.isError ? "Tool call failed." : "Tool call completed.") : event.kind === "turn" && event.reason ? t("Turn ended: {reason}.", { reason: event.reason }) : redactObservationText(event.text)),
+              event.detail ? (0, import_react53.createElement)("p", { className: "bt-main-work-detail" }, redactObservationText(event.detail)) : null,
               event.argumentKeys?.length ? (0, import_react53.createElement)("p", { className: "bt-main-work-detail" }, `${t("Arguments")}: ${event.argumentKeys.join(", ")}`) : null
             )) : (0, import_react53.createElement)("p", { className: "bt-main-status" }, t("No execution history has been recorded yet.")),
             observation.hasMore ? (0, import_react53.createElement)("button", { type: "button", className: "bt-soft bt-observation-more", onClick: () => {
@@ -21077,7 +21183,7 @@ function applyProduct(ctx) {
       timer.current = setTimeout(() => {
         if (!state.binding) return;
         view.set((current) => ({ ...current, observationQuery: value, observationCursor: null }));
-        void loadObservations(state.binding);
+        void loadObservations(state.binding, { reset: true });
       }, 180);
     };
     return (0, import_react53.createElement)(
@@ -21088,8 +21194,16 @@ function applyProduct(ctx) {
         className: "bt-soft",
         "aria-current": state.route === "main" ? "page" : void 0,
         onClick: () => {
-          view.set((current) => ({ ...current, route: "main", selectedObservation: null, observation: null, observationError: null }));
+          view.set((current) => ({
+            ...current,
+            route: "main",
+            selectedObservation: null,
+            observationGeneration: null,
+            observation: null,
+            observationError: null
+          }));
           void refresh();
+          setTimeout(() => document.querySelector("#main-message, .bt-main-composer textarea")?.focus(), 0);
         }
       }, (0, import_react53.createElement)(BrandMark, { size: 24 }), "Main"),
       (0, import_react53.createElement)(
@@ -21118,7 +21232,14 @@ function applyProduct(ctx) {
           className: "bt-observation-nav-item",
           "aria-current": state.route === "observe" && state.selectedObservation?.id === item.id ? "page" : void 0,
           onClick: () => {
-            view.set((current) => ({ ...current, route: "observe", selectedObservation: item, observation: null, observationError: null }));
+            view.set((current) => ({
+              ...current,
+              route: "observe",
+              selectedObservation: item,
+              observationGeneration: item.generation ?? null,
+              observation: null,
+              observationError: null
+            }));
             if (state.binding) void loadObservation(state.binding, item, { reset: true });
           }
         },
@@ -21183,16 +21304,18 @@ var PRODUCT_CSS = `
 .bt-main-work-result{margin-top:8px;padding-top:8px;border-top:.5px solid var(--bt-line-2);color:var(--bt-ink);font-size:13px;line-height:18px;overflow-wrap:anywhere}
 .bt-main-work-result p{margin:0 0 6px}.bt-main-work-result p:last-child{margin-bottom:0}
 .bt-main-work-artifact code{font:inherit;color:var(--bt-ink)}
+.bt-main-history-more{display:block;margin:0 auto 8px}
 .bt-main-nav{padding:12px;display:flex;flex-direction:column;gap:6px}
 .bt-main-nav>button,.bt-observation-nav-item{width:100%;display:flex;align-items:center;gap:10px;justify-content:flex-start;min-height:40px;text-align:left}
 .bt-observation-search{margin:8px 0 4px;color:var(--bt-ink-2);font-size:12px}
 .bt-observation-search label{display:block;margin:0 0 5px}
-.bt-observation-search input{width:100%;height:34px;box-sizing:border-box;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card);color:var(--bt-ink);padding:0 9px;font:inherit}
+.bt-observation-search input{width:100%;height:36px;box-sizing:border-box;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card);color:var(--bt-ink);padding:0 9px;font:inherit;font-size:13px}
 .bt-observation-search input:focus-visible{outline:2px solid var(--bt-accent);outline-offset:1px}
 .bt-observation-nav-head{display:flex;justify-content:space-between;gap:8px;margin:8px 2px 2px;color:var(--bt-ink-2);font-size:11px;line-height:16px;text-transform:uppercase;letter-spacing:.04em}
 .bt-observation-nav-item{align-items:flex-start;padding:8px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--bt-ink)}
 .bt-observation-nav-item:hover,.bt-observation-nav-item:focus-visible,.bt-observation-nav-item[aria-current=page]{border-color:var(--bt-line);background:var(--bt-card)}
-.bt-observation-role{flex:none;padding:1px 6px;border:1px solid var(--bt-line);border-radius:999px;color:var(--bt-ink-2);font-size:10px;line-height:16px;text-transform:uppercase;letter-spacing:.04em}
+.bt-observation-nav-item:focus-visible,.bt-observation-generation:focus-visible{outline:2px solid var(--bt-accent);outline-offset:1px}
+.bt-observation-role{flex:none;padding:1px 6px;border:1px solid var(--bt-line);border-radius:999px;color:var(--bt-ink-2);font-size:11px;line-height:16px;text-transform:uppercase;letter-spacing:.04em}
 .bt-observation-nav-copy{min-width:0;display:flex;flex-direction:column;gap:2px;font-size:12px;line-height:16px}
 .bt-observation-nav-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
 .bt-observation-nav-copy>span{color:var(--bt-ink-2);font-size:11px}
@@ -21216,13 +21339,14 @@ var PRODUCT_CSS = `
 .bt-observation-facts dd{margin:2px 0 0;overflow-wrap:anywhere;font-size:12px;line-height:18px}
 .bt-observation-generations,.bt-observation-history{display:flex;flex-direction:column;gap:8px}
 .bt-observation-generations h2,.bt-observation-history h2{margin:0;font-size:13px;line-height:20px}
-.bt-observation-generations>div{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;padding:8px 10px;border:1px solid var(--bt-line);border-radius:8px;color:var(--bt-ink-2);font-size:11px;overflow-wrap:anywhere}
-.bt-observation-generations>div[aria-current=true]{border-color:var(--bt-accent);color:var(--bt-ink)}
+.bt-observation-generation{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;padding:8px 10px;border:1px solid var(--bt-line);border-radius:8px;background:transparent;color:var(--bt-ink-2);font:inherit;font-size:11px;text-align:left;overflow-wrap:anywhere}
+.bt-observation-generation:not(:disabled):hover,.bt-observation-generation:not(:disabled):focus-visible{border-color:var(--bt-accent);color:var(--bt-ink)}
+.bt-observation-generation[aria-current=true]{border-color:var(--bt-accent);color:var(--bt-ink)}
 .bt-observation-event{padding:10px 12px;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card)}
 .bt-observation-event-head{display:flex;justify-content:space-between;gap:12px;color:var(--bt-ink-2);font-size:11px;line-height:16px}
 .bt-observation-event-head>span{font-weight:600;text-transform:uppercase;letter-spacing:.04em}
 .bt-observation-event p{margin:5px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:20px}
-@media(max-width:640px){.bt-main-history,.bt-observation-body{padding:16px}.bt-main-header,.bt-observation-header{padding-left:16px;padding-right:16px}.bt-observation-header{align-items:flex-start;flex-wrap:wrap}.bt-observation-heading{order:3;width:100%}.bt-observation-summary{flex-direction:column}.bt-observation-facts{grid-template-columns:1fr}.bt-observation-generations>div{grid-template-columns:1fr}}
+@media(max-width:640px){.bt-main-history,.bt-observation-body{padding:16px}.bt-main-header,.bt-observation-header{padding-left:16px;padding-right:16px}.bt-observation-header{align-items:flex-start;flex-wrap:wrap}.bt-observation-heading{order:3;width:100%}.bt-observation-summary{flex-direction:column}.bt-observation-facts{grid-template-columns:1fr}.bt-observation-generation{grid-template-columns:1fr}}
 `;
 
 // src/client/index.js

@@ -53,11 +53,18 @@ export async function createProductHost(context: Context, config: ProductHostCon
         const fields = endpoint === 'send' ? ['instanceId', 'commandId', 'text']
           : endpoint === 'observe-list' ? ['instanceId', 'after', 'limit', 'query']
             : endpoint === 'observe-read' ? ['instanceId', 'observationId', 'generation', 'after', 'limit']
-              : endpoint === 'history' ? ['instanceId', 'after', 'limit']
+              : endpoint === 'history' ? ['instanceId', 'after', 'before', 'limit']
                 : undefined
         if (!fields) throw new CoreError('UNAVAILABLE', 'This product capability is not connected yet.')
         if (Object.keys(payload).some(key => !fields.includes(key))) throw new CoreError('INVALID_INPUT', 'The product request contains unsupported fields.')
-        if (endpoint === 'history') return engine!.getMainConversation({ instanceId, ...(payload.after === undefined ? {} : { after: payload.after as number }), ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
+        if (endpoint === 'history') {
+          if (payload.after !== undefined && payload.before !== undefined) throw new CoreError('INVALID_INPUT', 'Main history accepts one direction cursor.')
+          if (payload.after !== undefined) return engine!.getMainConversation({ instanceId, after: payload.after as number,
+            ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
+          return engine!.getRecentMainConversation({ instanceId,
+            ...(payload.before === undefined ? {} : { before: payload.before as number }),
+            ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
+        }
         if (endpoint === 'send') return engine!.sendMainMessage({ instanceId, commandId: payload.commandId as string, text: payload.text as string })
         if (endpoint === 'observe-list') return engine!.getWorkObservations({ instanceId,
           ...(payload.after === undefined ? {} : { after: payload.after as string }),
