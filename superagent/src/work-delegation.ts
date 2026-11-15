@@ -572,6 +572,7 @@ export class WorkDelegation {
         return { type: 'success' }
       } catch (error) {
         if (error instanceof CoreError && error.code === 'MAIN_BUSY') return { type: 'defer', reason: error.message }
+        if (error instanceof CoreError && error.code === 'MAIN_SOURCE_ROLLOVER') return { type: 'transient', reason: error.message }
         if (error instanceof CoreError && (error.code === 'MAIN_UPDATE_FAILED' || error.code === 'MAIN_SOURCE_FAILED')) {
           return { type: effect.state === 'unknown' ? 'not-applied' : 'transient', reason: error.message }
         }

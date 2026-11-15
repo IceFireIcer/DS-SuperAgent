@@ -17,11 +17,14 @@ test('the GitHub CLI transport maps a real issues/PR/review/CI snapshot into ord
     ['repos/acme/repo/pulls/2/reviews', [{ id: 21, state: 'COMMENTED', body: 'Looks good', submitted_at: '2026-01-02T12:00:00Z', user: { login: 'bob' } }]],
     ['repos/acme/repo/commits/sha-2/check-runs?per_page=100', { check_runs: [{ id: 31, name: 'test', status: 'completed', conclusion: 'success',
       started_at: '2026-01-03T00:05:00Z', completed_at: '2026-01-03T00:10:00Z', app: { slug: 'github-actions' } }] }],
+    ['repos/acme/repo/issues/2/timeline?per_page=100&page=1', [{ event: 'merged', actor: { login: 'maintainer', type: 'User' },
+      created_at: '2026-01-03T00:00:00Z' }]],
   ])
   const events = await transport.mapEvents(async path => responses.get(path), 'acme', 'repo')
   assert.deepEqual(events.map(event => event.kind), ['issue', 'review', 'pull_request', 'ci'])
-  assert.deepEqual(events.map(event => event.action), ['created', 'reviewed', 'closed', 'completed'])
+  assert.deepEqual(events.map(event => event.action), ['created', 'reviewed', 'merged', 'completed'])
   assert.equal(events[2].state, 'merged')
+  assert.deepEqual([events[2].authorId, events[2].authorKind], ['maintainer', 'human'])
   assert.equal(events[2].number, 2)
   assert.equal(events[1].authorId, 'bob')
   assert.equal(events[3].authorKind, 'ci')
@@ -84,6 +87,41 @@ test('edited and closed GitHub events use the native change actor instead of the
   assert.deepEqual([ciClosed.action, ciClosed.authorId, ciClosed.authorKind], ['closed', 'github-actions[bot]', 'ci'])
 })
 
+test('changed GitHub snapshots enrich their actor from a bounded native timeline', async () => {
+  const transport = new core.GitHubCliTransport()
+  const responses = new Map([
+    [issuesPath, [
+      { id: 81, number: 8, state: 'open', title: 'Collaborator edit', body: 'Edited', created_at: '2026-01-08T00:00:00Z',
+        updated_at: '2026-01-08T00:01:00Z', user: { login: 'alice', type: 'User' } },
+      { id: 82, number: 9, state: 'open', title: 'Reopened request', body: 'Reopened', created_at: '2026-01-09T00:00:00Z',
+        updated_at: '2026-01-09T00:01:00Z', user: { login: 'alice', type: 'User' } },
+      { id: 83, number: 10, state: 'closed', title: 'Bot close', body: 'Closed', created_at: '2026-01-10T00:00:00Z',
+        updated_at: '2026-01-10T00:01:00Z', user: { login: 'alice', type: 'User' } },
+      { id: 84, number: 11, state: 'closed', title: 'CI cancel', body: 'Canceled', created_at: '2026-01-11T00:00:00Z',
+        updated_at: '2026-01-11T00:01:00Z', user: { login: 'alice', type: 'User' } },
+      { id: 85, number: 12, state: 'open', title: 'Unknown edit', body: 'Edited', created_at: '2026-01-12T00:00:00Z',
+        updated_at: '2026-01-12T00:01:00Z', user: { login: 'alice', type: 'User' } },
+    ]],
+    ['repos/acme/repo/issues/8/timeline?per_page=100&page=1', [{ event: 'edited', actor: { login: 'mallory', type: 'User' },
+      created_at: '2026-01-08T00:01:00Z' }]],
+    ['repos/acme/repo/issues/9/timeline?per_page=100&page=1', [{ event: 'reopened', actor: { login: 'mallory', type: 'User' },
+      created_at: '2026-01-09T00:01:00Z' }]],
+    ['repos/acme/repo/issues/10/timeline?per_page=100&page=1', [{ event: 'closed', actor: { login: 'close-bot[bot]', type: 'Bot' },
+      created_at: '2026-01-10T00:01:00Z' }]],
+    ['repos/acme/repo/issues/11/timeline?per_page=100&page=1', [{ event: 'closed', actor: { login: 'github-actions[bot]', type: 'Bot' },
+      created_at: '2026-01-11T00:01:00Z' }]],
+    ['repos/acme/repo/issues/12/timeline?per_page=100&page=1', [{ event: 'edited',
+      created_at: '2026-01-12T00:01:00Z' }]],
+  ])
+  const events = await transport.mapEvents(async path => responses.get(path), 'acme', 'repo')
+  const byNumber = new Map(events.map(event => [event.number, event]))
+  assert.deepEqual([byNumber.get(8).action, byNumber.get(8).authorId, byNumber.get(8).authorKind], ['edited', 'mallory', 'human'])
+  assert.deepEqual([byNumber.get(9).action, byNumber.get(9).authorId, byNumber.get(9).authorKind], ['reopened', 'mallory', 'human'])
+  assert.deepEqual([byNumber.get(10).authorId, byNumber.get(10).authorKind], ['close-bot[bot]', 'bot'])
+  assert.deepEqual([byNumber.get(11).authorId, byNumber.get(11).authorKind], ['github-actions[bot]', 'ci'])
+  assert.deepEqual([byNumber.get(12).authorId, byNumber.get(12).authorKind], ['github', 'system'])
+})
+
 test('the GitHub CLI transport pages through the issue list and refuses to overrun its budget', async () => {
   const transport = new core.GitHubCliTransport()
   const pages = []
@@ -110,12 +148,14 @@ test('a missing pull request becomes deletion evidence instead of a source failu
       assert.deepEqual(request, { allowMissing: true })
       return undefined
     }
+    if (path === 'repos/acme/repo/issues/2/timeline?per_page=100&page=1') return []
     throw new Error(`Unexpected GitHub API path ${path}`)
   }
   const events = await transport.mapEvents(runner, 'acme', 'repo')
   assert.equal(events.length, 1)
   assert.equal(events[0].action, 'deleted')
   assert.equal(events[0].kind, 'pull_request')
+  assert.deepEqual([events[0].authorId, events[0].authorKind], ['github', 'system'])
   assert.match(events[0].deletionEvidence, /404/u)
 })
 

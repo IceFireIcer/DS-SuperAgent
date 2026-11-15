@@ -8,6 +8,9 @@ import type { GitHubComment, GitHubReplyRequest, GitHubReplyTransport } from './
 const execFileAsync = promisify(execFile)
 const pageSize = 100
 const maxPages = 10
+const timelinePageSize = 100
+const maxTimelinePages = 3
+const maxTimelineRequests = 60
 
 export interface GitHubApiRequest { allowMissing?: boolean; method?: 'GET' | 'POST'; body?: { body: string }; host?: string; signal?: AbortSignal }
 export type GitHubApiRunner = (path: string, request?: GitHubApiRequest) => Promise<unknown>
@@ -56,11 +59,18 @@ export class GitHubCliTransport implements GitHubTransport {
     const base = `repos/${repository}`
     const issues = await listPages(run, `${base}/issues?state=all&sort=updated&direction=asc&per_page=${pageSize}`)
     const events: GitHubEvent[] = []
+    const changedActors = new ChangedActorEnricher(run, base)
     for (const issue of issues) {
-      if (!issue?.pull_request) { events.push(issueEvent(issue, repository)); continue }
+      if (!issue?.pull_request) {
+        events.push(await changedActors.enrich(issueEvent(issue, repository), issue))
+        continue
+      }
       const pull = await run(`${base}/pulls/${issue.number}`, { allowMissing: true }) as Record<string, any> | undefined
-      if (!pull) { events.push(deletedPullEvent(issue, repository)); continue }
-      events.push(pullEvent(pull, repository))
+      if (!pull) {
+        events.push(await changedActors.enrich(deletedPullEvent(issue, repository), issue))
+        continue
+      }
+      events.push(await changedActors.enrich(pullEvent(pull, repository), pull))
       const reviews = await run(`${base}/pulls/${pull.number}/reviews`)
       if (Array.isArray(reviews)) for (const review of reviews) if (review?.submitted_at) events.push(reviewEvent(review, pull.number, repository))
       if (pull.head?.sha) {
@@ -178,7 +188,7 @@ function issueEvent(issue: Record<string, any>, repository: string): GitHubEvent
 function pullEvent(pull: Record<string, any>, repository: string): GitHubEvent {
   const state = pull.merged_at ? 'merged' : pull.state === 'closed' ? 'closed' : 'open'
   const edited = typeof pull.created_at === 'string' && String(pull.updated_at) > pull.created_at
-  const action = pull.state === 'closed' ? 'closed' : edited ? 'edited' : 'created'
+  const action = pull.merged_at ? 'merged' : pull.state === 'closed' ? 'closed' : edited ? 'edited' : 'created'
   const actor = eventActor(pull, action, pull.user)
   return { deliveryId: `pr-${pull.id}-${pull.updated_at}`, cursor: cursorFor(pull.updated_at, 'pr', pull.number), repo: repository,
     kind: 'pull_request', action, number: pull.number, id: String(pull.id),
@@ -187,9 +197,10 @@ function pullEvent(pull: Record<string, any>, repository: string): GitHubEvent {
 }
 
 function reviewEvent(review: Record<string, any>, number: number, repository: string): GitHubEvent {
+  const actor = nativeActor(review.user)
   return { deliveryId: `review-${review.id}-${review.submitted_at}`, cursor: cursorFor(review.submitted_at, 'review', review.id),
-    repo: repository, kind: 'review', action: 'reviewed', number, id: String(review.id), authorId: review.user?.login ?? 'github',
-    authorKind: actorKind(review.user),
+    repo: repository, kind: 'review', action: 'reviewed', number, id: String(review.id), authorId: actor?.login ?? 'github',
+    authorKind: actor ? actorKind(actor) : 'system',
     body: review.body ?? `Review state ${review.state}`, updatedAt: review.submitted_at }
 }
 
@@ -211,11 +222,90 @@ function deletedPullEvent(issue: Record<string, any>, repository: string): GitHu
 }
 
 function eventActor(record: Record<string, any>, action: string, creator: Record<string, any> | undefined): Pick<GitHubEvent, 'authorId' | 'authorKind'> {
-  if (action === 'created') return { authorId: String(creator?.login ?? 'github'), authorKind: actorKind(creator) }
-  const actor = record.sender ?? record.actor ?? record.closed_by ?? record.merged_by
+  if (action === 'created') {
+    const owner = nativeActor(creator)
+    return owner ? { authorId: owner.login, authorKind: actorKind(owner) } : { authorId: 'github', authorKind: 'system' }
+  }
+  const actor = explicitChangeActor(record)
   return actor
-    ? { authorId: String(actor.login ?? 'github'), authorKind: actorKind(actor) }
+    ? { authorId: actor.login, authorKind: actorKind(actor) }
     : { authorId: 'github', authorKind: 'system' }
+}
+
+type NativeActor = Record<string, any> & { login: string }
+
+function nativeActor(value: Record<string, any> | undefined): NativeActor | undefined {
+  return typeof value?.login === 'string' && value.login ? value as NativeActor : undefined
+}
+
+function explicitChangeActor(record: Record<string, any>): NativeActor | undefined {
+  return nativeActor(record.sender) ?? nativeActor(record.actor) ?? nativeActor(record.closed_by) ?? nativeActor(record.merged_by)
+}
+
+interface TimelineChange {
+  action: 'edited' | 'closed' | 'merged' | 'reopened'
+  actor: NativeActor
+  createdAt: string
+}
+
+class ChangedActorEnricher {
+  private readonly cache = new Map<number, Promise<Record<string, any>[]>>()
+  private requests = 0
+
+  constructor(private readonly run: GitHubApiRunner, private readonly base: string) {}
+
+  async enrich(event: GitHubEvent, record: Record<string, any>) {
+    if (event.action === 'created' || explicitChangeActor(record)) return event
+    const timeline = await this.timeline(record.number)
+    const change = timelineChangeFor(timeline, event)
+    return change ? { ...event, action: change.action, authorId: change.actor.login, authorKind: actorKind(change.actor) }
+      : event
+  }
+
+  private timeline(number: number) {
+    const prior = this.cache.get(number)
+    if (prior) return prior
+    const request = (async () => {
+      const items: Record<string, any>[] = []
+      for (let page = 1; page <= maxTimelinePages; page++) {
+        if (this.requests >= maxTimelineRequests) {
+          throw new CoreError('SOURCE_BUDGET', `GitHub changed-actor enrichment exceeded ${maxTimelineRequests} requests.`)
+        }
+        this.requests++
+        const batch = await this.run(`${this.base}/issues/${number}/timeline?per_page=${timelinePageSize}&page=${page}`, { allowMissing: true })
+        if (batch === undefined) return items
+        if (!Array.isArray(batch)) throw new CoreError('SOURCE_FAILED', 'GitHub returned an invalid issue timeline.')
+        items.push(...batch)
+        if (batch.length < timelinePageSize) break
+      }
+      return items
+    })()
+    this.cache.set(number, request)
+    return request
+  }
+}
+
+function timelineChangeFor(timeline: Record<string, any>[], event: GitHubEvent): TimelineChange | undefined {
+  const changes = timeline.flatMap(item => {
+    const action = item?.event === 'edited' || item?.event === 'closed' || item?.event === 'merged' || item?.event === 'reopened'
+      ? item.event as TimelineChange['action'] : undefined
+    const actor = nativeActor(item?.actor)
+    return action && actor && typeof item.created_at === 'string' ? [{ action, actor, createdAt: item.created_at }] : []
+  })
+  const preferred = event.action === 'merged' ? ['merged', 'closed']
+    : event.action === 'closed' ? ['closed', 'merged']
+      : event.action === 'reopened' ? ['reopened', 'edited']
+        : event.action === 'edited' ? ['edited', 'reopened'] : []
+  const exact = changes.filter(change => change.createdAt === event.updatedAt)
+  for (const action of preferred) {
+    const match = exact.find(change => change.action === action)
+    if (match) return match
+  }
+  if (event.action !== 'edited') for (const action of preferred) {
+    const match = changes.filter(change => change.action === action && change.createdAt <= event.updatedAt).at(-1)
+    if (match) return match
+  }
+  return undefined
 }
 
 function actorKind(user: Record<string, any> | undefined): NonNullable<GitHubEvent['authorKind']> {

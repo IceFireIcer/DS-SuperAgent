@@ -63,7 +63,33 @@ interface MainUpdateCommand {
   error?: string
   run?: { sessionId: string; generation: number }
 }
-interface MainSourceCommand { state: 'running' | 'failed' | 'completed'; messageId: string; turnMessageId: string; userSequence: number; attempt: number }
+interface MainSourceCommand {
+  state: 'running' | 'failed' | 'completed'
+  handoffId: string
+  messageId: string
+  turnMessageId: string
+  userSequence: number
+  sessionId: string
+  sessionGeneration: number
+  attempt: number
+}
+interface MainSourceRollover {
+  id: string
+  version: 1
+  instanceId: string
+  mainId: string
+  handoffId: string
+  sourceCommandKey: string
+  previousSessionId: string
+  sessionId: string
+  previousGeneration: number
+  sessionGeneration: number
+  previousTurnMessageId: string
+  turnMessageId: string
+  attempt: number
+  reason: 'CONTEXT_WINDOW'
+  createdAt: number
+}
 interface MainActiveCommand {
   key: string
   userSequence: number
@@ -111,7 +137,8 @@ export interface MainPage extends MainBinding {
 export interface MainRunResult extends MainBinding { messageId: string; status: MainMessage['status'] }
 interface MainEvent { type: string; data: { id?: string; message?: { content?: { type: string; text?: string }[] }; reason?: { kind?: string } } }
 const messageKey = (sequence: number) => String(sequence).padStart(16, '0')
-const sourceRecoveryMessageId = (handoffId: string, attempt: number) => `main-source-recovery:${handoffId}:${attempt}`
+const sourceRecoveryMessageId = (handoffId: string, generation: number, attempt: number) =>
+  `main-source-recovery:${handoffId}:g${generation}:${attempt}`
 const activeCommandKey = (sequence: number, key: string) => JSON.stringify(['main-active-command', messageKey(sequence), key])
 const reconcileCommandKey = (key: string) => JSON.stringify(['main-reconcile-command', key])
 
@@ -602,7 +629,8 @@ export class MainConversation {
       const key = `main-source:${handoff.id}`
       let prepared = await commandTransaction(this.storage, this.instanceId, async tx => {
         const prior = await tx.get<MainSourceCommand>('main-source-command', key)
-        if (prior) return { ...prior, turnMessageId: prior.turnMessageId ?? prior.messageId }
+        if (prior) return { ...prior, handoffId: prior.handoffId ?? handoff.id, turnMessageId: prior.turnMessageId ?? prior.messageId,
+          sessionId: prior.sessionId ?? binding.mainSessionId, sessionGeneration: prior.sessionGeneration ?? binding.generation }
         const state = await this.state(tx)
         const sequence = state.sequence + 1
         const messageId = `main-source-message:${handoff.id}`
@@ -610,11 +638,16 @@ export class MainConversation {
           createdAt: Date.now(), status: 'running', source: { kind: 'github', sourceInstanceId: handoff.sourceInstanceId,
             eventId: handoff.sourceEventId, objectId: handoff.objectId, threadId: handoff.threadId, authorId: handoff.authorId, reference: handoff.reference } })
         await tx.replace('main-state', 'main', { ...state, sequence })
-        const command: MainSourceCommand = { state: 'running', messageId, turnMessageId: messageId, userSequence: sequence, attempt: 1 }
+        const command: MainSourceCommand = { state: 'running', handoffId: handoff.id, messageId, turnMessageId: messageId, userSequence: sequence,
+          sessionId: binding.mainSessionId, sessionGeneration: binding.generation, attempt: 1 }
         await tx.insert('main-source-command', key, command)
         return command
       })
       if (prepared.state === 'completed') return
+      if (prepared.handoffId !== handoff.id || prepared.sessionId !== binding.mainSessionId
+        || prepared.sessionGeneration !== binding.generation) {
+        throw new CoreError('INCOMPLETE_STATE', 'The source Main recovery state does not match the current Main Session generation.')
+      }
       let answer: string | undefined
       const persistedTurn = await this.sessions!.hasMessage(binding.mainSessionId, prepared.turnMessageId)
       if (persistedTurn.found) {
@@ -627,7 +660,7 @@ export class MainConversation {
           if (current.attempt >= 10) throw new CoreError('MAIN_SOURCE_FAILED', 'The source Main recovery budget is exhausted.')
           const attempt = current.attempt + 1
           const command: MainSourceCommand = { ...current, state: 'running', attempt,
-            turnMessageId: sourceRecoveryMessageId(handoff.id, attempt) }
+            turnMessageId: sourceRecoveryMessageId(handoff.id, current.sessionGeneration, attempt) }
           await tx.replace('main-source-command', key, command)
           const user = await tx.get<MainMessage>('main-message', messageKey(current.userSequence))
           if (user) {
@@ -637,17 +670,63 @@ export class MainConversation {
           return command
         })
       }
+      let rolloverPrepared = false
+      const prepareFork = async (childSessionId: string) => {
+        prepared = await commandTransaction(this.storage, this.instanceId, async tx => {
+          const current = await tx.get<MainSourceCommand>('main-source-command', key)
+          if (!current || current.state === 'completed') throw new CoreError('MAIN_SOURCE_FAILED', 'The source recovery receipt disappeared.')
+          if (current.handoffId !== handoff.id || current.sessionId !== binding.mainSessionId
+            || current.sessionGeneration !== binding.generation) {
+            throw new CoreError('INCOMPLETE_STATE', 'The source Main Session changed while its rollover was being prepared.')
+          }
+          if (current.attempt >= 10) throw new CoreError('MAIN_SOURCE_FAILED', 'The source Main recovery budget is exhausted.')
+          const state = await this.state(tx)
+          const sessionGeneration = Math.max(state.generation, current.sessionGeneration) + 1
+          const attempt = current.attempt + 1
+          const turnMessageId = sourceRecoveryMessageId(handoff.id, sessionGeneration, attempt)
+          const command: MainSourceCommand = { ...current, state: 'running', sessionId: childSessionId,
+            sessionGeneration, turnMessageId, attempt }
+          await tx.replace('main-source-command', key, command)
+          await tx.replace('main-state', 'main', { ...state, mainSessionId: childSessionId, generation: sessionGeneration })
+          const rollover: MainSourceRollover = {
+            id: `${JSON.stringify(['main-source-rollover', handoff.id])}:${childSessionId}`,
+            version: 1,
+            instanceId: this.instanceId,
+            mainId: binding.mainId,
+            handoffId: handoff.id,
+            sourceCommandKey: key,
+            previousSessionId: current.sessionId,
+            sessionId: childSessionId,
+            previousGeneration: current.sessionGeneration,
+            sessionGeneration,
+            previousTurnMessageId: current.turnMessageId,
+            turnMessageId,
+            attempt,
+            reason: 'CONTEXT_WINDOW',
+            createdAt: Date.now(),
+          }
+          if (!await tx.replace('main-source-rollover', rollover.id, rollover)) await tx.insert('main-source-rollover', rollover.id, rollover)
+          return command
+        })
+        rolloverPrepared = true
+      }
       if (!answer) {
         const configured = await this.prepare?.(binding.mainSessionId)
         const result = await this.sessions!.run({ role: 'main', sessionId: binding.mainSessionId, messageId: prepared.turnMessageId, signal,
+          onForkPrepared: prepareFork,
           text: `[GitHub request${prepared.attempt > 1 ? ' recovery' : ''}]\nThis is one authorized source handoff, not a private transcript. ${prepared.attempt > 1
             ? 'The previous Main turn ended without a reply. Continue the same durable request and produce one safe reply; do not repeat completed side effects. '
             : 'When the request is actionable, use delegate_work and preserve the source reference. If no work is justified, explain that only in Main; no source message is sent without established work.'}\n${JSON.stringify({
               sourceEventId: handoff.sourceEventId, sourceInstanceId: handoff.sourceInstanceId, threadId: handoff.threadId, objectId: handoff.objectId,
+              mainSessionGeneration: prepared.sessionGeneration,
               authorId: handoff.authorId, reference: handoff.reference, text: handoff.text,
             })}`,
           tools: [this.sourceTool(binding, handoff, prepared.messageId, configured?.revision ?? 1)],
           ...(configured ? { profile: configured.profile } : {}) })
+        if (result.forkedSessionId) {
+          if (!rolloverPrepared) await prepareFork(result.forkedSessionId)
+          throw new CoreError('MAIN_SOURCE_ROLLOVER', 'Main reached its context limit and prepared a new Session for the same source handoff.')
+        }
         answer = this.reply(result.events as MainEvent[], prepared.turnMessageId)
       }
       if (!answer) throw new CoreError('MAIN_SOURCE_FAILED', 'Main ended the source handoff without a visible reply.')
@@ -678,16 +757,19 @@ export class MainConversation {
         const key = `main-source:${handoff.id}`
         const command = await tx.get<MainSourceCommand>('main-source-command', key)
         if (command && command.state !== 'completed') {
-          await tx.replace('main-source-command', key, { ...command, state: 'failed' })
+          const rollover = error instanceof CoreError && error.code === 'MAIN_SOURCE_ROLLOVER'
+          if (!rollover) await tx.replace('main-source-command', key, { ...command, state: 'failed' })
           const user = await tx.get<MainMessage>('main-message', messageKey(command.userSequence))
-          if (user) await tx.replace('main-message', messageKey(command.userSequence), { ...user, status: 'failed' })
+          if (user && !rollover) await tx.replace('main-message', messageKey(command.userSequence), { ...user, status: 'failed' })
           const current = await tx.get<MainSourceHandoff>('main-source-handoff', handoff.id)
           if (current && current.state !== 'delegated' && current.state !== 'discarded') {
             await tx.replace('main-source-handoff', handoff.id, { ...current,
-              lastError: error instanceof Error ? error.message.slice(0, 1024) : 'MAIN_SOURCE_FAILED', updatedAt: Date.now() })
+              lastError: rollover ? 'CONTEXT_WINDOW' : error instanceof Error ? error.message.slice(0, 1024) : 'MAIN_SOURCE_FAILED',
+              updatedAt: Date.now() })
           }
         }
       }).catch(() => {})
+      if (error instanceof CoreError && error.code === 'MAIN_SOURCE_ROLLOVER') throw error
       throw new CoreError('MAIN_SOURCE_FAILED', error instanceof Error ? error.message : 'Main could not recover the GitHub request.')
     }).finally(() => { this.pendingTurns-- })
     this.tail = turn.catch(() => {})

@@ -8,6 +8,13 @@ import { SqliteStorage } from '../dist/storage.js'
 import { completedToolCount, lastUserText } from './input-support.mjs'
 import { nativeContext, routerResponse, textResponse, toolResponse } from '../dev/native-mock.mjs'
 
+function* maxTokensResponse(text) {
+  yield { type: 'block-start', index: 0, blockType: 'text' }
+  yield { type: 'text-delta', index: 0, text }
+  yield { type: 'block-end', index: 0, block: { type: 'text', text } }
+  yield { type: 'finish', reason: { kind: 'max-tokens' } }
+}
+
 test('a new GitHub request enters Main exclusively and later events stay on the same Ticket', { timeout: 25000 }, async t => {
   const directory = await mkdtemp(join(tmpdir(), 'ds-bot-main-github-'))
   const workspace = join(directory, 'workspace')
@@ -264,4 +271,87 @@ test('a failed source Main turn recovers with a new stable turn while keeping th
   assert.equal(sourceMessages[0].status, 'completed')
   assert.equal(page.messages.some(message => message.role === 'main' && message.text === 'Recovered the source request.'), true)
   assert.equal(sourceTurns, 2)
+})
+
+test('a context-full source Main turn rolls over durably and retries the same handoff in the child Session', { timeout: 30000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-main-github-rollover-'))
+  const workspace = join(directory, 'workspace')
+  await mkdir(workspace)
+  let storage, native, sessions, desktop, github
+  const sourceTurns = []
+  t.after(async () => {
+    const errors = []
+    for (const dispose of [() => desktop?.effects.stop(), () => github?.effects.stop(), () => desktop?.shutdown(), () => github?.shutdown(),
+      () => sessions?.close(), () => native?.fiber.dispose(), () => storage?.close(),
+      async () => { assert.ok(directory.startsWith(join(tmpdir(), 'ds-bot-main-github-rollover-'))); await rm(directory, { recursive: true, force: true }) }]) {
+      try { await dispose() } catch (error) { errors.push(error) }
+    }
+    if (errors.length) throw new AggregateError(errors, 'Main source rollover fixture cleanup failed.')
+  })
+  native = await nativeContext(join(directory, 'sessions'), function* (options) {
+    const text = lastUserText(options)
+    const completed = completedToolCount(options)
+    if (options.model === 'main') {
+      if (text.includes('[GitHub request')) {
+        if (completed === 0) sourceTurns.push({ sessionId: options.sessionId, recovery: text.includes('recovery') })
+        if (sourceTurns.length === 1) {
+          yield* maxTokensResponse('Main filled its context while reading the source.')
+        } else if (completed === 0) {
+          yield* toolResponse('delegate_work', { items: [{ goal: 'Finish the source request after rollover.',
+            constraints: 'Continue the same source request through its durable handoff.', acceptanceCriteria: 'Return the verified result to the original source.' }] })
+        } else yield* textResponse('Main completed the source request in its child Session.')
+      } else yield* textResponse('Main idle.')
+      return
+    }
+    if (options.model === 'router') yield* routerResponse(options)
+    else yield* textResponse('Worker pending.')
+  })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  sessions = new core.NativeSessions(native, { main: { provider: 'mock', model: 'main' },
+    router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  const environment = await core.LocalEnvironment.open({ id: 'workspace', instanceId: 'private', root: workspace,
+    allowedActorIds: ['desktop-owner'], permissions: ['read', 'write'], commands: {} })
+  desktop = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'desktop-owner', allowedActorIds: ['desktop-owner'] },
+    { retryDelayMs: 1 }, sessions, [environment], {}, {}, {}, { channel: { deliver: async () => ({ type: 'success' }) } })
+  github = new core.Engine(storage, 'private', { kind: 'github', sourceInstanceId: 'github:acme/repo', actorId: 'github-receiver',
+    allowedActorIds: ['github-receiver'], allowedThreadPrefixes: ['github:acme/repo#'], versionOrder: 'sequence',
+    intake: { mode: 'auto', maxBatchSize: 5, maxAttempts: 1, timeoutMs: 5000, allowedRequesterIds: ['alice'], allowedBotActorIds: [], rules: [] } },
+    {}, sessions)
+  const initial = await desktop.openMain({ instanceId: 'private' })
+  const source = new core.GitHubSource(storage, 'private', github, { owner: 'acme', repo: 'repo', mainIntake: true })
+  await source.receive({ deliveryId: 'rollover-created', cursor: '1', repo: 'acme/repo', kind: 'issue', action: 'created', number: 13,
+    id: 'issue-13', authorId: 'alice', title: 'Roll over this request', body: 'Complete this request without duplicating it.',
+    updatedAt: '2026-11-15T03:00:00Z' })
+  await desktop.effects.drain()
+  await new Promise(resolve => setTimeout(resolve, 10))
+  for (let index = 0; index < 12; index++) await desktop.effects.drain()
+
+  const handoff = (await desktop.getMainSources({ instanceId: 'private' })).items[0]
+  assert.equal(handoff.state, 'delegated')
+  const page = await desktop.getRecentMainConversation({ instanceId: 'private', limit: 20 })
+  assert.notEqual(page.mainSessionId, initial.mainSessionId)
+  assert.equal(page.generation, initial.generation + 1)
+  const sourceMessages = page.messages.filter(message => message.source?.eventId === handoff.sourceEventId)
+  assert.equal(sourceMessages.length, 1)
+  assert.equal(sourceMessages[0].status, 'completed')
+  assert.equal(page.messages.some(message => message.role === 'main' && message.text === 'Main completed the source request in its child Session.'), true)
+  assert.equal(sourceTurns.length, 2)
+  assert.deepEqual(sourceTurns.map(turn => turn.sessionId), [initial.mainSessionId, page.mainSessionId])
+  assert.deepEqual(sourceTurns.map(turn => turn.recovery), [false, true])
+  assert.equal((await desktop.listTickets()).items.length, 1)
+  assert.equal((await desktop.getMainWorkPlan({ instanceId: 'private', workBriefId: handoff.workBriefId })).items.length, 1)
+
+  const oldEvents = await sessions.readSession(initial.mainSessionId, { limit: 100 })
+  const childEvents = await sessions.readSession(page.mainSessionId, { limit: 100 })
+  const userIds = session => session.events.filter(event => event.type === 'user/message').map(event => event.data.id)
+  const oldTurn = userIds(oldEvents).find(id => id.startsWith('main-source-message:'))
+  const childRecovery = userIds(childEvents).find(id => id.startsWith('main-source-recovery:'))
+  assert.equal(typeof oldTurn, 'string')
+  assert.equal(typeof childRecovery, 'string')
+  assert.notEqual(oldTurn, childRecovery)
+  const rollover = await storage.transaction('private', tx => tx.get('main-source-rollover',
+    `${JSON.stringify(['main-source-rollover', handoff.id])}:${page.mainSessionId}`))
+  assert.deepEqual([rollover.previousSessionId, rollover.sessionId, rollover.previousGeneration, rollover.sessionGeneration],
+    [initial.mainSessionId, page.mainSessionId, initial.generation, page.generation])
+  assert.deepEqual([rollover.handoffId, rollover.reason], [handoff.id, 'CONTEXT_WINDOW'])
 })

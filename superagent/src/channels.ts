@@ -24,7 +24,7 @@ export interface GitHubEvent {
   cursor: string
   repo: string
   kind: 'issue' | 'pull_request' | 'review' | 'ci' | 'comment'
-  action: 'created' | 'edited' | 'deleted' | 'closed' | 'reopened' | 'synchronize' | 'reviewed' | 'completed'
+  action: 'created' | 'edited' | 'deleted' | 'closed' | 'merged' | 'reopened' | 'synchronize' | 'reviewed' | 'completed'
   number: number
   id: string
   authorId: string
