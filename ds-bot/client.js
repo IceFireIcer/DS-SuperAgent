@@ -125,6 +125,18 @@ var ZH = {
   "Stop Feishu": "停止飞书来源",
   "Reconnect Feishu": "重连飞书来源",
   "Source cursor": "来源游标",
+  "Check the Feishu connection settings.": "检查飞书连接设置。",
+  "The Feishu account cannot access the configured tenant or chat.": "飞书账户无法访问配置的租户或会话。",
+  "Feishu did not respond. Check the connection and reconnect.": "飞书没有响应，请检查连接后重连。",
+  "Feishu setup failed. Check the connection settings and reconnect.": "飞书连接初始化失败，请检查设置后重连。",
+  "Feishu needs attention. Check the connection settings and reconnect.": "飞书连接需要处理，请检查设置后重连。",
+  "Could not read Feishu status. Check the app connection.": "无法读取飞书状态，请检查应用连接。",
+  "This task was cancelled.": "此定时任务已取消。",
+  "The schedule source is paused. Resume it to continue.": "日程来源已暂停，恢复后才能继续。",
+  "This work is stopped. Resume it before scheduling more work.": "工作已停止，请先明确恢复再安排后续工作。",
+  "This schedule no longer has access to the work.": "此日程已无权访问该工作。",
+  "The source request is no longer current.": "来源请求已不再有效。",
+  "This scheduled delivery could not complete. Check the work status.": "定时投递未完成，请检查工作状态。",
   "Main source failed": "Main 来源处理失败",
   GitHub: "GitHub",
   "Delivery receipts": "投递回执",
@@ -21027,6 +21039,12 @@ var sourceState = (state) => ({
   failed: "Feishu unavailable",
   stopped: "Feishu stopped"
 })[state] ?? "Feishu unavailable";
+var failureText2 = (code) => ({
+  INVALID_CONFIG: "Check the Feishu connection settings.",
+  SOURCE_SCOPE_DENIED: "The Feishu account cannot access the configured tenant or chat.",
+  SOURCE_TIMEOUT: "Feishu did not respond. Check the connection and reconnect.",
+  FEISHU_SETUP_FAILED: "Feishu setup failed. Check the connection settings and reconnect."
+})[code] ?? "Feishu needs attention. Check the connection settings and reconnect.";
 function FeishuSourceStatus({ instanceId, call: call2 }) {
   const [status, setStatus] = (0, import_react53.useState)(null);
   const [busy, setBusy] = (0, import_react53.useState)(false);
@@ -21037,7 +21055,7 @@ function FeishuSourceStatus({ instanceId, call: call2 }) {
     const refresh = () => call2("feishu-status", { instanceId }).then((result) => {
       if (active) setStatus(result);
     }).catch(() => {
-      if (active) setStatus({ configured: true, state: "failed" });
+      if (active) setStatus({ configured: false, state: "unavailable", readFailed: true });
     });
     void refresh();
     const timer = setInterval(() => {
@@ -21048,7 +21066,7 @@ function FeishuSourceStatus({ instanceId, call: call2 }) {
       clearInterval(timer);
     };
   }, [instanceId, call2]);
-  if (!status?.configured && status?.state !== "failed") return null;
+  if (!status?.configured && status?.state !== "failed" && !status?.readFailed) return null;
   const running = status.state === "polling" || status.state === "setup";
   const control = async () => {
     if (busy) return;
@@ -21072,7 +21090,8 @@ function FeishuSourceStatus({ instanceId, call: call2 }) {
       (0, import_react53.createElement)("span", { className: "bt-main-work-status", role: "status" }, t(sourceState(status.state)))
     ),
     status.cursor ? (0, import_react53.createElement)("p", { className: "bt-main-work-detail" }, `${t("Source cursor")}: ${status.cursor}`) : null,
-    status.lastError ? (0, import_react53.createElement)("p", { className: "bt-main-error", role: "alert" }, status.lastError) : null,
+    status.readFailed ? (0, import_react53.createElement)("p", { className: "bt-main-error", role: "alert" }, t("Could not read Feishu status. Check the app connection.")) : null,
+    status.lastError ? (0, import_react53.createElement)("p", { className: "bt-main-error", role: "alert" }, t(failureText2(status.lastError))) : null,
     error ? (0, import_react53.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
     (0, import_react53.createElement)(
       "button",
@@ -21113,7 +21132,14 @@ function occurrenceText(occurrence) {
     missed: "Missed",
     failed: "Delivery failed"
   }[occurrence.status] ?? occurrence.status;
-  return `${new Date(occurrence.dueAt).toLocaleString()} · ${t(state)}${occurrence.reason ? ` · ${occurrence.reason}` : ""}`;
+  const reason = {
+    SCHEDULE_CANCELLED: "This task was cancelled.",
+    SCHEDULE_SOURCE_CLOSED: "The schedule source is paused. Resume it to continue.",
+    TICKET_STOPPED: "This work is stopped. Resume it before scheduling more work.",
+    SOURCE_NOT_AUTHORIZED: "This schedule no longer has access to the work.",
+    SOURCE_NOT_CURRENT: "The source request is no longer current."
+  }[occurrence.reason] ?? "This scheduled delivery could not complete. Check the work status.";
+  return `${new Date(occurrence.dueAt).toLocaleString()} · ${t(state)}${occurrence.reason ? ` · ${t(reason)}` : ""}`;
 }
 function executionText(status) {
   const label = {
@@ -21400,7 +21426,7 @@ var PRODUCT_SCHEDULE_CSS = `
 .bt-product-schedule-row>svg{width:18px;height:18px;flex:none;color:var(--bt-ink-2)}
 .bt-product-schedule-row .bt-set-copy{min-width:0;display:flex;flex-direction:column;gap:4px}
 .bt-product-schedule-row .bt-task-next{white-space:normal;max-width:180px;text-align:right}
-.bt-product-schedule-row button:focus-visible,.bt-product-schedules input:focus-visible,.bt-product-schedules textarea:focus-visible,
+.bt-product-schedules button:focus-visible,.bt-product-schedules input:focus-visible,.bt-product-schedules textarea:focus-visible,
 .bt-product-schedules select:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 @media(max-width:640px){.bt-product-schedule-row{flex-wrap:wrap}.bt-product-schedule-row .bt-task-next{max-width:none;text-align:left}}
 @media(prefers-reduced-motion:reduce){.bt-product-schedules .bt-task-form{animation:none}.bt-product-schedules .bt-switch,.bt-product-schedules .bt-switch-knob{transition:none}}

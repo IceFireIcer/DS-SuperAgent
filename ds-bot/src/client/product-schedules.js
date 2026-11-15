@@ -23,7 +23,11 @@ function whenText(rule) {
 function occurrenceText(occurrence) {
   const state = { delegated: 'Delegated to Main', accepted: 'Accepted by work', pending: 'Pending delivery',
     blocked: 'Blocked', cancelled: 'Cancelled', missed: 'Missed', failed: 'Delivery failed' }[occurrence.status] ?? occurrence.status
-  return `${new Date(occurrence.dueAt).toLocaleString()} · ${t(state)}${occurrence.reason ? ` · ${occurrence.reason}` : ''}`
+  const reason = { SCHEDULE_CANCELLED: 'This task was cancelled.', SCHEDULE_SOURCE_CLOSED: 'The schedule source is paused. Resume it to continue.',
+    TICKET_STOPPED: 'This work is stopped. Resume it before scheduling more work.',
+    SOURCE_NOT_AUTHORIZED: 'This schedule no longer has access to the work.',
+    SOURCE_NOT_CURRENT: 'The source request is no longer current.' }[occurrence.reason] ?? 'This scheduled delivery could not complete. Check the work status.'
+  return `${new Date(occurrence.dueAt).toLocaleString()} · ${t(state)}${occurrence.reason ? ` · ${t(reason)}` : ''}`
 }
 function executionText(status) {
   const label = { stopped: 'Stopped work', 'waiting-human': 'Waiting for an answer', success: 'Work complete',
@@ -193,7 +197,7 @@ export const PRODUCT_SCHEDULE_CSS = `
 .bt-product-schedule-row>svg{width:18px;height:18px;flex:none;color:var(--bt-ink-2)}
 .bt-product-schedule-row .bt-set-copy{min-width:0;display:flex;flex-direction:column;gap:4px}
 .bt-product-schedule-row .bt-task-next{white-space:normal;max-width:180px;text-align:right}
-.bt-product-schedule-row button:focus-visible,.bt-product-schedules input:focus-visible,.bt-product-schedules textarea:focus-visible,
+.bt-product-schedules button:focus-visible,.bt-product-schedules input:focus-visible,.bt-product-schedules textarea:focus-visible,
 .bt-product-schedules select:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 @media(max-width:640px){.bt-product-schedule-row{flex-wrap:wrap}.bt-product-schedule-row .bt-task-next{max-width:none;text-align:left}}
 @media(prefers-reduced-motion:reduce){.bt-product-schedules .bt-task-form{animation:none}.bt-product-schedules .bt-switch,.bt-product-schedules .bt-switch-knob{transition:none}}
