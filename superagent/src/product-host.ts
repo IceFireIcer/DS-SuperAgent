@@ -13,6 +13,8 @@ import { SqliteStorage } from './storage.js'
 import { LocalEnvironment } from './local-environment.js'
 import { FeishuRuntime, type FeishuRuntimeOptions } from './feishu-runtime.js'
 import { ProductAttachments } from './product-attachments.js'
+import { productProactivePreparation } from './product-proactive.js'
+import type { ProactiveRule } from './proactive.js'
 import type { ProductCredentialRecords } from './product-credential-vault.js'
 import type { ProductCredentialManager } from './product-credential-manager.js'
 import { assertReferenceShape } from './environment-assets.js'
@@ -88,6 +90,14 @@ export async function createProductHost(context: Context, config: ProductHostCon
   let gateway: Awaited<ReturnType<typeof createClientGateway>> | undefined
   let feishuRuntime: FeishuRuntime | undefined
   let feishuEngine: Engine | undefined
+  const proactiveRoot = join(dirname(config.databasePath), 'proactive-preparations')
+  const proactive = { rootDirectory: proactiveRoot, prepareTimeoutMs: 30_000, pauseSourceInstanceId: 'product-desktop',
+    prepare: productProactivePreparation({ instanceId, actorId, sessions,
+      engineForSource: sourceId => sourceId === feishuRuntime?.sourceBinding.sourceInstanceId ? feishuEngine
+        : sourceId === 'product-desktop' ? engine : undefined }),
+    guard: async (_tx: import('./storage.js').AsyncTx, candidate: import('./proactive.js').ProactiveCandidate) =>
+      candidate.sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId
+        && feishuRuntime.health().state !== 'polling' ? 'SOURCE_STOPPED' : undefined }
   let resourceManager: ProductCredentialManager | undefined
   let closing: Promise<void> | undefined
   let scheduleTimer: ReturnType<typeof setInterval> | undefined
@@ -215,6 +225,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
   }
   async function dispose() {
     if (scheduleTimer) clearInterval(scheduleTimer)
+    engine?.abortProactiveRuns(); feishuEngine?.abortProactiveRuns()
     const failures: unknown[] = []
     for (const close of [() => gateway?.close(), () => feishuRuntime?.stop(), () => engine?.effects.stop(),
       () => feishuEngine?.effects.stop(), () => engine?.shutdown(), () => feishuEngine?.shutdown(),
@@ -242,7 +253,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
     for (const root of new Set(roots)) environments.push(await openDirectory(root))
     if (config.feishu) {
       feishuRuntime = new FeishuRuntime({ ...config.feishu, storage, instanceId, mainIntake: true })
-      feishuEngine = new Engine(storage, instanceId, feishuRuntime.sourceBinding, {}, sessions)
+      feishuEngine = new Engine(storage, instanceId, feishuRuntime.sourceBinding, {}, sessions, [], {}, {}, {}, {}, {}, proactive)
       feishuRuntime.bind(feishuEngine)
     }
     const channel: DeliveryChannel | undefined = feishuRuntime ? {
@@ -256,23 +267,28 @@ export async function createProductHost(context: Context, config: ProductHostCon
           : Promise.resolve({ type: 'permanent', reason: 'DESTINATION_SOURCE_DISABLED' }),
     } : undefined
     engine = new Engine(storage, instanceId, { sourceInstanceId: 'product-desktop', actorId, allowedActorIds: [actorId] }, {}, sessions,
-      environments, {}, {}, {}, channel ? { channel } : {}, {}, undefined, attachments)
+      environments, {}, {}, {}, channel ? { channel } : {}, {}, proactive, attachments)
     const records = context.get('credentials') as ProductCredentialRecords | undefined
     if (records && typeof records.readRecord === 'function' && typeof records.modifyRecord === 'function'
       && typeof records.deleteRecord === 'function') resourceManager = engine.createProductCredentialManager(records)
     if (environments[0] && config.workspaceRoot) await engine.addWorkDirectory({ instanceId,
       commandId: `bootstrap:${environments[0].config.id}`, environment: environments[0] })
     await engine.acquireHost()
+    await engine.recoverProactiveRuns()
     await recoverCredentials()
     await engine.openMain({ instanceId })
     engine.effects.start()
     void engine.tickSchedules().catch(() => { /* Rules and failed occurrences remain available for the next check. */ })
     scheduleTimer = setInterval(() => {
       void engine?.tickSchedules().catch(() => {})
+      void engine?.reconcileProactiveCandidates().catch(() => {})
+      void feishuEngine?.reconcileProactiveCandidates().catch(() => {})
       void recoverCredentials()
     }, 30_000)
     scheduleTimer.unref()
-    if (feishuRuntime) void feishuRuntime.start().catch(() => { /* Health retains the setup failure; Main stays available. */ })
+    if (feishuRuntime) void feishuRuntime.start().then(() => feishuEngine?.reconcileProactiveCandidates()).catch(() => {
+      /* Health and durable candidates retain a failed source pass for the next attempt. */
+    })
     void engine.resumeMainInputs({ instanceId }).catch(() => { /* The persisted input and failed health remain visible for retry. */ })
     const clients = engine.createClientAccess()
     const product: ProductHost = {
@@ -285,7 +301,14 @@ export async function createProductHost(context: Context, config: ProductHostCon
           return engine!.openMain({ instanceId })
         }
         if (payload.instanceId !== instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This request is outside the authorized Instance.')
-        const fields = resourceFields[endpoint] ?? (endpoint === 'schedule-list' || endpoint === 'schedule-source-read' ? ['instanceId']
+        const fields = resourceFields[endpoint] ?? (endpoint === 'proactive-rules' || endpoint === 'proactive-control' ? ['instanceId']
+          : endpoint === 'proactive-list' ? ['instanceId', 'before']
+          : endpoint === 'proactive-read' ? ['instanceId', 'runId']
+            : endpoint === 'proactive-artifact' ? ['instanceId', 'runId', 'path', 'offset', 'maxBytes']
+              : endpoint === 'proactive-save' ? ['instanceId', 'commandId', 'expectedRevision', 'rules']
+                : endpoint === 'proactive-pause' ? ['instanceId', 'commandId', 'paused']
+                  : endpoint === 'proactive-stop' ? ['instanceId', 'commandId', 'runId', 'reason']
+                    : endpoint === 'schedule-list' || endpoint === 'schedule-source-read' ? ['instanceId']
           : endpoint === 'schedule-source-set' ? ['instanceId', 'commandId', 'enabled']
             : endpoint === 'schedule-read' ? ['instanceId', 'ruleId']
               : endpoint === 'schedule-create' ? ['instanceId', 'commandId', 'title', 'text', 'timezone', 'when', 'target']
@@ -336,6 +359,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
         if (client && endpoint.startsWith('schedule-')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Schedule administration requires the local authorized product settings.')
         }
+        if (client && (endpoint === 'proactive-save' || endpoint === 'proactive-pause' || endpoint === 'proactive-artifact')) {
+          throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Preparation settings and files require the local authorized product window.')
+        }
         if (client && endpoint.startsWith('preset-')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Role presets require the local authorized product settings.')
         }
@@ -356,6 +382,50 @@ export async function createProductHost(context: Context, config: ProductHostCon
         const commandId = client && payload.commandId !== undefined
           ? (() => { identifier(payload.commandId, 'commandId'); return `client:${client.id}:${createHash('sha256').update(payload.commandId).digest('hex')}` })()
           : payload.commandId as string
+        if (endpoint === 'proactive-rules') {
+          const [configured, control] = await Promise.all([engine!.getProactiveRules(), engine!.getProactiveControl()])
+          return { ...configured, control, sources: feishuRuntime ? [{ sourceInstanceId: feishuRuntime.sourceBinding.sourceInstanceId,
+            label: 'Feishu' }] : [] }
+        }
+        if (endpoint === 'proactive-control') return engine!.getProactiveControl()
+        if (endpoint === 'proactive-list') {
+          const runs = await engine!.listProactiveRuns()
+          const before = payload.before
+          const end = before === undefined ? runs.length : runs.findIndex(run => run.id === before)
+          if (end < 0) throw new CoreError('INVALID_INPUT', 'Use a cursor from this Instance preparation index.')
+          const start = Math.max(0, end - 50)
+          return { items: runs.slice(start, end).reverse().map(({ text, ...run }) => ({ ...run, text: text.slice(0, 512) })),
+            total: runs.length, ...(start ? { before: runs[start]!.id } : {}) }
+        }
+        if (endpoint === 'proactive-read') return await engine!.getProactiveRun(payload.runId as string) ?? null
+        if (endpoint === 'proactive-artifact') return engine!.readProactiveArtifact(payload.runId as string,
+          payload.path as string, payload.offset as number | undefined, payload.maxBytes as number | undefined)
+        if (endpoint === 'proactive-save') {
+          const rules = payload.rules as ProactiveRule[]
+          if (!Array.isArray(rules) || rules.some(rule => !rule || rule.enabled && (!rule.match?.sourceInstanceIds
+            || rule.match.sourceInstanceIds.length !== 1
+            || rule.match.sourceInstanceIds[0] !== feishuRuntime?.sourceBinding.sourceInstanceId
+            || rule.match.actorKinds.some(kind => kind !== 'bot') || rule.match.addressing.includes('ambient')
+            || rule.match.textPattern !== undefined && !/^[\p{L}\p{N} _:-]{1,128}$/u.test(rule.match.textPattern)))) {
+            throw new CoreError('INVALID_CONFIG', 'Product preparations require an addressed Feishu app event and a bounded literal text match.')
+          }
+          const saved = await engine!.updateProactiveRules({ commandId, expectedRevision: payload.expectedRevision as number, rules })
+          engine!.abortProactiveRuns(); feishuEngine?.abortProactiveRuns()
+          return saved
+        }
+        if (endpoint === 'proactive-pause') {
+          const result = await engine!.setProactivePaused({ commandId, paused: payload.paused as boolean })
+          if (result.paused) { engine!.abortProactiveRuns(); feishuEngine?.abortProactiveRuns() }
+          return result
+        }
+        if (endpoint === 'proactive-stop') {
+          const run = await engine!.getProactiveRun(payload.runId as string)
+          if (!run || ![feishuRuntime?.sourceBinding.sourceInstanceId, 'product-desktop'].includes(run.sourceInstanceId)) {
+            throw new CoreError('NOT_FOUND', 'This Host does not own the preparation.')
+          }
+          const owner = run.sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId ? feishuEngine : engine
+          return owner!.stopProactiveRun({ commandId, runId: run.id, reason: payload.reason as string })
+        }
         if (endpoint.startsWith('resource-')) {
           if (!resourceManager) throw new CoreError('UNAVAILABLE', 'This DSH profile has no durable credential record service.')
           const manager = resourceManager
@@ -415,19 +485,28 @@ export async function createProductHost(context: Context, config: ProductHostCon
             throw new CoreError('UNAVAILABLE', 'No Feishu source is configured for this product Host.')
           }
           if (endpoint === 'feishu-start' && !['setup', 'polling'].includes(feishuRuntime.health().state)) {
+            feishuEngine?.abortProactiveRuns()
             await feishuRuntime.stop()
             await feishuRuntime.start()
           }
-          if (endpoint === 'feishu-stop') await feishuRuntime.stop()
+          if (endpoint === 'feishu-stop') {
+            feishuEngine?.abortProactiveRuns(); await feishuEngine?.discardProactiveCandidates(); await feishuRuntime.stop()
+          }
           return { configured: true, sourceInstanceId: feishuRuntime.sourceBinding.sourceInstanceId, ...feishuRuntime.health() }
         }
         if (endpoint === 'history') {
           if (payload.after !== undefined && payload.before !== undefined) throw new CoreError('INVALID_INPUT', 'Main history accepts one direction cursor.')
-          if (payload.after !== undefined) return engine!.getMainConversation({ instanceId, after: payload.after as number,
+          const page = payload.after !== undefined ? await engine!.getMainConversation({ instanceId, after: payload.after as number,
             ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
-          return engine!.getRecentMainConversation({ instanceId,
+            : await engine!.getRecentMainConversation({ instanceId,
             ...(payload.before === undefined ? {} : { before: payload.before as number }),
             ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
+          const rules = await engine!.getProactiveRules()
+          const current = new Map(rules.rules.filter(rule => rule.enabled && rule.communication === 'notify').map(rule => [rule.id, rule]))
+          const runs = current.size ? await engine!.getRecentProactiveNotices() : []
+          return { ...page, preparations: runs.filter(run => run.state === 'prepared' && run.ruleRevision === rules.revision
+            && current.has(run.ruleId)).map(run => ({ id: run.id, ruleId: run.ruleId,
+              sourceInstanceId: run.sourceInstanceId, eventId: run.eventId, summary: run.summary, createdAt: run.createdAt })) }
         }
         if (endpoint === 'directory-options') {
           const current = await engine!.getInstanceDirectory({ instanceId }).catch(error => {
