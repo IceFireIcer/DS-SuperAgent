@@ -12,7 +12,7 @@ export interface MainBinding { instanceId: string; mainId: string; mainSessionId
 interface MainState extends MainBinding { sequence: number; activeCommand?: string }
 export type MainMessageStatus = 'queued' | 'running' | 'stopping' | 'stopped' | 'completed' | 'interrupted' | 'failed'
 export interface MainExternalSource {
-  kind: 'github'
+  kind: 'github' | 'feishu'
   sourceInstanceId: string
   eventId: string
   objectId: string
@@ -48,6 +48,7 @@ interface MainCommand {
   fingerprint: string
   messageId: string
   userSequence: number
+  environmentId?: string | null
   status: MainMessage['status']
   replySequence?: number
   attempts?: number
@@ -111,7 +112,7 @@ export interface MainHealth {
   errorCode?: string
 }
 export interface MainAddress { instanceId: string }
-export interface MainSend extends MainAddress { commandId: string; text: string; clientId?: string }
+export interface MainSend extends MainAddress { commandId: string; text: string; environmentId?: string; clientId?: string }
 export interface MainSessionRollover {
   id: string
   mainId: string
@@ -156,7 +157,8 @@ export class MainConversation {
   constructor(private readonly storage: Storage, private readonly instanceId: string, private readonly source: DesktopSource,
     private readonly sessions?: NativeSessions,
     private readonly prepare?: (sessionId: string) => Promise<{ profile: RoleProfile; revision: number }>,
-    private readonly work?: () => WorkDelegation | undefined) {}
+    private readonly work?: () => WorkDelegation | undefined,
+    private readonly defaultEnvironment?: (transaction: AsyncTx) => Promise<string | undefined>) {}
 
   private authorize(request: MainAddress) {
     if (!request || request.instanceId !== this.instanceId || !this.source.allowedActorIds.includes(this.source.actorId)) {
@@ -331,13 +333,15 @@ export class MainConversation {
     this.authorize(request)
     identifier(request.commandId, 'commandId')
     if (request.clientId !== undefined) identifier(request.clientId, 'clientId')
+    if (request.environmentId !== undefined) identifier(request.environmentId, 'environmentId')
     if (typeof request.text !== 'string' || !request.text.trim() || Buffer.byteLength(request.text) > 32768) throw new CoreError('INVALID_INPUT', 'Send a nonempty Main message of at most 32768 bytes.')
     const binding = await this.open(request)
     const key = createHash('sha256').update(canonicalJson(request.clientId
       ? [this.source.sourceInstanceId, this.source.actorId, request.clientId, request.commandId]
       : [this.source.sourceInstanceId, this.source.actorId, request.commandId])).digest('hex')
-    const fingerprint = createHash('sha256').update(canonicalJson(request.clientId
-      ? [request.instanceId, request.text, request.clientId] : [request.instanceId, request.text])).digest('hex')
+    const fingerprint = createHash('sha256').update(canonicalJson([request.instanceId, request.text,
+      ...(request.environmentId === undefined ? [] : [request.environmentId]),
+      ...(request.clientId === undefined ? [] : [request.clientId])])).digest('hex')
     await commandTransaction(this.storage, this.instanceId, async tx => {
       const prior = await tx.get<MainCommand>('main-command', key)
       if (prior) {
@@ -352,9 +356,11 @@ export class MainConversation {
       const state = await this.state(tx)
       const sequence = state.sequence + 1
       const messageId = `main-input-${randomUUID()}`
+      const environmentId = request.environmentId ?? await this.defaultEnvironment?.(tx) ?? null
       await tx.insert<MainMessage>('main-message', messageKey(sequence), { id: messageId, sequence, role: 'user', text: request.text,
         createdAt: Date.now(), status: 'queued', ...(request.clientId ? { source: { kind: 'client', clientId: request.clientId } as const } : {}) })
-      const command: MainCommand = { fingerprint, messageId, userSequence: sequence, status: 'queued', updatedAt: Date.now() }
+      const command: MainCommand = { fingerprint, messageId, userSequence: sequence, status: 'queued', updatedAt: Date.now(),
+        environmentId }
       await tx.insert<MainCommand>('main-command', key, command)
       await tx.insert('main-message-command', messageId, { commandKey: key })
       await this.activeCommand(tx, { ...command, key })
@@ -507,7 +513,7 @@ export class MainConversation {
         },
         execute: async args => {
           const work = this.work?.()
-          if (!work) return JSON.stringify({ status: 'rejected', code: 'DELEGATION_UNAVAILABLE', ticketCreated: false, message: 'No authorized local workspace is configured; no work was started.' })
+          if (!work || command.environmentId === null) return JSON.stringify({ status: 'rejected', code: 'DELEGATION_UNAVAILABLE', ticketCreated: false, message: 'No authorized local workspace was selected for this input; no work was started.' })
           const items = Array.isArray(args.items) ? args.items.map(item => {
             const value = item && typeof item === 'object' ? item as Record<string, unknown> : {}
             return {
@@ -519,7 +525,7 @@ export class MainConversation {
           const brief = await work.create({ commandId: `main-work:${command.messageId}`, mainId: binding.mainId,
             mainSessionId: binding.mainSessionId, routerSessionId: binding.routerSessionId, mainMessageId: command.messageId,
             originalUserText, ...(items ? { items } : { goal: args.goal ?? '', constraints: args.constraints ?? '', acceptanceCriteria: args.acceptanceCriteria ?? '' }),
-            configurationRevision })
+            configurationRevision, ...(command.environmentId ? { environmentId: command.environmentId } : {}) })
           return JSON.stringify(await work.query(binding.mainId, { workBriefId: brief.id }))
         } },
       { name: 'query_work', description: 'Read a bounded status, receipt and verified result for a work item already visible in the Main conversation.',
@@ -582,7 +588,7 @@ export class MainConversation {
   private sourceTool(binding: MainBinding, handoff: MainSourceHandoff, messageId: string, configurationRevision: number): NativeTool {
     return {
       name: 'delegate_work',
-      description: 'Delegate this one authorized GitHub request to one to four independent work items. The original source remains the default acknowledgement and result audience until a separately verified authority changes it.',
+      description: 'Delegate this one authorized source request to one to four independent work items. The original source remains the default acknowledgement and result audience until a separately verified authority changes it.',
       parameters: {
         items: {
           type: 'array',
@@ -641,7 +647,7 @@ export class MainConversation {
         const sequence = state.sequence + 1
         const messageId = `main-source-message:${handoff.id}`
         await tx.insert<MainMessage>('main-message', messageKey(sequence), { id: messageId, sequence, role: 'user', text: handoff.text,
-          createdAt: Date.now(), status: 'running', source: { kind: 'github', sourceInstanceId: handoff.sourceInstanceId,
+          createdAt: Date.now(), status: 'running', source: { kind: handoff.sourceInstanceId.startsWith('feishu:') ? 'feishu' : 'github', sourceInstanceId: handoff.sourceInstanceId,
             eventId: handoff.sourceEventId, objectId: handoff.objectId, threadId: handoff.threadId, authorId: handoff.authorId, reference: handoff.reference } })
         await tx.replace('main-state', 'main', { ...state, sequence })
         const command: MainSourceCommand = { state: 'running', handoffId: handoff.id, messageId, turnMessageId: messageId, userSequence: sequence,
@@ -720,7 +726,7 @@ export class MainConversation {
         const configured = await this.prepare?.(binding.mainSessionId)
         const result = await this.sessions!.run({ role: 'main', sessionId: binding.mainSessionId, messageId: prepared.turnMessageId, signal,
           onForkPrepared: prepareFork,
-          text: `[GitHub request${prepared.attempt > 1 ? ' recovery' : ''}]\nThis is one authorized source handoff, not a private transcript. ${prepared.attempt > 1
+          text: `[${handoff.sourceInstanceId.startsWith('feishu:') ? 'Feishu' : 'GitHub'} request${prepared.attempt > 1 ? ' recovery' : ''}]\nThis is one authorized source handoff, not a private transcript. ${prepared.attempt > 1
             ? 'The previous Main turn ended without a reply. Continue the same durable request and produce one safe reply; do not repeat completed side effects. '
             : 'When the request is actionable, use delegate_work and preserve the source reference. If no work is justified, explain that only in Main; no source message is sent without established work.'}\n${JSON.stringify({
               sourceEventId: handoff.sourceEventId, sourceInstanceId: handoff.sourceInstanceId, threadId: handoff.threadId, objectId: handoff.objectId,
@@ -776,7 +782,7 @@ export class MainConversation {
         }
       }).catch(() => {})
       if (error instanceof CoreError && error.code === 'MAIN_SOURCE_ROLLOVER') throw error
-      throw new CoreError('MAIN_SOURCE_FAILED', error instanceof Error ? error.message : 'Main could not recover the GitHub request.')
+      throw new CoreError('MAIN_SOURCE_FAILED', error instanceof Error ? error.message : 'Main could not recover the source request.')
     }).finally(() => { this.pendingTurns-- })
     this.tail = turn.catch(() => {})
     return turn

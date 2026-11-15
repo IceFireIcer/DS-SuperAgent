@@ -14,6 +14,31 @@ const postgres = await startPostgres()
 const { directory, port, password, configuration, client, database, newStorage } = postgres
 const proxies = []
 
+test('PostgreSQL keeps an Instance work directory after restart without moving an older binding', { timeout: 30000 }, async t => {
+  const { storage } = await newStorage()
+  const first = join(directory, 'r5-17-postgres-first')
+  const second = join(directory, 'r5-17-postgres-second')
+  await Promise.all([mkdir(first, { recursive: true }), mkdir(second, { recursive: true })])
+  const environments = await Promise.all([['first', first], ['second', second]].map(([id, root]) => LocalEnvironment.open({
+    id, instanceId: 'directory-contract', root, allowedActorIds: ['alice'], permissions: ['read', 'write'], commands: {},
+  })))
+  const source = { sourceInstanceId: 'product-desktop', actorId: 'alice', allowedActorIds: ['alice'] }
+  const engine = new Engine(storage, 'directory-contract', source, {}, undefined, environments)
+  t.after(async () => { await engine.shutdown(); await Promise.all(environments.map(environment => environment.close())) })
+  const previous = await engine.getInstanceDirectory({ instanceId: 'directory-contract' })
+  assert.deepEqual([previous.environmentId, previous.root, previous.revision], ['first', first, 0])
+  const changed = await engine.setInstanceDirectory({ instanceId: 'directory-contract', commandId: 'change', expectedRevision: 0, environmentId: 'second' })
+  assert.equal(changed.root, second)
+  assert.deepEqual(await engine.setInstanceDirectory({ instanceId: 'directory-contract', commandId: 'change', expectedRevision: 0, environmentId: 'second' }), changed)
+  const reopened = new Engine(storage, 'directory-contract', source, {}, undefined, [environments[1], environments[0]])
+  t.after(() => reopened.shutdown())
+  assert.deepEqual(await reopened.getInstanceDirectory({ instanceId: 'directory-contract' }), changed)
+  await assert.rejects(reopened.setInstanceDirectory({ instanceId: 'another-instance', commandId: 'wrong', expectedRevision: 1,
+    environmentId: 'first' }), { code: 'SOURCE_NOT_AUTHORIZED' })
+  const catalog = await storage.transaction('directory-contract', tx => tx.scan('instance-directory', { limit: 10 }))
+  assert.equal(catalog.items.length, 1)
+})
+
 test('PostgreSQL preserves Main identity, deduplicates messages and isolates another Instance', { timeout: 30000 }, async t => {
   const { storage } = await newStorage()
   const native = await nativeContext(join(directory, 'main-sessions'), function* () { yield* textResponse('A durable Main reply.') })

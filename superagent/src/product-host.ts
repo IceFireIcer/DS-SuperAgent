@@ -1,5 +1,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { createHash } from 'node:crypto'
+import { realpath, stat } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { basename, dirname, isAbsolute, join, relative } from 'node:path'
 import { Engine } from './engine.js'
 import { CoreError, identifier } from './model.js'
 import { createClientGateway, type ClientGatewayOptions } from './client-gateway.js'
@@ -7,10 +10,14 @@ import type { ClientAccess, ClientCapability, ClientIdentity } from './client-ac
 import { NativeSessions } from './native-sessions.js'
 import { SqliteStorage } from './storage.js'
 import { LocalEnvironment } from './local-environment.js'
+import { FeishuRuntime, type FeishuRuntimeOptions } from './feishu-runtime.js'
+import { localDeliveryChannel, type DeliveryChannel } from './deliveries.js'
 import type { RoleConfig, RoleModel } from './config.js'
 
 export interface ProductHostConfig { databasePath: string; workspaceRoot?: string; instanceId?: string; actorId?: string; main?: RoleModel; router?: RoleModel; worker?: RoleModel; timeoutMs?: number;
-  clientGateway?: Omit<ClientGatewayOptions, 'product'> }
+  clientGateway?: Omit<ClientGatewayOptions, 'product'>;
+  /** Supplied by a trusted Host, never by the window or a model turn. */
+  feishu?: Omit<FeishuRuntimeOptions, 'storage' | 'instanceId' | 'mainIntake'> }
 export interface ProductHost {
   dispatch(endpoint: string, payload?: Record<string, unknown>, client?: ClientIdentity): Promise<unknown>
   clients: ClientAccess
@@ -34,6 +41,13 @@ interface PublicCredentials {
   set(reference: string, value: string): Promise<unknown>
   unset(reference: string): Promise<unknown>
 }
+interface DirectoryPicker {
+  kind: 'native' | 'browse'
+  pick?(signal: AbortSignal): Promise<string | undefined>
+  list?(path: string | undefined, signal: AbortSignal): Promise<{
+    path: string; home: string; crumbs: unknown[]; entries: unknown[]; truncated: boolean
+  }>
+}
 type SettingsSection = ReturnType<PublicSettings['describe']>[number]
 
 export async function createProductHost(context: Context, config: ProductHostConfig): Promise<ProductHost> {
@@ -47,10 +61,42 @@ export async function createProductHost(context: Context, config: ProductHostCon
   }
   const sessions = new NativeSessions(context, { main: route(config.main), router: route(config.router), worker: route(config.worker), ...(config.timeoutMs === undefined ? {} : { timeoutMs: config.timeoutMs }) })
   const storage = await SqliteStorage.open(config.databasePath)
-  let environment: LocalEnvironment | undefined
+  const environments: LocalEnvironment[] = []
   let engine: Engine | undefined
   let gateway: Awaited<ReturnType<typeof createClientGateway>> | undefined
+  let feishuRuntime: FeishuRuntime | undefined
+  let feishuEngine: Engine | undefined
   let closing: Promise<void> | undefined
+  const picker = () => {
+    try {
+      const service = (context as unknown as { get(name: string): { capability(): DirectoryPicker | undefined } | undefined }).get('directoryPicker')
+      return service?.capability()
+    } catch { return undefined }
+  }
+  const directoryId = (root: string) => `product-dir-${createHash('sha256').update(process.platform === 'win32' ? root.toLowerCase() : root).digest('hex').slice(0, 32)}`
+  const directoryRoot = async (path: unknown) => {
+    if (typeof path !== 'string' || !isAbsolute(path) || Buffer.byteLength(path) > 2048) {
+      throw new CoreError('INVALID_INPUT', 'Choose an absolute working directory.')
+    }
+    let root: string
+    try {
+      root = await realpath(path)
+      if (!(await stat(root)).isDirectory()) throw new Error('Not a directory')
+    } catch { throw new CoreError('PATH_DENIED', 'The selected working directory does not exist or cannot be read.') }
+    const core = await realpath(dirname(config.databasePath))
+    const userHome = await realpath(join(homedir(), '.dsh')).catch(() => undefined)
+    const overlap = (left: string, right: string) => {
+      const path = relative(left, right)
+      return path === '' || path !== '..' && !path.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(path)
+    }
+    if (overlap(core, root) || overlap(root, core) || userHome && (overlap(userHome, root) || overlap(root, userHome))) {
+      throw new CoreError('PATH_DENIED', 'Choose a directory outside the product state and personal DSH data.')
+    }
+    return root
+  }
+  const openDirectory = async (root: string) => LocalEnvironment.open({ id: directoryId(root), instanceId, root,
+    allowedActorIds: [actorId], permissions: ['read', 'write', 'search', 'command'], commands: {}, allowShell: true,
+    assetsPath: join(dirname(config.databasePath), 'assets', directoryId(root)) })
   const publicLlm = () => context.get('llm') as unknown as PublicLlm
   const settingsSections = (settings: PublicSettings) => new Map(settings.describe({ redactSecrets: true }).map(section => [section.ns, section]))
   const derivedKeyRef = (provider: string) => `${provider.toUpperCase().replace(/[^A-Z0-9]+/gu, '_')}_API_KEY`
@@ -135,19 +181,54 @@ export async function createProductHost(context: Context, config: ProductHostCon
     return { provider, configured: value !== null }
   }
   async function dispose() {
-    try { try { await gateway?.close() } finally { try { await engine?.effects.stop() } finally { await engine?.shutdown() } } }
-    finally { try { await sessions.close() } finally { try { await environment?.close() } finally { await storage.close() } } }
+    const failures: unknown[] = []
+    for (const close of [() => gateway?.close(), () => feishuRuntime?.stop(), () => engine?.effects.stop(),
+      () => feishuEngine?.effects.stop(), () => engine?.shutdown(), () => feishuEngine?.shutdown(),
+      () => sessions.close(), ...environments.map(environment => () => environment.close()), () => storage.close()]) {
+      try { await close() } catch (error) { failures.push(error) }
+    }
+    if (failures.length) throw new AggregateError(failures, 'The product Host did not close cleanly.')
   }
   try {
-    if (config.workspaceRoot) {
-      environment = await LocalEnvironment.open({ id: 'product-workspace', instanceId, root: config.workspaceRoot,
-        allowedActorIds: [actorId], permissions: ['read', 'write'], commands: {} })
+    const saved: { id: string; root: string }[] = []
+    let after: string | undefined
+    for (let page = 0; page < 10; page++) {
+      const slice = await storage.transaction(instanceId, transaction => transaction.scan<{ id: string; root: string }>('product-directory', {
+        limit: 100, ...(after ? { after } : {}),
+      }))
+      saved.push(...slice.items.map(item => item.value))
+      if (!slice.cursor) break
+      if (page === 9) throw new CoreError('DIRECTORY_BUDGET', 'The product directory registry exceeds 1000 entries.')
+      after = slice.cursor
     }
+    const roots = [
+      ...(config.workspaceRoot ? [await directoryRoot(config.workspaceRoot)] : []),
+      ...saved.map(item => item.root),
+    ]
+    for (const root of new Set(roots)) environments.push(await openDirectory(root))
+    if (config.feishu) {
+      feishuRuntime = new FeishuRuntime({ ...config.feishu, storage, instanceId, mainIntake: true })
+      feishuEngine = new Engine(storage, instanceId, feishuRuntime.sourceBinding, {}, sessions)
+      feishuRuntime.bind(feishuEngine)
+    }
+    const channel: DeliveryChannel | undefined = feishuRuntime ? {
+      deliver: (delivery, context) => delivery.destination.sourceInstanceId === feishuRuntime!.sourceBinding.sourceInstanceId
+        ? feishuRuntime!.channel.deliver(delivery, context)
+        : delivery.destination.sourceInstanceId === 'product-desktop' ? localDeliveryChannel.deliver(delivery, context)
+          : Promise.resolve({ type: 'permanent', reason: 'DESTINATION_SOURCE_DISABLED' }),
+      reconcile: (delivery, context) => delivery.destination.sourceInstanceId === feishuRuntime!.sourceBinding.sourceInstanceId
+        ? feishuRuntime!.channel.reconcile(delivery, context)
+        : delivery.destination.sourceInstanceId === 'product-desktop' ? localDeliveryChannel.deliver(delivery, context)
+          : Promise.resolve({ type: 'permanent', reason: 'DESTINATION_SOURCE_DISABLED' }),
+    } : undefined
     engine = new Engine(storage, instanceId, { sourceInstanceId: 'product-desktop', actorId, allowedActorIds: [actorId] }, {}, sessions,
-      environment ? [environment] : [])
+      environments, {}, {}, {}, channel ? { channel } : {})
+    if (environments[0] && config.workspaceRoot) await engine.addWorkDirectory({ instanceId,
+      commandId: `bootstrap:${environments[0].config.id}`, environment: environments[0] })
     await engine.acquireHost()
     await engine.openMain({ instanceId })
     engine.effects.start()
+    if (feishuRuntime) void feishuRuntime.start().catch(() => { /* Health retains the setup failure; Main stays available. */ })
     void engine.resumeMainInputs({ instanceId }).catch(() => { /* The persisted input and failed health remain visible for retry. */ })
     const clients = engine.createClientAccess()
     const product: ProductHost = {
@@ -160,10 +241,15 @@ export async function createProductHost(context: Context, config: ProductHostCon
           return engine!.openMain({ instanceId })
         }
         if (payload.instanceId !== instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This request is outside the authorized Instance.')
-        const fields = endpoint === 'send' ? ['instanceId', 'commandId', 'text']
+        const fields = endpoint === 'send' ? ['instanceId', 'commandId', 'text', 'environmentId']
           : endpoint === 'clients-list' ? ['instanceId']
             : endpoint === 'client-enroll' ? ['instanceId', 'commandId', 'label', 'capabilities']
               : endpoint === 'client-revoke' ? ['instanceId', 'commandId', 'clientId', 'reason']
+                : endpoint === 'directory-options' || endpoint === 'directory-pick' ? ['instanceId']
+                  : endpoint === 'directory-list' ? ['instanceId', 'path']
+                    : endpoint === 'directory-register' ? ['instanceId', 'commandId', 'path']
+                      : endpoint === 'directory-default-save' ? ['instanceId', 'commandId', 'expectedRevision', 'environmentId']
+                        : endpoint === 'feishu-status' || endpoint === 'feishu-start' || endpoint === 'feishu-stop' ? ['instanceId']
           : endpoint === 'stop-main' ? ['instanceId', 'commandId', 'messageId']
             : endpoint === 'work-stop'
               ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'expectedTicketVersion', 'reason']
@@ -196,6 +282,18 @@ export async function createProductHost(context: Context, config: ProductHostCon
         const commandId = client && payload.commandId !== undefined
           ? (() => { identifier(payload.commandId, 'commandId'); return `client:${client.id}:${createHash('sha256').update(payload.commandId).digest('hex')}` })()
           : payload.commandId as string
+        if (endpoint === 'feishu-status' || endpoint === 'feishu-start' || endpoint === 'feishu-stop') {
+          if (!feishuRuntime) {
+            if (endpoint === 'feishu-status') return { configured: false, state: 'unavailable' }
+            throw new CoreError('UNAVAILABLE', 'No Feishu source is configured for this product Host.')
+          }
+          if (endpoint === 'feishu-start' && !['setup', 'polling'].includes(feishuRuntime.health().state)) {
+            await feishuRuntime.stop()
+            await feishuRuntime.start()
+          }
+          if (endpoint === 'feishu-stop') await feishuRuntime.stop()
+          return { configured: true, sourceInstanceId: feishuRuntime.sourceBinding.sourceInstanceId, ...feishuRuntime.health() }
+        }
         if (endpoint === 'history') {
           if (payload.after !== undefined && payload.before !== undefined) throw new CoreError('INVALID_INPUT', 'Main history accepts one direction cursor.')
           if (payload.after !== undefined) return engine!.getMainConversation({ instanceId, after: payload.after as number,
@@ -204,7 +302,48 @@ export async function createProductHost(context: Context, config: ProductHostCon
             ...(payload.before === undefined ? {} : { before: payload.before as number }),
             ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
         }
+        if (endpoint === 'directory-options') {
+          const current = await engine!.getInstanceDirectory({ instanceId }).catch(error => {
+            if (error instanceof CoreError && error.code === 'DELEGATION_UNAVAILABLE') return null
+            throw error
+          })
+          return { default: current, picker: picker()?.kind ?? null,
+            directories: environments.map(environment => ({ id: environment.config.id, root: environment.config.root,
+              title: basename(environment.config.root) || environment.config.root })) }
+        }
+        if (endpoint === 'directory-pick') {
+          const native = picker()
+          if (native?.kind !== 'native' || !native.pick) throw new CoreError('UNAVAILABLE', 'This Host has no native folder picker.')
+          return await native.pick(AbortSignal.timeout(120_000)) ?? null
+        }
+        if (endpoint === 'directory-list') {
+          const browse = picker()
+          if (browse?.kind !== 'browse' || !browse.list) throw new CoreError('UNAVAILABLE', 'This Host cannot browse directories.')
+          if (payload.path !== undefined && (typeof payload.path !== 'string' || payload.path.length > 2048)) {
+            throw new CoreError('INVALID_INPUT', 'Choose a bounded directory path to browse.')
+          }
+          return browse.list(payload.path as string | undefined, AbortSignal.timeout(30_000))
+        }
+        if (endpoint === 'directory-register') {
+          identifier(payload.commandId, 'commandId')
+          const root = await directoryRoot(payload.path)
+          const id = directoryId(root)
+          let environment = environments.find(item => item.config.id === id)
+          if (environment && environment.config.root !== root) throw new CoreError('ENVIRONMENT_CHANGED', 'Directory identity changed.')
+          const opened = environment ? undefined : await openDirectory(root)
+          try {
+            environment = environment ?? opened!
+            await environment.probe({ instanceId, actorId })
+            const record = await engine!.addWorkDirectory({ instanceId, commandId: payload.commandId as string, environment })
+            if (opened) environments.push(opened)
+            return record
+          } catch (error) { await opened?.close(); throw error }
+        }
+        if (endpoint === 'directory-default-save') return engine!.setInstanceDirectory({ instanceId,
+          commandId: payload.commandId as string, expectedRevision: payload.expectedRevision as number,
+          environmentId: payload.environmentId as string })
         if (endpoint === 'send') return engine!.sendMainMessage({ instanceId, commandId, text: payload.text as string,
+          ...(payload.environmentId === undefined ? {} : { environmentId: payload.environmentId as string }),
           ...(client ? { clientId: client.id } : {}) })
         if (endpoint === 'stop-main') return engine!.stopMainTurn({ instanceId, commandId, messageId: payload.messageId as string })
         if (endpoint === 'work-stop') return engine!.stopMainWork({ instanceId, commandId,

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -9,8 +9,7 @@ import { RemoteProductClient } from '../../app/src/remote-product-client.mjs'
 
 async function fixture(t) {
   const directory = await mkdtemp(join(tmpdir(), 'r5-product-client-'))
-  const workspaceRoot = join(directory, 'workspace')
-  await mkdir(workspaceRoot)
+  const workspaceRoot = await mkdtemp(join(tmpdir(), 'r5-product-client-workspace-'))
   const native = await nativeContext(join(directory, 'sessions'), function* (request) {
     if (request.model !== 'main') throw new Error('Only Main may answer the client.')
     yield* textResponse('The same Main is here.')
@@ -23,6 +22,7 @@ async function fixture(t) {
   t.after(async () => {
     await product.close(); await native.fiber.dispose()
     await rm(directory, { recursive: true, force: true })
+    await rm(workspaceRoot, { recursive: true, force: true })
   })
   return { product, address: product.clientGateway.url }
 }
