@@ -189,6 +189,9 @@ test('explicit source replacement keeps the old preset and rejects a stale decis
   assert.deepEqual(await store.decideImport({ ...attempt, commandId: 'replace-one', decision: 'replace', expectedDecisionId: first.id }), replaced)
   await assert.rejects(store.decideImport({ ...attempt, commandId: 'replace-one', decision: 'replace', expectedDecisionId: 'changed' }),
     { code: 'IDENTITY_CONFLICT' })
+  const samePreviewStale = await store.decideImport({ ...attempt, commandId: 'replace-again', decision: 'replace', expectedDecisionId: first.id })
+  assert.equal(samePreviewStale.status, 'conflict')
+  assert.equal(samePreviewStale.conflictWith, replaced.id)
   const stalePreview = await store.recordPreview({ instanceId: 'personal', commandId: 'preview-three', copy: copy(state) })
   const stale = await store.decideImport({ instanceId: 'personal', commandId: 'replace-stale', previewId: stalePreview.id,
     decision: 'replace', expectedDecisionId: first.id, copy: copy(state), preset: preset('third-writer') })

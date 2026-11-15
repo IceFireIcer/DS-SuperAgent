@@ -9,6 +9,7 @@ import { Card, Row } from './bot-settings.js'
 import { ClockIcon, CloseIcon, SlidersIcon } from './icons.js'
 import { SCHEDULE_CSS } from './schedules.js'
 import { ProductScheduleSettings, PRODUCT_SCHEDULE_CSS } from './product-schedules.js'
+import { ProductProactiveSettings, ProactiveReview, PRODUCT_PROACTIVE_CSS } from './product-proactive.js'
 import { ProductPresetSettings, PRODUCT_PRESET_CSS } from './product-presets.js'
 import { ProductCredentialSettings, PRODUCT_CREDENTIAL_CSS } from './product-credentials.js'
 import { ProductSupervisionSettings, PRODUCT_SUPERVISION_CSS } from './product-supervision.js'
@@ -56,6 +57,7 @@ export function applyProduct(ctx) {
     activeTurn: null,
     health: null,
     sources: [],
+    preparations: [],
     mainEvidence: null,
     mainEvidenceLoading: false,
     mainEvidenceError: null,
@@ -101,6 +103,7 @@ export function applyProduct(ctx) {
           activeTurn: page.activeTurn ?? null,
           health: page.health ?? state.health,
           sources: page.sources ?? state.sources,
+          preparations: page.preparations ?? state.preparations,
           messageBefore: state.messagesComplete ? null : state.messageBefore ?? page.cursor ?? null,
           messagesComplete: state.messagesComplete || page.cursor === undefined, error: null }
       })
@@ -428,6 +431,21 @@ export function applyProduct(ctx) {
         h('button', { type: 'button', className: 'bt-soft', onClick: () => onEvidence(work) }, t('View original request'))) : null)
   }
 
+  function MainPreparationCard({ preparation }) {
+    const state = useView()
+    const [expanded, setExpanded] = useState(false)
+    return h('article', { className: 'bt-main-work', 'aria-label': t('Prepared review') },
+      h('div', { className: 'bt-main-work-head' }, h('strong', null, t('Prepared review')),
+        h('span', { className: 'bt-main-work-status' }, preparation.ruleId)),
+      h('p', { className: 'bt-main-work-detail' }, preparation.summary),
+      h('button', { type: 'button', className: 'bt-soft bt-soft-sm', 'aria-expanded': expanded,
+        onClick: () => setExpanded(value => !value) }, t(expanded ? 'Hide review' : 'Review')),
+      expanded ? h(ProactiveReview, { runId: preparation.id, instanceId: state.binding.instanceId,
+        call: productCall, remote: Boolean(state.connection?.connected),
+        canStop: !state.connection?.connected || state.connection.capabilities.includes('command'),
+        onStopped: () => { void refreshMain(state.binding) } }) : null)
+  }
+
   function MainSourceCard({ source, instanceId, onRefresh, canCommand }) {
     const [receipts, setReceipts] = useState(source.deliveries ?? [])
     const [receiptCursor, setReceiptCursor] = useState(source.deliveryCursor ?? null)
@@ -660,6 +678,7 @@ export function applyProduct(ctx) {
           !state.connection?.connected ? h(FeishuSourceStatus, { instanceId: state.binding?.instanceId, call: productCall }) : null,
           state.sources.map(source => h(MainSourceCard, { key: source.id, source, instanceId: state.binding?.instanceId,
             onRefresh: refresh, canCommand })),
+          state.preparations.map(preparation => h(MainPreparationCard, { key: preparation.id, preparation })),
           state.works.map(work => h(MainWorkCard, { key: work.brief.workItemId ?? work.brief.id, work,
             onEvidence: selected => { if (state.binding) void loadMainEvidence(state.binding, selected) } })),
           state.mainEvidenceError && !state.mainEvidence
@@ -1113,16 +1132,20 @@ export function applyProduct(ctx) {
           h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
             'aria-current': page === 'schedules' ? 'page' : undefined, onClick: () => setPage('schedules') }, h(ClockIcon), t('Scheduled tasks')),
           h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
+            'aria-current': page === 'preparations' ? 'page' : undefined, onClick: () => setPage('preparations') }, h(ClockIcon), t('Proactive preparation')),
+          h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
             'aria-current': page === 'presets' ? 'page' : undefined, onClick: () => setPage('presets') }, h(SlidersIcon), t('Role presets')),
           !viewState.connection?.connected ? h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
             'aria-current': page === 'supervision' ? 'page' : undefined, onClick: () => setPage('supervision') }, h(SlidersIcon), t('Supervision')) : null,
           h('span', { className: 'bt-main-settings-revision' }, `${t('Configuration')} v${snapshot.revision}`)),
         h('div', { className: 'bt-settings-main' },
           h('div', { className: 'bt-settings-head' }, h('h2', null, page === 'schedules' ? t('Scheduled tasks')
-            : page === 'presets' ? t('Role presets') : page === 'supervision' ? t('Supervision') : t('Super-agent settings'))),
+            : page === 'presets' ? t('Role presets') : page === 'preparations' ? t('Proactive preparation')
+              : page === 'supervision' ? t('Supervision') : t('Super-agent settings'))),
           h('div', { className: 'bt-settings-scroll' },
             page === 'schedules' ? h(ProductScheduleSettings, { binding, works: view.getSnapshot().works, call: productCall,
               onViewWork: () => { onClose(); view.set(current => ({ ...current, route: 'main' })); void refreshMain(binding) } })
+              : page === 'preparations' ? h(ProductProactiveSettings, { binding, call: productCall })
               : page === 'presets' ? h(ProductPresetSettings, { binding, call: productCall,
                 settingsRevision: snapshot.revision, onApplied: refreshAfterPreset, onReload: refreshAfterPreset })
                 : page === 'supervision' ? h(ProductSupervisionSettings, { binding, call: productCall }) : h(Fragment, null,
@@ -1257,7 +1280,7 @@ export function applyProduct(ctx) {
         onClose: () => view.set(current => ({ ...current, connectOpen: false })) }) : null)
   }
   const shadow = (name, component) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200 }, component))
-  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SCHEDULE_CSS + MODEL_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + PRODUCT_PRESET_CSS + PRODUCT_SUPERVISION_CSS, 'main'), 'superagent: existing chat styles')
+  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SCHEDULE_CSS + MODEL_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS, 'main'), 'superagent: existing chat styles')
   ctx.effect(() => { const style = installStyles(themeCss(allThemes().deepseek), 'main-theme'); return () => style.remove() }, 'superagent: existing theme')
   shadow('main.conversation', ProductSurface)
   shadow('sidebar.workspaces', MainNavigation)
