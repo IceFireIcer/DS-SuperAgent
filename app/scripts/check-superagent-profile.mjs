@@ -89,7 +89,8 @@ try {
       const plan = [
         ['write_file', { path: file, text: `${file} written and verified\n` }],
         ['read_file', { path: file }],
-        ['report_ready', { result: `Created ${file}.`, evidence: `Read back the exact accepted text from ${file}.`, artifacts: file }],
+        ['run_shell', { command: `node -e "const fs=require('node:fs'); if (fs.readFileSync(process.argv[1], 'utf8').trim() !== process.argv[2]) process.exit(1)" ${file} "${file} written and verified"` }],
+        ['report_ready', { result: `Created ${file}.`, evidence: `Read back and verified the accepted text in ${file}.`, artifacts: file }],
       ][completed]
       if (plan) yield* toolResponse(plan[0], plan[1], `profile-worker-${completed}`)
       else yield* textResponse('No result was recorded.')
