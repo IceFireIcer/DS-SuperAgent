@@ -4,7 +4,7 @@ import type { AsyncTx, Storage } from './storage.js'
 import type { Effect, Effects } from './effects.js'
 
 export type DeliveryPurpose = 'acknowledgement' | 'answer' | 'result' | 'attention' | 'policy'
-export type DeliveryState = 'pending' | 'sent' | 'dropped'
+export type DeliveryState = 'pending' | 'sent' | 'dropped' | 'unknown'
 
 export interface DeliveryDestination {
   sourceInstanceId: string
@@ -36,6 +36,7 @@ export interface Delivery {
 
 export interface DeliveryView extends Delivery {
   state: DeliveryState
+  reconcileRequired: boolean
   reason?: string
   attempts?: number
   reportId?: string
@@ -128,7 +129,8 @@ export class Deliveries {
   async view(transaction: AsyncTx, delivery: Delivery): Promise<DeliveryView> {
     const receipt = await this.effects.receiptInTransaction(transaction, delivery.effectId, delivery.effectGeneration)
     const state: DeliveryState = receipt?.delivery ?? 'pending'
-    return { ...delivery, state, ...(receipt?.reason ? { reason: receipt.reason } : {}), ...(receipt?.attempts === undefined ? {} : { attempts: receipt.attempts }),
+    return { ...delivery, state, reconcileRequired: state === 'unknown',
+      ...(receipt?.reason ? { reason: receipt.reason } : {}), ...(receipt?.attempts === undefined ? {} : { attempts: receipt.attempts }),
       ...(delivery.basis.kind === 'ready-report' ? { reportId: delivery.basis.reportId, directionVersion: delivery.basis.directionVersion } : {}),
       ...(delivery.basis.kind === 'waiting-attention' ? { attentionId: delivery.basis.attentionId } : {}),
       ...(delivery.basis.kind === 'policy-update' ? { policyRevision: delivery.basis.revision } : {}) }

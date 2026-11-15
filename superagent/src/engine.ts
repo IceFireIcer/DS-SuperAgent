@@ -1828,6 +1828,34 @@ export class Engine {
     return this.storage.transaction(this.instanceId, tx => this.deliveries.list(tx, ticketId))
   }
 
+  /** Reconcile one unknown delivery through its original Effect generation and idempotency key. */
+  async reconcileDelivery(command: { commandId: string; ticketId: string; deliveryId: string }): Promise<DeliveryView> {
+    await this.ensurePolicy()
+    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'deliveryId'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Delivery reconciliation accepts commandId, ticketId and deliveryId only.')
+    }
+    identifier(command.commandId, 'commandId'); identifier(command.ticketId, 'ticketId'); identifier(command.deliveryId, 'deliveryId')
+    await this.assertTicketReadable(command.ticketId)
+    const delivery = await this.storage.transaction(this.instanceId, tx => this.deliveries.get(tx, command.deliveryId))
+    if (!delivery || delivery.ticketId !== command.ticketId) throw new CoreError('NOT_FOUND', 'The delivery does not belong to this Ticket.')
+    const key = this.commandKey(command.commandId)
+    const fingerprint = createHash('sha256').update(canonicalJson(['delivery-reconcile-v1', command.ticketId, command.deliveryId])).digest('hex')
+    await commandTransaction(this.storage, this.instanceId, async tx => {
+      const prior = await tx.get<{ fingerprint: string }>('work-command', key)
+      if (prior) {
+        if (prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The delivery reconciliation command was reused for different input.')
+        return
+      }
+      await tx.insert('work-command', key, { fingerprint, ticketId: command.ticketId, deliveryId: command.deliveryId })
+    })
+    await this.effects.reconcile(delivery.effectId, delivery.effectGeneration)
+    return this.storage.transaction(this.instanceId, async tx => {
+      const current = await this.deliveries.get(tx, command.deliveryId)
+      if (!current) throw new CoreError('INCOMPLETE_STATE', 'The reconciled delivery record disappeared.')
+      return this.deliveries.view(tx, current)
+    })
+  }
+
   async readContext(request: ContextRequest): Promise<ContextCard> {
     await this.storage.transaction(this.instanceId, async tx => {
       const trigger = await this.triggerFor(tx, request.ticketId)

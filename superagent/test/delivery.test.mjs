@@ -86,6 +86,37 @@ test('an exhausted transient delivery stays pending instead of being dropped', a
   assert.equal(delivery.attempts, 2)
 })
 
+test('an unknown platform outcome is visible and reconciles under the original delivery idempotency key', async t => {
+  const sentKeys = []
+  const reconcileKeys = []
+  const { engine } = await fixture(t, {
+    deliver: async (_delivery, context) => {
+      sentKeys.push(context.idempotencyKey)
+      return { type: 'unknown', reason: 'PLATFORM_ACCEPTED_RESPONSE_LOST' }
+    },
+    reconcile: async (_delivery, context) => {
+      reconcileKeys.push(context.idempotencyKey)
+      return { type: 'success' }
+    },
+  })
+  const receipt = await engine.submit({ commandId: 'unknown-request', eventId: 'unknown-message', text: 'Deliver once.' })
+  await engine.effects.drain()
+  const [unknown] = await engine.getTicketDeliveries(receipt.ticketId)
+  assert.deepEqual({ state: unknown.state, reconcileRequired: unknown.reconcileRequired, attempts: unknown.attempts },
+    { state: 'unknown', reconcileRequired: true, attempts: 1 })
+  assert.equal(unknown.reason, 'PLATFORM_ACCEPTED_RESPONSE_LOST')
+
+  const command = { commandId: 'reconcile-unknown', ticketId: receipt.ticketId, deliveryId: unknown.id }
+  const reconciled = await engine.reconcileDelivery(command)
+  assert.deepEqual({ state: reconciled.state, reconcileRequired: reconciled.reconcileRequired, attempts: reconciled.attempts },
+    { state: 'sent', reconcileRequired: false, attempts: 2 })
+  assert.deepEqual(reconcileKeys, sentKeys)
+  assert.equal(sentKeys.length, 1)
+  assert.deepEqual(await engine.reconcileDelivery(command), reconciled)
+  assert.equal(sentKeys.length, 1)
+  assert.equal(reconcileKeys.length, 1)
+})
+
 test('an answer requires a current human question and returns to that exact message', async t => {
   const calls = []
   const { engine } = await fixture(t, {

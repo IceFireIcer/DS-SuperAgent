@@ -191,7 +191,7 @@ test('adapter deadlines keep unknown receipts and do not block unrelated scopes 
   await effects.drain()
   assert.deepEqual(delivered, ['other'])
   assert.equal((await effects.receipt(slow.id, slow.generation)).state, 'unknown')
-  assert.equal((await effects.receipt(slow.id, slow.generation)).delivery, 'pending')
+    assert.equal((await effects.receipt(slow.id, slow.generation)).delivery, 'unknown')
   assert.equal((await effects.receipt(other.id, other.generation)).delivery, 'sent')
 })
 
