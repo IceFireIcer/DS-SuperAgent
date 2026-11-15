@@ -196,8 +196,12 @@ export async function createProductHost(context: Context, config: ProductHostCon
           expectedGeneration: payload.expectedGeneration as string, reason: payload.reason as string })
         if (endpoint === 'settings') return roleSettings(payload.limit === undefined ? 50 : payload.limit as number)
         if (endpoint === 'settings-save') {
+          const roles = payload.roles as RoleConfig
+          if (!roles || typeof roles !== 'object' || !roles.main || !roles.router || !roles.worker) {
+            throw new CoreError('INVALID_CONFIG', 'Product settings require Main, Router and Worker profiles.')
+          }
           const view = await engine!.updateRoleConfig({ commandId: payload.commandId as string,
-            expectedRevision: payload.expectedRevision as number, roles: payload.roles as RoleConfig },
+            expectedRevision: payload.expectedRevision as number, roles },
           { verify: (roles, signal) => verifyRoles(roles, signal) })
           return { ...view, uses: await engine!.getRecentRoleConfigUses(50) }
         }

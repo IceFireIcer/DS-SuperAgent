@@ -111,6 +111,28 @@ test('idle Worker text never becomes a result and cannot invoke Router-only deli
   assert.equal(visible.some(name => name === 'assign_worker' || name === 'deliver_result'), false)
 })
 
+test('a failed Worker model attempt still records its configuration revision', { timeout: 15000 }, async context => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-failed-worker-config-'))
+  let native, storage, sessions, engine
+  context.after(async () => {
+    await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+  native = await nativeContext(join(directory, 'sessions'), options => {
+    if (options.model === 'worker') throw new Error('The Worker model failed.')
+    return options.messages.some(message => message.role === 'tool') ? textResponse('Assigned.') : toolResponse('assign_worker', {})
+  })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  sessions = new core.NativeSessions(native, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] }, { retryDelayMs: 1 }, sessions)
+  const receipt = await engine.submit({ commandId: 'failed-worker', eventId: 'failed-worker', text: 'Fail the Worker model.' })
+  for (let index = 0; index < 6; index++) await engine.effects.drain()
+  const assignment = (await engine.conversation(receipt.ticketId)).assignments[0]
+  assert.ok(assignment)
+  const uses = await engine.getRoleConfigUses(assignment.sessionId)
+  assert.equal(uses.some(use => use.role === 'worker' && use.revision === 1 && use.worker.model === 'worker'), true)
+})
+
 test('a Router batch keeps the configuration captured at its request boundary', { timeout: 20000 }, async context => {
   const directory = await mkdtemp(join(tmpdir(), 'ds-bot-router-config-snapshot-'))
   let native, storage, sessions, engine, release, entered

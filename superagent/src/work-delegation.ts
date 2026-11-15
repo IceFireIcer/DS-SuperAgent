@@ -475,6 +475,7 @@ export class WorkDelegation {
     try {
       result = await this.options.sessions.run({ sessionId: brief.routerSessionId, role: 'router', signal,
         stepBudget: routerStepBudget,
+        onBeforeModel: async () => { await this.options.recordRouterUse(brief.routerSessionId, config) },
         profile: structuredClone(config.roles.router), text: `Decide the independent work items for this one versioned Main WorkBrief. Preserve the one original source event. Establish each missing local Ticket and report only durable receipts.\n${JSON.stringify(brief)}`,
         tools: [tool] })
       await this.finishRouterTurn(attempt, { ...result, status: 'completed' })
@@ -482,7 +483,6 @@ export class WorkDelegation {
       await this.finishRouterTurn(attempt, { status: 'failed', error }).catch(() => {})
       throw error
     }
-    await this.options.recordRouterUse(result.sessionId, config)
     const split = await this.readSplit(brief.id)
     if (!split) throw new CoreError('ROUTER_NOTICE_UNHANDLED', 'Router did not establish a durable work plan.')
     const receipts = await Promise.all(split.items.map(item => this.itemReceipt(item.id)))
@@ -752,6 +752,7 @@ export class WorkDelegation {
     try {
       result = await this.options.sessions.run({ role: 'router', sessionId: source.brief.routerSessionId, signal, profile: structuredClone(config.roles.router),
         stepBudget: routerStepBudget,
+        onBeforeModel: async () => { await this.options.recordRouterUse(source.brief.routerSessionId, config) },
         text: `Return this bounded, verified work item state to Main. Keep its source, stable item identity and follow-up delivery facts; no Worker transcript is included.\n${JSON.stringify({
           workBriefId: source.brief.id, workItemId: source.item.id, receipt, outcome, followUps,
         })}`,
@@ -762,7 +763,6 @@ export class WorkDelegation {
       await this.finishRouterTurn(attempt, { status: 'failed', error }).catch(() => {})
       throw error
     }
-    await this.options.recordRouterUse(result.sessionId, config)
     if (!recorded) throw new CoreError('ROUTER_NOTICE_UNHANDLED', 'Router did not record the bounded work result.')
   }
 

@@ -134,6 +134,30 @@ test('an asynchronous role verification cannot overwrite a newer save', async t 
   assert.equal(current.roles.worker.model.model, 'worker-newer')
 })
 
+test('a committed role command replays before provider verification is attempted again', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-config-replay-'))
+  const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
+  const engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] })
+  let verifications = 0
+  const first = await engine.updateRoleConfig({ commandId: 'lost-response', expectedRevision: 1, roles: roles() }, {
+    verify: async () => { verifications += 1 },
+  })
+  const replay = await engine.updateRoleConfig({ commandId: 'lost-response', expectedRevision: 1, roles: roles() }, {
+    verify: async () => { throw new Error('Provider enumeration now fails.') },
+  })
+  assert.deepEqual(replay, first)
+  assert.equal(verifications, 1)
+  await assert.rejects(engine.updateRoleConfig({ commandId: 'failed-before-commit', expectedRevision: 2, roles: roles() }, {
+    verify: async () => { throw new Error('First verification fails.') },
+  }), /First verification fails/u)
+  const retried = await engine.updateRoleConfig({ commandId: 'failed-before-commit', expectedRevision: 2, roles: roles() }, {
+    verify: async () => { verifications += 1 },
+  })
+  assert.equal(retried.revision, 3)
+  assert.equal(verifications, 2)
+})
+
 test('recent configuration uses stay bounded after more than one thousand append-only records', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'ds-bot-config-recent-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))

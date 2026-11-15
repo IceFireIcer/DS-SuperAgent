@@ -144,6 +144,13 @@ export class RoleConfigStore {
     })
   }
 
+  async atRevision(revision: number): Promise<RoleConfigView | undefined> {
+    if (!Number.isSafeInteger(revision) || revision < 1) throw new CoreError('INVALID_CONFIG', 'A role configuration revision must be a positive integer.')
+    const stored = await this.storage.transaction(this.instanceId, transaction =>
+      transaction.get<StoredRoleConfig>('role-config-history', historyKey(revision)))
+    return stored ? this.view(stored) : undefined
+  }
+
   async history(limit = 20): Promise<StoredRoleConfig[]> {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new CoreError('INVALID_CONFIG', 'Role configuration history needs a limit from 1 to 100.')
     return this.storage.transaction(this.instanceId, async transaction => {

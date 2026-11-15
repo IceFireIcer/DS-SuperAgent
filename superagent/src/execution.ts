@@ -696,9 +696,9 @@ export class Execution {
     const config = await this.roleConfig.currentView()
     const request = await this.routerRequest(ticketId, ready)
     if (!request) return
-    const result = await this.sessions.run({ ...request, signal, profile: structuredClone(config.roles.router) })
+    const result = await this.sessions.run({ ...request, signal, profile: structuredClone(config.roles.router),
+      onBeforeModel: async () => { await this.recordRouterUse(request.sessionId, config) } })
     await this.recordRouterSession(result)
-    await this.recordRouterUse(result.sessionId, config)
   }
 
   private async routerBatch(effects: Effect[], signal: AbortSignal): Promise<EffectResult[]> {
@@ -708,9 +708,9 @@ export class Execution {
       if (request.status === 'rejected') return { type: 'unknown' as const, reason: 'The Router notification could not be prepared.' }
       if (!request.value) return { type: 'success' as const }
       try {
-        const result = await this.sessions.run({ ...request.value, signal, profile: structuredClone(config.roles.router) })
+        const result = await this.sessions.run({ ...request.value, signal, profile: structuredClone(config.roles.router),
+          onBeforeModel: async () => { await this.recordRouterUse(request.value!.sessionId, config) } })
         await this.recordRouterSession(result)
-        await this.recordRouterUse(result.sessionId, config)
         return { type: 'success' as const }
       } catch (error) {
         return error instanceof CoreError && error.code === 'ROUTER_NOTICE_UNHANDLED'
@@ -1197,6 +1197,13 @@ export class Execution {
           const scope = {
             parent, cwd: bound!.cwd, environmentId: assignment.environment!.id, mandateId: ticket.mandateId, tools,
             model: configuration.roles.worker.model,
+            configurationRevision: configuration.revision,
+            recordUse: async (sessionId: string) => {
+              await this.storage.transaction(this.instanceId, transaction => this.roleConfig.recordUse(transaction, {
+                sessionId, role: 'worker', revision: configuration.revision,
+                router: configuration.roles.router.model, worker: configuration.roles.worker.model,
+              }))
+            },
             authorize: async (tx: AsyncTx) => {
               const current = await tx.get<Assignment>('assignment', ticketId)
               if (current?.id !== assignment.id || current.state !== 'running') throw new CoreError('STALE_ASSIGNMENT', 'The delegating Assignment is no longer current.')
@@ -1312,6 +1319,10 @@ export class Execution {
         ...(input ? { onMessagePersisted: async (seq: number) => {
           await this.storage.transaction(this.instanceId, transaction => this.inputs.recordPersisted(transaction, input.id, turnMessageId!, seq))
         } } : {}),
+        onBeforeModel: async () => { await this.storage.transaction(this.instanceId, transaction => this.roleConfig.recordUse(transaction, {
+          sessionId: assignment.sessionId, role: 'worker', revision: configuration.revision,
+          router: configuration.roles.router.model, worker: configuration.roles.worker.model,
+        })) },
         text: turnText ?? await this.turnTextFor(cause, ticketId, trigger, input, job, subagent),
         profile: structuredClone(configuration.roles.worker),
         ...(bound ? { cwd: bound.cwd } : {}), signal: controller.signal, tools: status ? statusTools : [
@@ -1474,8 +1485,6 @@ export class Execution {
       }
       const sessionMetadata = { id: outcome.sessionId, eventCount: outcome.events.length, ticketId, role: 'worker', status: outcome.status }
       if (!await transaction.replace('session', outcome.sessionId, sessionMetadata)) await transaction.insert('session', outcome.sessionId, sessionMetadata)
-      await this.roleConfig.recordUse(transaction, { sessionId: outcome.sessionId, role: 'worker', revision: configuration.revision,
-        router: configuration.roles.router.model, worker: configuration.roles.worker.model })
       if (status && statusFact) {
         const fact: StatusReport = { id: `${JSON.stringify(['status-report', ticketId])}:${randomUUID()}`, ticketId, assignmentId: assignment.id, text: statusFact, createdAt: Date.now() }
         if (!await transaction.replace('status-report', `${JSON.stringify(['status-report', ticketId])}:current`, fact)) await transaction.insert('status-report', `${JSON.stringify(['status-report', ticketId])}:current`, fact)

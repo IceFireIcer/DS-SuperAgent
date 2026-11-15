@@ -87,6 +87,10 @@ test('the product HTTP boundary chats with Main and refuses cross-scope and unav
   const invalidEffort = await call('settings-save', { instanceId, commandId: 'invalid-effort', expectedRevision: 2,
     roles: { ...changed, main: { ...changed.main, model: { ...changed.main.model, effort: 'not-served' } } } })
   assert.equal(invalidEffort.error.code, 'INVALID_CONFIG')
+  const missingMain = await call('settings-save', { instanceId, commandId: 'missing-main', expectedRevision: 2,
+    roles: { router: changed.router, worker: changed.worker } })
+  assert.equal(missingMain.error.code, 'INVALID_CONFIG')
+  assert.equal((await call('settings', { instanceId })).value.revision, 2)
   const secret = 'sk-test-never-return-this'
   const keyResult = await call('provider-key', { instanceId, provider: 'mock', value: secret })
   assert.deepEqual(keyResult.value, { provider: 'mock', configured: true })

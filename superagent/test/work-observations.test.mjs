@@ -220,6 +220,9 @@ test('work observations auto-discover bounded Router and Worker history with sta
   await until(async () => (await engine.readWorkObservation({ instanceId: 'personal', observationId: failedRouter.id, limit: 100 }))
     .facts.some(fact => fact.label === 'Router turns' && fact.value.includes('failed') && fact.value.includes('STEP_BUDGET')),
   'the failed Router turn audit')
+  const failedRouterUses = await engine.getRoleConfigUses(failedRouter.sessionId)
+  assert.equal(failedRouterUses.some(use => use.role === 'router' && use.revision === 2), true,
+    'a failed Router attempt records the revision it actually used')
 
   const sessionRoot = join(directory, 'sessions')
   const sessionFiles = (await readdir(sessionRoot, { recursive: true }))

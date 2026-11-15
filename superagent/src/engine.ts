@@ -1582,24 +1582,31 @@ export class Engine {
     identifier(command.commandId, 'commandId')
     this.assertAuthoringActor()
     validateRoleConfig(command.roles)
-    if (options.verify) {
-      const controller = new AbortController()
-      await options.verify(structuredClone(command.roles), controller.signal)
-      controller.abort()
-    }
     const commandKey = this.commandKey(command.commandId)
     const fingerprint = createHash('sha256').update(canonicalJson(['role-config-v1', command.expectedRevision, command.roles])).digest('hex')
+    const prior = await this.storage.transaction(this.instanceId,
+      transaction => transaction.get<{ fingerprint: string; revision: number }>('work-command', commandKey))
+    if (prior) {
+      if (prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The role configuration command was reused with different input.')
+      return await this.roleConfig.atRevision(prior.revision) ?? await this.roleConfig.currentView()
+    }
+    if (options.verify) {
+      const controller = new AbortController()
+      try { await options.verify(structuredClone(command.roles), controller.signal) }
+      finally { controller.abort() }
+    }
     const result = await commandTransaction(this.storage, this.instanceId, async transaction => {
-      const prior = await transaction.get<{ fingerprint: string; revision: number }>('work-command', commandKey)
-      if (prior) {
-        if (prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The role configuration command was reused with different input.')
-        return { revision: prior.revision, replayed: true }
+      const committed = await transaction.get<{ fingerprint: string; revision: number }>('work-command', commandKey)
+      if (committed) {
+        if (committed.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The role configuration command was reused with different input.')
+        return { revision: committed.revision, replayed: true }
       }
       const view = await this.roleConfig.write(transaction, command.expectedRevision, command.roles)
       await transaction.insert('work-command', commandKey, { fingerprint, revision: view.revision })
       return { revision: view.revision, replayed: false, view }
     })
-    const view = 'view' in result ? result.view : await this.roleConfig.currentView()
+    if (!('view' in result) || !result.view) return await this.roleConfig.atRevision(result.revision) ?? await this.roleConfig.currentView()
+    const view = result.view
     this.roleConfigRevision = view.revision
     this.applyRoleRoutes(view)
     return view

@@ -15,7 +15,7 @@ export interface NativeTool {
   /** `agent` is the exact caller DSH reports for this call, used to parent a delegated child Agent. */
   execute(args: Record<string, any>, signal: AbortSignal, agent?: Agent): Promise<string>
 }
-export interface NativeSessionRequest { sessionId: string; role: 'main' | 'router' | 'worker'; text: string; tools: NativeTool[]; cwd?: string; signal?: AbortSignal; onDelivered?: () => Promise<void>; coalesce?: boolean; messageId?: string; onMessagePersisted?: (seq: number) => Promise<void>; onForkPrepared?: (sessionId: string) => Promise<void>; instructions?: string; skills?: string[]; profile?: RoleProfile; stepBudget?: number }
+export interface NativeSessionRequest { sessionId: string; role: 'main' | 'router' | 'worker'; text: string; tools: NativeTool[]; cwd?: string; signal?: AbortSignal; onBeforeModel?: () => Promise<void>; onDelivered?: () => Promise<void>; coalesce?: boolean; messageId?: string; onMessagePersisted?: (seq: number) => Promise<void>; onForkPrepared?: (sessionId: string) => Promise<void>; instructions?: string; skills?: string[]; profile?: RoleProfile; stepBudget?: number }
 export interface NativeSessionsOptions { main?: AgentOptions; router: AgentOptions; worker: AgentOptions; timeoutMs?: number }
 interface NativeSessionResult { sessionId: string; status: string; events: readonly unknown[]; forkedSessionId?: string
   turnStartSeq?: number; turnEndSeq?: number; stepCount: number }
@@ -119,6 +119,7 @@ export class NativeSessions {
           text: batch.length === 1 ? first.text : `Process these queued Router notifications together. Handle each item using its matching tools.\n${batch.map((task, index) => `Notification ${index + 1}:\n${task.request.text}`).join('\n')}`,
           tools: batch.flatMap((task, index) => task.request.tools.map(tool => ({ ...tool, ...(batch.length === 1 ? {} : { name: (toolNameCounts.get(tool.name) ?? 0) > 1 ? `${tool.name}_${index + 1}` : tool.name, description: `${tool.description} Handle notification ${index + 1} only.` }),
             execute: async (args: Record<string, string>, signal: AbortSignal) => { const result = await tool.execute(args, signal); handled[index] = true; return result } }))),
+          onBeforeModel: async () => { for (const task of batch) await task.request.onBeforeModel?.() },
           onDelivered: async () => { for (const task of batch) await task.request.onDelivered?.() },
         }
         try {
@@ -216,6 +217,7 @@ export class NativeSessions {
       .reduce((last, event) => Math.max(last, Number.isSafeInteger((event as { seq?: unknown }).seq) ? Number((event as { seq?: unknown }).seq) : -1), -1)
     try {
       request.signal?.throwIfAborted()
+      await request.onBeforeModel?.()
       await request.onDelivered?.()
       handle.agent.followup({ id: MessageId(messageId), role: 'user', content: [{ type: 'text', text: request.text }], source: { kind: 'user' } })
       await handle.agent.whenIdle()

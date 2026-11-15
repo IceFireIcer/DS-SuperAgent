@@ -25,6 +25,7 @@ export interface SubagentRecord {
   mandateId: string
   environmentId: string
   sessionId: string
+  configurationRevision?: number
   task: string
   state: SubagentState
   startedAt: number
@@ -41,6 +42,8 @@ export interface SubagentView {
   assignmentId: string
   generation: string
   mandateId: string
+  configurationRevision?: number
+  sessionId: string
   task: string
   state: SubagentState
   /** A completed, failed or cancelled child has finished; only `completed` succeeded. */
@@ -76,6 +79,8 @@ export interface SubagentScope {
   /** Tools that are safe to hand down. Router-only and delivery tools are never in this list. */
   tools: NativeTool[]
   model: RoleModel
+  configurationRevision: number
+  recordUse(sessionId: string): Promise<void>
   /** Read-only look at the durable facts, used before a subtask may start. */
   authorize(tx: AsyncTx): Promise<void>
   /** Re-checks, before every child tool call, that this subtask is still the live one. */
@@ -148,7 +153,7 @@ export class Subagents {
     identifier(request.id, 'subagentId')
     const record: SubagentRecord = { id: request.id, ticketId: request.ticketId, assignmentId: request.assignmentId,
       generation: request.generation, mandateId: request.mandateId, environmentId: request.scope.environmentId, sessionId: `subagent-${randomUUID()}`,
-      task: request.task, state: 'running', startedAt: this.now(), runtimeToken: this.runtimeToken }
+      configurationRevision: request.scope.configurationRevision, task: request.task, state: 'running', startedAt: this.now(), runtimeToken: this.runtimeToken }
     await tx.insert('subagent', key(record.ticketId, record.id), record)
     await this.index.add(tx, record.ticketId, { id: record.id, assignmentId: record.assignmentId })
     // The claim starts with the record, not with the child: a read between commit and creation must not call it lost.
@@ -321,6 +326,7 @@ export class Subagents {
       const current = await this.storage.transaction(this.instanceId, tx => this.get(tx, record.ticketId, record.id))
       // A stop or cancel that landed while the child was starting must not be overtaken by this turn.
       if (!current || current.state !== 'running') { await this.close(record.id); return }
+      await scope.recordUse(record.sessionId)
       handle.agent.followup({ id: MessageId(randomUUID()), role: 'user', content: [{ type: 'text', text: record.task }], source: { kind: 'user' } })
       await handle.agent.whenIdle()
       if (!await this.context.sessions.flush(handle.agent.session)) throw new CoreError('PERSISTENCE_REQUIRED', 'No persistence provider confirmed the child Session flush.')
@@ -429,7 +435,8 @@ export class Subagents {
 
   private viewOf(record: SubagentRecord): SubagentView {
     return { id: record.id, ticketId: record.ticketId, assignmentId: record.assignmentId, generation: record.generation,
-      mandateId: record.mandateId, task: record.task, state: record.state,
+      mandateId: record.mandateId, ...(record.configurationRevision === undefined ? {} : { configurationRevision: record.configurationRevision }), sessionId: record.sessionId,
+      task: record.task, state: record.state,
       settled: settledStates.includes(record.state), succeeded: record.state === 'completed',
       startedAt: record.startedAt, ...(record.finishedAt === undefined ? {} : { finishedAt: record.finishedAt }),
       ...(record.result ? { result: record.result } : {}), ...(record.cancelReason ? { cancelReason: record.cancelReason } : {}),
