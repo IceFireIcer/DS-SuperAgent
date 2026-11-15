@@ -51,6 +51,10 @@ export async function createProductHost(context: Context, config: ProductHostCon
         }
         if (payload.instanceId !== instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This request is outside the authorized Instance.')
         const fields = endpoint === 'send' ? ['instanceId', 'commandId', 'text']
+          : endpoint === 'stop-main' ? ['instanceId', 'commandId', 'messageId']
+            : endpoint === 'work-stop' || endpoint === 'work-retry'
+              ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'reason']
+              : endpoint === 'work-resume' ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration']
           : endpoint === 'observe-list' ? ['instanceId', 'after', 'limit', 'query']
             : endpoint === 'observe-read' ? ['instanceId', 'observationId', 'generation', 'after', 'limit']
               : endpoint === 'observe-detail' ? ['instanceId', 'observationId', 'generation', 'detailId', 'offset', 'limit']
@@ -67,6 +71,16 @@ export async function createProductHost(context: Context, config: ProductHostCon
             ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
         }
         if (endpoint === 'send') return engine!.sendMainMessage({ instanceId, commandId: payload.commandId as string, text: payload.text as string })
+        if (endpoint === 'stop-main') return engine!.stopMainTurn({ instanceId, commandId: payload.commandId as string, messageId: payload.messageId as string })
+        if (endpoint === 'work-stop') return engine!.stopMainWork({ instanceId, commandId: payload.commandId as string,
+          workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
+          expectedGeneration: payload.expectedGeneration as string, reason: payload.reason as string })
+        if (endpoint === 'work-resume') return engine!.resumeMainWork({ instanceId, commandId: payload.commandId as string,
+          workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
+          expectedGeneration: payload.expectedGeneration as string })
+        if (endpoint === 'work-retry') return engine!.retryMainWork({ instanceId, commandId: payload.commandId as string,
+          workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
+          expectedGeneration: payload.expectedGeneration as string, reason: payload.reason as string })
         if (endpoint === 'observe-list') return engine!.getWorkObservations({ instanceId,
           ...(payload.after === undefined ? {} : { after: payload.after as string }),
           ...(payload.limit === undefined ? {} : { limit: payload.limit as number }),

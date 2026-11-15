@@ -5,7 +5,7 @@ import { BotMark } from './mark.js'
 import { useLinger, useViewport, viewBottom } from './motion.js'
 import { t } from './i18n.js'
 
-export function MainComposer({ onSend, busy, error, value, onValueChange }) {
+export function MainComposer({ onSend, onStop, busy, stopping, error, value, onValueChange }) {
   const [draft, setDraft] = useState('')
   const text = value ?? draft
   const setText = next => onValueChange ? onValueChange(next) : setDraft(next)
@@ -22,7 +22,10 @@ export function MainComposer({ onSend, busy, error, value, onValueChange }) {
       onChange: event => setText(event.target.value),
       onKeyDown: event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(event) } },
     }),
-    h('div', { className: 'bt-main-send' }, h('button', { className: 'bt-soft', type: 'submit', disabled: busy || !text.trim() }, busy ? t('Sending…') : t('Send'))))
+    h('div', { className: 'bt-main-send' },
+      busy && onStop ? h('button', { className: 'bt-soft', type: 'button', disabled: stopping, onClick: onStop },
+        stopping ? t('Stopping…') : t('Stop reply')) : null,
+      h('button', { className: 'bt-soft', type: 'submit', disabled: busy || !text.trim() }, busy ? t('Sending…') : t('Send'))))
 }
 
 // -------------------------------------------------------------------------

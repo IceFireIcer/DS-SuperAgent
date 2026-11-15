@@ -95,6 +95,7 @@ export interface MainWorkCard {
   update?: MainWorkUpdate
   outcome?: MainWorkOutcome
   followUps?: MainWorkFollowUpView[]
+  control?: MainWorkControl
 }
 
 export interface MainWorkRequest {
@@ -226,6 +227,34 @@ export interface MainWorkTicketSnapshot {
   lifecycle: Work['ticket']['state']
   setupCode?: string
   report?: { id: string; result: string; evidence: string; artifacts: MainWorkOutcome['artifacts'] }
+  control?: MainWorkControl
+}
+
+export interface MainWorkControl {
+  workItemId: string
+  ticketId: string
+  permissions: { actorId: string; canStop: boolean; canResume: boolean; canRetry: boolean; canAnswer: boolean }
+  assignment?: { id: string; generation: string; sessionId: string; state: 'pending' | 'running' | 'stopping' | 'ended' }
+  attention?: {
+    id: string
+    version: number
+    status: 'waiting' | 'answered' | 'superseded'
+    question: string
+    options: string[]
+    freeText: true
+    assignmentId: string
+    sessionId: string
+  }
+  stop?: {
+    id: string
+    state: 'stopping' | 'stopped'
+    requestedAt: number
+    requestedBy: string
+    reason: string
+    pendingDeviceConfirmation: boolean
+    cancellationConfirmedAt?: number
+    resumedAt?: number
+  }
 }
 
 export interface WorkDelegationOptions {
@@ -979,7 +1008,8 @@ export class WorkDelegation {
     const status = latestFollowUp ? followUpCardStatus[latestFollowUp.status]
       : outcome?.status ?? (snapshotStatus === 'success' ? 'running' : snapshotStatus)
     return { brief: cardBrief, receipt, status,
-      ...(update ? { update } : {}), ...(outcome ? { outcome } : {}), ...followUps }
+      ...(update ? { update } : {}), ...(outcome ? { outcome } : {}), ...followUps,
+      ...(snapshot.control ? { control: { ...snapshot.control, workItemId: item.id } } : {}) }
   }
 
   private legacyItem(brief: MainWorkBrief): MainWorkItem {

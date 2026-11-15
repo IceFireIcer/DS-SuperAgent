@@ -22,6 +22,7 @@ export function applyProduct(ctx) {
     binding: null,
     messages: [],
     works: [],
+    activeTurn: null,
     error: null,
     mainDraft: '',
     messageBefore: null,
@@ -54,6 +55,7 @@ export function applyProduct(ctx) {
       if (!stopped) view.set(state => {
         return { ...state, binding, messages: mergeMessages(state.messages, page.messages),
           works: page.works ?? state.works,
+          activeTurn: page.activeTurn ?? null,
           messageBefore: state.messagesComplete ? null : state.messageBefore ?? page.cursor ?? null,
           messagesComplete: state.messagesComplete || page.cursor === undefined, error: null }
       })
@@ -186,12 +188,43 @@ export function applyProduct(ctx) {
     expired: t('Follow-up delivery expired') })[status] ?? status
   const receiptCopy = status => ({ routing: t('Router is routing'), accepted: t('Accepted by Router'), rejected: t('Not accepted') })[status] ?? status
   function MainWorkCard({ work }) {
+    const state = useView()
+    const [controlBusy, setControlBusy] = useState(null)
+    const [controlError, setControlError] = useState(null)
+    const control = work.control
+    const assignment = control?.assignment
+    const runControl = async endpoint => {
+      if (!state.binding || !control || !assignment) return
+      setControlBusy(endpoint)
+      setControlError(null)
+      const payload = { instanceId: state.binding.instanceId, commandId: crypto.randomUUID(),
+        workItemId: control.workItemId, ticketId: control.ticketId, expectedGeneration: assignment.generation }
+      if (endpoint === 'work-stop') payload.reason = t('Stopped from the Main work card.')
+      if (endpoint === 'work-retry') payload.reason = t('Retry requested from the Main work card.')
+      try {
+        await productCall(endpoint, payload)
+        await refreshMain(state.binding)
+      } catch (error) {
+        setControlError(error.message)
+        await refreshMain(state.binding)
+      } finally {
+        setControlBusy(null)
+      }
+    }
+    const stop = control?.stop
     return h('article', { className: 'bt-main-work', 'aria-label': t('Work item: {goal}', { goal: work.brief.goal }) },
       h('div', { className: 'bt-main-work-head' }, h('strong', null, work.brief.goal),
         h('span', { className: 'bt-main-work-status', role: 'status' }, statusCopy(work.status))),
       h('p', { className: 'bt-main-work-id' }, `${t('Work brief')} ${work.brief.id}`),
       h('p', { className: 'bt-main-work-id' }, `${t('Receipt')}: ${receiptCopy(work.receipt.status)}`),
       work.receipt.ticketId ? h('p', { className: 'bt-main-work-id' }, `${t('Ticket')} ${work.receipt.ticketId}`) : null,
+      assignment ? h('p', { className: 'bt-main-work-id' }, `${t('Execution version')}: ${assignment.generation}`) : null,
+      stop ? h('p', { className: 'bt-main-work-detail' }, stop.state === 'stopping'
+        ? stop.pendingDeviceConfirmation ? t('Stopping · waiting for device cancellation confirmation.')
+          : t('Stopping · waiting for the current execution to become quiet.')
+        : stop.cancellationConfirmedAt ? t('Stopped · execution cancellation confirmed.')
+          : t('Stopped · cancellation confirmation is unavailable.')) : null,
+      controlError ? h('p', { className: 'bt-main-error', role: 'alert' }, controlError) : null,
       work.receipt.reason ? h('p', { className: 'bt-main-error' }, `${t('Work receipt')}: ${work.receipt.reason}`) : null,
       work.receipt.status === 'routing' ? h('p', { className: 'bt-main-work-detail' }, `${t('Next step')}: ${work.receipt.nextStep}`) : null,
       h('p', { className: 'bt-main-work-detail' }, `${t('Constraints')}: ${work.brief.constraints}`),
@@ -209,7 +242,17 @@ export function applyProduct(ctx) {
         h('p', null, work.outcome.summary), h('p', { className: 'bt-main-work-detail' }, `${t('Verification')}: ${work.outcome.evidence}`),
         h('p', { className: 'bt-main-work-detail' }, `${t('Next step')}: ${work.outcome.nextStep}`),
         work.outcome.artifacts.map(artifact => h('p', { key: artifact.path, className: 'bt-main-work-artifact' },
-          h('code', null, artifact.path), ' ', h('span', null, `${artifact.bytes} ${t('bytes')} · ${artifact.sha256.slice(0, 12)}`)))) : null)
+          h('code', null, artifact.path), ' ', h('span', null, `${artifact.bytes} ${t('bytes')} · ${artifact.sha256.slice(0, 12)}`)))) : null,
+      control ? h('div', { className: 'bt-main-work-controls' },
+        assignment && control.permissions.canStop ? h('button', { type: 'button', className: 'bt-soft',
+          disabled: Boolean(controlBusy), onClick: () => runControl('work-stop') },
+        controlBusy === 'work-stop' ? t('Stopping…') : t('Stop work')) : null,
+        assignment && control.permissions.canResume ? h('button', { type: 'button', className: 'bt-soft',
+          disabled: Boolean(controlBusy), onClick: () => runControl('work-resume') },
+        controlBusy === 'work-resume' ? t('Resuming…') : t('Resume work')) : null,
+        assignment && control.permissions.canRetry ? h('button', { type: 'button', className: 'bt-soft',
+          disabled: Boolean(controlBusy), onClick: () => runControl('work-retry') },
+        controlBusy === 'work-retry' ? t('Retrying…') : t('Retry work')) : null) : null)
   }
 
   function MainConversation() {
@@ -246,7 +289,19 @@ export function applyProduct(ctx) {
       } catch (error) { setSendError(error.message); await refreshMain(state.binding); return false }
       finally { setSending(false) }
     }
-    const busy = sending || state.messages.some(message => message.status === 'running' || message.status === 'queued')
+    const busy = sending || Boolean(state.activeTurn) || state.messages.some(message => ['queued', 'running', 'stopping'].includes(message.status))
+    const stopping = state.activeTurn?.status === 'stopping'
+    const stop = async () => {
+      if (!state.binding || !state.activeTurn) return
+      const commandId = crypto.randomUUID()
+      try {
+        setSendError(null)
+        await productCall('stop-main', { instanceId: state.binding.instanceId, commandId, messageId: state.activeTurn.messageId })
+        await refreshMain(state.binding)
+      } catch (error) {
+        setSendError(error.message)
+      }
+    }
     return h('section', { className: 'bt-main-conversation', 'aria-label': 'Main' },
       h('header', { className: 'bt-main-header' }, h(BrandMark, { size: 28 }), h('span', null, 'Main')),
       h('div', { className: 'bt-main-history', ref: scroll, onScroll: () => { const node = scroll.current; follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80 } },
@@ -262,9 +317,10 @@ export function applyProduct(ctx) {
             h(ChatRows, { items: [{ kind: message.role === 'main' ? 'bot' : 'user', text: message.text, time: message.createdAt }], sessionId: 'main', roster: emptyRoster, actions: {} }),
             message.status === 'failed' ? h('p', { className: 'bt-main-error', role: 'status' }, t('Main could not finish this reply. Your message is saved.')) : null)),
           state.works.map(work => h(MainWorkCard, { key: work.brief.workItemId ?? work.brief.id, work })),
-          busy ? h('p', { className: 'bt-main-status', role: 'status' }, t('Main is replying…')) : null,
+          stopping ? h('p', { className: 'bt-main-status', role: 'status' }, t('Stopping this Main reply…')) : busy
+            ? h('p', { className: 'bt-main-status', role: 'status' }, t('Main is replying…')) : null,
           h('div', { ref: bottom }))),
-      h(MainComposer, { onSend: send, busy: sending || !state.binding, error: sendError ?? state.error,
+      h(MainComposer, { onSend: send, onStop: state.activeTurn ? stop : undefined, busy, stopping, error: sendError ?? state.error,
         value: state.mainDraft, onValueChange: mainDraft => view.set(current => ({ ...current, mainDraft })) }))
   }
 
@@ -453,7 +509,7 @@ const PRODUCT_CSS = `
 .bt-main-composer{width:min(800px,100% - 32px);margin:16px auto 20px;padding:12px;border:1px solid var(--bt-line);border-radius:16px;background:var(--bt-card)}
 .bt-main-composer textarea{display:block;width:100%;resize:vertical;min-height:80px;max-height:200px;padding:4px;border:0;background:transparent;color:var(--bt-ink);font:inherit;font-size:14px;line-height:22px;box-sizing:border-box}
 .bt-main-composer textarea:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px;border-radius:4px}
-.bt-main-send{display:flex;justify-content:flex-end;margin-top:8px}
+.bt-main-send{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
 .bt-main-send button{height:36px;min-width:64px}
 .bt-main-label{display:block;margin:0 0 6px;font-size:12px;color:var(--bt-ink-2)}
 .bt-main-empty{margin:48px 0;color:var(--bt-ink-2);font-size:14px;line-height:22px;text-align:center}
@@ -468,6 +524,8 @@ const PRODUCT_CSS = `
 .bt-main-work-followup{padding:6px 0;color:var(--bt-ink);font-size:12px;line-height:16px;overflow-wrap:anywhere}
 .bt-main-work-followup+.bt-main-work-followup{border-top:.5px solid var(--bt-line-2)}
 .bt-main-work-followup p{margin:0}
+.bt-main-work-controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;padding-top:8px;border-top:.5px solid var(--bt-line-2)}
+.bt-main-work-controls button{height:32px}
 .bt-main-work-result{margin-top:8px;padding-top:8px;border-top:.5px solid var(--bt-line-2);color:var(--bt-ink);font-size:13px;line-height:18px;overflow-wrap:anywhere}
 .bt-main-work-result p{margin:0 0 6px}.bt-main-work-result p:last-child{margin-bottom:0}
 .bt-main-work-artifact code{font:inherit;color:var(--bt-ink)}

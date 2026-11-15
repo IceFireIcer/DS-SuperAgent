@@ -38,7 +38,7 @@ import { compareWorkCopy, WorkCopyUnsupported, workCopyGaps,
   uniqueBlockers, type HandoffCopyView, type WorkCopyBlocker, type WorkCopyComparison, type WorkCopyFile, type WorkCopySnapshot } from './work-copy.js'
 import type { ActivationGate } from './activation.js'
 import { MainConversation, type MainAddress, type MainSend } from './main-conversation.js'
-import { WorkDelegation, type MainWorkCard, type MainWorkItem } from './work-delegation.js'
+import { WorkDelegation, type MainWorkCard, type MainWorkControl, type MainWorkItem } from './work-delegation.js'
 import { WorkObservations } from './work-observations.js'
 
 interface StoredPolicy { revision: number; configuration: Omit<IntakePolicy, 'assess'>; origin: 'bootstrap' | 'manual' | 'sync'; sourceRevision?: string; updatedAt: number }
@@ -296,9 +296,37 @@ export class Engine {
           if (status !== 'pending' && status !== 'running' && status !== 'ready' && status !== 'waiting-human' && status !== 'stopping' && status !== 'stopped') {
             throw new CoreError('INCOMPLETE_STATE', 'The work state is not recognized.')
           }
+          const assignment = conversation.assignments[0]
+          const attention = conversation.attention
+          const stop = conversation.stop
+          const actorAllowed = this.source.allowedActorIds.includes(this.source.actorId)
+          const control: MainWorkControl = {
+            workItemId: '',
+            ticketId,
+            permissions: {
+              actorId: this.source.actorId,
+              canStop: actorAllowed && !['ready', 'stopped', 'stopping'].includes(status),
+              canResume: actorAllowed && stop?.state === 'stopped' && !stop.pendingDeviceConfirmation
+                && stop.cancellationConfirmedAt !== undefined && attention?.status !== 'waiting',
+              canRetry: actorAllowed && (conversation.reason === 'worker-idle'
+                || conversation.reason === 'recovery-blocked' || conversation.reason === 'recovery-exhausted'),
+              canAnswer: actorAllowed && attention?.status === 'waiting' && status === 'waiting-human',
+            },
+            ...(assignment ? { assignment: { id: assignment.id, generation: assignment.generation,
+              sessionId: assignment.sessionId, state: assignment.state } } : {}),
+            ...(attention ? { attention: { id: attention.id, version: attention.sequence, status: attention.status,
+              question: attention.question, options: [...attention.options], freeText: true as const,
+              assignmentId: attention.assignmentId, sessionId: attention.sessionId } } : {}),
+            ...(stop ? { stop: { id: stop.id, state: stop.state, requestedAt: stop.requestedAt,
+              requestedBy: stop.requestedBy, reason: stop.reason,
+              pendingDeviceConfirmation: stop.pendingDeviceConfirmation === true,
+              ...(stop.cancellationConfirmedAt === undefined ? {} : { cancellationConfirmedAt: stop.cancellationConfirmedAt }),
+              ...(stop.resumedAt === undefined ? {} : { resumedAt: stop.resumedAt }) } } : {}),
+          }
           return { ticketId, status, reason: conversation.reason, lifecycle: conversation.lifecycle,
             ...(conversation.setup?.state === 'failed' ? { setupCode: conversation.setup.code ?? 'SETUP_FAILED' } : {}),
-            ...(report ? { report: { id: report.id, result: report.result, evidence: report.evidence, artifacts: report.artifacts } } : {}) }
+            ...(report ? { report: { id: report.id, result: report.result, evidence: report.evidence, artifacts: report.artifacts } } : {}),
+            control }
         },
         routerProfile: async () => {
           const config = await this.getRoleConfig()
@@ -1269,6 +1297,7 @@ export class Engine {
     return binding
   }
   sendMainMessage(request: MainSend) { return this.main.send(request) }
+  stopMainTurn(request: MainAddress & { commandId: string; messageId: string }) { return this.main.stop(request) }
   async getMainConversation(request: MainAddress & { limit?: number; after?: number }) {
     const page = await this.main.page(request)
     return { ...page, works: this.workDelegation ? await this.workDelegation.list(page.mainId) : [] as MainWorkCard[] }
@@ -1943,6 +1972,56 @@ export class Engine {
       await tx.insert('work-command', commandKey, { fingerprint, attentionId: result.attention.id, inputId: result.input.id })
       return result
     })
+  }
+
+  private async requireMainWorkControl(request: { instanceId: string; workItemId: string; ticketId: string; expectedGeneration: string }) {
+    if (request.instanceId !== this.instanceId || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The work control is outside the authorized Main Instance.')
+    }
+    if (!this.execution) throw new CoreError('WORKER_NOT_ENABLED', 'Work controls require a configured native runtime.')
+    identifier(request.workItemId, 'workItemId')
+    identifier(request.ticketId, 'ticketId')
+    identifier(request.expectedGeneration, 'expectedGeneration')
+    const binding = await this.main.open({ instanceId: request.instanceId })
+    await this.storage.transaction(this.instanceId, async tx => {
+      const item = await tx.get<MainWorkItem>('work-item', request.workItemId)
+      const brief = item ? await tx.get<import('./work-delegation.js').MainWorkBrief>('work-brief', item.workBriefId) : undefined
+      const receipt = await tx.get<import('./work-delegation.js').MainWorkReceipt>('work-receipt', request.workItemId)
+      const ticketIndex = await tx.get<{ ticketId: string }>('work-item-ticket', request.workItemId)
+      if (!item || !brief || brief.mainId !== binding.mainId || brief.instanceId !== this.instanceId
+        || receipt?.status !== 'accepted' || (receipt.ticketId ?? ticketIndex?.ticketId) !== request.ticketId) {
+        throw new CoreError('NOT_FOUND', 'The named work card does not match this Main Instance.')
+      }
+    })
+    const conversation = await this.execution.conversation(request.ticketId)
+    const current = conversation.assignments[0]
+    if (!current || current.generation !== request.expectedGeneration) {
+      throw new CoreError('WORK_VERSION_STALE', 'The work card changed before this command; refresh before trying again.')
+    }
+  }
+
+  async stopMainWork(command: { instanceId: string; commandId: string; workItemId: string; ticketId: string; expectedGeneration: string; reason: string }) {
+    if (!command || Object.keys(command).some(key => !['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'reason'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Stopping work accepts only its exact card target and reason.')
+    }
+    await this.requireMainWorkControl(command)
+    return this.stopTicket({ commandId: command.commandId, ticketId: command.ticketId, reason: command.reason })
+  }
+
+  async resumeMainWork(command: { instanceId: string; commandId: string; workItemId: string; ticketId: string; expectedGeneration: string }) {
+    if (!command || Object.keys(command).some(key => !['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Resuming work accepts only its exact card target.')
+    }
+    await this.requireMainWorkControl(command)
+    return this.resumeTicket({ commandId: command.commandId, ticketId: command.ticketId })
+  }
+
+  async retryMainWork(command: { instanceId: string; commandId: string; workItemId: string; ticketId: string; expectedGeneration: string; reason: string }) {
+    if (!command || Object.keys(command).some(key => !['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'reason'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Retrying work accepts only its exact card target and reason.')
+    }
+    await this.requireMainWorkControl(command)
+    return this.retryTicket({ commandId: command.commandId, ticketId: command.ticketId, reason: command.reason })
   }
 
   async stopTicket(command: { commandId: string; ticketId: string; reason: string }) {

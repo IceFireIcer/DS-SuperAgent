@@ -8,12 +8,26 @@ import type { MainWorkCard, MainWorkIntent, MainWorkNotification, WorkDelegation
 
 export interface MainBinding { instanceId: string; mainId: string; mainSessionId: string; routerSessionId: string }
 interface MainState extends MainBinding { sequence: number; activeCommand?: string }
-export interface MainMessage { id: string; sequence: number; role: 'user' | 'main'; text: string; createdAt: number; status: 'queued' | 'running' | 'completed' | 'failed'; error?: string }
+export type MainMessageStatus = 'queued' | 'running' | 'stopping' | 'stopped' | 'completed' | 'failed'
+export interface MainMessage { id: string; sequence: number; role: 'user' | 'main'; text: string; createdAt: number; status: MainMessageStatus; error?: string }
+export interface MainTurnStop {
+  id: string
+  version: 1
+  instanceId: string
+  commandId: string
+  commandKey: string
+  messageId: string
+  status: 'stopping' | 'stopped'
+  confirmation?: 'runtime-cancelled' | 'turn-ended' | 'host-restart'
+  requestedAt: number
+  confirmedAt?: number
+}
+export interface MainTurnView { messageId: string; status: 'running' | 'stopping' | 'stopped'; stop?: MainTurnStop }
 interface MainCommand { fingerprint: string; messageId: string; userSequence: number; status: MainMessage['status']; replySequence?: number }
 interface MainUpdateCommand { attempt: number; state: 'running' | 'failed' | 'completed' | 'discarded'; messageId: string; sequence?: number }
 export interface MainAddress { instanceId: string }
 export interface MainSend extends MainAddress { commandId: string; text: string }
-export interface MainPage extends MainBinding { messages: MainMessage[]; cursor?: number; works?: MainWorkCard[] }
+export interface MainPage extends MainBinding { messages: MainMessage[]; cursor?: number; works?: MainWorkCard[]; activeTurn?: MainTurnView }
 interface MainEvent { type: string; data: { id?: string; message?: { content?: { type: string; text?: string }[] }; reason?: { kind?: string } } }
 const messageKey = (sequence: number) => String(sequence).padStart(16, '0')
 
@@ -22,6 +36,7 @@ export class MainConversation {
   private tail: Promise<unknown> = Promise.resolve()
   private closed = false
   private pendingTurns = 0
+  private readonly turnControllers = new Map<string, AbortController>()
   constructor(private readonly storage: Storage, private readonly instanceId: string, private readonly source: DesktopSource,
     private readonly sessions?: NativeSessions,
     private readonly prepare?: (sessionId: string) => Promise<{ profile: RoleProfile; revision: number }>,
@@ -60,9 +75,12 @@ export class MainConversation {
     const state = await commandTransaction(this.storage, this.instanceId, tx => this.state(tx))
     if (state.activeCommand) await this.reconcile(state, state.activeCommand)
     return commandTransaction(this.storage, this.instanceId, async tx => {
-      const { sequence: _sequence, activeCommand: _active, ...binding } = await this.state(tx)
+      const current = await this.state(tx)
+      const { sequence: _sequence, activeCommand: _active, ...binding } = current
       const page = await tx.scan<MainMessage>('main-message', { limit, ...(request.after === undefined ? {} : { after: messageKey(request.after) }) })
-      return { ...binding, messages: page.items.map(item => item.value), ...(page.cursor ? { cursor: Number(page.cursor) } : {}) }
+      const activeTurn = current.activeCommand ? await this.activeTurnIn(tx, current.activeCommand) : undefined
+      return { ...binding, messages: page.items.map(item => item.value), ...(page.cursor ? { cursor: Number(page.cursor) } : {}),
+        ...(activeTurn ? { activeTurn } : {}) }
     })
   }
 
@@ -86,7 +104,9 @@ export class MainConversation {
         const message = await tx.get<MainMessage>('main-message', messageKey(sequence))
         if (message) messages.push(message)
       }
-      return { ...binding, messages, ...(start > 1 ? { cursor: start } : {}) }
+      const activeTurn = current.activeCommand ? await this.activeTurnIn(tx, current.activeCommand) : undefined
+      return { ...binding, messages, ...(start > 1 ? { cursor: start } : {}),
+        ...(activeTurn ? { activeTurn } : {}) }
     })
   }
 
@@ -108,12 +128,67 @@ export class MainConversation {
       const messageId = `main-input-${randomUUID()}`
       await tx.insert<MainMessage>('main-message', messageKey(sequence), { id: messageId, sequence, role: 'user', text: request.text, createdAt: Date.now(), status: 'queued' })
       await tx.insert<MainCommand>('main-command', key, { fingerprint, messageId, userSequence: sequence, status: 'queued' })
+      await tx.insert('main-message-command', messageId, { commandKey: key })
       await tx.replace('main-state', 'main', { ...state, sequence })
     })
     this.pendingTurns++
     const turn = this.tail.then(() => this.run(binding, key, request.text)).finally(() => { this.pendingTurns-- })
     this.tail = turn.catch(() => {})
     return turn
+  }
+
+  async stop(request: MainAddress & { commandId: string; messageId: string }) {
+    this.authorize(request)
+    identifier(request.commandId, 'commandId')
+    identifier(request.messageId, 'messageId')
+    const stopCommandKey = createHash('sha256').update(canonicalJson([
+      'main-turn-stop-v1', this.source.sourceInstanceId, this.source.actorId, request.commandId,
+    ])).digest('hex')
+    const stop = await commandTransaction(this.storage, this.instanceId, async tx => {
+      const prior = await tx.get<{ fingerprint: string; messageId: string }>('main-turn-stop-command', stopCommandKey)
+      if (prior) {
+        if (prior.messageId !== request.messageId) {
+          throw new CoreError('IDENTITY_CONFLICT', 'The Main stop command was reused for a different turn.')
+        }
+        const stored = await tx.get<MainTurnStop>('main-turn-stop', prior.messageId)
+        if (!stored) throw new CoreError('INCOMPLETE_STATE', 'The Main stop record is missing.')
+        return stored
+      }
+      const index = await tx.get<{ commandKey: string }>('main-message-command', request.messageId)
+      const state = await this.state(tx)
+      if (!index || state.activeCommand !== index.commandKey) {
+        throw new CoreError('MAIN_NOT_RUNNING', 'Only the current Main turn can be stopped.')
+      }
+      const command = await tx.get<MainCommand>('main-command', index.commandKey)
+      if (!command || !['queued', 'running', 'stopping'].includes(command.status)) {
+        throw new CoreError('MAIN_NOT_RUNNING', 'The Main turn is no longer running.')
+      }
+      const existing = await tx.get<MainTurnStop>('main-turn-stop', request.messageId)
+      const record: MainTurnStop = existing ?? {
+        id: `main-turn-stop:${request.messageId}`,
+        version: 1,
+        instanceId: this.instanceId,
+        commandId: request.commandId,
+        commandKey: index.commandKey,
+        messageId: request.messageId,
+        status: 'stopping',
+        requestedAt: Date.now(),
+      }
+      if (!existing) await tx.insert('main-turn-stop', request.messageId, record)
+      await this.updateCommandIn(tx, index.commandKey, { ...command, status: 'stopping' })
+      await tx.insert('main-turn-stop-command', stopCommandKey, {
+        fingerprint: createHash('sha256').update(canonicalJson([this.instanceId, request.messageId])).digest('hex'),
+        messageId: request.messageId,
+      })
+      return record
+    })
+    const controller = this.turnControllers.get(stop.commandKey)
+    if (controller) controller.abort()
+    else {
+      await this.confirmStopped(stop.commandKey, stop.messageId, 'host-restart')
+      return commandTransaction(this.storage, this.instanceId, tx => tx.get<MainTurnStop>('main-turn-stop', stop.messageId))
+    }
+    return stop
   }
 
   private tools(binding: MainBinding, command: MainCommand, originalUserText: string, configurationRevision: number): NativeTool[] {
@@ -201,18 +276,33 @@ export class MainConversation {
       }
       if (command.status === 'failed') return { ...binding, messageId: command.messageId, status: command.status }
       await this.updateCommand(key, 'running')
+      const controller = new AbortController()
+      this.turnControllers.set(key, controller)
+      const stopping = await commandTransaction(this.storage, this.instanceId,
+        tx => tx.get<MainTurnStop>('main-turn-stop', command.messageId))
+      if (stopping) controller.abort()
       const prepared = await this.prepare?.(binding.mainSessionId)
       const result = await this.sessions!.run({ role: 'main', sessionId: binding.mainSessionId, text,
         tools: this.tools(binding, command, text, prepared?.revision ?? 1), messageId: command.messageId,
+        signal: controller.signal,
         ...(prepared ? { profile: prepared.profile } : {}) })
+      if (await this.confirmStopped(key, command.messageId, 'runtime-cancelled')) {
+        return { ...binding, messageId: command.messageId, status: 'stopped' as const }
+      }
       const answer = this.reply(result.events as MainEvent[], command.messageId)
       if (!answer) throw new CoreError('MAIN_TURN_FAILED', 'Main did not produce a completed visible reply.')
       await this.publish(key, answer)
       return { ...binding, messageId: command.messageId, status: 'completed' as const }
     } catch (error) {
+      const current = await commandTransaction(this.storage, this.instanceId, tx => tx.get<MainCommand>('main-command', key))
+      if (current && await this.confirmStopped(key, current.messageId, 'runtime-cancelled')) {
+        return { ...binding, messageId: current.messageId, status: 'stopped' as const }
+      }
       const code = error instanceof CoreError ? error.code : 'MAIN_TURN_FAILED'
       await this.updateCommand(key, 'failed', code)
       throw new CoreError(code, 'Main could not finish this reply. Your message remains in the conversation.')
+    } finally {
+      this.turnControllers.delete(key)
     }
   }
 
@@ -299,6 +389,22 @@ export class MainConversation {
   private async reconcile(binding: MainBinding, key: string) {
     const command = await commandTransaction(this.storage, this.instanceId, tx => tx.get<MainCommand>('main-command', key))
     if (!command || command.status === 'completed') return command?.status === 'completed'
+    const stop = await commandTransaction(this.storage, this.instanceId, tx => tx.get<MainTurnStop>('main-turn-stop', command.messageId))
+    if (stop) {
+      if (stop.status === 'stopped') {
+        await this.confirmStopped(key, command.messageId, 'turn-ended')
+        return true
+      }
+      if (!this.turnControllers.has(key)) {
+        await this.confirmStopped(key, command.messageId, 'host-restart')
+        return true
+      }
+      if (!this.sessions || !(await this.sessions.hasMessage(binding.mainSessionId, command.messageId)).found) return false
+      const turn = await this.readTurn(binding, command.messageId)
+      if (!turn.ended) return false
+      await this.confirmStopped(key, command.messageId, 'turn-ended')
+      return true
+    }
     if (!this.sessions || !(await this.sessions.hasMessage(binding.mainSessionId, command.messageId)).found) return false
     const answer = await this.readReply(binding, command.messageId)
     if (answer) { await this.publish(key, answer); return true }
@@ -309,7 +415,7 @@ export class MainConversation {
     return (await this.readTurn(binding, messageId)).answer
   }
 
-  private async readTurn(binding: MainBinding, messageId: string): Promise<{ answer?: string; ended: boolean }> {
+  private async readTurn(binding: MainBinding, messageId: string): Promise<{ answer?: string; ended: boolean; terminalReason?: string }> {
     if (!this.sessions) return { ended: false }
     const events: MainEvent[] = []
     let after: number | undefined
@@ -317,9 +423,12 @@ export class MainConversation {
       const page = await this.sessions.readSession(binding.mainSessionId, { limit: 100, ...(after === undefined ? {} : { after }) })
       events.push(...page.events as unknown as MainEvent[])
       const answer = this.reply(events, messageId)
-      if (answer) return { answer, ended: true }
+      if (answer) return { answer, ended: true, terminalReason: 'completed' }
       const start = events.findIndex(event => event.type === 'user/message' && event.data.id === messageId)
-      if (start >= 0 && events.slice(start + 1).some(event => event.type === 'turn/end')) return { ended: true }
+      if (start >= 0) {
+        const end = events.slice(start + 1).find(event => event.type === 'turn/end')
+        if (end) return { ended: true, ...(end.data.reason?.kind ? { terminalReason: end.data.reason.kind } : {}) }
+      }
       if (page.cursor === undefined) return { ended: false }
       after = page.cursor
     }
@@ -329,7 +438,7 @@ export class MainConversation {
   private publish(key: string, answer: string) {
     return commandTransaction(this.storage, this.instanceId, async tx => {
       const prior = await tx.get<MainCommand>('main-command', key)
-      if (!prior || prior.status === 'completed') return
+      if (!prior || prior.status === 'completed' || prior.status === 'stopped' || prior.status === 'stopping') return
       const state = await this.state(tx)
       const sequence = state.sequence + 1
       await tx.insert<MainMessage>('main-message', messageKey(sequence), { id: `reply:${prior.messageId}`, sequence, role: 'main', text: answer, createdAt: Date.now(), status: 'completed' })
@@ -344,7 +453,7 @@ export class MainConversation {
     if (message) await tx.replace('main-message', messageKey(command.userSequence), { ...message, status: command.status, ...(error ? { error } : {}) })
     const state = await this.state(tx)
     if (command.status === 'running') await tx.replace('main-state', 'main', { ...state, activeCommand: key })
-    else if (state.activeCommand === key && command.status === 'completed') {
+    else if (state.activeCommand === key && (command.status === 'completed' || command.status === 'stopped')) {
       const { activeCommand: _active, ...settled } = state
       await tx.replace('main-state', 'main', settled)
     }
@@ -357,5 +466,39 @@ export class MainConversation {
     })
   }
 
-  async close() { this.closed = true; await this.tail }
+  private async activeTurnIn(tx: AsyncTx, key: string): Promise<MainTurnView | undefined> {
+    const command = await tx.get<MainCommand>('main-command', key)
+    if (!command) return undefined
+    const stop = await tx.get<MainTurnStop>('main-turn-stop', command.messageId)
+    return { messageId: command.messageId,
+      status: stop?.status ?? (command.status === 'stopped' ? 'stopped' : 'running'),
+      ...(stop ? { stop } : {}) }
+  }
+
+  private async confirmStopped(key: string, messageId: string, confirmation: NonNullable<MainTurnStop['confirmation']>) {
+    return commandTransaction(this.storage, this.instanceId, async tx => {
+      const command = await tx.get<MainCommand>('main-command', key)
+      const stop = await tx.get<MainTurnStop>('main-turn-stop', messageId)
+      if (!command || !stop) return false
+      const finished: MainTurnStop = { ...stop, status: 'stopped', confirmation: stop.confirmation ?? confirmation,
+        confirmedAt: stop.confirmedAt ?? Date.now() }
+      await tx.replace('main-turn-stop', messageId, finished)
+      if (command.status !== 'completed' && command.status !== 'failed') {
+        await this.updateCommandIn(tx, key, { ...command, status: 'stopped' })
+      } else {
+        const state = await this.state(tx)
+        if (state.activeCommand === key) {
+          const { activeCommand: _active, ...settled } = state
+          await tx.replace('main-state', 'main', settled)
+        }
+      }
+      return true
+    })
+  }
+
+  async close() {
+    this.closed = true
+    for (const controller of this.turnControllers.values()) controller.abort()
+    await this.tail
+  }
 }

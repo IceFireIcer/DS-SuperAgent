@@ -44,6 +44,21 @@ var NAMESPACE = "ds-bot";
 var ZH = {
   "Message Main": "与 Main 对话",
   "Sending…": "正在发送…",
+  "Stop reply": "停止本轮回复",
+  "Stopping…": "正在停止…",
+  "Resuming…": "正在恢复…",
+  "Retrying…": "正在重试…",
+  "Stopping this Main reply…": "正在停止本轮 Main 回复…",
+  "Execution version": "执行版本",
+  "Stop work": "停止工作",
+  "Resume work": "恢复工作",
+  "Retry work": "重试工作",
+  "Stopped from the Main work card.": "从 Main 工作卡停止。",
+  "Retry requested from the Main work card.": "从 Main 工作卡请求重试。",
+  "Stopping · waiting for device cancellation confirmation.": "正在停止 · 等待设备确认取消。",
+  "Stopping · waiting for the current execution to become quiet.": "正在停止 · 等待当前执行静止。",
+  "Stopped · execution cancellation confirmed.": "已停止 · 已确认执行取消。",
+  "Stopped · cancellation confirmation is unavailable.": "已停止 · 无法确认取消范围已静止。",
   "What would you like to discuss?": "想聊些什么？",
   "Main is replying…": "Main 正在回复…",
   "Main is unavailable.": "Main 暂不可用。",
@@ -10757,7 +10772,7 @@ function NewMessagePills({ sessionId, useSessions, useUi, useTurnClock }) {
 // src/client/composer.js
 var import_react21 = require("react");
 var import_react_dom5 = require("react-dom");
-function MainComposer({ onSend, busy, error, value, onValueChange }) {
+function MainComposer({ onSend, onStop, busy, stopping, error, value, onValueChange }) {
   const [draft, setDraft] = (0, import_react21.useState)("");
   const text = value ?? draft;
   const setText = (next) => onValueChange ? onValueChange(next) : setDraft(next);
@@ -10785,7 +10800,16 @@ function MainComposer({ onSend, busy, error, value, onValueChange }) {
         }
       }
     }),
-    (0, import_react21.createElement)("div", { className: "bt-main-send" }, (0, import_react21.createElement)("button", { className: "bt-soft", type: "submit", disabled: busy || !text.trim() }, busy ? t("Sending…") : t("Send")))
+    (0, import_react21.createElement)(
+      "div",
+      { className: "bt-main-send" },
+      busy && onStop ? (0, import_react21.createElement)(
+        "button",
+        { className: "bt-soft", type: "button", disabled: stopping, onClick: onStop },
+        stopping ? t("Stopping…") : t("Stop reply")
+      ) : null,
+      (0, import_react21.createElement)("button", { className: "bt-soft", type: "submit", disabled: busy || !text.trim() }, busy ? t("Sending…") : t("Send"))
+    )
   );
 }
 var speechApi = () => window.SpeechRecognition ?? window.webkitSpeechRecognition;
@@ -20740,6 +20764,7 @@ function applyProduct(ctx) {
     binding: null,
     messages: [],
     works: [],
+    activeTurn: null,
     error: null,
     mainDraft: "",
     messageBefore: null,
@@ -20774,6 +20799,7 @@ function applyProduct(ctx) {
           binding,
           messages: mergeMessages(state.messages, page.messages),
           works: page.works ?? state.works,
+          activeTurn: page.activeTurn ?? null,
           messageBefore: state.messagesComplete ? null : state.messageBefore ?? page.cursor ?? null,
           messagesComplete: state.messagesComplete || page.cursor === void 0,
           error: null
@@ -20953,6 +20979,35 @@ function applyProduct(ctx) {
   })[status] ?? status;
   const receiptCopy = (status) => ({ routing: t("Router is routing"), accepted: t("Accepted by Router"), rejected: t("Not accepted") })[status] ?? status;
   function MainWorkCard({ work }) {
+    const state = useView();
+    const [controlBusy, setControlBusy] = (0, import_react53.useState)(null);
+    const [controlError, setControlError] = (0, import_react53.useState)(null);
+    const control = work.control;
+    const assignment = control?.assignment;
+    const runControl = async (endpoint) => {
+      if (!state.binding || !control || !assignment) return;
+      setControlBusy(endpoint);
+      setControlError(null);
+      const payload = {
+        instanceId: state.binding.instanceId,
+        commandId: crypto.randomUUID(),
+        workItemId: control.workItemId,
+        ticketId: control.ticketId,
+        expectedGeneration: assignment.generation
+      };
+      if (endpoint === "work-stop") payload.reason = t("Stopped from the Main work card.");
+      if (endpoint === "work-retry") payload.reason = t("Retry requested from the Main work card.");
+      try {
+        await productCall(endpoint, payload);
+        await refreshMain(state.binding);
+      } catch (error) {
+        setControlError(error.message);
+        await refreshMain(state.binding);
+      } finally {
+        setControlBusy(null);
+      }
+    };
+    const stop = control?.stop;
     return (0, import_react53.createElement)(
       "article",
       { className: "bt-main-work", "aria-label": t("Work item: {goal}", { goal: work.brief.goal }) },
@@ -20965,6 +21020,9 @@ function applyProduct(ctx) {
       (0, import_react53.createElement)("p", { className: "bt-main-work-id" }, `${t("Work brief")} ${work.brief.id}`),
       (0, import_react53.createElement)("p", { className: "bt-main-work-id" }, `${t("Receipt")}: ${receiptCopy(work.receipt.status)}`),
       work.receipt.ticketId ? (0, import_react53.createElement)("p", { className: "bt-main-work-id" }, `${t("Ticket")} ${work.receipt.ticketId}`) : null,
+      assignment ? (0, import_react53.createElement)("p", { className: "bt-main-work-id" }, `${t("Execution version")}: ${assignment.generation}`) : null,
+      stop ? (0, import_react53.createElement)("p", { className: "bt-main-work-detail" }, stop.state === "stopping" ? stop.pendingDeviceConfirmation ? t("Stopping · waiting for device cancellation confirmation.") : t("Stopping · waiting for the current execution to become quiet.") : stop.cancellationConfirmedAt ? t("Stopped · execution cancellation confirmed.") : t("Stopped · cancellation confirmation is unavailable.")) : null,
+      controlError ? (0, import_react53.createElement)("p", { className: "bt-main-error", role: "alert" }, controlError) : null,
       work.receipt.reason ? (0, import_react53.createElement)("p", { className: "bt-main-error" }, `${t("Work receipt")}: ${work.receipt.reason}`) : null,
       work.receipt.status === "routing" ? (0, import_react53.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${work.receipt.nextStep}`) : null,
       (0, import_react53.createElement)("p", { className: "bt-main-work-detail" }, `${t("Constraints")}: ${work.brief.constraints}`),
@@ -20998,6 +21056,40 @@ function applyProduct(ctx) {
           " ",
           (0, import_react53.createElement)("span", null, `${artifact.bytes} ${t("bytes")} · ${artifact.sha256.slice(0, 12)}`)
         ))
+      ) : null,
+      control ? (0, import_react53.createElement)(
+        "div",
+        { className: "bt-main-work-controls" },
+        assignment && control.permissions.canStop ? (0, import_react53.createElement)(
+          "button",
+          {
+            type: "button",
+            className: "bt-soft",
+            disabled: Boolean(controlBusy),
+            onClick: () => runControl("work-stop")
+          },
+          controlBusy === "work-stop" ? t("Stopping…") : t("Stop work")
+        ) : null,
+        assignment && control.permissions.canResume ? (0, import_react53.createElement)(
+          "button",
+          {
+            type: "button",
+            className: "bt-soft",
+            disabled: Boolean(controlBusy),
+            onClick: () => runControl("work-resume")
+          },
+          controlBusy === "work-resume" ? t("Resuming…") : t("Resume work")
+        ) : null,
+        assignment && control.permissions.canRetry ? (0, import_react53.createElement)(
+          "button",
+          {
+            type: "button",
+            className: "bt-soft",
+            disabled: Boolean(controlBusy),
+            onClick: () => runControl("work-retry")
+          },
+          controlBusy === "work-retry" ? t("Retrying…") : t("Retry work")
+        ) : null
       ) : null
     );
   }
@@ -21053,7 +21145,19 @@ function applyProduct(ctx) {
         setSending(false);
       }
     };
-    const busy = sending || state.messages.some((message) => message.status === "running" || message.status === "queued");
+    const busy = sending || Boolean(state.activeTurn) || state.messages.some((message) => ["queued", "running", "stopping"].includes(message.status));
+    const stopping = state.activeTurn?.status === "stopping";
+    const stop = async () => {
+      if (!state.binding || !state.activeTurn) return;
+      const commandId = crypto.randomUUID();
+      try {
+        setSendError(null);
+        await productCall("stop-main", { instanceId: state.binding.instanceId, commandId, messageId: state.activeTurn.messageId });
+        await refreshMain(state.binding);
+      } catch (error) {
+        setSendError(error.message);
+      }
+    };
     return (0, import_react53.createElement)(
       "section",
       { className: "bt-main-conversation", "aria-label": "Main" },
@@ -21085,13 +21189,15 @@ function applyProduct(ctx) {
             message.status === "failed" ? (0, import_react53.createElement)("p", { className: "bt-main-error", role: "status" }, t("Main could not finish this reply. Your message is saved.")) : null
           )),
           state.works.map((work) => (0, import_react53.createElement)(MainWorkCard, { key: work.brief.workItemId ?? work.brief.id, work })),
-          busy ? (0, import_react53.createElement)("p", { className: "bt-main-status", role: "status" }, t("Main is replying…")) : null,
+          stopping ? (0, import_react53.createElement)("p", { className: "bt-main-status", role: "status" }, t("Stopping this Main reply…")) : busy ? (0, import_react53.createElement)("p", { className: "bt-main-status", role: "status" }, t("Main is replying…")) : null,
           (0, import_react53.createElement)("div", { ref: bottom })
         )
       ),
       (0, import_react53.createElement)(MainComposer, {
         onSend: send,
-        busy: sending || !state.binding,
+        onStop: state.activeTurn ? stop : void 0,
+        busy,
+        stopping,
         error: sendError ?? state.error,
         value: state.mainDraft,
         onValueChange: (mainDraft) => view.set((current) => ({ ...current, mainDraft }))
@@ -21430,7 +21536,7 @@ var PRODUCT_CSS = `
 .bt-main-composer{width:min(800px,100% - 32px);margin:16px auto 20px;padding:12px;border:1px solid var(--bt-line);border-radius:16px;background:var(--bt-card)}
 .bt-main-composer textarea{display:block;width:100%;resize:vertical;min-height:80px;max-height:200px;padding:4px;border:0;background:transparent;color:var(--bt-ink);font:inherit;font-size:14px;line-height:22px;box-sizing:border-box}
 .bt-main-composer textarea:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px;border-radius:4px}
-.bt-main-send{display:flex;justify-content:flex-end;margin-top:8px}
+.bt-main-send{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
 .bt-main-send button{height:36px;min-width:64px}
 .bt-main-label{display:block;margin:0 0 6px;font-size:12px;color:var(--bt-ink-2)}
 .bt-main-empty{margin:48px 0;color:var(--bt-ink-2);font-size:14px;line-height:22px;text-align:center}
@@ -21445,6 +21551,8 @@ var PRODUCT_CSS = `
 .bt-main-work-followup{padding:6px 0;color:var(--bt-ink);font-size:12px;line-height:16px;overflow-wrap:anywhere}
 .bt-main-work-followup+.bt-main-work-followup{border-top:.5px solid var(--bt-line-2)}
 .bt-main-work-followup p{margin:0}
+.bt-main-work-controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;padding-top:8px;border-top:.5px solid var(--bt-line-2)}
+.bt-main-work-controls button{height:32px}
 .bt-main-work-result{margin-top:8px;padding-top:8px;border-top:.5px solid var(--bt-line-2);color:var(--bt-ink);font-size:13px;line-height:18px;overflow-wrap:anywhere}
 .bt-main-work-result p{margin:0 0 6px}.bt-main-work-result p:last-child{margin-bottom:0}
 .bt-main-work-artifact code{font:inherit;color:var(--bt-ink)}
