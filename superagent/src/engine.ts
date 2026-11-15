@@ -405,12 +405,15 @@ export class Engine {
     const receipt = await this.sourceEvents.receive(event, async (tx, sourceEvent) => {
       await this.inputs.recordFanout(tx, sourceEvent)
       await this.answerFromSourceEvent(tx, sourceEvent)
+      if (this.proactive && sourceEvent.type !== 'deleted' && !this.processingPaused && !await this.inputs.owns(tx, sourceEvent)) {
+        await this.proactive.enqueue(tx, { sourceInstanceId: sourceEvent.source.sourceInstanceId,
+          eventId: sourceEvent.id, threadId: sourceEvent.threadId, objectId: sourceEvent.objectId, text: sourceEvent.text!,
+          authorId: sourceEvent.authorId, authorKind: sourceEvent.authorKind, addressing: sourceEvent.addressing })
+      }
     })
-    if (this.proactive && receipt.status === 'recorded' && event.type !== 'deleted' && !this.processingPaused) {
-      void this.proactive.evaluate({ sourceInstanceId: this.source.sourceInstanceId, eventId: receipt.eventId!, threadId: event.threadId,
-        objectId: event.objectId, text: event.text ?? '', authorId: event.authorId ?? this.source.actorId,
-        authorKind: event.authorKind ?? 'human', addressing: event.addressing ?? 'direct' }).catch(() => {})
-    }
+    if (this.proactive && receipt.status === 'recorded') void this.reconcileProactiveCandidates().catch(() => {
+      // The durable candidate remains queued for Host recovery after a transient failure.
+    })
     return receipt
   }
 
@@ -1943,8 +1946,8 @@ export class Engine {
     return this.rolePresets.getPreview(request)
   }
 
-  selectRolePreset(command: { instanceId: string; commandId: string; previewId: string; decision: 'select' | 'skip';
-    copy?: LegacyPresetCopy; preset?: unknown }) {
+  selectRolePreset(command: { instanceId: string; commandId: string; previewId: string; decision: 'select' | 'replace' | 'skip';
+    copy?: LegacyPresetCopy; preset?: unknown; expectedDecisionId?: string }) {
     this.assertPresetAccess(command?.instanceId, true)
     identifier(command.commandId, 'commandId')
     return this.rolePresets.decideImport({ ...command, commandId: this.commandKey(command.commandId) })
@@ -2250,6 +2253,20 @@ export class Engine {
   async recoverProactiveRuns() {
     if (!this.proactive) throw new CoreError('PROACTIVE_NOT_CONFIGURED', 'Configure a proactive root directory before recovering runs.')
     return this.proactive.recoverInterrupted()
+  }
+
+  async reconcileProactiveCandidates() {
+    if (!this.proactive) return 0
+    const candidates = await this.proactive.pending(this.source.sourceInstanceId)
+    for (const pending of candidates) {
+      await this.proactive.evaluate(pending.candidate, pending.ruleRevision, pending.controlRevision)
+      await this.proactive.completePending(pending.id)
+    }
+    return candidates.length
+  }
+
+  async discardProactiveCandidates() {
+    return this.proactive?.discardPending(this.source.sourceInstanceId)
   }
 
 

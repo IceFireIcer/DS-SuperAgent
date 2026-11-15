@@ -74,6 +74,9 @@ test('product settings save scoped rules and review and stop a prepared result',
       assert.match(document.body.textContent, /review/u)
       await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Stop preparation'))
       assert.equal(calls.find(([endpoint]) => endpoint === 'proactive-stop')[1].runId, 'review-one')
+      await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Delete rule'))
+      await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Confirm delete rule'))
+      assert.equal(rules.length, 0)
     } finally { await React.act(async () => root.unmount()) }
   } finally {
     globalThis.window = previous.window

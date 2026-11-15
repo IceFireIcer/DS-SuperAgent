@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { Engine } from '../dist/index.js'
+import { Engine, Proactive } from '../dist/index.js'
 import { startPostgres } from './fixtures/postgres-harness.mjs'
 
 test('PostgreSQL preserves rule, notice, pause and stop facts across Engine replacement', { timeout: 240000 }, async t => {
@@ -28,6 +28,10 @@ test('PostgreSQL preserves rule, notice, pause and stop facts across Engine repl
   }
   assert.ok(ready)
   assert.deepEqual((await engine.getRecentProactiveNotices()).map(run => run.id), [ready.id])
+  const queue = new Proactive(storage, 'private', options)
+  await storage.transaction('private', tx => queue.enqueue(tx, { sourceInstanceId: 'proactive-pg', eventId: receipt.eventId,
+    threadId: 'room', objectId: 'one', text: 'Prepare a review.', authorId: 'owner', authorKind: 'human', addressing: 'direct' }))
+  assert.equal((await queue.pending('proactive-pg')).length, 1)
   assert.equal((await engine.setProactivePaused({ commandId: 'pause', paused: true })).paused, true)
   assert.equal((await engine.stopProactiveRun({ commandId: 'stop', runId: ready.id, reason: 'User stopped this result.' })).state, 'stopped')
   await engine.shutdown()
@@ -36,5 +40,7 @@ test('PostgreSQL preserves rule, notice, pause and stop facts across Engine repl
   assert.equal((await engine.getProactiveRules()).revision, 2)
   assert.equal((await engine.getProactiveRun(ready.id)).state, 'stopped')
   assert.deepEqual(await engine.getRecentProactiveNotices(), [])
+  assert.equal(await engine.reconcileProactiveCandidates(), 1)
+  assert.deepEqual(await queue.pending('proactive-pg'), [], 'the old candidate cannot start after a durable pause')
   assert.equal((await engine.updateProactiveRules({ commandId: 'save', expectedRevision: 1, rules: [rule] })).revision, 2)
 })

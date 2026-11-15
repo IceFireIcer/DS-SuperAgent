@@ -44,6 +44,19 @@ interface ProductAttachmentRecord extends ProductAttachmentView {
 
 interface UploadReceipt { fingerprint: string; id: string }
 
+export interface SourceAttachment {
+  id: string
+  kind: 'file' | 'image'
+  name: string
+  asset: EnvironmentAssetReference
+  content: Extract<AdmittedPromptContentPart, { type: 'file' | 'image' }>
+}
+
+export function sourceAttachmentView(attachment: SourceAttachment, state: ProductAttachmentView['state'] = 'active'): ProductAttachmentView {
+  return { id: attachment.id, kind: attachment.kind, name: attachment.name, environmentId: attachment.asset.environmentId,
+    bytes: attachment.asset.bytes, ...(attachment.asset.mediaType ? { mediaType: attachment.asset.mediaType } : {}), state }
+}
+
 const recordKey = (id: string) => `ref:${id}`
 const uploadKey = (instanceId: string, actorId: string, clientId: string | undefined, commandId: string) =>
   `upload:${createHash('sha256').update(canonicalJson([instanceId, actorId, clientId ?? null, commandId])).digest('hex')}`
@@ -51,6 +64,37 @@ const uploadKey = (instanceId: string, actorId: string, clientId: string | undef
 function view(record: ProductAttachmentRecord): ProductAttachmentView {
   const { id, kind, environmentId, name, bytes, mediaType, state } = record
   return { id, kind, environmentId, name, bytes, ...(mediaType ? { mediaType } : {}), state }
+}
+
+/** Resolve the original upload identity inside the same business transaction as its new grant. */
+export async function resolveProductAttachments(tx: AsyncTx, request: {
+  instanceId: string; actorId: string; clientId?: string; environmentId: string; ids: string[];
+  expected?: SourceAttachment[]
+}) {
+  identifier(request.actorId, 'actorId')
+  identifier(request.environmentId, 'environmentId')
+  if (request.clientId !== undefined) identifier(request.clientId, 'clientId')
+  if (!Array.isArray(request.ids) || request.ids.length > 10 || new Set(request.ids).size !== request.ids.length) {
+    throw new CoreError('INVALID_INPUT', 'Choose at most ten distinct attachments.')
+  }
+  const records = await Promise.all(request.ids.map(async id => {
+    identifier(id, 'attachmentId')
+    const record = await tx.get<ProductAttachmentRecord>('product-attachment', recordKey(id))
+    if (!record || record.instanceId !== request.instanceId || record.actorId !== request.actorId
+      || record.clientId !== request.clientId) throw new CoreError('NOT_FOUND', 'This attachment is unavailable.')
+    if (record.state !== 'active') throw new CoreError('ATTACHMENT_REVOKED', 'The attachment is no longer authorized.')
+    if (record.environmentId !== request.environmentId) throw new CoreError('ENVIRONMENT_DENIED', 'The attachment belongs to another work directory.')
+    return record
+  }))
+  const attachments: SourceAttachment[] = records.map(record => ({ id: record.id, kind: record.kind, name: record.name,
+    asset: record.asset, content: record.kind === 'file'
+      ? { type: 'file', attachment: record.native as FileAttachmentRef }
+      : { type: 'image', attachment: record.native as ImageAttachmentRef } }))
+  if (request.expected && canonicalJson(attachments) !== canonicalJson(request.expected)) {
+    throw new CoreError('REFERENCE_STALE', 'The source attachment no longer matches its admitted reference.')
+  }
+  return { attachments, content: attachments.map(attachment => attachment.content), views: records.map(view),
+    assets: records.map(record => record.asset) }
 }
 
 /** Product-scoped admission sits in front of DSH's durable attachment service. */
@@ -138,18 +182,7 @@ export class ProductAttachments {
 
   async resolve(tx: AsyncTx, request: { instanceId: string; actorId: string; clientId?: string; environmentId: string; ids: string[] }) {
     this.identity(request)
-    if (!Array.isArray(request.ids) || request.ids.length > 10 || new Set(request.ids).size !== request.ids.length) {
-      throw new CoreError('INVALID_INPUT', 'Choose at most ten distinct attachments.')
-    }
-    const records = await Promise.all(request.ids.map(id => this.record(tx, id, request)))
-    for (const record of records) {
-      if (record.state !== 'active') throw new CoreError('ATTACHMENT_REVOKED', 'The attachment is no longer authorized.')
-      if (record.environmentId !== request.environmentId) throw new CoreError('ENVIRONMENT_DENIED', 'The attachment belongs to another work directory.')
-    }
-    const content: AdmittedPromptContentPart[] = records.map(record => record.kind === 'file'
-      ? { type: 'file', attachment: record.native as FileAttachmentRef }
-      : { type: 'image', attachment: record.native as ImageAttachmentRef })
-    return { content, views: records.map(view), assets: records.map(record => record.asset) }
+    return resolveProductAttachments(tx, request)
   }
 
   async read(request: { instanceId: string; actorId: string; clientId?: string; id: string; offset?: number; maxBytes?: number }): Promise<EnvironmentAssetPage> {
@@ -159,8 +192,14 @@ export class ProductAttachments {
     const owner = this.environment(record.environmentId)
     if (!owner) throw new CoreError('ENVIRONMENT_NOT_FOUND', 'The original work directory is unavailable.')
     const bound = await owner.prepare({ instanceId: this.instanceId, actorId: request.actorId })
-    return bound.readProductAsset(record.asset, { ...(request.offset === undefined ? {} : { offset: request.offset }),
+    const page = await bound.readProductAsset(record.asset, { ...(request.offset === undefined ? {} : { offset: request.offset }),
       ...(request.maxBytes === undefined ? {} : { maxBytes: request.maxBytes }) })
+    const current = await this.storage.transaction(this.instanceId, tx => this.record(tx, request.id, request))
+    if (current.state !== 'active') throw new CoreError('ATTACHMENT_REVOKED', 'The attachment was revoked during this read.')
+    if (canonicalJson(current.asset) !== canonicalJson(record.asset)) {
+      throw new CoreError('REFERENCE_STALE', 'The original attachment reference changed during this read.')
+    }
+    return page
   }
 
   async revoke(request: { instanceId: string; actorId: string; clientId?: string; id: string }): Promise<ProductAttachmentView> {

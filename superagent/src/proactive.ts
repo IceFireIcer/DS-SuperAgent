@@ -44,6 +44,8 @@ export interface ProactiveRun {
   instanceId: string
   ruleId: string
   ruleRevision: number
+  controlRevision?: number
+  processingRevision?: number
   eventId: string
   sourceInstanceId: string
   mode: ProactiveMode
@@ -62,6 +64,7 @@ export interface ProactiveRun {
   createdAt: number
 }
 interface StoredRules { revision: number; rules: ProactiveRule[]; updatedAt: number }
+interface PendingCandidate { id: string; candidate: ProactiveCandidate; ruleRevision: number; controlRevision: number }
 export interface ProactiveOptions {
   rootDirectory: string
   prepare?: (request: { runId: string; ruleRevision: number; rule: ProactiveRule; candidate: ProactiveCandidate; isolatedDirectory: string; remainingRuns: number }, signal: AbortSignal) => Promise<ProactivePreparation | undefined>
@@ -74,6 +77,7 @@ export interface ProactiveOptions {
 const ruleKey = 'proactive-rules'
 const controlKey = 'proactive-control'
 const noticeKey = 'recent'
+const pendingPrefix = (sourceId: string) => `${JSON.stringify(['proactive-candidate', sourceId])}:`
 const runPrefix = (ruleId: string) => `${JSON.stringify(['proactive-run', ruleId])}:`
 const historyKey = (revision: number) => `${JSON.stringify(['proactive-rule-history'])}:${String(revision).padStart(10, '0')}`
 const metric = (value: string) => createHash('sha256').update(value).digest('hex')
@@ -143,6 +147,44 @@ export class Proactive {
       ?? { paused: false, revision: 1 }
   }
 
+  async enqueue(tx: AsyncTx, candidate: ProactiveCandidate) {
+    const rules = await tx.get<StoredRules>('proactive-rule', ruleKey)
+    const control = await tx.get<{ paused: boolean; revision: number }>('proactive-control', controlKey)
+    if (!rules || control?.paused || this.pauseSourceInstanceId && (await tx.get<{ paused: boolean }>('processing-state',
+      JSON.stringify(['processing-state', this.pauseSourceInstanceId])))?.paused) return
+    if (!rules.rules.some(rule => rule.enabled && (!rule.match.sourceInstanceIds || rule.match.sourceInstanceIds.includes(candidate.sourceInstanceId))
+      && rule.match.actorKinds.includes(candidate.authorKind) && rule.match.addressing.includes(candidate.addressing))) return
+    const id = `${pendingPrefix(candidate.sourceInstanceId)}${metric(candidate.eventId)}`
+    if (!await tx.get('proactive-candidate', id)) await tx.insert('proactive-candidate', id, {
+      id, candidate, ruleRevision: rules.revision, controlRevision: control?.revision ?? 1 } satisfies PendingCandidate)
+  }
+
+  async pending(sourceInstanceId: string, limit = 25): Promise<PendingCandidate[]> {
+    const prefix = pendingPrefix(sourceInstanceId)
+    return this.storage.transaction(this.instanceId, async tx => {
+      const page = await tx.scan<PendingCandidate>('proactive-candidate', { limit, after: prefix })
+      return page.items.filter(item => item.id.startsWith(prefix)).map(item => item.value)
+    })
+  }
+
+  async completePending(id: string) {
+    return this.storage.transaction(this.instanceId, tx => tx.remove('proactive-candidate', id))
+  }
+
+  async discardPending(sourceInstanceId: string) {
+    const prefix = pendingPrefix(sourceInstanceId)
+    return this.storage.transaction(this.instanceId, async tx => {
+      let cursor = prefix
+      for (;;) {
+        const page = await tx.scan('proactive-candidate', { limit: 100, after: cursor })
+        const items = page.items.filter(item => item.id.startsWith(prefix))
+        for (const item of items) await tx.remove('proactive-candidate', item.id)
+        if (!page.cursor || !page.cursor.startsWith(prefix)) return
+        cursor = page.cursor
+      }
+    })
+  }
+
   async setPaused(command: { commandId: string; paused: boolean }) {
     identifier(command?.commandId, 'commandId')
     if (typeof command.paused !== 'boolean') throw new CoreError('INVALID_INPUT', 'A proactive pause needs a boolean value.')
@@ -185,9 +227,11 @@ export class Proactive {
     return { revision: next.revision, rules: next.rules }
   }
 
-  async evaluate(candidate: ProactiveCandidate, revisionOverride?: number): Promise<ProactiveRun[]> {
+  async evaluate(candidate: ProactiveCandidate, revisionOverride?: number, controlRevision?: number): Promise<ProactiveRun[]> {
     if (typeof candidate.authorId !== 'string' || !candidate.authorId) throw new CoreError('INVALID_INPUT', 'A proactive candidate needs an author ID.')
     const configured = await this.rules()
+    if (revisionOverride !== undefined && revisionOverride !== configured.revision) return []
+    if (controlRevision !== undefined && controlRevision !== (await this.control()).revision) return []
     const revision = revisionOverride ?? configured.revision
     const runs: ProactiveRun[] = []
     for (const rule of configured.rules) {
@@ -202,13 +246,16 @@ export class Proactive {
         const id = echo ? `${runPrefix(rule.id)}echo:${metric(candidate.text)}` : `${runPrefix(rule.id)}${metric(candidate.eventId)}`
         const replay = await tx.get<ProactiveRun>('proactive-run', id)
         if (replay) return { replay }
+        const control = await tx.get<{ paused: boolean; revision: number }>('proactive-control', controlKey)
+        const processing = this.pauseSourceInstanceId ? await tx.get<{ paused: boolean; revision: number }>('processing-state',
+          JSON.stringify(['processing-state', this.pauseSourceInstanceId])) : undefined
         const base = { id, instanceId: this.instanceId, ruleId: rule.id, ruleRevision: revision, eventId: candidate.eventId,
           sourceInstanceId: candidate.sourceInstanceId, mode: rule.mode, text: candidate.text.slice(0, 4096), authorId: candidate.authorId,
-          authorKind: candidate.authorKind, addressing: candidate.addressing, communication: rule.communication, createdAt: this.now() }
-        const locallyPaused = (await tx.get<{ paused: boolean }>('proactive-control', controlKey))?.paused
-        const paused = locallyPaused || this.pauseSourceInstanceId && (await tx.get<{ paused: boolean }>('processing-state',
-          JSON.stringify(['processing-state', this.pauseSourceInstanceId])))?.paused
-        const blocked = paused ? 'PROCESSING_PAUSED' : (await tx.get<StoredRules>('proactive-rule', ruleKey))?.revision !== configured.revision
+          authorKind: candidate.authorKind, addressing: candidate.addressing, communication: rule.communication,
+          controlRevision: control?.revision ?? 1, processingRevision: processing?.revision ?? 0, createdAt: this.now() }
+        const blocked = control?.paused || processing?.paused ? 'PROCESSING_PAUSED'
+          : controlRevision !== undefined && controlRevision !== base.controlRevision ? 'PROACTIVE_PAUSED'
+          : (await tx.get<StoredRules>('proactive-rule', ruleKey))?.revision !== configured.revision
           ? 'RULE_CHANGED' : await this.guard?.(tx, candidate)
         if (blocked) return { run: await this.insert(tx, { ...base, state: 'suppressed', reason: blocked }) }
         if (rule.mode === 'observe') return { run: await this.insert(tx, { ...base, state: 'observed' }) }
@@ -257,10 +304,12 @@ export class Proactive {
         const current = await tx.get<ProactiveRun>('proactive-run', base.id)
         if (!current || current.state !== 'running') return current ?? final
         const changed = (await tx.get<StoredRules>('proactive-rule', ruleKey))?.revision !== base.ruleRevision
-        const locallyPaused = (await tx.get<{ paused: boolean }>('proactive-control', controlKey))?.paused
-        const paused = locallyPaused || this.pauseSourceInstanceId && (await tx.get<{ paused: boolean }>('processing-state',
-          JSON.stringify(['processing-state', this.pauseSourceInstanceId])))?.paused
-        const blocked = paused ? 'PROCESSING_PAUSED' : changed ? 'RULE_CHANGED' : await this.guard?.(tx, candidate)
+        const control = await tx.get<{ paused: boolean; revision: number }>('proactive-control', controlKey)
+        const processing = this.pauseSourceInstanceId ? await tx.get<{ paused: boolean; revision: number }>('processing-state',
+          JSON.stringify(['processing-state', this.pauseSourceInstanceId])) : undefined
+        const blocked = control?.paused || processing?.paused ? 'PROCESSING_PAUSED'
+          : (control?.revision ?? 1) !== base.controlRevision || (processing?.revision ?? 0) !== base.processingRevision
+            ? 'CONTROL_CHANGED' : changed ? 'RULE_CHANGED' : await this.guard?.(tx, candidate)
         const result = await this.insertOrReplace(tx, blocked ? { ...base, state: 'suppressed', reason: blocked } : final)
         if (result.state === 'prepared' && result.communication === 'notify') {
           const previous = await tx.get<string[]>('proactive-notice', noticeKey) ?? []
@@ -377,9 +426,13 @@ export class Proactive {
       const run = await tx.get<ProactiveRun>('proactive-run', runId)
       if (run?.state !== 'running') return 'PREPARATION_STOPPED'
       if ((await tx.get<StoredRules>('proactive-rule', ruleKey))?.revision !== ruleRevision) return 'RULE_CHANGED'
-      if ((await tx.get<{ paused: boolean }>('proactive-control', controlKey))?.paused) return 'PROACTIVE_PAUSED'
-      if (this.pauseSourceInstanceId && (await tx.get<{ paused: boolean }>('processing-state',
-        JSON.stringify(['processing-state', this.pauseSourceInstanceId])))?.paused) return 'PROCESSING_PAUSED'
+      const control = await tx.get<{ paused: boolean; revision: number }>('proactive-control', controlKey)
+      if (control?.paused || (control?.revision ?? 1) !== run.controlRevision) return 'PROACTIVE_PAUSED'
+      if (this.pauseSourceInstanceId) {
+        const processing = await tx.get<{ paused: boolean; revision: number }>('processing-state',
+          JSON.stringify(['processing-state', this.pauseSourceInstanceId]))
+        if (processing?.paused || (processing?.revision ?? 0) !== run.processingRevision) return 'PROCESSING_PAUSED'
+      }
       return this.guard?.(tx, candidate)
     })
     if (blocked) throw new CoreError(blocked, 'This preparation no longer has a current authorization.')

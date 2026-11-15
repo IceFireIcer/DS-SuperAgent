@@ -51,6 +51,8 @@ var ZH = {
   "Edit rule": "编辑规则",
   "Disable rule": "停用规则",
   "Enable rule": "启用规则",
+  "Delete rule": "删除规则",
+  "Confirm delete rule": "再次点击删除规则",
   "Save rule": "保存规则",
   "Rules changed elsewhere. Review the latest version and save again.": "规则已在别处修改，请核对最新版本后重新保存。",
   "Preparation history": "准备记录",
@@ -1703,6 +1705,9 @@ var HOST_ZH = {
   "This import decision was already recorded.": "这项导入决定已记录。",
   "Import skipped.": "已跳过导入。",
   "Preset selected from the reviewed copy.": "已从审阅的副本选用预设。",
+  "Replace source binding": "替换此来源绑定",
+  "Replace only this source binding; the earlier preset stays available.": "只替换此来源绑定；先前的预设仍可使用。",
+  "Source binding replaced; the earlier preset remains available.": "来源绑定已替换，先前的预设仍可使用。",
   "Apply to": "应用到",
   "Apply preset": "应用预设",
   "Open role settings to load its current revision.": "请打开角色设置以加载当前版本。",
@@ -1715,6 +1720,7 @@ var HOST_ZH = {
   "Preset activity is unavailable.": "预设记录暂不可用。",
   "No preset activity yet.": "还没有预设记录。",
   selected: "已选用",
+  replaced: "已替换来源绑定",
   skipped: "已跳过",
   duplicate: "已记录的重复操作",
   conflict: "冲突",
@@ -21997,18 +22003,17 @@ function ProductProactiveSettings({ binding, call: call2 }) {
   const [before, setBefore] = (0, import_react55.useState)(null);
   const [draft, setDraft] = (0, import_react55.useState)(null);
   const [selected, setSelected] = (0, import_react55.useState)(null);
+  const [confirmDelete, setConfirmDelete] = (0, import_react55.useState)(null);
   const [busy, setBusy] = (0, import_react55.useState)(false);
   const [error, setError] = (0, import_react55.useState)("");
-  const refresh = async ({ older = false } = {}) => {
+  const refresh = async () => {
     const [rules, history] = await Promise.all([
       call2("proactive-rules", { instanceId: binding.instanceId }),
       call2("proactive-list", { instanceId: binding.instanceId })
     ]);
     setSnapshot(rules);
-    if (!older) {
-      setRuns((current) => [...new Map([...current, ...history.items].map((run2) => [run2.id, run2])).values()].sort((left, right) => right.createdAt - left.createdAt || right.id.localeCompare(left.id)));
-      setBefore((current) => current ?? history.before ?? null);
-    }
+    setRuns((current) => [...new Map([...current, ...history.items].map((run2) => [run2.id, run2])).values()].sort((left, right) => right.createdAt - left.createdAt || right.id.localeCompare(left.id)));
+    setBefore((current) => current ?? history.before ?? null);
     setError("");
   };
   const loadOlder = async () => {
@@ -22069,6 +22074,14 @@ function ProductProactiveSettings({ binding, call: call2 }) {
     } finally {
       setBusy(false);
     }
+  };
+  const remove = (ruleId) => {
+    if (confirmDelete !== ruleId) {
+      setConfirmDelete(ruleId);
+      return;
+    }
+    setConfirmDelete(null);
+    void save(snapshot.rules.filter((rule) => rule.id !== ruleId));
   };
   const edit = (rule) => setDraft(rule ? structuredClone(rule) : {
     id: `review-${crypto.randomUUID().slice(0, 8)}`,
@@ -22139,7 +22152,13 @@ function ProductProactiveSettings({ binding, call: call2 }) {
           }
         },
         t(rule.enabled ? "Disable rule" : "Enable rule")
-      )
+      ),
+      (0, import_react55.createElement)("button", {
+        type: "button",
+        className: "bt-soft bt-soft-sm",
+        disabled: busy,
+        onClick: () => remove(rule.id)
+      }, t(confirmDelete === rule.id ? "Confirm delete rule" : "Delete rule"))
     )),
     draft ? (0, import_react55.createElement)(
       "form",
@@ -22324,10 +22343,12 @@ function requirePreview(result) {
   return result;
 }
 function requireDecision(result) {
-  if (!result || typeof result.id !== "string" || !["selected", "skipped", "duplicate", "conflict"].includes(result.status)) {
+  if (!result || typeof result.id !== "string" || !["selected", "replaced", "skipped", "duplicate", "conflict"].includes(result.status)) {
     throw new Error(t("The import decision was not confirmed."));
   }
-  if (result.status === "selected" && typeof result.presetId !== "string") throw new Error(t("The selected preset was not confirmed."));
+  if (["selected", "replaced"].includes(result.status) && typeof result.presetId !== "string") {
+    throw new Error(t("The selected preset was not confirmed."));
+  }
   return result;
 }
 function DraftFields({ draft, onChange, onUploading, busy }) {
@@ -22435,6 +22456,7 @@ function ProductPresetSettings({ binding, call: call2, settingsRevision, onAppli
   const [mode, setMode] = (0, import_react56.useState)(null);
   const [draft, setDraft] = (0, import_react56.useState)(null);
   const [preview, setPreview] = (0, import_react56.useState)(null);
+  const [replacement, setReplacement] = (0, import_react56.useState)(null);
   const [reviewCopy, setReviewCopy] = (0, import_react56.useState)(null);
   const [ignored, setIgnored] = (0, import_react56.useState)([]);
   const [sourceText, setSourceText] = (0, import_react56.useState)("");
@@ -22470,6 +22492,7 @@ function ProductPresetSettings({ binding, call: call2, settingsRevision, onAppli
     setItems(null);
     setMode(null);
     setPreview(null);
+    setReplacement(null);
     setReviewCopy(null);
     setNotice("");
     setError("");
@@ -22589,6 +22612,7 @@ function ProductPresetSettings({ binding, call: call2, settingsRevision, onAppli
       if (record.preview.source.identity !== selected.copy.sourceIdentity || record.preview.source.botId !== selected.copy.sourceBotId || record.preview.targetRole !== targetRole) {
         throw new Error(t("The preview does not match the selected source and target."));
       }
+      setReplacement(null);
       setReviewCopy(selected.copy);
       setIgnored(selected.ignored);
       setDraft(draftFromPreview(record));
@@ -22599,22 +22623,25 @@ function ProductPresetSettings({ binding, call: call2, settingsRevision, onAppli
     const payload = {
       previewId: preview.id,
       decision,
-      ...decision === "select" ? { copy: reviewCopy, preset: toPreset(draft) } : {}
+      ...decision !== "skip" ? { copy: reviewCopy, preset: toPreset(draft) } : {},
+      ...decision === "replace" ? { expectedDecisionId: replacement.conflictWith } : {}
     };
-    void submit("select", "preset-select", payload, async (result) => {
+    void submit(decision, "preset-select", payload, async (result) => {
       const record = requireDecision(result);
       if (record.previewId !== preview.id) throw new Error(t("The import decision does not match this review."));
       if (record.status === "conflict") {
+        setReplacement(record.reason === "PRESET_CONTENT_CONFLICT" && record.conflictWith ? record : null);
         setError(t("Import conflict: {reason}. Review the source and preset again.", { reason: t(record.reason ?? "unknown") }));
         return;
       }
-      if (decision === "select" && record.status === "skipped" || decision === "skip" && record.status === "selected") {
+      if (decision !== "skip" && record.status === "skipped" || decision === "skip" && ["selected", "replaced"].includes(record.status) || decision === "replace" && record.status !== "replaced") {
         throw new Error(t("The import decision does not match your choice."));
       }
-      if (record.status === "selected" && record.presetId !== payload.preset.id) {
+      if (["selected", "replaced"].includes(record.status) && record.presetId !== payload.preset.id) {
         throw new Error(t("The selected preset does not match your review."));
       }
-      setNotice(t(record.status === "duplicate" ? "This import decision was already recorded." : record.status === "skipped" ? "Import skipped." : "Preset selected from the reviewed copy."));
+      setReplacement(null);
+      setNotice(t(record.status === "duplicate" ? "This import decision was already recorded." : record.status === "skipped" ? "Import skipped." : record.status === "replaced" ? "Source binding replaced; the earlier preset remains available." : "Preset selected from the reviewed copy."));
       setPreview(null);
       setReviewCopy(null);
       setDraft(null);
@@ -22863,9 +22890,11 @@ function ProductPresetSettings({ binding, call: call2, settingsRevision, onAppli
         },
         onChange: (value, failure) => {
           setDraft(value);
+          setReplacement(null);
           setError(failure ?? "");
         }
       }),
+      replacement ? (0, import_react56.createElement)("p", { className: "bt-set-row bt-set-hint" }, t("Replace only this source binding; the earlier preset stays available.")) : null,
       (0, import_react56.createElement)(
         "div",
         { className: "bt-actions" },
@@ -22881,10 +22910,17 @@ function ProductPresetSettings({ binding, call: call2, settingsRevision, onAppli
           disabled: Boolean(busy),
           onClick: () => {
             setPreview(null);
+            setReplacement(null);
             setReviewCopy(null);
             setDraft(null);
           }
         }, t("Review again")),
+        replacement ? (0, import_react56.createElement)("button", {
+          type: "button",
+          className: "bt-soft bt-soft-sm",
+          disabled: Boolean(busy),
+          onClick: () => decide("replace")
+        }, t("Replace source binding")) : null,
         (0, import_react56.createElement)("button", {
           type: "button",
           className: "bt-send bt-soft-sm",

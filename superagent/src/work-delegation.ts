@@ -12,6 +12,7 @@ import { authorizedScheduleEvent } from './product-schedules.js'
 import type { ContextCard, ContextRef, ContextRequest } from './context.js'
 import { assertReferenceShape, type EnvironmentAssetReference } from './environment-assets.js'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
+import { resolveProductAttachments } from './product-attachments.js'
 
 export interface MainWorkIntent {
   goal: string
@@ -38,6 +39,7 @@ export interface MainWorkBrief {
   resources?: EnvironmentAssetReference[]
   images?: ImageAttachmentRef[]
   attachments?: MainWorkAttachment[]
+  attachmentOwner?: { actorId: string; clientId?: string }
   authorization: { kind: 'authorized-main-actor'; sourceInstanceId: string; actorId: string }
   goal: string
   constraints: string
@@ -154,6 +156,7 @@ export interface MainWorkRequest {
   resources?: EnvironmentAssetReference[]
   images?: ImageAttachmentRef[]
   attachments?: MainWorkAttachment[]
+  attachmentClientId?: string
   items?: MainWorkIntent[]
   goal?: string
   constraints?: string
@@ -408,7 +411,7 @@ export class WorkDelegation {
 
   async create(request: MainWorkRequest) {
     if (!request || Object.keys(request).some(key => !['commandId', 'mainId', 'mainSessionId', 'routerSessionId', 'mainMessageId', 'originalUserText',
-      'items', 'goal', 'constraints', 'acceptanceCriteria', 'configurationRevision', 'sourceHandoffId', 'environmentId', 'resources', 'images', 'attachments'].includes(key))) {
+      'items', 'goal', 'constraints', 'acceptanceCriteria', 'configurationRevision', 'sourceHandoffId', 'environmentId', 'resources', 'images', 'attachments', 'attachmentClientId'].includes(key))) {
       throw new CoreError('INVALID_INPUT', 'A Main delegation accepts only its source and independent work items.')
     }
     if (request.items !== undefined && (request.goal !== undefined || request.constraints !== undefined || request.acceptanceCriteria !== undefined)) {
@@ -418,6 +421,7 @@ export class WorkDelegation {
     identifier(request.routerSessionId, 'routerSessionId'); identifier(request.mainMessageId, 'mainMessageId')
     if (request.environmentId !== undefined) identifier(request.environmentId, 'environmentId')
     if (request.sourceHandoffId !== undefined) identifier(request.sourceHandoffId, 'sourceHandoffId')
+    if (request.attachmentClientId !== undefined) identifier(request.attachmentClientId, 'attachmentClientId')
     if (!this.options.source.allowedActorIds.includes(this.options.source.actorId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This actor cannot delegate work in the Main Instance.')
     identifier(this.options.environmentId, 'environmentId')
     if (!Number.isSafeInteger(request.configurationRevision) || request.configurationRevision < 1) throw new CoreError('INVALID_INPUT', 'A delegation needs its Main role configuration revision.')
@@ -502,7 +506,7 @@ export class WorkDelegation {
       const fingerprint = createHash('sha256').update(canonicalJson(['main-work-brief-v2', this.options.instanceId, request.mainId,
         request.mainSessionId, request.routerSessionId, request.mainMessageId, originalUserText, requestedItems,
         environmentId, request.configurationRevision, request.sourceHandoffId ?? null, resources ?? [], images ?? [],
-        ...(attachments ? [attachments] : [])])).digest('hex')
+        ...(attachments ? [attachments] : []), ...(request.attachmentClientId ? [request.attachmentClientId] : [])])).digest('hex')
       if (existing) {
         if (existing.fingerprint !== fingerprint) {
           const formerItems = requestedItems.map(({ attachmentIds: _ids, ...item }) => item)
@@ -537,11 +541,23 @@ export class WorkDelegation {
           || (sourceEvent.source.kind === 'schedule' ? !scheduled : !policy?.configuration.allowedRequesterIds.includes(sourceEvent.authorId))) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The Main source handoff is no longer current and authorized.')
         }
+        if (attachments?.length && !sourceHandoff.attachments?.length) {
+          throw new CoreError('ATTACHMENT_SCOPE_AMBIGUOUS', 'The source request did not grant these attachments.')
+        }
+        if (sourceHandoff.attachments?.length && (request.attachmentClientId || environmentId !== sourceHandoff.environmentId
+          || sourceEvent.source.actorId !== sourceHandoff.sourceActorId || canonicalJson(sourceEvent.attachments) !== canonicalJson(sourceHandoff.attachments)
+          || canonicalJson(attachments) !== canonicalJson(sourceHandoff.attachments.map(({ id, asset, content }) => ({ id, asset,
+            ...(content.type === 'image' ? { image: content.attachment } : {}) }))))) {
+          throw new CoreError('ATTACHMENT_SCOPE_AMBIGUOUS', 'The work must retain its exact original source attachments and Environment.')
+        }
       }
+      if (attachments) await this.checkAttachments(transaction, attachments, environmentId, sourceHandoff?.sourceActorId ?? this.options.source.actorId,
+        request.attachmentClientId)
       const brief: MainWorkBrief = { id, version: 1, instanceId: this.options.instanceId,
         mainId: request.mainId, mainSessionId: request.mainSessionId, routerSessionId: request.routerSessionId,
         mainMessageId: request.mainMessageId, originalUserText, ...(resources ? { resources } : {}), ...(images ? { images } : {}),
-        ...(attachments ? { attachments } : {}),
+        ...(attachments ? { attachments, attachmentOwner: { actorId: sourceHandoff?.sourceActorId ?? this.options.source.actorId,
+          ...(request.attachmentClientId ? { clientId: request.attachmentClientId } : {}) } } : {}),
         authorization: { kind: 'authorized-main-actor', sourceInstanceId: this.options.source.sourceInstanceId, actorId: this.options.source.actorId },
         goal, constraints, acceptanceCriteria, requestedItems, sourceEventId: `main-work-source:${id}`,
         evidence: { kind: 'main-message', id: request.mainMessageId }, environmentId,
@@ -579,6 +595,9 @@ export class WorkDelegation {
 
     const config = await this.options.routerProfile()
     this.options.sessions.routerSessionId = brief.routerSessionId
+    const routerBrief = brief.attachments?.length ? { ...brief, attachments: brief.attachments.map(({ id, asset, image }) => ({
+      id, name: asset.name, kind: image ? 'image' : 'file',
+    })) } : brief
     const tool: NativeTool = {
       name: 'establish_work_plan',
       description: 'Decide the independent local work items for this one authorized WorkBrief and establish every missing Ticket. Each item gets a durable Engine identity, Mandate, acceptance criteria and delivery. Repeating the exact same plan reuses it; a different plan for this brief is a target conflict.'
@@ -613,7 +632,7 @@ export class WorkDelegation {
       result = await this.options.sessions.run({ sessionId: brief.routerSessionId, role: 'router', signal,
         stepBudget: routerStepBudget,
         onBeforeModel: async () => { await this.options.recordRouterUse(brief.routerSessionId, config) },
-        profile: structuredClone(config.roles.router), text: `Decide the independent work items for this one versioned Main WorkBrief. Preserve the one original source event. Establish each missing local Ticket and report only durable receipts.${brief.attachments?.length ? ' For this attached request, confirm requestedItems and their attachmentIds verbatim; changing the grant is rejected.' : ''}\n${JSON.stringify(brief)}`,
+        profile: structuredClone(config.roles.router), text: `Decide the independent work items for this one versioned Main WorkBrief. Preserve the one original source event. Establish each missing local Ticket and report only durable receipts.${brief.attachments?.length ? ' For this attached request, confirm requestedItems and their attachmentIds verbatim; changing the grant is rejected.' : ''}\n${JSON.stringify(routerBrief)}`,
         tools: [tool] })
       await this.finishRouterTurn(attempt, { ...result, status: 'completed' })
     } catch (error) {
@@ -668,8 +687,18 @@ export class WorkDelegation {
                     || (sourceEvent.source.kind === 'schedule' ? !scheduled : sourceEvent.authorKind !== 'human') ? 'SOURCE_NOT_AUTHORIZED'
                     : scheduled ? undefined : !policy ? 'SOURCE_POLICY_MISSING'
                       : !policy.configuration.allowedRequesterIds.includes(sourceEvent.authorId) ? 'SOURCE_ACTOR_NOT_ALLOWED' : undefined
-            if (staleReason) {
-              await tx.replace('main-source-handoff', current.id, { ...current, state: 'discarded', lastError: staleReason, updatedAt: this.now() })
+            let attachmentReason: string | undefined
+            if (!staleReason && current.attachments?.length) {
+              try {
+                await resolveProductAttachments(tx, { instanceId: this.options.instanceId, actorId: current.sourceActorId!,
+                  environmentId: current.environmentId!, ids: current.attachments.map(attachment => attachment.id), expected: current.attachments })
+              } catch (error) {
+                if (!(error instanceof CoreError)) throw error
+                attachmentReason = error.code
+              }
+            }
+            if (staleReason || attachmentReason) {
+              await tx.replace('main-source-handoff', current.id, { ...current, state: 'discarded', lastError: staleReason ?? attachmentReason, updatedAt: this.now() })
               return undefined
             }
             return current
@@ -801,6 +830,15 @@ export class WorkDelegation {
     if (existing) return this.acceptItem(brief, item, existing.ticketId)
     let ticket: { ticketId: string }
     try {
+      if (brief.attachments?.length) {
+        const granted = brief.attachments.filter(attachment => item.attachmentIds?.includes(attachment.id))
+        if (!item.attachmentIds || granted.length !== item.attachmentIds.length) {
+          throw new CoreError('ATTACHMENT_SCOPE_AMBIGUOUS', 'The work item has no valid attachment grant.')
+        }
+        await this.options.storage.transaction(this.options.instanceId, tx =>
+          this.checkAttachments(tx, granted, brief.environmentId,
+            brief.attachmentOwner?.actorId ?? this.options.source.actorId, brief.attachmentOwner?.clientId))
+      }
       ticket = await this.options.createTicket(brief, item)
     } catch (error) {
       if (error instanceof CoreError && ['COMMIT_UNKNOWN', 'STORAGE_UNAVAILABLE', 'HOST_LEASE_LOST'].includes(error.code)) throw error
@@ -813,6 +851,19 @@ export class WorkDelegation {
       return receipt
     }
     return this.acceptItem(brief, item, ticket.ticketId)
+  }
+
+  private async checkAttachments(tx: AsyncTx, attachments: MainWorkAttachment[], environmentId: string, actorId: string, clientId?: string) {
+    const admitted = await resolveProductAttachments(tx, { instanceId: this.options.instanceId, actorId, environmentId,
+      ...(clientId ? { clientId } : {}), ids: attachments.map(attachment => attachment.id) })
+    for (let index = 0; index < attachments.length; index++) {
+      const expected = attachments[index]!
+      const actual = admitted.attachments[index]!
+      if (canonicalJson(expected.asset) !== canonicalJson(actual.asset)
+        || canonicalJson(expected.image ?? null) !== canonicalJson(actual.content.type === 'image' ? actual.content.attachment : null)) {
+        throw new CoreError('REFERENCE_STALE', 'The work attachment no longer matches its original admission.')
+      }
+    }
   }
 
   private async acceptItem(brief: MainWorkBrief, item: MainWorkItem, ticketId: string) {

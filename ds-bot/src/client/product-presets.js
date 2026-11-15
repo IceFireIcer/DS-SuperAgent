@@ -65,10 +65,12 @@ function requirePreview(result) {
 }
 
 function requireDecision(result) {
-  if (!result || typeof result.id !== 'string' || !['selected', 'skipped', 'duplicate', 'conflict'].includes(result.status)) {
+  if (!result || typeof result.id !== 'string' || !['selected', 'replaced', 'skipped', 'duplicate', 'conflict'].includes(result.status)) {
     throw new Error(t('The import decision was not confirmed.'))
   }
-  if (result.status === 'selected' && typeof result.presetId !== 'string') throw new Error(t('The selected preset was not confirmed.'))
+  if (['selected', 'replaced'].includes(result.status) && typeof result.presetId !== 'string') {
+    throw new Error(t('The selected preset was not confirmed.'))
+  }
   return result
 }
 
@@ -130,6 +132,7 @@ export function ProductPresetSettings({ binding, call, settingsRevision, onAppli
   const [mode, setMode] = useState(null)
   const [draft, setDraft] = useState(null)
   const [preview, setPreview] = useState(null)
+  const [replacement, setReplacement] = useState(null)
   const [reviewCopy, setReviewCopy] = useState(null)
   const [ignored, setIgnored] = useState([])
   const [sourceText, setSourceText] = useState('')
@@ -161,7 +164,7 @@ export function ProductPresetSettings({ binding, call, settingsRevision, onAppli
     } catch (failure) { if (own === request.current) setListError(failure.message) }
   }, [call, instanceId])
   useEffect(() => {
-    setItems(null); setMode(null); setPreview(null); setReviewCopy(null); setNotice(''); setError('')
+    setItems(null); setMode(null); setPreview(null); setReplacement(null); setReviewCopy(null); setNotice(''); setError('')
     setActivity(null); setActivityError('')
     commands.current = {}
     void refresh()
@@ -246,27 +249,33 @@ export function ProductPresetSettings({ binding, call, settingsRevision, onAppli
         || record.preview.targetRole !== targetRole) {
         throw new Error(t('The preview does not match the selected source and target.'))
       }
-      setReviewCopy(selected.copy); setIgnored(selected.ignored); setDraft(draftFromPreview(record)); setPreview(record)
+      setReplacement(null); setReviewCopy(selected.copy); setIgnored(selected.ignored); setDraft(draftFromPreview(record)); setPreview(record)
     })
   }
   const decide = decision => {
     const payload = { previewId: preview.id, decision,
-      ...(decision === 'select' ? { copy: reviewCopy, preset: toPreset(draft) } : {}) }
-    void submit('select', 'preset-select', payload, async result => {
+      ...(decision !== 'skip' ? { copy: reviewCopy, preset: toPreset(draft) } : {}),
+      ...(decision === 'replace' ? { expectedDecisionId: replacement.conflictWith } : {}) }
+    void submit(decision, 'preset-select', payload, async result => {
       const record = requireDecision(result)
       if (record.previewId !== preview.id) throw new Error(t('The import decision does not match this review.'))
       if (record.status === 'conflict') {
+        setReplacement(record.reason === 'PRESET_CONTENT_CONFLICT' && record.conflictWith ? record : null)
         setError(t('Import conflict: {reason}. Review the source and preset again.', { reason: t(record.reason ?? 'unknown') }))
         return
       }
-      if (decision === 'select' && record.status === 'skipped' || decision === 'skip' && record.status === 'selected') {
+      if (decision !== 'skip' && record.status === 'skipped' || decision === 'skip' && ['selected', 'replaced'].includes(record.status)
+        || decision === 'replace' && record.status !== 'replaced') {
         throw new Error(t('The import decision does not match your choice.'))
       }
-      if (record.status === 'selected' && record.presetId !== payload.preset.id) {
+      if (['selected', 'replaced'].includes(record.status) && record.presetId !== payload.preset.id) {
         throw new Error(t('The selected preset does not match your review.'))
       }
+      setReplacement(null)
       setNotice(t(record.status === 'duplicate' ? 'This import decision was already recorded.'
-        : record.status === 'skipped' ? 'Import skipped.' : 'Preset selected from the reviewed copy.'))
+        : record.status === 'skipped' ? 'Import skipped.'
+          : record.status === 'replaced' ? 'Source binding replaced; the earlier preset remains available.'
+            : 'Preset selected from the reviewed copy.'))
       setPreview(null); setReviewCopy(null); setDraft(null); setSourceText(''); setMode(null)
       await refresh()
     })
@@ -356,12 +365,15 @@ export function ProductPresetSettings({ binding, call, settingsRevision, onAppli
           `${issue.field}: ${t(issue.reason)}`))),
       h(DraftFields, { draft, busy: Boolean(busy),
         onUploading: value => { uploading.current = value; setBusy(value ? 'image' : null) },
-        onChange: (value, failure) => { setDraft(value); setError(failure ?? '') } }),
+        onChange: (value, failure) => { setDraft(value); setReplacement(null); setError(failure ?? '') } }),
+      replacement ? h('p', { className: 'bt-set-row bt-set-hint' }, t('Replace only this source binding; the earlier preset stays available.')) : null,
       h('div', { className: 'bt-actions' },
         h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: Boolean(busy),
           onClick: () => decide('skip') }, t('Skip import')),
         h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: Boolean(busy),
-          onClick: () => { setPreview(null); setReviewCopy(null); setDraft(null) } }, t('Review again')),
+          onClick: () => { setPreview(null); setReplacement(null); setReviewCopy(null); setDraft(null) } }, t('Review again')),
+        replacement ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: Boolean(busy),
+          onClick: () => decide('replace') }, t('Replace source binding')) : null,
         h('button', { type: 'button', className: 'bt-send bt-soft-sm', disabled: Boolean(busy),
           onClick: () => decide('select') }, busy ? t('Saving…') : t('Select preset')))) : null,
     mode === 'new' && draft ? h('form', { className: 'bt-product-preset-form', onSubmit: create },

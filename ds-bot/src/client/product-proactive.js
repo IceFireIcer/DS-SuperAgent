@@ -68,18 +68,17 @@ export function ProductProactiveSettings({ binding, call }) {
   const [before, setBefore] = useState(null)
   const [draft, setDraft] = useState(null)
   const [selected, setSelected] = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const refresh = async ({ older = false } = {}) => {
+  const refresh = async () => {
     const [rules, history] = await Promise.all([
       call('proactive-rules', { instanceId: binding.instanceId }), call('proactive-list', { instanceId: binding.instanceId }),
     ])
     setSnapshot(rules)
-    if (!older) {
-      setRuns(current => [...new Map([...current, ...history.items].map(run => [run.id, run])).values()]
-        .sort((left, right) => right.createdAt - left.createdAt || right.id.localeCompare(left.id)))
-      setBefore(current => current ?? history.before ?? null)
-    }
+    setRuns(current => [...new Map([...current, ...history.items].map(run => [run.id, run])).values()]
+      .sort((left, right) => right.createdAt - left.createdAt || right.id.localeCompare(left.id)))
+    setBefore(current => current ?? history.before ?? null)
     setError('')
   }
   const loadOlder = async () => {
@@ -116,6 +115,11 @@ export function ProductProactiveSettings({ binding, call }) {
     } catch (failure) { setError(failure.message) }
     finally { setBusy(false) }
   }
+  const remove = ruleId => {
+    if (confirmDelete !== ruleId) { setConfirmDelete(ruleId); return }
+    setConfirmDelete(null)
+    void save(snapshot.rules.filter(rule => rule.id !== ruleId))
+  }
   const edit = rule => setDraft(rule ? structuredClone(rule) : {
     id: `review-${crypto.randomUUID().slice(0, 8)}`, name: '', mode: 'observe', enabled: true,
     match: { actorKinds: ['bot'], addressing: ['direct', 'mention'], sourceInstanceIds: [snapshot.sources[0].sourceInstanceId] },
@@ -150,7 +154,9 @@ export function ProductProactiveSettings({ binding, call }) {
       h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: busy, onClick: () => edit(rule) }, t('Edit rule')),
       h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: busy,
         onClick: () => { void save(snapshot.rules.map(item => item.id === rule.id ? { ...item, enabled: !item.enabled } : item)) } },
-      t(rule.enabled ? 'Disable rule' : 'Enable rule')))),
+      t(rule.enabled ? 'Disable rule' : 'Enable rule')),
+      h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: busy,
+        onClick: () => remove(rule.id) }, t(confirmDelete === rule.id ? 'Confirm delete rule' : 'Delete rule')))),
     draft ? h('form', { className: 'bt-set-card bt-product-preparation-form', onSubmit: submit },
       h('label', null, t('Name'), h('input', { className: 'bt-bs-input', value: draft.name, maxLength: 128, required: true,
         onChange: event => update(['name'], event.target.value) })),

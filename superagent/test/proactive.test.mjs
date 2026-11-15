@@ -244,3 +244,30 @@ test('a rule revision or explicit stop invalidates a late preparation result', {
   await assert.rejects(engine.stopProactiveRun({ commandId: 'stop-guarded', runId: second.id, reason: 'Different stop.' }), { code: 'IDENTITY_CONFLICT' })
   assert.deepEqual((await engine.effects.list()).items, [])
 })
+
+test('a persisted candidate is consumed once by a replacement Engine after reception', { timeout: 20000 }, async t => {
+  let calls = 0
+  const prepare = async () => { calls++; return { summary: 'Recovered preparation.', evidence: 'The original source event is current.' } }
+  const { storage, root, engine } = await fixture(t, prepare)
+  const receipt = await engine.receiveSource({ commandId: 'early-source', threadId: 'room', objectId: 'early',
+    type: 'created', version: '1', text: 'Review the observation.', authorId: 'user' })
+  const rule = { id: 'recovery', name: 'Recovery', mode: 'auto', match: { actorKinds: ['human'], addressing: ['direct'] },
+    communication: 'notify', budget: { maxRuns: 2, windowMs: 3600000 }, enabled: true }
+  await engine.updateProactiveRules({ commandId: 'enable-recovery', expectedRevision: 1, rules: [rule] })
+  const candidate = { sourceInstanceId: 'desktop', eventId: receipt.eventId, threadId: 'room', objectId: 'early',
+    text: 'Review the observation.', authorId: 'user', authorKind: 'human', addressing: 'direct' }
+  const queue = new core.Proactive(storage, 'private', { rootDirectory: root })
+  await storage.transaction('private', tx => queue.enqueue(tx, candidate))
+  assert.equal((await queue.pending('desktop')).length, 1)
+  await engine.shutdown()
+  const replacement = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user',
+    allowedActorIds: ['user'], allowedThreadIds: ['room'], versionOrder: 'sequence' }, {}, undefined, [], {}, {}, {}, {},
+  { hostId: 'proactive-host', leaseMs: 30000 }, { rootDirectory: root, prepare })
+  try {
+    assert.equal(await replacement.reconcileProactiveCandidates(), 1)
+    assert.equal(await replacement.reconcileProactiveCandidates(), 0)
+    assert.equal(calls, 1)
+    assert.equal((await replacement.getRecentProactiveNotices())[0].summary, 'Recovered preparation.')
+    assert.deepEqual(await queue.pending('desktop'), [])
+  } finally { await replacement.shutdown() }
+})

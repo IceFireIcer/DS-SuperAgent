@@ -203,6 +203,45 @@ test('old copy review excludes permissions and history, reports conflict, and pe
   })
 })
 
+test('a source conflict needs an explicit replacement decision and keeps the prior preset', async () => {
+  const calls = []
+  const entries = [{ id: 'previous', status: 'active', revision: 1,
+    preset: { id: 'previous', name: 'Earlier', model: { provider: 'mock', model: 'one' }, instructions: '', skills: [] } }]
+  const call = async (endpoint, payload) => {
+    calls.push([endpoint, payload])
+    if (endpoint === 'preset-list') return { items: [...entries] }
+    if (endpoint === 'preset-preview') return { id: 'preview-new', preview: {
+      source: { identity: 'old-export', botId: 'bot-a', digest: 'abcdef0123456789abcdef' }, targetRole: 'worker',
+      draft: { name: 'Updated', model: { provider: 'mock', model: 'one' }, instructions: '', skills: [] },
+      fields: [], ignored: [], issues: [],
+    } }
+    if (endpoint === 'preset-select' && payload.decision === 'select') return { id: 'conflict-new', previewId: payload.previewId,
+      status: 'conflict', reason: 'PRESET_CONTENT_CONFLICT', conflictWith: 'decision-old' }
+    if (endpoint === 'preset-select' && payload.decision === 'replace') {
+      entries.push({ id: payload.preset.id, status: 'active', revision: 1, preset: payload.preset })
+      return { id: 'replacement-new', previewId: payload.previewId, status: 'replaced', presetId: payload.preset.id,
+        conflictWith: 'decision-old' }
+    }
+    throw new Error(`Unexpected endpoint: ${endpoint}`)
+  }
+  await withPresets(call, 3, async ({ doc, click, change }) => {
+    await click('Review old configuration')
+    await change('Copy identity', 'old-export')
+    await change('Old Bot ID', 'bot-a')
+    await change('Old configuration copy', JSON.stringify({ bots: { 'bot-a': { name: 'Updated', model: 'mock/one' } } }))
+    await click('Preview')
+    await click('Select preset')
+    assert.match(doc.body.textContent, /Replace only this source binding/u)
+    assert.equal(calls.filter(([endpoint, payload]) => endpoint === 'preset-select' && payload.decision === 'replace').length, 0)
+    await click('Replace source binding')
+    const replacement = calls.find(([endpoint, payload]) => endpoint === 'preset-select' && payload.decision === 'replace')[1]
+    assert.equal(replacement.expectedDecisionId, 'decision-old')
+    assert.equal(replacement.previewId, 'preview-new')
+    assert.equal(entries.length, 2)
+    assert.match(doc.body.textContent, /earlier preset remains available/u)
+  })
+})
+
 test('a confirmed selection creates one preset; repeating the same source reports the recorded duplicate', async () => {
   const calls = []
   const items = []

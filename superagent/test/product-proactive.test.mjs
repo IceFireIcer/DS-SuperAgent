@@ -85,11 +85,11 @@ test('a configured Feishu bot event prepares a bounded review without granting p
   assert.equal(stopped.state, 'stopped')
   assert.deepEqual((await call('history')).preparations, [])
   await call('proactive-pause', { commandId: 'pause-preparation', paused: true })
+  const previousCalls = workerCalls
   events = [...events, message('om_paused', 'failure: new request')]
-  const paused = await waitFor(async () => (await call('proactive-list')).items.find(run => run.eventId.includes('om_paused')))
-  assert.equal(paused.state, 'suppressed')
-  assert.equal(paused.reason, 'PROCESSING_PAUSED')
-  assert.equal(workerCalls > 0, true)
+  await waitFor(async () => (await call('feishu-status')).cursor?.includes('om_paused'))
+  assert.equal((await call('proactive-list')).items.some(run => run.eventId.includes('om_paused')), false)
+  assert.equal(workerCalls, previousCalls)
   assert.equal(workerTools.some(name => /publish|merge|outbox|send|shell|command|pr_create/u.test(name)), false)
   assert.equal(outbound, 0)
 })

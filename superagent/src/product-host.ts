@@ -281,10 +281,14 @@ export async function createProductHost(context: Context, config: ProductHostCon
     void engine.tickSchedules().catch(() => { /* Rules and failed occurrences remain available for the next check. */ })
     scheduleTimer = setInterval(() => {
       void engine?.tickSchedules().catch(() => {})
+      void engine?.reconcileProactiveCandidates().catch(() => {})
+      void feishuEngine?.reconcileProactiveCandidates().catch(() => {})
       void recoverCredentials()
     }, 30_000)
     scheduleTimer.unref()
-    if (feishuRuntime) void feishuRuntime.start().catch(() => { /* Health retains the setup failure; Main stays available. */ })
+    if (feishuRuntime) void feishuRuntime.start().then(() => feishuEngine?.reconcileProactiveCandidates()).catch(() => {
+      /* Health and durable candidates retain a failed source pass for the next attempt. */
+    })
     void engine.resumeMainInputs({ instanceId }).catch(() => { /* The persisted input and failed health remain visible for retry. */ })
     const clients = engine.createClientAccess()
     const product: ProductHost = {
@@ -335,7 +339,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
                         ? ['instanceId', 'after', 'limit']
                         : endpoint === 'preset-create' ? ['instanceId', 'commandId', 'preset']
                           : endpoint === 'preset-preview' ? ['instanceId', 'commandId', 'copy']
-                            : endpoint === 'preset-select' ? ['instanceId', 'commandId', 'previewId', 'decision', 'copy', 'preset']
+                            : endpoint === 'preset-select' ? ['instanceId', 'commandId', 'previewId', 'decision', 'copy', 'preset', 'expectedDecisionId']
                               : endpoint === 'preset-apply' ? ['instanceId', 'commandId', 'presetId', 'targetRole', 'expectedRevision']
                                 : endpoint === 'preset-application-read' ? ['instanceId', 'commandId']
                                   : endpoint === 'preset-preview-read' ? ['instanceId', 'previewId']
@@ -398,11 +402,11 @@ export async function createProductHost(context: Context, config: ProductHostCon
           payload.path as string, payload.offset as number | undefined, payload.maxBytes as number | undefined)
         if (endpoint === 'proactive-save') {
           const rules = payload.rules as ProactiveRule[]
-          if (!Array.isArray(rules) || rules.some(rule => !rule?.match?.sourceInstanceIds
+          if (!Array.isArray(rules) || rules.some(rule => !rule || rule.enabled && (!rule.match?.sourceInstanceIds
             || rule.match.sourceInstanceIds.length !== 1
             || rule.match.sourceInstanceIds[0] !== feishuRuntime?.sourceBinding.sourceInstanceId
             || rule.match.actorKinds.some(kind => kind !== 'bot') || rule.match.addressing.includes('ambient')
-            || rule.match.textPattern !== undefined && !/^[\p{L}\p{N} _:-]{1,128}$/u.test(rule.match.textPattern))) {
+            || rule.match.textPattern !== undefined && !/^[\p{L}\p{N} _:-]{1,128}$/u.test(rule.match.textPattern)))) {
             throw new CoreError('INVALID_CONFIG', 'Product preparations require an addressed Feishu app event and a bounded literal text match.')
           }
           const saved = await engine!.updateProactiveRules({ commandId, expectedRevision: payload.expectedRevision as number, rules })
@@ -485,7 +489,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
             await feishuRuntime.stop()
             await feishuRuntime.start()
           }
-          if (endpoint === 'feishu-stop') { feishuEngine?.abortProactiveRuns(); await feishuRuntime.stop() }
+          if (endpoint === 'feishu-stop') {
+            feishuEngine?.abortProactiveRuns(); await feishuEngine?.discardProactiveCandidates(); await feishuRuntime.stop()
+          }
           return { configured: true, sourceInstanceId: feishuRuntime.sourceBinding.sourceInstanceId, ...feishuRuntime.health() }
         }
         if (endpoint === 'history') {
@@ -606,9 +612,10 @@ export async function createProductHost(context: Context, config: ProductHostCon
         if (endpoint === 'preset-preview') return engine!.previewRolePreset({ instanceId, commandId: payload.commandId as string,
           copy: payload.copy as LegacyPresetCopy })
         if (endpoint === 'preset-select') return engine!.selectRolePreset({ instanceId, commandId: payload.commandId as string,
-          previewId: payload.previewId as string, decision: payload.decision as 'select' | 'skip',
+          previewId: payload.previewId as string, decision: payload.decision as 'select' | 'replace' | 'skip',
           ...(payload.copy === undefined ? {} : { copy: payload.copy as LegacyPresetCopy }),
-          ...(payload.preset === undefined ? {} : { preset: payload.preset }) })
+          ...(payload.preset === undefined ? {} : { preset: payload.preset }),
+          ...(payload.expectedDecisionId === undefined ? {} : { expectedDecisionId: payload.expectedDecisionId as string }) })
         if (endpoint === 'preset-apply') return engine!.applyRolePreset({ instanceId, commandId: payload.commandId as string,
           presetId: payload.presetId as string, targetRole: payload.targetRole as PresetRole,
           expectedRevision: payload.expectedRevision as number }, { verify: verifyRoles })
