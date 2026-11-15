@@ -38,6 +38,13 @@ test('Feishu profile opt-in needs explicit tenant, chats, identities and a reque
   assert.equal(config.actorId, 'feishu-receiver')
   assert.equal(config.api.appId, 'cli_fixture')
   assert.equal(config.api.appSecret, 'fixture-value')
+  const { DS_SUPERAGENT_FEISHU_APP_SECRET: _legacy, ...managedEnv } = {
+    DS_SUPERAGENT_FEISHU_APP_ID: 'cli_fixture', DS_SUPERAGENT_FEISHU_APP_SECRET: 'fixture-value',
+    DS_SUPERAGENT_FEISHU_TENANT_KEY: 'tenant', DS_SUPERAGENT_FEISHU_CHAT_IDS: 'chat-a',
+    DS_SUPERAGENT_FEISHU_SELF_ACTOR_IDS: 'bot-1', DS_SUPERAGENT_FEISHU_ALLOWED_REQUESTER_IDS: 'alice',
+  }
+  assert.equal(feishuProfileConfig(managedEnv).api.appSecret, undefined, 'the managed source only needs non-secret Host identity')
+  assert.throws(() => feishuProfileConfig({ ...managedEnv, DS_SUPERAGENT_FEISHU_APP_SECRET: '' }), { code: 'INVALID_CONFIG' })
   assert.throws(() => feishuProfileConfig({
     DS_SUPERAGENT_FEISHU_APP_ID: 'cli_fixture', DS_SUPERAGENT_FEISHU_APP_SECRET: 'fixture-value',
     DS_SUPERAGENT_FEISHU_TENANT_KEY: 'tenant', DS_SUPERAGENT_FEISHU_CHAT_IDS: 'chat-a',

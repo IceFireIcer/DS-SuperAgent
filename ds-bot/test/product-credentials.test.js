@@ -34,8 +34,12 @@ test('credential settings keep values out of projections and show exact grant an
     const { ProductCredentialSettings } = module.exports
     const calls = []
     let resource
+    let feishuResourceId = null
     const call = async (endpoint, payload) => {
       calls.push({ endpoint, payload })
+      if (endpoint === 'feishu-status') return { configured: true, credentialMode: 'managed', sourceInstanceId: 'source-one',
+        resourceId: feishuResourceId, state: feishuResourceId ? 'polling' : 'failed' }
+      if (endpoint === 'resource-select-feishu') { feishuResourceId = payload.resourceId; return { resourceId: feishuResourceId } }
       if (endpoint === 'resource-list') {
         if (!resource) return { items: [] }
         if (payload.after) return { items: [{ id: 'resource-last', label: 'Last resource', status: 'active', revision: 1, grants: [] }] }
@@ -80,6 +84,11 @@ test('credential settings keep values out of projections and show exact grant an
       assert.deepEqual(JSON.parse(JSON.stringify(calls.find(entry => entry.endpoint === 'resource-grant').payload.scope)),
         { role: 'worker', workItemId: 'item-one', environmentId: 'work-one', sourceInstanceId: 'source-one' })
       assert.match(document.body.textContent, /worker · tool/u)
+      await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Use for Feishu'))
+      assert.equal(calls.find(entry => entry.endpoint === 'resource-select-feishu').payload.resourceId, 'resource-one')
+      assert.match(document.body.textContent, /Selected Feishu resource: Issue delivery/u)
+      await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Clear Feishu selection'))
+      assert.equal(calls.filter(entry => entry.endpoint === 'resource-select-feishu').at(-1).payload.resourceId, null)
       for (const value of ['item-one', 'work-one', 'source-one']) assert.match(document.body.textContent, new RegExp(value, 'u'))
       await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Revoke authorization'))
       assert.equal(calls.find(entry => entry.endpoint === 'resource-revoke').payload.grantId, 'grant-one')

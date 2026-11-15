@@ -26,17 +26,18 @@ export function profilePaths(env: NodeJS.ProcessEnv = process.env): SuperagentPr
 
 /** Opt-in source settings come from the trusted Host process, never a model or browser request. */
 export function feishuProfileConfig(env: NodeJS.ProcessEnv = process.env): ProductHostConfig['feishu'] | undefined {
-  const keys = ['APP_ID', 'APP_SECRET', 'TENANT_KEY', 'CHAT_IDS', 'SELF_ACTOR_IDS', 'ALLOWED_REQUESTER_IDS'] as const
+  const keys = ['APP_ID', 'TENANT_KEY', 'CHAT_IDS', 'SELF_ACTOR_IDS', 'ALLOWED_REQUESTER_IDS'] as const
   const values = keys.map(key => env[`DS_SUPERAGENT_FEISHU_${key}`])
-  if (values.every(value => value === undefined || value === '')) return undefined
+  const appSecret = env.DS_SUPERAGENT_FEISHU_APP_SECRET
+  if (values.every(value => value === undefined || value === '') && appSecret === undefined) return undefined
   if (values.some(value => typeof value !== 'string' || !value.trim())) {
     throw new CoreError('INVALID_CONFIG', 'A Feishu source needs its app, tenant, chats, bot identities and requester allowlist.')
   }
-  const [appId, appSecret, tenantKey, chats, bots, requesters] = values as string[]
+  const [appId, tenantKey, chats, bots, requesters] = values as string[]
   const ids = (value: string) => value.split(',').map(id => id.trim())
   const chatIds = ids(chats!), selfActorIds = ids(bots!), allowedRequesterIds = ids(requesters!)
   if (![appId, tenantKey].every(id => /^[\w-]{1,256}$/u.test(id!.trim()))
-    || !appSecret || Buffer.byteLength(appSecret) > 16384 || /[\r\n]/u.test(appSecret)
+    || appSecret !== undefined && (!appSecret.trim() || Buffer.byteLength(appSecret) > 16384 || /[\r\n]/u.test(appSecret))
     || chatIds.length > 20 || selfActorIds.length > 100 || allowedRequesterIds.length > 100
     || [chatIds, selfActorIds, allowedRequesterIds].some(list => list.some(id => !/^[\w-]{1,256}$/u.test(id)) || new Set(list).size !== list.length)) {
     throw new CoreError('INVALID_CONFIG', 'A Feishu source needs valid bounded app, tenant, chat, bot and requester settings.')
@@ -46,7 +47,7 @@ export function feishuProfileConfig(env: NodeJS.ProcessEnv = process.env): Produ
     allowedActorIds: ['feishu-receiver'],
     intake: { mode: 'auto', maxBatchSize: 5, maxAttempts: 1, timeoutMs: 5000,
       allowedRequesterIds, allowedBotActorIds: [], rules: [] },
-    api: { appId: appId!.trim(), appSecret: appSecret!.trim() },
+    api: { appId: appId!.trim(), ...(appSecret === undefined ? {} : { appSecret: appSecret.trim() }) },
   }
 }
 
