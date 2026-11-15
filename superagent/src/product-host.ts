@@ -62,6 +62,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
   let feishuRuntime: FeishuRuntime | undefined
   let feishuEngine: Engine | undefined
   let closing: Promise<void> | undefined
+  let scheduleTimer: ReturnType<typeof setInterval> | undefined
   const picker = () => {
     try {
       const service = (context as unknown as { get(name: string): { capability(): DirectoryPicker | undefined } | undefined }).get('directoryPicker')
@@ -176,6 +177,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
     return { provider, configured: value !== null }
   }
   async function dispose() {
+    if (scheduleTimer) clearInterval(scheduleTimer)
     try {
       await feishuRuntime?.stop()
       await engine?.effects.stop()
@@ -226,6 +228,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
     await engine.acquireHost()
     await engine.openMain({ instanceId })
     engine.effects.start()
+    void engine.tickSchedules().catch(() => { /* Rules and failed occurrences remain available for the next check. */ })
+    scheduleTimer = setInterval(() => { void engine?.tickSchedules().catch(() => {}) }, 30_000)
+    scheduleTimer.unref()
     if (feishuRuntime) void feishuRuntime.start().catch(() => { /* Health retains the setup failure; Main stays available. */ })
     void engine.resumeMainInputs({ instanceId }).catch(() => { /* The persisted input and failed health remain visible for retry. */ })
     return {
@@ -237,7 +242,13 @@ export async function createProductHost(context: Context, config: ProductHostCon
           return engine!.openMain({ instanceId })
         }
         if (payload.instanceId !== instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This request is outside the authorized Instance.')
-        const fields = endpoint === 'send' ? ['instanceId', 'commandId', 'text', 'environmentId']
+        const fields = endpoint === 'schedule-list' ? ['instanceId']
+          : endpoint === 'schedule-source-read' ? ['instanceId']
+            : endpoint === 'schedule-source-set' ? ['instanceId', 'commandId', 'enabled']
+            : endpoint === 'schedule-read' ? ['instanceId', 'ruleId']
+              : endpoint === 'schedule-create' ? ['instanceId', 'commandId', 'title', 'text', 'timezone', 'when', 'target']
+                : endpoint === 'schedule-cancel' ? ['instanceId', 'commandId', 'ruleId']
+                  : endpoint === 'send' ? ['instanceId', 'commandId', 'text', 'environmentId']
           : endpoint === 'directory-options' || endpoint === 'directory-pick' ? ['instanceId']
             : endpoint === 'directory-list' ? ['instanceId', 'path']
               : endpoint === 'directory-register' ? ['instanceId', 'commandId', 'path']
@@ -264,6 +275,17 @@ export async function createProductHost(context: Context, config: ProductHostCon
                                         : undefined
         if (!fields) throw new CoreError('UNAVAILABLE', 'This product capability is not connected yet.')
         if (Object.keys(payload).some(key => !fields.includes(key))) throw new CoreError('INVALID_INPUT', 'The product request contains unsupported fields.')
+        if (endpoint === 'schedule-list') return engine!.listSchedules({ instanceId })
+        if (endpoint === 'schedule-source-read') return engine!.getScheduleSource({ instanceId })
+        if (endpoint === 'schedule-source-set') return engine!.setScheduleSource({ instanceId,
+          commandId: payload.commandId as string, enabled: payload.enabled as boolean })
+        if (endpoint === 'schedule-read') return engine!.getSchedule({ instanceId, ruleId: payload.ruleId as string })
+        if (endpoint === 'schedule-create') return engine!.createSchedule({ instanceId, commandId: payload.commandId as string,
+          title: payload.title as string, text: payload.text as string, timezone: payload.timezone as string,
+          when: payload.when as import('./product-schedules.js').ScheduleWhen,
+          target: payload.target as import('./product-schedules.js').ScheduleTarget })
+        if (endpoint === 'schedule-cancel') return engine!.cancelSchedule({ instanceId,
+          commandId: payload.commandId as string, ruleId: payload.ruleId as string })
         if (endpoint === 'feishu-status' || endpoint === 'feishu-start' || endpoint === 'feishu-stop') {
           if (!feishuRuntime) {
             if (endpoint === 'feishu-status') return config.feishuConfigurationError

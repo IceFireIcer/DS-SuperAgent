@@ -45,6 +45,11 @@ test('the product Host exposes Feishu health, stop and reconnection without disc
   const canonicalWorkspace = await realpath(workspaceRoot)
   assert.equal(directories.default.root, canonicalWorkspace)
   assert.deepEqual(directories.directories.map(item => item.root), [canonicalWorkspace])
+  assert.equal((await host.dispatch('schedule-source-read', { instanceId: 'private' })).enabled, true)
+  const schedule = await host.dispatch('schedule-create', { instanceId: 'private', commandId: 'feishu-host-schedule',
+    title: 'Check work', text: 'Check the authorized work.', timezone: 'UTC',
+    when: { kind: 'at', at: Date.now() + 60_000 }, target: { kind: 'main' } })
+  assert.deepEqual((await host.dispatch('schedule-list', { instanceId: 'private' })).items.map(item => item.ruleId), [schedule.ruleId])
   for (let attempt = 0; attempt < 40 && (await host.dispatch('history', { instanceId: 'private' })).sources.length === 0; attempt++) {
     await new Promise(resolve => setTimeout(resolve, 25))
   }

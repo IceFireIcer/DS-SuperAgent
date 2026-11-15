@@ -66,6 +66,21 @@ test('the product HTTP boundary chats with Main and refuses cross-scope and unav
   assert.deepEqual(history.value.messages.map(message => [message.role, message.text]), [
     ['user', 'Hello Main.'], ['main', 'Main answered through the product boundary.'],
   ])
+  const scheduled = await call('schedule-create', { instanceId, commandId: 'schedule-http', title: 'Review', text: 'Check the release.',
+    timezone: 'UTC', when: { kind: 'at', at: Date.now() + 60_000 }, target: { kind: 'main' } })
+  assert.equal(scheduled.ok, true, JSON.stringify(scheduled))
+  const ruleId = scheduled.value.ruleId
+  assert.deepEqual((await call('schedule-list', { instanceId })).value.items.map(rule => rule.ruleId), [ruleId])
+  assert.deepEqual((await call('schedule-read', { instanceId, ruleId })).value.occurrences, [])
+  assert.equal((await call('schedule-read', { instanceId: 'another-private-scope', ruleId })).status, 403)
+  assert.equal((await call('schedule-create', { instanceId, commandId: 'wrong-target', title: 'Wrong', text: 'Guess another Ticket.',
+    timezone: 'UTC', when: { kind: 'every', minutes: 1 }, target: { kind: 'work', workItemId: 'guess', ticketId: 'guess' } })).error.code,
+  'SOURCE_NOT_AUTHORIZED')
+  assert.equal((await call('schedule-cancel', { instanceId, commandId: 'cancel-http', ruleId })).value.status, 'cancelled')
+  assert.equal((await call('schedule-read', { instanceId, ruleId })).value.status, 'cancelled')
+  assert.equal((await call('schedule-source-set', { instanceId, commandId: 'close-source', enabled: false })).value.enabled, false)
+  assert.equal((await call('schedule-source-read', { instanceId })).value.enabled, false)
+  assert.equal((await call('schedule-source-set', { instanceId, commandId: 'open-source', enabled: true })).value.enabled, true)
   const settings = await call('settings', { instanceId })
   assert.equal(settings.value.revision, 1)
   assert.ok(settings.value.providers.some(provider => provider.id === 'mock'))

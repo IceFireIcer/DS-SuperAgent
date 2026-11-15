@@ -12,7 +12,7 @@ export interface MainBinding { instanceId: string; mainId: string; mainSessionId
 interface MainState extends MainBinding { sequence: number; activeCommand?: string }
 export type MainMessageStatus = 'queued' | 'running' | 'stopping' | 'stopped' | 'completed' | 'interrupted' | 'failed'
 export interface MainMessageSource {
-  kind: 'github' | 'feishu'
+  kind: 'github' | 'feishu' | 'schedule'
   sourceInstanceId: string
   eventId: string
   objectId: string
@@ -582,7 +582,9 @@ export class MainConversation {
   private sourceTool(binding: MainBinding, handoff: MainSourceHandoff, messageId: string, configurationRevision: number): NativeTool {
     return {
       name: 'delegate_work',
-      description: 'Delegate this one authorized source request to one to four independent work items. The original source remains the default acknowledgement and result audience until a separately verified authority changes it.',
+      description: handoff.sourceInstanceId.startsWith('schedule:')
+        ? 'Delegate this authorized scheduled occurrence within its saved rule to one to four independent work items. Do not expand its scope or send it to another audience.'
+        : 'Delegate this one authorized source request to one to four independent work items. The original source remains the default acknowledgement and result audience until a separately verified authority changes it.',
       parameters: {
         items: {
           type: 'array',
@@ -641,7 +643,8 @@ export class MainConversation {
         const sequence = state.sequence + 1
         const messageId = `main-source-message:${handoff.id}`
         await tx.insert<MainMessage>('main-message', messageKey(sequence), { id: messageId, sequence, role: 'user', text: handoff.text,
-          createdAt: Date.now(), status: 'running', source: { kind: handoff.sourceInstanceId.startsWith('feishu:') ? 'feishu' : 'github', sourceInstanceId: handoff.sourceInstanceId,
+          createdAt: Date.now(), status: 'running', source: { kind: handoff.sourceInstanceId.startsWith('schedule:') ? 'schedule'
+            : handoff.sourceInstanceId.startsWith('feishu:') ? 'feishu' : 'github', sourceInstanceId: handoff.sourceInstanceId,
             eventId: handoff.sourceEventId, objectId: handoff.objectId, threadId: handoff.threadId, authorId: handoff.authorId, reference: handoff.reference } })
         await tx.replace('main-state', 'main', { ...state, sequence })
         const command: MainSourceCommand = { state: 'running', handoffId: handoff.id, messageId, turnMessageId: messageId, userSequence: sequence,
@@ -720,7 +723,8 @@ export class MainConversation {
         const configured = await this.prepare?.(binding.mainSessionId)
         const result = await this.sessions!.run({ role: 'main', sessionId: binding.mainSessionId, messageId: prepared.turnMessageId, signal,
           onForkPrepared: prepareFork,
-          text: `[${handoff.sourceInstanceId.startsWith('feishu:') ? 'Feishu' : 'GitHub'} request${prepared.attempt > 1 ? ' recovery' : ''}]\nThis is one authorized source handoff, not a private transcript. ${prepared.attempt > 1
+          text: `[${handoff.sourceInstanceId.startsWith('schedule:') ? 'Scheduled occurrence'
+            : `${handoff.sourceInstanceId.startsWith('feishu:') ? 'Feishu' : 'GitHub'} request`}${prepared.attempt > 1 ? ' recovery' : ''}]\nThis is one authorized source handoff, not a private transcript. ${prepared.attempt > 1
             ? 'The previous Main turn ended without a reply. Continue the same durable request and produce one safe reply; do not repeat completed side effects. '
             : 'When the request is actionable, use delegate_work and preserve the source reference. If no work is justified, explain that only in Main; no source message is sent without established work.'}\n${JSON.stringify({
               sourceEventId: handoff.sourceEventId, sourceInstanceId: handoff.sourceInstanceId, threadId: handoff.threadId, objectId: handoff.objectId,
