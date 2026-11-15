@@ -182,3 +182,25 @@ test('calendar rules retain their explicit timezone and weekday without replayin
   assert.deepEqual((await engine.listSchedules({ instanceId: 'personal' })).items.map(rule => rule.ruleId).sort(), [daily.ruleId, weekly.ruleId].sort())
   await assert.rejects(engine.getSchedule({ instanceId: 'another-instance', ruleId: daily.ruleId }), { code: 'SOURCE_NOT_AUTHORIZED' })
 })
+
+test('a source receiver cannot inspect or control product schedules in the same Instance', async t => {
+  const { engine, storage } = await fixture(t)
+  const rule = await engine.createSchedule({ instanceId: 'personal', commandId: 'owner-rule', title: 'Owner only',
+    text: 'Continue the authorized work.', timezone: 'UTC', when: { kind: 'at', at: Date.now() + 60_000 }, target: { kind: 'main' } })
+  const receiver = new Engine(storage, 'personal', { kind: 'feishu', sourceInstanceId: 'feishu:tenant:chat',
+    actorId: 'receiver', allowedActorIds: ['receiver'], allowedThreadPrefixes: ['feishu:tenant:'], versionOrder: 'sequence' })
+  try {
+    const scope = { instanceId: 'personal' }
+    assert.throws(() => receiver.getScheduleSource(scope), { code: 'SOURCE_NOT_AUTHORIZED' })
+    assert.throws(() => receiver.setScheduleSource({ ...scope, commandId: 'source-stop', enabled: false }), { code: 'SOURCE_NOT_AUTHORIZED' })
+    assert.throws(() => receiver.listSchedules(scope), { code: 'SOURCE_NOT_AUTHORIZED' })
+    assert.throws(() => receiver.getSchedule({ ...scope, ruleId: rule.ruleId }), { code: 'SOURCE_NOT_AUTHORIZED' })
+    assert.throws(() => receiver.cancelSchedule({ ...scope, commandId: 'source-cancel', ruleId: rule.ruleId }), { code: 'SOURCE_NOT_AUTHORIZED' })
+    assert.throws(() => receiver.tickSchedules(rule.nextAt), { code: 'SOURCE_NOT_AUTHORIZED' })
+    await assert.rejects(receiver.createSchedule({ instanceId: 'personal', commandId: 'source-create', title: 'Forbidden',
+      text: 'Do not run.', timezone: 'UTC', when: { kind: 'at', at: Date.now() + 60_000 }, target: { kind: 'main' } }),
+    { code: 'SOURCE_NOT_AUTHORIZED' })
+    assert.equal((await engine.getScheduleSource(scope)).enabled, true)
+    assert.equal((await engine.getSchedule({ ...scope, ruleId: rule.ruleId })).status, 'active')
+  } finally { await receiver.shutdown() }
+})
