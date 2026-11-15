@@ -61,6 +61,12 @@ var ZH = {
   "Stopped · cancellation confirmation is unavailable.": "已停止 · 无法确认取消范围已静止。",
   "What would you like to discuss?": "想聊些什么？",
   "Main is replying…": "Main 正在回复…",
+  "Main ready": "Main 就绪",
+  "Main running": "Main 处理中",
+  "Main degraded": "Main 异常",
+  "{count} inputs queued": "{count} 条输入排队中",
+  "Main model failed. Durable work facts remain available.": "Main 模型异常，持久工作事实仍可查看。",
+  "System work fact": "系统工作事实",
   "Main is unavailable.": "Main 暂不可用。",
   "Main could not finish this reply. Your message is saved.": "Main 未能完成回复，你的消息已保存。",
   "Could not reach Main. Check that the app is running.": "无法连接 Main，请检查应用是否仍在运行。",
@@ -20765,6 +20771,7 @@ function applyProduct(ctx) {
     messages: [],
     works: [],
     activeTurn: null,
+    health: null,
     error: null,
     mainDraft: "",
     messageBefore: null,
@@ -20800,6 +20807,7 @@ function applyProduct(ctx) {
           messages: mergeMessages(state.messages, page.messages),
           works: page.works ?? state.works,
           activeTurn: page.activeTurn ?? null,
+          health: page.health ?? state.health,
           messageBefore: state.messagesComplete ? null : state.messageBefore ?? page.cursor ?? null,
           messagesComplete: state.messagesComplete || page.cursor === void 0,
           error: null
@@ -20978,6 +20986,7 @@ function applyProduct(ctx) {
     expired: t("Follow-up delivery expired")
   })[status] ?? status;
   const receiptCopy = (status) => ({ routing: t("Router is routing"), accepted: t("Accepted by Router"), rejected: t("Not accepted") })[status] ?? status;
+  const mainHealthCopy = (health) => health?.state === "running" ? t("Main running") : health?.state === "degraded" ? t("Main degraded") : t("Main ready");
   function MainWorkCard({ work }) {
     const state = useView();
     const [controlBusy, setControlBusy] = (0, import_react53.useState)(null);
@@ -21014,7 +21023,12 @@ function applyProduct(ctx) {
       (0, import_react53.createElement)(
         "div",
         { className: "bt-main-work-head" },
-        (0, import_react53.createElement)("strong", null, work.brief.goal),
+        (0, import_react53.createElement)(
+          "div",
+          { className: "bt-main-work-title" },
+          (0, import_react53.createElement)("span", { className: "bt-main-work-source" }, t("System work fact")),
+          (0, import_react53.createElement)("strong", null, work.brief.goal)
+        ),
         (0, import_react53.createElement)("span", { className: "bt-main-work-status", role: "status" }, statusCopy(work.status))
       ),
       (0, import_react53.createElement)("p", { className: "bt-main-work-id" }, `${t("Work brief")} ${work.brief.id}`),
@@ -21161,7 +21175,27 @@ function applyProduct(ctx) {
     return (0, import_react53.createElement)(
       "section",
       { className: "bt-main-conversation", "aria-label": "Main" },
-      (0, import_react53.createElement)("header", { className: "bt-main-header" }, (0, import_react53.createElement)(BrandMark, { size: 28 }), (0, import_react53.createElement)("span", null, "Main")),
+      (0, import_react53.createElement)(
+        "header",
+        { className: "bt-main-header" },
+        (0, import_react53.createElement)(BrandMark, { size: 28 }),
+        (0, import_react53.createElement)("span", null, "Main"),
+        (0, import_react53.createElement)(
+          "span",
+          { className: `bt-main-health bt-main-health-${state.health?.state ?? "ready"}`, role: "status" },
+          mainHealthCopy(state.health)
+        ),
+        state.health?.queuedInputs ? (0, import_react53.createElement)(
+          "span",
+          { className: "bt-main-health-detail" },
+          t("{count} inputs queued", { count: state.health.queuedInputs })
+        ) : null
+      ),
+      state.health?.state === "degraded" ? (0, import_react53.createElement)(
+        "p",
+        { className: "bt-main-health-warning", role: "alert" },
+        t("Main model failed. Durable work facts remain available.")
+      ) : null,
       (0, import_react53.createElement)(
         "div",
         { className: "bt-main-history", ref: scroll, onScroll: () => {
@@ -21531,6 +21565,11 @@ function redactObservationText(value) {
 var PRODUCT_CSS = `
 .bt-main-conversation{height:100%;min-height:0;display:flex;flex-direction:column;background:var(--bt-main);color:var(--bt-ink);font-family:var(--bt-font)}
 .bt-main-header{height:56px;flex-shrink:0;display:flex;align-items:center;gap:10px;padding:0 24px;border-bottom:.5px solid var(--bt-line-2);font-size:15px;font-weight:600}
+.bt-main-health{margin-left:auto;padding:2px 8px;border:1px solid var(--bt-line);border-radius:999px;color:var(--bt-ink-2);font-size:11px;line-height:16px;font-weight:500}
+.bt-main-health-running{border-color:var(--bt-accent);color:var(--bt-ink)}
+.bt-main-health-degraded{border-color:var(--bt-danger);color:var(--bt-danger)}
+.bt-main-health-detail{color:var(--bt-ink-2);font-size:11px;font-weight:400}
+.bt-main-health-warning{margin:0;padding:8px 24px;border-bottom:.5px solid var(--bt-line-2);background:var(--bt-card);color:var(--bt-danger);font-size:12px;line-height:18px}
 .bt-main-history{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:24px}
 .bt-main-messages{max-width:800px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
 .bt-main-composer{width:min(800px,100% - 32px);margin:16px auto 20px;padding:12px;border:1px solid var(--bt-line);border-radius:16px;background:var(--bt-card)}
@@ -21544,6 +21583,8 @@ var PRODUCT_CSS = `
 .bt-main-status{color:var(--bt-ink-2);font-size:13px;line-height:18px}
 .bt-main-work{max-width:800px;margin:0 auto;width:calc(100% - 32px);padding:12px;border:1px solid var(--bt-line);border-radius:6px;background:var(--bt-card);box-sizing:border-box}
 .bt-main-work-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;color:var(--bt-ink);font-size:14px;line-height:20px}
+.bt-main-work-title{min-width:0;display:flex;flex-direction:column;gap:2px}
+.bt-main-work-source{color:var(--bt-ink-2);font-size:10px;line-height:14px;text-transform:uppercase;letter-spacing:.05em}
 .bt-main-work-head strong{min-width:0;overflow-wrap:anywhere;font-weight:600}
 .bt-main-work-status{flex:none;color:var(--bt-ink-2);font-size:12px;line-height:16px}
 .bt-main-work-id,.bt-main-work-detail,.bt-main-work-artifact{margin:6px 0 0;color:var(--bt-ink-2);font-size:12px;line-height:16px;overflow-wrap:anywhere}
@@ -21604,7 +21645,7 @@ var PRODUCT_CSS = `
 .bt-observation-event-head{display:flex;justify-content:space-between;gap:12px;color:var(--bt-ink-2);font-size:11px;line-height:16px}
 .bt-observation-event-head>span{font-weight:600;text-transform:uppercase;letter-spacing:.04em}
 .bt-observation-event p{margin:5px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:20px}
-@media(max-width:640px){.bt-main-history,.bt-observation-body{padding:16px}.bt-main-header,.bt-observation-header{padding-left:16px;padding-right:16px}.bt-observation-header{align-items:flex-start;flex-wrap:wrap}.bt-observation-heading{order:3;width:100%}.bt-observation-summary{flex-direction:column}.bt-observation-facts{grid-template-columns:1fr}.bt-observation-generation{grid-template-columns:1fr}}
+@media(max-width:640px){.bt-main-history,.bt-observation-body{padding:16px}.bt-main-header,.bt-observation-header{padding-left:16px;padding-right:16px}.bt-main-header{flex-wrap:wrap;height:auto;min-height:56px}.bt-main-health-detail{width:100%;margin-left:38px}.bt-main-health-warning{padding-left:16px;padding-right:16px}.bt-observation-header{align-items:flex-start;flex-wrap:wrap}.bt-observation-heading{order:3;width:100%}.bt-observation-summary{flex-direction:column}.bt-observation-facts{grid-template-columns:1fr}.bt-observation-generation{grid-template-columns:1fr}}
 `;
 
 // src/client/index.js

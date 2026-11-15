@@ -7,7 +7,7 @@ import type { RoleProfile } from './config.js'
 import type { MainWorkCard, MainWorkIntent, MainWorkNotification, WorkDelegation } from './work-delegation.js'
 
 export interface MainBinding { instanceId: string; mainId: string; mainSessionId: string; routerSessionId: string }
-interface MainState extends MainBinding { sequence: number; activeCommand?: string }
+interface MainState extends MainBinding { generation: number; sequence: number; activeCommand?: string }
 export type MainMessageStatus = 'queued' | 'running' | 'stopping' | 'stopped' | 'completed' | 'failed'
 export interface MainMessage { id: string; sequence: number; role: 'user' | 'main'; text: string; createdAt: number; status: MainMessageStatus; error?: string }
 export interface MainTurnStop {
@@ -23,17 +23,51 @@ export interface MainTurnStop {
   confirmedAt?: number
 }
 export interface MainTurnView { messageId: string; status: 'running' | 'stopping' | 'stopped'; stop?: MainTurnStop }
-interface MainCommand { fingerprint: string; messageId: string; userSequence: number; status: MainMessage['status']; replySequence?: number }
-interface MainUpdateCommand { attempt: number; state: 'running' | 'failed' | 'completed' | 'discarded'; messageId: string; sequence?: number }
+interface MainCommand {
+  fingerprint: string
+  messageId: string
+  userSequence: number
+  status: MainMessage['status']
+  replySequence?: number
+  attempts?: number
+  updatedAt?: number
+  error?: string
+  run?: { attempts: number; messageId: string; sessionId: string; generation: number; startedAt: number }
+}
+interface MainUpdateCommand {
+  attempt: number
+  state: 'running' | 'failed' | 'completed' | 'discarded'
+  messageId: string
+  sequence?: number
+  updatedAt?: number
+  error?: string
+  run?: { sessionId: string; generation: number }
+}
+export interface MainHealth {
+  state: 'ready' | 'running' | 'degraded'
+  queuedInputs: number
+  failedInputs: number
+  updatedAt: number
+  errorCode?: string
+}
 export interface MainAddress { instanceId: string }
 export interface MainSend extends MainAddress { commandId: string; text: string }
-export interface MainPage extends MainBinding { messages: MainMessage[]; cursor?: number; works?: MainWorkCard[]; activeTurn?: MainTurnView }
+export interface MainPage extends MainBinding {
+  generation: number
+  messages: MainMessage[]
+  health: MainHealth
+  cursor?: number
+  works?: MainWorkCard[]
+  activeTurn?: MainTurnView
+}
+export interface MainRunResult extends MainBinding { messageId: string; status: MainMessage['status'] }
 interface MainEvent { type: string; data: { id?: string; message?: { content?: { type: string; text?: string }[] }; reason?: { kind?: string } } }
 const messageKey = (sequence: number) => String(sequence).padStart(16, '0')
 
 /** Business facts stay separate from the native Session; no transaction spans a model turn. */
 export class MainConversation {
   private tail: Promise<unknown> = Promise.resolve()
+  private readonly scheduled = new Map<string, Promise<MainRunResult>>()
   private closed = false
   private pendingTurns = 0
   private readonly turnControllers = new Map<string, AbortController>()
@@ -51,10 +85,58 @@ export class MainConversation {
 
   private async state(tx: AsyncTx): Promise<MainState> {
     const prior = await tx.get<MainState>('main-state', 'main')
-    if (prior) return prior
-    const initial: MainState = { instanceId: this.instanceId, mainId: `main-${randomUUID()}`, mainSessionId: `main-session-${randomUUID()}`, routerSessionId: `router-${randomUUID()}`, sequence: 0 }
+    if (prior) {
+      if (!Number.isSafeInteger(prior.generation) || prior.generation < 0) {
+        const migrated = { ...prior, generation: 0 }
+        await tx.replace('main-state', 'main', migrated)
+        return migrated
+      }
+      return prior
+    }
+    const initial: MainState = { instanceId: this.instanceId, mainId: `main-${randomUUID()}`, mainSessionId: `main-session-${randomUUID()}`,
+      routerSessionId: `router-${randomUUID()}`, generation: 0, sequence: 0 }
     await tx.insert('main-state', 'main', initial)
     return initial
+  }
+
+  private async health(tx: AsyncTx, state: MainState): Promise<MainHealth> {
+    const commands: MainCommand[] = []
+    const updates: MainUpdateCommand[] = []
+    let commandAfter: string | undefined
+    for (let pageCount = 0; pageCount < 10; pageCount++) {
+      const page = await tx.scan<MainCommand>('main-command', { limit: 100, ...(commandAfter === undefined ? {} : { after: commandAfter }) })
+      commands.push(...page.items.map(item => item.value))
+      if (!page.cursor) break
+      commandAfter = page.cursor
+      if (pageCount === 9) throw new CoreError('MAIN_QUEUE_BUDGET', 'The Main input queue exceeds its 1000-command budget.')
+    }
+    let updateAfter: string | undefined
+    for (let pageCount = 0; pageCount < 10; pageCount++) {
+      const updatePage = await tx.scan<MainUpdateCommand>('main-update-command', { limit: 100, ...(updateAfter === undefined ? {} : { after: updateAfter }) })
+      updates.push(...updatePage.items.map(item => item.value))
+      if (!updatePage.cursor) break
+      updateAfter = updatePage.cursor
+      if (pageCount === 9) throw new CoreError('MAIN_QUEUE_BUDGET', 'The Main notification queue exceeds its 1000-command budget.')
+    }
+    const latestCommand = commands.sort((left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0))[0]
+    const latestUpdate = updates.sort((left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0))[0]
+    const latest = (latestCommand?.updatedAt ?? 0) >= (latestUpdate?.updatedAt ?? 0)
+      ? { status: latestCommand?.status, error: latestCommand?.error, updatedAt: latestCommand?.updatedAt }
+      : { status: latestUpdate?.state === 'failed' ? 'failed' as const : latestUpdate?.state === 'running' ? 'running' as const
+        : 'completed' as const, error: latestUpdate?.error, updatedAt: latestUpdate?.updatedAt }
+    const queuedInputs = commands.filter(command => command.status === 'queued').length
+    const failedInputs = commands.filter(command => command.status === 'failed').length
+    return {
+      state: state.activeCommand || latest.status === 'running' ? 'running' : latest.status === 'failed' ? 'degraded' : 'ready',
+      queuedInputs,
+      failedInputs,
+      updatedAt: latest.updatedAt ?? Date.now(),
+      ...(latest.error ? { errorCode: latest.error } : {}),
+    }
+  }
+
+  private binding(state: MainState): MainBinding {
+    return { instanceId: state.instanceId, mainId: state.mainId, mainSessionId: state.mainSessionId, routerSessionId: state.routerSessionId }
   }
 
   async open(request: MainAddress): Promise<MainBinding> {
@@ -72,6 +154,7 @@ export class MainConversation {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100 || request.after !== undefined && (!Number.isSafeInteger(request.after) || request.after < 0)) {
       throw new CoreError('INVALID_INPUT', 'Main history needs a bounded page and non-negative cursor.')
     }
+    await this.reconcileRecoverable()
     const state = await commandTransaction(this.storage, this.instanceId, tx => this.state(tx))
     if (state.activeCommand) await this.reconcile(state, state.activeCommand)
     return commandTransaction(this.storage, this.instanceId, async tx => {
@@ -79,7 +162,8 @@ export class MainConversation {
       const { sequence: _sequence, activeCommand: _active, ...binding } = current
       const page = await tx.scan<MainMessage>('main-message', { limit, ...(request.after === undefined ? {} : { after: messageKey(request.after) }) })
       const activeTurn = current.activeCommand ? await this.activeTurnIn(tx, current.activeCommand) : undefined
-      return { ...binding, messages: page.items.map(item => item.value), ...(page.cursor ? { cursor: Number(page.cursor) } : {}),
+      return { ...binding, messages: page.items.map(item => item.value), health: await this.health(tx, current),
+        ...(page.cursor ? { cursor: Number(page.cursor) } : {}),
         ...(activeTurn ? { activeTurn } : {}) }
     })
   }
@@ -91,6 +175,7 @@ export class MainConversation {
       && (!Number.isSafeInteger(request.before) || request.before < 1)) {
       throw new CoreError('INVALID_INPUT', 'Recent Main history needs a bounded page and a positive before cursor.')
     }
+    await this.reconcileRecoverable()
     const state = await commandTransaction(this.storage, this.instanceId, tx => this.state(tx))
     if (state.activeCommand) await this.reconcile(state, state.activeCommand)
     return commandTransaction(this.storage, this.instanceId, async tx => {
@@ -105,7 +190,7 @@ export class MainConversation {
         if (message) messages.push(message)
       }
       const activeTurn = current.activeCommand ? await this.activeTurnIn(tx, current.activeCommand) : undefined
-      return { ...binding, messages, ...(start > 1 ? { cursor: start } : {}),
+      return { ...binding, messages, health: await this.health(tx, current), ...(start > 1 ? { cursor: start } : {}),
         ...(activeTurn ? { activeTurn } : {}) }
     })
   }
@@ -127,14 +212,72 @@ export class MainConversation {
       const sequence = state.sequence + 1
       const messageId = `main-input-${randomUUID()}`
       await tx.insert<MainMessage>('main-message', messageKey(sequence), { id: messageId, sequence, role: 'user', text: request.text, createdAt: Date.now(), status: 'queued' })
-      await tx.insert<MainCommand>('main-command', key, { fingerprint, messageId, userSequence: sequence, status: 'queued' })
+      await tx.insert<MainCommand>('main-command', key, { fingerprint, messageId, userSequence: sequence, status: 'queued', updatedAt: Date.now() })
       await tx.insert('main-message-command', messageId, { commandKey: key })
       await tx.replace('main-state', 'main', { ...state, sequence })
     })
+    return this.enqueue(binding, key, request.text)
+  }
+
+  async resume(request: MainAddress) {
+    this.authorize(request)
+    const commands: { key: string; command: MainCommand; text: string }[] = []
+    await commandTransaction(this.storage, this.instanceId, async tx => {
+      let after: string | undefined
+      for (let pageCount = 0; pageCount < 10; pageCount++) {
+        const page = await tx.scan<MainCommand>('main-command', { limit: 100, ...(after === undefined ? {} : { after }) })
+        for (const item of page.items) {
+          if (item.value.status !== 'queued' && item.value.status !== 'running') continue
+          const message = await tx.get<MainMessage>('main-message', messageKey(item.value.userSequence))
+          if (message?.role === 'user') commands.push({ key: item.id, command: item.value, text: message.text })
+        }
+        if (!page.cursor) break
+        after = page.cursor
+        if (pageCount === 9) throw new CoreError('MAIN_QUEUE_BUDGET', 'The Main input queue exceeds its 1000-command budget.')
+      }
+    })
+    commands.sort((left, right) => left.command.userSequence - right.command.userSequence)
+    const binding = await this.open(request)
+    const resumed = commands.map(entry => this.enqueue(binding, entry.key, entry.text))
+    await Promise.all(resumed)
+    return { resumed: commands.length }
+  }
+
+  private async reconcileRecoverable() {
+    if (!this.sessions) return
+    const state = await commandTransaction(this.storage, this.instanceId, tx => this.state(tx))
+    const binding = this.binding(state)
+    const commands: { key: string; command: MainCommand }[] = []
+    await commandTransaction(this.storage, this.instanceId, async tx => {
+      let after: string | undefined
+      for (let pageCount = 0; pageCount < 10; pageCount++) {
+        const page = await tx.scan<MainCommand>('main-command', { limit: 100, ...(after === undefined ? {} : { after }) })
+        for (const item of page.items) {
+          if (item.value.status !== 'failed' && item.value.status !== 'running') continue
+          commands.push({ key: item.id, command: item.value })
+        }
+        if (!page.cursor) break
+        after = page.cursor
+        if (pageCount === 9) throw new CoreError('MAIN_QUEUE_BUDGET', 'The Main input queue exceeds its 1000-command budget.')
+      }
+    })
+    for (const entry of commands.sort((left, right) => left.command.userSequence - right.command.userSequence)) {
+      await this.reconcile(binding, entry.key)
+    }
+  }
+
+  private enqueue(binding: MainBinding, key: string, text: string): Promise<MainRunResult> {
+    const existing = this.scheduled.get(key)
+    if (existing) return existing
     this.pendingTurns++
-    const turn = this.tail.then(() => this.run(binding, key, request.text)).finally(() => { this.pendingTurns-- })
-    this.tail = turn.catch(() => {})
-    return turn
+    let tracked: Promise<MainRunResult>
+    tracked = this.tail.then(() => this.run(binding, key, text)).finally(() => {
+      this.pendingTurns--
+      if (this.scheduled.get(key) === tracked) this.scheduled.delete(key)
+    })
+    this.scheduled.set(key, tracked)
+    this.tail = tracked.catch(() => {})
+    return tracked
   }
 
   async stop(request: MainAddress & { commandId: string; messageId: string }) {
@@ -261,38 +404,49 @@ export class MainConversation {
 
   private async run(binding: MainBinding, key: string, text: string) {
     if (this.closed) throw new CoreError('RUNTIME_CLOSED', 'The Main conversation is closed.')
+    let state = await commandTransaction(this.storage, this.instanceId, tx => this.state(tx))
+    let current = this.binding(state)
+    if (current.mainId !== binding.mainId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The durable Main input belongs to another conversation.')
     const command = await commandTransaction(this.storage, this.instanceId, tx => tx.get<MainCommand>('main-command', key))
     if (!command) throw new CoreError('INCOMPLETE_STATE', 'The Main input receipt is missing.')
-    if (command.status === 'completed') return { ...binding, messageId: command.messageId, status: command.status }
+    if (command.status === 'completed') return { ...current, messageId: command.messageId, status: command.status }
     try {
-      const state = await commandTransaction(this.storage, this.instanceId, tx => this.state(tx))
       if (state.activeCommand && state.activeCommand !== key) {
-        if (!await this.reconcile(binding, state.activeCommand)) throw new CoreError('MAIN_TURN_UNKNOWN', 'The previous Main turn needs reconciliation before another turn.')
+        if (!await this.reconcile(current, state.activeCommand)) {
+          await this.updateCommand(state.activeCommand, 'failed', 'MAIN_TURN_INTERRUPTED')
+        }
+        state = await commandTransaction(this.storage, this.instanceId, tx => this.state(tx))
+        current = this.binding(state)
       }
-      if ((await this.sessions!.hasMessage(binding.mainSessionId, command.messageId)).found) {
-        if (await this.reconcile(binding, key)) return { ...binding, messageId: command.messageId, status: 'completed' as const }
-        if (command.status === 'failed') return { ...binding, messageId: command.messageId, status: command.status }
-        throw new CoreError('MAIN_TURN_UNKNOWN', 'The previous Main turn needs reconciliation.')
-      }
-      if (command.status === 'failed') return { ...binding, messageId: command.messageId, status: command.status }
-      await this.updateCommand(key, 'running')
+      if (await this.reconcile(current, key)) return { ...current, messageId: command.messageId, status: 'completed' as const }
+      const priorDelivery = command.run
+        ? await this.sessions!.hasMessage(command.run.sessionId, command.run.messageId)
+        : await this.sessions!.hasMessage(current.mainSessionId, command.messageId)
+      const attempts = (command.attempts ?? 0) + 1
+      const messageId = priorDelivery.found ? `main-continue:${command.messageId}:${attempts}` : command.messageId
+      const turnText = priorDelivery.found
+        ? `Continue the interrupted Main turn for durable input ${command.messageId}. Use the existing Session history and durable tool receipts. Do not repeat a delegation, follow-up, stop, answer or query that already completed. Reply to the user without restating the original input.`
+        : text
+      await this.updateCommand(key, 'running', undefined, { attempts, run: { attempts, messageId, sessionId: current.mainSessionId,
+        generation: state.generation, startedAt: Date.now() } })
       const controller = new AbortController()
       this.turnControllers.set(key, controller)
       const stopping = await commandTransaction(this.storage, this.instanceId,
         tx => tx.get<MainTurnStop>('main-turn-stop', command.messageId))
       if (stopping) controller.abort()
-      const prepared = await this.prepare?.(binding.mainSessionId)
-      const result = await this.sessions!.run({ role: 'main', sessionId: binding.mainSessionId, text,
-        tools: this.tools(binding, command, text, prepared?.revision ?? 1), messageId: command.messageId,
-        signal: controller.signal,
+      const prepared = await this.prepare?.(current.mainSessionId)
+      const result = await this.sessions!.run({ role: 'main', sessionId: current.mainSessionId, text: turnText,
+        tools: this.tools(current, command, text, prepared?.revision ?? 1), messageId, signal: controller.signal,
         ...(prepared ? { profile: prepared.profile } : {}) })
       if (await this.confirmStopped(key, command.messageId, 'runtime-cancelled')) {
-        return { ...binding, messageId: command.messageId, status: 'stopped' as const }
+        return { ...current, messageId: command.messageId, status: 'stopped' as const }
       }
-      const answer = this.reply(result.events as MainEvent[], command.messageId)
+      const answer = this.reply(result.events as MainEvent[], messageId)
       if (!answer) throw new CoreError('MAIN_TURN_FAILED', 'Main did not produce a completed visible reply.')
-      await this.publish(key, answer)
-      return { ...binding, messageId: command.messageId, status: 'completed' as const }
+      await this.publish(key, answer, { sessionId: current.mainSessionId, generation: state.generation })
+      state = await commandTransaction(this.storage, this.instanceId, tx => this.state(tx))
+      current = this.binding(state)
+      return { ...current, messageId: command.messageId, status: 'completed' as const }
     } catch (error) {
       const current = await commandTransaction(this.storage, this.instanceId, tx => tx.get<MainCommand>('main-command', key))
       if (current && await this.confirmStopped(key, current.messageId, 'runtime-cancelled')) {
@@ -327,7 +481,9 @@ export class MainConversation {
       const attempt = prior?.state === 'failed' || prior?.state === 'running' ? prior.attempt + 1 : prior?.attempt ?? 0
       const messageId = `main-update:${key}:${attempt}`
       const record = (state: MainUpdateCommand['state']) => commandTransaction(this.storage, this.instanceId, async tx => {
-        const next: MainUpdateCommand = { attempt, state, messageId }
+        const current = await this.state(tx)
+        const next: MainUpdateCommand = { attempt, state, messageId, updatedAt: Date.now(),
+          ...(state === 'running' ? { run: { sessionId: current.mainSessionId, generation: current.generation } } : {}) }
         if (!await tx.replace('main-update-command', key, next)) await tx.insert('main-update-command', key, next)
       })
       if (!await isCurrent()) { await record('discarded'); return }
@@ -356,6 +512,17 @@ export class MainConversation {
       }
       if (!await isCurrent()) { await record('discarded'); return }
       await this.publishUpdateReply(key, messageId, answer, attempt, isCurrent)
+    }).catch(async error => {
+      const code = error instanceof CoreError ? error.code : 'MAIN_UPDATE_FAILED'
+      await commandTransaction(this.storage, this.instanceId, async tx => {
+        const key = notification.update.id
+        const prior = await tx.get<MainUpdateCommand>('main-update-command', key)
+        if (prior?.state === 'completed' || prior?.state === 'discarded') return
+        const next: MainUpdateCommand = { ...(prior ?? { attempt: 0, messageId: `main-update:${key}:0` }), state: 'failed',
+          error: code, updatedAt: Date.now() }
+        if (!await tx.replace('main-update-command', key, next)) await tx.insert('main-update-command', key, next)
+      })
+      throw error
     }).finally(() => { this.pendingTurns-- })
     this.tail = turn.catch(() => {})
     return turn
@@ -364,14 +531,16 @@ export class MainConversation {
   private publishUpdateReply(key: string, messageId: string, answer: string, attempt: number,
     isCurrent: (transaction?: AsyncTx) => Promise<boolean>) {
     return commandTransaction(this.storage, this.instanceId, async tx => {
-      if ((await tx.get<MainUpdateCommand>('main-update-command', key))?.state === 'completed') return
+      const prior = await tx.get<MainUpdateCommand>('main-update-command', key)
+      if (prior?.state === 'completed') return
       const current = await isCurrent(tx)
       const state = await this.state(tx)
+      const live = current && (!prior?.run || prior.run.sessionId === state.mainSessionId && prior.run.generation === state.generation)
       const sequence = state.sequence + 1
-      if (current) await tx.insert<MainMessage>('main-message', messageKey(sequence), { id: `reply:${messageId}`, sequence,
+      if (live) await tx.insert<MainMessage>('main-message', messageKey(sequence), { id: `reply:${messageId}`, sequence,
         role: 'main', text: answer, createdAt: Date.now(), status: 'completed' })
-      const next: MainUpdateCommand = { messageId, sequence, attempt, state: current ? 'completed' : 'discarded' }
-      if (current) await tx.replace('main-state', 'main', { ...state, sequence })
+      const next: MainUpdateCommand = { messageId, sequence, attempt, state: live ? 'completed' : 'discarded', updatedAt: Date.now() }
+      if (live) await tx.replace('main-state', 'main', { ...state, sequence })
       if (!await tx.replace('main-update-command', key, next)) await tx.insert('main-update-command', key, next)
     })
   }
@@ -388,7 +557,10 @@ export class MainConversation {
 
   private async reconcile(binding: MainBinding, key: string) {
     const command = await commandTransaction(this.storage, this.instanceId, tx => tx.get<MainCommand>('main-command', key))
-    if (!command || command.status === 'completed') return command?.status === 'completed'
+    if (!command) return false
+    if (command.status === 'completed') return true
+    const sessionId = command.run?.sessionId ?? binding.mainSessionId
+    const messageId = command.run?.messageId ?? command.messageId
     const stop = await commandTransaction(this.storage, this.instanceId, tx => tx.get<MainTurnStop>('main-turn-stop', command.messageId))
     if (stop) {
       if (stop.status === 'stopped') {
@@ -399,15 +571,19 @@ export class MainConversation {
         await this.confirmStopped(key, command.messageId, 'host-restart')
         return true
       }
-      if (!this.sessions || !(await this.sessions.hasMessage(binding.mainSessionId, command.messageId)).found) return false
-      const turn = await this.readTurn(binding, command.messageId)
+      if (!this.sessions || !(await this.sessions.hasMessage(sessionId, messageId)).found) return false
+      const turn = await this.readTurn({ ...binding, mainSessionId: sessionId }, messageId)
       if (!turn.ended) return false
       await this.confirmStopped(key, command.messageId, 'turn-ended')
       return true
     }
-    if (!this.sessions || !(await this.sessions.hasMessage(binding.mainSessionId, command.messageId)).found) return false
-    const answer = await this.readReply(binding, command.messageId)
-    if (answer) { await this.publish(key, answer); return true }
+    if (!this.sessions) return false
+    if (!(await this.sessions.hasMessage(sessionId, messageId)).found) return false
+    const answer = await this.readReply({ ...binding, mainSessionId: sessionId }, messageId)
+    if (answer) {
+      await this.publish(key, answer, command.run ? { sessionId: command.run.sessionId, generation: command.run.generation } : undefined)
+      return true
+    }
     return false
   }
 
@@ -435,15 +611,20 @@ export class MainConversation {
     throw new CoreError('MAIN_HISTORY_BUDGET', 'Main history reconciliation exceeded its bounded read budget.')
   }
 
-  private publish(key: string, answer: string) {
+  private publish(key: string, answer: string, run?: { sessionId: string; generation: number }) {
     return commandTransaction(this.storage, this.instanceId, async tx => {
       const prior = await tx.get<MainCommand>('main-command', key)
       if (!prior || prior.status === 'completed' || prior.status === 'stopped' || prior.status === 'stopping') return
       const state = await this.state(tx)
+      if (run && (state.mainSessionId !== run.sessionId || state.generation !== run.generation)) {
+        await this.updateCommandIn(tx, key, { ...prior, status: 'failed', updatedAt: Date.now(), error: 'MAIN_TURN_STALE' })
+        return
+      }
       const sequence = state.sequence + 1
       await tx.insert<MainMessage>('main-message', messageKey(sequence), { id: `reply:${prior.messageId}`, sequence, role: 'main', text: answer, createdAt: Date.now(), status: 'completed' })
       await tx.replace('main-state', 'main', { ...state, sequence })
-      await this.updateCommandIn(tx, key, { ...prior, status: 'completed', replySequence: sequence })
+      const { error: _error, ...settled } = prior
+      await this.updateCommandIn(tx, key, { ...settled, status: 'completed', replySequence: sequence, updatedAt: Date.now() })
     })
   }
 
@@ -453,16 +634,20 @@ export class MainConversation {
     if (message) await tx.replace('main-message', messageKey(command.userSequence), { ...message, status: command.status, ...(error ? { error } : {}) })
     const state = await this.state(tx)
     if (command.status === 'running') await tx.replace('main-state', 'main', { ...state, activeCommand: key })
-    else if (state.activeCommand === key && (command.status === 'completed' || command.status === 'stopped')) {
+    else if (state.activeCommand === key && command.status !== 'stopping') {
       const { activeCommand: _active, ...settled } = state
       await tx.replace('main-state', 'main', settled)
     }
   }
 
-  private updateCommand(key: string, status: MainCommand['status'], error?: string) {
+  private updateCommand(key: string, status: MainCommand['status'], error?: string,
+    update: Partial<Pick<MainCommand, 'attempts' | 'run'>> = {}) {
     return commandTransaction(this.storage, this.instanceId, async tx => {
       const command = await tx.get<MainCommand>('main-command', key)
-      if (command && command.status !== 'completed') await this.updateCommandIn(tx, key, { ...command, status }, error)
+      if (command && command.status !== 'completed') {
+        const { error: _oldError, ...current } = command
+        await this.updateCommandIn(tx, key, { ...current, ...update, status, updatedAt: Date.now() }, error)
+      }
     })
   }
 

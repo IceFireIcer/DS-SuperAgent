@@ -1298,6 +1298,7 @@ export class Engine {
   }
   sendMainMessage(request: MainSend) { return this.main.send(request) }
   stopMainTurn(request: MainAddress & { commandId: string; messageId: string }) { return this.main.stop(request) }
+  resumeMainInputs(request: MainAddress) { return this.main.resume(request) }
   async getMainConversation(request: MainAddress & { limit?: number; after?: number }) {
     const page = await this.main.page(request)
     return { ...page, works: this.workDelegation ? await this.workDelegation.list(page.mainId) : [] as MainWorkCard[] }

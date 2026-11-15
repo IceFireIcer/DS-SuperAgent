@@ -41,6 +41,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
     await engine.acquireHost()
     await engine.openMain({ instanceId })
     engine.effects.start()
+    void engine.resumeMainInputs({ instanceId }).catch(() => { /* The persisted input and failed health remain visible for retry. */ })
     return {
       async dispatch(endpoint, payload = {}) {
         if (closing) throw new CoreError('RUNTIME_CLOSED', 'The product Host is closed.')
