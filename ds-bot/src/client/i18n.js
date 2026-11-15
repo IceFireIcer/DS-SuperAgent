@@ -1620,6 +1620,7 @@ const HOST_ZH = {
   'Apply preset': '应用预设',
   'Open role settings to load its current revision.': '请打开角色设置以加载当前版本。',
   'Role settings changed. Reload settings before applying a preset.': '角色设置已变化，请重新加载后再应用预设。',
+  'Reload settings': '重新加载设置',
   'The role configuration revision was not confirmed.': '无法确认角色配置版本。',
   'Could not refresh role settings.': '无法刷新角色设置。',
   'From': '来源',

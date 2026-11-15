@@ -1121,7 +1121,7 @@ export function applyProduct(ctx) {
             page === 'schedules' ? h(ProductScheduleSettings, { binding, works: view.getSnapshot().works, call: productCall,
               onViewWork: () => { onClose(); view.set(current => ({ ...current, route: 'main' })); void refreshMain(binding) } })
               : page === 'presets' ? h(ProductPresetSettings, { binding, call: productCall,
-                settingsRevision: snapshot.revision, onApplied: refreshAfterPreset }) : h(Fragment, null,
+                settingsRevision: snapshot.revision, onApplied: refreshAfterPreset, onReload: refreshAfterPreset }) : h(Fragment, null,
             error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
             viewState.directoryError ? h('p', { className: 'bt-main-error', role: 'alert' }, viewState.directoryError) : null,
             conflict ? h('div', { className: 'bt-main-settings-conflict', role: 'status' },

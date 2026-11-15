@@ -1664,6 +1664,7 @@ var HOST_ZH = {
   "Apply preset": "应用预设",
   "Open role settings to load its current revision.": "请打开角色设置以加载当前版本。",
   "Role settings changed. Reload settings before applying a preset.": "角色设置已变化，请重新加载后再应用预设。",
+  "Reload settings": "重新加载设置",
   "The role configuration revision was not confirmed.": "无法确认角色配置版本。",
   "Could not refresh role settings.": "无法刷新角色设置。",
   "From": "来源",
@@ -22004,7 +22005,7 @@ function DraftFields({ draft, onChange, onUploading, busy }) {
     ) : null
   );
 }
-function ProductPresetSettings({ binding, call: call2, settingsRevision, onApplied }) {
+function ProductPresetSettings({ binding, call: call2, settingsRevision, onApplied, onReload }) {
   const instanceId = binding.instanceId;
   const [items, setItems] = (0, import_react55.useState)(null);
   const [cursor, setCursor] = (0, import_react55.useState)(null);
@@ -22124,6 +22125,20 @@ function ProductPresetSettings({ binding, call: call2, settingsRevision, onAppli
       setActivityError(failure?.message ?? t("Preset activity is unavailable."));
     } finally {
       setActivityBusy(false);
+    }
+  };
+  const reloadSettings = async () => {
+    if (!onReload || submitting.current) return;
+    submitting.current = true;
+    setBusy("reload");
+    setError("");
+    try {
+      await onReload();
+    } catch (failure) {
+      setError(failure?.message ?? t("Could not refresh role settings."));
+    } finally {
+      submitting.current = false;
+      setBusy(null);
     }
   };
   const create = (event) => {
@@ -22316,7 +22331,19 @@ function ProductPresetSettings({ binding, call: call2, settingsRevision, onAppli
         }
       }, t("Load more")) : null
     ) : null,
-    stale ? (0, import_react55.createElement)("p", { role: "alert", className: "bt-main-error" }, t("Role settings changed. Reload settings before applying a preset.")) : null,
+    stale ? (0, import_react55.createElement)(
+      "div",
+      { className: "bt-set-row" },
+      (0, import_react55.createElement)("p", { role: "alert", className: "bt-main-error" }, t("Role settings changed. Reload settings before applying a preset.")),
+      onReload ? (0, import_react55.createElement)("button", {
+        type: "button",
+        className: "bt-soft bt-soft-sm",
+        disabled: Boolean(busy),
+        onClick: () => {
+          void reloadSettings();
+        }
+      }, t("Reload settings")) : null
+    ) : null,
     error ? (0, import_react55.createElement)("p", { role: "alert", className: "bt-main-error" }, error) : null,
     notice ? (0, import_react55.createElement)("p", { role: "status", className: "bt-main-status" }, notice) : null,
     mode === "import" && !preview ? (0, import_react55.createElement)(
@@ -24548,7 +24575,8 @@ function applyProduct(ctx) {
               binding,
               call: productCall,
               settingsRevision: snapshot.revision,
-              onApplied: refreshAfterPreset
+              onApplied: refreshAfterPreset,
+              onReload: refreshAfterPreset
             }) : (0, import_react57.createElement)(
               import_react57.Fragment,
               null,

@@ -139,5 +139,5 @@ test('Engine reconciles a lost preset-apply commit by its original command ident
   assert.equal((await owner.getRoleConfig()).revision, 2)
   assert.equal((await owner.listRolePresetApplications({ instanceId: 'personal' })).items.length, 1)
   await assert.rejects(reader.applyRolePreset({ ...command, commandId: 'reader-apply', expectedRevision: 2 }), { code: 'SOURCE_NOT_AUTHORIZED' })
-  assert.throws(() => owner.getRolePresetApplication({ instanceId: 'elsewhere', commandId: command.commandId }), { code: 'SOURCE_NOT_AUTHORIZED' })
+  await assert.rejects(owner.getRolePresetApplication({ instanceId: 'elsewhere', commandId: command.commandId }), { code: 'SOURCE_NOT_AUTHORIZED' })
 })

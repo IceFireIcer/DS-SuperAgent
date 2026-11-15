@@ -1966,7 +1966,10 @@ export class Engine {
       if (!application) throw new CoreError('INCOMPLETE_STATE', 'The committed preset application is missing its role revision.')
       return application
     })
-    if (prior) return prior
+    if (prior) {
+      await this.getRoleConfig()
+      return prior
+    }
     const current = await this.getRoleConfig()
     if (current.revision !== command.expectedRevision) throw new CoreError('CONFIG_REVISION_CONFLICT', 'The role configuration changed after this preset was selected.')
     const entry = await this.rolePresets.get({ instanceId: this.instanceId, presetId: command.presetId })
@@ -2002,11 +2005,14 @@ export class Engine {
     return result.application
   }
 
-  getRolePresetApplication(request: { instanceId: string; commandId: string }) {
+  async getRolePresetApplication(request: { instanceId: string; commandId: string }) {
     this.assertPresetAccess(request?.instanceId)
     if (!request || Object.keys(request).some(key => !['instanceId', 'commandId'].includes(key))) throw new CoreError('INVALID_INPUT', 'A preset application query needs a command ID.')
     identifier(request.commandId, 'commandId')
-    return this.storage.transaction(this.instanceId, tx => tx.get<RolePresetApplication>('role-preset-application', this.commandKey(request.commandId)))
+    const application = await this.storage.transaction(this.instanceId,
+      tx => tx.get<RolePresetApplication>('role-preset-application', this.commandKey(request.commandId)))
+    if (application) await this.getRoleConfig()
+    return application
   }
 
   async listRolePresetApplications(request: { instanceId: string; after?: string; limit?: number }) {

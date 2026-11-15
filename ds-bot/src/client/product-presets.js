@@ -122,7 +122,7 @@ function DraftFields({ draft, onChange, onUploading, busy }) {
 }
 
 /** Settings page content. The parent supplies its authorized productCall and current settings revision. */
-export function ProductPresetSettings({ binding, call, settingsRevision, onApplied }) {
+export function ProductPresetSettings({ binding, call, settingsRevision, onApplied, onReload }) {
   const instanceId = binding.instanceId
   const [items, setItems] = useState(null)
   const [cursor, setCursor] = useState(null)
@@ -214,6 +214,15 @@ export function ProductPresetSettings({ binding, call, settingsRevision, onAppli
         importsCursor: imports.cursor ?? null, applicationsCursor: applications.cursor ?? null })
     } catch (failure) { setActivityError(failure?.message ?? t('Preset activity is unavailable.')) }
     finally { setActivityBusy(false) }
+  }
+
+  const reloadSettings = async () => {
+    if (!onReload || submitting.current) return
+    submitting.current = true
+    setBusy('reload'); setError('')
+    try { await onReload() }
+    catch (failure) { setError(failure?.message ?? t('Could not refresh role settings.')) }
+    finally { submitting.current = false; setBusy(null) }
   }
 
   const create = event => {
@@ -314,7 +323,10 @@ export function ProductPresetSettings({ binding, call, settingsRevision, onAppli
       !activity.imports.length && !activity.applications.length ? h('p', { className: 'bt-set-row bt-set-hint' }, t('No preset activity yet.')) : null,
       activity.importsCursor || activity.applicationsCursor ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm',
         disabled: activityBusy, onClick: () => { void loadActivity(activity) } }, t('Load more')) : null) : null,
-    stale ? h('p', { role: 'alert', className: 'bt-main-error' }, t('Role settings changed. Reload settings before applying a preset.')) : null,
+    stale ? h('div', { className: 'bt-set-row' },
+      h('p', { role: 'alert', className: 'bt-main-error' }, t('Role settings changed. Reload settings before applying a preset.')),
+      onReload ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: Boolean(busy),
+        onClick: () => { void reloadSettings() } }, t('Reload settings')) : null) : null,
     error ? h('p', { role: 'alert', className: 'bt-main-error' }, error) : null,
     notice ? h('p', { role: 'status', className: 'bt-main-status' }, notice) : null,
     mode === 'import' && !preview ? h('form', { className: 'bt-product-preset-form', onSubmit: prepare },

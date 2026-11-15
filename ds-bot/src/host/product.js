@@ -30,7 +30,7 @@ export function installProduct(ctx) {
           return Response.json({ ok: true, value })
         } catch (error) {
           const code = typeof error?.code === 'string' ? error.code : 'PRODUCT_UNAVAILABLE'
-          const message = typeof body?.endpoint === 'string' && body.endpoint.startsWith('preset-') && (code.startsWith('PRESET_') || code === 'INVALID_PRESET'
+          const message = typeof body?.endpoint === 'string' && body.endpoint.startsWith('preset-') && (code.startsWith('PRESET_') || code.startsWith('INVALID_PRESET')
             || code === 'IDENTITY_CONFLICT' || code === 'COMMIT_UNKNOWN') ? String(error?.message ?? 'Check the preset request.')
             : code === 'SOURCE_NOT_AUTHORIZED' ? 'This conversation is outside the authorized workspace.'
             : code === 'IDENTITY_CONFLICT' ? 'This message identity was already used for different text.'
