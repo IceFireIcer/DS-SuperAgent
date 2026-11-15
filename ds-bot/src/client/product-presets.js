@@ -122,7 +122,7 @@ function DraftFields({ draft, onChange, onUploading, busy }) {
 }
 
 /** Settings page content. The parent supplies its authorized productCall and current settings revision. */
-export function ProductPresetSettings({ binding, call, settingsRevision, onApplied }) {
+export function ProductPresetSettings({ binding, call, settingsRevision, onApplied, onReload }) {
   const instanceId = binding.instanceId
   const [items, setItems] = useState(null)
   const [cursor, setCursor] = useState(null)
@@ -142,6 +142,9 @@ export function ProductPresetSettings({ binding, call, settingsRevision, onAppli
   const [busy, setBusy] = useState(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [activity, setActivity] = useState(null)
+  const [activityError, setActivityError] = useState('')
+  const [activityBusy, setActivityBusy] = useState(false)
   const commands = useRef({})
   const request = useRef(0)
   const submitting = useRef(false)
@@ -159,6 +162,7 @@ export function ProductPresetSettings({ binding, call, settingsRevision, onAppli
   }, [call, instanceId])
   useEffect(() => {
     setItems(null); setMode(null); setPreview(null); setReviewCopy(null); setNotice(''); setError('')
+    setActivity(null); setActivityError('')
     commands.current = {}
     void refresh()
     return () => { request.current++ }
@@ -174,14 +178,51 @@ export function ProductPresetSettings({ binding, call, settingsRevision, onAppli
     if (submitting.current || uploading.current) return
     submitting.current = true
     setBusy(kind); setError(''); setNotice('')
+    const id = commandId(kind, payload)
     try {
-      const result = await call(endpoint, { instanceId, commandId: commandId(kind, payload), ...payload })
+      const result = await call(endpoint, { instanceId, commandId: id, ...payload })
       await receive(result)
       delete commands.current[kind]
     } catch (failure) {
+      if (kind === 'apply' && (failure?.code === 'COMMIT_UNKNOWN' || failure?.code === 'CLIENT_JOURNAL_UNAVAILABLE')) {
+        try {
+          const recorded = await call('preset-application-read', { instanceId, commandId: id })
+          if (recorded?.presetId === payload.presetId && recorded.targetRole === payload.targetRole
+            && recorded.revision > payload.expectedRevision) {
+            await receive(recorded)
+            delete commands.current[kind]
+            return
+          }
+        } catch { /* The original command ID remains available for retry. */ }
+      }
       if (kind === 'apply' && failure?.code === 'CONFIG_REVISION_CONFLICT') setStale(true)
       setError(failure?.message ?? t('The preset operation failed.'))
     } finally { submitting.current = false; setBusy(null) }
+  }
+
+  const loadActivity = async (previous = null) => {
+    setActivityBusy(true); setActivityError('')
+    try {
+      const [imports, applications] = await Promise.all([
+        previous?.importsCursor === null ? { items: [] } : call('preset-imports', { instanceId, limit: 50,
+          ...(previous?.importsCursor ? { after: previous.importsCursor } : {}) }),
+        previous?.applicationsCursor === null ? { items: [] } : call('preset-applications', { instanceId, limit: 50,
+          ...(previous?.applicationsCursor ? { after: previous.applicationsCursor } : {}) }),
+      ])
+      if (!Array.isArray(imports?.items) || !Array.isArray(applications?.items)) throw new Error(t('Preset activity is unavailable.'))
+      setActivity({ imports: [...(previous?.imports ?? []), ...imports.items], applications: [...(previous?.applications ?? []), ...applications.items],
+        importsCursor: imports.cursor ?? null, applicationsCursor: applications.cursor ?? null })
+    } catch (failure) { setActivityError(failure?.message ?? t('Preset activity is unavailable.')) }
+    finally { setActivityBusy(false) }
+  }
+
+  const reloadSettings = async () => {
+    if (!onReload || submitting.current) return
+    submitting.current = true
+    setBusy('reload'); setError('')
+    try { await onReload() }
+    catch (failure) { setError(failure?.message ?? t('Could not refresh role settings.')) }
+    finally { submitting.current = false; setBusy(null) }
   }
 
   const create = event => {
@@ -215,7 +256,7 @@ export function ProductPresetSettings({ binding, call, settingsRevision, onAppli
       const record = requireDecision(result)
       if (record.previewId !== preview.id) throw new Error(t('The import decision does not match this review.'))
       if (record.status === 'conflict') {
-        setError(t('Import conflict: {reason}. Review the source and preset again.', { reason: record.reason ?? 'unknown' }))
+        setError(t('Import conflict: {reason}. Review the source and preset again.', { reason: t(record.reason ?? 'unknown') }))
         return
       }
       if (decision === 'select' && record.status === 'skipped' || decision === 'skip' && record.status === 'selected') {
@@ -259,7 +300,7 @@ export function ProductPresetSettings({ binding, call, settingsRevision, onAppli
       items?.length ? h('div', { className: 'bt-set-row bt-product-preset-target' },
         h('label', null, t('Apply to'), h('select', { className: 'bt-select', 'aria-label': t('Apply to'), value: applyRole,
           disabled: Boolean(busy), onChange: event => setApplyRole(event.target.value) },
-        roles.map(([id, name]) => h('option', { key: id, value: id }, name)))),
+        roles.map(([id, name]) => h('option', { key: id, value: id }, t(name))))),
         !Number.isSafeInteger(revision) ? h('span', { className: 'bt-set-hint' }, t('Open role settings to load its current revision.')) : null) : null,
       items?.map(entry => h('div', { key: entry.id, className: 'bt-set-row bt-product-preset-item' },
         h(BotMark, { look: appearanceOf(entry.preset), size: 36, label: entry.preset.name }),
@@ -270,8 +311,22 @@ export function ProductPresetSettings({ binding, call, settingsRevision, onAppli
           disabled: Boolean(busy) || Boolean(listError) || stale || !Number.isSafeInteger(revision), onClick: () => apply(entry.id) }, t('Apply preset'))
           : h('span', { className: 'bt-set-hint' }, t('Deleted')))),
       cursor ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: Boolean(busy),
-        onClick: () => { void refresh(cursor, true) } }, t('Load more')) : null),
-    stale ? h('p', { role: 'alert', className: 'bt-main-error' }, t('Role settings changed. Reload settings before applying a preset.')) : null,
+        onClick: () => { void refresh(cursor, true) } }, t('Load more')) : null,
+      h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: activityBusy,
+        onClick: () => { void loadActivity() } }, t('Preset activity'))),
+    activityError ? h('p', { role: 'alert', className: 'bt-main-error' }, activityError) : null,
+    activity ? h(Card, { title: t('Preset activity') },
+      activity.imports.map(item => h('p', { key: item.id, className: 'bt-set-row bt-set-hint' },
+        `${item.source.identity} / ${item.source.botId} → ${item.targetRole}: ${t(item.status)}${item.reason ? ` (${t(item.reason)})` : ''}`)),
+      activity.applications.map(item => h('p', { key: `${item.sourceInstanceId}:${item.actorId}:${item.commandId}`, className: 'bt-set-row bt-set-hint' },
+        `${item.presetId} v${item.presetRevision} → ${item.targetRole}: ${t('Configuration')} v${item.revision}`)),
+      !activity.imports.length && !activity.applications.length ? h('p', { className: 'bt-set-row bt-set-hint' }, t('No preset activity yet.')) : null,
+      activity.importsCursor || activity.applicationsCursor ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm',
+        disabled: activityBusy, onClick: () => { void loadActivity(activity) } }, t('Load more')) : null) : null,
+    stale ? h('div', { className: 'bt-set-row' },
+      h('p', { role: 'alert', className: 'bt-main-error' }, t('Role settings changed. Reload settings before applying a preset.')),
+      onReload ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: Boolean(busy),
+        onClick: () => { void reloadSettings() } }, t('Reload settings')) : null) : null,
     error ? h('p', { role: 'alert', className: 'bt-main-error' }, error) : null,
     notice ? h('p', { role: 'status', className: 'bt-main-status' }, notice) : null,
     mode === 'import' && !preview ? h('form', { className: 'bt-product-preset-form', onSubmit: prepare },
@@ -283,7 +338,7 @@ export function ProductPresetSettings({ binding, call, settingsRevision, onAppli
           value: sourceBotId, required: true, disabled: Boolean(busy), onChange: event => setSourceBotId(event.target.value) })),
         h(Row, { label: t('Target role') }, h('select', { className: 'bt-select', 'aria-label': t('Target role'), value: targetRole,
           disabled: Boolean(busy), onChange: event => setTargetRole(event.target.value) },
-        roles.map(([id, name]) => h('option', { key: id, value: id }, name)))),
+        roles.map(([id, name]) => h('option', { key: id, value: id }, t(name))))),
         h(Row, { label: t('Old configuration copy'), hint: t('Paste a copy of bot/state.json. Only the selected profile fields are sent for review.'), stack: true },
           h('textarea', { className: 'bt-bs-input bt-bs-area', 'aria-label': t('Old configuration copy'), rows: 5,
             required: true, value: sourceText, disabled: Boolean(busy), onChange: event => setSourceText(event.target.value) }))),
@@ -298,7 +353,7 @@ export function ProductPresetSettings({ binding, call, settingsRevision, onAppli
         new Set([...preview.preview.ignored, ...ignored]).size ? h('p', { className: 'bt-set-row bt-set-hint' },
           `${t('Ignored fields')}: ${[...new Set([...preview.preview.ignored, ...ignored])].join(', ')}`) : null,
         preview.preview.issues.map((issue, index) => h('p', { key: index, role: 'status', className: 'bt-set-row bt-main-error' },
-          `${issue.field}: ${issue.reason}`))),
+          `${issue.field}: ${t(issue.reason)}`))),
       h(DraftFields, { draft, busy: Boolean(busy),
         onUploading: value => { uploading.current = value; setBusy(value ? 'image' : null) },
         onChange: (value, failure) => { setDraft(value); setError(failure ?? '') } }),

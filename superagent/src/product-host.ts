@@ -18,6 +18,7 @@ import type { ProductCredentialManager } from './product-credential-manager.js'
 import { assertReferenceShape } from './environment-assets.js'
 import { localDeliveryChannel, type DeliveryChannel } from './deliveries.js'
 import type { RoleConfig, RoleModel } from './config.js'
+import type { LegacyPresetCopy, PresetRole } from './role-presets.js'
 
 export interface ProductHostConfig { databasePath: string; workspaceRoot?: string; instanceId?: string; actorId?: string; main?: RoleModel; router?: RoleModel; worker?: RoleModel; timeoutMs?: number;
   clientGateway?: Omit<ClientGatewayOptions, 'product'>;
@@ -311,6 +312,15 @@ export async function createProductHost(context: Context, config: ProductHostCon
                 : endpoint === 'work-answer' ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'attentionId', 'attentionVersion', 'text']
                   : endpoint === 'settings' ? ['instanceId', 'limit']
                     : endpoint === 'settings-save' ? ['instanceId', 'commandId', 'expectedRevision', 'roles']
+                      : endpoint === 'preset-list' || endpoint === 'preset-imports' || endpoint === 'preset-applications'
+                        ? ['instanceId', 'after', 'limit']
+                        : endpoint === 'preset-create' ? ['instanceId', 'commandId', 'preset']
+                          : endpoint === 'preset-preview' ? ['instanceId', 'commandId', 'copy']
+                            : endpoint === 'preset-select' ? ['instanceId', 'commandId', 'previewId', 'decision', 'copy', 'preset']
+                              : endpoint === 'preset-apply' ? ['instanceId', 'commandId', 'presetId', 'targetRole', 'expectedRevision']
+                                : endpoint === 'preset-application-read' ? ['instanceId', 'commandId']
+                                  : endpoint === 'preset-preview-read' ? ['instanceId', 'previewId']
+                                    : endpoint === 'preset-import-read' ? ['instanceId', 'importId']
                       : endpoint === 'settings-efforts' ? ['instanceId', 'provider', 'model']
                         : endpoint === 'provider-key' ? ['instanceId', 'provider', 'value']
                           : endpoint === 'reconcile-delivery' ? ['instanceId', 'commandId', 'ticketId', 'deliveryId']
@@ -325,6 +335,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
         if (Object.keys(payload).some(key => !fields.includes(key))) throw new CoreError('INVALID_INPUT', 'The product request contains unsupported fields.')
         if (client && endpoint.startsWith('schedule-')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Schedule administration requires the local authorized product settings.')
+        }
+        if (client && endpoint.startsWith('preset-')) {
+          throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Role presets require the local authorized product settings.')
         }
         if (client && endpoint.startsWith('resource-')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Credential resources require the local authorized product settings.')
@@ -503,6 +516,29 @@ export async function createProductHost(context: Context, config: ProductHostCon
           workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
           expectedGeneration: payload.expectedGeneration as string, reason: payload.reason as string })
         if (endpoint === 'settings') return roleSettings(payload.limit === undefined ? 50 : payload.limit as number)
+        if (endpoint === 'preset-list') return engine!.listRolePresets({ instanceId,
+          ...(payload.after === undefined ? {} : { after: payload.after as string }),
+          ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
+        if (endpoint === 'preset-imports') return engine!.listRolePresetImports({ instanceId,
+          ...(payload.after === undefined ? {} : { after: payload.after as string }),
+          ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
+        if (endpoint === 'preset-applications') return engine!.listRolePresetApplications({ instanceId,
+          ...(payload.after === undefined ? {} : { after: payload.after as string }),
+          ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
+        if (endpoint === 'preset-preview-read') return await engine!.getRolePresetPreview({ instanceId, previewId: payload.previewId as string }) ?? null
+        if (endpoint === 'preset-import-read') return await engine!.getRolePresetImport({ instanceId, importId: payload.importId as string }) ?? null
+        if (endpoint === 'preset-application-read') return await engine!.getRolePresetApplication({ instanceId,
+          commandId: payload.commandId as string }) ?? null
+        if (endpoint === 'preset-create') return engine!.createRolePreset({ instanceId, commandId: payload.commandId as string, preset: payload.preset })
+        if (endpoint === 'preset-preview') return engine!.previewRolePreset({ instanceId, commandId: payload.commandId as string,
+          copy: payload.copy as LegacyPresetCopy })
+        if (endpoint === 'preset-select') return engine!.selectRolePreset({ instanceId, commandId: payload.commandId as string,
+          previewId: payload.previewId as string, decision: payload.decision as 'select' | 'skip',
+          ...(payload.copy === undefined ? {} : { copy: payload.copy as LegacyPresetCopy }),
+          ...(payload.preset === undefined ? {} : { preset: payload.preset }) })
+        if (endpoint === 'preset-apply') return engine!.applyRolePreset({ instanceId, commandId: payload.commandId as string,
+          presetId: payload.presetId as string, targetRole: payload.targetRole as PresetRole,
+          expectedRevision: payload.expectedRevision as number }, { verify: verifyRoles })
         if (endpoint === 'settings-save') {
           const roles = payload.roles as RoleConfig
           if (!roles || typeof roles !== 'object' || !roles.main || !roles.router || !roles.worker) {
