@@ -272,7 +272,19 @@ export class Engine {
       (rule, occurrence) => this.receiveScheduledOccurrence(rule, occurrence))
     this.membership = new SourceMembership(storage, instanceId, this.source.sourceInstanceId, Date.now)
     this.deliveryState = new DeliveryState(storage, instanceId, this.sourceEvents, Date.now)
-    this.proactive = proactiveOptions ? new Proactive(storage, instanceId, proactiveOptions) : undefined
+    this.proactive = proactiveOptions ? new Proactive(storage, instanceId, { ...proactiveOptions,
+      guard: async (tx, candidate) => {
+        const event = await tx.get<SourceEvent>('source-event', candidate.eventId)
+        if (!event || event.source.kind !== this.sourceEvents.kind || !this.sourceEvents.belongsToSource(event)
+          || event.source.sourceInstanceId !== candidate.sourceInstanceId || event.threadId !== candidate.threadId
+          || event.objectId !== candidate.objectId || event.text !== candidate.text || event.authorId !== candidate.authorId
+          || event.authorKind !== candidate.authorKind || event.addressing !== candidate.addressing
+          || !await isCurrentSourceEvent(tx, event)) return 'SOURCE_NOT_CURRENT'
+        if ((await tx.get<ProcessingState>('processing-state', this.processingKey()))?.paused) return 'PROCESSING_PAUSED'
+        if (await this.inputs.owns(tx, event)) return 'WORK_ALREADY_OWNED'
+        return proactiveOptions.guard?.(tx, candidate)
+      },
+    }) : undefined
     if (sessions && (effectsOptions.operationTimeoutMs ?? 60000) <= sessions.timeoutMs) throw new CoreError('INVALID_CONFIG', 'The effect deadline must exceed the native Session turn budget.')
     this.effects = new Effects(storage, instanceId, sessions ? { ...effectsOptions, operationTimeoutMs: effectsOptions.operationTimeoutMs ?? 60000 } : effectsOptions)
     this.configureEffectsGate()
@@ -393,12 +405,15 @@ export class Engine {
     const receipt = await this.sourceEvents.receive(event, async (tx, sourceEvent) => {
       await this.inputs.recordFanout(tx, sourceEvent)
       await this.answerFromSourceEvent(tx, sourceEvent)
+      if (this.proactive && sourceEvent.type !== 'deleted' && !this.processingPaused && !await this.inputs.owns(tx, sourceEvent)) {
+        await this.proactive.enqueue(tx, { sourceInstanceId: sourceEvent.source.sourceInstanceId,
+          eventId: sourceEvent.id, threadId: sourceEvent.threadId, objectId: sourceEvent.objectId, text: sourceEvent.text!,
+          authorId: sourceEvent.authorId, authorKind: sourceEvent.authorKind, addressing: sourceEvent.addressing })
+      }
     })
-    if (this.proactive && receipt.status === 'recorded' && event.type !== 'deleted' && !this.processingPaused) {
-      void this.proactive.evaluate({ sourceInstanceId: this.source.sourceInstanceId, eventId: receipt.eventId!, threadId: event.threadId,
-        objectId: event.objectId, text: event.text ?? '', authorId: event.authorId ?? this.source.actorId,
-        authorKind: event.authorKind ?? 'human', addressing: event.addressing ?? 'direct' }).catch(() => {})
-    }
+    if (this.proactive && receipt.status === 'recorded') void this.reconcileProactiveCandidates().catch(() => {
+      // The durable candidate remains queued for Host recovery after a transient failure.
+    })
     return receipt
   }
 
@@ -2158,23 +2173,34 @@ export class Engine {
     return this.proactive.rules()
   }
 
+  async getProactiveControl() {
+    if (!this.proactive) throw new CoreError('PROACTIVE_NOT_CONFIGURED', 'Configure a proactive root directory before reading controls.')
+    return this.proactive.control()
+  }
+
+  async setProactivePaused(command: { commandId: string; paused: boolean }) {
+    if (!this.proactive) throw new CoreError('PROACTIVE_NOT_CONFIGURED', 'Configure a proactive root directory before pausing.')
+    this.assertAuthoringActor()
+    return this.proactive.setPaused(command)
+  }
+
   async updateProactiveRules(command: { commandId: string; expectedRevision: number; rules: ProactiveRule[] }): Promise<{ revision: number; rules: ProactiveRule[] }> {
     if (!this.proactive) throw new CoreError('PROACTIVE_NOT_CONFIGURED', 'Configure a proactive root directory before saving rules.')
+    this.assertAuthoringActor()
     if (!command || Object.keys(command).some(key => !['commandId', 'expectedRevision', 'rules'].includes(key))) throw new CoreError('INVALID_INPUT', 'A proactive rule update accepts commandId, expectedRevision and rules only.')
     identifier(command.commandId, 'commandId')
     const commandKey = this.commandKey(command.commandId)
     const fingerprint = createHash('sha256').update(canonicalJson(['proactive-rules-v1', command.expectedRevision, command.rules])).digest('hex')
-    await commandTransaction(this.storage, this.instanceId, async tx => {
-      const prior = await tx.get<{ fingerprint: string; revision: number }>('work-command', commandKey)
+    return commandTransaction(this.storage, this.instanceId, async tx => {
+      const prior = await tx.get<{ fingerprint: string; saved: { revision: number; rules: ProactiveRule[] } }>('work-command', commandKey)
       if (prior) {
         if (prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The proactive rule command was reused with different input.')
-        return { revision: prior.revision, replayed: true }
+        return prior.saved
       }
       const rules = await this.proactive!.setRules(tx, command.expectedRevision, command.rules)
-      await tx.insert('work-command', commandKey, { fingerprint, revision: rules.revision })
-      return { revision: rules.revision, replayed: false }
+      await tx.insert('work-command', commandKey, { fingerprint, saved: rules })
+      return rules
     })
-    return this.proactive.rules()
   }
 
   async evaluateProactive(candidate: ProactiveCandidate): Promise<ProactiveRun[]> {
@@ -2197,6 +2223,54 @@ export class Engine {
     if (!this.proactive) throw new CoreError('PROACTIVE_NOT_CONFIGURED', 'Configure a proactive root directory before reading runs.')
     return this.proactive.listRuns(ruleId)
   }
+
+  async getRecentProactiveNotices(): Promise<ProactiveRun[]> {
+    if (!this.proactive) throw new CoreError('PROACTIVE_NOT_CONFIGURED', 'Configure a proactive root directory before reading notices.')
+    return this.proactive.recentNotices()
+  }
+
+  async getProactiveRun(runId: string): Promise<ProactiveRun | undefined> {
+    if (!this.proactive) throw new CoreError('PROACTIVE_NOT_CONFIGURED', 'Configure a proactive root directory before reading runs.')
+    return this.proactive.getRun(runId)
+  }
+
+  async readProactiveArtifact(runId: string, path: string, offset?: number, maxBytes?: number) {
+    if (!this.proactive) throw new CoreError('PROACTIVE_NOT_CONFIGURED', 'Configure a proactive root directory before reading artifacts.')
+    return this.proactive.readArtifact(runId, path, offset, maxBytes)
+  }
+
+  async stopProactiveRun(command: { commandId: string; runId: string; reason: string }): Promise<ProactiveRun> {
+    if (!this.proactive) throw new CoreError('PROACTIVE_NOT_CONFIGURED', 'Configure a proactive root directory before stopping runs.')
+    if (!this.source.allowedActorIds.includes(this.source.actorId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This actor cannot stop a preparation.')
+    return this.proactive.stop(command)
+  }
+
+  async assertProactiveRunCurrent(candidate: ProactiveCandidate, revision: number, runId: string) {
+    if (!this.proactive) throw new CoreError('PROACTIVE_NOT_CONFIGURED', 'Configure a proactive root directory before preparing runs.')
+    return this.proactive.assertCurrent(candidate, revision, runId)
+  }
+
+  async recoverProactiveRuns() {
+    if (!this.proactive) throw new CoreError('PROACTIVE_NOT_CONFIGURED', 'Configure a proactive root directory before recovering runs.')
+    return this.proactive.recoverInterrupted()
+  }
+
+  async reconcileProactiveCandidates() {
+    if (!this.proactive) return 0
+    const candidates = await this.proactive.pending(this.source.sourceInstanceId)
+    for (const pending of candidates) {
+      await this.proactive.evaluate(pending.candidate, pending.ruleRevision, pending.controlRevision)
+      await this.proactive.completePending(pending.id)
+    }
+    return candidates.length
+  }
+
+  async discardProactiveCandidates() {
+    return this.proactive?.discardPending(this.source.sourceInstanceId)
+  }
+
+
+  abortProactiveRuns() { this.proactive?.abortActive() }
 
   async getSourceMembers(): Promise<MembershipSnapshot | undefined> {
     return this.membership.get()
@@ -2328,6 +2402,54 @@ export class Engine {
   getSupervisorProposals(ticketId?: string) { return listSupervisorProposals(this.storage, this.instanceId, ticketId) }
 
   getSupervisorState(ticketId: string) { return this.createSupervisor().getState(ticketId) }
+
+  private async mainSupervisorTicket(ticketId: string) {
+    identifier(ticketId, 'ticketId')
+    const index = await this.storage.transaction(this.instanceId,
+      tx => tx.get<{ workItemId: string }>('work-ticket', ticketId))
+    if (!index) throw new CoreError('NOT_FOUND', 'This proposal does not belong to an established Main work card.')
+    await this.requireMainWorkControl({ instanceId: this.instanceId, workItemId: index.workItemId, ticketId })
+  }
+
+  async getMainSupervisorProposals(request: { instanceId: string; ticketId?: string }) {
+    if (request.instanceId !== this.instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The supervision history belongs to another Instance.')
+    if (request.ticketId !== undefined) await this.mainSupervisorTicket(request.ticketId)
+    const proposals = await this.getSupervisorProposals(request.ticketId)
+    const visible: SupervisorProposal[] = []
+    for (const proposal of proposals) {
+      try { await this.mainSupervisorTicket(proposal.ticketId); visible.push(proposal) }
+      catch (error) {
+        if (!(error instanceof CoreError) || !['NOT_FOUND', 'SOURCE_NOT_AUTHORIZED'].includes(error.code)) throw error
+      }
+    }
+    return visible
+  }
+
+  async getMainSupervisorState(request: { instanceId: string; ticketId: string }) {
+    if (request.instanceId !== this.instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The supervision history belongs to another Instance.')
+    await this.mainSupervisorTicket(request.ticketId)
+    return this.getSupervisorState(request.ticketId)
+  }
+
+  async decideSupervisorProposal(command: { instanceId: string; commandId: string; proposalId: string;
+    decision: 'approve' | 'reject'; fingerprint: string; reason?: string }) {
+    if (!command || Object.keys(command).some(key => !['instanceId', 'commandId', 'proposalId', 'decision', 'fingerprint', 'reason'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'A supervision decision needs its proposal, fingerprint and choice.')
+    }
+    this.requireProductScheduleActor()
+    if (command.instanceId !== this.instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The proposal belongs to another Instance.')
+    identifier(command.commandId, 'commandId'); identifier(command.proposalId, 'proposalId')
+    const proposal = await this.createSupervisor().getProposal(command.proposalId)
+    if (!proposal || proposal.instanceId !== this.instanceId) throw new CoreError('PROPOSAL_NOT_FOUND', 'The proposal does not exist.')
+    if (proposal.fingerprint !== command.fingerprint) throw new CoreError('PROPOSAL_STALE', 'The proposal evidence changed; reload the current proposal.')
+    if (!proposal.evidence.snapshot.assignmentId || !proposal.evidence.snapshot.generation
+      || !Number.isSafeInteger(proposal.evidence.snapshot.directionVersion) || proposal.evidence.snapshot.stage !== 'running') {
+      throw new CoreError('PROPOSAL_STALE', 'A supervision decision requires a current running Assignment and Ticket version.')
+    }
+    await this.mainSupervisorTicket(proposal.ticketId)
+    return this.createSupervisor().decide({ commandId: command.commandId, proposalId: command.proposalId,
+      decision: command.decision, ...(command.reason === undefined ? {} : { reason: command.reason }) })
+  }
 
   async getTicketDirection(ticketId: string): Promise<TicketDirection | undefined> {
     await this.ensurePolicy()
@@ -3326,9 +3448,10 @@ export class Engine {
   }
 
   /** An approved semantic correction: one direction input for the Worker, never a tool call by the supervisor. */
-  async correctTicket(command: { commandId: string; ticketId: string; text: string; reason: string }) {
+  async correctTicket(command: { commandId: string; ticketId: string; text: string; reason: string;
+    expectedDirectionVersion?: number; expectedGeneration?: string }) {
     await this.ensurePolicy()
-    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'text', 'reason'].includes(key))) throw new CoreError('INVALID_INPUT', 'A Ticket correction accepts commandId, ticketId, text and reason only.')
+    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'text', 'reason', 'expectedDirectionVersion', 'expectedGeneration'].includes(key))) throw new CoreError('INVALID_INPUT', 'A Ticket correction accepts commandId, ticketId, text, reason and expected version only.')
     identifier(command.commandId, 'commandId'); identifier(command.ticketId, 'ticketId')
     if (typeof command.text !== 'string' || !command.text.trim() || Buffer.byteLength(command.text) > 65_536) throw new CoreError('INVALID_INPUT', 'A correction needs bounded nonempty text.')
     if (typeof command.reason !== 'string' || !command.reason.trim() || Buffer.byteLength(command.reason) > 2_048) throw new CoreError('INVALID_INPUT', 'A correction needs a bounded reason.')
@@ -3344,6 +3467,18 @@ export class Engine {
       const ticket = await tx.get<Work['ticket']>('ticket', command.ticketId)
       if (!ticket) throw new CoreError('NOT_FOUND', 'The Ticket does not exist.')
       if (ticket.constraint) throw new CoreError('TICKET_BLOCKED', 'The Ticket constraint must be resolved before a correction.')
+      const stopHead = await tx.get<{ stopId: string }>('stop-head', JSON.stringify(['stop-head', command.ticketId]))
+      const stop = stopHead && await tx.get<{ resumedAt?: number }>('stop-state', stopHead.stopId)
+      if (stop && !stop.resumedAt) throw new CoreError('TICKET_STOPPED', 'An approved correction cannot undo a human stop.')
+      if (command.expectedDirectionVersion !== undefined && ticket.directionVersion !== command.expectedDirectionVersion) {
+        throw new CoreError('PROPOSAL_STALE', 'The Ticket direction changed after the supervision proposal.')
+      }
+      if (command.expectedGeneration !== undefined) {
+        const assignment = await tx.get<{ generation: string; state: string }>('assignment', command.ticketId)
+        if (assignment?.generation !== command.expectedGeneration || assignment.state !== 'running') {
+          throw new CoreError('PROPOSAL_STALE', 'The Worker generation changed after the supervision proposal.')
+        }
+      }
       const input = await this.inputs.attachSyntheticInput(tx, {
         ticketId: command.ticketId, sourceEventId: JSON.stringify(['supervisor-correction', command.ticketId, command.commandId]),
         threadId: '__supervisor__', text: command.text, authorId: this.source.actorId, reason: command.reason, basis: 'supervisor-correction',
