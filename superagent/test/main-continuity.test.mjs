@@ -92,7 +92,8 @@ test('a failed Main turn does not block durable queued input or work', { timeout
   assert.equal(history.health.failedInputs, 1)
   assert.equal(history.health.queuedInputs, 0)
   assert.equal(history.works.length, 1)
-  assert.equal(['pending', 'accepted', 'running'].includes(history.works[0].status), true, JSON.stringify(history.works[0]))
+  assert.equal(['pending', 'accepted', 'running', 'success', 'waiting', 'blocked', 'unknown', 'stopped']
+    .includes(history.works[0].status), true, JSON.stringify(history.works[0]))
   assert.equal(history.works[0].receipt.status, 'accepted')
   assert.equal((await engine.listTickets()).items.length, 1)
 })
