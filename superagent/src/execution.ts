@@ -1878,11 +1878,13 @@ export class Execution {
     else await this.storage.transaction(this.instanceId, operation)
   }
 
-  async stopTicket(command: { commandId: string; ticketId: string; reason: string; actorId: string }) {
+  async stopTicket(command: { commandId: string; ticketId: string; reason: string; actorId: string; expectedGeneration?: string }) {
     identifier(command.commandId, 'commandId'); identifier(command.ticketId, 'ticketId'); identifier(command.actorId, 'actorId')
+    if (command.expectedGeneration !== undefined) identifier(command.expectedGeneration, 'expectedGeneration')
     if (!command.reason.trim() || Buffer.byteLength(command.reason) > 2048) throw new CoreError('INVALID_INPUT', 'Stop needs a bounded reason.')
     const commandKey = createHash('sha256').update(JSON.stringify(['stop', this.instanceId, command.ticketId, command.actorId, command.commandId])).digest('hex')
-    const fingerprint = createHash('sha256').update(JSON.stringify(['stop-v1', this.instanceId, command.ticketId, command.actorId, command.reason])).digest('hex')
+    const fingerprint = createHash('sha256').update(JSON.stringify(['stop-v2', this.instanceId, command.ticketId,
+      command.actorId, command.reason, command.expectedGeneration ?? null])).digest('hex')
     const outcome = await commandTransaction(this.storage, this.instanceId, async transaction => {
       const prior = await transaction.get<{ stopId: string; assignmentId?: string; fingerprint: string }>('work-command', commandKey)
       if (prior) {
@@ -1892,6 +1894,10 @@ export class Execution {
       const trigger = await this.trigger(transaction, command.ticketId)
       if (trigger.source.sourceInstanceId !== this.sourceEvents.sourceInstanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The stopped Ticket belongs to a different source instance.')
       if (trigger.source.actorId !== command.actorId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Only the trusted source actor may stop this Ticket.')
+      const assignment = await transaction.get<Assignment>('assignment', command.ticketId)
+      if (command.expectedGeneration !== undefined && assignment?.generation !== command.expectedGeneration) {
+        throw new CoreError('WORK_VERSION_STALE', 'The work card changed before this stop; refresh before trying again.')
+      }
       const ticket = (await transaction.get<Work['ticket']>('ticket', command.ticketId))!
       const existingHead = await transaction.get<StopHead>('stop-head', this.stopHeadKey(command.ticketId))
       if (existingHead) {
@@ -1901,7 +1907,6 @@ export class Execution {
           return { stopId: existing.id, assignmentId: existing.assignmentId, replay: false, remotePending: false, remoteJobIds: [] }
         }
       }
-      const assignment = await transaction.get<Assignment>('assignment', command.ticketId)
       // A turn ends while its background jobs still hold the slot, so a running Assignment is not proof of a live
       // local turn; background process ranges are cancelled with the stop and confirm quiescence below.
       const liveBackground = await this.hasBackgroundWork(transaction, command.ticketId)
@@ -2592,16 +2597,28 @@ export class Execution {
     return assignment?.id ?? ''
   }
 
-  async resumeTicket(command: { commandId: string; ticketId: string; actorId: string }) {
+  async resumeTicket(command: { commandId: string; ticketId: string; actorId: string; expectedGeneration?: string }) {
     identifier(command.commandId, 'commandId'); identifier(command.ticketId, 'ticketId'); identifier(command.actorId, 'actorId')
+    if (command.expectedGeneration !== undefined) identifier(command.expectedGeneration, 'expectedGeneration')
+    const fingerprint = createHash('sha256').update(JSON.stringify(['resume-v2', this.instanceId, command.ticketId,
+      command.actorId, command.expectedGeneration ?? null])).digest('hex')
     const commandKey = createHash('sha256').update(JSON.stringify(['resume', this.instanceId, command.ticketId, command.actorId, command.commandId])).digest('hex')
     await commandTransaction(this.storage, this.instanceId, async transaction => {
-      const prior = await transaction.get('work-command', commandKey)
-      if (prior) return
+      const prior = await transaction.get<{ fingerprint?: string }>('work-command', commandKey)
+      if (prior) {
+        if (prior.fingerprint !== undefined && prior.fingerprint !== fingerprint) {
+          throw new CoreError('IDENTITY_CONFLICT', 'The resume command was reused with a different work version.')
+        }
+        return
+      }
       await this.assertHostAdmissionIn(transaction)
       const trigger = await this.trigger(transaction, command.ticketId)
       if (trigger.source.sourceInstanceId !== this.sourceEvents.sourceInstanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The resumed Ticket belongs to a different source instance.')
       if (trigger.source.actorId !== command.actorId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Only the trusted source actor may resume this Ticket.')
+      const previous = await transaction.get<Assignment>('assignment', command.ticketId)
+      if (command.expectedGeneration !== undefined && previous?.generation !== command.expectedGeneration) {
+        throw new CoreError('WORK_VERSION_STALE', 'The work card changed before this resume; refresh before trying again.')
+      }
       const waitingIntent = await transaction.get<Work['intent']>('intent', command.ticketId)
       if (waitingIntent?.reason === 'environment-waiting') {
         throw new CoreError('ENVIRONMENT_WAITING', 'The Ticket is waiting for an eligible execution Environment; retry the target first.')
@@ -2616,7 +2633,6 @@ export class Execution {
       if (attention?.status === 'waiting') throw new CoreError('WAITING_HUMAN', 'Resolve the current human question before resume.')
       await this.requireCurrentAuthorization(transaction, command.ticketId, command.actorId, 'resume')
       const ticket = (await transaction.get<Work['ticket']>('ticket', command.ticketId))!
-      const previous = await transaction.get<Assignment>('assignment', command.ticketId)
       if (await this.previewCleanupPending(transaction, command.ticketId)) {
         throw new CoreError('PREVIEW_ACTIVE', 'Cancel or confirm the acceptance preview cleanup before resuming or replacing this work.')
       }
@@ -2636,20 +2652,22 @@ export class Execution {
       const pendingInput = await this.inputs.latestPendingInput(transaction, command.ticketId)
       await this.effects.enqueue(transaction, { key: `resume:${command.commandId}`, stream: 'relay', scope: command.ticketId,
         payload: { ticketId: command.ticketId, assignmentId: assignment.id, resume: !pendingInput, ...(pendingInput ? { inputId: pendingInput.id } : {}) } })
-      await transaction.insert('work-command', commandKey, { assignmentId: assignment.id })
+      await transaction.insert('work-command', commandKey, { assignmentId: assignment.id, fingerprint })
     })
     return this.conversation(command.ticketId)
   }
 
   /** A retry keeps the Ticket, Session and directory but starts a fresh Assignment generation. */
-  async retryTicket(command: { commandId: string; ticketId: string; actorId: string; reason: string }) {
+  async retryTicket(command: { commandId: string; ticketId: string; actorId: string; reason: string; expectedGeneration?: string }) {
     identifier(command.commandId, 'commandId'); identifier(command.ticketId, 'ticketId'); identifier(command.actorId, 'actorId')
+    if (command.expectedGeneration !== undefined) identifier(command.expectedGeneration, 'expectedGeneration')
     if (!command.reason.trim() || Buffer.byteLength(command.reason) > 2048) throw new CoreError('INVALID_INPUT', 'Retrying work needs a bounded reason.')
     const waiting = await this.storage.transaction(this.instanceId, async transaction =>
       (await transaction.get<Work['intent']>('intent', command.ticketId))?.reason === 'environment-waiting')
     if (waiting) throw new CoreError('ENVIRONMENT_WAITING', 'Retry the execution target before creating an Assignment.')
     const commandKey = createHash('sha256').update(JSON.stringify(['retry', this.instanceId, command.ticketId, command.actorId, command.commandId])).digest('hex')
-    const fingerprint = createHash('sha256').update(JSON.stringify(['retry-v1', command.reason])).digest('hex')
+    const fingerprint = createHash('sha256').update(JSON.stringify(['retry-v2', command.reason,
+      command.expectedGeneration ?? null])).digest('hex')
     const outcome = await commandTransaction(this.storage, this.instanceId, async transaction => {
       const prior = await transaction.get<{ fingerprint: string; blocked?: boolean }>('work-command', commandKey)
       if (prior) {
@@ -2660,6 +2678,10 @@ export class Execution {
       const trigger = await this.trigger(transaction, command.ticketId)
       if (trigger.source.sourceInstanceId !== this.sourceEvents.sourceInstanceId || trigger.source.actorId !== command.actorId) {
         throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Only the trusted source actor may retry this Ticket.')
+      }
+      const previous = await transaction.get<Assignment>('assignment', command.ticketId)
+      if (command.expectedGeneration !== undefined && previous?.generation !== command.expectedGeneration) {
+        throw new CoreError('WORK_VERSION_STALE', 'The work card changed before this retry; refresh before trying again.')
       }
       await this.requireCurrentAuthorization(transaction, command.ticketId, command.actorId, 'retry')
       const ticket = (await transaction.get<Work['ticket']>('ticket', command.ticketId))!
@@ -2672,7 +2694,6 @@ export class Execution {
       if (await this.previewCleanupPending(transaction, command.ticketId)) {
         throw new CoreError('PREVIEW_ACTIVE', 'Cancel or confirm the acceptance preview cleanup before retry.')
       }
-      const previous = await transaction.get<Assignment>('assignment', command.ticketId)
       const jobs = this.jobs ? await this.jobs.listIn(transaction, command.ticketId) : []
       const subagents = this.subagents ? await this.subagents.listIn(transaction, command.ticketId) : []
       const blockedWork = [

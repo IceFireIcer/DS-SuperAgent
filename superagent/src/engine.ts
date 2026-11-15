@@ -2313,7 +2313,8 @@ export class Engine {
       throw new CoreError('INVALID_INPUT', 'Stopping work accepts only its exact card target and reason.')
     }
     await this.requireMainWorkControl(command)
-    return this.stopTicket({ commandId: command.commandId, ticketId: command.ticketId, reason: command.reason })
+    return this.stopTicket({ commandId: command.commandId, ticketId: command.ticketId, reason: command.reason,
+      expectedGeneration: command.expectedGeneration })
   }
 
   async resumeMainWork(command: { instanceId: string; commandId: string; workItemId: string; ticketId: string; expectedGeneration: string }) {
@@ -2321,7 +2322,8 @@ export class Engine {
       throw new CoreError('INVALID_INPUT', 'Resuming work accepts only its exact card target.')
     }
     await this.requireMainWorkControl(command)
-    return this.resumeTicket({ commandId: command.commandId, ticketId: command.ticketId })
+    return this.resumeTicket({ commandId: command.commandId, ticketId: command.ticketId,
+      expectedGeneration: command.expectedGeneration })
   }
 
   async retryMainWork(command: { instanceId: string; commandId: string; workItemId: string; ticketId: string; expectedGeneration: string; reason: string }) {
@@ -2329,14 +2331,18 @@ export class Engine {
       throw new CoreError('INVALID_INPUT', 'Retrying work accepts only its exact card target and reason.')
     }
     await this.requireMainWorkControl(command)
-    return this.retryTicket({ commandId: command.commandId, ticketId: command.ticketId, reason: command.reason })
+    return this.retryTicket({ commandId: command.commandId, ticketId: command.ticketId, reason: command.reason,
+      expectedGeneration: command.expectedGeneration })
   }
 
-  async stopTicket(command: { commandId: string; ticketId: string; reason: string }) {
+  async stopTicket(command: { commandId: string; ticketId: string; reason: string; expectedGeneration?: string }) {
     await this.ensurePolicy()
     if (!this.execution) throw new CoreError('WORKER_NOT_ENABLED', 'Stopping work requires a configured native runtime.')
-    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'reason'].includes(key))) throw new CoreError('INVALID_INPUT', 'Stopping work accepts commandId, ticketId and reason only.')
+    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'reason', 'expectedGeneration'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Stopping work accepts its exact command, Ticket and version only.')
+    }
     identifier(command.commandId, 'commandId'); identifier(command.ticketId, 'ticketId')
+    if (command.expectedGeneration !== undefined) identifier(command.expectedGeneration, 'expectedGeneration')
     if (typeof command.reason !== 'string' || !command.reason.trim() || Buffer.byteLength(command.reason) > 2048) throw new CoreError('INVALID_INPUT', 'Stopping work needs a bounded reason.')
     if (!this.source.allowedActorIds.includes(this.source.actorId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The source actor cannot stop work.')
     return this.execution.stopTicket({ ...command, actorId: this.source.actorId })
@@ -2391,20 +2397,26 @@ export class Engine {
     return this.execution.reconcileRemoteWork(command.ticketId)
   }
 
-  async resumeTicket(command: { commandId: string; ticketId: string }) {
+  async resumeTicket(command: { commandId: string; ticketId: string; expectedGeneration?: string }) {
     await this.ensurePolicy()
     if (!this.execution) throw new CoreError('WORKER_NOT_ENABLED', 'Resuming work requires a configured native runtime.')
-    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId'].includes(key))) throw new CoreError('INVALID_INPUT', 'Resuming work accepts commandId and ticketId only.')
+    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'expectedGeneration'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Resuming work accepts its exact command and Ticket version only.')
+    }
     identifier(command.commandId, 'commandId'); identifier(command.ticketId, 'ticketId')
+    if (command.expectedGeneration !== undefined) identifier(command.expectedGeneration, 'expectedGeneration')
     if (!this.source.allowedActorIds.includes(this.source.actorId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The source actor cannot resume work.')
     return this.execution.resumeTicket({ ...command, actorId: this.source.actorId })
   }
 
-  async retryTicket(command: { commandId: string; ticketId: string; reason: string }) {
+  async retryTicket(command: { commandId: string; ticketId: string; reason: string; expectedGeneration?: string }) {
     await this.ensurePolicy()
     if (!this.execution) throw new CoreError('WORKER_NOT_ENABLED', 'Retrying work requires a configured native runtime.')
-    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'reason'].includes(key))) throw new CoreError('INVALID_INPUT', 'Retrying work accepts commandId, ticketId and reason only.')
+    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'reason', 'expectedGeneration'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Retrying work accepts its exact command, Ticket, reason and version only.')
+    }
     identifier(command.commandId, 'commandId'); identifier(command.ticketId, 'ticketId')
+    if (command.expectedGeneration !== undefined) identifier(command.expectedGeneration, 'expectedGeneration')
     if (typeof command.reason !== 'string' || !command.reason.trim() || Buffer.byteLength(command.reason) > 2048) throw new CoreError('INVALID_INPUT', 'Retrying work needs a bounded reason.')
     if (!this.source.allowedActorIds.includes(this.source.actorId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The source actor cannot retry work.')
     return this.execution.retryTicket({ ...command, actorId: this.source.actorId })

@@ -97,6 +97,14 @@ test('stopping the current Main reply leaves the committed delegated work runnin
   const work = page.works.find(item => item.outcome?.status === 'success')
   assert.equal(work?.control?.permissions.actorId, 'alice')
   assert.equal(work?.control?.assignment?.generation.length > 0, true)
+  for (const action of [
+    () => engine.stopTicket({ commandId: 'direct-stale-stop', ticketId: work.receipt.ticketId,
+      reason: 'Reject the raced stop.', expectedGeneration: 'stale-generation' }),
+    () => engine.resumeTicket({ commandId: 'direct-stale-resume', ticketId: work.receipt.ticketId,
+      expectedGeneration: 'stale-generation' }),
+    () => engine.retryTicket({ commandId: 'direct-stale-retry', ticketId: work.receipt.ticketId,
+      reason: 'Reject the raced retry.', expectedGeneration: 'stale-generation' }),
+  ]) await assert.rejects(action(), { code: 'WORK_VERSION_STALE' })
   await assert.rejects(engine.stopMainWork({ instanceId: 'personal', commandId: 'stale-work-stop',
     workItemId: work.brief.workItemId, ticketId: work.receipt.ticketId, expectedGeneration: 'stale-generation',
     reason: 'A stale card must be rejected.' }), { code: 'WORK_VERSION_STALE' })
