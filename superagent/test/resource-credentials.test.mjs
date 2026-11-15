@@ -12,8 +12,8 @@ async function fixture(t) {
   const database = join(directory, 'state.sqlite')
   const storage = await SqliteStorage.open(database)
   const connections = [storage]
-  const vault = new Map([['vault:personal', { instanceId: 'personal', secret: 'fictional-private-value' }],
-    ['vault:team', { instanceId: 'team', secret: 'fictional-team-value' }]])
+  const vault = new Map([['vault:personal', { instanceId: 'personal', value: 'fictional-private-value' }],
+    ['vault:team', { instanceId: 'team', value: 'fictional-team-value' }]])
   t.after(async () => {
     for (const connection of connections.reverse()) await connection.close()
     await rm(directory, { recursive: true, force: true })
@@ -24,7 +24,7 @@ async function fixture(t) {
     },
     async withSecret(instanceId, reference, consume) {
       if (vault.get(reference)?.instanceId !== instanceId) throw new Error('The reference is unavailable.')
-      return consume(vault.get(reference).secret)
+      return consume(vault.get(reference).value)
     },
   }
   return { database, storage, adapter, vault, connections, credentials: new ResourceCredentials(storage, 'personal', adapter) }
@@ -123,7 +123,7 @@ test('source, tool and outbound authorizations are independent and a cancelled r
 test('rotation changes only the trusted vault reference, deletion is a persistent denial, and retries cannot alter an accepted command', async t => {
   const { credentials, vault, adapter, database, connections } = await fixture(t)
   const resource = await credentials.create({ instanceId: 'personal', commandId: 'create', label: 'Connector', vaultReference: 'vault:personal' })
-  vault.set('vault:rotated', { instanceId: 'personal', secret: 'fictional-rotated-value' })
+  vault.set('vault:rotated', { instanceId: 'personal', value: 'fictional-rotated-value' })
   const updated = await credentials.update({ instanceId: 'personal', commandId: 'update', resourceId: resource.id,
     expectedRevision: 1, label: 'Rotated', vaultReference: 'vault:rotated' })
   assert.equal(updated.revision, 2)

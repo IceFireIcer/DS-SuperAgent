@@ -207,7 +207,10 @@ test('work observations auto-discover bounded Router and Worker history with sta
   const gammaRouterHistory = await engine.readWorkObservation({ instanceId: 'personal', observationId: gammaRouter.id, limit: 100 })
   assert.equal(JSON.stringify(firstRouterHistory.events).includes('observation gamma'), false,
     'a Router observation excludes another WorkBrief from the shared Router Session')
-  assert.equal(firstRouterHistory.facts.some(fact => fact.label === 'Configuration revision' && fact.value === '1'), true)
+  const routerTurns = firstRouterHistory.facts.find(fact => fact.label === 'Router turns')?.value ?? ''
+  assert.match(routerTurns, /route@v1:/u)
+  const latestRouterRevision = [...routerTurns.matchAll(/(?:route|update)@v(\d+):/gu)].at(-1)?.[1]
+  assert.equal(firstRouterHistory.facts.find(fact => fact.label === 'Configuration revision')?.value, latestRouterRevision)
   assert.equal(JSON.stringify(gammaRouterHistory.events).includes('observation gamma'), true)
   assert.equal(JSON.stringify(gammaRouterHistory.events).includes('observation alpha'), false)
 
