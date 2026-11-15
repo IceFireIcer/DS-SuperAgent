@@ -114,6 +114,9 @@ var ZH = {
   "Policy update": "策略更新",
   "GitHub source request": "GitHub 来源请求",
   "GitHub request": "GitHub 请求",
+  "Feishu source request": "飞书来源请求",
+  "Feishu request": "飞书请求",
+  Feishu: "飞书",
   "Main source failed": "Main 来源处理失败",
   GitHub: "GitHub",
   "Delivery receipts": "投递回执",
@@ -21536,13 +21539,14 @@ function applyProduct(ctx) {
         setReconciling(null);
       }
     };
+    const feishu = source.sourceInstanceId?.startsWith("feishu:");
     return (0, import_react53.createElement)(
       "article",
-      { className: "bt-main-source", "aria-label": t("GitHub source request") },
+      { className: "bt-main-source", "aria-label": t(feishu ? "Feishu source request" : "GitHub source request") },
       (0, import_react53.createElement)(
         "div",
         { className: "bt-main-work-head" },
-        (0, import_react53.createElement)("strong", null, t("GitHub request")),
+        (0, import_react53.createElement)("strong", null, t(feishu ? "Feishu request" : "GitHub request")),
         (0, import_react53.createElement)("span", { className: "bt-main-work-status", role: "status" }, sourceStatusCopy(source.state))
       ),
       (0, import_react53.createElement)("p", { className: "bt-main-work-detail" }, `${source.objectId} · @${source.authorId}`),
@@ -21579,7 +21583,7 @@ function applyProduct(ctx) {
         }, receiptsBusy ? t("Loading…") : t("Load earlier receipts")) : null,
         receiptsError ? (0, import_react53.createElement)("p", { className: "bt-main-error", role: "status" }, receiptsError) : null
       ) : null,
-      source.conditions.length ? (0, import_react53.createElement)(
+      !feishu && source.conditions.length ? (0, import_react53.createElement)(
         "div",
         { className: "bt-main-source-deliveries", "aria-label": t("Pull request conditions") },
         source.conditions.map((condition) => (0, import_react53.createElement)(
@@ -21720,7 +21724,7 @@ function applyProduct(ctx) {
               message.source ? (0, import_react53.createElement)(
                 "p",
                 { className: "bt-main-source-label" },
-                `${t("GitHub")} · @${message.source.authorId} · ${message.source.objectId}`
+                `${t(message.source.kind === "feishu" ? "Feishu" : "GitHub")} · @${message.source.authorId} · ${message.source.objectId}`
               ) : null,
               (0, import_react53.createElement)(ChatRows, {
                 items: [{ kind: message.role === "main" ? "bot" : "user", text: message.text, time: message.createdAt }],
