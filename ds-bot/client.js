@@ -1303,6 +1303,12 @@ var ZH = {
   "Pick when it runs": "选择什么时候运行",
   "No such task": "没有这个任务",
   "Working folder": "工作文件夹",
+  "Work directory": "工作目录",
+  "Work directories": "工作目录",
+  "Instance default": "实例默认目录",
+  "Instance default directory": "实例默认工作目录",
+  "New work starts here unless you choose a work directory in Main.": "新工作默认从这里开始，也可在 Main 中为本次工作选择目录。",
+  "New work uses this directory. Active work keeps its own directory.": "新工作使用此目录，在途工作继续使用各自的目录。",
   "Working folder: {folder}": "工作文件夹：{folder}",
   Folder: "文件夹",
   Folders: "文件夹",
@@ -10893,7 +10899,7 @@ function NewMessagePills({ sessionId, useSessions, useUi, useTurnClock }) {
 // src/client/composer.js
 var import_react21 = require("react");
 var import_react_dom5 = require("react-dom");
-function MainComposer({ onSend, onStop, busy, stopping, error, value, onValueChange }) {
+function MainComposer({ onSend, onStop, busy, stopping, error, value, onValueChange, directoryControl }) {
   const [draft, setDraft] = (0, import_react21.useState)("");
   const text = value ?? draft;
   const setText = (next) => onValueChange ? onValueChange(next) : setDraft(next);
@@ -10921,6 +10927,7 @@ function MainComposer({ onSend, onStop, busy, stopping, error, value, onValueCha
         }
       }
     }),
+    directoryControl,
     (0, import_react21.createElement)(
       "div",
       { className: "bt-main-send" },
@@ -12427,14 +12434,26 @@ var import_react26 = require("react");
 var import_react_dom7 = require("react-dom");
 var folderName = (path) => String(path).replace(/[\\/]+$/, "").split(/[\\/]/).pop() || String(path);
 var Tick = ({ on }) => (0, import_react26.createElement)("span", { className: "bt-model-tick", "aria-hidden": true }, on ? (0, import_react26.createElement)(CheckIcon) : null);
-function FolderMenu({ value, group = false, team = false, actions, run: run2, onPick, wide = false, disabled = false }) {
+function FolderMenu({
+  value,
+  group = false,
+  team = false,
+  actions,
+  run: run2,
+  onPick,
+  wide = false,
+  disabled = false,
+  fallbackLabel,
+  label
+}) {
   const { isOpen, shownPlace, leaving, button, menu, open, close } = useAnchoredMenu();
   const [info, setInfo] = (0, import_react26.useState)(null);
   const [view, setView] = (0, import_react26.useState)("list");
   const [draft, setDraft] = (0, import_react26.useState)("");
   const [listing, setListing] = (0, import_react26.useState)(null);
   const [problem, setProblem] = (0, import_react26.useState)("");
-  const fallback = group ? t("Each Bot's own folder") : t("Team workspace");
+  const fallback = fallbackLabel ?? (group ? t("Each Bot's own folder") : t("Team workspace"));
+  const menuLabel = label ?? (team ? t("Team workspace") : t("Working folder"));
   const toggle = () => {
     if (isOpen) {
       close();
@@ -12541,7 +12560,7 @@ function FolderMenu({ value, group = false, team = false, actions, run: run2, on
         "data-wide": wide || void 0,
         "aria-haspopup": "menu",
         "aria-expanded": isOpen,
-        "aria-label": team ? t("Team workspace: {folder}", { folder: value ?? "" }) : t("Working folder: {folder}", { folder: value ?? fallback }),
+        "aria-label": `${menuLabel}: ${value ?? (team ? "" : fallback)}`,
         title: value,
         onClick: toggle,
         disabled
@@ -12556,7 +12575,7 @@ function FolderMenu({ value, group = false, team = false, actions, run: run2, on
     ),
     shownPlace ? (0, import_react_dom7.createPortal)((0, import_react26.createElement)(
       "div",
-      { ref: menu, className: `bt-menu bt-model-menu bt-folder-menu${shownPlace.bottom !== void 0 ? " bt-menu-up" : ""}`, role: "menu", "aria-label": team ? t("Team workspace") : t("Working folder"), style: shownPlace, "data-leaving": leaving || void 0 },
+      { ref: menu, className: `bt-menu bt-model-menu bt-folder-menu${shownPlace.bottom !== void 0 ? " bt-menu-up" : ""}`, role: "menu", "aria-label": menuLabel, style: shownPlace, "data-leaving": leaving || void 0 },
       shownView,
       problem ? (0, import_react26.createElement)("div", { className: "bt-folder-error", role: "alert" }, problem) : null
     ), document.body) : null
@@ -21456,7 +21475,11 @@ function applyProduct(ctx) {
     observationDetailError: null,
     activityLoading: false,
     activityError: null,
-    settingsOpen: false
+    settingsOpen: false,
+    directoryOptions: null,
+    directoryOverride: null,
+    directoryBusy: false,
+    directoryError: null
   });
   const useView = () => (0, import_react55.useSyncExternalStore)(view.subscribe, view.getSnapshot);
   let stopped = false;
@@ -21484,6 +21507,33 @@ function applyProduct(ctx) {
       if (!stopped) view.set((state) => ({ ...state, error: error.message }));
     }
   };
+  const loadDirectories = async (binding) => {
+    try {
+      const options = await productCall("directory-options", { instanceId: binding.instanceId });
+      if (!stopped) view.set((state) => ({ ...state, directoryOptions: options }));
+      return options;
+    } catch (error) {
+      if (!stopped) view.set((state) => ({ ...state, directoryError: error.message }));
+      throw error;
+    }
+  };
+  const directoryActions = (binding) => ({
+    folders: async () => {
+      const options = await loadDirectories(binding);
+      return {
+        team: options.default?.root ?? null,
+        picker: options.picker,
+        folders: options.directories.map((directory) => ({ path: directory.root, title: directory.title }))
+      };
+    },
+    folderPick: () => productCall("directory-pick", { instanceId: binding.instanceId }),
+    folderList: (path) => productCall("directory-list", { instanceId: binding.instanceId, ...path ? { path } : {} })
+  });
+  const registerDirectory = (binding, path) => productCall("directory-register", {
+    instanceId: binding.instanceId,
+    commandId: crypto.randomUUID(),
+    path
+  });
   const loadEarlierMessages = async (binding) => {
     const current = view.getSnapshot();
     if (!current.messageBefore || current.messagesLoading) return;
@@ -21637,6 +21687,7 @@ function applyProduct(ctx) {
       const current = view.getSnapshot();
       const binding = current.binding ?? await productCall("open");
       if (current.route === "main") await refreshMain(binding);
+      await loadDirectories(binding);
       await loadObservations(binding);
       const selected = view.getSnapshot().route === "observe" ? view.getSnapshot().selectedObservation : null;
       if (selected) await loadObservation(binding, selected);
@@ -21789,6 +21840,7 @@ function applyProduct(ctx) {
         { className: "bt-main-work-id" },
         `${t("Configuration version")} v${work.brief.configurationRevision}`
       ) : null,
+      work.brief.directory ? (0, import_react55.createElement)("p", { className: "bt-main-work-id" }, `${t("Work directory")}: ${work.brief.directory}`) : null,
       (0, import_react55.createElement)("p", { className: "bt-main-work-id" }, `${t("Receipt")}: ${receiptCopy(work.receipt.status)}`),
       work.receipt.ticketId ? (0, import_react55.createElement)("p", { className: "bt-main-work-id" }, `${t("Ticket")} ${work.receipt.ticketId}`) : null,
       control ? (0, import_react55.createElement)("p", { className: "bt-main-work-id" }, `${t("Ticket version")}: ${control.ticketVersion}`) : null,
@@ -22030,7 +22082,11 @@ function applyProduct(ctx) {
           } catch {
           }
         }
-        if (!pending.current || pending.current.text !== text) pending.current = { commandId: crypto.randomUUID(), text };
+        if (!pending.current || pending.current.text !== text) pending.current = {
+          commandId: crypto.randomUUID(),
+          text,
+          ...state.directoryOverride ? { environmentId: state.directoryOverride } : {}
+        };
         try {
           sessionStorage.setItem(storageKey, JSON.stringify(pending.current));
         } catch {
@@ -22042,6 +22098,7 @@ function applyProduct(ctx) {
         } catch {
         }
         await refreshMain(state.binding);
+        view.set((current) => ({ ...current, directoryOverride: null }));
         if (result.status === "failed") {
           setSendError(t("Main could not finish this reply. Your message is saved."));
           return false;
@@ -22066,6 +22123,21 @@ function applyProduct(ctx) {
         await refreshMain(state.binding);
       } catch (error) {
         setSendError(error.message);
+      }
+    };
+    const options = state.directoryOptions;
+    const override = options?.directories.find((directory) => directory.id === state.directoryOverride);
+    const chooseWorkDirectory = async (path) => {
+      if (!state.binding) return;
+      view.set((current) => ({ ...current, directoryBusy: true, directoryError: null }));
+      try {
+        const selected = path ? await registerDirectory(state.binding, path) : null;
+        await loadDirectories(state.binding);
+        view.set((current) => ({ ...current, directoryOverride: selected?.id ?? null }));
+      } catch (error) {
+        view.set((current) => ({ ...current, directoryError: error.message }));
+      } finally {
+        view.set((current) => ({ ...current, directoryBusy: false }));
       }
     };
     return (0, import_react55.createElement)(
@@ -22202,7 +22274,23 @@ function applyProduct(ctx) {
         stopping,
         error: sendError ?? state.error,
         value: state.mainDraft,
-        onValueChange: (mainDraft) => view.set((current) => ({ ...current, mainDraft }))
+        onValueChange: (mainDraft) => view.set((current) => ({ ...current, mainDraft })),
+        directoryControl: options?.default ? (0, import_react55.createElement)(
+          "div",
+          { className: "bt-main-directory" },
+          (0, import_react55.createElement)("span", { className: "bt-main-label" }, t("Work directory")),
+          (0, import_react55.createElement)(FolderMenu, {
+            value: override?.root,
+            label: t("Work directory"),
+            fallbackLabel: t("Instance default"),
+            actions: directoryActions(state.binding),
+            run: (promise) => void Promise.resolve(promise).catch((error) => view.set((current) => ({ ...current, directoryError: error.message }))),
+            onPick: chooseWorkDirectory,
+            disabled: busy || state.directoryBusy
+          }),
+          (0, import_react55.createElement)("span", { className: "bt-main-directory-note" }, t("New work uses this directory. Active work keeps its own directory.")),
+          state.directoryError ? (0, import_react55.createElement)("p", { className: "bt-main-error", role: "alert" }, state.directoryError) : null
+        ) : null
       })
     );
   }
@@ -22526,6 +22614,7 @@ function applyProduct(ctx) {
   }
   function SettingsDialog2({ binding, onClose }) {
     const [page, setPage] = (0, import_react55.useState)("roles");
+    const viewState = useView();
     const [snapshot, setSnapshot] = (0, import_react55.useState)(null);
     const [draft, setDraft] = (0, import_react55.useState)(null);
     const [base, setBase] = (0, import_react55.useState)(null);
@@ -22701,6 +22790,26 @@ function applyProduct(ctx) {
         setError(failure.message);
       }
     };
+    const chooseDefaultDirectory = async (path) => {
+      if (!path || viewState.directoryBusy) return;
+      view.set((current) => ({ ...current, directoryBusy: true, directoryError: null }));
+      try {
+        const selected = await registerDirectory(binding, path);
+        await productCall("directory-default-save", {
+          instanceId: binding.instanceId,
+          commandId: crypto.randomUUID(),
+          expectedRevision: viewState.directoryOptions?.default?.revision ?? 0,
+          environmentId: selected.id
+        });
+        await loadDirectories(binding);
+      } catch (failure) {
+        view.set((current) => ({ ...current, directoryError: failure.message }));
+        await loadDirectories(binding).catch(() => {
+        });
+      } finally {
+        view.set((current) => ({ ...current, directoryBusy: false }));
+      }
+    };
     const close = (0, import_react55.createElement)("button", { type: "button", className: "bt-settings-close", "aria-label": t("Close settings"), onClick: onClose }, (0, import_react55.createElement)(CloseIcon));
     if (loading && !draft) return (0, import_react55.createElement)(
       "div",
@@ -22779,6 +22888,7 @@ function applyProduct(ctx) {
               import_react55.Fragment,
               null,
               error ? (0, import_react55.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+              viewState.directoryError ? (0, import_react55.createElement)("p", { className: "bt-main-error", role: "alert" }, viewState.directoryError) : null,
               conflict ? (0, import_react55.createElement)(
                 "div",
                 { className: "bt-main-settings-conflict", role: "status" },
@@ -22788,6 +22898,23 @@ function applyProduct(ctx) {
                 } }, t("Rebase my edits"))
               ) : null,
               notice ? (0, import_react55.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
+              viewState.directoryOptions?.default ? (0, import_react55.createElement)(
+                Card2,
+                { title: t("Work directories") },
+                (0, import_react55.createElement)(
+                  Row,
+                  { label: t("Instance default directory"), hint: t("New work starts here unless you choose a work directory in Main.") },
+                  (0, import_react55.createElement)(FolderMenu, {
+                    value: viewState.directoryOptions.default.root,
+                    team: true,
+                    label: t("Instance default directory"),
+                    actions: directoryActions(binding),
+                    run: (promise) => void Promise.resolve(promise).catch((failure) => view.set((current) => ({ ...current, directoryError: failure.message }))),
+                    onPick: chooseDefaultDirectory,
+                    disabled: viewState.directoryBusy
+                  })
+                )
+              ) : null,
               roleRows.map(([role, label]) => {
                 const profile = draft[role];
                 if (!profile) return null;
@@ -22943,7 +23070,7 @@ function applyProduct(ctx) {
     );
   }
   const shadow = (name, component) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200 }, component));
-  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SCHEDULE_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS, "main"), "superagent: existing chat styles");
+  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SCHEDULE_CSS + MODEL_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS, "main"), "superagent: existing chat styles");
   ctx.effect(() => {
     const style = installStyles(themeCss(allThemes().deepseek), "main-theme");
     return () => style.remove();
@@ -22972,6 +23099,7 @@ var PRODUCT_CSS = `
 .bt-main-composer{width:min(800px,100% - 32px);margin:16px auto 20px;padding:12px;border:1px solid var(--bt-line);border-radius:16px;background:var(--bt-card)}
 .bt-main-composer textarea{display:block;width:100%;resize:vertical;min-height:80px;max-height:200px;padding:4px;border:0;background:transparent;color:var(--bt-ink);font:inherit;font-size:14px;line-height:22px;box-sizing:border-box}
 .bt-main-composer textarea:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px;border-radius:4px}
+.bt-main-directory{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}.bt-main-directory .bt-main-label{margin:0}.bt-main-directory-note{color:var(--bt-ink-2);font-size:11px;line-height:16px}.bt-main-directory .bt-main-error{width:100%;margin:0}
 .bt-main-send{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
 .bt-main-send button{height:36px;min-width:64px}
 .bt-main-label{display:block;margin:0 0 6px;font-size:12px;color:var(--bt-ink-2)}

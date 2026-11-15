@@ -225,7 +225,10 @@ export class Engine {
       await storage.transaction(instanceId, tx => this.roleConfig.recordUse(tx, { sessionId, role: 'main', revision: config.revision,
         main: config.roles.main!.model, router: config.roles.router.model, worker: config.roles.worker.model }))
       return { profile: structuredClone(config.roles.main), revision: config.revision }
-    }, () => this.workDelegation)
+    }, () => this.environments.some(candidate => candidate.kind === 'local' && candidate.config.instanceId === instanceId
+      && candidate.config.allowedActorIds.includes(source.actorId) && candidate.config.permissions.includes('read')
+      && candidate.config.permissions.includes('write')) ? this.workDelegation : undefined,
+    async transaction => (await this.instanceDirectoryIn(transaction))?.environmentId)
     this.roleConfig = new RoleConfigStore(storage, instanceId, {
       ...(sessions?.mainRoute ? { main: { name: 'Main', model: sessions.mainRoute, instructions: '', skills: [] } } : {}),
       router: { name: 'Router', model: sessions?.routerRoute ?? { provider: 'unconfigured', model: 'unconfigured' }, instructions: '', skills: [] },
@@ -291,7 +294,7 @@ export class Engine {
     this.subagents = sessions ? new Subagents(sessions.context, storage, instanceId, randomUUID(), subagentOptions, Date.now) : undefined
     if (sessions) {
       this.execution = new Execution(storage, instanceId, this.effects, sessions, this.inputs, this.attentions, this.sourceEvents,
-        this.source.intake?.allowedRequesterIds ?? this.source.allowedActorIds, environments, this.slots, this.jobs, this.subagents, this.previews,
+        this.source.intake?.allowedRequesterIds ?? this.source.allowedActorIds, this.environments, this.slots, this.jobs, this.subagents, this.previews,
         this.deliveries, this.context, this.roleConfig, this.deliveryState, this.host.hostId, this.hostCapabilities,
         () => this.host.epoch())
       this.effects.setStartup(async () => {
@@ -302,10 +305,15 @@ export class Engine {
         await this.execution!.recoverInputs()
       })
     }
-    const environment = environments.find(candidate => candidate.kind === 'local' && candidate.config.instanceId === instanceId
+    const environment = this.environments.find(candidate => candidate.kind === 'local' && candidate.config.instanceId === instanceId
       && candidate.config.allowedActorIds.includes(source.actorId) && candidate.config.permissions.includes('read') && candidate.config.permissions.includes('write'))
-    if (sessions?.mainRoute && this.execution && environment) {
-      this.workDelegation = new WorkDelegation({ storage, instanceId, source, sessions, effects: this.effects, environmentId: environment.config.id,
+    if (sessions?.mainRoute && this.execution) {
+      this.workDelegation = new WorkDelegation({ storage, instanceId, source, sessions, effects: this.effects,
+        environmentId: environment?.config.id ?? 'unconfigured',
+        defaultEnvironmentId: async transaction => (await this.instanceDirectoryIn(transaction))?.environmentId ?? 'unconfigured',
+        environmentRoot: id => this.environments.find(candidate => candidate.config.id === id
+          && candidate.config.instanceId === instanceId && candidate.kind === 'local'
+          && candidate.config.allowedActorIds.includes(source.actorId))?.config.root,
         createTicket: (brief, item) => this.createDelegatedWorkItem(brief, item),
         readTicket: async ticketId => {
           const conversation = await this.conversation(ticketId)
@@ -1485,7 +1493,108 @@ export class Engine {
       return recorded
     })
   }
-  sendMainMessage(request: MainSend) { return this.main.send(request) }
+  private async instanceDirectoryIn(transaction: AsyncTx) {
+    const current = await transaction.get<{ revision: number; environmentId: string; updatedAt: number }>('instance-directory', 'default')
+    if (current) return current
+    const first = this.environments.find(candidate => candidate.kind === 'local' && candidate.config.instanceId === this.instanceId
+      && candidate.config.allowedActorIds.includes(this.source.actorId) && candidate.config.permissions.includes('read')
+      && candidate.config.permissions.includes('write'))
+    return first ? { revision: 0, environmentId: first.config.id, updatedAt: 0 } : undefined
+  }
+
+  private directoryEnvironment(id: string) {
+    const environment = this.environments.find(candidate => candidate.config.id === id && candidate.kind === 'local'
+      && candidate.config.instanceId === this.instanceId && candidate.config.allowedActorIds.includes(this.source.actorId)
+      && candidate.config.permissions.includes('read') && candidate.config.permissions.includes('write'))
+    if (!environment) throw new CoreError('ENVIRONMENT_DENIED', 'The selected work directory is not authorized for this Instance.')
+    return environment
+  }
+
+  registerWorkDirectory(environment: ExecutionEnvironment) {
+    if (environment.kind !== 'local' || environment.config.instanceId !== this.instanceId
+      || !environment.config.allowedActorIds.includes(this.source.actorId)
+      || !environment.config.permissions.includes('read') || !environment.config.permissions.includes('write')) {
+      throw new CoreError('ENVIRONMENT_DENIED', 'The work directory must be a writable local Environment for this Instance.')
+    }
+    const existing = this.environments.find(candidate => candidate.config.id === environment.config.id)
+    if (existing && existing.config.root !== environment.config.root) throw new CoreError('ENVIRONMENT_CHANGED', 'An Environment ID cannot change its directory.')
+    if (!existing) this.environments.push(environment)
+  }
+
+  async addWorkDirectory(command: MainAddress & { commandId: string; environment: ExecutionEnvironment }) {
+    if (!command || Object.keys(command).some(key => !['instanceId', 'commandId', 'environment'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'A work directory registration accepts an Instance, command ID and Environment.')
+    }
+    if (command.instanceId !== this.instanceId || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This actor cannot register a work directory.')
+    }
+    identifier(command.commandId, 'commandId')
+    const environment = command.environment
+    if (!environment || environment.kind !== 'local' || environment.config.instanceId !== this.instanceId
+      || !environment.config.allowedActorIds.includes(this.source.actorId)
+      || !environment.config.permissions.includes('read') || !environment.config.permissions.includes('write')) {
+      throw new CoreError('ENVIRONMENT_DENIED', 'The selected directory is not an authorized local Environment.')
+    }
+    const { id, root } = environment.config
+    const fingerprint = createHash('sha256').update(canonicalJson(['product-directory-v1', this.instanceId, id, root])).digest('hex')
+    const key = this.commandKey(`product-directory:${command.commandId}`)
+    await commandTransaction(this.storage, this.instanceId, async transaction => {
+      const prior = await transaction.get<{ fingerprint: string; id: string }>('instance-directory-command', key)
+      if (prior) {
+        if (prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The directory command was reused for a different path.')
+        return
+      }
+      const existing = await transaction.get<{ id: string; root: string }>('product-directory', id)
+      if (existing && existing.root !== root) throw new CoreError('ENVIRONMENT_CHANGED', 'The work directory identity changed.')
+      if (!existing) await transaction.insert('product-directory', id, { id, root, version: 1 })
+      await transaction.insert('instance-directory-command', key, { fingerprint, id })
+    })
+    this.registerWorkDirectory(environment)
+    return { id, root }
+  }
+
+  async getInstanceDirectory(request: MainAddress) {
+    if (!request || request.instanceId !== this.instanceId || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This work directory is outside the authorized Main Instance.')
+    }
+    const current = await this.storage.transaction(this.instanceId, transaction => this.instanceDirectoryIn(transaction))
+    if (!current) throw new CoreError('DELEGATION_UNAVAILABLE', 'No authorized local work directory is configured.')
+    return { ...current, root: this.directoryEnvironment(current.environmentId).config.root }
+  }
+
+  async setInstanceDirectory(command: MainAddress & { commandId: string; expectedRevision: number; environmentId: string }) {
+    if (!command || Object.keys(command).some(key => !['instanceId', 'commandId', 'expectedRevision', 'environmentId'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'A directory change accepts the Instance, command ID, revision and Environment only.')
+    }
+    if (command.instanceId !== this.instanceId || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This actor cannot change the Instance work directory.')
+    }
+    identifier(command.commandId, 'commandId'); identifier(command.environmentId, 'environmentId')
+    if (!Number.isSafeInteger(command.expectedRevision) || command.expectedRevision < 0) throw new CoreError('INVALID_INPUT', 'The directory revision must be a nonnegative integer.')
+    const environment = this.directoryEnvironment(command.environmentId)
+    const fingerprint = createHash('sha256').update(canonicalJson(['instance-directory-v1', this.instanceId,
+      command.environmentId, command.expectedRevision])).digest('hex')
+    const key = this.commandKey(`instance-directory:${command.commandId}`)
+    const result = await commandTransaction(this.storage, this.instanceId, async transaction => {
+      const prior = await transaction.get<{ fingerprint: string; value: { revision: number; environmentId: string; updatedAt: number } }>('instance-directory-command', key)
+      if (prior) {
+        if (prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The directory command was reused with different input.')
+        return prior.value
+      }
+      const current = await this.instanceDirectoryIn(transaction)
+      if (current?.revision !== command.expectedRevision) throw new CoreError('DIRECTORY_REVISION_CONFLICT', 'The default work directory changed; refresh before saving.')
+      const value = { revision: command.expectedRevision + 1, environmentId: environment.config.id, updatedAt: Date.now() }
+      if (!await transaction.replace('instance-directory', 'default', value)) await transaction.insert('instance-directory', 'default', value)
+      await transaction.insert('instance-directory-command', key, { fingerprint, value })
+      return value
+    })
+    return { ...result, root: environment.config.root }
+  }
+
+  sendMainMessage(request: MainSend) {
+    if (request.environmentId !== undefined) this.directoryEnvironment(request.environmentId)
+    return this.main.send(request)
+  }
   stopMainTurn(request: MainAddress & { commandId: string; messageId: string }) { return this.main.stop(request) }
   resumeMainInputs(request: MainAddress) { return this.main.resume(request) }
   async getMainConversation(request: MainAddress & { limit?: number; after?: number }) {

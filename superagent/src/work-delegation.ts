@@ -92,6 +92,8 @@ export interface MainWorkCardBrief extends MainWorkIntent {
   position: number
   mainMessageId: string
   configurationRevision?: number
+  environmentId?: string
+  directory?: string
   createdAt: number
 }
 export interface MainWorkCard {
@@ -142,6 +144,7 @@ export interface MainWorkRequest {
   constraints?: string
   acceptanceCriteria?: string
   configurationRevision: number
+  environmentId?: string
   sourceHandoffId?: string
 }
 
@@ -320,6 +323,8 @@ export interface WorkDelegationOptions {
   sessions: NativeSessions
   effects: Effects
   environmentId: string
+  defaultEnvironmentId?: (transaction: AsyncTx) => Promise<string>
+  environmentRoot?: (environmentId: string) => string | undefined
   now?: () => number
   createTicket(brief: MainWorkBrief, item: MainWorkItem): Promise<{ ticketId: string }>
   readTicket(ticketId: string): Promise<MainWorkTicketSnapshot>
@@ -383,7 +388,7 @@ export class WorkDelegation {
 
   async create(request: MainWorkRequest) {
     if (!request || Object.keys(request).some(key => !['commandId', 'mainId', 'mainSessionId', 'routerSessionId', 'mainMessageId', 'originalUserText',
-      'items', 'goal', 'constraints', 'acceptanceCriteria', 'configurationRevision', 'sourceHandoffId'].includes(key))) {
+      'items', 'goal', 'constraints', 'acceptanceCriteria', 'configurationRevision', 'sourceHandoffId', 'environmentId'].includes(key))) {
       throw new CoreError('INVALID_INPUT', 'A Main delegation accepts only its source and independent work items.')
     }
     if (request.items !== undefined && (request.goal !== undefined || request.constraints !== undefined || request.acceptanceCriteria !== undefined)) {
@@ -391,6 +396,7 @@ export class WorkDelegation {
     }
     identifier(request.commandId, 'commandId'); identifier(request.mainId, 'mainId'); identifier(request.mainSessionId, 'mainSessionId')
     identifier(request.routerSessionId, 'routerSessionId'); identifier(request.mainMessageId, 'mainMessageId')
+    if (request.environmentId !== undefined) identifier(request.environmentId, 'environmentId')
     if (request.sourceHandoffId !== undefined) identifier(request.sourceHandoffId, 'sourceHandoffId')
     if (!this.options.source.allowedActorIds.includes(this.options.source.actorId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This actor cannot delegate work in the Main Instance.')
     identifier(this.options.environmentId, 'environmentId')
@@ -401,12 +407,19 @@ export class WorkDelegation {
     const goal = single?.goal ?? `${requestedItems.length} independent work items from one Main request.`
     const constraints = single?.constraints ?? 'Each item has its own constraints.'
     const acceptanceCriteria = single?.acceptanceCriteria ?? 'Each item has its own observable acceptance criteria.'
-    const fingerprint = createHash('sha256').update(canonicalJson(['main-work-brief-v2', this.options.instanceId, request.mainId,
-      request.mainSessionId, request.routerSessionId, request.mainMessageId, originalUserText, requestedItems,
-      this.options.environmentId, request.configurationRevision, request.sourceHandoffId ?? null])).digest('hex')
     const key = commandKey(this.options.source, request.commandId)
     return commandTransaction(this.options.storage, this.options.instanceId, async transaction => {
       const existing = await transaction.get<{ fingerprint: string; workBriefId: string }>('work-brief-command', key)
+      const oldBrief = existing ? await transaction.get<MainWorkBrief>('work-brief', existing.workBriefId) : undefined
+      if (existing && !oldBrief) throw new CoreError('INCOMPLETE_STATE', 'The accepted WorkBrief is missing.')
+      const environmentId = request.environmentId ?? oldBrief?.environmentId
+        ?? await this.options.defaultEnvironmentId?.(transaction) ?? this.options.environmentId
+      if (this.options.environmentRoot && !this.options.environmentRoot(environmentId)) {
+        throw new CoreError('ENVIRONMENT_DENIED', 'The selected work directory is no longer authorized for this Instance.')
+      }
+      const fingerprint = createHash('sha256').update(canonicalJson(['main-work-brief-v2', this.options.instanceId, request.mainId,
+        request.mainSessionId, request.routerSessionId, request.mainMessageId, originalUserText, requestedItems,
+        environmentId, request.configurationRevision, request.sourceHandoffId ?? null])).digest('hex')
       if (existing) {
         if (existing.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'This Main delegation identity was already used for different work.')
         const brief = await transaction.get<MainWorkBrief>('work-brief', existing.workBriefId)
@@ -436,7 +449,7 @@ export class WorkDelegation {
         mainMessageId: request.mainMessageId, originalUserText,
         authorization: { kind: 'authorized-main-actor', sourceInstanceId: this.options.source.sourceInstanceId, actorId: this.options.source.actorId },
         goal, constraints, acceptanceCriteria, requestedItems, sourceEventId: `main-work-source:${id}`,
-        evidence: { kind: 'main-message', id: request.mainMessageId }, environmentId: this.options.environmentId,
+        evidence: { kind: 'main-message', id: request.mainMessageId }, environmentId,
         configurationRevision: request.configurationRevision, ...(sourceHandoff ? { sourceHandoffId: sourceHandoff.id } : {}), createdAt: this.now() }
       const receipt: MainWorkReceipt = { version: 1, workBriefId: brief.id, status: 'routing',
         nextStep: 'Router is deciding the independent work items.', createdAt: this.now() }
@@ -1301,7 +1314,9 @@ export class WorkDelegation {
     if (!receipt) return undefined
     const cardBrief: MainWorkCardBrief = { id: brief.id, workItemId: item.id, sourceEventId: item.sourceEventId,
       position: item.position, mainMessageId: brief.mainMessageId, goal: item.goal, constraints: item.constraints, acceptanceCriteria: item.acceptanceCriteria,
-      configurationRevision: brief.configurationRevision, createdAt: brief.createdAt }
+      configurationRevision: brief.configurationRevision, environmentId: brief.environmentId,
+      ...(this.options.environmentRoot?.(brief.environmentId) ? { directory: this.options.environmentRoot(brief.environmentId)! } : {}),
+      createdAt: brief.createdAt }
     const projection = await this.options.storage.transaction(this.options.instanceId, async tx => ({
       update: await tx.get<MainWorkUpdate>('work-update-head', item.id), outcome: await tx.get<MainWorkOutcome>('work-outcome', item.id),
       followUps: await this.followUpsForItem(tx, item),

@@ -13,14 +13,16 @@ const Tick = ({ on }) => h('span', { className: 'bt-model-tick', 'aria-hidden': 
 // one a Bot works in the team workspace and a group member in its own folder. `onPick`
 // gets the chosen path, or '' for that default. `team` is the menu for the team workspace
 // itself, which has no default.
-export function FolderMenu({ value, group = false, team = false, actions, run, onPick, wide = false, disabled = false }) {
+export function FolderMenu({ value, group = false, team = false, actions, run, onPick, wide = false, disabled = false,
+  fallbackLabel, label }) {
   const { isOpen, shownPlace, leaving, button, menu, open, close } = useAnchoredMenu()
   const [info, setInfo] = useState(null)
   const [view, setView] = useState('list')
   const [draft, setDraft] = useState('')
   const [listing, setListing] = useState(null)
   const [problem, setProblem] = useState('')
-  const fallback = group ? t("Each Bot's own folder") : t('Team workspace')
+  const fallback = fallbackLabel ?? (group ? t("Each Bot's own folder") : t('Team workspace'))
+  const menuLabel = label ?? (team ? t('Team workspace') : t('Working folder'))
   const toggle = () => {
     if (isOpen) { close(); return }
     setView('list')
@@ -83,14 +85,14 @@ export function FolderMenu({ value, group = false, team = false, actions, run, o
   return h(Fragment, null,
     h('button', {
       ref: button, type: 'button', className: 'bt-model-trigger', 'data-wide': wide || undefined,
-      'aria-haspopup': 'menu', 'aria-expanded': isOpen, 'aria-label': team ? t('Team workspace: {folder}', { folder: value ?? '' }) : t('Working folder: {folder}', { folder: value ?? fallback }),
+      'aria-haspopup': 'menu', 'aria-expanded': isOpen, 'aria-label': `${menuLabel}: ${value ?? (team ? '' : fallback)}`,
       title: value, onClick: toggle, disabled,
     },
     h('span', { className: 'bt-model-copy' },
       h('span', { className: 'bt-model-name' }, value ? folderName(value) : fallback),
       value ? h('span', { className: 'bt-model-provider' }, value) : null),
     h(Caret)),
-    shownPlace ? createPortal(h('div', { ref: menu, className: `bt-menu bt-model-menu bt-folder-menu${shownPlace.bottom !== undefined ? ' bt-menu-up' : ''}`, role: 'menu', 'aria-label': team ? t('Team workspace') : t('Working folder'), style: shownPlace, 'data-leaving': leaving || undefined },
+    shownPlace ? createPortal(h('div', { ref: menu, className: `bt-menu bt-model-menu bt-folder-menu${shownPlace.bottom !== undefined ? ' bt-menu-up' : ''}`, role: 'menu', 'aria-label': menuLabel, style: shownPlace, 'data-leaving': leaving || undefined },
       shownView,
       problem ? h('div', { className: 'bt-folder-error', role: 'alert' }, problem) : null), document.body) : null)
 }
