@@ -31,6 +31,9 @@ export interface GitHubEvent {
   authorKind?: 'human' | 'bot' | 'ci' | 'system'
   title?: string
   body?: string
+  /** IDs admitted to this Instance and Environment by the trusted source adapter. */
+  attachmentIds?: string[]
+  environmentId?: string
   updatedAt: string
   deletionEvidence?: string
   draft?: boolean
@@ -65,6 +68,9 @@ export class GitHubSource {
   async receive(event: GitHubEvent): Promise<SourceReceipt> {
     if (!event || event.repo !== `${this.config.owner}/${this.config.repo}`) throw new CoreError('SOURCE_SCOPE_DENIED', 'The GitHub event belongs to another repository.')
     if (!Number.isInteger(event.number) || event.number < 1) throw new CoreError('INVALID_INPUT', 'A GitHub event needs a positive issue or pull request number.')
+    if (event.action === 'deleted' && (event.attachmentIds !== undefined || event.environmentId !== undefined)) {
+      throw new CoreError('INVALID_INPUT', 'A source deletion cannot carry attachments.')
+    }
     if (this.config.selfActorIds?.includes(event.authorId)) {
       await this.advance(event.cursor)
       return { status: 'filtered', reason: 'SOURCE_SELF' }
@@ -77,6 +83,8 @@ export class GitHubSource {
     const input: ReceiveSourceEvent = { commandId: `github:${event.deliveryId}`, threadId, objectId, type,
       version: sequenceVersion(event),
       ...(type === 'deleted' ? { deletionEvidence: event.deletionEvidence ?? `GitHub deleted ${event.kind} ${event.id}.` } : { text: body }),
+      ...(type !== 'deleted' && event.attachmentIds !== undefined ? { attachmentIds: event.attachmentIds,
+        ...(event.environmentId === undefined ? {} : { environmentId: event.environmentId }) } : {}),
       authorId: event.authorId, authorKind,
       addressing: event.kind === 'review' || event.kind === 'comment' ? 'mention' as const : 'direct' as const }
     const receipt = this.config.mainIntake && authorKind === 'human' && type !== 'deleted'
@@ -154,6 +162,9 @@ export interface FeishuEvent {
   senderId: string
   senderKind?: 'human' | 'bot' | 'system'
   text?: string
+  /** IDs admitted to this Instance and Environment by the trusted source adapter. */
+  attachmentIds?: string[]
+  environmentId?: string
   createTime: string
   updateTime?: string
   mentionIds?: string[]
@@ -185,6 +196,9 @@ export class FeishuSource {
     if (!event || event.tenantKey !== this.config.tenantKey || !this.config.chatIds.includes(event.chatId)) {
       throw new CoreError('SOURCE_SCOPE_DENIED', 'The Feishu event is outside the configured tenant or chat scope.')
     }
+    if (event.deleted && (event.attachmentIds !== undefined || event.environmentId !== undefined)) {
+      throw new CoreError('INVALID_INPUT', 'A source deletion cannot carry attachments.')
+    }
     if (this.config.selfActorIds?.includes(event.senderId)) {
       await this.advance(event.cursor)
       return { status: 'filtered', reason: 'SOURCE_SELF' }
@@ -196,18 +210,16 @@ export class FeishuSource {
       : event.mentionIds?.some(id => this.config.selfActorIds?.includes(id)) ? 'mention' : 'ambient'
     const commandId = `feishu:${event.eventId}`
     const prior = await this.engine.getSourceReceipt(commandId)
-    if (prior) {
-      await this.advance(event.cursor)
-      return { status: 'filtered', reason: 'SOURCE_REPLAY' }
-    }
     const input: ReceiveSourceEvent = { commandId, threadId, objectId,
       type: event.deleted ? 'deleted' : event.edited ? 'edited' : 'created', version: feishuVersion(event),
       ...(event.deleted ? { deletionEvidence: event.deletionEvidence ?? `Feishu deleted message ${event.messageId}.` } : { text: event.text ?? '' }),
+      ...(!event.deleted && event.attachmentIds !== undefined ? { attachmentIds: event.attachmentIds,
+        ...(event.environmentId === undefined ? {} : { environmentId: event.environmentId }) } : {}),
       authorId: event.senderId, authorKind: event.senderKind ?? 'human', addressing: addressed }
     const receipt = this.config.mainIntake && input.authorKind === 'human' && !event.deleted
       ? await this.engine.receiveSourceForMain(input) : await this.engine.receiveSource(input)
     await this.advance(event.cursor)
-    return receipt
+    return prior ? { status: 'filtered', reason: 'SOURCE_REPLAY' } : receipt
   }
 
   /** A replay of an older message (or an edit of an old message) never moves the cursor backwards. */
