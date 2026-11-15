@@ -98,10 +98,14 @@ try {
   ctx.llm.registerAdapter(['mock'], new MockRoleAdapter())
   const binding = await ctx.superagentProduct.dispatch('open')
   assert.equal(ctx.get('sessionController'), undefined, 'the native controller is isolated from the product Gateway')
+  assert.equal(ctx.get('sessionReferenceResolver'), undefined, 'native Session discovery is unavailable')
   await assert.rejects(ctx.typertGateway.invoke({ namespace: 'session', method: 'prompt', args: {
     request: { requestId: 'forbidden-native', sessionId: binding.mainSessionId, mode: 'queue', content: [{ type: 'text', text: 'This must be refused.' }] },
   }, peer: ctx.connection.browserPeer }), { code: 'gateway/service-unavailable' })
   await assert.rejects(ctx.typertGateway.stream({ namespace: 'session', method: 'control', args: {}, peer: ctx.connection.browserPeer }), { code: 'gateway/service-unavailable' })
+  const exportDenied = await ctx.connection.createSharedFetchHandler('/api').fetch(new Request(
+    `http://localhost/api/session.export?sessionId=${binding.mainSessionId}`, { method: 'GET' }), ctx.connection.browserPeer)
+  assert.equal(exportDenied.status, 404)
   await ctx.superagentProduct.dispatch('send', { instanceId: binding.instanceId, commandId: 'profile-smoke', text: 'Hello Main.' })
   let history = await ctx.superagentProduct.dispatch('history', { instanceId: binding.instanceId })
   if (history.messages.length !== 2 || history.messages[1].role !== 'main') throw new Error('Main did not produce a durable reply.')
@@ -119,10 +123,30 @@ try {
   assert.deepEqual(history.works.map(work => work.outcome.artifacts[0].path).sort(), ['profile-alpha.txt', 'profile-beta.txt'], JSON.stringify({ works: history.works, modelCalls }, null, 2))
   assert.equal(await readFile(join(process.env.DS_BOT_WORKSPACE, 'profile-alpha.txt'), 'utf8'), 'profile-alpha.txt written and verified\n')
   assert.equal(await readFile(join(process.env.DS_BOT_WORKSPACE, 'profile-beta.txt'), 'utf8'), 'profile-beta.txt written and verified\n')
+  const observations = await ctx.superagentProduct.dispatch('observe-list', { instanceId: binding.instanceId, limit: 10 })
+  assert.equal(observations.items.length, 3, JSON.stringify({ observations, modelCalls }, null, 2))
+  const workerObservation = observations.items.find(item => item.role === 'worker' && item.title.includes('alpha'))
+  assert.ok(workerObservation?.generation)
+  const observationHistory = await ctx.superagentProduct.dispatch('observe-read', { instanceId: binding.instanceId,
+    observationId: workerObservation.id, generation: workerObservation.generation, limit: 100 })
+  assert.equal(observationHistory.current, true)
+  assert.equal(observationHistory.historyStatus, 'available')
+  assert.equal(observationHistory.events.some(event => event.kind === 'tool-call'), true)
+  await assert.rejects(ctx.superagentProduct.dispatch('observe-read', {
+    instanceId: binding.instanceId, observationId: workerObservation.id, text: 'This must be refused.',
+  }), { code: 'INVALID_INPUT' })
+  await assert.rejects(ctx.superagentProduct.dispatch('observe-detail', {
+    instanceId: binding.instanceId, observationId: workerObservation.id, generation: workerObservation.generation,
+    detailId: 'guessed-detail',
+  }), { code: 'NOT_FOUND' })
+  await assert.rejects(ctx.superagentProduct.dispatch('observe-detail', {
+    instanceId: binding.instanceId, observationId: workerObservation.id, detailId: 'guessed-detail', write: true,
+  }), { code: 'INVALID_INPUT' })
   if (ctx.get('botExecutionAdapter') !== undefined) throw new Error('The old execution adapter must not mount in the product profile.')
   console.log(JSON.stringify({ profile: SUPERAGENT_PROFILE, home, services, messages: history.messages.filter(message => !message.id.startsWith('reply:main-update:')).length,
     localWorkStatus: history.works.every(work => work.status === 'success') ? 'success' : 'failed', localWorkItems: history.works.length,
-    nativeSessionAccessDenied: true }))
+    observationItems: observations.items.length, observationHistoryEvents: observationHistory.events.length, observationWriteRejected: true,
+    nativeSessionAccessDenied: true, nativeSessionExportDenied: true, nativeSessionReferenceDenied: true }))
 } finally {
   try { await application?.shutdown?.shutdown?.(0) } catch {}
   rmSync(home, { recursive: true, force: true })

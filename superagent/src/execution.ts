@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { CoreError, identifier, type Work } from './model.js'
+import { CoreError, identifier, triggerDeliveryTarget, type Work } from './model.js'
 import type { Storage, AsyncTx } from './storage.js'
 import type { Effects, Effect, EffectHandler, EffectResult } from './effects.js'
 import type { NativeSessions, NativeTool } from './native-sessions.js'
@@ -16,7 +16,7 @@ import { Previews, type PreviewView } from './previews.js'
 import { Subagents, type SubagentRecord, type SubagentView } from './subagents.js'
 import { type Deliveries, type DeliveryView } from './deliveries.js'
 import type { ContextKind, ContextReader } from './context.js'
-import type { RoleConfigStore } from './config.js'
+import type { RoleConfigStore, RoleConfigView } from './config.js'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { ExecutionPolicyStore, loadExecutionSelection, saveExecutionSelection, selectExecutionTarget } from './execution-target.js'
 import { capabilityLocations, type CapabilityPlanView, type HostCapabilities } from './capability-locations.js'
@@ -56,6 +56,9 @@ export interface Assignment {
   state: 'pending' | 'running' | 'stopping' | 'ended'
   generation: string
   createdAt: number
+  configurationRevision?: number
+  sessionStartSeq?: number
+  sessionEndSeq?: number
   runtimeToken?: string
   environment?: EnvironmentLocation
   recovery?: { reason: 'HOST_REPLACED'; previousAssignmentId: string; takeoverId: string }
@@ -679,7 +682,8 @@ export class Execution {
         if (!current || current.id !== args.reportId || current.assignmentId !== assignment?.id) throw new CoreError('NOT_READY', 'Only the current Assignment ready report may be delivered.')
         const trigger = await this.trigger(transaction, ticketId)
         const deliveryId = `${ticketId}:result`
-        const destination = { ...trigger.source, eventId: trigger.eventId, ...(trigger.threadId ? { threadId: trigger.threadId } : {}) }
+        const target = triggerDeliveryTarget(trigger)
+        const destination = { ...target.source, eventId: target.eventId, ...(target.threadId ? { threadId: target.threadId } : {}) }
         const effect = await this.effects.enqueue(transaction, { key: `${ticketId}:result`, stream: 'outbox', scope: ticketId,
           payload: { purpose: 'result', ticketId, reportId: current.id, deliveryId } })
         await this.deliveries.record(transaction, { id: deliveryId, ticketId, purpose: 'result', text: current.result, destination,
@@ -698,30 +702,24 @@ export class Execution {
   }
 
   private async router(ticketId: string, ready: boolean, signal: AbortSignal) {
+    const config = await this.roleConfig.currentView()
     const request = await this.routerRequest(ticketId, ready)
     if (!request) return
-    const config = await this.roleConfig.currentView()
-    this.sessions.setRoutes(config.roles.router.model, config.roles.worker.model)
-    this.sessions.setRoleInstructions(config.roles.router, config.roles.worker)
-    const result = await this.sessions.run({ ...request, signal, instructions: config.roles.router.instructions, skills: config.roles.router.skills })
+    const result = await this.sessions.run({ ...request, signal, profile: structuredClone(config.roles.router),
+      onBeforeModel: async () => { await this.recordRouterUse(request.sessionId, config) } })
     await this.recordRouterSession(result)
-    await this.storage.transaction(this.instanceId, transaction => this.roleConfig.recordUse(transaction, { sessionId: result.sessionId, role: 'router',
-      revision: config.revision, router: config.roles.router.model, worker: config.roles.worker.model }))
   }
 
   private async routerBatch(effects: Effect[], signal: AbortSignal): Promise<EffectResult[]> {
-    const requests = await Promise.allSettled(effects.map(effect => this.routerRequest(String(effect.payload.ticketId), effect.payload.type === 'report-ready')))
     const config = await this.roleConfig.currentView()
-    this.sessions.setRoutes(config.roles.router.model, config.roles.worker.model)
-    this.sessions.setRoleInstructions(config.roles.router, config.roles.worker)
+    const requests = await Promise.allSettled(effects.map(effect => this.routerRequest(String(effect.payload.ticketId), effect.payload.type === 'report-ready')))
     return Promise.all(requests.map(async request => {
       if (request.status === 'rejected') return { type: 'unknown' as const, reason: 'The Router notification could not be prepared.' }
       if (!request.value) return { type: 'success' as const }
       try {
-        const result = await this.sessions.run({ ...request.value, signal, instructions: config.roles.router.instructions, skills: config.roles.router.skills })
+        const result = await this.sessions.run({ ...request.value, signal, profile: structuredClone(config.roles.router),
+          onBeforeModel: async () => { await this.recordRouterUse(request.value!.sessionId, config) } })
         await this.recordRouterSession(result)
-        await this.storage.transaction(this.instanceId, transaction => this.roleConfig.recordUse(transaction, { sessionId: result.sessionId, role: 'router',
-          revision: config.revision, router: config.roles.router.model, worker: config.roles.worker.model }))
         return { type: 'success' as const }
       } catch (error) {
         return error instanceof CoreError && error.code === 'ROUTER_NOTICE_UNHANDLED'
@@ -738,8 +736,15 @@ export class Execution {
     })
   }
 
+  private recordRouterUse(sessionId: string, config: RoleConfigView) {
+    return this.storage.transaction(this.instanceId, transaction => this.roleConfig.recordUse(transaction, { sessionId, role: 'router',
+      revision: config.revision, router: config.roles.router.model, worker: config.roles.worker.model,
+      ...(config.roles.main ? { main: config.roles.main.model } : {}) }))
+  }
+
   private async worker(request: WorkerTurnRequest) {
     const { ticketId, inputId, resume = false, takeover = false, status = false, jobId, subagentId, contextHandoff = false, environmentHandoffId } = request
+    const activeConfig = await this.roleConfig.currentView()
     const gate = await this.storage.transaction(this.instanceId, async transaction => ({
       takeoverPending: await isHostTakeoverPending(transaction, this.instanceId, this.hostEpoch?.()),
       record: await loadEnvironmentHandoff(transaction, ticketId),
@@ -863,7 +868,7 @@ export class Execution {
         : cause === 'launch' ? 'launch' : 'resume'
       if (!await this.admitSlot(transaction, assignment, { ticketId, activation })) return { outcome: 'waiting' as const }
       if (environmentHandoffId) await saveEnvironmentHandoffIn(transaction, { ...handoff!, promptStartedAt: Date.now() })
-      assignment.state = 'running'
+      assignment = { ...assignment, state: 'running', configurationRevision: activeConfig.revision }
       await this.saveAssignment(transaction, assignment)
       await transaction.replace('intent', ticketId, { ...intent, state: 'running', reason: 'worker-running' })
       const claimed = input ? await this.inputs.claimDelivery(transaction, input, { assignmentId: assignment.id, sessionId: assignment.sessionId }) : undefined
@@ -875,18 +880,27 @@ export class Execution {
     if (admitted.outcome === 'consumed') return 'skipped' as const
     if (admitted.outcome === 'waiting') return 'waiting' as const
     const { assignment, trigger, environment, input, job, subagent, cause } = admitted
+    const botProfile = await this.botWorkerProfile(trigger.threadId)
+    const worker = activeConfig.roles.worker
+    const configuration = botProfile ? { ...activeConfig, roles: { ...activeConfig.roles, worker: {
+      ...worker,
+      model: botProfile.model ?? worker.model,
+      instructions: [worker.instructions, botProfile.instructions].filter(text => text.trim()).join('\n\n'),
+      skills: [...worker.skills, ...botProfile.skills.filter(skill => !worker.skills.includes(skill))],
+    } } } : activeConfig
     try {
-      return await this.runTurn({ ticketId, assignment, trigger, environment, input, cause, status, job, subagent })
+      return await this.runTurn({ ticketId, assignment, trigger, environment, input, cause, status, job, subagent, configuration })
     } catch (error) {
       await this.releaseSlot(ticketId, assignment.id)
       throw error
     }
   }
 
-  private async runTurn({ ticketId, assignment, trigger, environment, input, cause, status, job, subagent }: {
+  private async runTurn({ ticketId, assignment: initialAssignment, trigger, environment, input, cause, status, job, subagent, configuration }: {
     ticketId: string; assignment: Assignment; trigger: Work['trigger']; environment: ExecutionEnvironment | undefined; input: WorkInput | undefined
-    cause: TurnCause; status: boolean; job: JobRecord | undefined; subagent: SubagentRecord | undefined
+    cause: TurnCause; status: boolean; job: JobRecord | undefined; subagent: SubagentRecord | undefined; configuration: RoleConfigView
   }) {
+    let assignment = initialAssignment
     const controller = new AbortController()
     const environmentHandoff = cause === 'environment-handoff'
     this.workerControllers.set(ticketId, { assignmentId: assignment.id, controller })
@@ -1199,7 +1213,14 @@ export class Execution {
           const ticket = (await this.storage.transaction(this.instanceId, transaction => transaction.get<Work['ticket']>('ticket', ticketId)))!
           const scope = {
             parent, cwd: bound!.cwd, environmentId: assignment.environment!.id, mandateId: ticket.mandateId, tools,
-            model: this.sessions.workerRoute,
+            model: configuration.roles.worker.model,
+            configurationRevision: configuration.revision,
+            recordUse: async (sessionId: string) => {
+              await this.storage.transaction(this.instanceId, transaction => this.roleConfig.recordUse(transaction, {
+                sessionId, role: 'worker', revision: configuration.revision,
+                router: configuration.roles.router.model, worker: configuration.roles.worker.model,
+              }))
+            },
             authorize: async (tx: AsyncTx) => {
               const current = await tx.get<Assignment>('assignment', ticketId)
               if (current?.id !== assignment.id || current.state !== 'running') throw new CoreError('STALE_ASSIGNMENT', 'The delegating Assignment is no longer current.')
@@ -1308,17 +1329,6 @@ export class Execution {
         turnText = input.text
       }
     }
-    const activeConfig = await this.roleConfig.currentView()
-    const botProfile = await this.botWorkerProfile(trigger.threadId)
-    const workerModel = botProfile?.model ?? activeConfig.roles.worker.model
-    const workerInstructions = botProfile
-      ? [activeConfig.roles.worker.instructions, botProfile.instructions].filter(text => text.trim()).join('\n\n')
-      : activeConfig.roles.worker.instructions
-    const workerSkills = botProfile
-      ? [...activeConfig.roles.worker.skills, ...botProfile.skills.filter(skill => !activeConfig.roles.worker.skills.includes(skill))]
-      : activeConfig.roles.worker.skills
-    this.sessions.setRoutes(activeConfig.roles.router.model, workerModel)
-    this.sessions.setRoleInstructions(activeConfig.roles.router, { instructions: workerInstructions, skills: workerSkills })
     let outcome
     try {
       outcome = await this.sessions.run({ sessionId: assignment.sessionId, role: 'worker',
@@ -1326,8 +1336,12 @@ export class Execution {
         ...(input ? { onMessagePersisted: async (seq: number) => {
           await this.storage.transaction(this.instanceId, transaction => this.inputs.recordPersisted(transaction, input.id, turnMessageId!, seq))
         } } : {}),
+        onBeforeModel: async () => { await this.storage.transaction(this.instanceId, transaction => this.roleConfig.recordUse(transaction, {
+          sessionId: assignment.sessionId, role: 'worker', revision: configuration.revision,
+          router: configuration.roles.router.model, worker: configuration.roles.worker.model,
+        })) },
         text: turnText ?? await this.turnTextFor(cause, ticketId, trigger, input, job, subagent),
-        instructions: workerInstructions, skills: workerSkills,
+        profile: structuredClone(configuration.roles.worker),
         ...(bound ? { cwd: bound.cwd } : {}), signal: controller.signal, tools: status ? statusTools : [
       contextTool,
       ...environmentTools,
@@ -1453,6 +1467,12 @@ export class Execution {
     } finally {
       this.workerControllers.delete(ticketId)
     }
+    assignment = {
+      ...assignment,
+      ...((assignment.sessionStartSeq ?? outcome.turnStartSeq) === undefined ? {} : { sessionStartSeq: assignment.sessionStartSeq ?? outcome.turnStartSeq }),
+      ...(outcome.turnEndSeq === undefined ? {}
+        : { sessionEndSeq: Math.max(assignment.sessionEndSeq ?? -1, outcome.turnEndSeq) }),
+    }
     const turnEnd = outcome.events.findLast(event => (event as { type?: string }).type === 'turn/end') as { data?: { reason?: { kind?: string } } } | undefined
     if (turnEnd?.data?.reason?.kind === 'max-tokens' && !reported && !askedAttention && !handedBack) {
       const rollover = await this.rolloverSession(ticketId, assignment, trigger, outcome.forkedSessionId)
@@ -1465,6 +1485,12 @@ export class Execution {
     let endedSubagents: string[] = []
     let releasedInTransaction = false
     const keepSlot = await this.storage.transaction(this.instanceId, async transaction => {
+      const currentAssignment = await transaction.get<Assignment>('assignment', ticketId)
+      if (currentAssignment?.id === assignment.id) await this.saveAssignment(transaction, {
+        ...currentAssignment,
+        ...(assignment.sessionStartSeq === undefined ? {} : { sessionStartSeq: assignment.sessionStartSeq }),
+        ...(assignment.sessionEndSeq === undefined ? {} : { sessionEndSeq: assignment.sessionEndSeq }),
+      })
       if (await this.activeStop(transaction, ticketId)) {
         // Background work is cancelled and confirmed after this transaction; claiming `stopped` here would be a lie.
         if (!await this.hasBackgroundWork(transaction, ticketId) && !await this.previewCleanupPending(transaction, ticketId)) {
@@ -1476,8 +1502,6 @@ export class Execution {
       }
       const sessionMetadata = { id: outcome.sessionId, eventCount: outcome.events.length, ticketId, role: 'worker', status: outcome.status }
       if (!await transaction.replace('session', outcome.sessionId, sessionMetadata)) await transaction.insert('session', outcome.sessionId, sessionMetadata)
-      await this.roleConfig.recordUse(transaction, { sessionId: outcome.sessionId, role: 'worker', revision: activeConfig.revision,
-        router: activeConfig.roles.router.model, worker: workerModel })
       if (status && statusFact) {
         const fact: StatusReport = { id: `${JSON.stringify(['status-report', ticketId])}:${randomUUID()}`, ticketId, assignmentId: assignment.id, text: statusFact, createdAt: Date.now() }
         if (!await transaction.replace('status-report', `${JSON.stringify(['status-report', ticketId])}:current`, fact)) await transaction.insert('status-report', `${JSON.stringify(['status-report', ticketId])}:current`, fact)
@@ -1883,11 +1907,17 @@ export class Execution {
     else await this.storage.transaction(this.instanceId, operation)
   }
 
-  async stopTicket(command: { commandId: string; ticketId: string; reason: string; actorId: string }) {
+  async stopTicket(command: { commandId: string; ticketId: string; reason: string; actorId: string;
+    expectedGeneration?: string; expectedTicketVersion?: number }) {
     identifier(command.commandId, 'commandId'); identifier(command.ticketId, 'ticketId'); identifier(command.actorId, 'actorId')
+    if (command.expectedGeneration !== undefined) identifier(command.expectedGeneration, 'expectedGeneration')
+    if (command.expectedTicketVersion !== undefined && (!Number.isSafeInteger(command.expectedTicketVersion) || command.expectedTicketVersion < 1)) {
+      throw new CoreError('INVALID_INPUT', 'The Ticket card version must be a positive integer.')
+    }
     if (!command.reason.trim() || Buffer.byteLength(command.reason) > 2048) throw new CoreError('INVALID_INPUT', 'Stop needs a bounded reason.')
     const commandKey = createHash('sha256').update(JSON.stringify(['stop', this.instanceId, command.ticketId, command.actorId, command.commandId])).digest('hex')
-    const fingerprint = createHash('sha256').update(JSON.stringify(['stop-v1', this.instanceId, command.ticketId, command.actorId, command.reason])).digest('hex')
+    const fingerprint = createHash('sha256').update(JSON.stringify(['stop-v3', this.instanceId, command.ticketId,
+      command.actorId, command.reason, command.expectedGeneration ?? null, command.expectedTicketVersion ?? null])).digest('hex')
     const outcome = await commandTransaction(this.storage, this.instanceId, async transaction => {
       const prior = await transaction.get<{ stopId: string; assignmentId?: string; fingerprint: string }>('work-command', commandKey)
       if (prior) {
@@ -1898,6 +1928,15 @@ export class Execution {
       if (trigger.source.sourceInstanceId !== this.sourceEvents.sourceInstanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The stopped Ticket belongs to a different source instance.')
       if (trigger.source.actorId !== command.actorId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Only the trusted source actor may stop this Ticket.')
       const ticket = (await transaction.get<Work['ticket']>('ticket', command.ticketId))!
+      if (command.expectedTicketVersion !== undefined && ticket.directionVersion !== command.expectedTicketVersion) {
+        throw new CoreError('WORK_VERSION_STALE', 'The work card changed before this stop; refresh before trying again.')
+      }
+      const assignment = await transaction.get<Assignment>('assignment', command.ticketId)
+      if (command.expectedGeneration !== undefined
+        ? assignment?.generation !== command.expectedGeneration
+        : command.expectedTicketVersion !== undefined && assignment !== undefined) {
+        throw new CoreError('WORK_VERSION_STALE', 'The work card changed before this stop; refresh before trying again.')
+      }
       const existingHead = await transaction.get<StopHead>('stop-head', this.stopHeadKey(command.ticketId))
       if (existingHead) {
         const existing = await transaction.get<StopState>('stop-state', existingHead.stopId)
@@ -1906,7 +1945,6 @@ export class Execution {
           return { stopId: existing.id, assignmentId: existing.assignmentId, replay: false, remotePending: false, remoteJobIds: [] }
         }
       }
-      const assignment = await transaction.get<Assignment>('assignment', command.ticketId)
       // A turn ends while its background jobs still hold the slot, so a running Assignment is not proof of a live
       // local turn; background process ranges are cancelled with the stop and confirm quiescence below.
       const liveBackground = await this.hasBackgroundWork(transaction, command.ticketId)
@@ -1927,6 +1965,7 @@ export class Execution {
       await transaction.insert('stop-state', stopId, stop)
       if (!await transaction.replace('stop-head', this.stopHeadKey(command.ticketId), { stopId })) await transaction.insert('stop-head', this.stopHeadKey(command.ticketId), { stopId })
       await transaction.insert('stop-history', `${JSON.stringify(['stop-history', command.ticketId])}:${stopId}`, stop)
+      await this.attentions.supersedeForStop(transaction, command.ticketId)
       await transaction.replace('ticket', command.ticketId, { ...ticket, constraint: { kind: 'stopped', stopId, reason: command.reason } })
       const intent = (await transaction.get<Work['intent']>('intent', command.ticketId))!
       await transaction.replace('intent', command.ticketId, { ...intent, state: 'pending', reason: running ? 'stopping' : 'stopped' })
@@ -2599,16 +2638,28 @@ export class Execution {
     return assignment?.id ?? ''
   }
 
-  async resumeTicket(command: { commandId: string; ticketId: string; actorId: string }) {
+  async resumeTicket(command: { commandId: string; ticketId: string; actorId: string; expectedGeneration?: string }) {
     identifier(command.commandId, 'commandId'); identifier(command.ticketId, 'ticketId'); identifier(command.actorId, 'actorId')
+    if (command.expectedGeneration !== undefined) identifier(command.expectedGeneration, 'expectedGeneration')
+    const fingerprint = createHash('sha256').update(JSON.stringify(['resume-v2', this.instanceId, command.ticketId,
+      command.actorId, command.expectedGeneration ?? null])).digest('hex')
     const commandKey = createHash('sha256').update(JSON.stringify(['resume', this.instanceId, command.ticketId, command.actorId, command.commandId])).digest('hex')
     await commandTransaction(this.storage, this.instanceId, async transaction => {
-      const prior = await transaction.get('work-command', commandKey)
-      if (prior) return
+      const prior = await transaction.get<{ fingerprint?: string }>('work-command', commandKey)
+      if (prior) {
+        if (prior.fingerprint !== undefined && prior.fingerprint !== fingerprint) {
+          throw new CoreError('IDENTITY_CONFLICT', 'The resume command was reused with a different work version.')
+        }
+        return
+      }
       await this.assertHostAdmissionIn(transaction)
       const trigger = await this.trigger(transaction, command.ticketId)
       if (trigger.source.sourceInstanceId !== this.sourceEvents.sourceInstanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The resumed Ticket belongs to a different source instance.')
       if (trigger.source.actorId !== command.actorId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Only the trusted source actor may resume this Ticket.')
+      const previous = await transaction.get<Assignment>('assignment', command.ticketId)
+      if (command.expectedGeneration !== undefined && previous?.generation !== command.expectedGeneration) {
+        throw new CoreError('WORK_VERSION_STALE', 'The work card changed before this resume; refresh before trying again.')
+      }
       const waitingIntent = await transaction.get<Work['intent']>('intent', command.ticketId)
       if (waitingIntent?.reason === 'environment-waiting') {
         throw new CoreError('ENVIRONMENT_WAITING', 'The Ticket is waiting for an eligible execution Environment; retry the target first.')
@@ -2624,7 +2675,6 @@ export class Execution {
       if (attention?.status === 'waiting') throw new CoreError('WAITING_HUMAN', 'Resolve the current human question before resume.')
       await this.requireCurrentAuthorization(transaction, command.ticketId, command.actorId, 'resume')
       const ticket = (await transaction.get<Work['ticket']>('ticket', command.ticketId))!
-      const previous = await transaction.get<Assignment>('assignment', command.ticketId)
       if (await this.previewCleanupPending(transaction, command.ticketId)) {
         throw new CoreError('PREVIEW_ACTIVE', 'Cancel or confirm the acceptance preview cleanup before resuming or replacing this work.')
       }
@@ -2646,20 +2696,22 @@ export class Execution {
       const pendingInput = await this.inputs.latestPendingInput(transaction, command.ticketId)
       await this.effects.enqueue(transaction, { key: `resume:${command.commandId}`, stream: 'relay', scope: command.ticketId,
         payload: { ticketId: command.ticketId, assignmentId: assignment.id, resume: !pendingInput, ...(pendingInput ? { inputId: pendingInput.id } : {}) } })
-      await transaction.insert('work-command', commandKey, { assignmentId: assignment.id })
+      await transaction.insert('work-command', commandKey, { assignmentId: assignment.id, fingerprint })
     })
     return this.conversation(command.ticketId)
   }
 
   /** A retry keeps the Ticket, Session and directory but starts a fresh Assignment generation. */
-  async retryTicket(command: { commandId: string; ticketId: string; actorId: string; reason: string }) {
+  async retryTicket(command: { commandId: string; ticketId: string; actorId: string; reason: string; expectedGeneration?: string }) {
     identifier(command.commandId, 'commandId'); identifier(command.ticketId, 'ticketId'); identifier(command.actorId, 'actorId')
+    if (command.expectedGeneration !== undefined) identifier(command.expectedGeneration, 'expectedGeneration')
     if (!command.reason.trim() || Buffer.byteLength(command.reason) > 2048) throw new CoreError('INVALID_INPUT', 'Retrying work needs a bounded reason.')
     const waiting = await this.storage.transaction(this.instanceId, async transaction =>
       (await transaction.get<Work['intent']>('intent', command.ticketId))?.reason === 'environment-waiting')
     if (waiting) throw new CoreError('ENVIRONMENT_WAITING', 'Retry the execution target before creating an Assignment.')
     const commandKey = createHash('sha256').update(JSON.stringify(['retry', this.instanceId, command.ticketId, command.actorId, command.commandId])).digest('hex')
-    const fingerprint = createHash('sha256').update(JSON.stringify(['retry-v1', command.reason])).digest('hex')
+    const fingerprint = createHash('sha256').update(JSON.stringify(['retry-v2', command.reason,
+      command.expectedGeneration ?? null])).digest('hex')
     const outcome = await commandTransaction(this.storage, this.instanceId, async transaction => {
       const prior = await transaction.get<{ fingerprint: string; blocked?: boolean }>('work-command', commandKey)
       if (prior) {
@@ -2670,6 +2722,10 @@ export class Execution {
       const trigger = await this.trigger(transaction, command.ticketId)
       if (trigger.source.sourceInstanceId !== this.sourceEvents.sourceInstanceId || trigger.source.actorId !== command.actorId) {
         throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Only the trusted source actor may retry this Ticket.')
+      }
+      const previous = await transaction.get<Assignment>('assignment', command.ticketId)
+      if (command.expectedGeneration !== undefined && previous?.generation !== command.expectedGeneration) {
+        throw new CoreError('WORK_VERSION_STALE', 'The work card changed before this retry; refresh before trying again.')
       }
       await this.requireCurrentAuthorization(transaction, command.ticketId, command.actorId, 'retry')
       const ticket = (await transaction.get<Work['ticket']>('ticket', command.ticketId))!
@@ -2682,7 +2738,6 @@ export class Execution {
       if (await this.previewCleanupPending(transaction, command.ticketId)) {
         throw new CoreError('PREVIEW_ACTIVE', 'Cancel or confirm the acceptance preview cleanup before retry.')
       }
-      const previous = await transaction.get<Assignment>('assignment', command.ticketId)
       const jobs = this.jobs ? await this.jobs.listIn(transaction, command.ticketId) : []
       const subagents = this.subagents ? await this.subagents.listIn(transaction, command.ticketId) : []
       const blockedWork = [

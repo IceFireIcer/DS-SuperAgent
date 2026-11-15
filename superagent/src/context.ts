@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { CoreError, identifier, type Work } from './model.js'
 import type { AsyncTx, Storage } from './storage.js'
 import type { SourceEvent } from './source-events.js'
@@ -41,9 +42,18 @@ const defaultMaxBytes = 4096
 const reportPrefix = (ticketId: string) => `${JSON.stringify(['report-history', ticketId])}:`
 const subscriptionPrefix = (ticketId: string) => `${JSON.stringify(['ticket-thread-subscription', ticketId])}:`
 
-function chunkText(text: string, after: string | undefined, maxBytes: number) {
+function contextVersion(ref: ContextRef, facts: Record<string, unknown>, text: string) {
+  return createHash('sha256').update(JSON.stringify([ref.kind, ref.id ?? null, ref.threadId ?? null, ref.objectId ?? null, facts, text]))
+    .digest('hex')
+}
+
+function chunkText(text: string, after: string | undefined, maxBytes: number, version: string) {
   const totalBytes = Buffer.byteLength(text)
-  const offset = after === undefined ? 0 : Number(after)
+  const [rawOffset, boundVersion, ...extra] = after?.split(':') ?? []
+  if (after !== undefined && (extra.length || !rawOffset || boundVersion !== undefined && boundVersion !== version)) {
+    throw new CoreError('CONTEXT_CURSOR_STALE', 'The evidence changed after this cursor was issued; restart from its first page.')
+  }
+  const offset = rawOffset === undefined ? 0 : Number(rawOffset)
   if (!Number.isInteger(offset) || offset < 0 || offset > totalBytes) throw new CoreError('INVALID_INPUT', 'Use a byte cursor from this context card.')
   if (offset === totalBytes) return { text: '', totalBytes, returnedBytes: 0, truncated: false, cursor: undefined }
   let counted = 0
@@ -64,7 +74,7 @@ function chunkText(text: string, after: string | undefined, maxBytes: number) {
   }
   if (start < 0) return { text: '', totalBytes, returnedBytes: 0, truncated: false, cursor: undefined }
   const returned = text.slice(start, end)
-  const cursor = startByte + bytes < totalBytes ? String(startByte + bytes) : undefined
+  const cursor = startByte + bytes < totalBytes ? `${startByte + bytes}:${version}` : undefined
   return { text: returned, totalBytes, returnedBytes: Buffer.byteLength(returned), truncated: cursor !== undefined, ...(cursor ? { cursor } : {}) }
 }
 
@@ -93,7 +103,7 @@ export class ContextReader {
       const work = await this.readWork(tx, request.ticketId)
       if (!work) throw new CoreError('NOT_FOUND', 'The context Ticket does not exist.')
       const card = await this.resolve(tx, work, { ...request.ref, ticketId: request.ticketId })
-      const chunk = chunkText(card.text, request.after, maxBytes)
+      const chunk = chunkText(card.text, request.after, maxBytes, contextVersion(card.ref, card.facts, card.text))
       return { ticketId: request.ticketId, ref: card.ref, title: card.title, summary: summary(card.text), text: chunk.text,
         facts: card.facts, pagination: { ...(chunk.cursor ? { cursor: chunk.cursor } : {}), totalBytes: chunk.totalBytes,
           returnedBytes: chunk.returnedBytes, truncated: chunk.truncated }, next: card.next }

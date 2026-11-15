@@ -187,7 +187,7 @@ test('a revision conflict after an asynchronous interpretation keeps a draft and
   )
   const current = await engine.getRoleConfig()
   await engine.updateRoleConfig({ commandId: 'direct-newer', expectedRevision: current.revision,
-    roles: { ...current.roles, worker: { ...current.roles.worker, instructions: 'Newer direct prompt.' } } })
+    roles: { ...current.roles, worker: { ...current.roles.worker, instructions: '{{goal}} {{constraints}} Newer direct prompt.' } } })
   release()
   const record = await pending
   assert.equal(record.status, 'conflict')
@@ -198,7 +198,7 @@ test('a revision conflict after an asynchronous interpretation keeps a draft and
   assert.equal(draft.change.target, 'roles')
   assert.equal(draft.currentRoleRevision, 2)
   assert.equal((await engine.getRoleConfig()).revision, 2)
-  assert.equal((await engine.getRoleConfig()).roles.worker.instructions, 'Newer direct prompt.')
+  assert.equal((await engine.getRoleConfig()).roles.worker.instructions, '{{goal}} {{constraints}} Newer direct prompt.')
   assert.equal((await engine.listConfigDrafts())[0].id, draft.id)
   const replay = await engine.updateBehaviorFromInstruction(
     { commandId: 'instruction-late', instruction: 'Change the Worker prompt.', expectedRoleRevision: 1 }, interpreter,

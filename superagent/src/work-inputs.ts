@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { CoreError, identifier, type DesktopSource, type Source, type Work } from './model.js'
+import { CoreError, identifier, triggerDeliveryTarget, type DesktopSource, type Source, type Work } from './model.js'
 import type { AsyncTx, Storage } from './storage.js'
 import type { SourceEvent, SourceEvents } from './source-events.js'
 import type { EffectRequest } from './effects.js'
@@ -245,18 +245,23 @@ export class WorkInputs {
   }
 
   async subscribe(tx: AsyncTx, ticketId: string, trigger: Work['trigger']) {
-    if (!trigger.threadId) return
-    await this.addSubscription(tx, ticketId, trigger.threadId, 'trigger', true, 'worker', 'Original source Thread', this.source.actorId)
+    const target = triggerDeliveryTarget(trigger)
+    if (!target.threadId) return
+    await this.addSubscription(tx, ticketId, target.threadId, 'trigger', true, 'worker', 'Original source Thread', this.source.actorId,
+      target.source.sourceInstanceId)
   }
 
-  async addSubscription(tx: AsyncTx, ticketId: string, threadId: string, basis: ThreadSubscription['basis'], required: boolean, mode: ThreadSubscription['mode'], reason: string, addedBy: string) {
-    identifier(ticketId, 'ticketId'); identifier(threadId, 'threadId'); identifier(addedBy, 'addedBy')
+  async addSubscription(tx: AsyncTx, ticketId: string, threadId: string, basis: ThreadSubscription['basis'], required: boolean, mode: ThreadSubscription['mode'], reason: string, addedBy: string,
+    sourceInstanceId = this.source.sourceInstanceId) {
+    identifier(ticketId, 'ticketId'); identifier(threadId, 'threadId'); identifier(addedBy, 'addedBy'); identifier(sourceInstanceId, 'sourceInstanceId')
     const inThreads = this.source.allowedThreadIds?.includes(threadId) ?? false
     const inPrefixes = this.source.allowedThreadPrefixes?.some(prefix => threadId.startsWith(prefix)) ?? false
-    if (!inThreads && !inPrefixes) throw new CoreError('SOURCE_SCOPE_DENIED', 'The additional Thread is outside the configured reception scope.')
+    if (sourceInstanceId === this.source.sourceInstanceId && !inThreads && !inPrefixes) {
+      throw new CoreError('SOURCE_SCOPE_DENIED', 'The additional Thread is outside the configured reception scope.')
+    }
     if (!reason.trim() || Buffer.byteLength(reason) > 2048) throw new CoreError('INVALID_INPUT', 'A Thread subscription needs a bounded reason.')
     await this.authorizedTicket(tx, ticketId)
-    const id = subscriptionKey(this.source.sourceInstanceId, threadId, ticketId)
+    const id = subscriptionKey(sourceInstanceId, threadId, ticketId)
     const existing = await tx.get<ThreadSubscription>('thread-subscription', id)
     if (!existing && basis === 'worker') {
       const decisions = await this.scanAll<SubscriptionDecision>(tx, 'subscription-decision', subscriptionDecisionPrefix(ticketId),
@@ -266,7 +271,7 @@ export class WorkInputs {
     if (!existing && (await this.subscriptionsForTicket(tx, ticketId)).length >= 1000
       || !existing && (await this.subscriptionsForThread(tx, threadId)).length >= 1000) throw new CoreError('WORK_OWNERSHIP_BUDGET', 'A Ticket or Thread already has its declared 1000 subscriptions.')
     const subscription: ThreadSubscription = { id, instanceId: this.instanceId, ticketId, threadId,
-      sourceInstanceId: this.source.sourceInstanceId, required: existing?.required || required, basis: existing?.basis ?? basis, mode: existing?.required ? 'worker' : mode, reason, addedBy }
+      sourceInstanceId, required: existing?.required || required, basis: existing?.basis ?? basis, mode: existing?.required ? 'worker' : mode, reason, addedBy }
     if (!await tx.replace('thread-subscription', id, subscription)) await tx.insert('thread-subscription', id, subscription)
     const ticketKey = ticketSubscriptionKey(ticketId, id)
     if (!await tx.replace('ticket-thread-subscription', ticketKey, subscription)) await tx.insert('ticket-thread-subscription', ticketKey, subscription)
@@ -331,6 +336,10 @@ export class WorkInputs {
 
   async owns(tx: AsyncTx, event: SourceEvent) {
     return (await this.ownershipsForEvent(tx, event.id)).some(ownership => ownership.state === 'owned')
+  }
+
+  async threadHasWorkerSubscriptions(tx: AsyncTx, threadId: string) {
+    return (await this.subscriptionsForThread(tx, threadId)).some(subscription => subscription.mode === 'worker')
   }
 
   async ownershipsForEventInTransaction(tx: AsyncTx, eventId: string) {
@@ -789,14 +798,18 @@ export class WorkInputs {
       || subscription.sourceInstanceId !== this.source.sourceInstanceId) return false
     if (!['explicit', 'inferred'].includes(mandate.strength) || decision.outcome !== 'accept') return false
     if (event.authorKind !== 'human' || !this.allowedRequesterIds.includes(event.authorId)) return false
-    return this.policyVersion() !== '' && trigger.source.sourceInstanceId === this.source.sourceInstanceId
+    return this.policyVersion() !== '' && (trigger.source.sourceInstanceId === this.source.sourceInstanceId
+      || trigger.deliveryOrigin?.source.sourceInstanceId === this.source.sourceInstanceId)
   }
 
   private async authorizedTicket(tx: AsyncTx, ticketId: string) {
     const ticket = await tx.get<Work['ticket']>('ticket', ticketId)
     const trigger = ticket && await tx.get<Work['trigger']>('trigger', ticket.triggerId)
     if (!ticket || !trigger) throw new CoreError('NOT_FOUND', 'The Ticket does not exist.')
-    if (trigger.source.sourceInstanceId !== this.source.sourceInstanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The Ticket belongs to a different source instance.')
+    if (trigger.source.sourceInstanceId !== this.source.sourceInstanceId
+      && trigger.deliveryOrigin?.source.sourceInstanceId !== this.source.sourceInstanceId) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The Ticket belongs to a different source instance.')
+    }
     return ticket
   }
 

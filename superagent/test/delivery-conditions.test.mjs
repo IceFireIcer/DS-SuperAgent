@@ -157,7 +157,7 @@ test('two P/R conditions are checked separately and a pending follow-up delays f
   await engine.receiveSource({ commandId: 'multi-followup', threadId: 'room', objectId: 'multi-2', type: 'created', version: '1',
     text: 'Follow up before closing.', authorId: 'user', authorKind: 'human', addressing: 'direct' })
   const followupEvent = await engine.getSourceObject({ threadId: 'room', objectId: 'multi-2' })
-  const target = await engine.setDeliveryTarget({ commandId: 'multi-target', ticketId, purpose: 'result', sourceInstanceId: 'desktop',
+  const target = await engine.setDeliveryTarget({ commandId: 'multi-target', ticketId, purpose: 'result', sourceInstanceId: 'desktop', actorId: 'user',
     threadId: 'room', objectId: 'multi-2', evidence: 'The target is the verified follow-up event.', evidenceEventId: followupEvent.eventId })
   assert.equal(target.evidenceEventId, followupEvent.eventId)
   const pendingDirection = await engine.getTicketDirection(ticketId)
@@ -232,26 +232,37 @@ test('an authorized delivery-target change redirects the result and is rejected 
   const receipt = await engine.submit({ commandId: 'retarget', eventId: 'retarget-message', text: 'Deliver this to GitHub.' })
   const other = new core.Engine(storage, 'private', { kind: 'github', sourceInstanceId: 'github:acme/repo', actorId: 'user', allowedActorIds: ['user'],
     allowedThreadPrefixes: ['github:acme/repo#'], versionOrder: 'sequence' })
-  t.after(() => disposeAll([() => other.effects.stop(), () => other.shutdown()], 'Retarget Engine cleanup failed.'))
+  const bobReceiver = new core.Engine(storage, 'private', { kind: 'github', sourceInstanceId: 'github:acme/repo', actorId: 'bob',
+    allowedActorIds: ['user', 'bob'], allowedThreadPrefixes: ['github:acme/repo#'], versionOrder: 'sequence' })
+  t.after(() => disposeAll([() => other.effects.stop(), () => other.shutdown(), () => bobReceiver.effects.stop(), () => bobReceiver.shutdown()],
+    'Retarget Engine cleanup failed.'))
   const reference = await engine.getTicketReference(receipt.ticketId)
   const event = await other.receiveSource({ commandId: 'retarget-pr', threadId: 'github:acme/repo#12', objectId: 'pr:12', type: 'created', version: '1',
     text: `${reference}\nDeliver the prepared result here.`, authorId: 'user', authorKind: 'human', addressing: 'direct' })
-  await assert.rejects(engine.setDeliveryTarget({ commandId: 'unassociated-target', ticketId: receipt.ticketId, purpose: 'result', sourceInstanceId: 'github:acme/repo',
+  await assert.rejects(engine.setDeliveryTarget({ commandId: 'unassociated-target', ticketId: receipt.ticketId, purpose: 'result', sourceInstanceId: 'github:acme/repo', actorId: 'user',
     threadId: 'github:acme/repo#12', objectId: 'pr:12', evidence: 'A reference alone cannot authorize a destination.', evidenceEventId: event.eventId }), { code: 'ASSOCIATION_REQUIRED' })
-  await assert.rejects(engine.setDeliveryTarget({ commandId: 'unverified-target', ticketId: receipt.ticketId, purpose: 'result', sourceInstanceId: 'github:acme/repo',
+  await assert.rejects(engine.setDeliveryTarget({ commandId: 'unverified-target', ticketId: receipt.ticketId, purpose: 'result', sourceInstanceId: 'github:acme/repo', actorId: 'user',
     threadId: 'github:acme/repo#12', objectId: 'pr:12', evidence: 'An unverified destination is not enough.' }), { code: 'ASSOCIATION_REQUIRED' })
   await engine.associateSourceEvent({ commandId: 'link-target', ticketId: receipt.ticketId, eventId: event.eventId, reference, reason: 'Owner-approved native follow-up.' }, other)
-  const target = await engine.setDeliveryTarget({ commandId: 'set-target', ticketId: receipt.ticketId, purpose: 'result', sourceInstanceId: 'github:acme/repo',
+  const target = await engine.setDeliveryTarget({ commandId: 'set-target', ticketId: receipt.ticketId, purpose: 'result', sourceInstanceId: 'github:acme/repo', actorId: 'user',
     threadId: 'github:acme/repo#12', objectId: 'pr:12', evidence: 'Authorized follow-up in the linked pull request.', evidenceEventId: event.eventId })
   assert.equal(target.destination.objectId, 'pr:12')
   await drain()
   const conversation = await engine.conversation(receipt.ticketId)
   const result = conversation.messages.find(message => message.purpose === 'result')
-  assert.deepEqual({ sourceInstanceId: result.destination.sourceInstanceId, eventId: result.destination.eventId, threadId: result.destination.threadId },
-    { sourceInstanceId: 'github:acme/repo', eventId: 'pr:12', threadId: 'github:acme/repo#12' })
-  await assert.rejects(other.setDeliveryTarget({ commandId: 'foreign-target', ticketId: receipt.ticketId, purpose: 'result', sourceInstanceId: 'github:acme/repo',
+  assert.deepEqual({ sourceInstanceId: result.destination.sourceInstanceId, actorId: result.destination.actorId,
+    eventId: result.destination.eventId, threadId: result.destination.threadId },
+  { sourceInstanceId: 'github:acme/repo', actorId: 'user', eventId: 'pr:12', threadId: 'github:acme/repo#12' })
+  await assert.rejects(other.setDeliveryTarget({ commandId: 'foreign-target', ticketId: receipt.ticketId, purpose: 'result', sourceInstanceId: 'github:acme/repo', actorId: 'user',
     threadId: 'github:acme/repo#12', objectId: 'foreign', evidence: 'No right to retarget.' }), { code: 'SOURCE_NOT_AUTHORIZED' })
-  await assert.rejects(engine.setDeliveryTarget({ commandId: 'bad-evidence', ticketId: receipt.ticketId, purpose: 'result',
+  const bobEvent = await bobReceiver.receiveSource({ commandId: 'bob-retarget', threadId: 'github:acme/repo#12', objectId: 'pr:12:comment:bob',
+    type: 'created', version: '1', text: `${reference}\nUse the follow-up from Bob.`, authorId: 'bob', authorKind: 'human', addressing: 'direct' })
+  await engine.associateSourceEvent({ commandId: 'link-bob', ticketId: receipt.ticketId, eventId: bobEvent.eventId, reference,
+    reason: 'Owner-approved Bob follow-up.' }, bobReceiver)
+  await assert.rejects(engine.setDeliveryTarget({ commandId: 'wrong-target-actor', ticketId: receipt.ticketId, purpose: 'result',
+    sourceInstanceId: 'github:acme/repo', actorId: 'user', threadId: 'github:acme/repo#12', objectId: 'pr:12:comment:bob',
+    evidence: 'The target actor must match the evidence author.', evidenceEventId: bobEvent.eventId }), { code: 'ACTOR_MISMATCH' })
+  await assert.rejects(engine.setDeliveryTarget({ commandId: 'bad-evidence', ticketId: receipt.ticketId, purpose: 'result', actorId: 'user',
     sourceInstanceId: 'github:acme/repo', threadId: 'github:acme/repo#12', objectId: 'pull-request-12', evidence: 'Missing evidence.',
     evidenceEventId: 'missing-event' }), { code: 'INVALID_INPUT' })
 })

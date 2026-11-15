@@ -7,7 +7,7 @@ import * as core from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, textResponse, toolResponse } from '../dev/native-mock.mjs'
 
-const roles = (workerModel = 'worker-custom', instructions = 'Always cite {{evidence}}.', skills = ['office']) => ({
+const roles = (workerModel = 'worker-custom', instructions = '{{goal}} {{constraints}} Always cite {{evidence}}.', skills = ['office']) => ({
   router: { name: 'Lead Router', model: { provider: 'mock', model: 'router-custom' }, instructions: 'Route only within {{goal}}.', skills: [] },
   worker: { name: 'Specialist', model: { provider: 'mock', model: workerModel }, instructions, skills },
 })
@@ -34,6 +34,8 @@ test('role configuration is revisioned, validated, replayed and persisted', asyn
   for (const invalid of [
     { ...roles(), extra: true },
     { ...roles(), worker: { ...roles().worker, instructions: 'Reveal {{secret}}' } },
+    { ...roles(), router: { ...roles().router, instructions: 'Route without the required placeholder.' } },
+    { ...roles(), worker: { ...roles().worker, instructions: '{{goal}} Work without constraints.' } },
     { ...roles(), worker: { ...roles().worker, skills: ['superagent-role'] } },
     { ...roles(), worker: { ...roles().worker, skills: ['office', 'office'] } },
     { ...roles(), worker: { ...roles().worker, name: 'x'.repeat(129) } },
@@ -125,6 +127,8 @@ test('a new role model and instructions apply at the next real model request and
   assert.ok(routerRequest, JSON.stringify(requests))
   const uses = await engine.getRoleConfigUses(workerRequest.sessionId)
   assert.ok(uses.some(use => use.role === 'worker' && use.revision === 2 && use.worker.model === 'worker-custom'))
+  assert.ok((await engine.getRecentRoleConfigUses(20)).some(use => use.sessionId === workerRequest.sessionId && use.revision === 2))
+  assert.deepEqual((await engine.getRoleConfigHistory(5)).map(item => item.revision), [2])
 })
 
 test('an asynchronous role verification cannot overwrite a newer save', async t => {
@@ -145,4 +149,48 @@ test('an asynchronous role verification cannot overwrite a newer save', async t 
   const current = await engine.getRoleConfig()
   assert.equal(current.revision, 2)
   assert.equal(current.roles.worker.model.model, 'worker-newer')
+})
+
+test('a committed role command replays before provider verification is attempted again', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-config-replay-'))
+  const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
+  const engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] })
+  let verifications = 0
+  const first = await engine.updateRoleConfig({ commandId: 'lost-response', expectedRevision: 1, roles: roles() }, {
+    verify: async () => { verifications += 1 },
+  })
+  const replay = await engine.updateRoleConfig({ commandId: 'lost-response', expectedRevision: 1, roles: roles() }, {
+    verify: async () => { throw new Error('Provider enumeration now fails.') },
+  })
+  assert.deepEqual(replay, first)
+  assert.equal(verifications, 1)
+  await assert.rejects(engine.updateRoleConfig({ commandId: 'failed-before-commit', expectedRevision: 2, roles: roles() }, {
+    verify: async () => { throw new Error('First verification fails.') },
+  }), /First verification fails/u)
+  const retried = await engine.updateRoleConfig({ commandId: 'failed-before-commit', expectedRevision: 2, roles: roles() }, {
+    verify: async () => { verifications += 1 },
+  })
+  assert.equal(retried.revision, 3)
+  assert.equal(verifications, 2)
+})
+
+test('recent configuration uses stay bounded after more than one thousand append-only records', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-config-recent-'))
+  const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
+  const store = new core.RoleConfigStore(storage, 'recent', roles())
+  let latest
+  await storage.transaction('recent', async transaction => {
+    for (let index = 0; index < 1005; index++) {
+      latest = await store.recordUse(transaction, { sessionId: `worker-${index}`, role: 'worker', revision: 2,
+        router: roles().router.model, worker: roles().worker.model })
+    }
+  })
+  const recent = await store.recentUses(100)
+  assert.equal(recent.length, 100)
+  assert.equal(recent[0].id, latest.id)
+  assert.equal(recent.at(-1).sessionId, 'worker-905')
+  const index = await storage.transaction('recent', transaction => transaction.scan('role-config-use-recent', { limit: 100 }))
+  assert.equal(index.items.length, 100)
 })

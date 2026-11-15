@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { CoreError, identifier, type CommandRecord, type DesktopSource, type EventRecord, type IntakePolicy, type Receipt, type Source, type SubmitRequest, type Work } from './model.js'
+import { CoreError, identifier, triggerDeliveryTarget, type CommandRecord, type DesktopSource, type EventRecord, type IntakePolicy, type Receipt, type Source, type SubmitRequest, type Work } from './model.js'
 import { capabilityLocations, validateHostCapabilities, validateRequiredCapabilities,
   type CapabilityPlanView, type HostCapabilities } from './capability-locations.js'
 import type { AsyncTx, Storage } from './storage.js'
@@ -25,7 +25,7 @@ import { HostLease, type HostOptions } from './host.js'
 import { ClientAccess } from './client-access.js'
 import { listSupervisorProposals, Supervisor, type SupervisorOptions, type SupervisorProposal } from './supervisor.js'
 import { assertHostTakeoverSettled, loadHostTakeover, type HostTakeoverRecord, type HostTakeoverTicket } from './host-takeover.js'
-import { ContextReader, type ContextCandidate, type ContextCard, type ContextRequest } from './context.js'
+import { ContextReader, type ContextCandidate, type ContextCard, type ContextRef, type ContextRequest } from './context.js'
 import { RoleConfigStore, validateRoleConfig, type RoleConfig, type RoleConfigUse, type RoleConfigView } from './config.js'
 import { draftKey, instructionKey, validateBehaviorChange, type BehaviorChange, type BehaviorInterpreter,
   type BehaviorInstructionRecord, type ConfigDraft } from './config-instructions.js'
@@ -38,7 +38,9 @@ import { compareWorkCopy, WorkCopyUnsupported, workCopyGaps,
   uniqueBlockers, type HandoffCopyView, type WorkCopyBlocker, type WorkCopyComparison, type WorkCopyFile, type WorkCopySnapshot } from './work-copy.js'
 import type { ActivationGate } from './activation.js'
 import { MainConversation, type MainAddress, type MainSend } from './main-conversation.js'
-import { WorkDelegation, type MainWorkCard, type MainWorkItem } from './work-delegation.js'
+import { WorkDelegation, type MainEvidenceCard, type MainWorkCard, type MainWorkControl, type MainWorkItem } from './work-delegation.js'
+import { WorkObservations } from './work-observations.js'
+import { MainSourceHandoffs, type MainSourceDeliveryPage, type MainSourceHandoff, type MainSourceView } from './main-source.js'
 
 interface StoredPolicy { revision: number; configuration: Omit<IntakePolicy, 'assess'>; origin: 'bootstrap' | 'manual' | 'sync'; sourceRevision?: string; updatedAt: number }
 interface ProcessingState { paused: boolean; revision: number; updatedAt: number }
@@ -49,6 +51,8 @@ export class Engine {
   readonly effects: Effects
   private readonly main: MainConversation
   private readonly workDelegation?: WorkDelegation
+  private readonly workObservations: WorkObservations | undefined
+  private readonly mainSources: MainSourceHandoffs
   private readonly slots: Slots | undefined
   private readonly jobs: Jobs | undefined
   private readonly previews: Previews | undefined
@@ -211,6 +215,7 @@ export class Engine {
     const storage = this.host.guard(rawStorage)
     this.storage = storage
     this.sessions = sessions
+    this.workObservations = sessions ? new WorkObservations(storage, instanceId, sessions) : undefined
     this.main = new MainConversation(storage, instanceId, source, sessions, async sessionId => {
       const config = await this.getRoleConfig()
       if (!config.roles.main) throw new CoreError('ROLE_NOT_CONFIGURED', 'Main needs its own role profile.')
@@ -247,6 +252,7 @@ export class Engine {
     const sourceBinding = { ...this.source }
     delete sourceBinding.intake
     this.sourceEvents = new SourceEvents(storage, instanceId, sourceBinding)
+    this.mainSources = new MainSourceHandoffs(storage, instanceId, Date.now)
     this.membership = new SourceMembership(storage, instanceId, this.source.sourceInstanceId, Date.now)
     this.deliveryState = new DeliveryState(storage, instanceId, this.sourceEvents, Date.now)
     this.proactive = proactiveOptions ? new Proactive(storage, instanceId, proactiveOptions) : undefined
@@ -265,7 +271,8 @@ export class Engine {
         instanceId, source: event.source, eventId: event.objectId, threadId: event.threadId, nativeVersion: event.version, text: event.text!,
         ...(capabilities?.length ? { capabilities } : {}),
       }, `intake:${strength}:${policyVersion}:${event.id}`, { strength, policyVersion }), Date.now, assessor,
-      (tx, event) => this.inputs.owns(tx, event), (tx, eventId) => this.inputs.hasPendingRequeue(tx, eventId),
+      async (tx, event) => await this.inputs.owns(tx, event) || !!(await this.mainSources.has(tx, event.id)),
+      (tx, eventId) => this.inputs.hasPendingRequeue(tx, eventId),
       (tx, eventId, evaluationId) => this.inputs.claimRequeue(tx, eventId, evaluationId),
       (tx, eventId, evaluationId) => this.inputs.consumeRequeue(tx, eventId, evaluationId),
       (tx, eventId, evaluationId) => this.inputs.releaseRequeue(tx, eventId, evaluationId)) : undefined
@@ -301,23 +308,55 @@ export class Engine {
           if (status !== 'pending' && status !== 'running' && status !== 'ready' && status !== 'waiting-human' && status !== 'stopping' && status !== 'stopped') {
             throw new CoreError('INCOMPLETE_STATE', 'The work state is not recognized.')
           }
+          const assignment = conversation.assignments[0]
+          const attention = conversation.attention
+          const stop = conversation.stop
+          const ticketVersion = (await storage.transaction(instanceId,
+            tx => tx.get<Work['ticket']>('ticket', ticketId)))?.directionVersion ?? 1
+          const actorAllowed = this.source.allowedActorIds.includes(this.source.actorId)
+          const control: MainWorkControl = {
+            workItemId: '',
+            ticketId,
+            ticketVersion,
+            permissions: {
+              actorId: this.source.actorId,
+              canStop: actorAllowed && !['ready', 'stopped', 'stopping'].includes(status),
+              canResume: actorAllowed && stop?.state === 'stopped' && !stop.pendingDeviceConfirmation
+                && stop.cancellationConfirmedAt !== undefined && attention?.status !== 'waiting',
+              canRetry: actorAllowed && (conversation.reason === 'worker-idle'
+                || conversation.reason === 'recovery-blocked' || conversation.reason === 'recovery-exhausted'),
+              canAnswer: actorAllowed && attention?.status === 'waiting' && status === 'waiting-human',
+            },
+            ...(assignment ? { assignment: { id: assignment.id, generation: assignment.generation,
+              sessionId: assignment.sessionId, state: assignment.state } } : {}),
+            ...(attention ? { attention: { id: attention.id, version: attention.sequence, status: attention.status,
+              question: attention.question, options: [...attention.options], freeText: true as const,
+              assignmentId: attention.assignmentId, sessionId: attention.sessionId,
+              ...(attention.answeredAt === undefined ? {} : { answeredAt: attention.answeredAt }),
+              ...(attention.answeredBy === undefined ? {} : { answeredBy: attention.answeredBy }),
+              ...(attention.answerText === undefined ? {} : { answerText: attention.answerText }) } } : {}),
+            ...(stop ? { stop: { id: stop.id, state: stop.state, requestedAt: stop.requestedAt,
+              requestedBy: stop.requestedBy, reason: stop.reason,
+              pendingDeviceConfirmation: stop.pendingDeviceConfirmation === true,
+              ...(stop.cancellationConfirmedAt === undefined ? {} : { cancellationConfirmedAt: stop.cancellationConfirmedAt }),
+              ...(stop.resumedAt === undefined ? {} : { resumedAt: stop.resumedAt }) } } : {}),
+          }
           return { ticketId, status, reason: conversation.reason, lifecycle: conversation.lifecycle,
             ...(conversation.setup?.state === 'failed' ? { setupCode: conversation.setup.code ?? 'SETUP_FAILED' } : {}),
-            ...(report ? { report: { id: report.id, result: report.result, evidence: report.evidence, artifacts: report.artifacts } } : {}) }
+            ...(report ? { report: { id: report.id, result: report.result, evidence: report.evidence, artifacts: report.artifacts } } : {}),
+            control }
         },
         routerProfile: async () => {
-          const config = await this.getRoleConfig()
-          this.sessions!.setRoutes(config.roles.router.model, config.roles.worker.model)
-          this.sessions!.setRoleInstructions(config.roles.router, config.roles.worker)
-          return { revision: config.revision, profile: structuredClone(config.roles.router) }
+          return this.roleConfig.currentView()
         },
-        recordRouterUse: async (sessionId, revision, profile) => {
-          const config = await this.roleConfig.currentView()
-          await storage.transaction(instanceId, tx => this.roleConfig.recordUse(tx, { sessionId, role: 'router', revision,
-            ...(config.roles.main ? { main: config.roles.main.model } : {}), router: profile.model, worker: config.roles.worker.model }))
+        recordRouterUse: async (sessionId, config) => {
+          await storage.transaction(instanceId, tx => this.roleConfig.recordUse(tx, { sessionId, role: 'router', revision: config.revision,
+            ...(config.roles.main ? { main: config.roles.main.model } : {}), router: config.roles.router.model, worker: config.roles.worker.model }))
         },
         notifyMain: (notification, signal, isCurrent) => this.main.notify(notification, signal, isCurrent),
+        notifyMainSource: (handoff, signal) => this.main.notifySource(handoff, signal),
         applyFollowUp: (tx, request) => this.inputs.attachMainFollowUp(tx, request),
+        readContext: request => this.context.read(request),
       })
     }
     const handlers = this.execution?.handlers()
@@ -339,6 +378,80 @@ export class Engine {
         authorKind: event.authorKind ?? 'human', addressing: event.addressing ?? 'direct' }).catch(() => {})
     }
     return receipt
+  }
+
+  /**
+   * Source-local Main intake. A Thread with existing ownership keeps normal fan-out; every other
+   * authorized human request becomes a Main handoff without starting an Eval or Ticket.
+   */
+  async receiveSourceForMain(event: ReceiveSourceEvent) {
+    await this.ensurePolicy()
+    await this.assertActivationCurrent()
+    await this.assertHostAdmission()
+    const binding = await this.main.open({ instanceId: this.instanceId })
+    const allowed = await this.storage.transaction(this.instanceId, async tx => {
+      const policy = await tx.get<StoredPolicy>('policy-state', this.policyKey())
+      return policy?.configuration.allowedRequesterIds ?? this.source.intake?.allowedRequesterIds ?? this.source.allowedActorIds
+    })
+    const receipt = await this.sourceEvents.receive(event, async (tx, sourceEvent) => {
+      if (await this.inputs.threadHasWorkerSubscriptions(tx, sourceEvent.threadId) || await this.inputs.owns(tx, sourceEvent)) {
+        await this.inputs.recordFanout(tx, sourceEvent)
+        await this.answerFromSourceEvent(tx, sourceEvent)
+        return
+      }
+      if (sourceEvent.authorKind !== 'human' || sourceEvent.addressing === 'ambient' || !allowed.includes(sourceEvent.authorId)) return
+      const handoff = await this.mainSources.create(tx, { event: sourceEvent, mainId: binding.mainId, commandId: `main-source:${sourceEvent.id}` })
+      await this.effects.enqueue(tx, { key: `handoff:${handoff.id}`, stream: 'notice', scope: `main:${binding.mainId}`,
+        payload: { type: 'main-source-handoff', handoffId: handoff.id } })
+    })
+    // A replay can observe a source event committed by an earlier process before its handoff transaction.
+    const authorId = event.authorId ?? this.source.actorId
+    const authorKind = event.authorKind ?? 'human'
+    if (receipt.status === 'recorded' && receipt.eventId && authorKind === 'human' && (event.addressing ?? 'direct') !== 'ambient'
+      && allowed.includes(authorId)) {
+      await this.handOffSourceToMain({ commandId: `main-source:${receipt.eventId}`, eventId: receipt.eventId })
+    }
+    return receipt
+  }
+
+  /** Route one trusted new human source event to the logical Main; owned events stay on their Ticket. */
+  async handOffSourceToMain(command: { commandId: string; eventId: string }): Promise<
+    { kind: 'main-source'; handoff: MainSourceHandoff } | { kind: 'existing-work'; eventId: string }> {
+    await this.ensurePolicy()
+    if (!command || Object.keys(command).some(key => !['commandId', 'eventId'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'A Main source handoff accepts commandId and eventId only.')
+    }
+    identifier(command.commandId, 'commandId'); identifier(command.eventId, 'eventId')
+    const binding = await this.main.open({ instanceId: this.instanceId })
+    const key = this.commandKey(command.commandId)
+    const fingerprint = createHash('sha256').update(canonicalJson(['main-source-handoff-v1', command.eventId, binding.mainId])).digest('hex')
+    const result = await commandTransaction(this.storage, this.instanceId, async tx => {
+      const prior = await tx.get<{ fingerprint: string; handoffId?: string; kind: 'main-source' | 'existing-work'; eventId: string }>('work-command', key)
+      if (prior) {
+        if (prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The Main source handoff command was reused for different input.')
+        if (prior.kind === 'existing-work') return { kind: 'existing-work' as const, eventId: prior.eventId }
+        const handoff = prior.handoffId ? await this.mainSources.get(tx, prior.handoffId) : undefined
+        if (!handoff) throw new CoreError('INCOMPLETE_STATE', 'The persisted Main source handoff is missing.')
+        return { kind: 'main-source' as const, handoff }
+      }
+      const event = await tx.get<SourceEvent>('source-event', command.eventId)
+      if (!event || !this.sourceEvents.belongsToSource(event)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The source event belongs to another adapter.')
+      if (await this.inputs.owns(tx, event)) {
+        await tx.insert('work-command', key, { fingerprint, kind: 'existing-work', eventId: event.id })
+        return { kind: 'existing-work' as const, eventId: event.id }
+      }
+      const policy = await tx.get<StoredPolicy>('policy-state', this.policyKey())
+      const allowed = policy?.configuration.allowedRequesterIds ?? this.source.intake?.allowedRequesterIds ?? this.source.allowedActorIds
+      if (event.authorKind !== 'human' || event.addressing === 'ambient' || !allowed.includes(event.authorId)) {
+        throw new CoreError('ACTOR_NOT_ALLOWED', 'Only a currently authorized addressed human request can enter Main.')
+      }
+      const handoff = await this.mainSources.create(tx, { event, mainId: binding.mainId, commandId: command.commandId })
+      await this.effects.enqueue(tx, { key: `handoff:${handoff.id}`, stream: 'notice', scope: `main:${binding.mainId}`,
+        payload: { type: 'main-source-handoff', handoffId: handoff.id } })
+      await tx.insert('work-command', key, { fingerprint, kind: 'main-source', eventId: event.id, handoffId: handoff.id })
+      return { kind: 'main-source' as const, handoff }
+    })
+    return result
   }
 
   /** A trusted human reply in a waiting question's Thread answers that question and resumes the work. */
@@ -517,11 +630,24 @@ export class Engine {
     const source: Source = { kind: this.source.kind ?? 'desktop', sourceInstanceId: this.source.sourceInstanceId, actorId: this.source.actorId }
     const triggerId = JSON.stringify([this.instanceId, source.kind, source.sourceInstanceId, brief.sourceEventId, item.id, 'main-work-item'])
     const text = `Original Main request:\n${brief.originalUserText}\n\nGoal:\n${item.goal}\n\nConstraints:\n${item.constraints}\n\nAcceptance criteria:\n${item.acceptanceCriteria}`
+    const deliveryOrigin = brief.sourceHandoffId ? await this.storage.transaction(this.instanceId, async tx => {
+      const handoff = await tx.get<MainSourceHandoff>('main-source-handoff', brief.sourceHandoffId!)
+      const event = handoff ? await tx.get<SourceEvent>('source-event', handoff.sourceEventId) : undefined
+      const policy = handoff ? await tx.get<StoredPolicy>('policy-state', JSON.stringify(['policy-state', handoff.sourceInstanceId])) : undefined
+      if (!handoff || handoff.mainId !== brief.mainId || handoff.workBriefId !== brief.id || handoff.state !== 'delegated'
+        || !event || !await isCurrentSourceEvent(tx, event) || event.authorId !== handoff.authorId
+        || !policy?.configuration.allowedRequesterIds.includes(event.authorId)) {
+        throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The delegated Ticket no longer has a current authorized Main source.')
+      }
+      return { sourceEventId: event.id, source: event.source, authorId: event.authorId, eventId: event.objectId,
+        ...(event.threadId ? { threadId: event.threadId } : {}), nativeVersion: event.version, reference: handoff.reference }
+    }) : undefined
     const trigger: Work['trigger'] = { id: triggerId, instanceId: this.instanceId, source, eventId: brief.sourceEventId,
-      text, environmentId: brief.environmentId, target: 'local-only', targetSource: 'ticket' }
+      text, environmentId: brief.environmentId, target: 'local-only', targetSource: 'ticket', ...(deliveryOrigin ? { deliveryOrigin } : {}) }
     const commandId = `main-work-ticket:${brief.id}:${item.id}`
     const fingerprint = `sha256:main-work-item-v1:${createHash('sha256').update(canonicalJson([
       this.instanceId, source, brief.sourceEventId, item.id, item.goal, item.constraints, item.acceptanceCriteria, brief.environmentId,
+      deliveryOrigin?.sourceEventId ?? null,
     ])).digest('hex')}`
     return commandTransaction(this.storage, this.instanceId, async transaction => {
       await this.sourceEvents.requireDirectMode(transaction)
@@ -539,7 +665,6 @@ export class Engine {
   private async accept(tx: AsyncTx, commandId: string, trigger: Work['trigger'], fingerprint: string,
     options: { strength?: 'explicit' | 'inferred'; policyVersion?: string; mandateScope?: string; linkTicket?: (tx: AsyncTx, receipt: Receipt) => Promise<void> } = {}): Promise<Receipt> {
     const triggerId = trigger.id
-    const source = trigger.source
     await this.assertActivationIn(tx)
     const event = await tx.get<EventRecord>('event', triggerId)
     if (event) {
@@ -579,7 +704,8 @@ export class Engine {
     await options.linkTicket?.(tx, receipt)
     await this.effects.enqueue(tx, { key: ticketId, stream: 'notice', scope: 'router', payload: { type: 'request-accepted', ticketId, triggerId } })
     const deliveryId = `${ticketId}:acknowledgement`
-    const destination = { ...source, eventId: trigger.eventId, ...(trigger.threadId ? { threadId: trigger.threadId } : {}) }
+    const delivery = triggerDeliveryTarget(persistedTrigger)
+    const destination = { ...delivery.source, eventId: delivery.eventId, ...(delivery.threadId ? { threadId: delivery.threadId } : {}) }
     const effect = await this.effects.enqueue(tx, { key: ticketId, stream: 'outbox', scope: ticketId, payload: {
       purpose: 'acknowledgement', text: 'Request accepted.', ticketId, deliveryId, destination,
     } })
@@ -1275,9 +1401,99 @@ export class Engine {
     return binding
   }
   sendMainMessage(request: MainSend) { return this.main.send(request) }
+  stopMainTurn(request: MainAddress & { commandId: string; messageId: string }) { return this.main.stop(request) }
+  resumeMainInputs(request: MainAddress) { return this.main.resume(request) }
   async getMainConversation(request: MainAddress & { limit?: number; after?: number }) {
     const page = await this.main.page(request)
-    return { ...page, works: this.workDelegation ? await this.workDelegation.list(page.mainId) : [] as MainWorkCard[] }
+    return { ...page, works: this.workDelegation ? await this.workDelegation.list(page.mainId) : [] as MainWorkCard[],
+      sources: await this.mainSourceViews((await this.mainSources.list(page.mainId, { limit: 20 })).items) }
+  }
+
+  async getRecentMainConversation(request: MainAddress & { limit?: number; before?: number }) {
+    const page = await this.main.recentPage(request)
+    return { ...page, works: this.workDelegation ? await this.workDelegation.list(page.mainId) : [] as MainWorkCard[],
+      sources: await this.mainSourceViews((await this.mainSources.list(page.mainId, { limit: 20 })).items) }
+  }
+
+  async getMainSources(request: MainAddress & { limit?: number; after?: string }) {
+    if (!request || Object.keys(request).some(key => !['instanceId', 'limit', 'after'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Main source history accepts an Instance and a bounded page.')
+    }
+    if (request.instanceId !== this.instanceId || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Main source history is outside the authorized Instance.')
+    }
+    const binding = await this.main.open({ instanceId: request.instanceId })
+    const page = await this.mainSources.list(binding.mainId, { ...(request.limit === undefined ? {} : { limit: request.limit }),
+      ...(request.after === undefined ? {} : { after: request.after }) })
+    return { ...page, items: await this.mainSourceViews(page.items) }
+  }
+
+  async getMainSourceDeliveries(request: MainAddress & { sourceId: string; after?: string; limit?: number }): Promise<MainSourceDeliveryPage> {
+    if (!request || Object.keys(request).some(key => !['instanceId', 'sourceId', 'after', 'limit'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Source deliveries accept an Instance, source ID and bounded page.')
+    }
+    if (request.instanceId !== this.instanceId || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Source deliveries are outside the authorized Main Instance.')
+    }
+    identifier(request.sourceId, 'sourceId')
+    const limit = request.limit ?? 10
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100 || request.after !== undefined && request.after.length > 1024) {
+      throw new CoreError('INVALID_INPUT', 'Source delivery history accepts 1–100 rows and a bounded cursor.')
+    }
+    const binding = await this.main.open({ instanceId: request.instanceId })
+    return this.storage.transaction(this.instanceId, async transaction => {
+      const handoff = await this.mainSources.get(transaction, request.sourceId)
+      if (!handoff || handoff.mainId !== binding.mainId) throw new CoreError('NOT_FOUND', 'The Main source handoff is unavailable.')
+      return this.sourceDeliveryPage(transaction, handoff, request.after, limit)
+    })
+  }
+
+  private mainSourceViews(handoffs: MainSourceHandoff[]): Promise<MainSourceView[]> {
+    return this.storage.transaction(this.instanceId, async transaction => Promise.all(handoffs.map(async handoff => {
+      const split = handoff.workBriefId ? await transaction.get<{ itemIds: string[] }>('work-split', handoff.workBriefId) : undefined
+      const workItemIds = split?.itemIds ?? []
+      const receipts = await Promise.all(workItemIds.map(id => transaction.get<{ ticketId?: string }>('work-receipt', id)))
+      const ticketIds = [...new Set(receipts.flatMap(receipt => receipt?.ticketId ? [receipt.ticketId] : []))]
+      const deliveryPage = this.deliveryPage(ticketIds, await Promise.all(ticketIds.map(ticketId => this.deliveries.list(transaction, ticketId))), undefined, 10)
+      const conditions = (await Promise.all(ticketIds.map(ticketId => this.deliveryState.list(transaction, ticketId)))).flat()
+        .map(condition => ({ ticketId: condition.ticketId, number: condition.number, state: condition.state,
+          ...(condition.result ? { result: condition.result } : {}), ...(condition.reason ? { reason: condition.reason } : {}) }))
+      return { ...structuredClone(handoff), workItemIds, ticketIds, deliveries: deliveryPage.items,
+        deliveryHasMore: deliveryPage.hasMore, ...(deliveryPage.cursor ? { deliveryCursor: deliveryPage.cursor } : {}), conditions }
+    })))
+  }
+
+  private async sourceDeliveryPage(transaction: AsyncTx, handoff: MainSourceHandoff, after: string | undefined, limit: number) {
+    const split = handoff.workBriefId ? await transaction.get<{ itemIds: string[] }>('work-split', handoff.workBriefId) : undefined
+    const receipts = await Promise.all((split?.itemIds ?? []).map(id => transaction.get<{ ticketId?: string }>('work-receipt', id)))
+    const ticketIds = [...new Set(receipts.flatMap(receipt => receipt?.ticketId ? [receipt.ticketId] : []))]
+    return this.deliveryPage(ticketIds, await Promise.all(ticketIds.map(ticketId => this.deliveries.list(transaction, ticketId))), after, limit)
+  }
+
+  private deliveryPage(ticketIds: string[], histories: DeliveryView[][], after: string | undefined, limit: number): MainSourceDeliveryPage {
+    const all = histories.flat().sort((left, right) => right.createdAt - left.createdAt || right.sequence - left.sequence
+      || left.ticketId.localeCompare(right.ticketId) || left.id.localeCompare(right.id))
+    let start = 0
+    if (after) {
+      let decoded: unknown
+      try { decoded = JSON.parse(Buffer.from(after, 'base64url').toString('utf8')) } catch { throw new CoreError('INVALID_INPUT', 'Use a source-delivery cursor from this Main source.') }
+      if (!Array.isArray(decoded) || decoded.length !== 4 || decoded.some(value => typeof value !== 'string' && typeof value !== 'number')) {
+        throw new CoreError('INVALID_INPUT', 'Use a source-delivery cursor from this Main source.')
+      }
+      const [createdAt, ticketId, sequence, id] = decoded
+      const index = all.findIndex(delivery => delivery.createdAt === createdAt && delivery.ticketId === ticketId
+        && delivery.sequence === sequence && delivery.id === id && ticketIds.includes(delivery.ticketId))
+      if (index < 0) throw new CoreError('INVALID_INPUT', 'The source-delivery cursor is no longer valid.')
+      start = index + 1
+    }
+    const items = all.slice(start, start + limit).map(delivery => ({ id: delivery.id, ticketId: delivery.ticketId, sequence: delivery.sequence,
+      createdAt: delivery.createdAt, purpose: delivery.purpose, state: delivery.state, reconcileRequired: delivery.reconcileRequired,
+      ...(delivery.attempts === undefined ? {} : { attempts: delivery.attempts }), ...(delivery.reason ? { reason: delivery.reason } : {}),
+      destination: delivery.destination }))
+    const hasMore = start + items.length < all.length
+    const last = items.at(-1)
+    const cursor = hasMore && last ? Buffer.from(JSON.stringify([last.createdAt, last.ticketId, last.sequence, last.id])).toString('base64url') : undefined
+    return { items, hasMore, ...(cursor ? { cursor } : {}) }
   }
 
   async getMainWorkPlan(request: MainAddress & { workBriefId: string }) {
@@ -1287,6 +1503,82 @@ export class Engine {
     }
     const binding = await this.main.open({ instanceId: request.instanceId })
     return this.workDelegation.plan(binding.mainId, request.workBriefId)
+  }
+
+  async readMainEvidence(request: MainAddress & { workItemId: string; ref: Omit<ContextRef, 'ticketId'>;
+    after?: string; maxBytes?: number }): Promise<MainEvidenceCard> {
+    if (!request || Object.keys(request).some(key => !['instanceId', 'workItemId', 'ref', 'after', 'maxBytes'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Main evidence accepts one authorized work item and a bounded reference page.')
+    }
+    if (request.instanceId !== this.instanceId || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Main evidence is outside the authorized Instance.')
+    }
+    if (!request.ref || typeof request.ref !== 'object' || Array.isArray(request.ref)) {
+      throw new CoreError('INVALID_INPUT', 'Main evidence needs one context reference.')
+    }
+    if (Object.keys(request.ref).some(key => !['kind', 'id', 'threadId', 'objectId'].includes(key))
+      || !['ticket', 'trigger', 'decision', 'mandate', 'report', 'attention', 'delivery', 'source-event', 'source-thread'].includes(request.ref.kind)) {
+      throw new CoreError('INVALID_INPUT', 'Main evidence accepts one known context reference shape.')
+    }
+    if (!this.workDelegation) throw new CoreError('DELEGATION_UNAVAILABLE', 'Main evidence requires authorized local work.')
+    const binding = await this.main.open({ instanceId: request.instanceId })
+    return this.workDelegation.evidence(binding.mainId, {
+      workItemId: request.workItemId,
+      ref: request.ref,
+      ...(request.after === undefined ? {} : { after: request.after }),
+      ...(request.maxBytes === undefined ? {} : { maxBytes: request.maxBytes }),
+    })
+  }
+
+  async getWorkObservations(request: MainAddress & { limit?: number; after?: string; query?: string }) {
+    if (!request || Object.keys(request).some(key => !['instanceId', 'limit', 'after', 'query'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Work activity accepts an Instance, a bounded page and an optional search.')
+    }
+    if (request.instanceId !== this.instanceId || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Work activity is outside the authorized Main Instance.')
+    }
+    const binding = await this.main.open({ instanceId: request.instanceId })
+    if (!this.workObservations) return { items: [] }
+    return this.workObservations.list(binding.mainId, {
+      ...(request.limit === undefined ? {} : { limit: request.limit }),
+      ...(request.after === undefined ? {} : { after: request.after }),
+      ...(request.query === undefined ? {} : { query: request.query }),
+    })
+  }
+
+  async readWorkObservation(request: MainAddress & { observationId: string; generation?: string; after?: number; limit?: number }) {
+    if (!request || Object.keys(request).some(key => !['instanceId', 'observationId', 'generation', 'after', 'limit'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Work observation history accepts one authorized observation and a bounded page.')
+    }
+    if (request.instanceId !== this.instanceId || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Work observation history is outside the authorized Main Instance.')
+    }
+    if (!this.workObservations) throw new CoreError('NOT_FOUND', 'The requested work observation is unavailable.')
+    const binding = await this.main.open({ instanceId: request.instanceId })
+    return this.workObservations.read(binding.mainId, { observationId: request.observationId,
+      ...(request.generation === undefined ? {} : { generation: request.generation }),
+      ...(request.after === undefined ? {} : { after: request.after }),
+      ...(request.limit === undefined ? {} : { limit: request.limit }) })
+  }
+
+  async readWorkObservationDetail(request: MainAddress & { observationId: string; generation?: string;
+    detailId: string; offset?: number; limit?: number }) {
+    if (!request || Object.keys(request).some(key =>
+      !['instanceId', 'observationId', 'generation', 'detailId', 'offset', 'limit'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Work detail accepts one authorized observation and a bounded page.')
+    }
+    if (request.instanceId !== this.instanceId || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Work detail is outside the authorized Main Instance.')
+    }
+    if (!this.workObservations) throw new CoreError('NOT_FOUND', 'The requested work detail is unavailable.')
+    const binding = await this.main.open({ instanceId: request.instanceId })
+    return this.workObservations.detail(binding.mainId, {
+      observationId: request.observationId,
+      detailId: request.detailId,
+      ...(request.generation === undefined ? {} : { generation: request.generation }),
+      ...(request.offset === undefined ? {} : { offset: request.offset }),
+      ...(request.limit === undefined ? {} : { limit: request.limit }),
+    })
   }
 
   async getRoleConfig(): Promise<RoleConfigView> {
@@ -1302,24 +1594,31 @@ export class Engine {
     identifier(command.commandId, 'commandId')
     this.assertAuthoringActor()
     validateRoleConfig(command.roles)
-    if (options.verify) {
-      const controller = new AbortController()
-      await options.verify(structuredClone(command.roles), controller.signal)
-      controller.abort()
-    }
     const commandKey = this.commandKey(command.commandId)
     const fingerprint = createHash('sha256').update(canonicalJson(['role-config-v1', command.expectedRevision, command.roles])).digest('hex')
+    const prior = await this.storage.transaction(this.instanceId,
+      transaction => transaction.get<{ fingerprint: string; revision: number }>('work-command', commandKey))
+    if (prior) {
+      if (prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The role configuration command was reused with different input.')
+      return await this.roleConfig.atRevision(prior.revision) ?? await this.roleConfig.currentView()
+    }
+    if (options.verify) {
+      const controller = new AbortController()
+      try { await options.verify(structuredClone(command.roles), controller.signal) }
+      finally { controller.abort() }
+    }
     const result = await commandTransaction(this.storage, this.instanceId, async transaction => {
-      const prior = await transaction.get<{ fingerprint: string; revision: number }>('work-command', commandKey)
-      if (prior) {
-        if (prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The role configuration command was reused with different input.')
-        return { revision: prior.revision, replayed: true }
+      const committed = await transaction.get<{ fingerprint: string; revision: number }>('work-command', commandKey)
+      if (committed) {
+        if (committed.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The role configuration command was reused with different input.')
+        return { revision: committed.revision, replayed: true }
       }
       const view = await this.roleConfig.write(transaction, command.expectedRevision, command.roles)
       await transaction.insert('work-command', commandKey, { fingerprint, revision: view.revision })
       return { revision: view.revision, replayed: false, view }
     })
-    const view = 'view' in result ? result.view : await this.roleConfig.currentView()
+    if (!('view' in result) || !result.view) return await this.roleConfig.atRevision(result.revision) ?? await this.roleConfig.currentView()
+    const view = result.view
     this.roleConfigRevision = view.revision
     this.applyRoleRoutes(view)
     return view
@@ -1327,6 +1626,14 @@ export class Engine {
 
   getRoleConfigUses(sessionId: string): Promise<RoleConfigUse[]> {
     return this.roleConfig.uses(sessionId)
+  }
+
+  getRecentRoleConfigUses(limit = 50): Promise<RoleConfigUse[]> {
+    return this.roleConfig.recentUses(limit)
+  }
+
+  getRoleConfigHistory(limit = 20) {
+    return this.roleConfig.history(limit)
   }
 
   async getIntakePolicy(): Promise<{ revision: number; policy: Omit<IntakePolicy, 'assess'>; processingPaused: boolean }> {
@@ -1399,16 +1706,17 @@ export class Engine {
   }
 
   /** Record an authorized result destination change, with its evidence, for one Ticket. */
-  async setDeliveryTarget(command: { commandId: string; ticketId: string; purpose: 'result' | 'answer'; sourceInstanceId: string; threadId: string; objectId: string; evidence: string; evidenceEventId?: string }) {
+  async setDeliveryTarget(command: { commandId: string; ticketId: string; purpose: 'result' | 'answer'; sourceInstanceId: string; actorId: string; threadId: string; objectId: string; evidence: string; evidenceEventId?: string }) {
     await this.ensurePolicy()
-    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'purpose', 'sourceInstanceId', 'threadId', 'objectId', 'evidence', 'evidenceEventId'].includes(key))) {
-      throw new CoreError('INVALID_INPUT', 'A delivery-target change accepts commandId, ticketId, purpose, sourceInstanceId, threadId, objectId, evidence and optional evidenceEventId only.')
+    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'purpose', 'sourceInstanceId', 'actorId', 'threadId', 'objectId', 'evidence', 'evidenceEventId'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'A delivery-target change accepts commandId, ticketId, purpose, sourceInstanceId, actorId, threadId, objectId, evidence and optional evidenceEventId only.')
     }
-    identifier(command.commandId, 'commandId'); identifier(command.ticketId, 'ticketId')
+    identifier(command.commandId, 'commandId'); identifier(command.ticketId, 'ticketId'); identifier(command.actorId, 'actorId')
     if (!this.source.allowedActorIds?.includes(this.source.actorId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Only a trusted actor may change a delivery destination.')
     const commandKey = this.commandKey(command.commandId)
     if (command.evidenceEventId !== undefined) identifier(command.evidenceEventId, 'evidenceEventId')
-    const fingerprint = createHash('sha256').update(canonicalJson(['delivery-target-v1', command.ticketId, command.purpose, command.sourceInstanceId, command.threadId, command.objectId, command.evidence, command.evidenceEventId ?? null])).digest('hex')
+    const fingerprint = createHash('sha256').update(canonicalJson(['delivery-target-v2', command.ticketId, command.purpose, command.sourceInstanceId,
+      command.actorId, command.threadId, command.objectId, command.evidence, command.evidenceEventId ?? null])).digest('hex')
     const target = await commandTransaction(this.storage, this.instanceId, async tx => {
       const existing = await tx.get<{ fingerprint: string }>('work-command', commandKey)
       if (existing) {
@@ -1429,6 +1737,7 @@ export class Engine {
         if (evidence.source.sourceInstanceId !== command.sourceInstanceId || evidence.threadId !== command.threadId || evidence.objectId !== command.objectId) {
           throw new CoreError('DESTINATION_MISMATCH', 'The evidence event does not belong to the named delivery target.')
         }
+        if (evidence.authorId !== command.actorId) throw new CoreError('ACTOR_MISMATCH', 'The delivery target actor must be the exact evidence author.')
         if (!await isCurrentSourceEvent(tx, evidence)) throw new CoreError('SOURCE_NOT_CURRENT', 'The target follow-up is no longer current.')
         const evidencePolicy = await tx.get<StoredPolicy>('policy-state', JSON.stringify(['policy-state', evidence.source.sourceInstanceId]))
         if (evidencePolicy && !evidencePolicy.configuration.allowedRequesterIds.includes(evidence.authorId)) {
@@ -1752,6 +2061,66 @@ export class Engine {
     return this.storage.transaction(this.instanceId, tx => this.deliveries.list(tx, ticketId))
   }
 
+  /** Reconcile one unknown delivery through its original Effect generation and idempotency key. */
+  async reconcileDelivery(command: { commandId: string; ticketId: string; deliveryId: string }): Promise<DeliveryView> {
+    await this.ensurePolicy()
+    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'deliveryId'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Delivery reconciliation accepts commandId, ticketId and deliveryId only.')
+    }
+    identifier(command.commandId, 'commandId'); identifier(command.ticketId, 'ticketId'); identifier(command.deliveryId, 'deliveryId')
+    await this.assertTicketReadable(command.ticketId)
+    const initial = await this.storage.transaction(this.instanceId, async tx => {
+      const delivery = await this.deliveries.get(tx, command.deliveryId)
+      return delivery ? { delivery, view: await this.deliveries.view(tx, delivery) } : undefined
+    })
+    if (!initial || initial.delivery.ticketId !== command.ticketId) throw new CoreError('NOT_FOUND', 'The delivery does not belong to this Ticket.')
+    const delivery = initial.delivery
+    const key = this.commandKey(command.commandId)
+    const fingerprint = createHash('sha256').update(canonicalJson(['delivery-reconcile-v1', command.ticketId, command.deliveryId])).digest('hex')
+    const begun = await commandTransaction(this.storage, this.instanceId, async tx => {
+      const prior = await tx.get<{ fingerprint: string; state: 'running' | 'failed' | 'completed'; attempt: number }>('work-command', key)
+      if (prior) {
+        if (prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The delivery reconciliation command was reused for different input.')
+        if (prior.state === 'completed') return { replayed: true }
+      }
+      const attempt = (prior?.attempt ?? 0) + 1
+      const next = { fingerprint, ticketId: command.ticketId, deliveryId: command.deliveryId, state: 'running' as const, attempt }
+      if (prior) await tx.replace('work-command', key, next)
+      else await tx.insert('work-command', key, next)
+      return { replayed: false }
+    })
+    const currentView = () => this.storage.transaction(this.instanceId, async tx => {
+      const current = await this.deliveries.get(tx, command.deliveryId)
+      if (!current) throw new CoreError('INCOMPLETE_STATE', 'The reconciled delivery record disappeared.')
+      return this.deliveries.view(tx, current)
+    })
+    if (begun.replayed) return currentView()
+    let view: DeliveryView
+    try {
+      await this.effects.reconcile(delivery.effectId, delivery.effectGeneration,
+        { allowPending: initial.view.state === 'pending' && (initial.view.attempts ?? 0) > 0 })
+      view = await currentView()
+    } catch (error) {
+      await commandTransaction(this.storage, this.instanceId, async tx => {
+        const prior = await tx.get<{ fingerprint: string; state: 'running' | 'failed' | 'completed'; attempt: number }>('work-command', key)
+        if (prior?.fingerprint === fingerprint && prior.state === 'running') {
+          await tx.replace('work-command', key, { ...prior, state: 'failed',
+            reason: error instanceof Error ? error.message.slice(0, 1024) : 'DELIVERY_RECONCILE_FAILED' })
+        }
+      }).catch(() => {})
+      throw error
+    }
+    await commandTransaction(this.storage, this.instanceId, async tx => {
+      const prior = await tx.get<{ fingerprint: string; state: 'running' | 'failed' | 'completed'; attempt: number }>('work-command', key)
+      if (!prior || prior.fingerprint !== fingerprint) throw new CoreError('INCOMPLETE_STATE', 'The delivery reconciliation receipt disappeared.')
+      const terminal = view.state === 'sent' || view.state === 'dropped'
+      const next = { ...prior, state: terminal ? 'completed' as const : 'failed' as const,
+        ...(terminal ? {} : { reason: view.reason ?? 'DELIVERY_RECONCILE_NOT_CONFIRMED' }) }
+      await tx.replace('work-command', key, next)
+    })
+    return view
+  }
+
   async readContext(request: ContextRequest): Promise<ContextCard> {
     await this.storage.transaction(this.instanceId, async tx => {
       const trigger = await this.triggerFor(tx, request.ticketId)
@@ -1835,19 +2204,30 @@ export class Engine {
     return this.storage.transaction(this.instanceId, tx => this.deliveries.view(tx, delivery))
   }
 
-  async answerAttention(command: { commandId: string; attentionId: string; text: string; sourceEventId?: string }, receiver?: Engine) {
+  async answerAttention(command: { commandId: string; attentionId: string; text: string; sourceEventId?: string;
+    ticketId?: string; expectedGeneration?: string; expectedVersion?: number }, receiver?: Engine,
+  requireMainWorkFact = false) {
     await this.ensurePolicy()
     if (receiver) {
       if (!(receiver instanceof Engine) || receiver.instanceId !== this.instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The answer receiver must be a trusted Engine in this Instance.')
       await receiver.ensurePolicy()
     }
-    if (!command || Object.keys(command).some(key => !['commandId', 'attentionId', 'text', 'sourceEventId'].includes(key))) throw new CoreError('INVALID_INPUT', 'Answering Attention accepts commandId, attentionId, text and sourceEventId only.')
+    if (!command || Object.keys(command).some(key => !['commandId', 'attentionId', 'text', 'sourceEventId', 'ticketId', 'expectedGeneration', 'expectedVersion'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Answering Attention accepts one exact question and bounded answer only.')
+    }
     identifier(command.commandId, 'commandId'); identifier(command.attentionId, 'attentionId')
     if (command.sourceEventId !== undefined) identifier(command.sourceEventId, 'sourceEventId')
+    if (command.ticketId !== undefined) identifier(command.ticketId, 'ticketId')
+    if (command.expectedGeneration !== undefined) identifier(command.expectedGeneration, 'expectedGeneration')
+    if (command.expectedVersion !== undefined && (!Number.isSafeInteger(command.expectedVersion) || command.expectedVersion < 1)) {
+      throw new CoreError('INVALID_INPUT', 'The Attention version must be a positive integer.')
+    }
     if (typeof command.text !== 'string' || !command.text.trim() || Buffer.byteLength(command.text) > 65536) throw new CoreError('INVALID_INPUT', 'An Attention answer needs bounded nonempty text.')
     const commandKey = this.commandKey(command.commandId)
     const fingerprint = createHash('sha256').update(canonicalJson(['attention-answer-v2', this.source.sourceInstanceId, this.source.actorId,
-      command.attentionId, command.text, command.sourceEventId ?? null, ...(receiver ? [receiver.source.sourceInstanceId, receiver.source.actorId] : [])])).digest('hex')
+      command.attentionId, command.text, command.sourceEventId ?? null, command.ticketId ?? null,
+      command.expectedGeneration ?? null, command.expectedVersion ?? null,
+      ...(receiver ? [receiver.source.sourceInstanceId, receiver.source.actorId] : [])])).digest('hex')
     return commandTransaction(this.storage, this.instanceId, async tx => {
       const existing = await tx.get<{ fingerprint: string; attentionId: string; inputId: string }>('work-command', commandKey)
       if (existing) {
@@ -1855,12 +2235,32 @@ export class Engine {
         const answered = await tx.get<Attention>('attention', existing.attentionId)
         const input = await this.inputs.getInput(tx, existing.inputId)
         if (!answered || !input) throw new CoreError('INCOMPLETE_STATE', 'The answered Attention is missing its Input.')
+        const fact = await this.workDelegation?.recordAttentionAnswerIn(tx, { ticketId: answered.ticketId, attentionId: answered.id,
+          attentionVersion: answered.sequence, assignmentId: answered.assignmentId, sessionId: answered.sessionId,
+          commandId: command.commandId, actorId: answered.answeredBy!, answer: answered.answerText!,
+          answeredAt: answered.answeredAt!, inputId: input.id })
+        if (requireMainWorkFact && !fact) throw new CoreError('INCOMPLETE_STATE', 'The Main Attention answer fact is missing.')
         return { attention: answered, input }
       }
       await this.assertHostAdmissionIn(tx)
       const attention = await tx.get<Attention>('attention', command.attentionId)
       if (!attention) throw new CoreError('NOT_FOUND', 'The Attention does not exist.')
-      const foreign = attention.destination.sourceInstanceId !== this.source.sourceInstanceId
+      if (command.ticketId !== undefined && command.ticketId !== attention.ticketId) {
+        throw new CoreError('ATTENTION_STALE', 'The named work no longer owns this question.')
+      }
+      const ticket = await tx.get<Work['ticket']>('ticket', attention.ticketId)
+      const trigger = ticket && await tx.get<Work['trigger']>('trigger', ticket.triggerId)
+      if (!ticket || !trigger || trigger.source.sourceInstanceId !== this.source.sourceInstanceId
+        && trigger.deliveryOrigin?.source.sourceInstanceId !== this.source.sourceInstanceId) {
+        throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The Attention Ticket belongs to a different source instance.')
+      }
+      const managedOrigin = !!trigger.deliveryOrigin
+        && attention.destination.sourceInstanceId === trigger.deliveryOrigin.source.sourceInstanceId
+        && attention.destination.actorId === trigger.deliveryOrigin.authorId
+        && attention.destination.eventId === trigger.deliveryOrigin.eventId
+        && attention.destination.threadId === trigger.deliveryOrigin.threadId
+      const originTicket = !!trigger.deliveryOrigin && attention.destination.sourceInstanceId === trigger.deliveryOrigin.source.sourceInstanceId
+      const foreign = attention.destination.sourceInstanceId !== this.source.sourceInstanceId && !originTicket
       let crossQuestionInput: WorkInput | undefined
       if (foreign) {
         await this.associationOwner(tx, attention.ticketId)
@@ -1872,10 +2272,18 @@ export class Engine {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'A cross-source Attention answer needs its exact owner-authorized question provenance.')
         }
         crossQuestionInput = input
+      } else if (originTicket && attention.questionSourceEventId) {
+        const question = await tx.get<SourceEvent>('source-event', attention.questionSourceEventId)
+        const ownerships = await this.inputs.ownershipsForEventInTransaction(tx, attention.questionSourceEventId)
+        const ownership = ownerships.find(candidate => candidate.ticketId === attention.ticketId && candidate.state === 'owned')
+        const input = ownership ? await this.inputs.getInput(tx, ownership.inputId) : undefined
+        if (!question || !input || !await isCurrentSourceEvent(tx, question)
+          || question.source.sourceInstanceId !== attention.destination.sourceInstanceId
+          || question.authorId !== attention.destination.actorId || question.objectId !== attention.destination.eventId
+          || question.threadId !== attention.destination.threadId) {
+          throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The original-source Attention is no longer backed by an active human Input.')
+        }
       }
-      const ticket = await tx.get<Work['ticket']>('ticket', attention.ticketId)
-      const trigger = ticket && await tx.get<Work['trigger']>('trigger', ticket.triggerId)
-      if (!ticket || !trigger || trigger.source.sourceInstanceId !== this.source.sourceInstanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The Attention Ticket belongs to a different source instance.')
       const answerers = this.source.intake?.allowedRequesterIds ?? this.source.allowedActorIds
       let actorId = this.source.actorId
       let answerText = command.text
@@ -1894,24 +2302,112 @@ export class Engine {
         answerText = event.text!
       }
       if (!command.sourceEventId && !answerers.includes(actorId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This actor cannot answer work questions.')
-      if (!foreign && actorId !== attention.destination.actorId) throw new CoreError('ANSWER_ACTOR_MISMATCH', 'The current actor does not match the question recipient.')
+      if (!foreign && !originTicket && !managedOrigin && actorId !== attention.destination.actorId) throw new CoreError('ANSWER_ACTOR_MISMATCH', 'The current actor does not match the question recipient.')
       const result = await this.attentions.answer(tx, { ticketId: attention.ticketId, attentionId: attention.id, text: answerText,
-        commandId: command.commandId, actorId, ...(command.sourceEventId ? { sourceEventId: command.sourceEventId } : {}) })
+        commandId: command.commandId, actorId, ...(command.sourceEventId ? { sourceEventId: command.sourceEventId } : {}),
+        ...(command.expectedGeneration === undefined ? {} : { expectedGeneration: command.expectedGeneration }),
+        ...(command.expectedVersion === undefined ? {} : { expectedVersion: command.expectedVersion }) })
       if (command.sourceEventId && crossQuestionInput?.association) {
         result.input = { ...result.input, association: { ...crossQuestionInput.association, sourceActorId: actorId,
           reason: `Authorized native answer to ${attention.id}`, checkedAt: Date.now() } }
         await tx.replace('work-input', result.input.id, result.input)
       }
       await tx.insert('work-command', commandKey, { fingerprint, attentionId: result.attention.id, inputId: result.input.id })
+      const fact = await this.workDelegation?.recordAttentionAnswerIn(tx, { ticketId: result.attention.ticketId,
+        attentionId: result.attention.id, attentionVersion: result.attention.sequence,
+        assignmentId: result.attention.assignmentId, sessionId: result.attention.sessionId,
+        commandId: command.commandId, actorId: result.attention.answeredBy!, answer: result.attention.answerText!,
+        answeredAt: result.attention.answeredAt!, inputId: result.input.id })
+      if (requireMainWorkFact && !fact) throw new CoreError('INCOMPLETE_STATE', 'The Main Attention answer fact is missing.')
       return result
     })
   }
 
-  async stopTicket(command: { commandId: string; ticketId: string; reason: string }) {
+  private async requireMainWorkControl(request: { instanceId: string; workItemId: string; ticketId: string }) {
+    if (request.instanceId !== this.instanceId || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The work control is outside the authorized Main Instance.')
+    }
+    if (!this.execution) throw new CoreError('WORKER_NOT_ENABLED', 'Work controls require a configured native runtime.')
+    identifier(request.workItemId, 'workItemId')
+    identifier(request.ticketId, 'ticketId')
+    const binding = await this.main.open({ instanceId: request.instanceId })
+    await this.storage.transaction(this.instanceId, async tx => {
+      const item = await tx.get<MainWorkItem>('work-item', request.workItemId)
+      const brief = item ? await tx.get<import('./work-delegation.js').MainWorkBrief>('work-brief', item.workBriefId) : undefined
+      const receipt = await tx.get<import('./work-delegation.js').MainWorkReceipt>('work-receipt', request.workItemId)
+      const ticketIndex = await tx.get<{ ticketId: string }>('work-item-ticket', request.workItemId)
+      if (!item || !brief || brief.mainId !== binding.mainId || brief.instanceId !== this.instanceId
+        || receipt?.status !== 'accepted' || (receipt.ticketId ?? ticketIndex?.ticketId) !== request.ticketId) {
+        throw new CoreError('NOT_FOUND', 'The named work card does not match this Main Instance.')
+      }
+    })
+  }
+
+  async answerMainAttention(command: { instanceId: string; commandId: string; workItemId: string; ticketId: string;
+    expectedGeneration: string; attentionId: string; attentionVersion: number; text: string }) {
+    if (!command || Object.keys(command).some(key => !['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration',
+      'attentionId', 'attentionVersion', 'text'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Answering a Main work card accepts only its exact current question and text.')
+    }
+    identifier(command.attentionId, 'attentionId')
+    await this.requireMainWorkControl(command)
+    const result = await this.answerAttention({
+      commandId: command.commandId,
+      attentionId: command.attentionId,
+      ticketId: command.ticketId,
+      expectedGeneration: command.expectedGeneration,
+      expectedVersion: command.attentionVersion,
+      text: command.text,
+    }, undefined, true)
+    this.effects.wake()
+    return result
+  }
+
+  async stopMainWork(command: { instanceId: string; commandId: string; workItemId: string; ticketId: string;
+    expectedGeneration?: string; expectedTicketVersion: number; reason: string }) {
+    if (!command || Object.keys(command).some(key => !['instanceId', 'commandId', 'workItemId', 'ticketId',
+      'expectedGeneration', 'expectedTicketVersion', 'reason'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Stopping work accepts only its exact card target and reason.')
+    }
+    if (!Number.isSafeInteger(command.expectedTicketVersion) || command.expectedTicketVersion < 1) {
+      throw new CoreError('INVALID_INPUT', 'Stopping a Main work card needs its exact Ticket version.')
+    }
+    await this.requireMainWorkControl(command)
+    return this.stopTicket({ commandId: command.commandId, ticketId: command.ticketId, reason: command.reason,
+      ...(command.expectedGeneration === undefined ? {} : { expectedGeneration: command.expectedGeneration }),
+      expectedTicketVersion: command.expectedTicketVersion })
+  }
+
+  async resumeMainWork(command: { instanceId: string; commandId: string; workItemId: string; ticketId: string; expectedGeneration: string }) {
+    if (!command || Object.keys(command).some(key => !['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Resuming work accepts only its exact card target.')
+    }
+    await this.requireMainWorkControl(command)
+    return this.resumeTicket({ commandId: command.commandId, ticketId: command.ticketId,
+      expectedGeneration: command.expectedGeneration })
+  }
+
+  async retryMainWork(command: { instanceId: string; commandId: string; workItemId: string; ticketId: string; expectedGeneration: string; reason: string }) {
+    if (!command || Object.keys(command).some(key => !['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'reason'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Retrying work accepts only its exact card target and reason.')
+    }
+    await this.requireMainWorkControl(command)
+    return this.retryTicket({ commandId: command.commandId, ticketId: command.ticketId, reason: command.reason,
+      expectedGeneration: command.expectedGeneration })
+  }
+
+  async stopTicket(command: { commandId: string; ticketId: string; reason: string; expectedGeneration?: string;
+    expectedTicketVersion?: number }) {
     await this.ensurePolicy()
     if (!this.execution) throw new CoreError('WORKER_NOT_ENABLED', 'Stopping work requires a configured native runtime.')
-    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'reason'].includes(key))) throw new CoreError('INVALID_INPUT', 'Stopping work accepts commandId, ticketId and reason only.')
+    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'reason', 'expectedGeneration', 'expectedTicketVersion'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Stopping work accepts its exact command, Ticket and version only.')
+    }
     identifier(command.commandId, 'commandId'); identifier(command.ticketId, 'ticketId')
+    if (command.expectedGeneration !== undefined) identifier(command.expectedGeneration, 'expectedGeneration')
+    if (command.expectedTicketVersion !== undefined && (!Number.isSafeInteger(command.expectedTicketVersion) || command.expectedTicketVersion < 1)) {
+      throw new CoreError('INVALID_INPUT', 'The Ticket card version must be a positive integer.')
+    }
     if (typeof command.reason !== 'string' || !command.reason.trim() || Buffer.byteLength(command.reason) > 2048) throw new CoreError('INVALID_INPUT', 'Stopping work needs a bounded reason.')
     if (!this.source.allowedActorIds.includes(this.source.actorId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The source actor cannot stop work.')
     return this.execution.stopTicket({ ...command, actorId: this.source.actorId })
@@ -1966,20 +2462,26 @@ export class Engine {
     return this.execution.reconcileRemoteWork(command.ticketId)
   }
 
-  async resumeTicket(command: { commandId: string; ticketId: string }) {
+  async resumeTicket(command: { commandId: string; ticketId: string; expectedGeneration?: string }) {
     await this.ensurePolicy()
     if (!this.execution) throw new CoreError('WORKER_NOT_ENABLED', 'Resuming work requires a configured native runtime.')
-    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId'].includes(key))) throw new CoreError('INVALID_INPUT', 'Resuming work accepts commandId and ticketId only.')
+    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'expectedGeneration'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Resuming work accepts its exact command and Ticket version only.')
+    }
     identifier(command.commandId, 'commandId'); identifier(command.ticketId, 'ticketId')
+    if (command.expectedGeneration !== undefined) identifier(command.expectedGeneration, 'expectedGeneration')
     if (!this.source.allowedActorIds.includes(this.source.actorId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The source actor cannot resume work.')
     return this.execution.resumeTicket({ ...command, actorId: this.source.actorId })
   }
 
-  async retryTicket(command: { commandId: string; ticketId: string; reason: string }) {
+  async retryTicket(command: { commandId: string; ticketId: string; reason: string; expectedGeneration?: string }) {
     await this.ensurePolicy()
     if (!this.execution) throw new CoreError('WORKER_NOT_ENABLED', 'Retrying work requires a configured native runtime.')
-    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'reason'].includes(key))) throw new CoreError('INVALID_INPUT', 'Retrying work accepts commandId, ticketId and reason only.')
+    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'reason', 'expectedGeneration'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Retrying work accepts its exact command, Ticket, reason and version only.')
+    }
     identifier(command.commandId, 'commandId'); identifier(command.ticketId, 'ticketId')
+    if (command.expectedGeneration !== undefined) identifier(command.expectedGeneration, 'expectedGeneration')
     if (typeof command.reason !== 'string' || !command.reason.trim() || Buffer.byteLength(command.reason) > 2048) throw new CoreError('INVALID_INPUT', 'Retrying work needs a bounded reason.')
     if (!this.source.allowedActorIds.includes(this.source.actorId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The source actor cannot retry work.')
     return this.execution.retryTicket({ ...command, actorId: this.source.actorId })
@@ -2344,7 +2846,7 @@ export class Engine {
         sourceActorId: event.authorId, authorizedBy: this.source.actorId, ownerSourceInstanceId: this.source.sourceInstanceId,
         reason: command.reason, checkedAt: Date.now() })
       const target = command.retargetResult ? await this.deliveryState.setTarget(tx, {
-        ticketId: command.ticketId, purpose: 'result', sourceInstanceId: event.source.sourceInstanceId,
+        ticketId: command.ticketId, purpose: 'result', sourceInstanceId: event.source.sourceInstanceId, actorId: event.authorId,
         threadId: event.threadId, objectId: event.objectId, evidence: command.reason, evidenceEventId: event.id, authorizedBy: this.source.actorId,
       }) : undefined
       const result = { input, ...(target ? { target } : {}) }

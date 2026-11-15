@@ -106,6 +106,97 @@ test('delivery history keeps reading past the second page instead of stopping at
   assert.equal(deliveries.at(-1).sequence, 1204)
 })
 
+test('an unknown platform outcome is visible and reconciles under the original delivery idempotency key', async t => {
+  const sentKeys = []
+  const reconcileKeys = []
+  let reconcileAttempt = 0
+  const { engine } = await fixture(t, {
+    deliver: async (_delivery, context) => {
+      sentKeys.push(context.idempotencyKey)
+      return { type: 'unknown', reason: 'PLATFORM_ACCEPTED_RESPONSE_LOST' }
+    },
+    reconcile: async (_delivery, context) => {
+      reconcileKeys.push(context.idempotencyKey)
+      reconcileAttempt++
+      return reconcileAttempt === 1 ? { type: 'transient', reason: 'RECONCILE_TEMPORARILY_UNAVAILABLE' } : { type: 'success' }
+    },
+  }, { maxAttempts: 2 })
+  const receipt = await engine.submit({ commandId: 'unknown-request', eventId: 'unknown-message', text: 'Deliver once.' })
+  await engine.effects.drain()
+  const [unknown] = await engine.getTicketDeliveries(receipt.ticketId)
+  assert.deepEqual({ state: unknown.state, reconcileRequired: unknown.reconcileRequired, attempts: unknown.attempts },
+    { state: 'unknown', reconcileRequired: true, attempts: 1 })
+  assert.equal(unknown.reason, 'PLATFORM_ACCEPTED_RESPONSE_LOST')
+
+  const command = { commandId: 'reconcile-unknown', ticketId: receipt.ticketId, deliveryId: unknown.id }
+  const retryable = await engine.reconcileDelivery(command)
+  assert.deepEqual([retryable.state, retryable.reconcileRequired, retryable.reason],
+    ['unknown', true, 'RECONCILE_TEMPORARILY_UNAVAILABLE'])
+  const reconciled = await engine.reconcileDelivery(command)
+  assert.deepEqual({ state: reconciled.state, reconcileRequired: reconciled.reconcileRequired, attempts: reconciled.attempts },
+    { state: 'sent', reconcileRequired: false, attempts: 3 })
+  assert.equal(reconcileKeys.every(key => key === sentKeys[0]), true)
+  assert.equal(sentKeys.length, 1)
+  assert.deepEqual(await engine.reconcileDelivery(command), reconciled)
+  assert.equal(sentKeys.length, 1)
+  assert.equal(reconcileKeys.length, 2)
+})
+
+test('reconciliation uses immutable delivery identity after the live answer basis changes', async t => {
+  const sentKeys = []
+  const reconcileKeys = []
+  const { engine } = await fixture(t, {
+    deliver: async (delivery, context) => {
+      if (delivery.purpose !== 'answer') return { type: 'success' }
+      sentKeys.push(context.idempotencyKey)
+      return { type: 'unknown', reason: 'ANSWER_RESPONSE_LOST' }
+    },
+    reconcile: async (_delivery, context) => {
+      reconcileKeys.push(context.idempotencyKey)
+      return { type: 'success' }
+    },
+  }, {}, true)
+  const question = await engine.receiveSource({ commandId: 'reconcile-question', threadId: 'room', objectId: 'question-reconcile',
+    type: 'created', version: '1', text: 'What changed?', authorId: 'alice', authorKind: 'human', addressing: 'direct' })
+  const receipt = await engine.acceptSource({ commandId: 'accept-reconcile', threadId: 'room', objectId: 'question-reconcile', expectedEventId: question.eventId })
+  await engine.queueAnswer({ commandId: 'answer-reconcile', ticketId: receipt.ticketId, questionEventId: question.eventId,
+    text: 'The original answer.', fact: 'The answer was verified before the question changed.' })
+  await engine.effects.drain()
+  const answer = (await engine.getTicketDeliveries(receipt.ticketId)).find(delivery => delivery.purpose === 'answer')
+  assert.equal(answer.state, 'unknown')
+  await engine.receiveSource({ commandId: 'delete-reconcile-question', threadId: 'room', objectId: 'question-reconcile',
+    type: 'deleted', version: '2', deletionEvidence: 'The question was deleted after the uncertain answer send.' })
+  const reconciled = await engine.reconcileDelivery({ commandId: 'reconcile-answer-after-delete', ticketId: receipt.ticketId, deliveryId: answer.id })
+  assert.equal(reconciled.state, 'sent')
+  assert.deepEqual(reconcileKeys, sentKeys)
+})
+
+test('a not-applied reconciliation remains retryable with the same stable command', async t => {
+  let delivered = 0
+  const reconcileKeys = []
+  const { engine } = await fixture(t, {
+    deliver: async () => {
+      delivered++
+      return delivered === 1 ? { type: 'unknown', reason: 'FIRST_RESPONSE_LOST' } : { type: 'success' }
+    },
+    reconcile: async (_delivery, context) => {
+      reconcileKeys.push(context.idempotencyKey)
+      return { type: 'not-applied', reason: 'PLATFORM_CONFIRMED_NOT_APPLIED' }
+    },
+  })
+  const receipt = await engine.submit({ commandId: 'not-applied-request', eventId: 'not-applied-message', text: 'Retry safely.' })
+  await engine.effects.drain()
+  const unknown = (await engine.getTicketDeliveries(receipt.ticketId))[0]
+  assert.equal(unknown.state, 'unknown')
+  const command = { commandId: 'not-applied-reconcile', ticketId: receipt.ticketId, deliveryId: unknown.id }
+  const pending = await engine.reconcileDelivery(command)
+  assert.equal(pending.state, 'pending')
+  const sent = await engine.reconcileDelivery(command)
+  assert.equal(sent.state, 'sent')
+  assert.equal(delivered, 2)
+  assert.equal(reconcileKeys.length, 1)
+})
+
 test('an answer requires a current human question and returns to that exact message', async t => {
   const calls = []
   const { engine } = await fixture(t, {

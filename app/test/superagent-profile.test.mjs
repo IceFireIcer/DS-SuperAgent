@@ -70,4 +70,9 @@ test('the real ds-superagent profile boots Main and verifies delegated local wor
   for (const service of ['superagentProduct', 'webServer', 'connection', 'sessionPersistence']) {
     assert.ok(report.services.includes(service), `${service} is mounted`)
   }
+  assert.equal(report.observationItems, 3)
+  assert.ok(report.observationHistoryEvents > 0)
+  assert.equal(report.observationWriteRejected, true)
+  assert.equal(report.nativeSessionExportDenied, true)
+  assert.equal(report.nativeSessionReferenceDenied, true)
 })

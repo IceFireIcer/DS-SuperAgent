@@ -1,7 +1,7 @@
 import { CoreError } from './model.js'
 import type { Storage } from './storage.js'
 import type { Engine } from './engine.js'
-import type { SourceReceipt } from './source-events.js'
+import type { ReceiveSourceEvent, SourceReceipt } from './source-events.js'
 
 interface Cursor { cursor: string; updatedAt: number }
 const cursorKey = (sourceInstanceId: string) => JSON.stringify(['channel-cursor', sourceInstanceId])
@@ -24,7 +24,7 @@ export interface GitHubEvent {
   cursor: string
   repo: string
   kind: 'issue' | 'pull_request' | 'review' | 'ci' | 'comment'
-  action: 'created' | 'edited' | 'deleted' | 'closed' | 'reopened' | 'synchronize' | 'reviewed' | 'completed'
+  action: 'created' | 'edited' | 'deleted' | 'closed' | 'merged' | 'reopened' | 'synchronize' | 'reviewed' | 'completed'
   number: number
   id: string
   authorId: string
@@ -41,6 +41,8 @@ export interface GitHubSourceConfig {
   owner: string
   repo: string
   selfActorIds?: string[]
+  /** New authorized human discussions are routed to Main; existing ownership stays on its Ticket. */
+  mainIntake?: boolean
 }
 
 function githubObjectId(event: GitHubEvent) {
@@ -71,11 +73,14 @@ export class GitHubSource {
     const objectId = githubObjectId(event)
     const type = event.action === 'deleted' ? 'deleted' : event.action === 'edited' || event.action === 'synchronize' ? 'edited' : 'created'
     const body = githubBody(event)
-    const receipt = await this.engine.receiveSource({ commandId: `github:${event.deliveryId}`, threadId, objectId, type,
+    const authorKind = event.authorKind ?? (event.authorId.endsWith('[bot]') ? 'bot' : 'human')
+    const input: ReceiveSourceEvent = { commandId: `github:${event.deliveryId}`, threadId, objectId, type,
       version: sequenceVersion(event),
       ...(type === 'deleted' ? { deletionEvidence: event.deletionEvidence ?? `GitHub deleted ${event.kind} ${event.id}.` } : { text: body }),
-      authorId: event.authorId, authorKind: event.authorKind ?? (event.authorId.endsWith('[bot]') ? 'bot' : 'human'),
-      addressing: event.kind === 'review' || event.kind === 'comment' ? 'mention' : 'direct' })
+      authorId: event.authorId, authorKind,
+      addressing: event.kind === 'review' || event.kind === 'comment' ? 'mention' as const : 'direct' as const }
+    const receipt = this.config.mainIntake && authorKind === 'human' && type !== 'deleted'
+      ? await this.engine.receiveSourceForMain(input) : await this.engine.receiveSource(input)
     await this.advance(event.cursor)
     return receipt
   }

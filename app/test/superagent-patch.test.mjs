@@ -15,6 +15,9 @@ test('the Super-agent profile mounts only the product projection', () => {
     assert.deepEqual(patchFiles, [join(home, 'profiles', 'superagent.patch.yml')])
     assert.deepEqual(parse(readFileSync(patchFiles[0], 'utf8')), [
       { id: 'bot', config: { product: true } },
+      { id: 'session-log-download', disabled: true },
+      { id: 'session-reference', disabled: true },
+      { id: 'ui-reference', disabled: true },
     ])
   } finally {
     rmSync(home, { recursive: true, force: true })

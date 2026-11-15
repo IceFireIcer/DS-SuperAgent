@@ -122,6 +122,15 @@ test('PostgreSQL persists a split Main WorkPlan, every Ticket receipt and verifi
   assert.equal(plan.items.length, 2)
   assert.equal(plan.status, 'accepted')
   const identities = plan.items.map(item => [item.id, item.ticketId])
+  const observations = await engine.getWorkObservations({ instanceId: 'postgres-work', limit: 10 })
+  assert.equal(observations.items.length, 3)
+  const alphaObservation = observations.items.find(item => item.role === 'worker' && item.title.includes('alpha'))
+  assert.ok(alphaObservation?.ticketId && alphaObservation.generation && alphaObservation.sessionId)
+  const alphaHistory = await engine.readWorkObservation({ instanceId: 'postgres-work', observationId: alphaObservation.id,
+    generation: alphaObservation.generation, limit: 100 })
+  assert.equal(alphaHistory.current, true)
+  assert.equal(alphaHistory.ticketId, alphaObservation.ticketId)
+  assert.equal(alphaHistory.events.some(event => event.kind === 'assistant-message'), true)
 
   await close()
   await open()

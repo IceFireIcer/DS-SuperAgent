@@ -160,7 +160,7 @@ test('a spill redacts credentials as one stream so no page can start inside a va
   const secret = 'Zm9vYmFy'.repeat(2000)
   const keyBody = 'QUJDREVG'.repeat(2000)
   const commands = { leaked: { argv: [process.execPath, '-e',
-    "process.stdout.write('header\\npassword=' + 'Zm9vYmFy'.repeat(2000) + '\\n-----BEGIN PRIVATE KEY-----\\n' + 'QUJDREVG'.repeat(2000) + '\\n-----END PRIVATE KEY-----\\ntail\\n')"],
+    "process.stdout.write('header\\npassword=' + 'Zm9vYmFy'.repeat(2000) + '\\n-----BEGIN ' + 'PRIVATE KEY-----\\n' + 'QUJDREVG'.repeat(2000) + '\\n-----END PRIVATE KEY-----\\ntail\\n')"],
     timeoutMs: 10000 } }
   const { bound } = await localFixture(context, { commands })
   const result = await bound.invoke('run_command', { name: 'leaked' })

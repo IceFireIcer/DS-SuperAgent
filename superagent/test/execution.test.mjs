@@ -111,6 +111,72 @@ test('idle Worker text never becomes a result and cannot invoke Router-only deli
   assert.equal(visible.some(name => name === 'assign_worker' || name === 'deliver_result'), false)
 })
 
+test('a failed Worker model attempt still records its configuration revision', { timeout: 15000 }, async context => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-failed-worker-config-'))
+  let native, storage, sessions, engine
+  context.after(async () => {
+    await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+  native = await nativeContext(join(directory, 'sessions'), options => {
+    if (options.model === 'worker') throw new Error('The Worker model failed.')
+    return options.messages.some(message => message.role === 'tool') ? textResponse('Assigned.') : toolResponse('assign_worker', {})
+  })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  sessions = new core.NativeSessions(native, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] }, { retryDelayMs: 1 }, sessions)
+  const receipt = await engine.submit({ commandId: 'failed-worker', eventId: 'failed-worker', text: 'Fail the Worker model.' })
+  for (let index = 0; index < 6; index++) await engine.effects.drain()
+  const assignment = (await engine.conversation(receipt.ticketId)).assignments[0]
+  assert.ok(assignment)
+  const uses = await engine.getRoleConfigUses(assignment.sessionId)
+  assert.equal(uses.some(use => use.role === 'worker' && use.revision === 1 && use.worker.model === 'worker'), true)
+})
+
+test('a Router batch keeps the configuration captured at its request boundary', { timeout: 20000 }, async context => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-router-config-snapshot-'))
+  let native, storage, sessions, engine, release, entered
+  const gate = new Promise(resolve => { release = resolve })
+  const started = new Promise(resolve => { entered = resolve })
+  const routerModels = []
+  context.after(async () => {
+    release()
+    await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+  native = await nativeContext(join(directory, 'sessions'), async function* (options) {
+    if (options.model === 'worker') { yield* textResponse('Worker is not complete.'); return }
+    routerModels.push(options.model)
+    const user = options.messages.filter(message => message.role === 'user').at(-1)
+    const text = user.content.map(block => block.text ?? '').join('')
+    const results = options.messages.slice(options.messages.lastIndexOf(user) + 1).filter(message => message.role === 'tool')
+    if (!results.length && text.includes('Snapshot alpha.') && text.includes('Snapshot beta.')) {
+      entered()
+      await gate
+    }
+    const tool = options.tools[results.length]
+    if (tool) yield* toolResponse(tool.name, {}, `snapshot-${results.length}`)
+    else yield* textResponse('Assigned.')
+  })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  sessions = new core.NativeSessions(native, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] }, { retryDelayMs: 1 }, sessions)
+  const alpha = await engine.submit({ commandId: 'snapshot-alpha', eventId: 'snapshot-alpha', text: 'Snapshot alpha.' })
+  const beta = await engine.submit({ commandId: 'snapshot-beta', eventId: 'snapshot-beta', text: 'Snapshot beta.' })
+  const running = engine.effects.drain()
+  await started
+  const current = await engine.getRoleConfig()
+  await engine.updateRoleConfig({ commandId: 'snapshot-next', expectedRevision: current.revision,
+    roles: { ...current.roles, router: { ...current.roles.router, model: { provider: 'mock', model: 'router-next' } } } })
+  release()
+  await running
+  assert.equal(routerModels.length > 0, true)
+  assert.deepEqual(new Set(routerModels), new Set(['router']))
+  const uses = await engine.getRoleConfigUses(sessions.routerSessionId)
+  assert.equal(uses.some(use => use.role === 'router' && use.revision === 1 && use.router.model === 'router'), true)
+  assert.ok([alpha.ticketId, beta.ticketId].every(Boolean))
+})
+
 test('a batched Router notice applies the current role configuration and records its use', { timeout: 10000 }, async context => {
   const directory = await mkdtemp(join(tmpdir(), 'ds-bot-engine-batch-config-'))
   let native, storage, sessions, engine, release, entered
@@ -145,7 +211,7 @@ test('a batched Router notice applies the current role configuration and records
   const before = await engine.getRoleConfig()
   const changed = await engine.updateRoleConfig({ commandId: 'batch-roles', expectedRevision: before.revision,
     roles: { ...before.roles, router: { ...before.roles.router, model: { provider: 'mock', model: 'router-custom' },
-      instructions: 'Use the current batch role.' } } })
+      instructions: 'Use the current batch role. {{goal}}' } } })
   assert.equal(changed.revision, before.revision + 1)
   const alpha = await engine.submit({ commandId: 'batch-alpha', eventId: 'batch-alpha', text: 'Request alpha.' })
   const beta = await engine.submit({ commandId: 'batch-beta', eventId: 'batch-beta', text: 'Request beta.' })

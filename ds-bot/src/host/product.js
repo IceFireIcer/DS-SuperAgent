@@ -3,7 +3,7 @@ export function installProduct(ctx) {
   return ctx.inject(['superagentProduct'], scope => {
     scope.effect(() => scope.on('connection/request', async (request, response, next) => {
       const path = new URL(request.url ?? '/', 'http://localhost').pathname
-      if (!path.startsWith('/api/session/')) return next()
+      if (!path.startsWith('/api/session/') && path !== '/api/session.export') return next()
       if (path === '/api/session/list') {
         let text = ''
         for await (const chunk of request) {
@@ -32,9 +32,15 @@ export function installProduct(ctx) {
           const code = typeof error?.code === 'string' ? error.code : 'PRODUCT_UNAVAILABLE'
           const message = code === 'SOURCE_NOT_AUTHORIZED' ? 'This conversation is outside the authorized workspace.'
             : code === 'IDENTITY_CONFLICT' ? 'This message identity was already used for different text.'
-              : code === 'INVALID_INPUT' ? 'Check the message and history page fields.'
-                : 'Main is unavailable. Your accepted messages remain in the conversation.'
-          return Response.json({ ok: false, error: { code, message } }, { status: code === 'SOURCE_NOT_AUTHORIZED' ? 403 : 400 })
+              : code === 'CONFIG_REVISION_CONFLICT' ? 'The configuration changed elsewhere. Your draft is still here.'
+                : code === 'INVALID_CONFIG' ? String(error?.message ?? 'Check the role configuration.')
+              : code === 'INVALID_INPUT' ? String(error?.message ?? 'Check the request fields.')
+                : code === 'NOT_FOUND' ? 'The requested work activity is unavailable.'
+                  : code === 'UNAVAILABLE' ? 'This product capability is not connected yet.'
+                    : code === 'RUNTIME_CLOSED' ? 'The product Host is closed.'
+                      : 'Main is unavailable. Your accepted messages remain in the conversation.'
+          const status = code === 'SOURCE_NOT_AUTHORIZED' ? 403 : code === 'NOT_FOUND' ? 404 : code === 'RUNTIME_CLOSED' ? 503 : 400
+          return Response.json({ ok: false, error: { code, message } }, { status })
         }
       },
     }), 'superagent: product commands and queries')

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { CoreError, identifier, type Work } from './model.js'
+import { CoreError, identifier, triggerDeliveryTarget, type Work } from './model.js'
 import type { AsyncTx, Storage } from './storage.js'
 import type { SourceEvent, SourceEvents } from './source-events.js'
 import type { Effects } from './effects.js'
@@ -55,11 +55,13 @@ export class Attentions {
     if (ticket.constraint?.kind === 'stopped') throw new CoreError('TICKET_STOPPED', 'A stopped Ticket cannot ask another question.')
     const previousHead = await tx.get<AttentionHead>('attention-head', headKey(request.ticketId))
     const inputEvent = request.input && await tx.get<SourceEvent>('source-event', request.input.sourceEventId)
-    const originalEvent = !inputEvent && trigger.threadId ? await this.sources.candidate(tx, { threadId: trigger.threadId, objectId: trigger.eventId }) : undefined
+    const defaultTarget = triggerDeliveryTarget(trigger)
+    const originalEvent = !inputEvent && trigger.deliveryOrigin ? await tx.get<SourceEvent>('source-event', trigger.deliveryOrigin.sourceEventId)
+      : !inputEvent && trigger.threadId ? await this.sources.candidate(tx, { threadId: trigger.threadId, objectId: trigger.eventId }) : undefined
     const destination = inputEvent
       ? { sourceInstanceId: inputEvent.source.sourceInstanceId, actorId: inputEvent.authorId, eventId: inputEvent.objectId, ...(inputEvent.threadId ? { threadId: inputEvent.threadId } : {}) }
-      : { sourceInstanceId: originalEvent?.source.sourceInstanceId ?? trigger.source.sourceInstanceId, actorId: originalEvent?.authorId ?? trigger.source.actorId,
-        eventId: originalEvent?.objectId ?? trigger.eventId, ...(trigger.threadId ? { threadId: trigger.threadId } : {}) }
+      : { sourceInstanceId: originalEvent?.source.sourceInstanceId ?? defaultTarget.source.sourceInstanceId, actorId: originalEvent?.authorId ?? defaultTarget.source.actorId,
+        eventId: originalEvent?.objectId ?? defaultTarget.eventId, ...(defaultTarget.threadId ? { threadId: defaultTarget.threadId } : {}) }
     const id = `${historyPrefix(request.ticketId)}:${randomUUID()}`
     const sequenceKey = JSON.stringify(['attention-meta', request.ticketId])
     const sequence = (await tx.get<number>('attention-meta', sequenceKey) ?? 0) + 1
@@ -89,7 +91,8 @@ export class Attentions {
     return attention
   }
 
-  async answer(tx: AsyncTx, request: { ticketId: string; attentionId: string; text: string; commandId: string; actorId: string; sourceEventId?: string }) {
+  async answer(tx: AsyncTx, request: { ticketId: string; attentionId: string; text: string; commandId: string; actorId: string;
+    sourceEventId?: string; expectedGeneration?: string; expectedVersion?: number }) {
     identifier(request.ticketId, 'ticketId'); identifier(request.attentionId, 'attentionId'); identifier(request.commandId, 'commandId'); identifier(request.actorId, 'actorId')
     if (!request.text.trim() || Buffer.byteLength(request.text) > 65536) throw new CoreError('INVALID_INPUT', 'An Attention answer needs bounded nonempty text.')
     const attention = await tx.get<Attention>('attention', request.attentionId)
@@ -97,25 +100,36 @@ export class Attentions {
     const ticket = await tx.get<Work['ticket']>('ticket', request.ticketId)
     if (!attention || !head || !ticket) throw new CoreError('NOT_FOUND', 'The Attention does not exist.')
     const waitingCurrent = ticket.constraint?.kind === 'waiting-human' && ticket.constraint.attentionId === attention.id
-    const stopped = ticket.constraint?.kind === 'stopped'
-    if (attention.ticketId !== request.ticketId || head.attentionId !== attention.id || !waitingCurrent && !stopped) {
+    if (ticket.constraint?.kind === 'stopped') throw new CoreError('TICKET_STOPPED', 'A stopped work item cannot receive an Attention answer.')
+    if (attention.ticketId !== request.ticketId || head.attentionId !== attention.id || !waitingCurrent) {
       throw new CoreError('ATTENTION_STALE', 'This question is no longer the current waiting-human constraint.')
+    }
+    const assignment = request.expectedGeneration === undefined ? undefined
+      : await tx.get<{ id: string; generation: string }>('assignment', request.ticketId)
+    if (request.expectedGeneration !== undefined && (!assignment || assignment.generation !== request.expectedGeneration
+      || attention.assignmentId !== assignment.id)
+      || request.expectedVersion !== undefined && attention.sequence !== request.expectedVersion) {
+      throw new CoreError('ATTENTION_STALE', 'This question version no longer matches the work card.')
     }
     if (attention.status !== 'waiting') throw new CoreError('ATTENTION_STALE', 'This question has already been answered or superseded.')
     const answerEventId = request.sourceEventId ?? JSON.stringify(['attention-answer', attention.id, request.commandId])
     const input = await this.inputs.attachSyntheticInput(tx, { ticketId: request.ticketId, sourceEventId: answerEventId,
-      threadId: attention.destination.threadId ?? '__attention__', text: request.text, authorId: request.actorId, reason: `Answer to ${attention.id}`, dispatch: !stopped })
+      threadId: attention.destination.threadId ?? '__attention__', text: request.text, authorId: request.actorId,
+      reason: `Answer to ${attention.id}`, dispatch: true })
     const answeredAt = this.now()
     const answered: Attention = { ...attention, status: 'answered', answeredAt, answeredBy: request.actorId, answerText: request.text,
       answerCommandId: request.commandId, answerSourceEventId: answerEventId }
     await tx.replace('attention', attention.id, answered)
     const updatedTicket = (await tx.get<Work['ticket']>('ticket', request.ticketId))!
-    if (stopped) await tx.replace('ticket', ticket.id, { ...updatedTicket, state: 'open' })
-    else {
-      const { constraint: _constraint, ...openTicket } = updatedTicket
-      await tx.replace('ticket', ticket.id, { ...openTicket, state: 'open' })
-    }
+    const { constraint: _constraint, ...openTicket } = updatedTicket
+    await tx.replace('ticket', ticket.id, { ...openTicket, state: 'open' })
     return { attention: answered, input }
+  }
+
+  async supersedeForStop(tx: AsyncTx, ticketId: string) {
+    const current = await this.current(tx, ticketId)
+    if (current?.status !== 'waiting') return
+    await tx.replace('attention', current.id, { ...current, status: 'superseded', supersededAt: this.now(), supersededBy: 'human-stop' })
   }
 
   async current(tx: AsyncTx, ticketId: string) {
