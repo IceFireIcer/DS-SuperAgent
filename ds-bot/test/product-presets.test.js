@@ -117,6 +117,34 @@ test('new presets retain the draft and command ID on failure, then apply only af
   })
 })
 
+test('preset activity shows decisions and applications, and an unknown apply result is reconciled', async () => {
+  const calls = []
+  const call = async (endpoint, payload) => {
+    calls.push([endpoint, payload])
+    if (endpoint === 'preset-list') return { items: [{ id: 'preset-one', revision: 1, status: 'active',
+      preset: { id: 'preset-one', name: 'Reviewer', model: { provider: 'mock', model: 'one' }, instructions: '', skills: [] } }] }
+    if (endpoint === 'preset-imports') return { items: [{ id: 'decision-one', status: 'skipped',
+      source: { identity: 'copy-one', botId: 'old-bot', digest: 'abc' }, targetRole: 'worker' }] }
+    if (endpoint === 'preset-applications') return { items: [{ commandId: 'previous', sourceInstanceId: 'desktop', actorId: 'user',
+      presetId: 'preset-one', presetRevision: 1, targetRole: 'router', revision: 3 }] }
+    if (endpoint === 'preset-apply') throw Object.assign(new Error('Commit outcome unknown'), { code: 'COMMIT_UNKNOWN' })
+    if (endpoint === 'preset-application-read') return { commandId: payload.commandId, presetId: 'preset-one',
+      targetRole: 'worker', revision: 4 }
+    throw new Error(`Unexpected endpoint: ${endpoint}`)
+  }
+  await withPresets(call, 3, async ({ doc, click, applied }) => {
+    await click('Preset activity')
+    assert.match(doc.body.textContent, /copy-one \/ old-bot → worker: skipped/u)
+    assert.match(doc.body.textContent, /preset-one v1 → router: Configuration v3/u)
+    await click('Apply preset')
+    assert.equal(applied[0].revision, 4)
+    assert.match(doc.body.textContent, /Configuration v4 is active for new turns/u)
+    assert.equal(calls.filter(([endpoint]) => endpoint === 'preset-apply').length, 1)
+    assert.equal(calls.find(([endpoint]) => endpoint === 'preset-application-read')[1].commandId,
+      calls.find(([endpoint]) => endpoint === 'preset-apply')[1].commandId)
+  })
+})
+
 test('old copy review excludes permissions and history, reports conflict, and persists explicit skip', async () => {
   const calls = []
   const digest = 'abcdef0123456789abcdef0123456789'

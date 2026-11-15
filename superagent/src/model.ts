@@ -92,7 +92,7 @@ export const recordKinds = [...coreRecordKinds, 'main-state', 'main-message', 'm
   'work-attention-answer', 'work-outcome', 'instance-directory', 'instance-directory-command', 'product-directory',
   'resource-credential', 'resource-command', 'resource-request', 'product-attachment',
   'role-preset', 'role-preset-version', 'role-preset-image', 'role-preset-command', 'role-preset-preview',
-  'role-preset-import', 'role-preset-review', 'role-preset-source'] as const
+  'role-preset-import', 'role-preset-review', 'role-preset-source', 'role-preset-application'] as const
 export type RecordKind = typeof recordKinds[number]
 
 export function identifier(value: unknown, label: string): asserts value is string {
