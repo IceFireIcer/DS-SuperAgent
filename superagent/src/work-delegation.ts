@@ -17,6 +17,13 @@ export interface MainWorkIntent {
   goal: string
   constraints: string
   acceptanceCriteria: string
+  attachmentIds?: string[]
+}
+
+export interface MainWorkAttachment {
+  id: string
+  asset: EnvironmentAssetReference
+  image?: ImageAttachmentRef
 }
 
 export interface MainWorkBrief {
@@ -30,6 +37,7 @@ export interface MainWorkBrief {
   originalUserText: string
   resources?: EnvironmentAssetReference[]
   images?: ImageAttachmentRef[]
+  attachments?: MainWorkAttachment[]
   authorization: { kind: 'authorized-main-actor'; sourceInstanceId: string; actorId: string }
   goal: string
   constraints: string
@@ -145,6 +153,7 @@ export interface MainWorkRequest {
   originalUserText: string
   resources?: EnvironmentAssetReference[]
   images?: ImageAttachmentRef[]
+  attachments?: MainWorkAttachment[]
   items?: MainWorkIntent[]
   goal?: string
   constraints?: string
@@ -363,14 +372,19 @@ function workIntents(items: unknown, label = 'Each work item'): MainWorkIntent[]
   if (!Array.isArray(items) || items.length < 1 || items.length > 4) throw new CoreError('INVALID_INPUT', 'A work plan needs between one and four independent work items.')
   const normalized = items.map((item, index) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)
-      || Object.keys(item).some(key => !['goal', 'constraints', 'acceptanceCriteria'].includes(key))) {
-      throw new CoreError('INVALID_INPUT', `${label} accepts only goal, constraints and acceptance criteria.`)
+      || Object.keys(item).some(key => !['goal', 'constraints', 'acceptanceCriteria', 'attachmentIds'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', `${label} accepts only goals, constraints, acceptance criteria and attachment IDs.`)
     }
     const value = item as Record<string, unknown>
+    const ids = value.attachmentIds
+    if (ids !== undefined && (!Array.isArray(ids) || ids.length > 10 || new Set(ids).size !== ids.length
+      || ids.some(id => typeof id !== 'string'))) throw new CoreError('INVALID_INPUT', 'Select at most ten distinct attachment IDs per work item.')
+    if (Array.isArray(ids)) for (const id of ids) identifier(id, 'attachmentId')
     return {
       goal: boundedText(value.goal, `Work item ${index + 1} goal`, 4096),
       constraints: boundedText(value.constraints, `Work item ${index + 1} constraints`, 4096),
       acceptanceCriteria: boundedText(value.acceptanceCriteria, `Work item ${index + 1} acceptance criteria`, 4096),
+      ...(Array.isArray(ids) ? { attachmentIds: [...ids].sort() } : {}),
     }
   })
   const exact = new Set(normalized.map(item => canonicalJson(item)))
@@ -394,7 +408,7 @@ export class WorkDelegation {
 
   async create(request: MainWorkRequest) {
     if (!request || Object.keys(request).some(key => !['commandId', 'mainId', 'mainSessionId', 'routerSessionId', 'mainMessageId', 'originalUserText',
-      'items', 'goal', 'constraints', 'acceptanceCriteria', 'configurationRevision', 'sourceHandoffId', 'environmentId', 'resources', 'images'].includes(key))) {
+      'items', 'goal', 'constraints', 'acceptanceCriteria', 'configurationRevision', 'sourceHandoffId', 'environmentId', 'resources', 'images', 'attachments'].includes(key))) {
       throw new CoreError('INVALID_INPUT', 'A Main delegation accepts only its source and independent work items.')
     }
     if (request.items !== undefined && (request.goal !== undefined || request.constraints !== undefined || request.acceptanceCriteria !== undefined)) {
@@ -423,11 +437,49 @@ export class WorkDelegation {
     if (images?.length && (!resources?.length || images.length > resources.length)) {
       throw new CoreError('INVALID_INPUT', 'Work images need their matching Environment resources.')
     }
-    const originalUserText = request.originalUserText === '' && resources?.length ? ''
-      : boundedText(request.originalUserText, 'The original Main request', 32768)
-    const requestedItems = requestIntents(request)
+    if (request.attachments !== undefined && (resources || images)) throw new CoreError('INVALID_INPUT', 'Use one attachment catalog for a work request.')
+    if (request.attachments !== undefined && (!Array.isArray(request.attachments) || !request.attachments.length || request.attachments.length > 10)) {
+      throw new CoreError('INVALID_INPUT', 'A work request needs at most ten admitted attachments.')
+    }
+    const attachments = request.attachments?.map(attachment => {
+      if (!attachment || typeof attachment !== 'object' || Object.keys(attachment).some(key => !['id', 'asset', 'image'].includes(key))) {
+        throw new CoreError('INVALID_INPUT', 'The attachment catalog is malformed.')
+      }
+      identifier(attachment.id, 'attachmentId')
+      assertReferenceShape(attachment.asset)
+      if (attachment.asset.kind !== 'attachment') throw new CoreError('INVALID_INPUT', 'A work attachment needs an admitted file reference.')
+      if (attachment.image !== undefined && (!attachment.image || typeof attachment.image.attachmentId !== 'string'
+        || !Number.isSafeInteger(attachment.image.bytes) || attachment.image.bytes < 1
+        || !Number.isSafeInteger(attachment.image.width) || attachment.image.width < 1
+        || !Number.isSafeInteger(attachment.image.height) || attachment.image.height < 1
+        || !['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(attachment.image.mediaType))) {
+        throw new CoreError('INVALID_INPUT', 'A work image needs a bounded durable attachment reference.')
+      }
+      return structuredClone(attachment)
+    })
+    if (attachments && new Set(attachments.map(attachment => attachment.id)).size !== attachments.length) {
+      throw new CoreError('INVALID_INPUT', 'The attachment catalog contains duplicate IDs.')
+    }
+    const originalUserText = request.originalUserText
+    if (typeof originalUserText !== 'string' || Buffer.byteLength(originalUserText) > 32768
+      || !originalUserText.trim() && !resources?.length && !attachments?.length) {
+      throw new CoreError('INVALID_INPUT', 'The original Main request needs text or authorized attachments within the message limit.')
+    }
+    let requestedItems = requestIntents(request)
+    if (attachments?.length) {
+      if (requestedItems.length === 1 && requestedItems[0]!.attachmentIds === undefined) {
+        requestedItems = [{ ...requestedItems[0]!, attachmentIds: attachments.map(attachment => attachment.id).sort() }]
+      }
+      if (requestedItems.some(item => item.attachmentIds === undefined)
+        || attachments.some(attachment => !requestedItems.some(item => item.attachmentIds!.includes(attachment.id)))
+        || requestedItems.some(item => item.attachmentIds!.some(id => !attachments.some(attachment => attachment.id === id)))) {
+        throw new CoreError('ATTACHMENT_SCOPE_AMBIGUOUS', 'Assign every attached resource explicitly to authorized work items.')
+      }
+    } else if (requestedItems.some(item => item.attachmentIds?.length)) {
+      throw new CoreError('ATTACHMENT_SCOPE_AMBIGUOUS', 'A work item cannot claim attachments absent from the original request.')
+    }
     if (resources?.length && requestedItems.length !== 1) {
-      throw new CoreError('ATTACHMENT_SCOPE_AMBIGUOUS', 'Select one work item for attached resources; multi-work grants are not available yet.')
+      throw new CoreError('ATTACHMENT_SCOPE_AMBIGUOUS', 'Older attached work grants one work item only.')
     }
     const single = requestedItems.length === 1 ? requestedItems[0] : undefined
     const goal = single?.goal ?? `${requestedItems.length} independent work items from one Main request.`
@@ -443,14 +495,27 @@ export class WorkDelegation {
       if (this.options.environmentRoot && !this.options.environmentRoot(environmentId)) {
         throw new CoreError('ENVIRONMENT_DENIED', 'The selected work directory is no longer authorized for this Instance.')
       }
-      if (resources?.some(reference => reference.environmentId !== environmentId)) {
+      if (resources?.some(reference => reference.environmentId !== environmentId)
+        || attachments?.some(attachment => attachment.asset.environmentId !== environmentId)) {
         throw new CoreError('ENVIRONMENT_DENIED', 'The attached resources belong to a different work directory.')
       }
       const fingerprint = createHash('sha256').update(canonicalJson(['main-work-brief-v2', this.options.instanceId, request.mainId,
         request.mainSessionId, request.routerSessionId, request.mainMessageId, originalUserText, requestedItems,
-        environmentId, request.configurationRevision, request.sourceHandoffId ?? null, resources ?? [], images ?? []])).digest('hex')
+        environmentId, request.configurationRevision, request.sourceHandoffId ?? null, resources ?? [], images ?? [],
+        ...(attachments ? [attachments] : [])])).digest('hex')
       if (existing) {
-        if (existing.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'This Main delegation identity was already used for different work.')
+        if (existing.fingerprint !== fingerprint) {
+          const formerItems = requestedItems.map(({ attachmentIds: _ids, ...item }) => item)
+          const formerResources = attachments?.map(attachment => attachment.asset) ?? resources ?? []
+          const formerImages = attachments?.flatMap(attachment => attachment.image ? [attachment.image] : []) ?? images ?? []
+          const formerFingerprint = createHash('sha256').update(canonicalJson(['main-work-brief-v2', this.options.instanceId,
+            request.mainId, request.mainSessionId, request.routerSessionId, request.mainMessageId,
+            originalUserText.trim(), formerItems, environmentId, request.configurationRevision,
+            request.sourceHandoffId ?? null, formerResources, formerImages])).digest('hex')
+          if (requestedItems.length !== 1 || oldBrief?.attachments || existing.fingerprint !== formerFingerprint) {
+            throw new CoreError('IDENTITY_CONFLICT', 'This Main delegation identity was already used for different work.')
+          }
+        }
         const brief = await transaction.get<MainWorkBrief>('work-brief', existing.workBriefId)
         if (!brief) throw new CoreError('INCOMPLETE_STATE', 'The accepted WorkBrief is missing.')
         return brief
@@ -476,6 +541,7 @@ export class WorkDelegation {
       const brief: MainWorkBrief = { id, version: 1, instanceId: this.options.instanceId,
         mainId: request.mainId, mainSessionId: request.mainSessionId, routerSessionId: request.routerSessionId,
         mainMessageId: request.mainMessageId, originalUserText, ...(resources ? { resources } : {}), ...(images ? { images } : {}),
+        ...(attachments ? { attachments } : {}),
         authorization: { kind: 'authorized-main-actor', sourceInstanceId: this.options.source.sourceInstanceId, actorId: this.options.source.actorId },
         goal, constraints, acceptanceCriteria, requestedItems, sourceEventId: `main-work-source:${id}`,
         evidence: { kind: 'main-message', id: request.mainMessageId }, environmentId,
@@ -515,7 +581,8 @@ export class WorkDelegation {
     this.options.sessions.routerSessionId = brief.routerSessionId
     const tool: NativeTool = {
       name: 'establish_work_plan',
-      description: 'Decide the independent local work items for this one authorized WorkBrief and establish every missing Ticket. Each item gets a durable Engine identity, Mandate, acceptance criteria and delivery. Repeating the exact same plan reuses it; a different plan for this brief is a target conflict.',
+      description: 'Decide the independent local work items for this one authorized WorkBrief and establish every missing Ticket. Each item gets a durable Engine identity, Mandate, acceptance criteria and delivery. Repeating the exact same plan reuses it; a different plan for this brief is a target conflict.'
+        + (brief.attachments?.length ? ' For an attached request, repeat requestedItems exactly, including every attachmentId: neither rename an item nor move a grant.' : ''),
       parameters: {
         items: {
           type: 'array', required: true, items: {
@@ -524,6 +591,7 @@ export class WorkDelegation {
               goal: { type: 'string', required: true },
               constraints: { type: 'string', required: true },
               acceptanceCriteria: { type: 'string', required: true },
+              attachmentIds: { type: 'array', items: { type: 'string' } },
             },
           },
         },
@@ -545,7 +613,7 @@ export class WorkDelegation {
       result = await this.options.sessions.run({ sessionId: brief.routerSessionId, role: 'router', signal,
         stepBudget: routerStepBudget,
         onBeforeModel: async () => { await this.options.recordRouterUse(brief.routerSessionId, config) },
-        profile: structuredClone(config.roles.router), text: `Decide the independent work items for this one versioned Main WorkBrief. Preserve the one original source event. Establish each missing local Ticket and report only durable receipts.\n${JSON.stringify(brief)}`,
+        profile: structuredClone(config.roles.router), text: `Decide the independent work items for this one versioned Main WorkBrief. Preserve the one original source event. Establish each missing local Ticket and report only durable receipts.${brief.attachments?.length ? ' For this attached request, confirm requestedItems and their attachmentIds verbatim; changing the grant is rejected.' : ''}\n${JSON.stringify(brief)}`,
         tools: [tool] })
       await this.finishRouterTurn(attempt, { ...result, status: 'completed' })
     } catch (error) {
@@ -683,6 +751,9 @@ export class WorkDelegation {
   }
 
   private async persistSplit(brief: MainWorkBrief, suggestions: MainWorkIntent[]) {
+    if (brief.attachments?.length && canonicalJson(suggestions) !== canonicalJson(brief.requestedItems)) {
+      throw new CoreError('ATTACHMENT_SCOPE_AMBIGUOUS', 'Router must confirm each Main-authorized work item and its exact attachment IDs.')
+    }
     if (brief.resources?.length && suggestions.length !== 1) {
       throw new CoreError('ATTACHMENT_SCOPE_AMBIGUOUS', 'This attached request grants resources to one work item only.')
     }
@@ -1346,6 +1417,7 @@ export class WorkDelegation {
     if (!receipt) return undefined
     const cardBrief: MainWorkCardBrief = { id: brief.id, workItemId: item.id, sourceEventId: item.sourceEventId,
       position: item.position, mainMessageId: brief.mainMessageId, goal: item.goal, constraints: item.constraints, acceptanceCriteria: item.acceptanceCriteria,
+      ...(item.attachmentIds ? { attachmentIds: item.attachmentIds } : {}),
       configurationRevision: brief.configurationRevision, environmentId: brief.environmentId,
       ...(this.options.environmentRoot?.(brief.environmentId) ? { directory: this.options.environmentRoot(brief.environmentId)! } : {}),
       createdAt: brief.createdAt }

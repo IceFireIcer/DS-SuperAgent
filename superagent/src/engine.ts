@@ -669,8 +669,14 @@ export class Engine {
     if (!this.source.allowedActorIds.includes(this.source.actorId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This desktop actor cannot establish delegated work.')
     const source: Source = { kind: this.source.kind ?? 'desktop', sourceInstanceId: this.source.sourceInstanceId, actorId: this.source.actorId }
     const triggerId = JSON.stringify([this.instanceId, source.kind, source.sourceInstanceId, brief.sourceEventId, item.id, 'main-work-item'])
+    const granted = brief.attachments?.filter(attachment => item.attachmentIds?.includes(attachment.id))
+    if (brief.attachments?.length && (!item.attachmentIds
+      || granted?.length !== item.attachmentIds.length)) throw new CoreError('ATTACHMENT_SCOPE_AMBIGUOUS', 'The work item has no valid attachment grant.')
+    const resources = granted?.map(attachment => attachment.asset) ?? brief.resources ?? []
+    const images = granted?.flatMap(attachment => attachment.image ? [attachment.image] : []) ?? brief.images ?? []
+    const readableResources = granted?.map(attachment => ({ ...attachment.asset, attachmentId: attachment.id })) ?? resources
     const text = `Original Main request:\n${brief.originalUserText}\n\nGoal:\n${item.goal}\n\nConstraints:\n${item.constraints}\n\nAcceptance criteria:\n${item.acceptanceCriteria}`
-      + (brief.resources?.length ? `\n\nAttached resources for this work (read with the bound Environment's read_asset tool):\n${JSON.stringify(brief.resources)}` : '')
+      + (readableResources.length ? `\n\nAttached resources for this work (read with the bound Environment's read_asset tool; include attachmentId for each admitted resource):\n${JSON.stringify(readableResources)}` : '')
     if (Buffer.byteLength(text) > 32768) throw new CoreError('INVALID_INPUT', 'This work request is too long with its attached resource references.')
     const deliveryOrigin = brief.sourceHandoffId ? await this.storage.transaction(this.instanceId, async tx => {
       const handoff = await tx.get<MainSourceHandoff>('main-source-handoff', brief.sourceHandoffId!)
@@ -689,11 +695,11 @@ export class Engine {
     }) : undefined
     const trigger: Work['trigger'] = { id: triggerId, instanceId: this.instanceId, source, eventId: brief.sourceEventId,
       text, environmentId: brief.environmentId, target: 'local-only', targetSource: 'ticket',
-      ...(brief.images?.length ? { nativeImages: brief.images } : {}), ...(deliveryOrigin ? { deliveryOrigin } : {}) }
+      ...(images.length ? { nativeImages: images } : {}), ...(deliveryOrigin ? { deliveryOrigin } : {}) }
     const commandId = `main-work-ticket:${brief.id}:${item.id}`
-    const fingerprint = `sha256:main-work-item-v1:${createHash('sha256').update(canonicalJson([
+    const fingerprint = `sha256:main-work-item-${brief.attachments ? 'v2' : 'v1'}:${createHash('sha256').update(canonicalJson([
       this.instanceId, source, brief.sourceEventId, item.id, item.goal, item.constraints, item.acceptanceCriteria, brief.environmentId,
-      deliveryOrigin?.sourceEventId ?? null,
+      deliveryOrigin?.sourceEventId ?? null, ...(brief.attachments ? [item.attachmentIds, resources, images] : []),
     ])).digest('hex')}`
     return commandTransaction(this.storage, this.instanceId, async transaction => {
       await this.sourceEvents.requireDirectMode(transaction)
