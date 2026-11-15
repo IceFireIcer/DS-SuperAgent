@@ -6,7 +6,7 @@ import type { NativeSessions, NativeTool } from './native-sessions.js'
 import { LocalSetupError, type LocalJob, type RemoteJobObservation } from './local-environment.js'
 import { environmentCommandNames, environmentHasCommand, environmentLocation, sameEnvironment,
   type EnvironmentLocation, type ExecutionEnvironment, type PreparedEnvironment } from './environment.js'
-import { commandTransaction } from './commands.js'
+import { canonicalJson, commandTransaction } from './commands.js'
 import { deliveryMessageId, type WorkInput, type WorkInputs, type WorkOwnership } from './work-inputs.js'
 import type { Attention, Attentions } from './attention.js'
 import type { SourceEvents } from './source-events.js'
@@ -28,6 +28,7 @@ import { assertHostTakeoverSettled, hostTakeoverKey, isHostTakeoverPending, load
   type HostTakeoverTicket } from './host-takeover.js'
 import { assertReferenceShape, type EnvironmentAssetReference } from './environment-assets.js'
 import type { MainWorkBrief, MainWorkItem } from './work-delegation.js'
+import { resolveProductAttachments } from './product-attachments.js'
 
 const maxRecoveryAttempts = 3
 const maxDeliveryAttempts = 5
@@ -955,14 +956,33 @@ export class Execution {
       reference.kind === 'attachment' && reference.id === args.id && reference.sha256 === args.sha256
         && reference.bytes === Number(args.bytes) && reference.environmentId === environment?.config.id
         && reference.environmentKind === environment?.kind
+    const currentGranted = async (tx: AsyncTx, attachmentId?: string) => {
+      const link = await tx.get<{ workBriefId: string; workItemId: string }>('work-ticket', ticketId)
+      const item = link ? await tx.get<MainWorkItem>('work-item', link.workItemId) : undefined
+      const brief = item ? await tx.get<MainWorkBrief>('work-brief', item.workBriefId) : undefined
+      if (!brief?.attachments) return { item, brief, granted: [] as NonNullable<MainWorkBrief['attachments']> }
+      const granted = brief.attachments.filter(attachment => item?.attachmentIds?.includes(attachment.id)
+        && (!attachmentId || attachment.id === attachmentId))
+      if (attachmentId && !granted.length) return { item, brief, granted }
+      const owner = brief.attachmentOwner ?? { actorId: brief.authorization.actorId }
+      const resolved = await resolveProductAttachments(tx, { instanceId: this.instanceId, actorId: owner.actorId,
+        ...(owner.clientId ? { clientId: owner.clientId } : {}), environmentId: brief.environmentId,
+        ids: granted.map(attachment => attachment.id) })
+      for (let index = 0; index < granted.length; index++) {
+        const expected = granted[index]!
+        const actual = resolved.attachments[index]!
+        if (canonicalJson(expected.asset) !== canonicalJson(actual.asset)
+          || canonicalJson(expected.image ?? null) !== canonicalJson(actual.content.type === 'image' ? actual.content.attachment : null)) {
+          throw new CoreError('REFERENCE_STALE', 'The granted attachment no longer matches its original admission.')
+        }
+      }
+      return { item, brief, granted }
+    }
     const authorizeAssetRead = async (args: Record<string, string>) => {
       if (args.kind !== 'attachment') return
       await this.storage.transaction(this.instanceId, async tx => {
-        const link = await tx.get<{ workBriefId: string; workItemId: string }>('work-ticket', ticketId)
-        const item = link ? await tx.get<MainWorkItem>('work-item', link.workItemId) : undefined
-        const brief = item ? await tx.get<MainWorkBrief>('work-brief', item.workBriefId) : undefined
-        const admitted = brief?.attachments?.some(attachment => attachment.id === args.attachmentId
-          && item?.attachmentIds?.includes(attachment.id)
+        const { brief, granted } = await currentGranted(tx, args.attachmentId || '__saved_attachment__')
+        const admitted = granted.some(attachment => attachment.id === args.attachmentId
           && sameAttachment(attachment.asset, args))
           || !brief?.attachments && brief?.resources?.some(reference => sameAttachment(reference, args))
         const saved = args.attachmentId ? undefined
@@ -1036,6 +1056,7 @@ export class Execution {
       try {
         if (name === 'read_asset') await authorizeAssetRead(args)
         const output = await bound.invoke(name, args, signal)
+        if (name === 'read_asset') await authorizeAssetRead(args)
         if (name === 'save_attachment') await recordSavedAsset(output)
         const success = name !== 'run_command' && name !== 'run_shell'
           || output.exitCode === 0 && !output.cancelled && !output.truncated
@@ -1096,6 +1117,7 @@ export class Execution {
       execute: async (args: Record<string, string>, signal: AbortSignal) => {
         if (tool.name === 'read_asset') await authorizeAssetRead(args)
         const output = await bound!.invoke(tool.name, args, signal)
+        if (tool.name === 'read_asset') await authorizeAssetRead(args)
         if (tool.name === 'save_attachment') await recordSavedAsset(output)
         return JSON.stringify(output)
       },
@@ -1403,6 +1425,7 @@ export class Execution {
     let outcome
     try {
       outcome = await this.sessions.run({ sessionId: assignment.sessionId, role: 'worker',
+        ...(cause === 'launch' ? { onDelivered: async () => { await this.storage.transaction(this.instanceId, tx => currentGranted(tx)) } } : {}),
         ...(turnMessageId === undefined ? {} : { messageId: turnMessageId }),
         ...(input ? { onMessagePersisted: async (seq: number) => {
           await this.storage.transaction(this.instanceId, transaction => this.inputs.recordPersisted(transaction, input.id, turnMessageId!, seq))

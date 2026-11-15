@@ -4,6 +4,7 @@ import { CoreError, identifier } from './model.js'
 import type { AsyncTx, Storage } from './storage.js'
 import { isCurrentSourceEvent, type SourceEvent } from './source-events.js'
 import { authorizedScheduleEvent } from './product-schedules.js'
+import { sourceAttachmentView, type ProductAttachmentView, type SourceAttachment } from './product-attachments.js'
 
 export type MainSourceHandoffState = 'pending' | 'presented' | 'delegated' | 'discarded'
 
@@ -21,6 +22,10 @@ export interface MainSourceHandoff {
   addressing: SourceEvent['addressing']
   nativeVersion: SourceEvent['version']
   text: string
+  sourceActorId?: string
+  environmentId?: string
+  attachments?: SourceAttachment[]
+  attachmentViews?: ProductAttachmentView[]
   reference: string
   state: MainSourceHandoffState
   mainMessageId?: string
@@ -75,7 +80,7 @@ export class MainSourceHandoffs {
     const scheduled = event.source.kind === 'schedule' && request.authorizedBy
       ? await authorizedScheduleEvent(transaction, event, request.authorizedBy, 'main') : undefined
     if ((event.source.kind === 'schedule' ? !scheduled : event.authorKind !== 'human')
-      || event.addressing === 'ambient' || event.text === undefined || !event.text.trim()) {
+      || event.addressing === 'ambient' || event.text === undefined || !event.text.trim() && !event.attachments?.length) {
       throw new CoreError('ACTOR_NOT_ALLOWED', 'Main source work requires an addressed human request or an authorized schedule rule.')
     }
     const id = mainSourceHandoffID(event.id)
@@ -85,7 +90,9 @@ export class MainSourceHandoffs {
     const handoff: MainSourceHandoff = { id, version: 1, instanceId: this.instanceId, mainId: request.mainId,
       sourceEventId: event.id, sourceInstanceId: event.source.sourceInstanceId, threadId: event.threadId, objectId: event.objectId,
       authorId: event.authorId, authorKind: event.authorKind, addressing: event.addressing, nativeVersion: event.version,
-      text: event.text, reference, state: 'pending', createdAt: this.now(), updatedAt: this.now() }
+      text: event.text, ...(event.attachments ? { sourceActorId: event.source.actorId,
+        environmentId: event.environmentId, attachments: structuredClone(event.attachments) } : {}),
+      reference, state: 'pending', createdAt: this.now(), updatedAt: this.now() }
     await transaction.insert('main-source-handoff', id, handoff)
     await transaction.insert('main-source-command', commandKey(event.id), {
       fingerprint: createHash('sha256').update(canonicalJson(['main-source-handoff-v1', event.id, request.mainId])).digest('hex'),
@@ -124,7 +131,11 @@ export class MainSourceHandoffs {
         const page = await transaction.scan<MainSourceHandoff>('main-source-handoff', { limit: 100, ...(scanAfter === undefined ? {} : { after: scanAfter }) })
         for (const entry of page.items) if (entry.value.mainId === mainId) {
           if (items.length === limit) return { items, cursor: lastIncluded }
-          items.push(entry.value)
+          const { attachments, sourceActorId: _sourceActorId, ...visible } = entry.value
+          const attachmentViews = await Promise.all((attachments ?? []).map(async attachment =>
+            sourceAttachmentView(attachment, (await transaction.get<{ state: ProductAttachmentView['state'] }>(
+              'product-attachment', `ref:${attachment.id}`))?.state ?? 'revoked')))
+          items.push({ ...visible, ...(attachmentViews.length ? { attachmentViews } : {}) })
           lastIncluded = entry.id
         }
         scanAfter = page.cursor

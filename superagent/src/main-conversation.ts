@@ -9,6 +9,8 @@ import type { ContextRef } from './context.js'
 import type { MainWorkCard, MainWorkHandoff, MainWorkIntent, MainWorkNotification, WorkDelegation } from './work-delegation.js'
 import type { MainSourceHandoff, MainSourceView } from './main-source.js'
 import type { ProductAttachments, ProductAttachmentView } from './product-attachments.js'
+import { resolveProductAttachments } from './product-attachments.js'
+import { isCurrentSourceEvent, type SourceEvent } from './source-events.js'
 import type { EnvironmentAssetReference } from './environment-assets.js'
 
 export interface MainBinding { instanceId: string; mainId: string; mainSessionId: string; routerSessionId: string; generation: number }
@@ -569,6 +571,7 @@ export class MainConversation {
           const brief = await work.create({ commandId: `main-work:${command.messageId}`, mainId: binding.mainId,
             mainSessionId: binding.mainSessionId, routerSessionId: binding.routerSessionId, mainMessageId: command.messageId,
             originalUserText, ...(attachments?.length ? { attachments } : {}),
+            ...(command.clientId ? { attachmentClientId: command.clientId } : {}),
             ...(items ? { items } : { goal: args.goal ?? '', constraints: args.constraints ?? '', acceptanceCriteria: args.acceptanceCriteria ?? '' }),
             configurationRevision, ...(command.environmentId ? { environmentId: command.environmentId } : {}) })
           return JSON.stringify(await work.query(binding.mainId, { workBriefId: brief.id }))
@@ -630,12 +633,23 @@ export class MainConversation {
     ]
   }
 
+  private async sourceAttachments(tx: AsyncTx, handoff: MainSourceHandoff) {
+    if (!handoff.attachments?.length) return undefined
+    if (!handoff.sourceActorId || !handoff.environmentId) throw new CoreError('INCOMPLETE_STATE', 'The source attachment owner is missing.')
+    const event = await tx.get<SourceEvent>('source-event', handoff.sourceEventId)
+    if (!event || event.source.actorId !== handoff.sourceActorId || event.source.sourceInstanceId !== handoff.sourceInstanceId
+      || !await isCurrentSourceEvent(tx, event)) throw new CoreError('SOURCE_NOT_CURRENT', 'The attached source is no longer current.')
+    return resolveProductAttachments(tx, { instanceId: this.instanceId, actorId: handoff.sourceActorId,
+      environmentId: handoff.environmentId, ids: handoff.attachments.map(attachment => attachment.id), expected: handoff.attachments })
+  }
+
   private sourceTool(binding: MainBinding, handoff: MainSourceHandoff, messageId: string, configurationRevision: number): NativeTool {
     return {
       name: 'delegate_work',
       description: handoff.sourceInstanceId.startsWith('schedule:')
         ? 'Delegate this authorized scheduled occurrence within its saved rule to one to four independent work items. Do not expand its scope or send it to another audience.'
-        : 'Delegate this one authorized source request to one to four independent work items. The original source remains the default acknowledgement and result audience until a separately verified authority changes it.',
+        : 'Delegate this one authorized source request to one to four independent work items. The original source remains the default acknowledgement and result audience until a separately verified authority changes it.'
+          + (handoff.attachments?.length ? ` Assign exact attachment IDs to each item; empty items use []. Available: ${JSON.stringify(handoff.attachments.map(({ id, name }) => ({ id, name })))}.` : ''),
       parameters: {
         items: {
           type: 'array',
@@ -645,6 +659,7 @@ export class MainConversation {
               goal: { type: 'string', required: true },
               constraints: { type: 'string' },
               acceptanceCriteria: { type: 'string' },
+              attachmentIds: { type: 'array', items: { type: 'string' } },
             },
           },
         },
@@ -657,8 +672,16 @@ export class MainConversation {
         if (!work) return JSON.stringify({ status: 'rejected', code: 'DELEGATION_UNAVAILABLE', ticketCreated: false })
         const items = Array.isArray(args.items) ? args.items.map(item => {
           const value = item && typeof item === 'object' ? item as Record<string, unknown> : {}
-          return { goal: value.goal, constraints: value.constraints ?? args.constraints, acceptanceCriteria: value.acceptanceCriteria ?? args.acceptanceCriteria }
+          return { goal: value.goal, constraints: value.constraints ?? args.constraints, acceptanceCriteria: value.acceptanceCriteria ?? args.acceptanceCriteria,
+            ...(value.attachmentIds === undefined ? {} : { attachmentIds: value.attachmentIds }) }
         }) as MainWorkIntent[] : undefined
+        if (handoff.attachments?.length && items && items.length > 1 && items.some(item => !Array.isArray(item.attachmentIds))) {
+          return JSON.stringify({ status: 'rejected', code: 'ATTACHMENT_SCOPE_AMBIGUOUS', ticketCreated: false,
+            message: 'Assign each admitted source attachment explicitly to a work item.' })
+        }
+        await this.storage.transaction(this.instanceId, tx => this.sourceAttachments(tx, handoff))
+        const attachments = handoff.attachments?.map(({ id, asset, content }) => ({ id, asset,
+          ...(content.type === 'image' ? { image: content.attachment } : {}) }))
         const brief = await work.create({
           commandId: `main-source-work:${handoff.id}`,
           mainId: binding.mainId,
@@ -667,6 +690,7 @@ export class MainConversation {
           mainMessageId: messageId,
           originalUserText: handoff.text,
           sourceHandoffId: handoff.id,
+          ...(attachments?.length ? { attachments, environmentId: handoff.environmentId } : {}),
           ...(items ? { items } : { goal: args.goal ?? '', constraints: args.constraints ?? '', acceptanceCriteria: args.acceptanceCriteria ?? '' }),
           configurationRevision,
         })
@@ -693,8 +717,10 @@ export class MainConversation {
         const state = await this.state(tx)
         const sequence = state.sequence + 1
         const messageId = `main-source-message:${handoff.id}`
+        const admitted = await this.sourceAttachments(tx, handoff)
         await tx.insert<MainMessage>('main-message', messageKey(sequence), { id: messageId, sequence, role: 'user', text: handoff.text,
-          createdAt: Date.now(), status: 'running', source: { kind: handoff.sourceInstanceId.startsWith('schedule:') ? 'schedule'
+          createdAt: Date.now(), status: 'running', ...(admitted ? { attachments: admitted.views } : {}),
+          source: { kind: handoff.sourceInstanceId.startsWith('schedule:') ? 'schedule'
             : handoff.sourceInstanceId.startsWith('feishu:') ? 'feishu' : 'github', sourceInstanceId: handoff.sourceInstanceId,
             eventId: handoff.sourceEventId, objectId: handoff.objectId, threadId: handoff.threadId, authorId: handoff.authorId, reference: handoff.reference } })
         await tx.replace('main-state', 'main', { ...state, sequence })
@@ -772,16 +798,21 @@ export class MainConversation {
       }
       if (!answer) {
         const configured = await this.prepare?.(binding.mainSessionId)
-        const result = await this.sessions!.run({ role: 'main', sessionId: binding.mainSessionId, messageId: prepared.turnMessageId, signal,
-          onForkPrepared: prepareFork,
-          text: `[${handoff.sourceInstanceId.startsWith('schedule:') ? 'Scheduled occurrence'
-            : `${handoff.sourceInstanceId.startsWith('feishu:') ? 'Feishu' : 'GitHub'} request`}${prepared.attempt > 1 ? ' recovery' : ''}]\nThis is one authorized source handoff, not a private transcript. ${prepared.attempt > 1
+        const sourceContent = !persistedTurn.found ? await this.storage.transaction(this.instanceId, tx => this.sourceAttachments(tx, handoff)) : undefined
+        const prompt = `[${handoff.sourceInstanceId.startsWith('schedule:') ? 'Scheduled occurrence'
+          : `${handoff.sourceInstanceId.startsWith('feishu:') ? 'Feishu' : 'GitHub'} request`}${prepared.attempt > 1 ? ' recovery' : ''}]\nThis is one authorized source handoff, not a private transcript. ${prepared.attempt > 1
             ? 'The previous Main turn ended without a reply. Continue the same durable request and produce one safe reply; do not repeat completed side effects. '
             : 'When the request is actionable, use delegate_work and preserve the source reference. If no work is justified, explain that only in Main; no source message is sent without established work.'}\n${JSON.stringify({
               sourceEventId: handoff.sourceEventId, sourceInstanceId: handoff.sourceInstanceId, threadId: handoff.threadId, objectId: handoff.objectId,
               mainSessionGeneration: prepared.sessionGeneration,
               authorId: handoff.authorId, reference: handoff.reference, text: handoff.text,
-            })}`,
+              ...(handoff.attachments ? { attachments: handoff.attachments.map(({ id, name, kind }) => ({ id, name, kind })) } : {}),
+            })}`
+        const result = await this.sessions!.run({ role: 'main', sessionId: binding.mainSessionId, messageId: prepared.turnMessageId, signal,
+          onForkPrepared: prepareFork,
+          text: prompt,
+          ...(sourceContent ? { content: [{ type: 'text' as const, text: prompt }, ...sourceContent.content],
+            onDelivered: async () => { await this.storage.transaction(this.instanceId, tx => this.sourceAttachments(tx, handoff)) } } : {}),
           tools: [this.sourceTool(binding, handoff, prepared.messageId, configured?.revision ?? 1)],
           ...(configured ? { profile: configured.profile } : {}) })
         if (result.forkedSessionId) {
@@ -824,8 +855,10 @@ export class MainConversation {
           if (user && !rollover) await tx.replace('main-message', messageKey(command.userSequence), { ...user, status: 'failed' })
           const current = await tx.get<MainSourceHandoff>('main-source-handoff', handoff.id)
           if (current && current.state !== 'delegated' && current.state !== 'discarded') {
+            const withdrawn = error instanceof CoreError && ['ATTACHMENT_REVOKED', 'NOT_FOUND', 'REFERENCE_STALE', 'SOURCE_NOT_CURRENT'].includes(error.code)
             await tx.replace('main-source-handoff', handoff.id, { ...current,
-              lastError: rollover ? 'CONTEXT_WINDOW' : error instanceof Error ? error.message.slice(0, 1024) : 'MAIN_SOURCE_FAILED',
+              ...(withdrawn ? { state: 'discarded' as const } : {}),
+              lastError: rollover ? 'CONTEXT_WINDOW' : withdrawn ? error.code : error instanceof Error ? error.message.slice(0, 1024) : 'MAIN_SOURCE_FAILED',
               updatedAt: Date.now() })
           }
         }
@@ -880,6 +913,11 @@ export class MainConversation {
       const prepared = await this.prepare?.(current.mainSessionId)
       const result = await this.sessions!.run({ role: 'main', sessionId: current.mainSessionId, text: turnText,
         ...(!priorDelivery.found && command.content ? { content: command.content } : {}),
+        ...(!priorDelivery.found && command.attachmentIds?.length ? { onDelivered: async () => {
+          await this.storage.transaction(this.instanceId, tx => this.attachments!.resolve(tx, { instanceId: this.instanceId,
+            actorId: this.source.actorId, ...(command.clientId ? { clientId: command.clientId } : {}),
+            environmentId: command.environmentId ?? '', ids: command.attachmentIds! }))
+        } } : {}),
         tools: this.tools(current, command, text, prepared?.revision ?? 1), messageId, signal: controller.signal,
         onForkPrepared: async childSessionId => { await this.rollover(key, current, childSessionId) },
         ...(prepared ? { profile: prepared.profile } : {}) })

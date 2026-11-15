@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { canonicalJson, commandTransaction } from './commands.js'
+import { resolveProductAttachments, sourceAttachmentView, type SourceAttachment, type ProductAttachmentView } from './product-attachments.js'
 import { CoreError, identifier, type DesktopSource, type IntakeAddressing, type IntakeActorKind, type Source } from './model.js'
 import type { AsyncTx, Storage } from './storage.js'
 
@@ -16,6 +17,8 @@ export interface ReceiveSourceEvent extends SourceObjectRef {
   type: 'created' | 'edited' | 'deleted'
   version: string
   text?: string
+  attachmentIds?: string[]
+  environmentId?: string
   deletionEvidence?: string
   authorId?: string
   authorKind?: IntakeActorKind
@@ -28,6 +31,8 @@ export interface SourceEvent extends SourceObjectRef {
   type: ReceiveSourceEvent['type']
   version: { order: 'sequence' | 'opaque'; value: string }
   text?: string
+  attachments?: SourceAttachment[]
+  environmentId?: string
   deletionEvidence?: string
   authorId: string
   authorKind: IntakeActorKind
@@ -42,7 +47,9 @@ export interface SourceProjection extends SourceObjectRef {
   eventId: string
   version: SourceEvent['version']
   text?: string
+  attachments?: ProductAttachmentView[]
 }
+export type SourceEventView = Omit<SourceEvent, 'attachments'> & { attachments?: ProductAttachmentView[] }
 export interface SourceReceipt { status: 'recorded' | 'filtered'; eventId?: string; reason?: string }
 interface Reception { fingerprint: string; receipt: SourceReceipt }
 
@@ -134,8 +141,9 @@ export class SourceEvents {
         return existing.receipt
       }
       let reason: string | undefined
+      let attachments: SourceAttachment[] | undefined
       try {
-        if (Object.keys(input).some(key => !['commandId', 'threadId', 'objectId', 'type', 'version', 'text', 'deletionEvidence', 'authorId', 'authorKind', 'addressing'].includes(key))) throw new CoreError('INVALID_INPUT', 'Source identity comes from the receiving adapter.')
+        if (Object.keys(input).some(key => !['commandId', 'threadId', 'objectId', 'type', 'version', 'text', 'attachmentIds', 'environmentId', 'deletionEvidence', 'authorId', 'authorKind', 'addressing'].includes(key))) throw new CoreError('INVALID_INPUT', 'Source identity comes from the receiving adapter.')
         this.key(input)
         this.authorize(input)
         identifier(input.version, 'nativeVersion')
@@ -144,8 +152,23 @@ export class SourceEvents {
         if (!['created', 'edited', 'deleted'].includes(input.type)) throw new CoreError('INVALID_INPUT', 'Unsupported native event type.')
         if (!unverified && this.binding.versionOrder === 'sequence' && !/^(?:0|[1-9][0-9]{0,39})$/u.test(input.version)) throw new CoreError('INVALID_INPUT', 'A native sequence must be a canonical unsigned integer of at most 40 digits.')
         if (input.type === 'deleted') {
-          if (input.text !== undefined || typeof input.deletionEvidence !== 'string' || !input.deletionEvidence.trim() || Buffer.byteLength(input.deletionEvidence) > 2048) throw new CoreError('DELETE_UNVERIFIED', 'A delete requires bounded native deletion evidence and no message body.')
-        } else if (typeof input.text !== 'string' || !input.text.trim() || Buffer.byteLength(input.text) > 65536 || input.deletionEvidence !== undefined) throw new CoreError('INVALID_INPUT', 'A create or edit needs bounded text and no deletion evidence.')
+          if (input.text !== undefined || input.attachmentIds !== undefined || input.environmentId !== undefined
+            || typeof input.deletionEvidence !== 'string' || !input.deletionEvidence.trim() || Buffer.byteLength(input.deletionEvidence) > 2048) {
+            throw new CoreError('DELETE_UNVERIFIED', 'A delete requires bounded native deletion evidence and no message body.')
+          }
+        } else {
+          if (typeof input.text !== 'string' || Buffer.byteLength(input.text) > 65536 || input.deletionEvidence !== undefined
+            || !input.text.trim() && !input.attachmentIds?.length) {
+            throw new CoreError('INVALID_INPUT', 'A create or edit needs bounded text or admitted attachments and no deletion evidence.')
+          }
+          if (input.attachmentIds !== undefined || input.environmentId !== undefined) {
+            if (unverified || !input.attachmentIds?.length || !input.environmentId) {
+              throw new CoreError('INVALID_INPUT', 'Verified source attachments need an explicit Environment and admitted IDs.')
+            }
+            attachments = (await resolveProductAttachments(tx, { instanceId: this.instanceId, actorId: this.binding.actorId,
+              environmentId: input.environmentId, ids: input.attachmentIds })).attachments
+          }
+        }
       } catch (error) {
         if (!(error instanceof CoreError)) throw error
         reason = error.code
@@ -167,7 +190,8 @@ export class SourceEvents {
         const fact = { instanceId: this.instanceId, source: this.source(), threadId: input.threadId, objectId: input.objectId, type: input.type, authorId, authorKind, addressing,
           version: { order: unverified ? 'opaque' : this.binding.versionOrder ?? 'opaque', value: input.version },
           ...(unverified ? { versionVerified: false as const } : {}),
-          ...(input.text !== undefined ? { text: input.text } : {}), ...(input.deletionEvidence !== undefined ? { deletionEvidence: input.deletionEvidence } : {}) }
+          ...(input.text !== undefined ? { text: input.text } : {}), ...(attachments ? { attachments, environmentId: input.environmentId } : {}),
+          ...(input.deletionEvidence !== undefined ? { deletionEvidence: input.deletionEvidence } : {}) }
         const eventId = `${objectKey}:${createHash('sha256').update(canonicalJson(fact)).digest('hex')}`
         const event: SourceEvent = { id: eventId, ...fact }
         if (!await tx.get('source-event', eventId)) {
@@ -192,8 +216,8 @@ export class SourceEvents {
     if (current?.state === 'unknown') {
       const prior = await tx.get<SourceEvent>('source-event', current.eventId)
       if (prior?.versionVerified !== false) {
-        const { text: _text, ...withoutText } = current
-        return { ...withoutText, state: 'unknown' }
+        const { text: _text, attachments: _attachments, ...withoutContent } = current
+        return { ...withoutContent, state: 'unknown' }
       }
       // A later verified native observation is the resolution for an unversioned quarantine.
       current = undefined
@@ -202,28 +226,41 @@ export class SourceEvents {
       state: 'deleted', eventId: event.id, version: event.version }
     if (current) {
       if (current.state === 'unknown' || current.version.order !== event.version.order || current.version.order === 'opaque' && current.version.value !== event.version.value) {
-        const { text: _text, ...withoutText } = current
-        return { ...withoutText, state: 'unknown' }
+        const { text: _text, attachments: _attachments, ...withoutContent } = current
+        return { ...withoutContent, state: 'unknown' }
       }
       if (current.version.order === 'sequence' && BigInt(current.version.value) > BigInt(event.version.value)) return current
       if (current.version.value === event.version.value) {
         const original = await tx.get<SourceEvent>('source-event', current.eventId)
         if (!original) throw new CoreError('INCOMPLETE_STATE', 'The current projection is missing its immutable event.')
-        if (current.state === 'conflict' || original.text !== event.text || original.type !== event.type || original.source.actorId !== event.source.actorId) {
-          const { text: _text, ...withoutText } = current
-          return { ...withoutText, state: 'conflict' }
+        if (current.state === 'conflict' || original.text !== event.text || original.type !== event.type
+          || canonicalJson(original.attachments ?? []) !== canonicalJson(event.attachments ?? [])
+          || original.source.actorId !== event.source.actorId) {
+          const { text: _text, attachments: _attachments, ...withoutContent } = current
+          return { ...withoutContent, state: 'conflict' }
         }
         return current
       }
     }
     return { id: objectKey, instanceId: this.instanceId, source: event.source, threadId: event.threadId, objectId: event.objectId,
-      state: 'current', eventId: event.id, version: event.version, ...(event.text === undefined ? {} : { text: event.text }) }
+      state: 'current', eventId: event.id, version: event.version, ...(event.text === undefined ? {} : { text: event.text }),
+      ...(event.attachments ? { attachments: event.attachments.map(attachment => sourceAttachmentView(attachment)) } : {}) }
+  }
+
+  private async attachmentState(tx: AsyncTx, id: string): Promise<ProductAttachmentView['state']> {
+    return (await tx.get<{ state: ProductAttachmentView['state'] }>('product-attachment', `ref:${id}`))?.state ?? 'revoked'
   }
 
   get(ref: SourceObjectRef): Promise<SourceProjection | undefined> {
     const key = this.key(ref)
     this.authorize(ref)
-    return this.storage.transaction(this.instanceId, tx => tx.get('source-object', key))
+    return this.storage.transaction(this.instanceId, async tx => {
+      const projection = await tx.get<SourceProjection>('source-object', key)
+      if (!projection?.attachments) return projection
+      return { ...projection, attachments: await Promise.all(projection.attachments.map(async attachment => ({
+        ...attachment, state: await this.attachmentState(tx, attachment.id),
+      }))) }
+    })
   }
 
 
@@ -234,6 +271,7 @@ export class SourceEvents {
     if (!projection || projection.state !== 'current') return undefined
     const event = await tx.get<SourceEvent>('source-event', projection.eventId)
     if (!event || event.type === 'deleted' || event.text === undefined) throw new CoreError('INCOMPLETE_STATE', 'The current source candidate is missing its immutable content.')
+    if (event.attachments?.length) throw new CoreError('ATTACHMENT_SCOPE_AMBIGUOUS', 'Attached source work must enter Main for explicit per-item authorization.')
     return event
   }
 
@@ -251,7 +289,12 @@ export class SourceEvents {
     return this.storage.transaction(this.instanceId, async tx => {
       const page = await tx.scan<SourceEvent>('source-event', { limit: limit + 1, after: options.after ?? prefix })
       const matching = page.items.filter(item => item.id.startsWith(prefix))
-      return { items: matching.slice(0, limit).map(item => item.value), ...(matching.length > limit ? { cursor: matching[limit - 1]!.id } : {}) }
+      const items: SourceEventView[] = await Promise.all(matching.slice(0, limit).map(async item => {
+        const { attachments, ...event } = item.value
+        return { ...event, ...(attachments ? { attachments: await Promise.all(attachments.map(async attachment =>
+          sourceAttachmentView(attachment, await this.attachmentState(tx, attachment.id)))) } : {}) }
+      }))
+      return { items, ...(matching.length > limit ? { cursor: matching[limit - 1]!.id } : {}) }
     })
   }
 

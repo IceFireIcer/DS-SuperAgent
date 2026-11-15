@@ -279,6 +279,7 @@ export class WorkInputs {
   }
 
   async recordFanout(tx: AsyncTx, event: SourceEvent): Promise<WorkFanout> {
+    if (event.attachments?.length) throw new CoreError('ATTACHMENT_SCOPE_AMBIGUOUS', 'Attached source follow-ups need a separately authorized work-item grant.')
     const key = fanoutKey(event.id)
     const prior = await tx.get<WorkFanout>('work-fanout', key)
     if (prior) return prior
@@ -463,6 +464,7 @@ export class WorkInputs {
   /** The owning Engine has verified both grants and the native event; this grants ownership of only that event. */
   async attachAssociated(tx: AsyncTx, ticketId: string, event: SourceEvent, association: CrossSourceAssociation,
     options: { schedule?: boolean } = {}) {
+    if (event.attachments?.length) throw new CoreError('ATTACHMENT_SCOPE_AMBIGUOUS', 'An attached source event cannot become a text-only Worker input.')
     const ticket = options.schedule ? await tx.get<Work['ticket']>('ticket', ticketId) : await this.authorizedTicket(tx, ticketId)
     if (!ticket) throw new CoreError('NOT_FOUND', 'The Ticket does not exist.')
     if (ticket.constraint) throw new CoreError('TICKET_BLOCKED', 'Resolve the Ticket constraint before associating cross-source input.')
