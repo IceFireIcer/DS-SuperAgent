@@ -4,9 +4,13 @@ import { CoreError, identifier } from './model.js'
 import { NativeSessions } from './native-sessions.js'
 import { SqliteStorage } from './storage.js'
 import { LocalEnvironment } from './local-environment.js'
+import { FeishuRuntime, type FeishuRuntimeOptions } from './feishu-runtime.js'
+import { localDeliveryChannel, type DeliveryChannel } from './deliveries.js'
 import type { RoleConfig, RoleModel } from './config.js'
 
-export interface ProductHostConfig { databasePath: string; workspaceRoot?: string; instanceId?: string; actorId?: string; main?: RoleModel; router?: RoleModel; worker?: RoleModel; timeoutMs?: number }
+export interface ProductHostConfig { databasePath: string; workspaceRoot?: string; instanceId?: string; actorId?: string; main?: RoleModel; router?: RoleModel; worker?: RoleModel; timeoutMs?: number;
+  /** Supplied by a trusted Host, never by the window or a model turn. */
+  feishu?: Omit<FeishuRuntimeOptions, 'storage' | 'instanceId' | 'mainIntake'> }
 export interface ProductHost {
   dispatch(endpoint: string, payload?: Record<string, unknown>): Promise<unknown>
   close(): Promise<void>
@@ -43,6 +47,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
   const storage = await SqliteStorage.open(config.databasePath)
   let environment: LocalEnvironment | undefined
   let engine: Engine | undefined
+  let feishuRuntime: FeishuRuntime | undefined
+  let feishuEngine: Engine | undefined
   let closing: Promise<void> | undefined
   let scheduleTimer: ReturnType<typeof setInterval> | undefined
   const publicLlm = () => context.get('llm') as unknown as PublicLlm
@@ -130,7 +136,13 @@ export async function createProductHost(context: Context, config: ProductHostCon
   }
   async function dispose() {
     if (scheduleTimer) clearInterval(scheduleTimer)
-    try { await engine?.effects.stop(); await engine?.shutdown() }
+    try {
+      await feishuRuntime?.stop()
+      await engine?.effects.stop()
+      await feishuEngine?.effects.stop()
+      await engine?.shutdown()
+      await feishuEngine?.shutdown()
+    }
     finally { try { await sessions.close() } finally { try { await environment?.close() } finally { await storage.close() } } }
   }
   try {
@@ -138,14 +150,30 @@ export async function createProductHost(context: Context, config: ProductHostCon
       environment = await LocalEnvironment.open({ id: 'product-workspace', instanceId, root: config.workspaceRoot,
         allowedActorIds: [actorId], permissions: ['read', 'write'], commands: {} })
     }
+    if (config.feishu) {
+      feishuRuntime = new FeishuRuntime({ ...config.feishu, storage, instanceId, mainIntake: true })
+      feishuEngine = new Engine(storage, instanceId, feishuRuntime.sourceBinding, {}, sessions)
+      feishuRuntime.bind(feishuEngine)
+    }
+    const channel: DeliveryChannel | undefined = feishuRuntime ? {
+      deliver: (delivery, context) => delivery.destination.sourceInstanceId === feishuRuntime!.sourceBinding.sourceInstanceId
+        ? feishuRuntime!.channel.deliver(delivery, context)
+        : delivery.destination.sourceInstanceId === 'product-desktop' ? localDeliveryChannel.deliver(delivery, context)
+          : Promise.resolve({ type: 'permanent', reason: 'DESTINATION_SOURCE_DISABLED' }),
+      reconcile: (delivery, context) => delivery.destination.sourceInstanceId === feishuRuntime!.sourceBinding.sourceInstanceId
+        ? feishuRuntime!.channel.reconcile(delivery, context)
+        : delivery.destination.sourceInstanceId === 'product-desktop' ? localDeliveryChannel.deliver(delivery, context)
+          : Promise.resolve({ type: 'permanent', reason: 'DESTINATION_SOURCE_DISABLED' }),
+    } : undefined
     engine = new Engine(storage, instanceId, { sourceInstanceId: 'product-desktop', actorId, allowedActorIds: [actorId] }, {}, sessions,
-      environment ? [environment] : [])
+      environment ? [environment] : [], {}, {}, {}, channel ? { channel } : {})
     await engine.acquireHost()
     await engine.openMain({ instanceId })
     engine.effects.start()
     void engine.tickSchedules().catch(() => { /* Rules and failed occurrences remain available for the next check. */ })
     scheduleTimer = setInterval(() => { void engine?.tickSchedules().catch(() => {}) }, 30_000)
     scheduleTimer.unref()
+    if (feishuRuntime) void feishuRuntime.start().catch(() => { /* Health retains the setup failure; Main stays available. */ })
     void engine.resumeMainInputs({ instanceId }).catch(() => { /* The persisted input and failed health remain visible for retry. */ })
     return {
       async dispatch(endpoint, payload = {}) {
@@ -159,10 +187,11 @@ export async function createProductHost(context: Context, config: ProductHostCon
         const fields = endpoint === 'schedule-list' ? ['instanceId']
           : endpoint === 'schedule-source-read' ? ['instanceId']
             : endpoint === 'schedule-source-set' ? ['instanceId', 'commandId', 'enabled']
-          : endpoint === 'schedule-read' ? ['instanceId', 'ruleId']
-            : endpoint === 'schedule-create' ? ['instanceId', 'commandId', 'title', 'text', 'timezone', 'when', 'target']
-              : endpoint === 'schedule-cancel' ? ['instanceId', 'commandId', 'ruleId']
-                : endpoint === 'send' ? ['instanceId', 'commandId', 'text']
+            : endpoint === 'schedule-read' ? ['instanceId', 'ruleId']
+              : endpoint === 'schedule-create' ? ['instanceId', 'commandId', 'title', 'text', 'timezone', 'when', 'target']
+                : endpoint === 'schedule-cancel' ? ['instanceId', 'commandId', 'ruleId']
+                  : endpoint === 'send' ? ['instanceId', 'commandId', 'text']
+          : endpoint === 'feishu-status' || endpoint === 'feishu-start' || endpoint === 'feishu-stop' ? ['instanceId']
           : endpoint === 'stop-main' ? ['instanceId', 'commandId', 'messageId']
             : endpoint === 'work-stop'
               ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'expectedTicketVersion', 'reason']
@@ -195,6 +224,18 @@ export async function createProductHost(context: Context, config: ProductHostCon
           target: payload.target as import('./product-schedules.js').ScheduleTarget })
         if (endpoint === 'schedule-cancel') return engine!.cancelSchedule({ instanceId,
           commandId: payload.commandId as string, ruleId: payload.ruleId as string })
+        if (endpoint === 'feishu-status' || endpoint === 'feishu-start' || endpoint === 'feishu-stop') {
+          if (!feishuRuntime) {
+            if (endpoint === 'feishu-status') return { configured: false, state: 'unavailable' }
+            throw new CoreError('UNAVAILABLE', 'No Feishu source is configured for this product Host.')
+          }
+          if (endpoint === 'feishu-start' && !['setup', 'polling'].includes(feishuRuntime.health().state)) {
+            await feishuRuntime.stop()
+            await feishuRuntime.start()
+          }
+          if (endpoint === 'feishu-stop') await feishuRuntime.stop()
+          return { configured: true, sourceInstanceId: feishuRuntime.sourceBinding.sourceInstanceId, ...feishuRuntime.health() }
+        }
         if (endpoint === 'history') {
           if (payload.after !== undefined && payload.before !== undefined) throw new CoreError('INVALID_INPUT', 'Main history accepts one direction cursor.')
           if (payload.after !== undefined) return engine!.getMainConversation({ instanceId, after: payload.after as number,

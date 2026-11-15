@@ -24,6 +24,7 @@ export interface FeishuRuntimeOptions {
   selfActorIds: string[]
   allowedActorIds: string[]
   intake?: IntakePolicy
+  mainIntake?: boolean
   api: FeishuApiOptions
   intervalMs?: number
   pollTimeoutMs?: number
@@ -66,7 +67,8 @@ export class FeishuRuntime {
     this.options = { ...structuredClone(configuration), storage, api: { ...api }, ...(intake ? { intake: { ...intake } } : {}) }
     this.setupTimeoutMs = options.setupTimeoutMs ?? 60000
     if (!Number.isInteger(this.setupTimeoutMs) || this.setupTimeoutMs < 1000 || this.setupTimeoutMs > 300000) throw new CoreError('INVALID_CONFIG', 'Feishu setup is bounded at 1–300 seconds.')
-    this.config = { tenantKey: options.tenantKey, chatIds: [...options.chatIds], selfActorIds: [...new Set([...options.selfActorIds, api.appId])] }
+    this.config = { tenantKey: options.tenantKey, chatIds: [...options.chatIds], selfActorIds: [...new Set([...options.selfActorIds, api.appId])],
+      mainIntake: options.mainIntake === true }
     const threads = options.chatIds.map(id => `feishu:${options.tenantKey}:${id}`)
     const clonedIntake = cloneIntake(intake)
     this.sourceBinding = { kind: 'feishu', sourceInstanceId: `feishu:${options.tenantKey}:${[...options.chatIds].sort().join(',')}:app:${api.appId}`,
@@ -267,11 +269,13 @@ class FeishuRuntimeSource extends FeishuSource {
       const prior = await this.runtimeEngine.getSourceReceipt(commandId)
       if (prior) receipt = { status: 'filtered', reason: 'SOURCE_REPLAY' }
       else {
-        receipt = await this.runtimeEngine.receiveSource({ commandId, threadId, objectId: `message:${event.messageId}`,
+        const input = { commandId, threadId, objectId: `message:${event.messageId}`,
           type: event.deleted ? 'deleted' : event.edited ? 'edited' : 'created', version: event.updateTime ?? '0',
           ...(event.deleted ? { deletionEvidence: event.deletionEvidence ?? `Feishu recalled message ${event.messageId}.` } : { text: event.text ?? '' }),
           authorId: event.senderId, authorKind: event.senderKind ?? 'human',
-          addressing })
+          addressing } as const
+        receipt = this.scope.mainIntake && input.authorKind === 'human' && addressing !== 'ambient' && !event.deleted
+          ? await this.runtimeEngine.receiveSourceForMain(input) : await this.runtimeEngine.receiveSource(input)
       }
     }
     const key = JSON.stringify(['channel-cursor', this.sourceInstanceId])

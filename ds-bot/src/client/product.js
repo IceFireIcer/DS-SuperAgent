@@ -1,6 +1,7 @@
 import { Fragment, createElement as h, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { ChatRows } from './cells.js'
 import { MainComposer } from './composer.js'
+import { FeishuSourceStatus } from './product-feishu.js'
 import { BrandMark } from './sidebar.js'
 import { Card, Row } from './bot-settings.js'
 import { ClockIcon, CloseIcon, SlidersIcon } from './icons.js'
@@ -386,8 +387,9 @@ export function applyProduct(ctx) {
       finally { setReconciling(null) }
     }
     const scheduled = source.sourceInstanceId.startsWith('schedule:')
-    return h('article', { className: 'bt-main-source', 'aria-label': t(scheduled ? 'Scheduled occurrence' : 'GitHub source request') },
-      h('div', { className: 'bt-main-work-head' }, h('strong', null, t(scheduled ? 'Scheduled occurrence' : 'GitHub request')),
+    const feishu = source.sourceInstanceId.startsWith('feishu:')
+    return h('article', { className: 'bt-main-source', 'aria-label': t(scheduled ? 'Scheduled occurrence' : feishu ? 'Feishu source request' : 'GitHub source request') },
+      h('div', { className: 'bt-main-work-head' }, h('strong', null, t(scheduled ? 'Scheduled occurrence' : feishu ? 'Feishu request' : 'GitHub request')),
         h('span', { className: 'bt-main-work-status', role: 'status' }, sourceStatusCopy(source.state))),
       h('p', { className: 'bt-main-work-detail' }, `${source.objectId} · @${source.authorId}`),
       h('p', { className: 'bt-main-work-detail' }, source.text),
@@ -405,7 +407,7 @@ export function applyProduct(ctx) {
         receiptCursor ? h('button', { type: 'button', className: 'bt-soft', disabled: receiptsBusy,
           onClick: () => void loadEarlierReceipts() }, receiptsBusy ? t('Loading…') : t('Load earlier receipts')) : null,
         receiptsError ? h('p', { className: 'bt-main-error', role: 'status' }, receiptsError) : null) : null,
-      source.conditions.length ? h('div', { className: 'bt-main-source-deliveries', 'aria-label': t('Pull request conditions') },
+      !feishu && source.conditions.length ? h('div', { className: 'bt-main-source-deliveries', 'aria-label': t('Pull request conditions') },
         source.conditions.map(condition => h('p', { key: `${condition.ticketId}:${condition.number}`, className: 'bt-main-work-detail' },
           `#${condition.number}: ${conditionCopy(condition.state)}${condition.reason ? ` · ${condition.reason}` : ''}`))) : null)
   }
@@ -483,11 +485,12 @@ export function applyProduct(ctx) {
               : h('div', null,
                 message.source ? h('p', { className: 'bt-main-source-label' },
                   message.source.kind === 'schedule' ? `${t('Scheduled occurrence')} · ${message.source.objectId}`
-                    : `${t('GitHub')} · @${message.source.authorId} · ${message.source.objectId}`) : null,
+                    : `${t(message.source.kind === 'feishu' ? 'Feishu' : 'GitHub')} · @${message.source.authorId} · ${message.source.objectId}`) : null,
                 h(ChatRows, { items: [{ kind: message.role === 'main' ? 'bot' : 'user', text: message.text, time: message.createdAt }],
                   sessionId: 'main', roster: emptyRoster, actions: {} }),
                 message.status === 'failed' ? h('p', { className: 'bt-main-error', role: 'status' },
                   t('Main could not finish this reply. Your message is saved.')) : null))),
+          h(FeishuSourceStatus, { instanceId: state.binding?.instanceId, call: productCall }),
           state.sources.map(source => h(MainSourceCard, { key: source.id, source, instanceId: state.binding?.instanceId, onRefresh: refresh })),
           state.works.map(work => h(MainWorkCard, { key: work.brief.workItemId ?? work.brief.id, work,
             onEvidence: selected => { if (state.binding) void loadMainEvidence(state.binding, selected) } })),
