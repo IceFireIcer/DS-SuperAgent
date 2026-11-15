@@ -118,6 +118,14 @@ test('the Feishu runtime polls a native discussion into the same Main and stops 
   assert.ok(runtime.health().passes >= 1)
   await runtime.stop()
   assert.equal(runtime.health().state, 'stopped')
+  await runtime.start()
+  for (let attempt = 0; attempt < 40 && runtime.health().passes === 0; attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 25))
+  }
+  assert.ok(runtime.health().passes >= 1)
+  assert.equal((await engine.getMainSources({ instanceId: 'private' })).items.length, 1,
+    'reconnecting the same native source does not duplicate its Main handoff')
+  await runtime.stop()
 })
 
 test('Main delegates a Feishu discussion and the original thread receives the bounded result', { timeout: 25000 }, async t => {
