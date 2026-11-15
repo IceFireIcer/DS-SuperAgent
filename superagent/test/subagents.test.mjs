@@ -456,3 +456,38 @@ test('a stop that cannot confirm the child stays stopping instead of claiming th
     await sleep(300)
   }
 })
+
+test('closing a stopped child keeps its claim until the cancellation fact commits', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-subagents-stop-claim-'))
+  let storage
+  t.after(async () => { await storage?.close(); await rm(directory, { recursive: true, force: true }) })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  const subagents = new core.Subagents({}, storage, 'private', 'this-runtime')
+  await subagents.stopChildren(['child'])
+  await subagents.close('child', true)
+  assert.equal(subagents.claimed.has('child'), true)
+  await subagents.finishStopped(['child'])
+  assert.equal(subagents.claimed.has('child'), false)
+})
+
+test('subagent history returns the actual newest records after the thousandth key', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-subagents-history-'))
+  let storage
+  t.after(async () => { await storage?.close(); await rm(directory, { recursive: true, force: true }) })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  const subagents = new core.Subagents({}, storage, 'private', 'this-runtime')
+  const ticketId = 'ticket'
+  const prefix = JSON.stringify(['subagent', ticketId])
+  await storage.transaction('private', async transaction => {
+    for (let index = 0; index <= 1000; index++) {
+      const id = `history-${String(index).padStart(4, '0')}`
+      await transaction.insert('subagent', `${prefix}:${id}`, { id, ticketId, assignmentId: 'assignment', generation: 'generation',
+        mandateId: 'mandate', environmentId: 'project', sessionId: `session-${id}`, task: 'work', state: 'completed',
+        startedAt: index, runtimeToken: 'earlier-runtime' })
+    }
+  })
+  const listed = await storage.transaction('private', transaction => subagents.listIn(transaction, ticketId))
+  assert.equal(listed.length, 100)
+  assert.equal(listed.at(-1).id, 'history-1000')
+  assert.equal(listed[0].id, 'history-0901')
+})

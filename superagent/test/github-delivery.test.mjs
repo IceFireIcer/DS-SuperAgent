@@ -92,6 +92,28 @@ test('GitHub unknown reconciliation never reposts, trusts a foreign marker, chan
   assert.equal(posts.length, 0)
 })
 
+test('a read-only preflight failure is transient and the first POST can still happen later', async t => {
+  const { channel, transport, posts } = await fixture(t)
+  transport.getActor = async () => { throw new Error('Temporary network failure.') }
+  assert.deepEqual(await channel.deliver(delivery, context), { type: 'transient', reason: 'GITHUB_PREFLIGHT_TRANSIENT' })
+  assert.equal(posts.length, 0)
+  assert.equal(await channel.getReceipt(context.idempotencyKey), undefined)
+
+  transport.getActor = async () => 'agent'
+  const listComments = transport.listComments
+  let attempts = 0
+  transport.listComments = async request => {
+    if (attempts++ === 0) throw new core.CoreError('GITHUB_HTTP_503', 'Temporary service failure.')
+    return listComments(request)
+  }
+  assert.deepEqual(await channel.deliver(delivery, context), { type: 'transient', reason: 'GITHUB_HTTP_503' })
+  assert.equal(posts.length, 0)
+
+  assert.deepEqual(await channel.deliver(delivery, context), { type: 'success' })
+  assert.equal(posts.length, 1)
+  assert.equal((await channel.getReceipt(context.idempotencyKey)).messageId, '9001')
+})
+
 test('GitHub refuses forged receipts and mismatched posting actors before any outbound write', async t => {
   const { channel, transport, comments, posts } = await fixture(t, { lost: true })
   assert.equal((await channel.deliver(delivery, context)).type, 'unknown')

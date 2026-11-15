@@ -25,6 +25,7 @@ export const UPDATE_TEXT = {
 }
 
 const CHECK_EVERY_MS = 4 * 60 * 60_000
+const CHECK_TIMEOUT_MS = 60_000
 export const RELEASES_URL = 'https://api.github.com/repos/Fei2411/DS-Bot/releases?per_page=20'
 
 function parseVersion(version) {
@@ -99,24 +100,47 @@ function stateHolder(log) {
 
 // `asset` names the release asset of this install (default: the macOS zip); a release without
 // it does not count.
-export function watchReleases({ current, arch, fetch = globalThis.fetch, ask, open, feed = RELEASES_URL, log = console, asset }) {
+export function watchReleases({ current, arch, fetch = globalThis.fetch, ask, open, feed = RELEASES_URL, log = console, asset, timeout = CHECK_TIMEOUT_MS }) {
   const assetName = asset ?? (version => `DS-Bot-${version}-mac-${arch}.zip`)
   let asked
   let latest = Promise.resolve(null)
+  let stopped = false
+  let controller
+  const runs = new Set()
+  let sequence = 0
   const holder = stateHolder(log)
   const run = () => {
+    if (stopped) return
+    const runId = ++sequence
+    const signal = new AbortController()
+    controller = signal
     holder.set({ phase: 'checking' })
-    latest = (async () => {
+    let finish
+    const stoppedRun = new Promise((resolve) => { finish = () => resolve(null) })
+    const active = { finish }
+    runs.add(active)
+    const live = () => !stopped && !signal.signal.aborted && sequence === runId
+    const deadline = setTimeout(() => {
+      if (!live()) return
+      sequence += 1
+      log.error('DS Bot: update check failed: timed out')
+      holder.set({ phase: 'failed' })
+      signal.abort(new Error('the update check timed out'))
+    }, timeout)
+    const check = (async () => {
       try {
         const response = await fetch(feed, {
           headers: { accept: 'application/vnd.github+json', 'user-agent': `DS-Bot/${current}` },
+          signal: signal.signal,
         })
+        if (!live()) return null
         if (!response.ok) {
           log.error(`DS Bot: update check failed: HTTP ${String(response.status)}`)
           holder.set({ phase: 'failed' })
           return null
         }
         const releases = await response.json()
+        if (!live()) return null
         if (!Array.isArray(releases)) {
           log.error('DS Bot: update check failed: releases response is not an array')
           holder.set({ phase: 'failed' })
@@ -145,23 +169,37 @@ export function watchReleases({ current, arch, fetch = globalThis.fetch, ask, op
         if (ask !== undefined && asked !== found.version) {
           asked = found.version
           void Promise.resolve().then(() => ask(found.version))
-            .then(yes => (yes ? open(found.page) : undefined))
+            .then(yes => (!stopped && yes ? open(found.page) : undefined))
             .catch((error) => { log.error(`DS Bot: update ${found.version} not opened: ${error instanceof Error ? error.message : String(error)}`) })
         }
         holder.set({ phase: 'available', version: found.version, page: found.page })
         return found
       } catch (error) {
+        if (!live()) return null
         log.error(`DS Bot: update check failed: ${error instanceof Error ? error.message : String(error)}`)
         holder.set({ phase: 'failed' })
         return null
       }
     })()
+    latest = Promise.race([check, stoppedRun]).finally(() => {
+      clearTimeout(deadline)
+      runs.delete(active)
+      if (controller === signal) controller = undefined
+    })
   }
   // A check runs at once and then on the timer; a manual one only starts when none is on.
-  const check = () => { if (!UPDATE_BUSY.has(holder.state().phase)) run() }
+  const check = () => { if (!stopped && !UPDATE_BUSY.has(holder.state().phase)) run() }
   run()
   const timer = setInterval(check, CHECK_EVERY_MS)
-  return { stop: () => { clearInterval(timer) }, latest: () => latest, state: holder.state, subscribe: holder.subscribe, check }
+  const stop = () => {
+    if (stopped) return
+    stopped = true
+    sequence += 1
+    clearInterval(timer)
+    controller?.abort(new Error('the update check stopped'))
+    for (const run of runs) run.finish()
+  }
+  return { stop, latest: () => latest, state: holder.state, subscribe: holder.subscribe, check }
 }
 
 /**
@@ -170,10 +208,12 @@ export function watchReleases({ current, arch, fetch = globalThis.fetch, ask, op
  *   beforeInstall: () => Promise<void>,
  *   ask?: (version: string) => Promise<boolean>,
  *   feed?: string,
+ *   timeout?: number,
  *   log?: Pick<Console, 'info' | 'error'>,
  * }} options `ask` answers whether to restart now; without it the update waits for the next
  *   quit. `beforeInstall` stops the Host, which runs from the files the installer replaces.
- *   `feed` is a folder URL with a latest.yml, in place of the GitHub releases.
+ *   `feed` is a folder URL with a latest.yml, in place of the GitHub releases. A check that
+ *   takes longer than `timeout` fails, so that a later check can run.
  * @returns {{
  *   stop: () => void,
  *   latest: () => Promise<{ version: string, downloaded: Promise<boolean> } | null>,
@@ -186,49 +226,88 @@ export function watchReleases({ current, arch, fetch = globalThis.fetch, ask, op
  *   the phase the About row shows; `check` runs the same check the timer does and does
  *   nothing while a check, a download or a ready install is on.
  */
-export function watchUpdates({ updater, beforeInstall, ask, feed, log = console }) {
+export function watchUpdates({ updater, beforeInstall, ask, feed, log = console, timeout = CHECK_TIMEOUT_MS }) {
   updater.autoDownload = true
   updater.autoInstallOnAppQuit = true
   if (feed) updater.setFeedURL({ provider: 'generic', url: feed })
   const holder = stateHolder(log)
+  let stopped = false
+  let accepting = true
+  const runs = new Set()
+  let sequence = 0
   const install = async () => {
     await beforeInstall()
     updater.quitAndInstall(true, true)
   }
   let asked
-  updater.on('checking-for-update', () => { holder.set({ phase: 'checking' }) })
-  updater.on('update-not-available', () => { holder.set({ phase: 'current' }) })
-  updater.on('update-available', (info) => { holder.set({ phase: 'downloading', version: info?.version }) })
+  const report = (next) => { if (!stopped && accepting) holder.set(next) }
+  updater.on('checking-for-update', () => { report({ phase: 'checking' }) })
+  updater.on('update-not-available', () => { report({ phase: 'current' }) })
+  updater.on('update-available', (info) => { report({ phase: 'downloading', version: info?.version }) })
   updater.on('update-downloaded', ({ version }) => {
+    if (stopped || !accepting) return
     log.info(`DS Bot: update ${version} downloaded`)
     holder.set({ phase: 'downloaded', version })
     if (ask === undefined || asked === version) return
     asked = version
-    void ask(version).then(now => (now ? install() : undefined))
+    void ask(version).then(now => (!stopped && now ? install() : undefined))
       .catch((error) => { log.error(`DS Bot: update ${version} not installed: ${error instanceof Error ? error.message : String(error)}`) })
   })
   // A downloaded update stays ready: a later failed check does not hide it.
   updater.on('error', (error) => {
+    if (stopped) return
     log.error(`DS Bot: update failed: ${error instanceof Error ? error.message : String(error)}`)
-    if (holder.state().phase !== 'downloaded') holder.set({ phase: 'failed' })
+    if (accepting && holder.state().phase !== 'downloaded') holder.set({ phase: 'failed' })
   })
   let latest = Promise.resolve(null)
   // A failed check or download also comes as an 'error' event.
   // The events normally move the phase; a check that settles without one must not leave it
   // on `checking`, or the busy guard would also stop the timer's checks.
-  const settled = (next) => { if (holder.state().phase === 'checking') holder.set(next) }
+  const settled = (next) => { if (accepting && holder.state().phase === 'checking') holder.set(next) }
   const run = () => {
-    latest = updater.checkForUpdates().then((result) => {
+    if (stopped) return
+    accepting = true
+    const runId = ++sequence
+    let finish
+    const stoppedRun = new Promise((resolve) => { finish = () => resolve(null) })
+    const active = { finish }
+    runs.add(active)
+    const live = () => !stopped && accepting && sequence === runId
+    const deadline = setTimeout(() => {
+      if (!live()) return
+      sequence += 1
+      accepting = false
+      log.error('DS Bot: update check failed: timed out')
+      holder.set({ phase: 'failed' })
+      finish?.()
+    }, timeout)
+    const check = updater.checkForUpdates().then((result) => {
+      if (!live()) return null
       if (result?.isUpdateAvailable && result.downloadPromise) {
         settled({ phase: 'downloading', version: result.updateInfo.version })
         return { version: result.updateInfo.version, downloaded: result.downloadPromise.then(() => true, () => false) }
       }
       settled({ phase: 'current' })
       return null
-    }, () => { settled({ phase: 'failed' }); return null })
+    }, () => {
+      if (live()) settled({ phase: 'failed' })
+      return null
+    })
+    latest = Promise.race([check, stoppedRun]).finally(() => {
+      clearTimeout(deadline)
+      runs.delete(active)
+    })
   }
-  const check = () => { if (!UPDATE_BUSY.has(holder.state().phase)) run() }
+  const check = () => { if (!stopped && !UPDATE_BUSY.has(holder.state().phase)) run() }
   run()
   const timer = setInterval(check, CHECK_EVERY_MS)
-  return { stop: () => { clearInterval(timer) }, latest: () => latest, install, state: holder.state, subscribe: holder.subscribe, check }
+  const stop = () => {
+    if (stopped) return
+    stopped = true
+    sequence += 1
+    accepting = false
+    clearInterval(timer)
+    for (const run of runs) run.finish()
+  }
+  return { stop, latest: () => latest, install, state: holder.state, subscribe: holder.subscribe, check }
 }

@@ -1,0 +1,38 @@
+flowchart TB
+  subgraph old["DS Bot：长期身份与成员协作（现有机制）"]
+    oldUser["用户选择 Bot 私聊或 Bot 群"] --> botA["长期 Bot A"]
+    oldUser --> botB["长期 Bot B"]
+    botA --> privateA["A 的私聊 Session / 历史 parts"]
+    botA --> roomA["A 在每个群里的独立 Session"]
+    botB --> privateB["B 的私聊 Session"]
+    botB --> roomB["B 在每个群里的独立 Session"]
+    privateA <-->|"message_bot / exchange"| privateB
+    relay["群 relay Session<br/>admin / everyone / @ / round"] --> roomA
+    relay --> roomB
+    oldUser --> relay
+    governance["一个或多个 Main Bot<br/>团队治理权限，不是全局 Router"] -.-> botA
+    governance -.-> botB
+  end
+  subgraph target["Super-agent：任务中心三层协作（R4 目标）"]
+    user["用户面对同一个连续协作者"] --> main["主 Agent / Main<br/>独立模型 · 用户上下文"]
+    main -->|"WorkBrief"| router["Router<br/>分解 / 关联 / 派工 / 汇总"]
+    main -->|"WorkFollowUp / Control"| router
+    source["环境来源事件 / Thread"] --> router
+    router --> taskA["工作 A / Ticket"]
+    router --> taskB["工作 B / Ticket"]
+    taskA --> workerA["Worker A<br/>隔离调查、执行、验证"]
+    taskB --> workerB["Worker B<br/>独立并行推进"]
+    source -->|"已有归属：程序直通"| workerA
+    workerA -->|"复杂单任务内部可选"| team["子代理 / Agent Team<br/>继承工作授权和生命周期"]
+    workerA -->|"Report / Attention"| router
+    workerB -->|"Report / Attention"| router
+    router -->|"有界 WorkOutcome / Attention"| main
+    main -->|"用户可见回复"| user
+    details["Router / Worker 只读观察"] -.->|"不写入主上下文"| main
+  end
+  classDef legacy fill:#fff3df,stroke:#a58145,color:#60451e
+  classDef control fill:#e6f2ed,stroke:#37745d,color:#163c2e
+  classDef work fill:#eaf0fa,stroke:#536f9a,color:#233e62
+  class botA,botB,relay,governance legacy
+  class main,router control
+  class taskA,taskB,workerA,workerB,team work

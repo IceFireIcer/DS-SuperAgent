@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createConnection, createServer } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -27,6 +27,33 @@ const freePort = async () => {
   await closeServer(server)
   return port
 }
+const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
+const isRunning = child => Boolean(child) && child.exitCode === null && child.signalCode === null
+const isPidAlive = pid => {
+  if (!Number.isInteger(pid) || pid <= 0) return false
+  try { process.kill(pid, 0); return true } catch { return false }
+}
+
+async function waitForExit(child, timeoutMs = 5000) {
+  if (!isRunning(child)) return true
+  await Promise.race([
+    new Promise(resolve => child.once('exit', resolve)),
+    sleep(timeoutMs),
+  ])
+  return !isRunning(child)
+}
+
+function killPidTree(pid) {
+  if (!isPidAlive(pid)) return
+  if (process.platform === 'win32') {
+    const result = spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' })
+    if (!result.error && result.status === 0) return
+  } else {
+    try { process.kill(-pid, 'SIGKILL'); return } catch { /* Fall back to the individual process. */ }
+  }
+  try { process.kill(pid, 'SIGKILL') } catch { /* The process already exited. */ }
+}
+
 const netSend = (port, value) => new Promise((resolve, reject) => {
   const socket = createConnection({ host: '127.0.0.1', port })
   let buffer = ''
@@ -44,7 +71,10 @@ const netSend = (port, value) => new Promise((resolve, reject) => {
 })
 
 function startChild(fixture, configuration) {
-  const child = spawn(process.execPath, [fixture, JSON.stringify(configuration)], { stdio: ['ignore', 'pipe', 'pipe'] })
+  const child = spawn(process.execPath, [fixture, JSON.stringify(configuration)], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: process.platform !== 'win32',
+  })
   const lines = createInterface({ input: child.stdout })
   const errors = []
   child.stderr.setEncoding('utf8')
@@ -61,6 +91,41 @@ function startChild(fixture, configuration) {
 
 test('a fictional old receiver and a new switchover process prove stopped old work, isolated entry and durable gap ownership', { timeout: 120_000 }, async t => {
   const root = mkdtempSync(join(tmpdir(), 'ds-superagent-switchover-process-'))
+  const children = []
+  let adminPort
+  let old
+  let oldReceiverPid
+  let bootstrap
+  let storage
+  t.after(async () => {
+    const errors = []
+    if (old && isRunning(old) && adminPort && isPidAlive(oldReceiverPid)) {
+      try {
+        const stopped = await netSend(adminPort, { command: 'stop' })
+        if (!stopped?.stopped) throw new Error(stopped?.code ?? 'the old receiver did not stop')
+      } catch (error) {
+        if (isPidAlive(oldReceiverPid)) errors.push(error)
+      }
+      await waitForExit(old, 5000)
+    }
+    for (const item of children) {
+      if (!isRunning(item.child)) continue
+      killPidTree(item.child.pid)
+      try { item.child.kill('SIGKILL') } catch { /* The process already exited. */ }
+      if (!await waitForExit(item.child, 2000)) errors.push(new Error(`process ${item.child.pid} did not exit`))
+    }
+    if (isPidAlive(oldReceiverPid)) {
+      try { process.kill(oldReceiverPid, 'SIGKILL') } catch (error) { if (error.code !== 'ESRCH') errors.push(error) }
+    }
+    try { await bootstrap?.close() } catch (error) { errors.push(error) }
+    try { await storage?.close() } catch (error) { errors.push(error) }
+    try {
+      rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+    } catch (error) {
+      errors.push(error)
+    }
+    if (errors.length) throw new AggregateError(errors, 'switchover process cleanup failed')
+  })
   const source = join(root, 'legacy')
   const target = join(root, 'archive')
   mkdirSync(join(source, 'bot'), { recursive: true })
@@ -74,29 +139,27 @@ test('a fictional old receiver and a new switchover process prove stopped old wo
   await publishLegacyArchive(target, 'batch-1')
 
   const intakePort = await freePort()
-  const adminPort = await freePort()
+  adminPort = await freePort()
   const controlPort = await freePort()
   const statusFile = join(root, 'old-status.json')
   const receiptsFile = join(root, 'old-receipts.json')
   const databasePath = join(root, 'core.sqlite')
   const legacyEntry = join(root, 'legacy-entry.mjs')
   writeFileSync(legacyEntry, readFileSync(entryFixture, 'utf8'))
-  const bootstrap = await SqliteStorage.open(databasePath)
+  bootstrap = await SqliteStorage.open(databasePath)
   const lease = await new HostLease(bootstrap, 'private', { hostId: 'switchover-drill', leaseMs: 600_000 }).acquire()
   await bootstrap.close()
-  const children = []
-  t.after(async () => {
-    for (const item of children) if (item.child.exitCode === null && item.child.signalCode === null) item.child.kill('SIGKILL')
-    rmSync(root, { recursive: true, force: true })
-  })
+  bootstrap = undefined
 
   const oldConfiguration = {
     home: source, intake: { host: '127.0.0.1', port: intakePort }, admin: { host: '127.0.0.1', port: adminPort },
     statusFile, receiptsFile, activeTurns: ['turn-1'], activeJobs: [], pendingOutbound: ['out-1'],
   }
-  const old = startChild(legacyEntry, { ...oldConfiguration, receiver: receiverFixture })
+  old = startChild(legacyEntry, { ...oldConfiguration, receiver: receiverFixture })
   children.push(old)
-  assert.equal((await old.first).ready, true)
+  const oldReport = await old.first
+  assert.equal(oldReport.ready, true)
+  oldReceiverPid = oldReport.pid
 
   const acceptedByOld = await netSend(intakePort, { objectId: 'old-object-1', eventId: 'old-event-1', text: 'old accepted input' })
   assert.equal(acceptedByOld.accepted, true)
@@ -120,6 +183,7 @@ test('a fictional old receiver and a new switchover process prove stopped old wo
   assert.equal(prepared.record.oldHome.lockExists, true)
   assert.equal(prepared.record.oldHome.usedAsFence, false)
   assert.equal((await old.exited).code, 0)
+  oldReceiverPid = undefined
   const restartCode = await new Promise(resolve => {
     const restart = spawn(process.execPath, [legacyEntry, JSON.stringify({ ...oldConfiguration, receiver: receiverFixture })], { stdio: 'ignore' })
     restart.once('error', () => resolve(-1))
@@ -166,12 +230,13 @@ test('a fictional old receiver and a new switchover process prove stopped old wo
   await first.exited
   assert.equal(JSON.parse(readFileSync(receiptsFile, 'utf8')).length, 1, 'the old receiver consumed no gap input')
 
-  const storage = await SqliteStorage.open(databasePath)
+  storage = await SqliteStorage.open(databasePath)
   try {
     assert.equal((await storage.transaction('private', tx => tx.scan('ticket', { limit: 10 }))).items.length, 0)
     assert.equal((await storage.transaction('private', tx => tx.scan('effect', { limit: 10 }))).items.length, 0)
   } finally {
     await storage.close()
+    storage = undefined
   }
 
   const second = startChild(switchoverFixture, runnerConfiguration)

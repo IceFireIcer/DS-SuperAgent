@@ -81,9 +81,11 @@ function bench({ providers = { deepseek: ['v4-flash'], stepfun: ['step-5'] }, fa
   const selected = []
   const saved = []
   const listeners = new Map()
+  const services = new Map()
   const ctx = {
     on(name, listener) { listeners.set(name, listener); return () => listeners.delete(name) },
-    get: name => (name === 'agentDefaultModel'
+    provide(name, value) { services.set(name, value) },
+    get: name => (services.has(name) ? services.get(name) : name === 'agentDefaultModel'
       ? { currentSelection: () => ({ ...current }), saveSelection: async (next) => { saved.push(next); current = { ...next } } }
       : undefined),
     llm: {
@@ -100,7 +102,7 @@ function bench({ providers = { deepseek: ['v4-flash'], stepfun: ['step-5'] }, fa
   }
   const rt = { ctx, state: { bots: {} }, chatOf: id => id, groupSessionsOf: () => [], save: async () => {}, warn: () => {} }
   install(rt)
-  return { rt, selected, saved, providers, listeners, current: () => current }
+  return { rt, selected, saved, providers, listeners, services, current: () => current }
 }
 
 test('the catalog is every model DSH serves, with no lab', async () => {
@@ -310,4 +312,29 @@ test('a Bot on the default model with its own thinking level leaves the default 
   }
   await rt.applyModel({ id: 'b1', model: 'deepseek/v4-flash', effort: 'low' })
   assert.deepEqual(current(), fallback)
+})
+
+test('the execution profile service returns the owning Bot model, thinking level and instructions', async () => {
+  const { rt, services } = bench({ reasoning: {
+    'deepseek/v4-flash': { reasoning: { efforts: [{ id: 'high', name: 'High' }], defaultEffort: 'high' } },
+  } })
+  rt.state.bots = {
+    b1: { id: 'b1', model: 'deepseek/v4-flash', effort: 'high', instructions: 'Work only inside the repository.' },
+    b2: { id: 'b2', model: 'stepfun/step-5', instructions: 'Answer from the project documents.' },
+  }
+  rt.groupSessionsOf = id => id === 'b1' ? ['group-session'] : []
+  const service = services.get('botExecutionProfiles')
+  assert.ok(service)
+  assert.deepEqual(await service.resolve('b1'), {
+    model: { provider: 'deepseek', model: 'v4-flash' }, reasoningEffort: 'high',
+    instructions: 'Work only inside the repository.', skills: [],
+  })
+  assert.deepEqual(await service.resolve('group-session'), {
+    model: { provider: 'deepseek', model: 'v4-flash' }, reasoningEffort: 'high',
+    instructions: 'Work only inside the repository.', skills: [],
+  })
+  assert.deepEqual(await service.resolve('b2'), {
+    model: { provider: 'stepfun', model: 'step-5' }, instructions: 'Answer from the project documents.', skills: [],
+  })
+  assert.equal(await service.resolve('unowned'), undefined)
 })

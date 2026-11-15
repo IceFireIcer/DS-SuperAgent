@@ -16,6 +16,29 @@ const browserOptions = {
   ...(process.env.BROWSER_EXECUTABLE_PATH ? { executablePath: process.env.BROWSER_EXECUTABLE_PATH } : {}),
 }
 
+function collectErrors(errors, error) {
+  if (error instanceof AggregateError) errors.push(...error.errors)
+  else errors.push(error)
+}
+
+async function settle(label, steps) {
+  const errors = []
+  for (const step of steps) {
+    try {
+      await step()
+    } catch (error) {
+      collectErrors(errors, error)
+    }
+  }
+  if (errors.length) throw new AggregateError(errors, label)
+}
+
+const closeSessions = sessions => async () => {
+  const results = await Promise.allSettled(sessions.map(session => session.close()))
+  const errors = results.filter(result => result.status === 'rejected').map(result => result.reason)
+  if (errors.length) throw new AggregateError(errors, 'browser session cleanup failed')
+}
+
 async function startPopupFixture() {
   const server = createServer((request, response) => {
     const path = new URL(request.url ?? '/', 'http://127.0.0.1').pathname
@@ -69,9 +92,11 @@ test('one Bot keeps its cookies and another Bot does not see them', async () => 
     assert.doesNotMatch(betaText, /bot=alpha/)
     assert.match(againText, /bot=alpha/)
   } finally {
-    await Promise.all(sessions.map(session => session.close()))
-    await fixture.close()
-    rmSync(profileRoot, { recursive: true, force: true })
+    await settle('browser isolation cleanup failed', [
+      closeSessions(sessions),
+      () => fixture.close(),
+      () => rmSync(profileRoot, { recursive: true, force: true }),
+    ])
   }
 })
 
@@ -99,9 +124,11 @@ test('a target=_blank click activates the new tab and snapshots both tabs', asyn
     assert.match(afterClose, /Title: Home/)
     assert.doesNotMatch(afterClose, /Tabs:\n/)
   } finally {
-    await session?.close()
-    await fixture.close()
-    rmSync(profileRoot, { recursive: true, force: true })
+    await settle('browser popup cleanup failed', [
+      () => session?.close(),
+      () => fixture.close(),
+      () => rmSync(profileRoot, { recursive: true, force: true }),
+    ])
   }
 })
 
@@ -122,9 +149,11 @@ test('a stale ARIA ref reports that a new snapshot is required', async () => {
       { message: `No element ${ref}. Take a new snapshot; refs change when the page changes.` },
     )
   } finally {
-    await session?.close()
-    await fixture.close()
-    rmSync(profileRoot, { recursive: true, force: true })
+    await settle('browser stale-ref cleanup failed', [
+      () => session?.close(),
+      () => fixture.close(),
+      () => rmSync(profileRoot, { recursive: true, force: true }),
+    ])
   }
 })
 
@@ -165,8 +194,10 @@ test('mounts distinct Bot profiles and reuses one browser across a Bot’s sessi
     assert.equal(existsSync(join(profileRoot, 'beta')), true)
     assert.notEqual(join(profileRoot, 'alpha'), join(profileRoot, 'beta'))
   } finally {
-    await dispose?.()
-    await fixture.close()
-    rmSync(home, { recursive: true, force: true })
+    await settle('browser mount cleanup failed', [
+      () => dispose?.(),
+      () => fixture.close(),
+      () => rmSync(home, { recursive: true, force: true }),
+    ])
   }
 })

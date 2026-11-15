@@ -8,7 +8,6 @@
 // the verified one.
 import { spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
 
 import {
   CHECK_TTL_MS, cleanVersion, encodeName, fetchJson, installSpecOf,
@@ -42,31 +41,18 @@ export function install(rt) {
       && status.verified !== null && status.verified !== status.current && !blocked(),
   })
 
-  // The version of the DSH that is running us: the app-boot export, or — where
-  // that import cannot see it — the nearest @deepseek-ai package.json above the
-  // entry script.
+  // The version of the DSH that is running us, from the public app-boot export.
+  // Without it the version is unknown, and no version-based update is offered.
   async function currentDsh() {
     try {
       const loader = ctx.get?.('loader')
       const loaded = await loader?.import?.(APP_BOOT)
       const appBoot = loader?.unwrapExports?.(loaded) ?? loaded?.default ?? loaded
-      const version = cleanVersion(appBoot?.getDshRuntimeVersion?.())
-      if (version) return version
-    } catch { /* the export is not visible here: read the install instead */ }
-    let dir = dirname(String(process.argv[1] ?? ''))
-    for (let depth = 0; depth < 12; depth += 1) {
-      try {
-        const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
-        if (manifest?.name?.startsWith?.('@deepseek-ai/')) {
-          const version = cleanVersion(manifest.version)
-          if (version) return version
-        }
-      } catch { /* not a package directory */ }
-      const parent = dirname(dir)
-      if (parent === dir) break
-      dir = parent
+      const reported = appBoot?.getDshRuntimeVersion?.()
+      return cleanVersion(reported?.release?.version ?? reported?.version ?? reported)
+    } catch {
+      return null
     }
-    return null
   }
 
   // A bundled package manager means the runtime came with the app and only the
@@ -131,24 +117,37 @@ export function install(rt) {
   /** Read current and verified DSH versions; a fresh check ignores the last answer. */
   async function check({ fresh = false } = {}) {
     if (!enabled) return view()
-    if (checking) return checking
-    if (!fresh && Date.now() - status.checkedAt < CHECK_TTL_MS) return view()
-    checking = runCheck().finally(() => { checking = null })
-    await checking
+    if (!checking && (fresh || Date.now() - status.checkedAt >= CHECK_TTL_MS)) {
+      checking = runCheck().finally(() => { checking = null })
+    }
+    if (checking) await checking
     return view()
+  }
+
+  // npm is a .cmd batch file on Windows, which spawn cannot start directly.
+  // The only variable argument is a cleaned release version.
+  function npmInvocation(args) {
+    if (process.platform !== 'win32') return ['npm', args]
+    return [process.env.ComSpec ?? process.env.COMSPEC ?? 'cmd.exe', ['/d', '/s', '/c', `npm ${args.join(' ')}`]]
   }
 
   /** Swap an npm-installed DSH for the verified version; the answer comes back through `check`. */
   function start() {
     if (status.phase === 'installing') return view()
-    if (target === null || blocked()) throw new Error('No DSH update is available')
+    if (target === null || status.current === null || blocked()) throw new Error('No DSH update is available')
     if (status.kind !== 'npm') throw new Error('This DSH updates with its app')
     const chosen = target
     Object.assign(status, { phase: 'installing', error: null })
-    const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
     const args = ['install', '-g', `${DSH_PACKAGE}@${chosen.version}`]
     const runner = rt.dshSpawn ?? ((command, argv, options) => spawn(command, argv, options))
-    running = runner(npm, args, { windowsHide: true })
+    const [command, argv] = npmInvocation(args)
+    try {
+      running = runner(command, argv, { windowsHide: true })
+    } catch (error) {
+      rt.warn('ds-bot: dsh update to %s could not start: %s', chosen.version, error?.message ?? error)
+      Object.assign(status, { phase: 'failed', error: String(error?.message ?? error).slice(0, 600) })
+      return view()
+    }
     let output = ''
     running.stdout?.on?.('data', chunk => { output = `${output}${chunk}`.slice(-4000) })
     running.stderr?.on?.('data', chunk => { output = `${output}${chunk}`.slice(-4000) })

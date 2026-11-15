@@ -1,5 +1,6 @@
-// The tool loop shared by the task plugin and the bench. The caller supplies the
-// model. Page text is data; a picture rides along when a tool returned one.
+// The tool loop used by the browser bench. The product has no nested model loop;
+// the caller supplies the model. Page text is data; a picture rides along when a
+// tool returned one.
 const asText = (value) => {
   if (typeof value === 'string') return value
   if (value && typeof value.text === 'string') return value.text

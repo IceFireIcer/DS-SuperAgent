@@ -100,6 +100,29 @@ test('a stale-lock recheck does not delete a new owner token', (t) => {
   assert.equal(JSON.parse(readFileSync(path, 'utf8')).token, 'new-owner')
 })
 
+test('a takeover that finds a new owner after its check gives the lock back', (t) => {
+  const path = join(tempHome(t), 'state.lock')
+  writeFileSync(path, JSON.stringify({ pid: 101, host: hostname(), token: 'stale' }))
+  const old = new Date(Date.now() - 120_000)
+  utimesSync(path, old, old)
+  const originalRename = fs.renameSync
+  fs.renameSync = (from, to) => {
+    if (from === path) {
+      writeFileSync(path, JSON.stringify({ pid: 303, host: hostname(), token: 'new-owner' }))
+    }
+    return originalRename(from, to)
+  }
+  syncBuiltinESMExports()
+  const late = homeLock(path, { pid: 202, isAlive: pid => pid === 303 })
+  t.after(() => {
+    late.release()
+    fs.renameSync = originalRename
+    syncBuiltinESMExports()
+  })
+  assert.equal(late.claim().token, 'new-owner')
+  assert.equal(JSON.parse(readFileSync(path, 'utf8')).token, 'new-owner')
+})
+
 test('a holder that finds another token in the file knows it lost the lock', (t) => {
   const path = join(tempHome(t), 'state.lock')
   const lock = homeLock(path, { pid: 101 })

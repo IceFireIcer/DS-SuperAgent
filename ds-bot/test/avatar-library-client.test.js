@@ -7,7 +7,7 @@ import { build } from 'esbuild'
 
 // The client half is bundled and run with a stub for react, as the other client tests do.
 const bundle = await build({
-  stdin: { contents: "export { importPhotos, loadLibrary } from './src/client/avatar-library.js'", resolveDir: dirname(dirname(fileURLToPath(import.meta.url))) },
+  stdin: { contents: "export { importPhotos, loadLibrary, mergePhotos } from './src/client/avatar-library.js'", resolveDir: dirname(dirname(fileURLToPath(import.meta.url))) },
   bundle: true, format: 'cjs', platform: 'node', write: false, logLevel: 'silent',
   external: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
 })
@@ -17,7 +17,7 @@ const react = {
   useState: initial => [initial, () => {}], useEffect: () => {}, useRef: current => ({ current }), Fragment: 'fragment',
 }
 runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require: name => (name === 'react' ? react : {}) })
-const { importPhotos, loadLibrary } = module.exports
+const { importPhotos, loadLibrary, mergePhotos } = module.exports
 
 const photos = count => Array.from({ length: count }, (_, index) => ({ name: `photo-${index}.png`, image: 'data:image/png;base64,AA' }))
 
@@ -76,4 +76,14 @@ test('the library is asked for page by page', async () => {
   const bare = await loadLibrary({ avatarLibrary: async () => ({ items: [{ id: 'b' }] }) })
   assert.equal(bare.total, 1)
   assert.equal(bare.next, 1)
+})
+
+test('a page already shown is not appended twice', () => {
+  const first = [{ id: 'a' }, { id: 'b' }]
+  const again = mergePhotos(first, [{ id: 'b' }, { id: 'c' }])
+  const ids = photos => Array.from(photos, photo => photo.id)
+  assert.deepEqual(ids(again), ['a', 'b', 'c'])
+  // The same page twice from overlapping requests does not grow the list.
+  assert.deepEqual(ids(mergePhotos(again, [{ id: 'a' }, { id: 'b' }, { id: 'c' }])), ['a', 'b', 'c'])
+  assert.deepEqual(ids(mergePhotos([], [{ id: 'x' }])), ['x'])
 })

@@ -8885,13 +8885,23 @@ function renderCall(call2, { sessionId, roster, actions, useUi, useWork, findBot
       return (0, import_react17.createElement)(EventLine, { prefix: t("Stopped"), bots: [target], onOpen: (bot) => bot.id && actions.openExchange(self?.id ?? sessionId, bot.id), whole: true });
     }
     case "create_bot": {
+      if (!done) return (0, import_react17.createElement)(CellEmpty);
+      const result = contentText(call2.content);
+      if (call2.isError || !result.startsWith("Created ")) {
+        return result.trim() ? (0, import_react17.createElement)("div", { className: "bt-event bt-event-error", role: "status" }, result) : (0, import_react17.createElement)(CellEmpty);
+      }
       const created = findBot(arg("name"));
-      if (!done || created === void 0) return (0, import_react17.createElement)(CellEmpty);
+      if (created === void 0) return (0, import_react17.createElement)(CellEmpty);
       return (0, import_react17.createElement)(EventLine, { prefix: t("Created"), bots: [created], onOpen: (bot) => actions.openSession(bot.id) });
     }
     case "update_bot": {
+      if (!done) return (0, import_react17.createElement)(CellEmpty);
+      const result = contentText(call2.content);
+      if (call2.isError || !result.startsWith("Updated ")) {
+        return result.trim() ? (0, import_react17.createElement)("div", { className: "bt-event bt-event-error", role: "status" }, result) : (0, import_react17.createElement)(CellEmpty);
+      }
       const target = findBot(arg("name")) ?? findBot(arg("bot")) ?? (arg("bot") ? void 0 : self);
-      return done && target ? (0, import_react17.createElement)(EventLine, { prefix: t("Updated"), bots: [target], onOpen: (bot) => actions.openSession(bot.id) }) : (0, import_react17.createElement)(CellEmpty);
+      return target ? (0, import_react17.createElement)(EventLine, { prefix: t("Updated"), bots: [target], onOpen: (bot) => actions.openSession(bot.id) }) : (0, import_react17.createElement)(CellEmpty);
     }
     case "group_relay":
       return (0, import_react17.createElement)(GroupReplies, { sessionId, callId: call2.callId, done, content: call2.content, roster, actions, useUi, useWork });
@@ -9730,7 +9740,7 @@ function TeamSidebar(props) {
     const stamps = JSON.parse(updated);
     const entries2 = [
       ...roster.bots.filter((bot) => bot.id !== roster.mainBotId).map((bot) => ({ kind: "bot", item: bot, at: stamps[currentPart(bot)] ?? bot.createdAt })),
-      ...roster.rooms.map((room2) => ({ kind: "room", item: room2, at: stamps[room2.id] ?? room2.createdAt })),
+      ...roster.rooms.map((room2) => ({ kind: "room", item: room2, at: stamps[room2.sessionId ?? room2.id] ?? room2.createdAt })),
       // The Agent sorts by its most recent Session, falling back to when it was added.
       ...(roster.agents ?? []).map((agent) => ({ kind: "agent", item: agent, at: Math.max(0, ...agent.sessions.map((id) => stamps[id] ?? 0)) || agent.createdAt }))
     ];
@@ -10705,9 +10715,13 @@ function useDictation(onText) {
   const [listening, setListening] = (0, import_react21.useState)(false);
   const [note, setNote] = (0, import_react21.useState)("");
   const recognition = (0, import_react21.useRef)(null);
+  const generation = (0, import_react21.useRef)(0);
   const latest = (0, import_react21.useRef)(onText);
   latest.current = onText;
-  (0, import_react21.useEffect)(() => () => recognition.current?.abort(), []);
+  (0, import_react21.useEffect)(() => () => {
+    generation.current += 1;
+    recognition.current?.abort();
+  }, []);
   (0, import_react21.useEffect)(() => {
     if (!note) return void 0;
     const timer = setTimeout(() => setNote(""), 2600);
@@ -10720,10 +10734,12 @@ function useDictation(onText) {
       return false;
     }
     const engine = new Api();
+    const own = ++generation.current;
     engine.lang = navigator.language || "zh-CN";
     engine.interimResults = true;
     engine.continuous = continuous;
     engine.onresult = (event) => {
+      if (generation.current !== own) return;
       let interim = "";
       for (let index = event.resultIndex; index < event.results.length; index += 1) {
         const result = event.results[index];
@@ -10735,12 +10751,15 @@ function useDictation(onText) {
       if (interim) latest.current(interim, false);
     };
     engine.onerror = (event) => {
+      if (generation.current !== own) return;
       if (event.error === "aborted" || event.error === "no-speech") return;
       setNote(event.error === "not-allowed" || event.error === "service-not-allowed" ? t("Microphone access is blocked") : t("Couldn't hear that"));
     };
     engine.onend = () => {
-      setListening(false);
-      recognition.current = null;
+      if (generation.current === own) {
+        setListening(false);
+        recognition.current = null;
+      }
       onEnd?.();
     };
     recognition.current = engine;
@@ -10754,7 +10773,17 @@ function useDictation(onText) {
     }
   };
   const stop = () => recognition.current?.stop();
-  return { listening, note, start, stop };
+  const discard = () => {
+    generation.current += 1;
+    const engine = recognition.current;
+    recognition.current = null;
+    setListening(false);
+    try {
+      engine?.abort();
+    } catch {
+    }
+  };
+  return { listening, note, start, stop, discard };
 }
 function ComposerVoice({ sessionId, inputActions, actions, useUi }) {
   const dictation = useDictation((text, final) => {
@@ -11345,17 +11374,36 @@ async function openCapture() {
   } catch (error) {
     throw captureError(error?.name === "NotAllowedError" ? "blocked" : "failed", error);
   }
-  const audio = new AudioContext();
-  const analyser = audio.createAnalyser();
-  analyser.fftSize = 512;
-  audio.createMediaStreamSource(stream).connect(analyser);
-  const frame = new Float32Array(analyser.fftSize);
-  const recorder = new MediaRecorder(stream);
-  const chunks = [];
-  recorder.ondataavailable = (event) => {
-    if (event.data.size > 0) chunks.push(event.data);
-  };
-  recorder.start();
+  let audio;
+  let recorder;
+  try {
+    audio = new AudioContext();
+    const analyser = audio.createAnalyser();
+    analyser.fftSize = 512;
+    audio.createMediaStreamSource(stream).connect(analyser);
+    const frame = new Float32Array(analyser.fftSize);
+    recorder = new MediaRecorder(stream);
+    const chunks = [];
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) chunks.push(event.data);
+    };
+    recorder.start();
+    return captureHandle(stream, audio, analyser, frame, recorder, chunks);
+  } catch (error) {
+    try {
+      if (recorder && recorder.state !== "inactive") recorder.stop();
+    } catch {
+    }
+    stream.getTracks().forEach((track) => track.stop());
+    try {
+      void audio?.close().catch(() => {
+      });
+    } catch {
+    }
+    throw captureError("failed", error);
+  }
+}
+function captureHandle(stream, audio, analyser, frame, recorder, chunks) {
   let closed = false;
   const close = () => {
     if (closed) return;
@@ -11996,9 +12044,12 @@ function ModelChoiceDock({ sessionId, useRoster, actions }) {
   if (!bot || currentPart(bot) !== sessionId || !roster.ready) return null;
   const models = roster.models ?? [];
   const usable = models.filter((model) => !model.needsKey);
-  const lost = bot.model ? !models.some((model) => model.ref === bot.model) : false;
-  if (bot.model && (!lost || models.length === 0)) return null;
-  const keyFor = usable.length === 0 && actions.setProviderKey ? models.find((model) => model.needsKey) : void 0;
+  const current = bot.model ? models.find((model) => model.ref === bot.model) : void 0;
+  const lost = bot.model ? current === void 0 : false;
+  const needsKey = current?.needsKey === true;
+  if (bot.model && (!lost && !needsKey || models.length === 0)) return null;
+  const keyFor = needsKey ? actions.setProviderKey ? current : void 0 : usable.length === 0 && actions.setProviderKey ? models.find((model) => model.needsKey) : void 0;
+  const keyModel = needsKey ? current : keyFor;
   const manage = manageModels(actions);
   const pick2 = (ref) => {
     setBusy(ref);
@@ -12008,7 +12059,7 @@ function ModelChoiceDock({ sessionId, useRoster, actions }) {
       void actions.refreshModels?.();
     }).finally(() => setBusy(""));
   };
-  const text = lost ? t("{model} is not available anymore. Pick another model for me.", { model: bot.model.split("/").slice(1).join("/") }) : keyFor ? t("Hi, I'm {name}. I need a {provider} API key before I can start.", { name: bot.name, provider: keyFor.providerName ?? keyFor.provider }) : usable.length === 0 ? t("Hi, I'm {name}. I don't have a model yet. How do you want to set one up?", { name: bot.name }) : t("Hi, I'm {name}. Pick a model for me first. You can change it later in my details.", { name: bot.name });
+  const text = lost ? t("{model} is not available anymore. Pick another model for me.", { model: bot.model.split("/").slice(1).join("/") }) : keyModel ? t("Hi, I'm {name}. I need a {provider} API key before I can start.", { name: bot.name, provider: keyModel.providerName ?? keyModel.provider }) : usable.length === 0 ? t("Hi, I'm {name}. I don't have a model yet. How do you want to set one up?", { name: bot.name }) : t("Hi, I'm {name}. Pick a model for me first. You can change it later in my details.", { name: bot.name });
   const choices = usable.length === 0 ? setupChoices(actions).map(([label, run2]) => (0, import_react25.createElement)("button", { key: label, type: "button", className: "bt-model-chip", onClick: run2 }, label)) : [
     ...groupModels(usable).map(([provider, list]) => (0, import_react25.createElement)(
       "div",
@@ -12900,27 +12951,48 @@ async function loadLibrary(actions, { offset = 0, limit = PAGE } = {}) {
   const items = value?.items ?? [];
   return { items, total: value?.total ?? items.length, next: value?.next ?? offset + items.length };
 }
+function mergePhotos(previous, page) {
+  const seen = new Set((previous ?? []).map((photo) => photo.id));
+  return [...previous ?? [], ...page.filter((photo) => !seen.has(photo.id))];
+}
 function AvatarLibraryPanel({ actions, onPick }) {
   const [items, setItems] = (0, import_react29.useState)(null);
   const [total, setTotal] = (0, import_react29.useState)(0);
   const [offset, setOffset] = (0, import_react29.useState)(0);
   const [busy, setBusy] = (0, import_react29.useState)(false);
+  const [paging, setPaging] = (0, import_react29.useState)(false);
   const [error, setError] = (0, import_react29.useState)("");
   const [report, setReport] = (0, import_react29.useState)(null);
   const fileRef = (0, import_react29.useRef)(null);
+  const loading = (0, import_react29.useRef)(false);
+  const generation = (0, import_react29.useRef)(0);
   const load = (0, import_react29.useCallback)(async (from = 0, append = false) => {
+    if (append && loading.current) return;
+    const own = ++generation.current;
+    loading.current = true;
+    if (append) setPaging(true);
     try {
       const page = await loadLibrary(actions, { offset: from });
-      setItems((previous) => append ? [...previous ?? [], ...page.items] : page.items);
+      if (own !== generation.current) return;
+      setItems((previous) => mergePhotos(append ? previous : [], page.items));
       setTotal(page.total);
       setOffset(page.next);
     } catch (failure) {
-      setError(failure?.message ?? String(failure));
+      if (own === generation.current) setError(failure?.message ?? String(failure));
+    } finally {
+      if (own === generation.current) {
+        loading.current = false;
+        setPaging(false);
+      }
     }
   }, [actions]);
   (0, import_react29.useEffect)(() => {
     void load();
   }, [load]);
+  (0, import_react29.useEffect)(() => () => {
+    generation.current += 1;
+    loading.current = false;
+  }, []);
   const importFiles = async (files) => {
     if (files.length === 0) return;
     setBusy(true);
@@ -12997,7 +13069,7 @@ function AvatarLibraryPanel({ actions, onPick }) {
     shown < total ? (0, import_react29.createElement)(
       "div",
       { className: "bt-lib-more" },
-      (0, import_react29.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: () => void load(offset, true) }, t("Show more photos")),
+      (0, import_react29.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", disabled: paging || busy, onClick: () => void load(offset, true) }, t("Show more photos")),
       (0, import_react29.createElement)("span", { className: "bt-note" }, t("Showing {shown} of {total} photos", { shown, total }))
     ) : null,
     report ? (0, import_react29.createElement)(
@@ -14000,6 +14072,8 @@ function NewChat({ mode, roster, actions }) {
   const [cursor, setCursor] = (0, import_react33.useState)(0);
   const [draft, setDraft] = (0, import_react33.useState)(mode === "create" ? { name: "", fromList: false } : null);
   const inputRef = (0, import_react33.useRef)(null);
+  const groupRoom = (0, import_react33.useRef)(null);
+  const pickedRoom = (0, import_react33.useRef)(null);
   const close = () => actions.closeOverlay();
   useEscape(close);
   const paneLeft = usePaneLeft();
@@ -14059,7 +14133,8 @@ function NewChat({ mode, roster, actions }) {
   const makeGroup = async () => {
     if (admin === null || picked.length === 0) return;
     const text = message.trim();
-    const room2 = await actions.createRoom([admin, ...picked], { admin, ...text ? {} : { greet: true } });
+    if (groupRoom.current === null) groupRoom.current = await actions.createRoom([admin, ...picked], { admin, ...text ? {} : { greet: true } });
+    const room2 = groupRoom.current;
     if (text) await actions.send(room2.id, text);
     actions.openSession(room2.id);
     close();
@@ -14078,7 +14153,8 @@ function NewChat({ mode, roster, actions }) {
       close();
       return;
     }
-    const room2 = await actions.createRoom(picked);
+    if (pickedRoom.current === null) pickedRoom.current = await actions.createRoom(picked);
+    const room2 = pickedRoom.current;
     await actions.send(room2.id, text);
     actions.openSession(room2.id);
     close();
@@ -14427,23 +14503,28 @@ function VoiceMode({ sessionId, roster, actions, useSessions, useSessionStatus }
   const waiting = (0, import_react35.useRef)(null);
   const reply = (0, import_react35.useRef)(lastReply);
   reply.current = lastReply;
+  const canSend = (0, import_react35.useRef)(false);
   const turn = (0, import_react35.useRef)(0);
   const paneLeft = usePaneLeft();
   const close = () => {
+    canSend.current = false;
     turn.current += 1;
     window.speechSynthesis?.cancel();
     actions.closeVoice();
   };
   useEscape(close);
   const submit = (text) => {
+    canSend.current = false;
     setHeard(text);
     setPhase("thinking");
     waiting.current = reply.current.split("|")[0];
     void actions.send(sessionId, text.trim()).catch(() => setPhase("listening"));
   };
   const dictation = useDictation((text, final) => {
+    if (!canSend.current) return;
     setHeard(text);
     if (!final) return;
+    canSend.current = false;
     dictation.stop();
     submit(text);
   });
@@ -14468,13 +14549,16 @@ function VoiceMode({ sessionId, roster, actions, useSessions, useSessionStatus }
   }, [speech]);
   const listen = phase === "listening";
   (0, import_react35.useEffect)(() => {
+    canSend.current = phase === "listening";
+  }, [phase]);
+  (0, import_react35.useEffect)(() => {
     if (speech || !listen || dictation.listening) return void 0;
     const timer = setTimeout(() => dictation.start({ continuous: false, onEnd: () => {
     } }), 250);
     return () => clearTimeout(timer);
   }, [listen, dictation.listening]);
   (0, import_react35.useEffect)(() => {
-    if (phase !== "listening") dictation.stop();
+    if (phase !== "listening") dictation.discard();
   }, [phase]);
   (0, import_react35.useEffect)(() => {
     if (!speech || !catalog || !listen) return void 0;
@@ -14583,6 +14667,7 @@ function VoiceMode({ sessionId, roster, actions, useSessions, useSessionStatus }
       setPhase("listening");
       return;
     }
+    canSend.current = false;
     turn.current += 1;
     window.speechSynthesis?.cancel();
     setPhase("paused");
@@ -16141,6 +16226,7 @@ function BrowserPage({ roster, actions, run: run2, Section, Row: Row3 }) {
   const [kinds, setKinds] = (0, import_react41.useState)(["post"]);
   const [duration, setDuration] = (0, import_react41.useState)("hour");
   const [busy, setBusy] = (0, import_react41.useState)(false);
+  const saving = (0, import_react41.useRef)(false);
   const selectedBot = bots.find((bot) => bot.id === botId);
   (0, import_react41.useEffect)(() => {
     if (!bots.some((bot) => bot.id === botId)) setBotId(bots[0]?.id ?? "");
@@ -16151,13 +16237,22 @@ function BrowserPage({ roster, actions, run: run2, Section, Row: Row3 }) {
     index,
     expired: expired(grant)
   })));
+  const save = (make) => {
+    if (saving.current) return;
+    saving.current = true;
+    setBusy(true);
+    void run2(Promise.resolve().then(make)).finally(() => {
+      saving.current = false;
+      setBusy(false);
+    });
+  };
   const remove = (bot, index) => {
     const next = (bot.browserGrants ?? []).filter((grant, position) => position !== index && !expired(grant));
-    void run2(actions.updateBot(bot.id, { browserGrants: next.length ? next : null }));
+    save(() => actions.updateBot(bot.id, { browserGrants: next.length ? next : null }));
   };
   const add = (event) => {
     event.preventDefault();
-    if (!selectedBot || kinds.length === 0 || busy) return;
+    if (!selectedBot || kinds.length === 0 || saving.current) return;
     const now = Date.now();
     let until;
     if (duration === "hour") until = now + 60 * 60 * 1e3;
@@ -16167,10 +16262,9 @@ function BrowserPage({ roster, actions, run: run2, Section, Row: Row3 }) {
       until = end.getTime();
     } else if (duration === "week") until = now + 7 * 24 * 60 * 60 * 1e3;
     const grant = { site: siteValue(site), kinds: [...kinds], ...until !== void 0 ? { until } : {} };
-    setBusy(true);
-    void run2(actions.updateBot(selectedBot.id, {
+    save(() => actions.updateBot(selectedBot.id, {
       browserGrants: [...(selectedBot.browserGrants ?? []).filter((grant2) => !expired(grant2)), grant]
-    })).finally(() => setBusy(false));
+    }));
   };
   const toggleKind = (kind, checked) => {
     setKinds((current) => checked ? current.includes(kind) ? current : [...current, kind] : current.filter((value) => value !== kind));
@@ -16209,6 +16303,7 @@ function BrowserPage({ roster, actions, run: run2, Section, Row: Row3 }) {
           type: "button",
           className: "bt-soft bt-soft-sm",
           onClick: () => remove(bot, index),
+          disabled: busy,
           "aria-label": t("Remove grant")
         }, t("Remove grant"))
       ))
@@ -16822,16 +16917,29 @@ function CustomForm({ view, apply: apply2, actions, onDone }) {
   const [found, setFound] = (0, import_react44.useState)(null);
   const [picked, setPicked] = (0, import_react44.useState)([]);
   const [asking, setAsking] = (0, import_react44.useState)(false);
-  const set = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
+  const query = (0, import_react44.useRef)(0);
+  const set = (field, value) => {
+    if (field === "baseURL" || field === "api" || field === "key") {
+      query.current += 1;
+      setFound(null);
+      setPicked([]);
+      setAsking(false);
+    }
+    setDraft((current) => ({ ...current, [field]: value }));
+  };
   const typed = draft.typed.split(/[\s,]+/).map((id) => id.trim()).filter(Boolean);
   const models = [...(found ?? []).filter((model) => picked.includes(model.id)), ...typed.filter((id) => !picked.includes(id)).map((id) => ({ id }))];
   const ready = draft.provider.trim() !== "" && draft.baseURL.trim() !== "" && models.length > 0;
   const fetchModels = () => {
+    const own = ++query.current;
     setAsking(true);
     void apply2(Promise.resolve(actions.providerModels({ baseURL: draft.baseURL, api: draft.api, key: draft.key })).then((list) => {
+      if (own !== query.current) return;
       setFound(list);
       setPicked([]);
-    })).finally(() => setAsking(false));
+    })).finally(() => {
+      if (own === query.current) setAsking(false);
+    });
   };
   const toggle = (id) => setPicked((list) => list.includes(id) ? list.filter((item) => item !== id) : [...list, id]);
   const add = () => {
@@ -16990,12 +17098,31 @@ function GeneralPage({ roster, actions, run: run2 }) {
   const themes = allThemes();
   const current = themes[prefs.theme] ? prefs.theme : "deepseek";
   const [custom, setCustom] = (0, import_react45.useState)(prefs.accent ?? "#4d6bfe");
+  const pending = (0, import_react45.useRef)(void 0);
   const timer = (0, import_react45.useRef)(0);
-  (0, import_react45.useEffect)(() => () => clearTimeout(timer.current), []);
+  const runRef = (0, import_react45.useRef)(run2);
+  const actionsRef = (0, import_react45.useRef)(actions);
+  runRef.current = run2;
+  actionsRef.current = actions;
+  const flush = () => {
+    const next = pending.current;
+    pending.current = void 0;
+    if (next !== void 0) void runRef.current(actionsRef.current.setPrefs({ accent: next }));
+  };
+  (0, import_react45.useEffect)(() => () => {
+    clearTimeout(timer.current);
+    flush();
+  }, []);
+  const pickAccent = (accent) => {
+    clearTimeout(timer.current);
+    pending.current = accent;
+    flush();
+  };
   const pickCustom = (value) => {
     setCustom(value);
     clearTimeout(timer.current);
-    timer.current = setTimeout(() => run2(actions.setPrefs({ accent: value })), 350);
+    pending.current = value;
+    timer.current = setTimeout(flush, 350);
   };
   return [
     (0, import_react45.createElement)(
@@ -17016,7 +17143,7 @@ function GeneralPage({ roster, actions, run: run2 }) {
         (0, import_react45.createElement)(
           "div",
           { className: "bt-swatches" },
-          (0, import_react45.createElement)("button", { type: "button", className: "bt-swatch bt-swatch-default", title: t("Theme accent"), "aria-label": t("Theme accent"), "aria-pressed": !prefs.accent, onClick: () => run2(actions.setPrefs({ accent: null })) }),
+          (0, import_react45.createElement)("button", { type: "button", className: "bt-swatch bt-swatch-default", title: t("Theme accent"), "aria-label": t("Theme accent"), "aria-pressed": !prefs.accent, onClick: () => pickAccent(null) }),
           ACCENT_INKS.map((ink) => (0, import_react45.createElement)("button", {
             key: ink,
             type: "button",
@@ -17025,7 +17152,7 @@ function GeneralPage({ roster, actions, run: run2 }) {
             "aria-label": t(capitalize2(ink)),
             "aria-pressed": prefs.accent === INKS[ink][0],
             style: { background: INKS[ink][0] },
-            onClick: () => run2(actions.setPrefs({ accent: INKS[ink][0] }))
+            onClick: () => pickAccent(INKS[ink][0])
           })),
           (0, import_react45.createElement)(
             "label",
@@ -18326,6 +18453,7 @@ function BrowserView({ bot, tabId, leaving, landed, actions, useBrowserPages, ho
   const imports = actions.browserImport;
   const [flow, setFlow] = (0, import_react49.useState)(null);
   const flowRef = (0, import_react49.useRef)(null);
+  const flowGen = (0, import_react49.useRef)(0);
   const [sources, setSources] = (0, import_react49.useState)(null);
   const [busy, setBusy] = (0, import_react49.useState)(false);
   const setFlowTracked = (next) => {
@@ -18351,8 +18479,9 @@ function BrowserView({ bot, tabId, leaving, landed, actions, useBrowserPages, ho
   (0, import_react49.useEffect)(() => {
     setFlowTracked(null);
     return () => {
+      flowGen.current += 1;
       const id = typeof flowRef.current === "object" && flowRef.current !== null ? flowRef.current.id : null;
-      if (id) void imports?.cancel(id).catch(() => {
+      if (id && flowRef.current.confirmed !== true) void imports?.cancel(id).catch(() => {
       });
     };
   }, [tabId]);
@@ -18360,31 +18489,48 @@ function BrowserView({ bot, tabId, leaving, landed, actions, useBrowserPages, ho
     setFlowTracked("menu");
     if (sources === null) void imports.sources().then(setSources, () => setSources([]));
   };
-  const showPicked = (r) => {
+  const showPicked = (r, gen) => {
+    if (gen !== flowGen.current) {
+      if (r?.id) void imports?.cancel(r.id).catch(() => {
+      });
+      return;
+    }
     if (r?.id) setFlowTracked({ stage: "preview", id: r.id, preview: r.preview, restarted: r.restarted === true });
     else if (r?.error) setFlowTracked({ stage: "error", message: importError(r.error) });
     else setFlowTracked(null);
   };
   const job = async (work) => {
+    const gen = flowGen.current;
     setBusy(true);
     try {
-      await work();
+      await work(gen);
     } catch (error) {
-      setFlowTracked({ stage: "error", message: String(error?.message ?? error) });
+      if (gen === flowGen.current) {
+        const id = typeof flowRef.current === "object" && flowRef.current !== null ? flowRef.current.id : null;
+        setFlowTracked({ stage: "error", message: String(error?.message ?? error), ...id ? { id } : {} });
+      }
     } finally {
-      setBusy(false);
+      if (gen === flowGen.current) setBusy(false);
     }
   };
-  const pickFile = () => job(async () => showPicked(await imports.pick()));
-  const pickSource = (source) => job(async () => {
+  const pickFile = () => job(async (gen) => showPicked(await imports.pick(), gen));
+  const pickSource = (source) => job(async (gen) => {
     const r = await imports.live(source.id);
+    if (gen !== flowGen.current) {
+      if (r?.id) void imports?.cancel(r.id).catch(() => {
+      });
+      return;
+    }
     if (r?.running) setFlowTracked({ stage: "running", source });
-    else showPicked(r);
+    else showPicked(r, gen);
   });
-  const closeAndImport = () => job(async () => showPicked(await imports.live(flowRef.current?.source?.id, true)));
-  const applyImport = () => job(async () => {
+  const closeAndImport = () => job(async (gen) => showPicked(await imports.live(flowRef.current?.source?.id, true), gen));
+  const applyImport = () => job(async (gen) => {
+    const current = flowRef.current;
+    if (current) setFlowTracked({ ...current, confirmed: true });
     const report = await imports.apply(bot.id, flowRef.current?.id);
-    setFlowTracked((current) => ({ stage: "result", report, label: current?.preview?.source?.label ?? null }));
+    if (gen !== flowGen.current) return;
+    setFlowTracked((current2) => ({ stage: "result", report, label: current2?.preview?.source?.label ?? null }));
   });
   const cancelImport = () => {
     const id = typeof flow === "object" && flow !== null ? flow.id : null;
@@ -19755,7 +19901,14 @@ function createBotBrowsers({ bridge, createSource: createSource2, storage = glob
       });
       return void 0;
     }
-    if (guest.appView) await bridge.views.create(botId, tabId, pending ?? "");
+    if (guest.appView) {
+      await bridge.views.create(botId, tabId, pending ?? "");
+      if (disposed) {
+        await bridge.views.close(botId, tabId).catch(() => {
+        });
+        return void 0;
+      }
+    }
     const element = guest.element;
     element.dataset.sidebarBrowserFrame = "webview";
     Object.assign(element.style, { position: "fixed", display: "flex", border: "0", pointerEvents: "auto", background: "#fff" });
@@ -19817,7 +19970,7 @@ function createBotBrowsers({ bridge, createSource: createSource2, storage = glob
     publish2(tabId, { live: true, loading: Boolean(entry.pending) });
     if (guest.appView) {
       const state = (await bridge.views.sync(botId)).find((view) => view.tabId === tabId);
-      if (state) {
+      if (state && !disposed) {
         entry.botAttached = state.botAttached === true;
         element.update(state);
       }
@@ -19909,6 +20062,7 @@ function createBotBrowsers({ bridge, createSource: createSource2, storage = glob
   }
   const activeTab = (botId) => tabs.getSnapshot()[botId]?.active ?? null;
   async function show2(tabId, box = null) {
+    if (disposed) return;
     if (tabId !== null && tabId === shown && visible && box !== null) {
       rect = box;
       const entry2 = views.get(tabId);
@@ -20040,6 +20194,8 @@ function createBotBrowsers({ bridge, createSource: createSource2, storage = glob
     },
     dispose() {
       disposed = true;
+      shown = null;
+      visible = false;
       clearTimeout(resizeLater);
       for (const entry of views.values()) {
         if (entry.appView) void bridge.views.place(entry.tabId, rect ?? { left: 0, top: 0, width: 800, height: 600 }, false);

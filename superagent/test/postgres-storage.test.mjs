@@ -555,6 +555,38 @@ test('old Effect results cannot replace a newer payload on PostgreSQL', { timeou
   }
 })
 
+test('a JSONB payload read back in its stored key order stays the same Effect', { timeout: 30000 }, async () => {
+  const { storage } = await newStorage()
+  const effects = new Effects(storage, 'effect-jsonb', { handlers: { notice: { execute: async () => ({ type: 'success' }) } } })
+  const enqueue = payload => storage.transaction('effect-jsonb', transaction => effects.enqueue(transaction,
+    { key: 'jsonb', stream: 'notice', scope: 'router', payload }))
+  const original = await enqueue({ aa: 1, b: 2 })
+  const [stored] = (await effects.list()).items
+  assert.deepEqual(stored.payload, { b: 2, aa: 1 })
+  const pending = await enqueue({ aa: 1, b: 2 })
+  assert.equal(pending.generation, original.generation)
+  await effects.drain()
+  const completed = await enqueue({ aa: 1, b: 2 })
+  assert.equal(completed.generation, original.generation)
+  await effects.stop()
+})
+
+test('a released writer lease no longer reports itself active', { timeout: 30000 }, async () => {
+  const { storage } = await newStorage()
+  const lease = await storage.acquireWriterLease('session-a')
+  assert.ok(lease)
+  assert.equal(lease.active, true)
+  assert.equal(await storage.acquireWriterLease('session-a'), undefined)
+  await lease.release()
+  assert.equal(lease.active, false)
+  await lease.release()
+  const next = await storage.acquireWriterLease('session-a')
+  assert.ok(next)
+  assert.equal(next.active, true)
+  await next.release()
+  assert.equal(next.active, false)
+})
+
 test('PostgreSQL statement and three-attempt budgets stop without accepting partial work', { timeout: 30000 }, async () => {
   const { storage, database: name } = await newStorage({ statementTimeoutMs: 100, lockTimeoutMs: 1000 })
   const raw = await client(name)

@@ -525,3 +525,28 @@ test('a failed HTTP MCP mount does not show the encoded secret from its URL', as
   assert.equal(status.state, 'error')
   assert.equal(status.error, 'Connection failed: fetch https://mcp.exa.test/mcp?apiKey=[secret:EXA_API_KEY]')
 })
+
+test('an MCP plugin import that fails once is retried on the next reconcile', async t => {
+  const state = team()
+  state.capabilities = { items: { echo: { ...mcp('echo'), approved: true, createdBy: 'chief', createdAt: 1, updatedAt: 1 } } }
+  state.bots.chief.capabilities = ['echo']
+  let attempts = 0
+  const env = await setup({
+    state,
+    beforeLoad: ({ ctx }) => {
+      const loader = ctx.get('loader')
+      const load = loader.import
+      loader.import = async (name) => {
+        if (name === '@deepseek-ai/dsh-mcp-client' && ++attempts === 1) throw new Error('loader not ready')
+        return load(name)
+      }
+    },
+  })
+  t.after(() => env.dispose())
+  await env.ctx.emitAsync('agent/created', { agent: testAgent('chief', env.mounts, env.skills) })
+  assert.equal(env.rt.capabilityStatusesView().chief.echo.state, 'error')
+  assert.match(env.rt.capabilityStatusesView().chief.echo.error, /loader not ready/)
+  await env.rt.scheduleCapabilitiesReconcile()
+  assert.equal(env.rt.capabilityStatusesView().chief.echo.state, 'ready')
+  assert.equal(env.mounts.filter(mount => mount.plugin === env.mcpPlugin).length, 1)
+})

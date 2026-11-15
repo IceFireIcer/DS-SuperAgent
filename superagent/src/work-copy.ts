@@ -118,7 +118,7 @@ function runGit(root: string, args: string[], limit: number): Promise<Buffer> {
         ? new WorkCopyUnsupported('Git is not available in this execution world.', [workCopyGaps.gitUnavailable])
         : error)
     })
-    child.once('exit', code => {
+    child.once('close', code => {
       if (settled) return
       settled = true
       clearTimeout(timer)

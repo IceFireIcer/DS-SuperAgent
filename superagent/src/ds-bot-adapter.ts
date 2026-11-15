@@ -24,6 +24,11 @@ export interface DsBotNativeSessions {
     events: readonly SessionEvent[]
     cursor?: number
   }>
+  readSessionPage?(sessionId: string, options?: { offset?: number; limit?: number }): Promise<{
+    sessionId: string
+    events: readonly SessionEvent[]
+    total?: number
+  }>
 }
 
 export interface DsBotEngineFactoryResult {
@@ -54,6 +59,8 @@ export interface DsBotAdapterOptions {
 }
 
 type Scope = { owner: DsBotOwner; sessionId: string; runtime: DsBotEngineFactoryResult; ctx: unknown; rt: DsBotAdapterContext['rt'] }
+type ConversationView = Awaited<ReturnType<Engine['conversation']>>
+interface FallbackItem { kind: 'user' | 'bot'; text: string; time: number; seq?: number }
 
 const unsupported = (operation: string) => Object.assign(new Error(`The DS Bot Engine adapter does not support ${operation} for this scope.`), { code: 'bot/execution-unsupported' })
 const invalid = (message: string) => Object.assign(new Error(message), { code: 'bot/invalid' })
@@ -73,6 +80,28 @@ function textOf(message: unknown): string {
 function requireRequestId(request: { requestId?: unknown }): string {
   if (typeof request.requestId !== 'string' || request.requestId.trim() === '') throw invalid('A stable requestId is required.')
   return request.requestId
+}
+
+function visibleText(content: unknown): string {
+  if (typeof content === 'string') return content.trim()
+  if (!Array.isArray(content)) return ''
+  return content.filter((block): block is { type: 'text'; text: string } => Boolean(block && typeof block === 'object'
+    && (block as { type?: unknown }).type === 'text' && typeof (block as { text?: unknown }).text === 'string'))
+    .map(block => block.text).join('\n').trim()
+}
+
+function itemKind(item: unknown) {
+  return item && typeof item === 'object' ? (item as { kind?: unknown }).kind : undefined
+}
+
+function itemText(item: unknown) {
+  return item && typeof item === 'object' && typeof (item as { text?: unknown }).text === 'string'
+    ? (item as { text: string }).text : ''
+}
+
+function itemTime(item: unknown) {
+  return item && typeof item === 'object' && typeof (item as { time?: unknown }).time === 'number'
+    ? (item as { time: number }).time : undefined
 }
 
 /**
@@ -245,54 +274,184 @@ export class DsBotExecutionAdapter {
     const index = cursor ? sessions.indexOf(cursor.sessionId as string) : sessions.length - 1
     const sessionId = sessions[index]
     if (!sessionId) return { sessionId: scope.sessionId, items: [], cursor: null }
-    const events: SessionEvent[] = []
-    let after: number | undefined
-    for (let page = 0; page < 20; page++) {
-      let result: Awaited<ReturnType<DsBotNativeSessions['readSession']>>
-      try {
-        result = await scope.runtime.sessions.readSession(sessionId, { limit: 100, ...(after === undefined ? {} : { after }) })
-      } catch (error) {
-        // A durable prompt can be acknowledged before the Worker Session is materialized.
-        const failure = error as { code?: unknown; name?: unknown }
-        if (events.length === 0
-          && (failure?.code === 'NOT_FOUND' || failure?.name === 'SessionPersistenceNotFoundError')) break
-        throw error
-      }
-      events.push(...result.events)
-      if (result.cursor === undefined) break
-      if (page === 19) throw unsupported('Session event budget')
-      after = result.cursor
-    }
-    const eligible = events.filter(event => cursor?.beforeSeq === undefined || Number(event.seq) < Number(cursor.beforeSeq))
-    const selected = eligible.slice(-20)
-    const next = eligible.length > selected.length ? { sessionId, beforeSeq: Number(selected[0]!.seq) }
+    const recent = await this.readRecentEvents(scope, sessionId,
+      cursor?.beforeSeq === undefined ? undefined : Number(cursor.beforeSeq))
+    const selected = recent.events
+    const next = recent.more && selected.length > 0 ? { sessionId, beforeSeq: Number(selected[0]!.seq) }
       : index > 0 ? { sessionId: sessions[index - 1]! } : null
     const items = context.rt.displayItems(request.sessionId, selected)
-    if (items.length > 0) return { sessionId: request.sessionId, items, cursor: next }
-    // The Engine's worker Session is a private execution log, not the copied UI's
-    // message shape. Until a native renderer exists, show the bound Ticket's
-    // request and result instead of an active chat that looks empty.
-    const fallback: unknown[] = []
-    if (typeof conversation.request === 'string' && conversation.request.trim() !== '') {
-      const requestTime = conversation.messages[0]?.createdAt
-      fallback.push({ kind: 'user', text: conversation.request, time: requestTime ?? Date.now() })
+    if (items.length > 0) {
+      const renderedConversation = items.some(item => itemKind(item) === 'user' || itemKind(item) === 'bot')
+      const needsFallback = renderedConversation && (cursor === undefined || items.some(item => itemKind(item) === 'user'))
+      return { sessionId: request.sessionId,
+        items: needsFallback ? this.mergeFallback(items, this.resultItems(conversation), selected, cursor === undefined) : items,
+        cursor: next }
     }
-    let resultCount = 0
-    for (const message of conversation.messages) {
-      if (message.purpose === 'result' && typeof message.text === 'string' && message.text.trim() !== '') {
-        fallback.push({ kind: 'bot', text: message.text, time: message.createdAt ?? Date.now() })
-        resultCount += 1
+    // The Engine's worker Session is a private execution log, not the copied UI's
+    // message shape. Project the complete durable conversation instead of only
+    // the first request and latest result, so multi-turn chats stay readable.
+    const fallback = await this.fallbackItems(scope, conversation)
+    return { sessionId: request.sessionId, items: fallback, cursor: fallback.length > 0 ? null : next }
+  }
+
+  private async readRecentEvents(scope: Scope, sessionId: string, before?: number) {
+    const sessions = scope.runtime.sessions
+    if (sessions.readSessionPage) {
+      try {
+        if (before !== undefined) {
+          if (before === 0) return { events: [] as SessionEvent[], more: false }
+          const start = Math.max(0, before - 20)
+          const page = await sessions.readSessionPage(sessionId, { offset: start, limit: before - start })
+          return { events: page.events.filter(event => Number(event.seq) < before).slice(-20), more: start > 0 }
+        }
+        const head = await sessions.readSessionPage(sessionId, { offset: 0, limit: 1 })
+        if (head.total === undefined) {
+          // A provider that cannot describe its log still needs the forward fallback.
+        } else if (head.total === 0) {
+          return { events: [] as SessionEvent[], more: false }
+        } else {
+          const start = Math.max(0, head.total - 20)
+          const page = await sessions.readSessionPage(sessionId, { offset: start, limit: head.total - start })
+          return { events: page.events.slice(-20), more: start > 0 }
+        }
+      } catch (error) {
+        if (!this.missingSession(error)) throw error
+        return { events: [] as SessionEvent[], more: false }
       }
     }
-    if (resultCount === 0) {
-      for (const report of conversation.reports) {
-        if (typeof report.result === 'string' && report.result.trim() !== '') {
-          fallback.push({ kind: 'bot', text: report.result, time: report.createdAt ?? Date.now() })
-          break
+    const selected: SessionEvent[] = []
+    let after: number | undefined
+    let more = false
+    for (;;) {
+      let result: Awaited<ReturnType<DsBotNativeSessions['readSession']>>
+      try {
+        result = await sessions.readSession(sessionId, { limit: 100, ...(after === undefined ? {} : { after }) })
+      } catch (error) {
+        if (selected.length === 0 && this.missingSession(error)) break
+        throw error
+      }
+      for (const event of result.events) {
+        if (before !== undefined && Number(event.seq) >= before) continue
+        selected.push(event)
+        if (selected.length > 20) {
+          selected.shift()
+          more = true
+        }
+      }
+      if (result.cursor === undefined) break
+      if (result.cursor === after) throw invalid('The Session cursor did not advance.')
+      after = result.cursor
+    }
+    return { events: selected, more }
+  }
+
+  private async fallbackItems(scope: Scope, conversation: ConversationView): Promise<FallbackItem[]> {
+    const items: FallbackItem[] = []
+    const add = (kind: 'user' | 'bot', text: string, time: number, seq?: number) => {
+      const value = text.trim()
+      if (!value) return
+      items.push({ kind, text: value, time, ...(seq === undefined ? {} : { seq }) })
+    }
+    const sessionIds = [...new Set([...conversation.assignmentHistory, ...conversation.assignments].map(assignment => assignment.sessionId))]
+    for (const sessionId of sessionIds) {
+      let events: readonly SessionEvent[]
+      try {
+        events = await this.allSessionEvents(scope, sessionId)
+      } catch (error) {
+        if (this.missingSession(error)) continue
+        throw error
+      }
+      for (const event of events) {
+        if (event.type === 'user/message') {
+          const data = event.data as { source?: { kind?: string }; content?: unknown }
+          if (data.source?.kind === 'user') add('user', visibleText(data.content), event.time, Number(event.seq))
         }
       }
     }
-    return { sessionId: request.sessionId, items: fallback, cursor: fallback.length > 0 ? null : next }
+    items.push(...this.resultItems(conversation))
+    return items.sort((left, right) => left.time - right.time || (left.seq ?? -1) - (right.seq ?? -1))
+  }
+
+  private resultItems(conversation: ConversationView): FallbackItem[] {
+    const items: FallbackItem[] = []
+    for (const message of conversation.messageHistory) {
+      if (message.purpose !== 'result' || message.state !== 'sent' || !message.text.trim()) continue
+      items.push({ kind: 'bot', text: message.text.trim(), time: message.createdAt })
+    }
+    if (items.length === 0) {
+      for (const report of conversation.reports) {
+        if (report.result.trim()) items.push({ kind: 'bot', text: report.result.trim(), time: report.createdAt })
+      }
+    }
+    return items.sort((left, right) => left.time - right.time || (left.seq ?? -1) - (right.seq ?? -1))
+  }
+
+  private async allSessionEvents(scope: Scope, sessionId: string): Promise<readonly SessionEvent[]> {
+    const sessions = scope.runtime.sessions
+    if (sessions.readSessionPage) {
+      const events: SessionEvent[] = []
+      let offset = 0
+      for (;;) {
+        const page = await sessions.readSessionPage(sessionId, { offset, limit: 100 })
+        events.push(...page.events)
+        if (page.events.length < 100) break
+        offset += page.events.length
+        if (page.total !== undefined && offset >= page.total) break
+      }
+      return events
+    }
+    const events: SessionEvent[] = []
+    let after: number | undefined
+    for (;;) {
+      const page = await sessions.readSession(sessionId, { limit: 100, ...(after === undefined ? {} : { after }) })
+      events.push(...page.events)
+      if (page.cursor === undefined) break
+      if (page.cursor === after) throw invalid('The Session cursor did not advance.')
+      after = page.cursor
+    }
+    return events
+  }
+
+  private mergeFallback(items: unknown[], fallback: FallbackItem[], selected: readonly SessionEvent[], includeLatest: boolean) {
+    const times = selected.map(event => event.time).filter(Number.isFinite)
+    if (times.length === 0) return items
+    const start = Math.min(...times)
+    const end = Math.max(...times)
+    const counts = new Map<string, number>()
+    const merged = [...items]
+    for (const item of items) {
+      const kind = itemKind(item)
+      const text = itemText(item).trim()
+      if ((kind === 'user' || kind === 'bot') && text) {
+        const identity = `${kind}\u0000${text}`
+        counts.set(identity, (counts.get(identity) ?? 0) + 1)
+      }
+    }
+    for (const item of fallback) {
+      if (item.time < start || item.time > end) continue
+      const identity = `${item.kind}\u0000${item.text}`
+      const remaining = counts.get(identity) ?? 0
+      if (remaining > 0) {
+        counts.set(identity, remaining - 1)
+        continue
+      }
+      merged.push({ kind: item.kind, text: item.text, time: item.time })
+    }
+    if (includeLatest) {
+      const latest = fallback.findLast(item => item.kind === 'bot')
+      if (latest && !merged.some(item => itemKind(item) === 'bot' && itemText(item) === latest.text)) {
+        merged.push({ kind: latest.kind, text: latest.text, time: latest.time })
+      }
+    }
+    if (merged.every(item => itemTime(item) !== undefined)) {
+      merged.sort((left, right) => itemTime(left)! - itemTime(right)!)
+    }
+    return merged
+  }
+
+  private missingSession(error: unknown) {
+    const failure = error as { code?: unknown; name?: unknown }
+    return failure?.code === 'NOT_FOUND' || failure?.name === 'SessionPersistenceNotFoundError'
   }
 
   async live(_request: unknown, context: DsBotAdapterContext) {
@@ -301,19 +460,23 @@ export class DsBotExecutionAdapter {
     const bots: Record<string, { since: number; said?: string }> = {}
     const questions: Record<string, { id: string; callId: string; question: string; options: { label: string }[]; multiSelect: false }> = {}
     for (const scopePromise of this.scopes.values()) {
-      const scope = await scopePromise
-      if (!await this.authorized({ ...scope, ctx: context.ctx, rt: context.rt })) continue
-      const binding = await this.requireBinding(scope, false)
-      if (!binding) continue
-      const conversation = await scope.runtime.engine.conversation(binding.ticketId)
-      if (conversation.attention?.status === 'waiting') {
-        const attention = conversation.attention
-        questions[scope.sessionId] = { id: attention.id, callId: attention.id, question: attention.question,
-          options: attention.options.map(label => ({ label })), multiSelect: false }
-      }
-      if (conversation.stage === 'draft' || conversation.stage === 'pending' || conversation.stage === 'waiting-human') {
-        activity[scope.owner.botId!] = conversation.stage === 'waiting-human' ? 'alert' : 'thinking'
-        bots[scope.owner.botId!] = { since: conversation.assignments[0]?.createdAt ?? 0, ...(conversation.request ? { said: conversation.request } : {}) }
+      try {
+        const scope = await scopePromise
+        if (!await this.authorized({ ...scope, ctx: context.ctx, rt: context.rt })) continue
+        const binding = await this.requireBinding(scope, false)
+        if (!binding) continue
+        const conversation = await scope.runtime.engine.conversation(binding.ticketId)
+        if (conversation.attention?.status === 'waiting') {
+          const attention = conversation.attention
+          questions[scope.sessionId] = { id: attention.id, callId: attention.id, question: attention.question,
+            options: attention.options.map(label => ({ label })), multiSelect: false }
+        }
+        if (conversation.stage === 'draft' || conversation.stage === 'pending' || conversation.stage === 'waiting-human') {
+          activity[scope.owner.botId!] = conversation.stage === 'waiting-human' ? 'alert' : 'thinking'
+          bots[scope.owner.botId!] = { since: conversation.assignments[0]?.createdAt ?? 0, ...(conversation.request ? { said: conversation.request } : {}) }
+        }
+      } catch {
+        // One unavailable historical chat must not erase the whole live projection.
       }
     }
     return { activity, questions, work: { bots, rooms: {}, waiting: {}, turns: {}, steered: {} } }
@@ -357,7 +520,6 @@ export class DsBotExecutionAdapter {
       if (value.owner.botId !== owner.botId || value.ctx !== context.ctx || value.rt !== context.rt) throw unsupported('owner or Host change')
       return value
     }
-    if (this.scopes.size >= 100) throw unsupported('more than 100 UI scopes')
     const promise = Promise.resolve(this.options.factory({ owner: { ...owner }, sessionId, ctx: context.ctx, rt: context.rt }))
       .then(runtime => {
         if (!runtime?.engine?.effects || !runtime.sessions || !runtime.actorId) throw new TypeError('The Engine factory returned an incomplete public runtime.')
@@ -391,10 +553,29 @@ export class DsBotExecutionAdapter {
 
   private async restoreScopes(context: DsBotAdapterContext) {
     const entries = [...context.rt.chatOwners?.entries() ?? []]
-    if (entries.length > 100) throw unsupported('more than 100 UI scopes')
+    const retired: Promise<void>[] = []
+    for (const [sessionId, scopePromise] of this.scopes) {
+      const botId = context.rt.chatOwners?.get(sessionId)
+      if (botId !== undefined && await this.authorized({ owner: { kind: 'bot', botId }, sessionId, ctx: context.ctx, rt: context.rt })) continue
+      this.scopes.delete(sessionId)
+      retired.push((async () => {
+        try {
+          const scope = await scopePromise
+          if (scope.runtime.dispose) await scope.runtime.dispose()
+          else await scope.runtime.engine.effects.stop()
+        } catch { /* An already failed scope has nothing left to release. */ }
+      })())
+    }
+    await Promise.all(retired)
     for (const [sessionId, botId] of entries) {
       const owner = { kind: 'bot', botId }
-      if (await this.authorized({ owner, sessionId, ctx: context.ctx, rt: context.rt })) await this.scope(sessionId, owner, context)
+      if (!await this.authorized({ owner, sessionId, ctx: context.ctx, rt: context.rt })) continue
+      try {
+        await this.scope(sessionId, owner, context)
+      } catch (error) {
+        if (this.closed) throw error
+        // A local failure is not a budget for every other chat.
+      }
     }
   }
 

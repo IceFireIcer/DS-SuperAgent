@@ -140,11 +140,33 @@ test('the same batch is idempotent and a changed source conflicts without overwr
   const first = await prepareLegacyArchive({ source: from, target, batchId: 'same', mapping })
   await verifyLegacyArchive(target, 'same')
   const published = await publishLegacyArchive(target, 'same')
+  assert.deepEqual(await publishLegacyArchive(target, 'same'), published)
   const again = await prepareLegacyArchive({ source: from, target, batchId: 'same', mapping })
   assert.deepEqual(again, published)
   write(join(from, 'memory', 'team', 'MEMORY.md'), 'changed after publish\n')
   await assert.rejects(prepareLegacyArchive({ source: from, target, batchId: 'same', mapping }), { code: 'ARCHIVE_CONFLICT' })
   assert.equal(getLegacyArchive(target, 'same').source.digest, first.source.digest)
+})
+
+test('Session history enters the source digest even without memory, attachments or a workspace', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'ds-superagent-archive-sessions-only-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const from = join(root, 'legacy')
+  const target = join(root, 'archive-store')
+  json(join(from, 'bot', 'state.json'), {
+    version: 1, revision: 1, mainBotIds: [], rooms: {}, works: {}, requests: {}, questions: {}, agents: {},
+    bots: { 'session-only': { id: 'session-only', name: 'Only', sessionId: 'session-only' } },
+  })
+  const log = join(from, 'sessions', '--team--', 'session-only', 'session.v4.jsonl')
+  write(log, '{"seq":0,"type":"session/created"}\n{"seq":1,"type":"user/message","data":{"text":"remember me"}}\n')
+  const prepared = await prepareLegacyArchive({ source: from, target, batchId: 'sessions-only', mapping: { roles: [], sharedMemory: [] } })
+  assert.equal(prepared.sessions.length, 1)
+  assert.equal(Object.hasOwn(prepared.checksums, 'sessions/--team--/session-only/session.v4.jsonl'), true)
+  assert.equal((await verifyLegacyArchive(target, 'sessions-only')).status, 'verified')
+  write(log, '{"seq":0,"type":"session/created"}\n{"seq":1,"type":"user/message","data":{"text":"Remember me."}}\n')
+  const changed = await verifyLegacyArchive(target, 'sessions-only')
+  assert.equal(changed.status, 'invalid')
+  assert.match(changed.errors.join(','), /SOURCE_CHANGED/u)
 })
 
 test('missing or newer history remains unpublished', async t => {

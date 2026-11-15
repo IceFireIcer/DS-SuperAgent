@@ -111,6 +111,56 @@ test('idle Worker text never becomes a result and cannot invoke Router-only deli
   assert.equal(visible.some(name => name === 'assign_worker' || name === 'deliver_result'), false)
 })
 
+test('a batched Router notice applies the current role configuration and records its use', { timeout: 10000 }, async context => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-engine-batch-config-'))
+  let native, storage, sessions, engine, release, entered
+  const gate = new Promise(resolve => { release = resolve })
+  const started = new Promise(resolve => { entered = resolve })
+  context.after(async () => {
+    release()
+    await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+  const routerTurns = []
+  native = await nativeContext(join(directory, 'sessions'), async function* (options) {
+    if (options.model === 'worker') { yield* textResponse('No completed result.'); return }
+    const user = options.messages.filter(message => message.role === 'user').at(-1)
+    const text = user.content.map(block => block.text ?? '').join('')
+    const results = options.messages.slice(options.messages.lastIndexOf(user) + 1).filter(message => message.role === 'tool')
+    if (!results.length) {
+      routerTurns.push({ model: options.model, sessionId: options.sessionId, text })
+      if (text.includes('Hold the Router.')) { entered(); await gate }
+    }
+    const tool = options.tools[results.length]
+    if (tool) yield* toolResponse(tool.name, {}, `call-${results.length}`)
+    else yield* textResponse('Assigned.')
+  })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  sessions = new core.NativeSessions(native, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] },
+    { retryDelayMs: 1 }, sessions)
+  await engine.submit({ commandId: 'hold-config', eventId: 'hold-config', text: 'Hold the Router.' })
+  const running = engine.effects.drain()
+  await started
+  const before = await engine.getRoleConfig()
+  const changed = await engine.updateRoleConfig({ commandId: 'batch-roles', expectedRevision: before.revision,
+    roles: { ...before.roles, router: { ...before.roles.router, model: { provider: 'mock', model: 'router-custom' },
+      instructions: 'Use the current batch role.' } } })
+  assert.equal(changed.revision, before.revision + 1)
+  const alpha = await engine.submit({ commandId: 'batch-alpha', eventId: 'batch-alpha', text: 'Request alpha.' })
+  const beta = await engine.submit({ commandId: 'batch-beta', eventId: 'batch-beta', text: 'Request beta.' })
+  release()
+  await running
+  for (let index = 0; index < 5; index++) await engine.effects.drain()
+  const batchTurns = routerTurns.filter(turn => !turn.text.includes('Hold the Router.'))
+  assert.ok(batchTurns.length >= 1, JSON.stringify(routerTurns))
+  assert.equal(batchTurns.every(turn => turn.model === 'router-custom'), true, JSON.stringify(routerTurns))
+  const uses = await engine.getRoleConfigUses(batchTurns[0].sessionId)
+  assert.equal(uses.some(use => use.role === 'router' && use.revision === changed.revision && use.router.model === 'router-custom'), true,
+    JSON.stringify(uses))
+  for (const receipt of [alpha, beta]) assert.equal((await engine.conversation(receipt.ticketId)).assignments.length, 1)
+})
+
 for (const partial of [false, true]) test(`Engine notices share the next busy Router turn and ${partial ? 'retry an unhandled item' : 'keep individual receipts'}`, { timeout: 10000 }, async context => {
   const directory = await mkdtemp(join(tmpdir(), 'ds-bot-engine-burst-'))
   let native, storage, sessions, engine, release, entered

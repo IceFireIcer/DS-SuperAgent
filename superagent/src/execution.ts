@@ -97,6 +97,15 @@ interface WorkerTurnRequest {
   contextHandoff?: boolean
   environmentHandoffId?: string
 }
+interface BotWorkerProfile {
+  model?: { provider: string; model: string }
+  reasoningEffort?: string
+  instructions: string
+  skills: string[]
+}
+interface BotExecutionProfiles {
+  resolve(sessionId: string): Promise<BotWorkerProfile | undefined> | BotWorkerProfile | undefined
+}
 export interface StopState {
   id: string
   instanceId: string
@@ -702,11 +711,17 @@ export class Execution {
 
   private async routerBatch(effects: Effect[], signal: AbortSignal): Promise<EffectResult[]> {
     const requests = await Promise.allSettled(effects.map(effect => this.routerRequest(String(effect.payload.ticketId), effect.payload.type === 'report-ready')))
+    const config = await this.roleConfig.currentView()
+    this.sessions.setRoutes(config.roles.router.model, config.roles.worker.model)
+    this.sessions.setRoleInstructions(config.roles.router, config.roles.worker)
     return Promise.all(requests.map(async request => {
       if (request.status === 'rejected') return { type: 'unknown' as const, reason: 'The Router notification could not be prepared.' }
       if (!request.value) return { type: 'success' as const }
       try {
-        await this.recordRouterSession(await this.sessions.run({ ...request.value, signal }))
+        const result = await this.sessions.run({ ...request.value, signal, instructions: config.roles.router.instructions, skills: config.roles.router.skills })
+        await this.recordRouterSession(result)
+        await this.storage.transaction(this.instanceId, transaction => this.roleConfig.recordUse(transaction, { sessionId: result.sessionId, role: 'router',
+          revision: config.revision, router: config.roles.router.model, worker: config.roles.worker.model }))
         return { type: 'success' as const }
       } catch (error) {
         return error instanceof CoreError && error.code === 'ROUTER_NOTICE_UNHANDLED'
@@ -1294,8 +1309,16 @@ export class Execution {
       }
     }
     const activeConfig = await this.roleConfig.currentView()
-    this.sessions.setRoutes(activeConfig.roles.router.model, activeConfig.roles.worker.model)
-    this.sessions.setRoleInstructions(activeConfig.roles.router, activeConfig.roles.worker)
+    const botProfile = await this.botWorkerProfile(trigger.threadId)
+    const workerModel = botProfile?.model ?? activeConfig.roles.worker.model
+    const workerInstructions = botProfile
+      ? [activeConfig.roles.worker.instructions, botProfile.instructions].filter(text => text.trim()).join('\n\n')
+      : activeConfig.roles.worker.instructions
+    const workerSkills = botProfile
+      ? [...activeConfig.roles.worker.skills, ...botProfile.skills.filter(skill => !activeConfig.roles.worker.skills.includes(skill))]
+      : activeConfig.roles.worker.skills
+    this.sessions.setRoutes(activeConfig.roles.router.model, workerModel)
+    this.sessions.setRoleInstructions(activeConfig.roles.router, { instructions: workerInstructions, skills: workerSkills })
     let outcome
     try {
       outcome = await this.sessions.run({ sessionId: assignment.sessionId, role: 'worker',
@@ -1304,7 +1327,7 @@ export class Execution {
           await this.storage.transaction(this.instanceId, transaction => this.inputs.recordPersisted(transaction, input.id, turnMessageId!, seq))
         } } : {}),
         text: turnText ?? await this.turnTextFor(cause, ticketId, trigger, input, job, subagent),
-        instructions: activeConfig.roles.worker.instructions, skills: activeConfig.roles.worker.skills,
+        instructions: workerInstructions, skills: workerSkills,
         ...(bound ? { cwd: bound.cwd } : {}), signal: controller.signal, tools: status ? statusTools : [
       contextTool,
       ...environmentTools,
@@ -1406,7 +1429,7 @@ export class Execution {
           const current = await transaction.get<Assignment>('assignment', ticketId)
           if (current?.id !== assignment.id || current.state !== 'running') throw new CoreError('STALE_ASSIGNMENT', 'The reporting Assignment is no longer current.')
           const existing = await transaction.get<ReadyReport>('report', ticketId)
-          if (existing && !input) return existing.id
+          if (existing?.assignmentId === assignment.id && !input) return existing.id
           const report: ReadyReport = { id: randomUUID(), ticketId, assignmentId: assignment.id, sessionId: assignment.sessionId, kind: 'ready', result: bound ? bound.sanitize(args.result!) : args.result!, evidence: bound ? bound.sanitize(args.evidence!) : args.evidence!, artifacts: structuredClone(artifacts), toolFacts: structuredClone(toolFacts),
             ...(input ? { inputId: input.id } : {}), directionVersion: input?.directionVersion ?? 1, createdAt: Date.now() }
           const historyKey = `${JSON.stringify(['report-history', ticketId])}:${report.id}`
@@ -1454,7 +1477,7 @@ export class Execution {
       const sessionMetadata = { id: outcome.sessionId, eventCount: outcome.events.length, ticketId, role: 'worker', status: outcome.status }
       if (!await transaction.replace('session', outcome.sessionId, sessionMetadata)) await transaction.insert('session', outcome.sessionId, sessionMetadata)
       await this.roleConfig.recordUse(transaction, { sessionId: outcome.sessionId, role: 'worker', revision: activeConfig.revision,
-        router: activeConfig.roles.router.model, worker: activeConfig.roles.worker.model })
+        router: activeConfig.roles.router.model, worker: workerModel })
       if (status && statusFact) {
         const fact: StatusReport = { id: `${JSON.stringify(['status-report', ticketId])}:${randomUUID()}`, ticketId, assignmentId: assignment.id, text: statusFact, createdAt: Date.now() }
         if (!await transaction.replace('status-report', `${JSON.stringify(['status-report', ticketId])}:current`, fact)) await transaction.insert('status-report', `${JSON.stringify(['status-report', ticketId])}:current`, fact)
@@ -1470,6 +1493,7 @@ export class Execution {
         if (completed) await this.inputs.completeDelivery(transaction, input.id, completed)
       }
       const report = await transaction.get<ReadyReport>('report', ticketId)
+      const currentReport = report?.assignmentId === assignment.id ? report : undefined
       const intent = (await transaction.get<Work['intent']>('intent', ticketId))!
       if (askedAttention) {
         await transaction.replace('intent', ticketId, { ...intent, state: 'pending', reason: 'waiting-human' })
@@ -1483,14 +1507,14 @@ export class Execution {
       }
       // Background work keeps its slot and keeps the Ticket working; it is not an idle Ticket and no report
       // is owed yet. Its completion event wakes this same Assignment on this same slot.
-      if (!report && await this.hasBackgroundWork(transaction, ticketId, assignment.id)) {
+      if (!currentReport && await this.hasBackgroundWork(transaction, ticketId, assignment.id)) {
         await transaction.replace('intent', ticketId, { ...intent, state: 'running', reason: 'worker-background' })
         return true
       }
-      await transaction.replace('intent', ticketId, { ...intent, state: report ? 'ready' : 'running', reason: report ? 'ready-report' : 'worker-idle' })
-      if (report) {
+      await transaction.replace('intent', ticketId, { ...intent, state: currentReport ? 'ready' : 'running', reason: currentReport ? 'ready-report' : 'worker-idle' })
+      if (currentReport) {
         await this.saveAssignment(transaction, { ...assignment, state: 'ended' })
-        await this.effects.enqueue(transaction, { key: report.id, stream: 'notice', scope: 'router', payload: { type: 'report-ready', ticketId, reportId: report.id } })
+        await this.effects.enqueue(transaction, { key: currentReport.id, stream: 'notice', scope: 'router', payload: { type: 'report-ready', ticketId, reportId: currentReport.id } })
         endedJobs = await this.endAssignmentJobs(transaction, ticketId, assignment.id)
         endedSubagents = await this.endAssignmentSubagents(transaction, ticketId, assignment.id)
       }
@@ -1607,33 +1631,12 @@ export class Execution {
       const attention = await this.attentions.current(transaction, ticketId)
       const attentionHistory = await this.attentions.history(transaction, ticketId)
       const slot = await this.slots?.currentFor(transaction, ticketId)
-      const assignmentHistory: Assignment[] = []
-      let assignmentCursor = `${JSON.stringify(['assignment-history', ticketId])}:`
-      for (let pageCount = 0; pageCount < 10; pageCount++) {
-        const page = await transaction.scan<Assignment>('assignment-history', { limit: 100, after: assignmentCursor })
-        assignmentHistory.push(...page.items.map(item => item.value))
-        if (!page.cursor || !page.cursor.startsWith(assignmentCursor)) break
-        assignmentCursor = page.cursor
-        if (pageCount === 9) throw new CoreError('ASSIGNMENT_BUDGET', 'The Assignment history exceeds its 1000-record budget.')
-      }
-      const stopHistory: StopState[] = []
-      let stopCursor = `${JSON.stringify(['stop-history', ticketId])}:`
-      for (let pageCount = 0; pageCount < 10; pageCount++) {
-        const page = await transaction.scan<StopState>('stop-history', { limit: 100, after: stopCursor })
-        stopHistory.push(...page.items.map(item => item.value))
-        if (!page.cursor || !page.cursor.startsWith(stopCursor)) break
-        stopCursor = page.cursor
-        if (pageCount === 9) throw new CoreError('STOP_BUDGET', 'The stop history exceeds its 1000-record budget.')
-      }
-      const resumeHistory: Record<string, unknown>[] = []
-      let resumeCursor = `${JSON.stringify(['resume-decision', ticketId])}:`
-      for (let pageCount = 0; pageCount < 10; pageCount++) {
-        const page = await transaction.scan<Record<string, unknown>>('resume-decision', { limit: 100, after: resumeCursor })
-        resumeHistory.push(...page.items.map(item => item.value))
-        if (!page.cursor || !page.cursor.startsWith(resumeCursor)) break
-        resumeCursor = page.cursor
-        if (pageCount === 9) throw new CoreError('RESUME_BUDGET', 'The resume history exceeds its 1000-record budget.')
-      }
+      const assignmentHistory = await this.history<Assignment>(transaction, 'assignment-history',
+        `${JSON.stringify(['assignment-history', ticketId])}:`, { code: 'ASSIGNMENT_BUDGET', message: 'The Assignment history exceeds its 1000-record budget.' })
+      const stopHistory = await this.history<StopState>(transaction, 'stop-history',
+        `${JSON.stringify(['stop-history', ticketId])}:`, { code: 'STOP_BUDGET', message: 'The stop history exceeds its 1000-record budget.' })
+      const resumeHistory = await this.history<Record<string, unknown>>(transaction, 'resume-decision',
+        `${JSON.stringify(['resume-decision', ticketId])}:`, { code: 'RESUME_BUDGET', message: 'The resume history exceeds its 1000-record budget.' })
       const messageHistory = await this.deliveries.list(transaction, ticketId)
       const visibleMessages = messageHistory.filter(message => message.state === 'sent')
       const messages: DeliveryView[] = []
@@ -1715,7 +1718,9 @@ export class Execution {
     return this.storage.transaction(this.instanceId, transaction => saveEnvironmentHandoffIn(transaction, record, command))
   }
 
-  private async history<T>(transaction: AsyncTx, kind: 'report-history' | 'delivery-history' | 'retry-decision' | 'session-rollover', prefix: string) {
+  private async history<T>(transaction: AsyncTx, kind: 'report-history' | 'delivery-history' | 'retry-decision' | 'session-rollover'
+    | 'assignment-history' | 'stop-history' | 'resume-decision', prefix: string,
+    budget: { code: string; message: string } = { code: 'CONVERSATION_BUDGET', message: 'The Ticket conversation exceeds its declared 1000-record history budget.' }) {
     const items: T[] = []
     let cursor = prefix
     for (let pageCount = 0; pageCount < 10; pageCount++) {
@@ -1728,7 +1733,7 @@ export class Execution {
         if (!confirmation.items[0]?.id.startsWith(prefix)) return items
       }
     }
-    throw new CoreError('CONVERSATION_BUDGET', 'The Ticket conversation exceeds its declared 1000-record history budget.')
+    throw new CoreError(budget.code, budget.message)
   }
 
   private stopHeadKey(ticketId: string) {
@@ -1769,6 +1774,22 @@ export class Execution {
   private hasLiveBackgroundWork(ticketId: string) {
     return this.storage.transaction(this.instanceId, async transaction =>
       await this.hasBackgroundWork(transaction, ticketId) || await this.previewCleanupPending(transaction, ticketId))
+  }
+
+  /** The Bot that owns this UI Session supplies the Worker's model and its own instructions. */
+  private async botWorkerProfile(threadId?: string): Promise<BotWorkerProfile | undefined> {
+    if (!threadId) return undefined
+    const get = this.sessions.context.get as ((name: string) => unknown) | undefined
+    const resolver = get?.('botExecutionProfiles') as BotExecutionProfiles | undefined
+    if (!resolver || typeof resolver.resolve !== 'function') return undefined
+    try {
+      const profile = await resolver.resolve(threadId)
+      if (!profile || typeof profile.instructions !== 'string') return undefined
+      const model = profile.model && typeof profile.model.provider === 'string' && typeof profile.model.model === 'string'
+        ? { provider: profile.model.provider, model: profile.model.model } : undefined
+      return { ...(model ? { model } : {}), instructions: profile.instructions,
+        skills: Array.isArray(profile.skills) ? profile.skills.filter(skill => typeof skill === 'string') : [] }
+    } catch { return undefined }
   }
 
   /**
@@ -1938,10 +1959,11 @@ export class Execution {
     // A confirmed empty set of ranges is the local cancellation evidence. A live turn that aborted deliberately
     // leaves confirmation to this path, because it cannot prove its own background work is quiet.
     const allStopped = confirmed.length === ranges.length && stoppedChildren.length === children.length && !previewsPending
+    const foregroundLive = worker !== undefined && outcome.assignmentId !== undefined && worker.assignmentId === outcome.assignmentId
     const confirmedIds = new Set(confirmed)
     const remoteEvidence = !outcome.remotePending
       || outcome.remoteJobIds.length > 0 && outcome.remoteJobIds.every(jobId => confirmedIds.has(jobId))
-    if (allStopped && remoteEvidence && (ranges.length || children.length)) {
+    if (allStopped && remoteEvidence && !foregroundLive && (ranges.length || children.length)) {
       await this.storage.transaction(this.instanceId, transaction => this.confirmStop(outcome.assignmentId, command.ticketId, transaction, true))
     }
     return this.conversation(command.ticketId)
@@ -2164,17 +2186,19 @@ export class Execution {
         transaction.replace('intent', ticketId, { ...intent, state: 'pending', reason: 'followup-pending' }))
       return { ...base, outcome: 'input-pending', blockers: [] }
     }
-    const live = this.jobs ? jobs.filter(job => job.runtimeToken === this.jobs!.runtimeToken
-      && ['starting', 'running', 'cancelling'].includes(job.state)) : []
-    if (live.length) {
+    if (this.jobs) {
       const next = this.successorAssignment(assignment, 'running', takeoverId)
-      await this.storage.transaction(this.instanceId, async transaction => {
-        await this.saveAssignment(transaction, next)
-        await this.jobs!.reassign(transaction, { ticketId, fromAssignmentId: assignment.id,
+      // The durable active index decides whether reassignment is needed; a display
+      // window of the newest jobs could miss an older range that is still live.
+      const moved = await this.storage.transaction(this.instanceId, async transaction => {
+        const moved = await this.jobs!.reassign(transaction, { ticketId, fromAssignmentId: assignment.id,
           assignmentId: next.id, generation: next.generation })
+        if (!moved.length) return moved
+        await this.saveAssignment(transaction, next)
         if (intent) await transaction.replace('intent', ticketId, { ...intent, state: 'pending', reason: 'worker-background' })
+        return moved
       })
-      return { ...base, outcome: 'waiting-job', assignmentId: next.id, blockers: [] }
+      if (moved.length) return { ...base, outcome: 'waiting-job', assignmentId: next.id, blockers: [] }
     }
     if (!intent || !resumableIntent(intent)) {
       await endAssignment()
@@ -2594,6 +2618,7 @@ export class Execution {
       if (stop.state !== 'stopped') throw new CoreError('STOP_REQUIRED', 'The Ticket is not stopped.')
       if (stop.pendingDeviceConfirmation) throw new CoreError('CANCELLATION_UNCONFIRMED', 'The original device range has not been confirmed quiet.')
       if (!stop.cancellationConfirmedAt) throw new CoreError('CANCELLATION_UNCONFIRMED', 'The previous local execution has not been confirmed stopped.')
+      if (this.workerControllers.has(command.ticketId)) throw new CoreError('TURN_ACTIVE', 'The stopped Assignment still has an active Worker turn.')
       if (await this.effects.hasUnknownScopeInTransaction(transaction, command.ticketId)) throw new CoreError('UNKNOWN_OUTCOME', 'Unknown external work must be reconciled before resume.')
       const attention = await this.attentions.current(transaction, command.ticketId)
       if (attention?.status === 'waiting') throw new CoreError('WAITING_HUMAN', 'Resolve the current human question before resume.')
@@ -2605,6 +2630,8 @@ export class Execution {
       }
       const environment = previous?.environment ? this.environments.find(candidate => candidate.config.id === previous.environment!.id) : undefined
       if (previous?.environment && (!environment || !sameEnvironment(previous.environment, environment))) throw new CoreError('ENVIRONMENT_CHANGED', 'The retained working directory is no longer available.')
+      const previousReport = await transaction.get<ReadyReport>('report', command.ticketId)
+      if (previous && previousReport?.assignmentId === previous.id) await transaction.remove('report', command.ticketId)
       const assignment: Assignment = { id: randomUUID(), generation: randomUUID(), ticketId: command.ticketId, createdAt: Date.now(),
         sessionId: previous?.sessionId ?? `worker-${randomUUID()}`, state: 'pending', runtimeToken: this.runtimeToken,
         ...(previous?.environment ? { environment: structuredClone(previous.environment) } : {}) }
@@ -2740,12 +2767,14 @@ export class Execution {
       .slice(-10).map(input => ({ id: input.id, text: input.text, directionVersion: input.directionVersion }))
     const newSessionId = forkedSessionId ?? `worker-${randomUUID()}`
     const forked = forkedSessionId !== undefined
-    return commandTransaction(this.storage, this.instanceId, async transaction => {
+    const cancelled = await commandTransaction(this.storage, this.instanceId, async transaction => {
       const current = await transaction.get<Assignment>('assignment', ticketId)
       if (!current || current.id !== assignment.id || current.state !== 'running') return false
       const ticket = await transaction.get<Work['ticket']>('ticket', ticketId)
       if (!ticket) return false
       await this.saveAssignment(transaction, { ...assignment, state: 'ended' })
+      const jobIds = await this.endAssignmentJobs(transaction, ticketId, assignment.id)
+      const subagentIds = await this.endAssignmentSubagents(transaction, ticketId, assignment.id)
       const next: Assignment = { id: randomUUID(), generation: randomUUID(), ticketId, sessionId: newSessionId, state: 'pending',
         createdAt: Date.now(), runtimeToken: this.runtimeToken, ...(assignment.environment ? { environment: structuredClone(assignment.environment) } : {}) }
       await this.saveAssignment(transaction, next)
@@ -2761,8 +2790,12 @@ export class Execution {
       await transaction.replace('intent', ticketId, { ...intent, state: 'pending', reason: 'context-rollover' })
       await this.effects.enqueue(transaction, { key: `rollover:${newSessionId}`, stream: 'relay', scope: ticketId,
         payload: { ticketId, assignmentId: next.id, handoff: true } })
-      return true
+      return { jobIds, subagentIds }
     })
+    if (!cancelled) return false
+    await this.stopJobs(ticketId, cancelled.jobIds)
+    await this.stopSubagents(ticketId, cancelled.subagentIds)
+    return true
   }
 
   private async handoffPrompt(ticketId: string) {

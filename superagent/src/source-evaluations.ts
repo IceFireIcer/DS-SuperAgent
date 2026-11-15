@@ -544,16 +544,15 @@ export class SourceEvaluations {
     const threads = new Set<string>()
     const prefix = this.sourceEvalPrefix()
     let cursor = prefix
-    for (let pageCount = 0; pageCount < 10; pageCount++) {
+    for (;;) {
       const page = await this.storage.transaction(this.instanceId, tx => tx.scan<SourceEvaluation>('eval', { limit: 100, after: cursor }))
-      for (const item of page.items) if (item.id.startsWith(prefix) && item.value.state === 'queued') threads.add(item.value.threadId)
-      if (!page.cursor || !page.cursor.startsWith(prefix)) break
-      cursor = page.cursor
-      if (pageCount === 9) {
-        const confirmation = await this.storage.transaction(this.instanceId, tx => tx.scan<SourceEvaluation>('eval', { limit: 1, after: cursor }))
-        if (!confirmation.items[0]?.id.startsWith(prefix)) break
-        throw new CoreError('EVAL_BUDGET', 'The paused Eval scan exceeded its 1000-record budget.')
+      let reachedEnd = false
+      for (const item of page.items) {
+        if (!item.id.startsWith(prefix)) { reachedEnd = true; break }
+        if (item.value.state === 'queued') threads.add(item.value.threadId)
       }
+      if (reachedEnd || !page.cursor || !page.cursor.startsWith(prefix)) break
+      cursor = page.cursor
     }
     for (const threadId of threads) await this.runNext(threadId)
   }
@@ -593,27 +592,36 @@ export class SourceEvaluations {
         const headKey = `head:${this.threadKey(threadId)}`
         if (await tx.get<EvalHead>('eval', headKey)) return undefined
         const prefix = this.evalPrefix(threadId)
-        let cursor = prefix
-        for (let pageCount = 0; pageCount < 10; pageCount++) {
+        const cursorKey = `scan:${this.threadKey(threadId)}`
+        let cursor = await tx.get<string>('eval', cursorKey) ?? prefix
+        if (!cursor.startsWith(prefix)) cursor = prefix
+        let queued: SourceEvaluation | undefined
+        for (;;) {
           const page = await tx.scan<SourceEvaluation>('eval', { limit: 100, after: cursor })
-          const queued = page.items.find(entry => entry.id.startsWith(prefix) && entry.value.state === 'queued')?.value
-          if (queued) {
-            const events: SourceEvent[] = []
-            for (const item of queued.items) if (item.outcome === 'pending' || item.outcome === 'accepted' && item.strength === 'explicit') {
-              const event = await tx.get<SourceEvent>('source-event', item.eventId)
-              const current = event && await this.sources.candidate(tx, { threadId: event.threadId, objectId: event.objectId })
-              if (event && current?.id === event.id) events.push(event)
-              else { item.outcome = 'rejected'; item.reason = 'SOURCE_EVENT_NOT_CURRENT' }
-            }
-            const needsRun = events.length > 0 || queued.items.some(item => item.outcome === 'accepted' && item.strength === 'explicit')
-            queued.state = needsRun ? 'running' : 'completed'; queued.status = queued.state
-            if (!needsRun) queued.completedAt = this.now()
-            await tx.replace('eval', queued.id, queued)
-            if (needsRun) await tx.insert('eval', headKey, { evaluationId: queued.id })
-            return needsRun ? { evaluation: queued, events } : { discarded: true }
+          let reachedEnd = false
+          for (const entry of page.items) {
+            if (!entry.id.startsWith(prefix)) { reachedEnd = true; break }
+            cursor = entry.id
+            if (entry.value.state === 'queued') { queued = entry.value; break }
           }
-          if (!page.cursor || !page.cursor.startsWith(prefix)) break
+          if (queued || reachedEnd || !page.cursor || !page.cursor.startsWith(prefix)) break
           cursor = page.cursor
+        }
+        if (!await tx.replace('eval', cursorKey, cursor)) await tx.insert('eval', cursorKey, cursor)
+        if (queued) {
+          const events: SourceEvent[] = []
+          for (const item of queued.items) if (item.outcome === 'pending' || item.outcome === 'accepted' && item.strength === 'explicit') {
+            const event = await tx.get<SourceEvent>('source-event', item.eventId)
+            const current = event && await this.sources.candidate(tx, { threadId: event.threadId, objectId: event.objectId })
+            if (event && current?.id === event.id) events.push(event)
+            else { item.outcome = 'rejected'; item.reason = 'SOURCE_EVENT_NOT_CURRENT' }
+          }
+          const needsRun = events.length > 0 || queued.items.some(item => item.outcome === 'accepted' && item.strength === 'explicit')
+          queued.state = needsRun ? 'running' : 'completed'; queued.status = queued.state
+          if (!needsRun) queued.completedAt = this.now()
+          await tx.replace('eval', queued.id, queued)
+          if (needsRun) await tx.insert('eval', headKey, { evaluationId: queued.id })
+          return needsRun ? { evaluation: queued, events } : { discarded: true }
         }
         return undefined
       })

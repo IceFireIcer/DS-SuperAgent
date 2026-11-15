@@ -8,6 +8,30 @@ export const within = (inner, outer) => {
   return path === '' || (!path.startsWith('..') && !path.startsWith(sep) && !/^[a-z]:/iu.test(path))
 }
 
+/**
+ * Whether two app folders may share the user's DSH data or the program folder, judged through
+ * links and junctions rather than by their text.
+ * @param {string} dataDir @param {string | undefined} workspace
+ * @param {{ dshHome?: string, program?: string, layout?: boolean }} [places] `layout: false`
+ *   keeps a saved data/workspace arrangement that an earlier version accepted
+ * @returns {'dataInWorkspace' | 'workspaceInData' | 'inDsh' | 'inProgram' | undefined}
+ */
+export function isolationProblem(dataDir, workspace, { dshHome, program, layout = true } = {}) {
+  const data = real(dataDir)
+  const space = workspace === undefined ? undefined : real(workspace)
+  if (layout) {
+    if (space !== undefined && within(data, space)) return 'dataInWorkspace'
+    if (space !== undefined && within(space, data)) return 'workspaceInData'
+  }
+  const dsh = dshHome === undefined ? undefined : real(dshHome)
+  const app = program === undefined ? undefined : real(program)
+  for (const path of [data, ...(space === undefined ? [] : [space])]) {
+    if (dsh !== undefined && (within(path, dsh) || within(dsh, path))) return 'inDsh'
+    if (app !== undefined && within(path, app)) return 'inProgram'
+  }
+  return undefined
+}
+
 // The path as the file system has it: through links and junctions, from the deepest part that
 // exists. A link can make a path that looks apart from a folder lead into it.
 export function real(path) {

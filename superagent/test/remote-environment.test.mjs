@@ -63,6 +63,16 @@ test('a paired device serves bounded files and literal search through an authent
   await assert.rejects(environment.prepare({ instanceId: 'private', actorId: 'intruder' }), { code: 'ENVIRONMENT_DENIED' })
 })
 
+test('a file beyond the read budget is rejected instead of returning a partial body', async context => {
+  const { root, device, endpoint } = await fixture(context)
+  await writeFile(join(root, 'large.txt'), 'x'.repeat(65537))
+  const environment = await core.RemoteEnvironment.pair(pairOptions(endpoint, device.pairingCode, { expectedDeviceKey: device.deviceKeyFingerprint }))
+  context.after(() => environment.close())
+  const bound = await environment.prepare({ instanceId: 'private', actorId: 'user' })
+  await assert.rejects(bound.invoke('read_file', { path: 'large.txt' }), { code: 'FILE_TOO_LARGE' })
+  await assert.rejects(bound.artifact('large.txt'), { code: 'FILE_TOO_LARGE' })
+})
+
 test('the peer cannot read a file through a symbolic link or a revoked pairing', async context => {
   const { root, device, endpoint, directory } = await fixture(context)
   const outside = join(directory, 'outside')
@@ -160,6 +170,50 @@ test('a paired device rejects a forged or replayed encrypted envelope', async co
   assert.ok(!JSON.stringify(await forged.json()).includes(device.pairingCode))
 })
 
+test('unauthenticated replay attempts cannot evict a valid request identity', { timeout: 30000 }, async context => {
+  const { device, endpoint } = await fixture(context)
+  let captured
+  const proxy = createServer((request, response) => {
+    const chunks = []
+    request.on('data', chunk => chunks.push(chunk))
+    request.on('end', () => {
+      const body = Buffer.concat(chunks)
+      if (request.url === '/rpc' && !captured) captured = JSON.parse(body.toString('utf8'))
+      const upstream = httpRequest(new URL(request.url, endpoint), { method: request.method, headers: request.headers }, result => {
+        const answer = []
+        result.on('data', chunk => answer.push(chunk))
+        result.on('end', () => {
+          const payload = Buffer.concat(answer)
+          const headers = { ...result.headers }
+          delete headers['transfer-encoding']
+          response.writeHead(result.statusCode ?? 500, { ...headers, 'content-length': String(payload.length) }).end(payload)
+        })
+      })
+      upstream.on('error', error => response.writeHead(502).end(error.message))
+      upstream.end(body)
+    })
+  })
+  await new Promise((resolve, reject) => { proxy.once('error', reject); proxy.listen(0, '127.0.0.1', resolve) })
+  context.after(() => new Promise(resolve => { proxy.closeAllConnections(); proxy.close(resolve) }))
+  const proxied = `http://127.0.0.1:${proxy.address().port}`
+  const environment = await core.RemoteEnvironment.pair(pairOptions(proxied, device.pairingCode,
+    { expectedDeviceKey: device.deviceKeyFingerprint }))
+  context.after(() => environment.close())
+  const bound = await environment.prepare({ instanceId: 'private', actorId: 'user' })
+  await bound.invoke('write_file', { path: 'replay.txt', text: 'once' })
+  assert.ok(captured)
+
+  for (let index = 0; index < 2050; index++) {
+    const response = await fetch(`${endpoint}/rpc`, { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ v: 1, pairingId: `forged-${index}`, requestId: `forged-${index}`, at: Date.now(),
+        body: Buffer.alloc(32).toString('base64url') }) })
+    assert.equal(response.status, 401)
+  }
+  const replayed = await fetch(`${endpoint}/rpc`, { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(captured) })
+  assert.equal(replayed.status, 401)
+})
+
 test('device state persists the paired host without persisting its pairing code', async context => {
   const directory = await mkdtemp(join(tmpdir(), 'ds-bot-remote-device-state-'))
   const root = join(directory, 'work')
@@ -200,6 +254,10 @@ test('a host restores its protected connection state without the pairing code', 
   context.after(() => restored.close())
   const next = await restored.prepare({ instanceId: 'private', actorId: 'user' })
   assert.equal((await next.invoke('read_file', { path: 'restored.txt' })).text, 'still paired\n')
+  const foreignRoot = process.platform === 'win32' ? '/srv/device-work' : 'C:\\device-work'
+  const foreign = core.RemoteEnvironment.restore({ ...state, root: foreignRoot })
+  context.after(() => foreign.close())
+  assert.equal(foreign.config.root, foreignRoot)
 })
 
 test('the device re-checks its current grant and can revoke a pairing locally', async context => {

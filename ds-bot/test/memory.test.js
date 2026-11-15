@@ -1446,3 +1446,27 @@ test('a memory call names the current part of the Bot chat', async (t) => {
   assert.equal(answer.ok, true)
   assert.equal(requests[0].sessionId, 'b2-part2')
 })
+
+test('shutdown waits for an in-flight memory summary and writes nothing after it', async (t) => {
+  let release
+  const pending = new Promise((resolve) => { release = resolve })
+  const { tool, call, requests, stop, home } = start({ replies: [pending] })
+  t.after(async () => {
+    release?.({ text: 'Too late.' })
+    await stop({ keep: true })
+    rmSync(home, { recursive: true, force: true, maxRetries: 5 })
+  })
+  await tool('remember', { text: 'Likes tea' }, 'b2')
+  await call('memory-view', { botId: 'b2', summarize: true })
+  await until(() => requests.length === 1)
+
+  let stopped = false
+  const stopping = stop({ keep: true }).then(() => { stopped = true })
+  await settle()
+  assert.equal(stopped, false)
+
+  release({ text: 'Too late.' })
+  await stopping
+  await settle()
+  assert.equal(existsSync(join(home, 'memory', 'summaries', 'b2.json')), false)
+})

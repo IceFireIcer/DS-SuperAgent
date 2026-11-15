@@ -83,10 +83,9 @@ describe('watchReleases', () => {
     const updates = watchReleases({ current: '0.1.7', arch: 'arm64', fetch, log: quietLog() })
     t.after(updates.stop)
     assert.equal(await updates.latest(), null)
-    assert.deepEqual(calls[0], {
-      url: RELEASES_URL,
-      options: { headers: { accept: 'application/vnd.github+json', 'user-agent': 'DS-Bot/0.1.7' } },
-    })
+    assert.equal(calls[0].url, RELEASES_URL)
+    assert.deepEqual(calls[0].options.headers, { accept: 'application/vnd.github+json', 'user-agent': 'DS-Bot/0.1.7' })
+    assert.equal(calls[0].options.signal instanceof AbortSignal, true)
 
     const feed = 'http://127.0.0.1:8080/'
     const custom = watchReleases({ current: '0.1.7', arch: 'arm64', fetch, feed, log: quietLog() })
@@ -369,6 +368,46 @@ describe('watchReleases', () => {
     assert.deepEqual(updates.state(), { phase: 'current' })
   })
 
+  test('a check that never answers times out and lets a later check run', async (t) => {
+    let calls = 0
+    const updates = watchReleases({
+      current: '0.1.7', arch: 'arm64', timeout: 10, log: quietLog(),
+      fetch: (_url, { signal }) => {
+        calls += 1
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+        })
+      },
+    })
+    t.after(updates.stop)
+    assert.equal(await updates.latest(), null)
+    assert.deepEqual(updates.state(), { phase: 'failed' })
+    updates.check()
+    assert.equal(calls, 2)
+    assert.equal(await updates.latest(), null)
+  })
+
+  test('stop cancels a check in flight and leaves its late answer out', async (t) => {
+    let signal
+    const log = quietLog()
+    const updates = watchReleases({
+      current: '0.1.7', arch: 'arm64', log,
+      fetch: (_url, options) => {
+        signal = options.signal
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+        })
+      },
+    })
+    const latest = updates.latest()
+    await sleep(0)
+    updates.stop()
+    assert.equal(await latest, null)
+    assert.equal(signal.aborted, true)
+    assert.deepEqual(updates.state(), { phase: 'checking' })
+    assert.deepEqual(log.lines, [])
+  })
+
   test('listeners hear every state change until they unsubscribe', async (t) => {
     const updates = watchReleases({
       current: '0.1.7', arch: 'arm64', fetch: async () => releaseResponse([release('0.1.7')]), log: quietLog(),
@@ -547,6 +586,20 @@ describe('watchUpdates', () => {
     updater.emit('update-downloaded', { version: '0.1.9' })
     updates.check()
     assert.equal(updater.checks, 2)
+  })
+
+  test('a check that never answers times out and lets a later check run', async (t) => {
+    const updater = new FakeUpdater()
+    updater.wait = true
+    const updates = watchUpdates({ updater, beforeInstall: async () => {}, timeout: 10, log: quietLog() })
+    t.after(updates.stop)
+    assert.equal(await updates.latest(), null)
+    assert.deepEqual(updates.state(), { phase: 'failed' })
+    updater.wait = false
+    updates.check()
+    assert.equal(updater.checks, 2)
+    await updates.latest()
+    assert.deepEqual(updates.state(), { phase: 'current' })
   })
 
   test('listeners hear every state change until they unsubscribe', (t) => {

@@ -87,9 +87,16 @@ export function install(rt) {
     const known = usable ? await ctx.workspaceRegistry.resolveByPath(dir) : undefined
     const place = known !== undefined ? { workspaceId: known.id } : usable ? { cwd: dir } : { workspaceId: await ensureWorkspace() }
     const { sessionId } = await ctx.sessionController.create({ ...place, ...await botPreset() })
-    const agent = await rt.resolveAgent(sessionId)
-    await ctx.sessionTitle.rename(agent.session, title)
-    return sessionId
+    try {
+      const agent = await rt.resolveAgent(sessionId)
+      await ctx.sessionTitle.rename(agent.session, title)
+      return sessionId
+    } catch (error) {
+      // The caller cannot clean up a Session it never received.
+      await ctx.workspaceRegistry.archiveSession(sessionId)
+        .catch(archiveError => rt.warn('ds-bot: archiving the Session for %s failed: %s', title, archiveError))
+      throw error
+    }
   }
 
   function cleanAvatar(input) {

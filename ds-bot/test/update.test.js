@@ -11,13 +11,14 @@ const realFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = realFetch })
 
 // The update module alone, on a stub plugin manager and a scripted fetch.
-function start({ source, registries, answers = {}, result = { application: 'restart-required' }, remove = { application: 'applied' }, config = {}, profileDir, home }) {
+function start({ source, registries, answers = {}, result = { application: 'restart-required' }, remove = { application: 'applied' }, config = {}, profileDir, home, fetchGate }) {
   const fetched = []
   const installs = []
   const removes = []
   const warnings = []
   globalThis.fetch = async (url) => {
     fetched.push(url)
+    await fetchGate
     const answer = answers[url]
     if (answer === undefined) return { ok: false, status: 404, json: async () => ({}) }
     if (answer instanceof Error) throw answer
@@ -104,6 +105,23 @@ test('a private registry of pnpm\'s own is asked alone, and an answer stands for
   assert.equal(fetched.length, 1)
   await rt.updateCheck({ fresh: true })
   assert.equal(fetched.length, 2)
+})
+
+test('a second check during a running one waits for it and gets the same view', async () => {
+  let release
+  const fetchGate = new Promise((resolve) => { release = resolve })
+  const { rt, fetched } = start({
+    source: `${PKG.name}@^${PKG.version}`,
+    answers: { [`https://registry.npmjs.org/${PKG.name}/latest`]: { version: '9.0.0' } },
+    fetchGate,
+  })
+  const first = rt.updateCheck()
+  const second = rt.updateCheck()
+  release()
+  const [a, b] = await Promise.all([first, second])
+  assert.equal(a.available, true)
+  assert.deepEqual(b, a)
+  assert.equal(fetched.length, 1)
 })
 
 test('a versioned GitHub install follows the latest release tag and keeps its path', async () => {

@@ -432,7 +432,7 @@ export function createSession({ context, browser, page, botId, userDataDir, cook
     let timer
     try {
       await Promise.race([
-        Promise.all(requests),
+        Promise.all(requests.map(request => request.done)),
         new Promise((_, reject) => {
           timer = setTimeout(() => reject(new Error('the browser request did not finish')), actionTimeout)
         }),
@@ -440,6 +440,8 @@ export function createSession({ context, browser, page, botId, userDataDir, cook
     } finally {
       clearTimeout(timer)
     }
+    const failed = requests.find(request => request.failure !== undefined)
+    if (failed) throw failed.failure
   }
 
   async function performWrite(action, target, perform) {
@@ -455,13 +457,10 @@ export function createSession({ context, browser, page, botId, userDataDir, cook
           return
         }
         if (requestOrigin !== action.origin || ['GET', 'HEAD'].includes(request.method().toUpperCase())) return
-        let resolve
-        let reject
-        requests.push(new Promise((res, rej) => {
-          resolve = res
-          reject = rej
-        }))
-        pendingRequests.set(request, { resolve, reject })
+        const pending = { failure: undefined }
+        pending.done = new Promise(resolve => { pending.resolve = resolve })
+        requests.push(pending)
+        pendingRequests.set(request, pending)
       }
       const onRequestFinished = request => {
         const pending = pendingRequests.get(request)
@@ -472,7 +471,10 @@ export function createSession({ context, browser, page, botId, userDataDir, cook
       const onRequestFailed = request => {
         const pending = pendingRequests.get(request)
         if (!pending) return
-        pending.reject(new Error(request.failure()?.errorText ?? 'the browser request failed'))
+        // Resolve instead of rejecting: the failure is held until perform() finishes,
+        // so a request that fails while a click is still running is never unobserved.
+        pending.failure = new Error(request.failure()?.errorText ?? 'the browser request failed')
+        pending.resolve()
         pendingRequests.delete(request)
       }
       target.on('request', onRequest)
@@ -718,41 +720,11 @@ export function createSession({ context, browser, page, botId, userDataDir, cook
       onHold?.(null)
       return 'The browser is yours again.'
     },
-    async runScript(source, origin) {
+    async runScript(source, _origin, signal) {
       const body = String(source ?? '')
       if (body.length > 8_000) throw new Error('Script is longer than 8000 characters.')
-      const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
-      let answer
-      const fn = new AsyncFunction(
-        'goto', 'snapshot', 'click', 'type', 'fill', 'select', 'press', 'scroll', 'tabs', 'screenshot', 'text', 'upload', 'handoff', 'resume', 'back', 'done',
-        `"use strict";\n${body}`,
-      )
-      const done = value => { answer = value }
-      const run = fn(
-        url => this.open(url),
-        () => this.snapshotText(),
-        (ref, options) => this.clickWithOptions(ref, options),
-        (ref, text, submit) => this.type(ref, text, submit),
-        (ref, text) => this.type(ref, text),
-        (ref, values) => this.select(ref, values),
-        key => this.press(key),
-        direction => this.scroll(direction),
-        (action, index) => action === 'list' ? this.tabs() : action === 'select' ? this.selectTab(index) : this.closeTab(index),
-        async () => {
-          const picture = await this.shot()
-          return picture.text
-        },
-        () => this.snapshotText(),
-        (ref, paths) => this.upload(ref, paths),
-        (reason, note) => this.handoff(reason, note, origin),
-        () => this.resume(),
-        () => this.back(),
-        done,
-      )
-      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Script ran longer than 20 seconds.')), 20_000))
-      const value = await Promise.race([run, timeout])
-      const finalAnswer = answer ?? value
-      return finalAnswer === undefined ? 'Script finished without done().' : String(finalAnswer)
+      if (signal?.aborted) throw new Error('Script was cancelled.')
+      throw new Error('browser_exec is unavailable: this build has no isolated script runner. Use the refs plugin (browser_open, browser_snapshot, browser_click, ...) instead.')
     },
     async close() {
       if (browser) { await browser.close().catch(() => {}); return }

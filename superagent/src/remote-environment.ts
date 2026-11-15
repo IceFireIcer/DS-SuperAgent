@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { isAbsolute } from 'node:path'
+import { posix, win32 } from 'node:path'
 import { canonicalJson } from './commands.js'
 import { CoreError, identifier } from './model.js'
 import type { Artifact, LocalJob, LocalJobOutput, LocalJobResult } from './local-environment.js'
@@ -83,6 +83,10 @@ function endpointUrl(value: string) {
     throw new CoreError('INVALID_CONFIG', 'The device endpoint cannot carry credentials, a query or a fragment.')
   }
   return url.origin + url.pathname.replace(/\/+$/u, '')
+}
+
+function isDeviceAbsolutePath(value: string) {
+  return posix.isAbsolute(value) || win32.isAbsolute(value)
 }
 
 async function responseError(response: Response, fallback: string): Promise<CoreError> {
@@ -252,7 +256,7 @@ export class RemoteEnvironment implements ExecutionEnvironment {
     }
     const pairing = sealed as unknown as SealedPairing
     if (pairing.deviceId !== paired.deviceId || pairing.instanceId !== options.instanceId || pairing.environmentId !== options.id
-      || !isAbsolute(pairing.root) || !sameSet(pairing.allowedActorIds, options.allowedActorIds) || !sameSet(pairing.permissions, options.permissions)) {
+      || !isDeviceAbsolutePath(pairing.root) || !sameSet(pairing.allowedActorIds, options.allowedActorIds) || !sameSet(pairing.permissions, options.permissions)) {
       throw new CoreError('GRANT_DENIED', 'The device granted a different Instance, Environment or permission set.')
     }
     const commands = commandSpecsValue(pairing.commands)
@@ -275,7 +279,7 @@ export class RemoteEnvironment implements ExecutionEnvironment {
       || typeof state.deviceId !== 'string' || typeof state.deviceIncarnation !== 'string' || typeof state.deviceKeyFingerprint !== 'string'
       || typeof state.deviceExchangeKey !== 'string' || typeof state.pairingId !== 'string' || typeof state.hostExchangePrivate !== 'string'
       || typeof state.hostExchangePublic !== 'string' || typeof state.hostNonce !== 'string' || typeof state.root !== 'string'
-      || !isAbsolute(state.root) || !state.allowedActorIds.length || !state.permissions.length
+      || !isDeviceAbsolutePath(state.root) || !state.allowedActorIds.length || !state.permissions.length
       || !/^[a-f0-9]{64}$/u.test(state.deviceKeyFingerprint)
       || state.permissions.some(permission => !['read', 'write', 'search', 'command'].includes(permission))) {
       throw new CoreError('INVALID_CONFIG', 'The saved remote connection is malformed.')
@@ -672,7 +676,7 @@ class RemoteBoundEnvironment implements PreparedEnvironment {
       }
       const window = Buffer.from(result.data, 'base64')
       if (window.length !== result.nextOffset - offset) throw new CoreError('DEVICE_FAILED', 'The device spill page has an invalid length.')
-      return pageOf(reference, window, offset, maxBytes, text => this.owner.sanitize(text))
+      return pageOf(reference, window, offset, maxBytes)
     }
     if (!reference.path) throw new CoreError('INVALID_INPUT', 'An artifact reference needs its working-directory-relative path.')
     const result = await this.call('file.readRange', { path: reference.path, offset: String(offset), length: String(maxBytes),

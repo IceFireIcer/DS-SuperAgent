@@ -43,6 +43,7 @@ import { WorkDelegation, type MainWorkCard, type MainWorkItem } from './work-del
 interface StoredPolicy { revision: number; configuration: Omit<IntakePolicy, 'assess'>; origin: 'bootstrap' | 'manual' | 'sync'; sourceRevision?: string; updatedAt: number }
 interface ProcessingState { paused: boolean; revision: number; updatedAt: number }
 interface StoredPolicyNotice { key: string; ticketId: string; revision: number; reason: string }
+type LeasedBehaviorInstruction = BehaviorInstructionRecord & { leaseToken?: string }
 
 export class Engine {
   readonly effects: Effects
@@ -81,6 +82,7 @@ export class Engine {
   private readonly initialIntake: IntakePolicy | undefined
   private initialPolicyRevision = 1
   private hasPersistedPolicy = false
+  private bootstrapPolicy = false
   private avoidPolicyPersistence = false
   private readonly ticketCursors = new Map<string, { after: string; sourceInstanceId: string; actorId: string; expiresAt: number }>()
   private commandKey(commandId: string) { return createHash('sha256').update(JSON.stringify([this.source.sourceInstanceId, this.source.actorId, commandId])).digest('hex') }
@@ -108,8 +110,9 @@ export class Engine {
       const stored = await tx.get<StoredPolicy>('policy-state', this.policyKey())
       const currentAssessor = this.configuredAssessor
       const configured = this.initialIntake
-      if (stored && stored.origin !== 'bootstrap') {
+      if (stored) {
         this.hasPersistedPolicy = true
+        this.bootstrapPolicy = stored.origin === 'bootstrap'
         this.applyPolicy(stored.configuration, stored.revision, currentAssessor)
       } else if (configured) {
         const { assess: _assess, ...configuration } = configured
@@ -125,7 +128,7 @@ export class Engine {
     try { await this.policyReady }
     catch (error) { this.policyReady = undefined; throw error }
     await this.getRoleConfig()
-    if (this.configuredIntake && !this.hasPersistedPolicy) await this.syncConfiguredPolicy()
+    if (this.configuredIntake && (!this.hasPersistedPolicy || this.bootstrapPolicy)) await this.syncConfiguredPolicy()
   }
 
   private async syncConfiguredPolicy() {
@@ -163,7 +166,10 @@ export class Engine {
       const items: StoredPolicyNotice[] = []
       for (let pageCount = 0; pageCount < 10; pageCount++) {
         const page = await tx.scan<StoredPolicyNotice>('policy-reevaluation', { limit: 100, after: cursor })
-        items.push(...page.items.map(item => item.value))
+        for (const item of page.items) {
+          if (!item.id.startsWith(prefix)) return items
+          items.push({ ...item.value, key: item.id })
+        }
         if (!page.cursor || !page.cursor.startsWith(prefix)) return items
         cursor = page.cursor
         if (pageCount === 9) {
@@ -184,7 +190,9 @@ export class Engine {
       if (detail) threads.add(detail.threadId)
     }
     await commandTransaction(this.storage, this.instanceId, async tx => {
-      for (const item of pending) await tx.remove('policy-reevaluation', item.key)
+      for (const item of pending) {
+        if (item.key.startsWith(prefix)) await tx.remove('policy-reevaluation', item.key)
+      }
     })
     for (const threadId of threads) await this.evaluations.runAll(threadId)
   }
@@ -528,7 +536,6 @@ export class Engine {
     })
   }
 
-
   private async accept(tx: AsyncTx, commandId: string, trigger: Work['trigger'], fingerprint: string,
     options: { strength?: 'explicit' | 'inferred'; policyVersion?: string; mandateScope?: string; linkTicket?: (tx: AsyncTx, receipt: Receipt) => Promise<void> } = {}): Promise<Receipt> {
     const triggerId = trigger.id
@@ -858,20 +865,16 @@ export class Engine {
     const key = this.commandKey(command.commandId)
     const fingerprint = createHash('sha256').update(canonicalJson(['verify-handoff-copy', this.instanceId, command.ticketId])).digest('hex')
     const prior = await this.storage.transaction(this.instanceId, transaction => transaction.get<{ fingerprint: string; recordId: string }>('work-command', key))
-    if (prior) {
-      if (prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The work-copy verification command was reused for different input.')
-      const existing = await this.storage.transaction(this.instanceId, transaction => loadHandoffCopy(transaction, command.ticketId))
-      if (!existing) throw new CoreError('NOT_FOUND', 'The work-copy preparation no longer exists.')
-      return existing
-    }
-    const record = await this.storage.transaction(this.instanceId, async transaction => {
+    if (prior && prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The work-copy verification command was reused for different input.')
+    const { record, assignmentId } = await this.storage.transaction(this.instanceId, async transaction => {
       const current = await loadHandoffCopy(transaction, command.ticketId)
       if (!current) throw new CoreError('NOT_FOUND', 'Prepare a work copy before verifying it.')
       const trigger = await this.triggerFor(transaction, command.ticketId)
       if (trigger.source.sourceInstanceId !== this.sourceEvents.sourceInstanceId || trigger.source.actorId !== this.source.actorId) {
         throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Only the original source actor may verify this work copy.')
       }
-      return current
+      const assignment = await transaction.get<{ id: string }>('assignment', command.ticketId)
+      return { record: current, assignmentId: assignment?.id }
     })
     const source = this.environments.find(environment => environment.config.id === record.source.id)
     const target = this.environments.find(environment => environment.config.id === record.target.id)
@@ -879,6 +882,9 @@ export class Engine {
     const identity = { instanceId: this.instanceId, actorId: this.source.actorId }
     source.authorize(identity); target.authorize(identity)
     const blockers: WorkCopyBlocker[] = []
+    if (assignmentId !== record.assignmentId) {
+      blockers.push({ code: 'assignment-changed', message: 'The Ticket Assignment changed after preparation.' })
+    }
     if (source.kind !== record.source.kind || source.config.root !== record.source.root) {
       blockers.push({ code: 'source-environment-changed', message: 'The source Environment identity changed after preparation.' })
     }
@@ -923,7 +929,9 @@ export class Engine {
       const current = await loadHandoffCopy(transaction, command.ticketId)
       if (!current || current.id !== record.id) throw new CoreError('COMMIT_UNKNOWN', 'The work-copy preparation changed during verification.')
       await saveHandoffCopy(transaction, next)
-      await transaction.insert('work-command', key, { fingerprint, recordId: next.id })
+      if (!await transaction.replace('work-command', key, { fingerprint, recordId: next.id })) {
+        await transaction.insert('work-command', key, { fingerprint, recordId: next.id })
+      }
       return next
     })
   }
@@ -1148,6 +1156,7 @@ export class Engine {
    */
   async acquireHost() {
     const acquired = await this.host.acquireWithPrevious()
+    await this.activationGate?.reattach?.(acquired.lease.epoch)
     if (!acquired.previous && !await this.storage.transaction(this.instanceId, transaction => this.hostTakeoverPending(transaction))) {
       return acquired.lease
     }
@@ -1279,6 +1288,7 @@ export class Engine {
     const binding = await this.main.open({ instanceId: request.instanceId })
     return this.workDelegation.plan(binding.mainId, request.workBriefId)
   }
+
   async getRoleConfig(): Promise<RoleConfigView> {
     const config = await this.roleConfig.ensure()
     this.roleConfigRevision = config.revision
@@ -1514,14 +1524,26 @@ export class Engine {
     })
   }
 
-  async getSupervision(options: { includeHistory?: boolean } = {}) {
-    const tickets = await this.listTickets()
+  async getSupervision(options: { includeHistory?: boolean; cursor?: string } = {}) {
+    const tickets: Work[] = []
+    let cursor = options.cursor
+    let hasMore = false
+    let nextCursor: string | undefined
+    for (let pageCount = 0; pageCount < 10; pageCount++) {
+      const page = await this.listTickets(cursor)
+      tickets.push(...page.items)
+      if (!page.hasMore) { hasMore = false; nextCursor = undefined; break }
+      if (!page.nextCursor) throw new CoreError('INCOMPLETE_STATE', 'The supervision Ticket page is missing its cursor.')
+      hasMore = true
+      nextCursor = page.nextCursor
+      cursor = page.nextCursor
+    }
     const proposedSupervision = (await listSupervisorProposals(this.storage, this.instanceId)).filter(proposal => proposal.status === 'proposed')
     const proposalsByTicket = new Map<string, SupervisorProposal[]>()
     for (const proposal of proposedSupervision) proposalsByTicket.set(proposal.ticketId, [...(proposalsByTicket.get(proposal.ticketId) ?? []), proposal])
     const items = [] as Record<string, unknown>[]
     const counts = { needsHuman: 0, blocked: 0, stopped: 0, ready: 0, running: 0, ended: 0, pending: 0 }
-    for (const work of tickets.items) {
+    for (const work of tickets) {
       const conversation = this.execution ? await this.execution.conversation(work.ticket.id) : undefined
       const unknownEffects = (await this.effects.listByScope(work.ticket.id)).filter(effect => effect.state === 'unknown')
       const unknownJobs = (conversation?.jobs ?? []).filter(job => job.state === 'unknown')
@@ -1568,7 +1590,7 @@ export class Engine {
         jobs: conversation?.jobs ?? [], subagents: conversation?.subagents ?? [] })
     }
     items.sort((left, right) => Number(left.priority) - Number(right.priority) || String(left.ticketId).localeCompare(String(right.ticketId)))
-    return { items, counts, hasMore: tickets.hasMore, roleConfigRevision: this.roleConfigRevision, processingPaused: this.processingPaused }
+    return { items, counts, hasMore, ...(nextCursor ? { nextCursor } : {}), roleConfigRevision: this.roleConfigRevision, processingPaused: this.processingPaused }
   }
 
   private applyRoleRoutes(config: RoleConfigView) {
@@ -2062,19 +2084,19 @@ export class Engine {
     const key = instructionKey(command.commandId)
     const now = Date.now()
     const leaseUntil = now + 120_000
-    const claimed = await commandTransaction(this.storage, this.instanceId, async transaction => {
-      const prior = await transaction.get<BehaviorInstructionRecord>('behavior-instruction', key)
+    const claimed: LeasedBehaviorInstruction = await commandTransaction(this.storage, this.instanceId, async transaction => {
+      const prior = await transaction.get<LeasedBehaviorInstruction>('behavior-instruction', key)
       if (prior) {
         if (prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The behavior instruction command was reused with different input.')
         if (prior.status !== 'interpreting' && prior.status !== 'applying') return prior
         if ((prior.leaseUntil ?? 0) > now) throw new CoreError('INSTRUCTION_IN_PROGRESS', 'Another interpreter is still working on this instruction.')
-        const renewed: BehaviorInstructionRecord = { ...prior, leaseUntil, updatedAt: now }
+        const renewed: LeasedBehaviorInstruction = { ...prior, leaseToken: randomUUID(), leaseUntil, updatedAt: now }
         await transaction.replace('behavior-instruction', key, renewed)
         return renewed
       }
-      const next: BehaviorInstructionRecord = {
+      const next: LeasedBehaviorInstruction = {
         id: randomUUID(), instanceId: this.instanceId, commandId: command.commandId, actorId: this.source.actorId,
-        instruction: command.instruction, fingerprint, status: 'interpreting', leaseUntil, createdAt: now, updatedAt: now,
+        instruction: command.instruction, fingerprint, status: 'interpreting', leaseToken: randomUUID(), leaseUntil, createdAt: now, updatedAt: now,
         ...(command.expectedRoleRevision === undefined ? {} : { expectedRoleRevision: command.expectedRoleRevision }),
         ...(command.expectedPolicyRevision === undefined ? {} : { expectedPolicyRevision: command.expectedPolicyRevision }),
       }
@@ -2091,7 +2113,7 @@ export class Engine {
           instruction: command.instruction, roles: currentRoles, ...(currentPolicy === undefined ? {} : { policy: currentPolicy.policy }), signal: command.signal ?? new AbortController().signal,
         }))
       } catch (error) {
-        return this.finishBehaviorInstruction({ status: 'failed', error: error instanceof Error ? error.message : String(error) }, key)
+        return this.finishBehaviorInstruction(claimed, { status: 'failed', error: error instanceof Error ? error.message : String(error) }, key)
       }
       const prepared = await this.prepareBehaviorInstruction(claimed, change, key)
       if (prepared.status !== 'applying') return prepared
@@ -2112,7 +2134,7 @@ export class Engine {
         const expected = command.expectedRoleRevision ?? claimed.expectedRoleRevision
         if (expected === undefined) throw new CoreError('INVALID_INPUT', 'A roles instruction needs expectedRoleRevision.')
         const view = await this.updateRoleConfig({ commandId: `${command.commandId}:roles`, expectedRevision: expected, roles: appliedChange.roles! })
-        return this.finishBehaviorInstruction({ ...metadata, status: 'applied', effectiveRoleRevision: view.revision }, key)
+        return this.finishBehaviorInstruction(claimed, { ...metadata, status: 'applied', effectiveRoleRevision: view.revision }, key)
       }
       const expected = command.expectedPolicyRevision ?? claimed.expectedPolicyRevision
       if (expected === undefined) throw new CoreError('INVALID_INPUT', 'A policy instruction needs expectedPolicyRevision.')
@@ -2121,7 +2143,7 @@ export class Engine {
         allowedBotActorIds: latest.policy.allowedBotActorIds,
         ...(latest.policy.selfActorIds === undefined ? {} : { selfActorIds: latest.policy.selfActorIds }) }
       const view = await this.updateIntakePolicy({ commandId: `${command.commandId}:policy`, expectedRevision: expected, policy })
-      return this.finishBehaviorInstruction({ ...metadata, status: 'applied', effectivePolicyRevision: view.revision }, key)
+      return this.finishBehaviorInstruction(claimed, { ...metadata, status: 'applied', effectivePolicyRevision: view.revision }, key)
     } catch (error) {
       if (error instanceof CoreError && (error.code === 'CONFIG_REVISION_CONFLICT' || error.code === 'POLICY_REVISION_CONFLICT')) {
         const roles = await this.getRoleConfig()
@@ -2136,20 +2158,22 @@ export class Engine {
         await this.storage.transaction(this.instanceId, async transaction => {
           if (!await transaction.replace('config-draft', draftKey(draft.id), draft)) await transaction.insert('config-draft', draftKey(draft.id), draft)
         })
-        return this.finishBehaviorInstruction({ ...metadata, status: 'conflict', draftId: draft.id, error: error.message }, key)
+        return this.finishBehaviorInstruction(claimed, { ...metadata, status: 'conflict', draftId: draft.id, error: error.message }, key)
       }
-      return this.finishBehaviorInstruction({ ...metadata, status: 'failed', error: error instanceof Error ? error.message : String(error) }, key)
+      return this.finishBehaviorInstruction(claimed, { ...metadata, status: 'failed', error: error instanceof Error ? error.message : String(error) }, key)
     }
   }
 
-  private async prepareBehaviorInstruction(claimed: BehaviorInstructionRecord, change: BehaviorChange, key: string): Promise<BehaviorInstructionRecord> {
+  private async prepareBehaviorInstruction(claimed: LeasedBehaviorInstruction, change: BehaviorChange, key: string): Promise<BehaviorInstructionRecord> {
     return commandTransaction(this.storage, this.instanceId, async transaction => {
-      const current = await transaction.get<BehaviorInstructionRecord>('behavior-instruction', key)
+      const current = await transaction.get<LeasedBehaviorInstruction>('behavior-instruction', key)
       if (!current) throw new CoreError('INCOMPLETE_STATE', 'The behavior instruction claim is missing.')
       if (current.status !== 'interpreting' && current.status !== 'applying') return current
+      if (current.id !== claimed.id || current.leaseToken !== claimed.leaseToken) {
+        throw new CoreError('INSTRUCTION_CHANGED', 'The behavior instruction claim changed while it was interpreted.')
+      }
       if (current.status === 'applying' && current.change !== undefined) return current
-      if (current.id !== claimed.id) throw new CoreError('INSTRUCTION_CHANGED', 'The behavior instruction claim changed while it was interpreted.')
-      const next: BehaviorInstructionRecord = { ...current, change, summary: change.summary,
+      const next: LeasedBehaviorInstruction = { ...current, change, summary: change.summary,
         ...(change.interpreterVersion === undefined ? {} : { interpreterVersion: change.interpreterVersion }),
         ...(change.model === undefined ? {} : { model: change.model }), status: 'applying', leaseUntil: Date.now() + 120_000, updatedAt: Date.now() }
       await transaction.replace('behavior-instruction', key, next)
@@ -2157,12 +2181,13 @@ export class Engine {
     })
   }
 
-  private async finishBehaviorInstruction(fields: Partial<BehaviorInstructionRecord>, key: string): Promise<BehaviorInstructionRecord> {
+  private async finishBehaviorInstruction(claimed: LeasedBehaviorInstruction, fields: Partial<BehaviorInstructionRecord>, key: string): Promise<BehaviorInstructionRecord> {
     return commandTransaction(this.storage, this.instanceId, async transaction => {
-      const current = await transaction.get<BehaviorInstructionRecord>('behavior-instruction', key)
+      const current = await transaction.get<LeasedBehaviorInstruction>('behavior-instruction', key)
       if (!current) throw new CoreError('INCOMPLETE_STATE', 'The behavior instruction claim is missing.')
       if (current.status !== 'interpreting' && current.status !== 'applying') return current
-      const next: BehaviorInstructionRecord = { ...current, ...fields, leaseUntil: Date.now(), updatedAt: Date.now() }
+      if (current.id !== claimed.id || current.leaseToken !== claimed.leaseToken) return current
+      const next: LeasedBehaviorInstruction = { ...current, ...fields, leaseUntil: Date.now(), updatedAt: Date.now() }
       await transaction.replace('behavior-instruction', key, next)
       return next
     })

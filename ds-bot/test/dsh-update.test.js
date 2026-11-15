@@ -11,19 +11,20 @@ afterEach(() => { globalThis.fetch = realFetch })
 
 // The dsh-update module alone: a stub loader says the running DSH version, a
 // stub plugin manager says how the bot was installed, and fetch is scripted.
-function start({ current = '0.1.0', source, answers = {}, app = false, spawn, config = {}, profileDir }) {
+function start({ current = '0.1.0', source, answers = {}, app = false, spawn, config = {}, profileDir, fetchGate }) {
   const fetched = []
   const spawns = []
   const warnings = []
   globalThis.fetch = async (url) => {
     fetched.push(url)
+    await fetchGate
     const answer = answers[url]
     if (answer === undefined) return { ok: false, status: 404, json: async () => ({}) }
     if (answer instanceof Error) throw answer
     return { ok: true, status: 200, json: async () => answer }
   }
   const loader = current === null ? undefined : {
-    import: async name => (name === '@deepseek-ai/dsh-app-boot' ? { getDshRuntimeVersion: () => current } : {}),
+    import: async name => (name === '@deepseek-ai/dsh-app-boot' ? { getDshRuntimeVersion: () => ({ release: { version: current } }) } : {}),
     unwrapExports: exports => exports,
   }
   const profileContext = app ? { dir: profileDir, packageManager: { command: 'pnpm' } } : { dir: profileDir }
@@ -35,7 +36,7 @@ function start({ current = '0.1.0', source, answers = {}, app = false, spawn, co
     ctx: { get: name => ({ loader, pluginManager, profileContext })[name], effect() {} },
     config,
     warn: (...args) => warnings.push(args),
-    dshSpawn: spawn ?? ((command, argv) => { spawns.push([command, argv]); return fakeChild(0) }),
+    dshSpawn: spawn ?? ((command, argv, options) => { spawns.push([command, argv, options]); return fakeChild(0) }),
   }
   install(rt)
   return { rt, fetched, spawns, warnings }
@@ -64,9 +65,54 @@ test('the newest released bot declares the verified DSH, offered to an older npm
   assert.equal(view.available, true)
   assert.equal(rt.dshUpdateStart().phase, 'installing')
   await flush()
-  assert.deepEqual(spawns.map(([, argv]) => argv), [['install', '-g', '@deepseek-ai/dsh@9.9.9']])
+  const [command, argv] = spawns[0]
+  if (process.platform === 'win32') {
+    assert.match(command, /(?:^|[\\/])cmd(?:\.exe)?$/i)
+    assert.deepEqual(argv.slice(0, 3), ['/d', '/s', '/c'])
+    assert.equal(argv[3], 'npm install -g @deepseek-ai/dsh@9.9.9')
+  } else {
+    assert.equal(command, 'npm')
+    assert.deepEqual(argv, ['install', '-g', '@deepseek-ai/dsh@9.9.9'])
+  }
   assert.equal((await rt.dshUpdateCheck()).phase, 'installed')
   assert.equal((await rt.dshUpdateCheck()).installed, '9.9.9')
+})
+
+test('on Windows npm starts through the command interpreter, not the .cmd file', { skip: process.platform !== 'win32' }, async () => {
+  const { rt, spawns } = start({ source: `${PKG.name}@^${PKG.version}`, answers: registryLatest({ verifiedDsh: '9.9.9' }) })
+  await rt.dshUpdateCheck()
+  rt.dshUpdateStart()
+  await flush()
+  assert.match(spawns[0][0], /(?:^|[\\/])cmd(?:\.exe)?$/i)
+  assert.deepEqual(spawns[0][1].slice(0, 3), ['/d', '/s', '/c'])
+  assert.equal(spawns[0][1][3], 'npm install -g @deepseek-ai/dsh@9.9.9')
+  assert.deepEqual(spawns[0][2], { windowsHide: true })
+})
+
+test('a second check during a running one waits for it and gets the same view', async () => {
+  let release
+  const fetchGate = new Promise((resolve) => { release = resolve })
+  const { rt, fetched } = start({ source: `${PKG.name}@^${PKG.version}`, answers: registryLatest({ verifiedDsh: '9.9.9' }), fetchGate })
+  const first = rt.dshUpdateCheck()
+  const second = rt.dshUpdateCheck()
+  release()
+  const [a, b] = await Promise.all([first, second])
+  assert.equal(a.available, true)
+  assert.deepEqual(b, a)
+  assert.equal(fetched.length, 1)
+})
+
+test('a spawn that fails synchronously leaves installing and reports the failure', async () => {
+  const { rt, warnings } = start({
+    source: `${PKG.name}@^${PKG.version}`,
+    answers: registryLatest({ verifiedDsh: '9.9.9' }),
+    spawn: () => { throw new Error('spawn EINVAL') },
+  })
+  await rt.dshUpdateCheck()
+  const view = rt.dshUpdateStart()
+  assert.equal(view.phase, 'failed')
+  assert.match(view.error, /EINVAL/)
+  assert.equal(warnings.length, 1)
 })
 
 test('a verified version older than the running one is still offered, for a broken release', async () => {
@@ -131,6 +177,14 @@ test('the desktop app pins its DSH: it reports the running version, asks no netw
 
 test('without a running version there is nothing to compare against', async () => {
   const { rt } = start({ current: null, source: `${PKG.name}@^${PKG.version}` })
+  const view = await rt.dshUpdateCheck()
+  assert.equal(view.current, null)
+  assert.equal(view.available, false)
+  assert.throws(() => rt.dshUpdateStart(), /No DSH update/)
+})
+
+test('an app-boot export without a version leaves the DSH unknown', async () => {
+  const { rt } = start({ current: '', source: `${PKG.name}@^${PKG.version}`, answers: registryLatest({ verifiedDsh: '9.9.9' }) })
   const view = await rt.dshUpdateCheck()
   assert.equal(view.current, null)
   assert.equal(view.available, false)

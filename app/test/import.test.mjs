@@ -6,6 +6,7 @@ import { homedir, tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
 import { after, before, describe, test } from 'node:test'
 import { parse } from 'yaml'
+import { isolationProblem } from '../src/copy-tree.mjs'
 import { copySessions, findTeam, importTeam, newerSessions, sessionIdsOf, teamInUse, userDshHome } from '../src/import.mjs'
 
 const write = (path, text) => {
@@ -209,6 +210,31 @@ describe('links in the old team workspace', () => {
     assert.equal(readFileSync(join(workspace, 'node_modules', 'pkg', 'index.js'), 'utf8'), 'package')
     assert.equal(realpathSync.native(join(workspace, 'node_modules', 'pkg')), realpathSync.native(join(workspace, '.pnpm', 'pkg')))
     assert.equal(readFileSync(join(workspace, 'notes.txt'), 'utf8'), 'old notes')
+  })
+})
+
+describe('physical path isolation', () => {
+  let root
+  before(() => { root = mkdtempSync(join(tmpdir(), 'ds-bot-app-isolation-')) })
+  after(() => { rmSync(root, { recursive: true, force: true }) })
+
+  test('a link into the user DSH is refused even when its text looks outside', () => {
+    const dsh = join(root, 'dsh')
+    const linked = join(root, 'linked-dsh')
+    mkdirSync(dsh, { recursive: true })
+    symlinkSync(dsh, linked, process.platform === 'win32' ? 'junction' : 'dir')
+    assert.equal(isolationProblem(linked, join(root, 'workspace'), { dshHome: dsh }), 'inDsh')
+    assert.equal(isolationProblem(join(dsh, 'data'), join(root, 'workspace'), { dshHome: dsh }), 'inDsh')
+  })
+
+  test('data and workspace are kept apart through the file system too', () => {
+    const data = join(root, 'data')
+    const workspaces = join(data, 'workspaces')
+    const linked = join(root, 'linked-workspace')
+    mkdirSync(workspaces, { recursive: true })
+    symlinkSync(workspaces, linked, process.platform === 'win32' ? 'junction' : 'dir')
+    assert.equal(isolationProblem(data, linked), 'workspaceInData')
+    assert.equal(isolationProblem(linked, data), 'dataInWorkspace')
   })
 })
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { base64Of, closingReplyText, preparationStep, requestPreparation, speechCatalog, transcribeWave, turnDetector, waveBytes } from '../src/client/speech.js'
+import { base64Of, closingReplyText, openCapture, preparationStep, requestPreparation, speechCatalog, transcribeWave, turnDetector, waveBytes } from '../src/client/speech.js'
 
 const catalog = (phase, extra = {}) => ({
   providers: [{ id: 'sensevoice', preparation: { phase } }],
@@ -100,4 +100,49 @@ test('turnDetector ends a turn after a pause that follows speech', () => {
   assert.equal(detect(0.3, 1150), 'speech')
   assert.equal(detect(0.01, 1200), 'speech')
   assert.equal(detect(0.01, 2200), 'done')
+})
+
+test('a capture that fails after the microphone opened stops its track', async () => {
+  const stopped = []
+  const closed = []
+  const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+  const AudioContextBefore = globalThis.AudioContext
+  const MediaRecorderBefore = globalThis.MediaRecorder
+  const stream = { getTracks: () => [{ stop: () => stopped.push('track') }] }
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true,
+    value: { mediaDevices: { getUserMedia: async () => stream } },
+  })
+  globalThis.MediaRecorder = class {
+    state = 'inactive'
+    start() { this.state = 'recording' }
+    stop() { this.state = 'inactive' }
+  }
+  try {
+    const cases = [
+      // The audio context never came up.
+      [class { constructor() { throw new Error('no audio device') } }, false],
+      // The context came up but the source could not be made: it has to close.
+      [class {
+        createAnalyser() { return {} }
+        createMediaStreamSource() { throw new Error('source failed') }
+        close() { closed.push('audio'); return Promise.resolve() }
+      }, true],
+    ]
+    for (const [audioContext, closes] of cases) {
+      stopped.length = 0
+      closed.length = 0
+      globalThis.AudioContext = audioContext
+      await assert.rejects(openCapture(), error => error.kind === 'failed')
+      assert.deepEqual(stopped, ['track'])
+      assert.deepEqual(closed, closes ? ['audio'] : [])
+    }
+  } finally {
+    if (navigatorDescriptor === undefined) delete globalThis.navigator
+    else Object.defineProperty(globalThis, 'navigator', navigatorDescriptor)
+    if (AudioContextBefore === undefined) delete globalThis.AudioContext
+    else globalThis.AudioContext = AudioContextBefore
+    if (MediaRecorderBefore === undefined) delete globalThis.MediaRecorder
+    else globalThis.MediaRecorder = MediaRecorderBefore
+  }
 })

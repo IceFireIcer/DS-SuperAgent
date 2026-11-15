@@ -6794,6 +6794,7 @@ var Package = class _Package {
   static open(file) {
     const pkg = new _Package();
     for (const member of readZip(readFileSync(file))) {
+      if (member.name.endsWith("/")) continue;
       pkg.parts.set(member.name, { raw: member.raw, method: member.method, crc: member.crc, usize: member.data.length });
       pkg.#cache(member.name, member.data);
     }
@@ -7898,7 +7899,8 @@ function resolveChanges(doc, accept) {
     el.parentNode.removeChild(el);
   };
   const mergeIntoNext = (p, pPr) => {
-    const next = p.nextSibling;
+    let next = p.nextSibling;
+    while (next && (next.nodeType === 8 || next.nodeType === 3 && next.nodeValue.trim() === "")) next = next.nextSibling;
     if (!next || next.tagName !== "w:p") return false;
     const nextPPr = childrenOf(next, "w:pPr")[0];
     const anchor = nextPPr ? nextPPr.nextSibling : next.firstChild;
@@ -7916,11 +7918,15 @@ function resolveChanges(doc, accept) {
     const del = childrenOf(rPr, "w:del")[0];
     const ins = childrenOf(rPr, "w:ins")[0];
     if (del) {
-      dirty = true;
-      if (!accept || !mergeIntoNext(p, pPr)) rPr.removeChild(del);
+      if (!accept) {
+        rPr.removeChild(del);
+        dirty = true;
+      } else if (mergeIntoNext(p, pPr)) dirty = true;
     } else if (ins) {
-      dirty = true;
-      if (accept || !mergeIntoNext(p, pPr)) rPr.removeChild(ins);
+      if (accept) {
+        rPr.removeChild(ins);
+        dirty = true;
+      } else if (mergeIntoNext(p, pPr)) dirty = true;
     }
   }
   for (const tr of elementsOf(doc.documentElement, "w:tr")) {
@@ -7947,6 +7953,7 @@ function resolveChanges(doc, accept) {
   }
   for (const el of elementsOf(doc.documentElement)) {
     const tag = el.tagName;
+    if ((tag === "w:ins" || tag === "w:del") && (el.parentNode?.tagName === "w:rPr" || el.parentNode?.tagName === "w:trPr")) continue;
     if (tag === "w:ins" || tag === "w:moveTo") {
       if (accept) lift(el);
       else el.parentNode.removeChild(el);
@@ -8044,7 +8051,7 @@ function phOf(sp) {
 }
 var shapeName = (sp) => child(child(sp, "p:nvSpPr") ?? child(sp, "p:nvPicPr") ?? child(sp, "p:nvGrpSpPr") ?? child(sp, "p:nvCxnSpPr") ?? child(sp, "p:nvGraphicFramePr") ?? sp, "p:cNvPr")?.getAttribute("name");
 var shapeId = (sp) => child(child(sp, "p:nvSpPr") ?? child(sp, "p:nvPicPr") ?? child(sp, "p:nvGrpSpPr") ?? child(sp, "p:nvCxnSpPr") ?? child(sp, "p:nvGraphicFramePr") ?? sp, "p:cNvPr")?.getAttribute("id");
-var xfrmOf = (sp) => child(child(sp, "p:spPr") ?? sp, "a:xfrm");
+var xfrmOf = (sp) => child(sp, "p:xfrm") ?? child(child(sp, "p:spPr") ?? sp, "a:xfrm");
 var off = (xfrm) => ({ x: Number(firstOf(xfrm, "a:off")?.getAttribute("x") ?? 0), y: Number(firstOf(xfrm, "a:off")?.getAttribute("y") ?? 0) });
 var ext = (xfrm) => ({ cx: Number(firstOf(xfrm, "a:ext")?.getAttribute("cx") ?? 0), cy: Number(firstOf(xfrm, "a:ext")?.getAttribute("cy") ?? 0) });
 function applyGroup(box, grpSp) {
@@ -8080,7 +8087,7 @@ function shapeBox(pkg, sp, layoutDoc, masterDoc, groupChain = []) {
     }
     if (!box) return void 0;
   }
-  for (const grp of groupChain) box = applyGroup(box, grp);
+  for (let i = groupChain.length - 1; i >= 0; i--) box = applyGroup(box, groupChain[i]);
   return box;
 }
 var phMatch = (a, b) => a && b && a.type === b.type && String(a.idx ?? "") === String(b.idx ?? "");
@@ -8396,7 +8403,34 @@ function pptxClean(pkg, { dryRun = false } = {}) {
 
 // src/office/xlsx.js
 var DATE_FORMATS = /* @__PURE__ */ new Set([14, 15, 16, 17, 22, 45, 46, 47]);
-var dateLike = (code) => /(^|[^\\])[ymdhs]/i.test(code ?? "");
+function dateLike(code) {
+  const text = code ?? "";
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"') quoted = false;
+      continue;
+    }
+    if (ch === '"') {
+      quoted = true;
+      continue;
+    }
+    if (ch === "\\" || ch === "_" || ch === "*") {
+      i++;
+      continue;
+    }
+    if (ch === "[") {
+      const end = text.indexOf("]", i + 1);
+      if (end === -1) break;
+      if (/^[hms]+$/i.test(text.slice(i + 1, end))) return true;
+      i = end;
+      continue;
+    }
+    if (/[ymdhs]/i.test(ch)) return true;
+  }
+  return false;
+}
 function numFmts(pkg) {
   const map = /* @__PURE__ */ new Map();
   if (!pkg.parts.has("xl/styles.xml")) return map;

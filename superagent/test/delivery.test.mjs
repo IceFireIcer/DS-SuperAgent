@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -84,6 +85,25 @@ test('an exhausted transient delivery stays pending instead of being dropped', a
   assert.equal(delivery.state, 'pending')
   assert.equal(delivery.reason, 'SOURCE_TEMPORARILY_CLOSED')
   assert.equal(delivery.attempts, 2)
+})
+
+test('delivery history keeps reading past the second page instead of stopping at the first cursor', async t => {
+  const { engine, storage } = await fixture(t, { deliver: async () => ({ type: 'success' }) })
+  const receipt = await engine.submit({ commandId: 'long-history', eventId: 'long-history-message', text: 'Keep the history.' })
+  const prefix = JSON.stringify(['delivery-history', receipt.ticketId])
+  await storage.transaction('private', async transaction => {
+    for (let index = 0; index < 205; index++) {
+      const id = `history-${index}`
+      const record = { id, instanceId: 'private', ticketId: receipt.ticketId, purpose: 'result', text: `History ${index}.`,
+        destination: { sourceInstanceId: 'desktop', actorId: 'user', eventId: `event-${index}` },
+        basis: { kind: 'policy-update', revision: index }, effectId: `effect-${index}`, effectGeneration: 'generation-1',
+        sequence: 1000 + index, createdAt: index }
+      await transaction.insert('delivery-history', `${prefix}:${createHash('sha256').update(id).digest('hex')}:${String(record.sequence).padStart(16, '0')}`, record)
+    }
+  })
+  const deliveries = await engine.getTicketDeliveries(receipt.ticketId)
+  assert.equal(deliveries.length, 206)
+  assert.equal(deliveries.at(-1).sequence, 1204)
 })
 
 test('an answer requires a current human question and returns to that exact message', async t => {

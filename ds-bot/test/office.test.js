@@ -14,7 +14,7 @@ import { docxRead, docxEdit, resolveChanges } from '../src/office/docx.js'
 import { pptxInventory, pptxLayout, pptxClean, pptxSlides } from '../src/office/pptx.js'
 import { xlsxInventory, xlsxRead } from '../src/office/xlsx.js'
 import { decodePng, encodePng, contactSheet } from '../src/office/png.js'
-import { parseXml, elementsOf, childrenOf, textOf } from '../src/office/xml.js'
+import { parseXml, elementsOf, childrenOf, firstOf, textOf } from '../src/office/xml.js'
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
 const FIXTURES = join(ROOT, 'test', 'fixtures', 'office')
@@ -211,6 +211,37 @@ describe('pptx', () => {
     assert.ok(s1.shapes.some(s => s.kind === 'chart') && s1.shapes.some(s => s.media))
     assert.equal(inv.slides[1].hidden, true)
   })
+  test('graphic frames read p:xfrm boxes and layout checks them', () => {
+    const pkg = Package.open(fixture('sample.pptx'))
+    const shapes = pptxInventory(pkg, ['1']).slides[0].shapes
+    assert.deepEqual(shapes.find(s => s.name === 'Table 4').box, { x: 0.5, y: 4.5, w: 4, h: 1.2 })
+    assert.deepEqual(shapes.find(s => s.name === 'Chart 5').box, { x: 5, y: 4, w: 4, h: 3 })
+    const doc = pkg.xml('ppt/slides/slide1.xml')
+    const table = elementsOf(doc.documentElement, 'p:graphicFrame')
+      .find(f => firstOf(firstOf(f, 'p:nvGraphicFramePr'), 'p:cNvPr')?.getAttribute('name') === 'Table 4')
+    firstOf(firstOf(table, 'p:xfrm'), 'a:off').setAttribute('x', String(9144000))
+    pkg.putXml('ppt/slides/slide1.xml', doc)
+    assert.ok(pptxLayout(pkg, ['1']).findings.some(f => f.rule === 'off-slide' && f.shape === 'Table 4'))
+  })
+  test('nested group transforms apply inner first', () => {
+    const pkg = Package.open(fixture('sample.pptx'))
+    const slide = parseXml(`<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree>
+      <p:grpSp><p:nvGrpSpPr><p:cNvPr id="10" name="Outer"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+        <p:grpSpPr><a:xfrm><a:off x="1000000" y="0"/><a:ext cx="3000000" cy="1000000"/><a:chOff x="0" y="0"/><a:chExt cx="1000000" cy="1000000"/></a:xfrm></p:grpSpPr>
+        <p:grpSp><p:nvGrpSpPr><p:cNvPr id="11" name="Inner"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+          <p:grpSpPr><a:xfrm><a:off x="100000" y="0"/><a:ext cx="2000000" cy="1000000"/><a:chOff x="0" y="0"/><a:chExt cx="1000000" cy="1000000"/></a:xfrm></p:grpSpPr>
+          <p:sp><p:nvSpPr><p:cNvPr id="12" name="Leaf"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+            <p:spPr><a:xfrm><a:off x="100000" y="0"/><a:ext cx="100000" cy="100000"/></a:xfrm></p:spPr>
+            <p:txBody><a:bodyPr/><a:p><a:r><a:t>leaf</a:t></a:r></a:p></p:txBody></p:sp>
+        </p:grpSp>
+      </p:grpSp>
+    </p:spTree></p:cSld></p:sld>`)
+    pkg.putXml('ppt/slides/slide1.xml', slide)
+    const leaf = pptxInventory(pkg, ['1']).slides[0].shapes.find(s => s.name === 'Leaf')
+    // inner: 100000 + 2 * 100000; outer: 1000000 + 3 * 300000.
+    assert.equal(leaf.box.x, 2.08)
+    assert.equal(leaf.box.w, 0.66)
+  })
   test('layout reports overlap; autofit sets normAutofit', () => {
     const dir = tmp()
     const out = join(dir, 'fit.pptx')
@@ -248,6 +279,34 @@ describe('xlsx', () => {
     const row2 = grid.rows.find(r => r.row === 2).cells
     assert.equal(row2.D2.v, '2026-10-01')
     assert.equal(row2.C2.f, 'B2*2')
+  })
+  test('quoted unit literals keep numeric cells as numbers', () => {
+    const pkg = Package.open(fixture('sample.xlsx'))
+    const styles = pkg.xml('xl/styles.xml')
+    const numFmts = firstOf(styles.documentElement, 'numFmts')
+    for (const [id, code] of [[166, '0 "USD"'], [167, '0 "days"']]) {
+      const fmt = styles.createElement('numFmt')
+      fmt.setAttribute('numFmtId', String(id)); fmt.setAttribute('formatCode', code)
+      numFmts.appendChild(fmt)
+    }
+    const cellXfs = firstOf(styles.documentElement, 'cellXfs')
+    for (const id of [166, 167]) {
+      const xf = styles.createElement('xf')
+      xf.setAttribute('numFmtId', String(id))
+      cellXfs.appendChild(xf)
+    }
+    pkg.putXml('xl/styles.xml', styles)
+    const sheet = pkg.xml('xl/worksheets/sheet1.xml')
+    const cell = (ref) => elementsOf(sheet.documentElement, 'c').find(c => c.getAttribute('r') === ref)
+    cell('B2').setAttribute('s', '2')
+    const huge = cell('B3')
+    huge.setAttribute('s', '3')
+    firstOf(huge, 'v').textContent = '12345678901234'
+    pkg.putXml('xl/worksheets/sheet1.xml', sheet)
+    const rows = xlsxRead(pkg, 'Sheet1').rows
+    const value = (ref) => rows.find(r => r.row === Number(ref.slice(1))).cells[ref].v
+    assert.equal(value('B2'), '42')
+    assert.equal(value('B3'), '12345678901234')
   })
 })
 
@@ -298,6 +357,19 @@ describe('unpack/pack', () => {
     writeFileSync(join(dir, 'random.txt'), 'hi')
     assert.throws(() => execFileSync(NODE, [CLI, 'unpack', fixture('sample.docx'), dir, '--json']), /unpack/)
   })
+  test('ZIP directory entries are skipped so unpack succeeds', () => {
+    const dir = tmp()
+    const members = readZip(readFileSync(fixture('sample.docx')))
+    members.splice(1, 0, { name: 'word/', data: Buffer.alloc(0) })
+    const file = join(dir, 'entries.docx')
+    writeFileSync(file, writeZip(members))
+    const pkg = Package.open(file)
+    assert.ok(!pkg.parts.has('word/'))
+    const dest = join(dir, 'un')
+    pkg.unpack(dest)
+    assert.ok(existsSync(join(dest, 'word', 'document.xml')))
+    assert.ok(!readZip(pkg.save()).some(m => m.name === 'word/'))
+  })
 })
 
 describe('paragraph and row marks (review 1)', () => {
@@ -318,6 +390,32 @@ describe('paragraph and row marks (review 1)', () => {
     const { blocks } = docxRead(Package.open(out))
     assert.ok(blocks.some(b => b.text === 'Final closing paragraph.' && !b.deletedParagraphMark))
     assert.ok(blocks.some(b => / PAGE /.test(b.text)))
+  })
+  test('paragraph marks merge across formatting whitespace', () => {
+    const docWith = (mark) => parseXml(`<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
+      <w:p><w:pPr><w:rPr>${mark}</w:rPr></w:pPr><w:r><w:t>First</w:t></w:r></w:p>
+      <w:p><w:r><w:t>Second</w:t></w:r></w:p>
+    </w:body></w:document>`)
+    const mark = '<w:del w:id="1" w:author="A" w:date="2026-01-01T00:00:00Z"/>'
+    const accepted = docWith(mark)
+    const body = childrenOf(accepted.documentElement, 'w:body')[0]
+    assert.equal(childrenOf(body, 'w:p')[0].nextSibling.nodeType, 3) // formatting whitespace
+    resolveChanges(accepted, true)
+    assert.deepEqual(elementsOf(accepted.documentElement, 'w:p').map(p => textOf(p)), ['FirstSecond'])
+
+    const rejected = docWith('<w:ins w:id="2" w:author="A" w:date="2026-01-01T00:00:00Z"/>')
+    resolveChanges(rejected, false)
+    assert.deepEqual(elementsOf(rejected.documentElement, 'w:p').map(p => textOf(p)), ['FirstSecond'])
+  })
+  test('a mark that cannot merge keeps its revision', () => {
+    const doc = parseXml(`<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
+      <w:p><w:pPr><w:rPr><w:del w:id="1" w:author="A" w:date="2026-01-01T00:00:00Z"/></w:rPr></w:pPr><w:r><w:t>First</w:t></w:r></w:p>
+      <w:tbl/>
+    </w:body></w:document>`)
+    resolveChanges(doc, true)
+    const p = elementsOf(doc.documentElement, 'w:p')[0]
+    const rPr = childrenOf(childrenOf(p, 'w:pPr')[0], 'w:rPr')[0]
+    assert.equal(childrenOf(rPr, 'w:del').length, 1)
   })
 })
 

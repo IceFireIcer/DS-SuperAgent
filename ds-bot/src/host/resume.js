@@ -120,6 +120,9 @@ export function install(rt) {
 
   /** @type {Record<string, {botId:string, roomId?:string, since:number, trigger?:any, approval?:{tool:string, reason:string}, resumed?:boolean}>} */
   let turns = {}
+  // Still on disk until recovery takes each one up; a new delivery may persist
+  // before that, and must not replace what the last process left.
+  let pendingTurns = interrupted.turns
   // A new delivery can persist before recovery runs; it must keep the old queue.
   /** @type {Record<string, {at:number, args:any}[]>} deliveries no turn has taken up, by Session */
   let queued = interrupted.queued
@@ -130,7 +133,7 @@ export function install(rt) {
   const persist = () => {
     // Only the host that saves the team runs its work again.
     if (stopped || rt.readOnly() !== undefined) return
-    latest = JSON.stringify({ turns, queued })
+    latest = JSON.stringify({ turns: { ...pendingTurns, ...turns }, queued })
     // One write waits at a time and takes the latest notes, so a busy round does not
     // write the file once per change.
     if (due) return
@@ -163,6 +166,13 @@ export function install(rt) {
       persist()
       return
     }
+  }
+  const forgetPending = (sessionId) => {
+    if (!(sessionId in pendingTurns)) return
+    const next = { ...pendingTurns }
+    delete next[sessionId]
+    pendingTurns = next
+    persist()
   }
 
   const deliver = rt.deliver
@@ -417,11 +427,19 @@ export function install(rt) {
       if (first?.type === 'turn/end') {
         // The turn ended while DS Bot was not watching it: what it did is settled from
         // the Session's durable log.
-        await reconcileEnded(sessionId, record, first).catch(error => rt.warn('ds-bot: settling the work of %s failed: %s', sessionId, error))
+        try {
+          await reconcileEnded(sessionId, record, first)
+          forgetPending(sessionId)
+        } catch (error) {
+          rt.warn('ds-bot: settling the work of %s failed: %s', sessionId, error)
+        }
         continue
       }
       // Still running: noted again, as if it had started here.
-      if (first === undefined && (await rt.resolveAgent(sessionId).catch(() => undefined))?.status === 'running') update(sessionId, () => record)
+      if (first === undefined && (await rt.resolveAgent(sessionId).catch(() => undefined))?.status === 'running') {
+        update(sessionId, () => record)
+        forgetPending(sessionId)
+      }
       else cut.push([sessionId, record])
     }
     firstTurn = undefined
@@ -431,7 +449,12 @@ export function install(rt) {
     }
     taken = undefined
     for (const [sessionId, record] of cut) {
-      await resumeTurn(sessionId, record).catch(error => rt.warn('ds-bot: picking up the turn of %s failed: %s', sessionId, error))
+      try {
+        await resumeTurn(sessionId, record)
+        forgetPending(sessionId)
+      } catch (error) {
+        rt.warn('ds-bot: picking up the turn of %s failed: %s', sessionId, error)
+      }
     }
   }
 

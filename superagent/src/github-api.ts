@@ -57,16 +57,23 @@ export class GitHubCliTransport implements GitHubTransport {
     const issues = await listPages(run, `${base}/issues?state=all&sort=updated&direction=asc&per_page=${pageSize}`)
     const events: GitHubEvent[] = []
     for (const issue of issues) {
-      if (!issue?.pull_request) { events.push(issueEvent(issue, repository)); continue }
+      if (!issue?.pull_request) {
+        events.push(issueEvent(issue, repository))
+        const comments = await listPages(run, `${base}/issues/${issue.number}/comments?per_page=${pageSize}`, 'comment')
+        for (const comment of comments) if (comment?.id) events.push(commentEvent(comment, issue.number, repository))
+        continue
+      }
       const pull = await run(`${base}/pulls/${issue.number}`, { allowMissing: true }) as Record<string, any> | undefined
       if (!pull) { events.push(deletedPullEvent(issue, repository)); continue }
       events.push(pullEvent(pull, repository))
-      const reviews = await run(`${base}/pulls/${pull.number}/reviews`)
-      if (Array.isArray(reviews)) for (const review of reviews) if (review?.submitted_at) events.push(reviewEvent(review, pull.number, repository))
+      const reviews = await listPages(run, `${base}/pulls/${pull.number}/reviews?per_page=${pageSize}`, 'review')
+      for (const review of reviews) if (review?.submitted_at) events.push(reviewEvent(review, pull.number, repository))
       if (pull.head?.sha) {
-        const checks = await run(`${base}/commits/${pull.head.sha}/check-runs?per_page=${pageSize}`, { allowMissing: true }) as Record<string, any> | undefined
-        if (Array.isArray(checks?.check_runs)) for (const checkRun of checks.check_runs) if (checkRun?.id) events.push(checkRunEvent(checkRun, pull.number, repository, pull.updated_at))
+        const checks = await listCheckPages(run, `${base}/commits/${pull.head.sha}/check-runs?per_page=${pageSize}`)
+        for (const checkRun of checks) if (checkRun?.id) events.push(checkRunEvent(checkRun, pull.number, repository, pull.updated_at))
       }
+      const comments = await listPages(run, `${base}/issues/${issue.number}/comments?per_page=${pageSize}`, 'comment')
+      for (const comment of comments) if (comment?.id) events.push(commentEvent(comment, issue.number, repository))
     }
     return events.sort((left, right) => left.cursor.localeCompare(right.cursor))
   }
@@ -151,15 +158,31 @@ export class GitHubCliReplyTransport implements GitHubReplyTransport {
   }
 }
 
-async function listPages(run: GitHubApiRunner, path: string): Promise<Record<string, any>[]> {
+async function listPages(run: GitHubApiRunner, path: string, label = 'issue'): Promise<Record<string, any>[]> {
   const items: Record<string, any>[] = []
   for (let page = 1; page <= maxPages; page++) {
     const batch = await run(`${path}&page=${page}`)
-    if (!Array.isArray(batch)) throw new CoreError('SOURCE_FAILED', 'GitHub returned an invalid issue list.')
+    if (!Array.isArray(batch)) throw new CoreError('SOURCE_FAILED', `GitHub returned an invalid ${label} list.`)
     items.push(...batch)
     if (batch.length < pageSize) return items
   }
-  throw new CoreError('SOURCE_BUDGET', `GitHub issue pagination exceeded ${maxPages} pages.`)
+  throw new CoreError('SOURCE_BUDGET', `GitHub ${label} pagination exceeded ${maxPages} pages.`)
+}
+
+async function listCheckPages(run: GitHubApiRunner, path: string): Promise<Record<string, any>[]> {
+  const items: Record<string, any>[] = []
+  for (let page = 1; page <= maxPages; page++) {
+    const batch = await run(`${path}&page=${page}`, { allowMissing: true }) as Record<string, any> | undefined
+    if (batch === undefined) {
+      if (page === 1) return items
+      throw new CoreError('SOURCE_FAILED', 'GitHub returned an incomplete check-run page.')
+    }
+    if (!Array.isArray(batch.check_runs)) throw new CoreError('SOURCE_FAILED', 'GitHub returned an invalid check-run list.')
+    items.push(...batch.check_runs)
+    const total = Number(batch.total_count)
+    if (batch.check_runs.length < pageSize || Number.isSafeInteger(total) && items.length >= total) return items
+  }
+  throw new CoreError('SOURCE_BUDGET', `GitHub check-run pagination exceeded ${maxPages} pages.`)
 }
 
 function cursorFor(updatedAt: string, kind: string, id: unknown) {
@@ -186,6 +209,15 @@ function reviewEvent(review: Record<string, any>, number: number, repository: st
   return { deliveryId: `review-${review.id}-${review.submitted_at}`, cursor: cursorFor(review.submitted_at, 'review', review.id),
     repo: repository, kind: 'review', action: 'reviewed', number, id: String(review.id), authorId: review.user?.login ?? 'github',
     body: review.body ?? `Review state ${review.state}`, updatedAt: review.submitted_at }
+}
+
+function commentEvent(comment: Record<string, any>, number: number, repository: string): GitHubEvent {
+  const updatedAt = typeof comment.updated_at === 'string' ? comment.updated_at : String(comment.created_at)
+  const edited = typeof comment.created_at === 'string' && String(comment.updated_at) > comment.created_at
+  return { deliveryId: `comment-${comment.id}-${updatedAt}`, cursor: cursorFor(updatedAt, 'comment', comment.id),
+    repo: repository, kind: 'comment', action: edited ? 'edited' : 'created', number, id: String(comment.id),
+    authorId: comment.user?.login ?? 'github', ...(comment.user?.type === 'Bot' ? { authorKind: 'bot' as const } : {}),
+    body: comment.body ?? '', updatedAt }
 }
 
 function checkRunEvent(checkRun: Record<string, any>, number: number, repository: string, fallback: string): GitHubEvent {

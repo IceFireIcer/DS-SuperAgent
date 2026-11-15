@@ -624,6 +624,18 @@ test('a write that fails at save time archives the Session it made', async (t) =
   assert.equal(Object.values(saved.bots).some(bot => bot.name === 'Phantom'), false)
 })
 
+test('a Session whose rename fails is archived instead of left behind', async (t) => {
+  const { call, stop, ctx, archived } = start({ version: 1, mainBotIds: ['chief'], bots: { chief: { id: 'chief', name: 'Chief' } } })
+  t.after(stop)
+  await call('state', {})
+  ctx.sessionTitle.rename = async () => { throw new Error('the title store is closed') }
+  const answer = await call('create-bot', { name: 'Phantom' })
+  assert.equal(answer.ok, false)
+  assert.deepEqual(archived.map(([id]) => id), ['s1'])
+  const team = (await call('state', {})).value
+  assert.equal(team.bots.some(bot => bot.name === 'Phantom'), false)
+})
+
 // 公开#178: "User" is how a group log names the user, so a Bot may not take it.
 test('a Bot cannot be named or renamed like the user; one named so before keeps working', async (t) => {
   const team = {

@@ -55,3 +55,36 @@ test('a Feishu IM reply is kept short while the full text stays in the Ticket', 
   assert.equal(calls[0].text.length <= 4000, true)
   assert.match(calls[0].text, /\[Truncated for Feishu\. The full text is in the Ticket\.\]$/u)
 })
+
+test('a first send is not blocked by time the Delivery spent waiting in the local queue', async () => {
+  const calls = []
+  const channel = new core.FeishuDeliveryChannel({ replyMessage: async request => { calls.push(request); return { messageId: 'om_reply' } } },
+    { now: () => 2 * 60 * 60 * 1000 })
+  assert.deepEqual(await channel.deliver(view({ createdAt: 0 }), context), { type: 'success' })
+  assert.equal(calls.length, 1)
+  assert.deepEqual(await channel.deliver(view({ createdAt: 0, attempts: 0 }), context), { type: 'success' })
+  assert.equal(calls.length, 2)
+})
+
+test('a reconcile past the uuid window is not sent a second time', async () => {
+  const calls = []
+  const channel = new core.FeishuDeliveryChannel({ replyMessage: async request => { calls.push(request); return { messageId: 'om_reply' } } },
+    { now: () => 2 * 60 * 60 * 1000 })
+  assert.deepEqual(await channel.reconcile(view({ createdAt: 0, attempts: 1 }), context),
+    { type: 'unknown', reason: 'FEISHU_RECONCILIATION_REQUIRED: the safe uuid window has expired.' })
+  assert.equal(calls.length, 0)
+})
+
+test('an ambiguous send or an unrecorded receipt stays unknown instead of retrying blindly', async () => {
+  const at = { now: () => 1000 }
+  const timedOut = new core.FeishuDeliveryChannel({ replyMessage: async () => { throw new core.CoreError('SOURCE_TIMEOUT', 'The Feishu request timed out.') } }, at)
+  assert.equal((await timedOut.deliver(view(), context)).type, 'unknown')
+  const network = new core.FeishuDeliveryChannel({ replyMessage: async () => { throw new core.CoreError('SOURCE_FAILED', 'The Feishu request failed.') } }, at)
+  assert.equal((await network.deliver(view(), context)).type, 'unknown')
+  const unrecorded = new core.FeishuDeliveryChannel({ replyMessage: async () => ({ messageId: 'om_reply' }) },
+    { ...at, recordReceipt: async () => { throw new Error('storage unavailable') } })
+  assert.deepEqual(await unrecorded.deliver(view(), context), { type: 'unknown', reason: 'FEISHU_RECEIPT_UNRECORDED' })
+  const beforeSend = new core.FeishuDeliveryChannel({ replyMessage: async () => { throw new Error('must not send') } },
+    { ...at, authorize: async () => { throw new core.CoreError('SOURCE_STOPPED', 'The Feishu source is stopped.') } })
+  assert.deepEqual(await beforeSend.deliver(view(), context), { type: 'transient', reason: 'SOURCE_STOPPED' })
+})

@@ -695,6 +695,57 @@ test('a failed create attachment can be retried without resaving or losing the p
   assert.ok(runtime.teamState().bots.b2.capabilities.includes('release-checks'))
 })
 
+test('a failed update attachment can be retried without tripping over the version it saved', async t => {
+  const history = { b2: [...ownChat] }
+  const updateReply = JSON.stringify({
+    action: 'update',
+    name: 'release-checks',
+    description: 'Use when checking any release.',
+    content: 'Run the release checks.',
+    why: 'The work showed the scope should be broader.',
+  })
+  const runtime = await startRuntime({
+    history,
+    replies: [createReply, updateReply],
+    config: { learningTimes: { tickMs: 100_000 } },
+  })
+  t.after(() => runtime.stop())
+  await finishTurn(runtime.ctx)
+  await runtime.rt.learningRun()
+  await until(() => Object.keys(runtime.learningState().proposals ?? {}).length === 1)
+  const created = Object.values(runtime.learningState().proposals)[0]
+  assert.equal((await runtime.call('learning-answer', { id: created.id, approve: true })).value.applied, true)
+
+  addNextTurn(history)
+  await finishTurn(runtime.ctx)
+  await until(() => runtime.learningState().pending?.b2?.includes('b2'))
+  await settle()
+  await runtime.rt.learningRun()
+  await until(() => Object.values(runtime.learningState().proposals ?? {}).some(entry => entry.action === 'update'))
+  const proposal = Object.values(runtime.learningState().proposals).find(entry => entry.action === 'update')
+  await runtime.rt.capabilityEndpoint('bot-capability', { botId: 'b2', name: 'release-checks', attached: false })
+  const attach = runtime.rt.capabilityEndpoint
+  let fail = true
+  runtime.rt.capabilityEndpoint = async (...args) => {
+    if (fail) {
+      fail = false
+      throw new Error('temporary attachment failure')
+    }
+    return attach(...args)
+  }
+
+  const first = await runtime.call('learning-answer', { id: proposal.id, approve: true })
+  assert.equal(first.ok, false)
+  assert.equal(runtime.learningState().proposals[proposal.id].saved, true)
+  assert.equal(runtime.teamState().capabilities.items['release-checks'].content, 'Run the release checks.')
+  assert.ok(runtime.learningState().learned.b2.includes('release-checks'))
+
+  const second = await runtime.call('learning-answer', { id: proposal.id, approve: true })
+  assert.equal(second.value.applied, true)
+  assert.equal(runtime.learningState().proposals[proposal.id], undefined)
+  assert.ok(runtime.teamState().bots.b2.capabilities.includes('release-checks'))
+})
+
 test('a recreated approved skill is learned when its saved proposal is retried', async t => {
   const runtime = await startRuntime({ replies: [createReply] })
   t.after(() => runtime.stop())

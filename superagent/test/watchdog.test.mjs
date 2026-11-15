@@ -136,6 +136,49 @@ test('a service failure is replaced gracefully and a successful recovery is sile
   assert.equal(state.last.after.epoch, 2, 'the observation after the restart is kept')
 })
 
+test('a restart reserves its budget before it stops the Host', async t => {
+  const app = await open(t, { initial: failed() })
+  let persisted
+  app.host.stop = async () => {
+    persisted = (await app.watchdog.getState()).restarts.length
+    return 'stopped'
+  }
+  const result = await app.watchdog.inspectOnce()
+  assert.equal(persisted, 1, 'the attempt was durable before the Host was touched')
+  assert.equal(result.kind, 'recovered')
+  assert.equal(result.budget.used, 1)
+})
+
+test('a second Watchdog cannot spend a restart budget another Watchdog reserved', async t => {
+  const app = await open(t, { initial: failed(), maxRestarts: 1 })
+  const secondHost = fakeHost(failed('The second Host is gone.'))
+  const second = new Watchdog({
+    instanceId: 'private', storage: app.storage, host: secondHost, intervalMs: 20, graceMs: 50,
+    probeTimeoutMs: 1_000, startTimeoutMs: 1_000, maxRestarts: 1, restartWindowMs: 60_000,
+    version: 't47-test', now: () => 1_000, log: { warn: () => {}, error: () => {} },
+  })
+  let releaseStop
+  const stopGate = new Promise(resolve => { releaseStop = resolve })
+  let enteredStop
+  const stopEntered = new Promise(resolve => { enteredStop = resolve })
+  app.host.stop = async () => {
+    enteredStop()
+    await stopGate
+    return 'stopped'
+  }
+  const first = app.watchdog.inspectOnce()
+  await stopEntered
+  let competing
+  try { competing = await second.inspectOnce() } finally { releaseStop() }
+  const recovered = await first
+  assert.equal(competing.kind, 'budget-exhausted')
+  assert.equal(competing.action, 'none')
+  assert.equal(competing.budget.used, 1)
+  assert.equal(secondHost.calls.stop, 0, 'the competing Watchdog did not touch its Host')
+  assert.equal(recovered.kind, 'recovered')
+  assert.equal((await app.watchdog.getState()).restarts.length, 1)
+})
+
 test('a Host that does not stop within the grace period is not killed or restarted', async t => {
   const app = await open(t, { initial: failed() })
   app.host.stopResult = 'timeout'

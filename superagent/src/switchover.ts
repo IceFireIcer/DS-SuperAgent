@@ -442,6 +442,7 @@ export class Switchover {
   private server: Server | undefined
   private readonly sockets = new Set<Socket>()
   private heartbeat: ReturnType<typeof setInterval> | undefined
+  private heartbeatRun: Promise<void> | undefined
   private readonly startedAt = Date.now()
   private tail: Promise<unknown> = Promise.resolve()
   private heartbeatMs = 2_000
@@ -604,7 +605,7 @@ export class Switchover {
 
   async close(): Promise<void> {
     await this.exclusively(async () => {
-      this.stopHeartbeat()
+      await this.stopHeartbeatAndWait()
       const server = this.server
       this.server = undefined
       try {
@@ -631,13 +632,39 @@ export class Switchover {
   async detach(batch: string): Promise<void> {
     identifier(batch, 'batchId')
     await this.exclusively(async () => {
-      this.stopHeartbeat()
+      await this.stopHeartbeatAndWait()
       const server = this.server
       this.server = undefined
       if (!server) return
       for (const socket of this.sockets) socket.destroy()
       this.sockets.clear()
       await new Promise<void>(resolveClose => server.close(() => resolveClose()))
+    })
+  }
+
+  /** Stop this process' intake, then persist that the abandoned entry is no longer held. */
+  async release(batch: string): Promise<void> {
+    identifier(batch, 'batchId')
+    await this.exclusively(async () => {
+      await this.stopHeartbeatAndWait()
+      const server = this.server
+      this.server = undefined
+      if (server) {
+        for (const socket of this.sockets) socket.destroy()
+        this.sockets.clear()
+        await new Promise<void>(resolveClose => server.close(() => resolveClose()))
+      }
+      const record = await this.storage.transaction(this.instanceId, tx => this.load(tx, batch))
+      if (!record || record.state === 'active' || !record.entry.isolated) return
+      if (!this.isHolder(record) && await this.entryReachable(record.entry)) {
+        throw new CoreError('ENTRY_STILL_HELD', 'The isolated intake entry is still reachable from another process.')
+      }
+      await this.storage.transaction(this.instanceId, async tx => {
+        const current = await this.load(tx, batch)
+        if (!current || current.state === 'active' || !current.entry.isolated) return
+        await tx.replace('switchover', current.id, { ...current, updatedAt: this.now(),
+          entry: { ...current.entry, isolated: false, releasedAt: this.now() } })
+      })
     })
   }
 
@@ -691,7 +718,7 @@ export class Switchover {
   private async isolateEntry(record: SwitchoverRecord, entry: SwitchoverEntry, entryWaitMs: number) {
     if (this.server?.listening && this.isHolder(record)) return record
     if (this.server?.listening) {
-      this.stopHeartbeat()
+      await this.stopHeartbeatAndWait()
       return this.setBlockers(record, [{ code: 'ENTRY_HELD_BY_ANOTHER', message: 'This process no longer owns the isolated entry.' }])
     }
     const bound = await this.bind(entry.host, entry.port, entryWaitMs)
@@ -840,7 +867,10 @@ export class Switchover {
 
   private startHeartbeat() {
     this.stopHeartbeat()
-    this.heartbeat = setInterval(() => { void this.beat() }, this.heartbeatMs)
+    this.heartbeat = setInterval(() => {
+      if (this.heartbeatRun) return
+      this.heartbeatRun = this.beat().finally(() => { this.heartbeatRun = undefined })
+    }, this.heartbeatMs)
     this.heartbeat.unref()
   }
 
@@ -849,14 +879,26 @@ export class Switchover {
     this.heartbeat = undefined
   }
 
+  private async stopHeartbeatAndWait() {
+    this.stopHeartbeat()
+    if (this.heartbeatRun) await this.heartbeatRun
+  }
+
   private async beat() {
     try {
       const prefix = `${JSON.stringify(['switchover', this.instanceId]).slice(0, -1)},`
       const records = await this.storage.transaction(this.instanceId, tx => tx.scan<SwitchoverRecord>('switchover', { limit: 100, after: prefix }))
       for (const item of records.items) {
         if (!item.id.startsWith(prefix)) break
-        if (item.value.entry.holderPid !== process.pid || item.value.entry.holderStartedAt !== this.startedAt || !item.value.entry.isolated) continue
-        await this.save({ ...item.value, entry: { ...item.value.entry, heartbeatAt: this.now() } })
+        await this.storage.transaction(this.instanceId, async tx => {
+          const current = await tx.get<SwitchoverRecord>('switchover', item.id)
+          if (!current || current.batchId !== item.value.batchId || current.state !== item.value.state
+            || current.entry.isolated !== item.value.entry.isolated || current.updatedAt !== item.value.updatedAt
+            || current.entry.holderPid !== process.pid || current.entry.holderStartedAt !== this.startedAt
+            || !current.entry.isolated) return
+          await tx.replace('switchover', current.id, { ...current, updatedAt: this.now(),
+            entry: { ...current.entry, heartbeatAt: this.now() } })
+        })
       }
     } catch { /* A failed heartbeat is visible as stale isolation; it must not turn into an unbounded retry loop. */ }
   }

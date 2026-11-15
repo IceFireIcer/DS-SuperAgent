@@ -23,11 +23,13 @@ const react = {
   useMemo: make => { hooks += 1; return make() },
 }
 const module = { exports: {} }
+const windowObject = {}
 runInNewContext(outputFiles[0].text, {
   module, exports: module.exports,
+  window: windowObject, navigator: { language: 'en-US' },
   require: name => (name === 'react' ? react : name === 'react-dom' ? { createPortal: node => node } : {}),
 })
-const { ComposerPlus } = module.exports
+const { ComposerPlus, useDictation } = module.exports
 
 // Renders the "+" for a chat whose Bot is in the roster as `roster` says, and counts its hook calls.
 function render(roster) {
@@ -51,4 +53,35 @@ test('the "+" calls the same hooks whether or not its roster knows the Bot yet',
   assert.equal(forgotten.tree, null)
   assert.equal(known.hooks, unknown.hooks)
   assert.equal(forgotten.hooks, unknown.hooks)
+})
+
+test('browser dictation drops the final result of a discarded recognition', () => {
+  const heard = []
+  class FakeRecognition {
+    start() { FakeRecognition.current = this }
+    stop() {}
+    abort() {}
+    result(text) {
+      const result = Object.assign([{ transcript: text }], { isFinal: true })
+      this.onresult({ resultIndex: 0, results: [result] })
+    }
+  }
+  windowObject.SpeechRecognition = FakeRecognition
+  const dictation = useDictation((text, final) => heard.push([text, final]))
+  assert.equal(dictation.start({ continuous: false }), true)
+  const first = FakeRecognition.current
+  // A natural stop keeps the words the user just said.
+  dictation.stop()
+  first.result('first')
+  assert.deepEqual(heard, [['first', true]])
+  // Pause discards the engine, so its late final result never reaches the chat.
+  dictation.discard()
+  first.result('late')
+  assert.deepEqual(heard, [['first', true]])
+  // The engine from before the pause is stale even after listening resumes.
+  dictation.start({ continuous: false })
+  const second = FakeRecognition.current
+  first.result('older')
+  second.result('second')
+  assert.deepEqual(heard, [['first', true], ['second', true]])
 })

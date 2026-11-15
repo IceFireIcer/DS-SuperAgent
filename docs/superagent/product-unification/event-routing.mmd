@@ -1,0 +1,32 @@
+flowchart TB
+  userEvent["主对话消息 / 外部新的人类请求<br/>稳定事件 ID + 受信用户 scope"] --> intake["接收核查、去重、持久化<br/>Main 输入 / Turn"]
+  intake --> main["主 Agent<br/>独立模型与上下文"]
+  main -->|"WorkBrief"| eval["Router 研判<br/>分解 / 新任务或有证据的关联"]
+  event["合法关联的已有工作跟进 / 环境事件<br/>PR / CI / 设备 / 日程"] --> sourceIntake["来源归属核查、去重、持久化<br/>不先把全文塞入 Main"]
+  sourceIntake --> subscription["按已核验订阅 fan-out<br/>保存接收时的 owner / context-only 关系"]
+  subscription -->|"已有工作上下文：直通"| work["原 Ticket 的 Input<br/>当前合法 Worker / Assignment"]
+  subscription -->|"无人拥有的新候选"| eval
+  eval --> resolution["接受 / 关联的持久决定<br/>复合请求分项须新增明确契约"]
+  resolution --> ticket["一个或多个工作项的 Ticket / Mandate<br/>各有范围、身份和新 Assignment / 合法原工作"]
+  ticket --> work
+  work --> decision{"范围内？"}
+  decision -->|"是"| execute["调查 / 执行 / 验证<br/>等待用户、设备、后台作业可分开"]
+  decision -->|"范围外"| handback["持久 handback + 原因<br/>全部 owner 交回后重新 Eval"]
+  handback --> eval
+  execute --> report["Report / Attention / 证据引用"]
+  report --> delivery["Router 汇总有界 Report / Attention<br/>完成、失败、待决定或重要变化才主动通知 Main"]
+  delivery --> main
+  main --> user["现有主对话组件 / 原来源信道<br/>关键结果、问题；执行细节按需读取"]
+  stop["明确目标的 UI 停止"] --> control["受信核心核对目标与授权<br/>持久停止、传播取消，不等待模型"]
+  control -.->|"停止事实通知"| main
+  answer["主对话有效问题卡的原始选择"] --> answerGate["核心校验工作、权限与当前问题<br/>拒绝过期答复，不经模型改写"]
+  answerGate -->|"仅推进匹配的原工作"| work
+  answerGate -.->|"答复事实通知"| main
+  main -->|"WorkControl / FollowUp"| eval
+  control --> work
+  classDef control fill:#e6f2ed,stroke:#37745d,color:#163c2e
+  classDef work fill:#eaf0fa,stroke:#536f9a,color:#233e62
+  classDef caution fill:#fff3df,stroke:#a58145,color:#60451e
+  class intake,sourceIntake,subscription,eval,resolution,delivery,main,control control
+  class ticket,work,execute,report work
+  class decision,handback caution

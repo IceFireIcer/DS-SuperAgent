@@ -1,0 +1,37 @@
+%% R4 目标架构补充：Main / Router / Worker 三层。旧 R2 此图未画出独立 Main；当前生成的 R4 报告使用 three-tier-runtime.mmd 作为主架构图。
+flowchart TB
+  ui["复用现有聊天、侧栏、卡片、设置组件<br/>具体 Bot/群入口含义等待维护者确认"] --> boundary["产品命令 / 查询边界<br/>受信用户、Instance、Thread、稳定输入"]
+  sources["来源 adapters<br/>GitHub / IM / schedule"] --> boundary
+  boundary --> core["Instance Domain Engine<br/>事件、授权、订阅、工作身份、代次、恢复、效果"]
+  boundary --> config["版本化设置 / 只读诊断<br/>不把普通 CRUD 伪装成工作"]
+  subgraph runtime["一个共享上下文范围的协作运行时"]
+    router["一个逻辑 Router<br/>新候选 / 工作间协调 / 主要对外交互"]
+    workers["多个任务级 Worker<br/>Ticket ≠ Assignment ≠ Session"]
+    inner["Worker 内部可选 Agent Team<br/>不是长期 Bot 通讯录"]
+    router -->|"决定与安排经 Engine 受控提交"| workers
+    workers --> inner
+  end
+  core --> router
+  core -->|"已有 owner 输入直通，不每条唤醒 Router LLM"| workers
+  workers -->|"受限操作"| capability["能力 ports<br/>浏览器 / MCP / 凭据 / Office / 文件 / 模型 / 作业"]
+  workers -->|"授权上下文读取"| memory["记忆 / 搜索 / 历史引用<br/>隐私范围不因角色配置而合并"]
+  capability --> environment["明确的 Environment / 资源授权<br/>本地或已授权远端，不按客户端位置猜"]
+  router --> dsh["公开 DSH Agent loop / Session / 工具 / 模型路由"]
+  workers --> dsh
+  workers -->|"报告 / 问题"| core
+  core --> outbox["统一交付规则 / Outbox / 回执"]
+  outbox --> projection["产品聊天与控制状态投影<br/>与 Worker transcript 分开"]
+  config --> projection
+  projection --> ui
+  core --> business["业务持久库<br/>Instance / Thread / Ticket / Assignment / 效果事实"]
+  dsh --> sessions["DSH 原生 Session 日志<br/>显式映射、flush、历史与换代"]
+  archive["旧 Bot / 群 / Session / 资源<br/>先只读归档 + 审阅映射"] -.->|"引用或经确认导入，不复活旧 loop / 权限"| memory
+  watchdog["独立 Watchdog / 语义监督<br/>受控查证、预算与提案"] -.-> core
+  classDef control fill:#e6f2ed,stroke:#37745d,color:#163c2e
+  classDef work fill:#eaf0fa,stroke:#536f9a,color:#233e62
+  classDef resource fill:#fff3df,stroke:#a58145,color:#60451e
+  classDef store fill:#f0edf7,stroke:#81679b,color:#433453
+  class core,router,outbox control
+  class workers,inner,dsh work
+  class capability,environment,memory,archive resource
+  class business,sessions store

@@ -164,6 +164,7 @@ test('a completion of an earlier Assignment generation cannot wake the current o
   })
   const ticketId = await accept('room', 'room-1', 'Start a long build.')
   await until(async () => (await engine.listJobs(ticketId)).length === 1, 'the job start fact')
+  await until(async () => (await engine.conversation(ticketId)).reason === 'worker-background', 'the turn to end with a running job')
   const [job] = await engine.listJobs(ticketId)
   await engine.stopTicket({ commandId: 'stop-before-resume', ticketId, reason: 'Restart the work.' })
   await engine.resumeTicket({ commandId: 'resume-work', ticketId })
@@ -250,6 +251,7 @@ test('a stop terminates background work and its late exit never wakes the stoppe
   })
   const ticketId = await accept('room', 'room-1', 'Start a long build.')
   await until(async () => (await engine.listJobs(ticketId)).length === 1, 'the job start fact')
+  await until(async () => (await engine.conversation(ticketId)).reason === 'worker-background', 'the turn to end with a running job')
   const [job] = await engine.listJobs(ticketId)
   const stopped = await engine.stopTicket({ commandId: 'stop-long', ticketId, reason: 'The work is no longer needed.' })
   assert.equal(stopped.status, 'stopped')
@@ -398,4 +400,70 @@ test('an active job stays visible past the query budget, and a cancel keeps its 
   assert.equal(target.state, 'cancelled')
   assert.match(target.output.stdout.text, /built/u)
   assert.equal((await engine.listSlots()).holding.length, 0)
+})
+
+test('a preview settlement keeps the stop claim until its confirmation commits', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-jobs-preview-claim-'))
+  let storage
+  t.after(async () => { await storage?.close(); await rm(directory, { recursive: true, force: true }) })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  const jobs = new core.Jobs(storage, 'private', 'this-runtime')
+  await storage.transaction('private', transaction => transaction.insert('job', `${JSON.stringify(['job', 'ticket'])}:preview`,
+    { id: 'preview', ticketId: 'ticket', assignmentId: 'assignment', generation: 'generation', environmentId: 'project',
+      command: 'preview', state: 'cancelling', startedAt: 1, runtimeToken: 'this-runtime', cancelReason: 'human' }))
+  jobs.holdExternal('preview')
+  await jobs.settlePreview('ticket', 'preview', { exitCode: null, cancelled: true, truncated: false, settled: true })
+  assert.equal(jobs.hasLiveRange('preview'), true)
+  jobs.finishStopped(['preview'])
+  assert.equal(jobs.hasLiveRange('preview'), false)
+})
+
+test('reassignment moves an old active job even when newer history exceeds the report budget', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-jobs-reassign-'))
+  let storage
+  t.after(async () => { await storage?.close(); await rm(directory, { recursive: true, force: true }) })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  const jobs = new core.Jobs(storage, 'private', 'this-runtime')
+  const ticketId = 'ticket'
+  const prefix = JSON.stringify(['job', ticketId])
+  await storage.transaction('private', async transaction => {
+    await transaction.insert('job', `${prefix}:old-job`, { id: 'old-job', ticketId, assignmentId: 'old-assignment',
+      generation: 'old-generation', environmentId: 'project', command: 'build', state: 'running', startedAt: 0, runtimeToken: 'this-runtime' })
+    for (let index = 1; index <= 150; index++) {
+      const id = `later-${String(index).padStart(3, '0')}`
+      await transaction.insert('job', `${prefix}:${id}`, { id, ticketId, assignmentId: 'newer-assignment', generation: 'newer-generation',
+        environmentId: 'project', command: 'build', state: 'exited', startedAt: index, runtimeToken: 'earlier-runtime', exitCode: 0 })
+    }
+    await transaction.insert('background', JSON.stringify(['background', ticketId]),
+      { ticketId, entries: [{ kind: 'job', id: 'old-job', assignmentId: 'old-assignment' }] })
+  })
+  const moved = await storage.transaction('private', transaction => jobs.reassign(transaction,
+    { ticketId, fromAssignmentId: 'old-assignment', assignmentId: 'replacement', generation: 'replacement-generation' }))
+  assert.deepEqual(moved, ['old-job'])
+  const record = await storage.transaction('private', transaction => jobs.getRaw(transaction, ticketId, 'old-job'))
+  assert.equal(record.assignmentId, 'replacement')
+  assert.equal(record.generation, 'replacement-generation')
+  const index = await storage.transaction('private', transaction => transaction.get('background', JSON.stringify(['background', ticketId])))
+  assert.equal(index.entries.find(entry => entry.kind === 'job' && entry.id === 'old-job').assignmentId, 'replacement')
+})
+
+test('job history returns the actual newest records after the thousandth key', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-jobs-history-'))
+  let storage
+  t.after(async () => { await storage?.close(); await rm(directory, { recursive: true, force: true }) })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  const jobs = new core.Jobs(storage, 'private', 'this-runtime')
+  const ticketId = 'ticket'
+  const prefix = JSON.stringify(['job', ticketId])
+  await storage.transaction('private', async transaction => {
+    for (let index = 0; index <= 1000; index++) {
+      const id = `history-${String(index).padStart(4, '0')}`
+      await transaction.insert('job', `${prefix}:${id}`, { id, ticketId, assignmentId: 'assignment', generation: 'generation',
+        environmentId: 'project', command: 'build', state: 'exited', startedAt: index, runtimeToken: 'earlier-runtime', exitCode: 0 })
+    }
+  })
+  const listed = await storage.transaction('private', transaction => jobs.listIn(transaction, ticketId))
+  assert.equal(listed.length, 100)
+  assert.equal(listed.at(-1).id, 'history-1000')
+  assert.equal(listed[0].id, 'history-0901')
 })

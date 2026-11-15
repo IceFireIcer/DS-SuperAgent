@@ -220,10 +220,10 @@ export function install(rt) {
   /** Ask where the package came from for its newest version; a fresh check ignores the last answer. */
   async function check({ fresh = false } = {}) {
     if (!enabled) return view()
-    if (checking) return checking
-    if (!fresh && Date.now() - status.checkedAt < CHECK_TTL_MS) return view()
-    checking = runCheck().finally(() => { checking = null })
-    await checking
+    if (!checking && (fresh || Date.now() - status.checkedAt >= CHECK_TTL_MS)) {
+      checking = runCheck().finally(() => { checking = null })
+    }
+    if (checking) await checking
     return view()
   }
 

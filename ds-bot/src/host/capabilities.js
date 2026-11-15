@@ -262,7 +262,13 @@ export function install(rt) {
         return loader.unwrapExports?.(exports) ?? exports?.default ?? exports
       })()
     }
-    return pluginPromise
+    const loading = pluginPromise
+    try {
+      return await loading
+    } catch (error) {
+      if (pluginPromise === loading) pluginPromise = undefined
+      throw error
+    }
   }
   function secretFor(name, botId) {
     const value = rt.canUseSecret(name, botId) ? rt.secretValue(name) : undefined

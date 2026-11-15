@@ -150,3 +150,25 @@ test('the gateway refuses a public bind without TLS and serves a self-signed pro
   assert.equal(secure.status, 200)
   await assert.rejects(send(`${gateway.url.replace('https:', 'http:')}/instances/private/state`, { token: client.token }))
 })
+
+test('the state cursor does not skip a commit made while the snapshot is read', async t => {
+  const { access, engine, open } = await fixture(t)
+  const client = await access.enroll({ commandId: 'cursor-client', label: 'Cursor Desktop',
+    grants: [{ instanceId: 'private', capabilities: ['read'] }] })
+  const gateway = await open()
+  const supervision = engine.getSupervision.bind(engine)
+  let recorded = false
+  engine.getSupervision = async (...args) => {
+    const snapshot = await supervision(...args)
+    if (!recorded) {
+      recorded = true
+      await access.record([{ key: 'state:during-read', kind: 'state', data: { ticketId: 'during-read', state: 'running' } }])
+    }
+    return snapshot
+  }
+  const state = await send(`${gateway.url}/instances/private/state`, { token: client.token })
+  assert.equal(state.status, 200)
+  assert.deepEqual(state.body.items, [], 'the snapshot was taken before the concurrent commit')
+  const replay = await send(`${gateway.url}/instances/private/events?after=${state.body.cursor}`, { token: client.token })
+  assert.deepEqual(replay.body.items.map(item => item.key), ['state:during-read'])
+})

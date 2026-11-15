@@ -27,12 +27,21 @@ test('toSetDetails maps a normalized cookie to the Electron set call', () => {
 
   assert.equal(toSetDetails({ name: 'n', value: 'v', domain: 'x.io', path: '/', sameSite: 'None' }).sameSite, 'no_restriction')
   assert.equal(toSetDetails({ name: 'n', value: 'v', domain: 'x.io', path: '/', sameSite: 'Lax' }).sameSite, 'lax')
+  assert.throws(
+    () => toSetDetails({ name: 'n', value: 'v', domain: 'x.io', path: '/', secure: true, partitionKey: { topLevelSite: 'https://top.io' } }),
+    /partitioned cookie cannot be stored/u)
 })
 
 /** A session.cookies stand-in: store what set accepts, refuse and drop what we are told to. */
-function fakeSession({ reject = [], drop = [] } = {}) {
+function fakeSession({ reject = [], drop = [], existing = [] } = {}) {
   const stored = new Map()
-  const key = (c) => `${c.name}${String(c.domain ?? '').replace(/^\.+/, '')}${c.path ?? '/'}`
+  const key = (c) => [c.name, String(c.domain ?? '').replace(/^\.+/, ''), c.path ?? '/', c.hostOnly === true].join('\u0000')
+  for (const cookie of existing) {
+    stored.set(key(cookie), {
+      ...cookie,
+      hostOnly: typeof cookie.hostOnly === 'boolean' ? cookie.hostOnly : !String(cookie.domain ?? '').startsWith('.'),
+    })
+  }
   return {
     stored,
     flushed: false,
@@ -41,10 +50,13 @@ function fakeSession({ reject = [], drop = [] } = {}) {
         if (reject.includes(details.name)) throw new Error('Invalid cookie fields')
         if (!drop.includes(details.name)) {
           const host = new URL(details.url).host
-          stored.set(key({ name: details.name, domain: details.domain ?? host, path: details.path }), {
+          const cookie = {
             name: details.name, domain: details.domain ?? host, path: details.path, value: details.value,
-            secure: details.secure, httpOnly: details.httpOnly,
-          })
+            secure: details.secure, httpOnly: details.httpOnly, sameSite: details.sameSite,
+            hostOnly: details.domain === undefined,
+            ...(details.expirationDate === undefined ? {} : { expirationDate: details.expirationDate }),
+          }
+          stored.set(key(cookie), cookie)
         }
       },
       get: async () => [...stored.values()],
@@ -76,6 +88,28 @@ test('applyCookies reports rejects and silent drops per cookie', async () => {
   assert.equal(report.dropped[0].name, 'p_strict')
   // Reports never carry values.
   for (const item of [...report.failed, ...report.dropped]) assert.equal(item.value, undefined)
+})
+
+test('an older cookie with the same name and domain is not counted as the imported value', async () => {
+  const parsed = parse('cookie-editor.json')
+  const target = parsed.cookies.find((cookie) => cookie.name === 'p_strict')
+  const ses = fakeSession({ drop: ['p_strict'], existing: [{ ...target, value: 'old-value' }] })
+  const report = await applyCookies(ses, parsed.cookies)
+  assert.equal(report.stored, 7)
+  assert.equal(report.dropped.length, 1)
+  assert.equal(report.dropped[0].name, 'p_strict')
+  assert.match(report.dropped[0].reason, /different cookie/u)
+})
+
+test('a host-only cookie is not confused with a domain cookie of the same name', async () => {
+  const cookie = { name: 'n', value: 'v', domain: 'example.com', path: '/', secure: false, httpOnly: false }
+  const ses = fakeSession({
+    drop: ['n'],
+    existing: [{ name: 'n', value: 'v', domain: '.example.com', path: '/', secure: false, httpOnly: false, sameSite: 'unspecified' }],
+  })
+  const report = await applyCookies(ses, [cookie])
+  assert.equal(report.stored, 0)
+  assert.equal(report.dropped.length, 1)
 })
 
 test('a pending import is value-bearing, one-shot and capped', () => {

@@ -71,6 +71,7 @@ export class GitHubDeliveryChannel implements DeliveryChannel {
     if (previous?.fingerprint !== undefined && previous.fingerprint !== fingerprint) return { type: 'permanent', reason: 'IDENTITY_CONFLICT: this outbound identity was used for different content or destination.' }
     if (previous?.receipt) return { type: 'success' }
     const request = { host: source.host, owner: source.owner, repo: source.repo, number, signal: context.signal }
+    let mayHavePosted = previous !== undefined
     try {
       context.signal.throwIfAborted()
       if (await this.transport.getActor(request) !== source.actorId) return { type: 'permanent', reason: 'GITHUB_ACTOR_MISMATCH: the authenticated account is not the configured posting actor.' }
@@ -97,6 +98,7 @@ export class GitHubDeliveryChannel implements DeliveryChannel {
         return true
       })
       if (!claimed) return { type: 'unknown', reason: 'GITHUB_POST_IN_PROGRESS: reconcile the original outbound identity.' }
+      mayHavePosted = true
       context.signal.throwIfAborted()
       const posted = await this.transport.createComment({ ...request, body })
       if (posted.body !== body || posted.authorId !== source.actorId) return { type: 'unknown', reason: 'GITHUB_RECEIPT_INVALID: the API response did not confirm the expected body and posting actor.' }
@@ -104,6 +106,7 @@ export class GitHubDeliveryChannel implements DeliveryChannel {
     } catch (error) {
       const status = error instanceof CoreError && /^GITHUB_HTTP_\d+$/u.test(error.code) ? Number(error.code.slice('GITHUB_HTTP_'.length)) : undefined
       if (status === 401 || status === 403 || status === 404 || status === 410 || status === 422) return { type: 'permanent', reason: `GITHUB_HTTP_${status}` }
+      if (!mayHavePosted) return { type: 'transient', reason: status === undefined ? 'GITHUB_PREFLIGHT_TRANSIENT' : `GITHUB_HTTP_${status}` }
       return { type: 'unknown', reason: 'GITHUB_OUTCOME_UNKNOWN: inspect the original outbound marker before any retry.' }
     }
   }

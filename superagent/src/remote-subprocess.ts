@@ -215,7 +215,13 @@ export class RemoteJobHandle implements SubprocessHandle {
       if (!unavailable(error)) throw error
       // The device may have started the job and lost only the response. Inspect the same ID
       // before deciding anything; never issue a second start for this identity.
-      this.apply(await this.call('command.inspect', this.inspection()))
+      try {
+        this.apply(await this.call('command.inspect', this.inspection()))
+      } catch (inspection) {
+        if (!unavailable(inspection)) throw inspection
+        this.retryObservation()
+        return
+      }
     }
     this.afterObserved()
   }
@@ -228,7 +234,13 @@ export class RemoteJobHandle implements SubprocessHandle {
     if (!validateRemoteJobId(this.jobId, this.prefix())) {
       throw new CoreError('JOB_IDENTITY_MISMATCH', 'The job ID does not belong to this Instance, Environment and device incarnation.')
     }
-    this.apply(await this.call('command.inspect', this.inspection()))
+    try {
+      this.apply(await this.call('command.inspect', this.inspection()))
+    } catch (error) {
+      if (!unavailable(error)) throw error
+      this.retryObservation()
+      return
+    }
     this.afterObserved('The device no longer knows this job; its result is unknown.')
   }
 
@@ -289,6 +301,12 @@ export class RemoteJobHandle implements SubprocessHandle {
       || this.recoveryValue?.kind === 'identity-changed' || this.recoveryValue?.kind === 'unverifiable')) {
       throw jobUnknown(this.recoveryValue?.reason ?? unknownMessage)
     }
+    this.started = true
+    if (this.cancelRequested && !this.finished) void this.sendCancel()
+    if (!this.finished) this.schedule()
+  }
+
+  private retryObservation() {
     this.started = true
     if (this.cancelRequested && !this.finished) void this.sendCancel()
     if (!this.finished) this.schedule()

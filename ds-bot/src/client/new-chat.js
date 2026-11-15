@@ -20,6 +20,10 @@ export function NewChat({ mode, roster, actions }) {
   // The Create Bot form, opened straight from 'create' mode or from the list.
   const [draft, setDraft] = useState(mode === 'create' ? { name: '', fromList: false } : null)
   const inputRef = useRef(null)
+  // A room that was already created stays the target when the first message fails:
+  // retrying must not create a second room.
+  const groupRoom = useRef(null)
+  const pickedRoom = useRef(null)
   const close = () => actions.closeOverlay()
   useEscape(close)
   const paneLeft = usePaneLeft()
@@ -71,7 +75,8 @@ export function NewChat({ mode, roster, actions }) {
   const makeGroup = async () => {
     if (admin === null || picked.length === 0) return
     const text = message.trim()
-    const room = await actions.createRoom([admin, ...picked], { admin, ...(text ? {} : { greet: true }) })
+    if (groupRoom.current === null) groupRoom.current = await actions.createRoom([admin, ...picked], { admin, ...(text ? {} : { greet: true }) })
+    const room = groupRoom.current
     if (text) await actions.send(room.id, text)
     actions.openSession(room.id)
     close()
@@ -87,7 +92,8 @@ export function NewChat({ mode, roster, actions }) {
       close()
       return
     }
-    const room = await actions.createRoom(picked)
+    if (pickedRoom.current === null) pickedRoom.current = await actions.createRoom(picked)
+    const room = pickedRoom.current
     await actions.send(room.id, text)
     actions.openSession(room.id)
     close()

@@ -35,9 +35,12 @@ export function useDictation(onText) {
   const [listening, setListening] = useState(false)
   const [note, setNote] = useState('')
   const recognition = useRef(null)
+  // A new recognition makes the previous one's late results stale: after Pause,
+  // or after a restart, the browser may still deliver its last final result.
+  const generation = useRef(0)
   const latest = useRef(onText)
   latest.current = onText
-  useEffect(() => () => recognition.current?.abort(), [])
+  useEffect(() => () => { generation.current += 1; recognition.current?.abort() }, [])
   useEffect(() => {
     if (!note) return undefined
     const timer = setTimeout(() => setNote(''), 2600)
@@ -47,10 +50,12 @@ export function useDictation(onText) {
     const Api = speechApi()
     if (!Api) { setNote(t('Dictation is not available in this browser')); return false }
     const engine = new Api()
+    const own = ++generation.current
     engine.lang = navigator.language || 'zh-CN'
     engine.interimResults = true
     engine.continuous = continuous
     engine.onresult = (event) => {
+      if (generation.current !== own) return
       let interim = ''
       for (let index = event.resultIndex; index < event.results.length; index += 1) {
         const result = event.results[index]
@@ -60,15 +65,28 @@ export function useDictation(onText) {
       if (interim) latest.current(interim, false)
     }
     engine.onerror = (event) => {
+      if (generation.current !== own) return
       if (event.error === 'aborted' || event.error === 'no-speech') return
       setNote(event.error === 'not-allowed' || event.error === 'service-not-allowed' ? t('Microphone access is blocked') : t("Couldn't hear that"))
     }
-    engine.onend = () => { setListening(false); recognition.current = null; onEnd?.() }
+    engine.onend = () => {
+      if (generation.current === own) { setListening(false); recognition.current = null }
+      onEnd?.()
+    }
     recognition.current = engine
     try { engine.start(); setListening(true); return true } catch { setNote(t("Couldn't start dictation")); return false }
   }
   const stop = () => recognition.current?.stop()
-  return { listening, note, start, stop }
+  // Drops anything the engine still owes us: Pause and Close use it, while a
+  // natural stop keeps the final result the user just spoke.
+  const discard = () => {
+    generation.current += 1
+    const engine = recognition.current
+    recognition.current = null
+    setListening(false)
+    try { engine?.abort() } catch {}
+  }
+  return { listening, note, start, stop, discard }
 }
 
 export function ComposerVoice({ sessionId, inputActions, actions, useUi }) {

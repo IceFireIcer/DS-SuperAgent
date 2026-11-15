@@ -1,0 +1,26 @@
+flowchart TB
+  user["用户<br/>主对话默认入口"] --> main["主 Agent / Main<br/>独立模型 · 独立 Session · 长期用户上下文<br/>Worker 的原始 tool trace 不进入此上下文"]
+  externalHuman["外部新的人类请求<br/>通过受信来源接入所属 Main"] --> main
+  sources["已关联工作跟进 / 环境事件<br/>PR / CI / 设备 / 日程"] --> engine["Instance Domain Engine<br/>事件归属 / 授权 / 幂等 / Ticket / Assignment / Effects"]
+  main -->|"WorkBrief / FollowUp / Control<br/>用户依据 + 目标 + 约束 + 验收"| engine
+  engine --> router["Router<br/>独立模型与协调上下文<br/>分解 / 关联 / Ticket / Mandate / 派工"]
+  router -->|"Assignment"| workers["Worker Sessions<br/>每项工作隔离上下文<br/>调查 / 执行 / 验证"]
+  workers -->|"范围内可再用"| inner["Subagent / Agent Team<br/>继承工作授权与环境"]
+  workers -->|"Report / Attention / 执行事实"| engine
+  engine -->|"Worker 结果、状态、问题<br/>只给 Router 协调"| router
+  router -->|"有界回执 / 完成 / 失败 / 待决定 / 重要变化<br/>普通步骤不逐条唤醒 Main"| main
+  main -->|"自然语言回复 / 问题 / 结果说明"| user
+  engine -->|"受权只读查询<br/>角色 + Ticket 归属 + 分页"| observer["Router / Worker 观察视图<br/>只读 · 不自动写入 Main 上下文"]
+  observer -.->|"用户打开详情"| user
+  main -->|"授权查询状态 / 按需读取有界证据"| engine
+  user --> explicitStop["明确 UI 停止 / 有效问题卡答复<br/>鉴权后直达核心，不等待模型"]
+  explicitStop --> engine
+  engine -->|"状态 / 结果 / 问题事实卡<br/>Main 模型故障仍可查看和明确操作"| user
+  classDef main fill:#e6f2ed,stroke:#37745d,color:#163c2e
+  classDef coordination fill:#eaf0fa,stroke:#536f9a,color:#233e62
+  classDef execution fill:#f2ecff,stroke:#896bc5,color:#433453
+  classDef readonly fill:#f4f7f9,stroke:#7a8b94,color:#2d4049
+  class main,engine main
+  class router,workers coordination
+  class inner execution
+  class observer readonly

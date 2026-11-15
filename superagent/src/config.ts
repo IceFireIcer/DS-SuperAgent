@@ -56,7 +56,6 @@ export function validateRoleConfig(roles: RoleConfig) {
 }
 
 export class RoleConfigStore {
-  private current: StoredRoleConfig | undefined
   constructor(
     private readonly storage: Storage,
     private readonly instanceId: string,
@@ -66,17 +65,15 @@ export class RoleConfigStore {
 
   async ensure(): Promise<RoleConfigView> {
     const stored = await this.storage.transaction(this.instanceId, transaction => transaction.get<StoredRoleConfig>('role-config', configKey))
-    if (stored) { this.current = stored; return this.view(stored) }
+    if (stored) return this.view(stored)
     // Defaults are virtual until the first explicit save. Persisting them from a
     // session-less source engine would clobber another engine's model routes.
     const initial: StoredRoleConfig = { revision: 1, roles: structuredClone(this.defaults), updatedAt: this.now() }
-    this.current = initial
     return this.view(initial)
   }
 
   async currentView(): Promise<RoleConfigView> {
-    if (!this.current) return this.ensure()
-    return this.view(this.current)
+    return this.ensure()
   }
 
   async write(transaction: AsyncTx, expectedRevision: number, roles: RoleConfig): Promise<RoleConfigView> {
@@ -88,7 +85,6 @@ export class RoleConfigStore {
     const next: StoredRoleConfig = { revision: baseRevision + 1, roles: structuredClone(roles), updatedAt: this.now() }
     if (!await transaction.replace('role-config', configKey, next)) await transaction.insert('role-config', configKey, next)
     await transaction.insert('role-config-history', historyKey(next.revision), next)
-    this.current = next
     return this.view(next)
   }
 

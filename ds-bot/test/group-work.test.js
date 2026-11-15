@@ -122,6 +122,20 @@ const settle = async (check) => {
 const text = message => message.content.map(block => block.text ?? '').join('\n')
 const kinds = result => result.replies.map(reply => [reply.kind ?? 'message', reply.name])
 
+test('a Bot step leaves the shared compaction service methods alone', async (t) => {
+  const compaction = {
+    compactIfNeeded() {},
+    compactNow() {},
+    compactRegion() {},
+    summarize() {},
+  }
+  const before = { ...compaction }
+  const host = await start(t, {}, { compaction })
+  const preStep = host.ctx.listeners.get('agent/pre-step').find(listener => /adoptCompaction/.test(String(listener)))
+  assert.equal(await preStep({ agent: host.agentOf('gb'), messages: [], step: 1, signal: AbortSignal.timeout(60_000) }, async () => 'next'), 'next')
+  assert.deepEqual(compaction, before)
+})
+
 test('work past the grace lets the round go on, and the member that asked answers the result', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] })
   const host = await start(t)
@@ -1390,6 +1404,40 @@ test('parallel batch barrier posts each late reply at once and wakes the caller 
   assert.match(text(synth), /Tester: 测试全部通过。/)
   host.finish('ga', '文档和测试都通过了。')
   await settle(() => third() !== undefined)
+})
+
+test('a member waiting for approval keeps the batch open until it finishes', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const host = await start(t)
+  const waits = rt.waitsForApproval
+  rt.waitsForApproval = id => id === 'gb'
+  t.after(() => { rt.waitsForApproval = waits })
+
+  const first = host.round('c1', host.say('全面检查一下'))
+  await settle(() => host.agentOf('ga').calls.length === 1)
+  host.begin('ga')
+  host.finish('ga', '@Writer @Tester 分别检查文档和测试')
+  await settle(() => host.agentOf('gb').calls.length === 1 && host.agentOf('gc').calls.length === 1)
+  host.begin('gc')
+  host.emit('gc', 'tool/call', { callId: 'k2', name: 'pwsh', arguments: '{}' })
+  t.mock.timers.tick(ROOM_WORK_GRACE_MS)
+  await settle(() => first() !== undefined)
+  assert.deepEqual(kinds(first()), [['message', 'Chief'], ['approval', 'Writer'], ['working', 'Tester']])
+
+  // Tester finishes while Writer still waits for the user: its reply stays quiet.
+  host.emit('gc', 'tool/result', { callId: 'k2' })
+  host.finish('gc', '测试全部通过。')
+  await settle(() => host.agentOf('r1').calls.length === 1)
+  const early = host.takePost()
+  assert.deepEqual([early.source.late, early.source.quiet, early.source.askedBy], [true, true, undefined])
+  assert.equal(host.agentOf('ga').calls.length, 1, 'Chief was not woken before Writer finished')
+
+  // Writer finishes after the approval: now its result goes to Chief.
+  host.begin('gb')
+  host.finish('gb', '文档检查完毕。')
+  await settle(() => host.agentOf('r1').calls.length === 1)
+  const final = host.takePost()
+  assert.deepEqual([final.source.late, final.source.quiet, final.source.askedBy], [true, undefined, 'a'])
 })
 
 // #469: a member that replies only "收到，我现在开始排查" without calling any tool gets

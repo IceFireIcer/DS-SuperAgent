@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -300,4 +301,24 @@ test('a waiting-human question survives stop but cannot be bypassed by resume', 
   await engine.resumeTicket({ commandId: 'resume-after-answer', ticketId: receipt.ticketId })
   for (let index = 0; index < 6; index++) await engine.effects.drain()
   assert.equal((await engine.conversation(receipt.ticketId)).status, 'ready')
+})
+
+test('Attention history keeps paging after the first page instead of treating its last ID as the prefix', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-attention-history-'))
+  const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
+  const engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'], versionOrder: 'sequence' })
+  const ticketId = 'history-ticket'
+  const prefix = `${JSON.stringify(['attention', createHash('sha256').update(ticketId).digest('hex')])}:`
+  await storage.transaction('private', async tx => {
+    for (let sequence = 1; sequence <= 250; sequence++) {
+      const id = `${prefix}${String(sequence).padStart(6, '0')}`
+      await tx.insert('attention', id, { id, instanceId: 'private', ticketId, assignmentId: 'assignment', sessionId: 'session',
+        question: `Question ${sequence}`, options: [], destination: { sourceInstanceId: 'desktop', actorId: 'user', eventId: 'event' },
+        status: 'answered', sequence, createdAt: sequence })
+    }
+  })
+  const { history } = await engine.getTicketAttention(ticketId)
+  assert.equal(history.length, 250)
+  assert.deepEqual(history.map(attention => attention.sequence), Array.from({ length: 250 }, (_value, index) => index + 1))
 })

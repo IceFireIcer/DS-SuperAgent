@@ -551,7 +551,11 @@ export function resolveChanges(doc, accept) {
   // children (all but w:pPr), in order, into the next paragraph after its w:pPr
   // — the merged paragraph keeps the next paragraph's mark and properties.
   const mergeIntoNext = (p, pPr) => {
-    const next = p.nextSibling
+    // Body-level formatting whitespace and comments may sit between paragraphs.
+    // Step over them so a deleted/inserted paragraph mark still merges; any
+    // other significant sibling is a structural boundary and must not merge.
+    let next = p.nextSibling
+    while (next && (next.nodeType === 8 || (next.nodeType === 3 && next.nodeValue.trim() === ''))) next = next.nextSibling
     if (!next || next.tagName !== 'w:p') return false
     const nextPPr = childrenOf(next, 'w:pPr')[0]
     const anchor = nextPPr ? nextPPr.nextSibling : next.firstChild
@@ -568,8 +572,16 @@ export function resolveChanges(doc, accept) {
     if (!rPr) continue
     const del = childrenOf(rPr, 'w:del')[0]
     const ins = childrenOf(rPr, 'w:ins')[0]
-    if (del) { dirty = true; if (!accept || !mergeIntoNext(p, pPr)) rPr.removeChild(del) }
-    else if (ins) { dirty = true; if (accept || !mergeIntoNext(p, pPr)) rPr.removeChild(ins) }
+    // Accepting a deleted mark or rejecting an inserted one needs the merge; if
+    // no adjacent paragraph exists, keep the revision instead of silently
+    // clearing it and leaving the paragraphs split.
+    if (del) {
+      if (!accept) { rPr.removeChild(del); dirty = true }
+      else if (mergeIntoNext(p, pPr)) dirty = true
+    } else if (ins) {
+      if (accept) { rPr.removeChild(ins); dirty = true }
+      else if (mergeIntoNext(p, pPr)) dirty = true
+    }
   }
   for (const tr of elementsOf(doc.documentElement, 'w:tr')) {
     const trPr = childrenOf(tr, 'w:trPr')[0]
@@ -592,6 +604,9 @@ export function resolveChanges(doc, accept) {
   }
   for (const el of elementsOf(doc.documentElement)) {
     const tag = el.tagName
+    // Paragraph and row marks were resolved above; a mark that could not merge
+    // stays as a revision and must not be lifted/removed by this generic pass.
+    if ((tag === 'w:ins' || tag === 'w:del') && (el.parentNode?.tagName === 'w:rPr' || el.parentNode?.tagName === 'w:trPr')) continue
     if (tag === 'w:ins' || tag === 'w:moveTo') {
       if (accept) lift(el)
       else el.parentNode.removeChild(el)

@@ -23,6 +23,7 @@ function fixture({ statePath } = {}) {
       this.debugger = Object.assign(new EventEmitter(), {
         attach() {},
         async sendCommand(method) {
+          if (method === 'Page.enable' && this.delay) await new Promise(resolve => setTimeout(resolve, this.delay))
           if (method === 'Page.getFrameTree') return { frameTree: { frame: { id: 'frame-a', url: 'https://example.com/' } } }
           return { method }
         },
@@ -424,6 +425,24 @@ test('user hold closes relay sockets, rejects endpoints, and allows a new endpoi
   const resumedSocket = await openSocket(resumed)
   t.after(() => resumedSocket.close())
   assert.equal((await request(resumedSocket, 3, 'Target.getTargets')).result.targetInfos.length, 1)
+})
+
+test('forgetting a Bot closes its relay socket and does not run commands it queued', async t => {
+  const { manager, views } = fixture()
+  t.after(() => manager.dispose())
+  const entry = manager.create('a')
+  const socket = await openSocket(await manager.endpoint('a'))
+  const socketClosed = closed(socket)
+  const attached = await request(socket, 1, 'Target.attachToTarget', { targetId: entry.tabId, flatten: true })
+  views[0].webContents.debugger.delay = 50
+  socket.send(JSON.stringify({ id: 2, method: 'Page.enable', params: {}, sessionId: attached.result.sessionId }))
+  socket.send(JSON.stringify({ id: 3, method: 'Target.createTarget', params: { url: 'http://127.0.0.1:43118/late' } }))
+  await new Promise(resolve => setTimeout(resolve, 5))
+  await manager.forget('a')
+  await socketClosed
+  await new Promise(resolve => setTimeout(resolve, 80))
+  assert.equal(views.length, 1, 'the queued Target.createTarget did not recreate the Bot browser')
+  assert.deepEqual(manager.sync('a'), [])
 })
 
 test('navigation guard rejects the app origin and popup tabs work before relay attachment', async t => {

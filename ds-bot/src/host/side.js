@@ -161,16 +161,20 @@ export function install(rt) {
 
   const originalRefresh = rt.refresh?.bind(rt)
   if (typeof originalRefresh === 'function') {
+    let readRevision
     rt.refresh = async () => {
       const wasWriting = writes()
       await originalRefresh()
-      // Taking over a team the other host closed makes this one the writer:
-      // re-read the loaded Bots so a leftover 'answering' is recorded now.
-      if (wasWriting || !writes()) return
+      // A reading host follows the writer's revision; taking over a team the
+      // other host closed re-reads once more so a leftover 'answering' is
+      // recorded now. Either way the loaded chats are replaced, never written.
+      const readingOnly = !writes()
+      if (readingOnly ? readRevision === state.revision : wasWriting) return
       for (const botId of [...chats.keys()]) {
         chats.delete(botId)
         await readBot(botId)
       }
+      readRevision = state.revision
     }
   }
 

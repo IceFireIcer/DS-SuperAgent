@@ -108,9 +108,10 @@ export class Effects {
     if (await this.gate?.blocked?.(transaction)) throw new CoreError('CORE_NOT_ACTIVE', 'Only the active core entry may write an Effect intent.')
     const key = this.key(request)
     const index = await transaction.get<{ queueKey: string; completed?: Effect }>('effect-key', key)
-    if (index?.completed && JSON.stringify(index.completed.payload) === payload) return index.completed
+    // JSONB does not preserve object key order, so a stored payload is compared in its canonical form too.
+    if (index?.completed && canonicalJson(index.completed.payload) === payload) return index.completed
     const previous = index ? await transaction.get<Effect>('effect', index.queueKey) : undefined
-    if (previous && JSON.stringify(previous.payload) === payload) return previous
+    if (previous && canonicalJson(previous.payload) === payload) return previous
     let queueKey = previous?.queueKey
     if (!queueKey) {
       const count = await transaction.get<number>('effect-meta', 'count') ?? 0

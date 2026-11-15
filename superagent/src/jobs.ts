@@ -81,6 +81,8 @@ const jobPrefix = (ticketId: string) => JSON.stringify(['job', ticketId])
 const jobKey = (ticketId: string, jobId: string) => `${jobPrefix(ticketId)}:${jobId}`
 const remotePrefix = (ticketId: string) => JSON.stringify(['remote-job', ticketId])
 const remoteKey = (ticketId: string, jobId: string) => `${remotePrefix(ticketId)}:${jobId}`
+const historyKey = (ticketId: string) => JSON.stringify(['job-history', ticketId])
+interface JobHistory { ticketId: string; ids: string[] }
 const emptyStream: JobStream = { text: '', lossy: false }
 const settledStates: JobState[] = ['exited', 'cancelled']
 
@@ -145,6 +147,7 @@ export class Jobs {
       ...(request.job.remote ? { remote: request.job.remote } : {}) }
     await tx.insert('job', jobKey(record.ticketId, record.id), record)
     await this.index.add(tx, record.ticketId, { id: record.id, assignmentId: record.assignmentId })
+    await this.remember(tx, record.ticketId, record.id)
     if (request.environmentKind === 'remote') {
       await tx.insert('remote-job', remoteKey(record.ticketId, record.id), { ticketId: record.ticketId, jobId: record.id })
     }
@@ -163,6 +166,7 @@ export class Jobs {
     await tx.insert('job', jobKey(record.ticketId, record.id), record)
     await tx.insert('remote-job', remoteKey(record.ticketId, record.id), { ticketId: record.ticketId, jobId: record.id })
     await this.index.add(tx, record.ticketId, { id: record.id, assignmentId: record.assignmentId })
+    await this.remember(tx, record.ticketId, record.id)
     return record
   }
 
@@ -297,6 +301,7 @@ export class Jobs {
       reason: 'The Host reattached to the original device range; its exit has not been observed by this process.' }
     await tx.replace('job', jobKey(request.ticketId, request.jobId), adopted)
     await this.index.add(tx, request.ticketId, { id: adopted.id, assignmentId: adopted.assignmentId })
+    await this.remember(tx, request.ticketId, adopted.id)
     this.pending.set(adopted.id, { job: request.job, record: adopted })
     return adopted
   }
@@ -397,13 +402,19 @@ export class Jobs {
    * Only work this Host actually holds is moved; an old-runtime record is never presented as adopted.
    */
   async reassign(tx: AsyncTx, request: { ticketId: string; fromAssignmentId: string; assignmentId: string; generation: string }) {
-    const records = await this.listIn(tx, request.ticketId)
+    await this.migrateLegacyIndex(tx, request.ticketId)
+    const records: JobRecord[] = []
+    for (const entry of await this.index.active(tx, request.ticketId)) {
+      const record = await tx.get<JobRecord>('job', jobKey(request.ticketId, entry.id))
+      if (record) records.push(record)
+    }
     const moved: string[] = []
     for (const record of records) {
       if (record.assignmentId !== request.fromAssignmentId || !isActive(record.state) || record.runtimeToken !== this.runtimeToken) continue
       const next: JobRecord = { ...record, assignmentId: request.assignmentId, generation: request.generation }
       await tx.replace('job', jobKey(record.ticketId, record.id), next)
       await this.index.add(tx, record.ticketId, { id: record.id, assignmentId: request.assignmentId })
+      await this.remember(tx, record.ticketId, record.id)
       moved.push(record.id)
     }
     return moved
@@ -459,7 +470,10 @@ export class Jobs {
   async stopRanges(jobIds: string[]): Promise<{ jobId: string; output?: JobOutput }[]> {
     const ranges = jobIds.flatMap(jobId => {
       const handle = this.handles.get(jobId)
-      return handle ? [{ jobId, job: handle.job }] : []
+      if (handle) return [{ jobId, job: handle.job }]
+      // A committed start can be stopped before `attach` receives its process handle.
+      const pending = this.pending.get(jobId)
+      return pending ? [{ jobId, job: pending.job }] : []
     })
     // The ids stay claimed while the ranges settle, so a concurrent read cannot mistake a job that is being
     // stopped for one this process no longer holds.
@@ -507,6 +521,7 @@ export class Jobs {
   private release(jobId: string, keepClaim = false) {
     const handle = this.handles.get(jobId)
     this.handles.delete(jobId)
+    this.pending.delete(jobId)
     if (!keepClaim) this.claims.delete(jobId)
     handle?.job.terminate()
     const timer = this.timers.get(jobId)
@@ -642,28 +657,56 @@ export class Jobs {
         await transaction.replace('job', jobKey(ticketId, jobId), next)
         await this.previews.get(transaction, ticketId, jobId)
       })
-    } finally { this.release(jobId) }
+    } finally { this.release(jobId, this.claims.has(jobId)) }
   }
 
   async listIn(tx: AsyncTx, ticketId: string): Promise<JobRecord[]> {
     identifier(ticketId, 'ticketId')
+    const history = await tx.get<JobHistory>('background', historyKey(ticketId))
+    // An index below the display capacity cannot be assumed complete: it may predate a record written by another
+    // runtime or imported outside this class. Rebuild it from the durable records before trusting it.
+    if (history && history.ids.length >= this.maxRecords) {
+      const records: JobRecord[] = []
+      for (const id of history.ids) {
+        const record = await tx.get<JobRecord>('job', jobKey(ticketId, id))
+        if (record) records.push(await this.reconcile(tx, record))
+      }
+      return this.order(records.map(record => ({ id: jobKey(ticketId, record.id), record })))
+    }
+    const ordered = this.order(await this.scanIn(tx, ticketId))
+    await this.writeHistory(tx, ticketId, ordered.map(record => record.id))
+    const records: JobRecord[] = []
+    for (const record of ordered) records.push(await this.reconcile(tx, record))
+    return records
+  }
+
+  /** Reads every retained record once, to seed the durable history index for a database written before it existed. */
+  private async scanIn(tx: AsyncTx, ticketId: string) {
     const prefix = `${jobPrefix(ticketId)}:`
     const items: { id: string; record: JobRecord }[] = []
     let cursor = prefix
-    for (let pageCount = 0; pageCount < 10; pageCount++) {
+    for (;;) {
       const page = await tx.scan<JobRecord>('job', { limit: 100, after: cursor })
       for (const item of page.items) {
         // The cursor is a lower bound, not a prefix filter; another Ticket's key can sort inside this range.
         if (!item.id.startsWith(prefix)) continue
-        const record = await this.reconcile(tx, item.value)
-        items.push({ id: item.id, record })
+        items.push({ id: item.id, record: item.value })
       }
-      if (!page.cursor || !page.cursor.startsWith(prefix)) return this.order(items)
+      if (!page.cursor || !page.cursor.startsWith(prefix)) break
       cursor = page.cursor
     }
-    // The query is bounded at 1,000 records and keeps the newest: records are evidence and are never deleted
-    // automatically, so a long-lived Ticket still answers with its most recent work instead of failing.
-    return this.order(items)
+    return items
+  }
+
+  private async remember(tx: AsyncTx, ticketId: string, ...ids: string[]) {
+    const history = await tx.get<JobHistory>('background', historyKey(ticketId))
+    const existing = history?.ids ?? this.order(await this.scanIn(tx, ticketId)).map(record => record.id)
+    await this.writeHistory(tx, ticketId, existing, ids)
+  }
+
+  private async writeHistory(tx: AsyncTx, ticketId: string, existing: string[], appended: string[] = []) {
+    const next: JobHistory = { ticketId, ids: [...existing.filter(id => !appended.includes(id)), ...appended].slice(-this.maxRecords) }
+    if (!await tx.replace('background', historyKey(ticketId), next)) await tx.insert('background', historyKey(ticketId), next)
   }
 
   private order(items: { id: string; record: JobRecord }[]) {

@@ -55,7 +55,9 @@ const shapeName = (sp) => child(child(sp, 'p:nvSpPr') ?? child(sp, 'p:nvPicPr') 
 const shapeId = (sp) => child(child(sp, 'p:nvSpPr') ?? child(sp, 'p:nvPicPr') ?? child(sp, 'p:nvGrpSpPr')
   ?? child(sp, 'p:nvCxnSpPr') ?? child(sp, 'p:nvGraphicFramePr') ?? sp, 'p:cNvPr')?.getAttribute('id')
 
-const xfrmOf = (sp) => child(child(sp, 'p:spPr') ?? sp, 'a:xfrm')
+// Tables and charts put their transform in a direct p:xfrm child; shapes and
+// pictures use p:spPr/a:xfrm.
+const xfrmOf = (sp) => child(sp, 'p:xfrm') ?? child(child(sp, 'p:spPr') ?? sp, 'a:xfrm')
 const off = (xfrm) => ({ x: Number(firstOf(xfrm, 'a:off')?.getAttribute('x') ?? 0), y: Number(firstOf(xfrm, 'a:off')?.getAttribute('y') ?? 0) })
 const ext = (xfrm) => ({ cx: Number(firstOf(xfrm, 'a:ext')?.getAttribute('cx') ?? 0), cy: Number(firstOf(xfrm, 'a:ext')?.getAttribute('cy') ?? 0) })
 
@@ -92,7 +94,9 @@ function shapeBox(pkg, sp, layoutDoc, masterDoc, groupChain = []) {
     }
     if (!box) return undefined
   }
-  for (const grp of groupChain) box = applyGroup(box, grp)
+  // groupChain is outer→inner; local coordinates pass through the innermost
+  // transform first.
+  for (let i = groupChain.length - 1; i >= 0; i--) box = applyGroup(box, groupChain[i])
   return box
 }
 const phMatch = (a, b) => a && b && a.type === b.type && String(a.idx ?? '') === String(b.idx ?? '')

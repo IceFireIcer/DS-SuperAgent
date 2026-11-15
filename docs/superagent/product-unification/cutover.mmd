@@ -1,0 +1,16 @@
+flowchart TB
+  meaning["独立 DS-SuperAgent<br/>Q1—Q14 已收敛 · 不兼容旧 ds-bot"] --> validation["Main / Router / Worker 竖切<br/>能力、权限与原生客户端验收"]
+  validation --> init["独立配置 / 数据 / 运行入口<br/>不加载旧 Bot 工作或聊天状态"]
+  init --> optional{"用户是否选择导入<br/>配置或资源？"}
+  optional -->|"否"| removal["移除旧 Bot 架构与兼容代码<br/>无旧联系人、群 round、旧档案入口或 profile 回切"]
+  optional -->|"是"| preview["预览可选预设 / 记忆 / 浏览器 / 凭据归属<br/>不恢复旧身份、Main Bot 权限或派活"]
+  preview --> mapping["显式选择与授权后绑定新资源<br/>保持隐私，原始磁盘数据不删除"]
+  mapping --> removal
+  removal --> preflight{"保留能力可用、无旧消费入口<br/>新产品自身历史与恢复通过？"}
+  preflight -->|"否"| validation
+  preflight -->|"是"| release["DS-SuperAgent 独立发布<br/>不以旧格式迁移/旧协议兼容为门槛"]
+  release --> lifecycle["新产品自己的备份、升级与故障恢复<br/>不恢复旧 dispatcher，不重放旧任务"]
+  classDef caution fill:#fff3df,stroke:#a58145,color:#60451e
+  classDef ready fill:#e6f2ed,stroke:#37745d,color:#163c2e
+  class optional,preview,mapping,preflight caution
+  class meaning,init,removal,release,lifecycle ready

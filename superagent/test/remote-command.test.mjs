@@ -32,6 +32,15 @@ const commands = {
   long: { argv: ['node', '-e', "console.log('cancel-start');setInterval(()=>{},1000)"], timeoutMs: 5000, backgroundTimeoutMs: 15000 },
   big: { argv: ['node', '-e', "process.stdout.write('start\\n');process.stdout.write('x'.repeat(40000));console.log('end')"], timeoutMs: 5000, backgroundTimeoutMs: 15000 },
   split: { argv: ['node', '-e', "process.stdout.write(Buffer.from([0x2d,0xe2]));setTimeout(()=>process.stdout.write(Buffer.from([0x9c,0x93,0x0a])),1000)"], timeoutMs: 5000, backgroundTimeoutMs: 15000 },
+  orphan: { argv: [process.execPath, '-e',
+    "const fs=require('node:fs');const {spawn}=require('node:child_process');const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{detached:process.platform==='win32',stdio:'ignore',windowsHide:true});fs.writeFileSync('orphan.pid',String(child.pid));child.unref();process.exit(0)"],
+  timeoutMs: 5000, backgroundTimeoutMs: 15000 },
+  lossy: { argv: [process.execPath, '-e',
+    "process.stdout.write('a'.repeat(8192));process.stdout.write(Buffer.from([0xe4]));setTimeout(()=>process.stdout.write(Buffer.from([0xb8,0xad])),500)"],
+  timeoutMs: 5000, backgroundTimeoutMs: 15000 },
+  secret: { argv: [process.execPath, '-e',
+    "process.stdout.write('x'.repeat(8120)+'\\npassword=remote-spill-secret-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789\\n'+'z'.repeat(500)+'\\n')"],
+  timeoutMs: 5000, backgroundTimeoutMs: 15000 },
 }
 
 function sleep(milliseconds) {
@@ -47,7 +56,7 @@ async function until(check, label, timeout = 15000) {
 }
 
 async function proxyFixture(endpoint) {
-  const state = { blocked: false, dropNext: false }
+  const state = { blocked: false, dropNext: 0 }
   const server = createServer((request, response) => {
     if (state.blocked) {
       request.destroy()
@@ -61,8 +70,8 @@ async function proxyFixture(endpoint) {
         const answer = []
         result.on('data', chunk => answer.push(chunk))
         result.on('end', () => {
-          if (state.dropNext) {
-            state.dropNext = false
+          if (state.dropNext > 0) {
+            state.dropNext--
             response.destroy()
             return
           }
@@ -91,8 +100,10 @@ async function fixture(context, options = {}) {
   await mkdir(root)
   await writeFile(join(root, 'input.txt'), 'file-on-device\n')
   const resolvedRoot = await realpath(root)
+  const assetsPath = options.assets ? join(directory, 'device-assets') : undefined
   const config = { deviceId: 'second-device', root, jobsPath: join(directory, 'device-jobs'), commands,
-    grants: Array.isArray(options.grants) ? options.grants : [grant], statePath: join(directory, 'device-state.json'), ...options.open }
+    grants: Array.isArray(options.grants) ? options.grants : [grant], statePath: join(directory, 'device-state.json'),
+    ...(assetsPath ? { assetsPath } : {}), ...options.open }
   let device, environment, proxy
   context.after(async () => {
     if (options.manualCleanup) return
@@ -111,12 +122,24 @@ async function fixture(context, options = {}) {
     permissions: Array.isArray(options.permissions) ? options.permissions : allPermissions, endpoint, pairingCode: device.pairingCode,
     expectedDeviceId: 'second-device', expectedDeviceKey: device.deviceKeyFingerprint })
   const bound = await environment.prepare({ instanceId: 'private', actorId: 'user' })
-  return { directory, root, resolvedRoot, device, environment, bound, proxy, config }
+  return { directory, root, resolvedRoot, device, environment, bound, proxy, config, assetsPath }
 }
 
 function jobText(job) {
   const read = job.read()
   return read.stdout.text
+}
+
+async function readAllAsset(bound, reference, maxBytes) {
+  let text = ''
+  let offset = 0
+  while (offset < reference.bytes) {
+    const page = await bound.readAsset(reference, { offset, maxBytes })
+    text += page.encoding === 'base64' ? Buffer.from(page.text, 'base64').toString('utf8') : page.text
+    if (page.nextOffset <= offset) throw new Error('The asset page did not advance.')
+    offset = page.nextOffset
+  }
+  return text
 }
 
 test('a paired device resolves the executable and runs a configured command in its own cwd and environment', { timeout: 20000 }, async context => {
@@ -316,9 +339,9 @@ test('a fresh paired client observes the same job by its stable ID after reconne
   await environment.close()
 })
 
-test('a lost start response is reconciled by the original job ID instead of starting the command twice', { timeout: 20000 }, async context => {
+test('lost start and first inspect responses are reconciled by the original job ID instead of starting twice', { timeout: 20000 }, async context => {
   const { root, environment, bound, proxy } = await fixture(context, { proxy: true })
-  proxy.state.dropNext = true
+  proxy.state.dropNext = 2
   const job = await bound.startCommand('count')
   assert.equal(await job.done.then(result => result.exitCode), 0)
   assert.equal(await job.waitForExit(AbortSignal.timeout(5000)), true)
@@ -330,6 +353,66 @@ test('a lost start response is reconciled by the original job ID instead of star
   await assert.rejects(environment.call({ instanceId: 'private', environmentId: 'remote-project', actorId: 'user',
     operation: 'command.start', args: { jobId: 'job:private:remote-project:wrong:1', name: 'quick', mode: 'background' } }),
   { code: 'JOB_IDENTITY_MISMATCH' })
+})
+
+test('concurrent starts for one job ID reserve the identity before starting the command', { timeout: 20000 }, async context => {
+  const { root, environment, bound } = await fixture(context)
+  const jobId = bound.planCommand('count').jobId
+  const start = () => environment.call({ instanceId: 'private', environmentId: 'remote-project', actorId: 'user',
+    operation: 'command.start', args: { jobId, name: 'count', mode: 'background' } })
+  const [first, second] = await Promise.all([start(), start()])
+  assert.equal(first.jobId, jobId)
+  assert.equal(second.jobId, jobId)
+  await until(async () => (await bound.inspectRange(jobId)).settled, 'the concurrent job to settle')
+  assert.equal(await readFile(join(root, 'starts.txt'), 'utf8'), 'x')
+})
+
+test('a root exit does not settle a range while a descendant keeps it alive', { timeout: 30000 }, async context => {
+  const { root, bound } = await fixture(context)
+  let descendant
+  context.after(() => { if (descendant) try { process.kill(descendant, 'SIGKILL') } catch { /* The range is already gone. */ } })
+  const job = await bound.startCommand('orphan')
+  assert.equal(await job.done.then(result => result.exitCode), 0)
+  await until(async () => {
+    try {
+      descendant = Number(await readFile(join(root, 'orphan.pid'), 'utf8'))
+      return Number.isSafeInteger(descendant) && descendant > 0
+    } catch { return false }
+  }, 'the descendant identity')
+  await sleep(5500)
+  const range = await bound.inspectRange(job.jobId)
+  assert.equal(range.settled, false)
+  assert.equal(range.state, 'unknown')
+  process.kill(descendant, 0)
+  await bound.cancelRange(job.jobId)
+  await until(() => {
+    try { process.kill(descendant, 0); return false } catch { return true }
+  }, 'the descendant to stop')
+  await until(async () => {
+    const observed = await bound.inspectRange(job.jobId)
+    return observed.settled && observed.state === 'cancelled'
+  }, 'the cancelled range to settle')
+})
+
+test('a lossy output window continues from a complete UTF-8 character boundary', { timeout: 20000 }, async context => {
+  const { bound } = await fixture(context)
+  const job = await bound.startCommand('lossy')
+  assert.equal(await job.done.then(result => result.exitCode), 0)
+  assert.equal(await job.waitForExit(AbortSignal.timeout(5000)), true)
+  assert.equal(job.read().stdout.lossy, true)
+})
+
+test('a remote spill is sanitized as a complete stream before it is served in pages', { timeout: 20000 }, async context => {
+  const { bound } = await fixture(context, { assets: true })
+  const job = await bound.startCommand('secret')
+  assert.equal(await job.done.then(result => result.exitCode), 0)
+  assert.equal(await job.waitForExit(AbortSignal.timeout(5000)), true)
+  const reference = await bound.spillReference(job.jobId, 'stdout')
+  assert.ok(reference.bytes > 8192)
+  const text = await readAllAsset(bound, reference, 8192)
+  assert.match(text, /password=\[redacted\]/u)
+  assert.doesNotMatch(text, /remote-spill-secret/u)
+  assert.doesNotMatch(text, /qrstuvwxyz0123456789/u)
 })
 
 test('two device jobs keep separate output and cancelling one does not disturb the other', { timeout: 20000 }, async context => {

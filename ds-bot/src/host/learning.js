@@ -708,10 +708,20 @@ export function install(rt) {
         await persist()
       }
     } else if (proposal.action === 'update') {
-      if (current === undefined || hashOf(`${current.description}\n${current.content}`) !== proposal.base) throw new Error(`${proposal.name} changed since this was proposed`)
-      const item = await rt.capabilitySave({ name: proposal.name, kind: 'skill', description: proposal.description, content: proposal.content }, { botId: bot.id, ui: false })
-      store.learned[bot.id] = [...new Set([...(store.learned[bot.id] ?? []), item.name])]
-      await persist()
+      if (proposal.saved) {
+        // The earlier approval saved this exact version; finish only its attachment.
+        if (current === undefined || current.description !== proposal.description || current.content !== proposal.content) {
+          throw new Error(`${proposal.name} changed since this was proposed`)
+        }
+        store.learned[bot.id] = [...new Set([...(store.learned[bot.id] ?? []), current.name])]
+        await persist()
+      } else {
+        if (current === undefined || hashOf(`${current.description}\n${current.content}`) !== proposal.base) throw new Error(`${proposal.name} changed since this was proposed`)
+        const item = await rt.capabilitySave({ name: proposal.name, kind: 'skill', description: proposal.description, content: proposal.content }, { botId: bot.id, ui: false })
+        proposal.saved = true
+        store.learned[bot.id] = [...new Set([...(store.learned[bot.id] ?? []), item.name])]
+        await persist()
+      }
     }
     if (!(bot.capabilities ?? []).includes(proposal.name)) await rt.capabilityEndpoint('bot-capability', { botId: bot.id, name: proposal.name, attached: true })
   }

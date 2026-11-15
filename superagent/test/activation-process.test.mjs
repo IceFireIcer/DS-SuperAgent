@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { createServer } from 'node:net'
+import { createConnection, createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
@@ -27,9 +27,89 @@ const freePort = async () => {
   await closeServer(server)
   return port
 }
+const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
+const isRunning = child => Boolean(child) && child.exitCode === null && child.signalCode === null
+const isPidAlive = pid => {
+  if (!Number.isInteger(pid) || pid <= 0) return false
+  try { process.kill(pid, 0); return true } catch { return false }
+}
+
+async function waitForExit(child, timeoutMs = 5000) {
+  if (!isRunning(child)) return true
+  await Promise.race([
+    new Promise(resolve => child.once('exit', resolve)),
+    sleep(timeoutMs),
+  ])
+  return !isRunning(child)
+}
+
+function killPidTree(pid) {
+  if (!isPidAlive(pid)) return
+  if (process.platform === 'win32') {
+    const result = spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' })
+    if (!result.error && result.status === 0) return
+  } else {
+    try { process.kill(-pid, 'SIGKILL'); return } catch { /* Fall back to the individual process. */ }
+  }
+  try { process.kill(pid, 'SIGKILL') } catch { /* The process already exited. */ }
+}
+
+function stopLegacy(port) {
+  return new Promise((resolve, reject) => {
+    const socket = createConnection({ host: '127.0.0.1', port })
+    let buffer = ''
+    socket.setEncoding('utf8')
+    socket.setTimeout(5000, () => { socket.destroy(); reject(new Error('legacy admin stop timed out')) })
+    socket.on('error', reject)
+    socket.on('data', chunk => {
+      buffer += chunk
+      const newline = buffer.indexOf('\n')
+      if (newline < 0) return
+      socket.destroy()
+      try { resolve(JSON.parse(buffer.slice(0, newline))) } catch (error) { reject(error) }
+    })
+    socket.on('connect', () => socket.write(`${JSON.stringify({ command: 'stop' })}\n`))
+  })
+}
 
 test('a real activation process exits after commit and external acceptance, leaving one current manifest and no replay', { timeout: 60000 }, async t => {
   const root = mkdtempSync(join(tmpdir(), 'ds-superagent-activation-process-'))
+  let old
+  let child
+  let oldLines
+  let storage
+  let adminPort
+  let receiverPid
+  t.after(async () => {
+    const errors = []
+    if (old && isRunning(old) && adminPort && isPidAlive(receiverPid)) {
+      try {
+        const stopped = await stopLegacy(adminPort)
+        if (!stopped?.stopped) throw new Error(stopped?.code ?? 'the old receiver did not stop')
+      } catch (error) {
+        if (isPidAlive(receiverPid)) errors.push(error)
+      }
+    }
+    for (const processTree of [old, child]) {
+      if (!processTree || !isRunning(processTree)) continue
+      if (!await waitForExit(processTree, 5000)) {
+        killPidTree(processTree.pid)
+        try { processTree.kill('SIGKILL') } catch { /* The process already exited. */ }
+        if (!await waitForExit(processTree, 2000)) errors.push(new Error(`process ${processTree.pid} did not exit`))
+      }
+    }
+    if (isPidAlive(receiverPid)) {
+      try { process.kill(receiverPid, 'SIGKILL') } catch (error) { if (error.code !== 'ESRCH') errors.push(error) }
+    }
+    oldLines?.close()
+    try { await storage?.close() } catch (error) { errors.push(error) }
+    try {
+      rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+    } catch (error) {
+      errors.push(error)
+    }
+    if (errors.length) throw new AggregateError(errors, 'activation process cleanup failed')
+  })
   const source = join(root, 'legacy')
   const target = join(root, 'archive')
   mkdirSync(join(source, 'bot'), { recursive: true })
@@ -40,7 +120,7 @@ test('a real activation process exits after commit and external acceptance, leav
   await publishLegacyArchive(target, 'batch-1')
 
   const intakePort = await freePort()
-  const adminPort = await freePort()
+  adminPort = await freePort()
   const legacyEntry = join(root, 'legacy-entry.mjs')
   const statusFile = join(root, 'old-status.json')
   const receiptsFile = join(root, 'old-receipts.json')
@@ -49,10 +129,12 @@ test('a real activation process exits after commit and external acceptance, leav
   writeFileSync(legacyEntry, readFileSync(entryFixture, 'utf8'))
   const oldConfig = { home: source, intake: { host: '127.0.0.1', port: intakePort }, admin: { host: '127.0.0.1', port: adminPort },
     statusFile, receiptsFile, activeTurns: ['turn-1'], activeJobs: [], pendingOutbound: ['out-1'], receiver: receiverFixture }
-  const old = spawn(process.execPath, [legacyEntry, JSON.stringify(oldConfig)], { stdio: ['ignore', 'pipe', 'pipe'] })
-  let child
+  old = spawn(process.execPath, [legacyEntry, JSON.stringify(oldConfig)], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: process.platform !== 'win32',
+  })
   const oldExited = new Promise(resolve => old.once('exit', (code, signal) => resolve({ code, signal })))
-  const oldLines = createInterface({ input: old.stdout })
+  oldLines = createInterface({ input: old.stdout })
   const oldErrors = []
   old.stderr.setEncoding('utf8')
   old.stderr.on('data', chunk => oldErrors.push(chunk))
@@ -60,11 +142,16 @@ test('a real activation process exits after commit and external acceptance, leav
     oldLines.once('line', line => resolve(JSON.parse(line)))
     old.once('exit', code => reject(new Error(`old receiver exited before ready (${code}): ${oldErrors.join('')}`)))
   })
-  assert.equal((await oldReady).ready, true)
+  const oldReport = await oldReady
+  assert.equal(oldReport.ready, true)
+  receiverPid = oldReport.pid
 
   child = spawn(process.execPath, [activationFixture, JSON.stringify({ databasePath, batchId: 'batch-1', commandId: 'activate-crash',
     archiveTarget: target, oldHome: source, entry: { host: '127.0.0.1', port: intakePort }, admin: { host: '127.0.0.1', port: adminPort },
-    statusFile, legacyEntry, marker })], { stdio: ['ignore', 'pipe', 'pipe'] })
+    statusFile, legacyEntry, marker })], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: process.platform !== 'win32',
+  })
   const childExitPromise = new Promise(resolve => child.once('exit', (code, signal) => resolve({ code, signal })))
   const childErrors = []
   child.stderr.setEncoding('utf8')
@@ -73,16 +160,11 @@ test('a real activation process exits after commit and external acceptance, leav
   assert.equal(childExit.code, 0, childErrors.join(''))
   const oldExit = await oldExited
   assert.equal(oldExit.code, 0)
+  receiverPid = undefined
   const firstMarker = readFileSync(marker, 'utf8').trim().split('\n').filter(Boolean)
   assert.equal(firstMarker.length, 1)
 
-  const storage = await SqliteStorage.open(databasePath)
-  t.after(async () => {
-    if (old.exitCode === null && old.signalCode === null) old.kill('SIGKILL')
-    if (child && child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
-    await storage.close()
-    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
-  })
+  storage = await SqliteStorage.open(databasePath)
   const activation = new Activation(storage, 'private', {})
   const observed = await activation.status()
   assert.equal(observed.state, 'active')

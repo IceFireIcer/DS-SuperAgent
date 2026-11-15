@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { EventEmitter } from 'node:events'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -9,7 +10,7 @@ import { mountBrowserPlugin } from '../src/host/browser/mount.js'
 import { createSession } from '../src/host/browser/session.js'
 import { toolDefs as refsTools } from '../src/host/browser/refs.js'
 import { toolDefs as scriptTools } from '../src/host/browser/script.js'
-import { runTask, toolDefs as taskTools } from '../src/host/browser/task.js'
+import { toolDefs as taskTools } from '../src/host/browser/task.js'
 import { REPLY_KIND } from '../src/host/constants.js'
 import { handoffReply, historyEntry, install as installParts, readReply, replyText } from '../src/host/parts.js'
 import { fakeContext } from './fake-ctx.js'
@@ -60,6 +61,67 @@ function start() {
 
 const BOT_HOLD = { by: 'bot', reason: 'login', note: 'Sign in to the shop.', callId: 'call-1' }
 
+test('browser_exec refuses to run model JavaScript in the Host process', async () => {
+  const session = createSession({
+    context: { pages: () => [], on() {} },
+    page: null,
+    botId: 'b2',
+    userDataDir: '/profiles/b2',
+    cookieFile: '/profiles/b2/cookies.json',
+    downloadDir: '/downloads',
+    actionTimeout: 1000,
+  })
+
+  await assert.rejects(session.runScript('process.exit(1)'), /no isolated script runner/)
+  await assert.rejects(session.runScript('x'.repeat(8001)), /longer than 8000/)
+  const controller = new AbortController()
+  controller.abort()
+  await assert.rejects(session.runScript('return 1', undefined, controller.signal), /cancelled/)
+})
+
+test('a failed write request is observed before the action settles', async () => {
+  const request = {
+    url: () => 'https://shop.example.com/posts',
+    method: () => 'POST',
+    failure: () => ({ errorText: 'net::ERR_FAILED' }),
+  }
+  class Page extends EventEmitter {
+    setDefaultTimeout() {}
+    setDefaultNavigationTimeout() {}
+    isClosed() { return false }
+    url() { return 'https://shop.example.com/item' }
+    async waitForLoadState() {}
+    async title() { return 'Item' }
+    async ariaSnapshot() { return '- button "Publish" [ref=e1]' }
+    locator() {
+      return {
+        count: async () => 1,
+        evaluate: async (_fn, args) => args?.mode === 'click'
+          ? { kind: 'post', label: 'Publish', origin: 'https://shop.example.com', host: 'shop.example.com' }
+          : null,
+        click: async () => {
+          this.emit('request', request)
+          this.emit('requestfailed', request)
+          await new Promise(resolve => setImmediate(resolve))
+        },
+        getAttribute: async () => null,
+      }
+    }
+  }
+  const page = new Page()
+  const session = createSession({
+    context: { pages: () => [page], on() {} },
+    page,
+    botId: 'b2',
+    userDataDir: '/profiles/b2',
+    cookieFile: '/profiles/b2/cookies.json',
+    downloadDir: '/downloads',
+    actionTimeout: 1000,
+  })
+
+  assert.match(await session.click('e1'), /result is unknown/)
+})
+
 test('a browser handoff names the call and the Session that raised it', async () => {
   const tools = new Map()
   const holds = []
@@ -99,7 +161,7 @@ test('a browser handoff names the call and the Session that raised it', async ()
   ])
 })
 
-test('browser_task forwards its outer call origin to a nested handoff', async () => {
+test('the task plugin uses the normal ARIA ref tools and has no nested model loop', async () => {
   const tools = new Map()
   const holds = []
   let completions = 0
@@ -134,9 +196,10 @@ test('browser_task forwards its outer call origin to a nested handoff', async ()
     }),
   })
 
-  const result = await tools.get('browser_task').execute({ goal: 'Sign in' }, { agent: { id: 'b2' }, callId: 'outer-call' })
-  assert.match(result.text, /Waiting for sign-in/)
-  assert.match(result.text, /Handoffs:\nwaiting/)
+  assert.deepEqual([...tools.keys()], refsTools.map(tool => tool.name))
+  assert.equal(tools.has('browser_task'), false)
+  await tools.get('browser_handoff').execute({ reason: 'login', note: 'Sign in' }, { agent: { id: 'b2' }, callId: 'outer-call' })
+  assert.equal(completions, 0)
   assert.deepEqual(holds, [
     ['b2', { by: 'bot', reason: 'login', note: 'Sign in', callId: 'outer-call', sessionId: 'b2' }],
   ])
@@ -157,7 +220,7 @@ test('only a handoff raised in the Bot\'s own chat keeps its call and drops the 
   assert.deepEqual(handoffHold(rt, 'b2', { by: 'bot', reason: 'other', note: '' }), { by: 'bot', reason: 'other', note: '' })
 })
 
-test('a handoff outside the Bot\'s own chat gives resume-first guidance, and browser_task returns it', async (t) => {
+test('a handoff outside the Bot\'s own chat gives resume-first guidance', async (t) => {
   const { rt, stop } = start()
   t.after(stop)
   await rt.load()
@@ -183,26 +246,6 @@ test('a handoff outside the Bot\'s own chat gives resume-first guidance, and bro
   assert.match(group, /Tell the user here what you need them to do/)
   assert.match(group, /call browser_resume, then browser_snapshot/)
   assert.deepEqual(rt.browserChannel.holdOf('b2'), { by: 'bot', reason: 'login', note: 'Sign in' })
-
-  rt.browserChannel.setHold('b2', null)
-  let completions = 0
-  const task = await runTask({
-    session: makeSession(),
-    goal: 'Sign in',
-    origin: { callId: 'call-3', sessionId: 'room-session' },
-    complete: async () => {
-      completions += 1
-      if (completions === 1) {
-        return { choices: [{ message: { tool_calls: [{
-          id: 'inner-call',
-          function: { name: 'browser_handoff', arguments: JSON.stringify({ reason: 'login', note: 'Sign in' }) },
-        }] } }] }
-      }
-      return { choices: [{ message: { content: 'Nested answer' } }] }
-    },
-  })
-  assert.match(task.text, /Nested answer/)
-  assert.ok(task.text.includes(`Handoffs:\n${group}`))
 })
 
 test('the channel keeps a handoff\'s call on its hold', async (t) => {

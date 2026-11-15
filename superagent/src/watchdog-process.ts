@@ -66,7 +66,9 @@ export class ProcessWatchdogHost implements WatchdogHost {
     const child = spawn(this.options.command, this.options.args ?? [], {
       ...(this.options.cwd === undefined ? {} : { cwd: this.options.cwd }),
       ...(this.options.env === undefined ? {} : { env: this.options.env }),
-      stdio: ['ignore', 'pipe', 'pipe', 'ipc'], windowsHide: true,
+      // Discard stdout: a chatty Host must not block on a pipe nobody reads. stderr keeps the tail
+      // that start and probe failures report.
+      stdio: ['ignore', 'ignore', 'pipe', 'ipc'], windowsHide: true,
     })
     this.child = child
     this.stderr = ''

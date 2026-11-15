@@ -371,7 +371,7 @@ export function install(rt) {
     const sessionId = room.sessions?.[botId]
     if (sessionId !== undefined && (rt.live.get(sessionId)?.turn !== undefined || rt.hasSubagents?.(sessionId) === true)) return true
     return [...rt.roomProgress.values()].some(round => round.roomId === room.id
-      && round.slots.some(slot => slot.id === botId && (slot.status === 'waiting' || slot.status === 'speaking')))
+      && round.slots.some(slot => slot.id === botId && (slot.status === 'waiting' || slot.status === 'speaking' || slot.status === 'waiting-approval')))
   }
 
   const registerBatch = (roomId, by, callees) => {
@@ -381,6 +381,7 @@ export function install(rt) {
       roomId,
       by,
       pending: new Set(callees.map(peer => peer.id)),
+      waiting: new Set(),
       done: [],
       worked: false,
       answered: false,
@@ -391,6 +392,7 @@ export function install(rt) {
       const prev = memberBatch.get(mKey)
       if (prev !== undefined) {
         prev.pending.delete(peer.id)
+        prev.waiting.delete(peer.id)
         if (prev.pending.size === 0) roomBatches.delete(prev.key)
       }
       memberBatch.set(mKey, batch)
@@ -405,8 +407,9 @@ export function install(rt) {
 
   const pruneBatchPending = (room, batch) => {
     for (const otherId of batch.pending) {
-      if (!room.members.includes(otherId) || !activeInRoom(room, otherId)) {
+      if (!room.members.includes(otherId) || (!batch.waiting.has(otherId) && !activeInRoom(room, otherId))) {
         batch.pending.delete(otherId)
+        batch.waiting.delete(otherId)
         if (memberBatch.get(batchKeyOf(room.id, otherId)) === batch) memberBatch.delete(batchKeyOf(room.id, otherId))
       }
     }
@@ -418,6 +421,7 @@ export function install(rt) {
     if (batch === undefined) return undefined
     memberBatch.delete(mKey)
     batch.pending.delete(botId)
+    batch.waiting.delete(botId)
     pruneBatchPending(room, batch)
     if (batch.pending.size === 0) roomBatches.delete(batch.key)
     return batch
@@ -807,8 +811,13 @@ export function install(rt) {
         appendRoom(room, { who: 'DS Bot', kind: 'notice', reason: 'missed', names: [member.name], minutes: Math.round(ROOM_REPLY_TIMEOUT_MS / 60000) })
       }
     }
-    // Settle the member's place in its call batch when its work did not continue in the background.
-    if (slot.status !== 'working') {
+    if (slot.status === 'waiting-approval') {
+      const batch = (slot.batchKey ? roomBatches.get(slot.batchKey) : undefined) ?? memberBatch.get(batchKeyOf(room.id, member.id))
+      batch?.waiting.add(member.id)
+    }
+    // Settle the member's place in its call batch when its work did not continue in the
+    // background. A turn waiting for approval is still unfinished.
+    if (slot.status !== 'working' && slot.status !== 'waiting-approval') {
       const batch = (slot.batchKey ? roomBatches.get(slot.batchKey) : undefined) ?? memberBatch.get(batchKeyOf(room.id, member.id))
       if (batch !== undefined) {
         if (slot.status === 'posted') {

@@ -12,6 +12,9 @@ const SAME_SITE = { Strict: 'strict', Lax: 'lax', None: 'no_restriction' }
 
 /** A normalized cookie → Electron's CookiesSetDetails. */
 export function toSetDetails(cookie) {
+  // Electron 44 has no partitionKey in CookiesSetDetails: writing this cookie anyway would
+  // widen it from its top-level site into the default context.
+  if (cookie.partitionKey !== undefined) throw new Error('a partitioned cookie cannot be stored without its top-level site')
   const host = String(cookie.domain ?? '').replace(/^\.+/, '')
   const details = {
     url: `${cookie.secure ? 'https' : 'http'}://${host}${cookie.path || '/'}`,
@@ -30,7 +33,29 @@ export function toSetDetails(cookie) {
   return details
 }
 
-const keyOf = (c) => `${c.name}${String(c.domain ?? '').replace(/^\.+/, '')}${c.path ?? '/'}`
+const identityOf = (c) => {
+  const partition = c.partitionKey
+  return [
+    c.name,
+    String(c.domain ?? '').replace(/^\.+/, '').toLowerCase(),
+    c.path ?? '/',
+    typeof c.hostOnly === 'boolean' ? c.hostOnly : !String(c.domain ?? '').startsWith('.'),
+    partition ? `${partition.topLevelSite}\u0000${partition.hasCrossSiteAncestor === true}` : '',
+  ].join('\u0000')
+}
+
+const sameSiteOf = (c) => (c.sameSite ? SAME_SITE[c.sameSite] : 'unspecified')
+
+function sameStored(stored, cookie) {
+  if (stored.value !== cookie.value) return false
+  if (Boolean(stored.secure) !== Boolean(cookie.secure)) return false
+  if (Boolean(stored.httpOnly) !== Boolean(cookie.httpOnly)) return false
+  if ((stored.sameSite ?? 'unspecified') !== sameSiteOf(cookie)) return false
+  if (typeof cookie.expires === 'number') {
+    if (typeof stored.expirationDate !== 'number' || Math.abs(stored.expirationDate - cookie.expires) > 1) return false
+  } else if (stored.expirationDate !== undefined) return false
+  return true
+}
 
 /**
  * Write cookies into an Electron session: one `cookies.set` each so a rejected cookie cannot
@@ -40,21 +65,35 @@ const keyOf = (c) => `${c.name}${String(c.domain ?? '').replace(/^\.+/, '')}${c.
  */
 export async function applyCookies(storage, cookies) {
   const failed = []
+  const failedIds = new Set()
   for (const cookie of cookies) {
     try {
       await storage.cookies.set(toSetDetails(cookie))
     } catch (error) {
       failed.push({ ...describeCookie(cookie), reason: error?.message ?? String(error) })
+      failedIds.add(identityOf(cookie))
     }
   }
   const kept = new Map()
-  for (const stored of await storage.cookies.get({})) kept.set(keyOf(stored), stored)
+  for (const stored of await storage.cookies.get({})) {
+    const id = identityOf(stored)
+    const rows = kept.get(id)
+    if (rows) rows.push(stored)
+    else kept.set(id, [stored])
+  }
   const dropped = []
   let storedCount = 0
   for (const cookie of cookies) {
-    if (failed.some((item) => keyOf(item) === keyOf(cookie))) continue
-    if (kept.has(keyOf(cookie))) storedCount += 1
-    else dropped.push({ ...describeCookie(cookie), reason: 'the browser did not store it' })
+    const id = identityOf(cookie)
+    if (failedIds.has(id)) continue
+    const rows = kept.get(id) ?? []
+    if (rows.some((stored) => sameStored(stored, cookie))) storedCount += 1
+    else {
+      dropped.push({
+        ...describeCookie(cookie),
+        reason: rows.length === 0 ? 'the browser did not store it' : 'the browser kept a different cookie with the same name and domain',
+      })
+    }
   }
   let flushed = false
   try { await storage.cookies.flushStore(); flushed = true } catch { /* the store flushes itself within 30 s */ }

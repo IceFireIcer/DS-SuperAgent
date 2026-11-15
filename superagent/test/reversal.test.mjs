@@ -81,7 +81,7 @@ async function fixture(t) {
     rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
   })
   return { root, target, storage, engine, switchover, activation, legacy, sourceBefore,
-    setSnapshot: value => { oldSnapshot = value }, restart: () => ({ enabled: restartEnabled, calls: restartCalls }) }
+    port, setSnapshot: value => { oldSnapshot = value }, restart: () => ({ enabled: restartEnabled, calls: restartCalls }) }
 }
 
 async function prepareHeld(switchover, setSnapshot) {
@@ -119,6 +119,10 @@ test('abandoning before activation rechecks ownership, leaves history and only r
   assert.equal(abandoned.restart.enabledAt > 0, true)
   assert.equal(context.restart().enabled, true)
   assert.equal((await context.switchover.status('batch-1')).state, 'abandoned')
+  assert.equal((await context.switchover.status('batch-1')).entry.isolated, false)
+  const probe = createServer(socket => socket.end())
+  await listen(probe, context.port)
+  await closeServer(probe)
   assert.equal((await readLegacyObject({ target: context.target, batchId: 'batch-1', ref: 'work:old' })).data.state, 'running')
   assert.equal(getLegacyArchive(context.target, 'batch-2').status, 'published')
   assert.equal(readFileSync(join(context.root, 'legacy', 'bot', 'state.json'), 'utf8'), context.sourceBefore)

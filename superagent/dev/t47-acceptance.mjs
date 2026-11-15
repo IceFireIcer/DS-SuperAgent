@@ -30,34 +30,37 @@ async function rehearse(name, { status, database, storageArguments, openStorage 
     args: [hostEntry, ...storageArguments, '--instance', 'private', '--host-id', `t47-${name}`, '--status', status, '--seed'],
     statusPath: status, startTimeoutMs: 30000, staleMs: 5000,
   })
-  await host.start({ signal })
-  const before = await host.probe({ signal })
-  if (before.service !== 'healthy') throw new Error(`${name}: the Host did not become healthy`)
-  const storage = await openStorage()
-  const notifications = []
-  const watchdog = new Watchdog({
-    instanceId: 'private', storage, host, intervalMs: 3_600_000, graceMs: 5000, probeTimeoutMs: 2000, startTimeoutMs: 30000,
-    maxRestarts: 2, restartWindowMs: 21_600_000, version: `t47-${name}-1`,
-    notify: notification => { notifications.push(notification) }, log: { warn: () => {}, error: () => {} },
-  })
-  const healthy = await watchdog.inspectOnce()
-  process.kill(host.pid(), 'SIGKILL')
-  await gone(host)
-  const recovered = await watchdog.inspectOnce()
-  const after = JSON.parse(await readFile(status, 'utf8'))
-  const state = await watchdog.getState()
-  const report = {
-    recipe: name, database, version: recovered.version,
-    before: { kind: healthy.kind, service: healthy.service, epoch: before.epoch },
-    after: { kind: recovered.kind, service: recovered.service, action: recovered.action, result: recovered.result,
-      epoch: recovered.epoch, budget: recovered.budget },
-    takeover: after.takeover,
-    notifications: notifications.map(notification => ({ kind: notification.kind, escalate: notification.escalate })),
-    history: state.history.map(item => ({ kind: item.kind, action: item.action, result: item.result, version: item.version, budget: item.budget })),
+  let storage
+  try {
+    await host.start({ signal })
+    const before = await host.probe({ signal })
+    if (before.service !== 'healthy') throw new Error(`${name}: the Host did not become healthy`)
+    storage = await openStorage()
+    const notifications = []
+    const watchdog = new Watchdog({
+      instanceId: 'private', storage, host, intervalMs: 3_600_000, graceMs: 5000, probeTimeoutMs: 2000, startTimeoutMs: 30000,
+      maxRestarts: 2, restartWindowMs: 21_600_000, version: `t47-${name}-1`,
+      notify: notification => { notifications.push(notification) }, log: { warn: () => {}, error: () => {} },
+    })
+    const healthy = await watchdog.inspectOnce()
+    process.kill(host.pid(), 'SIGKILL')
+    await gone(host)
+    const recovered = await watchdog.inspectOnce()
+    const after = JSON.parse(await readFile(status, 'utf8'))
+    const state = await watchdog.getState()
+    return {
+      recipe: name, database, version: recovered.version,
+      before: { kind: healthy.kind, service: healthy.service, epoch: before.epoch },
+      after: { kind: recovered.kind, service: recovered.service, action: recovered.action, result: recovered.result,
+        epoch: recovered.epoch, budget: recovered.budget },
+      takeover: after.takeover,
+      notifications: notifications.map(notification => ({ kind: notification.kind, escalate: notification.escalate })),
+      history: state.history.map(item => ({ kind: item.kind, action: item.action, result: item.result, version: item.version, budget: item.budget })),
+    }
+  } finally {
+    try { await host.dispose() } catch {}
+    try { await storage?.close() } catch {}
   }
-  await host.dispose()
-  await storage.close()
-  return report
 }
 
 const reports = []
@@ -75,8 +78,9 @@ try {
 }
 
 const postgres = await startPostgres('ds-superagent-t47-hosted-')
-const hostedDirectory = await mkdtemp(join(tmpdir(), 'ds-superagent-t47-hosted-'))
+let hostedDirectory
 try {
+  hostedDirectory = await mkdtemp(join(tmpdir(), 'ds-superagent-t47-hosted-'))
   const database = await postgres.createDatabase()
   const configuration = { ...postgres.configuration, database }
   const status = join(hostedDirectory, 'status.json')
@@ -86,8 +90,8 @@ try {
     openStorage: () => PostgresStorage.open(configuration),
   }))
 } finally {
-  await postgres.close()
-  await rm(hostedDirectory, { recursive: true, force: true })
+  try { await postgres.close() } catch {}
+  if (hostedDirectory) try { await rm(hostedDirectory, { recursive: true, force: true }) } catch {}
 }
 
 console.log(JSON.stringify({ platform: process.platform, node: process.version, reports }, null, 2))

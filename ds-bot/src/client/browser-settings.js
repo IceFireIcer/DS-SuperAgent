@@ -1,4 +1,4 @@
-import { createElement as h, useEffect, useState } from 'react'
+import { createElement as h, useEffect, useRef, useState } from 'react'
 import { BotAvatar } from './mark.js'
 import { dateLocale, t } from './i18n.js'
 
@@ -32,6 +32,7 @@ export function BrowserPage({ roster, actions, run, Section, Row }) {
   const [kinds, setKinds] = useState(['post'])
   const [duration, setDuration] = useState('hour')
   const [busy, setBusy] = useState(false)
+  const saving = useRef(false)
   const selectedBot = bots.find(bot => bot.id === botId)
 
   useEffect(() => {
@@ -41,13 +42,21 @@ export function BrowserPage({ roster, actions, run, Section, Row }) {
   const grants = bots.flatMap(bot => (bot.browserGrants ?? []).map((grant, index) => ({
     bot, grant, index, expired: expired(grant),
   })))
+  // One grant change at a time: the next one must start from the roster the first
+  // one saved, or two whole-array writes could restore each other's removed grant.
+  const save = make => {
+    if (saving.current) return
+    saving.current = true
+    setBusy(true)
+    void run(Promise.resolve().then(make)).finally(() => { saving.current = false; setBusy(false) })
+  }
   const remove = (bot, index) => {
     const next = (bot.browserGrants ?? []).filter((grant, position) => position !== index && !expired(grant))
-    void run(actions.updateBot(bot.id, { browserGrants: next.length ? next : null }))
+    save(() => actions.updateBot(bot.id, { browserGrants: next.length ? next : null }))
   }
   const add = event => {
     event.preventDefault()
-    if (!selectedBot || kinds.length === 0 || busy) return
+    if (!selectedBot || kinds.length === 0 || saving.current) return
     const now = Date.now()
     let until
     if (duration === 'hour') until = now + 60 * 60 * 1000
@@ -57,10 +66,9 @@ export function BrowserPage({ roster, actions, run, Section, Row }) {
       until = end.getTime()
     } else if (duration === 'week') until = now + 7 * 24 * 60 * 60 * 1000
     const grant = { site: siteValue(site), kinds: [...kinds], ...(until !== undefined ? { until } : {}) }
-    setBusy(true)
-    void run(actions.updateBot(selectedBot.id, {
+    save(() => actions.updateBot(selectedBot.id, {
       browserGrants: [...(selectedBot.browserGrants ?? []).filter(grant => !expired(grant)), grant],
-    })).finally(() => setBusy(false))
+    }))
   }
   const toggleKind = (kind, checked) => {
     setKinds(current => checked
@@ -86,7 +94,7 @@ export function BrowserPage({ roster, actions, run, Section, Row }) {
           h('div', { className: 'bt-browser-grant-kinds' }, grantKinds(grant).map(label => h('span', { key: label, className: 'bt-chip' }, label))),
           h('span', { className: 'bt-set-hint' }, grantTime(grant))),
         h('button', {
-          type: 'button', className: 'bt-soft bt-soft-sm', onClick: () => remove(bot, index),
+          type: 'button', className: 'bt-soft bt-soft-sm', onClick: () => remove(bot, index), disabled: busy,
           'aria-label': t('Remove grant'),
         }, t('Remove grant'))))),
     h(Section, { title: t('Allow an action') },

@@ -194,7 +194,7 @@ export class Proactive {
   private async isEcho(tx: AsyncTx, rule: ProactiveRule, candidate: ProactiveCandidate) {
     if (candidate.authorKind !== 'bot' && candidate.authorKind !== 'ci') return false
     const since = this.now() - rule.budget.windowMs
-    return (await this.listRunsIn(tx, rule.id)).some(run => run.text === candidate.text && run.createdAt >= since)
+    return (await this.listRunsIn(tx, rule.id, since)).some(run => run.text === candidate.text)
   }
 
   private isolatedDirectory(rule: ProactiveRule, eventId: string) {
@@ -208,17 +208,8 @@ export class Proactive {
 
   async listRuns(ruleId?: string): Promise<ProactiveRun[]> {
     const prefix = ruleId ? runPrefix(ruleId) : `${JSON.stringify(['proactive-run']).slice(0, -1)},`
-    return this.storage.transaction(this.instanceId, async tx => {
-      const items: ProactiveRun[] = []
-      let cursor = prefix
-      for (let pageCount = 0; pageCount < 10; pageCount++) {
-        const page = await tx.scan<ProactiveRun>('proactive-run', { limit: 100, after: cursor })
-        items.push(...page.items.map(item => item.value))
-        if (!page.cursor || !page.cursor.startsWith(prefix)) return items.sort((left, right) => left.createdAt - right.createdAt)
-        cursor = page.cursor
-      }
-      return items.sort((left, right) => left.createdAt - right.createdAt)
-    })
+    return this.storage.transaction(this.instanceId, async tx =>
+      (await this.scanRuns(tx, prefix)).sort((left, right) => left.createdAt - right.createdAt))
   }
 
   private async verifyArtifacts(directory: string, artifacts: ProactiveArtifact[], maxBytes: number) {
@@ -256,19 +247,25 @@ export class Proactive {
 
   private async countRuns(tx: AsyncTx, ruleId: string, windowMs: number) {
     const since = this.now() - windowMs
-    return (await this.listRunsIn(tx, ruleId)).filter(run => run.createdAt >= since && ['running', 'prepared', 'silent', 'failed'].includes(run.state)).length
+    return (await this.listRunsIn(tx, ruleId, since)).filter(run => ['running', 'prepared', 'silent', 'failed'].includes(run.state)).length
   }
 
-  private async listRunsIn(tx: AsyncTx, ruleId: string) {
+  private async scanRuns(tx: AsyncTx, prefix: string, since?: number) {
     const items: ProactiveRun[] = []
-    let cursor = runPrefix(ruleId)
-    for (let pageCount = 0; pageCount < 10; pageCount++) {
+    let cursor = prefix
+    for (;;) {
       const page = await tx.scan<ProactiveRun>('proactive-run', { limit: 100, after: cursor })
-      items.push(...page.items.map(item => item.value))
-      if (!page.cursor || !page.cursor.startsWith(runPrefix(ruleId))) return items
+      for (const item of page.items) {
+        if (!item.id.startsWith(prefix)) return items
+        if (since === undefined || item.value.createdAt >= since) items.push(item.value)
+      }
+      if (!page.cursor || !page.cursor.startsWith(prefix)) return items
       cursor = page.cursor
     }
-    return items
+  }
+
+  private async listRunsIn(tx: AsyncTx, ruleId: string, since?: number) {
+    return this.scanRuns(tx, runPrefix(ruleId), since)
   }
 
   private async insert(tx: AsyncTx, run: ProactiveRun) {

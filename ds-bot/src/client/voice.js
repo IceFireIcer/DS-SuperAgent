@@ -100,20 +100,26 @@ export function VoiceMode({ sessionId, roster, actions, useSessions, useSessionS
   const waiting = useRef(null)
   const reply = useRef(lastReply)
   reply.current = lastReply
+  // False from the moment the user pauses or closes: the browser's recognizer
+  // can still deliver what it heard after its stop, and that must not send.
+  const canSend = useRef(false)
   // Bumped on pause and close, so a transcript that arrives later is dropped.
   const turn = useRef(0)
   const paneLeft = usePaneLeft()
-  const close = () => { turn.current += 1; window.speechSynthesis?.cancel(); actions.closeVoice() }
+  const close = () => { canSend.current = false; turn.current += 1; window.speechSynthesis?.cancel(); actions.closeVoice() }
   useEscape(close)
   const submit = (text) => {
+    canSend.current = false
     setHeard(text)
     setPhase('thinking')
     waiting.current = reply.current.split('|')[0]
     void actions.send(sessionId, text.trim()).catch(() => setPhase('listening'))
   }
   const dictation = useDictation((text, final) => {
+    if (!canSend.current) return
     setHeard(text)
     if (!final) return
+    canSend.current = false
     dictation.stop()
     submit(text)
   })
@@ -133,6 +139,7 @@ export function VoiceMode({ sessionId, roster, actions, useSessions, useSessionS
     return () => { live = false }
   }, [speech])
   const listen = phase === 'listening'
+  useEffect(() => { canSend.current = phase === 'listening' }, [phase])
   useEffect(() => {
     if (speech || !listen || dictation.listening) return undefined
     const timer = setTimeout(() => dictation.start({ continuous: false, onEnd: () => {} }), 250)
@@ -140,7 +147,7 @@ export function VoiceMode({ sessionId, roster, actions, useSessions, useSessionS
   }, [listen, dictation.listening])
   // Recognition stops on silence; keep listening until the user pauses or ends.
   useEffect(() => {
-    if (phase !== 'listening') dictation.stop()
+    if (phase !== 'listening') dictation.discard()
   }, [phase])
   // The plugin's recognizer: record one utterance, end it after a pause, transcribe it.
   useEffect(() => {
@@ -237,6 +244,7 @@ export function VoiceMode({ sessionId, roster, actions, useSessions, useSessionS
   const blocked = phase === 'unsupported' || phase === 'setup' || phase === 'starting' || phase === 'preparing'
   const togglePause = () => {
     if (phase === 'paused') { setPhase('listening'); return }
+    canSend.current = false
     turn.current += 1
     window.speechSynthesis?.cancel()
     setPhase('paused')

@@ -83,15 +83,30 @@ export async function openCapture() {
   } catch (error) {
     throw captureError(error?.name === 'NotAllowedError' ? 'blocked' : 'failed', error)
   }
-  const audio = new AudioContext()
-  const analyser = audio.createAnalyser()
-  analyser.fftSize = 512
-  audio.createMediaStreamSource(stream).connect(analyser)
-  const frame = new Float32Array(analyser.fftSize)
-  const recorder = new MediaRecorder(stream)
-  const chunks = []
-  recorder.ondataavailable = (event) => { if (event.data.size > 0) chunks.push(event.data) }
-  recorder.start()
+  let audio
+  let recorder
+  try {
+    audio = new AudioContext()
+    const analyser = audio.createAnalyser()
+    analyser.fftSize = 512
+    audio.createMediaStreamSource(stream).connect(analyser)
+    const frame = new Float32Array(analyser.fftSize)
+    recorder = new MediaRecorder(stream)
+    const chunks = []
+    recorder.ondataavailable = (event) => { if (event.data.size > 0) chunks.push(event.data) }
+    recorder.start()
+    return captureHandle(stream, audio, analyser, frame, recorder, chunks)
+  } catch (error) {
+    // The microphone is already open: a failed recorder leaves its track live
+    // until the page goes away, and nothing else holds the stream to stop it.
+    try { if (recorder && recorder.state !== 'inactive') recorder.stop() } catch {}
+    stream.getTracks().forEach(track => track.stop())
+    try { void audio?.close().catch(() => {}) } catch {}
+    throw captureError('failed', error)
+  }
+}
+
+function captureHandle(stream, audio, analyser, frame, recorder, chunks) {
   let closed = false
   const close = () => {
     if (closed) return

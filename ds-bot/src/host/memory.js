@@ -540,7 +540,12 @@ export function install(rt) {
     await replaceFile(temp, path)
   }
   let writing = Promise.resolve()
+  // Set before the accepted writes drain, so no new file change or review starts while
+  // the Host still holds the team lock.
+  let stopped = false
+  const closing = new AbortController()
   const queued = (job) => {
+    if (stopped) return Promise.reject(Object.assign(new Error('DS Bot is stopping; memory no longer changes'), { code: 'memory/stopped' }))
     const run = writing.then(job)
     writing = run.catch(() => {})
     return run
@@ -678,7 +683,17 @@ export function install(rt) {
 
   // A change that was interrupted is finished when the host starts.
   ctx.effect(() => {
-    void rt.load().then(() => recover()).catch(error => rt.warn('ds-bot: memory recovery failed: %s', error?.message ?? error))
+    void rt.load().then(() => (stopped ? undefined : recover())).catch(error => rt.warn('ds-bot: memory recovery failed: %s', error?.message ?? error))
+    // The Host releases the team lock only after this effect settles. Stop new work,
+    // abort the model calls, and wait for the writes and reviews already accepted.
+    return () => {
+      stopped = true
+      closing.abort()
+      for (const timer of reviewTimers.values()) clearTimeout(timer)
+      reviewTimers.clear()
+      reviewQueue.clear()
+      return Promise.allSettled([writing, reviewOn ? reviewChain : Promise.resolve(), ...summarizing.values()])
+    }
   }, 'ds-bot: memory recovery')
 
   // Checked when the write runs: a Bot or group chat deleted after the write was
@@ -1297,7 +1312,7 @@ export function install(rt) {
         system,
         messages,
         maxTokens,
-        signal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
+        signal: AbortSignal.any([AbortSignal.timeout(MODEL_TIMEOUT_MS), closing.signal]),
       })) assembler.push(chunk)
       const finish = assembler.finish
       if (finish.kind === 'error' || finish.kind === 'aborted') throw new Error(finish.failure?.message ?? finish.kind)
@@ -1364,6 +1379,7 @@ export function install(rt) {
   const panelLabel = (panel, scope) => (scope.kind === 'team' ? 'the team memory' : panel.group ? 'the group memory' : `${panel.name}'s memory`)
 
   function startSummary(panel, loaded, language, hash) {
+    if (stopped) return
     const { keeper } = panel
     const model = keeper.model
     const request = panel.group
@@ -1374,7 +1390,7 @@ export function install(rt) {
       const value = { hash, text: text.slice(0, SUMMARY_TEXT_MAX), at: Date.now() }
       summaries.set(panel.id, value)
       summaryFailures.delete(panel.id)
-      if (rt.readOnly() === undefined) await writeText(summaryPath(panel.id), JSON.stringify(value, null, 2))
+      if (rt.readOnly() === undefined) await queued(() => writeText(summaryPath(panel.id), JSON.stringify(value, null, 2)))
     })().catch((error) => {
       summaryFailures.set(panel.id, { hash, model, message: error?.message ?? String(error) })
       rt.warn('ds-bot: memory summary for %s failed: %s', panel.name, error)
@@ -1678,7 +1694,7 @@ export function install(rt) {
     // leaves a cursor that the next review goes on from.
     if (since === undefined && read.length > 0) {
       cursorsNow()[key] = read[0].seq - 1
-      await writeText(cursorsPath, JSON.stringify(cursors))
+      await queued(() => writeText(cursorsPath, JSON.stringify(cursors)))
     }
     // Only the user's words are kept, so lines without any need no model call.
     if (read.some(line => line.who === 'user')) {
@@ -1725,7 +1741,7 @@ export function install(rt) {
     const now = cursorsNow()[key]
     if (through !== undefined && (now === undefined || through > now)) {
       cursorsNow()[key] = through
-      await writeText(cursorsPath, JSON.stringify(cursors))
+      await queued(() => writeText(cursorsPath, JSON.stringify(cursors)))
     }
     if (again) next()
   }
@@ -1742,6 +1758,7 @@ export function install(rt) {
   // A conversation waits in the line once: a later turn's copy of a group log joins
   // the one that already waits.
   function queueReview(seen) {
+    if (stopped) return
     const prior = reviewQueue.get(seen.key)
     if (prior !== undefined) {
       if (seen.room !== undefined) reviewQueue.set(seen.key, { ...seen, room: joinLogs(prior.room, seen.room) })
@@ -1751,9 +1768,10 @@ export function install(rt) {
     reviewChain = reviewChain.then(async () => {
       const waited = reviewQueue.get(seen.key)
       reviewQueue.delete(seen.key)
+      if (waited === undefined) return
       reviewsRunning += 1
       try {
-        if (rt.readOnly() === undefined) await (waited.roomId === undefined ? reviewChat(waited) : reviewGroup(waited))
+        if (!stopped && rt.readOnly() === undefined) await (waited.roomId === undefined ? reviewChat(waited) : reviewGroup(waited))
       } catch (error) {
         rt.warn('ds-bot: memory review of %s failed: %s', waited.key, error?.message ?? error)
       } finally {

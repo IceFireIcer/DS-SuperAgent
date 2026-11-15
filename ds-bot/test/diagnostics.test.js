@@ -189,6 +189,32 @@ test('reportMarkdown says when nothing went wrong', () => {
   assert.doesNotMatch(text, /DSH \|/)
 })
 
+test('the DSH version in a report comes from the app-boot export, and is unknown without it', async (t) => {
+  const home = mkdtempSync(join(tmpdir(), 'ds-bot-diag-'))
+  t.after(() => rmSync(home, { recursive: true, force: true, maxRetries: 5 }))
+  const loader = {
+    import: async name => (name === '@deepseek-ai/dsh-app-boot'
+      ? { getDshRuntimeVersion: () => ({ release: { version: '0.2.1-rc.4' } }) }
+      : {}),
+    unwrapExports: exports => exports,
+  }
+  const rt = {
+    ctx: { logger: { warn() {} }, effect() {}, get: name => (name === 'loader' ? loader : undefined) },
+    home,
+    config: { diagnosticsFile: false },
+    state: { bots: {}, mainBotIds: [], rooms: {} },
+    readOnly: () => undefined,
+  }
+  installDiagnostics(rt)
+  const withVersion = await rt.diagnostics.report()
+  assert.equal(withVersion.facts.dshVersion, '0.2.1-rc.4')
+  assert.match(withVersion.markdown, /\| DSH \| 0\.2\.1-rc\.4 \|/)
+  rt.ctx.get = () => undefined
+  const unknown = await rt.diagnostics.report()
+  assert.equal(unknown.facts.dshVersion, undefined)
+  assert.doesNotMatch(unknown.markdown, /\| DSH \|/)
+})
+
 test('errorCode tells refusals from DS Bot faults', () => {
   assert.equal(errorCode(new Error('Unknown Bot')), 'bot/refused')
   assert.equal(errorCode(new TypeError('x is undefined')), 'bot/internal')

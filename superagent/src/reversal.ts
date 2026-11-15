@@ -154,8 +154,7 @@ export class Reversal {
         await transaction.insert('abandonment', next.id, next)
         await transaction.insert('abandonment-command', abandonmentCommandKey(this.instanceId, options.commandId), { fingerprint, record: next.id })
         if (!blockers.length) {
-          await transaction.replace('switchover', switchRecord.id, { ...switchRecord, state: 'abandoned',
-            entry: { ...switchRecord.entry, isolated: false, releasedAt: this.now() }, updatedAt: this.now() })
+          await transaction.replace('switchover', switchRecord.id, { ...switchRecord, state: 'abandoned', updatedAt: this.now() })
         }
         return next
       })
@@ -198,6 +197,7 @@ export class Reversal {
       }
       let restart: { enabledAt: number; evidence?: string; entry?: string }
       try {
+        await this.switchover.release(options.batchId)
         const enabled = await options.legacy.restartEnabled() ? undefined : await options.legacy.enableRestart()
         restart = { enabledAt: this.now(), ...(enabled?.evidence ? { evidence: enabled.evidence } : {}), ...(enabled?.entry ? { entry: enabled.entry } : {}) }
       } catch (error) {
@@ -223,7 +223,8 @@ export class Reversal {
     if (!activation || activation.batchId !== options.batchId) throw new CoreError('ACTIVATION_NOT_FOUND', 'The batch is not the active core entry.')
     if (activation.state === 'reversed') throw new CoreError('ALREADY_REVERSED', 'The reverse handoff is already complete.')
     const lease = await this.leaseIn(transaction)
-    if (lease.epoch < activation.epoch) throw new CoreError('REVERSE_EPOCH', 'The reverse epoch cannot precede the activation epoch.')
+    const activationEpoch = activation.activatedEpoch ?? activation.epoch
+    if (lease.epoch < activationEpoch) throw new CoreError('REVERSE_EPOCH', 'The reverse epoch cannot precede the activation epoch.')
     const fingerprint = reverseFingerprint(options.batchId, options.reason)
     const priorCommand = await transaction.get<{ fingerprint: string }>('reversal-command', reversalCommandKey(this.instanceId, options.commandId))
     if (priorCommand && priorCommand.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'This reverse command ID was used with different input.')
@@ -247,7 +248,7 @@ export class Reversal {
     if (existing) return existing
     const reverse: ReverseRecord = {
       id: reversalKey(this.instanceId, options.batchId), instanceId: this.instanceId, batchId: options.batchId, commandId: options.commandId,
-      activationId: activation.manifest.activationId, activationEpoch: activation.epoch, reverseEpoch: lease.epoch, state: 'stopping',
+      activationId: activation.manifest.activationId, activationEpoch, reverseEpoch: lease.epoch, state: 'stopping',
       reason: options.reason, manifest: { gap: activation.manifest.gap, release: activation.release, oldReview: activation.manifest.oldReview, manualStops: [] },
       restart: {}, blockers: [], createdAt: this.now(), updatedAt: this.now(),
     }
@@ -289,6 +290,7 @@ export class Reversal {
 
   private async enableRestart(record: AbandonmentRecord, legacy: LegacyRecovery) {
     try {
+      await this.switchover.release(record.batchId)
       const enabled = await legacy.restartEnabled() ? undefined : await legacy.enableRestart()
       const next: AbandonmentRecord = { ...record, state: 'abandoned',
         restart: { enabledAt: this.now(), ...(enabled?.evidence ? { evidence: enabled.evidence } : {}), ...(enabled?.entry ? { entry: enabled.entry } : {}) },

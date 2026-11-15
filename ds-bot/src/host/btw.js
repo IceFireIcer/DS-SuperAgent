@@ -295,17 +295,21 @@ export function install(rt) {
 
   const originalRefresh = rt.refresh?.bind(rt)
   if (typeof originalRefresh === 'function') {
+    let readRevision
     rt.refresh = async () => {
       const wasWriting = writes()
       await originalRefresh()
-      // Taking over a team the other host closed makes this one the writer:
-      // re-read the loaded parts so a leftover 'answering' is recorded now.
-      if (wasWriting || !writes()) return
+      // A reading host follows the writer's revision; taking over a team the
+      // other host closed re-reads once more so a leftover 'answering' is
+      // recorded now. Either way the loaded parts are replaced, never written.
+      const readingOnly = !writes()
+      if (readingOnly ? readRevision === state.revision : wasWriting) return
       for (const [botId, byBot] of cards) {
         const parts = Array.from(byBot.keys())
         byBot.clear()
         for (const partId of parts) await readPart(botId, partId)
       }
+      readRevision = state.revision
     }
   }
 

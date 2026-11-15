@@ -260,10 +260,39 @@ export function install(rt) {
     if (bot !== undefined) await applyModel(bot, { force: true })
   }
 
+  // The Super-agent executes a Bot's hidden Worker outside this UI Session. It reads
+  // the owning Bot's live model and instructions from here instead of the shared role
+  // defaults, so the settings the user sees are the settings the Worker runs with.
+  const botForSession = sessionId => {
+    for (const bot of Object.values(state.bots ?? {})) {
+      if (rt.chatOf?.(bot.id) === sessionId) return bot
+      if (rt.groupSessionsOf?.(bot.id)?.includes(sessionId)) return bot
+    }
+    return undefined
+  }
+  const executionProfiles = {
+    async resolve(sessionId) {
+      const bot = botForSession(sessionId)
+      if (bot === undefined) return undefined
+      const ref = await desiredModel(bot)
+      const effort = ref === undefined ? undefined : await desiredEffort(bot, ref)
+      const route = ref === undefined ? undefined : splitRef(ref)
+      return {
+        ...(route === undefined ? {} : { model: { provider: route.provider, model: route.model } }),
+        ...(effort === undefined ? {} : { reasoningEffort: effort }),
+        instructions: String(bot.instructions ?? ''),
+        skills: Array.isArray(bot.skills) ? [...bot.skills] : [],
+      }
+    },
+  }
+  if (typeof ctx.provide === 'function' && ctx.get?.('botExecutionProfiles') === undefined) {
+    ctx.provide('botExecutionProfiles', executionProfiles)
+  }
+
   Object.assign(rt, {
     catalog, cachedCatalog: () => answerable(catalogCache.value), cachedDefault: () => pickDefault(catalogCache.value),
     defaultRef, defaultModel, defaultEffort, resolveModel, desiredModel, reasoningOf, resolveEffort, desiredEffort,
-    selectSessionModel, applyModel, waitForModel, syncModels, routeRefused,
+    selectSessionModel, applyModel, waitForModel, syncModels, routeRefused, executionProfiles,
     dropCatalog: () => { catalogCache = { at: 0, value: [] } },
   })
 }

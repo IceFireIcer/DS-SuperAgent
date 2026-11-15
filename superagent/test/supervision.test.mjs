@@ -61,3 +61,17 @@ test('supervision puts human questions, blocked work and stops before ordinary r
   const route = await (await fetch(`${chat.url}/supervision`)).json()
   assert.equal(route.items[0].ticketId, attention.ticketId)
 })
+
+test('supervision reads every Ticket page instead of stopping at the first hundred', { timeout: 30000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-supervision-pages-'))
+  const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  const engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] })
+  t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
+  for (let index = 0; index < 105; index++) {
+    await engine.submit({ commandId: `ticket-page-${index}`, eventId: `ticket-page-message-${index}`, text: `Ticket ${index}.` })
+  }
+  const view = await engine.getSupervision()
+  assert.equal(view.items.length, 105)
+  assert.equal(view.hasMore, false)
+  assert.equal(view.counts.pending, 105)
+})

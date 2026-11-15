@@ -111,6 +111,15 @@ test('SameSite=None without Secure is dropped to unspecified with a warning, not
   assert.ok(parsed.warnings.some((w) => w.code === 'samesite-none-insecure'))
 })
 
+test('partitioned cookies are skipped instead of flattened into the default context', () => {
+  const parsed = parseCookieFile(JSON.stringify([
+    { name: 'part', value: 'v', domain: 'example.com', path: '/', secure: true, httpOnly: false, expirationDate: 1893456000, partitionKey: { topLevelSite: 'https://top.example', hasCrossSiteAncestor: false } },
+    { name: 'bad', value: 'v', domain: 'example.com', path: '/', secure: true, httpOnly: false, expirationDate: 1893456000, partitionKey: { site: 'example.com' } },
+  ]))
+  assert.equal(parsed.cookies.length, 0)
+  assert.deepEqual(parsed.skipped.map(item => item.code), ['partitioned-unsupported', 'bad-partition-key'])
+})
+
 test('prefix rules and expired entries are refused before they can fail the store', () => {
   const parsed = parseCookieFile(JSON.stringify([
     { name: '__Host-x', value: 'v', domain: 'example.com', path: '/app', secure: true, httpOnly: false, expirationDate: 1893456000 },

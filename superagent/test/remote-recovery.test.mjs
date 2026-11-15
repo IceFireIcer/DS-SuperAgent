@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
+import { existsSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -10,6 +11,8 @@ import { fileURLToPath } from 'node:url'
 import * as core from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, textResponse, toolResponse } from '../dev/native-mock.mjs'
+
+const hasLinuxProcStat = process.platform === 'linux' && existsSync('/proc/self/stat')
 
 const grant = {
   instanceId: 'private',
@@ -175,13 +178,23 @@ test('a device job belongs to the actor that started it and exposes its deadline
   assert.equal(await job.waitForExit(AbortSignal.timeout(10000)), true)
 })
 
-test('a daemon restart distinguishes a live process range from log-only output and restores only the live range', { timeout: 30000, skip: process.platform === 'win32' }, async context => {
+test('on Linux with /proc, a daemon restart distinguishes a live process range from log-only output and restores only the live range', {
+  timeout: 30000,
+  skip: hasLinuxProcStat ? false : 'This proof needs the process identity that only Linux /proc provides.',
+}, async context => {
   const device = await fixture(context)
+  const ownedPids = new Set()
+  context.after(() => {
+    for (const pid of ownedPids) {
+      try { process.kill(pid, 'SIGKILL') } catch { /* The process already exited. */ }
+    }
+  })
   const bound = await device.environment.prepare({ instanceId: 'private', actorId: 'user' })
 
   const live = await bound.startCommand('hold')
   await until(() => live.read().stdout.text.includes('started'), 'the live job output')
   const livePid = Number(await readFile(join(device.root, 'hold.pid'), 'utf8'))
+  ownedPids.add(livePid)
   await device.kill()
   await device.restart()
 
@@ -199,6 +212,7 @@ test('a daemon restart distinguishes a live process range from log-only output a
   await until(() => {
     try { process.kill(livePid, 0); return false } catch { return true }
   }, 'the recovered live process to stop')
+  ownedPids.delete(livePid)
 
   await rm(join(device.root, 'hold.pid'), { force: true })
   const terminal = await bound.startCommand('hold')
@@ -207,12 +221,14 @@ test('a daemon restart distinguishes a live process range from log-only output a
     catch { return false }
   }, 'the second job process')
   const terminalPid = Number(await readFile(join(device.root, 'hold.pid'), 'utf8'))
+  ownedPids.add(terminalPid)
   assert.notEqual(terminalPid, livePid)
   await device.kill()
   try { process.kill(terminalPid, 'SIGKILL') } catch { /* The process exited with the daemon. */ }
   await until(() => {
     try { process.kill(terminalPid, 0); return false } catch { return true }
   }, 'the second process to exit')
+  ownedPids.delete(terminalPid)
   await device.restart()
 
   const terminalRange = await bound.inspectRange(terminal.jobId)
@@ -243,7 +259,10 @@ test('a job record that disappears during a restart stays unknown and is never r
   await assert.rejects(bound.attachCommand(job.jobId), { code: 'COMMAND_UNKNOWN' })
 })
 
-test('a PID-only daemon restart keeps the range observable but never signals an unverified process', { timeout: 20000, skip: process.platform !== 'win32' }, async context => {
+test('a PID-only daemon restart keeps the range observable but never signals an unverified process', {
+  timeout: 20000,
+  skip: hasLinuxProcStat ? 'Linux /proc is covered by the strong process-identity recovery test.' : false,
+}, async context => {
   const device = await fixture(context)
   const bound = await device.environment.prepare({ instanceId: 'private', actorId: 'user' })
   const job = await bound.startCommand('hold')

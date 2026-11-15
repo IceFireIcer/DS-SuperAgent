@@ -60,6 +60,13 @@ export async function loadLibrary(actions, { offset = 0, limit = PAGE } = {}) {
   return { items, total: value?.total ?? items.length, next: value?.next ?? offset + items.length }
 }
 
+// A page added to the ones already shown: a repeat of a photo already there is
+// dropped, so a retried or overlapping request cannot draw it twice.
+export function mergePhotos(previous, page) {
+  const seen = new Set((previous ?? []).map(photo => photo.id))
+  return [...(previous ?? []), ...page.filter(photo => !seen.has(photo.id))]
+}
+
 // The avatar library: the photos the user imported once, kept by the host beside the
 // team. The window asks for them when the picker opens, and imports new ones in a
 // batch: a photo that cannot be read is named, and the others still land.
@@ -68,21 +75,37 @@ export function AvatarLibraryPanel({ actions, onPick }) {
   const [total, setTotal] = useState(0)
   const [offset, setOffset] = useState(0)
   const [busy, setBusy] = useState(false)
+  const [paging, setPaging] = useState(false)
   const [error, setError] = useState('')
   const [report, setReport] = useState(null)
   const fileRef = useRef(null)
+  const loading = useRef(false)
+  // A page request and a refresh share the list; the latest refresh wins, and a
+  // page only lands when no later request has started.
+  const generation = useRef(0)
 
   const load = useCallback(async (from = 0, append = false) => {
+    if (append && loading.current) return
+    const own = ++generation.current
+    loading.current = true
+    if (append) setPaging(true)
     try {
       const page = await loadLibrary(actions, { offset: from })
-      setItems(previous => (append ? [...(previous ?? []), ...page.items] : page.items))
+      if (own !== generation.current) return
+      setItems(previous => mergePhotos(append ? previous : [], page.items))
       setTotal(page.total)
       setOffset(page.next)
     } catch (failure) {
-      setError(failure?.message ?? String(failure))
+      if (own === generation.current) setError(failure?.message ?? String(failure))
+    } finally {
+      if (own === generation.current) {
+        loading.current = false
+        setPaging(false)
+      }
     }
   }, [actions])
   useEffect(() => { void load() }, [load])
+  useEffect(() => () => { generation.current += 1; loading.current = false }, [])
 
   const importFiles = async (files) => {
     if (files.length === 0) return
@@ -133,7 +156,7 @@ export function AvatarLibraryPanel({ actions, onPick }) {
       h('button', { type: 'button', className: 'bt-lib-del', 'aria-label': t('Remove photo from the library'), onClick: () => void remove(entry) },
         h(TrashIcon))))) : null,
     shown < total ? h('div', { className: 'bt-lib-more' },
-      h('button', { type: 'button', className: 'bt-soft bt-soft-sm', onClick: () => void load(offset, true) }, t('Show more photos')),
+      h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: paging || busy, onClick: () => void load(offset, true) }, t('Show more photos')),
       h('span', { className: 'bt-note' }, t('Showing {shown} of {total} photos', { shown, total }))) : null,
     report ? h('div', { className: 'bt-lib-report' },
       report.imported.length ? h('div', { className: 'bt-note' }, report.imported.length === 1 ? t('1 photo imported') : t('{count} photos imported', { count: report.imported.length })) : null,

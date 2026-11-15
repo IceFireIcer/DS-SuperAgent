@@ -139,13 +139,17 @@ export class PostgresStorage implements Storage {
           if (released) return
           released = true
           this.leases.delete(lease)
-          if (active) {
+          const wasActive = active
+          // The handle loses write ownership as soon as release starts, whatever the unlock returns.
+          active = false
+          let unlockFailed = !wasActive
+          if (wasActive) {
             try { await client.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [name]) }
-            catch { active = false }
+            catch { unlockFailed = true }
           }
           client.removeListener('error', lost)
           client.removeListener('end', lost)
-          client.release(active ? undefined : new Error('The writer lease connection was lost.'))
+          client.release(unlockFailed ? new Error('The writer lease connection was lost.') : undefined)
         },
       }
       if (this.closed) {

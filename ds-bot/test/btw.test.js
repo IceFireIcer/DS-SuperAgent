@@ -330,6 +330,31 @@ test('a second host does not fail an aside the writer is still answering', async
   assert.equal(cardsFile(env.home).length, 2)
 })
 
+test('a second host reloads saved cards when the writer saves a new revision', async (t) => {
+  const env = await setup({
+    foreignLock: true,
+    btw: {
+      b1: {
+        's-now': [
+          { id: 'live', botId: 'b1', partId: 's-now', atSeq: 2, question: 'Still going?', answer: '', status: 'answering', createdAt: 10 },
+        ],
+      },
+    },
+  })
+  t.after(() => env.stop())
+  assert.equal(cardsOf(env.rt)[0].status, 'answering')
+  const done = [{ id: 'live', botId: 'b1', partId: 's-now', atSeq: 2, question: 'Still going?', answer: 'Done.', status: 'done', createdAt: 10, finishedAt: 11 }]
+  writeFileSync(join(env.home, 'btw', 'b1', 's-now.json'), JSON.stringify(done))
+  const statePath = join(env.home, 'state.json')
+  const saved = JSON.parse(readFileSync(statePath, 'utf8'))
+  writeFileSync(statePath, JSON.stringify({ ...saved, revision: saved.revision + 1 }))
+  await env.rt.refresh()
+  const card = cardsOf(env.rt)[0]
+  assert.equal(card.status, 'done')
+  assert.equal(card.answer, 'Done.')
+  assert.equal(cardsFile(env.home)[0].status, 'done')
+})
+
 test('deleting a Bot removes its card files', async (t) => {
   const state = team()
   state.bots.b2 = { id: 'b2', sessionId: 's-b2', name: 'Side', capabilities: [], color: 'deepseek', createdAt: 2 }

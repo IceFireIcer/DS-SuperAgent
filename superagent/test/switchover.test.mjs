@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { prepareLegacyArchive, publishLegacyArchive, verifyLegacyArchive } from '../dist/legacy-archive.js'
-import { HostLease } from '../dist/index.js'
+import { Activation, HostLease } from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 import { Switchover } from '../dist/switchover.js'
 
@@ -116,6 +116,39 @@ test('quiescing verifies drained turns, jobs and outbound and actually holds the
   assert.equal(duplicateRecord.state, 'quiesced')
   await duplicateHolder.close()
   assert.equal((await switchover.status('batch-1')).state, 'quiesced', 'a duplicate holder cannot release the live holder')
+})
+
+test('a delayed heartbeat cannot put a quiesced snapshot over a terminal activation record', async t => {
+  const { source, target, storage, lease } = await setup(t)
+  const port = await freePort()
+  const old = createServer(socket => socket.end())
+  await listen(old, port)
+  const legacy = { stop: async () => { await closeServer(old) }, disableRestart: async () => ({ evidence: 'old launcher renamed' }),
+    restartDisabled: async () => true, snapshot: async () => clearSnapshot() }
+  const switchover = new Switchover(storage, 'private')
+  t.after(() => switchover.close().catch(() => {}))
+  const quiesced = await switchover.begin({ batchId: 'batch-1', newEpoch: lease.epoch, archive: { target }, oldHome: source,
+    entry: { host: '127.0.0.1', port }, legacy, settleMs: 5, entryWaitMs: 250, heartbeatMs: 50 })
+  assert.equal(quiesced.state, 'quiesced')
+  const activation = new Activation(storage, 'private', switchover)
+  await activation.activate({ batchId: 'batch-1', commandId: 'activate-heartbeat', newEpoch: lease.epoch, legacy, settleMs: 5,
+    release: { release: async () => ({}) } })
+
+  const delayed = {
+    transaction: (instanceId, operation) => storage.transaction(instanceId, tx => operation({ ...tx,
+      scan: async (kind, options) => {
+        const page = await tx.scan(kind, options)
+        return kind === 'switchover' ? { ...page, items: page.items.map(item => ({ ...item, value: quiesced })) } : page
+      } })),
+    reconnect: () => storage.reconnect(),
+    close: () => storage.close(),
+  }
+  const lateBeat = new Switchover(delayed, 'private')
+  await lateBeat.beat()
+
+  const status = await switchover.status('batch-1')
+  assert.equal(status.state, 'active')
+  assert.equal(status.entry.isolated, false)
 })
 
 test('the gap intake keeps reliable ownership apart and quarantines unreliable boundaries without dispatch', async t => {

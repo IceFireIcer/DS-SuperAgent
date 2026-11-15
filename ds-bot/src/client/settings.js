@@ -80,12 +80,28 @@ function GeneralPage({ roster, actions, run }) {
   const themes = allThemes()
   const current = themes[prefs.theme] ? prefs.theme : 'deepseek'
   const [custom, setCustom] = useState(prefs.accent ?? '#4d6bfe')
+  const pending = useRef(undefined)
   const timer = useRef(0)
-  useEffect(() => () => clearTimeout(timer.current), [])
+  const runRef = useRef(run)
+  const actionsRef = useRef(actions)
+  runRef.current = run
+  actionsRef.current = actions
+  const flush = () => {
+    const next = pending.current
+    pending.current = undefined
+    if (next !== undefined) void runRef.current(actionsRef.current.setPrefs({ accent: next }))
+  }
+  useEffect(() => () => { clearTimeout(timer.current); flush() }, [])
+  const pickAccent = (accent) => {
+    clearTimeout(timer.current)
+    pending.current = accent
+    flush()
+  }
   const pickCustom = (value) => {
     setCustom(value)
     clearTimeout(timer.current)
-    timer.current = setTimeout(() => run(actions.setPrefs({ accent: value })), 350)
+    pending.current = value
+    timer.current = setTimeout(flush, 350)
   }
   return [
     h(SetSection, { key: 'look', title: t('Appearance') },
@@ -94,10 +110,10 @@ function GeneralPage({ roster, actions, run }) {
           Object.entries(themes).map(([id, theme]) => h('option', { key: id, value: id }, t(theme.label))))),
       h(SetRow, { label: t('Accent'), hint: t('Unread marks, badges, and the brand mark.') },
         h('div', { className: 'bt-swatches' },
-          h('button', { type: 'button', className: 'bt-swatch bt-swatch-default', title: t('Theme accent'), 'aria-label': t('Theme accent'), 'aria-pressed': !prefs.accent, onClick: () => run(actions.setPrefs({ accent: null })) }),
+          h('button', { type: 'button', className: 'bt-swatch bt-swatch-default', title: t('Theme accent'), 'aria-label': t('Theme accent'), 'aria-pressed': !prefs.accent, onClick: () => pickAccent(null) }),
           ACCENT_INKS.map(ink => h('button', {
             key: ink, type: 'button', className: 'bt-swatch', title: t(capitalize(ink)), 'aria-label': t(capitalize(ink)), 'aria-pressed': prefs.accent === INKS[ink][0],
-            style: { background: INKS[ink][0] }, onClick: () => run(actions.setPrefs({ accent: INKS[ink][0] })),
+            style: { background: INKS[ink][0] }, onClick: () => pickAccent(INKS[ink][0]),
           })),
           h('label', { className: 'bt-swatch bt-swatch-custom', title: t('Custom accent'), 'data-on': Boolean(prefs.accent) && !ACCENT_INKS.some(ink => INKS[ink][0] === prefs.accent) },
             h('input', { type: 'color', value: custom, 'aria-label': t('Custom accent'), onChange: event => pickCustom(event.target.value) })))),

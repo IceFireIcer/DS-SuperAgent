@@ -1,7 +1,7 @@
 // The Models page of a window that has no DSH settings of its own: the model providers
 // DSH serves, with their API keys and models, and the providers it can add. DSH keeps
 // all of it; a key only ever travels from these inputs to the host.
-import { createElement as h, useEffect, useState } from 'react'
+import { createElement as h, useEffect, useRef, useState } from 'react'
 import { CheckIcon, TrashIcon } from './icons.js'
 import { KeyIcon, MaskedInput } from './secret-card.js'
 import { Segmented, SPRING_SHAPE } from './motion.js'
@@ -123,14 +123,30 @@ function CustomForm({ view, apply, actions, onDone }) {
   const [found, setFound] = useState(null)
   const [picked, setPicked] = useState([])
   const [asking, setAsking] = useState(false)
-  const set = (field, value) => setDraft(current => ({ ...current, [field]: value }))
+  // The endpoint, protocol and key decide what a discovery answer means; changing
+  // one drops the old answer, and an answer that arrives later is not this setup.
+  const query = useRef(0)
+  const set = (field, value) => {
+    if (field === 'baseURL' || field === 'api' || field === 'key') {
+      query.current += 1
+      setFound(null)
+      setPicked([])
+      setAsking(false)
+    }
+    setDraft(current => ({ ...current, [field]: value }))
+  }
   const typed = draft.typed.split(/[\s,]+/).map(id => id.trim()).filter(Boolean)
   const models = [...(found ?? []).filter(model => picked.includes(model.id)), ...typed.filter(id => !picked.includes(id)).map(id => ({ id }))]
   const ready = draft.provider.trim() !== '' && draft.baseURL.trim() !== '' && models.length > 0
   const fetchModels = () => {
+    const own = ++query.current
     setAsking(true)
-    void apply(Promise.resolve(actions.providerModels({ baseURL: draft.baseURL, api: draft.api, key: draft.key })).then((list) => { setFound(list); setPicked([]) }))
-      .finally(() => setAsking(false))
+    void apply(Promise.resolve(actions.providerModels({ baseURL: draft.baseURL, api: draft.api, key: draft.key })).then((list) => {
+      if (own !== query.current) return
+      setFound(list)
+      setPicked([])
+    }))
+      .finally(() => { if (own === query.current) setAsking(false) })
   }
   const toggle = id => setPicked(list => (list.includes(id) ? list.filter(item => item !== id) : [...list, id]))
   const add = () => {

@@ -37,6 +37,26 @@ async function start(team = TEAM) {
   writeFileSync(join(home, 'state.json'), JSON.stringify(team))
   const ctx = fakeContext()
   const archived = []
+  const agents = new Map()
+  const agentOf = (sessionId) => {
+    if (!agents.has(sessionId)) {
+      const nextStep = []
+      const nextTurn = []
+      agents.set(sessionId, {
+        id: sessionId,
+        session: { id: sessionId, header: {}, requestHeader: () => undefined, deriveMessages: () => [] },
+        followup(message) { nextTurn.push(message) },
+        inject(message) { nextStep.push(message) },
+        inbox: {
+          nextStep,
+          nextTurn,
+          prepend(target, message) { (target === 'next-turn' ? nextTurn : nextStep).unshift(message) },
+          remove() { return false },
+        },
+      })
+    }
+    return agents.get(sessionId)
+  }
   let sessions = 0
   // While `hold` is set, the next Session waits until it is let go.
   let hold
@@ -54,7 +74,7 @@ async function start(team = TEAM) {
         if (hold !== undefined) await hold.promise
         return { sessionId }
       },
-      resolveAgent: async sessionId => ({ agent: { id: sessionId, session: { id: sessionId }, followup() {} } }),
+      resolveAgent: async sessionId => ({ agent: agentOf(sessionId) }),
       selectModel: async () => {},
     },
     sessionTitle: { rename: async () => {} },
@@ -62,6 +82,8 @@ async function start(team = TEAM) {
   })
   const rt = createRuntime(ctx, { home })
   await rt.load()
+  const preStep = (sessionId, messages = [], step = 1) => ctx.listeners.get('agent/pre-step').at(-1)(
+    { agent: agentOf(sessionId), messages, step, signal: AbortSignal.timeout(60_000) }, async () => 'next')
   const held = () => {
     let release
     hold = { promise: new Promise(resolve => { release = resolve }) }
@@ -72,7 +94,7 @@ async function start(team = TEAM) {
     await ctx.dispose()
     rmSync(root, { recursive: true, force: true, maxRetries: 5 })
   }
-  return { rt, ctx, home, folder, archived, held, saved, stop }
+  return { rt, ctx, home, folder, archived, held, saved, preStep, agentOf, stop }
 }
 
 test('a Bot deleted while its group is made stays out of it, and so does the admin role it was given', async (t) => {
@@ -147,4 +169,18 @@ test('a team saved with a deleted Bot in a group, even as its admin, loads witho
   t.after(stop)
   assert.deepEqual([rt.state.rooms.r1.members, rt.state.rooms.r1.admin], [['a', 'b'], null])
   assert.deepEqual([saved().rooms.r1.members, saved().rooms.r1.admin], [['a', 'b'], null])
+})
+
+test('input for an earlier part stays in its inbox when the hand-off fails', async (t) => {
+  const team = JSON.parse(JSON.stringify(TEAM))
+  team.bots.b.sessionId = 'b-new'
+  team.bots.b.segments = [{ sessionId: 'b-old' }]
+  const { ctx, saved, preStep, agentOf, stop } = await start(team)
+  t.after(stop)
+  ctx.sessions.flush = async () => { throw new Error('disk full') }
+  const message = { id: 'm1', role: 'user', content: [{ type: 'text', text: 'Keep this input' }], source: { kind: 'user' } }
+
+  assert.deepEqual(await preStep('b-old', [message]), { kind: 'reject' })
+  assert.deepEqual(agentOf('b-old').inbox.nextTurn.map(item => item.content[0].text), ['Keep this input'])
+  assert.deepEqual(saved().switching, { 'b-old': { botId: 'b' } })
 })

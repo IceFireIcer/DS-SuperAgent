@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createInterface } from 'node:readline'
 import { createConnection, createServer } from 'node:net'
@@ -29,10 +29,37 @@ const freePort = async () => {
   await closeServer(server)
   return port
 }
+const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
+const isRunning = child => Boolean(child) && child.exitCode === null && child.signalCode === null
+const isPidAlive = pid => {
+  if (!Number.isInteger(pid) || pid <= 0) return false
+  try { process.kill(pid, 0); return true } catch { return false }
+}
+
+async function waitForExit(child, timeoutMs = 5000) {
+  if (!isRunning(child)) return true
+  await Promise.race([
+    new Promise(resolve => child.once('exit', resolve)),
+    sleep(timeoutMs),
+  ])
+  return !isRunning(child)
+}
+
+function killPidTree(pid) {
+  if (!isPidAlive(pid)) return
+  if (process.platform === 'win32') {
+    const result = spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' })
+    if (!result.error && result.status === 0) return
+  } else {
+    try { process.kill(-pid, 'SIGKILL'); return } catch { /* Fall back to the individual process. */ }
+  }
+  try { process.kill(pid, 'SIGKILL') } catch { /* The process already exited. */ }
+}
 
 const stopOld = port => new Promise((resolve, reject) => {
   const socket = createConnection({ host: '127.0.0.1', port })
   socket.setEncoding('utf8')
+  socket.setTimeout(5000, () => { socket.destroy(); reject(new Error('legacy admin stop timed out')) })
   socket.on('error', reject)
   socket.on('data', chunk => { if (chunk.includes('"stopped"')) { socket.destroy(); resolve(undefined) } })
   socket.on('connect', () => socket.write(`${JSON.stringify({ command: 'stop' })}\n`))
@@ -40,6 +67,40 @@ const stopOld = port => new Promise((resolve, reject) => {
 
 test('a real reverse child exits after stopping the new entry; a newer Host resumes the same reverse and reopens the old launcher without replay', { timeout: 60000 }, async t => {
   const root = mkdtempSync(join(tmpdir(), 'ds-superagent-reversal-process-'))
+  let adminPort
+  let old
+  let oldReceiverPid
+  let crashChild
+  let storage
+  const readers = []
+  t.after(async () => {
+    const errors = []
+    if (old && isRunning(old) && adminPort && isPidAlive(oldReceiverPid)) {
+      try {
+        await stopOld(adminPort)
+      } catch (error) {
+        if (isPidAlive(oldReceiverPid)) errors.push(error)
+      }
+      await waitForExit(old, 5000)
+    }
+    for (const processTree of [old, crashChild]) {
+      if (!processTree || !isRunning(processTree)) continue
+      killPidTree(processTree.pid)
+      try { processTree.kill('SIGKILL') } catch { /* The process already exited. */ }
+      if (!await waitForExit(processTree, 2000)) errors.push(new Error(`process ${processTree.pid} did not exit`))
+    }
+    if (isPidAlive(oldReceiverPid)) {
+      try { process.kill(oldReceiverPid, 'SIGKILL') } catch (error) { if (error.code !== 'ESRCH') errors.push(error) }
+    }
+    for (const reader of readers) reader.close()
+    try { await storage?.close() } catch (error) { errors.push(error) }
+    try {
+      rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+    } catch (error) {
+      errors.push(error)
+    }
+    if (errors.length) throw new AggregateError(errors, 'reversal process cleanup failed')
+  })
   const legacyHome = join(root, 'legacy')
   const target = join(root, 'archive')
   mkdirSync(join(legacyHome, 'bot'), { recursive: true })
@@ -51,7 +112,7 @@ test('a real reverse child exits after stopping the new entry; a newer Host resu
   await publishLegacyArchive(target, 'batch-1')
 
   const intakePort = await freePort()
-  const adminPort = await freePort()
+  adminPort = await freePort()
   const statusFile = join(root, 'old-status.json')
   const receiptsFile = join(root, 'old-receipts.json')
   const legacyEntry = join(root, 'legacy-entry.mjs')
@@ -61,20 +122,20 @@ test('a real reverse child exits after stopping the new entry; a newer Host resu
   writeFileSync(legacyEntry, readFileSync(entryFixture, 'utf8'))
   const oldConfig = { home: legacyHome, intake: { host: '127.0.0.1', port: intakePort }, admin: { host: '127.0.0.1', port: adminPort },
     statusFile, receiptsFile, activeTurns: ['turn-1'], activeJobs: [], pendingOutbound: ['out-1'], receiver: receiverFixture }
-  let old = spawn(process.execPath, [legacyEntry, JSON.stringify(oldConfig)], { stdio: ['ignore', 'pipe', 'pipe'] })
-  let oldExited = new Promise(resolve => old.once('exit', (code, signal) => resolve({ code, signal })))
-  const storage = await SqliteStorage.open(databasePath)
-  t.after(async () => {
-    if (old.exitCode === null && old.signalCode === null) old.kill('SIGKILL')
-    await storage.close()
-    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+  old = spawn(process.execPath, [legacyEntry, JSON.stringify(oldConfig)], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: process.platform !== 'win32',
   })
+  let oldExited = new Promise(resolve => old.once('exit', (code, signal) => resolve({ code, signal })))
+  storage = await SqliteStorage.open(databasePath)
   const oldLines = createInterface({ input: old.stdout })
+  readers.push(oldLines)
   const ready = await new Promise((resolve, reject) => {
     oldLines.once('line', line => resolve(JSON.parse(line)))
     old.once('exit', code => reject(new Error(`old receiver exited early: ${code}`)))
   })
   assert.equal(ready.ready, true)
+  oldReceiverPid = ready.pid
 
   const host = new HostLease(storage, 'private', { hostId: 'reverse-parent', leaseMs: 600_000 })
   const lease = await host.acquire()
@@ -99,6 +160,7 @@ test('a real reverse child exits after stopping the new entry; a newer Host resu
   writeFileSync(statusFile, JSON.stringify(oldFacts))
   await switchover.recheck('batch-1', { legacy: recovery, settleMs: 50 })
   await oldExited
+  oldReceiverPid = undefined
   const activation = new Activation(storage, 'private', switchover)
   const active = await activation.activate({ batchId: 'batch-1', commandId: 'activate-process', newEpoch: lease.epoch, legacy: recovery, settleMs: 50,
     release: { release: async (input, context) => {
@@ -108,9 +170,12 @@ test('a real reverse child exits after stopping the new entry; a newer Host resu
   assert.equal(active.release.released, 1)
   await host.release()
 
-  const child = spawn(process.execPath, [reversalFixture, JSON.stringify({ databasePath, batchId: 'batch-1', commandId: 'reverse-process',
-    marker, legacyEntry, leaseMs: 500 })], { stdio: ['ignore', 'pipe', 'pipe'] })
-  const childExit = await new Promise(resolve => child.once('exit', (code, signal) => resolve({ code, signal })))
+  crashChild = spawn(process.execPath, [reversalFixture, JSON.stringify({ databasePath, batchId: 'batch-1', commandId: 'reverse-process',
+    marker, legacyEntry, leaseMs: 500 })], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: process.platform !== 'win32',
+  })
+  const childExit = await new Promise(resolve => crashChild.once('exit', (code, signal) => resolve({ code, signal })))
   assert.equal(childExit.code, 0)
   await new Promise(resolve => setTimeout(resolve, 700))
   const next = await new HostLease(storage, 'private', { hostId: 'reverse-parent-next', leaseMs: 600_000 }).acquire()
@@ -132,14 +197,20 @@ test('a real reverse child exits after stopping the new entry; a newer Host resu
   assert.equal(readFileSync(join(legacyHome, 'bot', 'state.json'), 'utf8'), state)
   assert.equal(readFileSync(receiptsFile, 'utf8').trim(), '[]')
 
-  old = spawn(process.execPath, [legacyEntry, JSON.stringify(oldConfig)], { stdio: ['ignore', 'pipe', 'pipe'] })
+  old = spawn(process.execPath, [legacyEntry, JSON.stringify(oldConfig)], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: process.platform !== 'win32',
+  })
   oldExited = new Promise(resolve => old.once('exit', (code, signal) => resolve({ code, signal })))
   const reopenedLines = createInterface({ input: old.stdout })
+  readers.push(reopenedLines)
   const reopened = await new Promise((resolve, reject) => {
     reopenedLines.once('line', line => resolve(JSON.parse(line)))
     old.once('exit', code => reject(new Error(`old receiver failed to reopen: ${code}`)))
   })
   assert.equal(reopened.ready, true)
+  oldReceiverPid = reopened.pid
   await stopOld(adminPort)
   await oldExited
+  oldReceiverPid = undefined
 })

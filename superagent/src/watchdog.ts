@@ -246,7 +246,7 @@ export class Watchdog {
     const state = await this.storage.transaction(this.instanceId, transaction => this.readState(transaction))
     const probe = await this.probe()
     const restarts = state.restarts.filter(time => time > at - this.restartWindowMs)
-    const budget: WatchdogBudget = { used: restarts.length, max: this.maxRestarts, windowMs: this.restartWindowMs }
+    let budget: WatchdogBudget = { used: restarts.length, max: this.maxRestarts, windowMs: this.restartWindowMs }
     const finding = this.classify(probe, budget)
     const inspection: WatchdogInspection = {
       id: randomUUID(), instanceId: this.instanceId, at, version: this.version, kind: finding.kind,
@@ -265,10 +265,20 @@ export class Watchdog {
       inspection.fingerprint = fingerprintOf('budget-exhausted', probe, String(budget.max))
       inspection.result = await this.deliver(inspection, state)
     } else if (finding.kind === 'service-failure') {
-      const restart = await this.restart(probe, budget, restarts, at)
-      Object.assign(inspection, restart.inspection)
-      state.restarts = restarts
-      if (inspection.result === 'notified') inspection.result = await this.deliver(inspection, state)
+      const reservation = await this.reserveRestart(at)
+      budget = reservation.budget
+      inspection.budget = budget
+      if (!reservation.reserved) {
+        inspection.kind = 'budget-exhausted'
+        inspection.action = 'none'
+        inspection.detail = messageOf('budget-exhausted', probe)
+        inspection.fingerprint = fingerprintOf('budget-exhausted', probe, String(budget.max))
+        inspection.result = await this.deliver(inspection, state)
+      } else {
+        const restart = await this.restart(probe)
+        Object.assign(inspection, restart.inspection)
+        if (inspection.result === 'notified') inspection.result = await this.deliver(inspection, state)
+      }
     }
     if (finding.kind !== 'service-failure' && finding.notify) {
       const delivered = await this.deliver(inspection, state)
@@ -311,10 +321,20 @@ export class Watchdog {
     return { kind: 'healthy', action: 'none', result: 'silent', notify: false }
   }
 
-  private async restart(probe: WatchdogProbe, budget: WatchdogBudget, restarts: number[], at: number): Promise<{ inspection: Partial<WatchdogInspection> }> {
-    // An attempt spends budget even when the graceful stop does not finish: it is an action.
-    restarts.push(at)
-    budget.used = restarts.length
+  /** Spend one restart in the same transaction that reads the budget, before the Host is touched. */
+  private async reserveRestart(at: number): Promise<{ reserved: boolean; budget: WatchdogBudget }> {
+    return this.storage.transaction(this.instanceId, async transaction => {
+      const state = await this.readState(transaction)
+      const restarts = state.restarts.filter(time => time > at - this.restartWindowMs)
+      const budget: WatchdogBudget = { used: restarts.length, max: this.maxRestarts, windowMs: this.restartWindowMs }
+      if (restarts.length >= this.maxRestarts) return { reserved: false, budget }
+      restarts.push(at)
+      await this.saveState(transaction, { ...state, restarts })
+      return { reserved: true, budget: { ...budget, used: restarts.length } }
+    })
+  }
+
+  private async restart(probe: WatchdogProbe): Promise<{ inspection: Partial<WatchdogInspection> }> {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), this.graceMs + 1_000)
     let stopped: 'stopped' | 'timeout' = 'timeout'
@@ -388,12 +408,18 @@ export class Watchdog {
   }
 
   private async writeState(transaction: AsyncTx, state: WatchdogState, inspection: WatchdogInspection, clearsNotificationDedupe: boolean): Promise<void> {
+    const current = await this.readState(transaction)
+    const notifiedFingerprint = clearsNotificationDedupe ? undefined : state.notifiedFingerprint ?? current.notifiedFingerprint
     const next: WatchdogState = {
       instanceId: this.instanceId, version: this.version, last: inspection,
-      restarts: state.restarts.filter(time => time > inspection.at - this.restartWindowMs),
-      ...(clearsNotificationDedupe || state.notifiedFingerprint === undefined ? {} : { notifiedFingerprint: state.notifiedFingerprint }),
-      history: [inspection, ...state.history.filter(item => item.id !== inspection.id)].slice(0, this.historyLimit),
+      restarts: current.restarts.filter(time => time > inspection.at - this.restartWindowMs),
+      ...(notifiedFingerprint === undefined ? {} : { notifiedFingerprint }),
+      history: [inspection, ...current.history.filter(item => item.id !== inspection.id)].slice(0, this.historyLimit),
     }
-    if (!await transaction.replace('watchdog-state', stateKey(this.instanceId), next)) await transaction.insert('watchdog-state', stateKey(this.instanceId), next)
+    await this.saveState(transaction, next)
+  }
+
+  private async saveState(transaction: AsyncTx, state: WatchdogState): Promise<void> {
+    if (!await transaction.replace('watchdog-state', stateKey(this.instanceId), state)) await transaction.insert('watchdog-state', stateKey(this.instanceId), state)
   }
 }

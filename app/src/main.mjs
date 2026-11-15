@@ -17,7 +17,7 @@ import { applyCookies, CookieImports } from './cookie-import.mjs'
 import { parseCookieFile } from './cookie-parse.mjs'
 import { downloadSaver } from './downloads.mjs'
 import { canonicalExecPath } from './canonical-path.mjs'
-import { chooseLocations, localeText, programFolder, saveLocations, text } from './first-run.mjs'
+import { chooseLocations, localeText, placeProblem, programFolder, saveLocations, text } from './first-run.mjs'
 import { configureIdentity } from './legacy.mjs'
 import { hostPort } from './host-port.mjs'
 import { assertHostLockFree, hostLockPath, releaseHostLock, writeHostLock } from './host-lock.mjs'
@@ -174,20 +174,33 @@ if (canonical !== undefined) {
     if (stopped || host === undefined) return
     event.preventDefault()
     // The Host is already stopping: the quit follows it.
-    if (stopping) { void (hostStop ?? Promise.resolve()).then(() => { app.quit() }); return }
-    void stopHost().then(() => { app.quit() })
+    const leave = () => { stopped = true; app.quit() }
+    if (stopping) { void (hostStop ?? Promise.resolve()).then(() => { app.quit() }, leave); return }
+    void stopHost().then(() => { app.quit() }, leave)
   })
   app.whenReady().then(async () => { shell.install(); await start() }).catch(fail)
 }
 
 function stopHost() {
   stopping = true
-  hostStop ??= Promise.resolve().then(() => host?.stop()).catch((error) => { console.error(error) }).finally(() => {
+  hostStop ??= Promise.resolve().then(() => host?.stop()).then(() => {
     stopped = true
+    hostState = HOST_STATE.stopped
     releaseHostLock(hostLock, hostLockPid)
     hostLockPid = undefined
+  }, (error) => {
+    console.error(error)
+    // A Host that did not confirm its exit still owns the data: its lock stays, and nothing
+    // may start on or replace that data.
+    if (error?.code !== 'STOP_UNKNOWN') {
+      stopped = true
+      releaseHostLock(hostLock, hostLockPid)
+      hostLockPid = undefined
+    } else {
+      hostState = HOST_STATE.failed
+    }
+    throw error
   })
-  hostState = HOST_STATE.stopped
   shell.refresh()
   return hostStop
 }
@@ -241,6 +254,12 @@ async function start() {
   const location = profile === SUPERAGENT_PROFILE ? { ...where, import: undefined } : where
   const hostHome = profileHome(location.dataDir, profile)
   const workspace = profile === SUPERAGENT_PROFILE ? join(hostHome, 'workspace') : location.workspace
+  // A link can be made after the first run's check: the folders the Host will write to are
+  // checked again, as the file system has them, before anything starts.
+  for (const path of new Set([hostHome, workspace].filter(Boolean))) {
+    const problem = placeProblem(text(), path)
+    if (problem !== undefined) throw new Error(problem)
+  }
   places = { dataDir: location.dataDir, workspace }
   const port = await hostPort(join(app.getPath('userData'), 'host-port.json'))
   hostPortNumber = port
@@ -449,22 +468,39 @@ async function copyTeam(where, newHost, newCheck, signal) {
     return undefined
   }
   const warm = newHost()
-  host = warm
-  const stopWarm = () => { void warm.stop() }
+  const stopWarm = () => {
+    void warm.stop().then(() => {
+      if (host === warm) host = undefined
+      releaseHostLock(hostLock, hostLockPid)
+      hostLockPid = undefined
+    }).catch((error) => { console.error(error) })
+  }
   signal.addEventListener('abort', stopWarm, { once: true })
   try {
-    await warm.start()
+    await launchHost(warm)
     if (signal.aborted) return 'stopped'
     mainWindow?.setProgressBar(2)
     await warm.stop()
     host = undefined
+    // No Host runs during the copy, but a second app must not start one on this data while
+    // the import writes it. The shell holds the same lock until launchHost writes the new pid.
+    hostLockPid = process.pid
+    writeHostLock(hostLock, { pid: hostLockPid, port: hostPortNumber })
     const summary = await importTeam({ ...where.import, to: where.dataDir, workspace: where.workspace, dsh: getDshRuntimeVersion(), signal })
     console.log(`DS Bot: copied ${String(summary.bots)} Bots and ${String(summary.sessions)} Sessions from ${summary.from}`)
   } catch (error) {
-    if (signal.aborted) return 'stopped'
+    if (signal.aborted) {
+      releaseHostLock(hostLock, hostLockPid)
+      hostLockPid = undefined
+      return 'stopped'
+    }
     console.error(error)
     await dialog.showMessageBox({ type: 'warning', title: 'DS Bot', message: text().failed(error instanceof Error ? error.message : String(error)), signal })
-    if (signal.aborted) return 'stopped'
+    if (signal.aborted) {
+      releaseHostLock(hostLock, hostLockPid)
+      hostLockPid = undefined
+      return 'stopped'
+    }
   } finally {
     signal.removeEventListener('abort', stopWarm)
     mainWindow?.setProgressBar(-1)
@@ -535,7 +571,12 @@ async function moveData(workspace) {
   copying = (async () => {
     // The settings go away first, so that nothing moves the team workspace from here on.
     void mainWindow?.loadURL(notePage(t.moving)).catch(() => {})
-    await stopHost()
+    try {
+      await stopHost()
+    } catch (error) {
+      await dialog.showMessageBox({ type: 'warning', title: 'DS Bot', message: t.moveFailed(error instanceof Error ? error.message : String(error)) })
+      return
+    }
     // The app may have heard of a team workspace change while the Host stopped.
     if (await refused()) {
       app.relaunch()
@@ -867,7 +908,16 @@ async function resumeHost() {
 async function relaunchHost(cause) {
   if (stopping || hostFactory === undefined) return
   if (cause !== undefined) console.warn(`DS Bot: replacing the Host: ${cause instanceof Error ? cause.message : String(cause)}`)
-  await host?.stop().catch((error) => { console.error(error) })
+  let confirmed = true
+  await host?.stop().catch((error) => {
+    console.error(error)
+    if (error?.code === 'STOP_UNKNOWN') confirmed = false
+  })
+  if (!confirmed) {
+    hostState = HOST_STATE.failed
+    shell.refresh()
+    return
+  }
   releaseHostLock(hostLock, hostLockPid)
   hostLockPid = undefined
   host = undefined

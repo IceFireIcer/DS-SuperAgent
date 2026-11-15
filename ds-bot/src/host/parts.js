@@ -1,8 +1,9 @@
 // Parts: making room in a long conversation (a checkpoint in place, or a switch to a
 // fresh Session), the handoff note and package, and earlier pages for the chat view.
 //
-// A Bot's conversations are long-lived, and the compaction backend's own pressure
-// line does not apply to them. Once a turn ends with the context past the check line
+// A Bot's conversations are long-lived. DSH exposes no per-Session way to turn off the
+// compaction backend's own pressure line, so DS Bot cannot patch it; it only drives its
+// own check line below. Once a turn ends with the context past the check line
 // (a share of what the model can take), the context steward (steward.js) reads the
 // latest messages and decides. Work still under way: the older messages are condensed
 // in place into a checkpoint that keeps the messages to the Bot word for word, and
@@ -19,7 +20,7 @@ import { BlockAssembler, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { openTurnAt } from './btw.js'
 import { HANDOFF_ACK, HISTORY_TIMEOUT_MS, REPLY_KIND, SOURCE_KIND } from './constants.js'
 import { parseReplies, stackReplies } from '../shared/group-replies.js'
-import { CHECKPOINT_PROMPT, STEWARD_SYSTEM, checkpointCount, checkpointTail, checkpointTailNote, checkpointText, linesFor, parseDecision, stewardRequest } from './steward.js'
+import { STEWARD_SYSTEM, checkpointCount, linesFor, parseDecision, stewardRequest } from './steward.js'
 import { RESUME_DELAY_MS } from './resume.js'
 import { clip, createClock, escapeRegExp, estimateTokens, splitRef, textOf } from './text.js'
 import { checkShownView, normalizeView, readViewReply, viewCardText, viewReply, viewReplyText } from 'deep-view/core'
@@ -183,7 +184,6 @@ export function install(rt) {
   const OVERFLOW = 'CONTEXT_WINDOW_EXCEEDED'
   // Generic request and credential errors say nothing about the conversation.
   const STUCK_CODES = ['IMAGE_OFFLOAD_REQUIRED']
-  const ORIGINAL_COMPACT = Symbol.for('ds-bot/compaction')
   const STEWARD_MAX_TOKENS = 4_096
   const STEWARD_TIMEOUT_MS = 120_000
   const STEWARD_LINES = 40
@@ -253,70 +253,11 @@ export function install(rt) {
     return linesFor({ window: info.context?.contextWindow, reserve: route.maxTokens ?? info.defaultMaxTokens, checkRatio: config.checkRatio })
   }
 
-  // The backend's own entry points leave Bot Sessions alone, earlier parts and group
-  // records included: automatic pressure and overflow compaction do nothing, and
-  // /compact and explicit ranges are refused. Only DS Bot condenses a Bot Session,
-  // when the steward says so, and then the summary is DS Bot's checkpoint. Each preset
-  // mount has its own compaction backend. Every other Session, subagents included, is
-  // as it was.
-  const adoptedEngines = new Set()
-  // Sessions DS Bot itself is condensing right now.
-  const condensing = new Set()
-  const refuseCompaction = () => Promise.reject(new Error(
-    'A Bot conversation makes room on its own, and read_own_chat searches all of it.'))
-  const isBotTarget = (target) => {
-    const id = target?.session?.id
-    return id !== undefined && (rt.selfOf(id) !== undefined || rt.roomOf(id) !== undefined)
-  }
-  const ownedByBot = target => isBotTarget(target) && !condensing.has(target.session.id)
   // The engine that serves this agent, when DS Bot can condense through it.
-  const engineOf = agent => [ctx.get('agentPresets')?.serviceFor(agent, 'compaction'), ctx.get('compaction')]
-    .find(engine => typeof engine?.[ORIGINAL_COMPACT]?.summarize === 'function')
-  // The wrapper decides per call, so it can go on before the Session is a Bot's.
-  function adoptCompaction(agent) {
-    adoptEngine(ctx.get('agentPresets')?.serviceFor(agent, 'compaction'))
-    adoptEngine(ctx.get('compaction'))
-  }
-  function adoptEngine(engine) {
-    // The mark lives on the engine itself, so two lookups of one engine adopt it once.
-    if (engine === undefined || engine[ORIGINAL_COMPACT] !== undefined || typeof engine.compactIfNeeded !== 'function') return
-    const original = engine[ORIGINAL_COMPACT] = {
-      compactIfNeeded: engine.compactIfNeeded,
-      compactNow: engine.compactNow,
-      compactRegion: engine.compactRegion,
-      // compaction-basic's one customization hook; it runs for every summary.
-      ...(typeof engine.summarize === 'function' ? { summarize: engine.summarize } : {}),
-    }
-    engine.compactIfNeeded = function compactOutsideBots(target, trigger, signal) {
-      if (ownedByBot(target)) return Promise.resolve(null)
-      return original.compactIfNeeded.call(this, target, trigger, signal)
-    }
-    engine.compactNow = function compactNowOutsideBots(target, signal, commandId) {
-      if (ownedByBot(target)) return refuseCompaction()
-      return original.compactNow.call(this, target, signal, commandId)
-    }
-    engine.compactRegion = function compactRegionOutsideBots(start, end, target, signal) {
-      if (ownedByBot(target)) return refuseCompaction()
-      return original.compactRegion.call(this, start, end, target, signal)
-    }
-    if (original.summarize !== undefined) {
-      engine.summarize = function summarizeForBots(input, agent, signal) {
-        if (isBotTarget(agent)) return writeCheckpoint(input, agent, signal)
-        return original.summarize.call(this, input, agent, signal)
-      }
-    }
-    adoptedEngines.add(engine)
-  }
-  ctx.effect(() => () => {
-    for (const engine of adoptedEngines) {
-      for (const [key, method] of Object.entries(engine[ORIGINAL_COMPACT] ?? {})) {
-        delete engine[key]
-        if (engine[key] !== method) engine[key] = method
-      }
-      delete engine[ORIGINAL_COMPACT]
-    }
-    adoptedEngines.clear()
-  }, 'ds-bot: Bot compaction')
+  const engineOf = agent => ctx.get('agentPresets')?.serviceFor(agent, 'compaction') ?? ctx.get('compaction')
+  // DSH has no public per-Session compaction policy: automatic pressure, /compact and
+  // overflow all use the Agent preset's backend. Never replace its methods (Hard rule 1).
+  function adoptCompaction() {}
   ctx.on('agent/created', ({ agent }) => { adoptCompaction(agent) })
 
   // A Bot's own chat, or its Session in one group, or the group's own Session
@@ -487,78 +428,6 @@ export function install(rt) {
     throw new Error(`no usable note in ${NOTE_ATTEMPTS} attempts; the last one: ${problem}`)
   }
 
-  // The messages to the Bot in this part, newest kept first within the budget, as a
-  // checkpoint carries them. Read from the saved record, so messages an earlier
-  // checkpoint condensed are there too.
-  async function keptMessages(sessionId, { budget, group, number }) {
-    const kept = []
-    let used = 0
-    let more = false
-    for await (const line of partLines(sessionId, AbortSignal.timeout(HANDOFF_READ_MS), { group, pages: Infinity })) {
-      if (line.who === 'you') continue
-      const text = `${group ? `[${clock(line.time)}]` : `[part ${number} #${line.seq} · ${clock(line.time)}]`} ${clip(line.text, RECENT_LINE_MAX, 'read_own_chat shows all of it')}`
-      const cost = estimateTokens(text)
-      if (kept.length > 0 && used + cost > budget) {
-        more = true
-        break
-      }
-      kept.push(text)
-      used += cost
-    }
-    return { kept: kept.reverse(), more }
-  }
-
-  // DS Bot's summary for a Bot Session, in place of the backend's. Like the backend's
-  // own, it is one request on the conversation's own prefix, so the provider serves
-  // that from cache.
-  async function writeCheckpoint(input, agent, signal) {
-    const session = agent.session
-    const route = session.requestHeader()?.config
-    if (!route?.provider || !route?.model) throw new Error('the Session has not called a model yet')
-    // The results list grows with the work, so the checkpoint may write as much as one
-    // of the Bot's own replies.
-    const maxTokens = route.maxTokens
-    const head = input.messages
-    const tail = checkpointTail(head, session.deriveMessages())
-    const prompt = tail.length === 0 ? CHECKPOINT_PROMPT : `${CHECKPOINT_PROMPT}\n\n${checkpointTailNote(tail)}`
-    const assembler = new BlockAssembler()
-    for await (const chunk of ctx.llm.stream({
-      provider: route.provider,
-      model: route.model,
-      ...(route.reasoningEffort ? { reasoningEffort: route.reasoningEffort } : {}),
-      messages: [...head, ...tail, { role: 'user', content: [{ type: 'text', text: prompt }] }],
-      toolHistory: session.toolHistory(),
-      ...(input.tools ? { tools: [...input.tools] } : {}),
-      ...(maxTokens !== undefined ? { maxTokens } : {}),
-      sessionId: session.id,
-      purpose: 'compaction',
-      signal,
-    })) assembler.push(chunk)
-    const finish = assembler.finish
-    if (finish.kind === 'error' || finish.kind === 'aborted') throw new Error(finish.failure?.message ?? finish.kind)
-    if (finish.kind === 'max-tokens') throw new Error('the checkpoint was cut off at the output limit')
-    const rawOutput = assembler.blocks()
-    const summary = rawOutput.filter(block => block.type === 'text').map(block => block.text).join('\n').trim()
-    if (summary === '') throw new Error('the checkpoint was empty')
-    const place = placeOf(session.id)
-    const lines = await contextLines(session).catch(() => undefined)
-    const { kept, more } = await keptMessages(session.id, {
-      budget: Math.min(RECENT_TOKENS, Math.floor((lines?.check ?? 4 * RECENT_TOKENS) / 4)),
-      group: place?.roomId !== undefined,
-      number: place === undefined ? 1 : partsOf(place.botId, place.roomId).length,
-    })
-    const text = checkpointText({ number: checkpointCount(input.messages) + 1, summary, kept, more })
-    return {
-      summary: [{ type: 'text', text }],
-      rawOutput,
-      llmStreamCall: true,
-      provider: route.provider,
-      model: route.model,
-      ...(maxTokens !== undefined ? { maxTokens } : {}),
-      ...(assembler.usage === undefined ? {} : { usage: assembler.usage }),
-    }
-  }
-
   // The steward's call: the latest messages of this part, and nothing of the Bot's
   // own prefix, so it stays small. Undefined when its answer names no action.
   async function askSteward(agent, { midTurn }) {
@@ -614,10 +483,7 @@ export function install(rt) {
     const engine = engineOf(agent)
     const before = tokensOf(agent.session)
     const sessionId = agent.session.id
-    condensing.add(sessionId)
     try {
-      // Through the service itself, past DS Bot's own wrapper: only a call on the
-      // service gives the engine its own context, with the services it injects.
       const result = inTurn
         ? await engine.compactIfNeeded(agent, 'context-overflow', signal)
         : await engine.compactNow(agent, AbortSignal.timeout(NOTE_TIMEOUT_MS))
@@ -626,8 +492,6 @@ export function install(rt) {
       if (!inTurn && (error?.code === 'busy' || error?.code === 'cancelled')) return undefined
       rt.warn('ds-bot: condensing %s failed: %s', agent.id, error)
       return false
-    } finally {
-      condensing.delete(sessionId)
     }
     // The prefix cache starts over anyway, so the memory section catches up.
     rt.renewMemory(sessionId)
@@ -1081,8 +945,23 @@ export function install(rt) {
     const { agent } = payload
     const past = rt.pastOwners.get(agent.id)
     if (past !== undefined && !rt.isBotSession(agent.id)) {
-      await forward(past, payload.messages).catch(error => rt.warn('ds-bot: input for %s was not handed on: %s', agent.id, error))
-      return takeOverStep(agent, payload)
+      try {
+        await forward(past, payload.messages)
+        if (state.switching[agent.id] !== undefined) {
+          delete state.switching[agent.id]
+          await rt.save().catch(error => rt.warn('ds-bot: the switch of %s was not cleared: %s', agent.id, error))
+        }
+        return takeOverStep(agent, payload)
+      } catch (error) {
+        // The step took these messages out of the inbox, so put them back before
+        // failing it: the next wake (or the restart pass) tries the hand-off again.
+        try { restore(agent, payload.messages) } catch {}
+        state.switching[agent.id] = past.roomId === undefined ? { botId: past.botId } : { botId: past.botId, roomId: past.roomId }
+        await rt.save().catch(saveError => rt.warn('ds-bot: the switch of %s was not saved: %s', agent.id, saveError))
+        if (unloaded(error)) noteInfo('ds-bot: plugin unloaded while %s handed input on; input kept in part %s', agent.id, agent.id)
+        else rt.warn('ds-bot: input for %s was not handed on: %s', agent.id, error)
+        return { kind: 'reject' }
+      }
     }
     const place = placeOf(agent.id)
     if (place === undefined) return next()

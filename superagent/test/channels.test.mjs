@@ -57,6 +57,19 @@ test('GitHub source derives a canonical sequence from composite API cursors and 
   assert.equal(replay.processed, 0)
 })
 
+test('GitHub source compares numeric cursors numerically across digit changes and never rewinds', async t => {
+  const { source } = await githubFixture(t)
+  const event = (deliveryId, cursor, overrides = {}) => ({ deliveryId, cursor, repo: 'acme/repo', kind: 'issue', action: 'created', number: 1,
+    id: 'issue-1', authorId: 'alice', title: 'Fix the bug', body: `Details for ${deliveryId}.`, updatedAt: '2026-01-01T00:00:00Z', ...overrides })
+  await source.receive(event('nine', '9'))
+  assert.equal(await source.cursor(), '9')
+  const next = await source.poll([event('ten', '10', { action: 'edited' })])
+  assert.equal(next.processed, 1)
+  assert.equal(await source.cursor(), '10')
+  await source.receive(event('late', '8', { action: 'edited' }))
+  assert.equal(await source.cursor(), '10')
+})
+
 test('GitHub source keeps draft and edited native facts in the recorded text', async t => {
   const { engine, source } = await githubFixture(t)
   await source.receive({ deliveryId: 'draft-1', cursor: '2026-01-01T00:00:00Z#pr#000000000002', repo: 'acme/repo', kind: 'pull_request',

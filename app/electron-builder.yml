@@ -27,7 +27,8 @@ extraResources:
 # node-pty, sharp and koffi ship prebuilt binaries for each platform. A rebuild would compile
 # node-pty from source and needs a C++ toolchain.
 npmRebuild: false
-# So the binaries come from npm as it installed them; a build for another architecture stops.
+# So the binaries come from npm as it installed them; a build for another operating system or
+# architecture stops.
 beforePack: ./scripts/before-pack.mjs
 win:
   target:

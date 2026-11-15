@@ -211,11 +211,16 @@ test('an activation commit with a lost response is reconciled on the original co
     receipts: [{ commandId: 'held-command', eventId: 'held-object', state: 'not-accepted', cursor: '2' }],
   }))
   await switchover.recheck('batch-1', { legacy, settleMs: 5 })
-  let loseReply = true
+  let transactions = 0
+  let lostActivationCommit = false
   const uncertain = {
     transaction: async (instanceId, operation) => {
       const result = await storage.transaction(instanceId, operation)
-      if (loseReply) { loseReply = false; throw new CoreError('COMMIT_UNKNOWN', 'Activation response lost.') }
+      transactions++
+      if (transactions === 2 && !lostActivationCommit) {
+        lostActivationCommit = true
+        throw new CoreError('COMMIT_UNKNOWN', 'Activation response lost.')
+      }
       return result
     },
     reconnect: () => storage.reconnect(),
@@ -234,7 +239,58 @@ test('an activation commit with a lost response is reconciled on the original co
   assert.equal(active.release.released, 1)
   const replay = await activation.activate({ batchId: 'batch-1', commandId: 'activate-unknown', newEpoch: lease.epoch, legacy, release, settleMs: 5 })
   assert.equal(replay.id, active.id)
+  assert.equal(lostActivationCommit, true)
   assert.equal((await engine.listTickets()).items.length, 1)
+})
+
+test('an active entry reattaches to a replacement Host epoch after a clean restart', async t => {
+  const { storage, engine, lease, switchover, legacy } = await fixture(t)
+  const activation = new Activation(storage, 'private', switchover)
+  engine.setActivationGate(activation.gate())
+  const release = { release: async () => ({}) }
+  const active = await activation.activate({ batchId: 'batch-1', commandId: 'activate-before-restart', newEpoch: lease.epoch, legacy, release, settleMs: 5 })
+  assert.equal(active.state, 'active')
+
+  await engine.shutdown()
+  const next = await engine.acquireHost()
+  assert.equal(next.epoch, lease.epoch + 1)
+  const reattached = await activation.activate({ batchId: 'batch-1', commandId: 'activate-after-restart', newEpoch: next.epoch, legacy, release, settleMs: 5 })
+  assert.equal(reattached.state, 'active')
+  assert.equal(reattached.epoch, next.epoch)
+  assert.equal(reattached.manifest.epoch, next.epoch)
+  assert.equal((await activation.reattach({ batchId: 'batch-1', newEpoch: next.epoch })).epoch, next.epoch)
+
+  const receipt = await engine.submit({ commandId: 'after-restart', eventId: 'after-restart', text: 'Use the new Host epoch.' })
+  assert.equal((await engine.getTicket(receipt.ticketId)).trigger.text, 'Use the new Host epoch.')
+})
+
+test('the activation gate follows acquireHost on a restart and ignores a missing activation', async t => {
+  // Startup before the first activation has no record to reattach; it must remain a no-op.
+  const absent = await fixture(t)
+  const absentActivation = new Activation(absent.storage, 'private', absent.switchover)
+  absent.engine.setActivationGate(absentActivation.gate())
+  await absent.engine.shutdown()
+  const absentEpoch = await absent.engine.acquireHost()
+  assert.equal(absentEpoch.epoch, absent.lease.epoch + 1)
+  assert.equal(await absentActivation.status(), undefined)
+  assert.equal(await absent.storage.transaction('private', tx => absentActivation.gate().active(tx)), false)
+
+  // A clean restart advances the Host epoch; acquireHost reattaches the active entry before new work is admitted.
+  const { storage, engine, lease, switchover, legacy } = await fixture(t)
+  const activation = new Activation(storage, 'private', switchover)
+  const gate = activation.gate()
+  engine.setActivationGate(gate)
+  await activation.activate({ batchId: 'batch-1', commandId: 'activate-before-auto-reattach', newEpoch: lease.epoch, legacy,
+    release: { release: async () => ({}) }, settleMs: 5 })
+  assert.equal(await storage.transaction('private', tx => gate.active(tx)), true)
+
+  await engine.shutdown()
+  const next = await engine.acquireHost()
+  assert.equal(next.epoch, lease.epoch + 1)
+  assert.equal(await storage.transaction('private', tx => gate.active(tx)), true)
+  const reattached = await activation.status()
+  assert.equal(reattached.epoch, next.epoch)
+  assert.equal(reattached.manifest.epoch, next.epoch)
 })
 
 test('activation leaves old review readable, starts a new Session and keeps a manual stop', { timeout: 20000 }, async t => {

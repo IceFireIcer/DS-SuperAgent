@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { test } from 'node:test'
@@ -41,6 +41,7 @@ async function start(seed) {
   const home = mkdtempSync(join(tmpdir(), 'ds-bot-messages-'))
   writeFileSync(join(home, 'state.json'), JSON.stringify(seed))
   const ctx = fakeContext()
+  const prompt = async () => {}
   const agents = new Map()
   const agentOf = (sessionId) => {
     if (!agents.has(sessionId)) {
@@ -85,6 +86,7 @@ async function start(seed) {
       resolveAgent: async sessionId => ({ agent: agentOf(sessionId) }),
       selectModel: async () => {},
       page: async () => ({ records: [], hasMore: false }),
+      prompt,
     },
     sessionTitle: { rename: async () => {} },
     sessions: { flush: async () => {}, messageProjections: [] },
@@ -117,7 +119,7 @@ async function start(seed) {
   }
   // Loading once fills the Session-owner indexes turns.js filters events by.
   await tool('list_bots', {}, 'a')
-  return { ctx, agents, agentOf, emit, fire, tool, call, exchanges, home, stop }
+  return { ctx, agents, agentOf, emit, fire, tool, call, exchanges, home, prompt, stop }
 }
 
 const textOf = content => content.map(block => block.text ?? '').join('\n')
@@ -1235,4 +1237,41 @@ test('without file storage a message past 20,000 characters is not sent', async 
   // 20,000 characters still go as they are.
   await tool('message_bot', { to: 'Writer', message: 'x'.repeat(20_000) }, 'a')
   assert.equal(agentOf('b').calls.length, 1)
+})
+
+// #424: the hidden reason is read at DS Bot's own prompt call, not by wrapping the
+// shared sessionController.
+test('a rejected prompt reaches the sender with its reason and the shared controller stays as it was', async (t) => {
+  const { ctx, call, prompt, stop } = await start(team())
+  t.after(stop)
+  assert.equal(ctx.sessionController.prompt, prompt)
+  const error = Object.assign(new Error('prompt rejected'), {
+    code: 'session/agent-busy',
+    isDSHRemoteError: true,
+    details: { reason: 'Error: Could not load the "sharp" module', rest: 1 },
+  })
+  const rejected = async () => { throw error }
+  ctx.sessionController.prompt = rejected
+  const result = await call('send', { sessionId: 'a', text: 'hello' })
+  assert.equal(result.ok, false)
+  assert.match(result.error.message, /prompt rejected — Error: Could not load the "sharp" module/)
+  const log = (await call('diagnostics-log', {})).value
+  assert.match(log, /sharp/)
+  // The reason can name a local path or carry a token; the sender and the log see
+  // what the diagnostics clean, not the raw reason.
+  const secret = Object.assign(new Error('prompt rejected'), {
+    code: 'session/attachment-invalid',
+    isDSHRemoteError: true,
+    details: { reason: `Cannot read ${join(homedir(), 'key.pem')} or https://hook.example/in?token=t0ken123` },
+  })
+  const secretRejected = async () => { throw secret }
+  ctx.sessionController.prompt = secretRejected
+  const refused = await call('send', { sessionId: 'a', text: 'hello' })
+  assert.ok(!refused.error.message.includes('t0ken123'), refused.error.message)
+  assert.ok(!refused.error.message.includes(homedir()), refused.error.message)
+  assert.match(refused.error.message, /token=\[hidden\]/)
+  assert.equal(secret.details.reason, `Cannot read ~${join(homedir(), 'key.pem').slice(homedir().length)} or https://hook.example/in?token=[hidden]`)
+  assert.ok(!(await call('diagnostics-log', {})).value.includes('t0ken123'))
+  await ctx.dispose()
+  assert.equal(ctx.sessionController.prompt, secretRejected)
 })

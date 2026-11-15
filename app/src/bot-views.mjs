@@ -129,6 +129,7 @@ export class BotViews {
     const contents = view.webContents
     const clients = this.#clients.get(botId) ?? []
     for (const client of clients) {
+      if (!client.active) continue
       if (client.discover) this.#send(client.socket, { method: 'Target.targetCreated', params: { targetInfo: this.#targetInfo(entry) } })
       if (client.autoAttach) client.attach(entry)
     }
@@ -305,6 +306,7 @@ export class BotViews {
   }
 
   async forget(botId) {
+    this.#revokeClients(botId)
     for (const entry of [...this.#views.values()]) if (entry.botId === botId) await this.close(botId, entry.tabId)
     for (const [token, id] of this.#tokens) if (id === botId) this.#tokens.delete(token)
     this.#downloadPaths.delete(botId)
@@ -500,16 +502,25 @@ export class BotViews {
   }
 
   #broadcast(botId, message) {
-    for (const client of this.#clients.get(botId) ?? []) this.#send(client.socket, message)
+    for (const client of this.#clients.get(botId) ?? []) if (client.active) this.#send(client.socket, message)
   }
 
   #send(socket, message) {
     if (socket.readyState === 1) socket.send(JSON.stringify(message))
   }
 
+  #revokeClients(botId) {
+    for (const client of this.#clients.get(botId) ?? []) {
+      client.active = false
+      client.sessions.clear()
+      client.socket.close()
+      client.socket.terminate()
+    }
+  }
+
   #connect(socket, botId) {
     const sessions = new Map()
-    const clientState = { socket, botId, autoAttach: false, discover: false, attach: undefined, sessions }
+    const clientState = { socket, botId, active: true, autoAttach: false, discover: false, attach: undefined, sessions }
     const clients = this.#clients.get(botId) ?? new Set()
     clients.add(clientState)
     this.#clients.set(botId, clients)
@@ -530,6 +541,7 @@ export class BotViews {
     let commandQueue = Promise.resolve()
     socket.on('message', raw => {
       commandQueue = commandQueue.then(async () => {
+        if (!clientState.active) return
         let request
         try { request = JSON.parse(raw.toString()) } catch { return }
         const { id, method, params = {}, sessionId } = request
@@ -615,7 +627,7 @@ export class BotViews {
       }
       sessions.clear()
       clients.delete(clientState)
-      if (clients.size === 0) this.#clients.delete(botId)
+      if (clients.size === 0 && this.#clients.get(botId) === clients) this.#clients.delete(botId)
     })
   }
 

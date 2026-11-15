@@ -136,3 +136,25 @@ test('a window without DSH settings asks for the missing API key in the first ch
   assert.equal(card.props.model.provider, 'official')
   assert.equal(nodes(tree, node => node.props.className === 'bt-model-chips').length, 0)
 })
+
+test('a chosen model that lost its key asks for the key again', () => {
+  const saved = []
+  const bot = { id: 'chief', name: 'Chief', model: 'official/flash' }
+  const tree = ModelChoiceDock({
+    sessionId: bot.id,
+    useRoster: select => select({ ready: true, byId: { chief: bot }, models: [...keyless, models[1]] }),
+    actions: { setProviderKey: (provider, value) => { saved.push([provider, value]) } },
+  })
+  assert.match(nodes(tree, node => node.props.className === 'bt-bubble')[0].children[0], /need a DeepSeek API key/)
+  const [card] = nodes(tree, node => node.props.model !== undefined)
+  assert.equal(card.props.model.provider, 'official')
+  assert.equal(nodes(tree, node => node.props.className === 'bt-model-chips').length, 0)
+  assert.deepEqual(saved, [])
+})
+
+test('without a key card, a chosen keyless model still offers the way to set one', () => {
+  const { tree } = dock([...keyless, models[1]], { model: 'official/flash' })
+  assert.match(nodes(tree, node => node.props.className === 'bt-bubble')[0].children[0], /need a DeepSeek API key/)
+  assert.equal(nodes(tree, node => node.props.className === 'bt-model-key').length, 0)
+  assert.equal(nodes(tree, node => node.type === 'button' && node.children.includes('Manage models')).length, 1)
+})

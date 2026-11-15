@@ -254,7 +254,13 @@ export function createBotBrowsers({ bridge, createSource, storage = globalThis.l
       else await bridge.views.close(botId, tabId).catch(() => {})
       return undefined
     }
-    if (guest.appView) await bridge.views.create(botId, tabId, pending ?? '')
+    if (guest.appView) {
+      await bridge.views.create(botId, tabId, pending ?? '')
+      if (disposed) {
+        await bridge.views.close(botId, tabId).catch(() => {})
+        return undefined
+      }
+    }
     const element = guest.element
     // The shell forwards app shortcuts from a focused webview that carries these
     // attributes, as it does for its own Sidebar browser.
@@ -323,7 +329,7 @@ export function createBotBrowsers({ bridge, createSource, storage = globalThis.l
     publish(tabId, { live: true, loading: Boolean(entry.pending) })
     if (guest.appView) {
       const state = (await bridge.views.sync(botId)).find(view => view.tabId === tabId)
-      if (state) {
+      if (state && !disposed) {
         entry.botAttached = state.botAttached === true
         element.update(state)
       }
@@ -437,6 +443,7 @@ export function createBotBrowsers({ bridge, createSource, storage = globalThis.l
    * while the panel slides in or shows its own empty or error state.
    */
   async function show(tabId, box = null) {
+    if (disposed) return
     // The shown guest only moved (the panel is being dragged): it follows at once, the
     // hidden ones take the new size once the rectangle stops changing.
     if (tabId !== null && tabId === shown && visible && box !== null) {
@@ -565,6 +572,8 @@ export function createBotBrowsers({ bridge, createSource, storage = globalThis.l
     },
     dispose() {
       disposed = true
+      shown = null
+      visible = false
       clearTimeout(resizeLater)
       for (const entry of views.values()) {
         if (entry.appView) void bridge.views.place(entry.tabId, rect ?? { left: 0, top: 0, width: 800, height: 600 }, false)

@@ -38,14 +38,12 @@ describe('the app profile', () => {
     assert.ok(rows(entries).some((entry) => DSH_WEB_FRONT_END.test(entry.name ?? '')), 'the DSH Web front end is mounted')
   })
 
-  test('mounts the Main product profile with the existing chat UI', () => {
+  test('mounts the Super-agent profile before the existing chat UI', () => {
     const profile = loadAppProfile(SUPERAGENT_PROFILE)
     assert.deepEqual(profile.layers.map((layer) => layer.packageName), SUPERAGENT_BUNDLES)
     const entries = composeEntries([...profile.layers.map((layer) => layer.patches), profile.patches])
     const on = new Set(entries.filter((entry) => entry.disabled !== true).map((entry) => entry.id))
     for (const id of ['superagent-profile', 'webserver', 'connection', 'bot']) assert.ok(on.has(id), `${id} is mounted`)
-    assert.equal(entries.find(entry => entry.id === 'bot').config.product, true)
-    assert.ok(!on.has('superagent-ui-host'), 'the copied UI Host is not mounted')
   })
 })
 
@@ -91,6 +89,12 @@ describe('claimBundles', () => {
 
   test('claims the Super-agent bundles in their own order', () => {
     write([...SUPERAGENT_BUNDLES, 'a-plugin'])
+    claimBundles(dir, SUPERAGENT_BUNDLES)
+    assert.deepEqual(read().dsh.profile.bundles, [...SUPERAGENT_BUNDLES, 'a-plugin'])
+  })
+
+  test('drops the retired narrow Super-agent bundles', () => {
+    write([...SUPERAGENT_BUNDLES, 'ds-superagent-host', 'ds-superagent-ui', 'a-plugin'])
     claimBundles(dir, SUPERAGENT_BUNDLES)
     assert.deepEqual(read().dsh.profile.bundles, [...SUPERAGENT_BUNDLES, 'a-plugin'])
   })

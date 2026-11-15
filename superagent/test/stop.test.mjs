@@ -1,11 +1,21 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import * as core from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, textResponse, toolResponse } from '../dev/native-mock.mjs'
+
+const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
+
+async function until(check, label, timeout = 15000) {
+  const deadline = Date.now() + timeout
+  while (!await check()) {
+    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${label}.`)
+    await sleep(20)
+  }
+}
 
 test('a running Worker is stopped with explicit cancellation confirmation and resumes only by command', { timeout: 15000 }, async t => {
   const directory = await mkdtemp(join(tmpdir(), 'ds-bot-stop-'))
@@ -173,4 +183,114 @@ test('the chat preview exposes stop and resume controls through same-origin rout
   const resumed = await (await fetch(`${chat.url}/resume`, { method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ commandId: 'chat-resume', ticketId: receipt.ticketId }) })).json()
   assert.equal(resumed.status, 'pending')
+})
+
+test('resuming a stopped ready Ticket drops the previous Assignment report', { timeout: 15000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-stop-report-'))
+  let native, storage, sessions, engine
+  t.after(async () => {
+    await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+  native = await nativeContext(directory, async function* (options) {
+    const user = options.messages.filter(message => message.role === 'user').at(-1)
+    const text = user.content.filter(block => block.type === 'text').map(block => block.text).join('')
+    const completed = options.messages.slice(options.messages.lastIndexOf(user) + 1).filter(message => message.role === 'tool').length
+    if (options.model === 'worker') {
+      if (!completed && text.startsWith('Complete and stop.')) {
+        yield* toolResponse('report_ready', { result: 'Old result.', evidence: 'The old turn verified the old result.' })
+      } else yield* textResponse('No new evidence yet.')
+      return
+    }
+    const tool = options.tools[completed]
+    if (!tool) { yield* textResponse('Router complete.'); return }
+    if (tool.name.startsWith('deliver_result')) {
+      const ready = JSON.parse(text.slice('Ready report:'.length))
+      yield* toolResponse(tool.name, { reportId: ready.id }, `router-${completed}`)
+    } else yield* toolResponse(tool.name, {}, `router-${completed}`)
+  })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  sessions = new core.NativeSessions(native, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] }, {}, sessions)
+  const receipt = await engine.submit({ commandId: 'ready-then-stop', eventId: 'ready-then-stop-message', text: 'Complete and stop.' })
+  for (let index = 0; index < 6; index++) await engine.effects.drain()
+  const ready = await engine.conversation(receipt.ticketId)
+  assert.equal(ready.status, 'ready')
+  assert.equal(ready.reports.length, 1)
+  const oldReport = ready.reports[0]
+
+  await engine.stopTicket({ commandId: 'stop-ready', ticketId: receipt.ticketId, reason: 'Start over.' })
+  const resumed = await engine.resumeTicket({ commandId: 'resume-ready', ticketId: receipt.ticketId })
+  assert.deepEqual(resumed.reports, [], 'a new Assignment must not inherit the old current report')
+  for (let index = 0; index < 6; index++) await engine.effects.drain()
+  const after = await engine.conversation(receipt.ticketId)
+  assert.deepEqual(after.reports, [])
+  assert.equal(after.status, 'running')
+  assert.equal(after.reason, 'worker-idle')
+  assert.ok(after.reportHistory.some(report => report.id === oldReport.id), 'old evidence stays readable as history')
+})
+
+test('a stop with background work waits for the foreground turn before confirming', { timeout: 30000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-stop-background-'))
+  const root = join(directory, 'work')
+  await mkdir(root)
+  let native, storage, sessions, engine, environment, release
+  const gate = new Promise(resolve => { release = resolve })
+  let started
+  const workerStarted = new Promise(resolve => { started = resolve })
+  t.after(async () => {
+    release?.()
+    await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close(); await environment?.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+  native = await nativeContext(join(directory, 'sessions'), async function* (options) {
+    const user = options.messages.filter(message => message.role === 'user').at(-1)
+    const text = user.content.filter(block => block.type === 'text').map(block => block.text).join('')
+    const completed = options.messages.slice(options.messages.lastIndexOf(user) + 1).filter(message => message.role === 'tool').length
+    if (options.model === 'worker') {
+      if (!completed && text.startsWith('Start a long background build.')) {
+        yield* toolResponse('start_command', { name: 'build' })
+        return
+      }
+      if (!completed && text.startsWith('Hold the foreground.')) {
+        started()
+        await gate
+        yield* textResponse('The foreground turn is done.')
+        return
+      }
+      yield* textResponse('Worker idle.')
+      return
+    }
+    const tool = options.tools[completed]
+    if (!tool) { yield* textResponse('Router complete.'); return }
+    yield* toolResponse(tool.name, {}, `router-${completed}`)
+  })
+  environment = await core.LocalEnvironment.open({ id: 'project', instanceId: 'private', root, allowedActorIds: ['user'],
+    permissions: ['read', 'write', 'search', 'command'],
+    commands: { build: { argv: [process.execPath, '-e', 'setInterval(() => {}, 1000)'], timeoutMs: 5000, backgroundTimeoutMs: 120000 } } })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  sessions = new core.NativeSessions(native, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  const source = { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'], allowedThreadIds: ['room'], versionOrder: 'sequence' }
+  engine = new core.Engine(storage, 'private', source, { retryDelayMs: 10, scanIntervalMs: 20 }, sessions, [environment])
+  engine.effects.start()
+
+  const received = await engine.receiveSource({ commandId: 'stop-bg-receive', threadId: 'room', objectId: 'stop-bg-1', type: 'created', version: '1', text: 'Start a long background build.' })
+  const ticketId = (await engine.acceptSource({ commandId: 'stop-bg-accept', threadId: 'room', objectId: 'stop-bg-1',
+    expectedEventId: received.eventId, environmentId: 'project' })).ticketId
+  await until(async () => (await engine.listJobs(ticketId)).length === 1, 'the background job')
+  await until(async () => (await engine.conversation(ticketId)).reason === 'worker-background', 'the background turn to end')
+
+  await engine.receiveSource({ commandId: 'stop-bg-followup', threadId: 'room', objectId: 'stop-bg-2', type: 'created', version: '1', text: 'Hold the foreground.' })
+  await workerStarted
+  const stopping = await engine.stopTicket({ commandId: 'stop-bg', ticketId, reason: 'Stop both scopes.' })
+  assert.equal(stopping.status, 'stopping', JSON.stringify(stopping))
+  assert.equal(stopping.stop.state, 'stopping')
+  assert.equal(stopping.stop.cancellationConfirmedAt, undefined)
+  assert.equal(stopping.jobs[0].state, 'cancelled')
+
+  release()
+  await until(async () => (await engine.conversation(ticketId)).stop?.state === 'stopped', 'the foreground turn to confirm the stop')
+  const stopped = await engine.conversation(ticketId)
+  assert.equal(stopped.stop.state, 'stopped')
+  assert.ok(stopped.stop.cancellationConfirmedAt)
 })

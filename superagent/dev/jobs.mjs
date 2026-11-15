@@ -15,8 +15,10 @@ const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, millise
 const directory = await mkdtemp(join(tmpdir(), 'ds-bot-job-load-'))
 const root = join(directory, 'work')
 await mkdir(root)
-let context, storage, sessions, engine
+let context, storage, sessions, environment, engine
 const prompts = []
+let failure
+const failures = []
 try {
   context = await nativeContext(join(directory, 'sessions'), function* (options) {
     if (options.model === 'router') { yield* routerResponse(options); return }
@@ -35,7 +37,7 @@ try {
   })
   storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   sessions = new NativeSessions(context, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
-  const environment = await LocalEnvironment.open({ id: 'project', instanceId: 'job-load', root, allowedActorIds: ['user'],
+  environment = await LocalEnvironment.open({ id: 'project', instanceId: 'job-load', root, allowedActorIds: ['user'],
     permissions: ['read', 'write', 'search', 'command'], commands: {
       // A real Windows process that keeps running until released, so the turn really returns before it ends.
       long: { argv: [process.execPath, '-e', "const fs=require('node:fs');const end=Date.now()+12000;fs.writeFileSync('long-started.txt','started');setInterval(()=>{if(Date.now()>end||fs.existsSync('long-release.txt')){console.log('long finished');process.exit(0)}},25)"], timeoutMs: 10000, backgroundTimeoutMs: 60000 },
@@ -107,7 +109,21 @@ try {
       completionReportedAsResult: false,
     },
   }, null, 2))
+} catch (error) {
+  failure = error
 } finally {
-  engine?.shutdown(); await engine?.effects.stop(); await sessions?.close(); await context?.fiber.dispose(); await storage?.close()
-  await rm(directory, { recursive: true, force: true })
+  for (const release of [
+    () => engine?.effects.stop(),
+    () => engine?.shutdown(),
+    () => sessions?.close(),
+    () => context?.fiber.dispose(),
+    () => environment?.close(),
+    () => storage?.close(),
+    () => rm(directory, { recursive: true, force: true }),
+  ]) {
+    try { await release() } catch (error) { failures.push(error) }
+  }
 }
+if (failures.length) console.error(failures.map(error => `cleanup: ${error instanceof Error ? error.message : String(error)}`).join('\n'))
+if (failure) throw failure
+if (failures.length) throw new AggregateError(failures, 'The job load run did not clean up.')

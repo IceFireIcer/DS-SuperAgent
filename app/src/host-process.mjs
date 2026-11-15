@@ -103,6 +103,13 @@ export class HostProcess {
     if (child.connected) child.send({ type: 'shutdown' }, (error) => { if (error) console.error(error) })
     if (!await settlesWithin(this.#exit, 10_000)) child.kill()
     if (!await settlesWithin(this.#exit, 5_000)) child.kill('SIGKILL')
+    // SIGKILL is not an exit: wait for close, so that the lock is not released while the
+    // old Host may still be writing.
+    if (!await settlesWithin(this.#exit, 5_000)) {
+      const error = new Error('The DSH Host did not confirm that it stopped; its data stays locked.')
+      error.code = 'STOP_UNKNOWN'
+      throw error
+    }
     this.#exited = true
     this.#child = undefined
   }

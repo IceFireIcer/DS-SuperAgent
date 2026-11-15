@@ -64,7 +64,7 @@ export class GitHubSource {
     if (!event || event.repo !== `${this.config.owner}/${this.config.repo}`) throw new CoreError('SOURCE_SCOPE_DENIED', 'The GitHub event belongs to another repository.')
     if (!Number.isInteger(event.number) || event.number < 1) throw new CoreError('INVALID_INPUT', 'A GitHub event needs a positive issue or pull request number.')
     if (this.config.selfActorIds?.includes(event.authorId)) {
-      await this.cursors.write(this.sourceInstanceId, event.cursor)
+      await this.advance(event.cursor)
       return { status: 'filtered', reason: 'SOURCE_SELF' }
     }
     const threadId = `github:${this.config.owner}/${this.config.repo}#${event.number}`
@@ -76,8 +76,15 @@ export class GitHubSource {
       ...(type === 'deleted' ? { deletionEvidence: event.deletionEvidence ?? `GitHub deleted ${event.kind} ${event.id}.` } : { text: body }),
       authorId: event.authorId, authorKind: event.authorKind ?? (event.authorId.endsWith('[bot]') ? 'bot' : 'human'),
       addressing: event.kind === 'review' || event.kind === 'comment' ? 'mention' : 'direct' })
-    await this.cursors.write(this.sourceInstanceId, event.cursor)
+    await this.advance(event.cursor)
     return receipt
+  }
+
+  /** A webhook replayed out of order must not move the durable cursor backwards. */
+  private async advance(cursor: string) {
+    const current = await this.cursor()
+    if (current !== undefined && compareCursor(cursor, current) <= 0) return
+    await this.cursors.write(this.sourceInstanceId, cursor)
   }
 
   /** Process an ordered delivery page, advancing the durable cursor only after each event is recorded. */
@@ -86,7 +93,7 @@ export class GitHubSource {
     const prior = await this.cursor()
     let processed = 0, filtered = 0, malformed = 0, failed = 0
     for (const event of [...events].sort((left, right) => compareCursor(left.cursor, right.cursor))) {
-      if (prior !== undefined && event.cursor <= prior) continue
+      if (prior !== undefined && compareCursor(event.cursor, prior) <= 0) continue
       try {
         const receipt = await this.receive(event)
         if (receipt.status === 'recorded') processed++
@@ -94,7 +101,7 @@ export class GitHubSource {
       } catch (error) {
         if (error instanceof CoreError && ['SOURCE_SCOPE_DENIED', 'INVALID_INPUT', 'NOT_FOUND'].includes(error.code)) {
           malformed++
-          await this.cursors.write(this.sourceInstanceId, event.cursor)
+          await this.advance(event.cursor)
           continue
         }
         failed++

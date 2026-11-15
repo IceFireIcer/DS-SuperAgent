@@ -1,0 +1,17 @@
+flowchart TB
+  p0["0 · 三层角色与功能处置基线<br/>Main / Router / Worker 独立模型、上下文、协议；能力全盘点"] --> p1["1 · MainSession + WorkBrief + 共享 Engine<br/>稳定委托 / Router 回执 / 主上下文隔离 / 幂等"]
+  p1 --> p2["2 · 真实主对话竖切<br/>主 Agent 一份 A+B 委托 → Router 两项工作并行"]
+  p2 --> p3["3 · 三层跟进与恢复<br/>Main 回答 / Router 直通 / handback / stop / unknown"]
+  p3 --> gate{"原 Super-agent 协作<br/>已得到行为证据？"}
+  gate -->|"未过：修正接线与领域边界"| p1
+  gate -->|"通过且产品含义确认"| p4["4 · 三层角色配置与只读观察<br/>Main/Router/Worker model/prompt/权限 + 资源 scope"]
+  p4 --> p5["5 · 执行能力逐项接入<br/>浏览器 / MCP / Office / 附件 / 凭据 / 文件"]
+  p4 --> p6["6 · 记忆、来源与常驻能力<br/>日程 / 平台 / 主动性 / 监督 / 远程 / 运维"]
+  p5 --> p7["7 · 新产品初始化 + 可选配置/资源导入<br/>预览、明确授权，不导入旧执行/聊天状态"]
+  p6 --> p7
+  p7 --> p8["8 · 移除旧 Bot 架构与兼容代码<br/>无旧档案入口、旧 API façade 或旧 profile 选择/回切"]
+  p8 --> p9["9 · 独立产品完整验收与发布<br/>新工作历史、能力、权限、自身升级/恢复"]
+  classDef gate fill:#fff3df,stroke:#a58145,color:#60451e
+  classDef core fill:#e6f2ed,stroke:#37745d,color:#163c2e
+  class p0,gate gate
+  class p1,p2,p3 core

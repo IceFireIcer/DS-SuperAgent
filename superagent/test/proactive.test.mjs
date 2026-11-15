@@ -96,6 +96,53 @@ test('observe never executes, auto prepares inside an isolated budget and never 
   assert.deepEqual(createdAt, createdAt.slice().sort((left, right) => left - right))
 })
 
+test('rule-scoped run scans never include another rule history', { timeout: 20000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-proactive-scope-'))
+  const root = join(directory, 'proactive-root')
+  const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
+  const proactive = new core.Proactive(storage, 'private', { rootDirectory: root, prepare: async () => ({ summary: 'Prepared.' }) })
+  const rule = id => ({ id, name: id, mode: 'auto', match: { actorKinds: ['human'], addressing: ['direct'], textPattern: id },
+    communication: 'silent', budget: { maxRuns: 1, windowMs: 3600000 }, enabled: true })
+  await storage.transaction('private', tx => proactive.setRules(tx, 1, [rule('alpha'), rule('beta')]))
+  const foreignId = `${JSON.stringify(['proactive-run', 'beta'])}:${'0'.repeat(64)}`
+  await storage.transaction('private', tx => tx.insert('proactive-run', foreignId, { id: foreignId, instanceId: 'private', ruleId: 'beta',
+    ruleRevision: 2, eventId: 'beta-event', sourceInstanceId: 'desktop', mode: 'auto', state: 'prepared', text: 'alpha', authorId: 'user',
+    authorKind: 'human', addressing: 'direct', communication: 'silent', createdAt: Date.now() }))
+  const runs = await proactive.evaluate({ sourceInstanceId: 'desktop', eventId: 'alpha-event', threadId: 'room', objectId: 'alpha-object',
+    text: 'alpha', authorId: 'user', authorKind: 'human', addressing: 'direct' })
+  assert.equal(runs[0].state, 'prepared')
+  assert.equal((await proactive.listRuns('alpha')).some(run => run.ruleId === 'beta'), false)
+})
+
+test('a rule budget counts its complete history beyond the first thousand records', { timeout: 30000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-proactive-history-'))
+  const root = join(directory, 'proactive-root')
+  const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
+  const proactive = new core.Proactive(storage, 'private', { rootDirectory: root })
+  await storage.transaction('private', tx => proactive.setRules(tx, 1, [{ id: 'deep', name: 'Deep', mode: 'auto',
+    match: { actorKinds: ['human'], addressing: ['direct'], textPattern: 'deep' }, communication: 'silent',
+    budget: { maxRuns: 1, windowMs: 3600000 }, enabled: true }]))
+  const prefix = `${JSON.stringify(['proactive-run', 'deep'])}:`
+  const now = Date.now()
+  await storage.transaction('private', async tx => {
+    for (let index = 0; index < 1000; index++) {
+      const id = `${prefix}${index.toString(16).padStart(63, '0')}`
+      await tx.insert('proactive-run', id, { id, instanceId: 'private', ruleId: 'deep', ruleRevision: 2, eventId: `old-${index}`,
+        sourceInstanceId: 'desktop', mode: 'auto', state: 'observed', text: 'old', authorId: 'user', authorKind: 'human',
+        addressing: 'direct', communication: 'silent', createdAt: now - 7200000 })
+    }
+    const id = `${prefix}${'f'.repeat(64)}`
+    await tx.insert('proactive-run', id, { id, instanceId: 'private', ruleId: 'deep', ruleRevision: 2, eventId: 'prepared-event',
+      sourceInstanceId: 'desktop', mode: 'auto', state: 'prepared', text: 'deep work', authorId: 'user', authorKind: 'human',
+      addressing: 'direct', communication: 'silent', createdAt: now })
+  })
+  const runs = await proactive.evaluate({ sourceInstanceId: 'desktop', eventId: 'deep-event', threadId: 'room', objectId: 'deep-object',
+    text: 'deep work', authorId: 'user', authorKind: 'human', addressing: 'direct' })
+  assert.equal(runs[0].state, 'budget-exhausted')
+})
+
 test('prepared artifacts are verified inside the isolated directory', { timeout: 20000 }, async t => {
   let mode = 'valid'
   const content = 'x'.repeat(2048)

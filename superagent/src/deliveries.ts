@@ -107,11 +107,12 @@ export class Deliveries {
   async list(transaction: AsyncTx, ticketId: string): Promise<DeliveryView[]> {
     identifier(ticketId, 'ticketId')
     const items: Delivery[] = []
-    let cursor = historyPrefix(ticketId)
+    const prefix = historyPrefix(ticketId)
+    let cursor = prefix
     for (let pageCount = 0; pageCount < 10; pageCount++) {
       const page = await transaction.scan<Delivery>('delivery-history', { limit: 100, after: cursor })
       items.push(...page.items.map(item => item.value).filter(item => item.ticketId === ticketId))
-      if (!page.cursor || !page.cursor.startsWith(cursor)) {
+      if (!page.cursor || !page.cursor.startsWith(`${prefix}:`)) {
         return Promise.all(items.sort((left, right) => left.sequence - right.sequence || left.id.localeCompare(right.id)).map(item => this.view(transaction, item)))
       }
       cursor = page.cursor

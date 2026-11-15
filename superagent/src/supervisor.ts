@@ -31,8 +31,11 @@ export interface SupervisorSnapshot {
   reportIds: string[]
   lastReportId?: string
   lastReportAt?: number
+  lastReport?: SupervisorSnapshotReport
+  deliveries: SupervisorSnapshotDelivery[]
   toolDigest: string
   reportDigest: string
+  reportContentDigest?: string
   deliveryDigest: string
   jobStates: string[]
   subagentStates: string[]
@@ -45,6 +48,31 @@ export interface SupervisorSnapshot {
   waiting: boolean
   observedAt: number
   progressFingerprint: string
+}
+
+export interface SupervisorSnapshotReport {
+  id: string
+  result: string
+  evidence: string
+  toolFacts: SupervisorSnapshotToolFact[]
+  createdAt: number
+  truncated: boolean
+  omittedToolFacts?: number
+}
+
+export interface SupervisorSnapshotToolFact {
+  tool: string
+  outcome: string
+  output: unknown
+  truncated: boolean
+}
+
+export interface SupervisorSnapshotDelivery {
+  id: string
+  state: string
+  purpose: string
+  text: string
+  truncated: boolean
 }
 
 export interface SupervisorProposal {
@@ -81,12 +109,20 @@ export interface SupervisorObservationRecord {
   ticketId: string
   instanceId: string
   version: string
-  fingerprints: { at: number; fingerprint: string; toolDigest: string; reportId?: string }[]
+  fingerprints: SupervisorFingerprint[]
   proposals: number[]
   lastProposalFingerprint?: string
   last?: SupervisorObservationResult
   history: SupervisorObservationResult[]
   updatedAt: number
+}
+
+interface SupervisorFingerprint {
+  at: number
+  fingerprint: string
+  toolDigest: string
+  reportContentDigest?: string
+  reportId?: string
 }
 
 export interface SupervisorReport {
@@ -124,6 +160,20 @@ export interface SupervisorOptions {
 
 const proposalKey = (proposalId: string) => JSON.stringify(['supervisor-proposal', proposalId])
 const observationKey = (ticketId: string) => JSON.stringify(['supervisor-observation', ticketId])
+const ticketWriteTails = new Map<string, Promise<void>>()
+
+async function withProcessTicketLock<Result>(key: string, operation: () => Promise<Result>): Promise<Result> {
+  const previous = ticketWriteTails.get(key) ?? Promise.resolve()
+  let release!: () => void
+  const current = new Promise<void>(resolve => { release = resolve })
+  const tail = previous.then(() => current)
+  ticketWriteTails.set(key, tail)
+  await previous
+  try { return await operation() } finally {
+    release()
+    if (ticketWriteTails.get(key) === tail) ticketWriteTails.delete(key)
+  }
+}
 
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex')
 const summarizeActionResult = (value: unknown): Record<string, unknown> => {
@@ -148,8 +198,52 @@ const reportFacts = (value: unknown) => asArray(value).map(entry => {
 
 const deliveryFacts = (value: unknown) => asArray(value).map(entry => {
   const message = asRecord(entry)
-  return [asString(message.id), asString(message.state), asString(message.purpose)]
+  return { id: asString(message.id), state: asString(message.state), purpose: asString(message.purpose), text: asString(message.text) }
 })
+
+const snapshotLimits = {
+  reportResult: 8_192,
+  reportEvidence: 4_096,
+  toolFactOutput: 1_024,
+  toolFacts: 12,
+  deliveryText: 2_048,
+} as const
+
+const boundedText = (value: string, maxBytes: number) => {
+  const bytes = Buffer.from(value)
+  if (bytes.byteLength <= maxBytes) return { text: value, truncated: false }
+  return { text: bytes.subarray(0, maxBytes).toString('utf8'), truncated: true }
+}
+
+const boundedToolFact = (value: unknown): SupervisorSnapshotToolFact => {
+  const fact = asRecord(value)
+  const output = JSON.stringify(fact.output ?? {}) ?? '{}'
+  const bounded = boundedText(output, snapshotLimits.toolFactOutput)
+  return {
+    tool: asString(fact.tool), outcome: asString(fact.outcome),
+    output: bounded.truncated ? { truncated: true, preview: bounded.text } : fact.output ?? {},
+    truncated: bounded.truncated,
+  }
+}
+
+const boundedReport = (report: ReturnType<typeof reportFacts>[number]): SupervisorSnapshotReport => {
+  const result = boundedText(report.result, snapshotLimits.reportResult)
+  const evidence = boundedText(report.evidence, snapshotLimits.reportEvidence)
+  const retained = report.toolFacts.slice(-snapshotLimits.toolFacts)
+  const omittedToolFacts = report.toolFacts.length - retained.length
+  const toolFacts = retained.map(boundedToolFact)
+  return {
+    id: report.id, result: result.text, evidence: evidence.text, toolFacts, createdAt: report.createdAt,
+    truncated: result.truncated || evidence.truncated || toolFacts.some(fact => fact.truncated) || omittedToolFacts > 0,
+    ...(omittedToolFacts === 0 ? {} : { omittedToolFacts }),
+  }
+}
+
+const boundedDeliveries = (messages: ReturnType<typeof deliveryFacts>): SupervisorSnapshotDelivery[] =>
+  messages.map(message => {
+    const bounded = boundedText(message.text, snapshotLimits.deliveryText)
+    return { id: message.id, state: message.state, purpose: message.purpose, text: bounded.text, truncated: bounded.truncated }
+  })
 
 const stateList = (value: unknown) => asArray(value).map(entry => asString(asRecord(entry).state))
 
@@ -291,21 +385,21 @@ export class Supervisor {
     const normal = this.normalFinding(item, snapshot)
     if (normal !== undefined) {
       const reconciliation = normal === 'unknown' ? await this.reconcile(snapshot) : undefined
-      return this.finish(record, snapshot, normal, at, false, undefined, reconciliation)
+      return this.finish(snapshot, normal, at, false, undefined, reconciliation)
     }
-    record.fingerprints.push({ at, fingerprint: snapshot.progressFingerprint, toolDigest: snapshot.toolDigest, ...(snapshot.lastReportId === undefined ? {} : { reportId: snapshot.lastReportId }) })
-    record.fingerprints = record.fingerprints.slice(-50)
-    const same = record.fingerprints.filter(entry => entry.fingerprint === snapshot.progressFingerprint)
+    const fingerprint: SupervisorFingerprint = { at, fingerprint: snapshot.progressFingerprint, toolDigest: snapshot.toolDigest,
+      ...(snapshot.reportContentDigest === undefined ? {} : { reportContentDigest: snapshot.reportContentDigest }),
+      ...(snapshot.lastReportId === undefined ? {} : { reportId: snapshot.lastReportId }) }
+    const fingerprints = [...record.fingerprints, fingerprint].slice(-50)
+    const same = fingerprints.filter(entry => entry.fingerprint === snapshot.progressFingerprint)
     const firstAt = same[0]?.at ?? at
-    const recentTools = record.fingerprints.slice(-this.loopObservations).map(entry => entry.toolDigest)
-    const repeatedTools = snapshot.toolDigest !== '' && recentTools.length >= this.loopObservations && recentTools.every(digest => digest === snapshot.toolDigest)
-    const loop = same.length >= this.loopObservations && repeatedTools
+    const loop = this.repeatedToolEvidence(fingerprints, snapshot.toolDigest, snapshot.reportContentDigest)
     const noProgress = same.length >= this.stallObservations && at - firstAt >= this.stallMs
     let assessment: SupervisorAssessment | undefined
     if (loop || noProgress) {
       assessment = {
         kind: loop ? 'loop' : 'no-progress',
-        reason: loop ? `The same tool/result fingerprint repeated at least ${String(this.loopObservations)} times.` : `No new report, tool fact or delivery for at least ${String(this.stallObservations)} observations.`,
+        reason: loop ? `Different report steps repeated the same tool/result fingerprint at least ${String(this.loopObservations)} times.` : `No new report, tool fact or delivery for at least ${String(this.stallObservations)} observations.`,
         recommendation: loop ? 'Correct the direction or stop this Ticket and inspect the repeated step.' : 'Correct the direction or stop this Ticket and inspect why it is not progressing.',
         action: 'pause',
       }
@@ -313,37 +407,11 @@ export class Supervisor {
       assessment = await this.assess(snapshot, new AbortController().signal)
     }
     if (assessment === undefined || assessment.kind === 'normal') {
-      return this.finish(record, snapshot, 'normal', at, true, assessment)
+      return this.finish(snapshot, 'normal', at, true, assessment, undefined, fingerprint)
     }
     const finding = assessment.kind
     const proposalFingerprint = hash([ticketId, finding, snapshot.assignmentId, snapshot.generation, snapshot.lastReportId, snapshot.toolDigest, snapshot.deliveryDigest, assessment.reason, assessment.recommendation])
-    const proposals = await this.storage.transaction(this.instanceId, transaction => this.scanProposals(transaction, ticketId))
-    if (proposals.some(proposal => proposal.status === 'proposed') || record.lastProposalFingerprint === proposalFingerprint) {
-      return this.finish(record, snapshot, 'duplicate', at, true, assessment)
-    }
-    const budget = record.proposals.filter(time => time > at - this.proposalWindowMs)
-    if (budget.length >= this.maxProposals) {
-      return this.finish(record, snapshot, 'budget-exhausted', at, true, assessment)
-    }
-    const kind = assessment.action ?? (assessment.kind === 'deviation' ? 'correct' : 'pause')
-    const recommendation = assessment.recommendation?.trim() || assessment.reason
-    const proposal: SupervisorProposal = {
-      id: randomUUID(), instanceId: this.instanceId, ticketId, kind, status: 'proposed', version: this.version,
-      fingerprint: proposalFingerprint, evidence: { snapshot, assessment, finding }, recommendation,
-      impact: { stopsNewWork: kind === 'pause', wakesWorker: kind === 'correct',
-        summary: kind === 'pause'
-          ? 'Stops this Ticket; the Worker and later commands cannot continue until an explicit resume.'
-          : 'Adds one approved direction input for the Worker; the Worker reads it on its next turn, and the Supervisor executes no tool.' },
-      createdAt: at,
-    }
-    await this.storage.transaction(this.instanceId, async transaction => {
-      await transaction.insert('supervisor-proposal', proposalKey(proposal.id), proposal)
-    })
-    record.proposals = [...record.proposals, at].slice(-100)
-    record.lastProposalFingerprint = proposalFingerprint
-    const result = this.result(record, snapshot, finding, at, true, assessment, proposal.id)
-    await this.writeObservation(record)
-    return { observation: result, proposal }
+    return this.finalizeProposal(snapshot, finding, at, assessment, fingerprint, proposalFingerprint)
   }
 
   private normalFinding(item: Record<string, unknown>, snapshot: SupervisorSnapshot): SupervisorFindingKind | undefined {
@@ -355,12 +423,91 @@ export class Supervisor {
     return undefined
   }
 
-  private async finish(record: SupervisorObservationRecord, snapshot: SupervisorSnapshot, finding: SupervisorFindingKind, at: number, keepFingerprints: boolean, assessment?: SupervisorAssessment, reconciliation?: SupervisorObservationResult['reconciliation']): Promise<{ observation: SupervisorObservationResult; proposal?: SupervisorProposal }> {
-    if (!keepFingerprints) record.fingerprints = []
-    if (!keepFingerprints) delete record.lastProposalFingerprint
-    const result = this.result(record, snapshot, finding, at, keepFingerprints, assessment, undefined, reconciliation)
-    await this.writeObservation(record)
-    return { observation: result }
+  private async finish(snapshot: SupervisorSnapshot, finding: SupervisorFindingKind, at: number, keepFingerprints: boolean, assessment?: SupervisorAssessment, reconciliation?: SupervisorObservationResult['reconciliation'], fingerprint?: SupervisorFingerprint): Promise<{ observation: SupervisorObservationResult; proposal?: SupervisorProposal }> {
+    return this.withTicketWriteLock(snapshot.ticketId, () => this.storage.transaction(this.instanceId, async transaction => {
+      const record = await this.readObservation(transaction, snapshot.ticketId)
+      if (keepFingerprints && fingerprint !== undefined) this.appendFingerprint(record, fingerprint)
+      if (!keepFingerprints) {
+        record.fingerprints = []
+        delete record.lastProposalFingerprint
+      }
+      const result = this.result(record, snapshot, finding, at, keepFingerprints, assessment, undefined, reconciliation)
+      await this.saveObservation(transaction, record)
+      return { observation: result }
+    }))
+  }
+
+  private async finalizeProposal(snapshot: SupervisorSnapshot, finding: SupervisorAssessment['kind'], at: number, assessment: SupervisorAssessment, fingerprint: SupervisorFingerprint, proposalFingerprint: string): Promise<{ observation: SupervisorObservationResult; proposal?: SupervisorProposal }> {
+    return this.withTicketWriteLock(snapshot.ticketId, () => this.storage.transaction(this.instanceId, async transaction => {
+      const record = await this.readObservation(transaction, snapshot.ticketId)
+      this.appendFingerprint(record, fingerprint)
+      const proposals = await this.scanProposals(transaction, snapshot.ticketId)
+      if (proposals.some(proposal => proposal.status === 'proposed') || record.lastProposalFingerprint === proposalFingerprint) {
+        const observation = this.result(record, snapshot, 'duplicate', at, true, assessment)
+        await this.saveObservation(transaction, record)
+        return { observation }
+      }
+      const budget = record.proposals.filter(time => time > at - this.proposalWindowMs)
+      if (budget.length >= this.maxProposals) {
+        const observation = this.result(record, snapshot, 'budget-exhausted', at, true, assessment)
+        await this.saveObservation(transaction, record)
+        return { observation }
+      }
+      const kind = assessment.action ?? (assessment.kind === 'deviation' ? 'correct' : 'pause')
+      const recommendation = assessment.recommendation?.trim() || assessment.reason
+      const proposal: SupervisorProposal = {
+        id: randomUUID(), instanceId: this.instanceId, ticketId: snapshot.ticketId, kind, status: 'proposed', version: this.version,
+        fingerprint: proposalFingerprint, evidence: { snapshot, assessment, finding }, recommendation,
+        impact: { stopsNewWork: kind === 'pause', wakesWorker: kind === 'correct',
+          summary: kind === 'pause'
+            ? 'Stops this Ticket; the Worker and later commands cannot continue until an explicit resume.'
+            : 'Adds one approved direction input for the Worker; the Worker reads it on its next turn, and the Supervisor executes no tool.' },
+        createdAt: at,
+      }
+      await transaction.insert('supervisor-proposal', proposalKey(proposal.id), proposal)
+      record.proposals = [...record.proposals, at].slice(-100)
+      record.lastProposalFingerprint = proposalFingerprint
+      const observation = this.result(record, snapshot, finding, at, true, assessment, proposal.id)
+      await this.saveObservation(transaction, record)
+      return { observation, proposal }
+    }))
+  }
+
+  private repeatedToolEvidence(fingerprints: SupervisorFingerprint[], toolDigest: string, reportContentDigest: string | undefined): boolean {
+    if (toolDigest === '' || reportContentDigest === undefined) return false
+    const steps: SupervisorFingerprint[] = []
+    let priorReportId: string | undefined
+    for (const entry of fingerprints) {
+      if (entry.reportId === undefined || entry.reportId === '') continue
+      if (entry.reportId === priorReportId) continue
+      priorReportId = entry.reportId
+      steps.push(entry)
+    }
+    const recent = steps.slice(-this.loopObservations)
+    return recent.length >= this.loopObservations
+      && new Set(recent.map(entry => entry.reportId)).size === this.loopObservations
+      && recent.every(entry => entry.toolDigest === toolDigest)
+      && recent.every(entry => entry.reportContentDigest === reportContentDigest)
+  }
+
+  private appendFingerprint(record: SupervisorObservationRecord, fingerprint: SupervisorFingerprint): void {
+    record.fingerprints = [...record.fingerprints, fingerprint].slice(-50)
+  }
+
+  private async withTicketWriteLock<Result>(ticketId: string, operation: () => Promise<Result>): Promise<Result> {
+    const key = `supervisor-observation:${hash([this.instanceId, ticketId])}`
+    return withProcessTicketLock(key, async () => {
+      const acquire = this.storage.acquireWriterLease?.bind(this.storage)
+      if (acquire === undefined) return operation()
+      for (let attempt = 0; attempt < 50; attempt++) {
+        const lease = await acquire(key)
+        if (lease !== undefined) {
+          try { return await operation() } finally { await lease.release() }
+        }
+        await new Promise(resolve => setTimeout(resolve, 10))
+      }
+      throw new CoreError('SUPERVISOR_BUSY', 'The Ticket supervision state is being written by another process.')
+    })
   }
 
   private result(record: SupervisorObservationRecord, snapshot: SupervisorSnapshot, finding: SupervisorFindingKind, at: number, keepFingerprints: boolean, assessment?: SupervisorAssessment, proposalId?: string, reconciliation?: SupervisorObservationResult['reconciliation']): SupervisorObservationResult {
@@ -405,7 +552,8 @@ export class Supervisor {
     const intentReason = asString(item.reason)
     const toolDigest = lastReport === undefined || lastReport.toolFacts.length === 0 ? '' : hash(lastReport.toolFacts)
     const reportDigest = lastReport === undefined ? '' : hash([lastReport.id, lastReport.result, lastReport.evidence, lastReport.toolFacts])
-    const deliveryDigest = hash(messages)
+    const reportContentDigest = lastReport === undefined ? '' : hash([lastReport.result, lastReport.evidence, lastReport.toolFacts])
+    const deliveryDigest = hash(messages.map(message => [message.id, message.state, message.purpose]))
     const jobStates = stateList(item.jobs)
     const subagentStates = stateList(item.subagents)
     const unknownEffects = asNumber(health.effectsUnknown)
@@ -428,7 +576,9 @@ export class Supervisor {
       ...(asString(assignment.generation) === '' ? {} : { generation: asString(assignment.generation) }),
       stage, intentReason, directionVersion: direction?.directionVersion ?? 1,
       reportIds: allReports.map(report => report.id), ...(lastReport === undefined ? {} : { lastReportId: lastReport.id, lastReportAt: lastReport.createdAt }),
-      toolDigest, reportDigest, deliveryDigest, jobStates, subagentStates, unknownEffects, unknownJobs,
+      ...(lastReport === undefined ? {} : { lastReport: boundedReport(lastReport) }),
+      deliveries: boundedDeliveries(messages),
+      toolDigest, reportDigest, reportContentDigest, deliveryDigest, jobStates, subagentStates, unknownEffects, unknownJobs,
       attention, stop, setup, paused: processingPaused, waiting, observedAt: at, progressFingerprint,
     }
   }
@@ -439,10 +589,8 @@ export class Supervisor {
     }
   }
 
-  private async writeObservation(record: SupervisorObservationRecord): Promise<void> {
-    await this.storage.transaction(this.instanceId, async transaction => {
-      if (!await transaction.replace('supervisor-observation', observationKey(record.ticketId), record)) await transaction.insert('supervisor-observation', observationKey(record.ticketId), record)
-    })
+  private async saveObservation(transaction: AsyncTx, record: SupervisorObservationRecord): Promise<void> {
+    if (!await transaction.replace('supervisor-observation', observationKey(record.ticketId), record)) await transaction.insert('supervisor-observation', observationKey(record.ticketId), record)
   }
 
   private async scanProposals(transaction: AsyncTx, ticketId: string): Promise<SupervisorProposal[]> {

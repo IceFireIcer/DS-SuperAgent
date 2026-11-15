@@ -10,6 +10,21 @@ import { ProcessWatchdogHost } from '../dist/watchdog-process.js'
 
 const hostEntry = fileURLToPath(new URL('../dev/t47-host.mjs', import.meta.url))
 const signal = new AbortController().signal
+const floodScript = `
+const { renameSync, writeFileSync } = require('node:fs')
+const statusPath = process.argv[1]
+const chunk = 'log line\\n'.repeat(8192)
+const write = () => new Promise(resolve => {
+  if (process.stdout.write(chunk)) resolve()
+  else process.stdout.once('drain', resolve)
+})
+;(async () => {
+  for (let index = 0; index < 64; index++) await write()
+  writeFileSync(statusPath + '.tmp', JSON.stringify({ pid: process.pid, at: Date.now(), service: 'healthy', sources: [], setups: [], normalWaits: 0 }))
+  renameSync(statusPath + '.tmp', statusPath)
+  setInterval(() => {}, 1000)
+})().catch(error => { console.error(error); process.exit(1) })
+`
 
 async function gone(host) {
   for (let attempt = 0; attempt < 100; attempt++) {
@@ -81,6 +96,23 @@ test('a Host the adapter did not start is never reported stopped while its proce
   assert.equal(await host.stop({ graceMs: 100, signal }), 'timeout', 'a live process without the IPC channel is not claimed stopped')
   await writeFile(statusPath, JSON.stringify({ pid: 999999, at: Date.now(), service: 'healthy', sources: [], setups: [], normalWaits: 0 }))
   assert.equal(await host.stop({ graceMs: 100, signal }), 'stopped', 'a dead PID can be replaced')
+})
+
+test('a Host that floods stdout before reporting does not block its own readiness', { timeout: 30000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-watchdog-stdout-'))
+  const statusPath = join(directory, 'status.json')
+  const host = new ProcessWatchdogHost({
+    command: process.execPath, args: ['-e', floodScript, statusPath],
+    statusPath, startTimeoutMs: 15000, staleMs: 5000,
+  })
+  t.after(async () => {
+    await host.dispose()
+    await rm(directory, { recursive: true, force: true })
+  })
+  const started = Date.now()
+  await host.start({ signal })
+  assert.ok(Date.now() - started < 10000, 'the unread stdout pipe did not stall the Host')
+  assert.equal((await host.probe({ signal })).service, 'healthy')
 })
 
 test('the process adapter asks a running Host to stop and observes the exit', { timeout: 30000 }, async t => {

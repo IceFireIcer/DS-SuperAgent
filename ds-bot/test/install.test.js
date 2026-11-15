@@ -68,7 +68,6 @@ test('apply registers listeners and effects in a fixed order', (t) => {
     'prompt bot-memory 645',
     'on agent/status',
     'effect ds-bot: memory review',
-    'effect ds-bot: Bot compaction',
     'on agent/created',
     'on agent/pre-step (prepend)',
     'on system-prompt/assemble (prepend)',

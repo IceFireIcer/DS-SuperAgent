@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -99,6 +99,57 @@ test('the production factory fails closed without an explicit or profile model r
   const native = await nativeContext(join(tmpdir(), `ds-bot-host-route-${process.pid}`), function* () { yield { type: 'finish', reason: { kind: 'stop' } } })
   t.after(async () => native.fiber.dispose())
   await assert.rejects(createDsBotHostAdapter(native, { databasePath: join(tmpdir(), `ds-bot-host-route-${process.pid}.sqlite`) }), error => error?.code === 'INVALID_CONFIG')
+})
+
+test('the production factory binds an isolated Worker environment', { timeout: 30000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-host-environment-'))
+  const root = join(directory, 'workspace')
+  await mkdir(root, { recursive: true })
+  await writeFile(join(root, 'README.txt'), 'workspace evidence', 'utf8')
+  let tools = []
+  const native = await nativeContext(join(directory, 'sessions'), async function* (request) {
+    if (request.model === 'router') { yield* routerResponse(request); return }
+    const results = request.messages.filter(message => message.role === 'tool')
+    if (results.length === 0) {
+      tools = request.tools.map(tool => tool.name)
+      yield* toolResponse('read_file', { path: 'README.txt' }, 'call-read')
+      return
+    }
+    if (results.length === 1) {
+      yield* toolResponse('run_command', { name: 'inspect' }, 'call-command')
+      return
+    }
+    const evidence = results[0].content.filter(block => block.type === 'text').map(block => block.text).join('')
+    yield* toolResponse('report_ready', { result: `Tools: ${tools.join(',')} File: ${evidence}`, evidence: 'The Worker read the isolated workspace.', artifacts: 'README.txt' }, 'call-report')
+  })
+  const sessionId = 'ui-chat-chief'
+  const context = { ctx: native, rt: { chatOwners: new Map([[sessionId, 'chief']]), displayItems: () => [] } }
+  const adapter = await createDsBotHostAdapter(native, {
+    databasePath: join(directory, 'state.sqlite'),
+    sourceInstanceId: 'ds-bot-ui',
+    actorId: 'ui-user',
+    allowedActorIds: ['ui-user'],
+    router: { provider: 'mock', model: 'router' },
+    worker: { provider: 'mock', model: 'worker' },
+    environment: { root, commands: { inspect: { argv: [process.execPath, '-e', 'console.log("inspect")'], timeoutMs: 2000 } } },
+  })
+  t.after(async () => {
+    await adapter.close().catch(() => {})
+    await native.fiber.dispose().catch(() => {})
+    await rm(directory, { recursive: true, force: true })
+  })
+  await adapter.prompt({ requestId: 'environment-1', sessionId, owner: { kind: 'bot', botId: 'chief' }, content: 'Inspect the workspace.' }, context)
+  const deadline = Date.now() + 10000
+  let page
+  let conversation
+  while (Date.now() < deadline) {
+    page = await adapter.chatPage({ botId: 'chief', sessionId }, context)
+    if (page.items.some(item => item.kind === 'bot')) break
+    conversation = await adapter.conversation({ sessionId, owner: { kind: 'bot', botId: 'chief' } }, context)
+    await sleep(10)
+  }
+  for (const tool of ['glob', 'grep', 'read_file', 'run_command', 'write_file']) assert.ok(tools.includes(tool), `${tool} was not registered: ${tools.join(',')}`)
+  assert.ok(page.items.some(item => item.kind === 'bot' && item.text.includes('workspace evidence')), JSON.stringify({ items: page.items, conversation }))
 })
 
 test('the ds-bot-host plugin publishes the adapter through the Host service', async t => {

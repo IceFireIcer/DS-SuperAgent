@@ -225,8 +225,8 @@ const shown = (root, options) => text(show(root, options))
 const BRANCHES = [
   ['message_bot', { args: { to: 'Writer' } }, /Messaged.*Writer/],
   ['stop_bot', { args: { bot: 'Writer' } }, /Stopped.*Writer/],
-  ['create_bot', { args: { name: 'Writer' } }, /Created.*Writer/],
-  ['update_bot', { args: { name: 'Writer' } }, /Updated.*Writer/],
+  ['create_bot', { args: { name: 'Writer' }, content: 'Created Writer. It is greeting the user now.' }, /Created.*Writer/],
+  ['update_bot', { args: { name: 'Writer' }, content: 'Updated Writer.' }, /Updated.*Writer/],
   ['group_relay', { content: { replies: [{ botId: 'writer', text: 'Relay reply.' }] } }, /Writer.*Relay reply\./],
   ['create_group', { content: 'Created group "Ops" with Writer.' }, /Created group.*Ops/],
   ['update_group', { content: 'Updated "Ops".' }, /Updated group.*Ops/],
@@ -282,15 +282,26 @@ test('cards and replies still show when the program\'s own call head left the lo
 })
 
 test('each sub-call shows its own state, not its program\'s', () => {
-  const created = call('create_bot', 'program:ptc:1', { args: { name: 'Writer' } })
+  const created = call('create_bot', 'program:ptc:1', { args: { name: 'Writer' }, content: 'Created Writer. It is greeting the user now.' })
   assert.match(shown(program([created], { running: true })), /Created.*Writer/)
-  assert.equal(shown(program([{ ...call('create_bot', 'program:ptc:1', { args: { name: 'Writer' }, running: true }) }])), '')
+  assert.equal(shown(program([{ ...call('create_bot', 'program:ptc:1', { args: { name: 'Writer' }, content: 'Created Writer. It is greeting the user now.', running: true }) }])), '')
   const failed = call('message_bot', 'program:ptc:1', { args: { to: 'Writer' }, isError: true })
   assert.match(shown(program([failed])), /Couldn't message Writer/)
   assert.match(shown(program([call('message_bot', 'program:ptc:1', { args: { to: 'Writer' } })], { isError: true })), /^Messaged/)
   const refused = call('post_to_group', 'program:ptc:1', { content: 'No group is called "Nope".', isError: true })
   const posted = call('post_to_group', 'program:ptc:2', { content: 'Posted in "Ops".' })
   assert.match(shown(program([refused, posted])), /Couldn't post in the group.*Posted in.*Ops/)
+})
+
+test('a refused Bot change shows its reason, not Created or Updated', () => {
+  const refusedCreate = call('create_bot', 'create-failed', { args: { name: 'Writer' }, content: 'Could not create the Bot: Writer is already on the team.' })
+  assert.match(shown(refusedCreate), /Could not create the Bot: Writer is already on the team\./)
+  assert.doesNotMatch(shown(refusedCreate), /Created/)
+  const refusedUpdate = call('update_bot', 'update-failed', { args: { name: 'Writer' }, content: 'Only a Main Bot can change another Bot.', isError: true })
+  assert.match(shown(refusedUpdate), /Only a Main Bot can change another Bot\./)
+  assert.doesNotMatch(shown(refusedUpdate), /Updated/)
+  // A result without the host's success line is not taken for success either.
+  assert.equal(shown(call('update_bot', 'update-empty', { args: { name: 'Writer' } })), '')
 })
 
 test('a program with no known sub-call draws nothing, as before', () => {

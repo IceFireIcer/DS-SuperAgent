@@ -48,9 +48,10 @@ export class OpenAiCompatibleAdapter extends LlmAdapter {
   }
 
   async *stream(options) {
-    if (this.budget.requests >= this.budget.maxRequests) {
+    const tokensExhausted = this.budget.exceeded || this.budget.totalTokens >= this.budget.maxTokens
+    if (tokensExhausted || this.budget.requests >= this.budget.maxRequests) {
       this.budget.exceeded = true
-      throw new LlmError('The real-model request budget is exhausted.', 'MODEL_BUDGET')
+      throw new LlmError(tokensExhausted ? 'The real-model token budget is exhausted.' : 'The real-model request budget is exhausted.', 'MODEL_BUDGET')
     }
     this.budget.requests += 1
     const startedAt = this.now()
@@ -88,7 +89,7 @@ export class OpenAiCompatibleAdapter extends LlmAdapter {
     this.budget.inputTokens += usage.inputTokens
     this.budget.outputTokens += usage.outputTokens
     this.budget.totalTokens += usage.totalTokens ?? usage.inputTokens + usage.outputTokens
-    if (this.budget.totalTokens > this.budget.maxTokens) this.budget.exceeded = true
+    if (this.budget.totalTokens >= this.budget.maxTokens) this.budget.exceeded = true
 
     let index = 0
     if (typeof message.reasoning_content === 'string' && message.reasoning_content) {

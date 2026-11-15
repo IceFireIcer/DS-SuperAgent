@@ -104,3 +104,48 @@ test('failed setup remains visible without a Worker and only an explicit retry r
   assert.deepEqual(conversation.assignments[0].environment, original.environment)
   assert.equal(await readFile(join(root, 'attempts.txt'), 'utf8'), 'checked\nchecked\n')
 })
+
+test('the owning Bot supplies the hidden Worker model and instructions', { timeout: 15000 }, async context => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-local-worker-profile-'))
+  let native, sessions, storage, engine
+  context.after(async () => {
+    await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+  const workerCalls = []
+  native = await nativeContext(join(directory, 'sessions'), options => {
+    const user = options.messages.filter(message => message.role === 'user').at(-1)
+    const text = user.content.filter(block => block.type === 'text').map(block => block.text).join('')
+    const results = options.messages.slice(options.messages.lastIndexOf(user) + 1).filter(message => message.role === 'tool')
+    if (options.model === 'worker-bot') {
+      workerCalls.push({ model: options.model, sessionId: options.sessionId, request: JSON.stringify(options) })
+      if (results.length) return textResponse('Recorded.')
+      return toolResponse('report_ready', { result: 'Bot worker result.', evidence: 'The Bot worker used its configured model and instructions.' })
+    }
+    if (options.model !== 'router') return textResponse('Unexpected model.')
+    if (results.length) return textResponse('Recorded.')
+    return text.startsWith('Ready report:')
+      ? toolResponse('deliver_result', { reportId: JSON.parse(text.slice('Ready report:'.length)).id })
+      : toolResponse('assign_worker', {})
+  })
+  native.provide('botExecutionProfiles', {
+    resolve: async sessionId => sessionId === 'ui-session'
+      ? { model: { provider: 'mock', model: 'worker-bot' }, instructions: 'Bot worker instruction marker.', skills: [] }
+      : undefined,
+  })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  sessions = new core.NativeSessions(native, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'],
+    allowedThreadIds: ['ui-session'], versionOrder: 'sequence' }, {}, sessions)
+  const received = await engine.receiveSource({ commandId: 'profile-receive', threadId: 'ui-session', objectId: 'profile-message',
+    type: 'created', version: '1', text: 'Use the Bot settings.' })
+  const ticketId = (await engine.acceptSource({ commandId: 'profile-accept', threadId: 'ui-session', objectId: 'profile-message',
+    expectedEventId: received.eventId })).ticketId
+  for (let index = 0; index < 6; index++) await engine.effects.drain()
+  const conversation = await engine.conversation(ticketId)
+  assert.equal(conversation.status, 'ready')
+  assert.equal(workerCalls[0].model, 'worker-bot')
+  assert.match(workerCalls[0].request, /Bot worker instruction marker/u)
+  const uses = await engine.getRoleConfigUses(workerCalls[0].sessionId)
+  assert.equal(uses.some(use => use.role === 'worker' && use.worker.model === 'worker-bot'), true, JSON.stringify(uses))
+})

@@ -154,6 +154,58 @@ test('chat page shows the bound request and result when the native Worker log ha
   assert.equal(page.cursor, null)
 })
 
+test('chat fallback keeps every multi-turn request and result', { timeout: 20000 }, async t => {
+  const { adapter, context, engine, sessionId } = await fixture(t)
+  const owner = { kind: 'bot', botId: 'chief' }
+  context.rt.displayItems = () => []
+  let ticketId
+  for (let index = 0; index < 3; index++) {
+    const result = await adapter.prompt({ requestId: `multi-turn-${index}`, sessionId, owner, content: `Multi turn ${index}.` }, context)
+    ticketId = result.ticketId
+    await settle(engine, ticketId)
+    const deadline = Date.now() + 5000
+    while (Date.now() < deadline) {
+      const current = await engine.conversation(ticketId)
+      if (current.status === 'ready' && current.messageHistory.some(message => message.purpose === 'result'
+        && message.text === `Completed: Multi turn ${index}.`)) break
+      await new Promise(resolve => setTimeout(resolve, 10))
+    }
+  }
+  const page = await adapter.chatPage({ botId: 'chief', sessionId }, context)
+  for (let index = 0; index < 3; index++) {
+    assert.ok(page.items.some(item => item.kind === 'user' && item.text === `Multi turn ${index}.`), JSON.stringify(page.items))
+    assert.ok(page.items.some(item => item.kind === 'bot' && item.text === `Completed: Multi turn ${index}.`), JSON.stringify(page.items))
+  }
+  assert.equal(page.items.length, 6)
+  assert.equal(page.cursor, null)
+})
+
+test('a rendered page still adds the authoritative result that its renderer omits', { timeout: 20000 }, async t => {
+  const { adapter, context, engine, sessionId } = await fixture(t)
+  const owner = { kind: 'bot', botId: 'chief' }
+  const text = content => Array.isArray(content) ? content.filter(block => block?.type === 'text').map(block => block.text).join('\n') : ''
+  context.rt.displayItems = (_id, events) => events.flatMap(event => {
+    if (event.type === 'user/message' && event.data?.source?.kind === 'user') return [{ kind: 'user', text: text(event.data.content), time: event.time }]
+    if (event.type === 'assistant/message') {
+      const value = text(event.data?.message?.content)
+      return value ? [{ kind: 'bot', text: value, time: event.time }] : []
+    }
+    return []
+  })
+  const started = await adapter.prompt({ requestId: 'rendered-page', sessionId, owner, content: 'Rendered request.' }, context)
+  await settle(engine, started.ticketId)
+  const deadline = Date.now() + 5000
+  while (Date.now() < deadline) {
+    const current = await engine.conversation(started.ticketId)
+    if (current.messageHistory.some(message => message.purpose === 'result' && message.text === 'Completed: Rendered request.')) break
+    await new Promise(resolve => setTimeout(resolve, 10))
+  }
+  const page = await adapter.chatPage({ botId: 'chief', sessionId }, context)
+  assert.ok(page.items.some(item => item.kind === 'user' && item.text === 'Rendered request.'), JSON.stringify(page.items))
+  assert.ok(page.items.some(item => item.kind === 'bot' && item.text === 'Recorded.'), JSON.stringify(page.items))
+  assert.ok(page.items.some(item => item.kind === 'bot' && item.text === 'Completed: Rendered request.'), JSON.stringify(page.items))
+})
+
 test('durable prompt acknowledgement returns before a blocked native Worker and its active Session projects to the original UI', { timeout: 15000 }, async t => {
   let release
   const blocked = new Promise(resolve => { release = resolve })
@@ -209,6 +261,63 @@ test('chat pages preserve the old item renderer contract and page every real nat
   assert.equal(new Set(items.map(item => item.seq)).size, items.length)
   assert.equal(items.filter(item => item.type === 'user/message').length, 3)
   await assert.rejects(adapter.chatPage({ botId: 'chief', sessionId, cursor: { sessionId: 'another-worker' } }, context), { code: 'bot/invalid' })
+})
+
+test('chat pagination still reads the newest page after 2000 raw events', async () => {
+  const sessionId = 'ui-chat-chief'
+  const events = Array.from({ length: 2001 }, (_, seq) => ({ seq, time: seq, type: 'tool/call', data: {} }))
+  const sessions = {
+    async readSession(requested, options = {}) {
+      const start = options.after === undefined ? 0 : options.after + 1
+      const page = events.slice(start, start + (options.limit ?? 50))
+      const last = page.at(-1)
+      return { sessionId: requested, events: page, ...(last && last.seq < events.length - 1 ? { cursor: last.seq } : {}) }
+    },
+  }
+  const engine = {
+    effects: { start: () => {}, wake: () => {}, stop: async () => {} },
+    getReceipt: async () => ({ ticketId: 'ticket-1' }),
+    getTicket: async () => ({ trigger: { threadId: sessionId, source: { actorId: 'ui-user' } } }),
+    conversation: async () => ({ request: 'Long history.', assignments: [{ sessionId }], assignmentHistory: [],
+      messages: [], messageHistory: [], reports: [], attention: undefined, stage: 'ready' }),
+  }
+  const adapter = new DsBotExecutionAdapter({ factory: async () => ({ engine, sessions, actorId: 'ui-user' }) })
+  const context = { ctx: {}, rt: { chatOwners: new Map([[sessionId, 'chief']]),
+    displayItems: (_id, page) => page.map(event => ({ seq: event.seq, type: event.type })) } }
+  try {
+    const first = await adapter.chatPage({ botId: 'chief', sessionId }, context)
+    assert.deepEqual(first.items.map(item => item.seq), Array.from({ length: 20 }, (_, index) => 1981 + index))
+    assert.deepEqual(first.cursor, { sessionId, beforeSeq: 1981 })
+    const second = await adapter.chatPage({ botId: 'chief', sessionId, cursor: first.cursor }, context)
+    assert.deepEqual(second.items.map(item => item.seq), Array.from({ length: 20 }, (_, index) => 1961 + index))
+    assert.deepEqual(second.cursor, { sessionId, beforeSeq: 1961 })
+  } finally {
+    await adapter.close().catch(() => {})
+  }
+})
+
+test('live restores more than 100 chats and retires scopes whose owners are gone', async () => {
+  const disposed = []
+  const adapter = new DsBotExecutionAdapter({
+    factory: async ({ sessionId }) => ({
+      engine: { effects: { start: () => {}, wake: () => {}, stop: async () => {} }, getReceipt: async () => undefined },
+      sessions: { readSession: async () => ({ sessionId, events: [] }) },
+      actorId: 'ui-user',
+      dispose: async () => { disposed.push(sessionId) },
+    }),
+  })
+  const chatOwners = new Map(Array.from({ length: 101 }, (_, index) => [`ui-chat-${index}`, `chief-${index}`]))
+  const context = { ctx: {}, rt: { chatOwners, displayItems: () => [] } }
+  try {
+    const projection = await adapter.live({}, context)
+    assert.deepEqual(projection.activity, {})
+    assert.equal(disposed.length, 0)
+    for (let index = 0; index < 100; index++) chatOwners.delete(`ui-chat-${index}`)
+    await adapter.live({}, context)
+    assert.equal(disposed.length, 100)
+  } finally {
+    await adapter.close()
+  }
 })
 
 test('unsupported group, browser, view, attachment and steer paths fail safely without hidden data', async t => {

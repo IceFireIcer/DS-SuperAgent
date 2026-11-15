@@ -300,7 +300,7 @@ const sourceEntries = async (source: string, state: Record<string, unknown>, lim
     entries.push(...files.map(file => ({ ...file, path: `${prefix}/${file.path}` })))
   }
   collectFile(join(source, 'bot', 'state.json'), 'state.json')
-  for (const session of sessions) collect(join(source, 'sessions', session.group, session.id), `sessions/${session.group}/${session.id}`)
+  for (const session of sessions) await collect(join(source, 'sessions', session.group, session.id), `sessions/${session.group}/${session.id}`)
   for (const memory of ['memory', join('bot', 'memory')]) if (existsSync(join(source, memory))) await collect(join(source, memory), memory === 'memory' ? 'memory' : 'memory-legacy')
   if (include.attachments && existsSync(join(source, 'attachments'))) await collect(join(source, 'attachments'), 'attachments')
   if (include.workspace && existsSync(join(source, 'bot', 'workspace'))) await collect(join(source, 'bot', 'workspace'), 'workspace')
@@ -439,13 +439,17 @@ export async function publishLegacyArchive(targetInput: string, batchId: string)
   assertBatchId(batchId)
   const target = resolve(targetInput)
   const paths = archivePaths(target, batchId)
-  let manifest = readManifest(paths.staging)
-  if (!manifest) throw new CoreError('ARCHIVE_NOT_FOUND', 'The prepared archive does not exist.')
+  const staged = readManifest(paths.staging)
   const existing = readManifest(paths.final)
   if (existing) {
-    if (existing.source.digest !== manifest.source.digest || existing.mappingDigest !== manifest.mappingDigest) throw new CoreError('ARCHIVE_CONFLICT', 'This batch already published different content.')
+    if (existing.batchId !== batchId || existing.status !== 'published'
+      || (staged && (existing.source.digest !== staged.source.digest || existing.mappingDigest !== staged.mappingDigest))) {
+      throw new CoreError('ARCHIVE_CONFLICT', 'This batch already published different content.')
+    }
     return existing
   }
+  let manifest = staged
+  if (!manifest) throw new CoreError('ARCHIVE_NOT_FOUND', 'The prepared archive does not exist.')
   if (manifest.status !== 'verified' && manifest.status !== 'published') throw new CoreError('ARCHIVE_NOT_VERIFIED', 'The archive must be verified before it is published.')
   if (manifest.status === 'verified') {
     manifest = await verifyLegacyArchive(target, batchId)
@@ -456,7 +460,8 @@ export async function publishLegacyArchive(targetInput: string, batchId: string)
   await writeManifest(paths.staging, published)
   try { await rename(paths.staging, paths.final) } catch (error) {
     const raced = readManifest(paths.final)
-    if (raced) return raced
+    if (raced && raced.batchId === batchId && raced.status === 'published'
+      && raced.source.digest === published.source.digest && raced.mappingDigest === published.mappingDigest) return raced
     throw error
   }
   return published

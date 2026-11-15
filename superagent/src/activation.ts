@@ -77,6 +77,7 @@ export interface ActivationRecord {
   batchId: string
   commandId: string
   epoch: number
+  activatedEpoch?: number
   currentCore: CurrentCore
   state: ActivationState
   manifest: ActivationManifest
@@ -91,6 +92,7 @@ export interface ActivationView extends ActivationRecord {
 
 export interface ActivationGate {
   active(transaction: AsyncTx): Promise<boolean>
+  reattach?(epoch: number): Promise<void>
 }
 
 export interface ActivationOptions {
@@ -168,7 +170,16 @@ export class Activation {
   }
 
   gate(): ActivationGate {
-    return { active: transaction => this.activeIn(transaction) }
+    return {
+      active: transaction => this.activeIn(transaction),
+      reattach: epoch => this.exclusively(async () => {
+        await this.storage.transaction(this.instanceId, async transaction => {
+          const current = await transaction.get<ActivationRecord>('activation', activationKey(this.instanceId))
+          if (!current || current.state !== 'active' || current.epoch === epoch) return
+          await this.reattachIn(transaction, current, epoch)
+        })
+      }),
+    }
   }
 
   async status(): Promise<ActivationView | undefined> {
@@ -192,7 +203,7 @@ export class Activation {
     const existing = await commandTransaction(this.storage, this.instanceId, async transaction => {
       const current = await transaction.get<ActivationRecord>('activation', activationKey(this.instanceId))
       if (!current) return undefined
-      if (current.batchId !== options.batchId || current.epoch !== options.newEpoch) throw new CoreError('ACTIVATION_CONFLICT', 'Another core entry is already active.')
+      if (current.batchId !== options.batchId || current.epoch > options.newEpoch) throw new CoreError('ACTIVATION_CONFLICT', 'Another core entry is already active.')
       if (current.state !== 'active') throw new CoreError('ACTIVATION_REVERSING', 'The current core entry is already stopping or reversed.')
       const commandKey = activationCommandKey(this.instanceId, options.commandId)
       const prior = await transaction.get<{ fingerprint: string; activationId: string }>('activation-command', commandKey)
@@ -200,7 +211,7 @@ export class Activation {
         throw new CoreError('IDENTITY_CONFLICT', 'This activation command ID was already used with different input.')
       }
       if (!prior) await transaction.insert('activation-command', commandKey, { fingerprint: fingerprintValue, activationId: current.manifest.activationId })
-      return current
+      return current.epoch === options.newEpoch ? current : this.reattachIn(transaction, current, options.newEpoch, 'ACTIVATION_CONFLICT')
     })
     if (existing) {
       return this.releasePending(existing.batchId, options.release, maxAttempts)
@@ -221,6 +232,24 @@ export class Activation {
       this.activateIn(transaction, options, view, archive.source.stateRevision, fingerprintValue))
     try { await this.switchover.detach(options.batchId) } catch { /* The active record already refuses gap intake. */ }
     return this.releasePending(activation.batchId, options.release, maxAttempts)
+  }
+
+  /** Rebind the current activation to a replacement Host epoch after its takeover has settled. */
+  async reattach(options: { batchId: string; newEpoch: number }): Promise<ActivationView> {
+    identifier(options?.batchId, 'batchId')
+    if (!Number.isSafeInteger(options.newEpoch) || options.newEpoch < 1) throw new CoreError('ACTIVATION_INPUT', 'A current Host epoch is required.')
+    return this.exclusively(async () => {
+      const activation = await commandTransaction(this.storage, this.instanceId, async transaction => {
+        const current = await transaction.get<ActivationRecord>('activation', activationKey(this.instanceId))
+        if (!current) throw new CoreError('ACTIVATION_NOT_FOUND', 'No activation record exists.')
+        if (current.batchId !== options.batchId) throw new CoreError('ACTIVATION_CONFLICT', 'The activation belongs to another batch.')
+        if (current.epoch > options.newEpoch) throw new CoreError('ACTIVATION_EPOCH', 'The activation cannot move back to an older Host epoch.')
+        if (current.state !== 'active') throw new CoreError('ACTIVATION_REVERSING', 'The current core entry is already stopping or reversed.')
+        return this.reattachIn(transaction, current, options.newEpoch)
+      })
+      const releases = await this.storage.transaction(this.instanceId, transaction => this.scanReleases(transaction, activation.batchId))
+      return { ...activation, releases }
+    })
   }
 
   async releasePending(batchId: string, release: ActivationRelease, maxAttempts = 5): Promise<ActivationView> {
@@ -304,7 +333,7 @@ export class Activation {
     if (priorCommand) {
       if (priorCommand.fingerprint !== fingerprintValue) throw new CoreError('IDENTITY_CONFLICT', 'This activation command was already used with different input.')
       const prior = await transaction.get<ActivationRecord>('activation', activationKey(this.instanceId))
-      if (!prior || prior.id !== priorCommand.activationId) throw new CoreError('COMMIT_UNKNOWN', 'The activation command has no matching current record.')
+      if (!prior || prior.manifest.activationId !== priorCommand.activationId) throw new CoreError('COMMIT_UNKNOWN', 'The activation command has no matching current record.')
       return prior
     }
     const current = await transaction.get<ActivationRecord>('activation', activationKey(this.instanceId))
@@ -339,7 +368,7 @@ export class Activation {
     }
     const activation: ActivationRecord = {
       id: activationKey(this.instanceId), instanceId: this.instanceId, batchId: options.batchId, commandId: options.commandId,
-      epoch: options.newEpoch, currentCore: CURRENT_CORE, state: 'active', manifest,
+      epoch: options.newEpoch, activatedEpoch: options.newEpoch, currentCore: CURRENT_CORE, state: 'active', manifest,
       release: { planned: gaps.length, released: 0, pending: currentGap.held, unknown: 0, failed: 0,
         skipped: currentGap.legacyAccepted + currentGap.quarantined, legacyAccepted: currentGap.legacyAccepted, quarantined: currentGap.quarantined },
       activatedAt: this.now(), updatedAt: this.now(),
@@ -358,6 +387,26 @@ export class Activation {
     await transaction.replace('switchover', switchover.id, { ...switchover, state: 'active',
       entry: { ...switchover.entry, isolated: false, releasedAt: this.now() }, updatedAt: this.now() })
     return activation
+  }
+
+  private async reattachIn(transaction: AsyncTx, current: ActivationRecord, newEpoch: number,
+    leaseErrorCode: 'ACTIVATION_CONFLICT' | 'ACTIVATION_EPOCH' = 'ACTIVATION_EPOCH'): Promise<ActivationRecord> {
+    if (current.epoch === newEpoch) return current
+    const lease = await transaction.get<HostLeaseRecord>('host-lease', hostLeaseKey(this.instanceId))
+    if (!lease || lease.epoch !== newEpoch || lease.owner !== hostProcessToken || lease.releasedAt !== undefined || lease.expiresAt <= this.now()) {
+      throw new CoreError(leaseErrorCode, 'The activation can only follow the current, unexpired Host lease.')
+    }
+    const switchover = await loadSwitchover(transaction, this.instanceId, current.batchId)
+    if (!switchover || switchover.state !== 'active'
+      || switchover.archive.sourceDigest !== current.manifest.archiveSourceDigest
+      || switchover.archive.mappingDigest !== current.manifest.archiveMappingDigest
+      || switchover.entry.host !== current.manifest.entry.host || switchover.entry.port !== current.manifest.entry.port
+      || JSON.stringify(switchover.checkpoints.slice(-2).map(item => item.digest)) !== JSON.stringify(current.manifest.checkpoints)) {
+      throw new CoreError('ACTIVATION_STALE', 'The active switchover record no longer matches this activation.')
+    }
+    const next: ActivationRecord = { ...current, epoch: newEpoch, manifest: { ...current.manifest, epoch: newEpoch }, updatedAt: this.now() }
+    await transaction.replace('activation', current.id, next)
+    return next
   }
 
   private async activeIn(transaction: AsyncTx) {

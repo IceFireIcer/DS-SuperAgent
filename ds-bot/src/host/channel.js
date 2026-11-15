@@ -6,6 +6,7 @@ import { install as installSide } from './side.js'
 import { handoffReply, questionReply, viewReply } from './parts.js'
 import { validateViewAnswer } from 'deep-view/core'
 import { COLORS, EXTRA_COLORS, ROUTE } from './constants.js'
+import { cleanText } from './diagnostics.js'
 
 const LANGUAGES = { zh: 'Chinese (简体中文)', en: 'English' }
 const RUN_STATS = ['sessionStats', 'tokenUsage', 'contextPressure']
@@ -31,6 +32,32 @@ export function install(rt) {
 
   const ok = value => ({ ok: true, value })
   const fail = (message, code = 'bot/error') => ({ ok: false, error: { code, message, details: {} } })
+  // DSH's prompt admission wraps any unexpected failure as 'session/agent-busy' and
+  // keeps the real cause in details.reason, which the window never shows and the log
+  // never saw (#424). This is DS Bot's own prompt call, so the reason reaches the user
+  // and the diagnostics here, without replacing the shared sessionController method.
+  const promptFailure = (sessionId, error) => {
+    const room = rt.roomOf(sessionId)
+    if (room === undefined && !rt.isBotSession(sessionId)) return error
+    // The reason can name local paths or carry tokens, so the same cleaning the
+    // diagnostics get applies before it reaches the client.
+    const reason = typeof error?.details?.reason === 'string' && error.details.reason !== ''
+      ? cleanText(error.details.reason, { redact: rt.redactSecrets })
+      : undefined
+    const where = room === undefined ? 'own chat' : `group "${room.name}"`
+    rt.noteFailure({
+      source: 'prompt',
+      text: `prompt rejected for ${where}${reason === undefined ? '' : `: ${reason}`}`,
+      code: error?.code,
+      where,
+      sessionId,
+    })
+    if (reason !== undefined) {
+      error.message = `${error?.message ?? 'prompt rejected'} — ${reason}`
+      error.details = { ...error.details, reason }
+    }
+    return error
+  }
   // Models come from DSH, not state.json, so a provider added in Harness settings
   // changes the view without a new revision.
   const modelsKey = () => `${rt.cachedCatalog().map(entry => `${entry.ref}${entry.needsKey ? '!' : ''}${entry.reasoning ? `:${JSON.stringify(entry.reasoning)}` : ''}`).join(',')}|${rt.cachedDefault() ?? ''}`
@@ -480,7 +507,13 @@ export function install(rt) {
             content: [{ type: 'text', text }],
           }
           if (rt.executionAdapter) await rt.executionDispatch('prompt', request, signal)
-          else await ctx.sessionController.prompt(request, AbortSignal.timeout(30_000))
+          else {
+            try {
+              await ctx.sessionController.prompt(request, AbortSignal.timeout(30_000))
+            } catch (error) {
+              throw promptFailure(sessionId, error)
+            }
+          }
           return ok(true)
         }
         case 'btw-delete': {

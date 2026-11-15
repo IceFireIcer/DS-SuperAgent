@@ -4,7 +4,8 @@ import { app, dialog } from 'electron'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { findTeam, newerSessions, teamInUse, userDshHome, within } from './import.mjs'
+import { isolationProblem } from './copy-tree.mjs'
+import { findTeam, newerSessions, teamInUse, userDshHome } from './import.mjs'
 import { installFolder } from './move-data.mjs'
 
 const TEXT = {
@@ -97,15 +98,18 @@ async function pick(title, current, signal) {
 
 export const programFolder = () => installFolder(app.getPath('exe'))
 
-function placeProblem(t, dataDir, workspace) {
+export function placeProblem(t, dataDir, workspace, { layout = true } = {}) {
   const dsh = userDshHome()
   const program = programFolder()
-  if (within(dataDir, workspace)) return t.dataInWorkspace
-  if (within(workspace, dataDir)) return t.workspaceInData
-  for (const path of [dataDir, workspace]) {
-    if (within(path, dsh) || within(dsh, path)) return t.inDsh(dsh)
-    if (app.isPackaged && within(path, program)) return t.inProgram
-  }
+  const problem = isolationProblem(dataDir, workspace, {
+    dshHome: dsh,
+    program: app.isPackaged ? program : undefined,
+    layout,
+  })
+  if (problem === 'dataInWorkspace') return t.dataInWorkspace
+  if (problem === 'workspaceInData') return t.workspaceInData
+  if (problem === 'inDsh') return t.inDsh(dsh)
+  if (problem === 'inProgram') return t.inProgram
   return undefined
 }
 
@@ -157,14 +161,21 @@ export function saveLocations({ dataDir, workspace }) {
  */
 export async function chooseLocations(signal, { importTeam: allowImport = true } = {}) {
   if (process.env.DS_BOT_HOME) return { dataDir: process.env.DS_BOT_HOME, workspace: process.env.DS_BOT_WORKSPACE || undefined }
-  const file = locationsFile()
-  if (existsSync(file)) {
-    const saved = JSON.parse(readFileSync(file, 'utf8'))
-    return { dataDir: saved.dataDir, workspace: saved.workspace }
-  }
   const t = text()
+  const file = locationsFile()
+  let saved
+  if (existsSync(file)) {
+    try {
+      saved = JSON.parse(readFileSync(file, 'utf8'))
+      if (placeProblem(t, saved.dataDir, saved.workspace, { layout: false }) === undefined) return { dataDir: saved.dataDir, workspace: saved.workspace }
+    } catch {}
+  }
   let dataDir = join(homedir(), '.ds-bot')
   let workspace = join(homedir(), 'DS Bot')
+  if (saved !== undefined) {
+    dataDir = typeof saved.dataDir === 'string' ? saved.dataDir : dataDir
+    workspace = typeof saved.workspace === 'string' ? saved.workspace : workspace
+  }
   try {
     for (;;) {
       const choice = await ask({ type: 'info', message: t.welcome, detail: t.places(dataDir, workspace), buttons: [t.start, t.change, t.quit], defaultId: 0, cancelId: 2 }, signal)

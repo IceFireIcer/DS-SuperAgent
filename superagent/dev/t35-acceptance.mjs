@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process'
 import { createConnection, createServer } from 'node:net'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, posix } from 'node:path'
 import { RemoteEnvironment } from '../dist/index.js'
 
 function argument(name) {
@@ -18,17 +18,37 @@ function optionalArgument(name) {
   return index === -1 ? undefined : process.argv[index + 1]
 }
 
+function absoluteRemotePath(value, name) {
+  if (typeof value !== 'string' || !value || value.includes('\0') || value.includes('\r') || value.includes('\n') || !posix.isAbsolute(value)) {
+    throw new Error(`--${name} must be an absolute POSIX path.`)
+  }
+  return posix.normalize(value)
+}
+
+function safeDeviceRoot(value) {
+  const normalized = absoluteRemotePath(value, 'device-root')
+  const root = ['/tmp', '/var/tmp'].find(candidate => normalized.startsWith(`${candidate}/`))
+  if (!root) throw new Error('--device-root must be a dedicated directory below /tmp or /var/tmp.')
+  const inside = posix.relative(root, normalized)
+  if (!inside || inside === '..' || inside.startsWith('../') || posix.isAbsolute(inside)) {
+    throw new Error('--device-root must stay strictly inside its temporary root.')
+  }
+  return normalized
+}
+
+const shellQuote = value => `'${String(value).replaceAll("'", "'\\''")}'`
+
 const host = argument('host')
 const key = argument('key')
-const packageRoot = argument('package-root')
-const deviceRoot = argument('device-root')
+const packageRoot = absoluteRemotePath(argument('package-root'), 'package-root')
+const deviceRoot = safeDeviceRoot(argument('device-root'))
 const remotePort = Number(argument('remote-port'))
 const localPort = optionalArgument('local-port') === undefined ? undefined : Number(optionalArgument('local-port'))
 if (!Number.isInteger(remotePort) || remotePort < 1 || remotePort > 65535) throw new Error('--remote-port must be a TCP port.')
 if (localPort !== undefined && (!Number.isInteger(localPort) || localPort < 1 || localPort > 65535)) throw new Error('--local-port must be a TCP port.')
 
 const directory = await mkdtemp(join(tmpdir(), 'ds-bot-t35-acceptance-'))
-const remotePath = (...parts) => parts.join('/').replace(/\/+/gu, '/')
+const remotePath = (...parts) => posix.join(...parts)
 const configPath = remotePath(deviceRoot, 'device.json')
 const pairingCodePath = remotePath(deviceRoot, 'pairing-code.txt')
 const deviceLog = remotePath(deviceRoot, 'device.log')
@@ -98,16 +118,20 @@ async function freePort() {
 }
 
 async function startDevice() {
-  await remoteShell(`cd ${packageRoot} && rm -f ${pairingCodePath} ${deviceLog} ${devicePid}`)
-  await remoteShell(`cd ${packageRoot} && setsid -f env PATH=$HOME/.local/node/bin:$PATH node dev/remote-device.mjs `
-    + `--config ${configPath} --pairing-code-file ${pairingCodePath} </dev/null >${deviceLog} 2>&1`)
-  await until(async () => (await ssh(`test -f ${pairingCodePath} && echo ready`).catch(() => '')).includes('ready'), 'the device pairing code')
-  await remoteShell(`pgrep -f "remote-device.mjs --config ${configPath}" | head -1 > ${devicePid}`)
+  await remoteShell(`cd ${shellQuote(packageRoot)} && rm -f -- ${shellQuote(pairingCodePath)} ${shellQuote(deviceLog)} ${shellQuote(devicePid)}`)
+  await remoteShell(`cd ${shellQuote(packageRoot)} && setsid -f env PATH=$HOME/.local/node/bin:$PATH node dev/remote-device.mjs `
+    + `--config ${shellQuote(configPath)} --pairing-code-file ${shellQuote(pairingCodePath)} </dev/null >${shellQuote(deviceLog)} 2>&1`)
+  await until(async () => (await ssh(`test -f ${shellQuote(pairingCodePath)} && echo ready`).catch(() => '')).includes('ready'), 'the device pairing code')
+  await remoteShell(`pgrep -f -- ${shellQuote(`remote-device.mjs --config ${configPath}`)} | head -1 > ${shellQuote(devicePid)}`)
 }
 
 async function killDevice() {
-  await remoteShell(`if test -f ${devicePid}; then kill -9 $(cat ${devicePid}) 2>/dev/null || true; fi`)
-  await until(async () => !(await ssh(`test -f ${devicePid} && kill -0 $(cat ${devicePid}) 2>/dev/null && echo alive`).catch(() => '')).includes('alive'), 'the daemon to exit')
+  await remoteShell(`if test -f ${shellQuote(devicePid)}; then kill -9 "$(cat ${shellQuote(devicePid)})" 2>/dev/null || true; fi`)
+  await until(async () => !(await ssh(`test -f ${shellQuote(devicePid)} && kill -0 "$(cat ${shellQuote(devicePid)})" 2>/dev/null && echo alive`).catch(() => '')).includes('alive'), 'the daemon to exit')
+}
+
+async function removeDeviceRoot() {
+  await remoteShell(`rm -rf -- ${shellQuote(safeDeviceRoot(deviceRoot))}`)
 }
 
 const config = { deviceId: 'linux-t35', root: remotePath(deviceRoot, 'work'), jobsPath: remotePath(deviceRoot, 'jobs'),
@@ -119,8 +143,10 @@ const config = { deviceId: 'linux-t35', root: remotePath(deviceRoot, 'work'), jo
     timeoutMs: 500, backgroundTimeoutMs: 2500 },
   quick: { argv: ['node', '-e', "console.log('finished')"], timeoutMs: 5000, backgroundTimeoutMs: 60000 } },
   grants: [{ instanceId: 'private', environmentId: 'remote-project', allowedActorIds: ['user'], permissions: ['read', 'write', 'search', 'command'] }] }
+const holdPidPath = remotePath(config.root, 'hold.pid')
 await writeFile(localConfigPath, JSON.stringify(config))
-await remoteShell(`rm -rf ${deviceRoot} && mkdir -p ${deviceRoot}/work ${deviceRoot}/jobs`)
+await removeDeviceRoot()
+await remoteShell(`mkdir -p -- ${shellQuote(remotePath(deviceRoot, 'work'))} ${shellQuote(remotePath(deviceRoot, 'jobs'))}`)
 await scp(localConfigPath, configPath)
 
 let tunnel
@@ -128,19 +154,19 @@ let environment
 const startedAt = Date.now()
 try {
   await startDevice()
-  const pairingCode = (await ssh(`cat ${pairingCodePath}`)).trim()
+  const pairingCode = (await ssh(`cat ${shellQuote(pairingCodePath)}`)).trim()
   const tunnelPort = localPort ?? await freePort()
   tunnel = spawn('ssh', ['-N', '-i', key, '-o', 'StrictHostKeyChecking=no', '-o', 'ExitOnForwardFailure=yes',
     '-L', `${tunnelPort}:127.0.0.1:${remotePort}`, host], { stdio: 'ignore', windowsHide: true })
   await until(() => portOpen(tunnelPort), 'the SSH device tunnel')
   environment = await RemoteEnvironment.pair({ id: 'remote-project', instanceId: 'private', allowedActorIds: ['user'],
     permissions: ['read', 'write', 'search', 'command'], endpoint: `http://127.0.0.1:${tunnelPort}`, pairingCode,
-    expectedDeviceId: config.deviceId, expectedDeviceKey: (await ssh(`grep -o '[a-f0-9]\\{64\\}' ${deviceLog} | head -1`)).trim() })
+    expectedDeviceId: config.deviceId, expectedDeviceKey: (await ssh(`grep -o '[a-f0-9]\\{64\\}' ${shellQuote(deviceLog)} | head -1`)).trim() })
   const bound = await environment.prepare({ instanceId: 'private', actorId: 'user' })
 
   const live = await bound.startCommand('hold')
   await until(() => live.read().stdout.text.includes('started'), 'the live range output')
-  const livePid = Number(await ssh(`cat ${config.root}/hold.pid`))
+  const livePid = Number(await ssh(`cat ${shellQuote(holdPidPath)}`))
   await killDevice()
   await startDevice()
   const liveRange = await bound.inspectRange(live.jobId)
@@ -155,10 +181,10 @@ try {
   assert.equal((await bound.inspectRange(live.jobId)).state, 'cancelled')
   await until(async () => !(await ssh(`kill -0 ${livePid} 2>/dev/null && echo alive`).catch(() => '')).includes('alive'), 'the recovered range to stop')
 
-  await remoteShell(`rm -f ${config.root}/hold.pid`)
+  await remoteShell(`rm -f -- ${shellQuote(holdPidPath)}`)
   const terminal = await bound.startCommand('hold')
-  await until(async () => (await ssh(`cat ${config.root}/hold.pid`).catch(() => '')).trim() !== '', 'the second range PID')
-  const terminalPid = Number(await ssh(`cat ${config.root}/hold.pid`))
+  await until(async () => (await ssh(`cat ${shellQuote(holdPidPath)}`).catch(() => '')).trim() !== '', 'the second range PID')
+  const terminalPid = Number(await ssh(`cat ${shellQuote(holdPidPath)}`))
   await killDevice()
   await remoteShell(`kill -9 ${terminalPid} 2>/dev/null || true`)
   await until(async () => !(await ssh(`kill -0 ${terminalPid} 2>/dev/null && echo alive`).catch(() => '')).includes('alive'), 'the second range to exit')
@@ -170,10 +196,10 @@ try {
   assert.equal(terminalRange.stdout.text, 'started\n')
   await assert.rejects(bound.attachCommand(terminal.jobId), { code: 'COMMAND_UNKNOWN' })
 
-  await remoteShell(`rm -f ${config.root}/hold.pid`)
+  await remoteShell(`rm -f -- ${shellQuote(holdPidPath)}`)
   const short = await bound.startCommand('short')
-  await until(async () => (await ssh(`cat ${config.root}/hold.pid`).catch(() => '')).trim() !== '', 'the deadline range PID')
-  const shortPid = Number(await ssh(`cat ${config.root}/hold.pid`))
+  await until(async () => (await ssh(`cat ${shellQuote(holdPidPath)}`).catch(() => '')).trim() !== '', 'the deadline range PID')
+  const shortPid = Number(await ssh(`cat ${shellQuote(holdPidPath)}`))
   await killDevice()
   await sleep(3000)
   await startDevice()
@@ -186,10 +212,10 @@ try {
   await until(async () => !(await ssh(`kill -0 ${shortPid} 2>/dev/null && echo alive`).catch(() => '')).includes('alive'), 'the deadline range to stop')
 
   const missing = await bound.startCommand('hold')
-  await until(async () => (await ssh(`cat ${config.root}/hold.pid`).catch(() => '')).trim() !== '', 'the unqueryable range PID')
-  const missingPid = Number(await ssh(`cat ${config.root}/hold.pid`))
+  await until(async () => (await ssh(`cat ${shellQuote(holdPidPath)}`).catch(() => '')).trim() !== '', 'the unqueryable range PID')
+  const missingPid = Number(await ssh(`cat ${shellQuote(holdPidPath)}`))
   await killDevice()
-  await remoteShell(`kill -9 ${missingPid} 2>/dev/null || true; rm -rf ${config.jobsPath}`)
+  await remoteShell(`kill -9 ${missingPid} 2>/dev/null || true; rm -rf -- ${shellQuote(config.jobsPath)}`)
   await until(async () => !(await ssh(`kill -0 ${missingPid} 2>/dev/null && echo alive`).catch(() => '')).includes('alive'), 'the unqueryable range to exit')
   await startDevice()
   const missingRange = await bound.inspectRange(missing.jobId)
@@ -213,8 +239,8 @@ try {
 } finally {
   await environment?.close().catch(() => {})
   tunnel?.kill()
-  await remoteShell(`if test -f ${devicePid}; then kill -9 $(cat ${devicePid}) 2>/dev/null || true; fi; `
-    + `if test -f ${config.root}/hold.pid; then kill -9 $(cat ${config.root}/hold.pid) 2>/dev/null || true; fi; `
-    + `rm -f ${config.root}/hold.pid`).catch(() => {})
+  await remoteShell(`if test -f ${shellQuote(devicePid)}; then kill -9 "$(cat ${shellQuote(devicePid)})" 2>/dev/null || true; fi; `
+    + `if test -f ${shellQuote(holdPidPath)}; then kill -9 "$(cat ${shellQuote(holdPidPath)})" 2>/dev/null || true; fi; `
+    + `rm -f -- ${shellQuote(holdPidPath)}`).catch(() => {})
   await rm(directory, { recursive: true, force: true })
 }

@@ -625,3 +625,30 @@ test('a second host reads chats but never writes or answers', async (t) => {
   assert.equal(env.requests.length, 0)
   assert.equal(existsSync(join(env.home, 'side', 'b1.json')), true)
 })
+
+test('a second host reloads side chats when the writer saves a new revision', async (t) => {
+  const env = await setup({
+    foreignLock: true,
+    side: {
+      b1: [
+        { id: 'chat', botId: 'b1', createdAt: 1, updatedAt: 10, entries: [
+          { id: 'live', question: 'Still going?', answer: '', status: 'answering', createdAt: 10 },
+        ] },
+      ],
+    },
+  })
+  t.after(() => env.stop())
+  assert.equal(chatOf(env.rt, 'chat').entries[0].status, 'answering')
+  const done = [{ id: 'chat', botId: 'b1', createdAt: 1, updatedAt: 11, entries: [
+    { id: 'live', question: 'Still going?', answer: 'Done.', status: 'done', createdAt: 10, finishedAt: 11 },
+  ] }]
+  writeFileSync(join(env.home, 'side', 'b1.json'), JSON.stringify(done))
+  const statePath = join(env.home, 'state.json')
+  const saved = JSON.parse(readFileSync(statePath, 'utf8'))
+  writeFileSync(statePath, JSON.stringify({ ...saved, revision: saved.revision + 1 }))
+  await env.rt.refresh()
+  const entry = chatOf(env.rt, 'chat').entries[0]
+  assert.equal(entry.status, 'done')
+  assert.equal(entry.answer, 'Done.')
+  assert.equal(chatsFile(env.home)[0].entries[0].status, 'done')
+})

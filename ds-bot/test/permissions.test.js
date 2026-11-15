@@ -9,11 +9,14 @@ function runtime({ presets = true, auto = false, fail = false, hold = false } = 
   const writes = []
   const releases = []
   const bots = {}
-  const control = { fail }
+  const control = { fail, failOn: new Set() }
   const service = {
     catalog: () => ({ options: [...Object.keys(PRESETS), ...(auto ? SESSION_ONLY : [])].map(value => ({ value, name: value })), defaultOptions: [], defaultPreset: 'workspace-write' }),
     resolve: (name) => { if (!(name in PRESETS) && !(auto && SESSION_ONLY.includes(name))) throw new Error(`permission: unknown preset "${name}"`); return PRESETS[name] },
-    set: (session, name) => { if (control.fail) throw new Error('permission: rejected'); writes.push(`${session}=${name}`) },
+    set: (session, name) => {
+      if (control.fail || control.failOn.has(session)) throw new Error('permission: rejected')
+      writes.push(`${session}=${name}`)
+    },
   }
   const ctx = { get: name => (presets && name === 'permissionPresets' ? service : undefined) }
   const rt = {
@@ -166,6 +169,29 @@ test('the last preset asked for wins when two group changes overlap', async () =
   await first
   await second
   assert.equal(room.permission, 'danger-full-access')
-  assert.equal(writes.length, 4)
-  assert.ok(writes.every(write => write.endsWith('=danger-full-access')))
+  assert.deepEqual(writes, ['s1=danger-full-access', 's2=danger-full-access'])
+})
+
+test('a group change that fails keeps its saved preset, and a retry applies', async () => {
+  const { rt, writes, bots, control } = runtime()
+  bots.b1 = { id: 'b1', name: 'Ada' }
+  const room = { id: 'r1', name: 'Ops', sessions: { b1: 's1' }, permission: 'danger-full-access' }
+  control.fail = true
+  await assert.rejects(rt.setRoomPermission(room, 'workspace-write'), /rejected/)
+  assert.equal(room.permission, 'danger-full-access')
+  control.fail = false
+  assert.equal(await rt.setRoomPermission(room, 'workspace-write'), true)
+  assert.equal(room.permission, 'workspace-write')
+  assert.deepEqual(writes, ['s1=workspace-write'])
+})
+
+test('a partly applied group change puts its Sessions back and saves nothing', async () => {
+  const { rt, writes, bots, control } = runtime()
+  bots.b1 = { id: 'b1', name: 'Ada' }
+  bots.b2 = { id: 'b2', name: 'Ben' }
+  const room = { id: 'r1', name: 'Ops', sessions: { b1: 's1', b2: 's2' }, permission: 'danger-full-access' }
+  control.failOn.add('s2')
+  await assert.rejects(rt.setRoomPermission(room, 'workspace-write'), /rejected/)
+  assert.equal(room.permission, 'danger-full-access')
+  assert.deepEqual(writes, ['s1=workspace-write', 's1=danger-full-access'])
 })

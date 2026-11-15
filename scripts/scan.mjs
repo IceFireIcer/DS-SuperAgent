@@ -97,17 +97,15 @@ for (const file of files) {
   if (data.includes(0)) continue
   const lines = data.toString('utf8').split('\n')
   lines.forEach((line, index) => {
+    // A finding from one rule must not reprint text that another rule found to be a secret.
+    // Redact every secret range on the line before any snippet is cut from it.
+    const safeLine = redact(line, secretRanges(line, file))
     for (const rule of TEXT_RULES) {
-      if (rule.files && !rule.files.test(file)) continue
-      if (rule.notFiles && rule.notFiles.test(file)) continue
-      if (rule.unless && rule.unless.test(line)) continue
-      const legacy = LEGACY_FILES.test(file) || /legacy|旧版/i.test(line)
-      if (rule.legacyOk && legacy) continue
-      if (rule.onlyLegacy && !legacy) continue
+      if (!applies(rule, file, line)) continue
       rule.re.lastIndex = 0
       for (const match of line.matchAll(rule.re)) {
         if (rule.secret && PLACEHOLDER.test(match[0])) continue
-        const shown = rule.secret ? `${match[0].slice(0, 6)}… (${match[0].length} chars)` : snippet(line, match.index, match[0].length)
+        const shown = rule.secret ? `${match[0].slice(0, 6)}… (${match[0].length} chars)` : snippet(safeLine, match.index, match[0].length)
         add(rule.level, rule.id, file, index + 1, shown, rule.summary)
       }
     }
@@ -175,6 +173,42 @@ function snippet(line, at, length) {
   const start = Math.max(0, at - 40)
   const end = Math.min(line.length, at + length + 40)
   return `${start > 0 ? '…' : ''}${line.slice(start, end).trim()}${end < line.length ? '…' : ''}`
+}
+
+function applies(rule, file, line) {
+  if (rule.files && !rule.files.test(file)) return false
+  if (rule.notFiles && rule.notFiles.test(file)) return false
+  if (rule.unless && rule.unless.test(line)) return false
+  const legacy = LEGACY_FILES.test(file) || /legacy|旧版/i.test(line)
+  if (rule.legacyOk && legacy) return false
+  if (rule.onlyLegacy && !legacy) return false
+  return true
+}
+
+function secretRanges(line, file) {
+  const ranges = []
+  for (const rule of TEXT_RULES) {
+    if (!rule.secret || !applies(rule, file, line)) continue
+    rule.re.lastIndex = 0
+    for (const match of line.matchAll(rule.re)) {
+      ranges.push([match.index, match.index + match[0].length])
+    }
+  }
+  ranges.sort((first, second) => first[0] - second[0] || first[1] - second[1])
+  return ranges
+}
+
+function redact(line, ranges) {
+  if (ranges.length === 0) return line
+  let end = 0
+  let text = ''
+  for (const [start, stop] of ranges) {
+    if (stop <= end) continue
+    text += line.slice(end, Math.max(start, end))
+    text += '*'.repeat(stop - Math.max(start, end))
+    end = stop
+  }
+  return text + line.slice(end)
 }
 
 function walk(dir) {

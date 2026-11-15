@@ -96,20 +96,49 @@ export function install(rt) {
 
   // Members' Sessions in the group change now; a member that has none there yet gets the
   // group's preset when its first turn there makes one. Returns whether it changed.
+  const roomRequests = new Map()
+
   async function setRoomPermission(room, name) {
     const wanted = cleanRoomPermission(name) ?? undefined
-    if (wanted === room.permission) return false
-    if (wanted === undefined) delete room.permission
-    else room.permission = wanted
+    const request = roomRequests.get(room.id ?? room) ?? { seq: 0 }
+    const mine = ++request.seq
+    roomRequests.set(room.id ?? room, request)
+    const previous = room.permission
     const service = presets()
-    if (service === undefined) return true
+    if (service === undefined) {
+      if (request.seq !== mine || wanted === previous) return false
+      if (wanted === undefined) delete room.permission
+      else room.permission = wanted
+      return true
+    }
+    const applied = []
+    let failure
     for (const [botId, sessionId] of Object.entries(room.sessions ?? {})) {
       const bot = rt.botOf(botId)
       if (bot === undefined) continue
       // A member without a preset of its own goes back to the default its Session started on.
-      await setPreset(sessionId, () => room.permission ?? bot.permission ?? service.catalog().defaultPreset)
-        .catch(error => rt.warn('ds-bot: permission for %s in %s not applied: %s', bot.name, room.name, error))
+      try {
+        const preset = await setPreset(sessionId, () => (request.seq === mine
+          ? wanted ?? bot.permission ?? service.catalog().defaultPreset
+          : undefined))
+        if (preset !== undefined) applied.push({ bot, sessionId })
+      } catch (error) {
+        if (request.seq === mine && failure === undefined) failure = error
+      }
     }
+    if (request.seq !== mine) return false
+    if (failure !== undefined) {
+      // Keep the group's saved preset and put back the Sessions this change already
+      // moved, so a retry starts from the preset the group still has.
+      for (const { bot, sessionId } of applied) {
+        await setPreset(sessionId, previous ?? bot.permission ?? service.catalog().defaultPreset)
+          .catch(error => rt.warn('ds-bot: permission for %s in %s not restored: %s', bot.name, room.name, error))
+      }
+      throw failure
+    }
+    if (wanted === previous) return false
+    if (wanted === undefined) delete room.permission
+    else room.permission = wanted
     return true
   }
 

@@ -59,32 +59,52 @@ export class FeishuDeliveryChannel implements DeliveryChannel {
       if (prior?.messageId) return prior.fingerprint === fingerprint ? { type: 'success' } : { type: 'unknown', reason: 'FEISHU_RECEIPT_CONFLICT' }
       const denied = await this.options.authorize?.(delivery, context.signal)
       if (denied) return denied
-      // After the native deduplication window, re-sending an uncertain attempt can duplicate a reply.
+      // A delivery that never reached Feishu starts the one-hour window with its first request,
+      // so time spent waiting in the local queue cannot block that send. After the window,
+      // re-sending an uncertain attempt could duplicate a reply.
       const age = (this.options.now ?? Date.now)() - delivery.createdAt
-      if (!Number.isFinite(age) || age < 0 || age >= 55 * 60 * 1000) return { type: 'unknown', reason: 'FEISHU_RECONCILIATION_REQUIRED: the safe uuid window has expired.' }
-      const receipt = await this.transport.replyMessage({ messageId, text, uuid: uuidFor(context.idempotencyKey), signal: context.signal })
+      if ((delivery.attempts ?? 0) > 0 && (!Number.isFinite(age) || age < 0 || age >= 55 * 60 * 1000)) {
+        return { type: 'unknown', reason: 'FEISHU_RECONCILIATION_REQUIRED: the safe uuid window has expired.' }
+      }
+      let receipt: { messageId: string }
+      try {
+        receipt = await this.transport.replyMessage({ messageId, text, uuid: uuidFor(context.idempotencyKey), signal: context.signal })
+      } catch (error) {
+        return this.failure(error, true)
+      }
       if (!receipt.messageId) return { type: 'unknown', reason: 'FEISHU_RECEIPT_MISSING' }
-      await this.options.recordReceipt?.({ deliveryId: delivery.id, idempotencyKey: context.idempotencyKey, messageId: receipt.messageId,
-        sourceInstanceId: delivery.destination.sourceInstanceId, fingerprint, recordedAt: (this.options.now ?? Date.now)() })
+      try {
+        await this.options.recordReceipt?.({ deliveryId: delivery.id, idempotencyKey: context.idempotencyKey, messageId: receipt.messageId,
+          sourceInstanceId: delivery.destination.sourceInstanceId, fingerprint, recordedAt: (this.options.now ?? Date.now)() })
+      } catch {
+        // Feishu accepted the reply; a missing local receipt is reconciled under the same uuid.
+        return { type: 'unknown', reason: 'FEISHU_RECEIPT_UNRECORDED' }
+      }
       return { type: 'success' }
     } catch (error) {
-      if (error instanceof FeishuApiError) {
-        const status = error.httpStatus ?? 0
-        if (status === 429 || status >= 500) return { type: 'transient', reason: `FEISHU_HTTP_${status}` }
-        if (status === 401 || status === 403) return { type: 'transient', reason: `FEISHU_PERMISSION_${status}` }
-        if (error.feishuCode !== undefined && [99991400, 99991663, 230020].includes(error.feishuCode)) return { type: 'transient', reason: `FEISHU_${error.feishuCode}` }
-        if (error.feishuCode === 230110) return { type: 'permanent', reason: 'DESTINATION_GONE: the Feishu message was deleted.' }
-        if (error.feishuCode !== undefined && [230002, 230006, 230013, 230018, 230019, 230022, 230025, 230027, 230028, 230035, 230073, 230099, 231203, 231204].includes(error.feishuCode)) {
-          return { type: 'permanent', reason: `FEISHU_${error.feishuCode}` }
-        }
-        return { type: 'unknown', reason: `FEISHU_${error.feishuCode ?? 'UNKNOWN'}` }
-      }
-      if (error instanceof CoreError && error.code === 'SOURCE_STOPPED') return { type: 'transient', reason: 'SOURCE_STOPPED' }
-      if (error instanceof CoreError && (error.code === 'INVALID_INPUT' || error.code === 'INVALID_CONFIG')) {
-        return { type: 'permanent', reason: error.code }
-      }
-      return { type: 'transient', reason: 'FEISHU_REQUEST_FAILED' }
+      return this.failure(error, false)
     }
+  }
+
+  private failure(error: unknown, mayHaveSent: boolean): DeliveryResult {
+    if (error instanceof FeishuApiError) {
+      const status = error.httpStatus ?? 0
+      if (status === 429 || status >= 500) return { type: 'transient', reason: `FEISHU_HTTP_${status}` }
+      if (status === 401 || status === 403) return { type: 'transient', reason: `FEISHU_PERMISSION_${status}` }
+      if (error.feishuCode !== undefined && [99991400, 99991663, 230020].includes(error.feishuCode)) return { type: 'transient', reason: `FEISHU_${error.feishuCode}` }
+      if (error.feishuCode === 230110) return { type: 'permanent', reason: 'DESTINATION_GONE: the Feishu message was deleted.' }
+      if (error.feishuCode !== undefined && [230002, 230006, 230013, 230018, 230019, 230022, 230025, 230027, 230028, 230035, 230073, 230099, 231203, 231204].includes(error.feishuCode)) {
+        return { type: 'permanent', reason: `FEISHU_${error.feishuCode}` }
+      }
+      return { type: 'unknown', reason: `FEISHU_${error.feishuCode ?? 'UNKNOWN'}` }
+    }
+    if (error instanceof CoreError && (error.code === 'INVALID_INPUT' || error.code === 'INVALID_CONFIG')) {
+      return { type: 'permanent', reason: error.code }
+    }
+    // A transport failure, timeout, stop or unreadable response may happen after Feishu took the
+    // reply; only a failure before the request was made proves the reply does not exist.
+    if (mayHaveSent) return { type: 'unknown', reason: error instanceof CoreError ? `FEISHU_${error.code}` : 'FEISHU_REQUEST_UNKNOWN' }
+    return { type: 'transient', reason: error instanceof CoreError ? error.code : 'FEISHU_REQUEST_NOT_SENT' }
   }
 
   private imText(text: string) {

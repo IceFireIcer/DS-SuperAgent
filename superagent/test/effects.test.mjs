@@ -141,6 +141,33 @@ test('JSON object key order does not create a new generation and payload mutatio
   assert.equal((await effects.list()).items.length, 1)
 })
 
+test('a stored payload read back with JSONB key order is still the same Effect', async context => {
+  const { effects, enqueue, storage } = await setup(context, { handlers: { relay: { execute: async () => ({ type: 'success' }) } } })
+  const request = { key: 'jsonb', stream: 'relay', scope: 'worker', payload: { aa: 1, b: 2 } }
+  // PostgreSQL JSONB orders object keys by length and then by bytes, so it reads the payload back as { b: 2, aa: 1 }.
+  const reorderStored = payload => storage.transaction('private', async transaction => {
+    const id = JSON.stringify([request.stream, request.scope, request.key])
+    const entry = await transaction.get('effect-key', id)
+    assert.ok(entry)
+    const effect = await transaction.get('effect', entry.queueKey)
+    if (effect) await transaction.replace('effect', entry.queueKey, { ...effect, payload })
+    await transaction.replace('effect-key', id, { ...entry,
+      ...(entry.completed ? { completed: { ...entry.completed, payload } } : {}) })
+  })
+  const original = await enqueue(request)
+  await reorderStored({ b: 2, aa: 1 })
+  const duplicate = await enqueue(request)
+  assert.equal(duplicate.generation, original.generation)
+  assert.equal((await effects.list()).items.length, 1)
+
+  await effects.drain()
+  assert.equal((await effects.receipt(original.id, original.generation)).state, 'done')
+  assert.equal((await effects.list()).items.length, 0)
+  await reorderStored({ b: 2, aa: 1 })
+  const completed = await enqueue(request)
+  assert.equal(completed.generation, original.generation)
+})
+
 test('accepted work exposes its notice, acknowledgement and command receipt atomically through Engine', async context => {
   const { storage } = await setup(context)
   const source = { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] }

@@ -83,8 +83,11 @@ export async function createClientGateway(engine: Engine, access: ClientAccess, 
       response.setHeader('Content-Type', 'application/json; charset=utf-8')
       if (request.method === 'GET' && route === 'state') {
         const client = await authorize(request, 'read')
+        // Read the watermark before the snapshot. A commit that lands while the snapshot is read
+        // is then replayed from the journal instead of being skipped by a newer cursor.
+        const cursor = await access.cursor()
         const supervision = await engine.getSupervision()
-        response.end(JSON.stringify({ ...supervision, instanceId, client, cursor: await access.cursor() }))
+        response.end(JSON.stringify({ ...supervision, instanceId, client, cursor }))
         return
       }
       if (request.method === 'GET' && route === 'events') {

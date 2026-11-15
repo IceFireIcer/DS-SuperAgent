@@ -42,6 +42,29 @@ test('the independent supervisor Session records one semantic result through the
   assert.ok(calls >= 2, 'the Agent loop continued after the tool result')
 })
 
+test('the supervisor Session receives report, tool and delivery content', async t => {
+  let prompt = ''
+  const { sessions } = await context(t, options => {
+    if (prompt === '') {
+      prompt = options.messages.flatMap(message => message.content).filter(block => block.type === 'text').map(block => block.text).join('\n')
+    }
+    return toolResponse('record_supervision', { kind: 'normal', reason: 'The report is progressing.', recommendation: '', action: '' }, 'supervision-content')
+  })
+  const assess = createSessionAssessor(sessions, { sessionId: 'supervisor-content' })
+  await assess({
+    ...snapshot,
+    lastReport: {
+      id: 'r1', result: 'Concrete report text', evidence: 'Evidence text',
+      toolFacts: [{ tool: 'read_file', outcome: 'success', output: { text: 'file content' }, truncated: false }],
+      createdAt: 1_000, truncated: false,
+    },
+    deliveries: [{ id: 'm1', state: 'sent', purpose: 'result', text: 'Delivered result body', truncated: false }],
+  }, new AbortController().signal)
+  assert.match(prompt, /Concrete report text/u)
+  assert.match(prompt, /file content/u)
+  assert.match(prompt, /Delivered result body/u)
+})
+
 test('a supervisor Session that answers without the recording tool is rejected', async t => {
   const { sessions } = await context(t, () => textResponse('Everything looks fine.'))
   const assess = createSessionAssessor(sessions, { sessionId: 'supervisor-no-tool' })

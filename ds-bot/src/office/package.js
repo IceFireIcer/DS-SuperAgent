@@ -32,6 +32,9 @@ export class Package {
   static open(file) {
     const pkg = new Package()
     for (const member of readZip(readFileSync(file))) {
+      // ZIP tools may store explicit directory entries; they carry no data and
+      // must not become parts (unpack would try to write a directory path).
+      if (member.name.endsWith('/')) continue
       pkg.parts.set(member.name, { raw: member.raw, method: member.method, crc: member.crc, usize: member.data.length })
       pkg.#cache(member.name, member.data)
     }

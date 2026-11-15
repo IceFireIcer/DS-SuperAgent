@@ -258,6 +258,31 @@ test('preparing sidebar navigation leaves actions elsewhere unchanged', () => {
   assert.deepEqual(calls, [['openSession', 'from-another-surface']])
 })
 
+test('a group sorts by its current session part, not its first room id', () => {
+  viewport.innerWidth = 1280
+  const bot = { id: 'writer', name: 'Writer', createdAt: 2 }
+  const room = { id: 'room', name: 'Team', members: [], createdAt: 1, sessionId: 'room-part-2' }
+  const roster = { bots: [bot], rooms: [room], agents: [], byId: { writer: bot }, roomsById: { room }, ready: true, exchangeTurns: {} }
+  const sessions = { ids: ['room-part-2'], byId: { 'room-part-2': { updatedAt: 100 } } }
+  const order = []
+  const walk = (node) => {
+    if (Array.isArray(node)) { node.forEach(walk); return }
+    if (!node || typeof node !== 'object') return
+    if (node.type?.name === 'BotRow') order.push(node.props.bot.id)
+    if (node.type?.name === 'RoomRow') order.push(node.props.room.id)
+    walk(node.props?.children)
+  }
+  walk(TeamSidebar({
+    wide: true,
+    actions: Object.fromEntries(['openSession', 'openAgent', 'openAgentSession', 'newAgentSession', 'openMenu', 'openPalette', 'openNewChat', 'toggleSidebar', 'clearUnread'].map(name => [name, () => {}])),
+    useRoster: pick => pick(roster), useUi: pick => pick({ unread: {} }), useRegistry: pick => pick({}),
+    useSessions: pick => pick(sessions), useUpdate: () => ({}),
+    useSessionStatus: pick => pick(new Map()), useSessionRetainInfo: () => null,
+    useActivity: pick => pick({}), useWork: pick => pick({ waiting: {}, rooms: {}, approvals: [] }),
+  }))
+  assert.deepEqual(order, ['room', 'writer'])
+})
+
 function rulesOf(css) {
   const text = css.replace(/\/\*[\s\S]*?\*\//g, '')
   const rules = []

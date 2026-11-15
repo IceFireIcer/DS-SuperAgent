@@ -207,11 +207,16 @@ export function ModelChoiceDock({ sessionId, useRoster, actions }) {
   const models = roster.models ?? []
   // A model whose provider has no API key fails every turn, so it is no choice.
   const usable = models.filter(model => !model.needsKey)
-  const lost = bot.model ? !models.some(model => model.ref === bot.model) : false
+  const current = bot.model ? models.find(model => model.ref === bot.model) : undefined
+  const lost = bot.model ? current === undefined : false
+  const needsKey = current?.needsKey === true
   // An unknown catalog (none listed) cannot tell a lost model from a slow provider.
-  if (bot.model && (!lost || models.length === 0)) return null
+  if (bot.model && ((!lost && !needsKey) || models.length === 0)) return null
   // A window without DSH's own settings takes the missing key here.
-  const keyFor = usable.length === 0 && actions.setProviderKey ? models.find(model => model.needsKey) : undefined
+  const keyFor = needsKey
+    ? (actions.setProviderKey ? current : undefined)
+    : usable.length === 0 && actions.setProviderKey ? models.find(model => model.needsKey) : undefined
+  const keyModel = needsKey ? current : keyFor
   const manage = manageModels(actions)
   const pick = (ref) => {
     setBusy(ref)
@@ -223,8 +228,8 @@ export function ModelChoiceDock({ sessionId, useRoster, actions }) {
   // The pick reads as the Bot's own first message, with the choices as replies under it.
   const text = lost
     ? t('{model} is not available anymore. Pick another model for me.', { model: bot.model.split('/').slice(1).join('/') })
-    : keyFor
-      ? t("Hi, I'm {name}. I need a {provider} API key before I can start.", { name: bot.name, provider: keyFor.providerName ?? keyFor.provider })
+    : keyModel
+      ? t("Hi, I'm {name}. I need a {provider} API key before I can start.", { name: bot.name, provider: keyModel.providerName ?? keyModel.provider })
       : usable.length === 0
         ? t("Hi, I'm {name}. I don't have a model yet. How do you want to set one up?", { name: bot.name })
         : t("Hi, I'm {name}. Pick a model for me first. You can change it later in my details.", { name: bot.name })

@@ -10,6 +10,7 @@ import { arch, homedir, platform, release } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { format } from 'node:util'
+import { cleanVersion } from './update.js'
 
 export const KEEP = 200
 const LOG_MAX_BYTES = 1 << 20
@@ -17,6 +18,7 @@ const STACK_LINES = 8
 const TEXT_MAX = 2000
 export const REPORT_ENTRIES = 20
 export const ISSUES_URL = 'https://github.com/Fei2411/DS-Bot/issues/new'
+const APP_BOOT = '@deepseek-ai/dsh-app-boot'
 
 const quote = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
@@ -97,18 +99,17 @@ const ownVersion = () => {
   }
 }
 
-// DSH packages share one version; the LLM package is always beside the plugin.
-const dshVersion = () => {
+// The DSH version comes from the public app-boot export; without it, it is unknown.
+const dshVersion = async (ctx) => {
   try {
-    let dir = dirname(fileURLToPath(import.meta.resolve('@deepseek-ai/dsh-llm')))
-    for (let depth = 0; depth < 5; depth += 1, dir = dirname(dir)) {
-      try {
-        const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
-        if (manifest.name === '@deepseek-ai/dsh-llm') return manifest.version
-      } catch {}
-    }
-  } catch {}
-  return undefined
+    const loader = ctx?.get?.('loader')
+    const loaded = await loader?.import?.(APP_BOOT)
+    const appBoot = loader?.unwrapExports?.(loaded) ?? loaded?.default ?? loaded
+    const reported = appBoot?.getDshRuntimeVersion?.()
+    return cleanVersion(reported?.release?.version ?? reported?.version ?? reported) ?? undefined
+  } catch {
+    return undefined
+  }
 }
 
 export function install(rt) {
@@ -195,14 +196,14 @@ export function install(rt) {
     }))
   }
 
-  const facts = () => {
+  const facts = async () => {
     const bots = Object.values(rt.state.bots)
     const models = [...new Set(bots.map(bot => bot.model ?? bot.appliedModel).filter(Boolean))]
     const count = (n, one, many) => `${n} ${n === 1 ? one : many}`
     const groups = Object.keys(rt.state.rooms).length
     return {
       botVersion: ownVersion(),
-      dshVersion: dshVersion(),
+      dshVersion: await dshVersion(ctx),
       os: `${platform()} ${release()} ${arch()}`,
       node: process.version,
       team: `${count(bots.length, 'Bot', 'Bots')}, ${rt.state.mainBotIds.length} Main, ${count(groups, 'group chat', 'group chats')}`,
@@ -229,7 +230,7 @@ export function install(rt) {
     const list = await entries()
     const client = sanitizeClient(body.client)
     const clientEntries = sanitizeClientEntries(body.clientErrors)
-    const hostFacts = facts()
+    const hostFacts = await facts()
     return {
       facts: hostFacts,
       entries: list.slice(-50).reverse(),

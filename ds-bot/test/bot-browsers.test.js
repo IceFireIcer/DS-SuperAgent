@@ -236,6 +236,35 @@ test('an app popup is adopted and activated before a Bot has attached', async ()
   assert.ok(calls.some(call => call.type === 'place' && call.tabId === 'user-popup' && call.visible))
 })
 
+test('an app view whose create returns after dispose is closed, never shown', async () => {
+  const calls = []
+  let finish
+  const doc = { body: { append() {} }, createElement: () => ({ style: {}, isConnected: true, append() {}, remove() {} }) }
+  const bridge = {
+    views: {
+      subscribe() { return () => {} },
+      async sync() { return [] },
+      create(botId, tabId) {
+        calls.push({ type: 'create', botId, tabId })
+        return new Promise(resolve => { finish = () => resolve(tabId) })
+      },
+      async place(tabId, rect, visible) { calls.push({ type: 'place', tabId, rect, visible }) },
+      async navigate() {}, async command() {}, async focus() {}, async read() {},
+      async close(botId, tabId) { calls.push({ type: 'close', botId, tabId }) },
+    },
+  }
+  const browsers = createBotBrowsers({ bridge, createSource, storage: fakeDesktop().storage, document: doc })
+  const tab = browsers.openTab('a')
+  const showing = browsers.show(tab, BOX)
+  await tick(); await tick()
+  assert.ok(calls.some(call => call.type === 'create' && call.tabId === tab))
+  browsers.dispose()
+  finish()
+  await showing
+  assert.ok(calls.some(call => call.type === 'close' && call.tabId === tab))
+  assert.equal(calls.some(call => call.type === 'place' && call.tabId === tab && call.visible), false)
+})
+
 test('past six live guests the least recently shown one is released; forget drops all of a Bot’s tabs', async () => {
   const desktop = fakeDesktop()
   const browsers = createBotBrowsers({ bridge: desktop.bridge, createSource, storage: desktop.storage, document: desktop.doc })

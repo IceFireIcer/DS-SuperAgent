@@ -61,6 +61,23 @@ test('virtual defaults stay unpersisted until an explicit save and a second engi
   assert.equal((await reopened.ensure()).roles.worker.model.model, 'desktop-worker')
 })
 
+test('a rolled back role configuration is not visible to currentView', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-config-rollback-'))
+  const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
+  const store = new core.RoleConfigStore(storage, 'private', roles('default-worker'))
+  const saved = await storage.transaction('private', transaction => store.write(transaction, 1, roles('persisted-worker')))
+  assert.equal(saved.revision, 2)
+  await assert.rejects(storage.transaction('private', async transaction => {
+    await store.write(transaction, 2, roles('rolled-back-worker'))
+    throw new Error('rollback')
+  }), /rollback/u)
+  const current = await store.currentView()
+  assert.equal(current.revision, 2)
+  assert.equal(current.roles.worker.model.model, 'persisted-worker')
+  assert.equal((await storage.transaction('private', transaction => transaction.get('role-config', 'role-config'))).revision, 2)
+})
+
 test('a new role model and instructions apply at the next real model request and are recorded per Session', { timeout: 20000 }, async t => {
   const directory = await mkdtemp(join(tmpdir(), 'ds-bot-config-runtime-'))
   let native, storage, sessions, engine

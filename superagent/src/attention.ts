@@ -125,15 +125,21 @@ export class Attentions {
 
   async history(tx: AsyncTx, ticketId: string) {
     const items: Attention[] = []
-    let cursor = `${historyPrefix(ticketId)}:`
+    const prefix = `${historyPrefix(ticketId)}:`
+    let cursor = prefix
     for (let pageCount = 0; pageCount < 10; pageCount++) {
       const page = await tx.scan<Attention>('attention', { limit: 100, after: cursor })
-      items.push(...page.items.map(item => item.value).filter(item => item.ticketId === ticketId))
-      if (!page.cursor || !page.cursor.startsWith(cursor)) return items.sort((left, right) => left.sequence - right.sequence)
+      for (const item of page.items) {
+        if (!item.id.startsWith(prefix)) break
+        if (item.value.ticketId === ticketId) items.push(item.value)
+      }
+      if (!page.cursor || !page.cursor.startsWith(prefix)) return items.sort((left, right) => left.sequence - right.sequence)
       cursor = page.cursor
       if (pageCount === 9) {
         const confirmation = await tx.scan<Attention>('attention', { limit: 1, after: cursor })
-        if (!confirmation.items[0]?.value || confirmation.items[0].value.ticketId !== ticketId) return items.sort((left, right) => left.sequence - right.sequence)
+        if (!confirmation.items[0]?.id.startsWith(prefix) || confirmation.items[0].value.ticketId !== ticketId) {
+          return items.sort((left, right) => left.sequence - right.sequence)
+        }
       }
     }
     throw new CoreError('ATTENTION_BUDGET', 'The Ticket Attention history exceeds its 1000-record budget.')

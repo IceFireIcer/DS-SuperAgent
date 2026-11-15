@@ -66,12 +66,45 @@ test('an outstanding P/R condition keeps a ready Ticket open until the condition
   assert.equal(conversation.deliveryConditions[0].state, 'open')
   assert.ok(conversation.messages.some(message => message.purpose === 'result'), 'the result is still delivered while the P/R remains open')
   const reconciled = await engine.reconcileDeliveryCondition({ commandId: 'merge-pr', ticketId: receipt.ticketId,
-    sourceInstanceId: 'github:acme/repo', text: 'Pull request #12 was merged.' })
+    sourceInstanceId: 'github:acme/repo', text: 'Pull request #12 created (merged).\n\nMerged after review.' })
   assert.equal(reconciled[0].state, 'merged')
   assert.equal(reconciled[0].result, 'merged')
   conversation = await engine.conversation(receipt.ticketId)
   assert.equal(conversation.lifecycle, 'ended')
   assert.equal(conversation.deliveryPending, false)
+})
+
+test('only an authoritative P/R header changes a condition, not merged text in its details or reviews', { timeout: 20000 }, async t => {
+  const { engine } = await runtimeFixture(t, { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] })
+  const receipt = await engine.submit({ commandId: 'authoritative-condition', eventId: 'authoritative-condition-message', text: 'Prepare a change.' })
+  await engine.bindDeliveryCondition({ commandId: 'authoritative-bind', ticketId: receipt.ticketId, kind: 'pr', sourceInstanceId: 'github:acme/repo',
+    repo: 'acme/repo', number: 12, basis: 'Worker created pull request 12.' })
+  const bodyMention = await engine.reconcileDeliveryCondition({ commandId: 'authoritative-body', ticketId: receipt.ticketId,
+    sourceInstanceId: 'github:acme/repo', text: 'Pull request #12 created (open).\n\nThis must be merged after CI.' })
+  assert.equal(bodyMention[0].state, 'open')
+  const reviewMention = await engine.reconcileDeliveryCondition({ commandId: 'authoritative-review', ticketId: receipt.ticketId,
+    sourceInstanceId: 'github:acme/repo', text: 'Pull request #12 review.\n\nLooks merged to me.' })
+  assert.equal(reviewMention, undefined)
+  assert.equal((await engine.getDeliveryConditions(receipt.ticketId))[0].state, 'open')
+  const merged = await engine.reconcileDeliveryCondition({ commandId: 'authoritative-merge', ticketId: receipt.ticketId,
+    sourceInstanceId: 'github:acme/repo', text: 'Pull request #12 created (merged).\n\nMerged after CI.' })
+  assert.equal(merged[0].state, 'merged')
+  assert.equal(merged[0].result, 'merged')
+})
+
+test('reopening a P/R condition clears its old merged or dropped conclusion', { timeout: 20000 }, async t => {
+  const { engine } = await runtimeFixture(t, { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] })
+  const receipt = await engine.submit({ commandId: 'reopen-condition', eventId: 'reopen-condition-message', text: 'Prepare a change.' })
+  await engine.bindDeliveryCondition({ commandId: 'reopen-bind', ticketId: receipt.ticketId, kind: 'pr', sourceInstanceId: 'github:acme/repo',
+    repo: 'acme/repo', number: 13, basis: 'Worker created pull request 13.' })
+  const merged = await engine.reconcileDeliveryCondition({ commandId: 'reopen-merge', ticketId: receipt.ticketId,
+    sourceInstanceId: 'github:acme/repo', text: 'Pull request #13 created (merged).' })
+  assert.equal(merged[0].result, 'merged')
+  const reopened = await engine.reconcileDeliveryCondition({ commandId: 'reopen-open', ticketId: receipt.ticketId,
+    sourceInstanceId: 'github:acme/repo', text: 'Pull request #13 created (open).' })
+  assert.equal(reopened[0].state, 'open')
+  assert.equal('result' in reopened[0], false)
+  assert.equal('reason' in reopened[0], false)
 })
 
 test('a draft P/R condition is tracked and keeps the Ticket open', { timeout: 20000 }, async t => {
@@ -98,7 +131,7 @@ test('a resolved condition does not end a Ticket before its result reaches the c
   assert.equal(before.status, 'ready')
   assert.equal(before.messages.some(message => message.purpose === 'result'), false, 'the refused result is not reported as sent')
   await engine.reconcileDeliveryCondition({ commandId: 'dropped-merge', ticketId: receipt.ticketId,
-    sourceInstanceId: 'github:acme/repo', text: 'Pull request #31 merged.' })
+    sourceInstanceId: 'github:acme/repo', text: 'Pull request #31 created (merged).' })
   const after = await engine.conversation(receipt.ticketId)
   assert.equal(after.lifecycle, 'open', 'an undelivered result must not count as delivered')
   assert.equal(after.deliveryPending, false)
@@ -117,7 +150,7 @@ test('two P/R conditions are checked separately and a pending follow-up delays f
   let conversation = await engine.conversation(ticketId)
   assert.equal(conversation.lifecycle, 'open')
   assert.equal(conversation.deliveryConditions.length, 2)
-  await engine.reconcileDeliveryCondition({ commandId: 'merge-12', ticketId, sourceInstanceId: 'github:acme/repo', text: 'Pull request #12 merged.' })
+  await engine.reconcileDeliveryCondition({ commandId: 'merge-12', ticketId, sourceInstanceId: 'github:acme/repo', text: 'Pull request #12 created (merged).' })
   conversation = await engine.conversation(ticketId)
   assert.equal(conversation.lifecycle, 'open')
   assert.equal(conversation.deliveryConditions.find(condition => condition.number === 13).state, 'open')
@@ -129,7 +162,7 @@ test('two P/R conditions are checked separately and a pending follow-up delays f
   assert.equal(target.evidenceEventId, followupEvent.eventId)
   const pendingDirection = await engine.getTicketDirection(ticketId)
   assert.equal(pendingDirection.inputs.filter(input => input.state === 'pending').length, 1, JSON.stringify(pendingDirection))
-  await engine.reconcileDeliveryCondition({ commandId: 'close-13', ticketId, sourceInstanceId: 'github:acme/repo', text: 'Pull request #13 was closed.' })
+  await engine.reconcileDeliveryCondition({ commandId: 'close-13', ticketId, sourceInstanceId: 'github:acme/repo', text: 'Pull request #13 closed (closed).' })
   conversation = await engine.conversation(ticketId)
   assert.equal(conversation.lifecycle, 'open', 'a pending follow-up delays final completion')
   await drain(10)

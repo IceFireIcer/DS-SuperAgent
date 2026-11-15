@@ -1012,13 +1012,23 @@ function renderCall(call, { sessionId, roster, actions, useUi, useWork, findBot,
       return h(EventLine, { prefix: t('Stopped'), bots: [target], onOpen: bot => bot.id && actions.openExchange(self?.id ?? sessionId, bot.id), whole: true })
     }
     case 'create_bot': {
+      if (!done) return h(CellEmpty)
+      const result = contentText(call.content)
+      if (call.isError || !result.startsWith('Created ')) {
+        return result.trim() ? h('div', { className: 'bt-event bt-event-error', role: 'status' }, result) : h(CellEmpty)
+      }
       const created = findBot(arg('name'))
-      if (!done || created === undefined) return h(CellEmpty)
+      if (created === undefined) return h(CellEmpty)
       return h(EventLine, { prefix: t('Created'), bots: [created], onOpen: bot => actions.openSession(bot.id) })
     }
     case 'update_bot': {
+      if (!done) return h(CellEmpty)
+      const result = contentText(call.content)
+      if (call.isError || !result.startsWith('Updated ')) {
+        return result.trim() ? h('div', { className: 'bt-event bt-event-error', role: 'status' }, result) : h(CellEmpty)
+      }
       const target = findBot(arg('name')) ?? findBot(arg('bot')) ?? (arg('bot') ? undefined : self)
-      return done && target ? h(EventLine, { prefix: t('Updated'), bots: [target], onOpen: bot => actions.openSession(bot.id) }) : h(CellEmpty)
+      return target ? h(EventLine, { prefix: t('Updated'), bots: [target], onOpen: bot => actions.openSession(bot.id) }) : h(CellEmpty)
     }
     case 'group_relay':
       return h(GroupReplies, { sessionId, callId: call.callId, done, content: call.content, roster, actions, useUi, useWork })

@@ -166,6 +166,7 @@ export function mountBrowserPlugin(ctx, { toolDefs, defineTool, keyOf, profileRo
           profileDir: join(profileRoot, botId),
           session,
           complete: completeFor?.(exec),
+          signal: exec.signal,
           origin: { ...(exec.callId !== undefined ? { callId: exec.callId } : {}), ...(exec.agent?.id !== undefined ? { sessionId: exec.agent.id } : {}) },
         })))
       },

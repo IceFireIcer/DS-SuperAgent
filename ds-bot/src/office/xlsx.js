@@ -3,7 +3,32 @@
 import { childrenOf, elementsOf, firstOf, textOf } from './xml.js'
 
 const DATE_FORMATS = new Set([14, 15, 16, 17, 22, 45, 46, 47])
-const dateLike = (code) => /(^|[^\\])[ymdhs]/i.test(code ?? '')
+
+// Date/time tokens count only outside quoted/escaped literals and inside
+// elapsed-time brackets such as [h]. [Red], [>=1], [$-409] and [DBNum1] are
+// formatting directives, not dates — a code like `0 "days"` is a plain number.
+function dateLike(code) {
+  const text = code ?? ''
+  let quoted = false
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (quoted) {
+      if (ch === '"') quoted = false
+      continue
+    }
+    if (ch === '"') { quoted = true; continue }
+    if (ch === '\\' || ch === '_' || ch === '*') { i++; continue }
+    if (ch === '[') {
+      const end = text.indexOf(']', i + 1)
+      if (end === -1) break
+      if (/^[hms]+$/i.test(text.slice(i + 1, end))) return true
+      i = end
+      continue
+    }
+    if (/[ymdhs]/i.test(ch)) return true
+  }
+  return false
+}
 
 function numFmts(pkg) {
   const map = new Map()

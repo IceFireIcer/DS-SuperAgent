@@ -243,7 +243,7 @@ function PanelStrip({ bot, subject, view, ids, active, sides, side, canBrowse, r
 
 // The browser view: toolbar (back, forward, reload/stop, address) over the frame
 // the guest webview covers.
-function BrowserView({ bot, tabId, leaving, landed, actions, useBrowserPages, hold }) {
+export function BrowserView({ bot, tabId, leaving, landed, actions, useBrowserPages, hold }) {
   const page = useBrowserPages(pages => pages[tabId ?? '']) ?? EMPTY_PAGE
   const frame = useRef(null)
   const input = useRef(null)
@@ -257,6 +257,9 @@ function BrowserView({ bot, tabId, leaving, landed, actions, useBrowserPages, ho
   // A mirrored flow: the cleanup on leaving the tab or the panel can still cancel
   // an unconfirmed pending import.
   const flowRef = useRef(null)
+  // A result that arrives after its tab or flow is gone must not publish; a new
+  // pending import it created is cancelled instead.
+  const flowGen = useRef(0)
   const [sources, setSources] = useState(null)
   const [busy, setBusy] = useState(false)
   const setFlowTracked = (next) => {
@@ -286,8 +289,9 @@ function BrowserView({ bot, tabId, leaving, landed, actions, useBrowserPages, ho
   useEffect(() => {
     setFlowTracked(null)
     return () => {
+      flowGen.current += 1
       const id = typeof flowRef.current === 'object' && flowRef.current !== null ? flowRef.current.id : null
-      if (id) void imports?.cancel(id).catch(() => {})
+      if (id && flowRef.current.confirmed !== true) void imports?.cancel(id).catch(() => {})
     }
     // The flow controls live in this component; the effect re-runs only per tab.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -297,24 +301,46 @@ function BrowserView({ bot, tabId, leaving, landed, actions, useBrowserPages, ho
     setFlowTracked('menu')
     if (sources === null) void imports.sources().then(setSources, () => setSources([]))
   }
-  const showPicked = (r) => {
+  const showPicked = (r, gen) => {
+    if (gen !== flowGen.current) {
+      if (r?.id) void imports?.cancel(r.id).catch(() => {})
+      return
+    }
     if (r?.id) setFlowTracked({ stage: 'preview', id: r.id, preview: r.preview, restarted: r.restarted === true })
     else if (r?.error) setFlowTracked({ stage: 'error', message: importError(r.error) })
     else setFlowTracked(null)
   }
   const job = async (work) => {
+    const gen = flowGen.current
     setBusy(true)
-    try { await work() } catch (error) { setFlowTracked({ stage: 'error', message: String(error?.message ?? error) }) } finally { setBusy(false) }
+    try {
+      await work(gen)
+    } catch (error) {
+      if (gen === flowGen.current) {
+        // Keep a preview's pending id on the error card so leaving can still drop it.
+        const id = typeof flowRef.current === 'object' && flowRef.current !== null ? flowRef.current.id : null
+        setFlowTracked({ stage: 'error', message: String(error?.message ?? error), ...(id ? { id } : {}) })
+      }
+    } finally {
+      if (gen === flowGen.current) setBusy(false)
+    }
   }
-  const pickFile = () => job(async () => showPicked(await imports.pick()))
-  const pickSource = (source) => job(async () => {
+  const pickFile = () => job(async gen => showPicked(await imports.pick(), gen))
+  const pickSource = (source) => job(async (gen) => {
     const r = await imports.live(source.id)
+    if (gen !== flowGen.current) {
+      if (r?.id) void imports?.cancel(r.id).catch(() => {})
+      return
+    }
     if (r?.running) setFlowTracked({ stage: 'running', source })
-    else showPicked(r)
+    else showPicked(r, gen)
   })
-  const closeAndImport = () => job(async () => showPicked(await imports.live(flowRef.current?.source?.id, true)))
-  const applyImport = () => job(async () => {
+  const closeAndImport = () => job(async gen => showPicked(await imports.live(flowRef.current?.source?.id, true), gen))
+  const applyImport = () => job(async (gen) => {
+    const current = flowRef.current
+    if (current) setFlowTracked({ ...current, confirmed: true })
     const report = await imports.apply(bot.id, flowRef.current?.id)
+    if (gen !== flowGen.current) return
     setFlowTracked((current) => ({ stage: 'result', report, label: current?.preview?.source?.label ?? null }))
   })
   const cancelImport = () => {

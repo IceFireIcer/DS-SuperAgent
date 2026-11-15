@@ -74,7 +74,7 @@ R5 新产品入口：[R5-01 / #93 连续 Main 主对话](r5-01.md)；[R5-02 / #9
 | T57 / #91 | 已收口；真实模型、主动准备与 GitHub 通过；飞书由维护者暂缓 | [记录](t57.md)、[证据](t57-evidence.json)、[审查](reviews/t57.md)：公开 `LlmAdapter`、凭据安全环境检查、真实 Worker/Supervisor/配置解释器样本、真实 GitHub Issue/PR/review/check 与原生外发回执；飞书 tenant/群缺失，环境检查明确 `unverified`，维护者于 2026-11-13 明确暂缓并收口 |
 | T58 / #92 | 部分验收；真实托管 Host/PostgreSQL/客户端/设备/Watchdog 已完成 | [记录](t58.md)、[证据](t58-evidence.json)、[审查](reviews/t58.md)：Ubuntu 真实 Host、PostgreSQL 业务与 Session、真实模型、SSH 隧道客户端、断连补读/即时撤销、Ubuntu 设备文件与命令、daemon 重启后重连、Watchdog epoch 4→5；T56 factory/T59/T60 远程 UI、离线 stop/resume、双向交接和飞书仍未完成 |
 | T59 | 已实现；未发布 | [记录](t59.md)、[审查](reviews/t59.md)：独立 `ds-superagent` profile、`DSH_HOME` 隔离、`botExecutionAdapter` 服务、`executionAdapterRequired` fail-closed、stop/resume；真实 `runProfile` 启动与 profile 进程测试通过；不复制前端 |
-| T60 | 部分实现；未达验收 | [记录](t60.md)、[审查](reviews/t60.md)：复制 `ds-bot` 聊天源码为 `ds-superagent-ui`，独立 build id 和生成检查通过；真实 profile 可发送并读取 Engine 请求/结果。仍使用 `/api/bot` 桥接旧 Host，窄接口、面板隐藏、主聊天投影和 Attention/stop/resume 未完成 |
+| T60 | 已废止并删除 | [记录](t60.md)、[审查](reviews/t60.md)：独立 `ds-superagent-ui` 与窄 UI host 已移除；产品改为直接使用并修改 `ds-bot` UI，通过 `botExecutionAdapter` 接 Engine |
 
 上述已实现票的前置实现为 T01；实施状态与 GitHub 发布状态分别记录。2026-11-05 回查发现原 T02/T04/T17 工作树注册指向不存在的目录，不能用旧“实施中”记录证明实现进展。本轮 T17 交付共用的事务更新、删除、有界扫描与新连接契约；T04 已在该公开契约上恢复并完成。
 

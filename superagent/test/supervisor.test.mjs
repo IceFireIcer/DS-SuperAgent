@@ -12,7 +12,7 @@ const base = () => ({
   attention: { status: 'none' }, setup: { state: 'ready' },
   assignment: { id: 'a1', generation: 'g1', state: 'running', sessionId: 's1' },
   reports: [{ id: 'r1', result: 'Working.', evidence: 'Read the original request.', toolFacts: [{ tool: 'read_file', outcome: 'success', output: {} }], createdAt: 1_000 }],
-  reportHistory: [], messages: [{ id: 'm1', state: 'sent', purpose: 'acknowledgement' }], jobs: [], subagents: [],
+  reportHistory: [], messages: [{ id: 'm1', state: 'sent', purpose: 'acknowledgement', text: 'Working on it.' }], jobs: [], subagents: [],
 })
 
 async function open(t, { assess, maxProposals = 2 } = {}) {
@@ -62,7 +62,7 @@ test('normal waiting, unknown, ready and ended are not semantic failures', async
 test('a changing report is progress and creates no proposal', async t => {
   const app = await open(t)
   for (let index = 0; index < 4; index++) {
-    app.setItem({ ...base(), reports: [{ ...base().reports[0], id: `r${index + 1}`, createdAt: 1_000 + index * 500 }] })
+    app.setItem({ ...base(), reports: [{ ...base().reports[0], id: `r${index + 1}`, result: `Working step ${index + 1}.`, createdAt: 1_000 + index * 500 }] })
     app.advance(500)
     assert.equal((await app.supervisor.inspect()).observations[0].finding, 'normal')
   }
@@ -89,16 +89,50 @@ test('an unchanged Ticket without a new report or delivery becomes a pause propo
   assert.equal(app.calls.stops.length, 0, 'a proposal does not stop anything')
 })
 
-test('repeated tool facts become a loop proposal', async t => {
+test('repeated inspection of one report is not a tool loop', async t => {
   const app = await open(t)
+  for (let index = 0; index < 3; index++) {
+    app.advance(100)
+    const report = await app.supervisor.inspect()
+    assert.notEqual(report.observations[0].finding, 'loop')
+    assert.deepEqual(report.proposals, [])
+  }
+})
+
+test('different reports repeating the same tool facts become a loop proposal', async t => {
+  const app = await open(t)
+  for (let index = 0; index < 3; index++) {
+    app.setItem({ ...base(), reports: [{ ...base().reports[0], id: `r${index + 1}`, createdAt: 1_000 + index * 100 }] })
+    app.advance(100)
+    const report = await app.supervisor.inspect()
+    if (index < 2) assert.equal(report.observations[0].finding, 'normal')
+    else {
+      assert.equal(report.observations[0].finding, 'loop')
+      assert.equal(report.proposals[0].kind, 'pause')
+      assert.match(report.proposals[0].recommendation, /repeated/u)
+    }
+  }
+})
+
+test('the snapshot carries bounded report, tool and delivery evidence', async t => {
+  let seen
+  const app = await open(t, { assess: async snapshot => { seen = snapshot; return { kind: 'normal', reason: 'The Ticket is progressing.' } } })
+  const toolFacts = Array.from({ length: 14 }, (_, index) => ({ tool: `read_${index}`, outcome: 'success', output: { text: 'y'.repeat(1_500) } }))
+  app.setItem({ ...base(),
+    reports: [{ id: 'r1', result: 'x'.repeat(9_000), evidence: 'Verified the report.', toolFacts, createdAt: 1_000 }],
+    messages: [{ id: 'm1', state: 'sent', purpose: 'result', text: 'Delivered result body.' }] })
   await app.supervisor.inspect()
-  app.advance(500)
-  await app.supervisor.inspect()
-  app.advance(500)
-  const report = await app.supervisor.inspect()
-  assert.equal(report.observations[0].finding, 'loop')
-  assert.equal(report.proposals[0].kind, 'pause')
-  assert.match(report.proposals[0].recommendation, /repeated/u)
+  assert.equal(seen.lastReport.id, 'r1')
+  assert.equal(seen.lastReport.result.length, 8_192)
+  assert.equal(seen.lastReport.evidence, 'Verified the report.')
+  assert.equal(seen.lastReport.truncated, true)
+  assert.equal(seen.lastReport.toolFacts.length, 12)
+  assert.equal(seen.lastReport.omittedToolFacts, 2)
+  assert.equal(seen.lastReport.toolFacts[0].tool, 'read_2')
+  assert.equal(seen.lastReport.toolFacts[0].output.truncated, true)
+  assert.match(seen.lastReport.toolFacts[0].output.preview, /y{100}/u)
+  assert.equal(seen.deliveries[0].text, 'Delivered result body.')
+  assert.equal(seen.deliveries[0].truncated, false)
 })
 
 test('a semantic deviation is a correct proposal and still executes nothing', async t => {
@@ -232,6 +266,22 @@ test('concurrent decisions claim the proposal once and execute one action', asyn
   const rejected = results.find(result => result.status === 'rejected')
   assert.equal(rejected.reason.code, 'PROPOSAL_CLOSED')
   assert.equal(app.calls.stops.length, 1)
+})
+
+test('concurrent inspections create one proposal and one observation update', async t => {
+  let started = 0
+  let release
+  const gate = new Promise(resolve => { release = resolve })
+  const app = await open(t, { maxProposals: 1, assess: async () => {
+    started += 1
+    if (started === 2) release()
+    await gate
+    return { kind: 'deviation', reason: 'The report left the requested scope.', recommendation: 'Return to the requested scope.', action: 'correct' }
+  } })
+  const reports = await Promise.all([app.supervisor.inspect(), app.supervisor.inspect()])
+  assert.deepEqual(reports.map(report => report.observations[0].finding).sort(), ['deviation', 'duplicate'])
+  assert.equal((await app.supervisor.listProposals()).length, 1)
+  assert.equal((await app.supervisor.getState('t1')).proposals.length, 1)
 })
 
 test('proposal queries do not lose records after the first hundred', async t => {

@@ -9,7 +9,7 @@
 // team read-only for as long as it runs. The token, not the pid, decides ownership: a
 // holder that finds another token has lost the lock.
 import { randomUUID } from 'node:crypto'
-import { readFileSync, statSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { linkSync, readFileSync, renameSync, statSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { hostname } from 'node:os'
 
 export function pidAlive(pid) {
@@ -44,6 +44,37 @@ export function homeLock(path, { staleMs = 60_000, beatMs = 15_000, host = hostn
     return age() < staleMs
   }
   const owns = () => read()?.token === token
+  const same = (holder, current) => (holder === null
+    ? current === null
+    : holder?.token !== undefined
+      ? current?.token === holder.token
+      : JSON.stringify(current) === JSON.stringify(holder))
+
+  // Move the lock aside before deciding what it says. The name is unique to this
+  // process, so a lock another process puts in its place is never deleted blind.
+  const takeAway = () => {
+    const trash = `${path}.${token}.${randomUUID()}.stale`
+    try {
+      renameSync(path, trash)
+    } catch {
+      return undefined
+    }
+    let holder
+    try {
+      holder = JSON.parse(readFileSync(trash, 'utf8'))
+    } catch {
+      holder = null
+    }
+    return { holder, trash }
+  }
+  const putBack = ({ holder, trash }) => {
+    try {
+      linkSync(trash, path)
+    } catch {
+      try { writeFileSync(path, JSON.stringify(holder), { flag: 'wx' }) } catch {}
+    }
+    try { unlinkSync(trash) } catch {}
+  }
 
   const beat = () => {
     if (!owns()) {
@@ -65,6 +96,7 @@ export function homeLock(path, { staleMs = 60_000, beatMs = 15_000, host = hostn
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         writeFileSync(path, JSON.stringify({ pid, host, token, since: now() }), { flag: 'wx' })
+        if (!owns()) continue
         stop()
         timer = setInterval(beat, beatMs)
         timer.unref?.()
@@ -74,14 +106,16 @@ export function homeLock(path, { staleMs = 60_000, beatMs = 15_000, host = hostn
       }
       const holder = read()
       if (live(holder)) return holder ?? {}
-      const current = read()
-      const unchanged = holder === null
-        ? current === null
-        : holder?.token !== undefined
-          ? current?.token === holder.token
-          : JSON.stringify(current) === JSON.stringify(holder)
-      if (unchanged) {
-        try { unlinkSync(path) } catch {}
+      if (same(holder, read())) {
+        const moved = takeAway()
+        if (moved === undefined) continue
+        if (same(holder, moved.holder)) {
+          try { unlinkSync(moved.trash) } catch {}
+        } else {
+          // A new owner arrived after the check: give its lock back untouched.
+          putBack(moved)
+          continue
+        }
       }
     }
     return read() ?? {}
@@ -89,8 +123,13 @@ export function homeLock(path, { staleMs = 60_000, beatMs = 15_000, host = hostn
 
   function release() {
     stop()
-    if (owns()) {
-      try { unlinkSync(path) } catch {}
+    if (!owns()) return
+    const moved = takeAway()
+    if (moved === undefined) return
+    if (moved.holder?.token === token) {
+      try { unlinkSync(moved.trash) } catch {}
+    } else {
+      putBack(moved)
     }
   }
 

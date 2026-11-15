@@ -35,6 +35,15 @@ let next = 0
 const textOf = content => (typeof content === 'string' ? content
   : Array.isArray(content) ? content.map(part => part?.text ?? '').join('\n') : '')
 
+function safeError(error) {
+  const message = error instanceof Error ? error.message : String(error)
+  return message
+    .replace(/\/\/[^/@\s]+@/gu, '//[redacted]@')
+    .replace(/\bBearer\s+[^\s,;]+/giu, 'Bearer [redacted]')
+    .replace(/\bsk-[A-Za-z0-9_-]{8,}/gu, '[redacted]')
+    .slice(0, 500)
+}
+
 function describe(body) {
   const messages = body?.messages ?? []
   const system = body?.system !== undefined ? textOf(body.system)
@@ -167,60 +176,82 @@ createServer(async (req, res) => {
   const id = ++next
   const started = Date.now()
   const chunks = []
-  for await (const chunk of req) chunks.push(chunk)
-  const raw = Buffer.concat(chunks)
-  let body
-  try { body = raw.length > 0 ? JSON.parse(raw.toString('utf8')) : undefined } catch { body = undefined }
-  const headers = {}
-  for (const [name, value] of Object.entries(req.headers)) if (!HOP_BY_HOP.has(name)) headers[name] = value
-  let upstreamResponse
+  let reader
   try {
-    upstreamResponse = await fetch(`${base}${req.url.replace(/^\/v1/, '')}`, { method: req.method, headers, body: raw.length > 0 ? raw : undefined })
+    for await (const chunk of req) chunks.push(chunk)
+    const raw = Buffer.concat(chunks)
+    let body
+    try { body = raw.length > 0 ? JSON.parse(raw.toString('utf8')) : undefined } catch { body = undefined }
+    const headers = {}
+    for (const [name, value] of Object.entries(req.headers)) if (!HOP_BY_HOP.has(name)) headers[name] = value
+    let upstreamResponse
+    try {
+      upstreamResponse = await fetch(`${base}${req.url.replace(/^\/v1/, '')}`, { method: req.method, headers, body: raw.length > 0 ? raw : undefined })
+    } catch (error) {
+      const message = safeError(error)
+      res.writeHead(502, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ error: { message: `tap: upstream unreachable: ${message}` } }))
+      try { appendFileSync(log, JSON.stringify({ t: new Date().toISOString(), id, path: req.url, error: message }) + '\n') } catch { /* Keep the proxy alive. */ }
+      return
+    }
+    const type = upstreamResponse.headers.get('content-type') ?? ''
+    res.writeHead(upstreamResponse.status, { 'content-type': type || 'application/json', 'cache-control': 'no-cache' })
+    let text = ''
+    const decoder = new TextDecoder()
+    if (upstreamResponse.body) {
+      reader = upstreamResponse.body.getReader()
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        res.write(value)
+        text += decoder.decode(value, { stream: true })
+      }
+    }
+    res.end()
+    if (body?.messages === undefined) {
+      appendFileSync(log, JSON.stringify({ t: new Date().toISOString(), id, path: req.url, status: upstreamResponse.status }) + '\n')
+      return
+    }
+    const call = describe(body)
+    const answer = answerOf(text, type.includes('event-stream'))
+    const whole = call.kind !== 'main'
+    const who = call.bot ?? call.kind
+    const prefix = prefixAgainst(previousOf.get(who), body)
+    previousOf.set(who, { id, body })
+    if (bodies) writeFileSync(path.join(bodies, `${id}-${call.kind}-${String(who).replace(/[^\w.-]+/g, '_')}.json`), raw)
+    appendFileSync(log, JSON.stringify({
+      t: new Date().toISOString(),
+      id,
+      ms: Date.now() - started,
+      status: upstreamResponse.status,
+      kind: call.kind,
+      bot: call.bot,
+      messages: call.messages,
+      request: call.request,
+      ...(prefix === undefined ? {} : { prefix }),
+      usage: answer.usage,
+      tokens: tokensOf(answer.usage),
+      finish: answer.finish,
+      lastUser: whole ? call.lastUser : call.lastUser.slice(0, 300),
+      text: answer.text,
+      reasoning: whole ? answer.reasoning : answer.reasoning.slice(0, 200),
+      tools: answer.tools,
+      ...(upstreamResponse.status >= 400 ? { error: text.slice(0, 1000) } : {}),
+    }) + '\n')
   } catch (error) {
-    res.writeHead(502, { 'content-type': 'application/json' })
-    res.end(JSON.stringify({ error: { message: `tap: upstream unreachable: ${error.message}` } }))
-    appendFileSync(log, JSON.stringify({ t: new Date().toISOString(), id, path: req.url, error: error.message }) + '\n')
-    return
-  }
-  const type = upstreamResponse.headers.get('content-type') ?? ''
-  res.writeHead(upstreamResponse.status, { 'content-type': type || 'application/json', 'cache-control': 'no-cache' })
-  let text = ''
-  const decoder = new TextDecoder()
-  if (upstreamResponse.body) {
-    for await (const chunk of upstreamResponse.body) {
-      res.write(chunk)
-      text += decoder.decode(chunk, { stream: true })
+    const message = safeError(error)
+    try {
+      if (res.headersSent) res.destroy()
+      else {
+        res.writeHead(502, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ error: { message: `tap: request failed: ${message}` } }))
+      }
+    } catch { /* The client may already be gone; this request alone failed. */ }
+    try { appendFileSync(log, JSON.stringify({ t: new Date().toISOString(), id, path: req.url, error: message }) + '\n') } catch { /* Keep the proxy alive. */ }
+  } finally {
+    if (reader) {
+      try { await reader.cancel() } catch { /* The stream may already be closed. */ }
+      try { reader.releaseLock() } catch { /* This request owns the reader. */ }
     }
   }
-  res.end()
-  if (body?.messages === undefined) {
-    appendFileSync(log, JSON.stringify({ t: new Date().toISOString(), id, path: req.url, status: upstreamResponse.status }) + '\n')
-    return
-  }
-  const call = describe(body)
-  const answer = answerOf(text, type.includes('event-stream'))
-  const whole = call.kind !== 'main'
-  const who = call.bot ?? call.kind
-  const prefix = prefixAgainst(previousOf.get(who), body)
-  previousOf.set(who, { id, body })
-  if (bodies) writeFileSync(path.join(bodies, `${id}-${call.kind}-${String(who).replace(/[^\w.-]+/g, '_')}.json`), raw)
-  appendFileSync(log, JSON.stringify({
-    t: new Date().toISOString(),
-    id,
-    ms: Date.now() - started,
-    status: upstreamResponse.status,
-    kind: call.kind,
-    bot: call.bot,
-    messages: call.messages,
-    request: call.request,
-    ...(prefix === undefined ? {} : { prefix }),
-    usage: answer.usage,
-    tokens: tokensOf(answer.usage),
-    finish: answer.finish,
-    lastUser: whole ? call.lastUser : call.lastUser.slice(0, 300),
-    text: answer.text,
-    reasoning: whole ? answer.reasoning : answer.reasoning.slice(0, 200),
-    tools: answer.tools,
-    ...(upstreamResponse.status >= 400 ? { error: text.slice(0, 1000) } : {}),
-  }) + '\n')
 }).listen(Number(port), '127.0.0.1', () => console.log(`llm-tap: 127.0.0.1:${port} -> ${base}`))
