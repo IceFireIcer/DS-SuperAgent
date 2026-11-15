@@ -3,7 +3,9 @@ import { ChatRows } from './cells.js'
 import { MainComposer } from './composer.js'
 import { BrandMark } from './sidebar.js'
 import { Card, Row } from './bot-settings.js'
-import { CloseIcon, SlidersIcon } from './icons.js'
+import { ClockIcon, CloseIcon, SlidersIcon } from './icons.js'
+import { SCHEDULE_CSS } from './schedules.js'
+import { ProductScheduleSettings, PRODUCT_SCHEDULE_CSS } from './product-schedules.js'
 import { createSource } from './sources.js'
 import { mergeMessages, mergeObservationItems, rebaseRoleDraft } from './product-state.js'
 import { installLocale, t } from './i18n.js'
@@ -383,8 +385,9 @@ export function applyProduct(ctx) {
       } catch (error) { setReceiptsError(error.message) }
       finally { setReconciling(null) }
     }
-    return h('article', { className: 'bt-main-source', 'aria-label': t('GitHub source request') },
-      h('div', { className: 'bt-main-work-head' }, h('strong', null, t('GitHub request')),
+    const scheduled = source.sourceInstanceId.startsWith('schedule:')
+    return h('article', { className: 'bt-main-source', 'aria-label': t(scheduled ? 'Scheduled occurrence' : 'GitHub source request') },
+      h('div', { className: 'bt-main-work-head' }, h('strong', null, t(scheduled ? 'Scheduled occurrence' : 'GitHub request')),
         h('span', { className: 'bt-main-work-status', role: 'status' }, sourceStatusCopy(source.state))),
       h('p', { className: 'bt-main-work-detail' }, `${source.objectId} · @${source.authorId}`),
       h('p', { className: 'bt-main-work-detail' }, source.text),
@@ -479,7 +482,8 @@ export function applyProduct(ctx) {
                 h('span', null, t('System fact')), h('p', null, message.text))
               : h('div', null,
                 message.source ? h('p', { className: 'bt-main-source-label' },
-                  `${t('GitHub')} · @${message.source.authorId} · ${message.source.objectId}`) : null,
+                  message.source.kind === 'schedule' ? `${t('Scheduled occurrence')} · ${message.source.objectId}`
+                    : `${t('GitHub')} · @${message.source.authorId} · ${message.source.objectId}`) : null,
                 h(ChatRows, { items: [{ kind: message.role === 'main' ? 'bot' : 'user', text: message.text, time: message.createdAt }],
                   sessionId: 'main', roster: emptyRoster, actions: {} }),
                 message.status === 'failed' ? h('p', { className: 'bt-main-error', role: 'status' },
@@ -672,6 +676,7 @@ export function applyProduct(ctx) {
   }
 
   function SettingsDialog({ binding, onClose }) {
+    const [page, setPage] = useState('roles')
     const [snapshot, setSnapshot] = useState(null)
     const [draft, setDraft] = useState(null)
     const [base, setBase] = useState(null)
@@ -834,11 +839,16 @@ export function applyProduct(ctx) {
       h('div', { className: 'bt-scrim', onMouseDown: onClose }),
       h('div', { className: 'bt-settings bt-main-settings-dialog', role: 'dialog', 'aria-modal': true, 'aria-label': t('Super-agent settings') },
         h('nav', { className: 'bt-settings-nav', 'aria-label': t('Settings pages') },
-          h('span', { className: 'bt-settings-item', 'aria-current': 'page' }, h(SlidersIcon), t('Roles and providers')),
+          h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
+            'aria-current': page === 'roles' ? 'page' : undefined, onClick: () => setPage('roles') }, h(SlidersIcon), t('Roles and providers')),
+          h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
+            'aria-current': page === 'schedules' ? 'page' : undefined, onClick: () => setPage('schedules') }, h(ClockIcon), t('Scheduled tasks')),
           h('span', { className: 'bt-main-settings-revision' }, `${t('Configuration')} v${snapshot.revision}`)),
         h('div', { className: 'bt-settings-main' },
-          h('div', { className: 'bt-settings-head' }, h('h2', null, t('Super-agent settings'))),
+          h('div', { className: 'bt-settings-head' }, h('h2', null, page === 'schedules' ? t('Scheduled tasks') : t('Super-agent settings'))),
           h('div', { className: 'bt-settings-scroll' },
+            page === 'schedules' ? h(ProductScheduleSettings, { binding, works: view.getSnapshot().works, call: productCall,
+              onViewWork: () => { onClose(); view.set(current => ({ ...current, route: 'main' })); void refreshMain(binding) } }) : h(Fragment, null,
             error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
             conflict ? h('div', { className: 'bt-main-settings-conflict', role: 'status' },
               h('p', null, t('Newer settings exist. Rebase only your changed fields, then review and save.')),
@@ -893,7 +903,7 @@ export function applyProduct(ctx) {
                 h('span', null, refOf(use[use.role] ?? use.worker ?? use.router)),
                 h('span', { className: 'bt-main-settings-use-session', title: use.sessionId }, use.sessionId),
                 h('time', null, new Date(use.createdAt).toLocaleString()))) : h('p', { className: 'bt-main-status' }, t('No role turn has recorded a configuration version yet.'))),
-            h('p', { className: 'bt-main-status' }, t('Configuration versions apply at request boundaries. A turn already running keeps the version it started with.'))),
+            h('p', { className: 'bt-main-status' }, t('Configuration versions apply at request boundaries. A turn already running keeps the version it started with.')))),
           close)))
   }
 
@@ -905,7 +915,7 @@ export function applyProduct(ctx) {
         onClose: () => view.set(current => ({ ...current, settingsOpen: false })) }) : null)
   }
   const shadow = (name, component) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200 }, component))
-  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + PRODUCT_CSS, 'main'), 'superagent: existing chat styles')
+  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SCHEDULE_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS, 'main'), 'superagent: existing chat styles')
   ctx.effect(() => { const style = installStyles(themeCss(allThemes().deepseek), 'main-theme'); return () => style.remove() }, 'superagent: existing theme')
   shadow('main.conversation', ProductSurface)
   shadow('sidebar.workspaces', MainNavigation)
@@ -919,6 +929,8 @@ function redactObservationText(value) {
 }
 
 const PRODUCT_CSS = `
+.bt-main-settings-nav-item{display:flex;width:100%;border:0;text-align:left;cursor:pointer;font:inherit}
+.bt-main-settings-nav-item:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 .bt-main-conversation{height:100%;min-height:0;display:flex;flex-direction:column;background:var(--bt-main);color:var(--bt-ink);font-family:var(--bt-font)}
 .bt-main-header{height:56px;flex-shrink:0;display:flex;align-items:center;gap:10px;padding:0 24px;border-bottom:.5px solid var(--bt-line-2);font-size:15px;font-weight:600}
 .bt-main-health{margin-left:auto;padding:2px 8px;border:1px solid var(--bt-line);border-radius:999px;color:var(--bt-ink-2);font-size:11px;line-height:16px;font-weight:500}

@@ -44,6 +44,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
   let environment: LocalEnvironment | undefined
   let engine: Engine | undefined
   let closing: Promise<void> | undefined
+  let scheduleTimer: ReturnType<typeof setInterval> | undefined
   const publicLlm = () => context.get('llm') as unknown as PublicLlm
   const settingsSections = (settings: PublicSettings) => new Map(settings.describe({ redactSecrets: true }).map(section => [section.ns, section]))
   const derivedKeyRef = (provider: string) => `${provider.toUpperCase().replace(/[^A-Z0-9]+/gu, '_')}_API_KEY`
@@ -128,6 +129,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
     return { provider, configured: value !== null }
   }
   async function dispose() {
+    if (scheduleTimer) clearInterval(scheduleTimer)
     try { await engine?.effects.stop(); await engine?.shutdown() }
     finally { try { await sessions.close() } finally { try { await environment?.close() } finally { await storage.close() } } }
   }
@@ -141,6 +143,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
     await engine.acquireHost()
     await engine.openMain({ instanceId })
     engine.effects.start()
+    void engine.tickSchedules().catch(() => { /* Rules and failed occurrences remain available for the next check. */ })
+    scheduleTimer = setInterval(() => { void engine?.tickSchedules().catch(() => {}) }, 30_000)
+    scheduleTimer.unref()
     void engine.resumeMainInputs({ instanceId }).catch(() => { /* The persisted input and failed health remain visible for retry. */ })
     return {
       async dispatch(endpoint, payload = {}) {
@@ -151,7 +156,13 @@ export async function createProductHost(context: Context, config: ProductHostCon
           return engine!.openMain({ instanceId })
         }
         if (payload.instanceId !== instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This request is outside the authorized Instance.')
-        const fields = endpoint === 'send' ? ['instanceId', 'commandId', 'text']
+        const fields = endpoint === 'schedule-list' ? ['instanceId']
+          : endpoint === 'schedule-source-read' ? ['instanceId']
+            : endpoint === 'schedule-source-set' ? ['instanceId', 'commandId', 'enabled']
+          : endpoint === 'schedule-read' ? ['instanceId', 'ruleId']
+            : endpoint === 'schedule-create' ? ['instanceId', 'commandId', 'title', 'text', 'timezone', 'when', 'target']
+              : endpoint === 'schedule-cancel' ? ['instanceId', 'commandId', 'ruleId']
+                : endpoint === 'send' ? ['instanceId', 'commandId', 'text']
           : endpoint === 'stop-main' ? ['instanceId', 'commandId', 'messageId']
             : endpoint === 'work-stop'
               ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'expectedTicketVersion', 'reason']
@@ -173,6 +184,17 @@ export async function createProductHost(context: Context, config: ProductHostCon
                                         : undefined
         if (!fields) throw new CoreError('UNAVAILABLE', 'This product capability is not connected yet.')
         if (Object.keys(payload).some(key => !fields.includes(key))) throw new CoreError('INVALID_INPUT', 'The product request contains unsupported fields.')
+        if (endpoint === 'schedule-list') return engine!.listSchedules({ instanceId })
+        if (endpoint === 'schedule-source-read') return engine!.getScheduleSource({ instanceId })
+        if (endpoint === 'schedule-source-set') return engine!.setScheduleSource({ instanceId,
+          commandId: payload.commandId as string, enabled: payload.enabled as boolean })
+        if (endpoint === 'schedule-read') return engine!.getSchedule({ instanceId, ruleId: payload.ruleId as string })
+        if (endpoint === 'schedule-create') return engine!.createSchedule({ instanceId, commandId: payload.commandId as string,
+          title: payload.title as string, text: payload.text as string, timezone: payload.timezone as string,
+          when: payload.when as import('./product-schedules.js').ScheduleWhen,
+          target: payload.target as import('./product-schedules.js').ScheduleTarget })
+        if (endpoint === 'schedule-cancel') return engine!.cancelSchedule({ instanceId,
+          commandId: payload.commandId as string, ruleId: payload.ruleId as string })
         if (endpoint === 'history') {
           if (payload.after !== undefined && payload.before !== undefined) throw new CoreError('INVALID_INPUT', 'Main history accepts one direction cursor.')
           if (payload.after !== undefined) return engine!.getMainConversation({ instanceId, after: payload.after as number,

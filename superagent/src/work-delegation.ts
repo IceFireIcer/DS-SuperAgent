@@ -8,6 +8,7 @@ import type { Effect, EffectHandler, EffectResult, Effects } from './effects.js'
 import type { InputDelivery, MainFollowUpAttachment, MainFollowUpAttachmentRequest, WorkInput, WorkOwnership } from './work-inputs.js'
 import type { MainSourceHandoff } from './main-source.js'
 import { isCurrentSourceEvent, type SourceEvent } from './source-events.js'
+import { authorizedScheduleEvent } from './product-schedules.js'
 import type { ContextCard, ContextRef, ContextRequest } from './context.js'
 
 export interface MainWorkIntent {
@@ -423,8 +424,10 @@ export class WorkDelegation {
         const sourceEvent = await transaction.get<SourceEvent>('source-event', sourceHandoff.sourceEventId)
         const policy = await transaction.get<{ configuration: { allowedRequesterIds: string[] } }>('policy-state',
           JSON.stringify(['policy-state', sourceHandoff.sourceInstanceId]))
+        const scheduled = sourceEvent?.source.kind === 'schedule'
+          ? await authorizedScheduleEvent(transaction, sourceEvent, this.options.source.actorId, 'main').catch(() => undefined) : undefined
         if (!sourceEvent || !await isCurrentSourceEvent(transaction, sourceEvent) || sourceEvent.authorId !== sourceHandoff.authorId || sourceEvent.source.sourceInstanceId !== sourceHandoff.sourceInstanceId
-          || !policy?.configuration.allowedRequesterIds.includes(sourceEvent.authorId)) {
+          || (sourceEvent.source.kind === 'schedule' ? !scheduled : !policy?.configuration.allowedRequesterIds.includes(sourceEvent.authorId))) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The Main source handoff is no longer current and authorized.')
         }
       }
@@ -543,11 +546,17 @@ export class WorkDelegation {
             const sourceEvent = await tx.get<SourceEvent>('source-event', current.sourceEventId)
             const policy = await tx.get<{ configuration: { allowedRequesterIds: string[] } }>('policy-state',
               JSON.stringify(['policy-state', current.sourceInstanceId]))
+            const scheduleSource = sourceEvent?.source.kind === 'schedule'
+              ? await tx.get<{ enabled: boolean }>('product-schedule-source', 'product-schedule-source') : undefined
+            const scheduled = sourceEvent?.source.kind === 'schedule'
+              ? await authorizedScheduleEvent(tx, sourceEvent, this.options.source.actorId, 'main').catch(() => undefined) : undefined
             const staleReason = !sourceEvent ? 'SOURCE_EVENT_MISSING'
               : !await isCurrentSourceEvent(tx, sourceEvent) ? 'SOURCE_EVENT_SUPERSEDED'
-                : sourceEvent.authorId !== current.authorId || sourceEvent.source.sourceInstanceId !== current.sourceInstanceId ? 'SOURCE_ACTOR_CHANGED'
-                  : sourceEvent.type === 'deleted' || sourceEvent.addressing === 'ambient' || sourceEvent.authorKind !== 'human' ? 'SOURCE_NOT_AUTHORIZED'
-                    : !policy ? 'SOURCE_POLICY_MISSING'
+              : sourceEvent.authorId !== current.authorId || sourceEvent.source.sourceInstanceId !== current.sourceInstanceId ? 'SOURCE_ACTOR_CHANGED'
+                : scheduleSource?.enabled === false ? 'SCHEDULE_SOURCE_CLOSED'
+                  : sourceEvent.type === 'deleted' || sourceEvent.addressing === 'ambient'
+                    || (sourceEvent.source.kind === 'schedule' ? !scheduled : sourceEvent.authorKind !== 'human') ? 'SOURCE_NOT_AUTHORIZED'
+                    : scheduled ? undefined : !policy ? 'SOURCE_POLICY_MISSING'
                       : !policy.configuration.allowedRequesterIds.includes(sourceEvent.authorId) ? 'SOURCE_ACTOR_NOT_ALLOWED' : undefined
             if (staleReason) {
               await tx.replace('main-source-handoff', current.id, { ...current, state: 'discarded', lastError: staleReason, updatedAt: this.now() })

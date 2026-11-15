@@ -77,7 +77,7 @@ export interface RecoveryDecision {
   mandateDecisionId: string
   policyVersion: string
   currentPolicyVersion: string
-  reason: 'AUTHORIZED_HUMAN_FOLLOWUP'
+  reason: 'AUTHORIZED_HUMAN_FOLLOWUP' | 'AUTHORIZED_SCHEDULE_RULE'
   checkedAt: number
 }
 
@@ -89,7 +89,7 @@ export interface WorkOwnership {
   inputId: string
   subscriptionId: string
   state: 'owned' | 'handed-back' | 'requeued'
-  basis: 'fanout' | 'explicit-attach' | 'attention-answer' | 'supervisor-correction' | 'main-follow-up'
+  basis: 'fanout' | 'explicit-attach' | 'attention-answer' | 'supervisor-correction' | 'main-follow-up' | 'schedule'
   reason?: string
   requeueCommandId?: string
   assignedAt: number
@@ -461,8 +461,10 @@ export class WorkInputs {
   }
 
   /** The owning Engine has verified both grants and the native event; this grants ownership of only that event. */
-  async attachAssociated(tx: AsyncTx, ticketId: string, event: SourceEvent, association: CrossSourceAssociation) {
-    const ticket = await this.authorizedTicket(tx, ticketId)
+  async attachAssociated(tx: AsyncTx, ticketId: string, event: SourceEvent, association: CrossSourceAssociation,
+    options: { schedule?: boolean } = {}) {
+    const ticket = options.schedule ? await tx.get<Work['ticket']>('ticket', ticketId) : await this.authorizedTicket(tx, ticketId)
+    if (!ticket) throw new CoreError('NOT_FOUND', 'The Ticket does not exist.')
     if (ticket.constraint) throw new CoreError('TICKET_BLOCKED', 'Resolve the Ticket constraint before associating cross-source input.')
     const id = inputKey(ticket.id, event.id)
     const existing = await tx.get<WorkInput>('work-input', id)
@@ -472,11 +474,13 @@ export class WorkInputs {
       return existing
     }
     const directionVersion = (ticket.directionVersion ?? 1) + 1
+    const recoveryDecisionId = options.schedule && ticket.state === 'ended'
+      ? await this.recordRecovery(tx, ticket, event.id, id, 'AUTHORIZED_SCHEDULE_RULE') : undefined
     const input: WorkInput = { id, instanceId: this.instanceId, ticketId, sourceEventId: event.id, threadId: event.threadId,
       objectId: event.objectId, text: event.text!, authorId: event.authorId, ownership: 'worker', directionVersion,
-      state: 'pending', receivedAt: this.now(), association }
+      state: 'pending', ...(recoveryDecisionId ? { recoveryDecisionId } : {}), receivedAt: this.now(), association }
     await this.insertInput(tx, input)
-    await this.addOwnership(tx, ticket.id, event.id, id, `association:${id}`, 'explicit-attach', association.reason)
+    await this.addOwnership(tx, ticket.id, event.id, id, `association:${id}`, options.schedule ? 'schedule' : 'explicit-attach', association.reason)
     await tx.replace('ticket', ticket.id, { ...ticket, state: 'open', directionVersion })
     const intent = await tx.get<Work['intent']>('intent', ticket.id)
     if (!intent) throw new CoreError('INCOMPLETE_STATE', 'Associated work is missing its original intent.')
@@ -767,14 +771,15 @@ export class WorkInputs {
     return this.scanAll<WorkOwnership>(tx, 'event-work-ownership', eventOwnershipPrefix(eventId), ownership => ownership.sourceEventId === eventId, 'WORK_OWNERSHIP_BUDGET')
   }
 
-  private async recordRecovery(tx: AsyncTx, ticket: Work['ticket'], sourceEventId: string, inputId: string) {
+  private async recordRecovery(tx: AsyncTx, ticket: Work['ticket'], sourceEventId: string, inputId: string,
+    reason: RecoveryDecision['reason'] = 'AUTHORIZED_HUMAN_FOLLOWUP') {
     const mandate = await tx.get<Work['mandate']>('mandate', ticket.mandateId)
     const decision = mandate && await tx.get<Work['decision']>('decision', mandate.decisionId)
     if (!mandate || !decision) throw new CoreError('INCOMPLETE_STATE', 'Recovering a Ticket requires its original Mandate and Decision.')
     const id = recoveryKey(ticket.id, inputId)
     const recovery: RecoveryDecision = { id, instanceId: this.instanceId, ticketId: ticket.id, inputId, sourceEventId,
       mandateId: mandate.id, mandateDecisionId: decision.id, policyVersion: decision.policyVersion, currentPolicyVersion: this.policyVersion(),
-      reason: 'AUTHORIZED_HUMAN_FOLLOWUP', checkedAt: this.now() }
+      reason, checkedAt: this.now() }
     if (!await tx.replace('recovery-decision', id, recovery)) await tx.insert('recovery-decision', id, recovery)
     return id
   }
