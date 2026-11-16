@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { CoreError } from './model.js'
+import { maxProductAttachmentBytes } from './environment-assets.js'
 import type { FeishuEvent } from './channels.js'
 import type { FeishuTransport } from './pollers.js'
 import type { SourceMember } from './membership.js'
@@ -25,7 +26,8 @@ export interface FeishuApiOptions {
   requestTimeoutMs?: number
 }
 
-export interface FeishuNativeEvent extends FeishuEvent { rootId?: string; threadId?: string }
+export interface FeishuResource { kind: 'image' | 'file'; key: string; name?: string }
+export interface FeishuNativeEvent extends FeishuEvent { rootId?: string; threadId?: string; resource?: FeishuResource; resourceMissing?: boolean }
 
 export interface FeishuChatInfo {
   chatId: string
@@ -158,6 +160,90 @@ export class FeishuOpenApi implements FeishuTransport {
     return chatId
   }
 
+  /** Read a native message resource only while its chat, sender, version and key still match the observed event. */
+  async downloadResource(request: { messageId: string; chatId: string; senderId: string; updateTime: string;
+    resource: FeishuResource; signal: AbortSignal }): Promise<Buffer> {
+    const { messageId, resource, signal } = request
+    if (!/^[\w-]{1,512}$/u.test(messageId) || !/^[\w-]{1,512}$/u.test(resource.key)
+      || !['image', 'file'].includes(resource.kind)) throw new CoreError('INVALID_INPUT', 'A native message resource needs bounded identities.')
+    const check = async () => {
+      const data = await this.call<{ items?: Record<string, unknown>[] }>(`/open-apis/im/v1/messages/${encodeURIComponent(messageId)}`, { signal })
+      const item = data?.items?.find(value => value.message_id === messageId)
+      if (!item || item.chat_id !== request.chatId || item.deleted === true || item.sender === null
+        || (item.sender as Record<string, unknown> | undefined)?.id !== request.senderId
+        || String(asMillis(item.update_time)) !== request.updateTime
+        || JSON.stringify(messageResource(item)) !== JSON.stringify(resource)) {
+        throw new CoreError('ATTACHMENT_UNAVAILABLE', 'The native message no longer authorizes this resource.')
+      }
+    }
+    await check()
+    const path = `/open-apis/im/v1/messages/${encodeURIComponent(messageId)}/resources/${encodeURIComponent(resource.key)}?type=${resource.kind}`
+    const read = (secret: string) => this.binaryWithSecret(path, signal, secret)
+    const bytes = this.options.withCredential ? await this.options.withCredential('source', async secret => {
+      try { return { ok: true as const, value: await read(secret) } }
+      catch (error) {
+        if (error instanceof FeishuApiError) return { ok: false as const, type: 'api' as const,
+          feishuCode: error.feishuCode, httpStatus: error.httpStatus }
+        return { ok: false as const, type: 'core' as const,
+          code: error instanceof CoreError && ['SOURCE_BUDGET', 'SOURCE_TIMEOUT', 'SOURCE_STOPPED'].includes(error.code)
+            ? error.code : 'SOURCE_FAILED' }
+      }
+    }).then(result => {
+      if (result.ok) return result.value
+      if (result.type === 'api') throw new FeishuApiError(result.feishuCode, result.httpStatus, 'Feishu resource request failed.')
+      throw new CoreError(result.code, 'Feishu resource request failed.')
+    }) : await read(this.options.appSecret!)
+    await check()
+    return bytes
+  }
+
+  private async binaryWithSecret(path: string, signal: AbortSignal, secret: string, allowRefresh = true): Promise<Buffer> {
+    const token = await this.ensureToken(signal, secret)
+    const deadline = AbortSignal.any([signal, AbortSignal.timeout(this.requestTimeoutMs)])
+    let response: Response
+    try { response = await this.fetchImpl(`${this.baseUrl}${path}`, { signal: deadline, redirect: 'error', headers: { Authorization: `Bearer ${token}` } }) }
+    catch {
+      throw new CoreError(signal.aborted ? 'SOURCE_STOPPED' : deadline.aborted ? 'SOURCE_TIMEOUT' : 'SOURCE_FAILED', 'The Feishu resource request failed.')
+    }
+    if (!response.ok) throw new FeishuApiError(undefined, response.status, 'The Feishu resource request was refused.')
+    const length = response.headers.get('content-length')
+    if (length !== null && (!/^(?:0|[1-9]\d*)$/u.test(length) || Number(length) > maxProductAttachmentBytes)) {
+      await response.body?.cancel()
+      throw new CoreError('SOURCE_BUDGET', 'The Feishu resource exceeds the product attachment limit.')
+    }
+    const reader = response.body?.getReader()
+    if (!reader) throw new CoreError('SOURCE_FAILED', 'The Feishu resource has no byte stream.')
+    const chunks: Uint8Array[] = []
+    let size = 0
+    try {
+      while (true) {
+        const next = await reader.read()
+        if (next.done) break
+        size += next.value.byteLength
+        if (size > maxProductAttachmentBytes) throw new CoreError('SOURCE_BUDGET', 'The Feishu resource exceeds the product attachment limit.')
+        chunks.push(next.value)
+      }
+    } catch (error) {
+      await reader.cancel().catch(() => {})
+      if (error instanceof CoreError) throw error
+      throw new CoreError(signal.aborted ? 'SOURCE_STOPPED' : deadline.aborted ? 'SOURCE_TIMEOUT' : 'SOURCE_FAILED', 'The Feishu resource stream failed.')
+    } finally { reader.releaseLock() }
+    if (!size) throw new CoreError('SOURCE_FAILED', 'The Feishu resource is empty.')
+    const bytes = Buffer.concat(chunks, size)
+    if (response.headers.get('content-type')?.includes('json')) {
+      let error: { code?: number; msg?: string }
+      try { error = JSON.parse(bytes.toString('utf8')) as { code?: number; msg?: string } }
+      catch { throw new CoreError('SOURCE_FAILED', 'Feishu returned an invalid resource response.') }
+      if (typeof error.code !== 'number' || typeof error.msg !== 'string') return bytes
+      if (error.code === 99991663 && allowRefresh) {
+        this.token = undefined
+        return this.binaryWithSecret(path, signal, secret, false)
+      }
+      throw new FeishuApiError(error.code, undefined, 'Feishu rejected the resource request.')
+    }
+    return bytes
+  }
+
   clear(): void {
     this.token = undefined; this.chats.clear(); this.pageTokens.clear(); this.pageStarts.clear(); this.threadPages.clear(); this.pendingPage = undefined
   }
@@ -234,14 +320,18 @@ export class FeishuOpenApi implements FeishuTransport {
       ? (item.mentions as Record<string, unknown>[]).map(mention => asString(mention?.id)).filter((id): id is string => Boolean(id))
       : []
     const text = deleted ? undefined : messageText(item)
+    const resource = !deleted && (item.msg_type === 'image' || item.msg_type === 'file') ? messageResource(item) : undefined
+    const resourceMissing = !deleted && ((['image', 'file', 'audio', 'media', 'sticker'].includes(String(item.msg_type)) && !resource)
+      || item.msg_type === 'post' && hasPostResource(item))
     const kind = deleted ? 'deleted' : edited ? 'edited' : 'created'
-    const fingerprint = createHash('sha256').update(`${kind}\n${text ?? ''}`).digest('hex').slice(0, 16)
+    const fingerprint = createHash('sha256').update(`${kind}\n${text ?? ''}\n${JSON.stringify(resource ?? resourceMissing)}`).digest('hex').slice(0, 16)
     return {
       eventId: `${messageId}:${updateTime ?? 'unknown'}:${kind}:${fingerprint}`,
       cursor: eventCursor(createTime, messageId),
       tenantKey, chatId, chatType: info.chatType, messageId, senderId,
       senderKind: sender?.sender_type === 'app' ? 'bot' : 'human',
       ...(text === undefined ? {} : { text }),
+      ...(resource ? { resource } : {}), ...(resourceMissing ? { resourceMissing: true } : {}),
       createTime: String(createTime), ...(updateTime === undefined ? {} : { updateTime: String(updateTime) }),
       ...(asString(item.root_id) ? { rootId: asString(item.root_id)! } : {}),
       ...(asString(item.thread_id) ? { threadId: asString(item.thread_id)! } : {}),
@@ -342,6 +432,32 @@ function asString(value: unknown) {
 function asMillis(value: unknown) {
   const number = typeof value === 'number' ? value : typeof value === 'string' && /^\d+$/u.test(value) ? Number(value) : NaN
   return Number.isSafeInteger(number) && number > 0 ? number : undefined
+}
+
+function messageResource(item: Record<string, unknown>): FeishuResource | undefined {
+  if (item.msg_type !== 'image' && item.msg_type !== 'file') return undefined
+  const raw = (item.body as Record<string, unknown> | undefined)?.content
+  if (typeof raw !== 'string' || raw.length > 4096) return undefined
+  let content: Record<string, unknown>
+  try { content = JSON.parse(raw) as Record<string, unknown> }
+  catch { return undefined }
+  const key = content[item.msg_type === 'image' ? 'image_key' : 'file_key']
+  if (typeof key !== 'string' || !/^[\w-]{1,512}$/u.test(key)) return undefined
+  if (item.msg_type === 'image') return { kind: 'image', key }
+  if (typeof content.file_name !== 'string' || !content.file_name || Buffer.byteLength(content.file_name) > 256) return undefined
+  return { kind: 'file', key, name: content.file_name }
+}
+
+function hasPostResource(item: Record<string, unknown>) {
+  const raw = (item.body as Record<string, unknown> | undefined)?.content
+  if (typeof raw !== 'string' || raw.length > 65536) return true
+  try {
+    const content = JSON.parse(raw) as Record<string, unknown>
+    const localized = (content.zh_cn ?? content.en_us ?? content) as Record<string, unknown>
+    return Array.isArray(localized.content) && localized.content.some(line => Array.isArray(line) && line.some(element =>
+      element && typeof element === 'object' && (['img', 'image', 'file', 'media'].includes(String(element.tag))
+        || element.image_key !== undefined || element.file_key !== undefined)))
+  } catch { return true }
 }
 
 function messageText(item: Record<string, unknown>) {

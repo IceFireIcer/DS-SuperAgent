@@ -56,6 +56,114 @@ test('the Feishu transport maps chats, messages, mentions, edits, recalls and pa
   assert.equal(p2pRequest.query.get('start_time'), String(Math.floor(Number(lastCursor.split(':')[0]) / 1000) - 600))
 })
 
+test('Feishu image and file messages expose bounded native resource identities without raw bytes', async () => {
+  const fetch = async url => {
+    const path = new URL(url).pathname
+    if (path.endsWith('/tenant_access_token/internal')) return json({ code: 0, tenant_access_token: 'fixture-token', expire: 7200 })
+    if (path === '/open-apis/im/v1/chats/oc_group') return json({ code: 0, data: { chat_mode: 'group' } })
+    if (path === '/open-apis/im/v1/messages') return json({ code: 0, data: { items: [
+      message({ message_id: 'om_image', msg_type: 'image', body: { content: '{"image_key":"img_fixture"}' } }),
+      message({ message_id: 'om_file', msg_type: 'file', body: { content: '{"file_key":"file_fixture","file_name":"report.txt"}' } }),
+      message({ message_id: 'om_missing', msg_type: 'file', body: { content: '{"file_name":"unknown.txt"}' } }),
+      message({ message_id: 'om_audio', msg_type: 'audio', body: { content: '{"file_key":"audio_fixture"}' } }),
+      message({ message_id: 'om_rich', msg_type: 'post', body: { content: '{"zh_cn":{"content":[[{"tag":"img","image_key":"img_rich"}]]}}' } }),
+    ], has_more: false } })
+    throw new Error(`Unexpected fixture request: ${path}`)
+  }
+  const api = new core.FeishuOpenApi({ appId: 'cli_test', appSecret: 'fixture-secret', fetch })
+  const events = (await api.listEvents({ tenantKey: 'tenant', chatIds: ['oc_group'], signal: new AbortController().signal })).events
+  assert.deepEqual(events.find(event => event.messageId === 'om_image').resource, { kind: 'image', key: 'img_fixture' })
+  assert.deepEqual(events.find(event => event.messageId === 'om_file').resource,
+    { kind: 'file', key: 'file_fixture', name: 'report.txt' })
+  assert.equal(events.find(event => event.messageId === 'om_missing').resourceMissing, true)
+  assert.equal(events.find(event => event.messageId === 'om_audio').resourceMissing, true)
+  assert.equal(events.find(event => event.messageId === 'om_rich').resourceMissing, true)
+  assert.equal(JSON.stringify(events).includes('fixture-secret'), false)
+})
+
+test('Feishu reads only bytes still belonging to the exact native message and bounds the response', async () => {
+  const bytes = Buffer.from('the original document')
+  const native = message({ message_id: 'om_file', msg_type: 'file', body: { content: '{"file_key":"file_fixture","file_name":"report.txt"}' } })
+  let current = native
+  let resourceCalls = 0
+  let oversized = false
+  let revoked = false
+  let missing = false
+  let changedDuringRead = false
+  let streamingOverflow = false
+  const fetch = async (url, init = {}) => {
+    const path = new URL(url).pathname
+    if (path.endsWith('/tenant_access_token/internal')) return json({ code: 0, tenant_access_token: 'fixture-token', expire: 7200 })
+    if (path === '/open-apis/im/v1/messages/om_file') return json({ code: 0, data: { items: [current] } })
+    if (path === '/open-apis/im/v1/messages/om_file/resources/file_fixture') {
+      resourceCalls++
+      assert.equal(new URL(url).searchParams.get('type'), 'file')
+      assert.equal(init.headers.Authorization, 'Bearer fixture-token')
+      if (revoked) return new Response('Forbidden', { status: 403 })
+      if (missing) return new Response('Not Found', { status: 404 })
+      if (changedDuringRead) current = { ...native, deleted: true }
+      return new Response(streamingOverflow ? Buffer.alloc(8 * 1024 * 1024 + 1) : bytes, { headers: { 'Content-Type': 'application/octet-stream',
+        ...(oversized ? { 'Content-Length': String(9 * 1024 * 1024) } : {}) } })
+    }
+    throw new Error(`Unexpected fixture request: ${path}`)
+  }
+  const api = new core.FeishuOpenApi({ appId: 'cli_test', appSecret: 'fixture-secret', fetch })
+  const request = { messageId: 'om_file', chatId: 'oc_group', senderId: 'ou_alice', updateTime: '1700000000000',
+    resource: { kind: 'file', key: 'file_fixture', name: 'report.txt' }, signal: new AbortController().signal }
+  assert.deepEqual(await api.downloadResource(request), bytes)
+  current = { ...native, chat_id: 'oc_other' }
+  await assert.rejects(api.downloadResource(request), { code: 'ATTACHMENT_UNAVAILABLE' })
+  current = { ...native, body: { content: '{"file_key":"other_file","file_name":"report.txt"}' } }
+  await assert.rejects(api.downloadResource(request), { code: 'ATTACHMENT_UNAVAILABLE' })
+  assert.equal(resourceCalls, 1)
+  current = native
+  oversized = true
+  await assert.rejects(api.downloadResource(request), { code: 'SOURCE_BUDGET' })
+  oversized = false
+  streamingOverflow = true
+  await assert.rejects(api.downloadResource(request), { code: 'SOURCE_BUDGET' })
+  streamingOverflow = false
+  revoked = true
+  await assert.rejects(api.downloadResource(request), { code: 'SOURCE_FAILED', httpStatus: 403 })
+  revoked = false
+  missing = true
+  await assert.rejects(api.downloadResource(request), { code: 'SOURCE_FAILED', httpStatus: 404 })
+  missing = false
+  changedDuringRead = true
+  await assert.rejects(api.downloadResource(request), { code: 'ATTACHMENT_UNAVAILABLE' })
+})
+
+test('Feishu binary reads refresh a rejected managed tenant token without exposing the credential', async () => {
+  const native = message({ message_id: 'om_file', msg_type: 'file', body: { content: '{"file_key":"file_fixture","file_name":"report.json"}' } })
+  let tokenCount = 0
+  let resourceCalls = 0
+  const purposes = []
+  const fetch = async (url, init = {}) => {
+    const path = new URL(url).pathname
+    if (path.endsWith('/tenant_access_token/internal')) return json({ code: 0, tenant_access_token: `fixture-${++tokenCount}`, expire: 7200 })
+    if (path === '/open-apis/im/v1/messages/om_file') return json({ code: 0, data: { items: [native] } })
+    if (path.endsWith('/resources/file_fixture')) {
+      resourceCalls++
+      if (resourceCalls === 1) return new Response(JSON.stringify({ code: 99991663, msg: 'token expired' }),
+        { headers: { 'Content-Type': 'application/json' } })
+      assert.equal(init.headers.Authorization, 'Bearer fixture-2')
+      return new Response('{"title":"valid JSON file"}', { headers: { 'Content-Type': 'application/json' } })
+    }
+    throw new Error(`Unexpected fixture request: ${path}`)
+  }
+  const api = new core.FeishuOpenApi({ appId: 'cli_test', withCredential: async (purpose, consume) => {
+    purposes.push(purpose)
+    return consume('fictional-managed-secret')
+  }, fetch })
+  const result = await api.downloadResource({ messageId: 'om_file', chatId: 'oc_group', senderId: 'ou_alice',
+    updateTime: '1700000000000', resource: { kind: 'file', key: 'file_fixture', name: 'report.json' },
+    signal: new AbortController().signal })
+  assert.equal(result.toString('utf8'), '{"title":"valid JSON file"}')
+  assert.equal(resourceCalls, 2)
+  assert.equal(tokenCount, 2)
+  assert.deepEqual(purposes, ['source', 'source', 'source'])
+})
+
 test('a tenant token rejected mid-poll is refreshed once and the request is retried', async () => {
   let tokens = 0
   let messageCalls = 0

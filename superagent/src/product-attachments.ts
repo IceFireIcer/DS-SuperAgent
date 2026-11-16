@@ -101,7 +101,8 @@ export async function resolveProductAttachments(tx: AsyncTx, request: {
 export class ProductAttachments {
   constructor(private readonly storage: Storage, private readonly instanceId: string,
     private readonly attachments: Pick<AttachmentStore, 'admitEncodedFile' | 'admitPromptContent'>,
-    private readonly environment: (id: string) => LocalEnvironment | undefined) {}
+    private readonly environment: (id: string) => LocalEnvironment | undefined,
+    private readonly environmentActorId?: string) {}
 
   private identity(request: { instanceId: string; actorId: string; clientId?: string }) {
     if (request.instanceId !== this.instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This attachment belongs to another Instance.')
@@ -142,7 +143,7 @@ export class ProductAttachments {
     }
     const owner = this.environment(request.environmentId)
     if (!owner) throw new CoreError('ENVIRONMENT_NOT_FOUND', 'Choose an available work directory before uploading.')
-    owner.authorize({ instanceId: this.instanceId, actorId: request.actorId })
+    owner.authorize({ instanceId: this.instanceId, actorId: this.environmentActorId ?? request.actorId })
     const key = uploadKey(this.instanceId, request.actorId, request.clientId, request.commandId)
     const fingerprint = createHash('sha256').update(canonicalJson([request.kind, request.name, request.mediaType ?? null,
       request.environmentId, createHash('sha256').update(bytes).digest('hex')])).digest('hex')
@@ -161,7 +162,7 @@ export class ProductAttachments {
       if (admitted?.type !== 'image') throw new CoreError('ATTACHMENT_UNAVAILABLE', 'The attachment service did not admit the image.')
       native = admitted.attachment
     }
-    const asset = await (await owner.prepare({ instanceId: this.instanceId, actorId: request.actorId }))
+    const asset = await (await owner.prepare({ instanceId: this.instanceId, actorId: this.environmentActorId ?? request.actorId }))
       .saveProductAttachment({ name: request.name, data: bytes, ...(request.mediaType ? { mediaType: request.mediaType } : {}) })
     const id = key.slice('upload:'.length)
     return commandTransaction(this.storage, this.instanceId, async tx => {
@@ -191,7 +192,7 @@ export class ProductAttachments {
     if (record.state !== 'active') throw new CoreError('ATTACHMENT_REVOKED', 'The attachment is no longer authorized.')
     const owner = this.environment(record.environmentId)
     if (!owner) throw new CoreError('ENVIRONMENT_NOT_FOUND', 'The original work directory is unavailable.')
-    const bound = await owner.prepare({ instanceId: this.instanceId, actorId: request.actorId })
+    const bound = await owner.prepare({ instanceId: this.instanceId, actorId: this.environmentActorId ?? request.actorId })
     const page = await bound.readProductAsset(record.asset, { ...(request.offset === undefined ? {} : { offset: request.offset }),
       ...(request.maxBytes === undefined ? {} : { maxBytes: request.maxBytes }) })
     const current = await this.storage.transaction(this.instanceId, tx => this.record(tx, request.id, request))
