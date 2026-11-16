@@ -18,6 +18,7 @@ import { productProactivePreparation } from './product-proactive.js'
 import type { ProactiveRule } from './proactive.js'
 import type { ProductCredentialRecords } from './product-credential-vault.js'
 import type { ProductCredentialManager } from './product-credential-manager.js'
+import { workerMcpName, type WorkerMcpConfig } from './worker-mcp-tool.js'
 import { assertReferenceShape } from './environment-assets.js'
 import { localDeliveryChannel, type DeliveryChannel } from './deliveries.js'
 import type { RoleConfig, RoleModel } from './config.js'
@@ -31,6 +32,8 @@ export interface ProductHostConfig { databasePath: string; workspaceRoot?: strin
   clientGateway?: Omit<ClientGatewayOptions, 'product'>;
   /** Supplied by a trusted Host, never by the window or a model turn. */
   feishu?: Omit<FeishuRuntimeOptions, 'storage' | 'instanceId' | 'mainIntake'>;
+  /** Trusted deployment selection; one exact Host-local MCP tool, with no model-supplied endpoint or credential. */
+  workerMcpTool?: WorkerMcpConfig;
   feishuConfigurationError?: 'INVALID_CONFIG';
   github?: Omit<GitHubRuntimeOptions, 'storage' | 'instanceId'>;
   githubConfigurationError?: 'INVALID_CONFIG' }
@@ -85,6 +88,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
   const instanceId = config.instanceId ?? 'personal'
   const actorId = config.actorId ?? 'local-user'
   identifier(instanceId, 'instanceId'); identifier(actorId, 'actorId')
+  if (config.workerMcpTool) workerMcpName(config.workerMcpTool)
   const route = (configured?: RoleModel): RoleModel => {
     const value = configured ?? context.get('agentDefaultModel')?.currentSelection?.()
     if (!value?.provider || !value.model) return { provider: 'unconfigured', model: 'unconfigured' }
@@ -304,11 +308,16 @@ export async function createProductHost(context: Context, config: ProductHostCon
         : delivery.destination.sourceInstanceId === 'product-desktop' ? localDeliveryChannel.deliver(delivery, context)
           : Promise.resolve({ type: 'permanent', reason: 'DESTINATION_SOURCE_DISABLED' }),
     } : undefined
-    engine = new Engine(storage, instanceId, { sourceInstanceId: 'product-desktop', actorId, allowedActorIds: [actorId] }, {}, sessions,
+    engine = new Engine(storage, instanceId, { sourceInstanceId: 'product-desktop', actorId, allowedActorIds: [actorId],
+      ...(config.workerMcpTool ? { hostCapabilities: { mcp: true } } : {}) }, {}, sessions,
       environments, {}, {}, {}, channel ? { channel } : {}, {}, proactive, attachments)
     const records = context.get('credentials') as ProductCredentialRecords | undefined
     if (records && typeof records.readRecord === 'function' && typeof records.modifyRecord === 'function'
       && typeof records.deleteRecord === 'function') resourceManager = engine.createProductCredentialManager(records)
+    if (config.workerMcpTool) {
+      if (!resourceManager) throw new CoreError('UNAVAILABLE', 'The approved MCP tool requires a durable DSH record service.')
+      engine.configureWorkerMcp({ config: config.workerMcpTool, credentials: resourceManager })
+    }
     if (environments[0] && config.workspaceRoot) await engine.addWorkDirectory({ instanceId,
       commandId: `bootstrap:${environments[0].config.id}`, environment: environments[0] })
     await engine.acquireHost()
