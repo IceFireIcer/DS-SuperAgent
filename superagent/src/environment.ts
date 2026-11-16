@@ -50,6 +50,7 @@ export interface PreparedEnvironment {
   readonly cwd: string
   invoke(name: string, args: Record<string, string>, signal?: AbortSignal): Promise<Record<string, unknown>>
   artifact(path: string, signal?: AbortSignal): Promise<Artifact>
+  stageAttachment?(reference: EnvironmentAssetReference, path: string, signal?: AbortSignal): Promise<{ path: string; bytes: number; sha256: string }>
   assetCapabilities?(signal?: AbortSignal): Promise<EnvironmentAssetCapabilities>
   saveAttachment?(input: { name: string; data: Uint8Array; mediaType?: string }, signal?: AbortSignal): Promise<EnvironmentAssetReference>
   readAsset?(reference: EnvironmentAssetReference, options?: { offset?: number; maxBytes?: number }, signal?: AbortSignal): Promise<EnvironmentAssetPage>

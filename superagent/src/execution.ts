@@ -1064,8 +1064,24 @@ export class Execution {
       }
       try {
         if (name === 'read_asset') await authorizeAssetRead(args)
-        const output = await bound.invoke(name, args, signal)
+        let staged: EnvironmentAssetReference | undefined
+        if (name === 'stage_attachment') {
+          staged = await this.storage.transaction(this.instanceId, async tx => {
+            const { granted } = await currentGranted(tx, args.attachmentId)
+            const attachment = granted.find(item => item.id === args.attachmentId && sameAttachment(item.asset, args))
+            if (!attachment) throw new CoreError('RESOURCE_NOT_AUTHORIZED', 'This attachment was not granted to this work item.')
+            const current = await tx.get<Assignment>('assignment', ticketId)
+            if (current?.id !== assignment.id || current.state !== 'running') throw new CoreError('STALE_ASSIGNMENT', 'Only the current Assignment may stage an attachment.')
+            return attachment.asset
+          })
+        }
+        const output: Record<string, unknown> = staged ? await bound.stageAttachment!(staged, args.path!, signal) : await bound.invoke(name, args, signal)
         if (name === 'read_asset') await authorizeAssetRead(args)
+        if (staged) await this.storage.transaction(this.instanceId, async tx => {
+          await currentGranted(tx, args.attachmentId)
+          const current = await tx.get<Assignment>('assignment', ticketId)
+          if (current?.id !== assignment.id || current.state !== 'running') throw new CoreError('STALE_ASSIGNMENT', 'The staging Assignment is no longer current.')
+        })
         if (name === 'save_attachment') await recordSavedAsset(output)
         const success = name !== 'run_command' && name !== 'run_shell'
           || output.exitCode === 0 && !output.cancelled && !output.truncated
@@ -1093,7 +1109,16 @@ export class Execution {
       execute: (args, signal) => environmentTool('read_asset', args, signal) }
     const listSkillsTool: NativeTool = { name: 'list_skills', description: 'List the model-invocable skills discovered by the bound Environment\'s public skill provider. A name is not loaded content; read it with read_asset kind=skill.',
       parameters: {}, execute: (_args, signal) => environmentTool('list_skills', {}, signal) }
-    const commandNames = environment ? environmentCommandNames(environment).filter(name => name !== environment.config.setup) : []
+    const office = environment?.kind === 'local' && Boolean(environment.config.commands.office && environment.config.skillsPath)
+    const stageTool: NativeTool = { name: 'stage_attachment', description: 'Copy one originally admitted .docx attachment granted to this work item into a new relative .docx path in this same Environment. Include its attachmentId; a revoked or foreign upload is refused.',
+      parameters: { attachmentId: { type: 'string', required: true }, id: { type: 'string', required: true },
+        sha256: { type: 'string', required: true }, bytes: { type: 'string', required: true }, path: { type: 'string', required: true } },
+      execute: (args, signal) => environmentTool('stage_attachment', args, signal) }
+    const officeTool: NativeTool = { name: 'run_office', description: 'Use the bound Office CLI for check, docx-read or docx-edit. Read for paragraph IDs; edit with JSON ops such as [{"replace":{"find":"old","with":"new"}}] into a new relative .docx file. Check the output before report_ready. A cancelled, incomplete or failed command is not a verified file.',
+      parameters: { operation: { type: 'string', required: true }, input: { type: 'string', required: true },
+        output: { type: 'string' }, ops: { type: 'string' } },
+      execute: (args, signal) => environmentTool('run_office', args, signal) }
+    const commandNames = environment ? environmentCommandNames(environment).filter(name => name !== environment.config.setup && name !== 'office') : []
     const hasCommand = environmentHasCommand(environment)
     const commandTool: NativeTool = { name: 'run_command', description: `Run one configured command inside the bound Environment: ${commandNames.join(', ')}.`, parameters: { name: { type: 'string', required: true } }, execute: (args, signal) => environmentTool('run_command', args, signal) }
     const shellTool: NativeTool = { name: 'run_shell', description: 'Run one bounded shell command in this Assignment directory using the public DSH subprocess provider. Its exit and output are facts, not a completed Ticket.',
@@ -1106,6 +1131,7 @@ export class Execution {
       ...(assets?.attachments ? [saveAttachmentTool] : []),
       ...(readAsset ? [readAssetTool] : []),
       ...(assets?.skills ? [listSkillsTool] : []),
+      ...(office ? [stageTool, officeTool] : []),
       ...(commandNames.length ? [commandTool] : []),
       ...(environment?.config.allowShell ? [shellTool] : []),
     ] : [
@@ -1564,9 +1590,9 @@ export class Execution {
         if (askedAttention) throw new CoreError('ATTENTION_ACTIVE', 'A ready report cannot be submitted while a human answer is pending.')
         for (const value of [args.result!, args.evidence!]) if (!value?.trim() || Buffer.byteLength(value) > 16384) throw new CoreError('INVALID_REPORT', 'A ready report needs bounded nonempty result and verification evidence.')
         if (bound) {
-          const lastWrite = toolFacts.findLastIndex(fact => fact.tool === 'write_file' && fact.outcome === 'success')
+          const lastWrite = toolFacts.findLastIndex(fact => (fact.tool === 'write_file' || fact.tool === 'stage_attachment') && fact.outcome === 'success')
           const verified = hasCommand
-            ? toolFacts.some((fact, index) => index > lastWrite && (fact.tool === 'run_command' || fact.tool === 'run_shell') && fact.outcome === 'success')
+            ? toolFacts.some((fact, index) => index > lastWrite && (fact.tool === 'run_command' || fact.tool === 'run_shell' || fact.tool === 'run_office') && fact.outcome === 'success')
             : toolFacts.some((fact, index) => index > lastWrite && (fact.tool === 'read_file' || fact.tool === 'grep') && fact.outcome === 'success')
           if (!verified) throw new CoreError('VERIFICATION_REQUIRED', hasCommand
             ? 'A ready report needs a successful configured verification command after the last file write.'
@@ -1574,8 +1600,24 @@ export class Execution {
           const rawArtifacts = typeof args.artifacts === 'string' ? args.artifacts : ''
           const paths = [...new Set(rawArtifacts.split('\n').map((path: string) => path.trim()).filter(Boolean))]
           if (!paths.length || paths.length > 10) throw new CoreError('INVALID_REPORT', 'Provide one to ten newline-separated relative artifact paths.')
+          for (const path of paths.filter(path => path.toLowerCase().endsWith('.docx'))) {
+            if (!toolFacts.some((fact, index) => index > lastWrite && fact.tool === 'run_office'
+              && fact.outcome === 'success' && fact.output.operation === 'check' && fact.output.input === path)) {
+              throw new CoreError('VERIFICATION_REQUIRED', 'Check each generated Word file in its original Environment before reporting it.')
+            }
+          }
           artifacts.splice(0)
-          for (const path of paths) artifacts.push(await bound.artifact(path, signal))
+          for (const path of paths) {
+            if (path.toLowerCase().endsWith('.docx')) {
+              const before = await bound.artifact(path, signal)
+              await bound.invoke('run_office', { operation: 'check', input: path }, signal)
+              const current = await bound.artifact(path, signal)
+              if (before.sha256 !== current.sha256 || before.bytes !== current.bytes) {
+                throw new CoreError('REFERENCE_STALE', 'The Word file changed while its package was being checked.')
+              }
+              artifacts.push(current)
+            } else artifacts.push(await bound.artifact(path, signal))
+          }
         }
         return this.storage.transaction(this.instanceId, async transaction => {
           const current = await transaction.get<Assignment>('assignment', ticketId)

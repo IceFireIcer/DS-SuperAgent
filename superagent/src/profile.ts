@@ -1,5 +1,6 @@
-import { mkdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { dirname, join, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import { createProductHost, type ProductHostConfig } from './product-host.js'
 import { CoreError } from './model.js'
@@ -10,6 +11,21 @@ export interface SuperagentProfilePaths {
 }
 
 export type SuperagentProfileConfig = Omit<ProductHostConfig, 'databasePath'>
+
+/** The app's already-mounted Office payload is the only automatic Office grant. */
+export function officeProfileConfig(env: NodeJS.ProcessEnv = process.env): ProductHostConfig['office'] | undefined {
+  const node = env.DS_BOT_OFFICE_NODE
+  const runtime = env.DS_BOT_RUNTIME_DIR
+  if (!node || !runtime) return undefined
+  let cli: string
+  try { cli = join(dirname(fileURLToPath(import.meta.resolve('ds-bot'))), 'office.js')
+    .replace(`${sep}app.asar${sep}`, `${sep}app.asar.unpacked${sep}`) }
+  catch { return undefined }
+  const skillsPath = join(runtime, 'office-skills')
+  if (![node, cli, join(skillsPath, 'office', 'SKILL.md'), join(skillsPath, 'office-docx', 'SKILL.md')]
+    .every(path => existsSync(path))) return undefined
+  return { node, cli, skillsPath }
+}
 
 /**
  * The profile home is the app's isolated DSH home for this profile. Keeping the
@@ -116,8 +132,10 @@ export async function apply(context: Context, config: SuperagentProfileConfig = 
       githubConfigurationError = 'INVALID_CONFIG'
     }
   }
+  const office = config.office ?? officeProfileConfig()
   const host = await createProductHost(context, {
     ...config,
+    ...(office ? { office } : {}),
     ...(config.watchdogStatusPath === undefined && process.env.DS_SUPERAGENT_WATCHDOG_STATUS_PATH
       ? { watchdogStatusPath: process.env.DS_SUPERAGENT_WATCHDOG_STATUS_PATH } : {}),
     ...(config.workspaceRoot === undefined && workspaceRoot ? { workspaceRoot } : {}),
