@@ -138,9 +138,11 @@ export class ProductMcpConfiguration {
     return this.storage.transaction(this.instanceId, async tx => {
       const selection = await tx.get<McpSelection>('product-mcp-selection', 'worker') ?? this.initial()
       const view = await this.projection(selection, tx)
-      if (view.resourceId !== input.resourceId || view.state !== 'ready') {
+      if (view.resourceId !== input.resourceId || !selection.connected) {
         throw new CoreError('MCP_NOT_CONNECTED', 'This Host MCP tool is not enabled for the selected resource.')
       }
+      if (view.error) throw new CoreError(view.error, 'The selected MCP resource is unavailable.')
+      if (!selection.approved) throw new CoreError('MCP_NOT_APPROVED', 'This Host MCP tool is no longer approved.')
       const resource = await tx.get<CredentialResourceView>('resource-credential', input.resourceId)
       if (!resource?.grants.some(grant => grant.scope.role === 'worker' && grant.purposes.includes('tool')
         && (grant.scope.workItemId === undefined || grant.scope.workItemId === input.workItemId)

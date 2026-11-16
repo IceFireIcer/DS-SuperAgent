@@ -6,7 +6,7 @@ import type { Assignment } from './execution.js'
 import type { Attention } from './attention.js'
 import type { MainWorkBrief, MainWorkItem, MainWorkOutcome, MainWorkPlanConflict, MainWorkReceipt,
   MainWorkUpdate } from './work-delegation.js'
-import { mcpBlockIn, mcpCallPageIn, type WorkerMcpCall } from './worker-mcp-calls.js'
+import { mcpBlockIn, mcpCallPageIn, mcpDenialPageIn, type WorkerMcpCall, type WorkerMcpDenial } from './worker-mcp-calls.js'
 
 type ObservationRole = 'router' | 'worker'
 
@@ -583,6 +583,7 @@ export class WorkObservations {
     const currentReport = await transaction.get<ReadyReport>('report', ticketId)
     const mcpUnknown = await mcpBlockIn(transaction, ticketId)
     const mcpCalls = await this.mcpCalls(transaction, ticketId, selected.id)
+    const mcpDenials = await this.mcpDenials(transaction, ticketId, selected.id)
     const attentionHead = await transaction.get<{ attentionId: string }>('attention-head', JSON.stringify(['attention-head', ticketId]))
     const attention = attentionHead ? await transaction.get<Attention>('attention', attentionHead.attentionId) : undefined
     const stopHead = await transaction.get<{ stopId: string }>('stop-head', JSON.stringify(['stop-head', ticketId]))
@@ -641,10 +642,15 @@ export class WorkObservations {
           ...(call.settledAt ? [`settled ${new Date(call.settledAt).toISOString()}`] : []),
           ...(call.code ? [`code ${call.code}`] : []),
         ].join(' · ') })),
+        ...mcpDenials.items.map(denial => ({ label: 'MCP state', value: [
+          `not dispatched · ${denial.serverName}/${denial.toolName}`, `code ${denial.code}`,
+          `denied ${new Date(denial.deniedAt).toISOString()}`,
+        ].join(' · ') })),
         ...(mcpUnknown && mcpUnknown.assignmentId === selected.id && !mcpCalls.items.some(call => call.id === mcpUnknown.id)
           ? [{ label: 'MCP request', value: `unknown · ${mcpUnknown.serverName}/${mcpUnknown.toolName} · original request ${mcpUnknown.requestId} · input SHA-256 ${mcpUnknown.inputSha256}` }]
           : []),
         ...(mcpCalls.truncated ? [{ label: 'MCP history', value: 'The 1000-record scan limit was reached; later MCP requests may be omitted.' }] : []),
+        ...(mcpDenials.truncated ? [{ label: 'MCP history', value: 'The 1000-record scan limit was reached; later MCP denials may be omitted.' }] : []),
         ...(selected.environment?.deviceId ? [{ label: 'Device', value: selected.environment.deviceId }] : []),
         ...(selected.environment?.root ? [{ label: 'Directory', value: selected.environment.root }] : []),
         { label: 'Goal', value: summary(item.goal) },
@@ -739,6 +745,18 @@ export class WorkObservations {
       if (pageCount === 9) throw new CoreError('REPORT_BUDGET', 'The observation report history exceeds its 1000-record budget.')
     }
     return [...reports.values()]
+  }
+
+  private async mcpDenials(transaction: AsyncTx, ticketId: string, assignmentId: string) {
+    const denials: WorkerMcpDenial[] = []
+    let after: string | undefined
+    for (let pageCount = 0; pageCount < 10; pageCount++) {
+      const page = await mcpDenialPageIn(transaction, ticketId, after)
+      denials.push(...page.items.filter(denial => denial.assignmentId === assignmentId))
+      if (!page.cursor) return { items: denials.sort((a, b) => a.deniedAt - b.deniedAt || a.id.localeCompare(b.id)), truncated: false }
+      after = page.cursor
+    }
+    return { items: denials.sort((a, b) => a.deniedAt - b.deniedAt || a.id.localeCompare(b.id)), truncated: true }
   }
 
   private async mcpCalls(transaction: AsyncTx, ticketId: string, assignmentId: string) {

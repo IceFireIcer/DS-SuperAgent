@@ -103,6 +103,7 @@ test('an interrupted child MCP request remains unknown across a restart and deep
   const child = workerMcpTool(binding, scope, (outcome, output) => records.push({ outcome, output }), {
     begin: (request, args) => ledger.begin(ticketId, assignment, request, config, args),
     confirm: (call, outcome, code) => ledger.confirm(call, outcome, code),
+    recordNotDispatched: async () => {},
   })
   const controller = new AbortController()
   const attempt = child.execute({ input: JSON.stringify({ text: 'private raw input' }) }, controller.signal)
@@ -136,6 +137,7 @@ test('an interrupted child MCP request remains unknown across a restart and deep
   const second = workerMcpTool(binding, scope, () => {}, {
     begin: (request, args) => afterRestart.begin(ticketId, assignment, request, config, args),
     confirm: (call, outcome, code) => afterRestart.confirm(call, outcome, code),
+    recordNotDispatched: async () => {},
   })
   await assert.rejects(second.execute({ input: JSON.stringify({ text: 'private raw input' }) }, new AbortController().signal),
     { code: 'MCP_OUTCOME_UNKNOWN' })
@@ -144,4 +146,24 @@ test('an interrupted child MCP request remains unknown across a restart and deep
   assert.equal(retained.requestId, original.requestId)
   assert.equal(JSON.stringify(retained).includes('private raw input'), false)
   assert.equal(JSON.stringify(retained).includes(secret), false)
+})
+
+test('a failed not-dispatched write is surfaced without inventing an external request', async () => {
+  const config = { serverName: 'approved', toolName: 'check', url: 'http://127.0.0.1:1/mcp', resourceId: 'resource-1' }
+  const records = []
+  const tool = workerMcpTool({
+    config,
+    credentials: { use: async () => assert.fail('invalid input must not open the credential') },
+  }, async () => { throw new Error('scope must not run') }, (outcome, output) => records.push({ outcome, output }), {
+    begin: async () => assert.fail('invalid input must not begin an external request'),
+    confirm: async () => assert.fail('invalid input must not confirm an external request'),
+    recordNotDispatched: async () => { throw new Error('storage unavailable') },
+  })
+  await assert.rejects(tool.execute({ input: 'not-json' }, new AbortController().signal), {
+    code: 'INVALID_INPUT',
+    message: /denial fact could not be recorded/u,
+  })
+  assert.deepEqual(records, [{ outcome: 'failed', output: {
+    code: 'INVALID_INPUT', state: 'not-dispatched', outcome: 'failed', evidence: 'not-recorded',
+  } }])
 })

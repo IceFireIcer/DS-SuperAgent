@@ -180,7 +180,18 @@ test('local MCP settings save, approve, disconnect and retry at the actual Worke
   await host.dispatch('resource-revoke', { instanceId: 'personal', commandId: 'revoke', resourceId: resource.id,
     grantId: granted.grants[0].id, expectedRevision: granted.revision })
   assert.equal((await state()).state, 'needs-grant')
-  assert.equal((await send('revoked')).status, 'failed')
+  const revoked = await send('revoked')
+  assert.equal(revoked.status, 'failed')
+  const revokedObservation = (await host.dispatch('observe-list', { instanceId: 'personal',
+    query: revoked.receipt.ticketId })).items
+    .find(item => item.role === 'worker' && item.ticketId === revoked.receipt.ticketId)
+  assert.ok(revokedObservation)
+  const revokedDetail = await host.dispatch('observe-read', { instanceId: 'personal',
+    observationId: revokedObservation.id, generation: revokedObservation.generation })
+  assert.ok(revokedDetail.facts.some(fact => fact.label === 'MCP state'
+    && fact.value.includes('not dispatched') && fact.value.includes('GRANT_DENIED')),
+  'revoking the only grant is reported as an authorization denial, not a disconnect')
+  assert.equal(revokedDetail.facts.some(fact => fact.label === 'MCP request'), false)
   assert.equal(calls.length, 3, 'revocation is checked at the tool use site')
   assert.ok(requests.every(request => request.authorized))
   assert.ok(mainTools.every(name => !name.startsWith('mcp__')))

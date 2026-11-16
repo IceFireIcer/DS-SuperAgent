@@ -147,8 +147,27 @@ test('the product Worker calls only its approved MCP tool through the live tool 
     await host.dispatch('send', { instanceId: 'personal', commandId: id, text: `Check ${id}.` })
     await until(() => workerAttempts >= Number(id.split('-').at(-1)))
   }
+  const assertNotDispatched = async (ticketId, code) => {
+    const observation = (await host.dispatch('observe-list', { instanceId: 'personal', query: ticketId })).items
+      .find(item => item.role === 'worker' && item.ticketId === ticketId)
+    assert.ok(observation)
+    const detail = await host.dispatch('observe-read', { instanceId: 'personal', observationId: observation.id,
+      generation: observation.generation })
+    assert.ok(detail.facts.some(fact => fact.label === 'MCP state'
+      && fact.value.includes('not dispatched') && fact.value.includes(code)),
+    `the ${code} denial must remain visible in the work card`)
+    assert.equal(detail.facts.some(fact => fact.label === 'MCP request'), false,
+      'a denied tool never receives a platform request ID')
+    assert.equal(JSON.stringify(detail).includes(secret), false)
+  }
   await send('work-1')
   assert.equal(requests.length, 0, 'no grant means no handshake or tool call')
+  const initialDeniedWork = (await host.dispatch('history', { instanceId: 'personal' })).works
+    .find(work => work.brief?.goal === 'Check work-1.')
+  assert.ok(initialDeniedWork?.receipt?.ticketId)
+  await host.close()
+  host = await createProductHost(native, { ...config, workerMcpTool: workerMcpToolConfig })
+  await assertNotDispatched(initialDeniedWork.receipt.ticketId, 'MCP_NOT_CONNECTED')
   const wrong = await host.dispatch('resource-grant', { instanceId: 'personal', commandId: 'wrong-work', resourceId: resource.id,
     expectedRevision: resource.revision, scope: { role: 'worker', workItemId: 'different-work', environmentId: directory.id }, purposes: ['tool'] })
   await send('work-2')
@@ -209,6 +228,7 @@ test('the product Worker calls only its approved MCP tool through the live tool 
   await until(async () => (await host.dispatch('history', { instanceId: 'personal' })).works
     .some(work => work.brief?.goal === 'Check work-5.' && work.status === 'stopped'))
   assert.equal(calls.length, 1, 'a stopped Assignment cannot dispatch after MCP discovery')
+  await assertNotDispatched(active.receipt.ticketId, 'TICKET_BLOCKED')
   const childWork = async id => {
     await host.dispatch('send', { instanceId: 'personal', commandId: id, text: `Check ${id}.` })
     await until(() => childAttempts >= Number(id.split('-').at(-1)) - 5)
@@ -233,6 +253,7 @@ test('the product Worker calls only its approved MCP tool through the live tool 
       && ['completed', 'failed', 'cancelled'].includes(entry.value.state))
   }))
   await childStore.close()
+  await assertNotDispatched(deniedWork.receipt.ticketId, 'GRANT_DENIED')
   const afterChild = await host.dispatch('resource-read', { instanceId: 'personal', resourceId: resource.id })
   await host.dispatch('resource-grant', { instanceId: 'personal', commandId: 'grant-echo', resourceId: resource.id,
     expectedRevision: afterChild.revision, scope: { role: 'worker', environmentId: directory.id }, purposes: ['tool'] })

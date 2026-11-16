@@ -20,6 +20,7 @@ export interface WorkerMcpBinding {
 export interface WorkerMcpDispatch {
   begin(use: CredentialUse, input: Record<string, unknown>): Promise<WorkerMcpCall>
   confirm(call: WorkerMcpCall, outcome: 'success' | 'failed', code?: string): Promise<void>
+  recordNotDispatched(code: string): Promise<void>
 }
 
 export function workerMcpName(config: WorkerMcpConfig) {
@@ -140,12 +141,21 @@ export function workerMcpTool(binding: WorkerMcpBinding, scope: () => Promise<Cr
       } catch (error) {
         const code = dispatched && !settled ? 'MCP_OUTCOME_UNKNOWN'
           : reportedCode ?? (signal.aborted ? 'TICKET_BLOCKED' : error instanceof CoreError ? error.code : 'MCP_TOOL_FAILED')
-        record('failed', { code, state: settled ? 'confirmed' : call || reportedCode === 'MCP_OUTCOME_UNKNOWN' ? 'unknown' : 'not-dispatched',
-          outcome: confirmedOutcome ?? (call || reportedCode === 'MCP_OUTCOME_UNKNOWN' ? 'unknown' : 'failed'),
+        const state = settled ? 'confirmed' : call || reportedCode === 'MCP_OUTCOME_UNKNOWN' ? 'unknown' : 'not-dispatched'
+        let evidenceRecorded = true
+        if (state === 'not-dispatched') {
+          try { await dispatch.recordNotDispatched(code) }
+          catch { evidenceRecorded = false }
+        }
+        record('failed', { code, state,
+          outcome: confirmedOutcome ?? (state === 'unknown' ? 'unknown' : 'failed'),
+          ...(evidenceRecorded ? {} : { evidence: 'not-recorded' }),
           ...(call ? { requestId: call.requestId } : {}) })
         throw new CoreError(code, settled
           ? 'The approved MCP request was confirmed; review its outcome before continuing.'
-          : 'The approved MCP tool was not confirmed; check its tool fact before retrying.')
+          : evidenceRecorded
+            ? 'The approved MCP tool was not confirmed; check its tool fact before retrying.'
+            : 'The approved MCP tool was not dispatched, but its denial fact could not be recorded; inspect Host storage before retrying.')
       }
     },
   }

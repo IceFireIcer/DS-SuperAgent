@@ -26,7 +26,21 @@ export interface WorkerMcpCall {
   settledAt?: number
 }
 
+export interface WorkerMcpDenial {
+  id: string
+  ticketId: string
+  assignmentId: string
+  generation: string
+  workItemId: string
+  environmentId: string
+  serverName: string
+  toolName: string
+  code: string
+  deniedAt: number
+}
+
 const callPrefix = (ticketId: string) => `${JSON.stringify(['worker-mcp-call', ticketId])}:`
+const denialPrefix = (ticketId: string) => `${JSON.stringify(['worker-mcp-denial', ticketId])}:`
 const blockKey = (ticketId: string) => JSON.stringify(['worker-mcp-block', ticketId])
 
 export async function mcpBlockIn(tx: AsyncTx, ticketId: string) {
@@ -47,9 +61,35 @@ export async function mcpCallPageIn(tx: AsyncTx, ticketId: string, after?: strin
     ...(page.cursor?.startsWith(prefix) ? { cursor: page.cursor } : {}) }
 }
 
+export async function mcpDenialPageIn(tx: AsyncTx, ticketId: string, after?: string) {
+  const prefix = denialPrefix(ticketId)
+  if (after && !after.startsWith(prefix)) throw new CoreError('INVALID_INPUT', 'The MCP denial cursor belongs to another Ticket.')
+  const page = await tx.scan<WorkerMcpDenial>('worker-mcp-denial', { limit: 100, after: after ?? prefix })
+  return { items: page.items.filter(entry => entry.id.startsWith(prefix)).map(entry => entry.value),
+    ...(page.cursor?.startsWith(prefix) ? { cursor: page.cursor } : {}) }
+}
+
 /** A dispatch intent is already unknown until its original request receives a durable confirmation. */
 export class WorkerMcpCalls {
   constructor(private readonly storage: Storage, private readonly instanceId: string) {}
+
+  async recordNotDispatched(ticketId: string, assignment: { id: string; generation: string },
+    config: WorkerMcpConfig, code: string) {
+    const safeCode = /^[A-Z][A-Z0-9_]{0,63}$/u.test(code) ? code : 'MCP_TOOL_FAILED'
+    await commandTransaction(this.storage, this.instanceId, async tx => {
+      const current = await tx.get<Assignment>('assignment', ticketId)
+      const ticket = await tx.get<Work['ticket']>('ticket', ticketId)
+      const link = await tx.get<{ workItemId: string }>('work-ticket', ticketId)
+      if (!ticket || !link || !current || current.id !== assignment.id || current.generation !== assignment.generation) {
+        throw new CoreError('STALE_ASSIGNMENT', 'Only the bound Worker Assignment may record this MCP denial.')
+      }
+      const denied: WorkerMcpDenial = { id: `${denialPrefix(ticketId)}${randomUUID()}`, ticketId,
+        assignmentId: current.id, generation: current.generation, workItemId: link.workItemId,
+        environmentId: current.environment?.id ?? 'unknown', serverName: config.serverName, toolName: config.toolName,
+        code: safeCode, deniedAt: Date.now() }
+      await tx.insert('worker-mcp-denial', denied.id, denied)
+    })
+  }
 
   async begin(ticketId: string, assignment: Pick<Assignment, 'id' | 'generation'>,
     use: CredentialUse, config: WorkerMcpConfig, input: Record<string, unknown>) {

@@ -1236,6 +1236,8 @@ export class Execution {
           this.mcpCalls.begin(ticketId, assignment, use, this.workerMcp!.config, args),
         confirm: (call: import('./worker-mcp-calls.js').WorkerMcpCall, result: 'success' | 'failed', code?: string) =>
           this.mcpCalls.confirm(call, result, code),
+        recordNotDispatched: (code: string) =>
+          this.mcpCalls.recordNotDispatched(ticketId, assignment, this.workerMcp!.config, code),
       }
       const tool = workerMcpTool(this.workerMcp!, mcpScope, (outcome, output) => {
         toolFacts.push({ tool: workerMcpName(this.workerMcp!.config), outcome, output })
@@ -1285,6 +1287,7 @@ export class Execution {
     })), ...(mcpScope ? [workerMcpTool(this.workerMcp!, mcpScope, () => {}, {
       begin: (use, args) => this.mcpCalls.begin(ticketId, assignment, use, this.workerMcp!.config, args),
       confirm: (call, result, code) => this.mcpCalls.confirm(call, result, code),
+      recordNotDispatched: code => this.mcpCalls.recordNotDispatched(ticketId, assignment, this.workerMcp!.config, code),
     })] : []),
     ...(this.browser && workScope ? [{ name: 'browser_resources', description: browserTools[0]!.description,
       parameters: {}, execute: async () => JSON.stringify(await this.browser!.forWorker(await workScope())) },
