@@ -31,7 +31,7 @@ export interface MemoryProposal {
   sessionId: string
   entryId?: string
 }
-interface WorkAccess { revision: number; enabled: boolean }
+export interface WorkAccess { revision: number; enabled: boolean }
 interface Receipt { fingerprint: string; entryId?: string; proposalId?: string; revision?: number; status: string }
 interface MainState { instanceId: string; mainId: string; mainSessionId: string }
 interface Assignment { id: string; sessionId: string; state: string }
