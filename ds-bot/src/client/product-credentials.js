@@ -8,6 +8,9 @@ export function ProductCredentialSettings({ binding, call }) {
   const [selectedId, setSelectedId] = useState(null)
   const [label, setLabel] = useState('')
   const [value, setValue] = useState('')
+  const [rotationValue, setRotationValue] = useState('')
+  const [rotationAttempt, setRotationAttempt] = useState(null)
+  const [rotationResult, setRotationResult] = useState(null)
   const [rename, setRename] = useState('')
   const [role, setRole] = useState('worker')
   const [purpose, setPurpose] = useState('tool')
@@ -18,7 +21,17 @@ export function ProductCredentialSettings({ binding, call }) {
   const [error, setError] = useState(null)
   const [notice, setNotice] = useState(null)
   const pendingCreate = useRef(null)
+  const pendingRotation = useRef(null)
   const instanceId = binding.instanceId
+
+  const rememberRotation = attempt => {
+    pendingRotation.current = attempt
+    setRotationAttempt(attempt)
+    try {
+      if (attempt) window.sessionStorage.setItem(`product-rotation:${instanceId}`, JSON.stringify(attempt))
+      else window.sessionStorage.removeItem(`product-rotation:${instanceId}`)
+    } catch { /* The current view still keeps the command for retry. */ }
+  }
 
   const load = async () => {
     const items = []
@@ -41,6 +54,19 @@ export function ProductCredentialSettings({ binding, call }) {
   }
   useEffect(() => {
     let live = true
+    pendingRotation.current = null
+    setRotationAttempt(null); setRotationResult(null); setRotationValue('')
+    try {
+      const stored = JSON.parse(window.sessionStorage.getItem(`product-rotation:${instanceId}`))
+      if (stored && typeof stored.commandId === 'string' && typeof stored.resourceId === 'string'
+        && Number.isSafeInteger(stored.expectedRevision)) {
+        const attempt = { commandId: stored.commandId, resourceId: stored.resourceId, expectedRevision: stored.expectedRevision }
+        pendingRotation.current = attempt
+        setRotationAttempt(attempt)
+        void call('resource-rotation-read', { instanceId, commandId: attempt.commandId })
+          .then(result => { if (live) setRotationResult(result) }).catch(() => { /* Keep the original command available for checking. */ })
+      }
+    } catch { /* Session storage may be unavailable. */ }
     Promise.all([load(), call('feishu-status', { instanceId }).catch(() => null)]).then(([items, status]) => {
       if (!live) return
       setResources(items); setFeishu(status)
@@ -72,7 +98,54 @@ export function ProductCredentialSettings({ binding, call }) {
     }, 'Credential resource saved.')
   }
   const selected = resources?.find(resource => resource.id === selectedId)
-  const choose = resource => { setSelectedId(resource.id); setRename(resource.label); setError(null); setNotice(null) }
+  const choose = resource => {
+    if (selectedId !== resource.id) setRotationValue('')
+    setSelectedId(resource.id); setRename(resource.label); setError(null); setNotice(null)
+  }
+  const finishRotation = result => {
+    setRotationResult(result)
+    if (result.status === 'committed') {
+      rememberRotation(null)
+      setRotationValue('')
+      setNotice(t(result.cleanupPending ? 'Credential rotated; old record cleanup pending.' : 'Credential rotated.'))
+    } else if (result.status === 'abandoned') {
+      rememberRotation(null)
+      setRotationValue('')
+      setError(t('Rotation was not applied. Refresh the resource before starting another rotation.'))
+    } else {
+      setError(t('Rotation is pending. Retry with the same value and command, or check its status.'))
+    }
+  }
+  const checkRotation = async attempt => {
+    if (busy) return
+    setBusy('rotation-check'); setError(null); setNotice(null)
+    try {
+      finishRotation(await call('resource-rotation-read', { instanceId, commandId: attempt.commandId }))
+      await refresh().catch(() => { /* Preserve the verified receipt if list refresh fails. */ })
+    } catch {
+      setError(t('Rotation result is unknown. Keep this command and check again.'))
+    } finally { setBusy(null) }
+  }
+  const rotate = event => {
+    event.preventDefault()
+    if (!selected || !rotationValue.trim() || busy || pendingRotation.current?.resourceId !== selected.id && pendingRotation.current) return
+    const attempt = pendingRotation.current ?? { commandId: crypto.randomUUID(), resourceId: selected.id,
+      expectedRevision: selected.revision }
+    rememberRotation(attempt)
+    setBusy('rotate'); setError(null); setNotice(null); setRotationResult(null)
+    void (async () => {
+      try {
+        const result = await call('resource-rotate', { instanceId, ...attempt, value: rotationValue })
+        finishRotation(result)
+      } catch {
+        try { finishRotation(await call('resource-rotation-read', { instanceId, commandId: attempt.commandId })) }
+        catch { setError(t('Rotation result is unknown. Keep this command and check again.')) }
+      } finally {
+        try { await refresh() } catch { /* Keep the command and its receipt visible. */ }
+        setBusy(null)
+      }
+    })()
+  }
   const grant = event => {
     event.preventDefault()
     if (!selected || busy || purpose !== 'tool' && !sourceInstanceId.trim()) return
@@ -109,6 +182,12 @@ export function ProductCredentialSettings({ binding, call }) {
         feishu.lastError ? ` · ${feishu.lastError}` : '') : null,
     error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
     notice ? h('p', { className: 'bt-main-status', role: 'status' }, notice) : null,
+    rotationAttempt ? h('div', { className: 'bt-product-resource-row', role: 'status' },
+      h('span', null, t(rotationResult?.status === 'pending'
+        ? 'Rotation pending. Retry with the same value or check its status.'
+        : 'Rotation command saved. Check its status before starting another rotation.')),
+      h('button', { className: 'bt-soft', type: 'button', disabled: Boolean(busy),
+        onClick: () => { void checkRotation(rotationAttempt) } }, t('Check rotation'))) : null,
     h('form', { className: 'bt-product-resource-create', onSubmit: create },
       h(Row, { label: t('Resource name') }, h('input', { className: 'bt-bs-input', value: label, maxLength: 128,
         disabled: Boolean(busy), onChange: event => { setLabel(event.target.value); pendingCreate.current = null } })),
@@ -135,6 +214,13 @@ export function ProductCredentialSettings({ binding, call }) {
       h('input', { className: 'bt-bs-input', value: rename, maxLength: 128, disabled: Boolean(busy),
         'aria-label': t('New resource name'), onChange: event => setRename(event.target.value) }),
       h('button', { className: 'bt-soft', type: 'submit', disabled: Boolean(busy) || !rename.trim() }, t('Rename resource'))),
+      h('form', { className: 'bt-product-resource-create', onSubmit: rotate },
+        h(Row, { label: t('New credential value') }, h('input', { className: 'bt-bs-input', type: 'password',
+          value: rotationValue, autoComplete: 'new-password', disabled: Boolean(busy) || Boolean(rotationAttempt && rotationAttempt.resourceId !== selected.id),
+          onChange: event => setRotationValue(event.target.value) })),
+        h('button', { className: 'bt-soft', type: 'submit',
+          disabled: Boolean(busy) || !rotationValue.trim() || Boolean(rotationAttempt && rotationAttempt.resourceId !== selected.id) },
+        busy === 'rotate' ? t('Saving…') : t(rotationAttempt ? 'Retry rotation' : 'Rotate credential'))),
       h('form', { className: 'bt-product-resource-grant', onSubmit: grant },
         h('label', null, t('Role'), h('select', { value: role, disabled: Boolean(busy), onChange: event => setRole(event.target.value) },
           ['main', 'router', 'worker'].map(item => h('option', { key: item, value: item }, item)))),

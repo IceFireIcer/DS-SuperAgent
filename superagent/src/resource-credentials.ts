@@ -51,6 +51,8 @@ export interface CredentialVault {
 
 interface StoredResource extends CredentialResourceView { vaultReference?: string }
 interface CommandReceipt { fingerprint: string; result: CredentialResourceView | CredentialRequest }
+interface RotationIntentRecord { resourceId: string; expectedRevision: number; previousReference: string;
+  nextReference: string; status: 'pending' | 'committed' | 'abandoned' }
 
 const purposes: CredentialPurpose[] = ['source', 'tool', 'outbound']
 const roles: CredentialRole[] = ['main', 'router', 'worker']
@@ -200,6 +202,44 @@ export class ResourceCredentials {
         revision: current.revision + 1, updatedAt: this.now() }
       await tx.replace('resource-credential', current.id, next)
       return view(next)
+    })
+  }
+
+  /** Switch the reference and settle its cleanup intent in the same business transaction. */
+  async rotate(input: { instanceId: string; commandId: string; resourceId: string; expectedRevision: number;
+    previousReference: string; nextReference: string }): Promise<CredentialResourceView> {
+    fields(input, ['instanceId', 'commandId', 'resourceId', 'expectedRevision', 'previousReference', 'nextReference'], 'resource rotation')
+    this.assertInstance(input.instanceId); identifier(input.resourceId, 'resourceId'); revision(input.expectedRevision)
+    identifier(input.previousReference, 'previousReference'); identifier(input.nextReference, 'nextReference')
+    if (input.previousReference === input.nextReference) throw new CoreError('INVALID_INPUT', 'Rotation needs a new vault record.')
+    return this.command(input.commandId, ['rotate', input.resourceId, input.expectedRevision, input.nextReference], async tx => {
+      const intent = await tx.get<RotationIntentRecord>('resource-rotation-intent', input.commandId)
+      if (intent?.status !== 'pending' || intent.resourceId !== input.resourceId
+        || intent.expectedRevision !== input.expectedRevision || intent.previousReference !== input.previousReference
+        || intent.nextReference !== input.nextReference) {
+        throw new CoreError('RESOURCE_UNAVAILABLE', 'This credential rotation is no longer authorized.')
+      }
+      const current = await this.active(tx, input.resourceId)
+      this.assertRevision(current, input.expectedRevision)
+      if (current.vaultReference !== input.previousReference) throw new CoreError('RESOURCE_REVISION_CONFLICT', 'The resource changed since this command was prepared.')
+      await this.assertVault(input.nextReference)
+      const next = { ...current, vaultReference: input.nextReference, revision: current.revision + 1, updatedAt: this.now() }
+      await tx.replace('resource-credential', current.id, next)
+      await tx.replace('resource-rotation-intent', input.commandId, { ...intent, status: 'committed' })
+      return view(next)
+    })
+  }
+
+  async rotationReceipt(input: { instanceId: string; commandId: string; resourceId: string;
+    expectedRevision: number; nextReference: string }) {
+    this.assertInstance(input.instanceId); identifier(input.commandId, 'commandId'); identifier(input.resourceId, 'resourceId')
+    revision(input.expectedRevision); identifier(input.nextReference, 'nextReference')
+    const expected = fingerprint(['rotate', input.resourceId, input.expectedRevision, input.nextReference])
+    return this.storage.transaction(this.instanceId, async tx => {
+      const receipt = await tx.get<CommandReceipt>('resource-command', input.commandId)
+      if (!receipt) return undefined
+      if (receipt.fingerprint !== expected) throw new CoreError('IDENTITY_CONFLICT', 'The resource rotation command changed.')
+      return receipt.result as CredentialResourceView
     })
   }
 

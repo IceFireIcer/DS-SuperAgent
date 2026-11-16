@@ -11,12 +11,12 @@ import { nativeContext, textResponse } from '../dev/native-mock.mjs'
 const json = data => ({ ok: true, status: 200, json: async () => ({ code: 0, data }) })
 const sourceInstanceId = 'feishu:tenant:group:app:cli_test'
 
-function mockTransport(calls) {
+function mockTransport(calls, currentSecret = () => 'fixture-resource-secret') {
   return async (url, init = {}) => {
     const path = new URL(url).pathname
     calls.push(path)
     if (path === '/open-apis/auth/v3/tenant_access_token/internal') {
-      assert.equal(JSON.parse(init.body).app_secret, 'fixture-resource-secret')
+      assert.equal(JSON.parse(init.body).app_secret, currentSecret())
       return { ok: true, status: 200, json: async () => ({ code: 0, tenant_access_token: 'fixture-token', expire: 7200 }) }
     }
     if (path === '/open-apis/tenant/v2/tenant/query') return json({ tenant: { tenant_key: 'tenant' } })
@@ -37,6 +37,7 @@ test('product Host selection controls real source requests, including cached-tok
   const native = await nativeContext(join(directory, 'sessions'), function* () { yield* textResponse('Main is ready.') })
   await native.plugin(LocalCredentials, { path: join(directory, 'credentials.yaml'), watch: false })
   const calls = []
+  let currentSecret = 'fixture-resource-secret'
   let host
   t.after(async () => { await host?.close(); await native.fiber.dispose(); await rm(directory, { recursive: true, force: true }) })
   const instanceId = 'private'
@@ -46,7 +47,7 @@ test('product Host selection controls real source requests, including cached-tok
     feishu: { tenantKey: 'tenant', chatIds: ['group'], actorId: 'receiver', selfActorIds: ['ou_bot'],
       allowedActorIds: ['receiver'], intake: { mode: 'auto', maxBatchSize: 5, maxAttempts: 1, timeoutMs: 5000,
         allowedRequesterIds: ['alice'], allowedBotActorIds: [], rules: [] },
-      api: { appId: 'cli_test', fetch: mockTransport(calls) }, intervalMs: 30, maxBackoffMs: 30 } }
+      api: { appId: 'cli_test', fetch: mockTransport(calls, () => currentSecret) }, intervalMs: 30, maxBackoffMs: 30 } }
   host = await core.createProductHost(native, config)
   const status = () => host.dispatch('feishu-status', { instanceId })
   assert.equal((await status()).credentialMode, 'managed')
@@ -66,8 +67,18 @@ test('product Host selection controls real source requests, including cached-tok
   assert.ok(calls.includes('/open-apis/im/v1/messages'), 'the poller must make an authorized source network request')
   const prior = calls.filter(path => path === '/open-apis/auth/v3/tenant_access_token/internal').length
   assert.equal(prior, 1, 'the subsequent source request uses the cached token')
+  const rotated = await host.dispatch('resource-rotate', { instanceId, commandId: 'rotate-source', resourceId: resource.id,
+    expectedRevision: granted.revision, value: 'fixture-rotated-secret' })
+  assert.equal(rotated.status, 'committed')
+  currentSecret = 'fixture-rotated-secret'
+  for (let attempt = 0; attempt < 50
+    && calls.filter(path => path === '/open-apis/auth/v3/tenant_access_token/internal').length === prior; attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 25))
+  }
+  assert.equal(calls.filter(path => path === '/open-apis/auth/v3/tenant_access_token/internal').length, prior + 1,
+    'a rotated record must replace the cached Feishu token on the next authorized request')
   await host.dispatch('resource-revoke', { instanceId, commandId: 'revoke-source', resourceId: resource.id,
-    grantId: granted.grants.at(-1).id, expectedRevision: granted.revision })
+    grantId: granted.grants.at(-1).id, expectedRevision: rotated.resource.revision })
   for (let attempt = 0; attempt < 50 && (await status()).lastError !== 'GRANT_DENIED'; attempt++) await new Promise(resolve => setTimeout(resolve, 25))
   assert.equal((await status()).lastError, 'GRANT_DENIED')
   const count = calls.length
@@ -76,7 +87,7 @@ test('product Host selection controls real source requests, including cached-tok
   await assert.rejects(host.dispatch('resource-select-feishu', { instanceId, commandId: 'select-authorized', resourceId: null }),
     { code: 'IDENTITY_CONFLICT' })
   assert.equal((await status()).resourceId, resource.id, 'a rejected selection must keep the previous reference')
-  assert.doesNotMatch(JSON.stringify(await status()), /fixture-resource-secret|fixture-token/u)
+  assert.doesNotMatch(JSON.stringify(await status()), /fixture-resource-secret|fixture-rotated-secret|fixture-token/u)
   await assert.rejects(host.dispatch('resource-select-feishu', { instanceId: 'another', commandId: 'other', resourceId: resource.id }),
     { code: 'SOURCE_NOT_AUTHORIZED' })
   await assert.rejects(host.dispatch('resource-select-feishu', { instanceId, commandId: 'remote', resourceId: resource.id },
