@@ -44,9 +44,9 @@ export class ProductMcpConfiguration {
   }
 
   private initial(): McpSelection {
-    // The explicit trusted deployment tool was approved before this settings surface existed.
+    // Deployment selects the tool, but a product actor must approve and connect it explicitly.
     return { declaration: this.declaration, revision: 0, resourceId: this.configured.resourceId,
-      approved: true, connected: true, updatedAt: 0 }
+      approved: false, connected: false, updatedAt: 0 }
   }
 
   private assertInstance(instanceId: unknown) {

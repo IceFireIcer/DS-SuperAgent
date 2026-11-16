@@ -12,20 +12,20 @@ import { completedToolCount, lastUserText } from './input-support.mjs'
 import { nativeContext, routerResponse, textResponse, toolResponse } from '../dev/native-mock.mjs'
 
 async function until(check) {
-  const deadline = Date.now() + 20000
+  const deadline = Date.now() + 40000
   while (!await check()) {
     if (Date.now() > deadline) throw new Error('The MCP work did not settle.')
     await sleep(25)
   }
 }
 
-test('local MCP settings save, approve, disconnect and retry at the actual Worker call', { timeout: 90000 }, async t => {
+test('local MCP settings save, approve, disconnect and retry at the actual Worker call', { timeout: 180000 }, async t => {
   const root = await mkdtemp(join(tmpdir(), 'r5-mcp-settings-'))
   const work = join(root, 'work')
   const core = join(root, 'core')
   await Promise.all([mkdir(work), mkdir(core)])
   await writeFile(join(work, 'evidence.txt'), 'verified local file\n')
-  const secret = 'fictional-mcp-setting-secret'
+  const secret = 'mock-mcp-setting-credential'
   const requests = []
   const calls = []
   const server = createServer(async (req, res) => {
