@@ -139,6 +139,24 @@ test('source, tool and outbound authorizations are independent and a cancelled r
     { code: 'REQUEST_UNAVAILABLE' })
 })
 
+test('historical source and outbound grants without an exact source Instance cannot authorize a request', async t => {
+  const { credentials, storage } = await fixture(t)
+  const resource = await credentials.create({ instanceId: 'personal', commandId: 'legacy-create', label: 'Source', vaultReference: 'vault:personal' })
+  await storage.transaction('personal', async tx => {
+    const record = await tx.get('resource-credential', resource.id)
+    await tx.replace('resource-credential', resource.id, { ...record, grants: [
+      { id: 'legacy-source', scope: { role: 'main' }, purposes: ['source'], grantedAt: Date.now() },
+      { id: 'legacy-outbound', scope: { role: 'router' }, purposes: ['outbound'], grantedAt: Date.now() },
+    ] })
+  })
+  for (const [role, purpose] of [['main', 'source'], ['router', 'outbound']]) {
+    await assert.rejects(credentials.use({ instanceId: 'personal', resourceId: resource.id, role,
+      sourceInstanceId: 'feishu:tenant:chat', purpose }, async () => {
+      throw new Error('A historical unscoped grant must not open a credential.')
+    }), { code: 'GRANT_DENIED' })
+  }
+})
+
 test('rotation changes only the trusted vault reference, deletion is a persistent denial, and retries cannot alter an accepted command', async t => {
   const { credentials, vault, adapter, database, connections } = await fixture(t)
   const resource = await credentials.create({ instanceId: 'personal', commandId: 'create', label: 'Connector', vaultReference: 'vault:personal' })

@@ -420,6 +420,7 @@ export class ResourceCredentials {
       && grant.scope.role === requested.role && (grant.scope.workItemId === undefined || grant.scope.workItemId === requested.workItemId)
       && (grant.scope.environmentId === undefined || grant.scope.environmentId === requested.environmentId)
       && (grant.scope.sourceInstanceId === undefined || grant.scope.sourceInstanceId === requested.sourceInstanceId)
+      && (requestedPurpose === 'tool' || grant.scope.sourceInstanceId === requested.sourceInstanceId)
       && (requestedPurpose !== 'tool' || requested.role !== 'worker'
         || grant.scope.workItemId !== undefined || grant.scope.environmentId !== undefined))
     const reference = await this.storage.transaction(this.instanceId, async tx => {
