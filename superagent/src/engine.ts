@@ -28,6 +28,7 @@ import { ProductCredentialManager } from './product-credential-manager.js'
 import type { WorkerMcpBinding } from './worker-mcp-tool.js'
 import { ProductMcpConfiguration } from './product-mcp-configuration.js'
 import type { WorkerMcpConfig } from './worker-mcp-tool.js'
+import { BrowserResources, type BrowserAdapter } from './browser-resources.js'
 import type { ProductCredentialRecords } from './product-credential-vault.js'
 import type { ProductAttachments } from './product-attachments.js'
 import { listSupervisorProposals, Supervisor, type SupervisorOptions, type SupervisorProposal } from './supervisor.js'
@@ -87,6 +88,7 @@ export class Engine {
   private readonly executionPolicy: ExecutionPolicyStore
   private readonly hostCapabilities: HostCapabilities
   private readonly deliveryState: DeliveryState
+  private browserResources: BrowserResources | undefined
   private readonly proactive: Proactive | undefined
   private readonly membership: SourceMembership
   private activationGate: ActivationGate | undefined
@@ -1524,6 +1526,44 @@ export class Engine {
     if (!this.execution) throw new CoreError('UNAVAILABLE', 'Worker Sessions are not configured.')
     this.execution.configureWorkerMcp(binding)
   }
+
+  /** The trusted product Host binds the browser bridge to this Instance and its Worker runtime. */
+  configureWorkerBrowser(adapter: BrowserAdapter) {
+    if (!this.execution || this.browserResources || (this.source.kind ?? 'desktop') !== 'desktop') {
+      throw new CoreError('UNAVAILABLE', 'A product Worker browser is unavailable for this Instance.')
+    }
+    this.browserResources = new BrowserResources(this.storage, this.instanceId, this.source.actorId, this.environments,
+      adapter, tx => this.assertHostAdmissionIn(tx))
+    this.execution.configureWorkerBrowser(this.browserResources)
+  }
+
+  private browser() {
+    if (!this.source.allowedActorIds.includes(this.source.actorId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This actor cannot manage browsers.')
+    if (!this.browserResources) throw new CoreError('UNAVAILABLE', 'The product Host has no browser bridge.')
+    return this.browserResources
+  }
+
+  createBrowserResource(command: { instanceId: string; commandId: string; environmentId: string; label: string }) {
+    this.assertAuthoringActor()
+    return this.browser().create(command)
+  }
+  grantBrowserResource(command: { instanceId: string; commandId: string; resourceId: string; workItemId: string; expectedRevision: number; active: boolean }) {
+    this.assertAuthoringActor()
+    return this.browser().grant(command)
+  }
+  revokeBrowserResource(command: { instanceId: string; commandId: string; resourceId: string; expectedRevision: number }) {
+    this.assertAuthoringActor()
+    return this.browser().revoke(command)
+  }
+  async resolveBrowserOperation(command: { instanceId: string; commandId: string; resourceId: string; operationId: string; reason: string }) {
+    this.assertAuthoringActor()
+    const operation = await this.browser().resolve(command)
+    await this.execution?.settleBrowserStop(operation.ticketId)
+    return operation
+  }
+  listBrowserResources(request: { instanceId: string }) { return this.browser().list(request) }
+  readBrowserResource(request: { instanceId: string; resourceId: string }) { return this.browser().read(request) }
+  closeBrowserResources() { return this.browserResources?.close() ?? Promise.resolve() }
 
   async createSchedule(request: ScheduleCreate) {
     this.requireProductScheduleActor()
