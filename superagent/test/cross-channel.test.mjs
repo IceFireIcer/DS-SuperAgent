@@ -50,7 +50,7 @@ async function fixture(t) {
   return { desktop, github, storage, receive, drain, deliveries, turns }
 }
 
-test('an owner-authorized native PR reference continues the original Ticket and Session from A to B and explicitly retargets only its result', { timeout: 20000 }, async t => {
+test('an owner-authorized native PR reference continues the original Ticket and Session from A to B without a direct result', { timeout: 20000 }, async t => {
   const { desktop, github, receive, drain, deliveries, turns } = await fixture(t)
   const accepted = await desktop.submit({ commandId: 'A', eventId: 'desktop-message', text: 'Prepare revision A within the supplied project.' })
   await drain()
@@ -80,9 +80,10 @@ test('an owner-authorized native PR reference continues the original Ticket and 
   assert.deepEqual((await desktop.getTicket(accepted.ticketId)).mandate, original.mandate)
   assert.deepEqual(turns, ['Prepare revision A within the supplied project.', text])
   assert.equal((await desktop.listTickets()).items.length, 1)
-  assert.deepEqual(deliveries.map(item => [item.purpose, item.destination.sourceInstanceId]), [['acknowledgement', 'desktop'], ['result', 'github:acme/repo']])
-  assert.equal(deliveries[1].text.includes('Revision B prepared.'), true)
-  assert.equal(deliveries[1].text.includes('Prepare revision A within the supplied project.'), false, 'Retargeting must not copy private conversation history.')
+  assert.deepEqual(deliveries.map(item => [item.purpose, item.destination.sourceInstanceId]), [['acknowledgement', 'desktop']])
+  const target = await desktop.getDeliveryTarget(accepted.ticketId, 'result')
+  assert.deepEqual({ sourceInstanceId: target.destination.sourceInstanceId, objectId: target.destination.objectId },
+    { sourceInstanceId: 'github:acme/repo', objectId: 'pr:12:comment:41' })
   const direction = await desktop.getTicketDirection(accepted.ticketId)
   assert.equal(direction.inputs.length, 1)
   assert.equal(direction.inputs[0].state, 'delivered')

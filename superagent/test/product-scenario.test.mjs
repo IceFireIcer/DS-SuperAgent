@@ -17,7 +17,7 @@ async function until(check, label) {
   }
 }
 
-test('one mock product Ticket keeps its direction, human answer and stop across restart before an evidenced result', { timeout: 120000 }, async t => {
+test('one mock direct Ticket keeps its direction, human answer and stop across restart before an evidenced report', { timeout: 120000 }, async t => {
   const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-product-'))
   const root = join(directory, 'work')
   await mkdir(root)
@@ -185,8 +185,8 @@ test('one mock product Ticket keeps its direction, human answer and stop across 
   assert.equal(resumed.assignments[0].sessionId, firstAssignment.sessionId)
   await until(async () => {
     const view = await engine.conversation(ticketId)
-    return view.status === 'ready' && view.messages.some(message => message.purpose === 'result')
-  }, 'the delivered resumed revision B result')
+    return view.status === 'ready' && view.reports.length === 1 && view.messages.some(message => message.purpose === 'result') === false
+  }, 'the resumed revision B report without a direct user result')
   const result = await engine.conversation(ticketId)
   assert.equal(result.ticketId, ticketId)
   assert.equal(result.reports.length, 1)
@@ -198,9 +198,7 @@ test('one mock product Ticket keeps its direction, human answer and stop across 
   assert.equal(result.reports[0].artifacts[0].path, 'release-note.txt')
   assert.equal(result.reports[0].artifacts[0].bytes, 20)
   assert.equal(result.reports[0].artifacts[0].reference.kind, 'artifact')
-  assert.equal(result.messages.filter(message => message.purpose === 'result').length, 1)
-  assert.deepEqual(result.messages.find(message => message.purpose === 'result').destination,
-    { sourceInstanceId: 'github:product/scenario', eventId: 'comment-1', threadId: 'product/scenario#83', actorId: 'user' })
+  assert.equal(result.messages.filter(message => message.purpose === 'result').length, 0)
   assert.equal(result.resumeHistory.length, 1)
   assert.equal((await engine.listTickets()).items.length, 2)
   const resumeTurn = workerTurns.find(turn => turn.text.startsWith('Recovery attempt ') && turn.text.endsWith(answer))

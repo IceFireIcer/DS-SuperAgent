@@ -700,11 +700,11 @@ export class Execution {
     if (ticket?.constraint) return undefined
     const trigger = await this.storage.transaction(this.instanceId, transaction => this.trigger(transaction, ticketId))
     if (trigger.proactive) return undefined
+    if (ready && !await this.storage.transaction(this.instanceId,
+      transaction => transaction.get('work-ticket', ticketId))) return undefined
     const report = ready ? await this.storage.transaction(this.instanceId, transaction => transaction.get<ReadyReport>('report', ticketId)) : undefined
     if (ready && (!report || expectedReportId && report.id !== expectedReportId)) return undefined
     const resultText = ready ? await this.storage.transaction(this.instanceId, async transaction => {
-      const link = await transaction.get('work-ticket', ticketId)
-      if (!link) return report!.result
       const current = await transaction.get<ReadyReport>('report', ticketId)
       const assignment = await transaction.get<Assignment>('assignment', ticketId)
       if (current?.id !== report!.id || current.assignmentId !== assignment?.id) return undefined
@@ -730,8 +730,7 @@ export class Execution {
         const current = await transaction.get<ReadyReport>('report', ticketId)
         const assignment = await transaction.get<Assignment>('assignment', ticketId)
         if (!current || current.id !== args.reportId || current.assignmentId !== assignment?.id) throw new CoreError('NOT_READY', 'Only the current Assignment ready report may be delivered.')
-        const link = await transaction.get('work-ticket', ticketId)
-        const text = link ? await mainResultReply(transaction, ticketId, current.id) : current.result
+        const text = await mainResultReply(transaction, ticketId, current.id)
         if (!text) throw new CoreError('MAIN_RESULT_PENDING', 'The current work result is waiting for Main to finish its reply.')
         const trigger = await this.trigger(transaction, ticketId)
         const deliveryId = `${ticketId}:result`

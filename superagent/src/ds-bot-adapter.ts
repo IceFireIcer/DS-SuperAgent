@@ -99,6 +99,11 @@ function itemText(item: unknown) {
     ? (item as { text: string }).text : ''
 }
 
+function isWorkerAssistantItem(item: unknown) {
+  return itemKind(item) === 'bot' || Boolean(item && typeof item === 'object'
+    && (item as { type?: unknown }).type === 'assistant/message')
+}
+
 function itemTime(item: unknown) {
   return item && typeof item === 'object' && typeof (item as { time?: unknown }).time === 'number'
     ? (item as { time: number }).time : undefined
@@ -279,7 +284,7 @@ export class DsBotExecutionAdapter {
     const selected = recent.events
     const next = recent.more && selected.length > 0 ? { sessionId, beforeSeq: Number(selected[0]!.seq) }
       : index > 0 ? { sessionId: sessions[index - 1]! } : null
-    const items = context.rt.displayItems(request.sessionId, selected)
+    const items = context.rt.displayItems(request.sessionId, selected).filter(item => !isWorkerAssistantItem(item))
     if (items.length > 0) {
       const renderedConversation = items.some(item => itemKind(item) === 'user' || itemKind(item) === 'bot')
       const needsFallback = renderedConversation && (cursor === undefined || items.some(item => itemKind(item) === 'user'))
@@ -377,11 +382,6 @@ export class DsBotExecutionAdapter {
     for (const message of conversation.messageHistory) {
       if (message.purpose !== 'result' || message.state !== 'sent' || !message.text.trim()) continue
       items.push({ kind: 'bot', text: message.text.trim(), time: message.createdAt })
-    }
-    if (items.length === 0) {
-      for (const report of conversation.reports) {
-        if (report.result.trim()) items.push({ kind: 'bot', text: report.result.trim(), time: report.createdAt })
-      }
     }
     return items.sort((left, right) => left.time - right.time || (left.seq ?? -1) - (right.seq ?? -1))
   }

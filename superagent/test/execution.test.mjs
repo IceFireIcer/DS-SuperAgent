@@ -7,7 +7,7 @@ import * as core from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, textResponse, toolResponse } from '../dev/native-mock.mjs'
 
-for (const sourceMode of [false, true]) test(`a native Router delivers ready evidence to the original ${sourceMode ? 'versioned source thread' : 'desktop message'}`, { timeout: 15000 }, async context => {
+for (const sourceMode of [false, true]) test(`a native Router keeps unowned ready evidence from becoming a ${sourceMode ? 'versioned source result' : 'desktop result'}`, { timeout: 15000 }, async context => {
   const directory = await mkdtemp(join(tmpdir(), 'ds-bot-native-loop-'))
   let native
   let storage
@@ -60,22 +60,36 @@ for (const sourceMode of [false, true]) test(`a native Router delivers ready evi
   for (let index = 0; index < 5; index++) await engine.effects.drain()
   const conversation = await engine.conversation(receipt.ticketId)
   assert.equal(conversation.status, 'ready')
+  assert.equal(conversation.lifecycle, 'open')
   assert.equal(conversation.assignments.length, 1)
   assert.equal(conversation.reports.length, 1)
   assert.equal(conversation.reports[0].kind, 'ready')
-  assert.equal(conversation.messages.length, 2)
-  assert.deepEqual(conversation.messages.map(message => message.purpose), ['acknowledgement', 'result'])
+  assert.deepEqual(conversation.messages.map(message => message.purpose), ['acknowledgement'])
   assert.ok(conversation.messages.every(message => message.destination.eventId === 'original-message'))
   if (sourceMode) assert.ok(conversation.messages.every(message => message.destination.threadId === 'room'))
-  assert.equal(conversation.messages[1].text, 'The answer is 4.')
-  assert.equal(conversation.messages[1].reportId, conversation.reports[0].id)
+  assert.equal(requests.some(request => request.model === 'router'
+    && JSON.stringify(request.messages).includes('Ready report:')), false,
+  'a Ticket without a Main-owned work link cannot start a result Router turn')
+  const readyNotice = await storage.transaction('private', async transaction => {
+    let after
+    for (let index = 0; index < 10; index++) {
+      const page = await transaction.scan('effect-key', { limit: 100, ...(after ? { after } : {}) })
+      const found = page.items.map(item => item.value.completed).find(effect =>
+        effect?.payload.type === 'report-ready' && effect.payload.ticketId === receipt.ticketId)
+      if (found || !page.cursor) return found
+      after = page.cursor
+    }
+  })
+  assert.ok(readyNotice)
+  assert.equal((await engine.effects.receipt(readyNotice.id, readyNotice.generation))?.state, 'done',
+    'the no-op ready notice completes instead of retrying as unknown')
   const worker = requests.filter(request => request.model === 'worker')
   assert.ok(worker[0].messages.some(message => message.role === 'user' && message.content.some(block => block.text === command.text)))
   assert.deepEqual(worker[0].tools.map(tool => tool.name), ['add_thread_subscription', 'ask_human', 'read_context', 'remove_thread_subscription', 'report_ready'])
   if (sourceMode) await engine.acceptSource({ ...sourceRequest, commandId: 'transport-retry' })
   else await engine.submit({ ...command, commandId: 'transport-retry' })
   for (let index = 0; index < 3; index++) await engine.effects.drain()
-  assert.equal((await engine.conversation(receipt.ticketId)).messages.length, 2)
+  assert.equal((await engine.conversation(receipt.ticketId)).messages.length, 1)
   assert.equal((await engine.conversation(receipt.ticketId)).assignments.length, 1)
 })
 

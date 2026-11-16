@@ -52,7 +52,7 @@ async function runtimeFixture(t, source, versioned = false, deliveryOptions = {}
   return { engine, storage, drain, versioned }
 }
 
-test('an outstanding P/R condition keeps a ready Ticket open until the condition is merged', { timeout: 20000 }, async t => {
+test('an outstanding P/R condition keeps an unowned ready Ticket open without sending Worker text', { timeout: 20000 }, async t => {
   const { engine, drain } = await runtimeFixture(t, { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] })
   const receipt = await engine.submit({ commandId: 'condition', eventId: 'condition-message', text: 'Prepare a change.' })
   const condition = await engine.bindDeliveryCondition({ commandId: 'bind-pr', ticketId: receipt.ticketId, kind: 'pr', sourceInstanceId: 'github:acme/repo',
@@ -64,14 +64,16 @@ test('an outstanding P/R condition keeps a ready Ticket open until the condition
   assert.equal(conversation.lifecycle, 'open')
   assert.equal(conversation.deliveryPending, true)
   assert.equal(conversation.deliveryConditions[0].state, 'open')
-  assert.ok(conversation.messages.some(message => message.purpose === 'result'), 'the result is still delivered while the P/R remains open')
+  assert.equal(conversation.messages.some(message => message.purpose === 'result'), false,
+    'a direct Ticket without Main ownership keeps its report but sends no result')
   const reconciled = await engine.reconcileDeliveryCondition({ commandId: 'merge-pr', ticketId: receipt.ticketId,
     sourceInstanceId: 'github:acme/repo', text: 'Pull request #12 created (merged).\n\nMerged after review.' })
   assert.equal(reconciled[0].state, 'merged')
   assert.equal(reconciled[0].result, 'merged')
   conversation = await engine.conversation(receipt.ticketId)
-  assert.equal(conversation.lifecycle, 'ended')
+  assert.equal(conversation.lifecycle, 'open')
   assert.equal(conversation.deliveryPending, false)
+  assert.equal(conversation.messages.some(message => message.purpose === 'result'), false)
 })
 
 test('only an authoritative P/R header changes a condition, not merged text in its details or reviews', { timeout: 20000 }, async t => {
@@ -120,7 +122,7 @@ test('a draft P/R condition is tracked and keeps the Ticket open', { timeout: 20
   assert.equal(conversation.lifecycle, 'open')
 })
 
-test('a resolved condition does not end a Ticket before its result reaches the channel', { timeout: 20000 }, async t => {
+test('a resolved condition never turns an unowned Worker report into a user result', { timeout: 20000 }, async t => {
   const { engine, drain } = await runtimeFixture(t, { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] }, false,
     { channel: { deliver: async () => ({ type: 'permanent', reason: 'The test channel refuses the result.' }) } })
   const receipt = await engine.submit({ commandId: 'dropped-result', eventId: 'dropped-result-message', text: 'Prepare a change.' })
@@ -137,7 +139,7 @@ test('a resolved condition does not end a Ticket before its result reaches the c
   assert.equal(after.deliveryPending, false)
 })
 
-test('two P/R conditions are checked separately and a pending follow-up delays final completion', { timeout: 25000 }, async t => {
+test('two P/R conditions are checked separately while a pending follow-up keeps ownership open', { timeout: 25000 }, async t => {
   const source = { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'], allowedThreadIds: ['room'], versionOrder: 'sequence' }
   const { engine, drain } = await runtimeFixture(t, source, true)
   const received = await engine.receiveSource({ commandId: 'multi-initial', threadId: 'room', objectId: 'multi-1', type: 'created', version: '1',
@@ -167,10 +169,11 @@ test('two P/R conditions are checked separately and a pending follow-up delays f
   assert.equal(conversation.lifecycle, 'open', 'a pending follow-up delays final completion')
   await drain(10)
   conversation = await engine.conversation(ticketId)
-  assert.equal(conversation.lifecycle, 'ended')
+  assert.equal(conversation.lifecycle, 'open')
+  assert.equal(conversation.messages.some(message => message.purpose === 'result'), false)
 })
 
-test('a pending follow-up keeps the earlier result from ending its Ticket', { timeout: 20000 }, async t => {
+test('a pending follow-up keeps the earlier report from ending its Ticket', { timeout: 20000 }, async t => {
   let releaseInitial
   let releaseFollowup
   let enteredInitialWorker
@@ -213,21 +216,23 @@ test('a pending follow-up keeps the earlier result from ending its Ticket', { ti
   let conversation
   for (let attempt = 0; attempt < 500; attempt++) {
     conversation = await engine.conversation(ticketId)
-    if (conversation.messages.some(message => message.purpose === 'result')) break
+    if (conversation.reportHistory.length > 0) break
     await new Promise(resolve => setTimeout(resolve, 10))
   }
-  assert.ok(conversation.messages.some(message => message.purpose === 'result'), 'the first result reached the channel')
+  assert.equal(conversation.reportHistory.length, 1, 'the first report remains queryable without a direct user result')
+  assert.equal(conversation.messages.some(message => message.purpose === 'result'), false)
   const during = await engine.getTicketDirection(ticketId)
   assert.equal(during.state, 'open', 'the queued follow-up still owns the next direction')
   assert.equal(during.inputs.filter(input => input.state === 'pending').length, 1)
   releaseFollowup()
   await drain(20)
   const final = await engine.conversation(ticketId)
-  assert.equal(final.lifecycle, 'ended')
+  assert.equal(final.lifecycle, 'open')
+  assert.equal(final.messages.some(message => message.purpose === 'result'), false)
   assert.deepEqual(final.reportHistory.map(report => report.result), ['Handled: Prepare the first result.', 'Handled: Follow up before closing.'])
 })
 
-test('an authorized delivery-target change redirects the result and is rejected across source instances', { timeout: 20000 }, async t => {
+test('an authorized delivery-target change persists without sending an unowned Worker result', { timeout: 20000 }, async t => {
   const { engine, storage, drain } = await runtimeFixture(t, { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] })
   const receipt = await engine.submit({ commandId: 'retarget', eventId: 'retarget-message', text: 'Deliver this to GitHub.' })
   const other = new core.Engine(storage, 'private', { kind: 'github', sourceInstanceId: 'github:acme/repo', actorId: 'user', allowedActorIds: ['user'],
@@ -249,10 +254,10 @@ test('an authorized delivery-target change redirects the result and is rejected 
   assert.equal(target.destination.objectId, 'pr:12')
   await drain()
   const conversation = await engine.conversation(receipt.ticketId)
-  const result = conversation.messages.find(message => message.purpose === 'result')
-  assert.deepEqual({ sourceInstanceId: result.destination.sourceInstanceId, actorId: result.destination.actorId,
-    eventId: result.destination.eventId, threadId: result.destination.threadId },
-  { sourceInstanceId: 'github:acme/repo', actorId: 'user', eventId: 'pr:12', threadId: 'github:acme/repo#12' })
+  assert.equal(conversation.messages.some(message => message.purpose === 'result'), false)
+  assert.deepEqual({ sourceInstanceId: target.destination.sourceInstanceId, actorId: target.destination.actorId,
+    objectId: target.destination.objectId, threadId: target.destination.threadId },
+  { sourceInstanceId: 'github:acme/repo', actorId: 'user', objectId: 'pr:12', threadId: 'github:acme/repo#12' })
   await assert.rejects(other.setDeliveryTarget({ commandId: 'foreign-target', ticketId: receipt.ticketId, purpose: 'result', sourceInstanceId: 'github:acme/repo', actorId: 'user',
     threadId: 'github:acme/repo#12', objectId: 'foreign', evidence: 'No right to retarget.' }), { code: 'SOURCE_NOT_AUTHORIZED' })
   const bobEvent = await bobReceiver.receiveSource({ commandId: 'bob-retarget', threadId: 'github:acme/repo#12', objectId: 'pr:12:comment:bob',

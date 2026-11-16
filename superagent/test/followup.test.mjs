@@ -57,7 +57,7 @@ test('an accepted Thread fans out a stable human follow-up into the same Ticket 
   assert.equal((await engine.listTickets()).items.length, 1)
 })
 
-test('a naturally ended request resumes the same Ticket, Assignment and Worker Session for an authorized follow-up', { timeout: 15000 }, async t => {
+test('a ready request without Main ownership resumes the same Ticket for an authorized follow-up', { timeout: 15000 }, async t => {
   const directory = await mkdtemp(join(tmpdir(), 'ds-bot-followup-runtime-'))
   let native, storage, sessions, engine
   t.after(async () => {
@@ -94,7 +94,7 @@ test('a naturally ended request resumes the same Ticket, Assignment and Worker S
   const ticketId = accepted.receipts[0].ticketId
   for (let index = 0; index < 5; index++) await engine.effects.drain()
   const first = await engine.getTicketDirection(ticketId)
-  assert.equal(first.state, 'ended')
+  assert.equal(first.state, 'open')
   const firstConversation = await engine.conversation(ticketId)
   assert.equal(firstConversation.status, 'ready')
   const assignment = firstConversation.assignments[0]
@@ -108,18 +108,15 @@ test('a naturally ended request resumes the same Ticket, Assignment and Worker S
   for (let index = 0; index < 5; index++) await engine.effects.drain()
 
   const final = await engine.getTicketDirection(ticketId)
-  assert.equal(final.state, 'ended', JSON.stringify({ final, conversation: await engine.conversation(ticketId), effects: await engine.effects.list() }))
+  assert.equal(final.state, 'open', JSON.stringify({ final, conversation: await engine.conversation(ticketId), effects: await engine.effects.list() }))
   assert.equal(final.inputs[0].state, 'delivered')
   const finalConversation = await engine.conversation(ticketId)
   assert.equal(finalConversation.assignments[0].id, assignment.id)
   assert.equal(finalConversation.assignments[0].sessionId, assignment.sessionId)
   assert.equal(finalConversation.reports[0].result, 'Handled: Change the title and verify it.')
   assert.deepEqual(finalConversation.reportHistory.map(report => report.result), ['Handled: Create the first result.', 'Handled: Change the title and verify it.'])
-  assert.deepEqual(finalConversation.messageHistory.map(message => message.text), ['Request accepted.', 'Handled: Create the first result.', 'Handled: Change the title and verify it.'])
-  assert.equal(final.recoveries.length, 1)
-  assert.equal(final.recoveries[0].mandateId, mandate.id)
-  assert.equal(final.recoveries[0].mandateDecisionId, mandate.decisionId)
-  assert.equal(final.recoveries[0].policyVersion, (await engine.getTicket(ticketId)).decision.policyVersion)
+  assert.deepEqual(finalConversation.messageHistory.map(message => message.text), ['Request accepted.'])
+  assert.deepEqual(final.recoveries, [])
   assert.deepEqual(workerTurns, ['Create the first result.', 'Change the title and verify it.'])
   assert.deepEqual((await engine.getTicket(ticketId)).mandate, mandate)
 })

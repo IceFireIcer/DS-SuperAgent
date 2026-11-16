@@ -55,7 +55,7 @@ test('an authorized request binds one directory and returns a verified file plus
   assert.equal(result.reports[0].artifacts[0].reference.sha256, result.reports[0].artifacts[0].sha256)
   assert.deepEqual(result.reports[0].toolFacts.map(fact => fact.tool), ['write_file', 'read_file', 'glob', 'grep', 'run_command'])
   assert.equal(result.reports[0].toolFacts.at(-1).output.exitCode, 0)
-  assert.equal(result.messages[1].purpose, 'result')
+  assert.equal(result.messages.some(message => message.purpose === 'result'), false)
   assert.equal(await readFile(join(root, 'answer.txt'), 'utf8'), 'hello\n')
   const worker = calls.find(call => call.model === 'worker')
   assert.ok(worker.messages.some(message => message.role === 'user' && message.content.some(block => block.text === command.text)))

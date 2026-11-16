@@ -93,7 +93,8 @@ test('prompt creates one durable UI binding and deliver follows the original Tic
   await assert.rejects(restarted.prompt({ requestId: 'prompt-1', sessionId, owner, content: 'Changed replay text.' }, context), { code: 'IDENTITY_CONFLICT' })
   assert.deepEqual(await restarted.projectSession({ sessionId: conversation.assignments[0].sessionId }, context), { botId: 'chief', sessionId })
   const page = await restarted.chatPage({ botId: 'chief', sessionId }, context)
-  assert.ok(page.items.some(item => item.type === 'assistant/message'))
+  assert.ok(page.items.some(item => item.type === 'user/message'))
+  assert.equal(page.items.some(item => item.type === 'assistant/message'), false)
   assert.equal(page.sessionId, sessionId)
   await assert.rejects(adapter.prompt({ requestId: 'bad-scope', sessionId, owner: { kind: 'group', botId: 'chief' }, content: 'No fallback.' }, context), { code: 'bot/execution-unsupported' })
 })
@@ -139,7 +140,7 @@ test('conversation exposes the bound Ticket to the copied UI host', async t => {
   await settle(engine, started.ticketId)
 })
 
-test('chat page shows the bound request and result when the native Worker log has no display rows', { timeout: 20000 }, async t => {
+test('chat page shows the bound request without projecting Worker text as a result', { timeout: 20000 }, async t => {
   const { adapter, context, engine, sessionId } = await fixture(t)
   const owner = { kind: 'bot', botId: 'chief' }
   context.rt.displayItems = () => []
@@ -149,12 +150,11 @@ test('chat page shows the bound request and result when the native Worker log ha
   const page = await adapter.chatPage({ botId: 'chief', sessionId }, context)
   assert.deepEqual(page.items.map(item => [item.kind, item.text]), [
     ['user', 'Show this request.'],
-    ['bot', 'Completed: Show this request.'],
   ])
   assert.equal(page.cursor, null)
 })
 
-test('chat fallback keeps every multi-turn request and result', { timeout: 20000 }, async t => {
+test('chat fallback keeps every multi-turn request without fabricating direct results', { timeout: 20000 }, async t => {
   const { adapter, context, engine, sessionId } = await fixture(t)
   const owner = { kind: 'bot', botId: 'chief' }
   context.rt.displayItems = () => []
@@ -163,24 +163,18 @@ test('chat fallback keeps every multi-turn request and result', { timeout: 20000
     const result = await adapter.prompt({ requestId: `multi-turn-${index}`, sessionId, owner, content: `Multi turn ${index}.` }, context)
     ticketId = result.ticketId
     await settle(engine, ticketId)
-    const deadline = Date.now() + 5000
-    while (Date.now() < deadline) {
-      const current = await engine.conversation(ticketId)
-      if (current.status === 'ready' && current.messageHistory.some(message => message.purpose === 'result'
-        && message.text === `Completed: Multi turn ${index}.`)) break
-      await new Promise(resolve => setTimeout(resolve, 10))
-    }
   }
   const page = await adapter.chatPage({ botId: 'chief', sessionId }, context)
   for (let index = 0; index < 3; index++) {
     assert.ok(page.items.some(item => item.kind === 'user' && item.text === `Multi turn ${index}.`), JSON.stringify(page.items))
-    assert.ok(page.items.some(item => item.kind === 'bot' && item.text === `Completed: Multi turn ${index}.`), JSON.stringify(page.items))
+    assert.equal(page.items.some(item => item.kind === 'bot' && item.text === `Completed: Multi turn ${index}.`), false,
+      'a direct Ticket cannot fabricate a delivered result from Worker text')
   }
-  assert.equal(page.items.length, 6)
+  assert.equal(page.items.filter(item => item.kind === 'user').length, 3)
   assert.equal(page.cursor, null)
 })
 
-test('a rendered page still adds the authoritative result that its renderer omits', { timeout: 20000 }, async t => {
+test('a rendered page cannot expose Worker assistant text as a user result', { timeout: 20000 }, async t => {
   const { adapter, context, engine, sessionId } = await fixture(t)
   const owner = { kind: 'bot', botId: 'chief' }
   const text = content => Array.isArray(content) ? content.filter(block => block?.type === 'text').map(block => block.text).join('\n') : ''
@@ -202,8 +196,8 @@ test('a rendered page still adds the authoritative result that its renderer omit
   }
   const page = await adapter.chatPage({ botId: 'chief', sessionId }, context)
   assert.ok(page.items.some(item => item.kind === 'user' && item.text === 'Rendered request.'), JSON.stringify(page.items))
-  assert.ok(page.items.some(item => item.kind === 'bot' && item.text === 'Recorded.'), JSON.stringify(page.items))
-  assert.ok(page.items.some(item => item.kind === 'bot' && item.text === 'Completed: Rendered request.'), JSON.stringify(page.items))
+  assert.equal(page.items.some(item => item.kind === 'bot' && item.text === 'Recorded.'), false, JSON.stringify(page.items))
+  assert.equal(page.items.some(item => item.kind === 'bot' && item.text === 'Completed: Rendered request.'), false, JSON.stringify(page.items))
 })
 
 test('durable prompt acknowledgement returns before a blocked native Worker and its active Session projects to the original UI', { timeout: 15000 }, async t => {

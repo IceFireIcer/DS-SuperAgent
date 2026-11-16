@@ -302,7 +302,7 @@ test('an answer requires a current human question and returns to that exact mess
     text: 'Too late.', fact: 'The question was deleted.' }), { code: 'SOURCE_NOT_CURRENT' })
 })
 
-test('a native result is delivered after its acknowledgement with a current-report receipt', { timeout: 15000 }, async t => {
+test('a ready report without a Main-owned work link never becomes a user result', { timeout: 15000 }, async t => {
   const directory = await mkdtemp(join(tmpdir(), 'ds-bot-delivery-runtime-'))
   let native, storage, sessions, engine
   t.after(async () => {
@@ -332,10 +332,12 @@ test('a native result is delivered after its acknowledgement with a current-repo
     sessions, [], {}, {}, {}, { channel: { deliver: async delivery => { calls.push(delivery); return { type: 'success' } } } })
   const receipt = await engine.submit({ commandId: 'runtime', eventId: 'runtime-message', text: 'What is 2 + 2?' })
   for (let index = 0; index < 6; index++) await engine.effects.drain()
-  assert.deepEqual(calls.map(delivery => delivery.purpose), ['acknowledgement', 'result'])
+  assert.deepEqual(calls.map(delivery => delivery.purpose), ['acknowledgement'])
   const deliveries = await engine.getTicketDeliveries(receipt.ticketId)
-  assert.deepEqual(deliveries.map(delivery => [delivery.purpose, delivery.state]), [['acknowledgement', 'sent'], ['result', 'sent']])
-  const result = deliveries.find(delivery => delivery.purpose === 'result')
-  assert.equal(result.reportId, (await engine.conversation(receipt.ticketId)).reports[0].id)
-  assert.equal(result.text, 'The answer is 4.')
+  assert.deepEqual(deliveries.map(delivery => [delivery.purpose, delivery.state]), [['acknowledgement', 'sent']])
+  const conversation = await engine.conversation(receipt.ticketId)
+  assert.equal(conversation.status, 'ready')
+  assert.equal(conversation.lifecycle, 'open')
+  assert.equal(conversation.reports[0].result, 'The answer is 4.')
+  assert.equal(conversation.messages.some(message => message.purpose === 'result'), false)
 })

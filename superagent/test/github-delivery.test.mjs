@@ -157,8 +157,8 @@ test('GitHub permanent target failure produces no receipt or POST and does not f
   assert.equal(await channel.getReceipt(context.idempotencyKey), undefined)
 })
 
-test('a retargeted Engine result reconciles its actual outbound view and original Effect key without another POST', { timeout: 20000 }, async t => {
-  const { channel, transport, channelOptions, posts, storage, directory, cleanups } = await fixture(t)
+test('a retargeted direct Ticket persists its destination but sends no Worker result', { timeout: 20000 }, async t => {
+  const { channel, posts, storage, directory, cleanups } = await fixture(t)
   let native, sessions, owner, receiver
   cleanups.push(async () => {
     const errors = []
@@ -194,18 +194,11 @@ test('a retargeted Engine result reconciles its actual outbound view and origina
     reason: 'Owner approved this native correction and destination.', retargetResult: true }, receiver)
   for (let index = 0; index < 12; index++) await owner.effects.drain()
   const history = await owner.getTicketDeliveries(accepted.ticketId)
-  const originalView = history.find(item => item.purpose === 'result')
-  assert.equal(originalView.destination.sourceInstanceId, 'desktop', 'The immutable pre-redirect history is still first; it is not the actual GitHub send.')
-  assert.deepEqual(await channel.reconcile(originalView, { idempotencyKey: outbound.idempotencyKey, signal: new AbortController().signal }),
-    { type: 'permanent', reason: 'DESTINATION_DENIED: no grant for this Instance and GitHub source.' })
-  const result = (await owner.conversation(accepted.ticketId)).messages.find(item => item.purpose === 'result')
-  assert.equal(result.destination.sourceInstanceId, 'github:acme/repo')
-  assert.deepEqual(result.destination, outbound.delivery.destination)
-  assert.equal(result.text, outbound.delivery.text)
-  const idempotencyKey = JSON.stringify([result.effectId, result.effectGeneration])
-  assert.equal(idempotencyKey, outbound.idempotencyKey)
-  assert.equal((await channel.getReceipt(idempotencyKey)).messageId, '9001')
-  const restarted = new core.GitHubDeliveryChannel(transport, channelOptions)
-  assert.deepEqual(await restarted.reconcile(result, { idempotencyKey, signal: new AbortController().signal }), { type: 'success' })
-  assert.equal(posts.length, 1)
+  assert.equal(history.some(item => item.purpose === 'result'), false)
+  const target = await owner.getDeliveryTarget(accepted.ticketId, 'result')
+  assert.deepEqual({ sourceInstanceId: target.destination.sourceInstanceId, objectId: target.destination.objectId,
+    threadId: target.destination.threadId },
+  { sourceInstanceId: 'github:acme/repo', objectId: 'pr:12:comment:41', threadId: 'github:acme/repo#12' })
+  assert.equal(outbound, undefined)
+  assert.equal(posts.length, 0)
 })
