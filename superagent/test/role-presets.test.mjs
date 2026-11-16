@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
-import { Engine } from '../dist/index.js'
+import { Engine, RoleConfigStore } from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 
 // This module is intentionally not registered in the shared package entry until its Host integration lands.
@@ -118,9 +118,8 @@ test('application drafts replace exactly one role through the revisioned config 
   const command = prepareRolePresetApplication({ commandId: 'apply-writer', current, targetRole: 'worker', preset: manual() })
   assert.deepEqual(command, { commandId: 'apply-writer', expectedRevision: 7,
     roles: { ...before.roles, worker: { name: 'Writer', model: manual().model,
-      instructions: manual().instructions, skills: ['office'] } } })
+      instructions: manual().instructions, skills: ['office'], appearance: manual().appearance } } })
   assert.deepEqual(current, before)
-  assert.equal('appearance' in command.roles.worker, false)
   assert.equal('permissions' in command.roles.worker, false)
   assert.throws(() => prepareRolePresetApplication({ commandId: 'invalid-router', current, targetRole: 'router',
     preset: { ...manual(), instructions: 'No required placeholder.' } }), { code: 'INVALID_CONFIG' })
@@ -141,4 +140,71 @@ test('the prepared command uses the Engine revision contract and survives a repe
   assert.deepEqual(await engine.updateRoleConfig(command), saved)
   await assert.rejects(engine.updateRoleConfig({ ...command, commandId: 'stale-apply' }), { code: 'CONFIG_REVISION_CONFLICT' })
   assert.deepEqual((await engine.getRoleConfig()).roles.router, initial.roles.router)
+})
+
+test('applying a bounded image survives restart without changing another role or the captured revision', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'role-preset-appearance-'))
+  const path = join(directory, 'state.sqlite')
+  const opened = []
+  const open = async () => {
+    const storage = await SqliteStorage.open(path)
+    opened.push(storage)
+    return { storage, engine: new Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] }) }
+  }
+  t.after(async () => { for (const storage of opened) await storage.close(); await rm(directory, { recursive: true, force: true }) })
+  const { engine, storage } = await open()
+  const image = `data:image/png;base64,${Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    Buffer.alloc(119_992)]).toString('base64')}`
+  const initial = await engine.getRoleConfig()
+  const router = { ...initial.roles.router, appearance: { color: '#aabbcc' } }
+  const configured = await engine.updateRoleConfig({ commandId: 'router-appearance', expectedRevision: initial.revision,
+    roles: { ...initial.roles, router } })
+  const inFlight = structuredClone(configured)
+  const use = await storage.transaction('private', tx => new RoleConfigStore(storage, 'private', configured.roles).recordUse(tx, {
+    sessionId: 'worker-in-flight', role: 'worker', revision: inFlight.revision,
+    router: inFlight.roles.router.model, worker: inFlight.roles.worker.model }))
+  await engine.createRolePreset({ instanceId: 'private', commandId: 'create-image',
+    preset: { ...manual(), appearance: { shape: 'square', color: '#123456', image } } })
+  const application = { instanceId: 'private', commandId: 'apply-image', presetId: 'writer', targetRole: 'worker',
+    expectedRevision: configured.revision }
+  const applied = await engine.applyRolePreset(application)
+  assert.equal(applied.revision, inFlight.revision + 1)
+  assert.deepEqual(await engine.applyRolePreset(application), applied)
+  const withImage = await engine.getRoleConfig()
+  await storage.transaction('private', tx => new RoleConfigStore(storage, 'private', withImage.roles).recordUse(tx, {
+    sessionId: 'worker-with-image', role: 'worker', revision: withImage.revision,
+    router: withImage.roles.router.model, worker: withImage.roles.worker.model }))
+  const records = await storage.transaction('private', async tx => ({
+    current: await tx.get('role-config', 'role-config'),
+    history: await tx.scan('role-config-history', { limit: 10 }),
+    images: await tx.scan('role-preset-image', { limit: 10 }),
+    uses: await tx.scan('role-config-use', { limit: 10 }),
+    recentUses: await tx.scan('role-config-use-recent', { limit: 10 }),
+  }))
+  assert.equal(records.current.imageChunks.worker, 3)
+  assert.equal(records.current.roles.worker.appearance.image, undefined)
+  assert.ok(Buffer.byteLength(JSON.stringify(records.current)) < 131072)
+  assert.ok(records.history.items.every(item => Buffer.byteLength(JSON.stringify(item.value)) < 131072))
+  assert.ok(records.images.items.every(item => Buffer.byteLength(JSON.stringify(item.value)) < 131072))
+  assert.equal(records.uses.items.length, 2)
+  assert.equal(records.recentUses.items.length, 2)
+  assert.ok([...records.uses.items, ...records.recentUses.items].every(item =>
+    Buffer.byteLength(JSON.stringify(item.value)) < 131072 && !JSON.stringify(item.value).includes('data:image/')))
+  const { engine: restarted } = await open()
+  const current = await restarted.getRoleConfig()
+  assert.equal(current.revision, applied.revision)
+  assert.deepEqual(current.roles.worker.appearance, { shape: 'square', color: '#123456', image })
+  assert.deepEqual(current.roles.router, router)
+  assert.deepEqual(inFlight.roles, configured.roles)
+  assert.equal((await restarted.getRoleConfigUses('worker-in-flight'))[0].revision, use.revision)
+  assert.deepEqual((await restarted.getRoleConfigHistory()).find(item => item.revision === inFlight.revision).roles, inFlight.roles)
+  assert.deepEqual((await restarted.getRoleConfigHistory()).find(item => item.revision === applied.revision).roles, current.roles)
+  await assert.rejects(restarted.applyRolePreset({ ...application, commandId: 'stale-image' }), { code: 'CONFIG_REVISION_CONFLICT' })
+  const next = await restarted.updateRoleConfig({ commandId: 'another-role', expectedRevision: current.revision,
+    roles: { ...current.roles, router: { ...router, name: 'Updated Router' } } })
+  assert.deepEqual(next.roles.worker.appearance, current.roles.worker.appearance)
+  const afterSecondRestart = (await (await open()).engine.getRoleConfig())
+  assert.deepEqual(afterSecondRestart.roles.worker.appearance, current.roles.worker.appearance)
+  assert.deepEqual((await restarted.getRoleConfigHistory()).find(item => item.revision === applied.revision).roles.worker.appearance,
+    current.roles.worker.appearance)
 })

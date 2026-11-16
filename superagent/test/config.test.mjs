@@ -5,7 +5,9 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import * as core from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
+import { PostgresStorage } from '../dist/postgres-storage.js'
 import { nativeContext, textResponse, toolResponse } from '../dev/native-mock.mjs'
+import { startPostgres } from './fixtures/postgres-harness.mjs'
 
 const roles = (workerModel = 'worker-custom', instructions = '{{goal}} {{constraints}} Always cite {{evidence}}.', skills = ['office']) => ({
   router: { name: 'Lead Router', model: { provider: 'mock', model: 'router-custom' }, instructions: 'Route only within {{goal}}.', skills: [] },
@@ -46,6 +48,28 @@ test('role configuration is revisioned, validated, replayed and persisted', asyn
   const persisted = await reopened.getRoleConfig()
   assert.equal(persisted.revision, 2)
   assert.equal(persisted.roles.worker.model.model, 'worker-custom')
+})
+
+test('PostgreSQL stores role appearance images in versioned records and restores current/history views', {
+  skip: process.platform === 'win32' && 'The embedded PostgreSQL fixture does not start on this Windows host.',
+  timeout: 120000,
+}, async t => {
+  const postgres = await startPostgres('role-config-appearance-pg-')
+  t.after(() => postgres.close())
+  const { storage, database } = await postgres.newStorage()
+  const store = new core.RoleConfigStore(storage, 'personal', roles())
+  const image = `data:image/png;base64,${Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.alloc(90_000)]).toString('base64')}`
+  const nextRoles = { ...roles(), worker: { ...roles().worker, appearance: { shape: 'moon', color: '#336699', image } } }
+  const saved = await storage.transaction('personal', tx => store.write(tx, 1, nextRoles))
+  assert.equal(saved.roles.worker.appearance.image, image)
+  const stored = await storage.transaction('personal', tx => tx.get('role-config', 'role-config'))
+  assert.equal(stored.roles.worker.appearance.image, undefined)
+  assert.ok(stored.imageChunks.worker > 0)
+
+  const reopened = postgres.register(await PostgresStorage.open({ ...postgres.configuration, database }))
+  const restored = new core.RoleConfigStore(reopened, 'personal', roles())
+  assert.deepEqual((await restored.currentView()).roles.worker.appearance, nextRoles.worker.appearance)
+  assert.deepEqual((await restored.atRevision(2)).roles.worker.appearance, nextRoles.worker.appearance)
 })
 
 test('virtual defaults stay unpersisted until an explicit save and a second engine keeps the saved routes', async t => {

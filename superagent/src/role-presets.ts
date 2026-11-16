@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto'
-import { validateRoleConfig, type RoleConfig, type RoleConfigView, type RoleModel, type RoleProfile } from './config.js'
+import { parseRoleAppearance, validateRoleConfig, type RoleAppearance, type RoleConfig, type RoleConfigView, type RoleModel, type RoleProfile } from './config.js'
 import { CoreError, identifier } from './model.js'
 
 export type PresetRole = 'main' | 'router' | 'worker'
-export interface PresetAppearance { shape?: string; color?: string; image?: string }
+export type PresetAppearance = RoleAppearance
 export interface RolePreset extends RoleProfile { id: string; appearance?: PresetAppearance }
 export interface LegacyPresetSource { identity: string; botId: string; digest: string }
 export interface LegacyPresetPreview {
@@ -23,7 +23,6 @@ export interface LegacyPresetDecision extends Pick<LegacyPresetPreview, 'key' | 
 }
 
 const baseProfile: RoleProfile = { name: 'Unconfigured', model: { provider: 'unconfigured', model: 'unconfigured' }, instructions: '', skills: [] }
-const maxImageBytes = 120_000
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex')
 const object = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
 function invalid(message: string): never { throw new CoreError('INVALID_PRESET', message) }
@@ -43,37 +42,7 @@ function validLegacyName(value: unknown): value is string {
   catch { return false }
 }
 
-function image(value: unknown): value is string {
-  if (typeof value !== 'string' || value.length > Math.ceil(maxImageBytes * 4 / 3) + 64) return false
-  const matched = /^data:image\/(png|jpeg|gif|webp);base64,([A-Za-z0-9+/]+={0,2})$/u.exec(value)
-  if (!matched) return false
-  const bytes = Buffer.from(matched[2]!, 'base64')
-  if (!bytes.length || bytes.length > maxImageBytes || bytes.toString('base64') !== matched[2]) return false
-  if (matched[1] === 'png') return bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
-  if (matched[1] === 'jpeg') return bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255
-  if (matched[1] === 'gif') return bytes.subarray(0, 6).toString('ascii') === 'GIF87a' || bytes.subarray(0, 6).toString('ascii') === 'GIF89a'
-  return bytes.length >= 12 && bytes.subarray(0, 4).toString('ascii') === 'RIFF' && bytes.subarray(8, 12).toString('ascii') === 'WEBP'
-}
-
-function appearance(value: unknown): PresetAppearance | undefined {
-  if (value === undefined) return undefined
-  if (!object(value)) invalid('Appearance accepts shape, color and an embedded image only.')
-  if (Object.keys(value).some(key => !['shape', 'color', 'image'].includes(key))) invalid('Appearance accepts shape, color and an embedded image only.')
-  const clean: PresetAppearance = {}
-  if (value.shape !== undefined) {
-    if (typeof value.shape !== 'string' || !/^[a-z][a-z0-9_-]{0,31}$/u.test(value.shape)) invalid('The appearance shape is invalid.')
-    clean.shape = value.shape
-  }
-  if (value.color !== undefined) {
-    if (typeof value.color !== 'string' || !/^(?:#[0-9a-fA-F]{6}|[a-z][a-z0-9-]{0,31})$/u.test(value.color)) invalid('The appearance color is invalid.')
-    clean.color = value.color
-  }
-  if (value.image !== undefined) {
-    if (!image(value.image)) invalid('The appearance image must be a bounded PNG, JPEG, GIF or WebP data URL.')
-    clean.image = value.image
-  }
-  return Object.keys(clean).length ? clean : undefined
-}
+const appearance = (value: unknown): PresetAppearance | undefined => parseRoleAppearance(value, 'INVALID_PRESET')
 
 /** Pure preset data. It carries no Bot identity, resource grant or execution permission. */
 export function createRolePreset(input: unknown): RolePreset {
@@ -199,8 +168,9 @@ export function prepareRolePresetApplication(input: { commandId: string; current
   }
   safeId(input.commandId, 'commandId'); role(input.targetRole)
   validateRoleConfig(input.current.roles)
-  const { name, model, instructions, skills } = createRolePreset(input.preset)
-  const roles: RoleConfig = { ...structuredClone(input.current.roles), [input.targetRole]: { name, model, instructions, skills } }
+  const { name, model, instructions, skills, appearance: look } = createRolePreset(input.preset)
+  const roles: RoleConfig = { ...structuredClone(input.current.roles), [input.targetRole]: { name, model, instructions, skills,
+    ...(look === undefined ? {} : { appearance: look }) } }
   validateRoleConfig(roles)
   return { commandId: input.commandId, expectedRevision: input.current.revision, roles }
 }

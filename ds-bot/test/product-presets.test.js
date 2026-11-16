@@ -37,7 +37,8 @@ async function withPresets(call, settingsRevision, inspect, onReload) {
     const applied = []
     const render = async revision => React.act(async () => {
       root.render(React.createElement(module.exports.ProductPresetSettings, { binding: { instanceId: 'personal' },
-        call, settingsRevision: revision, onApplied: result => applied.push(result), onReload }))
+        call, settingsRevision: revision, roleSettings: { roles: { worker: { appearance: { shape: 'moon' } } } },
+        onApplied: result => applied.push(result), onReload }))
     })
     const clickNode = async button => React.act(async () => {
       button.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
@@ -164,6 +165,7 @@ test('old copy review excludes permissions and history, reports conflict, and pe
   }
   await withPresets(call, 3, async ({ doc, click, clickNode, change }) => {
     await click('Review old configuration')
+    assert.equal(doc.querySelector('.bt-product-preset-target .bt-mark')?.getAttribute('data-shape'), 'moon')
     await change('Copy identity', 'old-export')
     await change('Old Bot ID', 'bot-a')
     await change('Old configuration copy', JSON.stringify({ mainBotIds: ['bot-a'], bots: { 'bot-a': {

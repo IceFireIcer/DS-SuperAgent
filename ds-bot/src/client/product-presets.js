@@ -124,7 +124,7 @@ function DraftFields({ draft, onChange, onUploading, busy }) {
 }
 
 /** Settings page content. The parent supplies its authorized productCall and current settings revision. */
-export function ProductPresetSettings({ binding, call, settingsRevision, onApplied, onReload }) {
+export function ProductPresetSettings({ binding, call, settingsRevision, roleSettings, onApplied, onReload }) {
   const instanceId = binding.instanceId
   const [items, setItems] = useState(null)
   const [cursor, setCursor] = useState(null)
@@ -345,9 +345,13 @@ export function ProductPresetSettings({ binding, call, settingsRevision, onAppli
             disabled: Boolean(busy), onChange: event => setSourceIdentity(event.target.value) })),
         h(Row, { label: t('Old Bot ID') }, h('input', { className: 'bt-bs-input', 'aria-label': t('Old Bot ID'),
           value: sourceBotId, required: true, disabled: Boolean(busy), onChange: event => setSourceBotId(event.target.value) })),
-        h(Row, { label: t('Target role') }, h('select', { className: 'bt-select', 'aria-label': t('Target role'), value: targetRole,
-          disabled: Boolean(busy), onChange: event => setTargetRole(event.target.value) },
-        roles.map(([id, name]) => h('option', { key: id, value: id }, t(name))))),
+        h(Row, { label: t('Target role') }, h('div', { className: 'bt-product-preset-target' },
+          h(BotMark, { look: lookOf({ id: `role-${targetRole}`, color: roleSettings?.roles?.[targetRole]?.appearance?.color,
+            avatar: roleSettings?.roles?.[targetRole]?.appearance }), size: 32,
+            label: t(targetRole === 'main' ? 'Main' : targetRole === 'router' ? 'Router' : 'Worker') }),
+          h('select', { className: 'bt-select', 'aria-label': t('Target role'), value: targetRole,
+            disabled: Boolean(busy), onChange: event => setTargetRole(event.target.value) },
+          roles.map(([id, name]) => h('option', { key: id, value: id }, t(name)))))),
         h(Row, { label: t('Old configuration copy'), hint: t('Paste a copy of bot/state.json. Only the selected profile fields are sent for review.'), stack: true },
           h('textarea', { className: 'bt-bs-input bt-bs-area', 'aria-label': t('Old configuration copy'), rows: 5,
             required: true, value: sourceText, disabled: Boolean(busy), onChange: event => setSourceText(event.target.value) }))),

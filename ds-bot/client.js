@@ -22675,7 +22675,7 @@ function DraftFields({ draft, onChange, onUploading, busy }) {
     ) : null
   );
 }
-function ProductPresetSettings({ binding, call: call2, settingsRevision, onApplied, onReload }) {
+function ProductPresetSettings({ binding, call: call2, settingsRevision, roleSettings, onApplied, onReload }) {
   const instanceId = binding.instanceId;
   const [items, setItems] = (0, import_react56.useState)(null);
   const [cursor, setCursor] = (0, import_react56.useState)(null);
@@ -23049,15 +23049,28 @@ function ProductPresetSettings({ binding, call: call2, settingsRevision, onAppli
           onChange: (event) => setSourceBotId(event.target.value)
         })),
         (0, import_react56.createElement)(Row, { label: t("Target role") }, (0, import_react56.createElement)(
-          "select",
-          {
-            className: "bt-select",
-            "aria-label": t("Target role"),
-            value: targetRole,
-            disabled: Boolean(busy),
-            onChange: (event) => setTargetRole(event.target.value)
-          },
-          roles.map(([id, name]) => (0, import_react56.createElement)("option", { key: id, value: id }, t(name)))
+          "div",
+          { className: "bt-product-preset-target" },
+          (0, import_react56.createElement)(BotMark, {
+            look: lookOf({
+              id: `role-${targetRole}`,
+              color: roleSettings?.roles?.[targetRole]?.appearance?.color,
+              avatar: roleSettings?.roles?.[targetRole]?.appearance
+            }),
+            size: 32,
+            label: t(targetRole === "main" ? "Main" : targetRole === "router" ? "Router" : "Worker")
+          }),
+          (0, import_react56.createElement)(
+            "select",
+            {
+              className: "bt-select",
+              "aria-label": t("Target role"),
+              value: targetRole,
+              disabled: Boolean(busy),
+              onChange: (event) => setTargetRole(event.target.value)
+            },
+            roles.map(([id, name]) => (0, import_react56.createElement)("option", { key: id, value: id }, t(name)))
+          )
         )),
         (0, import_react56.createElement)(
           Row,
@@ -26275,6 +26288,7 @@ function applyProduct(ctx) {
               binding,
               call: productCall,
               settingsRevision: snapshot.revision,
+              roleSettings: snapshot,
               onApplied: refreshAfterPreset,
               onReload: refreshAfterPreset
             }) : page === "memory" ? (0, import_react61.createElement)(ProductMemorySettings, { binding, works: view.getSnapshot().works, call: productCall }) : page === "supervision" ? (0, import_react61.createElement)(ProductSupervisionSettings, { binding, call: productCall }) : (0, import_react61.createElement)(

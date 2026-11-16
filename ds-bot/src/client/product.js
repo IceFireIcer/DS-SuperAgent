@@ -1166,7 +1166,7 @@ export function applyProduct(ctx) {
               } })
               : page === 'preparations' ? h(ProductProactiveSettings, { binding, call: productCall })
               : page === 'presets' ? h(ProductPresetSettings, { binding, call: productCall,
-                settingsRevision: snapshot.revision, onApplied: refreshAfterPreset, onReload: refreshAfterPreset })
+                settingsRevision: snapshot.revision, roleSettings: snapshot, onApplied: refreshAfterPreset, onReload: refreshAfterPreset })
                 : page === 'memory' ? h(ProductMemorySettings, { binding, works: view.getSnapshot().works, call: productCall })
                 : page === 'supervision' ? h(ProductSupervisionSettings, { binding, call: productCall }) : h(Fragment, null,
             error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
