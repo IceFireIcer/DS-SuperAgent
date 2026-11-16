@@ -29,6 +29,7 @@ import { assertHostTakeoverSettled, hostTakeoverKey, isHostTakeoverPending, load
 import { assertReferenceShape, type EnvironmentAssetReference } from './environment-assets.js'
 import type { MainWorkBrief, MainWorkItem } from './work-delegation.js'
 import { resolveProductAttachments } from './product-attachments.js'
+import { workerMcpName, workerMcpTool, type WorkerMcpBinding } from './worker-mcp-tool.js'
 
 const maxRecoveryAttempts = 3
 const maxDeliveryAttempts = 5
@@ -182,6 +183,7 @@ export class Execution {
   private readonly context: ContextReader
   private readonly roleConfig: RoleConfigStore
   private readonly executionPolicy: ExecutionPolicyStore
+  private workerMcp: WorkerMcpBinding | undefined
   constructor(private readonly storage: Storage, private readonly instanceId: string, private readonly effects: Effects, private readonly sessions: NativeSessions,
     private readonly inputs: WorkInputs, private readonly attentions: Attentions, private readonly sourceEvents: SourceEvents,
     private allowedRequesterIds: string[], private readonly environments: ExecutionEnvironment[] = [], private readonly slots?: Slots, jobs?: Jobs,
@@ -294,6 +296,13 @@ export class Execution {
 
   setAllowedRequesterIds(ids: string[]) {
     this.allowedRequesterIds = [...ids]
+  }
+
+  /** Called once by the trusted Host before processing work; never exposed as an Agent tool. */
+  configureWorkerMcp(binding: WorkerMcpBinding) {
+    if (this.workerMcp) throw new CoreError('INVALID_CONFIG', 'The approved MCP tool is already configured.')
+    workerMcpName(binding.config)
+    this.workerMcp = binding
   }
 
   handlers(): Record<'notice' | 'relay', EffectHandler> {
@@ -1108,11 +1117,42 @@ export class Execution {
       ...(allowed.has('read') && assets?.skills ? [listSkillsTool] : []),
       ...(commandNames.length ? [commandTool] : []),
     ] : []
+    const mcpScope = this.workerMcp && bound && environment?.kind === 'local' && assignment.environment ? async () => {
+      if (reported || askedAttention) throw new CoreError('REPORT_SEALED', 'Tools are sealed after the report or a human question.')
+      if (controller.signal.aborted) throw new CoreError('TICKET_BLOCKED', 'The Worker turn was stopped.')
+      return this.storage.transaction(this.instanceId, async tx => {
+        const current = await tx.get<Assignment>('assignment', ticketId)
+        const ticket = await tx.get<Work['ticket']>('ticket', ticketId)
+        const link = await tx.get<{ workBriefId: string; workItemId: string }>('work-ticket', ticketId)
+        const item = link ? await tx.get<MainWorkItem>('work-item', link.workItemId) : undefined
+        const brief = item ? await tx.get<MainWorkBrief>('work-brief', item.workBriefId) : undefined
+        if (!current || current.id !== assignment.id || current.generation !== assignment.generation
+          || current.state !== 'running' || current.runtimeToken !== this.runtimeToken
+          || !ticket || ticket.state !== 'open' || ticket.constraint
+          || !link || !item || !brief || item.id !== link.workItemId || item.workBriefId !== link.workBriefId
+          || brief.instanceId !== this.instanceId || brief.environmentId !== assignment.environment!.id
+          || !current.environment || current.environment.kind !== 'local'
+          || !sameEnvironment(current.environment, environment)) {
+          throw new CoreError('STALE_ASSIGNMENT', 'Only the current local work Assignment may call this MCP tool.')
+        }
+        return { instanceId: this.instanceId, resourceId: this.workerMcp!.config.resourceId,
+          role: 'worker' as const, purpose: 'tool' as const, workItemId: item.id, environmentId: current.environment!.id }
+      })
+    } : undefined
+    const mcpTools: NativeTool[] = mcpScope ? (() => {
+      const tool = workerMcpTool(this.workerMcp!, mcpScope, (outcome, output) => {
+        toolFacts.push({ tool: workerMcpName(this.workerMcp!.config), outcome, output })
+      })
+      return [{ ...tool, execute: async (args, signal) => {
+        if (toolFacts.length >= 24) throw new CoreError('TOOL_BUDGET', 'The Worker tool-call budget was exhausted.')
+        return tool.execute(args, signal)
+      } }]
+    })() : []
     /**
      * A child gets the same local capabilities but its own accounting: its calls must not consume the parent's
      * tool budget or satisfy the parent's verification rule for `report_ready`.
      */
-    const childTools = (): NativeTool[] => bound ? environmentTools.map(tool => ({
+    const childTools = (): NativeTool[] => bound ? [...environmentTools.map(tool => ({
       name: tool.name, description: tool.description, parameters: tool.parameters,
       execute: async (args: Record<string, string>, signal: AbortSignal) => {
         if (tool.name === 'read_asset') await authorizeAssetRead(args)
@@ -1121,7 +1161,7 @@ export class Execution {
         if (tool.name === 'save_attachment') await recordSavedAsset(output)
         return JSON.stringify(output)
       },
-    })) : []
+    })), ...(mcpScope ? [workerMcpTool(this.workerMcp!, mcpScope, () => {})] : [])] : []
     // Background work outlives the turn: the tool returns a job identity at once, and the completion event
     // arrives as a later turn on this same Session instead of holding the Router or this step open.
     const startLocalJob = async (name: string, start: (jobId: string) => Promise<LocalJob>) => {
@@ -1442,6 +1482,7 @@ export class Execution {
         ...(bound ? { cwd: bound.cwd } : {}), signal: controller.signal, tools: status ? statusTools : [
       contextTool,
       ...environmentTools,
+      ...mcpTools,
       ...jobTools,
       ...subagentTools,
       {

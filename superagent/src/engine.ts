@@ -25,6 +25,7 @@ import { HostLease, type HostOptions } from './host.js'
 import { ClientAccess } from './client-access.js'
 import { feishuQuestionCode } from './feishu-delivery.js'
 import { ProductCredentialManager } from './product-credential-manager.js'
+import type { WorkerMcpBinding } from './worker-mcp-tool.js'
 import type { ProductCredentialRecords } from './product-credential-vault.js'
 import type { ProductAttachments } from './product-attachments.js'
 import { listSupervisorProposals, Supervisor, type SupervisorOptions, type SupervisorProposal } from './supervisor.js'
@@ -1504,6 +1505,12 @@ export class Engine {
     }
     this.assertAuthoringActor()
     return new ProductCredentialManager(this.storage, this.instanceId, records)
+  }
+
+  /** Host-only configuration of one approved Worker tool; never part of the model command surface. */
+  configureWorkerMcp(binding: WorkerMcpBinding) {
+    if (!this.execution) throw new CoreError('UNAVAILABLE', 'Worker Sessions are not configured.')
+    this.execution.configureWorkerMcp(binding)
   }
 
   async createSchedule(request: ScheduleCreate) {
