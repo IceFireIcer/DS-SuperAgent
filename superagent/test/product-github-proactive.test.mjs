@@ -222,3 +222,173 @@ test('stopping the product GitHub receiver rejects a fetched page before intake 
   assert.equal((await call('proactive-list')).items[0].state, 'observed')
   assert.equal((await call('github-status')).cursor, '1')
 })
+
+test('auto CI preparation enters a real bounded Router Ticket without treating preparation as completion', { timeout: 35000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'r5-proactive-ticket-'))
+  await mkdir(join(directory, 'data'))
+  let events = [], host, workerTools = [], routerCalls = 0, completeTicket = false, originalSourceRead = false
+  const native = await nativeContext(join(directory, 'sessions'), function* (request) {
+    const names = request.tools.map(tool => tool.name)
+    if (request.model === 'router' && names.includes('establish_proactive_ticket')) {
+      if (completedToolCount(request) === 0) { routerCalls++; yield* toolResponse('establish_proactive_ticket', {}) }
+      else yield* textResponse('The Router recorded its decision.')
+    } else if (request.model === 'worker' && names.includes('submit_preparation')) {
+      const calls = completedToolCount(request)
+      if (!calls) yield* toolResponse('write_file', { path: 'review.md', text: 'Checked CI evidence.' })
+      else if (calls === 1) yield* toolResponse('submit_preparation', {
+        summary: 'Investigate failing CI.', evidence: 'A source check failed.', paths: '["review.md"]',
+      })
+      else yield* textResponse('Review submitted.')
+    } else if (request.model === 'worker') {
+      workerTools = names
+      if (completeTicket) {
+        const calls = completedToolCount(request)
+        if (!calls) yield* toolResponse('read_proactive_source', { offset: '0', maxBytes: '1024' })
+        else if (calls === 1) {
+          originalSourceRead = JSON.stringify(request.messages.filter(message => message.role === 'tool')).includes('A different failing check on PR 12.')
+          yield* toolResponse('write_file', { path: 'verified.txt', text: 'Confirmed on the isolated CI evidence.' })
+        } else if (calls === 2) yield* toolResponse('read_file', { path: 'verified.txt' })
+        else if (calls === 3) yield* toolResponse('report_ready', { result: 'Verified the isolated CI finding.',
+          evidence: 'Read back verified.txt after writing.', artifacts: 'verified.txt' })
+        else yield* textResponse('The Worker reported verified work.')
+      } else yield* textResponse('The review is useful, but this Ticket is not complete without verified work.')
+    } else yield* textResponse('No Main request.')
+  })
+  t.after(async () => { await host?.close(); await native.fiber.dispose(); await rm(directory, { recursive: true, force: true }) })
+  const config = { databasePath: join(directory, 'data', 'state.sqlite'), instanceId: 'private', actorId: 'owner',
+    main: { provider: 'mock', model: 'main' }, router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' },
+    github: { owner: 'acme', repo: 'repo', actorId: 'receiver', allowedActorIds: ['receiver'],
+      transport: { listEvents: async () => ({ events }) }, intervalMs: 40, maxBackoffMs: 40 } }
+  host = await createProductHost(native, config)
+  const call = (endpoint, payload = {}) => host.dispatch(endpoint, { instanceId: 'private', ...payload })
+  await call('proactive-save', { commandId: 'ci-auto', expectedRevision: 1, rules: [{
+    id: 'ci-work', name: 'Inspect CI', mode: 'auto', enabled: true,
+    match: { sourceInstanceIds: ['github:acme/repo'], actorKinds: ['ci'], addressing: ['direct'] },
+    scope: 'Investigate CI evidence in the isolated directory only.', communication: 'silent',
+    budget: { maxRuns: 1, windowMs: 3600000, maxArtifactBytes: 4096 },
+  }] })
+  events = [{ deliveryId: 'ci-11', cursor: '1', repo: 'acme/repo', kind: 'ci', action: 'completed', number: 11,
+    id: 'check-11', authorId: 'github-actions', authorKind: 'ci', body: 'Check failure on PR 11.',
+    updatedAt: '2026-11-16T00:00:00Z' }]
+  let prepared
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const run = (await call('proactive-list')).items[0]
+    if (run?.work?.ticketId && run.work.assignment?.id) { prepared = run; break }
+    await delay(30)
+  }
+  assert.ok(prepared?.work?.ticketId, 'Router established an auditable Ticket for the rule-authorized source')
+  assert.equal(routerCalls, 1)
+  assert.equal(prepared.state, 'prepared')
+  assert.equal(prepared.work.status === 'ready', false, 'the preparation is not a completed Ticket')
+  assert.equal(prepared.work.mandate.strength, 'inferred')
+  assert.equal(prepared.work.mandate.scope, 'Investigate CI evidence in the isolated directory only.')
+  assert.equal(prepared.work.trigger.proactive.runId, prepared.id)
+  assert.equal(prepared.work.assignment.environment.root, prepared.isolatedDirectory)
+  for (let attempt = 0; attempt < 100 && !workerTools.length; attempt++) await delay(30)
+  assert.deepEqual(workerTools.sort(), ['read_context', 'read_proactive_source', 'read_file', 'write_file', 'glob', 'grep', 'report_ready'].sort())
+  assert.equal((await call('history')).works.length, 0, 'CI does not impersonate Main')
+  await call('proactive-stop', { commandId: 'stop-ci-ticket', runId: prepared.id, reason: 'Stopped by the operator.' })
+  const stopped = await call('proactive-read', { runId: prepared.id })
+  assert.equal(stopped.work.status, 'stopped')
+  await host.close()
+  host = await createProductHost(native, config)
+  assert.equal((await call('proactive-read', { runId: prepared.id })).work.ticketId, prepared.work.ticketId)
+  assert.equal((await call('proactive-read', { runId: prepared.id })).work.status, 'stopped')
+  assert.equal(routerCalls, 1, 'Host recovery does not repeat a Router decision')
+  completeTicket = true
+  await call('proactive-save', { commandId: 'ci-auto-next', expectedRevision: 2, rules: [{
+    id: 'ci-work', name: 'Inspect CI', mode: 'auto', enabled: true,
+    match: { sourceInstanceIds: ['github:acme/repo'], actorKinds: ['ci'], addressing: ['direct'] },
+    scope: 'Investigate CI evidence in the isolated directory only.', communication: 'silent',
+    budget: { maxRuns: 3, windowMs: 3600000, maxArtifactBytes: 4096 },
+  }] })
+  events.push({ ...events[0], deliveryId: 'ci-12', cursor: '2', id: 'check-12', body: 'A different failing check on PR 12.',
+    updatedAt: '2026-11-16T00:01:00Z' })
+  let verified
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const run = (await call('proactive-list')).items.find(item => item.work?.status === 'ready')
+    if (run) { verified = run; break }
+    await delay(30)
+  }
+  assert.ok(verified?.work?.ticketId)
+  assert.equal(verified.work.report.result, 'Verified the isolated CI finding.')
+  assert.equal(originalSourceRead, true, 'the Worker read the current original CI event before reporting')
+  assert.deepEqual(verified.work.report.artifacts.map(item => item.path), ['verified.txt'])
+  assert.equal(verified.work.budgets.workerTurnStepLimit, 8)
+  assert.equal(verified.work.budgets.workerLastTurnSteps > 0, true)
+  assert.match((await call('proactive-work-artifact', { runId: verified.id, path: 'verified.txt' })).text,
+    /Confirmed on the isolated CI evidence/u)
+  await assert.rejects(call('proactive-work-artifact', { runId: verified.id, path: '../state.sqlite' }), { code: 'NOT_FOUND' })
+  assert.equal(verified.work.mandate.strength, 'inferred')
+  assert.equal((await call('history')).works.length, 0)
+  assert.equal((await call('history')).messages.length, 0, 'silent work does not wake Main')
+  await host.close()
+  host = await createProductHost(native, config)
+  assert.equal((await call('proactive-read', { runId: verified.id })).work.report.id, verified.work.report.id)
+  assert.match((await call('proactive-work-artifact', { runId: verified.id, path: 'verified.txt' })).text,
+    /Confirmed on the isolated CI evidence/u)
+  assert.equal(routerCalls, 2, 'Host restart does not repeat either Router decision')
+  events.push({ ...events[0], deliveryId: 'ci-13', cursor: '3', id: 'check-13', body: 'A third failing check on PR 13.',
+    updatedAt: '2026-11-16T00:02:00Z' })
+  let third
+  for (let attempt = 0; attempt < 200; attempt++) {
+    third = (await call('proactive-list')).items.find(item => item.work?.status === 'ready' && item.id !== verified.id)
+    if (third) break
+    await delay(30)
+  }
+  assert.ok(third?.work?.ticketId)
+  events.push({ ...events.at(-1), deliveryId: 'ci-13-edit', cursor: '4', action: 'edited',
+    body: 'The check was corrected; the original review is stale.', updatedAt: '2026-11-16T00:03:00Z' })
+  for (let attempt = 0; attempt < 200; attempt++) {
+    if ((await call('proactive-read', { runId: third.id })).work.status === 'stopped') break
+    await delay(30)
+  }
+  assert.equal((await call('proactive-read', { runId: third.id })).work.status, 'stopped',
+    'an edited native source revokes the original Ticket')
+  await call('proactive-pause', { commandId: 'pause-real-ticket', paused: true })
+  assert.equal((await call('proactive-read', { runId: verified.id })).work.status, 'stopped',
+    'the standing grant cannot leave an accepted Ticket runnable after pause')
+})
+
+test('pausing a standing rule before the Router tool runs prevents a late CI Ticket', { timeout: 20000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'r5-proactive-route-stop-'))
+  await mkdir(join(directory, 'data'))
+  let events = [], host, routerWaiting = false, releaseRouter
+  const native = await nativeContext(join(directory, 'sessions'), async function* (request) {
+    const tools = request.tools.map(tool => tool.name)
+    if (tools.includes('establish_proactive_ticket')) {
+      if (completedToolCount(request)) { yield* textResponse('No further work.'); return }
+      routerWaiting = true
+      await new Promise(resolve => { releaseRouter = resolve })
+      yield* toolResponse('establish_proactive_ticket', {})
+    } else if (tools.includes('submit_preparation')) {
+      if (!completedToolCount(request)) yield* toolResponse('submit_preparation', {
+        summary: 'A bounded review is useful.', evidence: 'The CI check reported failure.', paths: '[]',
+      })
+      else yield* textResponse('Prepared.')
+    } else yield* textResponse('No work.')
+  })
+  t.after(async () => { releaseRouter?.(); await host?.close(); await native.fiber.dispose(); await rm(directory, { recursive: true, force: true }) })
+  host = await createProductHost(native, { databasePath: join(directory, 'data', 'state.sqlite'), instanceId: 'private',
+    actorId: 'owner', main: { provider: 'mock', model: 'main' }, router: { provider: 'mock', model: 'router' },
+    worker: { provider: 'mock', model: 'worker' }, github: { owner: 'acme', repo: 'repo', actorId: 'receiver',
+      allowedActorIds: ['receiver'], transport: { listEvents: async () => ({ events }) }, intervalMs: 40, maxBackoffMs: 40 } })
+  const call = (endpoint, payload = {}) => host.dispatch(endpoint, { instanceId: 'private', ...payload })
+  await call('proactive-save', { commandId: 'auto-stale', expectedRevision: 1, rules: [{ id: 'stale-ci', name: 'CI review',
+    mode: 'auto', enabled: true, match: { sourceInstanceIds: ['github:acme/repo'], actorKinds: ['ci'], addressing: ['direct'] },
+    scope: 'Inspect evidence only.', communication: 'silent', budget: { maxRuns: 1, windowMs: 3600000 } }] })
+  events = [{ deliveryId: 'ci-late', cursor: '1', repo: 'acme/repo', kind: 'ci', action: 'completed', number: 7,
+    id: 'check-late', authorId: 'github-actions', authorKind: 'ci', body: 'A failing check.', updatedAt: '2026-11-16T00:00:00Z' }]
+  for (let attempt = 0; attempt < 100 && !routerWaiting; attempt++) await delay(30)
+  assert.equal(routerWaiting, true)
+  await call('proactive-pause', { commandId: 'pause-before-route', paused: true })
+  releaseRouter()
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if ((await call('proactive-list')).items[0]?.work?.status === 'suppressed') break
+    await delay(30)
+  }
+  const [run] = (await call('proactive-list')).items
+  assert.equal(run.work.status, 'suppressed')
+  assert.equal(run.work.ticketId, undefined)
+  assert.equal((await call('history')).works.length, 0)
+})
