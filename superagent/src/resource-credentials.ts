@@ -410,19 +410,38 @@ export class ResourceCredentials {
       ...(input.sourceInstanceId === undefined ? {} : { sourceInstanceId: input.sourceInstanceId }) })
     const requestedPurpose = purpose(input.purpose)
     grantPurposes([requestedPurpose], requested)
+    const isAllowed = (current: StoredResource) => current.grants.some(grant => grant.purposes.includes(requestedPurpose)
+      && grant.scope.role === requested.role && (grant.scope.workItemId === undefined || grant.scope.workItemId === requested.workItemId)
+      && (grant.scope.environmentId === undefined || grant.scope.environmentId === requested.environmentId)
+      && (grant.scope.sourceInstanceId === undefined || grant.scope.sourceInstanceId === requested.sourceInstanceId))
     const reference = await this.storage.transaction(this.instanceId, async tx => {
       const current = await this.active(tx, input.resourceId)
-      if (!current.grants.some(grant => grant.purposes.includes(requestedPurpose)
-        && grant.scope.role === requested.role && (grant.scope.workItemId === undefined || grant.scope.workItemId === requested.workItemId)
-        && (grant.scope.environmentId === undefined || grant.scope.environmentId === requested.environmentId)
-        && (grant.scope.sourceInstanceId === undefined || grant.scope.sourceInstanceId === requested.sourceInstanceId))) {
+      if (!isAllowed(current)) {
         throw new CoreError('GRANT_DENIED', 'This resource is not granted for the requested use.')
       }
       return current.vaultReference!
     })
     // Vault and consumer errors may contain a secret; never forward their text to callers or logs.
-    try { return await this.vault.withSecret(this.instanceId, reference, consume) }
-    catch { throw new CoreError('CREDENTIAL_USE_FAILED', 'The credential could not be used.') }
+    let authorizationFailure: CoreError | undefined
+    try {
+      return await this.vault.withSecret(this.instanceId, reference, async secret => {
+        await this.storage.transaction(this.instanceId, async tx => {
+          const current = await this.active(tx, input.resourceId)
+          if (current.vaultReference !== reference) {
+            authorizationFailure = new CoreError('RESOURCE_STALE', 'The credential changed during use.')
+            throw authorizationFailure
+          }
+          if (!isAllowed(current)) {
+            authorizationFailure = new CoreError('GRANT_DENIED', 'This resource is no longer granted for the requested use.')
+            throw authorizationFailure
+          }
+        })
+        return consume(secret)
+      })
+    } catch {
+      if (authorizationFailure) throw authorizationFailure
+      throw new CoreError('CREDENTIAL_USE_FAILED', 'The credential could not be used.')
+    }
   }
 
   private async assertVault(reference: string) {

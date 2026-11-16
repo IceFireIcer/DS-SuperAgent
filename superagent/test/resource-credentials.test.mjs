@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { ResourceCredentials } from '../dist/index.js'
+import { CoreError, ResourceCredentials } from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 import { startPostgres } from './fixtures/postgres-harness.mjs'
 
@@ -24,7 +24,8 @@ async function fixture(t) {
     },
     async withSecret(instanceId, reference, consume) {
       if (vault.get(reference)?.instanceId !== instanceId) throw new Error('The reference is unavailable.')
-      return consume(vault.get(reference).value)
+      try { return await consume(vault.get(reference).value) }
+      catch { throw new CoreError('CREDENTIAL_USE_FAILED', 'The credential could not be used.') }
     },
   }
   return { database, storage, adapter, vault, connections, credentials: new ResourceCredentials(storage, 'personal', adapter) }
@@ -175,8 +176,38 @@ test('vault failures and consumer errors cannot print the secret through a resou
     assert.equal(error.message.includes('fictional-private-value'), false)
     return true
   })
+  await assert.rejects(credentials.use(use, async value => { throw new CoreError('GRANT_DENIED', `Rejected ${value}`) }), error => {
+    assert.equal(error.code, 'CREDENTIAL_USE_FAILED')
+    assert.equal(error.message.includes('fictional-private-value'), false)
+    return true
+  })
   vault.delete('vault:personal')
   await assert.rejects(credentials.use(use, async () => {}), { code: 'CREDENTIAL_USE_FAILED' })
+})
+
+test('use rechecks the grant immediately before the consumer receives the secret', async t => {
+  const { credentials, vault, storage } = await fixture(t)
+  const resource = await credentials.create({ instanceId: 'personal', commandId: 'create-race', label: 'Connector', vaultReference: 'vault:personal' })
+  const granted = await credentials.grant({ instanceId: 'personal', commandId: 'grant-race', resourceId: resource.id,
+    expectedRevision: 1, scope: { role: 'worker', workItemId: 'work-race' }, purposes: ['tool'] })
+  let revokeBeforeConsume = true
+  const raceVault = {
+    async assertReference(instanceId, reference) {
+      if (vault.get(reference)?.instanceId !== instanceId) throw new Error('Unavailable.')
+    },
+    withSecret: async (instanceId, reference, consume) => {
+      if (vault.get(reference)?.instanceId !== instanceId) throw new Error('Unavailable.')
+      if (revokeBeforeConsume) {
+        revokeBeforeConsume = false
+        await credentials.revoke({ instanceId: 'personal', commandId: 'revoke-race', resourceId: resource.id,
+          grantId: granted.grants[0].id, expectedRevision: 2 })
+      }
+      return consume(vault.get(reference).value)
+    },
+  }
+  const raced = new ResourceCredentials(storage, 'personal', raceVault)
+  await assert.rejects(raced.use({ instanceId: 'personal', resourceId: resource.id, role: 'worker', workItemId: 'work-race', purpose: 'tool' },
+    async () => { throw new Error('The consumer must not run after revocation.') }), { code: 'GRANT_DENIED' })
 })
 
 test('PostgreSQL persists the same scoped grants and revocation across connections', {
