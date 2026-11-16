@@ -26,7 +26,7 @@ test('the product Worker calls only its approved MCP tool through the live tool 
   const core = join(base, 'core')
   await Promise.all([mkdir(work), mkdir(core)])
   await writeFile(join(work, 'evidence.txt'), 'local verification\n')
-  const secret = 'fictional-worker-mcp-secret'
+  const secret = 'mock-worker-mcp-credential'
   const requests = []
   const calls = []
   let listStarted
