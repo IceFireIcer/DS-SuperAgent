@@ -94,6 +94,8 @@ test('the product Host grants an isolated browser to its current Worker and reco
   const browser = await host.dispatch('browser-read', { instanceId: 'personal', resourceId: resource.id })
   assert.equal(browser.state, 'available', 'a completed Assignment no longer holds the lease')
   assert.equal(browser.operations.at(-1).state, 'succeeded')
+  assert.equal(browser.grants.some(item => item.workItemId === workCard.brief.workItemId && item.active), true)
+  assert.equal(browser.grantsTruncated, false)
   assert.equal(JSON.stringify(browser).includes('Mock content'), false, 'page data stays out of product resource projections')
   assert.ok(workerTools.some(name => name === 'browser_use'))
   assert.ok(mainTools.every(name => !name.startsWith('browser_')))
@@ -124,7 +126,51 @@ test('the product Host grants an isolated browser to its current Worker and reco
   assert.equal(stopping.control.stop.state, 'stopping')
   assert.equal(stopping.control.stop.cancellationConfirmedAt, undefined)
   await host.dispatch('browser-resolve', { instanceId: 'personal', commandId: 'resolve-stop', resourceId: resource.id,
-    operationId: unknown.id, reason: 'The operator checked the page after the stopped request.' })
+    operationId: unknown.id, reason: 'INSPECTED' })
   await until(async () => (await host.dispatch('history', { instanceId: 'personal' })).works
     .some(item => item.brief?.workItemId === stopWork.brief.workItemId && item.control?.stop?.cancellationConfirmedAt))
+  const settled = await host.dispatch('browser-read', { instanceId: 'personal', resourceId: resource.id })
+  await assert.rejects(host.dispatch('browser-grant', { instanceId: 'personal', commandId: 'stale-grant',
+    resourceId: resource.id, workItemId: stopWork.brief.workItemId, expectedRevision: settled.revision - 1, active: false }),
+  { code: 'RESOURCE_STALE' })
+  const revokedGrant = await host.dispatch('browser-grant', { instanceId: 'personal', commandId: 'revoke-grant',
+    resourceId: resource.id, workItemId: stopWork.brief.workItemId, expectedRevision: settled.revision, active: false })
+  assert.equal(revokedGrant.active, false)
+  const projected = await host.dispatch('browser-read', { instanceId: 'personal', resourceId: resource.id })
+  assert.equal(projected.grants.some(grant => grant.workItemId === stopWork.brief.workItemId && grant.active),
+    false)
+  assert.equal(JSON.stringify(projected).includes('profileKey'), false)
+  assert.equal(JSON.stringify(projected).includes('Mock content'), false)
+  const grantStore = await SqliteStorage.open(config.databasePath)
+  await grantStore.transaction('personal', async tx => {
+    for (let index = 0; index < 50; index++) {
+      const resourceId = 'other-resource-a'
+      await tx.insert('browser-grant', JSON.stringify([resourceId, `dummy-${index}`]),
+        { resourceId, workItemId: `dummy-${index}`, active: true })
+    }
+    for (let index = 50; index < 101; index++) {
+      const resourceId = 'other-resource-b'
+      await tx.insert('browser-grant', JSON.stringify([resourceId, `dummy-${index}`]),
+        { resourceId, workItemId: `dummy-${index}`, active: true })
+    }
+  })
+  const isolated = await host.dispatch('browser-read', { instanceId: 'personal', resourceId: resource.id })
+  assert.equal(isolated.grantsTruncated, false, 'a different resource cannot exhaust this resource projection')
+  await grantStore.transaction('personal', async tx => {
+    await tx.insert('work-brief', 'full-brief', { id: 'full-brief', instanceId: 'personal', environmentId: resource.environmentId })
+    await tx.insert('work-item', 'full-work', { id: 'full-work', workBriefId: 'full-brief' })
+    await tx.insert('work-item-ticket', 'full-work', { ticketId: 'full-ticket' })
+    for (let index = 0; index < 100; index++) {
+      const workItemId = `full-${index}`
+      await tx.insert('browser-grant', JSON.stringify([resource.id, workItemId]),
+        { resourceId: resource.id, workItemId, active: false })
+    }
+  })
+  await grantStore.close()
+  const truncated = await host.dispatch('browser-read', { instanceId: 'personal', resourceId: resource.id })
+  assert.equal(truncated.grants.length, 100)
+  assert.equal(truncated.grantsTruncated, true)
+  await assert.rejects(host.dispatch('browser-grant', { instanceId: 'personal', commandId: 'over-limit',
+    resourceId: resource.id, workItemId: 'full-work', expectedRevision: truncated.revision, active: true }),
+  { code: 'RESOURCE_LIMIT' })
 })

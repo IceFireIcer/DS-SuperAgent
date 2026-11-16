@@ -6,7 +6,7 @@ import { readProductArtifact, readProductAttachment, uploadPayload, uploadWithRe
 import { FeishuSourceStatus } from './product-feishu.js'
 import { BrandMark } from './sidebar.js'
 import { Card, Row } from './bot-settings.js'
-import { ClockIcon, CloseIcon, MemoryIcon, SlidersIcon } from './icons.js'
+import { ClockIcon, CloseIcon, GlobeIcon, MemoryIcon, SlidersIcon } from './icons.js'
 import { SCHEDULE_CSS } from './schedules.js'
 import { ProductScheduleSettings, PRODUCT_SCHEDULE_CSS } from './product-schedules.js'
 import { ProductProactiveSettings, ProactiveReview, PRODUCT_PROACTIVE_CSS } from './product-proactive.js'
@@ -23,6 +23,7 @@ import { installLocale, t } from './i18n.js'
 import { allThemes, themeCss } from './themes.js'
 import { SHELL_CSS, CONVERSATION_CSS, installCompiledStyles, installStyles } from './styles.js'
 import { ProductMcpSettings } from './product-mcp-settings.js'
+import { ProductBrowserSettings, PRODUCT_BROWSER_CSS } from './product-browser-settings.js'
 
 const clientBridge = () => window.dsBotApp?.productClient
 let activeHost = 'local'
@@ -1162,12 +1163,15 @@ export function applyProduct(ctx) {
           h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
             'aria-current': page === 'memory' ? 'page' : undefined, onClick: () => setPage('memory') }, h(MemoryIcon), t('Memory')),
           !viewState.connection?.connected ? h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
+            'aria-current': page === 'browser' ? 'page' : undefined, onClick: () => setPage('browser') }, h(GlobeIcon), t('Browser resources')) : null,
+          !viewState.connection?.connected ? h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
             'aria-current': page === 'supervision' ? 'page' : undefined, onClick: () => setPage('supervision') }, h(SlidersIcon), t('Supervision')) : null,
           h('span', { className: 'bt-main-settings-revision' }, `${t('Configuration')} v${snapshot.revision}`)),
         h('div', { className: 'bt-settings-main' },
           h('div', { className: 'bt-settings-head' }, h('h2', null, page === 'schedules' ? t('Scheduled tasks')
             : page === 'presets' ? t('Role presets') : page === 'preparations' ? t('Proactive preparation')
-              : page === 'memory' ? t('Memory') : page === 'supervision' ? t('Supervision') : t('Super-agent settings'))),
+              : page === 'memory' ? t('Memory') : page === 'browser' ? t('Browser resources')
+                : page === 'supervision' ? t('Supervision') : t('Super-agent settings'))),
           h('div', { className: 'bt-settings-scroll' },
             page === 'schedules' ? h(ProductScheduleSettings, { binding, works: view.getSnapshot().works, call: productCall,
               onViewWork: ({ ticketIds = [], workBriefId } = {}) => {
@@ -1188,6 +1192,8 @@ export function applyProduct(ctx) {
               : page === 'presets' ? h(ProductPresetSettings, { binding, call: productCall,
                 settingsRevision: snapshot.revision, roleSettings: snapshot, onApplied: refreshAfterPreset, onReload: refreshAfterPreset })
                 : page === 'memory' ? h(ProductMemorySettings, { key: binding.instanceId, binding, works: view.getSnapshot().works, call: productCall })
+                : page === 'browser' ? h(ProductBrowserSettings, { binding, works: view.getSnapshot().works,
+                  directoryOptions: viewState.directoryOptions, call: productCall })
                 : page === 'supervision' ? h(ProductSupervisionSettings, { binding, call: productCall }) : h(Fragment, null,
             error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
             viewState.directoryError ? h('p', { className: 'bt-main-error', role: 'alert' }, viewState.directoryError) : null,
@@ -1321,7 +1327,7 @@ export function applyProduct(ctx) {
         onClose: () => view.set(current => ({ ...current, connectOpen: false })) }) : null)
   }
   const shadow = (name, component) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200 }, component))
-  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SCHEDULE_CSS + MODEL_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + LEARNING_CSS, 'main'), 'superagent: existing chat styles')
+  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SCHEDULE_CSS + MODEL_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + LEARNING_CSS, 'main'), 'superagent: existing chat styles')
   ctx.effect(() => { const style = installStyles(themeCss(allThemes().deepseek), 'main-theme'); return () => style.remove() }, 'superagent: existing theme')
   shadow('main.conversation', ProductSurface)
   shadow('sidebar.workspaces', MainNavigation)

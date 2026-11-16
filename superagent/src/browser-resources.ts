@@ -72,6 +72,7 @@ function profileKey(instanceId: string, resourceId: string) {
 }
 
 const grantKey = (resourceId: string, workItemId: string) => canonicalJson([resourceId, workItemId])
+const browserObservations = ['UNCHANGED', 'CHANGED', 'CLOSED', 'INSPECTED'] as const
 
 /** Product-owned profiles and durable, single-Assignment write control. No Bot identity is imported. */
 export class BrowserResources {
@@ -89,6 +90,23 @@ export class BrowserResources {
     const resource = await tx.get<BrowserResource>('browser-resource', resourceId)
     if (!resource || resource.instanceId !== this.instanceId) throw new CoreError('NOT_FOUND', 'The browser resource is unavailable.')
     return resource
+  }
+
+  private async resourceGrants(tx: AsyncTx, resourceId: string) {
+    const prefix = `${JSON.stringify([resourceId]).slice(0, -1)},`
+    const grants: BrowserGrant[] = []
+    let after = prefix
+    for (let pageCount = 0; pageCount < 2; pageCount++) {
+      const page = await tx.scan<BrowserGrant>('browser-grant', { limit: 100, after })
+      for (const item of page.items) {
+        if (!item.id.startsWith(prefix)) return { items: grants, truncated: false }
+        grants.push(item.value)
+        if (grants.length === 100) return { items: grants, truncated: true }
+      }
+      if (!page.cursor?.startsWith(prefix)) return { items: grants, truncated: false }
+      after = page.cursor
+    }
+    return { items: grants, truncated: true }
   }
 
   private command<T>(commandId: string, input: unknown, apply: (tx: AsyncTx) => Promise<T>): Promise<T> {
@@ -166,6 +184,10 @@ export class BrowserResources {
       if (resource.state !== 'active' || resource.revision !== input.expectedRevision) throw new CoreError('RESOURCE_STALE', 'The browser resource changed.')
       await this.work(tx, input.workItemId, resource.environmentId)
       const key = grantKey(resource.id, input.workItemId)
+      const existing = await tx.get<BrowserGrant>('browser-grant', key)
+      if (!existing && (await this.resourceGrants(tx, resource.id)).truncated) {
+        throw new CoreError('RESOURCE_LIMIT', 'The browser grant index for this resource is full.')
+      }
       const grant: BrowserGrant = { resourceId: resource.id, workItemId: input.workItemId, active: input.active }
       if (!await tx.replace('browser-grant', key, grant)) await tx.insert('browser-grant', key, grant)
       await tx.replace('browser-resource', resource.id, { ...resource, revision: resource.revision + 1 })
@@ -188,12 +210,15 @@ export class BrowserResources {
     const lease = await tx.get<BrowserLease>('browser-lease', resource.id)
     const owner = lease ? await tx.get<Assignment>('assignment', lease.ticketId) : undefined
     const operation = lease?.operationId ? await tx.get<BrowserOperation>('browser-operation', lease.operationId) : undefined
+    const grants = await this.resourceGrants(tx, resource.id)
     const occupied = owner && lease && owner.id === lease.assignmentId && owner.generation === lease.generation && owner.state === 'running'
     const state = operation?.state === 'unknown' || operation?.state === 'pending' && !occupied ? 'unknown'
       : resource.state === 'revoked' ? 'revoked'
         : occupied ? 'busy' : 'available'
     return { id: resource.id, environmentId: resource.environmentId, label: resource.label,
       revision: resource.revision, state,
+      grants: grants.items.map(grant => ({ workItemId: grant.workItemId, active: grant.active })),
+      grantsTruncated: grants.truncated,
       ...(state === 'busy' || state === 'unknown' ? { owner: { ticketId: lease!.ticketId, assignmentId: lease!.assignmentId, generation: lease!.generation } } : {}),
       operations: (await Promise.all(resource.operationIds.map(id => tx.get<BrowserOperation>('browser-operation', id)))).filter(Boolean) }
   }
@@ -329,8 +354,8 @@ export class BrowserResources {
   async resolve(input: { instanceId: string; commandId: string; resourceId: string; operationId: string; reason: string }) {
     this.identity(input.instanceId)
     identifier(input.operationId, 'operationId')
-    if (typeof input.reason !== 'string' || !input.reason.trim() || Buffer.byteLength(input.reason) > 512) {
-      throw new CoreError('INVALID_INPUT', 'Record the observation used to reconcile this browser operation.')
+    if (!browserObservations.includes(input.reason as typeof browserObservations[number])) {
+      throw new CoreError('INVALID_INPUT', 'Choose the observed browser state used to reconcile this operation.')
     }
     return this.command(input.commandId, ['resolve', input.resourceId, input.operationId, input.reason], async tx => {
       const resource = await this.resource(tx, input.resourceId)
@@ -343,7 +368,7 @@ export class BrowserResources {
           && (assignment?.id !== lease.assignmentId || assignment.generation !== lease.generation || assignment.state !== 'running'))) {
         throw new CoreError('BROWSER_RECONCILE_REQUIRED', 'Only an unknown or abandoned browser operation can be reconciled.')
       }
-      const updated: BrowserOperation = { ...operation, state: 'resolved', resolution: input.reason.trim(), settledAt: Date.now() }
+      const updated: BrowserOperation = { ...operation, state: 'resolved', resolution: input.reason, settledAt: Date.now() }
       await tx.replace('browser-operation', operation.id, updated)
       const { operationId: _operationId, ...released } = lease
       await tx.replace('browser-lease', resource.id, released)

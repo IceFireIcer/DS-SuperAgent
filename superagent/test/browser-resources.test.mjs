@@ -83,9 +83,9 @@ test('one Environment browser is leased to one Assignment, and an unknown operat
   const afterRestart = new BrowserResources(storage, 'personal', 'alice', [environment], adapter, allowHost)
   await assert.rejects(afterRestart.use(b, { resourceId: created.id, action: 'snapshot' }, new AbortController().signal), { code: 'BROWSER_RECONCILE_REQUIRED' })
   await assert.rejects(afterRestart.resolve({ instanceId: 'personal', commandId: 'resolve-wrong', resourceId: created.id,
-    operationId: opened.operationId, reason: 'Checked the page.' }), { code: 'BROWSER_RECONCILE_REQUIRED' })
+    operationId: opened.operationId, reason: 'UNCHANGED' }), { code: 'BROWSER_RECONCILE_REQUIRED' })
   await afterRestart.resolve({ instanceId: 'personal', commandId: 'resolve-b', resourceId: created.id,
-    operationId: unknown.operations.at(-1).id, reason: 'Inspected the page and recorded its actual state.' })
+    operationId: unknown.operations.at(-1).id, reason: 'INSPECTED' })
   assert.equal((await afterRestart.read({ instanceId: 'personal', resourceId: created.id })).state, 'busy')
   fail = false
   await afterRestart.use(b, { resourceId: created.id, action: 'snapshot' }, new AbortController().signal)
@@ -134,14 +134,16 @@ test('stop or grant revocation during a browser request leaves a durable unknown
     await tx.replace('assignment', 'ticket', { ...assignment, state: 'stopping' })
   })
   await assert.rejects(browsers.resolve({ instanceId: 'personal', commandId: 'premature', resourceId: resource.id,
-    operationId: pending.id, reason: 'Not yet inspected.' }), { code: 'BROWSER_RECONCILE_REQUIRED' })
+    operationId: pending.id, reason: 'CHANGED' }), { code: 'BROWSER_RECONCILE_REQUIRED' })
+  await assert.rejects(browsers.resolve({ instanceId: 'personal', commandId: 'unsafe-note', resourceId: resource.id,
+    operationId: pending.id, reason: 'https://private.example/reset?token=secret' }), { code: 'INVALID_INPUT' })
   controller.abort()
   release()
   await assert.rejects(call, { code: 'BROWSER_OUTCOME_UNKNOWN' })
   assert.equal((await browsers.read({ instanceId: 'personal', resourceId: resource.id })).operations.at(-1).state, 'unknown')
   await browsers.resolve({ instanceId: 'personal', commandId: 'acknowledge', resourceId: resource.id,
     operationId: (await browsers.read({ instanceId: 'personal', resourceId: resource.id })).operations.at(-1).id,
-    reason: 'The user inspected the page after stopping the work.' })
+    reason: 'INSPECTED' })
   await storage.transaction('personal', async tx => {
     const assignment = await tx.get('assignment', 'ticket')
     await tx.replace('assignment', 'ticket', { ...assignment, state: 'running' })
