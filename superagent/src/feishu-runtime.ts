@@ -11,6 +11,7 @@ import { FeishuOpenApi } from './feishu-api.js'
 import type { FeishuApiOptions, FeishuNativeEvent } from './feishu-api.js'
 import type { ProductAttachments } from './product-attachments.js'
 import { FeishuDeliveryChannel } from './feishu-delivery.js'
+import type { FeishuSourceReply } from './feishu-delivery.js'
 import type { DeliveryResult, DeliveryView } from './deliveries.js'
 import { FeishuMemberSync } from './feishu-sync.js'
 import type { MembershipSnapshot } from './membership.js'
@@ -88,6 +89,7 @@ export class FeishuRuntime {
     } }, {
       sourceInstanceId: this.sourceBinding.sourceInstanceId, ...(options.maxTextChars === undefined ? {} : { maxTextChars: options.maxTextChars }),
       authorize: (delivery, signal) => this.authorizeDelivery(delivery, signal),
+      authorizeSourceReply: (reply, signal) => this.authorizeSourceReply(reply, signal),
       findReceipt: (deliveryId, idempotencyKey) => this.trackDelivery(this.options.storage.transaction(this.options.instanceId,
         tx => tx.get<{ messageId: string; fingerprint: string }>('channel-cursor', this.receiptKey(deliveryId, idempotencyKey)))),
       recordReceipt: receipt => this.trackDelivery(this.options.storage.transaction(this.options.instanceId, async tx => {
@@ -208,13 +210,24 @@ export class FeishuRuntime {
   }
 
   private async authorizeDelivery(delivery: DeliveryView, signal: AbortSignal): Promise<DeliveryResult | undefined> {
+    return this.authorizeFeishuRecipient(delivery.destination, signal)
+  }
+
+  private async authorizeSourceReply(reply: FeishuSourceReply, signal: AbortSignal): Promise<DeliveryResult | undefined> {
+    return this.authorizeFeishuRecipient(reply.destination, signal)
+  }
+
+  private async authorizeFeishuRecipient(destination: { sourceInstanceId: string; actorId: string; eventId: string; threadId?: string },
+    signal: AbortSignal): Promise<DeliveryResult | undefined> {
     if (this.state !== 'running' || !this.controller) return { type: 'transient', reason: 'FEISHU_SOURCE_DISABLED' }
-    if (!this.options.allowedActorIds.includes(delivery.destination.actorId)
-      && !this.binding.intake?.allowedRequesterIds.includes(delivery.destination.actorId)) return { type: 'permanent', reason: 'DESTINATION_ACTOR_DENIED' }
-    const threadId = delivery.destination.threadId
+    if (destination.sourceInstanceId !== this.sourceBinding.sourceInstanceId) return { type: 'permanent', reason: 'DESTINATION_MISMATCH' }
+    if (!this.options.allowedActorIds.includes(destination.actorId)
+      && !this.binding.intake?.allowedRequesterIds.includes(destination.actorId)) return { type: 'permanent', reason: 'DESTINATION_ACTOR_DENIED' }
+    const threadId = destination.threadId
     const prefix = this.config.chatIds.find(id => threadId === `feishu:${this.config.tenantKey}:${id}` || threadId?.startsWith(`feishu:${this.config.tenantKey}:${id}:message:`))
     if (!prefix) return { type: 'permanent', reason: 'DESTINATION_THREAD_DENIED' }
-    const scope = await this.trackDelivery(this.api.messageChat(delivery.destination.eventId.slice('message:'.length), AbortSignal.any([signal, this.controller.signal]), 'outbound'))
+    if (!destination.eventId.startsWith('message:')) return { type: 'permanent', reason: 'DESTINATION_UNSUPPORTED' }
+    const scope = await this.trackDelivery(this.api.messageChat(destination.eventId.slice('message:'.length), AbortSignal.any([signal, this.controller.signal]), 'outbound'))
     if (scope !== prefix) return { type: 'permanent', reason: 'DESTINATION_CHAT_DENIED' }
     if (this.state !== 'running') return { type: 'transient', reason: 'FEISHU_SOURCE_DISABLED' }
     return undefined

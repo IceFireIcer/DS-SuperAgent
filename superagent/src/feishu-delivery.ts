@@ -1,10 +1,18 @@
 import { createHash } from 'node:crypto'
 import { CoreError } from './model.js'
-import type { DeliveryChannel, DeliveryContext, DeliveryResult, DeliveryView } from './deliveries.js'
+import type { DeliveryChannel, DeliveryContext, DeliveryDestination, DeliveryResult, DeliveryView } from './deliveries.js'
 import { FeishuApiError } from './feishu-api.js'
 
 export interface FeishuReplyTransport {
   replyMessage(request: { messageId: string; text: string; uuid: string; signal: AbortSignal }): Promise<{ messageId: string }>
+}
+
+export interface FeishuSourceReply {
+  id: string
+  text: string
+  destination: DeliveryDestination
+  createdAt: number
+  attempts?: number
 }
 
 export interface FeishuDeliveryChannelOptions {
@@ -13,6 +21,7 @@ export interface FeishuDeliveryChannelOptions {
   sourceInstanceId?: string
   /** Trusted runtime checks enabled state, account scope and native message access. */
   authorize?: (delivery: DeliveryView, signal: AbortSignal) => Promise<DeliveryResult | undefined>
+  authorizeSourceReply?: (reply: FeishuSourceReply, signal: AbortSignal) => Promise<DeliveryResult | undefined>
   now?: () => number
   recordReceipt?: (receipt: { deliveryId: string; idempotencyKey: string; messageId: string; sourceInstanceId: string; fingerprint: string; recordedAt: number }) => Promise<void>
   findReceipt?: (deliveryId: string, idempotencyKey: string) => Promise<{ messageId: string; fingerprint: string } | undefined>
@@ -44,7 +53,15 @@ export class FeishuDeliveryChannel implements DeliveryChannel {
     return this.send(delivery, context)
   }
 
-  private async send(delivery: DeliveryView, context: DeliveryContext): Promise<DeliveryResult> {
+  deliverSourceReply(reply: FeishuSourceReply, context: DeliveryContext): Promise<DeliveryResult> {
+    return this.send(reply, context)
+  }
+
+  reconcileSourceReply(reply: FeishuSourceReply, context: DeliveryContext): Promise<DeliveryResult> {
+    return this.send(reply, context)
+  }
+
+  private async send(delivery: FeishuSourceReply | DeliveryView, context: DeliveryContext): Promise<DeliveryResult> {
     if (!delivery.destination.sourceInstanceId.startsWith('feishu:')) {
       return { type: 'permanent', reason: 'DESTINATION_MISMATCH: the delivery target is not a Feishu source.' }
     }
@@ -53,9 +70,9 @@ export class FeishuDeliveryChannel implements DeliveryChannel {
     }
     const messageId = nativeMessageId(delivery.destination.eventId)
     if (!messageId) return { type: 'permanent', reason: 'DESTINATION_UNSUPPORTED: the target is not a Feishu message.' }
-    const answerHint = delivery.purpose === 'attention' && delivery.basis.kind === 'waiting-attention'
+    const answerHint = 'purpose' in delivery && delivery.purpose === 'attention' && delivery.basis.kind === 'waiting-attention'
       ? `\n\nReply with Q-${feishuQuestionCode(delivery.basis.attentionId)}: followed by your answer.` : ''
-    const text = this.imText(delivery.text, this.maxTextChars - answerHint.length) + answerHint
+    const text = this.imText(delivery.text, this.maxTextChars - answerHint.length, !('purpose' in delivery)) + answerHint
     if (Buffer.byteLength(JSON.stringify({ text })) > 150 * 1024) {
       return { type: 'permanent', reason: 'MESSAGE_TOO_LARGE: the reply exceeds the Feishu text limit.' }
     }
@@ -63,7 +80,9 @@ export class FeishuDeliveryChannel implements DeliveryChannel {
       const fingerprint = createHash('sha256').update(JSON.stringify([delivery.destination, text])).digest('hex')
       const prior = await this.options.findReceipt?.(delivery.id, context.idempotencyKey)
       if (prior?.messageId) return prior.fingerprint === fingerprint ? { type: 'success' } : { type: 'unknown', reason: 'FEISHU_RECEIPT_CONFLICT' }
-      const denied = await this.options.authorize?.(delivery, context.signal)
+      const denied = 'purpose' in delivery
+        ? await this.options.authorize?.(delivery, context.signal)
+        : await this.options.authorizeSourceReply?.(delivery, context.signal)
       if (denied) return denied
       // A delivery that never reached Feishu starts the one-hour window with its first request,
       // so time spent waiting in the local queue cannot block that send. After the window,
@@ -117,9 +136,9 @@ export class FeishuDeliveryChannel implements DeliveryChannel {
     return { type: 'transient', reason: error instanceof CoreError ? error.code : 'FEISHU_REQUEST_NOT_SENT' }
   }
 
-  private imText(text: string, budget = this.maxTextChars) {
+  private imText(text: string, budget = this.maxTextChars, sourceReply = false) {
     if (text.length <= budget) return text
-    const suffix = '\n\n[Truncated for Feishu. The full text is in the Ticket.]'
+    const suffix = sourceReply ? '\n\n[Truncated for Feishu.]' : '\n\n[Truncated for Feishu. The full text is in the Ticket.]'
     return text.slice(0, Math.max(0, budget - suffix.length)) + suffix
   }
 }

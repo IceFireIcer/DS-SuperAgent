@@ -18,10 +18,11 @@ test('the product Host exposes Feishu health, stop and reconnection without disc
   native = await nativeContext(join(directory, 'sessions'), function* () { yield* textResponse('Main received the request.') })
   await native.plugin(LocalCredentials, { path: join(directory, 'credentials.yaml'), watch: false })
   const workspaceRoot = join(directory, 'workspace')
+  const outboundReplies = []
   await mkdir(join(directory, 'data'))
   await mkdir(workspaceRoot)
   const json = data => ({ ok: true, status: 200, json: async () => ({ code: 0, data }) })
-  const fetch = async url => {
+  const fetch = async (url, options) => {
     const path = new URL(url).pathname
     if (path === '/open-apis/auth/v3/tenant_access_token/internal') {
       return { ok: true, status: 200, json: async () => ({ code: 0, tenant_access_token: 'fixture-token', expire: 7200 }) }
@@ -29,6 +30,11 @@ test('the product Host exposes Feishu health, stop and reconnection without disc
     if (path === '/open-apis/tenant/v2/tenant/query') return json({ tenant: { tenant_key: 'tenant' } })
     if (path === '/open-apis/im/v1/chats/group') return json({ chat_mode: 'group' })
     if (path === '/open-apis/im/v1/chats/group/members') return json({ items: [{ member_id: 'alice', member_id_type: 'open_id' }], has_more: false })
+    if (path === '/open-apis/im/v1/messages/om_host') return json({ items: [{ message_id: 'om_host', chat_id: 'group' }] })
+    if (path === '/open-apis/im/v1/messages/om_host/reply') {
+      outboundReplies.push(JSON.parse(options.body))
+      return json({ message_id: 'reply-host' })
+    }
     if (path === '/open-apis/im/v1/messages') return json({ items: [{ message_id: 'om_host', chat_id: 'group', msg_type: 'text',
       create_time: '1700000000000', update_time: '1700000000000', sender: { id: 'alice', id_type: 'open_id', sender_type: 'user' },
       mentions: [{ id: 'ou_bot' }], body: { content: '{"text":"Please read this."}' } }], has_more: false })
@@ -56,6 +62,9 @@ test('the product Host exposes Feishu health, stop and reconnection without disc
     await new Promise(resolve => setTimeout(resolve, 25))
   }
   assert.equal((await host.dispatch('history', { instanceId: 'private' })).sources.length, 1)
+  for (let attempt = 0; attempt < 200 && outboundReplies.length === 0; attempt++) await new Promise(resolve => setTimeout(resolve, 25))
+  assert.equal(outboundReplies.length, 1, 'the Feishu Engine routes a no-work Main reply through the runtime channel')
+  assert.equal(JSON.parse(outboundReplies[0].content).text, 'Main received the request.')
   assert.equal((await read()).state, 'polling')
   assert.equal((await read()).credentialMode, 'legacy')
   await assert.rejects(host.dispatch('resource-select-feishu', { instanceId: 'private', commandId: 'legacy-select', resourceId: null }),

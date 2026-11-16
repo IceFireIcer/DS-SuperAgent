@@ -248,7 +248,8 @@ export class Engine {
       && candidate.config.permissions.includes('write')) ? this.workDelegation : undefined,
     async transaction => (await this.instanceDirectoryIn(transaction))?.environmentId, attachments,
     binding => source.sourceInstanceId === 'product-desktop'
-      ? memoryToolsFor(this.memory, { role: 'main', sessionId: binding.mainSessionId }) : [])
+      ? memoryToolsFor(this.memory, { role: 'main', sessionId: binding.mainSessionId }) : [],
+    (tx, request) => this.effects.enqueue(tx, request))
     this.roleConfig = new RoleConfigStore(storage, instanceId, {
       ...(sessions?.mainRoute ? { main: { name: 'Main', model: sessions.mainRoute, instructions: '', skills: [] } } : {}),
       router: { name: 'Router', model: sessions?.routerRoute ?? { provider: 'unconfigured', model: 'unconfigured' }, instructions: '', skills: [] },

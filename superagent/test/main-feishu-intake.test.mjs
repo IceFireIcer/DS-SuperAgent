@@ -63,6 +63,152 @@ test('an addressed Feishu request enters Main while discussion and bot messages 
   assert.equal((await engine.listTickets()).items.length, 0, 'Main text must not create a Router Ticket')
 })
 
+test('a no-work Main reply is delivered through a durable Feishu source reply', { timeout: 20000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-main-feishu-no-work-'))
+  const turns = []
+  const replies = []
+  let storage, native, sessions, engine
+  t.after(async () => {
+    await engine?.effects.stop()
+    await engine?.shutdown()
+    await sessions?.close()
+    await native?.fiber.dispose()
+    await storage?.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+  native = await nativeContext(join(directory, 'sessions'), function* (options) {
+    turns.push(lastUserText(options))
+    yield* textResponse('I cannot identify a justified task from this request.')
+  })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  sessions = new core.NativeSessions(native, { main: { provider: 'mock', model: 'main' },
+    router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  const channel = new core.FeishuDeliveryChannel({ replyMessage: async request => {
+    replies.push(request)
+    return { messageId: `reply-${replies.length}` }
+  } }, { sourceInstanceId: 'feishu:tenant:group' })
+  engine = new core.Engine(storage, 'private', { kind: 'feishu', sourceInstanceId: 'feishu:tenant:group', actorId: 'bot',
+    allowedActorIds: ['bot'], allowedThreadPrefixes: ['feishu:tenant:'], versionOrder: 'sequence',
+    intake: { mode: 'auto', maxBatchSize: 5, maxAttempts: 1, timeoutMs: 5000,
+      allowedRequesterIds: ['alice'], allowedBotActorIds: [], rules: [] } }, {}, sessions, [], {}, {}, {}, { channel })
+  const source = new core.FeishuSource(storage, 'private', engine, { tenantKey: 'tenant', chatIds: ['group'],
+    selfActorIds: ['bot'], mainIntake: true })
+  const receipt = await source.receive({ eventId: 'no-work-1', cursor: '1', tenantKey: 'tenant', chatId: 'group',
+    chatType: 'group', messageId: 'om_question', senderId: 'alice', senderKind: 'human',
+    text: 'Could you clarify what this team does?', mentionIds: ['bot'], createTime: '1700000000000', updateTime: '1700000000000' })
+  assert.equal(receipt.status, 'recorded')
+  for (let index = 0; index < 8; index++) await engine.effects.drain()
+  assert.equal((await engine.listTickets()).items.length, 0)
+  assert.equal(replies.length, 1)
+  assert.equal(replies[0].messageId, 'om_question')
+  assert.equal(replies[0].text, 'I cannot identify a justified task from this request.')
+  assert.match(replies[0].uuid, /^[a-f0-9]{32}$/u)
+  assert.match(turns[0], /If no work is justified, give a brief answer to this requester only/u)
+  const effects = await engine.effects.list()
+  assert.equal(effects.items.length, 0, 'the durable source reply effect is settled')
+  assert.equal((await source.receive({ eventId: 'no-work-1', cursor: '1', tenantKey: 'tenant', chatId: 'group',
+    chatType: 'group', messageId: 'om_question', senderId: 'alice', senderKind: 'human',
+    text: 'Could you clarify what this team does?', mentionIds: ['bot'], createTime: '1700000000000', updateTime: '1700000000000' })).reason,
+  'SOURCE_REPLAY')
+  await engine.effects.drain()
+  assert.equal(replies.length, 1, 'source replay does not enqueue a second outbound reply')
+})
+
+test('an edited Feishu question cannot receive a queued Main reply', { timeout: 20000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-main-feishu-stale-'))
+  let storage, native, sessions, engine
+  const replies = []
+  t.after(async () => {
+    await engine?.effects.stop()
+    await engine?.shutdown()
+    await sessions?.close()
+    await native?.fiber.dispose()
+    await storage?.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+  native = await nativeContext(join(directory, 'sessions'), function* () { yield* textResponse('Original answer.') })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  sessions = new core.NativeSessions(native, { main: { provider: 'mock', model: 'main' },
+    router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  const channel = new core.FeishuDeliveryChannel({ replyMessage: async request => {
+    replies.push(request)
+    return { messageId: 'om_reply' }
+  } }, { sourceInstanceId: 'feishu:tenant:group' })
+  engine = new core.Engine(storage, 'private', { kind: 'feishu', sourceInstanceId: 'feishu:tenant:group', actorId: 'bot',
+    allowedActorIds: ['bot'], allowedThreadPrefixes: ['feishu:tenant:'], versionOrder: 'sequence',
+    intake: { mode: 'auto', maxBatchSize: 5, maxAttempts: 1, timeoutMs: 5000,
+      allowedRequesterIds: ['alice'], allowedBotActorIds: [], rules: [] } }, {}, sessions, [], {}, {}, {}, { channel })
+  const source = new core.FeishuSource(storage, 'private', engine, { tenantKey: 'tenant', chatIds: ['group'],
+    selfActorIds: ['bot'], mainIntake: true })
+  const event = (id, version, text, extra = {}) => ({ eventId: id, cursor: id, tenantKey: 'tenant', chatId: 'group',
+    chatType: 'group', messageId: 'om_question', senderId: 'alice', senderKind: 'human', text,
+    mentionIds: ['bot'], createTime: '1700000000000', updateTime: version, ...extra })
+  await source.receive(event('1', '1700000000000', 'Original question.'))
+  await engine.effects.drain()
+  const pending = (await engine.effects.list()).items.find(item => item.payload.type === 'main-source-reply')
+  assert.ok(pending)
+  await source.receive(event('2', '1700000001000', 'Changed question.', { edited: true }))
+  await engine.effects.drain()
+  assert.equal(replies.length, 0)
+  assert.match((await engine.effects.receipt(pending.id, pending.generation)).reason, /SOURCE_NOT_CURRENT/u)
+})
+
+test('an unknown Main reply keeps its UUID after restart and does not resend under revoked policy', { timeout: 20000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-main-feishu-reconcile-'))
+  let storage, native, sessions, engine
+  const replies = []
+  let ambiguous = true
+  t.after(async () => {
+    await engine?.effects.stop()
+    await engine?.shutdown()
+    await sessions?.close()
+    await native?.fiber.dispose()
+    await storage?.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+  native = await nativeContext(join(directory, 'sessions'), function* () { yield* textResponse('No work is needed for this question.') })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  sessions = new core.NativeSessions(native, { main: { provider: 'mock', model: 'main' },
+    router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  const channel = new core.FeishuDeliveryChannel({ replyMessage: async request => {
+    replies.push(request)
+    if (ambiguous) throw new core.CoreError('SOURCE_TIMEOUT', 'The reply outcome is unknown.')
+    return { messageId: 'om_reply' }
+  } }, { sourceInstanceId: 'feishu:tenant:group' })
+  engine = new core.Engine(storage, 'private', { kind: 'feishu', sourceInstanceId: 'feishu:tenant:group', actorId: 'bot',
+    allowedActorIds: ['bot'], allowedThreadPrefixes: ['feishu:tenant:'], versionOrder: 'sequence',
+    intake: { mode: 'auto', maxBatchSize: 5, maxAttempts: 1, timeoutMs: 5000,
+      allowedRequesterIds: ['alice'], allowedBotActorIds: [], rules: [] } }, {}, sessions, [], {}, {}, {}, { channel })
+  const source = new core.FeishuSource(storage, 'private', engine, { tenantKey: 'tenant', chatIds: ['group'],
+    selfActorIds: ['bot'], mainIntake: true })
+  await source.receive({ eventId: 'reconcile-1', cursor: '1', tenantKey: 'tenant', chatId: 'group',
+    chatType: 'group', messageId: 'om_question', senderId: 'alice', senderKind: 'human',
+    text: 'Is this request actionable?', mentionIds: ['bot'], createTime: '1700000000000', updateTime: '1700000000000' })
+  await engine.effects.drain()
+  const pending = (await engine.effects.list()).items.find(item => item.payload.type === 'main-source-reply')
+  assert.ok(pending)
+  await engine.effects.drain()
+  assert.equal((await engine.effects.receipt(pending.id, pending.generation)).state, 'unknown')
+  const uuid = replies[0].uuid
+  await storage.transaction('private', async tx => {
+    const key = JSON.stringify(['policy-state', 'feishu:tenant:group'])
+    const policy = await tx.get('policy-state', key)
+    await tx.replace('policy-state', key, { ...policy, configuration: { ...policy.configuration, allowedRequesterIds: [] } })
+  })
+  assert.equal(await engine.effects.reconcile(pending.id, pending.generation), false)
+  assert.equal(replies.length, 1, 'revoked policy prevents a second uncertain send')
+  assert.equal((await engine.effects.receipt(pending.id, pending.generation)).state, 'unknown')
+  await storage.transaction('private', async tx => {
+    const key = JSON.stringify(['policy-state', 'feishu:tenant:group'])
+    const policy = await tx.get('policy-state', key)
+    await tx.replace('policy-state', key, { ...policy, configuration: { ...policy.configuration, allowedRequesterIds: ['alice'] } })
+  })
+  ambiguous = false
+  assert.equal(await engine.effects.reconcile(pending.id, pending.generation), true)
+  assert.equal(replies.length, 2)
+  assert.equal(replies[1].uuid, uuid, 'restart reconciliation reuses the original Feishu UUID')
+})
+
 test('the Feishu runtime polls a native discussion into the same Main and stops cleanly', { timeout: 20000 }, async t => {
   const directory = await mkdtemp(join(tmpdir(), 'ds-bot-main-feishu-runtime-'))
   let storage, native, sessions, runtime, engine, environment
@@ -192,7 +338,8 @@ test('Main delegates a Feishu discussion and the original thread receives the bo
   assert.equal((await desktop.listTickets()).items.length, 1,
     JSON.stringify({ sources, effects: await desktop.effects.list(), page: await desktop.getRecentMainConversation({ instanceId: 'private' }) }))
   assert.deepEqual(replies.map(reply => reply.messageId), ['om_work', 'om_work'])
-  assert.equal(replies.some(reply => reply.text.includes('Main recorded the request privately.')), false)
+  const ticketless = await storage.transaction('private', tx => tx.scan('main-source-reply', { limit: 20 }))
+  assert.equal(ticketless.items.length, 0, JSON.stringify(ticketless.items))
   assert.deepEqual(sources.items[0].deliveries.map(delivery => [delivery.purpose, delivery.state, delivery.destination.eventId]),
     [['result', 'sent', 'message:om_work'], ['acknowledgement', 'sent', 'message:om_work']])
   await source.receive({ eventId: 'feishu-follow', cursor: '2', tenantKey: 'tenant', chatId: 'group',

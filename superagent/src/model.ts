@@ -86,7 +86,7 @@ const coreRecordKinds = ['trigger', 'decision', 'mandate', 'ticket', 'intent', '
 export const recordKinds = [...coreRecordKinds, 'main-state', 'main-message', 'main-command', 'main-message-command',
   'product-schedule', 'product-schedule-command', 'product-schedule-occurrence', 'product-schedule-source', 'proactive-control', 'proactive-notice', 'proactive-candidate', 'proactive-work', 'proactive-work-source',
   'main-turn-stop', 'main-turn-stop-command', 'main-update-command', 'main-active-command', 'main-reconcile-command',
-  'main-health', 'main-source-handoff', 'main-source-command', 'main-source-rollover', 'main-session-rollover',
+  'main-health', 'main-source-handoff', 'main-source-command', 'main-source-reply', 'main-source-rollover', 'main-session-rollover',
   'work-brief', 'work-brief-command',
   'work-split', 'work-plan-conflict', 'work-plan-conflict-head', 'work-item', 'work-item-ticket', 'work-receipt',
   'work-ticket', 'work-router-turn', 'work-follow-up', 'work-follow-up-command', 'work-update', 'work-update-head',

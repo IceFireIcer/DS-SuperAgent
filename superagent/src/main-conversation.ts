@@ -12,6 +12,7 @@ import type { ProductAttachments, ProductAttachmentView } from './product-attach
 import { resolveProductAttachments } from './product-attachments.js'
 import { isCurrentSourceEvent, type SourceEvent } from './source-events.js'
 import type { EnvironmentAssetReference } from './environment-assets.js'
+import type { Effect, EffectRequest } from './effects.js'
 
 export interface MainBinding { instanceId: string; mainId: string; mainSessionId: string; routerSessionId: string; generation: number }
 interface MainState extends MainBinding { sequence: number; activeCommand?: string }
@@ -170,7 +171,8 @@ export class MainConversation {
     private readonly work?: () => WorkDelegation | undefined,
     private readonly defaultEnvironment?: (transaction: AsyncTx) => Promise<string | undefined>,
     private readonly attachments?: ProductAttachments,
-    private readonly memoryTools: (binding: MainBinding) => NativeTool[] = () => []) {}
+    private readonly memoryTools: (binding: MainBinding) => NativeTool[] = () => [],
+    private readonly enqueueEffect?: (tx: AsyncTx, request: EffectRequest) => Promise<Effect>) {}
 
   private authorize(request: MainAddress) {
     if (!request || request.instanceId !== this.instanceId || !this.source.allowedActorIds.includes(this.source.actorId)) {
@@ -804,7 +806,7 @@ export class MainConversation {
         const prompt = `[${handoff.sourceInstanceId.startsWith('schedule:') ? 'Scheduled occurrence'
           : `${handoff.sourceInstanceId.startsWith('feishu:') ? 'Feishu' : 'GitHub'} request`}${prepared.attempt > 1 ? ' recovery' : ''}]\nThis is one authorized source handoff, not a private transcript. ${prepared.attempt > 1
             ? 'The previous Main turn ended without a reply. Continue the same durable request and produce one safe reply; do not repeat completed side effects. '
-            : 'When the request is actionable, use delegate_work and preserve the source reference. If no work is justified, explain that only in Main; no source message is sent without established work.'}\n${JSON.stringify({
+            : 'When the request is actionable, use delegate_work and preserve the source reference. If no work is justified, give a brief answer to this requester only, suitable for the original Feishu thread. Do not include private Main context or other discussions.'}\n${JSON.stringify({
               sourceEventId: handoff.sourceEventId, sourceInstanceId: handoff.sourceInstanceId, threadId: handoff.threadId, objectId: handoff.objectId,
               mainSessionGeneration: prepared.sessionGeneration,
               authorId: handoff.authorId, reference: handoff.reference, text: handoff.text,
@@ -838,13 +840,23 @@ export class MainConversation {
           await tx.replace('main-message', messageKey(command.userSequence), { ...settledUser, status: 'completed' })
         }
         await tx.replace('main-state', 'main', { ...state, sequence })
-        await tx.replace('main-source-command', key, { ...command, state: 'completed' })
         const current = await tx.get<MainSourceHandoff>('main-source-handoff', handoff.id)
         if (current && current.state !== 'discarded') {
           const { lastError: _error, ...settled } = current
           await tx.replace('main-source-handoff', handoff.id,
             { ...settled, state: current.state === 'delegated' ? 'delegated' : 'presented', mainMessageId: prepared.messageId, updatedAt: Date.now() })
+          if (current.sourceInstanceId.startsWith('feishu:') && current.state !== 'delegated' && !current.workBriefId && this.enqueueEffect) {
+            const replyId = `main-source-reply:${handoff.id}`
+            const effect = await this.enqueueEffect(tx, { key: replyId, stream: 'outbox', scope: `main:${binding.mainId}`,
+              payload: { type: 'main-source-reply', replyId } })
+            await tx.insert('main-source-reply', replyId, { id: replyId, handoffId: handoff.id, mainId: binding.mainId,
+              sourceEventId: current.sourceEventId, nativeVersion: current.nativeVersion, text: answer,
+              destination: { sourceInstanceId: current.sourceInstanceId, actorId: current.authorId,
+                eventId: current.objectId, threadId: current.threadId }, effectId: effect.id, effectGeneration: effect.generation,
+              createdAt: Date.now() })
+          }
         }
+        await tx.replace('main-source-command', key, { ...command, state: 'completed' })
       })
     }).catch(async error => {
       await this.storage.transaction(this.instanceId, async tx => {

@@ -13,6 +13,7 @@ import { NativeSessions } from './native-sessions.js'
 import { SqliteStorage } from './storage.js'
 import { LocalEnvironment } from './local-environment.js'
 import { FeishuRuntime, type FeishuRuntimeOptions } from './feishu-runtime.js'
+import type { FeishuSourceReply } from './feishu-delivery.js'
 import { GitHubRuntime, type GitHubRuntimeOptions } from './github-runtime.js'
 import { ProductAttachments } from './product-attachments.js'
 import { productProactivePreparation } from './product-proactive.js'
@@ -357,7 +358,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
       }, storage, instanceId, mainIntake: true,
       ...(attachments ? { attachmentIntake: { upload: (request: import('./product-attachments.js').ProductAttachmentUpload) => attachments.upload(request),
         environmentId: async () => (await engine!.getInstanceDirectory({ instanceId })).environmentId } } : {}) })
-      feishuEngine = new Engine(storage, instanceId, feishuRuntime.sourceBinding, {}, sessions, [], {}, {}, {}, {}, {}, proactive)
+      feishuEngine = new Engine(storage, instanceId, feishuRuntime.sourceBinding, {}, sessions, [], {}, {}, {},
+        { channel: feishuRuntime.channel }, {}, proactive)
       feishuRuntime.bind(feishuEngine)
     }
     if (config.github) {
@@ -365,7 +367,11 @@ export async function createProductHost(context: Context, config: ProductHostCon
       githubEngine = new Engine(storage, instanceId, githubRuntime.sourceBinding, {}, sessions, [], {}, {}, {}, {}, {}, proactive)
       githubRuntime.bind(githubEngine)
     }
-    const channel: DeliveryChannel | undefined = feishuRuntime || githubRuntime ? {
+    type ProductDeliveryChannel = DeliveryChannel & {
+      deliverSourceReply?: (reply: FeishuSourceReply, context: Parameters<DeliveryChannel['deliver']>[1]) => ReturnType<DeliveryChannel['deliver']>
+      reconcileSourceReply?: (reply: FeishuSourceReply, context: Parameters<DeliveryChannel['deliver']>[1]) => ReturnType<DeliveryChannel['deliver']>
+    }
+    const channel: ProductDeliveryChannel | undefined = feishuRuntime || githubRuntime ? {
       deliver: (delivery, context) => delivery.destination.sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId
         ? feishuRuntime!.channel.deliver(delivery, context)
         : delivery.destination.sourceInstanceId === 'product-desktop' ? localDeliveryChannel.deliver(delivery, context)
@@ -374,6 +380,12 @@ export async function createProductHost(context: Context, config: ProductHostCon
         ? feishuRuntime!.channel.reconcile(delivery, context)
         : delivery.destination.sourceInstanceId === 'product-desktop' ? localDeliveryChannel.deliver(delivery, context)
           : Promise.resolve({ type: 'permanent', reason: 'DESTINATION_SOURCE_DISABLED' }),
+      deliverSourceReply: (reply, context) => reply.destination.sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId
+        ? feishuRuntime!.channel.deliverSourceReply(reply, context)
+        : Promise.resolve({ type: 'unknown', reason: 'DESTINATION_SOURCE_DISABLED' }),
+      reconcileSourceReply: (reply, context) => reply.destination.sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId
+        ? feishuRuntime!.channel.reconcileSourceReply(reply, context)
+        : Promise.resolve({ type: 'unknown', reason: 'DESTINATION_SOURCE_DISABLED' }),
     } : undefined
     engine = new Engine(storage, instanceId, { sourceInstanceId: 'product-desktop', actorId, allowedActorIds: [actorId],
       ...(config.workerMcpTool || browserAdapter ? { hostCapabilities: {
@@ -429,6 +441,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
       statusTimer = setInterval(() => { void statusPublisher?.publish().catch(() => {}) }, 10_000)
       statusTimer.unref()
     }
+    feishuEngine?.effects.start()
     engine.effects.start()
     supervision.start()
     void engine.tickSchedules().catch(() => { /* Rules and failed occurrences remain available for the next check. */ })

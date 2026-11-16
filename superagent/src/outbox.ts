@@ -9,9 +9,25 @@ import type { Attention } from './attention.js'
 import type { Assignment, ReadyReport } from './execution.js'
 import type { DeliveryState } from './delivery-state.js'
 import { associatedInput, type WorkInputs } from './work-inputs.js'
+import type { MainSourceHandoff } from './main-source.js'
+import type { FeishuSourceReply } from './feishu-delivery.js'
+
+interface MainReplyRecord extends FeishuSourceReply {
+  handoffId: string
+  mainId: string
+  sourceEventId: string
+  nativeVersion: SourceEvent['version']
+  effectId: string
+  effectGeneration: string
+}
+
+interface SourceReplyChannel extends DeliveryChannel {
+  deliverSourceReply?(reply: FeishuSourceReply, context: { idempotencyKey: string; signal: AbortSignal }): Promise<EffectResult>
+  reconcileSourceReply?(reply: FeishuSourceReply, context: { idempotencyKey: string; signal: AbortSignal }): Promise<EffectResult>
+}
 
 export class Outbox {
-  private readonly channel: DeliveryChannel
+  private readonly channel: SourceReplyChannel
   constructor(
     private readonly storage: Storage,
     private readonly instanceId: string,
@@ -32,6 +48,7 @@ export class Outbox {
   }
 
   private async deliver(effect: Effect, context: { idempotencyKey: string; signal: AbortSignal }, reconciling: boolean): Promise<EffectResult> {
+    if (effect.payload.type === 'main-source-reply') return this.deliverMainReply(effect, context, reconciling)
     const ticketId = String(effect.payload.ticketId)
     const deliveryId = typeof effect.payload.deliveryId === 'string' ? effect.payload.deliveryId : undefined
     const prepared = await this.storage.transaction(this.instanceId, async transaction => {
@@ -74,6 +91,52 @@ export class Outbox {
     const action = reconciling ? this.channel.reconcile?.bind(this.channel) : this.channel.deliver.bind(this.channel)
     if (!action) return { type: 'unknown', reason: 'The delivery channel cannot reconcile an unknown outcome.' }
     return action(prepared.view, context)
+  }
+
+  private async deliverMainReply(effect: Effect, context: { idempotencyKey: string; signal: AbortSignal }, reconciling: boolean): Promise<EffectResult> {
+    const replyId = effect.payload.replyId
+    if (typeof replyId !== 'string' || replyId !== effect.key) return { type: 'permanent', reason: 'INVALID_DELIVERY: invalid Main reply identity.' }
+    const checked = await this.storage.transaction(this.instanceId, async tx => {
+      const reply = await tx.get<MainReplyRecord>('main-source-reply', replyId)
+      if (!reply || reply.id !== replyId || reply.effectId !== effect.id || reply.effectGeneration !== effect.generation) {
+        return { invalid: 'INVALID_DELIVERY: the Main reply does not match its durable Effect.' }
+      }
+      const receipt = await tx.get<{ attempts?: number }>('effect-receipt', JSON.stringify([effect.id, effect.generation]))
+      if (reconciling) {
+        // An unknown external outcome keeps the original reply identity. A later edit,
+        // recall or handoff transition must not turn an already accepted send into a
+        // permanent failure; the Feishu channel owns the stable UUID reconciliation.
+        const policy = await tx.get<{ configuration: { allowedRequesterIds: string[] } }>('policy-state',
+          JSON.stringify(['policy-state', reply.destination.sourceInstanceId]))
+        if (!policy?.configuration.allowedRequesterIds.includes(reply.destination.actorId)) {
+          return { blocked: 'SOURCE_POLICY_REVOKED: the original requester is no longer authorized for reconciliation.' }
+        }
+        return { reply: { ...reply, attempts: receipt?.attempts ?? effect.attempts } }
+      }
+      const handoff = await tx.get<MainSourceHandoff>('main-source-handoff', reply.handoffId)
+      const event = await tx.get<SourceEvent>('source-event', reply.sourceEventId)
+      const policy = await tx.get<{ configuration: { allowedRequesterIds: string[] } }>('policy-state',
+        JSON.stringify(['policy-state', reply.destination.sourceInstanceId]))
+      const state = await tx.get<{ mainId: string }>('main-state', 'main')
+      if (!handoff || handoff.state !== 'presented' || handoff.workBriefId || handoff.mainId !== reply.mainId
+        || state?.mainId !== reply.mainId || handoff.sourceEventId !== reply.sourceEventId
+        || handoff.sourceInstanceId !== reply.destination.sourceInstanceId || handoff.authorId !== reply.destination.actorId
+        || handoff.objectId !== reply.destination.eventId || handoff.threadId !== reply.destination.threadId
+        || JSON.stringify(handoff.nativeVersion) !== JSON.stringify(reply.nativeVersion)
+        || !event || event.source.kind !== 'feishu' || event.source.sourceInstanceId !== reply.destination.sourceInstanceId
+        || event.authorId !== reply.destination.actorId || event.authorKind !== 'human' || event.addressing === 'ambient'
+        || event.objectId !== reply.destination.eventId || event.threadId !== reply.destination.threadId
+        || JSON.stringify(event.version) !== JSON.stringify(reply.nativeVersion) || !await isCurrentSourceEvent(tx, event)
+        || !policy?.configuration.allowedRequesterIds.includes(event.authorId)) {
+        return { invalid: 'SOURCE_NOT_CURRENT: the Main reply source, audience or authorization changed.' }
+      }
+      return { reply: { ...reply, attempts: receipt?.attempts ?? effect.attempts } }
+    })
+    if ('invalid' in checked) return { type: 'permanent', reason: checked.invalid }
+    if ('blocked' in checked) return { type: 'unknown', reason: checked.blocked }
+    const action = reconciling ? this.channel.reconcileSourceReply?.bind(this.channel) : this.channel.deliverSourceReply?.bind(this.channel)
+    if (!action) return { type: 'unknown', reason: 'The delivery channel cannot send a ticketless Main reply.' }
+    return action(checked.reply, context)
   }
 
   private async validateImmutableDelivery(transaction: AsyncTx, delivery: Delivery, effect: Effect): Promise<string | undefined> {
