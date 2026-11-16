@@ -107,6 +107,17 @@ var ZH = {
   "Resource name": "资源名称",
   "Credential value": "凭据内容",
   "Credential resource saved.": "凭据资源已保存。",
+  "New credential value": "新的凭据值",
+  "Rotate credential": "轮换凭据",
+  "Retry rotation": "重试轮换",
+  "Check rotation": "核查轮换",
+  "Credential rotated.": "凭据已轮换。",
+  "Credential rotated; old record cleanup pending.": "凭据已轮换，旧记录等待清理。",
+  "Rotation pending. Retry with the same value or check its status.": "轮换待确认。请用相同值重试或核查状态。",
+  "Rotation command saved. Check its status before starting another rotation.": "轮换命令已保留。开始新轮换前请先核查。",
+  "Rotation is pending. Retry with the same value and command, or check its status.": "轮换尚未确认。请用相同值和命令重试，或核查状态。",
+  "Rotation result is unknown. Keep this command and check again.": "轮换结果未知。请保留当前命令并再次核查。",
+  "Rotation was not applied. Refresh the resource before starting another rotation.": "轮换未生效。刷新资源后可重新发起。",
   "Authorization recorded.": "授权记录已保存。",
   "Resource deletion recorded.": "资源删除已记录。",
   "Delete this credential resource and all its grants?": "删除此凭据资源及全部授权？",
@@ -23046,6 +23057,9 @@ function ProductCredentialSettings({ binding, call: call2 }) {
   const [selectedId, setSelectedId] = (0, import_react57.useState)(null);
   const [label, setLabel] = (0, import_react57.useState)("");
   const [value, setValue] = (0, import_react57.useState)("");
+  const [rotationValue, setRotationValue] = (0, import_react57.useState)("");
+  const [rotationAttempt, setRotationAttempt] = (0, import_react57.useState)(null);
+  const [rotationResult, setRotationResult] = (0, import_react57.useState)(null);
   const [rename, setRename] = (0, import_react57.useState)("");
   const [role, setRole] = (0, import_react57.useState)("worker");
   const [purpose, setPurpose] = (0, import_react57.useState)("tool");
@@ -23056,7 +23070,17 @@ function ProductCredentialSettings({ binding, call: call2 }) {
   const [error, setError] = (0, import_react57.useState)(null);
   const [notice, setNotice] = (0, import_react57.useState)(null);
   const pendingCreate = (0, import_react57.useRef)(null);
+  const pendingRotation = (0, import_react57.useRef)(null);
   const instanceId = binding.instanceId;
+  const rememberRotation = (attempt) => {
+    pendingRotation.current = attempt;
+    setRotationAttempt(attempt);
+    try {
+      if (attempt) window.sessionStorage.setItem(`product-rotation:${instanceId}`, JSON.stringify(attempt));
+      else window.sessionStorage.removeItem(`product-rotation:${instanceId}`);
+    } catch {
+    }
+  };
   const load = async () => {
     const items = [];
     let after;
@@ -23078,6 +23102,23 @@ function ProductCredentialSettings({ binding, call: call2 }) {
   };
   (0, import_react57.useEffect)(() => {
     let live = true;
+    pendingRotation.current = null;
+    setRotationAttempt(null);
+    setRotationResult(null);
+    setRotationValue("");
+    try {
+      const stored = JSON.parse(window.sessionStorage.getItem(`product-rotation:${instanceId}`));
+      if (stored && typeof stored.commandId === "string" && typeof stored.resourceId === "string" && Number.isSafeInteger(stored.expectedRevision)) {
+        const attempt = { commandId: stored.commandId, resourceId: stored.resourceId, expectedRevision: stored.expectedRevision };
+        pendingRotation.current = attempt;
+        setRotationAttempt(attempt);
+        void call2("resource-rotation-read", { instanceId, commandId: attempt.commandId }).then((result) => {
+          if (live) setRotationResult(result);
+        }).catch(() => {
+        });
+      }
+    } catch {
+    }
     Promise.all([load(), call2("feishu-status", { instanceId }).catch(() => null)]).then(
       ([items, status]) => {
         if (!live) return;
@@ -23124,10 +23165,72 @@ function ProductCredentialSettings({ binding, call: call2 }) {
   };
   const selected = resources?.find((resource) => resource.id === selectedId);
   const choose = (resource) => {
+    if (selectedId !== resource.id) setRotationValue("");
     setSelectedId(resource.id);
     setRename(resource.label);
     setError(null);
     setNotice(null);
+  };
+  const finishRotation = (result) => {
+    setRotationResult(result);
+    if (result.status === "committed") {
+      rememberRotation(null);
+      setRotationValue("");
+      setNotice(t(result.cleanupPending ? "Credential rotated; old record cleanup pending." : "Credential rotated."));
+    } else if (result.status === "abandoned") {
+      rememberRotation(null);
+      setRotationValue("");
+      setError(t("Rotation was not applied. Refresh the resource before starting another rotation."));
+    } else {
+      setError(t("Rotation is pending. Retry with the same value and command, or check its status."));
+    }
+  };
+  const checkRotation = async (attempt) => {
+    if (busy) return;
+    setBusy("rotation-check");
+    setError(null);
+    setNotice(null);
+    try {
+      finishRotation(await call2("resource-rotation-read", { instanceId, commandId: attempt.commandId }));
+      await refresh().catch(() => {
+      });
+    } catch {
+      setError(t("Rotation result is unknown. Keep this command and check again."));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const rotate = (event) => {
+    event.preventDefault();
+    if (!selected || !rotationValue.trim() || busy || pendingRotation.current?.resourceId !== selected.id && pendingRotation.current) return;
+    const attempt = pendingRotation.current ?? {
+      commandId: crypto.randomUUID(),
+      resourceId: selected.id,
+      expectedRevision: selected.revision
+    };
+    rememberRotation(attempt);
+    setBusy("rotate");
+    setError(null);
+    setNotice(null);
+    setRotationResult(null);
+    void (async () => {
+      try {
+        const result = await call2("resource-rotate", { instanceId, ...attempt, value: rotationValue });
+        finishRotation(result);
+      } catch {
+        try {
+          finishRotation(await call2("resource-rotation-read", { instanceId, commandId: attempt.commandId }));
+        } catch {
+          setError(t("Rotation result is unknown. Keep this command and check again."));
+        }
+      } finally {
+        try {
+          await refresh();
+        } catch {
+        }
+        setBusy(null);
+      }
+    })();
   };
   const grant = (event) => {
     event.preventDefault();
@@ -23183,6 +23286,19 @@ function ProductCredentialSettings({ binding, call: call2 }) {
     ) : null,
     error ? (0, import_react57.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
     notice ? (0, import_react57.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
+    rotationAttempt ? (0, import_react57.createElement)(
+      "div",
+      { className: "bt-product-resource-row", role: "status" },
+      (0, import_react57.createElement)("span", null, t(rotationResult?.status === "pending" ? "Rotation pending. Retry with the same value or check its status." : "Rotation command saved. Check its status before starting another rotation.")),
+      (0, import_react57.createElement)("button", {
+        className: "bt-soft",
+        type: "button",
+        disabled: Boolean(busy),
+        onClick: () => {
+          void checkRotation(rotationAttempt);
+        }
+      }, t("Check rotation"))
+    ) : null,
     (0, import_react57.createElement)(
       "form",
       { className: "bt-product-resource-create", onSubmit: create },
@@ -23263,6 +23379,27 @@ function ProductCredentialSettings({ binding, call: call2 }) {
           onChange: (event) => setRename(event.target.value)
         }),
         (0, import_react57.createElement)("button", { className: "bt-soft", type: "submit", disabled: Boolean(busy) || !rename.trim() }, t("Rename resource"))
+      ),
+      (0, import_react57.createElement)(
+        "form",
+        { className: "bt-product-resource-create", onSubmit: rotate },
+        (0, import_react57.createElement)(Row, { label: t("New credential value") }, (0, import_react57.createElement)("input", {
+          className: "bt-bs-input",
+          type: "password",
+          value: rotationValue,
+          autoComplete: "new-password",
+          disabled: Boolean(busy) || Boolean(rotationAttempt && rotationAttempt.resourceId !== selected.id),
+          onChange: (event) => setRotationValue(event.target.value)
+        })),
+        (0, import_react57.createElement)(
+          "button",
+          {
+            className: "bt-soft",
+            type: "submit",
+            disabled: Boolean(busy) || !rotationValue.trim() || Boolean(rotationAttempt && rotationAttempt.resourceId !== selected.id)
+          },
+          busy === "rotate" ? t("Saving…") : t(rotationAttempt ? "Retry rotation" : "Rotate credential")
+        )
       ),
       (0, import_react57.createElement)(
         "form",

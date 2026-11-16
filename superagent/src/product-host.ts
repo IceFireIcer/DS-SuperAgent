@@ -70,6 +70,8 @@ const resourceFields: Record<string, string[]> = {
   'resource-list': ['instanceId', 'after', 'limit'], 'resource-read': ['instanceId', 'resourceId'],
   'resource-create': ['instanceId', 'commandId', 'label', 'value'],
   'resource-rename': ['instanceId', 'commandId', 'resourceId', 'expectedRevision', 'label'],
+  'resource-rotate': ['instanceId', 'commandId', 'resourceId', 'expectedRevision', 'value'],
+  'resource-rotation-read': ['instanceId', 'commandId'],
   'resource-delete': ['instanceId', 'commandId', 'resourceId', 'expectedRevision'],
   'resource-request': ['instanceId', 'commandId', 'resourceId', 'scope', 'purpose'],
   'resource-request-read': ['instanceId', 'requestId'], 'resource-cancel': ['instanceId', 'commandId', 'requestId'],
@@ -124,6 +126,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
     if (!resourceManager || closing || credentialRecovery) return credentialRecovery
     credentialRecovery = (async () => {
       try { await resourceManager!.resumeCreations() } catch { /* Retain the intent for the next bounded scan. */ }
+      try { await resourceManager!.resumeRotations() } catch { /* Retain the rotation intent for the next scan. */ }
       try { await resourceManager!.resumeCleanup() } catch { /* Keep deleted resources visible until cleanup succeeds. */ }
     })().finally(() => { credentialRecovery = undefined })
     return credentialRecovery
@@ -525,6 +528,14 @@ export async function createProductHost(context: Context, config: ProductHostCon
           if (endpoint === 'resource-rename') return manager.rename({ instanceId, commandId,
             resourceId: payload.resourceId as string, expectedRevision: payload.expectedRevision as number,
             label: payload.label as string })
+          if (endpoint === 'resource-rotate') return manager.rotate({ instanceId, commandId,
+            resourceId: payload.resourceId as string, expectedRevision: payload.expectedRevision as number,
+            value: payload.value as string })
+          if (endpoint === 'resource-rotation-read') {
+            const result = await manager.rotationStatus({ instanceId, commandId })
+            if (!result) throw new CoreError('NOT_FOUND', 'The credential rotation command is unavailable.')
+            return result
+          }
           if (endpoint === 'resource-delete') return manager.delete({ instanceId, commandId,
             resourceId: payload.resourceId as string, expectedRevision: payload.expectedRevision as number })
           if (endpoint === 'resource-request') return manager.request({ instanceId, commandId,
@@ -545,7 +556,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
             resourceId: payload.resourceId as string, grantId: payload.grantId as string,
             expectedRevision: payload.expectedRevision as number })
           if (endpoint === 'resource-cleanup') return payload.resourceId === undefined
-            ? { creations: await manager.resumeCreations(), deletions: await manager.resumeCleanup() }
+            ? { creations: await manager.resumeCreations(), rotations: await manager.resumeRotations(),
+              deletions: await manager.resumeCleanup() }
             : manager.cleanupDeleted({ instanceId, resourceId: payload.resourceId as string })
           if (endpoint === 'resource-select-feishu') {
             if (!feishuRuntime || config.feishu?.api.appSecret) throw new CoreError('UNAVAILABLE', 'Managed Feishu credentials are not enabled for this source.')
