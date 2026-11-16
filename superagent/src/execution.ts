@@ -9,7 +9,7 @@ import { environmentCommandNames, environmentHasCommand, environmentLocation, sa
 import { canonicalJson, commandTransaction } from './commands.js'
 import { deliveryMessageId, type WorkInput, type WorkInputs, type WorkOwnership } from './work-inputs.js'
 import type { Attention, Attentions } from './attention.js'
-import type { SourceEvents } from './source-events.js'
+import { isCurrentSourceEvent, type SourceEvent, type SourceEvents } from './source-events.js'
 import type { Slots, SlotActivation } from './slots.js'
 import { Jobs, type JobRecord, type JobView } from './jobs.js'
 import { Previews, type PreviewView } from './previews.js'
@@ -135,7 +135,7 @@ export interface StopState {
 
 interface StopHead { stopId: string }
 export interface ReadyReport { id: string; ticketId: string; assignmentId: string; sessionId: string; kind: 'ready'; result: string; evidence: string; artifacts: Artifact[]; toolFacts: ToolFact[]; inputId?: string; directionVersion: number; createdAt: number }
-export interface Artifact { path: string; bytes: number; sha256: string }
+export interface Artifact { path: string; bytes: number; sha256: string; reference?: EnvironmentAssetReference }
 export interface ToolFact { tool: string; outcome: 'success' | 'failed'; output: Record<string, unknown> }
 export interface SetupState { assignmentId: string; state: 'failed' | 'ready' | 'pending'; output?: Record<string, unknown>; code?: string }
 export interface StatusReport { id: string; ticketId: string; assignmentId: string; text: string; createdAt: number }
@@ -192,7 +192,8 @@ export class Execution {
     subagents?: Subagents, previews?: Previews, deliveries?: Deliveries, context?: ContextReader, roleConfig?: RoleConfigStore,
     private readonly deliveryState?: import('./delivery-state.js').DeliveryState, private readonly hostId = 'local-host',
     private readonly hostCapabilities: HostCapabilities = {},
-    private readonly hostEpoch?: () => number | undefined) {
+    private readonly hostEpoch?: () => number | undefined,
+    private readonly proactiveGuard?: (transaction: AsyncTx, ticketId: string, runId: string) => Promise<void>) {
     this.jobs = jobs
     this.previews = previews
     this.subagents = subagents
@@ -331,6 +332,7 @@ export class Execution {
         // A turn already running on this Ticket is not a failure of the queued wake: keep it due instead of
         // turning an ordinary overlap into an unknown outcome that would block the lane.
         if (error instanceof CoreError && error.code === 'TURN_ACTIVE') return { type: 'defer', reason: 'The Ticket already has an active Worker turn.' }
+        if (error instanceof CoreError && error.code === 'SOURCE_STOPPED' && effect.payload.ticketId) return { type: 'defer', reason: error.message }
         throw error
       }
     }
@@ -384,6 +386,7 @@ export class Execution {
       const ticket = await transaction.get<Work['ticket']>('ticket', ticketId)
       const assignment = await transaction.get<Assignment>('assignment', ticketId)
       const trigger = await this.trigger(transaction, ticketId)
+      if (trigger.proactive) await this.proactiveGuard?.(transaction, ticketId, trigger.proactive.runId)
       return { ticket, assignment, trigger }
     })
     if (!initial.ticket || initial.ticket.state !== 'open' || initial.ticket.constraint) {
@@ -412,6 +415,7 @@ export class Execution {
         throw new CoreError('ENVIRONMENT_BOUND', 'The active Assignment has no replaceable Environment binding.')
       }
       const trigger = await this.trigger(transaction, ticketId)
+      if (trigger.proactive) await this.proactiveGuard?.(transaction, ticketId, trigger.proactive.runId)
       if (trigger.source.actorId !== initial.trigger.source.actorId) {
         throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The original actor changed before the Environment was fixed.')
       }
@@ -689,6 +693,7 @@ export class Execution {
     const ticket = await this.storage.transaction(this.instanceId, transaction => transaction.get<Work['ticket']>('ticket', ticketId))
     if (ticket?.constraint) return undefined
     const trigger = await this.storage.transaction(this.instanceId, transaction => this.trigger(transaction, ticketId))
+    if (trigger.proactive) return undefined
     const report = ready ? await this.storage.transaction(this.instanceId, transaction => transaction.get<ReadyReport>('report', ticketId)) : undefined
     if (ready && !report) throw new CoreError('NOT_READY', 'No ready report exists.')
     const tool: NativeTool = ready ? {
@@ -821,6 +826,7 @@ export class Execution {
     const admitted = await this.storage.transaction(this.instanceId, async transaction => {
       let assignment = await transaction.get<Assignment>('assignment', ticketId)
       const trigger = await this.trigger(transaction, ticketId)
+      if (trigger.proactive) await this.proactiveGuard?.(transaction, ticketId, trigger.proactive.runId)
       const ticket = (await transaction.get<Work['ticket']>('ticket', ticketId))!
       if (ticket.state !== 'open') throw new CoreError('TICKET_ENDED', 'The Ticket is not open for this Worker turn.')
       if (ticket.constraint) throw new CoreError('TICKET_BLOCKED', 'The Ticket constraint must be resolved before another Worker turn.')
@@ -927,6 +933,11 @@ export class Execution {
     if (stoppedBeforeRun) controller.abort()
     const toolFacts: ToolFact[] = []
     const artifacts: Artifact[] = []
+    let proactiveWrittenBytes = 0
+    const checkProactive = async () => {
+      if (trigger.proactive) await this.storage.transaction(this.instanceId,
+        tx => this.proactiveGuard!(tx, ticketId, trigger.proactive!.runId))
+    }
     let reported = false
     let askedAttention: Attention | undefined
     let handedBack = false
@@ -1018,10 +1029,16 @@ export class Execution {
       })
     }
     const environmentTool = async (name: string, args: Record<string, string>, signal: AbortSignal) => {
+      await checkProactive()
       if (!bound) throw new CoreError('ENVIRONMENT_DENIED', 'No Environment is bound to this Assignment.')
       if (reported) throw new CoreError('REPORT_SEALED', 'Environment tools are sealed after the ready report; no later mutation is authorized.')
       if (askedAttention) throw new CoreError('ATTENTION_ACTIVE', 'Environment tools are sealed after asking a human question.')
       if (toolFacts.length >= 24) throw new CoreError('TOOL_BUDGET', 'The Environment tool-call budget was exhausted.')
+      const bytes = name === 'write_file' ? Buffer.byteLength(args.text ?? '') : 0
+      if (trigger.proactive && (name === 'write_file' && typeof args.text !== 'string'
+        || proactiveWrittenBytes + bytes > trigger.proactive.maxArtifactBytes)) {
+        throw new CoreError('ARTIFACT_BUDGET', 'The proactive Ticket exceeded its isolated file budget.')
+      }
       if (name === 'run_command' && bound.planCommand) {
         const planned = bound.planCommand(args.name!, 'foreground')
         try {
@@ -1072,6 +1089,8 @@ export class Execution {
       try {
         if (name === 'read_asset') await authorizeAssetRead(args)
         const output = await bound.invoke(name, args, signal)
+        proactiveWrittenBytes += bytes
+        await checkProactive()
         if (name === 'read_asset') await authorizeAssetRead(args)
         if (name === 'save_attachment') await recordSavedAsset(output)
         const success = name !== 'run_command' && name !== 'run_shell'
@@ -1470,11 +1489,34 @@ export class Execution {
       parameters: { kind: { type: 'string', required: true }, id: { type: 'string', required: true }, threadId: { type: 'string', required: true },
         objectId: { type: 'string', required: true }, after: { type: 'string', required: true }, maxBytes: { type: 'string', required: true } },
       execute: async (args: Record<string, string>) => {
+        await checkProactive()
         const kind = args.kind as ContextKind
         return JSON.stringify(await this.context.read({ ticketId, ref: { kind, ticketId,
           ...(args.id ? { id: args.id } : {}), ...(args.threadId ? { threadId: args.threadId } : {}), ...(args.objectId ? { objectId: args.objectId } : {}) },
           ...(args.after ? { after: args.after } : {}), ...(args.maxBytes ? { maxBytes: Number(args.maxBytes) } : {}) }))
       },
+    }
+    const proactiveSourceTool: NativeTool = {
+      name: 'read_proactive_source', description: 'Read one bounded page of the original verified source event for this exact proactive Ticket.',
+      parameters: { offset: { type: 'string', required: true }, maxBytes: { type: 'string', required: true } },
+      execute: async args => this.storage.transaction(this.instanceId, async tx => {
+        if (!trigger.proactive || !this.proactiveGuard) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This Ticket has no proactive source grant.')
+        await this.proactiveGuard(tx, ticketId, trigger.proactive.runId)
+        const event = await tx.get<SourceEvent>('source-event', trigger.proactive.sourceEventId)
+        if (!event || event.source.sourceInstanceId !== trigger.proactive.sourceInstanceId || !await isCurrentSourceEvent(tx, event)) {
+          throw new CoreError('SOURCE_NOT_CURRENT', 'The original event is no longer current.')
+        }
+        const offset = Number(args.offset), maxBytes = Number(args.maxBytes)
+        if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isInteger(maxBytes) || maxBytes < 1 || maxBytes > 8192) {
+          throw new CoreError('INVALID_INPUT', 'Read a bounded source page of at most 8192 bytes.')
+        }
+        const body = Buffer.from(event.text ?? '')
+        if (offset > body.length) throw new CoreError('INVALID_INPUT', 'The source offset is beyond the event.')
+        const nextOffset = Math.min(offset + maxBytes, body.length)
+        return JSON.stringify({ sourceInstanceId: event.source.sourceInstanceId, eventId: event.id, authorId: event.authorId,
+          authorKind: event.authorKind, addressing: event.addressing, version: event.version,
+          text: body.subarray(offset, nextOffset).toString('utf8'), nextOffset, hasMore: nextOffset < body.length })
+      }),
     }
     let turnMessageId: string | undefined
     let turnText: string | undefined
@@ -1511,17 +1553,20 @@ export class Execution {
         ...(input ? { onMessagePersisted: async (seq: number) => {
           await this.storage.transaction(this.instanceId, transaction => this.inputs.recordPersisted(transaction, input.id, turnMessageId!, seq))
         } } : {}),
-        onBeforeModel: async () => { await this.storage.transaction(this.instanceId, transaction => this.roleConfig.recordUse(transaction, {
-          sessionId: assignment.sessionId, role: 'worker', revision: configuration.revision,
-          router: configuration.roles.router.model, worker: configuration.roles.worker.model,
-        })) },
+        onBeforeModel: async () => { await this.storage.transaction(this.instanceId, async transaction => {
+          if (trigger.proactive) await this.proactiveGuard?.(transaction, ticketId, trigger.proactive.runId)
+          await this.roleConfig.recordUse(transaction, { sessionId: assignment.sessionId, role: 'worker', revision: configuration.revision,
+            router: configuration.roles.router.model, worker: configuration.roles.worker.model })
+        }) },
+        ...(trigger.proactive ? { stepBudget: 8 } : {}),
         text: turnText ?? await this.turnTextFor(cause, ticketId, trigger, input, job, subagent),
         ...(cause === 'launch' && trigger.nativeImages?.length
           ? { content: [{ type: 'text' as const, text: turnText ?? trigger.text },
               ...trigger.nativeImages.map(attachment => ({ type: 'image' as const, attachment }))] } : {}),
         profile: structuredClone(configuration.roles.worker),
-        ...(bound ? { cwd: bound.cwd } : {}), signal: controller.signal, tools: status ? statusTools : [
+        ...(bound ? { cwd: bound.cwd } : {}), signal: controller.signal, tools: status ? statusTools : ([
       contextTool,
+      ...(trigger.proactive ? [proactiveSourceTool] : []),
       ...environmentTools,
       ...mcpTools,
       ...browserTools,
@@ -1618,8 +1663,12 @@ export class Execution {
           if (!paths.length || paths.length > 10) throw new CoreError('INVALID_REPORT', 'Provide one to ten newline-separated relative artifact paths.')
           artifacts.splice(0)
           for (const path of paths) artifacts.push(await bound.artifact(path, signal))
+          if (trigger.proactive && artifacts.reduce((total, artifact) => total + artifact.bytes, 0) > trigger.proactive.maxArtifactBytes) {
+            throw new CoreError('ARTIFACT_BUDGET', 'The proactive Ticket artifacts exceed the rule byte budget.')
+          }
         }
         return this.storage.transaction(this.instanceId, async transaction => {
+          if (trigger.proactive) await this.proactiveGuard?.(transaction, ticketId, trigger.proactive.runId)
           const current = await transaction.get<Assignment>('assignment', ticketId)
           if (current?.id !== assignment.id || current.state !== 'running') throw new CoreError('STALE_ASSIGNMENT', 'The reporting Assignment is no longer current.')
           const existing = await transaction.get<ReadyReport>('report', ticketId)
@@ -1635,7 +1684,7 @@ export class Execution {
         })
       },
       },
-    ] })
+    ] satisfies NativeTool[]).filter(tool => !trigger.proactive || ['read_context', 'read_proactive_source', 'read_file', 'write_file', 'glob', 'grep', 'report_ready'].includes(tool.name)) })
     } catch (error) {
       if (controller.signal.aborted || await this.storage.transaction(this.instanceId, async transaction => Boolean(await this.activeStop(transaction, ticketId)))) {
         // The turn is quiet, but its background work may not be: the stop's own path cancels it and confirms.
@@ -1680,7 +1729,8 @@ export class Execution {
         releasedInTransaction = true
         return false
       }
-      const sessionMetadata = { id: outcome.sessionId, eventCount: outcome.events.length, ticketId, role: 'worker', status: outcome.status }
+      const sessionMetadata = { id: outcome.sessionId, eventCount: outcome.events.length, ticketId, role: 'worker', status: outcome.status,
+        ...(trigger.proactive ? { stepCount: outcome.stepCount } : {}) }
       if (!await transaction.replace('session', outcome.sessionId, sessionMetadata)) await transaction.insert('session', outcome.sessionId, sessionMetadata)
       if (status && statusFact) {
         const fact: StatusReport = { id: `${JSON.stringify(['status-report', ticketId])}:${randomUUID()}`, ticketId, assignmentId: assignment.id, text: statusFact, createdAt: Date.now() }
@@ -1718,7 +1768,7 @@ export class Execution {
       await transaction.replace('intent', ticketId, { ...intent, state: currentReport ? 'ready' : 'running', reason: currentReport ? 'ready-report' : 'worker-idle' })
       if (currentReport) {
         await this.saveAssignment(transaction, { ...assignment, state: 'ended' })
-        await this.effects.enqueue(transaction, { key: currentReport.id, stream: 'notice', scope: 'router', payload: { type: 'report-ready', ticketId, reportId: currentReport.id } })
+        if (!trigger.proactive) await this.effects.enqueue(transaction, { key: currentReport.id, stream: 'notice', scope: 'router', payload: { type: 'report-ready', ticketId, reportId: currentReport.id } })
         endedJobs = await this.endAssignmentJobs(transaction, ticketId, assignment.id)
         endedSubagents = await this.endAssignmentSubagents(transaction, ticketId, assignment.id)
       }
@@ -3004,6 +3054,11 @@ export class Execution {
 
   private async requireCurrentAuthorization(transaction: AsyncTx, ticketId: string, actorId: string, action: string) {
     const trigger = await this.trigger(transaction, ticketId)
+    if (trigger.proactive) {
+      if (!this.proactiveGuard) throw new CoreError('PROACTIVE_REVOKED', 'The proactive work guard is unavailable.')
+      await this.proactiveGuard(transaction, ticketId, trigger.proactive.runId)
+      return
+    }
     if (trigger.threadId) {
       const current = await this.sourceEvents.candidate(transaction, { threadId: trigger.threadId, objectId: trigger.eventId })
       if (!current) throw new CoreError('SOURCE_NOT_CURRENT', `The original source authorization is no longer current for ${action}.`)

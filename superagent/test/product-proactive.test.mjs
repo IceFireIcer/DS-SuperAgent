@@ -16,9 +16,18 @@ test('a configured Feishu bot event prepares a bounded review without granting p
   const workerTools = []
   const paths = []
   const native = await nativeContext(join(directory, 'sessions'), function* (request) {
+    if (request.model === 'router' && request.tools.some(tool => tool.name === 'establish_proactive_ticket')) {
+      if (request.messages.filter(message => message.role === 'tool').length === 0) yield* toolResponse('establish_proactive_ticket', {})
+      else yield* textResponse('The Router recorded the bounded decision.')
+      return
+    }
     if (request.model !== 'worker') { yield* textResponse('No source work requested.'); return }
     workerCalls++
     workerTools.push(...request.tools.map(tool => tool.name))
+    if (!request.tools.some(tool => tool.name === 'submit_preparation')) {
+      yield* textResponse('This Ticket is still pending independent verification.')
+      return
+    }
     const tools = request.messages.filter(message => message.role === 'tool').length
     if (tools === 0) yield* toolResponse('write_file', { path: 'review.md', text: 'Review only. No publish, PR or merge.' })
     else if (tools === 1) yield* toolResponse('submit_preparation', {
@@ -77,6 +86,10 @@ test('a configured Feishu bot event prepares a bounded review without granting p
   assert.equal(ready.ruleRevision, 3)
   assert.equal(ready.modelSteps > 0, true)
   assert.equal(ready.artifacts[0].path, 'review.md')
+  const routed = await waitFor(async () => (await call('proactive-read', { runId: ready.id })).work?.assignment?.id)
+  assert.ok(routed)
+  assert.equal((await call('proactive-read', { runId: ready.id })).work.mandate.scope, 'Prepare a review note only.')
+  assert.notEqual((await call('proactive-read', { runId: ready.id })).work.status, 'ready')
   assert.match((await call('proactive-artifact', { runId: ready.id, path: 'review.md' })).text, /Review only/u)
   assert.equal((await call('history')).preparations[0].id, ready.id)
   assert.equal((await call('history')).messages.length, 0, 'a useful preparation is a bounded card, not a new Main model turn')
@@ -86,6 +99,7 @@ test('a configured Feishu bot event prepares a bounded review without granting p
   await assert.rejects(call('proactive-artifact', { runId: ready.id, path: '../state.sqlite' }), { code: 'NOT_FOUND' })
   const stopped = await call('proactive-stop', { commandId: 'stop-review', runId: ready.id, reason: 'Stopped by the user.' })
   assert.equal(stopped.state, 'stopped')
+  assert.equal((await call('proactive-read', { runId: ready.id })).work.status, 'stopped')
   assert.deepEqual((await call('history')).preparations, [])
   await call('proactive-pause', { commandId: 'pause-preparation', paused: true })
   const previousCalls = workerCalls

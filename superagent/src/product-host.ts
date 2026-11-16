@@ -15,6 +15,7 @@ import { FeishuRuntime, type FeishuRuntimeOptions } from './feishu-runtime.js'
 import { GitHubRuntime, type GitHubRuntimeOptions } from './github-runtime.js'
 import { ProductAttachments } from './product-attachments.js'
 import { productProactivePreparation } from './product-proactive.js'
+import { ProactiveWork } from './proactive-work.js'
 import type { ProactiveRule } from './proactive.js'
 import type { ProductCredentialRecords } from './product-credential-vault.js'
 import type { ProductCredentialManager } from './product-credential-manager.js'
@@ -127,10 +128,28 @@ export async function createProductHost(context: Context, config: ProductHostCon
   let feishuEngine: Engine | undefined
   let githubRuntime: GitHubRuntime | undefined
   let githubEngine: Engine | undefined
+  let workRouter: ProactiveWork | undefined
   let feishuLegacyConflict = false
   let feishuSelectionActive = false
   const proactiveRoot = join(dirname(config.databasePath), 'proactive-preparations')
   const proactive = { rootDirectory: proactiveRoot, prepareTimeoutMs: 30_000, pauseSourceInstanceId: 'product-desktop',
+    onPrepared: (tx: import('./storage.js').AsyncTx, run: import('./proactive.js').ProactiveRun) => workRouter!.enqueue(tx, run),
+    route: (runId: string, signal: AbortSignal) => workRouter!.route(runId, signal),
+    sourceAvailable: (sourceId: string, sourceActorId: string) => sourceId === feishuRuntime?.sourceBinding.sourceInstanceId
+      && sourceActorId === feishuRuntime.sourceBinding.actorId && feishuRuntime.health().state === 'polling'
+      || sourceId === githubRuntime?.sourceBinding.sourceInstanceId
+      && sourceActorId === githubRuntime.sourceBinding.actorId && githubRuntime.health().state === 'polling',
+    authorizeWork: async (tx: import('./storage.js').AsyncTx, run: import('./proactive.js').ProactiveRun) => {
+      if (run.sourceInstanceId !== feishuRuntime?.sourceBinding.sourceInstanceId || config.feishu?.api.appSecret) return
+      const selected = await tx.get<{ resourceId: string | null }>('product-feishu-credential', run.sourceInstanceId)
+      const resource = selected?.resourceId ? await tx.get<{ status: string; grants: { scope: { role: string; workItemId?: string;
+        environmentId?: string; sourceInstanceId?: string }; purposes: string[] }[] }>('resource-credential', selected.resourceId) : undefined
+      if (resource?.status !== 'active' || !resource.grants.some(grant => grant.scope.role === 'main'
+        && grant.scope.workItemId === undefined && grant.scope.environmentId === undefined
+        && (grant.scope.sourceInstanceId === undefined || grant.scope.sourceInstanceId === run.sourceInstanceId)
+        && grant.purposes.includes('source'))) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The selected Feishu source grant was revoked.')
+    },
+    onSourceChanged: (sourceId: string) => { void workRouter?.stopInvalid('The original source event changed.', sourceId).catch(() => {}) },
     prepare: productProactivePreparation({ instanceId, actorId, sessions,
       engineForSource: sourceId => sourceId === feishuRuntime?.sourceBinding.sourceInstanceId ? feishuEngine
         : sourceId === githubRuntime?.sourceBinding.sourceInstanceId ? githubEngine
@@ -278,7 +297,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
     const failures: unknown[] = []
     for (const close of [() => supervision?.close(), () => statusPublisher?.close(), () => gateway?.close(), () => feishuRuntime?.stop(), () => githubRuntime?.stop(), () => engine?.effects.stop(),
       () => feishuEngine?.effects.stop(), () => githubEngine?.effects.stop(), () => engine?.shutdown(), () => feishuEngine?.shutdown(), () => githubEngine?.shutdown(),
-      () => engine?.closeBrowserResources(), () => sessions.close(), ...environments.map(environment => () => environment.close()), () => storage.close()]) {
+      () => engine?.closeBrowserResources(), () => workRouter?.close(), () => sessions.close(),
+      ...environments.map(environment => () => environment.close()), () => storage.close()]) {
       try { await close() } catch (error) { failures.push(error) }
     }
     if (failures.length) throw new AggregateError(failures, 'The product Host did not close cleanly.')
@@ -338,6 +358,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
         ...(config.workerMcpTool ? { mcp: true } : {}), ...(browserAdapter ? { browser: true } : {}),
       } } : {}) }, {}, sessions,
       environments, {}, {}, {}, channel ? { channel } : {}, {}, proactive, attachments)
+    workRouter = new ProactiveWork(storage, instanceId, engine, sessions, actorId)
     const records = context.get('credentials') as ProductCredentialRecords | undefined
     if (records && typeof records.readRecord === 'function' && typeof records.modifyRecord === 'function'
       && typeof records.deleteRecord === 'function') resourceManager = engine.createProductCredentialManager(records)
@@ -366,6 +387,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
       feishuLegacyConflict = Boolean(selected?.resourceId)
     }
     await engine.recoverProactiveRuns()
+    await workRouter.recover()
     await recoverCredentials()
     await engine.openMain({ instanceId })
     supervision = createProductSupervision(engine, sessions, storage, instanceId,
@@ -393,6 +415,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
       void engine?.reconcileProactiveCandidates().catch(() => {})
       void feishuEngine?.reconcileProactiveCandidates().catch(() => {})
       if (githubRuntime?.health().state === 'polling') void githubEngine?.reconcileProactiveCandidates().catch(() => {})
+      void workRouter?.stopInvalid('The proactive authorization changed.').catch(() => {})
       void recoverCredentials()
     }, 30_000)
     scheduleTimer.unref()
@@ -418,6 +441,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
           : endpoint === 'proactive-list' ? ['instanceId', 'before']
           : endpoint === 'proactive-read' ? ['instanceId', 'runId']
             : endpoint === 'proactive-artifact' ? ['instanceId', 'runId', 'path', 'offset', 'maxBytes']
+              : endpoint === 'proactive-work-artifact' ? ['instanceId', 'runId', 'path', 'offset', 'maxBytes']
               : endpoint === 'proactive-save' ? ['instanceId', 'commandId', 'expectedRevision', 'rules']
                 : endpoint === 'proactive-pause' ? ['instanceId', 'commandId', 'paused']
                   : endpoint === 'proactive-stop' ? ['instanceId', 'commandId', 'runId', 'reason']
@@ -482,7 +506,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
         if (client && endpoint.startsWith('supervision')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Supervision decisions and history require the local authorized product window.')
         }
-        if (client && (endpoint === 'proactive-save' || endpoint === 'proactive-pause' || endpoint === 'proactive-artifact')) {
+        if (client && (endpoint === 'proactive-save' || endpoint === 'proactive-pause' || endpoint === 'proactive-artifact' || endpoint === 'proactive-work-artifact')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Preparation settings and files require the local authorized product window.')
         }
         if (client && endpoint.startsWith('preset-')) {
@@ -536,11 +560,21 @@ export async function createProductHost(context: Context, config: ProductHostCon
           const end = before === undefined ? runs.length : runs.findIndex(run => run.id === before)
           if (end < 0) throw new CoreError('INVALID_INPUT', 'Use a cursor from this Instance preparation index.')
           const start = Math.max(0, end - 50)
-          return { items: runs.slice(start, end).reverse().map(({ text, ...run }) => ({ ...run, text: text.slice(0, 512) })),
+          return { items: await Promise.all(runs.slice(start, end).reverse().map(async run => {
+            const work = await workRouter!.view(run)
+            return { ...run, text: run.text.slice(0, 512), ...(work ? { work } : {}) }
+          })),
             total: runs.length, ...(start ? { before: runs[start]!.id } : {}) }
         }
-        if (endpoint === 'proactive-read') return await engine!.getProactiveRun(payload.runId as string) ?? null
+        if (endpoint === 'proactive-read') {
+          const run = await engine!.getProactiveRun(payload.runId as string)
+          if (!run) return null
+          const work = await workRouter!.view(run)
+          return { ...run, ...(work ? { work } : {}) }
+        }
         if (endpoint === 'proactive-artifact') return engine!.readProactiveArtifact(payload.runId as string,
+          payload.path as string, payload.offset as number | undefined, payload.maxBytes as number | undefined)
+        if (endpoint === 'proactive-work-artifact') return workRouter!.readArtifact(payload.runId as string,
           payload.path as string, payload.offset as number | undefined, payload.maxBytes as number | undefined)
         if (endpoint === 'proactive-save') {
           const rules = payload.rules as ProactiveRule[]
@@ -560,11 +594,13 @@ export async function createProductHost(context: Context, config: ProductHostCon
           }
           const saved = await engine!.updateProactiveRules({ commandId, expectedRevision: payload.expectedRevision as number, rules })
           engine!.abortProactiveRuns(); feishuEngine?.abortProactiveRuns(); githubEngine?.abortProactiveRuns()
+          await workRouter!.stopInvalid('The standing proactive rule changed.')
           return saved
         }
         if (endpoint === 'proactive-pause') {
           const result = await engine!.setProactivePaused({ commandId, paused: payload.paused as boolean })
           if (result.paused) { engine!.abortProactiveRuns(); feishuEngine?.abortProactiveRuns(); githubEngine?.abortProactiveRuns() }
+          if (result.paused) await workRouter!.stopInvalid('Proactive work was paused.')
           return result
         }
         if (endpoint === 'proactive-stop') {
@@ -574,7 +610,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
           }
           const owner = run.sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId ? feishuEngine
             : run.sourceInstanceId === githubRuntime?.sourceBinding.sourceInstanceId ? githubEngine : engine
-          return owner!.stopProactiveRun({ commandId, runId: run.id, reason: payload.reason as string })
+          const stopped = await owner!.stopProactiveRun({ commandId, runId: run.id, reason: payload.reason as string })
+          await workRouter!.stopInvalid('The preparation was stopped.')
+          return stopped
         }
         if (endpoint.startsWith('resource-')) {
           if (!resourceManager) throw new CoreError('UNAVAILABLE', 'This DSH profile has no durable credential record service.')
@@ -600,8 +638,12 @@ export async function createProductHost(context: Context, config: ProductHostCon
             if (!result) throw new CoreError('NOT_FOUND', 'The credential rotation command is unavailable.')
             return result
           }
-          if (endpoint === 'resource-delete') return manager.delete({ instanceId, commandId,
-            resourceId: payload.resourceId as string, expectedRevision: payload.expectedRevision as number })
+          if (endpoint === 'resource-delete') {
+            const result = await manager.delete({ instanceId, commandId,
+              resourceId: payload.resourceId as string, expectedRevision: payload.expectedRevision as number })
+            await workRouter!.stopInvalid('A source credential was deleted.')
+            return result
+          }
           if (endpoint === 'resource-request') return manager.request({ instanceId, commandId,
             resourceId: payload.resourceId as string, scope: payload.scope as import('./resource-credentials.js').CredentialScope,
             purpose: payload.purpose as import('./resource-credentials.js').CredentialPurpose })
@@ -616,9 +658,13 @@ export async function createProductHost(context: Context, config: ProductHostCon
             scope: payload.scope as import('./resource-credentials.js').CredentialScope,
             purposes: payload.purposes as import('./resource-credentials.js').CredentialPurpose[],
             ...(payload.requestId === undefined ? {} : { requestId: payload.requestId as string }) })
-          if (endpoint === 'resource-revoke') return manager.revokeGrant({ instanceId, commandId,
-            resourceId: payload.resourceId as string, grantId: payload.grantId as string,
-            expectedRevision: payload.expectedRevision as number })
+          if (endpoint === 'resource-revoke') {
+            const result = await manager.revokeGrant({ instanceId, commandId,
+              resourceId: payload.resourceId as string, grantId: payload.grantId as string,
+              expectedRevision: payload.expectedRevision as number })
+            await workRouter!.stopInvalid('A source credential grant was revoked.')
+            return result
+          }
           if (endpoint === 'resource-cleanup') return payload.resourceId === undefined
             ? { creations: await manager.resumeCreations(), rotations: await manager.resumeRotations(),
               deletions: await manager.resumeCleanup() }
@@ -637,6 +683,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
               try {
                 selected = await manager.selectFeishuCredential({ instanceId, sourceInstanceId: feishuRuntime.sourceBinding.sourceInstanceId,
                   commandId, resourceId: payload.resourceId })
+                await workRouter!.stopInvalid('The Feishu source credential selection changed.', feishuRuntime.sourceBinding.sourceInstanceId)
               } catch (error) {
                 await feishuRuntime.start().catch(() => { /* Restore the previous selection when the command was rejected. */ })
                 throw error
@@ -708,6 +755,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
           }
           if (endpoint === 'feishu-stop') {
             feishuEngine?.abortProactiveRuns(); await feishuEngine?.discardProactiveCandidates(); await feishuRuntime.stop()
+            await workRouter!.stopInvalid('The Feishu source was stopped.', feishuRuntime.sourceBinding.sourceInstanceId)
           }
           return { configured: true, sourceInstanceId: feishuRuntime.sourceBinding.sourceInstanceId,
             credentialMode: config.feishu!.api.appSecret ? 'legacy' : 'managed',
@@ -730,6 +778,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
             await githubRuntime.stop()
             githubEngine?.abortProactiveRuns()
             await githubEngine?.discardProactiveCandidates()
+            await workRouter!.stopInvalid('The GitHub source was stopped.', githubRuntime.sourceBinding.sourceInstanceId)
           }
           return { configured: true, sourceInstanceId: githubRuntime.sourceBinding.sourceInstanceId, ...githubRuntime.health() }
         }
