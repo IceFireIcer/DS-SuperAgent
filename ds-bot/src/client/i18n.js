@@ -97,6 +97,8 @@ const ZH = {
   'Independent Watchdog is not configured for this Host.': '此 Host 尚未配置独立看护进程。',
   'Semantic inspection': '语义巡检',
   'Partial inspection': '部分巡检',
+  'Restart inspection': '重新巡检',
+  'Tickets inspected': '已巡检工作数',
   'Inspection budget': '巡检预算',
   'Inspection budget exhausted': '巡检预算已耗尽',
   'Inspection failed': '巡检失败',

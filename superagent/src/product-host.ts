@@ -431,7 +431,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
               : endpoint === 'work-resume' ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration']
                 : endpoint === 'work-answer' ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'attentionId', 'attentionVersion', 'text']
                 : endpoint === 'supervision' ? ['instanceId', 'ticketId']
-                  : endpoint === 'supervision-inspect' ? ['instanceId']
+                  : endpoint === 'supervision-inspect' ? ['instanceId', 'restart']
                     : endpoint === 'supervision-decide' ? ['instanceId', 'commandId', 'proposalId', 'decision', 'fingerprint', 'reason']
                   : endpoint === 'settings' ? ['instanceId', 'limit']
                     : endpoint === 'settings-save' ? ['instanceId', 'commandId', 'expectedRevision', 'roles']
@@ -636,7 +636,10 @@ export async function createProductHost(context: Context, config: ProductHostCon
         }
         if (endpoint === 'schedule-list') return engine!.listSchedules({ instanceId })
         if (endpoint === 'supervision') return supervision!.state(payload.ticketId as string | undefined)
-        if (endpoint === 'supervision-inspect') return supervision!.inspect()
+        if (endpoint === 'supervision-inspect') {
+          if (payload.restart !== undefined && payload.restart !== true) throw new CoreError('INVALID_INPUT', 'Restarting an inspection requires an explicit true value.')
+          return supervision!.inspect(payload.restart === true)
+        }
         if (endpoint === 'supervision-decide') return engine!.decideSupervisorProposal({ instanceId,
           commandId: commandId, proposalId: payload.proposalId as string, decision: payload.decision as 'approve' | 'reject',
           fingerprint: payload.fingerprint as string,

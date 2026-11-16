@@ -163,6 +163,8 @@ var ZH = {
   "Independent Watchdog is not configured for this Host.": "此 Host 尚未配置独立看护进程。",
   "Semantic inspection": "语义巡检",
   "Partial inspection": "部分巡检",
+  "Restart inspection": "重新巡检",
+  "Tickets inspected": "已巡检工作数",
   "Inspection budget": "巡检预算",
   "Inspection budget exhausted": "巡检预算已耗尽",
   "Inspection failed": "巡检失败",
@@ -23482,11 +23484,13 @@ var PRODUCT_CREDENTIAL_CSS = `
 
 // src/client/product-supervision.js
 var import_react58 = require("react");
+var inspectionStatus = (run2) => run2.status === "completed" && !run2.partial ? "Inspection complete" : run2.status === "budget-exhausted" ? "Inspection budget exhausted" : run2.status === "partial" || run2.partial && run2.status !== "failed" ? "Partial inspection" : "Inspection failed";
 function ProductSupervisionSettings({ binding, call: call2 }) {
   const [state, setState] = (0, import_react58.useState)(null);
   const [selected, setSelected] = (0, import_react58.useState)(null);
   const [busy, setBusy] = (0, import_react58.useState)(false);
   const [error, setError] = (0, import_react58.useState)(null);
+  const requiresRestart = state?.run?.last?.partial && (state.run.last.status === "completed" && !state.run.checkpoint || state.run.last.status === "failed" && ["INVALID_INPUT", "INCOMPLETE_STATE"].includes(state.run.last.error));
   const load = async (ticketId) => {
     const next = await call2("supervision", { instanceId: binding.instanceId, ...ticketId ? { ticketId } : {} });
     setState(next);
@@ -23523,7 +23527,10 @@ function ProductSupervisionSettings({ binding, call: call2 }) {
     setBusy(true);
     setError(null);
     try {
-      await call2("supervision-inspect", { instanceId: binding.instanceId });
+      await call2("supervision-inspect", {
+        instanceId: binding.instanceId,
+        ...requiresRestart ? { restart: true } : {}
+      });
       await load(selected);
     } catch (failure) {
       setError(failure.message);
@@ -23560,11 +23567,11 @@ function ProductSupervisionSettings({ binding, call: call2 }) {
       (0, import_react58.createElement)("h3", null, t("Supervision")),
       (0, import_react58.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", disabled: busy, onClick: () => {
         void inspect();
-      } }, t("Inspect now"))
+      } }, t(requiresRestart ? "Restart inspection" : "Inspect now"))
     ),
     error ? (0, import_react58.createElement)("p", { role: "alert", className: "bt-main-error" }, error) : null,
     (0, import_react58.createElement)("p", { className: "bt-main-status" }, state?.watchdogConfigured ? state.watchdog?.last ? `${t("Watchdog")}: ${state.watchdog.last.kind} · ${new Date(state.watchdog.last.at).toLocaleString()}` : t("Watchdog has not inspected yet.") : t("Independent Watchdog is not configured for this Host.")),
-    state?.run?.last ? (0, import_react58.createElement)("p", { className: "bt-main-status" }, `${t("Semantic inspection")}: ${state.run.last.status === "budget-exhausted" ? t("Inspection budget exhausted") : state.run.last.status === "failed" ? t("Inspection failed") : t("Inspection complete")}${state.run.last.partial ? ` · ${t("Partial inspection")}` : ""}${state.run.last.error && state.run.last.status === "failed" ? ` · ${state.run.last.error}` : ""} · ${new Date(state.run.last.at).toLocaleString()} · ${t("Inspection budget")} ${state.run.last.budget.used}/${state.run.last.budget.max}`) : null,
+    state?.run?.last ? (0, import_react58.createElement)("p", { className: "bt-main-status" }, `${t("Semantic inspection")}: ${t(inspectionStatus(state.run.last))}${state.run.last.error && state.run.last.status === "failed" ? ` · ${state.run.last.error}` : ""} · ${new Date(state.run.last.at).toLocaleString()} · ${t("Tickets inspected")} ${state.run.last.coverage?.inspected ?? state.run.last.inspectionBudget?.inspected ?? 0} · ${t("Inspection budget")} ${state.run.last.budget.used}/${state.run.last.budget.max}`) : null,
     state?.proposals?.length ? (0, import_react58.createElement)(
       "div",
       { className: "bt-product-supervision-list" },
