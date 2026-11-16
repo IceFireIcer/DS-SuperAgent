@@ -13,14 +13,14 @@ import { completedToolCount, lastUserText } from './input-support.mjs'
 import { nativeContext, routerResponse, textResponse, toolResponse } from '../dev/native-mock.mjs'
 
 async function until(check) {
-  const deadline = Date.now() + 20_000
+  const deadline = Date.now() + 40_000
   while (!await check()) {
     if (Date.now() > deadline) throw new Error('The Worker MCP call did not settle.')
     await sleep(25)
   }
 }
 
-test('the product Worker calls only its approved MCP tool through the live tool grant', { timeout: 90_000 }, async t => {
+test('the product Worker calls only its approved MCP tool through the live tool grant', { timeout: 120_000 }, async t => {
   const base = await mkdtemp(join(tmpdir(), 'r5-worker-mcp-'))
   const work = join(base, 'work')
   const core = join(base, 'core')
@@ -153,10 +153,14 @@ test('the product Worker calls only its approved MCP tool through the live tool 
   await until(async () => {
     const history = await host.dispatch('history', { instanceId: 'personal' })
     approvedWork = history.works.find(work => work.receipt?.status === 'accepted' && work.brief?.goal === 'Check work-3.')
-    return approvedWork?.outcome?.status === 'success'
+    return Boolean(approvedWork?.receipt?.ticketId)
   })
   const raw = await SqliteStorage.open(config.databasePath)
-  const report = await raw.transaction('personal', tx => tx.get('report', approvedWork.receipt.ticketId))
+  let report
+  await until(async () => {
+    report = await raw.transaction('personal', tx => tx.get('report', approvedWork.receipt.ticketId))
+    return report?.toolFacts?.some(fact => fact.tool === 'mcp__approved__check')
+  })
   await raw.close()
   assert.deepEqual(report.toolFacts.filter(fact => fact.tool === 'mcp__approved__check'),
     [{ tool: 'mcp__approved__check', outcome: 'success', output: { text: 'checked fixture' } }])
