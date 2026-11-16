@@ -13,3 +13,5 @@ Worker/子代理在外部请求前持久登记 unknown；仅原请求的确定�
 合并 `dev` `1d8112f` 后复核 #108：MCP 配置状态需要显式批准和连接，Host 在受信回调内调用 `assertUse`；持久意图位于这些检查之后的实际 `tools/call` 前。组合定向测试 6/6 通过，未改产品 Host/UI，也未把配置连接视为已完成工具副作用对账。
 
 再合并 `dev` `a3e7ea0d` 的 #110：保留共享 Worker scope、浏览器子代理工具和浏览器 unknown 阻断；MCP unknown 的 resume/retry/接管检查独立保留。Node 24 两路并行七个目标文件 9/9、typecheck、定向 lint 通过；未跑全量 CI 或真实浏览器。
+
+最终合并 `dev` `99e4bb48` 的 #115：主动 Router 工作和 MCP 作用域在不同调用点，组合定向 12/12、typecheck、定向 lint 与 UI 边界检查通过。未运行真实租户或全量 CI，不将合并 smoke 视作完整 R5-15 验收。

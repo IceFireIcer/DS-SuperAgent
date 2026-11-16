@@ -14,3 +14,5 @@ Node 24.22.1 隔离 SQLite、虚构 DSH record 与 mock MCP server 验证调用�
 合并最新 `dev` `1d8112f`（含 #108/#106/#116）后，保留 `mcp-approve` 与 `mcp-connect` 的既有显式门禁；意图仅在这两关和当前工具 grant 都通过、准备发出真实 `tools/call` 时提交。合并后的 MCP 设置、Worker/子代理、工作观察和 Main delegation 五个文件在 Windows 两路并行下 6/6 通过，typecheck 与定向 lint 通过。#108 设置测试只调整工具事实断言以接纳新增的安全请求 UUID；没有放宽审批或连接行为。
 
 后续合并 `dev` `a3e7ea0d` 的 #110 浏览器租约，共用 Worker `workScope`，但 MCP 仍单独核对 grant、持久意图与原 UUID；Host 接管和显式 retry 同时保留 MCP 与浏览器 unknown 阻断，停止后显式 resume 也检查 MCP unknown。Node 24 两路并行七个定向文件 9/9、typecheck、定向 lint 通过；未运行真实浏览器/租户或完整 CI。
+
+最终合并本地 `dev` `99e4bb48`（含 #115 主动 Router 工作），自动合并后 Node 24 两路并行七个定向文件 12/12、typecheck、定向 lint 和相对 `dev` 的 UI 边界检查通过。此合并没有修改本票的 Host/UI/实施索引；PostgreSQL、远端 MCP 结果查询和真实租户仍未验收。
