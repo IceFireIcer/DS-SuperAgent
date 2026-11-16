@@ -28,7 +28,7 @@ function keyFor(instanceId: string, reference: string): string {
   return reference
 }
 
-function secretValue(value: unknown): asserts value is string {
+export function assertCredentialValue(value: unknown): asserts value is string {
   if (typeof value !== 'string' || !value.trim() || Buffer.byteLength(value) > 16384 || /[\r\n]/u.test(value)) {
     throw new CoreError('INVALID_INPUT', 'The credential value is invalid.')
   }
@@ -55,7 +55,7 @@ export class ProductCredentialVault implements CredentialVault {
   }
 
   async create(instanceId: string, value: string, commandId?: string): Promise<string> {
-    identifier(instanceId, 'instanceId'); secretValue(value)
+    identifier(instanceId, 'instanceId'); assertCredentialValue(value)
     if (commandId !== undefined) identifier(commandId, 'commandId')
     const reference = commandId === undefined
       ? `${owner}/vault-${createHash('sha256').update(instanceId).digest('hex')}-${randomUUID()}`
@@ -81,23 +81,6 @@ export class ProductCredentialVault implements CredentialVault {
     const secret = await this.readSecret(instanceId, reference)
     try { return await consume(secret) }
     catch { throw new CoreError('CREDENTIAL_USE_FAILED', 'The credential could not be used.') }
-  }
-
-  async rotate(instanceId: string, reference: string, value: string): Promise<void> {
-    const key = keyFor(instanceId, reference)
-    secretValue(value)
-    let missing = false
-    try {
-      const updated = await this.records.modifyRecord(key, async current => {
-        if (current?.kind !== 'api-key' || typeof current.key !== 'string' || !current.key.trim() || current.env !== undefined) {
-          missing = true
-          return undefined
-        }
-        return { kind: 'api-key', key: value }
-      })
-      if (missing) throw unavailable()
-      if (updated?.kind !== 'api-key' || updated.key !== value || updated.env !== undefined) throw writeFailed()
-    } catch { throw missing ? unavailable() : writeFailed() }
   }
 
   async revoke(instanceId: string, reference: string): Promise<void> {

@@ -35,6 +35,7 @@ test('credential settings keep values out of projections and show exact grant an
     const calls = []
     let resource
     let feishuResourceId = null
+    let rotationCalls = 0
     const call = async (endpoint, payload) => {
       calls.push({ endpoint, payload })
       if (endpoint === 'feishu-status') return { configured: true, credentialMode: 'managed', sourceInstanceId: 'source-one',
@@ -54,8 +55,16 @@ test('credential settings keep values out of projections and show exact grant an
         resource = { ...resource, revision: 2, grants: [{ id: 'grant-one', scope: payload.scope, purposes: payload.purposes }] }
         return { ...resource }
       }
-      if (endpoint === 'resource-revoke') { resource = { ...resource, revision: 3, grants: [] }; return { ...resource } }
-      if (endpoint === 'resource-delete') { resource = { ...resource, revision: 4, status: 'deleted' }; return { ...resource } }
+      if (endpoint === 'resource-rotate') {
+        rotationCalls++
+        if (rotationCalls === 1) throw new Error(`A provider error must not show ${payload.value}`)
+        resource = { ...resource, revision: resource.revision + 1 }
+        return { status: 'committed', resource: { ...resource }, cleanupPending: false }
+      }
+      if (endpoint === 'resource-rotation-read') return { status: rotationCalls === 1 ? 'pending' : 'committed',
+        resourceId: resource.id, cleanupPending: rotationCalls === 1, resource: { ...resource } }
+      if (endpoint === 'resource-revoke') { resource = { ...resource, revision: resource.revision + 1, grants: [] }; return { ...resource } }
+      if (endpoint === 'resource-delete') { resource = { ...resource, revision: resource.revision + 1, status: 'deleted' }; return { ...resource } }
       throw new Error(`Unexpected endpoint: ${endpoint}`)
     }
     const root = createRoot(dom.window.document.querySelector('#root'))
@@ -84,6 +93,19 @@ test('credential settings keep values out of projections and show exact grant an
       assert.deepEqual(JSON.parse(JSON.stringify(calls.find(entry => entry.endpoint === 'resource-grant').payload.scope)),
         { role: 'worker', workItemId: 'item-one', environmentId: 'work-one', sourceInstanceId: 'source-one' })
       assert.match(document.body.textContent, /worker · tool/u)
+      await change(document.querySelector('.bt-product-resource-selected input[type="password"]'), 'fictional-next-value')
+      await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Rotate credential'))
+      assert.match(document.body.textContent, /Rotation is pending/u)
+      assert.equal(document.body.textContent.includes('fictional-next-value'), false)
+      assert.ok(dom.window.sessionStorage.getItem('product-rotation:personal'))
+      await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Check rotation'))
+      await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Retry rotation'))
+      const rotations = calls.filter(entry => entry.endpoint === 'resource-rotate')
+      assert.equal(rotations.length, 2)
+      assert.equal(rotations[0].payload.commandId, rotations[1].payload.commandId)
+      assert.equal(dom.window.sessionStorage.getItem('product-rotation:personal'), null)
+      assert.equal(document.querySelector('.bt-product-resource-selected input[type="password"]').value, '')
+      assert.match(document.body.textContent, /Credential rotated\./u)
       await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Use for Feishu'))
       assert.equal(calls.find(entry => entry.endpoint === 'resource-select-feishu').payload.resourceId, 'resource-one')
       assert.match(document.body.textContent, /Selected Feishu resource: Issue delivery/u)
@@ -94,7 +116,7 @@ test('credential settings keep values out of projections and show exact grant an
       assert.equal(calls.find(entry => entry.endpoint === 'resource-revoke').payload.grantId, 'grant-one')
       await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Delete resource'))
       assert.equal(calls.find(entry => entry.endpoint === 'resource-delete').payload.resourceId, 'resource-one')
-      assert.match(document.body.textContent, /deleted · v4/u)
+      assert.match(document.body.textContent, /deleted · v5/u)
     } finally { await React.act(async () => root.unmount()) }
   } finally {
     dom.window.close()

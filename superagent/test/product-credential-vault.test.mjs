@@ -45,14 +45,15 @@ test('an Instance owns a record reference; revocation denies later use without a
   assert.equal(service.stored.has(reference), false)
 })
 
-test('rotation changes the next use while a revoked reference cannot be rotated back into service', async () => {
+test('rotation stages a separate record; a revoked reference cannot be used again', async () => {
   const vault = new ProductCredentialVault(records())
   const reference = await vault.create('personal', 'fictional-old-value')
-  await assert.rejects(vault.rotate('team', reference, 'fictional-other-value'), { code: 'RESOURCE_UNAVAILABLE' })
-  await vault.rotate('personal', reference, 'fictional-new-value')
-  assert.equal(await vault.withSecret('personal', reference, async secret => secret === 'fictional-new-value'), true)
+  const next = await vault.create('personal', 'fictional-new-value', 'rotate-one')
+  assert.equal(await vault.withSecret('personal', reference, async secret => secret === 'fictional-old-value'), true)
+  assert.equal(await vault.withSecret('personal', next, async secret => secret === 'fictional-new-value'), true)
   await vault.revoke('personal', reference)
-  await assert.rejects(vault.rotate('personal', reference, 'fictional-again-value'), { code: 'RESOURCE_UNAVAILABLE' })
+  await assert.rejects(vault.assertReference('personal', reference), { code: 'RESOURCE_UNAVAILABLE' })
+  await assert.rejects(vault.assertReference('team', next), { code: 'RESOURCE_UNAVAILABLE' })
 })
 
 test('malformed, missing, foreign and ambient-only credentials are unavailable', async () => {
@@ -128,8 +129,8 @@ test('provider and consumer failures cannot return secret-bearing diagnostics', 
   service.modifyRecord = originalModify
   const reference = await vault.create('personal', sensitive)
   await masked(vault.withSecret('personal', reference, async secret => { throw new Error(`consumer rejected ${secret}`) }), 'CREDENTIAL_USE_FAILED')
-  service.modifyRecord = async () => { throw new Error(`rotate rejected ${sensitive}`) }
-  await masked(vault.rotate('personal', reference, 'fictional-next-value'), 'CREDENTIAL_WRITE_FAILED')
+  service.modifyRecord = async () => { throw new Error(`staging rejected ${sensitive}`) }
+  await masked(vault.create('personal', 'fictional-next-value', 'rotate-one'), 'CREDENTIAL_WRITE_FAILED')
   const originalRead = service.readRecord
   service.readRecord = async () => { throw new Error(`read rejected ${sensitive}`) }
   await masked(vault.assertReference('personal', reference), 'RESOURCE_UNAVAILABLE')
