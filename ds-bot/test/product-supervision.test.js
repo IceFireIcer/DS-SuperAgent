@@ -28,10 +28,15 @@ test('the existing settings view shows evidence and sends a decision only after 
     status: 'proposed', version: 'supervisor-r2', recommendation: 'Return to the listed files.',
     evidence: { assessment: { reason: 'The file list was ignored.' } }, impact: { summary: 'Adds one direction input.' }, createdAt: Date.now() }
   const calls = []
+  let status = 'partial'
   const call = async (endpoint, payload) => {
     calls.push({ endpoint, payload })
-    if (endpoint === 'supervision') return { watchdogConfigured: false, run: { last: { at: Date.now(), status: 'completed', budget: { used: 1, max: 24 } } }, watchdog: null,
+    if (endpoint === 'supervision') return { watchdogConfigured: false, run: { last: { at: Date.now(), status,
+      partial: status !== 'completed', ...(status === 'failed' ? { error: 'INCOMPLETE_STATE' } : {}),
+      coverage: { inspected: status === 'completed' ? 1001 : 100, batches: status === 'completed' ? 11 : 1 },
+      budget: { used: 1, max: 24 } }, ...(status === 'partial' ? { checkpoint: { cursor: 'opaque' } } : {}) }, watchdog: null,
       proposals: [proposal], observation: payload.ticketId ? { history: [{ at: Date.now(), finding: 'deviation' }] } : null }
+    if (endpoint === 'supervision-inspect') { status = 'completed'; return { status } }
     if (endpoint === 'supervision-decide') { proposal.status = 'approved'; proposal.action = { status: 'done', kind: 'direction' }; return proposal }
     throw new Error(`Unexpected product endpoint ${endpoint}`)
   }
@@ -42,9 +47,22 @@ test('the existing settings view shows evidence and sends a decision only after 
     })))
     assert.match(dom.window.document.body.textContent, /The file list was ignored/u)
     assert.match(dom.window.document.body.textContent, /Independent Watchdog is not configured/u)
+    assert.match(dom.window.document.body.textContent, /Partial inspection/u)
+    assert.match(dom.window.document.body.textContent, /Tickets inspected 100/u)
+    assert.doesNotMatch(dom.window.document.body.textContent, /Inspection complete/u)
+    const inspect = [...dom.window.document.querySelectorAll('button')].find(item => item.textContent === 'Inspect now')
+    await React.act(async () => inspect.click())
+    assert.match(dom.window.document.body.textContent, /Inspection complete/u)
+    assert.match(dom.window.document.body.textContent, /Tickets inspected 1001/u)
     assert.equal(calls.some(item => item.endpoint === 'supervision-decide'), false)
     const history = [...dom.window.document.querySelectorAll('button')].find(item => item.textContent === 'View history')
+    status = 'failed'
     await React.act(async () => history.click())
+    assert.match(dom.window.document.body.textContent, /Inspection failed/u)
+    const restart = [...dom.window.document.querySelectorAll('button')].find(item => item.textContent === 'Restart inspection')
+    await React.act(async () => restart.click())
+    assert.equal(calls.at(-2).endpoint, 'supervision-inspect')
+    assert.equal(calls.at(-2).payload.restart, true)
     assert.match(dom.window.document.body.textContent, /Observation history/u)
     const approve = [...dom.window.document.querySelectorAll('button')].find(item => item.textContent === 'Approve')
     await React.act(async () => approve.click())

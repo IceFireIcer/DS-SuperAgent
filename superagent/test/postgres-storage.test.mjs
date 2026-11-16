@@ -36,6 +36,38 @@ test('PostgreSQL retains supervision runs and Watchdog inspections after a new c
   assert.equal(await reopened.transaction('another-instance', tx => tx.get('supervisor-observation', JSON.stringify(['supervisor-observation', observed.ticketId]))), undefined)
 })
 
+test('PostgreSQL retains authorized supervision continuation across independent Engine connections', { timeout: 60000 }, async () => {
+  const { storage } = await newStorage()
+  const instance = 'supervision-cursor-contract'
+  const source = { sourceInstanceId: 'product-desktop', actorId: 'user', allowedActorIds: ['user'] }
+  await storage.transaction(instance, async tx => {
+    for (let index = 0; index < 101; index++) {
+      const id = `ticket-${String(index).padStart(3, '0')}`
+      const triggerId = `trigger-${id}`
+      const decisionId = `decision-${id}`
+      const mandateId = `mandate-${id}`
+      await tx.insert('trigger', triggerId, { id: triggerId, instanceId: instance,
+        source: { kind: 'desktop', sourceInstanceId: source.sourceInstanceId, actorId: source.actorId }, eventId: id, text: id })
+      await tx.insert('decision', decisionId, { id: decisionId, instanceId: instance, triggerId, outcome: 'accept', policyVersion: 'test' })
+      await tx.insert('mandate', mandateId, { id: mandateId, instanceId: instance, decisionId, scope: id, strength: 'explicit', environment: 'local' })
+      await tx.insert('ticket', id, { id, instanceId: instance, mandateId, triggerId, state: 'open', directionVersion: 1 })
+      await tx.insert('intent', id, { id: `intent-${id}`, instanceId: instance, ticketId: id, state: 'pending', reason: 'worker-not-enabled', environment: 'local' })
+    }
+  })
+  const first = await new Engine(storage, instance, source).getSupervision({ durableCursor: true, pageLimit: 1 })
+  assert.equal(first.items.length, 100)
+  assert.equal(first.hasMore, true)
+  const reopened = await postgres.register(await storage.reconnect())
+  const second = await new Engine(reopened, instance, source).getSupervision({ durableCursor: true, pageLimit: 1, cursor: first.nextCursor })
+  assert.equal(second.items.length, 1)
+  assert.equal(second.hasMore, false)
+  assert.equal(second.items[0].ticketId, 'ticket-100')
+  assert.equal(await new Engine(reopened, instance, source).countSupervisionTickets(), 101)
+  assert.equal(await reopened.transaction('another-instance', tx => tx.get('supervisor-cursor-key', 'product-supervisor')), undefined)
+  await assert.rejects(new Engine(reopened, instance, { ...source, sourceInstanceId: 'another-source' })
+    .getSupervision({ durableCursor: true, pageLimit: 1, cursor: first.nextCursor }), { code: 'INVALID_INPUT' })
+})
+
 test('PostgreSQL keeps an Instance work directory after restart without moving an older binding', { timeout: 30000 }, async t => {
   const { storage } = await newStorage()
   const first = join(directory, 'r5-17-postgres-first')

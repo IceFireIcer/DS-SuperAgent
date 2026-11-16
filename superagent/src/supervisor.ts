@@ -136,7 +136,7 @@ export interface SupervisorReport {
 
 /** The narrow Engine surface the Supervisor reads and the two authorized commands it may be approved to run. */
 export interface SupervisorEngine {
-  getSupervision(options?: { includeHistory?: boolean; cursor?: string; pageLimit?: number }): Promise<{
+  getSupervision(options?: { includeHistory?: boolean; cursor?: string; pageLimit?: number; durableCursor?: boolean }): Promise<{
     items: Record<string, unknown>[]; processingPaused?: boolean; hasMore: boolean; nextCursor?: string }>
   getTicket(ticketId: string): Promise<{ mandate: { id: string; scope: string } } | undefined>
   getTicketDirection(ticketId: string): Promise<{ directionVersion: number } | undefined>
@@ -299,7 +299,8 @@ export class Supervisor {
     let cursor = after
     for (let pageCount = 0; pageCount < this.maxPages; pageCount++) {
       signal.throwIfAborted()
-      const page = await this.engine.getSupervision({ includeHistory: true, pageLimit: 1, ...(cursor === undefined ? {} : { cursor }) })
+      const page = await this.engine.getSupervision({ includeHistory: true, pageLimit: 1, durableCursor: true,
+        ...(cursor === undefined ? {} : { cursor }) })
       if (page.items.length > 100) throw new CoreError('INCOMPLETE_STATE', 'The supervision Ticket page exceeds its 100-item budget.')
       if (typeof page.hasMore !== 'boolean' || !page.hasMore && page.nextCursor !== undefined) {
         throw new CoreError('INCOMPLETE_STATE', 'The supervision Ticket page has an inconsistent continuation state.')

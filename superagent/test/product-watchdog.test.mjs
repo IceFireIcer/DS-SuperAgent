@@ -15,6 +15,22 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { completedToolCount, lastUserText } from './input-support.mjs'
 import { routerResponse, toolResponse } from '../dev/native-mock.mjs'
 
+async function seedPendingTickets(storage, ids) {
+  await storage.transaction('private', async tx => {
+    for (const id of ids) {
+      const triggerId = `trigger-${id}`
+      const decisionId = `decision-${id}`
+      const mandateId = `mandate-${id}`
+      await tx.insert('trigger', triggerId, { id: triggerId, instanceId: 'private',
+        source: { kind: 'desktop', sourceInstanceId: 'product-desktop', actorId: 'user' }, eventId: `event-${id}`, text: `Review ${id}.` })
+      await tx.insert('decision', decisionId, { id: decisionId, instanceId: 'private', triggerId, outcome: 'accept', policyVersion: 'test' })
+      await tx.insert('mandate', mandateId, { id: mandateId, instanceId: 'private', decisionId, scope: `Review ${id}.`, strength: 'explicit', environment: 'local' })
+      await tx.insert('ticket', id, { id, instanceId: 'private', mandateId, triggerId, state: 'open', directionVersion: 1 })
+      await tx.insert('intent', id, { id: `intent-${id}`, instanceId: 'private', ticketId: id, state: 'pending', reason: 'worker-not-enabled', environment: 'local' })
+    }
+  })
+}
+
 test('the product probe separates Main, Router, Worker, source, setup and unknown-job failures', async () => {
   const probe = await productWatchdogProbe({
     async getMainConversation() { return { health: { state: 'degraded', errorCode: 'MODEL_DOWN' } } },
@@ -57,10 +73,10 @@ test('the actual product Host publishes bounded health for an independent Watchd
   const run = await host.dispatch('supervision-inspect', { instanceId: 'private' })
   assert.equal(run.status, 'completed')
   assert.equal(run.observations, 0)
-  assert.deepEqual(run.inspectionBudget, { inspected: 0, maxTickets: 1000 })
+  assert.deepEqual(run.inspectionBudget, { inspected: 0, maxTickets: 100 })
   const after = await host.dispatch('supervision', { instanceId: 'private' })
   assert.equal(after.run.last.status, 'completed')
-  assert.deepEqual(after.run.last.inspectionBudget, { inspected: 0, maxTickets: 1000 })
+  assert.deepEqual(after.run.last.inspectionBudget, { inspected: 0, maxTickets: 100 })
   let budgetResult
   for (let attempt = 0; attempt < 24; attempt++) budgetResult = await host.dispatch('supervision-inspect', { instanceId: 'private' })
   assert.equal(budgetResult.status, 'budget-exhausted', 'manual inspections share the persisted hourly budget')
@@ -175,4 +191,161 @@ test('Main work gets a semantic proposal; the trusted decision adds one directio
   const after = (await call('history')).works[0].control.ticketVersion
   assert.equal(after, before + 1)
   assert.equal((await call('supervision')).proposals.find(item => item.id === proposal.id).status, 'approved')
+})
+
+test('a legacy partial inspection needs an explicit trusted restart', { timeout: 20000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'r5-supervision-legacy-'))
+  const databasePath = join(directory, 'state.sqlite')
+  const native = await nativeContext(join(directory, 'sessions'), function* () { yield* textResponse('No tools.') })
+  const host = await createProductHost(native, { databasePath, instanceId: 'private', actorId: 'user',
+    main: { provider: 'mock', model: 'main' }, router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  t.after(async () => { await host.close(); await native.fiber.dispose(); await rm(directory, { recursive: true, force: true }) })
+  await host.dispatch('supervision-inspect', { instanceId: 'private' })
+  const storage = await SqliteStorage.open(databasePath)
+  try {
+    const prior = await storage.transaction('private', tx => tx.get('supervisor-run', 'product-supervisor'))
+    await storage.transaction('private', tx => tx.replace('supervisor-run', 'product-supervisor', {
+      ...prior, last: { at: prior.last.at, version: prior.last.version, budget: prior.last.budget,
+        status: 'completed', partial: true,
+        inspectionBudget: { inspected: 1000, maxTickets: 1000 }, nextCursor: 'legacy-memory-cursor' },
+    }))
+    const refused = await host.dispatch('supervision-inspect', { instanceId: 'private' })
+    assert.equal(refused.status, 'failed')
+    assert.equal(refused.partial, true)
+    assert.equal(refused.error, 'INCOMPLETE_STATE')
+    assert.equal(refused.coverage.inspected, 1000)
+    const client = { id: 'remote', grants: [{ instanceId: 'private', capabilities: ['read', 'command'] }] }
+    await assert.rejects(host.dispatch('supervision-inspect', { instanceId: 'private', restart: true }, client), { code: 'SOURCE_NOT_AUTHORIZED' })
+    await assert.rejects(host.dispatch('supervision-inspect', { instanceId: 'private', restart: false }), { code: 'INVALID_INPUT' })
+    const restarted = await host.dispatch('supervision-inspect', { instanceId: 'private', restart: true })
+    assert.equal(restarted.status, 'completed')
+    assert.deepEqual(restarted.coverage, { inspected: 0, batches: 1 })
+    assert.equal(restarted.partial, undefined)
+  } finally { await storage.close() }
+})
+
+test('a Ticket inserted behind the checkpoint cannot turn a partial inspection into complete', { timeout: 45000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'r5-supervision-changing-'))
+  const databasePath = join(directory, 'state.sqlite')
+  let host, native
+  t.after(async () => { await host?.close(); await native?.fiber.dispose(); await rm(directory, { recursive: true, force: true }) })
+  const config = { databasePath, instanceId: 'private', actorId: 'user',
+    main: { provider: 'mock', model: 'main' }, router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } }
+  const open = async () => {
+    native = await nativeContext(join(directory, 'sessions'), function* () { yield* textResponse('No tools.') })
+    host = await createProductHost(native, config)
+  }
+  await open()
+  const storage = await SqliteStorage.open(databasePath)
+  try {
+    await seedPendingTickets(storage, Array.from({ length: 101 }, (_, index) => `ticket-${String(index).padStart(4, '0')}`))
+    const first = await host.dispatch('supervision-inspect', { instanceId: 'private' })
+    assert.equal(first.status, 'partial')
+    await host.close(); host = undefined
+    await native.fiber.dispose(); native = undefined
+    await seedPendingTickets(storage, ['ticket-0000a'])
+    await open()
+    const failed = await host.dispatch('supervision-inspect', { instanceId: 'private' })
+    assert.equal(failed.status, 'failed')
+    assert.equal(failed.error, 'INCOMPLETE_STATE')
+    assert.equal(failed.partial, true)
+    assert.equal(failed.coverage.inspected, 101)
+    assert.equal((await storage.transaction('private', tx => tx.get('supervisor-run', 'product-supervisor'))).checkpoint, undefined)
+    const observation = id => storage.transaction('private', tx => tx.get('supervisor-observation', JSON.stringify(['supervisor-observation', id])))
+    assert.equal((await observation('ticket-0000')).history.length, 1)
+    assert.equal(await observation('ticket-0000a'), undefined)
+    const restarted = await host.dispatch('supervision-inspect', { instanceId: 'private', restart: true })
+    assert.equal(restarted.status, 'partial')
+    const deadline = Date.now() + 25_000
+    let completed
+    while (Date.now() < deadline) {
+      completed = (await host.dispatch('supervision', { instanceId: 'private' })).run?.last
+      if (completed?.status === 'completed') break
+      await sleep(50)
+    }
+    assert.equal(completed?.status, 'completed')
+    assert.equal(completed.coverage.inspected, 102)
+    assert.equal((await observation('ticket-0000a')).history.length, 1)
+  } finally { await storage.close() }
+})
+
+test('trusted product inspection resumes 1001 Tickets across Host restart and rejects a damaged checkpoint', { timeout: 240000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'r5-supervision-resume-'))
+  const databasePath = join(directory, 'state.sqlite')
+  let host, native
+  t.after(async () => {
+    await host?.close().catch(() => {})
+    await native?.fiber.dispose()
+    await rm(directory, { recursive: true, force: true })
+  })
+  const config = { databasePath, instanceId: 'private', actorId: 'user',
+    main: { provider: 'mock', model: 'main' }, router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } }
+  const open = async () => {
+    native = await nativeContext(join(directory, 'sessions'), function* () { yield* textResponse('No tools.') })
+    host = await createProductHost(native, config)
+  }
+  await open()
+  const storage = await SqliteStorage.open(databasePath)
+  try {
+    await seedPendingTickets(storage, Array.from({ length: 1001 }, (_, index) => `ticket-${String(index).padStart(4, '0')}`))
+    const first = await host.dispatch('supervision-inspect', { instanceId: 'private' })
+    assert.equal(first.status, 'partial')
+    assert.deepEqual(first.coverage, { inspected: 100, batches: 1 })
+    await host.close(); host = undefined
+    await native.fiber.dispose(); native = undefined
+    const record = await storage.transaction('private', tx => tx.get('supervisor-run', 'product-supervisor'))
+    assert.equal(record.checkpoint.inspected, 100)
+    const originalCursor = record.checkpoint.cursor
+    await storage.transaction('private', tx => tx.replace('supervisor-run', 'product-supervisor', {
+      ...record, attempts: Array.from({ length: 24 }, () => Date.now()),
+    }))
+    await open()
+    const limited = await host.dispatch('supervision-inspect', { instanceId: 'private' })
+    assert.equal(limited.status, 'budget-exhausted')
+    assert.equal(limited.partial, true)
+    assert.equal(limited.coverage.inspected, 100)
+    assert.equal((await storage.transaction('private', tx => tx.get('supervisor-run', 'product-supervisor'))).checkpoint.cursor, originalCursor)
+    await host.close(); host = undefined
+    await native.fiber.dispose(); native = undefined
+    const limitedState = await storage.transaction('private', tx => tx.get('supervisor-run', 'product-supervisor'))
+    await storage.transaction('private', tx => tx.replace('supervisor-run', 'product-supervisor', {
+      ...limitedState, attempts: record.attempts, checkpoint: { ...limitedState.checkpoint, cursor: 'sv1.invalid' },
+    }))
+    await open()
+    const failedDeadline = Date.now() + 15_000
+    let failed
+    while (Date.now() < failedDeadline) {
+      failed = (await host.dispatch('supervision', { instanceId: 'private' })).run?.last
+      if (failed?.status === 'failed') break
+      await sleep(50)
+    }
+    assert.equal(failed?.status, 'failed')
+    assert.equal(failed.partial, true)
+    assert.equal(failed.coverage.inspected, 100)
+    assert.equal(failed.error, 'INVALID_INPUT')
+    const firstObservation = () => storage.transaction('private', tx => tx.get('supervisor-observation', JSON.stringify(['supervisor-observation', 'ticket-0000'])))
+    assert.equal((await firstObservation()).history.length, 1, 'an invalid continuation never restarts at the first page')
+    const failedState = await storage.transaction('private', tx => tx.get('supervisor-run', 'product-supervisor'))
+    await storage.transaction('private', tx => tx.replace('supervisor-run', 'product-supervisor', {
+      ...failedState, checkpoint: { ...failedState.checkpoint, cursor: originalCursor },
+    }))
+    await host.dispatch('supervision-inspect', { instanceId: 'private' })
+    const deadline = Date.now() + 160_000
+    let run
+    while (Date.now() < deadline) {
+      run = (await host.dispatch('supervision', { instanceId: 'private' })).run?.last
+      if (run?.status === 'completed') break
+      if (run?.status === 'failed' || run?.status === 'budget-exhausted') assert.fail(`Inspection stopped: ${run.error}`)
+      await sleep(100)
+    }
+    assert.equal(run?.status, 'completed')
+    assert.deepEqual(run.coverage, { inspected: 1001, batches: 11 })
+    assert.equal(run.partial, undefined)
+    assert.equal((await firstObservation()).history.length, 1)
+    assert.equal((await storage.transaction('private', tx => tx.get('supervisor-observation', JSON.stringify(['supervisor-observation', 'ticket-1000'])))).history.length, 1)
+    assert.equal((await storage.transaction('private', tx => tx.get('supervisor-run', 'product-supervisor'))).checkpoint, undefined)
+    const client = { id: 'remote', grants: [{ instanceId: 'private', capabilities: ['read', 'command'] }] }
+    await assert.rejects(host.dispatch('supervision-inspect', { instanceId: 'private' }, client), { code: 'SOURCE_NOT_AUTHORIZED' })
+    await assert.rejects(host.dispatch('supervision-inspect', { instanceId: 'private', cursor: originalCursor }), { code: 'INVALID_INPUT' })
+  } finally { await storage.close() }
 })

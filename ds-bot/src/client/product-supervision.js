@@ -1,11 +1,17 @@
 import { createElement as h, useEffect, useState } from 'react'
 import { t } from './i18n.js'
 
+const inspectionStatus = run => run.status === 'completed' && !run.partial ? 'Inspection complete'
+  : run.status === 'budget-exhausted' ? 'Inspection budget exhausted'
+    : run.status === 'partial' || run.partial && run.status !== 'failed' ? 'Partial inspection' : 'Inspection failed'
+
 export function ProductSupervisionSettings({ binding, call }) {
   const [state, setState] = useState(null)
   const [selected, setSelected] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+  const requiresRestart = state?.run?.last?.partial && (state.run.last.status === 'completed' && !state.run.checkpoint
+    || state.run.last.status === 'failed' && ['INVALID_INPUT', 'INCOMPLETE_STATE'].includes(state.run.last.error))
   const load = async ticketId => {
     const next = await call('supervision', { instanceId: binding.instanceId, ...(ticketId ? { ticketId } : {}) })
     setState(next)
@@ -26,7 +32,8 @@ export function ProductSupervisionSettings({ binding, call }) {
   }
   const inspect = async () => {
     setBusy(true); setError(null)
-    try { await call('supervision-inspect', { instanceId: binding.instanceId }); await load(selected) }
+    try { await call('supervision-inspect', { instanceId: binding.instanceId,
+      ...(requiresRestart ? { restart: true } : {}) }); await load(selected) }
     catch (failure) { setError(failure.message) }
     finally { setBusy(false) }
   }
@@ -41,12 +48,12 @@ export function ProductSupervisionSettings({ binding, call }) {
   }
   return h('section', { className: 'bt-product-supervision', 'aria-label': t('Supervision') },
     h('div', { className: 'bt-product-supervision-head' }, h('h3', null, t('Supervision')),
-      h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: busy, onClick: () => { void inspect() } }, t('Inspect now'))),
+      h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: busy, onClick: () => { void inspect() } }, t(requiresRestart ? 'Restart inspection' : 'Inspect now'))),
     error ? h('p', { role: 'alert', className: 'bt-main-error' }, error) : null,
     h('p', { className: 'bt-main-status' }, state?.watchdogConfigured
       ? state.watchdog?.last ? `${t('Watchdog')}: ${state.watchdog.last.kind} · ${new Date(state.watchdog.last.at).toLocaleString()}` : t('Watchdog has not inspected yet.')
       : t('Independent Watchdog is not configured for this Host.')),
-    state?.run?.last ? h('p', { className: 'bt-main-status' }, `${t('Semantic inspection')}: ${state.run.last.status === 'budget-exhausted' ? t('Inspection budget exhausted') : state.run.last.status === 'failed' ? t('Inspection failed') : t('Inspection complete')}${state.run.last.partial ? ` · ${t('Partial inspection')}` : ''}${state.run.last.error && state.run.last.status === 'failed' ? ` · ${state.run.last.error}` : ''} · ${new Date(state.run.last.at).toLocaleString()} · ${t('Inspection budget')} ${state.run.last.budget.used}/${state.run.last.budget.max}`) : null,
+    state?.run?.last ? h('p', { className: 'bt-main-status' }, `${t('Semantic inspection')}: ${t(inspectionStatus(state.run.last))}${state.run.last.error && state.run.last.status === 'failed' ? ` · ${state.run.last.error}` : ''} · ${new Date(state.run.last.at).toLocaleString()} · ${t('Tickets inspected')} ${state.run.last.coverage?.inspected ?? state.run.last.inspectionBudget?.inspected ?? 0} · ${t('Inspection budget')} ${state.run.last.budget.used}/${state.run.last.budget.max}`) : null,
     state?.proposals?.length ? h('div', { className: 'bt-product-supervision-list' },
       state.proposals.slice(0, 30).map(proposal => h('article', { key: proposal.id, className: 'bt-product-supervision-item' },
         h('div', { className: 'bt-product-supervision-head' },
