@@ -54,6 +54,7 @@ import { WorkObservations } from './work-observations.js'
 import { MainSourceHandoffs, type MainSourceDeliveryPage, type MainSourceHandoff, type MainSourceView } from './main-source.js'
 import { ProductSchedules, authorizedScheduleEvent, scheduledOccurrenceKey,
   type ProductSchedule, type ScheduleCreate, type ScheduleTarget, type ScheduledOccurrence } from './product-schedules.js'
+import type { ProactiveWorkRecord } from './proactive-work.js'
 
 interface StoredPolicy { revision: number; configuration: Omit<IntakePolicy, 'assess'>; origin: 'bootstrap' | 'manual' | 'sync'; sourceRevision?: string; updatedAt: number }
 interface ProcessingState { paused: boolean; revision: number; updatedAt: number }
@@ -223,7 +224,7 @@ export class Engine {
       throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This actor cannot change versioned behavior configuration.')
     }
   }
-  constructor(rawStorage: Storage, private readonly instanceId: string, private readonly source: DesktopSource, effectsOptions: EffectsOptions = {}, sessions?: NativeSessions, private readonly environments: ExecutionEnvironment[] = [], slotOptions: SlotOptions = {}, jobOptions: JobsOptions = {}, subagentOptions: SubagentsOptions = {}, deliveryOptions: DeliveryOptions = {}, hostOptions: HostOptions = {}, proactiveOptions?: ProactiveOptions, attachments?: ProductAttachments) {
+  constructor(rawStorage: Storage, private readonly instanceId: string, private readonly source: DesktopSource, effectsOptions: EffectsOptions = {}, sessions?: NativeSessions, private readonly environments: ExecutionEnvironment[] = [], slotOptions: SlotOptions = {}, jobOptions: JobsOptions = {}, subagentOptions: SubagentsOptions = {}, deliveryOptions: DeliveryOptions = {}, hostOptions: HostOptions = {}, private readonly proactiveOptions?: ProactiveOptions, attachments?: ProductAttachments) {
     identifier(instanceId, 'instanceId')
     identifier(source.sourceInstanceId, 'sourceInstanceId')
     identifier(source.actorId, 'actorId')
@@ -323,7 +324,14 @@ export class Engine {
       this.execution = new Execution(storage, instanceId, this.effects, sessions, this.inputs, this.attentions, this.sourceEvents,
         this.source.intake?.allowedRequesterIds ?? this.source.allowedActorIds, this.environments, this.slots, this.jobs, this.subagents, this.previews,
         this.deliveries, this.context, this.roleConfig, this.deliveryState, this.host.hostId, this.hostCapabilities,
-        () => this.host.epoch())
+        () => this.host.epoch(), async (transaction, ticketId, runId) => {
+          if (!this.proactive || !this.proactiveSourceAvailable) throw new CoreError('PROACTIVE_REVOKED', 'The original proactive authorization is unavailable.')
+          const { run, event } = await this.proactive.assertPreparedIn(transaction, runId)
+          const link = await transaction.get<ProactiveWorkRecord>('proactive-work', runId)
+          if (link?.ticketId !== ticketId || !this.proactiveSourceAvailable(run.sourceInstanceId, event.source.actorId)) {
+            throw new CoreError('PROACTIVE_REVOKED', 'The original source or Ticket authorization changed.')
+          }
+        })
       this.effects.setStartup(async () => {
         try { await this.execution!.reconcileRemoteWork() }
         catch { /* Keep the independent Input recovery scan running when the remote recovery budget is exhausted. */ }
@@ -401,7 +409,7 @@ export class Engine {
       })
     }
     const handlers = this.execution?.handlers()
-    this.effects.configure({ ...(handlers && this.workDelegation ? this.workDelegation.handlers(handlers) : handlers), outbox: this.outbox.handler() })
+    this.effects.configure({ ...(handlers && this.workDelegation ? this.workDelegation.handlers(handlers, proactiveOptions?.route) : handlers), outbox: this.outbox.handler() })
   }
 
   async receiveSource(event: ReceiveSourceEvent) {
@@ -421,6 +429,7 @@ export class Engine {
     if (this.proactive && receipt.status === 'recorded') void this.reconcileProactiveCandidates().catch(() => {
       // The durable candidate remains queued for Host recovery after a transient failure.
     })
+    if (receipt.status === 'recorded' && event.type !== 'created') this.proactiveOptions?.onSourceChanged?.(this.source.sourceInstanceId)
     return receipt
   }
 
@@ -456,6 +465,7 @@ export class Engine {
       && allowed.includes(authorId)) {
       await this.handOffSourceToMain({ commandId: `main-source:${receipt.eventId}`, eventId: receipt.eventId })
     }
+    if (receipt.status === 'recorded' && event.type !== 'created') this.proactiveOptions?.onSourceChanged?.(this.source.sourceInstanceId)
     return receipt
   }
 
@@ -567,7 +577,9 @@ export class Engine {
     await this.ensurePolicy()
     await this.assertActivationCurrent()
     await this.assertHostAdmission()
-    return this.sourceEvents.receiveUnverified(event)
+    const receipt = await this.sourceEvents.receiveUnverified(event)
+    if (receipt.status === 'recorded') this.proactiveOptions?.onSourceChanged?.(this.source.sourceInstanceId)
+    return receipt
   }
 
   async acceptSource(command: AcceptSourceRequest): Promise<Receipt> {
@@ -743,7 +755,8 @@ export class Engine {
   }
 
   private async accept(tx: AsyncTx, commandId: string, trigger: Work['trigger'], fingerprint: string,
-    options: { strength?: 'explicit' | 'inferred'; policyVersion?: string; mandateScope?: string; linkTicket?: (tx: AsyncTx, receipt: Receipt) => Promise<void> } = {}): Promise<Receipt> {
+    options: { strength?: 'explicit' | 'inferred'; policyVersion?: string; mandateScope?: string; proactive?: boolean;
+      linkTicket?: (tx: AsyncTx, receipt: Receipt) => Promise<void> } = {}): Promise<Receipt> {
     const triggerId = trigger.id
     await this.assertActivationIn(tx)
     const event = await tx.get<EventRecord>('event', triggerId)
@@ -778,10 +791,11 @@ export class Engine {
     await tx.insert('mandate', mandateId, work.mandate)
     await tx.insert('ticket', ticketId, work.ticket)
     await tx.insert('intent', ticketId, work.intent)
-    await this.inputs.subscribe(tx, ticketId, persistedTrigger)
+    if (!options.proactive) await this.inputs.subscribe(tx, ticketId, persistedTrigger)
     await tx.insert('event', triggerId, { fingerprint, receipt })
     await tx.insert('command', commandId, { fingerprint, receipt })
     await options.linkTicket?.(tx, receipt)
+    if (options.proactive) return receipt
     await this.effects.enqueue(tx, { key: ticketId, stream: 'notice', scope: 'router', payload: { type: 'request-accepted', ticketId, triggerId } })
     const deliveryId = `${ticketId}:acknowledgement`
     const delivery = triggerDeliveryTarget(persistedTrigger)
@@ -2230,6 +2244,80 @@ export class Engine {
   async getProactiveRules(): Promise<{ revision: number; rules: ProactiveRule[] }> {
     if (!this.proactive) throw new CoreError('PROACTIVE_NOT_CONFIGURED', 'Configure a proactive root directory before reading rules.')
     return this.proactive.rules()
+  }
+
+  /** Only the trusted product Router calls this after a real prepared run; the model supplies no scope or source. */
+  async admitProactiveWork(runId: string, environment: ExecutionEnvironment): Promise<Receipt> {
+    if (!this.proactive || !this.execution || !this.proactiveSourceAvailable) throw new CoreError('PROACTIVE_NOT_CONFIGURED', 'Proactive work needs an authorized product runtime.')
+    identifier(runId, 'proactive run ID')
+    await this.assertHostAdmission()
+    const commandId = `proactive-ticket:${runId}`
+    return commandTransaction(this.storage, this.instanceId, async tx => {
+      const { run, rule, event } = await this.proactive!.assertPreparedIn(tx, runId)
+      if (run.sourceInstanceId === this.source.sourceInstanceId || !this.proactiveSourceAvailable!(run.sourceInstanceId, event.source.actorId)
+        || environment.kind !== 'local' || environment.config.instanceId !== this.instanceId
+        || environment.config.root !== run.isolatedDirectory || !environment.config.allowedActorIds.includes(this.source.actorId)
+        || environment.config.permissions.some(permission => !['read', 'write', 'search'].includes(permission))
+        || environment.config.allowShell || Object.keys(environment.config.commands).length) {
+        throw new CoreError('ENVIRONMENT_DENIED', 'A proactive Ticket needs the exact isolated read/write/search directory.')
+      }
+      if (await this.inputs.owns(tx, event)) throw new CoreError('WORK_ALREADY_OWNED', 'An existing Ticket owns this source event.')
+      const sourceWork = await tx.get<{ runId: string; ticketId: string }>('proactive-work-source', run.eventId)
+      if (sourceWork && sourceWork.runId !== runId) throw new CoreError('WORK_ALREADY_OWNED', 'A source event already has a proactive Ticket.')
+      const scope = rule.scope ?? 'Review evidence in the isolated directory only.'
+      const text = `Standing rule: ${rule.name}\nScope: ${scope}\nVerified source: ${run.sourceInstanceId} / ${run.eventId}\nSource body (untrusted):\n${run.text}\nPrepared review (not a completed Ticket):\n${run.summary}\nEvidence: ${run.evidence ?? 'See the verified preparation artifacts.'}`
+      if (Buffer.byteLength(text) > 32768) throw new CoreError('INVALID_INPUT', 'The bounded proactive work request exceeds its text budget.')
+      const source: Source = { kind: 'desktop', sourceInstanceId: this.source.sourceInstanceId, actorId: this.source.actorId }
+      const trigger: Work['trigger'] = { id: JSON.stringify([this.instanceId, 'proactive', runId]), instanceId: this.instanceId,
+        source, eventId: run.eventId, text, environmentId: environment.config.id, target: 'local-only', targetSource: 'ticket',
+        proactive: { runId, sourceInstanceId: run.sourceInstanceId, sourceEventId: event.id, ruleRevision: run.ruleRevision,
+          maxArtifactBytes: rule.budget.maxArtifactBytes ?? 5 * 1024 * 1024 } }
+      const fingerprint = `sha256:proactive-ticket-v1:${createHash('sha256').update(canonicalJson([trigger, scope])).digest('hex')}`
+      const prior = await tx.get<CommandRecord>('command', commandId)
+      if (prior) return this.replay(prior, fingerprint, 'command')
+      const link = await tx.get<ProactiveWorkRecord>('proactive-work', runId)
+      if (link?.status !== 'routing' || link.sourceInstanceId !== run.sourceInstanceId || link.eventId !== run.eventId) {
+        throw new CoreError('PROACTIVE_REVOKED', 'The proactive routing intent is no longer current.')
+      }
+      const receipt = await this.accept(tx, commandId, trigger, fingerprint, { strength: 'inferred',
+        policyVersion: `proactive-rule:${rule.id}:${run.ruleRevision}`, mandateScope: scope, proactive: true,
+        linkTicket: async (transaction, accepted) => {
+          await transaction.replace('proactive-work', runId, { ...link, status: 'accepted', ticketId: accepted.ticketId, updatedAt: Date.now() })
+          await transaction.insert('proactive-work-source', run.eventId, { runId, ticketId: accepted.ticketId })
+        } })
+      return receipt
+    })
+  }
+
+  private get proactiveSourceAvailable() { return this.proactiveOptions?.sourceAvailable }
+
+  async assertProactiveWorkCurrent(runId: string) {
+    if (!this.proactive || !this.proactiveSourceAvailable) throw new CoreError('PROACTIVE_NOT_CONFIGURED', 'Proactive work is unavailable.')
+    return this.storage.transaction(this.instanceId, async tx => {
+      const current = await this.proactive!.assertPreparedIn(tx, runId)
+      if (!this.proactiveSourceAvailable!(current.run.sourceInstanceId, current.event.source.actorId)) throw new CoreError('SOURCE_STOPPED', 'The original source is stopped.')
+      return current
+    })
+  }
+
+  async registerProactiveEnvironment(runId: string, environment: ExecutionEnvironment) {
+    const run = await this.getProactiveRun(runId)
+    if (!run?.isolatedDirectory || environment.kind !== 'local' || environment.config.root !== run.isolatedDirectory
+      || environment.config.instanceId !== this.instanceId || !environment.config.allowedActorIds.includes(this.source.actorId)
+      || environment.config.permissions.some(permission => !['read', 'write', 'search'].includes(permission))
+      || environment.config.allowShell || Object.keys(environment.config.commands).length) {
+      throw new CoreError('ENVIRONMENT_DENIED', 'The proactive Environment does not match its isolated run.')
+    }
+    const existing = this.environments.find(item => item.config.id === environment.config.id)
+    if (existing && existing.config.root !== environment.config.root) throw new CoreError('ENVIRONMENT_DENIED', 'The isolated Environment ID already belongs to another directory.')
+    if (!existing) this.environments.push(environment)
+  }
+
+  async recordProactiveRouterUse(sessionId: string) {
+    const config = await this.roleConfig.currentView()
+    await this.storage.transaction(this.instanceId, tx => this.roleConfig.recordUse(tx, { sessionId, role: 'router', revision: config.revision,
+      ...(config.roles.main ? { main: config.roles.main.model } : {}), router: config.roles.router.model, worker: config.roles.worker.model }))
+    return config
   }
 
   async getProactiveControl() {

@@ -3,6 +3,7 @@ import { mkdir, readFile, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { CoreError, identifier } from './model.js'
 import type { AsyncTx, Storage } from './storage.js'
+import { isCurrentSourceEvent, type SourceEvent } from './source-events.js'
 
 export type ProactiveMode = 'observe' | 'auto'
 export interface ProactiveMatch {
@@ -48,6 +49,8 @@ export interface ProactiveRun {
   processingRevision?: number
   eventId: string
   sourceInstanceId: string
+  threadId?: string
+  objectId?: string
   mode: ProactiveMode
   state: 'running' | 'observed' | 'prepared' | 'silent' | 'suppressed' | 'budget-exhausted' | 'failed' | 'stopped'
   text: string
@@ -73,6 +76,12 @@ export interface ProactiveOptions {
   /** Recheck source ownership and durable controls inside the reservation and settlement transactions. */
   guard?: (tx: AsyncTx, candidate: ProactiveCandidate) => Promise<string | undefined>
   pauseSourceInstanceId?: string
+  /** Commit a routing intent with the verified preparation, never with an unverified model response. */
+  onPrepared?: (tx: AsyncTx, run: ProactiveRun) => Promise<void>
+  route?: (runId: string, signal: AbortSignal) => Promise<void>
+  sourceAvailable?: (sourceInstanceId: string, sourceActorId: string) => boolean
+  authorizeWork?: (tx: AsyncTx, run: ProactiveRun, event: SourceEvent) => Promise<void>
+  onSourceChanged?: (sourceInstanceId: string) => void
 }
 const ruleKey = 'proactive-rules'
 const controlKey = 'proactive-control'
@@ -124,6 +133,8 @@ export class Proactive {
   private readonly now: () => number
   private readonly rootDirectory: string
   private readonly guard: ProactiveOptions['guard']
+  private readonly onPrepared: ProactiveOptions['onPrepared']
+  private readonly authorizeWork: ProactiveOptions['authorizeWork']
   private readonly pauseSourceInstanceId: string | undefined
   private readonly controllers = new Map<string, AbortController>()
   constructor(private readonly storage: Storage, private readonly instanceId: string, options: ProactiveOptions) {
@@ -131,6 +142,8 @@ export class Proactive {
     this.rootDirectory = options.rootDirectory
     this.prepare = options.prepare
     this.guard = options.guard
+    this.onPrepared = options.onPrepared
+    this.authorizeWork = options.authorizeWork
     this.pauseSourceInstanceId = options.pauseSourceInstanceId
     this.timeoutMs = options.prepareTimeoutMs ?? 10000
     if (!Number.isInteger(this.timeoutMs) || this.timeoutMs < 100 || this.timeoutMs > 60000) throw new CoreError('INVALID_CONFIG', 'The proactive preparation timeout must be 100–60000 ms.')
@@ -250,7 +263,8 @@ export class Proactive {
         const processing = this.pauseSourceInstanceId ? await tx.get<{ paused: boolean; revision: number }>('processing-state',
           JSON.stringify(['processing-state', this.pauseSourceInstanceId])) : undefined
         const base = { id, instanceId: this.instanceId, ruleId: rule.id, ruleRevision: revision, eventId: candidate.eventId,
-          sourceInstanceId: candidate.sourceInstanceId, mode: rule.mode, text: candidate.text.slice(0, 4096), authorId: candidate.authorId,
+          sourceInstanceId: candidate.sourceInstanceId, threadId: candidate.threadId, objectId: candidate.objectId,
+          mode: rule.mode, text: candidate.text.slice(0, 4096), authorId: candidate.authorId,
           authorKind: candidate.authorKind, addressing: candidate.addressing, communication: rule.communication,
           controlRevision: control?.revision ?? 1, processingRevision: processing?.revision ?? 0, createdAt: this.now() }
         const blocked = control?.paused || processing?.paused ? 'PROCESSING_PAUSED'
@@ -311,6 +325,7 @@ export class Proactive {
           : (control?.revision ?? 1) !== base.controlRevision || (processing?.revision ?? 0) !== base.processingRevision
             ? 'CONTROL_CHANGED' : changed ? 'RULE_CHANGED' : await this.guard?.(tx, candidate)
         const result = await this.insertOrReplace(tx, blocked ? { ...base, state: 'suppressed', reason: blocked } : final)
+        if (result.state === 'prepared') await this.onPrepared?.(tx, result)
         if (result.state === 'prepared' && result.communication === 'notify') {
           const previous = await tx.get<string[]>('proactive-notice', noticeKey) ?? []
           const ids = [result.id, ...previous.filter(id => id !== result.id)].slice(0, 10)
@@ -348,6 +363,34 @@ export class Proactive {
   async getRun(id: string): Promise<ProactiveRun | undefined> {
     identifier(id, 'proactive run ID')
     return this.storage.transaction(this.instanceId, tx => tx.get<ProactiveRun>('proactive-run', id))
+  }
+
+  async assertPreparedIn(tx: AsyncTx, runId: string): Promise<{ run: ProactiveRun; rule: ProactiveRule; event: SourceEvent }> {
+    const run = await tx.get<ProactiveRun>('proactive-run', runId)
+    const rules = await tx.get<StoredRules>('proactive-rule', ruleKey)
+    const rule = rules?.rules.find(item => item.id === run?.ruleId)
+    if (!run || run.instanceId !== this.instanceId || run.mode !== 'auto' || run.state !== 'prepared'
+      || !run.isolatedDirectory || !rule?.enabled || rule.mode !== 'auto' || rules?.revision !== run.ruleRevision
+      || !rule.match.sourceInstanceIds?.includes(run.sourceInstanceId)) {
+      throw new CoreError('PROACTIVE_REVOKED', 'The preparation no longer has an active exact-source auto rule.')
+    }
+    const control = await tx.get<{ paused: boolean; revision: number }>('proactive-control', controlKey)
+    const processing = this.pauseSourceInstanceId ? await tx.get<{ paused: boolean; revision: number }>('processing-state',
+      JSON.stringify(['processing-state', this.pauseSourceInstanceId])) : undefined
+    if (control?.paused || (control?.revision ?? 1) !== run.controlRevision || processing?.paused
+      || (processing?.revision ?? 0) !== run.processingRevision) {
+      throw new CoreError('PROACTIVE_PAUSED', 'The preparation control changed or processing is paused.')
+    }
+    const event = await tx.get<SourceEvent>('source-event', run.eventId)
+    if (!event || !await isCurrentSourceEvent(tx, event) || event.versionVerified === false
+      || event.source.sourceInstanceId !== run.sourceInstanceId || event.authorId !== run.authorId
+      || event.authorKind !== run.authorKind || event.addressing !== run.addressing
+      || event.threadId !== run.threadId || event.objectId !== run.objectId
+      || event.text?.slice(0, 4096) !== run.text) {
+      throw new CoreError('SOURCE_NOT_CURRENT', 'The preparation source event is no longer current and verified.')
+    }
+    await this.authorizeWork?.(tx, run, event)
+    return { run, rule, event }
   }
 
   async recentNotices(): Promise<ProactiveRun[]> {

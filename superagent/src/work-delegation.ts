@@ -664,7 +664,7 @@ export class WorkDelegation {
     return { workBriefId: brief.id, sourceEventId: brief.sourceEventId!, status, items: planItems, ...(conflict ? { conflict } : {}) }
   }
 
-  handlers(base: Record<'notice' | 'relay', EffectHandler>): Record<'notice' | 'relay', EffectHandler> {
+  handlers(base: Record<'notice' | 'relay', EffectHandler>, routeProactive?: (runId: string, signal: AbortSignal) => Promise<void>): Record<'notice' | 'relay', EffectHandler> {
     const execute = async (effect: Effect, context: { idempotencyKey: string; signal: AbortSignal }, handler: EffectHandler): Promise<EffectResult> => {
       try {
         if (effect.payload.type === 'main-source-handoff') {
@@ -704,7 +704,8 @@ export class WorkDelegation {
             return current
           })
           if (handoff) await this.options.notifyMainSource(handoff, context.signal)
-        } else if (effect.payload.type === 'main-work-brief') await this.route(String(effect.payload.workBriefId), context.signal)
+        } else if (effect.payload.type === 'proactive-work' && routeProactive) await routeProactive(String(effect.payload.runId), context.signal)
+        else if (effect.payload.type === 'main-work-brief') await this.route(String(effect.payload.workBriefId), context.signal)
         else if (effect.payload.type === 'main-work-update') {
           const notification = await this.options.storage.transaction(this.options.instanceId,
             tx => tx.get<MainWorkNotification>('work-update', String(effect.payload.updateId)))
@@ -720,6 +721,7 @@ export class WorkDelegation {
         return { type: 'success' }
       } catch (error) {
         if (error instanceof CoreError && error.code === 'MAIN_BUSY') return { type: 'defer', reason: error.message }
+        if (error instanceof CoreError && error.code === 'SOURCE_STOPPED' && effect.payload.type === 'proactive-work') return { type: 'defer', reason: error.message }
         if (error instanceof CoreError && error.code === 'MAIN_SOURCE_ROLLOVER') return { type: 'transient', reason: error.message }
         if (error instanceof CoreError && (error.code === 'MAIN_UPDATE_FAILED' || error.code === 'MAIN_SOURCE_FAILED')) {
           return { type: effect.state === 'unknown' ? 'not-applied' : 'transient', reason: error.message }
@@ -733,7 +735,7 @@ export class WorkDelegation {
       execute: (effect, context) => execute(effect, context, handler),
       reconcile: (effect, context) => execute(effect, context, { ...handler, execute: handler.reconcile ?? handler.execute }),
       ...(handler.batch ? { batch: { maxSize: handler.batch.maxSize, execute: async (effects, context) => {
-        if (effects.some(effect => ['main-source-handoff', 'main-work-brief', 'main-work-update', 'work-attention-answer']
+        if (effects.some(effect => ['proactive-work', 'main-source-handoff', 'main-work-brief', 'main-work-update', 'work-attention-answer']
           .includes(String(effect.payload.type)))) {
           return Promise.all(effects.map(effect => execute(effect,
             { idempotencyKey: JSON.stringify([effect.id, effect.generation]), signal: context.signal }, handler)))

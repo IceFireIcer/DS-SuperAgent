@@ -43,4 +43,14 @@ test('PostgreSQL preserves rule, notice, pause and stop facts across Engine repl
   assert.equal(await engine.reconcileProactiveCandidates(), 1)
   assert.deepEqual(await queue.pending('proactive-pg'), [], 'the old candidate cannot start after a durable pause')
   assert.equal((await engine.updateProactiveRules({ commandId: 'save', expectedRevision: 1, rules: [rule] })).revision, 2)
+  await storage.transaction('private', async tx => {
+    await tx.insert('proactive-work', ready.id, { runId: ready.id, sourceInstanceId: 'proactive-pg',
+      eventId: receipt.eventId, ruleId: rule.id, ruleRevision: 2, routerSessionId: 'router-pg',
+      status: 'accepted', ticketId: 'ticket-pg', updatedAt: Date.now() })
+    await tx.insert('proactive-work-source', receipt.eventId, { runId: ready.id, ticketId: 'ticket-pg' })
+  })
+  const reopened = await storage.reconnect()
+  t.after(() => reopened.close())
+  assert.equal((await reopened.transaction('private', tx => tx.get('proactive-work', ready.id))).ticketId, 'ticket-pg')
+  assert.equal((await reopened.transaction('private', tx => tx.get('proactive-work-source', receipt.eventId))).runId, ready.id)
 })
