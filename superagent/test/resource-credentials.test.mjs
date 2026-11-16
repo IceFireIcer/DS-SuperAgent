@@ -100,6 +100,7 @@ test('source, tool and outbound authorizations are independent and a cancelled r
   const cancelled = await credentials.cancel({ instanceId: 'personal', commandId: 'cancel-1', requestId: requested.id })
   assert.equal(cancelled.status, 'cancelled')
   assert.deepEqual(await credentials.cancel({ instanceId: 'personal', commandId: 'cancel-1', requestId: requested.id }), cancelled)
+  assert.deepEqual(await credentials.listRequests({ instanceId: 'personal', limit: 1 }), { items: [cancelled] })
   await assert.rejects(credentials.use({ instanceId: 'personal', resourceId: resource.id, purpose: 'source', ...scope }, async () => {}),
     { code: 'GRANT_DENIED' })
   const grant = await credentials.grant({ instanceId: 'personal', commandId: 'grant', resourceId: resource.id,
@@ -113,6 +114,11 @@ test('source, tool and outbound authorizations are independent and a cancelled r
   assert.equal(grant.grants.length, 1)
   const approvedRequest = await credentials.request({ instanceId: 'personal', commandId: 'request-2', resourceId: resource.id,
     scope, purpose: 'outbound' })
+  const firstPage = await credentials.listRequests({ instanceId: 'personal', limit: 1 })
+  assert.equal(firstPage.items.length, 1)
+  assert.ok(firstPage.cursor)
+  const secondPage = await credentials.listRequests({ instanceId: 'personal', limit: 1, after: firstPage.cursor })
+  assert.deepEqual(new Set([firstPage.items[0].id, secondPage.items[0].id]), new Set([requested.id, approvedRequest.id]))
   await credentials.grant({ instanceId: 'personal', commandId: 'grant-2', resourceId: resource.id,
     expectedRevision: 2, scope, purposes: ['outbound'], requestId: approvedRequest.id })
   assert.equal((await credentials.getRequest({ instanceId: 'personal', requestId: approvedRequest.id })).status, 'granted')

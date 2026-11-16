@@ -86,6 +86,7 @@ const resourceFields: Record<string, string[]> = {
   'resource-rotation-read': ['instanceId', 'commandId'],
   'resource-delete': ['instanceId', 'commandId', 'resourceId', 'expectedRevision'],
   'resource-request': ['instanceId', 'commandId', 'resourceId', 'scope', 'purpose'],
+  'resource-request-list': ['instanceId', 'after', 'limit'],
   'resource-request-read': ['instanceId', 'requestId'], 'resource-cancel': ['instanceId', 'commandId', 'requestId'],
   'resource-grant': ['instanceId', 'commandId', 'resourceId', 'expectedRevision', 'scope', 'purposes', 'requestId'],
   'resource-revoke': ['instanceId', 'commandId', 'resourceId', 'grantId', 'expectedRevision'],
@@ -694,6 +695,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
           if (endpoint === 'resource-request') return manager.request({ instanceId, commandId,
             resourceId: payload.resourceId as string, scope: payload.scope as import('./resource-credentials.js').CredentialScope,
             purpose: payload.purpose as import('./resource-credentials.js').CredentialPurpose })
+          if (endpoint === 'resource-request-list') return manager.listRequests({ instanceId,
+            ...(payload.after === undefined ? {} : { after: payload.after as string }),
+            ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
           if (endpoint === 'resource-request-read') {
             const request = await manager.getRequest({ instanceId, requestId: payload.requestId as string })
             if (!request) throw new CoreError('NOT_FOUND', 'The credential request is unavailable.')

@@ -35,9 +35,19 @@ test('the trusted product Host manages durable credential records without exposi
   await assert.rejects(host.dispatch('resource-rotate', { instanceId, commandId: 'remote-rotate', resourceId: created.id,
     expectedRevision: 1, value: 'fictional-next-value' }, remote), { code: 'SOURCE_NOT_AUTHORIZED' })
   await assert.rejects(host.dispatch('resource-rotation-read', { instanceId, commandId: 'rotate-one' }, remote), { code: 'SOURCE_NOT_AUTHORIZED' })
+  const scope = { role: 'worker', workItemId: 'item-one', environmentId: 'work-one' }
+  const request = await host.dispatch('resource-request', { instanceId, commandId: 'request-one', resourceId: created.id,
+    scope, purpose: 'tool' })
+  assert.equal(request.status, 'pending')
+  assert.deepEqual((await host.dispatch('resource-request-list', { instanceId, limit: 1 })).items, [request])
+  await assert.rejects(host.dispatch('resource-request-list', { instanceId }, remote), { code: 'SOURCE_NOT_AUTHORIZED' })
+  const cancelled = await host.dispatch('resource-request', { instanceId, commandId: 'request-cancelled', resourceId: created.id,
+    scope, purpose: 'tool' })
+  assert.equal((await host.dispatch('resource-cancel', { instanceId, commandId: 'cancel-request', requestId: cancelled.id })).status, 'cancelled')
   const granted = await host.dispatch('resource-grant', { instanceId, commandId: 'grant-one', resourceId: created.id,
-    expectedRevision: 1, scope: { role: 'worker', workItemId: 'item-one', environmentId: 'work-one' }, purposes: ['tool'] })
+    expectedRevision: 1, scope, purposes: ['tool'], requestId: request.id })
   assert.equal(granted.grants.length, 1)
+  assert.equal((await host.dispatch('resource-request-read', { instanceId, requestId: request.id })).status, 'granted')
   const rotation = await host.dispatch('resource-rotate', { instanceId, commandId: 'rotate-one', resourceId: created.id,
     expectedRevision: granted.revision, value: 'fictional-next-value' })
   assert.equal(rotation.status, 'committed')

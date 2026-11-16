@@ -136,6 +136,20 @@ var ZH = {
   "Rotation result is unknown. Keep this command and check again.": "轮换结果未知。请保留当前命令并再次核查。",
   "Rotation was not applied. Refresh the resource before starting another rotation.": "轮换未生效。刷新资源后可重新发起。",
   "Authorization recorded.": "授权记录已保存。",
+  "Request authorization": "申请授权",
+  "Approve request": "批准请求",
+  "Cancel request": "取消请求",
+  "Pending authorization request": "待处理授权请求",
+  "Cancelled authorization request": "已取消授权请求",
+  "Granted authorization request": "已批准授权请求",
+  "Current access revoked": "当前授权已撤销",
+  "Retry request list": "重新加载请求列表",
+  "Load more requests": "加载更多请求",
+  "Authorization request recorded.": "授权请求已记录。",
+  "Authorization request cancelled.": "授权请求已取消。",
+  "The authorization request was not confirmed.": "授权请求尚未确认。",
+  "The authorization decision was not confirmed.": "授权决定尚未确认。",
+  "The credential request list exceeds its bounded limit.": "凭据请求数量超过本页可读取的上限。",
   "Resource deletion recorded.": "资源删除已记录。",
   "Delete this credential resource and all its grants?": "删除此凭据资源及全部授权？",
   "Save resource": "保存资源",
@@ -23195,6 +23209,9 @@ var PRODUCT_PRESET_CSS = `
 var import_react57 = require("react");
 function ProductCredentialSettings({ binding, call: call2 }) {
   const [resources, setResources] = (0, import_react57.useState)(null);
+  const [requests, setRequests] = (0, import_react57.useState)([]);
+  const [requestCursor, setRequestCursor] = (0, import_react57.useState)(null);
+  const [requestError, setRequestError] = (0, import_react57.useState)(null);
   const [feishu, setFeishu] = (0, import_react57.useState)(null);
   const [selectedId, setSelectedId] = (0, import_react57.useState)(null);
   const [label, setLabel] = (0, import_react57.useState)("");
@@ -23213,6 +23230,8 @@ function ProductCredentialSettings({ binding, call: call2 }) {
   const [notice, setNotice] = (0, import_react57.useState)(null);
   const pendingCreate = (0, import_react57.useRef)(null);
   const pendingRotation = (0, import_react57.useRef)(null);
+  const pendingRequest = (0, import_react57.useRef)(null);
+  const pendingDecisions = (0, import_react57.useRef)(/* @__PURE__ */ new Map());
   const instanceId = binding.instanceId;
   const rememberRotation = (attempt) => {
     pendingRotation.current = attempt;
@@ -23223,27 +23242,48 @@ function ProductCredentialSettings({ binding, call: call2 }) {
     } catch {
     }
   };
-  const load = async () => {
+  const rememberRequest = (attempt) => {
+    pendingRequest.current = attempt;
+    try {
+      if (attempt) window.sessionStorage.setItem(`product-request:${instanceId}`, JSON.stringify(attempt));
+      else window.sessionStorage.removeItem(`product-request:${instanceId}`);
+    } catch {
+    }
+  };
+  const loadPages = async (endpoint, errorText) => {
     const items = [];
     let after;
     for (let pageNumber = 0; pageNumber < 10; pageNumber++) {
-      const page = await call2("resource-list", { instanceId, limit: 100, ...after ? { after } : {} });
+      const page = await call2(endpoint, { instanceId, limit: 100, ...after ? { after } : {} });
       items.push(...page.items);
       if (!page.cursor) return items;
       after = page.cursor;
     }
-    throw new Error(t("The credential resource list exceeds its bounded limit."));
+    throw new Error(t(errorText));
+  };
+  const load = () => loadPages("resource-list", "The credential resource list exceeds its bounded limit.");
+  const readRequests = async () => {
+    try {
+      const page = await call2("resource-request-list", { instanceId, limit: 100 });
+      return { items: page.items, cursor: page.cursor ?? null, available: true };
+    } catch (failure) {
+      return { items: [], cursor: null, available: false, error: failure.message };
+    }
   };
   const refresh = async () => {
-    const items = await load();
+    const [items, requestResult] = await Promise.all([load(), readRequests()]);
     setResources(items);
+    setRequests(requestResult.items);
+    setRequestCursor(requestResult.cursor);
+    setRequestError(requestResult.error ?? null);
     const status = await call2("feishu-status", { instanceId }).catch(() => null);
     setFeishu(status);
     if (status?.credentialMode === "managed") setSourceInstanceId((current) => current || status.sourceInstanceId);
-    return items;
+    return requestResult.available;
   };
   (0, import_react57.useEffect)(() => {
     let live = true;
+    pendingDecisions.current.clear();
     pendingRotation.current = null;
     setRotationAttempt(null);
     setRotationResult(null);
@@ -23261,10 +23301,27 @@ function ProductCredentialSettings({ binding, call: call2 }) {
       }
     } catch {
     }
-    Promise.all([load(), call2("feishu-status", { instanceId }).catch(() => null)]).then(
-      ([items, status]) => {
+    try {
+      const stored = JSON.parse(window.sessionStorage.getItem(`product-request:${instanceId}`));
+      const payload = stored?.payload;
+      if (typeof stored?.commandId === "string" && typeof payload?.resourceId === "string" && ["main", "router", "worker"].includes(payload?.scope?.role) && ["tool", "source", "outbound"].includes(payload?.purpose)) {
+        pendingRequest.current = stored;
+        setSelectedId(payload.resourceId);
+        setRole(payload.scope.role);
+        setPurpose(payload.purpose);
+        setWorkItemId(payload.scope.workItemId ?? "");
+        setEnvironmentId(payload.scope.environmentId ?? "");
+        setSourceInstanceId(payload.scope.sourceInstanceId ?? "");
+      }
+    } catch {
+    }
+    Promise.all([load(), readRequests(), call2("feishu-status", { instanceId }).catch(() => null)]).then(
+      ([items, requestResult, status]) => {
         if (!live) return;
         setResources(items);
+        setRequests(requestResult.items);
+        setRequestCursor(requestResult.cursor);
+        setRequestError(requestResult.error ?? null);
         setFeishu(status);
         if (status?.credentialMode === "managed") setSourceInstanceId((current) => current || status.sourceInstanceId);
       },
@@ -23276,13 +23333,31 @@ function ProductCredentialSettings({ binding, call: call2 }) {
       live = false;
     };
   }, [call2, instanceId]);
-  const run2 = async (name, action, success) => {
+  const loadMoreRequests = async () => {
+    if (!requestCursor || busy) return;
+    setBusy("requests");
+    setRequestError(null);
+    try {
+      const page = await call2("resource-request-list", { instanceId, limit: 100, after: requestCursor });
+      setRequests((current) => {
+        const seen = new Set(current.map((request) => request.id));
+        return [...current, ...page.items.filter((request) => !seen.has(request.id))];
+      });
+      setRequestCursor(page.cursor ?? null);
+    } catch (failure) {
+      setRequestError(failure.message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const run2 = async (name, action, success, onConfirmed) => {
     setBusy(name);
     setError(null);
     setNotice(null);
     try {
-      await action();
-      await refresh();
+      const result = await action();
+      const requestsAvailable = await refresh();
+      if (requestsAvailable) onConfirmed?.(result);
       setNotice(t(success));
     } catch (failure) {
       setError(failure.message);
@@ -23392,6 +23467,60 @@ function ProductCredentialSettings({ binding, call: call2 }) {
       purposes: [purpose]
     }), "Authorization recorded.");
   };
+  const requestAuthorization = () => {
+    if (!selected || busy || requestError || purpose !== "tool" && !sourceInstanceId.trim()) return;
+    const scope = {
+      role,
+      ...workItemId.trim() ? { workItemId: workItemId.trim() } : {},
+      ...environmentId.trim() ? { environmentId: environmentId.trim() } : {},
+      ...sourceInstanceId.trim() ? { sourceInstanceId: sourceInstanceId.trim() } : {}
+    };
+    const payload = { instanceId, resourceId: selected.id, scope, purpose };
+    const fingerprint = JSON.stringify(payload);
+    if (JSON.stringify(pendingRequest.current?.payload) !== fingerprint) rememberRequest({ payload, commandId: crypto.randomUUID() });
+    const commandId = pendingRequest.current.commandId;
+    void run2("request", async () => {
+      const result = await call2("resource-request", { ...payload, commandId });
+      if (result?.status !== "pending" || result.resourceId !== selected.id) throw new Error(t("The authorization request was not confirmed."));
+      return result;
+    }, "Authorization request recorded.", (result) => {
+      rememberRequest(null);
+      setRequests((current) => current.some((request) => request.id === result.id) ? current : [result, ...current]);
+    });
+  };
+  const decideRequest = (request, approve) => {
+    if (!selected || busy || requestError || request.status !== "pending") return;
+    const key = `${approve ? "approve" : "cancel"}:${request.id}`;
+    if (!pendingDecisions.current.has(key)) pendingDecisions.current.set(
+      key,
+      { commandId: crypto.randomUUID(), expectedRevision: selected.revision }
+    );
+    const attempt = pendingDecisions.current.get(key);
+    void run2(key, async () => {
+      try {
+        const result = approve ? await call2("resource-grant", {
+          instanceId,
+          commandId: attempt.commandId,
+          resourceId: selected.id,
+          expectedRevision: attempt.expectedRevision,
+          scope: request.scope,
+          purposes: [request.purpose],
+          requestId: request.id
+        }) : await call2("resource-cancel", { instanceId, commandId: attempt.commandId, requestId: request.id });
+        if (approve ? !Number.isSafeInteger(result?.revision) || result.revision <= attempt.expectedRevision : result?.status !== "cancelled" || result?.id !== request.id) {
+          throw new Error(t("The authorization decision was not confirmed."));
+        }
+        return result;
+      } catch (failure) {
+        if (failure.code === "RESOURCE_REVISION_CONFLICT" || failure.code === "REQUEST_UNAVAILABLE") pendingDecisions.current.delete(key);
+        throw failure;
+      }
+    }, approve ? "Authorization recorded." : "Authorization request cancelled.", (result) => {
+      pendingDecisions.current.delete(key);
+      const decided = approve ? { ...request, status: "granted" } : result;
+      setRequests((current) => current.some((item) => item.id === request.id) ? current.map((item) => item.id === request.id ? decided : item) : [decided, ...current]);
+    });
+  };
   const remove = (resource) => {
     if (busy || resource.status !== "deleted" && !window.confirm(t("Delete this credential resource and all its grants?"))) return;
     void run2("delete", () => resource.status === "deleted" ? call2("resource-cleanup", { instanceId, resourceId: resource.id }) : call2("resource-delete", {
@@ -23428,6 +23557,19 @@ function ProductCredentialSettings({ binding, call: call2 }) {
     ) : null,
     error ? (0, import_react57.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
     notice ? (0, import_react57.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
+    requestError ? (0, import_react57.createElement)(
+      "div",
+      { className: "bt-product-resource-row" },
+      (0, import_react57.createElement)("p", { className: "bt-main-error", role: "alert" }, requestError),
+      (0, import_react57.createElement)("button", {
+        className: "bt-soft",
+        type: "button",
+        disabled: Boolean(busy),
+        onClick: () => {
+          void refresh().catch((failure) => setError(failure.message));
+        }
+      }, t("Retry request list"))
+    ) : null,
     rotationAttempt ? (0, import_react57.createElement)(
       "div",
       { className: "bt-product-resource-row", role: "status" },
@@ -23567,8 +23709,51 @@ function ProductCredentialSettings({ binding, call: call2 }) {
           "button",
           { className: "bt-soft", type: "submit", disabled: Boolean(busy) || purpose !== "tool" && !sourceInstanceId.trim() },
           t("Record authorization")
-        )
+        ),
+        (0, import_react57.createElement)("button", {
+          className: "bt-soft",
+          type: "button",
+          disabled: Boolean(busy) || Boolean(requestError) || purpose !== "tool" && !sourceInstanceId.trim(),
+          onClick: requestAuthorization
+        }, t("Request authorization"))
       ),
+      requests.filter((request) => request.resourceId === selected.id).sort((left, right) => (right.createdAt ?? 0) - (left.createdAt ?? 0)).map((request) => (0, import_react57.createElement)(
+        "div",
+        { className: "bt-product-resource-row", key: request.id },
+        (0, import_react57.createElement)(
+          "span",
+          null,
+          `${t(request.status === "pending" ? "Pending authorization request" : request.status === "cancelled" ? "Cancelled authorization request" : "Granted authorization request")} · ${request.scope.role} · ${request.purpose}`,
+          request.scope.workItemId ? ` · ${t("Work item ID")}: ${request.scope.workItemId}` : "",
+          request.scope.environmentId ? ` · ${t("Environment ID")}: ${request.scope.environmentId}` : "",
+          request.scope.sourceInstanceId ? ` · ${t("Source Instance ID")}: ${request.scope.sourceInstanceId}` : ""
+        ),
+        request.status === "granted" && !selected.grants.some((grant2) => grant2.purposes.includes(request.purpose) && ["role", "workItemId", "environmentId", "sourceInstanceId"].every((key) => grant2.scope[key] === request.scope[key])) ? (0, import_react57.createElement)("span", { className: "bt-main-error", role: "status" }, t("Current access revoked")) : null,
+        request.status === "pending" ? (0, import_react57.createElement)(
+          "div",
+          { className: "bt-product-resource-request-actions" },
+          (0, import_react57.createElement)("button", {
+            className: "bt-soft",
+            type: "button",
+            disabled: Boolean(busy) || Boolean(requestError),
+            onClick: () => decideRequest(request, true)
+          }, t("Approve request")),
+          (0, import_react57.createElement)("button", {
+            className: "bt-soft",
+            type: "button",
+            disabled: Boolean(busy) || Boolean(requestError),
+            onClick: () => decideRequest(request, false)
+          }, t("Cancel request"))
+        ) : null
+      )),
+      requestCursor ? (0, import_react57.createElement)("button", {
+        className: "bt-soft",
+        type: "button",
+        disabled: Boolean(busy) || Boolean(requestError),
+        onClick: () => {
+          void loadMoreRequests();
+        }
+      }, t("Load more requests")) : null,
       selected.grants.map((grant2) => (0, import_react57.createElement)(
         "div",
         { className: "bt-product-resource-row", key: grant2.id },
@@ -23601,7 +23786,8 @@ var PRODUCT_CREDENTIAL_CSS = `
 .bt-product-resource-grant{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%}
 .bt-product-resource-grant label{display:flex;flex-direction:column;gap:4px;min-width:0;font-size:12px;color:var(--bt-ink-2)}
 .bt-product-resource-grant input,.bt-product-resource-grant select{height:32px;min-width:0;box-sizing:border-box;border:1px solid var(--bt-line);border-radius:6px;background:var(--bt-main);color:var(--bt-ink);font:inherit;padding:0 8px}
-.bt-product-resource-grant button{justify-self:start}.bt-product-resource-create button:focus-visible,.bt-product-resource-row button:focus-visible,.bt-product-resource-selected button:focus-visible,.bt-product-resource-create input:focus-visible,.bt-product-resource-selected input:focus-visible,.bt-product-resource-grant input:focus-visible,.bt-product-resource-grant select:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-product-resource-grant button{justify-self:start}.bt-product-resource-create button:focus-visible,.bt-product-resource-row button:focus-visible,.bt-product-resource-selected button:focus-visible,.bt-product-resource-grant button:focus-visible,.bt-product-resource-create input:focus-visible,.bt-product-resource-selected input:focus-visible,.bt-product-resource-grant input:focus-visible,.bt-product-resource-grant select:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-product-resource-request-actions{display:flex;flex-wrap:wrap;gap:8px}
 @media(max-width:640px){.bt-product-resource-grant{grid-template-columns:minmax(0,1fr)}}
 `;
 

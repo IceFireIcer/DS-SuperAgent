@@ -36,6 +36,10 @@ test('credential settings keep values out of projections and show exact grant an
     let resource
     let feishuResourceId = null
     let rotationCalls = 0
+    const requests = []
+    let loseRequestReceipt = true
+    let failRequestList = false
+    let paginateRequests = false
     const call = async (endpoint, payload) => {
       calls.push({ endpoint, payload })
       if (endpoint === 'feishu-status') return { configured: true, credentialMode: 'managed', sourceInstanceId: 'source-one',
@@ -47,11 +51,33 @@ test('credential settings keep values out of projections and show exact grant an
         return { items: [{ ...resource }, ...Array.from({ length: 99 }, (_, index) => ({ id: `other-${index}`,
           label: `Other resource ${index}`, status: 'active', revision: 1, grants: [] }))], cursor: 'next-page' }
       }
+      if (endpoint === 'resource-request-list') {
+        if (failRequestList) { failRequestList = false; throw new Error('Request list unavailable') }
+        if (paginateRequests && !payload.after) return { items: [], cursor: 'request-next-page' }
+        return { items: requests.map(({ commandId: _commandId, ...request }) => ({ ...request })) }
+      }
       if (endpoint === 'resource-create') {
         resource = { id: 'resource-one', label: payload.label, status: 'active', revision: 1, grants: [] }
         return { ...resource }
       }
+      if (endpoint === 'resource-request') {
+        let request = requests.find(item => item.commandId === payload.commandId)
+        if (!request) {
+          request = { commandId: payload.commandId, id: `request-${requests.length + 1}`, resourceId: payload.resourceId,
+            scope: payload.scope, purpose: payload.purpose, status: 'pending' }
+          requests.push(request)
+        }
+        if (loseRequestReceipt) { loseRequestReceipt = false; throw new Error('Request response lost') }
+        const { commandId: _commandId, ...result } = request
+        return { ...result }
+      }
+      if (endpoint === 'resource-cancel') {
+        const request = requests.find(item => item.id === payload.requestId)
+        request.status = 'cancelled'
+        return { ...request }
+      }
       if (endpoint === 'resource-grant') {
+        if (payload.requestId) requests.find(item => item.id === payload.requestId).status = 'granted'
         resource = { ...resource, revision: 2, grants: [{ id: 'grant-one', scope: payload.scope, purposes: payload.purposes }] }
         return { ...resource }
       }
@@ -67,7 +93,7 @@ test('credential settings keep values out of projections and show exact grant an
       if (endpoint === 'resource-delete') { resource = { ...resource, revision: resource.revision + 1, status: 'deleted' }; return { ...resource } }
       throw new Error(`Unexpected endpoint: ${endpoint}`)
     }
-    const root = createRoot(dom.window.document.querySelector('#root'))
+    let root = createRoot(dom.window.document.querySelector('#root'))
     const click = async node => { await React.act(async () => node.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))) }
     const change = async (field, value) => React.act(async () => {
       Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(field, value)
@@ -89,7 +115,27 @@ test('credential settings keep values out of projections and show exact grant an
       await change(scopeInputs[0], 'item-one')
       await change(scopeInputs[1], 'work-one')
       await change(scopeInputs[2], 'source-one')
-      await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Record authorization'))
+      await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Request authorization'))
+      assert.match(document.body.textContent, /Request response lost/u)
+      const pendingRequest = JSON.parse(dom.window.sessionStorage.getItem('product-request:personal'))
+      assert.equal(pendingRequest.payload.resourceId, 'resource-one')
+      await React.act(async () => root.unmount())
+      root = createRoot(document.querySelector('#root'))
+      await React.act(async () => root.render(React.createElement(ProductCredentialSettings,
+        { binding: { instanceId: 'personal' }, call })))
+      await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Request authorization'))
+      assert.equal(requests[0].status, 'pending')
+      assert.equal(requests.length, 1)
+      assert.equal(calls.filter(entry => entry.endpoint === 'resource-request')[0].payload.commandId,
+        calls.filter(entry => entry.endpoint === 'resource-request')[1].payload.commandId)
+      assert.equal(dom.window.sessionStorage.getItem('product-request:personal'), null)
+      assert.match(document.body.textContent, /Pending authorization request/u)
+      await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Cancel request'))
+      assert.equal(requests[0].status, 'cancelled')
+      await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Request authorization'))
+      await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Approve request'))
+      assert.equal(requests[1].status, 'granted')
+      assert.equal(calls.find(entry => entry.endpoint === 'resource-grant').payload.requestId, requests[1].id)
       assert.deepEqual(JSON.parse(JSON.stringify(calls.find(entry => entry.endpoint === 'resource-grant').payload.scope)),
         { role: 'worker', workItemId: 'item-one', environmentId: 'work-one', sourceInstanceId: 'source-one' })
       assert.match(document.body.textContent, /worker · tool/u)
@@ -112,8 +158,16 @@ test('credential settings keep values out of projections and show exact grant an
       await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Clear Feishu selection'))
       assert.equal(calls.filter(entry => entry.endpoint === 'resource-select-feishu').at(-1).payload.resourceId, null)
       for (const value of ['item-one', 'work-one', 'source-one']) assert.match(document.body.textContent, new RegExp(value, 'u'))
+      failRequestList = true
+      paginateRequests = true
       await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Revoke authorization'))
       assert.equal(calls.find(entry => entry.endpoint === 'resource-revoke').payload.grantId, 'grant-one')
+      assert.match(document.body.textContent, /Request list unavailable/u)
+      assert.match(document.body.textContent, /Issue delivery/u)
+      await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Retry request list'))
+      await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Load more requests'))
+      assert.equal(calls.some(entry => entry.endpoint === 'resource-request-list' && entry.payload.after === 'request-next-page'), true)
+      assert.match(document.body.textContent, /Current access revoked/u)
       await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Delete resource'))
       assert.equal(calls.find(entry => entry.endpoint === 'resource-delete').payload.resourceId, 'resource-one')
       assert.match(document.body.textContent, /deleted · v5/u)

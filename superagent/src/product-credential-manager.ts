@@ -152,6 +152,7 @@ export class ProductCredentialManager {
   list(request: { instanceId: string; after?: string; limit?: number }) { return this.resources.list(request) }
   get(request: { instanceId: string; resourceId: string }) { return this.resources.get(request) }
   getRequest(request: { instanceId: string; requestId: string }) { return this.resources.getRequest(request) }
+  listRequests(request: { instanceId: string; after?: string; limit?: number }) { return this.resources.listRequests(request) }
   request(request: { instanceId: string; commandId: string; resourceId: string; scope: CredentialScope; purpose: CredentialPurpose }) {
     return this.resources.request(request)
   }

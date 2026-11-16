@@ -388,6 +388,18 @@ export class ResourceCredentials {
     return this.storage.transaction(this.instanceId, tx => tx.get<CredentialRequest>('resource-request', input.requestId))
   }
 
+  async listRequests(input: { instanceId: string; after?: string; limit?: number }): Promise<{ items: CredentialRequest[]; cursor?: string }> {
+    fields(input, ['instanceId', 'after', 'limit'], 'resource request list')
+    this.assertInstance(input.instanceId)
+    if (input.after !== undefined) identifier(input.after, 'after')
+    const limit = input.limit ?? 50
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new CoreError('INVALID_INPUT', 'Request page limit must be between 1 and 100.')
+    return this.storage.transaction(this.instanceId, async tx => {
+      const page = await tx.scan<CredentialRequest>('resource-request', { limit, ...(input.after ? { after: input.after } : {}) })
+      return { items: page.items.map(item => item.value), ...(page.cursor ? { cursor: page.cursor } : {}) }
+    })
+  }
+
   /** Trusted adapters call this at the use site; model tools receive no vault reference. */
   async use<T>(input: CredentialUse, consume: (secret: string) => Promise<T>): Promise<T> {
     fields(input, ['instanceId', 'resourceId', 'role', 'workItemId', 'environmentId', 'sourceInstanceId', 'purpose'], 'resource use')
