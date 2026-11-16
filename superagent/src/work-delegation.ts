@@ -99,6 +99,33 @@ export interface MainWorkNotification {
   outcome?: MainWorkOutcome
   followUps?: MainWorkFollowUpView[]
 }
+
+/** Resolve only a completed Main reply for this exact current work result. */
+export async function mainResultReply(tx: AsyncTx, ticketId: string, reportId: string): Promise<string | undefined> {
+  const link = await tx.get<{ workBriefId: string; workItemId?: string }>('work-ticket', ticketId)
+  if (!link) return undefined
+  const ticket = await tx.get<Work['ticket']>('ticket', ticketId)
+  const report = await tx.get<{ id: string; assignmentId: string; directionVersion: number }>('report', ticketId)
+  const assignment = await tx.get<{ id: string }>('assignment', ticketId)
+  const intent = await tx.get<Work['intent']>('intent', ticketId)
+  if (ticket?.state !== 'open' || ticket.constraint || report?.id !== reportId || report.assignmentId !== assignment?.id
+    || report.directionVersion !== ticket.directionVersion || intent?.state !== 'ready' || intent.reason !== 'ready-report') return undefined
+  const brief = await tx.get<MainWorkBrief>('work-brief', link.workBriefId)
+  const itemId = link.workItemId ?? link.workBriefId
+  const update = await tx.get<MainWorkUpdate>('work-update-head', itemId)
+  const notification = update && await tx.get<MainWorkNotification>('work-update', update.id)
+  const command = update && await tx.get<{ state: string; messageId: string; sequence?: number }>('main-update-command', update.id)
+  const state = await tx.get<{ mainId: string }>('main-state', 'main')
+  if (!brief || !state || brief.mainId !== state.mainId || !notification || notification.mainId !== brief.mainId
+    || notification.receipt.ticketId !== ticketId || notification.update.workItemId !== link.workItemId
+    || notification.outcome?.status !== 'success' || notification.outcome.ticketId !== ticketId
+    || notification.outcome.reportId !== reportId || command?.state !== 'completed'
+    || !Number.isSafeInteger(command.sequence) || command.sequence! < 1) return undefined
+  const message = await tx.get<{ id: string; role: string; status: string; text: string }>('main-message',
+    String(command.sequence).padStart(16, '0'))
+  return message?.id === `reply:${command.messageId}` && message.role === 'main' && message.status === 'completed'
+    && message.text.trim() ? message.text : undefined
+}
 export interface MainWorkCardBrief extends MainWorkIntent {
   id: string
   workItemId: string
@@ -715,7 +742,8 @@ export class WorkDelegation {
           await this.routeAttentionAnswer(String(effect.payload.factId), context.signal)
         } else {
           const result = await handler.execute(effect, context)
-          if (result.type === 'success' && typeof effect.payload.ticketId === 'string') await this.refreshTicket(effect.payload.ticketId, context.signal)
+          if ((result.type === 'success' || result.type === 'defer' && effect.payload.type === 'report-ready')
+            && typeof effect.payload.ticketId === 'string') await this.refreshTicket(effect.payload.ticketId, context.signal)
           return result
         }
         return { type: 'success' }
@@ -743,7 +771,8 @@ export class WorkDelegation {
         const results = await handler.batch!.execute(effects, context)
         return Promise.all(results.map(async (result, index) => {
           const ticketId = effects[index]?.payload.ticketId
-          if (result.type !== 'success' || typeof ticketId !== 'string') return result
+          if (result.type !== 'success' && !(result.type === 'defer' && effects[index]?.payload.type === 'report-ready')
+            || typeof ticketId !== 'string') return result
           try { await this.refreshTicket(ticketId, context.signal); return result }
           catch { return { type: 'transient', reason: 'The bounded Main work update could not be recorded yet.' } }
         }))

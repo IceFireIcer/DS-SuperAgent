@@ -35,7 +35,9 @@ test('Main delegates one durable local brief and reports only the Worker result 
           failFirstMainUpdate = false
           throw new Error('Transient Main route failure.')
         }
-        yield* textResponse(notification.outcome?.summary ?? notification.update.summary)
+        yield* textResponse(notification.outcome?.status === 'success'
+          ? 'Main confirmed checked-note.txt after reviewing the Worker evidence.'
+          : notification.outcome?.summary ?? notification.update.summary)
         return
       }
       if (calls === 0) yield* toolResponse('delegate_work', {
@@ -73,7 +75,10 @@ test('Main delegates one durable local brief and reports only the Worker result 
   })
   const engine = new Engine(storage, 'personal', { sourceInstanceId: 'product-desktop', actorId: 'alice', allowedActorIds: ['alice'] },
     { scanIntervalMs: 10, retryDelayMs: 10 }, sessions, [environment])
+  let reopened
   t.after(async () => {
+    await reopened?.effects.stop()
+    await reopened?.shutdown()
     await engine.effects.stop()
     await engine.shutdown()
     await sessions.close()
@@ -108,10 +113,15 @@ test('Main delegates one durable local brief and reports only the Worker result 
   assert.deepEqual(history.messages.filter(message => message.role === 'user').map(message => message.id).length, 1)
   await until(async () => updates.some(update => update.outcome?.status === 'success'), 'Main receiving the bounded verified result')
   await until(async () => updates.filter(update => update.outcome?.status === 'success').length === 2, 'the stable Main notification retry')
-  await until(async () => (await engine.getMainConversation({ instanceId: 'personal' })).messages.some(message => message.text === 'Created checked-note.txt.'), 'Main committing the verified result reply')
+  await until(async () => (await engine.getMainConversation({ instanceId: 'personal' })).messages.some(message => message.text === 'Main confirmed checked-note.txt after reviewing the Worker evidence.'), 'Main committing the verified result reply')
   history = await engine.getMainConversation({ instanceId: 'personal' })
   assert.equal(updates.filter(update => update.outcome?.status === 'success').length, 2)
-  assert.equal(history.messages.filter(message => message.text === 'Created checked-note.txt.').length, 1)
+  assert.equal(history.messages.filter(message => message.text === 'Main confirmed checked-note.txt after reviewing the Worker evidence.').length, 1)
+  await until(async () => (await engine.conversation(work.receipt.ticketId)).messages.some(message => message.purpose === 'result'), 'Main reply delivery')
+  const result = (await engine.conversation(work.receipt.ticketId)).messages.find(message => message.purpose === 'result')
+  assert.equal(result.text, 'Main confirmed checked-note.txt after reviewing the Worker evidence.')
+  assert.equal(result.reportId, work.outcome.reportId)
+  assert.notEqual(result.text, work.outcome.summary)
   assert.equal(updates.find(update => update.outcome?.status === 'success').receipt.ticketId, work.receipt.ticketId)
   assert.equal(history.works[0].update.version, 1)
   assert.equal(history.works[0].update.needsDecision, false)
@@ -134,4 +144,14 @@ test('Main delegates one durable local brief and reports only the Worker result 
   assert.equal(final.messages.at(-1).role, 'main')
   assert.equal(final.messages.at(-1).status, 'completed')
   assert.equal((await engine.listTickets()).items.length, 2)
+  await engine.effects.stop()
+  await engine.shutdown()
+  reopened = new Engine(storage, 'personal', { sourceInstanceId: 'product-desktop', actorId: 'alice', allowedActorIds: ['alice'] },
+    { scanIntervalMs: 10, retryDelayMs: 10 }, sessions, [environment])
+  await reopened.openMain({ instanceId: 'personal' })
+  for (let index = 0; index < 3; index++) await reopened.effects.drain()
+  const afterRestart = (await reopened.conversation(work.receipt.ticketId)).messages.filter(message => message.purpose === 'result')
+  assert.deepEqual(afterRestart.map(message => message.text), ['Main confirmed checked-note.txt after reviewing the Worker evidence.'])
+  assert.equal((await reopened.getMainConversation({ instanceId: 'personal' })).messages.filter(message =>
+    message.text === 'Main confirmed checked-note.txt after reviewing the Worker evidence.').length, 1)
 })

@@ -27,7 +27,7 @@ import { environmentHandoffPrompt, handoffCopyBlockers, isEnvironmentHandoffActi
 import { assertHostTakeoverSettled, hostTakeoverKey, isHostTakeoverPending, loadHostTakeover, type HostTakeoverBlocker, type HostTakeoverRecord,
   type HostTakeoverTicket } from './host-takeover.js'
 import { assertReferenceShape, type EnvironmentAssetReference } from './environment-assets.js'
-import type { MainWorkBrief, MainWorkItem } from './work-delegation.js'
+import { mainResultReply, type MainWorkBrief, type MainWorkItem } from './work-delegation.js'
 import { resolveProductAttachments } from './product-attachments.js'
 import { workerMcpName, workerMcpTool, type WorkerMcpBinding } from './worker-mcp-tool.js'
 import { WorkerMcpCalls, mcpBlockIn, mcpCallPageIn } from './worker-mcp-calls.js'
@@ -342,8 +342,10 @@ export class Execution {
     }
     return {
       notice: { execute: async (effect, context) => {
-        try { await this.router(String(effect.payload.ticketId), effect.payload.type === 'report-ready', context.signal); return { type: 'success' } }
+        try { await this.router(String(effect.payload.ticketId), effect.payload.type === 'report-ready', context.signal,
+          typeof effect.payload.reportId === 'string' ? effect.payload.reportId : undefined); return { type: 'success' } }
         catch (error) {
+          if (error instanceof CoreError && error.code === 'MAIN_RESULT_PENDING') return { type: 'defer', reason: error.message }
           if (error instanceof CoreError && error.code === 'ROUTER_NOTICE_UNHANDLED') return { type: 'transient', reason: error.message }
           throw error
         }
@@ -693,13 +695,33 @@ export class Execution {
     return this.blockEnvironmentHandoff(record, [{ code: 'handoff-recovery-failed', message }], 'recovered')
   }
 
-  private async routerRequest(ticketId: string, ready: boolean) {
+  private async routerRequest(ticketId: string, ready: boolean, expectedReportId?: string) {
     const ticket = await this.storage.transaction(this.instanceId, transaction => transaction.get<Work['ticket']>('ticket', ticketId))
     if (ticket?.constraint) return undefined
     const trigger = await this.storage.transaction(this.instanceId, transaction => this.trigger(transaction, ticketId))
     if (trigger.proactive) return undefined
     const report = ready ? await this.storage.transaction(this.instanceId, transaction => transaction.get<ReadyReport>('report', ticketId)) : undefined
-    if (ready && !report) throw new CoreError('NOT_READY', 'No ready report exists.')
+    if (ready && (!report || expectedReportId && report.id !== expectedReportId)) return undefined
+    const resultText = ready ? await this.storage.transaction(this.instanceId, async transaction => {
+      const link = await transaction.get('work-ticket', ticketId)
+      if (!link) return report!.result
+      const current = await transaction.get<ReadyReport>('report', ticketId)
+      const assignment = await transaction.get<Assignment>('assignment', ticketId)
+      if (current?.id !== report!.id || current.assignmentId !== assignment?.id) return undefined
+      return mainResultReply(transaction, ticketId, current.id)
+    }) : undefined
+    if (ready && resultText === undefined) {
+      const current = await this.storage.transaction(this.instanceId, async transaction => ({
+        report: await transaction.get<ReadyReport>('report', ticketId),
+        assignment: await transaction.get<Assignment>('assignment', ticketId),
+        ticket: await transaction.get<Work['ticket']>('ticket', ticketId),
+        intent: await transaction.get<Work['intent']>('intent', ticketId),
+      }))
+      if (current.report?.id !== report!.id || current.report.assignmentId !== current.assignment?.id
+        || current.report.directionVersion !== current.ticket?.directionVersion || current.ticket?.state !== 'open'
+        || current.ticket.constraint || current.intent?.state !== 'ready' || current.intent.reason !== 'ready-report') return undefined
+      throw new CoreError('MAIN_RESULT_PENDING', 'The current work result is waiting for Main to finish its reply.')
+    }
     const tool: NativeTool = ready ? {
       name: 'deliver_result', description: 'Deliver the current verified ready report to the original request.', parameters: { reportId: { type: 'string', required: true } },
       execute: async args => this.storage.transaction(this.instanceId, async transaction => {
@@ -708,13 +730,16 @@ export class Execution {
         const current = await transaction.get<ReadyReport>('report', ticketId)
         const assignment = await transaction.get<Assignment>('assignment', ticketId)
         if (!current || current.id !== args.reportId || current.assignmentId !== assignment?.id) throw new CoreError('NOT_READY', 'Only the current Assignment ready report may be delivered.')
+        const link = await transaction.get('work-ticket', ticketId)
+        const text = link ? await mainResultReply(transaction, ticketId, current.id) : current.result
+        if (!text) throw new CoreError('MAIN_RESULT_PENDING', 'The current work result is waiting for Main to finish its reply.')
         const trigger = await this.trigger(transaction, ticketId)
         const deliveryId = `${ticketId}:result`
         const target = triggerDeliveryTarget(trigger)
         const destination = { ...target.source, eventId: target.eventId, ...(target.threadId ? { threadId: target.threadId } : {}) }
         const effect = await this.effects.enqueue(transaction, { key: `${ticketId}:result`, stream: 'outbox', scope: ticketId,
           payload: { purpose: 'result', ticketId, reportId: current.id, deliveryId } })
-        await this.deliveries.record(transaction, { id: deliveryId, ticketId, purpose: 'result', text: current.result, destination,
+        await this.deliveries.record(transaction, { id: deliveryId, ticketId, purpose: 'result', text, destination,
           basis: { kind: 'ready-report', reportId: current.id, directionVersion: current.directionVersion },
           effectId: effect.id, effectGeneration: effect.generation }, effect)
         return 'Result queued for the original message.'
@@ -729,9 +754,9 @@ export class Execution {
     return { sessionId: this.sessions.routerSessionId, role: 'router' as const, coalesce: true, text: report ? `Ready report:${JSON.stringify(report)}` : `Accepted original request:${JSON.stringify({ ticketId, text: trigger.text })}`, tools: [tool] }
   }
 
-  private async router(ticketId: string, ready: boolean, signal: AbortSignal) {
+  private async router(ticketId: string, ready: boolean, signal: AbortSignal, reportId?: string) {
     const config = await this.roleConfig.currentView()
-    const request = await this.routerRequest(ticketId, ready)
+    const request = await this.routerRequest(ticketId, ready, reportId)
     if (!request) return
     const result = await this.sessions.run({ ...request, signal, profile: structuredClone(config.roles.router),
       onBeforeModel: async () => { await this.recordRouterUse(request.sessionId, config) } })
@@ -740,9 +765,12 @@ export class Execution {
 
   private async routerBatch(effects: Effect[], signal: AbortSignal): Promise<EffectResult[]> {
     const config = await this.roleConfig.currentView()
-    const requests = await Promise.allSettled(effects.map(effect => this.routerRequest(String(effect.payload.ticketId), effect.payload.type === 'report-ready')))
+    const requests = await Promise.allSettled(effects.map(effect => this.routerRequest(String(effect.payload.ticketId), effect.payload.type === 'report-ready',
+      typeof effect.payload.reportId === 'string' ? effect.payload.reportId : undefined)))
     return Promise.all(requests.map(async request => {
-      if (request.status === 'rejected') return { type: 'unknown' as const, reason: 'The Router notification could not be prepared.' }
+      if (request.status === 'rejected') return request.reason instanceof CoreError && request.reason.code === 'MAIN_RESULT_PENDING'
+        ? { type: 'defer' as const, reason: request.reason.message }
+        : { type: 'unknown' as const, reason: 'The Router notification could not be prepared.' }
       if (!request.value) return { type: 'success' as const }
       try {
         const result = await this.sessions.run({ ...request.value, signal, profile: structuredClone(config.roles.router),
@@ -750,7 +778,9 @@ export class Execution {
         await this.recordRouterSession(result)
         return { type: 'success' as const }
       } catch (error) {
-        return error instanceof CoreError && error.code === 'ROUTER_NOTICE_UNHANDLED'
+        return error instanceof CoreError && error.code === 'MAIN_RESULT_PENDING'
+          ? { type: 'defer' as const, reason: error.message }
+          : error instanceof CoreError && error.code === 'ROUTER_NOTICE_UNHANDLED'
           ? { type: 'transient' as const, reason: error.message }
           : { type: 'unknown' as const, reason: 'The Router notification outcome requires reconciliation.' }
       }

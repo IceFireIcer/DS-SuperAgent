@@ -1082,7 +1082,7 @@ export class MainConversation {
         let forkedSessionId: string | undefined
         try {
           const result = await this.sessions!.run({ role: 'main', sessionId: binding.mainSessionId, messageId, tools: this.memoryTools(binding), signal,
-            text: `[Work update]\nThis is a bounded Router notification, not a new user request. Explain the receipt or result briefly. Do not claim more than its evidence.\n${JSON.stringify(notification)}`,
+            text: `[Work update]\nThis is a bounded Router notification, not a new user request. Explain the receipt or result briefly. For a successful result, write the reply you want delivered to the original requester in your own words, grounded in the evidence. Do not claim more than its evidence.\n${JSON.stringify(notification)}`,
             ...(prepared ? { profile: prepared.profile } : {}) })
           forkedSessionId = result.forkedSessionId
           if (forkedSessionId) answer = undefined
