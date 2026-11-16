@@ -7,12 +7,14 @@ export type HostTakeoverOutcome = 'resumed' | 'waiting-job' | 'waiting-human' | 
 export type HostTakeoverBlockerCode = 'device-unconfirmed' | 'waiting-human' | 'authority-revoked'
   | 'handoff-pending' | 'unknown-effect' | 'unknown-job' | 'unknown-subagent' | 'unconfirmed-subagent'
   | 'preview-pending' | 'takeover-failed'
+  | 'unknown-browser'
 
 export interface HostTakeoverBlocker {
   code: HostTakeoverBlockerCode
   message: string
   jobId?: string
   subagentId?: string
+  operationId?: string
 }
 
 /** The decision one Ticket received while a new Host epoch was being made current. */
