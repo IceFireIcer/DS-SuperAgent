@@ -51,7 +51,7 @@ import type { ActivationGate } from './activation.js'
 import { MainConversation, type MainAddress, type MainSend } from './main-conversation.js'
 import { WorkDelegation, type MainEvidenceCard, type MainWorkCard, type MainWorkControl, type MainWorkItem } from './work-delegation.js'
 import { WorkObservations } from './work-observations.js'
-import { MainSourceHandoffs, type MainSourceDeliveryPage, type MainSourceHandoff, type MainSourceView } from './main-source.js'
+import { MainSourceHandoffs, type MainSourceDeliveryPage, type MainSourceDeliveryView, type MainSourceHandoff, type MainSourceView } from './main-source.js'
 import { ProductSchedules, authorizedScheduleEvent, scheduledOccurrenceKey,
   type ProductSchedule, type ScheduleCreate, type ScheduleTarget, type ScheduledOccurrence } from './product-schedules.js'
 import type { ProactiveWorkRecord } from './proactive-work.js'
@@ -300,7 +300,9 @@ export class Engine {
       },
     }) : undefined
     if (sessions && (effectsOptions.operationTimeoutMs ?? 60000) <= sessions.timeoutMs) throw new CoreError('INVALID_CONFIG', 'The effect deadline must exceed the native Session turn budget.')
-    this.effects = new Effects(storage, instanceId, sessions ? { ...effectsOptions, operationTimeoutMs: effectsOptions.operationTimeoutMs ?? 60000 } : effectsOptions)
+    this.effects = new Effects(storage, instanceId, sessions
+      ? { ...effectsOptions, owner: effectsOptions.owner ?? source.sourceInstanceId, operationTimeoutMs: effectsOptions.operationTimeoutMs ?? 60000 }
+      : { ...effectsOptions, owner: effectsOptions.owner ?? source.sourceInstanceId })
     this.configureEffectsGate()
     this.deliveries = new Deliveries(storage, instanceId, this.effects, Date.now)
     this.inputs = new WorkInputs(storage, instanceId, this.source, this.sourceEvents, (tx, request) => this.effects.enqueue(tx, request), Date.now)
@@ -1855,8 +1857,10 @@ export class Engine {
       const conditions = (await Promise.all(ticketIds.map(ticketId => this.deliveryState.list(transaction, ticketId)))).flat()
         .map(condition => ({ ticketId: condition.ticketId, number: condition.number, state: condition.state,
           ...(condition.result ? { result: condition.result } : {}), ...(condition.reason ? { reason: condition.reason } : {}) }))
-      return { ...structuredClone(handoff), workItemIds, ticketIds, deliveries: deliveryPage.items,
-        deliveryHasMore: deliveryPage.hasMore, ...(deliveryPage.cursor ? { deliveryCursor: deliveryPage.cursor } : {}), conditions }
+      const sourceReply = ticketIds.length === 0 ? await this.sourceReplyView(transaction, handoff) : undefined
+      const deliveries = sourceReply ? [sourceReply, ...deliveryPage.items].slice(0, 10) : deliveryPage.items
+      return { ...structuredClone(handoff), workItemIds, ticketIds, deliveries,
+        deliveryHasMore: deliveryPage.hasMore || deliveries.length > 10, ...(deliveryPage.cursor ? { deliveryCursor: deliveryPage.cursor } : {}), conditions }
     })))
   }
 
@@ -1864,7 +1868,22 @@ export class Engine {
     const split = handoff.workBriefId ? await transaction.get<{ itemIds: string[] }>('work-split', handoff.workBriefId) : undefined
     const receipts = await Promise.all((split?.itemIds ?? []).map(id => transaction.get<{ ticketId?: string }>('work-receipt', id)))
     const ticketIds = [...new Set(receipts.flatMap(receipt => receipt?.ticketId ? [receipt.ticketId] : []))]
-    return this.deliveryPage(ticketIds, await Promise.all(ticketIds.map(ticketId => this.deliveries.list(transaction, ticketId))), after, limit)
+    const page = this.deliveryPage(ticketIds, await Promise.all(ticketIds.map(ticketId => this.deliveries.list(transaction, ticketId))), after, limit)
+    const sourceReply = ticketIds.length === 0 ? await this.sourceReplyView(transaction, handoff) : undefined
+    if (!sourceReply || after) return page
+    return { items: [sourceReply, ...page.items].slice(0, limit), ...(page.cursor ? { cursor: page.cursor } : {}), hasMore: page.hasMore }
+  }
+
+  private async sourceReplyView(transaction: AsyncTx, handoff: MainSourceHandoff): Promise<MainSourceDeliveryView | undefined> {
+    const reply = await transaction.get<{ id: string; effectId: string; effectGeneration: string; createdAt: number; destination: MainSourceDeliveryView['destination'] }>(
+      'main-source-reply', `main-source-reply:${handoff.id}`)
+    if (!reply) return undefined
+    const receipt = await transaction.get<{ state: 'pending' | 'done' | 'failed' | 'unknown' | 'superseded'; delivery?: 'pending' | 'sent' | 'dropped' | 'unknown'; attempts?: number; reason?: string }>(
+      'effect-receipt', JSON.stringify([reply.effectId, reply.effectGeneration]))
+    const state = receipt?.delivery ?? (receipt?.state === 'done' ? 'sent' : receipt?.state === 'unknown' ? 'unknown' : receipt?.state === 'failed' ? 'dropped' : 'pending')
+    return { id: reply.id, ticketId: handoff.id, sequence: 0, createdAt: reply.createdAt, purpose: 'result', state,
+      reconcileRequired: state === 'unknown', ...(receipt?.attempts === undefined ? {} : { attempts: receipt.attempts }),
+      ...(receipt?.reason ? { reason: receipt.reason } : {}), destination: reply.destination }
   }
 
   private deliveryPage(ticketIds: string[], histories: DeliveryView[][], after: string | undefined, limit: number): MainSourceDeliveryPage {

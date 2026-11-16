@@ -20,6 +20,33 @@ async function setup(context, options = {}) {
   return { storage, effects, enqueue, directory }
 }
 
+test('dispatchers sharing an Instance only claim their own effects and leave legacy effects for the primary owner', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-effect-owners-'))
+  const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  const primaryCalls = []
+  const sourceCalls = []
+  const primary = new core.Effects(storage, 'private', { owner: 'product-desktop', handlers: {
+    outbox: { execute: async effect => { primaryCalls.push(effect.key); return { type: 'success' } } },
+  } })
+  const source = new core.Effects(storage, 'private', { owner: 'feishu:tenant:group', claimUnowned: false, handlers: {
+    outbox: { execute: async effect => { sourceCalls.push(effect.key); return { type: 'success' } } },
+  } })
+  t.after(async () => { await primary.stop(); await source.stop(); await storage.close(); await rm(directory, { recursive: true, force: true }) })
+  await storage.transaction('private', async tx => {
+    await primary.enqueue(tx, { key: 'desktop', stream: 'outbox', scope: 'desktop', payload: {} })
+    await source.enqueue(tx, { key: 'feishu', stream: 'outbox', scope: 'feishu', payload: {} })
+    await tx.insert('effect', '0000000000000003', { id: 'old-effect', generation: 'old-generation', key: 'legacy',
+      queueKey: '0000000000000003', stream: 'outbox', scope: 'legacy', payload: {}, state: 'pending', attempts: 0, availableAt: 0 })
+    await tx.replace('effect-meta', 'count', 3)
+    await tx.replace('effect-meta', 'sequence', 3)
+  })
+  await source.drain()
+  assert.deepEqual(sourceCalls, ['feishu'])
+  await primary.drain()
+  assert.deepEqual(primaryCalls.sort(), ['desktop', 'legacy'])
+  assert.deepEqual(sourceCalls, ['feishu'])
+})
+
 test('effects only dispatch committed intents and a scan recovers a lost wake', async context => {
   const delivered = []
   const { storage, effects, enqueue } = await setup(context, {

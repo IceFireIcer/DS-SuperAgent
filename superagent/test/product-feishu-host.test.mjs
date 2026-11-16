@@ -65,6 +65,9 @@ test('the product Host exposes Feishu health, stop and reconnection without disc
   for (let attempt = 0; attempt < 200 && outboundReplies.length === 0; attempt++) await new Promise(resolve => setTimeout(resolve, 25))
   assert.equal(outboundReplies.length, 1, 'the Feishu Engine routes a no-work Main reply through the runtime channel')
   assert.equal(JSON.parse(outboundReplies[0].content).text, 'Main received the request.')
+  const sourceId = (await host.dispatch('history', { instanceId: 'private' })).sources[0].id
+  const receipts = await host.dispatch('source-deliveries', { instanceId: 'private', sourceId, limit: 10 })
+  assert.deepEqual(receipts.items.map(item => [item.state, item.destination.actorId]), [['sent', 'alice']])
   assert.equal((await read()).state, 'polling')
   assert.equal((await read()).credentialMode, 'legacy')
   await assert.rejects(host.dispatch('resource-select-feishu', { instanceId: 'private', commandId: 'legacy-select', resourceId: null }),

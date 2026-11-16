@@ -358,7 +358,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
       }, storage, instanceId, mainIntake: true,
       ...(attachments ? { attachmentIntake: { upload: (request: import('./product-attachments.js').ProductAttachmentUpload) => attachments.upload(request),
         environmentId: async () => (await engine!.getInstanceDirectory({ instanceId })).environmentId } } : {}) })
-      feishuEngine = new Engine(storage, instanceId, feishuRuntime.sourceBinding, {}, sessions, [], {}, {}, {},
+      feishuEngine = new Engine(storage, instanceId, feishuRuntime.sourceBinding,
+        { claimUnowned: false, streamOwners: { notice: 'product-desktop', relay: 'product-desktop' } }, sessions, [], {}, {}, {},
         { channel: feishuRuntime.channel }, {}, proactive)
       feishuRuntime.bind(feishuEngine)
     }

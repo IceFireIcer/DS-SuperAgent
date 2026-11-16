@@ -102,6 +102,9 @@ test('a no-work Main reply is delivered through a durable Feishu source reply', 
   assert.equal(replies.length, 1)
   assert.equal(replies[0].messageId, 'om_question')
   assert.equal(replies[0].text, 'I cannot identify a justified task from this request.')
+  const sourceId = (await engine.getMainSources({ instanceId: 'private' })).items[0].id
+  const delivery = await engine.getMainSourceDeliveries({ instanceId: 'private', sourceId })
+  assert.deepEqual(delivery.items.map(item => [item.purpose, item.state, item.destination.actorId]), [['result', 'sent', 'alice']])
   assert.match(replies[0].uuid, /^[a-f0-9]{32}$/u)
   assert.match(turns[0], /If no work is justified, give a brief answer to this requester only/u)
   const effects = await engine.effects.list()
@@ -323,7 +326,8 @@ test('Main delegates a Feishu discussion and the original thread receives the bo
   feishu = new core.Engine(storage, 'private', { kind: 'feishu', sourceInstanceId: 'feishu:tenant:group', actorId: 'receiver',
     allowedActorIds: ['receiver'], allowedThreadPrefixes: ['feishu:tenant:'], versionOrder: 'sequence',
     intake: { mode: 'auto', maxBatchSize: 5, maxAttempts: 1, timeoutMs: 5000,
-      allowedRequesterIds: ['alice'], allowedBotActorIds: [], rules: [] } }, {}, sessions)
+      allowedRequesterIds: ['alice'], allowedBotActorIds: [], rules: [] } },
+    { claimUnowned: false, streamOwners: { notice: 'desktop', relay: 'desktop' } }, sessions)
   await desktop.openMain({ instanceId: 'private' })
   const source = new core.FeishuSource(storage, 'private', feishu, { tenantKey: 'tenant', chatIds: ['group'],
     selfActorIds: ['ou_bot'], mainIntake: true })
@@ -331,10 +335,11 @@ test('Main delegates a Feishu discussion and the original thread receives the bo
     chatType: 'group', messageId: 'om_work', senderId: 'alice', senderKind: 'human', text: 'Please do this one job.',
     mentionIds: ['ou_bot'], createTime: '1700000000000', updateTime: '1700000000000' })
   assert.equal(request.status, 'recorded')
-  for (let index = 0; index < 14; index++) await desktop.effects.drain()
+  for (let index = 0; index < 14; index++) { await feishu.effects.drain(); await desktop.effects.drain() }
   const sources = await desktop.getMainSources({ instanceId: 'private' })
   assert.equal(sources.items.length, 1)
-  assert.equal(sources.items[0].state, 'delegated')
+  assert.equal(sources.items[0].state, 'delegated', JSON.stringify({ sources, effects: await desktop.effects.list(),
+    messages: (await desktop.getRecentMainConversation({ instanceId: 'private' })).messages }))
   assert.equal((await desktop.listTickets()).items.length, 1,
     JSON.stringify({ sources, effects: await desktop.effects.list(), page: await desktop.getRecentMainConversation({ instanceId: 'private' }) }))
   assert.deepEqual(replies.map(reply => reply.messageId), ['om_work', 'om_work'])
@@ -348,7 +353,7 @@ test('Main delegates a Feishu discussion and the original thread receives the bo
   assert.equal((await desktop.getMainSources({ instanceId: 'private' })).items.length, 1,
     'an authorized follow-up in the owned discussion does not create a second Main request')
   assert.equal((await desktop.listTickets()).items.length, 1)
-  for (let index = 0; index < 8; index++) await desktop.effects.drain()
+  for (let index = 0; index < 8; index++) { await feishu.effects.drain(); await desktop.effects.drain() }
   const ticketId = (await desktop.listTickets()).items[0].ticket.id
   const waiting = await desktop.conversation(ticketId)
   assert.equal(waiting.status, 'waiting-human')
@@ -374,7 +379,7 @@ test('Main delegates a Feishu discussion and the original thread receives the bo
   await source.receive({ eventId: 'feishu-owner-answer', cursor: '6', tenantKey: 'tenant', chatId: 'group',
     chatType: 'group', rootId: 'om_work', messageId: 'om_owner_answer', senderId: 'alice', senderKind: 'human',
     text: `Q-${code}: Yes`, createTime: '1700000005000', updateTime: '1700000005000' })
-  for (let index = 0; index < 8; index++) await desktop.effects.drain()
+  for (let index = 0; index < 8; index++) { await feishu.effects.drain(); await desktop.effects.drain() }
   const answered = await desktop.conversation(ticketId)
   assert.equal(answered.attention.answeredBy, 'alice')
   assert.equal(answered.attention.answerText, 'Yes')
