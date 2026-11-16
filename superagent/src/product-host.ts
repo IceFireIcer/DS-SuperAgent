@@ -20,6 +20,8 @@ import type { ProductCredentialRecords } from './product-credential-vault.js'
 import type { ProductCredentialManager } from './product-credential-manager.js'
 import { workerMcpName, type WorkerMcpConfig } from './worker-mcp-tool.js'
 import type { ProductMcpConfiguration } from './product-mcp-configuration.js'
+import { HostBrowserAdapter } from './browser-host.js'
+import type { BrowserAdapter } from './browser-resources.js'
 import { assertReferenceShape } from './environment-assets.js'
 import { localDeliveryChannel, type DeliveryChannel } from './deliveries.js'
 import type { RoleConfig, RoleModel } from './config.js'
@@ -35,6 +37,8 @@ export interface ProductHostConfig { databasePath: string; workspaceRoot?: strin
   feishu?: Omit<FeishuRuntimeOptions, 'storage' | 'instanceId' | 'mainIntake' | 'attachmentIntake'>;
   /** Trusted deployment selection; one exact Host-local MCP tool, with no model-supplied endpoint or credential. */
   workerMcpTool?: WorkerMcpConfig;
+  /** Trusted Host seam; tests may supply a fake bridge without touching a user browser. */
+  browserAdapter?: BrowserAdapter;
   feishuConfigurationError?: 'INVALID_CONFIG';
   github?: Omit<GitHubRuntimeOptions, 'storage' | 'instanceId'>;
   githubConfigurationError?: 'INVALID_CONFIG' }
@@ -91,10 +95,20 @@ const resourceFields: Record<string, string[]> = {
   'mcp-retry': ['instanceId', 'commandId', 'expectedRevision'],
 }
 
+const browserFields: Record<string, string[]> = {
+  'browser-list': ['instanceId'], 'browser-read': ['instanceId', 'resourceId'],
+  'browser-create': ['instanceId', 'commandId', 'environmentId', 'label'],
+  'browser-grant': ['instanceId', 'commandId', 'resourceId', 'workItemId', 'expectedRevision', 'active'],
+  'browser-revoke': ['instanceId', 'commandId', 'resourceId', 'expectedRevision'],
+  'browser-resolve': ['instanceId', 'commandId', 'resourceId', 'operationId', 'reason'],
+}
+
 export async function createProductHost(context: Context, config: ProductHostConfig): Promise<ProductHost> {
   const instanceId = config.instanceId ?? 'personal'
   const actorId = config.actorId ?? 'local-user'
   identifier(instanceId, 'instanceId'); identifier(actorId, 'actorId')
+  const browserAdapter = config.browserAdapter ?? (process.env.DS_BOT_APP === '1' && typeof process.send === 'function'
+    ? new HostBrowserAdapter() : undefined)
   if (config.workerMcpTool) workerMcpName(config.workerMcpTool)
   const route = (configured?: RoleModel): RoleModel => {
     const value = configured ?? context.get('agentDefaultModel')?.currentSelection?.()
@@ -264,7 +278,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
     const failures: unknown[] = []
     for (const close of [() => supervision?.close(), () => statusPublisher?.close(), () => gateway?.close(), () => feishuRuntime?.stop(), () => githubRuntime?.stop(), () => engine?.effects.stop(),
       () => feishuEngine?.effects.stop(), () => githubEngine?.effects.stop(), () => engine?.shutdown(), () => feishuEngine?.shutdown(), () => githubEngine?.shutdown(),
-      () => sessions.close(), ...environments.map(environment => () => environment.close()), () => storage.close()]) {
+      () => engine?.closeBrowserResources(), () => sessions.close(), ...environments.map(environment => () => environment.close()), () => storage.close()]) {
       try { await close() } catch (error) { failures.push(error) }
     }
     if (failures.length) throw new AggregateError(failures, 'The product Host did not close cleanly.')
@@ -320,7 +334,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
           : Promise.resolve({ type: 'permanent', reason: 'DESTINATION_SOURCE_DISABLED' }),
     } : undefined
     engine = new Engine(storage, instanceId, { sourceInstanceId: 'product-desktop', actorId, allowedActorIds: [actorId],
-      ...(config.workerMcpTool ? { hostCapabilities: { mcp: true } } : {}) }, {}, sessions,
+      ...(config.workerMcpTool || browserAdapter ? { hostCapabilities: {
+        ...(config.workerMcpTool ? { mcp: true } : {}), ...(browserAdapter ? { browser: true } : {}),
+      } } : {}) }, {}, sessions,
       environments, {}, {}, {}, channel ? { channel } : {}, {}, proactive, attachments)
     const records = context.get('credentials') as ProductCredentialRecords | undefined
     if (records && typeof records.readRecord === 'function' && typeof records.modifyRecord === 'function'
@@ -340,6 +356,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
         },
       } })
     }
+    if (browserAdapter) engine.configureWorkerBrowser(browserAdapter)
     if (environments[0] && config.workspaceRoot) await engine.addWorkDirectory({ instanceId,
       commandId: `bootstrap:${environments[0].config.id}`, environment: environments[0] })
     await engine.acquireHost()
@@ -397,7 +414,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
           return engine!.openMain({ instanceId })
         }
         if (payload.instanceId !== instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This request is outside the authorized Instance.')
-        const fields = resourceFields[endpoint] ?? (endpoint === 'proactive-rules' || endpoint === 'proactive-control' ? ['instanceId']
+        const fields = resourceFields[endpoint] ?? browserFields[endpoint] ?? (endpoint === 'proactive-rules' || endpoint === 'proactive-control' ? ['instanceId']
           : endpoint === 'proactive-list' ? ['instanceId', 'before']
           : endpoint === 'proactive-read' ? ['instanceId', 'runId']
             : endpoint === 'proactive-artifact' ? ['instanceId', 'runId', 'path', 'offset', 'maxBytes']
@@ -474,6 +491,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
         if (client && (endpoint.startsWith('resource-') || endpoint.startsWith('mcp-'))) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Credential and MCP settings require the local authorized product settings.')
         }
+        if (client && endpoint.startsWith('browser-')) {
+          throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Browser resources require the local authorized product window.')
+        }
         if (client && (endpoint.startsWith('attachment-') || endpoint === 'artifact-read')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'File access requires the local authorized product window.')
         }
@@ -488,6 +508,19 @@ export async function createProductHost(context: Context, config: ProductHostCon
         const commandId = client && payload.commandId !== undefined
           ? (() => { identifier(payload.commandId, 'commandId'); return `client:${client.id}:${createHash('sha256').update(payload.commandId).digest('hex')}` })()
           : payload.commandId as string
+        if (endpoint.startsWith('browser-')) {
+          if (endpoint === 'browser-list') return engine!.listBrowserResources({ instanceId })
+          if (endpoint === 'browser-read') return engine!.readBrowserResource({ instanceId, resourceId: payload.resourceId as string })
+          if (endpoint === 'browser-create') return engine!.createBrowserResource({ instanceId, commandId,
+            environmentId: payload.environmentId as string, label: payload.label as string })
+          if (endpoint === 'browser-grant') return engine!.grantBrowserResource({ instanceId, commandId,
+            resourceId: payload.resourceId as string, workItemId: payload.workItemId as string,
+            expectedRevision: payload.expectedRevision as number, active: payload.active as boolean })
+          if (endpoint === 'browser-revoke') return engine!.revokeBrowserResource({ instanceId, commandId,
+            resourceId: payload.resourceId as string, expectedRevision: payload.expectedRevision as number })
+          if (endpoint === 'browser-resolve') return engine!.resolveBrowserOperation({ instanceId, commandId,
+            resourceId: payload.resourceId as string, operationId: payload.operationId as string, reason: payload.reason as string })
+        }
         if (endpoint === 'proactive-rules') {
           const [configured, control] = await Promise.all([engine!.getProactiveRules(), engine!.getProactiveControl()])
           return { ...configured, control, sources: [
