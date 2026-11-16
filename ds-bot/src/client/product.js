@@ -365,7 +365,8 @@ export function applyProduct(ctx) {
         setControlBusy(null)
       }
     }
-    return h('article', { className: 'bt-main-work', 'aria-label': t('Work item: {goal}', { goal: work.brief.goal }) },
+    return h('article', { className: 'bt-main-work', 'aria-label': t('Work item: {goal}', { goal: work.brief.goal }),
+      'data-ticket-id': control?.ticketId ?? work.receipt.ticketId, 'data-work-brief-id': work.brief.id, tabIndex: -1 },
       h('div', { className: 'bt-main-work-head' }, h('div', { className: 'bt-main-work-title' },
         h('span', { className: 'bt-main-work-source' }, t('System work fact')), h('strong', null, work.brief.goal)),
         h('span', { className: 'bt-main-work-status', role: 'status' }, statusCopy(work.status))),
@@ -1149,7 +1150,20 @@ export function applyProduct(ctx) {
               : page === 'memory' ? t('Memory') : page === 'supervision' ? t('Supervision') : t('Super-agent settings'))),
           h('div', { className: 'bt-settings-scroll' },
             page === 'schedules' ? h(ProductScheduleSettings, { binding, works: view.getSnapshot().works, call: productCall,
-              onViewWork: () => { onClose(); view.set(current => ({ ...current, route: 'main' })); void refreshMain(binding) } })
+              onViewWork: ({ ticketIds = [], workBriefId } = {}) => {
+                onClose()
+                view.set(current => ({ ...current, route: 'main' }))
+                void refreshMain(binding).then(() => {
+                  requestAnimationFrame(() => {
+                    const cards = [...document.querySelectorAll('[data-ticket-id], [data-work-brief-id]')]
+                    const card = cards.find(item => ticketIds.includes(item.dataset.ticketId)
+                      || workBriefId && item.dataset.workBriefId === workBriefId)
+                    if (!card) return
+                    card.focus({ preventScroll: true })
+                    card.scrollIntoView?.({ behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' })
+                  })
+                })
+              } })
               : page === 'preparations' ? h(ProductProactiveSettings, { binding, call: productCall })
               : page === 'presets' ? h(ProductPresetSettings, { binding, call: productCall,
                 settingsRevision: snapshot.revision, onApplied: refreshAfterPreset, onReload: refreshAfterPreset })
@@ -1348,6 +1362,7 @@ const PRODUCT_CSS = `
 .bt-main-system-fact{padding:10px 12px;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card);color:var(--bt-ink-2);font-size:12px;line-height:18px}
 .bt-main-system-fact>span{display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.05em;font-size:10px}.bt-main-system-fact p{margin:0;color:var(--bt-ink)}
 .bt-main-work,.bt-main-source{max-width:800px;margin:0 auto;width:calc(100% - 32px);padding:12px;border:1px solid var(--bt-line);border-radius:6px;background:var(--bt-card);box-sizing:border-box}
+.bt-main-work:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 .bt-main-work-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;color:var(--bt-ink);font-size:14px;line-height:20px}
 .bt-main-work-title{min-width:0;display:flex;flex-direction:column;gap:2px}
 .bt-main-work-source{color:var(--bt-ink-2);font-size:10px;line-height:14px;text-transform:uppercase;letter-spacing:.05em}

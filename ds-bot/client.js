@@ -1497,6 +1497,13 @@ var ZH = {
   // Connectors and scheduled tasks
   "Scheduled tasks": "定时任务",
   "Scheduled occurrence": "日程发生点",
+  "Occurrence history ({count})": "发生记录（{count}）",
+  "No occurrences yet.": "尚无发生记录。",
+  "Load earlier occurrences": "加载更早发生记录",
+  "Work brief {id}": "委托 {id}",
+  "Ticket {id}": "工作项 {id}",
+  "View work for Ticket {id}": "查看工作项 {id}",
+  "View work brief {id}": "查看委托 {id}",
   "Delegated to Main": "已交给 Main",
   "Accepted by work": "已进入原工作",
   "Pending delivery": "等待投递",
@@ -21724,10 +21731,46 @@ function executionText(status) {
   }[status] ?? "Running work";
   return t(label);
 }
+function occurrenceHistory(occurrences, visibleOccurrences, loadEarlier, onViewWork) {
+  if (!occurrences.length) return (0, import_react54.createElement)("p", { className: "bt-set-hint" }, t("No occurrences yet."));
+  const rows2 = visibleOccurrences.map((occurrence) => {
+    const tickets = occurrence.ticketIds?.map((ticketId) => (0, import_react54.createElement)("p", { key: ticketId, className: "bt-set-hint" }, t("Ticket {id}", { id: ticketId })));
+    const workButtons = occurrence.ticketIds?.length ? occurrence.ticketIds.map((ticketId) => (0, import_react54.createElement)("button", {
+      key: `view:${ticketId}`,
+      type: "button",
+      className: "bt-soft bt-soft-sm",
+      "aria-label": t("View work for Ticket {id}", { id: ticketId }),
+      onClick: () => onViewWork?.({ workBriefId: occurrence.workBriefId, ticketIds: [ticketId] })
+    }, t("View work"))) : occurrence.workBriefId ? (0, import_react54.createElement)("button", {
+      type: "button",
+      className: "bt-soft bt-soft-sm",
+      "aria-label": t("View work brief {id}", { id: occurrence.workBriefId }),
+      onClick: () => onViewWork?.({ workBriefId: occurrence.workBriefId, ticketIds: [] })
+    }, t("View work")) : null;
+    return (0, import_react54.createElement)(
+      "div",
+      { key: occurrence.dueAt, className: "bt-product-schedule-occurrence" },
+      (0, import_react54.createElement)("p", { className: "bt-task-prompt" }, occurrenceText(occurrence)),
+      occurrence.executionStatus ? (0, import_react54.createElement)("p", { className: "bt-task-prompt", role: "status" }, executionText(occurrence.executionStatus)) : null,
+      occurrence.workBriefId ? (0, import_react54.createElement)("p", { className: "bt-set-hint" }, t("Work brief {id}", { id: occurrence.workBriefId })) : null,
+      tickets,
+      workButtons
+    );
+  });
+  const loadEarlierButton = occurrences.length > visibleOccurrences.length ? (0, import_react54.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: loadEarlier }, t("Load earlier occurrences")) : null;
+  return (0, import_react54.createElement)(
+    "details",
+    { className: "bt-product-schedule-history" },
+    (0, import_react54.createElement)("summary", null, t("Occurrence history ({count})", { count: occurrences.length })),
+    (0, import_react54.createElement)("div", { className: "bt-product-schedule-history-list" }, rows2),
+    loadEarlierButton
+  );
+}
 function ProductScheduleSettings({ binding, works, call: call2, onViewWork }) {
   const [rules, setRules] = (0, import_react54.useState)(null);
   const [sourceEnabled, setSourceEnabled] = (0, import_react54.useState)(true);
   const [details, setDetails] = (0, import_react54.useState)({});
+  const [historyCounts, setHistoryCounts] = (0, import_react54.useState)({});
   const [adding, setAdding] = (0, import_react54.useState)(false);
   const [title, setTitle] = (0, import_react54.useState)("");
   const [text, setText] = (0, import_react54.useState)("");
@@ -21948,7 +21991,14 @@ function ProductScheduleSettings({ binding, works, call: call2, onViewWork }) {
     ) : null,
     error ? (0, import_react54.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
     !rules ? (0, import_react54.createElement)("p", { className: "bt-main-status", role: "status" }, t("Loading…")) : rules.length === 0 ? (0, import_react54.createElement)("p", { className: "bt-main-status" }, t("No scheduled tasks yet.")) : (0, import_react54.createElement)("div", { className: "bt-set-card" }, rules.map((rule) => {
-      const last = details[rule.ruleId]?.occurrences?.at(-1);
+      const occurrences = [...details[rule.ruleId]?.occurrences ?? []].sort((left, right) => left.dueAt - right.dueAt);
+      const last = occurrences.at(-1);
+      const visibleCount = Math.min(occurrences.length, historyCounts[rule.ruleId] ?? 20);
+      const visibleOccurrences = occurrences.slice(-visibleCount);
+      const history = occurrenceHistory(occurrences, visibleOccurrences, () => setHistoryCounts((current) => ({
+        ...current,
+        [rule.ruleId]: Math.min(occurrences.length, (current[rule.ruleId] ?? 20) + 20)
+      })), onViewWork);
       const work = available.find((item) => item.brief.workItemId === rule.target.workItemId);
       return (0, import_react54.createElement)(
         "div",
@@ -21965,9 +22015,20 @@ function ProductScheduleSettings({ binding, works, call: call2, onViewWork }) {
             { className: "bt-task-prompt", role: "status" },
             occurrenceText(last),
             last.executionStatus ? ` · ${executionText(last.executionStatus)}` : null,
-            last.ticketIds?.length ? (0, import_react54.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: onViewWork }, t("View work")) : null
+            last.ticketIds?.length ? (0, import_react54.createElement)("button", {
+              type: "button",
+              className: "bt-soft bt-soft-sm",
+              "aria-label": t("View work for Ticket {id}", { id: last.ticketIds[0] }),
+              onClick: () => onViewWork?.({ workBriefId: last.workBriefId, ticketIds: last.ticketIds })
+            }, t("View work")) : last.workBriefId ? (0, import_react54.createElement)("button", {
+              type: "button",
+              className: "bt-soft bt-soft-sm",
+              "aria-label": t("View work brief {id}", { id: last.workBriefId }),
+              onClick: () => onViewWork?.({ workBriefId: last.workBriefId, ticketIds: [] })
+            }, t("View work")) : null
           ) : null
         ),
+        history,
         (0, import_react54.createElement)("span", { className: "bt-task-next" }, rule.status === "active" && rule.nextAt ? t("Next: {time}", { time: new Date(rule.nextAt).toLocaleString() }) : t(rule.status === "cancelled" ? "Cancelled" : "Finished")),
         rule.status === "active" ? (0, import_react54.createElement)("button", {
           type: "button",
@@ -21992,13 +22053,19 @@ var PRODUCT_SCHEDULE_CSS = `
 .bt-product-schedules .bt-switch[aria-checked=true] .bt-switch-knob{transform:translateX(16px)}
 .bt-product-schedules .bt-switch:active:not(:disabled) .bt-switch-knob{width:21px}
 .bt-product-schedules .bt-switch[aria-checked=true]:active:not(:disabled) .bt-switch-knob{transform:translateX(11px)}
-.bt-product-schedule-row{gap:10px;align-items:flex-start}
+.bt-product-schedule-row{gap:10px;align-items:flex-start;flex-wrap:wrap}
 .bt-product-schedule-row>svg{width:18px;height:18px;flex:none;color:var(--bt-ink-2)}
 .bt-product-schedule-row .bt-set-copy{min-width:0;display:flex;flex-direction:column;gap:4px}
+.bt-product-schedule-history{flex-basis:100%;min-width:0}
+.bt-product-schedule-history summary{cursor:pointer;overflow-wrap:anywhere;color:var(--bt-ink-2)}
+.bt-product-schedule-history summary:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-product-schedule-history-list{padding-left:12px}
+.bt-product-schedule-occurrence{padding:8px 0;border-top:1px solid var(--bt-line-2)}
+.bt-product-schedule-occurrence p{overflow-wrap:anywhere}
 .bt-product-schedule-row .bt-task-next{white-space:normal;max-width:180px;text-align:right}
 .bt-product-schedules button:focus-visible,.bt-product-schedules input:focus-visible,.bt-product-schedules textarea:focus-visible,
 .bt-product-schedules select:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
-@media(max-width:640px){.bt-product-schedule-row{flex-wrap:wrap}.bt-product-schedule-row .bt-task-next{max-width:none;text-align:left}}
+@media(max-width:640px){.bt-product-schedule-row .bt-task-next{max-width:none;text-align:left}}
 @media(prefers-reduced-motion:reduce){.bt-product-schedules .bt-task-form{animation:none}.bt-product-schedules .bt-switch,.bt-product-schedules .bt-switch-knob{transition:none}}
 `;
 
@@ -24620,7 +24687,13 @@ function applyProduct(ctx) {
     };
     return (0, import_react61.createElement)(
       "article",
-      { className: "bt-main-work", "aria-label": t("Work item: {goal}", { goal: work.brief.goal }) },
+      {
+        className: "bt-main-work",
+        "aria-label": t("Work item: {goal}", { goal: work.brief.goal }),
+        "data-ticket-id": control?.ticketId ?? work.receipt.ticketId,
+        "data-work-brief-id": work.brief.id,
+        tabIndex: -1
+      },
       (0, import_react61.createElement)(
         "div",
         { className: "bt-main-work-head" },
@@ -25999,10 +26072,18 @@ function applyProduct(ctx) {
               binding,
               works: view.getSnapshot().works,
               call: productCall,
-              onViewWork: () => {
+              onViewWork: ({ ticketIds = [], workBriefId } = {}) => {
                 onClose();
                 view.set((current) => ({ ...current, route: "main" }));
-                void refreshMain(binding);
+                void refreshMain(binding).then(() => {
+                  requestAnimationFrame(() => {
+                    const cards = [...document.querySelectorAll("[data-ticket-id], [data-work-brief-id]")];
+                    const card = cards.find((item) => ticketIds.includes(item.dataset.ticketId) || workBriefId && item.dataset.workBriefId === workBriefId);
+                    if (!card) return;
+                    card.focus({ preventScroll: true });
+                    card.scrollIntoView?.({ behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+                  });
+                });
               }
             }) : page === "preparations" ? (0, import_react61.createElement)(ProductProactiveSettings, { binding, call: productCall }) : page === "presets" ? (0, import_react61.createElement)(ProductPresetSettings, {
               binding,
@@ -26364,6 +26445,7 @@ var PRODUCT_CSS = `
 .bt-main-system-fact{padding:10px 12px;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card);color:var(--bt-ink-2);font-size:12px;line-height:18px}
 .bt-main-system-fact>span{display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.05em;font-size:10px}.bt-main-system-fact p{margin:0;color:var(--bt-ink)}
 .bt-main-work,.bt-main-source{max-width:800px;margin:0 auto;width:calc(100% - 32px);padding:12px;border:1px solid var(--bt-line);border-radius:6px;background:var(--bt-card);box-sizing:border-box}
+.bt-main-work:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 .bt-main-work-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;color:var(--bt-ink);font-size:14px;line-height:20px}
 .bt-main-work-title{min-width:0;display:flex;flex-direction:column;gap:2px}
 .bt-main-work-source{color:var(--bt-ink-2);font-size:10px;line-height:14px;text-transform:uppercase;letter-spacing:.05em}

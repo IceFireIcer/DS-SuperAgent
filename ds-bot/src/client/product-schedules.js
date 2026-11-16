@@ -36,10 +36,35 @@ function executionText(status) {
   return t(label)
 }
 
+function occurrenceHistory(occurrences, visibleOccurrences, loadEarlier, onViewWork) {
+  if (!occurrences.length) return h('p', { className: 'bt-set-hint' }, t('No occurrences yet.'))
+  const rows = visibleOccurrences.map(occurrence => {
+    const tickets = occurrence.ticketIds?.map(ticketId => h('p', { key: ticketId, className: 'bt-set-hint' }, t('Ticket {id}', { id: ticketId })))
+    const workButtons = occurrence.ticketIds?.length
+      ? occurrence.ticketIds.map(ticketId => h('button', { key: `view:${ticketId}`, type: 'button',
+        className: 'bt-soft bt-soft-sm', 'aria-label': t('View work for Ticket {id}', { id: ticketId }),
+        onClick: () => onViewWork?.({ workBriefId: occurrence.workBriefId, ticketIds: [ticketId] }) }, t('View work')))
+      : occurrence.workBriefId ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm',
+        'aria-label': t('View work brief {id}', { id: occurrence.workBriefId }),
+        onClick: () => onViewWork?.({ workBriefId: occurrence.workBriefId, ticketIds: [] }) }, t('View work')) : null
+    return h('div', { key: occurrence.dueAt, className: 'bt-product-schedule-occurrence' },
+      h('p', { className: 'bt-task-prompt' }, occurrenceText(occurrence)),
+      occurrence.executionStatus ? h('p', { className: 'bt-task-prompt', role: 'status' }, executionText(occurrence.executionStatus)) : null,
+      occurrence.workBriefId ? h('p', { className: 'bt-set-hint' }, t('Work brief {id}', { id: occurrence.workBriefId })) : null,
+      tickets, workButtons)
+  })
+  const loadEarlierButton = occurrences.length > visibleOccurrences.length
+    ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm', onClick: loadEarlier }, t('Load earlier occurrences')) : null
+  return h('details', { className: 'bt-product-schedule-history' },
+    h('summary', null, t('Occurrence history ({count})', { count: occurrences.length })),
+    h('div', { className: 'bt-product-schedule-history-list' }, rows), loadEarlierButton)
+}
+
 export function ProductScheduleSettings({ binding, works, call, onViewWork }) {
   const [rules, setRules] = useState(null)
   const [sourceEnabled, setSourceEnabled] = useState(true)
   const [details, setDetails] = useState({})
+  const [historyCounts, setHistoryCounts] = useState({})
   const [adding, setAdding] = useState(false)
   const [title, setTitle] = useState('')
   const [text, setText] = useState('')
@@ -166,7 +191,12 @@ export function ProductScheduleSettings({ binding, works, call, onViewWork }) {
     !rules ? h('p', { className: 'bt-main-status', role: 'status' }, t('Loading…')) : rules.length === 0
       ? h('p', { className: 'bt-main-status' }, t('No scheduled tasks yet.'))
         : h('div', { className: 'bt-set-card' }, rules.map(rule => {
-          const last = details[rule.ruleId]?.occurrences?.at(-1)
+          const occurrences = [...(details[rule.ruleId]?.occurrences ?? [])].sort((left, right) => left.dueAt - right.dueAt)
+          const last = occurrences.at(-1)
+          const visibleCount = Math.min(occurrences.length, historyCounts[rule.ruleId] ?? 20)
+          const visibleOccurrences = occurrences.slice(-visibleCount)
+          const history = occurrenceHistory(occurrences, visibleOccurrences, () => setHistoryCounts(current => ({ ...current,
+            [rule.ruleId]: Math.min(occurrences.length, (current[rule.ruleId] ?? 20) + 20) })), onViewWork)
           const work = available.find(item => item.brief.workItemId === rule.target.workItemId)
           return h('div', { key: rule.ruleId, className: 'bt-set-row bt-task bt-product-schedule-row' },
             h(ClockIcon), h('span', { className: 'bt-set-copy' },
@@ -175,7 +205,13 @@ export function ProductScheduleSettings({ binding, works, call, onViewWork }) {
               h('span', { className: 'bt-task-prompt' }, rule.text),
               last ? h('span', { className: 'bt-task-prompt', role: 'status' }, occurrenceText(last),
                 last.executionStatus ? ` · ${executionText(last.executionStatus)}` : null,
-                last.ticketIds?.length ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm', onClick: onViewWork }, t('View work')) : null) : null),
+                last.ticketIds?.length ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm',
+                  'aria-label': t('View work for Ticket {id}', { id: last.ticketIds[0] }),
+                  onClick: () => onViewWork?.({ workBriefId: last.workBriefId, ticketIds: last.ticketIds }) }, t('View work'))
+                  : last.workBriefId ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm',
+                    'aria-label': t('View work brief {id}', { id: last.workBriefId }),
+                    onClick: () => onViewWork?.({ workBriefId: last.workBriefId, ticketIds: [] }) }, t('View work')) : null) : null),
+            history,
             h('span', { className: 'bt-task-next' }, rule.status === 'active' && rule.nextAt
               ? t('Next: {time}', { time: new Date(rule.nextAt).toLocaleString() }) : t(rule.status === 'cancelled' ? 'Cancelled' : 'Finished')),
             rule.status === 'active' ? h('button', { type: 'button', className: 'bt-mini bt-task-remove',
@@ -193,12 +229,18 @@ export const PRODUCT_SCHEDULE_CSS = `
 .bt-product-schedules .bt-switch[aria-checked=true] .bt-switch-knob{transform:translateX(16px)}
 .bt-product-schedules .bt-switch:active:not(:disabled) .bt-switch-knob{width:21px}
 .bt-product-schedules .bt-switch[aria-checked=true]:active:not(:disabled) .bt-switch-knob{transform:translateX(11px)}
-.bt-product-schedule-row{gap:10px;align-items:flex-start}
+.bt-product-schedule-row{gap:10px;align-items:flex-start;flex-wrap:wrap}
 .bt-product-schedule-row>svg{width:18px;height:18px;flex:none;color:var(--bt-ink-2)}
 .bt-product-schedule-row .bt-set-copy{min-width:0;display:flex;flex-direction:column;gap:4px}
+.bt-product-schedule-history{flex-basis:100%;min-width:0}
+.bt-product-schedule-history summary{cursor:pointer;overflow-wrap:anywhere;color:var(--bt-ink-2)}
+.bt-product-schedule-history summary:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-product-schedule-history-list{padding-left:12px}
+.bt-product-schedule-occurrence{padding:8px 0;border-top:1px solid var(--bt-line-2)}
+.bt-product-schedule-occurrence p{overflow-wrap:anywhere}
 .bt-product-schedule-row .bt-task-next{white-space:normal;max-width:180px;text-align:right}
 .bt-product-schedules button:focus-visible,.bt-product-schedules input:focus-visible,.bt-product-schedules textarea:focus-visible,
 .bt-product-schedules select:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
-@media(max-width:640px){.bt-product-schedule-row{flex-wrap:wrap}.bt-product-schedule-row .bt-task-next{max-width:none;text-align:left}}
+@media(max-width:640px){.bt-product-schedule-row .bt-task-next{max-width:none;text-align:left}}
 @media(prefers-reduced-motion:reduce){.bt-product-schedules .bt-task-form{animation:none}.bt-product-schedules .bt-switch,.bt-product-schedules .bt-switch-knob{transition:none}}
 `

@@ -1421,6 +1421,13 @@ const ZH = {
   // Connectors and scheduled tasks
   'Scheduled tasks': '定时任务',
   'Scheduled occurrence': '日程发生点',
+  'Occurrence history ({count})': '发生记录（{count}）',
+  'No occurrences yet.': '尚无发生记录。',
+  'Load earlier occurrences': '加载更早发生记录',
+  'Work brief {id}': '委托 {id}',
+  'Ticket {id}': '工作项 {id}',
+  'View work for Ticket {id}': '查看工作项 {id}',
+  'View work brief {id}': '查看委托 {id}',
   'Delegated to Main': '已交给 Main',
   'Accepted by work': '已进入原工作',
   'Pending delivery': '等待投递',

@@ -37,6 +37,15 @@ test('product schedules create an explicit work target and guard source and canc
     const calls = []
     let enabled = true
     let cancelled = false
+    const occurrences = Array.from({ length: 21 }, (_value, index) => ({
+      ruleId: 'schedule-one', dueAt: Date.parse('2026-11-15T09:00:00Z') + index * 60_000,
+      status: index === 0 ? 'missed' : [5, 10, 20].includes(index) ? 'delegated' : 'accepted',
+      ...(index === 5 ? { workBriefId: 'brief-pending', ticketIds: [] }
+        : index === 10 ? { workBriefId: 'brief-earlier', ticketIds: ['ticket-earlier'], executionStatus: 'success' }
+          : index === 20 ? { workBriefId: 'brief-one', ticketIds: ['ticket-one'], executionStatus: 'success' } : { ticketIds: [] }),
+      attempts: [5, 10, 20].includes(index) ? 1 : 0, updatedAt: Date.parse('2026-11-15T09:00:00Z') + index * 60_000,
+    }))
+    const viewedWork = []
     const rule = { ruleId: 'schedule-one', title: 'Release check', text: 'Review the release.', timezone: 'UTC',
       when: { kind: 'daily', time: '09:00' }, target: { kind: 'main' }, status: 'active',
       nextAt: Date.now() + 86_400_000, createdAt: Date.now() }
@@ -45,7 +54,7 @@ test('product schedules create an explicit work target and guard source and canc
       calls.push([endpoint, payload])
       if (endpoint === 'schedule-list') return { items: rules.map(item => ({ ...item, status: item === rule && cancelled ? 'cancelled' : 'active' })) }
       if (endpoint === 'schedule-source-read') return { enabled }
-      if (endpoint === 'schedule-read') return { ...rules.find(item => item.ruleId === payload.ruleId), occurrences: [] }
+      if (endpoint === 'schedule-read') return { ...rules.find(item => item.ruleId === payload.ruleId), occurrences }
       if (endpoint === 'schedule-create') { rules.push({ ...rule, ...payload, ruleId: 'schedule-two' }); return rules.at(-1) }
       if (endpoint === 'schedule-source-set') { enabled = payload.enabled; return { enabled } }
       if (endpoint === 'schedule-cancel') { cancelled = true; return { ...rule, status: 'cancelled' } }
@@ -56,9 +65,29 @@ test('product schedules create an explicit work target and guard source and canc
     try {
       await React.act(async () => { root.render(React.createElement(ProductScheduleSettings,
         { binding: { instanceId: 'personal' }, works: [{ brief: { workItemId: 'work-a', goal: 'Check A' },
-          receipt: { status: 'accepted' }, control: { ticketId: 'ticket-a' } }], call, onViewWork: () => {} })) })
+          receipt: { status: 'accepted' }, control: { ticketId: 'ticket-a' } }], call,
+        onViewWork: target => viewedWork.push(target) })) })
       const document = dom.window.document
       assert.match(document.body.textContent, /Release check/u)
+      const history = document.querySelector('.bt-product-schedule-history')
+      assert.ok(history)
+      assert.match(history.querySelector('summary').textContent, /Occurrence history \(21\)/u)
+      await click(history.querySelector('summary'))
+      assert.equal(history.open, true)
+      assert.equal(history.querySelectorAll('.bt-product-schedule-occurrence').length, 20)
+      await click([...history.querySelectorAll('button')].find(button => button.textContent === 'Load earlier occurrences'))
+      assert.equal(history.querySelectorAll('.bt-product-schedule-occurrence').length, 21)
+      assert.match(history.textContent, /Missed/u)
+      assert.match(history.textContent, /Work brief brief-one/u)
+      assert.match(history.textContent, /Ticket ticket-one/u)
+      assert.match(history.textContent, /Work brief brief-pending/u)
+      assert.match(history.textContent, /Work complete/u)
+      await click(history.querySelector('button[aria-label="View work for Ticket ticket-earlier"]'))
+      await click(history.querySelector('button[aria-label="View work brief brief-pending"]'))
+      assert.deepEqual(JSON.parse(JSON.stringify(viewedWork)), [
+        { workBriefId: 'brief-earlier', ticketIds: ['ticket-earlier'] },
+        { workBriefId: 'brief-pending', ticketIds: [] },
+      ])
       const toggle = document.querySelector('[role="switch"]')
       assert.equal(toggle.getAttribute('aria-checked'), 'true')
       await click(toggle)
