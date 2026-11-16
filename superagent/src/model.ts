@@ -92,6 +92,7 @@ export const recordKinds = [...coreRecordKinds, 'main-state', 'main-message', 'm
   'work-attention-answer', 'work-outcome', 'instance-directory', 'instance-directory-command', 'product-directory',
   'resource-credential', 'resource-command', 'resource-request', 'resource-vault-intent', 'resource-rotation-intent', 'product-attachment',
   'product-feishu-credential', 'product-feishu-credential-command',
+  'product-mcp-selection', 'product-mcp-command',
   'role-preset', 'role-preset-version', 'role-preset-image', 'role-preset-command', 'role-preset-preview',
   'role-preset-import', 'role-preset-review', 'role-preset-source', 'role-preset-application', 'supervisor-run'] as const
 export type RecordKind = typeof recordKinds[number]

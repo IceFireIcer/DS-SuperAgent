@@ -26,6 +26,8 @@ import { ClientAccess } from './client-access.js'
 import { feishuQuestionCode } from './feishu-delivery.js'
 import { ProductCredentialManager } from './product-credential-manager.js'
 import type { WorkerMcpBinding } from './worker-mcp-tool.js'
+import { ProductMcpConfiguration } from './product-mcp-configuration.js'
+import type { WorkerMcpConfig } from './worker-mcp-tool.js'
 import type { ProductCredentialRecords } from './product-credential-vault.js'
 import type { ProductAttachments } from './product-attachments.js'
 import { listSupervisorProposals, Supervisor, type SupervisorOptions, type SupervisorProposal } from './supervisor.js'
@@ -1506,6 +1508,14 @@ export class Engine {
     }
     this.assertAuthoringActor()
     return new ProductCredentialManager(this.storage, this.instanceId, records)
+  }
+
+  createProductMcpConfiguration(config: WorkerMcpConfig) {
+    if ((this.source.kind ?? 'desktop') !== 'desktop' || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Only an authorized product actor can manage MCP settings.')
+    }
+    this.assertAuthoringActor()
+    return new ProductMcpConfiguration(this.storage, this.instanceId, config, tx => this.assertHostAdmissionIn(tx))
   }
 
   /** Host-only configuration of one approved Worker tool; never part of the model command surface. */

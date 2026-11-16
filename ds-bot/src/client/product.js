@@ -20,6 +20,7 @@ import { mergeMessages, mergeObservationItems, rebaseRoleDraft } from './product
 import { installLocale, t } from './i18n.js'
 import { allThemes, themeCss } from './themes.js'
 import { SHELL_CSS, CONVERSATION_CSS, installCompiledStyles, installStyles } from './styles.js'
+import { ProductMcpSettings } from './product-mcp-settings.js'
 
 const clientBridge = () => window.dsBotApp?.productClient
 let activeHost = 'local'
@@ -1205,6 +1206,7 @@ export function applyProduct(ctx) {
                       disabled: saving, onClick: () => { void saveKey(provider.id, null) } }, t('Remove key')) : null) : h('span', null, t('Set outside this product'))) : null))
                 : h('p', { className: 'bt-main-status' }, t('No provider catalog is available. Configure providers in DSH settings.'))),
             h(ProductCredentialSettings, { binding, call: productCall }),
+            h(ProductMcpSettings, { binding, call: productCall }),
             h(ClientSettings, { binding }),
             h(Card, { title: t('Recent configuration uses') },
               snapshot.uses.length ? snapshot.uses.slice(0, 20).map(use => h('div', { key: use.id, className: 'bt-main-settings-use' },
