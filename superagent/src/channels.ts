@@ -101,11 +101,12 @@ export class GitHubSource {
   }
 
   /** Process an ordered delivery page, advancing the durable cursor only after each event is recorded. */
-  async poll(events: GitHubEvent[]) {
+  async poll(events: GitHubEvent[], signal?: AbortSignal) {
     if (!Array.isArray(events) || events.length > 1000) throw new CoreError('INVALID_INPUT', 'A GitHub poll accepts at most 1000 ordered events.')
     const prior = await this.cursor()
     let processed = 0, filtered = 0, malformed = 0, failed = 0
     for (const event of [...events].sort((left, right) => compareCursor(left.cursor, right.cursor))) {
+      signal?.throwIfAborted()
       if (prior !== undefined && compareCursor(event.cursor, prior) <= 0) continue
       try {
         const receipt = await this.receive(event)

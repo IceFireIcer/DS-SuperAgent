@@ -120,9 +120,11 @@ export function ProductProactiveSettings({ binding, call }) {
     setConfirmDelete(null)
     void save(snapshot.rules.filter(rule => rule.id !== ruleId))
   }
+  const sourceFor = id => snapshot.sources.find(source => source.sourceInstanceId === id)
   const edit = rule => setDraft(rule ? structuredClone(rule) : {
     id: `review-${crypto.randomUUID().slice(0, 8)}`, name: '', mode: 'observe', enabled: true,
-    match: { actorKinds: ['bot'], addressing: ['direct', 'mention'], sourceInstanceIds: [snapshot.sources[0].sourceInstanceId] },
+    match: { actorKinds: snapshot.sources[0].kind === 'github' ? ['bot', 'ci'] : ['bot'],
+      addressing: ['direct', 'mention'], sourceInstanceIds: [snapshot.sources[0].sourceInstanceId] },
     scope: '', communication: 'silent', budget: { maxRuns: 2, windowMs: 3_600_000, maxArtifactBytes: 65_536 },
   })
   const update = (path, value) => setDraft(current => {
@@ -146,7 +148,7 @@ export function ProductProactiveSettings({ binding, call }) {
         onChange: value => { void pause(value) } }),
       h('p', null, t('Rules use an authenticated source event. Preparation cannot send messages, create PRs or merge changes.')),
       snapshot?.sources.length ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: busy,
-        onClick: () => edit(null) }, t('New rule')) : h('p', null, t('Configure a Feishu source to enable preparation rules.'))),
+        onClick: () => edit(null) }, t('New rule')) : h('p', null, t('Configure a source to enable preparation rules.'))),
     error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
     snapshot?.rules.map(rule => h(Card, { key: rule.id, title: rule.name },
       h('p', null, `${rule.enabled ? t(rule.mode === 'auto' ? 'Auto' : 'Observe') : t('Off')} · ${rule.match.sourceInstanceIds?.join(', ') ?? ''}`),
@@ -161,8 +163,16 @@ export function ProductProactiveSettings({ binding, call }) {
       h('label', null, t('Name'), h('input', { className: 'bt-bs-input', value: draft.name, maxLength: 128, required: true,
         onChange: event => update(['name'], event.target.value) })),
       h('label', null, t('Source'), h('select', { className: 'bt-select', value: draft.match.sourceInstanceIds[0],
-        onChange: event => update(['match', 'sourceInstanceIds'], [event.target.value]) },
+        onChange: event => setDraft(current => ({ ...current,
+          match: { ...current.match, sourceInstanceIds: [event.target.value],
+            actorKinds: sourceFor(event.target.value)?.kind === 'github' ? ['bot', 'ci'] : ['bot'] } })) },
       snapshot.sources.map(source => h('option', { key: source.sourceInstanceId, value: source.sourceInstanceId }, source.label)))),
+      sourceFor(draft.match.sourceInstanceIds[0])?.kind === 'github'
+        ? h('fieldset', null, h('legend', null, t('Event actors')),
+          ['bot', 'ci'].map(kind => h('label', { key: kind }, h('input', { type: 'checkbox', checked: draft.match.actorKinds.includes(kind),
+            onChange: event => update(['match', 'actorKinds'], event.target.checked
+              ? [...draft.match.actorKinds, kind] : draft.match.actorKinds.filter(item => item !== kind)) }),
+          t(kind === 'ci' ? 'CI events' : 'Bot events')))) : null,
       h('label', null, t('Mode'), h('select', { className: 'bt-select', value: draft.mode,
         onChange: event => update(['mode'], event.target.value) },
       h('option', { value: 'observe' }, t('Observe')), h('option', { value: 'auto' }, t('Auto')))),
@@ -177,7 +187,7 @@ export function ProductProactiveSettings({ binding, call }) {
       h('label', null, t('Max file bytes'), h('input', { type: 'number', min: 1024, max: 10485760, required: true,
         className: 'bt-bs-input', value: draft.budget.maxArtifactBytes,
         onChange: event => update(['budget', 'maxArtifactBytes'], Number(event.target.value)) })),
-      h('div', { className: 'bt-actions' }, h('button', { type: 'submit', className: 'bt-soft', disabled: busy }, t('Save rule')),
+      h('div', { className: 'bt-actions' }, h('button', { type: 'submit', className: 'bt-soft', disabled: busy || !draft.match.actorKinds.length }, t('Save rule')),
         h('button', { type: 'button', className: 'bt-soft', onClick: () => setDraft(null) }, t('Cancel')))) : null,
     h(Card, { title: t('Preparation history') },
       runs.length ? runs.map(run => h('div', { key: run.id, className: 'bt-product-preparation-row' },

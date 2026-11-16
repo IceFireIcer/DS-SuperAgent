@@ -12,6 +12,7 @@ import { NativeSessions } from './native-sessions.js'
 import { SqliteStorage } from './storage.js'
 import { LocalEnvironment } from './local-environment.js'
 import { FeishuRuntime, type FeishuRuntimeOptions } from './feishu-runtime.js'
+import { GitHubRuntime, type GitHubRuntimeOptions } from './github-runtime.js'
 import { ProductAttachments } from './product-attachments.js'
 import { productProactivePreparation } from './product-proactive.js'
 import type { ProactiveRule } from './proactive.js'
@@ -30,7 +31,9 @@ export interface ProductHostConfig { databasePath: string; workspaceRoot?: strin
   clientGateway?: Omit<ClientGatewayOptions, 'product'>;
   /** Supplied by a trusted Host, never by the window or a model turn. */
   feishu?: Omit<FeishuRuntimeOptions, 'storage' | 'instanceId' | 'mainIntake'>;
-  feishuConfigurationError?: 'INVALID_CONFIG' }
+  feishuConfigurationError?: 'INVALID_CONFIG';
+  github?: Omit<GitHubRuntimeOptions, 'storage' | 'instanceId'>;
+  githubConfigurationError?: 'INVALID_CONFIG' }
 export interface ProductHost {
   dispatch(endpoint: string, payload?: Record<string, unknown>, client?: ClientIdentity): Promise<unknown>
   clients: ClientAccess
@@ -97,16 +100,21 @@ export async function createProductHost(context: Context, config: ProductHostCon
   let gateway: Awaited<ReturnType<typeof createClientGateway>> | undefined
   let feishuRuntime: FeishuRuntime | undefined
   let feishuEngine: Engine | undefined
+  let githubRuntime: GitHubRuntime | undefined
+  let githubEngine: Engine | undefined
   let feishuLegacyConflict = false
   let feishuSelectionActive = false
   const proactiveRoot = join(dirname(config.databasePath), 'proactive-preparations')
   const proactive = { rootDirectory: proactiveRoot, prepareTimeoutMs: 30_000, pauseSourceInstanceId: 'product-desktop',
     prepare: productProactivePreparation({ instanceId, actorId, sessions,
       engineForSource: sourceId => sourceId === feishuRuntime?.sourceBinding.sourceInstanceId ? feishuEngine
+        : sourceId === githubRuntime?.sourceBinding.sourceInstanceId ? githubEngine
         : sourceId === 'product-desktop' ? engine : undefined }),
     guard: async (_tx: import('./storage.js').AsyncTx, candidate: import('./proactive.js').ProactiveCandidate) =>
-      candidate.sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId
-        && feishuRuntime.health().state !== 'polling' ? 'SOURCE_STOPPED' : undefined }
+      (candidate.sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId
+        && feishuRuntime.health().state !== 'polling'
+        || candidate.sourceInstanceId === githubRuntime?.sourceBinding.sourceInstanceId
+        && githubRuntime.health().state !== 'polling') ? 'SOURCE_STOPPED' : undefined }
   let resourceManager: ProductCredentialManager | undefined
   let statusPublisher: ReturnType<typeof productStatusPublisher> | undefined
   let statusTimer: ReturnType<typeof setInterval> | undefined
@@ -239,10 +247,10 @@ export async function createProductHost(context: Context, config: ProductHostCon
   async function dispose() {
     if (scheduleTimer) clearInterval(scheduleTimer)
     if (statusTimer) clearInterval(statusTimer)
-    engine?.abortProactiveRuns(); feishuEngine?.abortProactiveRuns()
+    engine?.abortProactiveRuns(); feishuEngine?.abortProactiveRuns(); githubEngine?.abortProactiveRuns()
     const failures: unknown[] = []
-    for (const close of [() => supervision?.close(), () => statusPublisher?.close(), () => gateway?.close(), () => feishuRuntime?.stop(), () => engine?.effects.stop(),
-      () => feishuEngine?.effects.stop(), () => engine?.shutdown(), () => feishuEngine?.shutdown(),
+    for (const close of [() => supervision?.close(), () => statusPublisher?.close(), () => gateway?.close(), () => feishuRuntime?.stop(), () => githubRuntime?.stop(), () => engine?.effects.stop(),
+      () => feishuEngine?.effects.stop(), () => githubEngine?.effects.stop(), () => engine?.shutdown(), () => feishuEngine?.shutdown(), () => githubEngine?.shutdown(),
       () => sessions.close(), ...environments.map(environment => () => environment.close()), () => storage.close()]) {
       try { await close() } catch (error) { failures.push(error) }
     }
@@ -281,12 +289,17 @@ export async function createProductHost(context: Context, config: ProductHostCon
       feishuEngine = new Engine(storage, instanceId, feishuRuntime.sourceBinding, {}, sessions, [], {}, {}, {}, {}, {}, proactive)
       feishuRuntime.bind(feishuEngine)
     }
-    const channel: DeliveryChannel | undefined = feishuRuntime ? {
-      deliver: (delivery, context) => delivery.destination.sourceInstanceId === feishuRuntime!.sourceBinding.sourceInstanceId
+    if (config.github) {
+      githubRuntime = new GitHubRuntime({ ...config.github, storage, instanceId })
+      githubEngine = new Engine(storage, instanceId, githubRuntime.sourceBinding, {}, sessions, [], {}, {}, {}, {}, {}, proactive)
+      githubRuntime.bind(githubEngine)
+    }
+    const channel: DeliveryChannel | undefined = feishuRuntime || githubRuntime ? {
+      deliver: (delivery, context) => delivery.destination.sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId
         ? feishuRuntime!.channel.deliver(delivery, context)
         : delivery.destination.sourceInstanceId === 'product-desktop' ? localDeliveryChannel.deliver(delivery, context)
           : Promise.resolve({ type: 'permanent', reason: 'DESTINATION_SOURCE_DISABLED' }),
-      reconcile: (delivery, context) => delivery.destination.sourceInstanceId === feishuRuntime!.sourceBinding.sourceInstanceId
+      reconcile: (delivery, context) => delivery.destination.sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId
         ? feishuRuntime!.channel.reconcile(delivery, context)
         : delivery.destination.sourceInstanceId === 'product-desktop' ? localDeliveryChannel.deliver(delivery, context)
           : Promise.resolve({ type: 'permanent', reason: 'DESTINATION_SOURCE_DISABLED' }),
@@ -331,11 +344,15 @@ export async function createProductHost(context: Context, config: ProductHostCon
       void engine?.tickSchedules().catch(() => {})
       void engine?.reconcileProactiveCandidates().catch(() => {})
       void feishuEngine?.reconcileProactiveCandidates().catch(() => {})
+      if (githubRuntime?.health().state === 'polling') void githubEngine?.reconcileProactiveCandidates().catch(() => {})
       void recoverCredentials()
     }, 30_000)
     scheduleTimer.unref()
     if (feishuRuntime && !feishuLegacyConflict) void feishuRuntime.start().then(() => feishuEngine?.reconcileProactiveCandidates()).catch(() => {
       /* Health and durable candidates retain a failed source pass for the next attempt. */
+    })
+    if (githubRuntime) void githubRuntime.start().catch(() => {
+      /* Source health reports setup failures; the Host and other sources stay available. */
     })
     void engine.resumeMainInputs({ instanceId }).catch(() => { /* The persisted input and failed health remain visible for retry. */ })
     const clients = engine.createClientAccess()
@@ -373,7 +390,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
                   : endpoint === 'directory-list' ? ['instanceId', 'path']
                     : endpoint === 'directory-register' ? ['instanceId', 'commandId', 'path']
                       : endpoint === 'directory-default-save' ? ['instanceId', 'commandId', 'expectedRevision', 'environmentId']
-                        : endpoint === 'feishu-status' || endpoint === 'feishu-start' || endpoint === 'feishu-stop' ? ['instanceId']
+                        : endpoint === 'feishu-status' || endpoint === 'feishu-start' || endpoint === 'feishu-stop'
+                          || endpoint === 'github-status' || endpoint === 'github-start' || endpoint === 'github-stop' ? ['instanceId']
           : endpoint === 'stop-main' ? ['instanceId', 'commandId', 'messageId']
             : endpoint === 'work-stop'
               ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'expectedTicketVersion', 'reason']
@@ -410,6 +428,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
         if (client && endpoint.startsWith('schedule-')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Schedule administration requires the local authorized product settings.')
         }
+        if (client && (endpoint === 'github-start' || endpoint === 'github-stop')) {
+          throw new CoreError('SOURCE_NOT_AUTHORIZED', 'GitHub source administration requires the local authorized product settings.')
+        }
         if (client && endpoint.startsWith('supervision')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Supervision decisions and history require the local authorized product window.')
         }
@@ -438,8 +459,11 @@ export async function createProductHost(context: Context, config: ProductHostCon
           : payload.commandId as string
         if (endpoint === 'proactive-rules') {
           const [configured, control] = await Promise.all([engine!.getProactiveRules(), engine!.getProactiveControl()])
-          return { ...configured, control, sources: feishuRuntime ? [{ sourceInstanceId: feishuRuntime.sourceBinding.sourceInstanceId,
-            label: 'Feishu' }] : [] }
+          return { ...configured, control, sources: [
+            ...(feishuRuntime ? [{ sourceInstanceId: feishuRuntime.sourceBinding.sourceInstanceId, label: 'Feishu', kind: 'feishu' }] : []),
+            ...(githubRuntime ? [{ sourceInstanceId: githubRuntime.sourceBinding.sourceInstanceId,
+              label: `GitHub ${config.github!.owner}/${config.github!.repo}`, kind: 'github' }] : []),
+          ] }
         }
         if (endpoint === 'proactive-control') return engine!.getProactiveControl()
         if (endpoint === 'proactive-list') {
@@ -456,28 +480,36 @@ export async function createProductHost(context: Context, config: ProductHostCon
           payload.path as string, payload.offset as number | undefined, payload.maxBytes as number | undefined)
         if (endpoint === 'proactive-save') {
           const rules = payload.rules as ProactiveRule[]
-          if (!Array.isArray(rules) || rules.some(rule => !rule || rule.enabled && (!rule.match?.sourceInstanceIds
-            || rule.match.sourceInstanceIds.length !== 1
-            || rule.match.sourceInstanceIds[0] !== feishuRuntime?.sourceBinding.sourceInstanceId
-            || rule.match.actorKinds.some(kind => kind !== 'bot') || rule.match.addressing.includes('ambient')
-            || rule.match.textPattern !== undefined && !/^[\p{L}\p{N} _:-]{1,128}$/u.test(rule.match.textPattern)))) {
-            throw new CoreError('INVALID_CONFIG', 'Product preparations require an addressed Feishu app event and a bounded literal text match.')
+          if (!Array.isArray(rules) || rules.some(rule => {
+            if (!rule) return true
+            if (!rule.enabled) return false
+            const source = rule.match?.sourceInstanceIds?.[0]
+            const feishu = source === feishuRuntime?.sourceBinding.sourceInstanceId
+            const github = source === githubRuntime?.sourceBinding.sourceInstanceId
+            return rule.match?.sourceInstanceIds?.length !== 1 || (!feishu && !github)
+              || !Array.isArray(rule.match.actorKinds) || !Array.isArray(rule.match.addressing)
+              || rule.match.actorKinds.some(kind => feishu ? kind !== 'bot' : kind !== 'bot' && kind !== 'ci')
+              || rule.match.addressing.includes('ambient')
+              || rule.match.textPattern !== undefined && !/^[\p{L}\p{N} _:-]{1,128}$/u.test(rule.match.textPattern)
+          })) {
+            throw new CoreError('INVALID_CONFIG', 'Product preparations require an addressed configured source, bot/CI events and a bounded literal text match.')
           }
           const saved = await engine!.updateProactiveRules({ commandId, expectedRevision: payload.expectedRevision as number, rules })
-          engine!.abortProactiveRuns(); feishuEngine?.abortProactiveRuns()
+          engine!.abortProactiveRuns(); feishuEngine?.abortProactiveRuns(); githubEngine?.abortProactiveRuns()
           return saved
         }
         if (endpoint === 'proactive-pause') {
           const result = await engine!.setProactivePaused({ commandId, paused: payload.paused as boolean })
-          if (result.paused) { engine!.abortProactiveRuns(); feishuEngine?.abortProactiveRuns() }
+          if (result.paused) { engine!.abortProactiveRuns(); feishuEngine?.abortProactiveRuns(); githubEngine?.abortProactiveRuns() }
           return result
         }
         if (endpoint === 'proactive-stop') {
           const run = await engine!.getProactiveRun(payload.runId as string)
-          if (!run || ![feishuRuntime?.sourceBinding.sourceInstanceId, 'product-desktop'].includes(run.sourceInstanceId)) {
+          if (!run || ![feishuRuntime?.sourceBinding.sourceInstanceId, githubRuntime?.sourceBinding.sourceInstanceId, 'product-desktop'].includes(run.sourceInstanceId)) {
             throw new CoreError('NOT_FOUND', 'This Host does not own the preparation.')
           }
-          const owner = run.sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId ? feishuEngine : engine
+          const owner = run.sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId ? feishuEngine
+            : run.sourceInstanceId === githubRuntime?.sourceBinding.sourceInstanceId ? githubEngine : engine
           return owner!.stopProactiveRun({ commandId, runId: run.id, reason: payload.reason as string })
         }
         if (endpoint.startsWith('resource-')) {
@@ -593,6 +625,25 @@ export async function createProductHost(context: Context, config: ProductHostCon
             credentialMode: config.feishu!.api.appSecret ? 'legacy' : 'managed',
             ...(config.feishu!.api.appSecret ? {} : { resourceId: await resourceManager?.selectedFeishuCredential(feishuRuntime.sourceBinding.sourceInstanceId) ?? null }),
             ...feishuRuntime.health() }
+        }
+        if (endpoint === 'github-status' || endpoint === 'github-start' || endpoint === 'github-stop') {
+          if (!githubRuntime) {
+            if (endpoint === 'github-status') return config.githubConfigurationError
+              ? { configured: false, state: 'failed', lastError: config.githubConfigurationError }
+              : { configured: false, state: 'idle' }
+            throw new CoreError('UNAVAILABLE', 'Configure a trusted GitHub repository before starting its source.')
+          }
+          if (endpoint === 'github-start' && !['setup', 'polling'].includes(githubRuntime.health().state)) {
+            await githubRuntime.stop()
+            await githubRuntime.start()
+          }
+          if (endpoint === 'github-stop') {
+            githubEngine?.abortProactiveRuns()
+            await githubRuntime.stop()
+            githubEngine?.abortProactiveRuns()
+            await githubEngine?.discardProactiveCandidates()
+          }
+          return { configured: true, sourceInstanceId: githubRuntime.sourceBinding.sourceInstanceId, ...githubRuntime.health() }
         }
         if (endpoint === 'history') {
           if (payload.after !== undefined && payload.before !== undefined) throw new CoreError('INVALID_INPUT', 'Main history accepts one direction cursor.')
