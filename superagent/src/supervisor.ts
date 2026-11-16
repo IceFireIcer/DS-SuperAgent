@@ -129,12 +129,15 @@ export interface SupervisorReport {
   version: string
   observations: SupervisorObservationResult[]
   proposals: SupervisorProposal[]
+  inspectionBudget: { inspected: number; maxTickets: number }
   partial?: boolean
+  nextCursor?: string
 }
 
 /** The narrow Engine surface the Supervisor reads and the two authorized commands it may be approved to run. */
 export interface SupervisorEngine {
-  getSupervision(options?: { includeHistory?: boolean }): Promise<{ items: Record<string, unknown>[]; processingPaused?: boolean }>
+  getSupervision(options?: { includeHistory?: boolean; cursor?: string; pageLimit?: number }): Promise<{
+    items: Record<string, unknown>[]; processingPaused?: boolean; hasMore: boolean; nextCursor?: string }>
   getTicket(ticketId: string): Promise<{ mandate: { id: string; scope: string } } | undefined>
   getTicketDirection(ticketId: string): Promise<{ directionVersion: number } | undefined>
   correctTicket(command: { commandId: string; ticketId: string; text: string; reason: string; expectedDirectionVersion?: number; expectedGeneration?: string }): Promise<{ id: string; directionVersion?: number }>
@@ -155,6 +158,7 @@ export interface SupervisorOptions {
   proposalWindowMs?: number
   maxProposals?: number
   historyLimit?: number
+  maxPages?: number
   version?: string
   now?: () => number
 }
@@ -265,6 +269,7 @@ export class Supervisor {
   private readonly proposalWindowMs: number
   private readonly maxProposals: number
   private readonly historyLimit: number
+  private readonly maxPages: number
   private readonly version: string
   private readonly now: () => number
 
@@ -280,23 +285,45 @@ export class Supervisor {
     this.proposalWindowMs = boundedInteger(options.proposalWindowMs, 21_600_000, 1_000, 604_800_000, 'proposalWindowMs')
     this.maxProposals = boundedInteger(options.maxProposals, 2, 1, 100, 'maxProposals')
     this.historyLimit = boundedInteger(options.historyLimit, 50, 1, 1_000, 'historyLimit')
+    this.maxPages = boundedInteger(options.maxPages, 10, 1, 10, 'maxPages')
     this.version = options.version ?? 'supervisor-1'
     this.now = options.now ?? Date.now
   }
 
-  /** Inspect every visible Ticket once. This never executes a proposal. */
-  async inspect(signal: AbortSignal = new AbortController().signal): Promise<SupervisorReport> {
-    const supervision = await this.engine.getSupervision({ includeHistory: true })
+  /** Inspect up to 100 Tickets per page, with a bounded continuation when more remain. */
+  async inspect(signal: AbortSignal = new AbortController().signal, after?: string): Promise<SupervisorReport> {
     const observations: SupervisorObservationResult[] = []
     const proposals: SupervisorProposal[] = []
-    for (const entry of supervision.items.slice(0, 100)) {
+    const seen = new Set<string>()
+    const cursors = new Set(after === undefined ? [] : [after])
+    let cursor = after
+    for (let pageCount = 0; pageCount < this.maxPages; pageCount++) {
       signal.throwIfAborted()
-      const result = await this.inspectItem(asRecord(entry), supervision.processingPaused === true, signal)
-      observations.push(result.observation)
-      if (result.proposal !== undefined) proposals.push(result.proposal)
+      const page = await this.engine.getSupervision({ includeHistory: true, pageLimit: 1, ...(cursor === undefined ? {} : { cursor }) })
+      if (page.items.length > 100) throw new CoreError('INCOMPLETE_STATE', 'The supervision Ticket page exceeds its 100-item budget.')
+      if (typeof page.hasMore !== 'boolean' || !page.hasMore && page.nextCursor !== undefined) {
+        throw new CoreError('INCOMPLETE_STATE', 'The supervision Ticket page has an inconsistent continuation state.')
+      }
+      if (page.hasMore && (!page.nextCursor || cursors.has(page.nextCursor))) {
+        throw new CoreError('INCOMPLETE_STATE', 'The supervision Ticket page has no advancing continuation cursor.')
+      }
+      for (const entry of page.items) {
+        signal.throwIfAborted()
+        const ticketId = asString(asRecord(entry).ticketId)
+        if (seen.has(ticketId)) throw new CoreError('INCOMPLETE_STATE', 'The supervision Ticket page repeated a Ticket.')
+        seen.add(ticketId)
+        const result = await this.inspectItem(asRecord(entry), page.processingPaused === true, signal)
+        observations.push(result.observation)
+        if (result.proposal !== undefined) proposals.push(result.proposal)
+      }
+      if (!page.hasMore) return { version: this.version, observations, proposals,
+        inspectionBudget: { inspected: observations.length, maxTickets: this.maxPages * 100 } }
+      cursor = page.nextCursor
+      cursors.add(cursor!)
     }
+    if (cursor === undefined) throw new CoreError('INCOMPLETE_STATE', 'The supervision Ticket continuation is missing.')
     return { version: this.version, observations, proposals,
-      ...(supervision.items.length > 100 || (supervision as { hasMore?: boolean }).hasMore ? { partial: true } : {}) }
+      inspectionBudget: { inspected: observations.length, maxTickets: this.maxPages * 100 }, partial: true, nextCursor: cursor }
   }
 
   async listProposals(ticketId?: string): Promise<SupervisorProposal[]> {

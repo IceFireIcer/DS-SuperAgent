@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { CoreError, identifier } from './model.js'
 import { canonicalJson, commandTransaction } from './commands.js'
-import { ProductCredentialVault, type ProductCredentialRecords } from './product-credential-vault.js'
+import { ProductCredentialVault, assertCredentialValue, type ProductCredentialRecords } from './product-credential-vault.js'
 import { ResourceCredentials, type CredentialPurpose, type CredentialResourceView, type CredentialScope, type CredentialUse } from './resource-credentials.js'
 import type { Storage } from './storage.js'
 
@@ -14,6 +14,16 @@ interface CreationIntent {
   resourceId?: string
   createdAt: number
 }
+interface RotationIntent {
+  commandId: string
+  resourceId: string
+  expectedRevision: number
+  previousReference: string
+  nextReference: string
+  status: 'pending' | 'committed' | 'abandoned'
+  cleanupPending: boolean
+  createdAt: number
+}
 
 /** Host-only commands; the supplied Storage must enforce the current Host lease. */
 export class ProductCredentialManager {
@@ -21,6 +31,9 @@ export class ProductCredentialManager {
   private readonly resources: ResourceCredentials
   private readonly creating = new Map<string, { label: string; value: string; promise: Promise<CredentialResourceView> }>()
   private recoveryCursor: string | undefined
+  private readonly rotating = new Map<string, { resourceId: string; expectedRevision: number; value: string;
+    promise: Promise<{ status: 'committed'; resource: CredentialResourceView; cleanupPending: boolean }> }>()
+  private rotationCursor: string | undefined
 
   constructor(private readonly storage: Storage, private readonly instanceId: string, records: ProductCredentialRecords) {
     identifier(instanceId, 'instanceId')
@@ -150,6 +163,156 @@ export class ProductCredentialManager {
   }
   rename(request: { instanceId: string; commandId: string; resourceId: string; expectedRevision: number; label: string }) {
     return this.resources.update(request)
+  }
+
+  async rotate(request: { instanceId: string; commandId: string; resourceId: string; expectedRevision: number; value: string }) {
+    this.assertInstance(request.instanceId)
+    identifier(request.commandId, 'commandId'); identifier(request.resourceId, 'resourceId')
+    assertCredentialValue(request.value)
+    if (!Number.isSafeInteger(request.expectedRevision) || request.expectedRevision < 1) {
+      throw new CoreError('INVALID_INPUT', 'An expected resource revision is required.')
+    }
+    const existing = this.rotating.get(request.commandId)
+    if (existing) {
+      if (existing.resourceId !== request.resourceId || existing.expectedRevision !== request.expectedRevision
+        || existing.value !== request.value) throw new CoreError('IDENTITY_CONFLICT', 'The credential rotation command changed.')
+      return existing.promise
+    }
+    const promise = this.rotateOne(request)
+    this.rotating.set(request.commandId, { resourceId: request.resourceId, expectedRevision: request.expectedRevision,
+      value: request.value, promise })
+    try { return await promise } finally { this.rotating.delete(request.commandId) }
+  }
+
+  private async rotateOne(request: { instanceId: string; commandId: string; resourceId: string;
+    expectedRevision: number; value: string }) {
+    const nextReference = this.vault.referenceFor(this.instanceId, `rotation:${request.resourceId}:${request.commandId}`)
+    const receipt = { instanceId: this.instanceId, commandId: request.commandId, resourceId: request.resourceId,
+      expectedRevision: request.expectedRevision, nextReference }
+    const accepted = await this.resources.rotationReceipt(receipt)
+    if (accepted) {
+      const current = await this.rotationStatus({ instanceId: this.instanceId, commandId: request.commandId })
+      if (current?.status !== 'committed' || current.resource?.status !== 'active'
+        || current.resource.revision < accepted.revision) throw new CoreError('RESOURCE_UNAVAILABLE', 'The rotated resource is unavailable.')
+      const stillCurrent = await this.storage.transaction(this.instanceId, async tx =>
+        (await tx.get<{ vaultReference?: string }>('resource-credential', request.resourceId))?.vaultReference === nextReference)
+      if (!stillCurrent || !await this.vault.withSecret(this.instanceId, nextReference, async value => value === request.value)) {
+        throw new CoreError('IDENTITY_CONFLICT', 'The credential rotation command changed or was superseded.')
+      }
+      await this.cleanupRotation(request.commandId).catch(() => {})
+      return this.committedRotation(request.commandId)
+    }
+    const intent = await commandTransaction(this.storage, this.instanceId, async tx => {
+      const prior = await tx.get<RotationIntent>('resource-rotation-intent', request.commandId)
+      if (prior) {
+        if (prior.resourceId !== request.resourceId || prior.expectedRevision !== request.expectedRevision
+          || prior.nextReference !== nextReference) throw new CoreError('IDENTITY_CONFLICT', 'The credential rotation command changed.')
+        if (prior.status === 'abandoned') throw new CoreError('RESOURCE_UNAVAILABLE', 'This credential rotation was abandoned after recovery.')
+        return prior
+      }
+      const resource = await tx.get<{ status: string; revision: number; vaultReference?: string }>('resource-credential', request.resourceId)
+      if (resource?.status !== 'active' || !resource.vaultReference) throw new CoreError('RESOURCE_UNAVAILABLE', 'The resource is unavailable.')
+      if (resource.revision !== request.expectedRevision) throw new CoreError('RESOURCE_REVISION_CONFLICT', 'The resource changed since this command was prepared.')
+      const prepared: RotationIntent = { commandId: request.commandId, resourceId: request.resourceId,
+        expectedRevision: request.expectedRevision, previousReference: resource.vaultReference, nextReference,
+        status: 'pending', cleanupPending: true, createdAt: Date.now() }
+      await tx.insert('resource-rotation-intent', request.commandId, prepared)
+      return prepared
+    })
+    if (intent.status === 'committed') {
+      throw new CoreError('COMMIT_UNKNOWN', 'Check this rotation with its original command ID.')
+    }
+    await this.vault.create(this.instanceId, request.value, `rotation:${request.resourceId}:${request.commandId}`)
+    try {
+      await this.resources.rotate({ ...receipt, previousReference: intent.previousReference })
+    } catch (error) {
+      if (error instanceof CoreError && ['RESOURCE_REVISION_CONFLICT', 'RESOURCE_UNAVAILABLE', 'IDENTITY_CONFLICT'].includes(error.code)) {
+        await this.abandonRotation(request.commandId).catch(() => {})
+        await this.cleanupRotation(request.commandId).catch(() => {})
+      }
+      throw error
+    }
+    await this.cleanupRotation(request.commandId).catch(() => {})
+    return this.committedRotation(request.commandId)
+  }
+
+  rotationStatus(request: { instanceId: string; commandId: string }) {
+    this.assertInstance(request.instanceId); identifier(request.commandId, 'commandId')
+    return this.storage.transaction(this.instanceId, async tx => {
+      const intent = await tx.get<RotationIntent>('resource-rotation-intent', request.commandId)
+      if (!intent) return undefined
+      const resource = await tx.get<{ id: string; instanceId: string; label: string; status: 'active' | 'deleted';
+        revision: number; grants: CredentialResourceView['grants']; createdAt: number; updatedAt: number;
+        vaultReference?: string }>('resource-credential', intent.resourceId)
+      return { status: intent.status, resourceId: intent.resourceId, cleanupPending: intent.cleanupPending,
+        ...(resource ? { resource: { id: resource.id, instanceId: resource.instanceId, label: resource.label,
+          status: resource.status, revision: resource.revision, grants: structuredClone(resource.grants),
+          createdAt: resource.createdAt, updatedAt: resource.updatedAt } satisfies CredentialResourceView } : {}) }
+    })
+  }
+
+  private async committedRotation(commandId: string) {
+    const status = await this.rotationStatus({ instanceId: this.instanceId, commandId })
+    if (status?.status !== 'committed' || !status.resource) throw new CoreError('COMMIT_UNKNOWN', 'Check this rotation with its original command ID.')
+    return { status: 'committed' as const, resource: status.resource, cleanupPending: status.cleanupPending }
+  }
+
+  private async abandonRotation(commandId: string) {
+    await commandTransaction(this.storage, this.instanceId, async tx => {
+      const intent = await tx.get<RotationIntent>('resource-rotation-intent', commandId)
+      if (intent?.status !== 'pending' || await tx.get('resource-command', commandId)) return
+      await tx.replace('resource-rotation-intent', commandId, { ...intent, status: 'abandoned' })
+    })
+  }
+
+  private async cleanupRotation(commandId: string) {
+    const intent = await this.storage.transaction(this.instanceId, tx => tx.get<RotationIntent>('resource-rotation-intent', commandId))
+    if (!intent || intent.status === 'pending') return false
+    const reference = intent.status === 'committed' ? intent.previousReference : intent.nextReference
+    const activeReference = await this.storage.transaction(this.instanceId, async tx =>
+      (await tx.get<{ status: string; vaultReference?: string }>('resource-credential', intent.resourceId)))
+    if (activeReference?.status === 'active' && activeReference.vaultReference === reference) {
+      throw new CoreError('INCOMPLETE_STATE', 'An active vault record cannot be cleaned.')
+    }
+    try { await this.vault.ensureRevoked(this.instanceId, reference) }
+    catch {
+      await commandTransaction(this.storage, this.instanceId, async tx => {
+        const current = await tx.get<RotationIntent>('resource-rotation-intent', commandId)
+        if (current?.status === intent.status && !current.cleanupPending) {
+          await tx.replace('resource-rotation-intent', commandId, { ...current, cleanupPending: true })
+        }
+      }).catch(() => {})
+      throw new CoreError('CREDENTIAL_WRITE_FAILED', 'The credential record could not be cleaned.')
+    }
+    await commandTransaction(this.storage, this.instanceId, async tx => {
+      const current = await tx.get<RotationIntent>('resource-rotation-intent', commandId)
+      if (current?.status === intent.status && current.cleanupPending) {
+        await tx.replace('resource-rotation-intent', commandId, { ...current, cleanupPending: false })
+      }
+    })
+    return true
+  }
+
+  async resumeRotations() {
+    let after = this.rotationCursor
+    let reconciled = 0
+    let pending = 0
+    for (let pageCount = 0; pageCount < 10; pageCount++) {
+      const page = await this.storage.transaction(this.instanceId, tx => tx.scan<RotationIntent>('resource-rotation-intent',
+        { limit: 100, ...(after === undefined ? {} : { after }) }))
+      for (const { value: intent } of page.items) {
+        if (this.rotating.has(intent.commandId)) { pending++; continue }
+        try {
+          if (intent.status === 'pending') await this.abandonRotation(intent.commandId)
+          if (await this.cleanupRotation(intent.commandId)) reconciled++
+          else pending++
+        } catch { pending++ }
+      }
+      if (!page.cursor) { this.rotationCursor = undefined; return { reconciled, pending } }
+      after = page.cursor
+    }
+    this.rotationCursor = after
+    return { reconciled, pending, more: true }
   }
 
   async delete(request: { instanceId: string; commandId: string; resourceId: string; expectedRevision: number }) {

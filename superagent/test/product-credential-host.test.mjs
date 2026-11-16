@@ -32,11 +32,20 @@ test('the trusted product Host manages durable credential records without exposi
   const remote = { id: 'read-only-client', label: 'Reader', grants: [{ instanceId, capabilities: ['read'] }], createdAt: 1 }
   await assert.rejects(host.dispatch('resource-list', { instanceId }, remote), { code: 'SOURCE_NOT_AUTHORIZED' })
   await assert.rejects(host.dispatch('resource-create', { ...input, commandId: 'remote-create' }, remote), { code: 'SOURCE_NOT_AUTHORIZED' })
+  await assert.rejects(host.dispatch('resource-rotate', { instanceId, commandId: 'remote-rotate', resourceId: created.id,
+    expectedRevision: 1, value: 'fictional-next-value' }, remote), { code: 'SOURCE_NOT_AUTHORIZED' })
+  await assert.rejects(host.dispatch('resource-rotation-read', { instanceId, commandId: 'rotate-one' }, remote), { code: 'SOURCE_NOT_AUTHORIZED' })
   const granted = await host.dispatch('resource-grant', { instanceId, commandId: 'grant-one', resourceId: created.id,
     expectedRevision: 1, scope: { role: 'worker', workItemId: 'item-one', environmentId: 'work-one' }, purposes: ['tool'] })
   assert.equal(granted.grants.length, 1)
+  const rotation = await host.dispatch('resource-rotate', { instanceId, commandId: 'rotate-one', resourceId: created.id,
+    expectedRevision: granted.revision, value: 'fictional-next-value' })
+  assert.equal(rotation.status, 'committed')
+  assert.equal(rotation.resource.revision, 3)
+  assert.equal(JSON.stringify(rotation).includes('fictional-next-value'), false)
+  assert.equal((await host.dispatch('resource-rotation-read', { instanceId, commandId: 'rotate-one' })).status, 'committed')
   const revoked = await host.dispatch('resource-revoke', { instanceId, commandId: 'revoke-one', resourceId: created.id,
-    grantId: granted.grants[0].id, expectedRevision: 2 })
+    grantId: granted.grants[0].id, expectedRevision: rotation.resource.revision })
   assert.equal(revoked.grants.length, 0)
   const raw = await SqliteStorage.open(config.databasePath)
   const leaseKey = JSON.stringify(['host-lease', instanceId])
@@ -52,7 +61,7 @@ test('the trusted product Host manages durable credential records without exposi
   await host.close()
   host = await createProductHost(native, config)
   const restored = await host.dispatch('resource-read', { instanceId, resourceId: created.id })
-  assert.equal(restored.revision, 3)
+  assert.equal(restored.revision, 4)
   const deleted = await host.dispatch('resource-delete', { instanceId, commandId: 'delete-one', resourceId: created.id,
     expectedRevision: restored.revision })
   assert.equal(deleted.status, 'deleted')
@@ -60,7 +69,7 @@ test('the trusted product Host manages durable credential records without exposi
   await assert.rejects(host.dispatch('resource-grant', { instanceId, commandId: 'later', resourceId: created.id,
     expectedRevision: deleted.revision, scope: { role: 'worker' }, purposes: ['tool'] }), { code: 'RESOURCE_UNAVAILABLE' })
   assert.deepEqual(await host.dispatch('resource-cleanup', { instanceId }),
-    { creations: { reconciled: 0, pending: 0 }, deletions: { cleaned: 0, pending: 0 } })
+    { creations: { reconciled: 0, pending: 0 }, rotations: { reconciled: 1, pending: 0 }, deletions: { cleaned: 0, pending: 0 } })
 })
 
 test('a missing DSH credential record service leaves Main available and fails resource commands closed', async t => {

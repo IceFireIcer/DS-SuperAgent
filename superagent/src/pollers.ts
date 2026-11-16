@@ -91,7 +91,8 @@ export class GitHubPoller {
     try {
       const cursor = await this.source.cursor()
       const page = await this.transport.listEvents({ owner: this.owner, repo: this.repo, ...(cursor === undefined ? {} : { cursor }), signal: bound.signal })
-      const result = await this.source.poll(page.events)
+      bound.signal.throwIfAborted()
+      const result = await this.source.poll(page.events, bound.signal)
       this.healthState = { state: 'polling', passes: this.healthState.passes + 1, lastSuccessAt: this.now(), malformed: result.malformed,
         failedItems: result.failed, ...(result.cursor === undefined ? {} : { cursor: result.cursor }) }
       return result

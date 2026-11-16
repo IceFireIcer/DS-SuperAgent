@@ -57,8 +57,10 @@ test('the actual product Host publishes bounded health for an independent Watchd
   const run = await host.dispatch('supervision-inspect', { instanceId: 'private' })
   assert.equal(run.status, 'completed')
   assert.equal(run.observations, 0)
+  assert.deepEqual(run.inspectionBudget, { inspected: 0, maxTickets: 1000 })
   const after = await host.dispatch('supervision', { instanceId: 'private' })
   assert.equal(after.run.last.status, 'completed')
+  assert.deepEqual(after.run.last.inspectionBudget, { inspected: 0, maxTickets: 1000 })
   let budgetResult
   for (let attempt = 0; attempt < 24; attempt++) budgetResult = await host.dispatch('supervision-inspect', { instanceId: 'private' })
   assert.equal(budgetResult.status, 'budget-exhausted', 'manual inspections share the persisted hourly budget')

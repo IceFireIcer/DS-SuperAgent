@@ -17,16 +17,23 @@ const proxies = []
 test('PostgreSQL retains supervision runs and Watchdog inspections after a new connection', { timeout: 30000 }, async () => {
   const { storage } = await newStorage()
   const instance = 'watchdog-contract'
-  const run = { last: { at: 100, version: 'supervisor-r2', status: 'failed', error: 'MODEL_UNAVAILABLE' }, history: [] }
+  const partial = { at: 100, version: 'supervisor-r2', status: 'completed', observations: 200,
+    inspectionBudget: { inspected: 200, maxTickets: 200 }, partial: true, nextCursor: 'next-page' }
+  const run = { last: partial, history: [partial, { at: 50, status: 'completed', observations: 100 }], attempts: [50, 100] }
+  const observed = { ticketId: 'ticket-201', instanceId: instance, version: 'supervisor-r2', fingerprints: [], proposals: [],
+    last: { ticketId: 'ticket-201', at: 100, finding: 'normal-wait' }, history: [{ ticketId: 'ticket-201', at: 100, finding: 'normal-wait' }], updatedAt: 100 }
   const inspection = { instanceId: instance, version: 'watchdog-1', restarts: [100], history: [{ id: 'first', kind: 'recovered', at: 100 }] }
   await storage.transaction(instance, async tx => {
     await tx.insert('supervisor-run', 'product-supervisor', run)
+    await tx.insert('supervisor-observation', JSON.stringify(['supervisor-observation', observed.ticketId]), observed)
     await tx.insert('watchdog-state', JSON.stringify(['watchdog-state', instance]), inspection)
   })
   const reopened = await postgres.register(await storage.reconnect())
   assert.deepEqual(await reopened.transaction(instance, tx => tx.get('supervisor-run', 'product-supervisor')), run)
+  assert.deepEqual(await reopened.transaction(instance, tx => tx.get('supervisor-observation', JSON.stringify(['supervisor-observation', observed.ticketId]))), observed)
   assert.deepEqual(await reopened.transaction(instance, tx => tx.get('watchdog-state', JSON.stringify(['watchdog-state', instance]))), inspection)
   assert.equal(await reopened.transaction('another-instance', tx => tx.get('supervisor-run', 'product-supervisor')), undefined)
+  assert.equal(await reopened.transaction('another-instance', tx => tx.get('supervisor-observation', JSON.stringify(['supervisor-observation', observed.ticketId]))), undefined)
 })
 
 test('PostgreSQL keeps an Instance work directory after restart without moving an older binding', { timeout: 30000 }, async t => {

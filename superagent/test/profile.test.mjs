@@ -4,7 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { apply as applyProfile, feishuProfileConfig, profilePaths } from '../dist/profile.js'
+import { apply as applyProfile, feishuProfileConfig, githubProfileConfig, profilePaths } from '../dist/profile.js'
 import { nativeContext, textResponse } from '../dev/native-mock.mjs'
 
 test('the ds-superagent profile keeps its business store under the profile home', () => {
@@ -55,6 +55,21 @@ test('Feishu profile opt-in needs explicit tenant, chats, identities and a reque
     DS_SUPERAGENT_FEISHU_TENANT_KEY: 'tenant', DS_SUPERAGENT_FEISHU_CHAT_IDS: 'chat-a',
     DS_SUPERAGENT_FEISHU_SELF_ACTOR_IDS: 'bot-1', DS_SUPERAGENT_FEISHU_ALLOWED_REQUESTER_IDS: 'alice',
   }), { code: 'INVALID_CONFIG' })
+})
+
+test('GitHub profile opt-in requires a bounded repository and explicit Main requester scope', () => {
+  assert.equal(githubProfileConfig({}), undefined)
+  assert.throws(() => githubProfileConfig({ DS_SUPERAGENT_GITHUB_OWNER: 'acme' }), { code: 'INVALID_CONFIG' })
+  assert.throws(() => githubProfileConfig({ DS_SUPERAGENT_GITHUB_OWNER: 'acme', DS_SUPERAGENT_GITHUB_REPO: '../other',
+    DS_SUPERAGENT_GITHUB_ALLOWED_REQUESTER_IDS: 'alice' }), { code: 'INVALID_CONFIG' })
+  assert.throws(() => githubProfileConfig({ DS_SUPERAGENT_GITHUB_OWNER: 'acme', DS_SUPERAGENT_GITHUB_REPO: 'repo',
+    DS_SUPERAGENT_GITHUB_ALLOWED_REQUESTER_IDS: 'alice,alice' }), { code: 'INVALID_CONFIG' })
+  const config = githubProfileConfig({ DS_SUPERAGENT_GITHUB_OWNER: 'acme', DS_SUPERAGENT_GITHUB_REPO: 'repo',
+    DS_SUPERAGENT_GITHUB_ALLOWED_REQUESTER_IDS: 'alice,bob', DS_SUPERAGENT_GITHUB_SELF_ACTOR_IDS: 'own-bot' })
+  assert.equal(config.actorId, 'github-receiver')
+  assert.deepEqual(config.intake.allowedRequesterIds, ['alice', 'bob'])
+  assert.deepEqual(config.selfActorIds, ['own-bot'])
+  assert.equal('api' in config, false, 'source configuration must not imply posting credentials')
 })
 
 test('an incomplete Feishu opt-in leaves Main running and shows a bounded source error', async t => {

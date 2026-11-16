@@ -6,7 +6,8 @@ import { createSessionAssessor } from './supervisor-session.js'
 import type { WatchdogState } from './watchdog.js'
 
 interface Run { at: number; version: string; status: 'completed' | 'failed' | 'budget-exhausted';
-  budget: { used: number; max: number; windowMs: number }; observations?: number; proposals?: number; partial?: boolean; error?: string }
+  budget: { used: number; max: number; windowMs: number }; observations?: number; proposals?: number;
+  inspectionBudget?: { inspected: number; maxTickets: number }; partial?: boolean; nextCursor?: string; error?: string }
 interface RunState { last: Run; history: Run[]; attempts?: number[] }
 const key = 'product-supervisor'
 const maxRuns = 24
@@ -36,7 +37,8 @@ export function createProductSupervision(engine: Engine, sessions: NativeSession
       const assess = createSessionAssessor(sessions, { sessionId: `supervisor:${instanceId}`, version, model: roles.roles.router.model })
       const report = await engine.createSupervisor({ assess, version }).inspect(AbortSignal.any([controller.signal, AbortSignal.timeout(60_000)]))
       result = { at, version, status: 'completed', budget, observations: report.observations.length, proposals: report.proposals.length,
-        ...(report.partial ? { partial: true } : {}) }
+        inspectionBudget: report.inspectionBudget,
+        ...(report.partial ? { partial: true, nextCursor: report.nextCursor } : {}) }
     } catch (error) {
       const code = error instanceof CoreError ? error.code : 'SUPERVISOR_FAILED'
       result = { at, version, status: code === 'SUPERVISOR_BUDGET' ? 'budget-exhausted' : 'failed', budget, error: code }

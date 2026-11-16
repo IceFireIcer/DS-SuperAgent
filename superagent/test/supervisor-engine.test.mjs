@@ -54,3 +54,38 @@ test('an approved correction becomes a real direction input and the proposal is 
   assert.ok(direction.inputs.some(input => input.text === 'Return to the requested file set.'))
   assert.equal((await engine.getSupervisorProposals(receipt.ticketId))[0].status, 'approved')
 })
+
+test('semantic supervision visits and persists all 151 Tickets across Engine pages', { timeout: 90000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-supervisor-pages-'))
+  const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
+  const source = { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] }
+  const engine = new Engine(storage, 'private', source)
+  const ticketIds = []
+  for (let index = 0; index < 151; index++) {
+    const receipt = await engine.submit({ commandId: `paged-${index}`, eventId: `paged-event-${index}`, text: `Review ${index}.` })
+    ticketIds.push(receipt.ticketId)
+  }
+  const report = await engine.createSupervisor().inspect()
+  assert.equal(report.observations.length, 151)
+  assert.equal(report.partial, undefined)
+  assert.deepEqual(new Set(report.observations.map(observation => observation.ticketId)), new Set(ticketIds))
+  const first = await engine.getSupervision({ pageLimit: 1 })
+  assert.equal(first.items.length, 100)
+  assert.equal(first.hasMore, true)
+  assert.ok(first.nextCursor)
+  const second = await engine.getSupervision({ pageLimit: 1, cursor: first.nextCursor })
+  assert.equal(second.items.length, 51)
+  assert.equal(second.hasMore, false)
+  const lastTicket = second.items.at(-1).ticketId
+  assert.equal((await engine.getSupervisorState(lastTicket)).last.finding, 'normal-wait')
+  const reopened = await storage.reconnect()
+  try {
+    const observation = await reopened.transaction('private', tx => tx.get('supervisor-observation', JSON.stringify(['supervisor-observation', lastTicket])))
+    assert.equal(observation.history[0].ticketId, lastTicket)
+    assert.equal(await reopened.transaction('other-instance', tx => tx.get('supervisor-observation', JSON.stringify(['supervisor-observation', lastTicket]))), undefined)
+  } finally { await reopened.close() }
+  const other = new Engine(storage, 'other-instance', source)
+  assert.equal(await other.getSupervisorState(lastTicket), undefined)
+  assert.deepEqual(await other.getSupervisorProposals(), [])
+})
