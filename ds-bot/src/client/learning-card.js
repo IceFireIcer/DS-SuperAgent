@@ -150,6 +150,25 @@ export function LearningDock(props) {
   return h(LearningProposals, { ...props, dock: true })
 }
 
+export function ProductMemoryProposalCard({ proposal, onAnswer }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const titleId = useId()
+  const answer = async approve => {
+    setBusy(true); setError('')
+    try { await onAnswer(proposal, approve) }
+    catch (failure) { setError(failure?.message ?? String(failure)) }
+    finally { setBusy(false) }
+  }
+  const scope = proposal.scope.kind === 'main' ? 'Main' : `${t('Work private')} · ${proposal.scope.workItemId}`
+  return h('section', { className: 'bt-q bt-learning-card', role: 'group', 'aria-labelledby': titleId, 'aria-busy': busy },
+    h(ProposalHead, { titleId, title: t('Learning proposal'), kind: scope, detail: proposal.reason }),
+    h(FileBox, { name: t('Memory'), path: scope, state: 'Added', blocks: [lineDiff('', proposal.text ?? '')] }),
+    h('p', { className: 'bt-learning-why' }, `${t('Expires')}: ${new Date(proposal.expiresAt).toLocaleString()}`),
+    error ? h('p', { className: 'bt-learning-error', role: 'alert' }, error) : null,
+    h(ProposalFoot, { busy, answer }))
+}
+
 export const LEARNING_CSS = `
 .bt-learning-stack{display:flex;flex-direction:column;gap:4px}
 .bt-learning-dock{width:100%;max-width:var(--dsh-chat-content-width,748px);margin:0 auto;box-sizing:border-box}

@@ -190,7 +190,8 @@ export class Execution {
     subagents?: Subagents, previews?: Previews, deliveries?: Deliveries, context?: ContextReader, roleConfig?: RoleConfigStore,
     private readonly deliveryState?: import('./delivery-state.js').DeliveryState, private readonly hostId = 'local-host',
     private readonly hostCapabilities: HostCapabilities = {},
-    private readonly hostEpoch?: () => number | undefined) {
+    private readonly hostEpoch?: () => number | undefined,
+    private readonly memoryTools: (ticketId: string, assignment: Assignment) => NativeTool[] = () => []) {
     this.jobs = jobs
     this.previews = previews
     this.subagents = subagents
@@ -1152,6 +1153,7 @@ export class Execution {
      * A child gets the same local capabilities but its own accounting: its calls must not consume the parent's
      * tool budget or satisfy the parent's verification rule for `report_ready`.
      */
+    const scopedMemoryTools = this.memoryTools(ticketId, assignment)
     const childTools = (): NativeTool[] => bound ? [...environmentTools.map(tool => ({
       name: tool.name, description: tool.description, parameters: tool.parameters,
       execute: async (args: Record<string, string>, signal: AbortSignal) => {
@@ -1161,7 +1163,7 @@ export class Execution {
         if (tool.name === 'save_attachment') await recordSavedAsset(output)
         return JSON.stringify(output)
       },
-    })), ...(mcpScope ? [workerMcpTool(this.workerMcp!, mcpScope, () => {})] : [])] : []
+    })), ...(mcpScope ? [workerMcpTool(this.workerMcp!, mcpScope, () => {})] : []), ...scopedMemoryTools] : []
     // Background work outlives the turn: the tool returns a job identity at once, and the completion event
     // arrives as a later turn on this same Session instead of holding the Router or this step open.
     const startLocalJob = async (name: string, start: (jobId: string) => Promise<LocalJob>) => {
@@ -1483,6 +1485,7 @@ export class Execution {
       contextTool,
       ...environmentTools,
       ...mcpTools,
+      ...scopedMemoryTools,
       ...jobTools,
       ...subagentTools,
       {

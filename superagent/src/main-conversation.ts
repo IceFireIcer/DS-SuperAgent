@@ -169,7 +169,8 @@ export class MainConversation {
     private readonly prepare?: (sessionId: string) => Promise<{ profile: RoleProfile; revision: number }>,
     private readonly work?: () => WorkDelegation | undefined,
     private readonly defaultEnvironment?: (transaction: AsyncTx) => Promise<string | undefined>,
-    private readonly attachments?: ProductAttachments) {}
+    private readonly attachments?: ProductAttachments,
+    private readonly memoryTools: (binding: MainBinding) => NativeTool[] = () => []) {}
 
   private authorize(request: MainAddress) {
     if (!request || request.instanceId !== this.instanceId || !this.source.allowedActorIds.includes(this.source.actorId)) {
@@ -524,6 +525,7 @@ export class MainConversation {
         environmentId: command.environmentId ?? '', ids: command.attachmentIds! }))
     }
     return [
+      ...this.memoryTools(binding),
       { name: 'delegate_work', description: 'Create one durable local WorkBrief for one to four independent items. Give every item a clear goal, strict constraints and observable acceptance criteria. When attachments are present, assign their exact IDs to each item with attachmentIds; an item without attachments uses an empty array. The Router cannot expand these grants. The Router decides and establishes the Tickets; this tool does not mean any Worker started or completed.'
           + (command.attachmentIds?.length ? ` Available attachments: ${JSON.stringify(command.attachmentIds.map((id, index) => ({ id, name: command.assets?.[index]?.name ?? '' })))}.` : ''),
         parameters: {
@@ -813,7 +815,7 @@ export class MainConversation {
           text: prompt,
           ...(sourceContent ? { content: [{ type: 'text' as const, text: prompt }, ...sourceContent.content],
             onDelivered: async () => { await this.storage.transaction(this.instanceId, tx => this.sourceAttachments(tx, handoff)) } } : {}),
-          tools: [this.sourceTool(binding, handoff, prepared.messageId, configured?.revision ?? 1)],
+          tools: [this.sourceTool(binding, handoff, prepared.messageId, configured?.revision ?? 1), ...this.memoryTools(binding)],
           ...(configured ? { profile: configured.profile } : {}) })
         if (result.forkedSessionId) {
           if (!rolloverPrepared) await prepareFork(result.forkedSessionId)
@@ -1079,7 +1081,7 @@ export class MainConversation {
         await record('running')
         let forkedSessionId: string | undefined
         try {
-          const result = await this.sessions!.run({ role: 'main', sessionId: binding.mainSessionId, messageId, tools: [], signal,
+          const result = await this.sessions!.run({ role: 'main', sessionId: binding.mainSessionId, messageId, tools: this.memoryTools(binding), signal,
             text: `[Work update]\nThis is a bounded Router notification, not a new user request. Explain the receipt or result briefly. Do not claim more than its evidence.\n${JSON.stringify(notification)}`,
             ...(prepared ? { profile: prepared.profile } : {}) })
           forkedSessionId = result.forkedSessionId

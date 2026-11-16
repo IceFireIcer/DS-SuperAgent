@@ -51,6 +51,7 @@ import { WorkObservations } from './work-observations.js'
 import { MainSourceHandoffs, type MainSourceDeliveryPage, type MainSourceHandoff, type MainSourceView } from './main-source.js'
 import { ProductSchedules, authorizedScheduleEvent, scheduledOccurrenceKey,
   type ProductSchedule, type ScheduleCreate, type ScheduleTarget, type ScheduledOccurrence } from './product-schedules.js'
+import { ProductMemory, memoryToolsFor, type MemoryReader, type MemoryScope } from './product-memory.js'
 
 interface StoredPolicy { revision: number; configuration: Omit<IntakePolicy, 'assess'>; origin: 'bootstrap' | 'manual' | 'sync'; sourceRevision?: string; updatedAt: number }
 interface ProcessingState { paused: boolean; revision: number; updatedAt: number }
@@ -64,6 +65,7 @@ export class Engine {
   private readonly workObservations: WorkObservations | undefined
   private readonly mainSources: MainSourceHandoffs
   private readonly schedules: ProductSchedules
+  private readonly memory: ProductMemory
   private readonly slots: Slots | undefined
   private readonly jobs: Jobs | undefined
   private readonly previews: Previews | undefined
@@ -226,6 +228,7 @@ export class Engine {
     this.host = new HostLease(rawStorage, instanceId, hostOptions)
     const storage = this.host.guard(rawStorage)
     this.storage = storage
+    this.memory = new ProductMemory(storage, instanceId)
     this.sessions = sessions
     this.workObservations = sessions ? new WorkObservations(storage, instanceId, sessions) : undefined
     this.main = new MainConversation(storage, instanceId, source, sessions, async sessionId => {
@@ -237,7 +240,9 @@ export class Engine {
     }, () => this.environments.some(candidate => candidate.kind === 'local' && candidate.config.instanceId === instanceId
       && candidate.config.allowedActorIds.includes(source.actorId) && candidate.config.permissions.includes('read')
       && candidate.config.permissions.includes('write')) ? this.workDelegation : undefined,
-    async transaction => (await this.instanceDirectoryIn(transaction))?.environmentId, attachments)
+    async transaction => (await this.instanceDirectoryIn(transaction))?.environmentId, attachments,
+    binding => source.sourceInstanceId === 'product-desktop'
+      ? memoryToolsFor(this.memory, { role: 'main', sessionId: binding.mainSessionId }) : [])
     this.roleConfig = new RoleConfigStore(storage, instanceId, {
       ...(sessions?.mainRoute ? { main: { name: 'Main', model: sessions.mainRoute, instructions: '', skills: [] } } : {}),
       router: { name: 'Router', model: sessions?.routerRoute ?? { provider: 'unconfigured', model: 'unconfigured' }, instructions: '', skills: [] },
@@ -318,7 +323,9 @@ export class Engine {
       this.execution = new Execution(storage, instanceId, this.effects, sessions, this.inputs, this.attentions, this.sourceEvents,
         this.source.intake?.allowedRequesterIds ?? this.source.allowedActorIds, this.environments, this.slots, this.jobs, this.subagents, this.previews,
         this.deliveries, this.context, this.roleConfig, this.deliveryState, this.host.hostId, this.hostCapabilities,
-        () => this.host.epoch())
+        () => this.host.epoch(),
+        (ticketId, assignment) => source.sourceInstanceId === 'product-desktop'
+          ? memoryToolsFor(this.memory, { role: 'worker', ticketId, assignmentId: assignment.id, sessionId: assignment.sessionId }) : [])
       this.effects.setStartup(async () => {
         try { await this.execution!.reconcileRemoteWork() }
         catch { /* Keep the independent Input recovery scan running when the remote recovery budget is exhausted. */ }
@@ -1474,6 +1481,57 @@ export class Engine {
     const binding = await this.main.open(request)
     if (this.sessions) this.sessions.routerSessionId = binding.routerSessionId
     return binding
+  }
+  private requireProductMemory(request: { instanceId: string }) {
+    if (request?.instanceId !== this.instanceId || this.source.sourceInstanceId !== 'product-desktop'
+      || (this.source.kind ?? 'desktop') !== 'desktop' || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Memory belongs to another product Instance or actor.')
+    }
+  }
+
+  async listProductMemory(request: { instanceId: string; after?: string; limit?: number; query?: string }) {
+    this.requireProductMemory(request)
+    return this.memory.list(request.limit, request.after, request.query)
+  }
+  async getProductMemory(request: { instanceId: string; id: string; after?: string; maxBytes?: number }) {
+    this.requireProductMemory(request)
+    return this.memory.readUser(request.id, request.after, request.maxBytes)
+  }
+  async searchProductMemory(request: { instanceId: string; reader: MemoryReader; query: string; limit?: number }) {
+    this.requireProductMemory(request)
+    return this.memory.search(request.reader, request.query, request.limit)
+  }
+  async readProductMemory(request: { instanceId: string; reader: MemoryReader; id: string; after?: string; maxBytes?: number }) {
+    this.requireProductMemory(request)
+    return this.memory.read(request.reader, request.id, request.after, request.maxBytes)
+  }
+  async saveProductMemory(request: { instanceId: string; commandId: string; scope: MemoryScope; text: string }) {
+    this.requireProductMemory(request); await this.assertHostAdmission()
+    return this.memory.save(request)
+  }
+  async shareProductMemory(request: { instanceId: string; commandId: string; id: string; expectedRevision: number; main: boolean; workItemIds: string[] }) {
+    this.requireProductMemory(request); await this.assertHostAdmission()
+    return this.memory.share(request)
+  }
+  async forgetProductMemory(request: { instanceId: string; commandId: string; id: string; expectedRevision: number }) {
+    this.requireProductMemory(request); await this.assertHostAdmission()
+    return this.memory.forget(request)
+  }
+  async getProductWorkMemoryAccess(request: { instanceId: string; workItemId: string }) {
+    this.requireProductMemory(request)
+    return this.memory.access(request.workItemId)
+  }
+  async grantProductWorkMemory(request: { instanceId: string; commandId: string; workItemId: string; expectedRevision: number; enabled: boolean }) {
+    this.requireProductMemory(request); await this.assertHostAdmission()
+    return this.memory.grant(request)
+  }
+  async listProductMemoryProposals(request: { instanceId: string }) {
+    this.requireProductMemory(request)
+    return this.memory.proposals()
+  }
+  async decideProductMemoryProposal(request: { instanceId: string; commandId: string; proposalId: string; approve: boolean }) {
+    this.requireProductMemory(request); await this.assertHostAdmission()
+    return this.memory.decide(request)
   }
   private async authorizeScheduledTarget(tx: AsyncTx, target: ScheduleTarget) {
     const binding = await tx.get<{ mainId: string }>('main-state', 'main')

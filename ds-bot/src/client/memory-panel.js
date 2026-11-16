@@ -95,7 +95,7 @@ const groupEntries = entries => entries.reduce((groups, entry) => {
   return groups
 }, [])
 
-function EntryRow({ entry, remove }) {
+export function MemoryEntryRow({ entry, remove, open }) {
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
   useEffect(() => {
@@ -114,6 +114,7 @@ function EntryRow({ entry, remove }) {
     h('div', { className: 'bt-mem-entry-copy' },
       h('span', { className: 'bt-mem-entry-text' }, entry.text),
       meta ? h('span', { className: 'bt-mem-entry-meta' }, meta) : null),
+    open ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm', onClick: () => open(entry) }, t('View full detail')) : null,
     h('button', {
       type: 'button', className: 'bt-mem-remove', 'data-confirm': confirming || undefined, disabled: busy,
       'aria-label': confirming ? t('Click again to remove') : t('Remove from memory'), title: confirming ? undefined : t('Remove from memory'), onClick: click,
@@ -137,7 +138,7 @@ function Entries({ owner, view, remove }) {
       groups.some(group => group.scope === section.scope)
         ? groups.filter(group => group.scope === section.scope).map(group => h(Fragment, { key: group.key },
             group.topic ? h('div', { className: 'bt-mem-topic' }, group.topic) : null,
-            h('ul', { className: 'bt-mem-list' }, group.entries.map(entry => h(EntryRow, { key: `${entry.topic ?? ''}:${entry.text}`, entry, remove })))))
+            h('ul', { className: 'bt-mem-list' }, group.entries.map(entry => h(MemoryEntryRow, { key: `${entry.topic ?? ''}:${entry.text}`, entry, remove })))))
         : h('div', { className: 'bt-mem-none' }, t('Nothing saved yet')))))
 }
 
