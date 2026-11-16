@@ -164,14 +164,8 @@ export class Outbox {
       text: 'Request accepted.', destination, basis: { kind: 'accepted-request', triggerId: trigger.id },
       effectId: effect.id, effectGeneration: effect.generation }
     if (purpose === 'result') {
-      // A product work result is authored by Main. An older outbox Effect without
-      // its immutable Delivery must never reconstruct a Worker-authored reply.
-      if (trigger.source.sourceInstanceId === 'product-desktop' || await transaction.get('work-ticket', ticketId)) return undefined
-      const report = await transaction.get<ReadyReport>('report', ticketId)
-      if (!report) return undefined
-      return { id: `${ticketId}:result`, ticketId, purpose, text: report.result, destination,
-        basis: { kind: 'ready-report', reportId: report.id, directionVersion: report.directionVersion },
-        effectId: effect.id, effectGeneration: effect.generation }
+      // A missing immutable Delivery cannot be reconstructed from a Worker report.
+      return undefined
     }
     if (purpose === 'attention') {
       const attention = await transaction.get<Attention>('attention', String(effect.payload.attentionId))

@@ -54,6 +54,24 @@ test('a direct product Ticket cannot reconstruct a Worker result without Main ow
   assert.equal((await engine.effects.receipt(effect.id, effect.generation)).delivery, 'dropped')
 })
 
+test('a legacy direct result Effect cannot reconstruct a Worker report without its Delivery', async t => {
+  const sent = []
+  const { engine, storage } = await fixture(t, {
+    deliver: async delivery => { sent.push(delivery); return { type: 'success' } },
+  })
+  const accepted = await engine.submit({ commandId: 'legacy-direct', eventId: 'legacy-input', text: 'Do the work.' })
+  const effect = await storage.transaction('private', async tx => {
+    await tx.insert('assignment', accepted.ticketId, { id: 'legacy-assignment', sessionId: 'legacy-session', state: 'running' })
+    await tx.insert('report', accepted.ticketId, { id: 'legacy-report', ticketId: accepted.ticketId,
+      assignmentId: 'legacy-assignment', directionVersion: 1, result: 'Worker-only text' })
+    return engine.effects.enqueue(tx, { key: 'legacy-result', stream: 'outbox', scope: accepted.ticketId,
+      payload: { purpose: 'result', ticketId: accepted.ticketId } })
+  })
+  await engine.effects.drain()
+  assert.equal(sent.some(delivery => delivery.purpose === 'result'), false)
+  assert.equal((await engine.effects.receipt(effect.id, effect.generation)).delivery, 'dropped')
+})
+
 test('acknowledgement is queryable before delivery and retries reuse one channel message', async t => {
   const calls = []
   const { engine } = await fixture(t, {
