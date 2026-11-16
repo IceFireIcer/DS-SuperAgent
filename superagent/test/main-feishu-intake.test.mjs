@@ -87,10 +87,11 @@ test('a no-work Main reply is delivered through a durable Feishu source reply', 
     replies.push(request)
     return { messageId: `reply-${replies.length}` }
   } }, { sourceInstanceId: 'feishu:tenant:group' })
-  engine = new core.Engine(storage, 'private', { kind: 'feishu', sourceInstanceId: 'feishu:tenant:group', actorId: 'bot',
+  const binding = { kind: 'feishu', sourceInstanceId: 'feishu:tenant:group', actorId: 'bot',
     allowedActorIds: ['bot'], allowedThreadPrefixes: ['feishu:tenant:'], versionOrder: 'sequence',
     intake: { mode: 'auto', maxBatchSize: 5, maxAttempts: 1, timeoutMs: 5000,
-      allowedRequesterIds: ['alice'], allowedBotActorIds: [], rules: [] } }, {}, sessions, [], {}, {}, {}, { channel })
+      allowedRequesterIds: ['alice'], allowedBotActorIds: [], rules: [] } }
+  engine = new core.Engine(storage, 'private', binding, {}, sessions, [], {}, {}, {}, { channel })
   const source = new core.FeishuSource(storage, 'private', engine, { tenantKey: 'tenant', chatIds: ['group'],
     selfActorIds: ['bot'], mainIntake: true })
   const receipt = await source.receive({ eventId: 'no-work-1', cursor: '1', tenantKey: 'tenant', chatId: 'group',
@@ -178,10 +179,11 @@ test('an unknown Main reply keeps its UUID after restart and does not resend und
     if (ambiguous) throw new core.CoreError('SOURCE_TIMEOUT', 'The reply outcome is unknown.')
     return { messageId: 'om_reply' }
   } }, { sourceInstanceId: 'feishu:tenant:group' })
-  engine = new core.Engine(storage, 'private', { kind: 'feishu', sourceInstanceId: 'feishu:tenant:group', actorId: 'bot',
+  const binding = { kind: 'feishu', sourceInstanceId: 'feishu:tenant:group', actorId: 'bot',
     allowedActorIds: ['bot'], allowedThreadPrefixes: ['feishu:tenant:'], versionOrder: 'sequence',
     intake: { mode: 'auto', maxBatchSize: 5, maxAttempts: 1, timeoutMs: 5000,
-      allowedRequesterIds: ['alice'], allowedBotActorIds: [], rules: [] } }, {}, sessions, [], {}, {}, {}, { channel })
+      allowedRequesterIds: ['alice'], allowedBotActorIds: [], rules: [] } }
+  engine = new core.Engine(storage, 'private', binding, {}, sessions, [], {}, {}, {}, { channel })
   const source = new core.FeishuSource(storage, 'private', engine, { tenantKey: 'tenant', chatIds: ['group'],
     selfActorIds: ['bot'], mainIntake: true })
   await source.receive({ eventId: 'reconcile-1', cursor: '1', tenantKey: 'tenant', chatId: 'group',
@@ -193,6 +195,9 @@ test('an unknown Main reply keeps its UUID after restart and does not resend und
   await engine.effects.drain()
   assert.equal((await engine.effects.receipt(pending.id, pending.generation)).state, 'unknown')
   const uuid = replies[0].uuid
+  await engine.effects.stop()
+  await engine.shutdown()
+  engine = new core.Engine(storage, 'private', binding, {}, sessions, [], {}, {}, {}, { channel })
   await storage.transaction('private', async tx => {
     const key = JSON.stringify(['policy-state', 'feishu:tenant:group'])
     const policy = await tx.get('policy-state', key)
