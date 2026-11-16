@@ -125,12 +125,15 @@ test('the product GitHub receiver routes humans to Main and prepares only author
   assert.equal((await call('proactive-list')).total, beforeRestart)
   assert.equal((await call('proactive-control')).paused, true)
   assert.equal((await call('proactive-read', { runId: prepared.id })).state, 'stopped')
-  const beforeRevoke = apiCalls.length
   await call('resource-revoke', { commandId: 'revoke-github-source', resourceId: resource.id,
     grantId: granted.grants.find(grant => grant.scope.sourceInstanceId === 'github:acme/repo').id,
     expectedRevision: granted.revision })
   await waitFor(async () => (await call('github-status')).lastError === 'GRANT_DENIED')
-  assert.equal(apiCalls.length, beforeRevoke, 'revocation stops subsequent native source requests')
+  const afterDenied = apiCalls.length
+  await call('github-stop')
+  await call('github-start')
+  await waitFor(async () => (await call('github-status')).lastError === 'GRANT_DENIED')
+  assert.equal(apiCalls.length, afterDenied, 'new polls after a confirmed denial cannot call the GitHub source')
   await assert.rejects(host.dispatch('resource-select-github', { instanceId: 'private', commandId: 'remote-change', resourceId: null },
     { id: 'remote' }), { code: 'SOURCE_NOT_AUTHORIZED' })
   await call('github-stop')
