@@ -11,6 +11,7 @@ import type { DeliveryState } from './delivery-state.js'
 import { associatedInput, type WorkInputs } from './work-inputs.js'
 import type { MainSourceHandoff } from './main-source.js'
 import type { FeishuSourceReply } from './feishu-delivery.js'
+import { mainResultReply } from './work-delegation.js'
 
 interface MainReplyRecord extends FeishuSourceReply {
   handoffId: string
@@ -74,7 +75,7 @@ export class Outbox {
           delivery = await this.deliveries.record(transaction, redirected, effect)
         }
       }
-      const invalid = await this.validateDelivery(transaction, delivery, trigger)
+      const invalid = await this.validateDelivery(transaction, delivery, trigger, effect)
       if (invalid) return { invalid }
       if (delivery.purpose === 'result') {
         const ticket = await transaction.get<Work['ticket']>('ticket', ticketId)
@@ -179,7 +180,7 @@ export class Outbox {
       destination, basis: { kind: 'policy-update', revision }, effectId: effect.id, effectGeneration: effect.generation }
   }
 
-  private async validateDelivery(transaction: AsyncTx, delivery: Delivery, trigger: Work['trigger']): Promise<string | undefined> {
+  private async validateDelivery(transaction: AsyncTx, delivery: Delivery, trigger: Work['trigger'], effect: Effect): Promise<string | undefined> {
     if (!await transaction.get<Work['ticket']>('ticket', delivery.ticketId)) return 'NOT_FOUND: the delivery Ticket does not exist.'
     const authorizedTarget = delivery.purpose === 'result' ? await this.deliveryState.target(transaction, delivery.ticketId, 'result') : undefined
     const defaultTarget = triggerDeliveryTarget(trigger)
@@ -203,7 +204,8 @@ export class Outbox {
       return undefined
     }
     if (delivery.purpose === 'result') {
-      if (trigger.source.sourceInstanceId === 'product-desktop' && !await transaction.get('work-ticket', delivery.ticketId)) {
+      const mainWork = await transaction.get('work-ticket', delivery.ticketId)
+      if (trigger.source.sourceInstanceId === 'product-desktop' && !mainWork) {
         return 'MAIN_RESULT_REQUIRED: a product result needs its Main work ownership.'
       }
       const evidence = authorizedTarget?.evidenceEventId ? await transaction.get<SourceEvent>('source-event', authorizedTarget.evidenceEventId) : undefined
@@ -229,6 +231,14 @@ export class Outbox {
       if (!ticket) return 'INCOMPLETE_STATE: result delivery is missing its Ticket.'
       if (ticket.constraint?.kind === 'stopped') return 'TICKET_STOPPED: a stopped Ticket cannot deliver a result.'
       if (ticket.constraint) return 'TICKET_CONSTRAINED: the Ticket is waiting for a person before delivery.'
+      if (mainWork) {
+        const allowEnded = ticket.state === 'ended' && effect.attempts > 1
+          && delivery.effectId === effect.id && delivery.effectGeneration === effect.generation
+        const reply = await mainResultReply(transaction, delivery.ticketId, report.id, allowEnded)
+        if (!reply || delivery.text !== reply || delivery.basis.directionVersion !== report.directionVersion) {
+          return 'MAIN_RESULT_REQUIRED: the result Delivery needs the current durable Main reply.'
+        }
+      }
       const authorizedEventId = authorizedTarget?.destination.objectId ?? defaultTarget.eventId
       const authorizedThreadId = authorizedTarget?.destination.threadId ?? defaultTarget.threadId
       const authorizedActorId = authorizedTarget?.destination.actorId ?? defaultTarget.source.actorId

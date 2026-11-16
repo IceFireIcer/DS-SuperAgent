@@ -73,8 +73,13 @@ test('Main delegates one durable local brief and reports only the Worker result 
   const sessions = new NativeSessions(native, {
     main: { provider: 'mock', model: 'main' }, router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' },
   })
+  let resultDispatches = 0
   const engine = new Engine(storage, 'personal', { sourceInstanceId: 'product-desktop', actorId: 'alice', allowedActorIds: ['alice'] },
-    { scanIntervalMs: 10, retryDelayMs: 10 }, sessions, [environment])
+    { scanIntervalMs: 10, retryDelayMs: 10 }, sessions, [environment], {}, {}, {}, { channel: { deliver: async delivery => {
+      if (delivery.purpose !== 'result') return { type: 'success' }
+      resultDispatches++
+      return resultDispatches === 1 ? { type: 'transient', reason: 'TEST_TRANSIENT' } : { type: 'success' }
+    } } })
   let reopened
   t.after(async () => {
     await reopened?.effects.stop()
@@ -118,6 +123,7 @@ test('Main delegates one durable local brief and reports only the Worker result 
   assert.equal(updates.filter(update => update.outcome?.status === 'success').length, 2)
   assert.equal(history.messages.filter(message => message.text === 'Main confirmed checked-note.txt after reviewing the Worker evidence.').length, 1)
   await until(async () => (await engine.conversation(work.receipt.ticketId)).messages.some(message => message.purpose === 'result'), 'Main reply delivery')
+  assert.equal(resultDispatches, 2, 'the original Main reply survives a transient result delivery retry')
   const result = (await engine.conversation(work.receipt.ticketId)).messages.find(message => message.purpose === 'result')
   assert.equal(result.text, 'Main confirmed checked-note.txt after reviewing the Worker evidence.')
   assert.equal(result.reportId, work.outcome.reportId)

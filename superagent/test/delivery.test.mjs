@@ -54,6 +54,33 @@ test('a direct product Ticket cannot reconstruct a Worker result without Main ow
   assert.equal((await engine.effects.receipt(effect.id, effect.generation)).delivery, 'dropped')
 })
 
+test('a persisted product result with Worker text cannot bypass the current Main reply', async t => {
+  const sent = []
+  const { engine, storage } = await fixture(t, {
+    deliver: async delivery => { sent.push(delivery); return { type: 'success' } },
+  }, {}, false, 'product-desktop')
+  const accepted = await engine.submit({ commandId: 'persisted-worker-result', eventId: 'original-input', text: 'Do the work.' })
+  const effect = await storage.transaction('private', async tx => {
+    await tx.insert('work-ticket', accepted.ticketId, { workBriefId: 'brief', workItemId: 'item', ticketId: accepted.ticketId })
+    const intent = await tx.get('intent', accepted.ticketId)
+    await tx.replace('intent', accepted.ticketId, { ...intent, state: 'ready', reason: 'ready-report' })
+    await tx.insert('assignment', accepted.ticketId, { id: 'current-assignment', sessionId: 'worker-session', state: 'running' })
+    await tx.insert('report', accepted.ticketId, { id: 'current-report', ticketId: accepted.ticketId,
+      assignmentId: 'current-assignment', directionVersion: 1, result: 'Worker-only text' })
+    const queued = await engine.effects.enqueue(tx, { key: 'persisted-result', stream: 'outbox', scope: accepted.ticketId,
+      payload: { purpose: 'result', ticketId: accepted.ticketId, deliveryId: 'persisted-result' } })
+    await tx.insert('delivery', 'persisted-result', { id: 'persisted-result', instanceId: 'private', ticketId: accepted.ticketId,
+      purpose: 'result', text: 'Worker-only text',
+      destination: { sourceInstanceId: 'product-desktop', actorId: 'user', eventId: 'original-input' },
+      basis: { kind: 'ready-report', reportId: 'current-report', directionVersion: 1 },
+      effectId: queued.id, effectGeneration: queued.generation, sequence: 2, createdAt: Date.now() })
+    return queued
+  })
+  await engine.effects.drain()
+  assert.equal(sent.some(delivery => delivery.purpose === 'result'), false)
+  assert.equal((await engine.effects.receipt(effect.id, effect.generation)).delivery, 'dropped')
+})
+
 test('a legacy direct result Effect cannot reconstruct a Worker report without its Delivery', async t => {
   const sent = []
   const { engine, storage } = await fixture(t, {

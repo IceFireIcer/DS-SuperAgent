@@ -101,14 +101,15 @@ export interface MainWorkNotification {
 }
 
 /** Resolve only a completed Main reply for this exact current work result. */
-export async function mainResultReply(tx: AsyncTx, ticketId: string, reportId: string): Promise<string | undefined> {
+export async function mainResultReply(tx: AsyncTx, ticketId: string, reportId: string, allowEnded = false): Promise<string | undefined> {
   const link = await tx.get<{ workBriefId: string; workItemId?: string }>('work-ticket', ticketId)
   if (!link) return undefined
   const ticket = await tx.get<Work['ticket']>('ticket', ticketId)
   const report = await tx.get<{ id: string; assignmentId: string; directionVersion: number }>('report', ticketId)
   const assignment = await tx.get<{ id: string }>('assignment', ticketId)
   const intent = await tx.get<Work['intent']>('intent', ticketId)
-  if (ticket?.state !== 'open' || ticket.constraint || report?.id !== reportId || report.assignmentId !== assignment?.id
+  if ((ticket?.state !== 'open' && !(allowEnded && ticket?.state === 'ended')) || ticket.constraint
+    || report?.id !== reportId || report.assignmentId !== assignment?.id
     || report.directionVersion !== ticket.directionVersion || intent?.state !== 'ready' || intent.reason !== 'ready-report') return undefined
   const brief = await tx.get<MainWorkBrief>('work-brief', link.workBriefId)
   const itemId = link.workItemId ?? link.workBriefId
