@@ -8,12 +8,12 @@ import * as core from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, textResponse, toolResponse } from '../dev/native-mock.mjs'
 
-async function fixture(t, channel, effects = {}, versioned = false) {
+async function fixture(t, channel, effects = {}, versioned = false, sourceInstanceId = 'desktop') {
   const directory = await mkdtemp(join(tmpdir(), 'ds-bot-delivery-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const engine = new core.Engine(storage, 'private', {
-    sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'],
+    sourceInstanceId, actorId: 'user', allowedActorIds: ['user'],
     ...(versioned ? { allowedThreadIds: ['room'], versionOrder: 'sequence' } : {}),
   }, effects, undefined, [], {}, {}, {}, { channel })
   return { engine, storage, directory }
@@ -30,6 +30,23 @@ test('a product work result cannot be reconstructed from its Worker report when 
     await tx.insert('report', accepted.ticketId, { id: 'ready-report', ticketId: accepted.ticketId,
       assignmentId: 'assignment', directionVersion: 1, result: 'Worker-only text' })
     return engine.effects.enqueue(tx, { key: 'missing-delivery', stream: 'outbox', scope: accepted.ticketId,
+      payload: { purpose: 'result', ticketId: accepted.ticketId } })
+  })
+  await engine.effects.drain()
+  assert.equal(sent.some(delivery => delivery.purpose === 'result'), false)
+  assert.equal((await engine.effects.receipt(effect.id, effect.generation)).delivery, 'dropped')
+})
+
+test('a direct product Ticket cannot reconstruct a Worker result without Main ownership', async t => {
+  const sent = []
+  const { engine, storage } = await fixture(t, {
+    deliver: async delivery => { sent.push(delivery); return { type: 'success' } },
+  }, {}, false, 'product-desktop')
+  const accepted = await engine.submit({ commandId: 'direct-product', eventId: 'direct-input', text: 'Do the work.' })
+  const effect = await storage.transaction('private', async tx => {
+    await tx.insert('report', accepted.ticketId, { id: 'direct-report', ticketId: accepted.ticketId,
+      assignmentId: 'direct-assignment', directionVersion: 1, result: 'Worker-only text' })
+    return engine.effects.enqueue(tx, { key: 'direct-result', stream: 'outbox', scope: accepted.ticketId,
       payload: { purpose: 'result', ticketId: accepted.ticketId } })
   })
   await engine.effects.drain()

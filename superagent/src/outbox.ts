@@ -166,7 +166,7 @@ export class Outbox {
     if (purpose === 'result') {
       // A product work result is authored by Main. An older outbox Effect without
       // its immutable Delivery must never reconstruct a Worker-authored reply.
-      if (await transaction.get('work-ticket', ticketId)) return undefined
+      if (trigger.source.sourceInstanceId === 'product-desktop' || await transaction.get('work-ticket', ticketId)) return undefined
       const report = await transaction.get<ReadyReport>('report', ticketId)
       if (!report) return undefined
       return { id: `${ticketId}:result`, ticketId, purpose, text: report.result, destination,
@@ -209,6 +209,9 @@ export class Outbox {
       return undefined
     }
     if (delivery.purpose === 'result') {
+      if (trigger.source.sourceInstanceId === 'product-desktop' && !await transaction.get('work-ticket', delivery.ticketId)) {
+        return 'MAIN_RESULT_REQUIRED: a product result needs its Main work ownership.'
+      }
       const evidence = authorizedTarget?.evidenceEventId ? await transaction.get<SourceEvent>('source-event', authorizedTarget.evidenceEventId) : undefined
       if (foreign) {
         const input = evidence ? await associatedInput(transaction, delivery.ticketId, evidence) : undefined
