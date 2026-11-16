@@ -341,7 +341,7 @@ export class Engine {
           const conversation = await this.conversation(ticketId)
           const report = conversation.reports[0]
           const status = conversation.status
-          if (status !== 'pending' && status !== 'running' && status !== 'ready' && status !== 'waiting-human' && status !== 'stopping' && status !== 'stopped') {
+          if (status !== 'pending' && status !== 'running' && status !== 'ready' && status !== 'unknown' && status !== 'waiting-human' && status !== 'stopping' && status !== 'stopped') {
             throw new CoreError('INCOMPLETE_STATE', 'The work state is not recognized.')
           }
           const assignment = conversation.assignments[0]
@@ -359,7 +359,7 @@ export class Engine {
               canStop: actorAllowed && !['ready', 'stopped', 'stopping'].includes(status),
               canResume: actorAllowed && stop?.state === 'stopped' && !stop.pendingDeviceConfirmation
                 && stop.cancellationConfirmedAt !== undefined && attention?.status !== 'waiting',
-              canRetry: actorAllowed && (conversation.reason === 'worker-idle'
+              canRetry: actorAllowed && status !== 'unknown' && (conversation.reason === 'worker-idle'
                 || conversation.reason === 'recovery-blocked' || conversation.reason === 'recovery-exhausted'),
               canAnswer: actorAllowed && attention?.status === 'waiting' && status === 'waiting-human',
             },

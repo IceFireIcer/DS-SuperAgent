@@ -30,6 +30,7 @@ import { assertReferenceShape, type EnvironmentAssetReference } from './environm
 import type { MainWorkBrief, MainWorkItem } from './work-delegation.js'
 import { resolveProductAttachments } from './product-attachments.js'
 import { workerMcpName, workerMcpTool, type WorkerMcpBinding } from './worker-mcp-tool.js'
+import { WorkerMcpCalls, mcpBlockIn, mcpCallPageIn } from './worker-mcp-calls.js'
 
 const maxRecoveryAttempts = 3
 const maxDeliveryAttempts = 5
@@ -183,6 +184,7 @@ export class Execution {
   private readonly context: ContextReader
   private readonly roleConfig: RoleConfigStore
   private readonly executionPolicy: ExecutionPolicyStore
+  private readonly mcpCalls: WorkerMcpCalls
   private workerMcp: WorkerMcpBinding | undefined
   constructor(private readonly storage: Storage, private readonly instanceId: string, private readonly effects: Effects, private readonly sessions: NativeSessions,
     private readonly inputs: WorkInputs, private readonly attentions: Attentions, private readonly sourceEvents: SourceEvents,
@@ -201,6 +203,7 @@ export class Execution {
     if (!roleConfig) throw new CoreError('INVALID_CONFIG', 'The native runtime requires the role configuration store.')
     this.roleConfig = roleConfig
     this.executionPolicy = new ExecutionPolicyStore(storage, instanceId, Date.now)
+    this.mcpCalls = new WorkerMcpCalls(storage, instanceId)
     this.jobs?.setHandlers({ settled: record => this.wakeForJob(record), deadline: record => this.wakeForJob(record),
       unknown: record => { void this.raiseRemoteUnknown(record) } })
     this.subagents?.setHandlers({ settled: record => this.wakeForSubagent(record), deadline: record => this.wakeForSubagent(record) })
@@ -1140,9 +1143,15 @@ export class Execution {
       })
     } : undefined
     const mcpTools: NativeTool[] = mcpScope ? (() => {
+      const dispatch = {
+        begin: (use: import('./resource-credentials.js').CredentialUse, args: Record<string, unknown>) =>
+          this.mcpCalls.begin(ticketId, assignment, use, this.workerMcp!.config, args),
+        confirm: (call: import('./worker-mcp-calls.js').WorkerMcpCall, result: 'success' | 'failed', code?: string) =>
+          this.mcpCalls.confirm(call, result, code),
+      }
       const tool = workerMcpTool(this.workerMcp!, mcpScope, (outcome, output) => {
         toolFacts.push({ tool: workerMcpName(this.workerMcp!.config), outcome, output })
-      })
+      }, dispatch)
       return [{ ...tool, execute: async (args, signal) => {
         if (toolFacts.length >= 24) throw new CoreError('TOOL_BUDGET', 'The Worker tool-call budget was exhausted.')
         return tool.execute(args, signal)
@@ -1161,7 +1170,10 @@ export class Execution {
         if (tool.name === 'save_attachment') await recordSavedAsset(output)
         return JSON.stringify(output)
       },
-    })), ...(mcpScope ? [workerMcpTool(this.workerMcp!, mcpScope, () => {})] : [])] : []
+    })), ...(mcpScope ? [workerMcpTool(this.workerMcp!, mcpScope, () => {}, {
+      begin: (use, args) => this.mcpCalls.begin(ticketId, assignment, use, this.workerMcp!.config, args),
+      confirm: (call, result, code) => this.mcpCalls.confirm(call, result, code),
+    })] : [])] : []
     // Background work outlives the turn: the tool returns a job identity at once, and the completion event
     // arrives as a later turn on this same Session instead of holding the Router or this step open.
     const startLocalJob = async (name: string, start: (jobId: string) => Promise<LocalJob>) => {
@@ -1580,6 +1592,7 @@ export class Execution {
         return this.storage.transaction(this.instanceId, async transaction => {
           const current = await transaction.get<Assignment>('assignment', ticketId)
           if (current?.id !== assignment.id || current.state !== 'running') throw new CoreError('STALE_ASSIGNMENT', 'The reporting Assignment is no longer current.')
+          if (await mcpBlockIn(transaction, ticketId)) throw new CoreError('MCP_OUTCOME_UNKNOWN', 'Reconcile the original MCP request before reporting ready.')
           const existing = await transaction.get<ReadyReport>('report', ticketId)
           if (existing?.assignmentId === assignment.id && !input) return existing.id
           const report: ReadyReport = { id: randomUUID(), ticketId, assignmentId: assignment.id, sessionId: assignment.sessionId, kind: 'ready', result: bound ? bound.sanitize(args.result!) : args.result!, evidence: bound ? bound.sanitize(args.evidence!) : args.evidence!, artifacts: structuredClone(artifacts), toolFacts: structuredClone(toolFacts),
@@ -1788,6 +1801,8 @@ export class Execution {
       const trigger = await this.trigger(transaction, ticketId)
       const assignment = await transaction.get<Assignment>('assignment', ticketId)
       const report = await transaction.get<ReadyReport>('report', ticketId)
+      const mcpUnknown = await mcpBlockIn(transaction, ticketId)
+      const mcpCalls = await mcpCallPageIn(transaction, ticketId)
       const intent = (await transaction.get<Work['intent']>('intent', ticketId))!
       const stop = await this.recoverStaleStop(transaction, ticketId)
       const attention = await this.attentions.current(transaction, ticketId)
@@ -1839,7 +1854,7 @@ export class Execution {
         : intent.state === 'ready' || intent.reason === 'ready-report' ? 'ready'
           : ticketState === 'ended' ? 'ended' : intent.reason === 'worker-idle' ? 'idle'
               : intent.reason === 'worker-running' || intent.reason === 'worker-background' ? 'draft' : 'pending'
-      return { ticketId, request: trigger.text, status: stop?.state ?? (attention?.status === 'waiting' ? 'waiting-human' : intent.state), reason: stop?.state ?? intent.reason,
+      return { ticketId, request: trigger.text, status: stop?.state ?? (attention?.status === 'waiting' ? 'waiting-human' : mcpUnknown ? 'unknown' : intent.state), reason: stop?.state ?? intent.reason,
         executionLocation: assignment?.environment ?? null,
         ...(executionSelection ? { executionSelection } : {}),
         ...(environmentHandoff ? { environmentHandoff } : {}),
@@ -1855,6 +1870,7 @@ export class Execution {
           ...(subagent.cancelReason ? { cancelReason: subagent.cancelReason } : {}), startedAt: subagent.startedAt,
           ...(subagent.finishedAt === undefined ? {} : { finishedAt: subagent.finishedAt }) })),
         previews: previews.map(preview => this.previews!.view(preview)),
+        mcpUnknown, mcpCalls: mcpCalls.items, ...(mcpCalls.cursor ? { mcpCallCursor: mcpCalls.cursor } : {}),
         assignmentHistory: assignmentHistory.sort((left, right) => left.createdAt - right.createdAt || left.id.localeCompare(right.id)),
         stopHistory: stopHistory.sort((left, right) => left.requestedAt - right.requestedAt), resumeHistory: resumeHistory.sort((left, right) => Number(left.resumedAt ?? 0) - Number(right.resumedAt ?? 0)),
         reports: report ? [report] : [],
@@ -2298,16 +2314,17 @@ export class Execution {
       const jobs = this.jobs ? await this.jobs.listIn(transaction, ticketId) : []
       const subagents = this.subagents ? await this.subagents.listIn(transaction, ticketId) : []
       const unknownEffects = await this.effects.hasUnknownScopeInTransaction(transaction, ticketId)
+      const mcpUnknown = await mcpBlockIn(transaction, ticketId)
       const previewPending = await this.previewCleanupPending(transaction, ticketId)
       const handoff = await loadEnvironmentHandoff(transaction, ticketId)
       const pendingInput = await this.inputs.latestPendingInput(transaction, ticketId)
       let revoked: string | undefined
       try { await this.requireCurrentAuthorization(transaction, ticketId, trigger.source.actorId, 'take over') }
       catch (error) { revoked = error instanceof CoreError ? error.message : 'The original authorization is no longer current.' }
-      return { ticket, assignment, stop, intent, attention, jobs, subagents, unknownEffects, previewPending, handoff, pendingInput, revoked }
+      return { ticket, assignment, stop, intent, attention, jobs, subagents, unknownEffects, mcpUnknown, previewPending, handoff, pendingInput, revoked }
     })
     if (!snapshot) return undefined
-    const { ticket, assignment, stop, intent, attention, jobs, subagents, unknownEffects, previewPending, handoff, pendingInput, revoked } = snapshot
+    const { ticket, assignment, stop, intent, attention, jobs, subagents, unknownEffects, mcpUnknown, previewPending, handoff, pendingInput, revoked } = snapshot
     const base = { ticketId, previousAssignmentId: assignment.id, previousGeneration: assignment.generation, sessionId: assignment.sessionId }
     const endAssignment = async () => {
       await this.storage.transaction(this.instanceId, transaction => this.saveAssignment(transaction, { ...assignment, state: 'ended' }))
@@ -2349,6 +2366,8 @@ export class Execution {
     const blockers: HostTakeoverBlocker[] = []
     if (unknownEffects) blockers.push({ code: 'unknown-effect',
       message: 'An external action has an unknown outcome; reconcile it by its original ID before continuing.' })
+    if (mcpUnknown) blockers.push({ code: 'unknown-mcp',
+      message: `MCP request ${mcpUnknown.requestId} has no confirmed result; check the original request before continuing.` })
     for (const job of jobs) {
       if (job.state !== 'unknown') continue
       blockers.push({ code: 'unknown-job', jobId: job.id,
@@ -2881,6 +2900,9 @@ export class Execution {
       if (this.workerControllers.has(command.ticketId)) throw new CoreError('TURN_ACTIVE', 'The current Assignment still has an active turn.')
       if (await this.effects.hasUnknownScopeInTransaction(transaction, command.ticketId)) {
         throw new CoreError('UNKNOWN_OUTCOME', 'Unknown external work must be reconciled by its original ID before retry.')
+      }
+      if (await mcpBlockIn(transaction, command.ticketId)) {
+        throw new CoreError('MCP_OUTCOME_UNKNOWN', 'The original MCP request must be reconciled before retrying this Ticket.')
       }
       if (await this.previewCleanupPending(transaction, command.ticketId)) {
         throw new CoreError('PREVIEW_ACTIVE', 'Cancel or confirm the acceptance preview cleanup before retry.')

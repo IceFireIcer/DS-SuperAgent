@@ -36,6 +36,11 @@ test('the product Worker calls only its approved MCP tool through the live tool 
   let pauseList = false
   let afterList
   let echoSecret = false
+  let holdCall = false
+  let callStarted
+  let releaseCall
+  const callArrived = new Promise(resolve => { callStarted = resolve })
+  const heldCall = new Promise(resolve => { releaseCall = resolve })
   const server = createServer(async (req, res) => {
     if (req.method !== 'POST') { res.writeHead(405).end(); return }
     const chunks = []
@@ -60,6 +65,7 @@ test('the product Worker calls only its approved MCP tool through the live tool 
     }
     else if (message.method === 'tools/call') {
       calls.push({ name: message.params.name, input: message.params.arguments })
+      if (holdCall) { callStarted(); await heldCall }
       result = { content: [{ type: 'text', text: echoSecret ? secret : `checked ${message.params.arguments.text}` }] }
     } else { res.writeHead(404).end(); return }
     res.end(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }))
@@ -123,6 +129,7 @@ test('the product Worker calls only its approved MCP tool through the live tool 
   let host
   t.after(async () => {
     releaseList()
+    releaseCall()
     unregisterGlobal()
     await host?.close(); await native.fiber.dispose()
     await new Promise(resolve => server.close(resolve))
@@ -132,9 +139,10 @@ test('the product Worker calls only its approved MCP tool through the live tool 
   const resource = await host.dispatch('resource-create', { instanceId: 'personal', commandId: 'create-mcp', label: 'Approved MCP', value: secret })
   const directory = (await host.dispatch('directory-options', { instanceId: 'personal' })).directories[0]
   await host.close()
-  host = await createProductHost(native, { ...config, workerMcpTool: {
+  const workerMcpToolConfig = {
     serverName: 'approved', toolName: 'check', url: `http://127.0.0.1:${address.port}/mcp`, resourceId: resource.id,
-  } })
+  }
+  host = await createProductHost(native, { ...config, workerMcpTool: workerMcpToolConfig })
   const send = async id => {
     await host.dispatch('send', { instanceId: 'personal', commandId: id, text: `Check ${id}.` })
     await until(() => workerAttempts >= Number(id.split('-').at(-1)))
@@ -161,9 +169,19 @@ test('the product Worker calls only its approved MCP tool through the live tool 
     report = await raw.transaction('personal', tx => tx.get('report', approvedWork.receipt.ticketId))
     return report?.toolFacts?.some(fact => fact.tool === 'mcp__approved__check')
   })
+  const mcpFact = report.toolFacts.filter(fact => fact.tool === 'mcp__approved__check')
+  assert.equal(mcpFact.length, 1)
+  assert.equal(mcpFact[0].outcome, 'success')
+  assert.equal(mcpFact[0].output.text, 'checked fixture')
+  assert.match(mcpFact[0].output.requestId, /^[a-f0-9-]{36}$/u)
+  const durableCall = await raw.transaction('personal', async tx => {
+    const calls = await tx.scan('worker-mcp-call', { limit: 10 })
+    return calls.items.find(entry => entry.value.requestId === mcpFact[0].output.requestId)?.value
+  })
   await raw.close()
-  assert.deepEqual(report.toolFacts.filter(fact => fact.tool === 'mcp__approved__check'),
-    [{ tool: 'mcp__approved__check', outcome: 'success', output: { text: 'checked fixture' } }])
+  assert.equal(durableCall?.state, 'confirmed')
+  assert.equal(durableCall?.outcome, 'success')
+  assert.equal(JSON.stringify(durableCall).includes(secret), false)
   assert.deepEqual(calls, [{ name: 'check', input: { text: 'fixture' } }])
   assert.ok(requests.every(request => request.authorized), 'the DSH record value reached only the MCP transport')
   let revoked
@@ -201,6 +219,16 @@ test('the product Worker calls only its approved MCP tool through the live tool 
   await childWork('child-7')
   assert.equal(calls.length, 2, 'the child cannot call after the shared grant is revoked')
   assert.equal(requests.length, requestsBeforeDeniedChild, 'the revoked child cannot even start an MCP connection')
+  const deniedWork = (await host.dispatch('history', { instanceId: 'personal' })).works
+    .find(work => work.brief?.goal === 'Check child-7.')
+  assert.ok(deniedWork?.receipt?.ticketId)
+  const childStore = await SqliteStorage.open(config.databasePath)
+  await until(async () => childStore.transaction('personal', async tx => {
+    const page = await tx.scan('subagent', { limit: 100 })
+    return page.items.some(entry => entry.value.ticketId === deniedWork.receipt.ticketId
+      && ['completed', 'failed', 'cancelled'].includes(entry.value.state))
+  }))
+  await childStore.close()
   const afterChild = await host.dispatch('resource-read', { instanceId: 'personal', resourceId: resource.id })
   await host.dispatch('resource-grant', { instanceId: 'personal', commandId: 'grant-echo', resourceId: resource.id,
     expectedRevision: afterChild.revision, scope: { role: 'worker', environmentId: directory.id }, purposes: ['tool'] })
@@ -214,4 +242,40 @@ test('the product Worker calls only its approved MCP tool through the live tool 
   assert.equal(globalCalls, 0)
   assert.equal(modelMessages.some(message => message.includes(secret)), false)
   assert.equal(JSON.stringify(await host.dispatch('history', { instanceId: 'personal' })).includes(secret), false)
+
+  echoSecret = false
+  holdCall = true
+  await host.dispatch('send', { instanceId: 'personal', commandId: 'child-9', text: 'Check child-9.' })
+  await callArrived
+  const interrupted = (await host.dispatch('history', { instanceId: 'personal' })).works
+    .find(work => work.brief?.goal === 'Check child-9.')
+  assert.ok(interrupted?.control?.assignment)
+  assert.equal(interrupted.status, 'unknown')
+  assert.equal(interrupted.control.permissions.canRetry, false)
+  await host.dispatch('work-stop', { instanceId: 'personal', commandId: 'stop-child-mcp',
+    workItemId: interrupted.brief.workItemId, ticketId: interrupted.receipt.ticketId,
+    expectedGeneration: interrupted.control.assignment.generation, expectedTicketVersion: interrupted.control.ticketVersion,
+    reason: 'MCP request interrupted after dispatch.' })
+  releaseCall()
+  const interruptedStore = await SqliteStorage.open(config.databasePath)
+  let unknown
+  await until(async () => {
+    const block = await interruptedStore.transaction('personal', tx => tx.get('worker-mcp-block',
+      JSON.stringify(['worker-mcp-block', interrupted.receipt.ticketId])))
+    unknown = block && await interruptedStore.transaction('personal', tx => tx.get('worker-mcp-call', block.callId))
+    return unknown?.state === 'unknown'
+  })
+  await interruptedStore.close()
+  assert.equal(unknown.toolName, 'check')
+  assert.equal(JSON.stringify(unknown).includes(secret), false)
+  assert.equal(JSON.stringify(unknown).includes('child'), false, 'the original child input is not stored')
+  await host.close()
+  host = await createProductHost(native, { ...config, workerMcpTool: workerMcpToolConfig })
+  const observations = await host.dispatch('observe-list', { instanceId: 'personal' })
+  const item = observations.items.find(candidate => candidate.ticketId === interrupted.receipt.ticketId)
+  assert.ok(item)
+  const card = await host.dispatch('observe-read', { instanceId: 'personal', observationId: item.id,
+    generation: interrupted.control.assignment.generation })
+  assert.ok(card.facts.some(fact => fact.label === 'MCP request' && fact.value.includes(unknown.requestId)))
+  assert.equal(JSON.stringify(card.facts).includes(secret), false)
 })

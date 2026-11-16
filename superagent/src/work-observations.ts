@@ -6,6 +6,7 @@ import type { Assignment } from './execution.js'
 import type { Attention } from './attention.js'
 import type { MainWorkBrief, MainWorkItem, MainWorkOutcome, MainWorkPlanConflict, MainWorkReceipt,
   MainWorkUpdate } from './work-delegation.js'
+import { mcpBlockIn } from './worker-mcp-calls.js'
 
 type ObservationRole = 'router' | 'worker'
 
@@ -465,11 +466,15 @@ export class WorkObservations {
         const update = await transaction.get<MainWorkUpdate>('work-update-head', item.id)
         const outcome = await transaction.get<MainWorkOutcome>('work-outcome', item.id)
         const report = await transaction.get<ReadyReport>('report', ticketId)
+        const mcpUnknown = await mcpBlockIn(transaction, ticketId)
         const latestAssignment = currentAssignment ?? assignments.at(-1)
         const currentUpdate = update && latestAssignment && update.createdAt >= latestAssignment.createdAt ? update : undefined
         const currentOutcome = outcome && report && report.assignmentId === latestAssignment?.id && outcome.reportId === report.id
           ? outcome : undefined
-        const state = workerStatus(ticket, intent, currentUpdate, currentOutcome)
+        const state = mcpUnknown && ticket?.constraint?.kind !== 'stopped'
+          ? { status: 'unknown', summary: `MCP request ${mcpUnknown.requestId} has no confirmed result.`,
+            nextStep: 'Reconcile the original MCP request before retrying.' }
+          : workerStatus(ticket, intent, currentUpdate, currentOutcome)
         items.push({
           id: observationId({ version: 1, role: 'worker', workBriefId: brief.id, workItemId: item.id, ticketId }),
           role: 'worker',
@@ -568,6 +573,7 @@ export class WorkObservations {
     const reports = await this.reports(transaction, ticketId)
     const report = reports.filter(candidate => candidate.assignmentId === selected.id).sort((left, right) => right.createdAt - left.createdAt)[0]
     const currentReport = await transaction.get<ReadyReport>('report', ticketId)
+    const mcpUnknown = await mcpBlockIn(transaction, ticketId)
     const attentionHead = await transaction.get<{ attentionId: string }>('attention-head', JSON.stringify(['attention-head', ticketId]))
     const attention = attentionHead ? await transaction.get<Attention>('attention', attentionHead.attentionId) : undefined
     const stopHead = await transaction.get<{ stopId: string }>('stop-head', JSON.stringify(['stop-head', ticketId]))
@@ -575,7 +581,10 @@ export class WorkObservations {
       cancellationConfirmedAt?: number }>('stop-state', stopHead.stopId) : undefined
     const currentUpdate = update && update.createdAt >= selected.createdAt ? update : undefined
     const currentOutcome = outcome && currentReport?.assignmentId === selected.id && outcome.reportId === currentReport.id ? outcome : undefined
-    const state = current ? workerStatus(ticket, intent, currentUpdate, currentOutcome)
+    const state = current && mcpUnknown && ticket.constraint?.kind !== 'stopped'
+      ? { status: 'unknown', summary: `MCP request ${mcpUnknown.requestId} has no confirmed result.`,
+        nextStep: 'Reconcile the original MCP request before retrying.' }
+      : current ? workerStatus(ticket, intent, currentUpdate, currentOutcome)
       : { status: selected.state, summary: 'This Assignment generation is retained in history.',
         nextStep: 'Return to the current generation for the next executable step.' }
     const selectedIndex = assignments.findIndex(assignment => assignment.id === selected.id)
@@ -617,6 +626,9 @@ export class WorkObservations {
           ? 'unknown' : String(selected.configurationRevision) },
         { label: 'Generation state', value: current ? 'Current' : 'Historical' },
         { label: 'Environment', value: selected.environment?.id ?? 'unknown' },
+        ...(mcpUnknown && mcpUnknown.assignmentId === selected.id
+          ? [{ label: 'MCP request', value: `unknown · ${mcpUnknown.serverName}/${mcpUnknown.toolName} · original request ${mcpUnknown.requestId} · input SHA-256 ${mcpUnknown.inputSha256}` }]
+          : []),
         ...(selected.environment?.deviceId ? [{ label: 'Device', value: selected.environment.deviceId }] : []),
         ...(selected.environment?.root ? [{ label: 'Directory', value: selected.environment.root }] : []),
         { label: 'Goal', value: summary(item.goal) },

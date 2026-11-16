@@ -295,7 +295,7 @@ export interface MainAttentionAnswerFact {
 
 export interface MainWorkTicketSnapshot {
   ticketId: string
-  status: Work['intent']['state'] | 'waiting-human' | 'stopping' | 'stopped'
+  status: Work['intent']['state'] | 'unknown' | 'waiting-human' | 'stopping' | 'stopped'
   reason: Work['intent']['reason']
   lifecycle: Work['ticket']['state']
   setupCode?: string
@@ -1506,6 +1506,7 @@ export class WorkDelegation {
     if (snapshot.status === 'stopped' || snapshot.status === 'stopping') return 'stopped'
     if (snapshot.reason === 'environment-waiting') return 'blocked'
     if (snapshot.reason === 'recovery-blocked' || snapshot.reason === 'recovery-exhausted') return 'unknown'
+    if (snapshot.status === 'unknown') return 'unknown'
     if (snapshot.status === 'ready' && snapshot.report) return 'success'
     if (snapshot.reason === 'worker-idle' || snapshot.lifecycle === 'ended') return 'failed'
     if (snapshot.status === 'ready') return 'unknown'

@@ -2,6 +2,7 @@ import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/cli
 import { CoreError, identifier } from './model.js'
 import type { CredentialUse } from './resource-credentials.js'
 import type { NativeTool } from './native-sessions.js'
+import type { WorkerMcpCall } from './worker-mcp-calls.js'
 
 /** Deployment-owned, fixed tool selection. Neither the model nor a work message supplies these fields. */
 export interface WorkerMcpConfig {
@@ -14,6 +15,11 @@ export interface WorkerMcpConfig {
 export interface WorkerMcpBinding {
   config: WorkerMcpConfig
   credentials: { use<T>(request: CredentialUse, consume: (secret: string) => Promise<T>): Promise<T> }
+}
+
+export interface WorkerMcpDispatch {
+  begin(use: CredentialUse, input: Record<string, unknown>): Promise<WorkerMcpCall>
+  confirm(call: WorkerMcpCall, outcome: 'success' | 'failed', code?: string): Promise<void>
 }
 
 export function workerMcpName(config: WorkerMcpConfig) {
@@ -34,7 +40,7 @@ export function workerMcpName(config: WorkerMcpConfig) {
 
 /** One connection and one tools/call per use; no credential survives in a global MCP registration. */
 export function workerMcpTool(binding: WorkerMcpBinding, scope: () => Promise<CredentialUse>,
-  record: (outcome: 'success' | 'failed', output: Record<string, unknown>) => void): NativeTool {
+  record: (outcome: 'success' | 'failed', output: Record<string, unknown>) => void, dispatch: WorkerMcpDispatch): NativeTool {
   const name = workerMcpName(binding.config)
   return {
     name,
@@ -44,6 +50,7 @@ export function workerMcpTool(binding: WorkerMcpBinding, scope: () => Promise<Cr
       let dispatched = false
       let settled = false
       let reportedCode: string | undefined
+      let call: WorkerMcpCall | undefined
       try {
         signal.throwIfAborted()
         if (typeof args.input !== 'string' || Buffer.byteLength(args.input) > 8192)
@@ -57,7 +64,7 @@ export function workerMcpTool(binding: WorkerMcpBinding, scope: () => Promise<Cr
         const output = await binding.credentials.use(use, async secret => {
           signal.throwIfAborted()
           const client = new Client({ name: 'ds-superagent-worker', version: '0.0.0' },
-            { versionNegotiation: { mode: 'auto' } })
+            { versionNegotiation: { mode: 'auto' }, inputRequired: { autoFulfill: false } })
           const transport = new StreamableHTTPClientTransport(new URL(binding.config.url), {
             requestInit: { headers: { Authorization: `Bearer ${secret}` } },
             fetch: (input, init) => fetch(input, { ...init, redirect: 'error' }),
@@ -65,7 +72,8 @@ export function workerMcpTool(binding: WorkerMcpBinding, scope: () => Promise<Cr
           try {
             await client.connect(transport, { signal, timeout: 10000 })
             const tools = await client.listTools(undefined, { signal, timeout: 10000 })
-            if (!tools.tools.some(tool => tool.name === binding.config.toolName)) {
+            const approved = tools.tools.find(tool => tool.name === binding.config.toolName)
+            if (!approved) {
               reportedCode = 'MCP_TOOL_UNAVAILABLE'
               throw new CoreError('MCP_TOOL_UNAVAILABLE', 'The approved MCP tool is unavailable.')
             }
@@ -81,38 +89,53 @@ export function workerMcpTool(binding: WorkerMcpBinding, scope: () => Promise<Cr
                   throw new CoreError('RESOURCE_STALE', 'The MCP credential changed during discovery.')
                 }
                 signal.throwIfAborted()
+                try { call = await dispatch.begin(current, input as Record<string, unknown>) }
+                catch (error) {
+                  if (error instanceof CoreError && ['MCP_OUTCOME_UNKNOWN', 'COMMIT_UNKNOWN'].includes(error.code)) {
+                    reportedCode = 'MCP_OUTCOME_UNKNOWN'
+                  }
+                  throw error
+                }
                 dispatched = true
                 return client.callTool({ name: binding.config.toolName,
-                  arguments: input as Record<string, unknown> }, { signal, timeout: 15000 })
+                  arguments: input as Record<string, unknown>,
+                  _meta: { 'com.ds-superagent/requestId': call.requestId } }, { signal, timeout: 15000, toolDefinition: approved })
               })
             } catch (error) {
               if (error instanceof CoreError && ['GRANT_DENIED', 'RESOURCE_UNAVAILABLE'].includes(error.code)) reportedCode = error.code
               throw error
             }
-            settled = true
             if (result.isError) {
               reportedCode = 'MCP_TOOL_FAILED'
+              await dispatch.confirm(call!, 'failed', reportedCode)
+              settled = true
               throw new CoreError('MCP_TOOL_FAILED', 'The approved MCP tool reported failure.')
             }
             if (!Array.isArray(result.content) || result.content.some(block => block.type !== 'text' || typeof block.text !== 'string')) {
               reportedCode = 'MCP_RESULT_UNSUPPORTED'
+              await dispatch.confirm(call!, 'failed', reportedCode)
+              settled = true
               throw new CoreError('MCP_RESULT_UNSUPPORTED', 'Only MCP text results are supported for this tool.')
             }
             const text = result.content.map(block => block.type === 'text' ? block.text : '').join('\n')
             if (Buffer.byteLength(text) > 8192 || text.includes(secret)) {
               reportedCode = 'MCP_RESULT_UNSUPPORTED'
+              await dispatch.confirm(call!, 'failed', reportedCode)
+              settled = true
               throw new CoreError('MCP_RESULT_UNSUPPORTED', 'The MCP result could not be presented safely.')
             }
+            await dispatch.confirm(call!, 'success')
+            settled = true
             signal.throwIfAborted()
             return text
           } finally { await client.close().catch(() => {}) }
         })
-        record('success', { text: output })
+        record('success', { text: output, requestId: call!.requestId })
         return output
       } catch (error) {
-        const code = dispatched && (!settled || signal.aborted) ? 'MCP_OUTCOME_UNKNOWN'
+        const code = dispatched && !settled ? 'MCP_OUTCOME_UNKNOWN'
           : reportedCode ?? (signal.aborted ? 'TICKET_BLOCKED' : error instanceof CoreError ? error.code : 'MCP_TOOL_FAILED')
-        record('failed', { code })
+        record('failed', { code, ...(call ? { requestId: call.requestId } : {}) })
         throw new CoreError(code, 'The approved MCP tool was not confirmed; check its tool fact before retrying.')
       }
     },

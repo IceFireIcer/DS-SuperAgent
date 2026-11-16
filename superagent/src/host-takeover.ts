@@ -5,7 +5,7 @@ export type HostTakeoverOutcome = 'resumed' | 'waiting-job' | 'waiting-human' | 
   | 'idle' | 'ended' | 'revoked' | 'input-pending' | 'handoff-pending'
 
 export type HostTakeoverBlockerCode = 'device-unconfirmed' | 'waiting-human' | 'authority-revoked'
-  | 'handoff-pending' | 'unknown-effect' | 'unknown-job' | 'unknown-subagent' | 'unconfirmed-subagent'
+  | 'handoff-pending' | 'unknown-effect' | 'unknown-mcp' | 'unknown-job' | 'unknown-subagent' | 'unconfirmed-subagent'
   | 'preview-pending' | 'takeover-failed'
 
 export interface HostTakeoverBlocker {
