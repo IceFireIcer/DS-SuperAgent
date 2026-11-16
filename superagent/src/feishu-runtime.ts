@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { CoreError, identifier } from './model.js'
 import type { DesktopSource, IntakePolicy } from './model.js'
 import type { Storage } from './storage.js'
@@ -9,6 +9,7 @@ import { FeishuPoller } from './pollers.js'
 import type { ChannelHealth } from './pollers.js'
 import { FeishuOpenApi } from './feishu-api.js'
 import type { FeishuApiOptions, FeishuNativeEvent } from './feishu-api.js'
+import type { ProductAttachments } from './product-attachments.js'
 import { FeishuDeliveryChannel } from './feishu-delivery.js'
 import type { DeliveryResult, DeliveryView } from './deliveries.js'
 import { FeishuMemberSync } from './feishu-sync.js'
@@ -26,6 +27,8 @@ export interface FeishuRuntimeOptions {
   intake?: IntakePolicy
   mainIntake?: boolean
   api: FeishuApiOptions
+  /** Supplied by the trusted product Host; never selected by a native message or model. */
+  attachmentIntake?: { upload: ProductAttachments['upload']; environmentId: () => Promise<string> }
   intervalMs?: number
   pollTimeoutMs?: number
   maxBackoffMs?: number
@@ -63,8 +66,9 @@ export class FeishuRuntime {
     if (!Array.isArray(options.allowedActorIds) || !options.allowedActorIds.includes(options.actorId)
       || !Array.isArray(options.selfActorIds) || !options.selfActorIds.length) throw new CoreError('INVALID_CONFIG', 'Configure the Feishu receiving actor and native bot identities explicitly.')
     for (const id of [...options.allowedActorIds, ...options.selfActorIds]) identifier(id, 'nativeActorId')
-    const { api, intake, storage, ...configuration } = options
-    this.options = { ...structuredClone(configuration), storage, api: { ...api }, ...(intake ? { intake: { ...intake } } : {}) }
+    const { api, intake, storage, attachmentIntake, ...configuration } = options
+    this.options = { ...structuredClone(configuration), storage, api: { ...api }, ...(intake ? { intake: { ...intake } } : {}),
+      ...(attachmentIntake ? { attachmentIntake } : {}) }
     this.setupTimeoutMs = options.setupTimeoutMs ?? 60000
     if (!Number.isInteger(this.setupTimeoutMs) || this.setupTimeoutMs < 1000 || this.setupTimeoutMs > 300000) throw new CoreError('INVALID_CONFIG', 'Feishu setup is bounded at 1–300 seconds.')
     this.config = { tenantKey: options.tenantKey, chatIds: [...options.chatIds], selfActorIds: [...new Set([...options.selfActorIds, api.appId])],
@@ -100,7 +104,9 @@ export class FeishuRuntime {
   bind(engine: Engine): void {
     if (this.engine || this.state !== 'idle') throw new CoreError('RUNTIME_ACTIVE', 'The Feishu runtime has already been bound.')
     this.engine = engine
-    const source = new FeishuRuntimeSource(this.options.storage, this.options.instanceId, engine, this.config, this.binding.sourceInstanceId)
+    const source = new FeishuRuntimeSource(this.options.storage, this.options.instanceId, engine, this.config,
+      this.binding.sourceInstanceId, this.binding.actorId, this.binding.intake?.allowedRequesterIds ?? [],
+      this.api, () => this.controller?.signal ?? AbortSignal.abort(), this.options.attachmentIntake)
     this.members = new FeishuMemberSync(this.api, engine, this.config.chatIds)
     this.poller = new FeishuPoller(source, {
       setup: async () => {},
@@ -234,13 +240,19 @@ function cloneIntake(intake: IntakePolicy | undefined): IntakePolicy | undefined
 class FeishuRuntimeSource extends FeishuSource {
   override readonly sourceInstanceId: string
   afterPage: (failed: number) => void = () => {}
-  constructor(private readonly runtimeStorage: Storage, private readonly runtimeInstanceId: string, private readonly runtimeEngine: Engine, private readonly scope: FeishuSourceConfig, sourceInstanceId: string) {
+  constructor(private readonly runtimeStorage: Storage, private readonly runtimeInstanceId: string, private readonly runtimeEngine: Engine,
+    private readonly scope: FeishuSourceConfig, sourceInstanceId: string, private readonly receiverActorId: string,
+    private readonly allowedRequesterIds: string[], private readonly api: FeishuOpenApi,
+    private readonly runtimeSignal: () => AbortSignal, private readonly attachmentIntake?: FeishuRuntimeOptions['attachmentIntake']) {
     super(runtimeStorage, runtimeInstanceId, runtimeEngine, scope)
     this.sourceInstanceId = sourceInstanceId
   }
 
   override async receive(event: FeishuNativeEvent): Promise<SourceReceipt> {
     if (event.tenantKey !== this.scope.tenantKey || !this.scope.chatIds.includes(event.chatId)) throw new CoreError('SOURCE_SCOPE_DENIED', 'The Feishu event is outside the runtime scope.')
+    if (event.attachmentIds !== undefined || event.environmentId !== undefined) {
+      throw new CoreError('SOURCE_SCOPE_DENIED', 'Native events cannot supply admitted attachment IDs or an Environment.')
+    }
     const root = event.rootId ?? event.messageId
     const threadId = `feishu:${event.tenantKey}:${event.chatId}${event.chatType === 'p2p' ? '' : `:message:${root}`}`
     const addressing = event.chatType === 'p2p' ? 'direct' : event.mentionIds?.some(id => this.scope.selfActorIds?.includes(id)) ? 'mention' : 'ambient'
@@ -259,7 +271,8 @@ class FeishuRuntimeSource extends FeishuSource {
       }
       const key = JSON.stringify(['feishu-unverified-version', this.sourceInstanceId, event.chatId, event.messageId])
       await this.runtimeStorage.transaction(this.runtimeInstanceId, async tx => {
-        const record = { state: 'unknown', event, sourceReceipt: recorded, cursor: event.cursor, updatedAt: Date.now() }
+        const { resource: _resource, resourceMissing: _missing, ...boundedEvent } = event
+        const record = { state: 'unknown', event: boundedEvent, sourceReceipt: recorded, cursor: event.cursor, updatedAt: Date.now() }
         if (!await tx.replace('channel-cursor', key, record)) await tx.insert('channel-cursor', key, record)
       })
       receipt = { status: 'filtered', reason: 'SOURCE_VERSION_UNVERIFIED' }
@@ -269,9 +282,36 @@ class FeishuRuntimeSource extends FeishuSource {
       const prior = await this.runtimeEngine.getSourceReceipt(commandId)
       if (prior) receipt = { status: 'filtered', reason: 'SOURCE_REPLAY' }
       else {
+        let attachmentIds: string[] | undefined
+        let environmentId: string | undefined
+        if (event.resourceMissing || event.resource) {
+          if (!event.resource || !this.attachmentIntake) throw new CoreError('ATTACHMENT_UNAVAILABLE', 'This native resource cannot be admitted.')
+          if (event.senderKind !== 'human' || !this.scope.mainIntake || !this.allowedRequesterIds.includes(event.senderId)
+            || event.chatType !== 'p2p' && !event.mentionIds?.some(id => this.scope.selfActorIds?.includes(id))) {
+            throw new CoreError('ACTOR_NOT_ALLOWED', 'This native resource is not an addressed human request.')
+          }
+          if (!event.updateTime) throw new CoreError('SOURCE_VERSION_UNVERIFIED', 'The native resource has no verified message version.')
+          const signal = AbortSignal.any([this.runtimeSignal(), AbortSignal.timeout(30_000)])
+          const bytes = await this.api.downloadResource({ messageId: event.messageId, chatId: event.chatId,
+            senderId: event.senderId, updateTime: event.updateTime, resource: event.resource, signal })
+          signal.throwIfAborted()
+          environmentId = await this.attachmentIntake.environmentId()
+          signal.throwIfAborted()
+          const image = event.resource.kind === 'image' ? imageType(bytes) : undefined
+          if (event.resource.kind === 'image' && !image) throw new CoreError('ATTACHMENT_UNAVAILABLE', 'The native image format is unavailable.')
+          const identity = createHash('sha256').update(JSON.stringify([this.sourceInstanceId, event.messageId, event.updateTime,
+            event.resource.kind, event.resource.key])).digest('hex')
+          const uploaded = await this.attachmentIntake.upload({ instanceId: this.runtimeInstanceId, actorId: this.receiverActorId,
+            commandId: `feishu-resource:${identity}`, environmentId, kind: event.resource.kind,
+            name: event.resource.kind === 'image' ? `native-${identity.slice(0, 16)}.${image!.extension}` : event.resource.name!,
+            ...(image ? { mediaType: image.mediaType } : {}), data: bytes.toString('base64') })
+          signal.throwIfAborted()
+          attachmentIds = [uploaded.id]
+        }
         const input = { commandId, threadId, objectId: `message:${event.messageId}`,
           type: event.deleted ? 'deleted' : event.edited ? 'edited' : 'created', version: event.updateTime ?? '0',
           ...(event.deleted ? { deletionEvidence: event.deletionEvidence ?? `Feishu recalled message ${event.messageId}.` } : { text: event.text ?? '' }),
+          ...(attachmentIds && environmentId ? { attachmentIds, environmentId } : {}),
           authorId: event.senderId, authorKind: event.senderKind ?? 'human',
           addressing } as const
         receipt = this.scope.mainIntake && input.authorKind === 'human' && !event.deleted
@@ -293,4 +333,12 @@ class FeishuRuntimeSource extends FeishuSource {
     this.afterPage(result.failed)
     return result
   }
+}
+
+function imageType(bytes: Buffer): { mediaType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; extension: string } | undefined {
+  if (bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return { mediaType: 'image/png', extension: 'png' }
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return { mediaType: 'image/jpeg', extension: 'jpg' }
+  if (bytes.subarray(0, 6).toString('ascii') === 'GIF87a' || bytes.subarray(0, 6).toString('ascii') === 'GIF89a') return { mediaType: 'image/gif', extension: 'gif' }
+  if (bytes.subarray(0, 4).toString('ascii') === 'RIFF' && bytes.subarray(8, 12).toString('ascii') === 'WEBP') return { mediaType: 'image/webp', extension: 'webp' }
+  return undefined
 }

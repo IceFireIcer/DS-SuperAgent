@@ -20,6 +20,7 @@ import type { ProactiveRule } from './proactive.js'
 import type { ProductCredentialRecords } from './product-credential-vault.js'
 import type { ProductCredentialManager } from './product-credential-manager.js'
 import { workerMcpName, type WorkerMcpConfig } from './worker-mcp-tool.js'
+import type { ProductMcpConfiguration } from './product-mcp-configuration.js'
 import { assertReferenceShape } from './environment-assets.js'
 import { localDeliveryChannel, type DeliveryChannel } from './deliveries.js'
 import type { RoleConfig, RoleModel } from './config.js'
@@ -32,7 +33,7 @@ export interface ProductHostConfig { databasePath: string; workspaceRoot?: strin
   watchdogStatusPath?: string;
   clientGateway?: Omit<ClientGatewayOptions, 'product'>;
   /** Supplied by a trusted Host, never by the window or a model turn. */
-  feishu?: Omit<FeishuRuntimeOptions, 'storage' | 'instanceId' | 'mainIntake'>;
+  feishu?: Omit<FeishuRuntimeOptions, 'storage' | 'instanceId' | 'mainIntake' | 'attachmentIntake'>;
   /** Trusted deployment selection; one exact Host-local MCP tool, with no model-supplied endpoint or credential. */
   workerMcpTool?: WorkerMcpConfig;
   feishuConfigurationError?: 'INVALID_CONFIG';
@@ -83,6 +84,12 @@ const resourceFields: Record<string, string[]> = {
   'resource-revoke': ['instanceId', 'commandId', 'resourceId', 'grantId', 'expectedRevision'],
   'resource-cleanup': ['instanceId', 'resourceId'],
   'resource-select-feishu': ['instanceId', 'commandId', 'resourceId'],
+  'mcp-status': ['instanceId'],
+  'mcp-save': ['instanceId', 'commandId', 'expectedRevision', 'resourceId'],
+  'mcp-approve': ['instanceId', 'commandId', 'expectedRevision', 'approved'],
+  'mcp-connect': ['instanceId', 'commandId', 'expectedRevision'],
+  'mcp-disconnect': ['instanceId', 'commandId', 'expectedRevision'],
+  'mcp-retry': ['instanceId', 'commandId', 'expectedRevision'],
 }
 
 export async function createProductHost(context: Context, config: ProductHostConfig): Promise<ProductHost> {
@@ -100,7 +107,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
   const environments: LocalEnvironment[] = []
   const nativeAttachments = context.get('attachments') as AttachmentStore | undefined
   const attachments = nativeAttachments ? new ProductAttachments(storage, instanceId, nativeAttachments,
-    id => environments.find(environment => environment.config.id === id)) : undefined
+    id => environments.find(environment => environment.config.id === id), actorId) : undefined
   let engine: Engine | undefined
   let gateway: Awaited<ReturnType<typeof createClientGateway>> | undefined
   let feishuRuntime: FeishuRuntime | undefined
@@ -139,6 +146,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
         || candidate.sourceInstanceId === githubRuntime?.sourceBinding.sourceInstanceId
         && githubRuntime.health().state !== 'polling') ? 'SOURCE_STOPPED' : undefined }
   let resourceManager: ProductCredentialManager | undefined
+  let mcpConfiguration: ProductMcpConfiguration | undefined
+  let selectedMcpTool: WorkerMcpConfig | undefined
   let statusPublisher: ReturnType<typeof productStatusPublisher> | undefined
   let statusTimer: ReturnType<typeof setInterval> | undefined
   let supervision: ReturnType<typeof createProductSupervision> | undefined
@@ -308,7 +317,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
           return manager.use({ instanceId, resourceId, sourceInstanceId,
             role: purpose === 'source' ? 'main' : 'router', purpose }, consume)
         },
-      }, storage, instanceId, mainIntake: true })
+      }, storage, instanceId, mainIntake: true,
+      ...(attachments ? { attachmentIntake: { upload: (request: import('./product-attachments.js').ProductAttachmentUpload) => attachments.upload(request),
+        environmentId: async () => (await engine!.getInstanceDirectory({ instanceId })).environmentId } } : {}) })
       feishuEngine = new Engine(storage, instanceId, feishuRuntime.sourceBinding, {}, sessions, [], {}, {}, {}, {}, {}, proactive)
       feishuRuntime.bind(feishuEngine)
     }
@@ -336,7 +347,18 @@ export async function createProductHost(context: Context, config: ProductHostCon
       && typeof records.deleteRecord === 'function') resourceManager = engine.createProductCredentialManager(records)
     if (config.workerMcpTool) {
       if (!resourceManager) throw new CoreError('UNAVAILABLE', 'The approved MCP tool requires a durable DSH record service.')
-      engine.configureWorkerMcp({ config: config.workerMcpTool, credentials: resourceManager })
+      mcpConfiguration = engine.createProductMcpConfiguration(config.workerMcpTool)
+      const selected = await mcpConfiguration.get({ instanceId })
+      selectedMcpTool = { ...config.workerMcpTool, resourceId: selected.resourceId }
+      engine.configureWorkerMcp({ config: selectedMcpTool, credentials: {
+        use: async (request, consume) => {
+          await mcpConfiguration!.assertUse(request)
+          return resourceManager!.use(request, async secret => {
+            await mcpConfiguration!.assertUse(request)
+            return consume(secret)
+          })
+        },
+      } })
     }
     if (environments[0] && config.workspaceRoot) await engine.addWorkDirectory({ instanceId,
       commandId: `bootstrap:${environments[0].config.id}`, environment: environments[0] })
@@ -432,7 +454,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
               : endpoint === 'work-resume' ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration']
                 : endpoint === 'work-answer' ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'attentionId', 'attentionVersion', 'text']
                 : endpoint === 'supervision' ? ['instanceId', 'ticketId']
-                  : endpoint === 'supervision-inspect' ? ['instanceId']
+                  : endpoint === 'supervision-inspect' ? ['instanceId', 'restart']
                     : endpoint === 'supervision-decide' ? ['instanceId', 'commandId', 'proposalId', 'decision', 'fingerprint', 'reason']
                   : endpoint === 'settings' ? ['instanceId', 'limit']
                     : endpoint === 'settings-save' ? ['instanceId', 'commandId', 'expectedRevision', 'roles']
@@ -472,8 +494,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
         if (client && endpoint.startsWith('preset-')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Role presets require the local authorized product settings.')
         }
-        if (client && endpoint.startsWith('resource-')) {
-          throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Credential resources require the local authorized product settings.')
+        if (client && (endpoint.startsWith('resource-') || endpoint.startsWith('mcp-'))) {
+          throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Credential and MCP settings require the local authorized product settings.')
         }
         if (client && (endpoint.startsWith('attachment-') || endpoint === 'artifact-read')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'File access requires the local authorized product window.')
@@ -637,9 +659,33 @@ export async function createProductHost(context: Context, config: ProductHostCon
             } finally { feishuSelectionActive = false }
           }
         }
+        if (endpoint.startsWith('mcp-')) {
+          if (!mcpConfiguration) {
+            if (endpoint === 'mcp-status') return { configured: false, state: 'unavailable', location: 'host', remote: 'unsupported' }
+            throw new CoreError('UNAVAILABLE', 'No trusted Host MCP tool is configured.')
+          }
+          if (endpoint === 'mcp-status') {
+            const current = await mcpConfiguration.get({ instanceId })
+            selectedMcpTool!.resourceId = current.resourceId
+            return current
+          }
+          const request = { instanceId, commandId, expectedRevision: payload.expectedRevision as number }
+          if (endpoint === 'mcp-save') {
+            const saved = await mcpConfiguration.save({ ...request, resourceId: payload.resourceId as string })
+            selectedMcpTool!.resourceId = saved.resourceId
+            return saved
+          }
+          if (endpoint === 'mcp-approve') return mcpConfiguration.approve({ ...request, approved: payload.approved as boolean })
+          if (endpoint === 'mcp-connect') return mcpConfiguration.connect(request)
+          if (endpoint === 'mcp-disconnect') return mcpConfiguration.disconnect(request)
+          if (endpoint === 'mcp-retry') return mcpConfiguration.connect(request, true)
+        }
         if (endpoint === 'schedule-list') return engine!.listSchedules({ instanceId })
         if (endpoint === 'supervision') return supervision!.state(payload.ticketId as string | undefined)
-        if (endpoint === 'supervision-inspect') return supervision!.inspect()
+        if (endpoint === 'supervision-inspect') {
+          if (payload.restart !== undefined && payload.restart !== true) throw new CoreError('INVALID_INPUT', 'Restarting an inspection requires an explicit true value.')
+          return supervision!.inspect(payload.restart === true)
+        }
         if (endpoint === 'supervision-decide') return engine!.decideSupervisorProposal({ instanceId,
           commandId: commandId, proposalId: payload.proposalId as string, decision: payload.decision as 'approve' | 'reject',
           fingerprint: payload.fingerprint as string,
