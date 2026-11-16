@@ -84,6 +84,19 @@ test('semantic supervision visits and persists all 151 Tickets across Engine pag
     const observation = await reopened.transaction('private', tx => tx.get('supervisor-observation', JSON.stringify(['supervisor-observation', lastTicket])))
     assert.equal(observation.history[0].ticketId, lastTicket)
     assert.equal(await reopened.transaction('other-instance', tx => tx.get('supervisor-observation', JSON.stringify(['supervisor-observation', lastTicket]))), undefined)
+    const firstDurable = await engine.getSupervision({ pageLimit: 1, durableCursor: true })
+    const restarted = new Engine(reopened, 'private', source)
+    const continuation = await restarted.getSupervision({ pageLimit: 1, durableCursor: true, cursor: firstDurable.nextCursor })
+    assert.equal(continuation.items.length, 51)
+    assert.deepEqual(new Set([...firstDurable.items, ...continuation.items].map(item => item.ticketId)), new Set(ticketIds))
+    await assert.rejects(restarted.getSupervision({ pageLimit: 1, durableCursor: true,
+      cursor: `${firstDurable.nextCursor.slice(0, -1)}${firstDurable.nextCursor.endsWith('A') ? 'B' : 'A'}` }), { code: 'INVALID_INPUT' })
+    await assert.rejects(new Engine(reopened, 'other-instance', source).getSupervision({ pageLimit: 1, durableCursor: true,
+      cursor: firstDurable.nextCursor }), { code: 'INVALID_INPUT' })
+    await assert.rejects(new Engine(reopened, 'private', { ...source, actorId: 'other-user' }).getSupervision({ pageLimit: 1,
+      durableCursor: true, cursor: firstDurable.nextCursor }), { code: 'INVALID_INPUT' })
+    await assert.rejects(new Engine(reopened, 'private', { ...source, kind: 'github' }).getSupervision({ pageLimit: 1,
+      durableCursor: true, cursor: firstDurable.nextCursor }), { code: 'INVALID_INPUT' })
   } finally { await reopened.close() }
   const other = new Engine(storage, 'other-instance', source)
   assert.equal(await other.getSupervisorState(lastTicket), undefined)

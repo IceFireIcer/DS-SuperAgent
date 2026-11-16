@@ -10,3 +10,5 @@
 **对账边界**：普通 MCP 服务不保证可以按本产品 UUID 查询原调用结果。未得到能核对原 UUID 的受信服务回执/状态前，此增量不能自动清除 unknown 或重试；没有提供无证据的手动放行，也不宣称远端 exactly-once。真实服务的查询适配、已发请求即时撤销、PostgreSQL/跨进程竞态和完整产品验收仍未完成；#107 保持 OPEN。
 
 Node 24.22.1 隔离 SQLite、虚构 DSH record 与 mock MCP server 验证调用前意图、真实请求 `_meta`、子代理中断与无 ready report、重启后的阻断、1100 条以上历史分页和无关 Ticket 独立运行。Windows 两路并行的 MCP、profile、工作观察与 Main delegation 定向文件共 6/6 通过；TypeScript 和改动文件 lint 通过。没有跑全量 CI、真实租户或 PostgreSQL fixture。
+
+合并最新 `dev` `1d8112f`（含 #108/#106/#116）后，保留 `mcp-approve` 与 `mcp-connect` 的既有显式门禁；意图仅在这两关和当前工具 grant 都通过、准备发出真实 `tools/call` 时提交。合并后的 MCP 设置、Worker/子代理、工作观察和 Main delegation 五个文件在 Windows 两路并行下 6/6 通过，typecheck 与定向 lint 通过。#108 设置测试只调整工具事实断言以接纳新增的安全请求 UUID；没有放宽审批或连接行为。

@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto'
 import { CoreError, identifier, triggerDeliveryTarget, type CommandRecord, type DesktopSource, type EventRecord, type IntakePolicy, type Receipt, type Source, type SubmitRequest, type Work } from './model.js'
 import { capabilityLocations, validateHostCapabilities, validateRequiredCapabilities,
   type CapabilityPlanView, type HostCapabilities } from './capability-locations.js'
@@ -26,6 +26,8 @@ import { ClientAccess } from './client-access.js'
 import { feishuQuestionCode } from './feishu-delivery.js'
 import { ProductCredentialManager } from './product-credential-manager.js'
 import type { WorkerMcpBinding } from './worker-mcp-tool.js'
+import { ProductMcpConfiguration } from './product-mcp-configuration.js'
+import type { WorkerMcpConfig } from './worker-mcp-tool.js'
 import type { ProductCredentialRecords } from './product-credential-vault.js'
 import type { ProductAttachments } from './product-attachments.js'
 import { listSupervisorProposals, Supervisor, type SupervisorOptions, type SupervisorProposal } from './supervisor.js'
@@ -101,6 +103,7 @@ export class Engine {
   private bootstrapPolicy = false
   private avoidPolicyPersistence = false
   private readonly ticketCursors = new Map<string, { after: string; sourceInstanceId: string; actorId: string; expiresAt: number }>()
+  private supervisorCursorKey: Promise<Buffer> | undefined
   private commandKey(commandId: string) { return createHash('sha256').update(JSON.stringify([this.source.sourceInstanceId, this.source.actorId, commandId])).digest('hex') }
   private policyKey() { return JSON.stringify(['policy-state', this.source.sourceInstanceId]) }
   private processingKey() { return JSON.stringify(['processing-state', this.source.sourceInstanceId]) }
@@ -1508,6 +1511,14 @@ export class Engine {
     return new ProductCredentialManager(this.storage, this.instanceId, records)
   }
 
+  createProductMcpConfiguration(config: WorkerMcpConfig) {
+    if ((this.source.kind ?? 'desktop') !== 'desktop' || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Only an authorized product actor can manage MCP settings.')
+    }
+    this.assertAuthoringActor()
+    return new ProductMcpConfiguration(this.storage, this.instanceId, config, tx => this.assertHostAdmissionIn(tx))
+  }
+
   /** Host-only configuration of one approved Worker tool; never part of the model command surface. */
   configureWorkerMcp(binding: WorkerMcpBinding) {
     if (!this.execution) throw new CoreError('UNAVAILABLE', 'Worker Sessions are not configured.')
@@ -2306,14 +2317,14 @@ export class Engine {
     })
   }
 
-  async getSupervision(options: { includeHistory?: boolean; cursor?: string; pageLimit?: number } = {}) {
+  async getSupervision(options: { includeHistory?: boolean; cursor?: string; pageLimit?: number; durableCursor?: boolean } = {}) {
     const tickets: Work[] = []
     let cursor = options.cursor
     let hasMore = false
     let nextCursor: string | undefined
     const pageLimit = boundedInteger(options.pageLimit, 10, 1, 10, 'pageLimit')
     for (let pageCount = 0; pageCount < pageLimit; pageCount++) {
-      const page = await this.listTickets(cursor)
+      const page = await this.listTickets(cursor, options.durableCursor === true)
       tickets.push(...page.items)
       if (!page.hasMore) { hasMore = false; nextCursor = undefined; break }
       if (!page.nextCursor) throw new CoreError('INCOMPLETE_STATE', 'The supervision Ticket page is missing its cursor.')
@@ -2374,6 +2385,23 @@ export class Engine {
     }
     items.sort((left, right) => Number(left.priority) - Number(right.priority) || String(left.ticketId).localeCompare(String(right.ticketId)))
     return { items, counts, hasMore, ...(nextCursor ? { nextCursor } : {}), roleConfigRevision: this.roleConfigRevision, processingPaused: this.processingPaused }
+  }
+
+  async countSupervisionTickets(): Promise<number> {
+    return this.storage.transaction(this.instanceId, async tx => {
+      let count = 0
+      let cursor: string | undefined
+      do {
+        const page = await tx.scan<Work['ticket']>('ticket', { limit: 100, ...(cursor ? { after: cursor } : {}) })
+        for (const { value } of page.items) {
+          const trigger = await tx.get<Work['trigger']>('trigger', value.triggerId)
+          if (!trigger) throw new CoreError('INCOMPLETE_STATE', 'A supervision Ticket has no source identity.')
+          if (this.canReadTicket(trigger)) count++
+        }
+        cursor = page.cursor
+      } while (cursor)
+      return count
+    })
   }
 
   private applyRoleRoutes(config: RoleConfigView) {
@@ -3500,8 +3528,9 @@ export class Engine {
     return result
   }
 
-  listTickets(cursor?: string): Promise<{ items: Work[]; hasMore: boolean; nextCursor?: string }> {
-    const sourceAfter = cursor === undefined ? undefined : this.ticketCursorAfter(cursor)
+  async listTickets(cursor?: string, durableCursor = false): Promise<{ items: Work[]; hasMore: boolean; nextCursor?: string }> {
+    const key = durableCursor ? await this.loadSupervisorCursorKey() : undefined
+    const sourceAfter = cursor === undefined ? undefined : this.ticketCursorAfter(cursor, key)
     return this.storage.transaction(this.instanceId, async tx => {
       const items: Work[] = []
       let after = sourceAfter
@@ -3514,7 +3543,7 @@ export class Engine {
           after = id
           const work = await this.readWork(tx, id)
           if (!work || !this.canReadTicket(work.trigger)) continue
-          if (items.length === 100) return { items, hasMore: true, nextCursor: this.rememberTicketCursor(lastIncluded!) }
+          if (items.length === 100) return { items, hasMore: true, nextCursor: key ? this.sealSupervisorCursor(lastIncluded!, key) : this.rememberTicketCursor(lastIncluded!) }
           items.push(work)
           lastIncluded = id
         }
@@ -3522,12 +3551,49 @@ export class Engine {
         after = tickets.cursor
       }
       const nextCursor = items.length === 100 ? lastIncluded : after
-      return { items, hasMore: true, nextCursor: this.rememberTicketCursor(nextCursor!) }
+      return { items, hasMore: true, nextCursor: key ? this.sealSupervisorCursor(nextCursor!, key) : this.rememberTicketCursor(nextCursor!) }
     })
   }
 
-  private ticketCursorAfter(cursor: string): string {
+  private async loadSupervisorCursorKey(): Promise<Buffer> {
+    this.supervisorCursorKey ??= this.storage.transaction(this.instanceId, async tx => {
+      const stored = await tx.get<string>('supervisor-cursor-key', 'product-supervisor')
+      if (stored) return Buffer.from(stored, 'base64')
+      const generated = randomBytes(32)
+      await tx.insert('supervisor-cursor-key', 'product-supervisor', generated.toString('base64'))
+      return generated
+    }).catch(error => { this.supervisorCursorKey = undefined; throw error })
+    const key = await this.supervisorCursorKey
+    if (key.length !== 32) throw new CoreError('INCOMPLETE_STATE', 'The supervision cursor key is invalid.')
+    return key
+  }
+
+  private supervisorCursorScope() { return JSON.stringify([this.instanceId, this.source.kind ?? 'desktop', this.source.sourceInstanceId, this.source.actorId]) }
+
+  private sealSupervisorCursor(after: string, key: Buffer): string {
+    const nonce = randomBytes(12)
+    const cipher = createCipheriv('aes-256-gcm', key, nonce)
+    cipher.setAAD(Buffer.from(this.supervisorCursorScope()))
+    const cursor = `sv1.${Buffer.concat([nonce, cipher.update(after, 'utf8'), cipher.final(), cipher.getAuthTag()]).toString('base64url')}`
+    if (Buffer.byteLength(cursor) > 512) throw new CoreError('INCOMPLETE_STATE', 'The supervision cursor exceeds its size budget.')
+    return cursor
+  }
+
+  private ticketCursorAfter(cursor: string, key?: Buffer): string {
     identifier(cursor, 'cursor')
+    if (key) {
+      if (!/^sv1\.[A-Za-z0-9_-]+$/u.test(cursor)) throw new CoreError('INVALID_INPUT', 'Use an authorized supervision continuation cursor.')
+      const bytes = Buffer.from(cursor.slice(4), 'base64url')
+      if (bytes.length <= 28 || bytes.toString('base64url') !== cursor.slice(4)) throw new CoreError('INVALID_INPUT', 'The supervision continuation cursor is invalid.')
+      try {
+        const decipher = createDecipheriv('aes-256-gcm', key, bytes.subarray(0, 12))
+        decipher.setAAD(Buffer.from(this.supervisorCursorScope()))
+        decipher.setAuthTag(bytes.subarray(-16))
+        const after = Buffer.concat([decipher.update(bytes.subarray(12, -16)), decipher.final()]).toString('utf8')
+        identifier(after, 'cursor position')
+        return after
+      } catch { throw new CoreError('INVALID_INPUT', 'The supervision continuation cursor is invalid for this source.') }
+    }
     const stored = this.ticketCursors.get(cursor)
     if (!stored || stored.expiresAt <= Date.now() || stored.sourceInstanceId !== this.source.sourceInstanceId || stored.actorId !== this.source.actorId) {
       this.ticketCursors.delete(cursor)

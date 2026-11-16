@@ -155,6 +155,10 @@ test('the product Worker calls only its approved MCP tool through the live tool 
   assert.equal(requests.length, 0, 'another work item cannot borrow this grant')
   const granted = await host.dispatch('resource-grant', { instanceId: 'personal', commandId: 'grant-local', resourceId: resource.id,
     expectedRevision: wrong.revision, scope: { role: 'worker', environmentId: directory.id }, purposes: ['tool'] })
+  const approvedTool = await host.dispatch('mcp-approve', { instanceId: 'personal', commandId: 'approve-mcp',
+    expectedRevision: 0, approved: true })
+  await host.dispatch('mcp-connect', { instanceId: 'personal', commandId: 'connect-mcp',
+    expectedRevision: approvedTool.revision })
   await send('work-3')
   await until(() => calls.length === 1)
   let approvedWork

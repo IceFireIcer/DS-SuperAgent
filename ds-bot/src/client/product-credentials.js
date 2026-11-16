@@ -169,7 +169,7 @@ export function ProductCredentialSettings({ binding, call }) {
   }
 
   return h(Card, { title: t('Credential resources') },
-    h('p', { className: 'bt-product-resource-note' }, t('Managed Feishu source and delivery use separate grants when configured. Tool use is not connected yet.')),
+    h('p', { className: 'bt-product-resource-note' }, t('Managed Feishu source and delivery use separate grants. Worker MCP tools require a separate grant and approval.')),
     feishu?.credentialMode === 'managed' ? h('div', { className: 'bt-product-resource-selected' },
       h('p', { className: 'bt-product-resource-note' }, `${t('Feishu source Instance')}: ${feishu.sourceInstanceId}`),
       h('p', { className: 'bt-product-resource-note' }, t('Grant Main/source and Router/outbound for this exact source Instance, then reconnect.')),
