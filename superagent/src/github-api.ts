@@ -14,12 +14,14 @@ const maxTimelineRequests = 60
 
 export interface GitHubApiRequest { allowMissing?: boolean; method?: 'GET' | 'POST'; body?: { body: string }; host?: string; signal?: AbortSignal }
 export type GitHubApiRunner = (path: string, request?: GitHubApiRequest) => Promise<unknown>
+export type GitHubCredentialConsumer = <T>(purpose: 'source' | 'outbound', consume: (secret: string) => Promise<T>) => Promise<T>
 
 export interface GitHubCliTransportOptions {
   command?: string
   maxBuffer?: number
   /** Inject the API call for tests; the default runs the authenticated `gh api`. */
   runner?: GitHubApiRunner
+  withCredential?: GitHubCredentialConsumer
 }
 
 /** Real GitHub transport over the authenticated `gh api` CLI; no token is stored or printed. */
@@ -27,15 +29,19 @@ export class GitHubCliTransport implements GitHubTransport {
   private readonly command: string
   private readonly maxBuffer: number
   private readonly runner: GitHubApiRunner | undefined
+  private readonly withCredential: GitHubCredentialConsumer | undefined
   constructor(options: GitHubCliTransportOptions = {}) {
     this.command = options.command ?? 'gh'
     this.maxBuffer = options.maxBuffer ?? 4 * 1024 * 1024
     this.runner = options.runner
+    this.withCredential = options.withCredential
   }
 
   async listEvents(request: { owner: string; repo: string; cursor?: string; signal: AbortSignal }) {
     request.signal.throwIfAborted()
-    const run = this.runner ?? this.cliRunner(request.signal)
+    const raw = this.runner ?? this.cliRunner(request.signal)
+    const run: GitHubApiRunner = this.withCredential && this.runner
+      ? (path, options) => this.withCredential!('source', async () => raw(path, options)) : raw
     const events = await this.mapEvents(run, request.owner, request.repo)
     return { events: request.cursor === undefined ? events : events.filter(event => event.cursor > request.cursor!) }
   }
@@ -43,13 +49,25 @@ export class GitHubCliTransport implements GitHubTransport {
   private cliRunner(signal: AbortSignal): GitHubApiRunner {
     return async (path, options = {}) => {
       try {
-        const { stdout } = await execFileAsync(this.command, ['api', path], { maxBuffer: this.maxBuffer, signal })
-        return JSON.parse(stdout)
+        const run = async (secret?: string) => {
+          const env = secret === undefined ? process.env : { ...process.env, GH_TOKEN: secret }
+          try {
+            const { stdout } = await execFileAsync(this.command, ['api', '--hostname', 'github.com', path],
+              { maxBuffer: this.maxBuffer, signal, env })
+            return { kind: 'success' as const, value: JSON.parse(stdout) as unknown }
+          } catch (error) {
+            return { kind: signal.aborted ? 'stopped' as const
+              : error instanceof Error && isMissingResource(error.message) ? 'missing' as const : 'failed' as const }
+          }
+        }
+        const result = this.withCredential ? await this.withCredential('source', run) : await run()
+        if (result.kind === 'success') return result.value
+        if (result.kind === 'missing' && options.allowMissing) return undefined
+        throw new CoreError(result.kind === 'stopped' ? 'SOURCE_STOPPED' : 'SOURCE_FAILED', 'The GitHub API request failed.')
       } catch (error) {
         if (signal.aborted) throw new CoreError('SOURCE_STOPPED', 'The GitHub API request was stopped.')
-        const detail = error instanceof Error ? error.message : String(error)
-        if (options.allowMissing && isMissingResource(detail)) return undefined
-        throw new CoreError('SOURCE_FAILED', `GitHub API request failed for ${path}: ${detail}`)
+        if (error instanceof CoreError && ['GRANT_DENIED', 'RESOURCE_UNAVAILABLE', 'RESOURCE_STALE'].includes(error.code)) throw error
+        throw new CoreError('SOURCE_FAILED', 'The GitHub API request failed.')
       }
     }
   }

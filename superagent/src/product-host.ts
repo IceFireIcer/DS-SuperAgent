@@ -15,6 +15,7 @@ import { LocalEnvironment } from './local-environment.js'
 import { FeishuRuntime, type FeishuRuntimeOptions } from './feishu-runtime.js'
 import type { FeishuSourceReply } from './feishu-delivery.js'
 import { GitHubRuntime, type GitHubRuntimeOptions } from './github-runtime.js'
+import { GitHubCliTransport } from './github-api.js'
 import { ProductAttachments } from './product-attachments.js'
 import { productProactivePreparation } from './product-proactive.js'
 import { ProactiveWork } from './proactive-work.js'
@@ -93,6 +94,7 @@ const resourceFields: Record<string, string[]> = {
   'resource-revoke': ['instanceId', 'commandId', 'resourceId', 'grantId', 'expectedRevision'],
   'resource-cleanup': ['instanceId', 'resourceId'],
   'resource-select-feishu': ['instanceId', 'commandId', 'resourceId'],
+  'resource-select-github': ['instanceId', 'commandId', 'resourceId'],
   'mcp-status': ['instanceId'],
   'mcp-save': ['instanceId', 'commandId', 'expectedRevision', 'resourceId'],
   'mcp-approve': ['instanceId', 'commandId', 'expectedRevision', 'approved'],
@@ -154,6 +156,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
   let workRouter: ProactiveWork | undefined
   let feishuLegacyConflict = false
   let feishuSelectionActive = false
+  let githubSelectionActive = false
   const proactiveRoot = join(dirname(config.databasePath), 'proactive-preparations')
   const proactive = { rootDirectory: proactiveRoot, prepareTimeoutMs: 30_000, pauseSourceInstanceId: 'product-desktop',
     onPrepared: (tx: import('./storage.js').AsyncTx, run: import('./proactive.js').ProactiveRun) => workRouter!.enqueue(tx, run),
@@ -366,8 +369,19 @@ export async function createProductHost(context: Context, config: ProductHostCon
       feishuRuntime.bind(feishuEngine)
     }
     if (config.github) {
-      githubRuntime = new GitHubRuntime({ ...config.github, storage, instanceId })
-      githubEngine = new Engine(storage, instanceId, githubRuntime.sourceBinding, {}, sessions, [], {}, {}, {}, {}, {}, proactive)
+      const sourceInstanceId = `github:${config.github.owner}/${config.github.repo}`
+      const githubCli = new GitHubCliTransport({ ...config.github.cli,
+        withCredential: async (purpose, consume) => {
+          const manager = resourceManager
+          if (!manager) throw new CoreError('RESOURCE_UNAVAILABLE', 'No GitHub credential resource is available.')
+          const resourceId = await manager.selectedGitHubCredential(sourceInstanceId)
+          if (!resourceId) throw new CoreError('RESOURCE_UNAVAILABLE', 'Select a GitHub credential resource in product settings.')
+          return manager.use({ instanceId, resourceId, sourceInstanceId, role: 'main', purpose }, consume)
+        } })
+      const { cli: _cli, transport: trustedTransport, ...github } = config.github
+      githubRuntime = new GitHubRuntime({ ...github, transport: trustedTransport ?? githubCli, storage, instanceId })
+      githubEngine = new Engine(storage, instanceId, githubRuntime.sourceBinding,
+        { claimUnowned: false, streamOwners: { notice: 'product-desktop', relay: 'product-desktop' } }, sessions, [], {}, {}, {}, {}, {}, proactive)
       githubRuntime.bind(githubEngine)
     }
     type ProductDeliveryChannel = DeliveryChannel & {
@@ -766,6 +780,29 @@ export async function createProductHost(context: Context, config: ProductHostCon
               return { ...selected, sourceInstanceId: feishuRuntime.sourceBinding.sourceInstanceId, ...feishuRuntime.health() }
             } finally { feishuSelectionActive = false }
           }
+          if (endpoint === 'resource-select-github') {
+            if (!githubRuntime || config.github?.transport) throw new CoreError('UNAVAILABLE', 'Managed GitHub credentials are not enabled for this source.')
+            if (payload.resourceId !== null && typeof payload.resourceId !== 'string') throw new CoreError('INVALID_INPUT', 'Choose a credential resource or clear the selection.')
+            if (payload.resourceId !== null && (await manager.get({ instanceId, resourceId: payload.resourceId }))?.status !== 'active') {
+              throw new CoreError('RESOURCE_UNAVAILABLE', 'Select an active credential resource.')
+            }
+            if (githubSelectionActive) throw new CoreError('RUNTIME_ACTIVE', 'Another GitHub resource selection is in progress.')
+            githubSelectionActive = true
+            try {
+              await githubRuntime.stop()
+              let selected: { resourceId: string | null }
+              try {
+                selected = await manager.selectGitHubCredential({ instanceId, sourceInstanceId: githubRuntime.sourceBinding.sourceInstanceId,
+                  commandId, resourceId: payload.resourceId })
+                await workRouter!.stopInvalid('The GitHub source credential selection changed.', githubRuntime.sourceBinding.sourceInstanceId)
+              } catch (error) {
+                await githubRuntime.start().catch(() => {})
+                throw error
+              }
+              await githubRuntime.start().catch(() => {})
+              return { ...selected, sourceInstanceId: githubRuntime.sourceBinding.sourceInstanceId, ...githubRuntime.health() }
+            } finally { githubSelectionActive = false }
+          }
         }
         if (endpoint.startsWith('mcp-')) {
           if (!mcpConfiguration) {
@@ -843,6 +880,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
               : { configured: false, state: 'idle' }
             throw new CoreError('UNAVAILABLE', 'Configure a trusted GitHub repository before starting its source.')
           }
+          if (githubSelectionActive && endpoint !== 'github-status') throw new CoreError('RUNTIME_ACTIVE', 'The GitHub resource selection is in progress.')
           if (endpoint === 'github-start' && !['setup', 'polling'].includes(githubRuntime.health().state)) {
             await githubRuntime.stop()
             await githubRuntime.start()
@@ -854,7 +892,10 @@ export async function createProductHost(context: Context, config: ProductHostCon
             await githubEngine?.discardProactiveCandidates()
             await workRouter!.stopInvalid('The GitHub source was stopped.', githubRuntime.sourceBinding.sourceInstanceId)
           }
-          return { configured: true, sourceInstanceId: githubRuntime.sourceBinding.sourceInstanceId, ...githubRuntime.health() }
+          return { configured: true, sourceInstanceId: githubRuntime.sourceBinding.sourceInstanceId,
+            credentialMode: config.github?.transport ? 'trusted' : 'managed',
+            ...(config.github?.transport ? {} : { resourceId: await resourceManager?.selectedGitHubCredential(githubRuntime.sourceBinding.sourceInstanceId) ?? null }),
+            ...githubRuntime.health() }
         }
         if (endpoint === 'history') {
           if (payload.after !== undefined && payload.before !== undefined) throw new CoreError('INVALID_INPUT', 'Main history accepts one direction cursor.')

@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import LocalCredentials from '@deepseek-ai/dsh-credentials-local'
 import { createProductHost } from '../dist/index.js'
 import { nativeContext, routerResponse, textResponse, toolResponse } from '../dev/native-mock.mjs'
 import { completedToolCount, lastUserText } from './input-support.mjs'
@@ -27,6 +28,7 @@ test('the product GitHub receiver routes humans to Main and prepares only author
     })
     else yield* textResponse('Prepared.')
   })
+  await native.plugin(LocalCredentials, { path: join(directory, 'credentials.yaml'), watch: false })
   t.after(async () => { await host?.close(); await native.fiber.dispose(); await rm(directory, { recursive: true, force: true }) })
   const issuePath = 'repos/acme/repo/issues?state=all&sort=updated&direction=asc&per_page=100&page=1'
   const runner = async (path, request = {}) => {
@@ -48,6 +50,18 @@ test('the product GitHub receiver routes humans to Main and prepares only author
       cli: { command: 'gh-must-not-run-in-this-test', runner }, intervalMs: 50, maxBackoffMs: 50 } }
   host = await createProductHost(native, config)
   const call = (endpoint, payload = {}) => host.dispatch(endpoint, { instanceId: 'private', ...payload })
+  assert.equal((await call('github-status')).resourceId, null)
+  assert.deepEqual(apiCalls, [], 'an unselected source cannot use ambient GitHub credentials')
+  const resource = await call('resource-create', { commandId: 'github-resource', label: 'GitHub source', value: 'fixture-github-value' })
+  const wrong = await call('resource-grant', { commandId: 'wrong-github-source', resourceId: resource.id,
+    expectedRevision: resource.revision, scope: { role: 'main', sourceInstanceId: 'github:acme/other' }, purposes: ['source'] })
+  await call('resource-select-github', { commandId: 'select-wrong-github-resource', resourceId: resource.id })
+  for (let attempt = 0; attempt < 40 && (await call('github-status')).lastError !== 'GRANT_DENIED'; attempt++) await delay(25)
+  assert.equal((await call('github-status')).lastError, 'GRANT_DENIED')
+  assert.deepEqual(apiCalls, [], 'a grant for another repository cannot access the selected source')
+  const granted = await call('resource-grant', { commandId: 'github-source-grant', resourceId: resource.id,
+    expectedRevision: wrong.revision, scope: { role: 'main', sourceInstanceId: 'github:acme/repo' }, purposes: ['source'] })
+  await call('resource-select-github', { commandId: 'select-github-resource', resourceId: resource.id })
   const waitFor = async predicate => {
     for (let attempt = 0; attempt < 120; attempt++) {
       const value = await predicate()
@@ -111,6 +125,14 @@ test('the product GitHub receiver routes humans to Main and prepares only author
   assert.equal((await call('proactive-list')).total, beforeRestart)
   assert.equal((await call('proactive-control')).paused, true)
   assert.equal((await call('proactive-read', { runId: prepared.id })).state, 'stopped')
+  const beforeRevoke = apiCalls.length
+  await call('resource-revoke', { commandId: 'revoke-github-source', resourceId: resource.id,
+    grantId: granted.grants.find(grant => grant.scope.sourceInstanceId === 'github:acme/repo').id,
+    expectedRevision: granted.revision })
+  await waitFor(async () => (await call('github-status')).lastError === 'GRANT_DENIED')
+  assert.equal(apiCalls.length, beforeRevoke, 'revocation stops subsequent native source requests')
+  await assert.rejects(host.dispatch('resource-select-github', { instanceId: 'private', commandId: 'remote-change', resourceId: null },
+    { id: 'remote' }), { code: 'SOURCE_NOT_AUTHORIZED' })
   await call('github-stop')
   assert.equal((await call('github-status')).state, 'stopped')
   await assert.rejects(host.dispatch('github-start', { instanceId: 'private' }, { id: 'remote' }), { code: 'SOURCE_NOT_AUTHORIZED' })

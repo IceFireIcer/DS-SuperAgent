@@ -35,6 +35,7 @@ test('credential settings keep values out of projections and show exact grant an
     const calls = []
     let resource
     let feishuResourceId = null
+    let githubResourceId = null
     let rotationCalls = 0
     const requests = []
     let loseRequestReceipt = true
@@ -44,7 +45,10 @@ test('credential settings keep values out of projections and show exact grant an
       calls.push({ endpoint, payload })
       if (endpoint === 'feishu-status') return { configured: true, credentialMode: 'managed', sourceInstanceId: 'source-one',
         resourceId: feishuResourceId, state: feishuResourceId ? 'polling' : 'failed' }
+      if (endpoint === 'github-status') return { configured: true, credentialMode: 'managed', sourceInstanceId: 'github:acme/repo',
+        resourceId: githubResourceId, state: githubResourceId ? 'polling' : 'failed' }
       if (endpoint === 'resource-select-feishu') { feishuResourceId = payload.resourceId; return { resourceId: feishuResourceId } }
+      if (endpoint === 'resource-select-github') { githubResourceId = payload.resourceId; return { resourceId: githubResourceId } }
       if (endpoint === 'resource-list') {
         if (!resource) return { items: [] }
         if (payload.after) return { items: [{ id: 'resource-last', label: 'Last resource', status: 'active', revision: 1, grants: [] }] }
@@ -111,6 +115,10 @@ test('credential settings keep values out of projections and show exact grant an
       assert.equal(document.body.textContent.includes('fictional-resource-value'), false)
       assert.equal(calls.some(entry => entry.endpoint === 'resource-list' && entry.payload.after === 'next-page'), true)
       await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Issue delivery'))
+      await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Use for GitHub'))
+      assert.equal(calls.find(entry => entry.endpoint === 'resource-select-github').payload.resourceId, 'resource-one')
+      assert.match(document.body.textContent, /Selected GitHub resource: Issue delivery/u)
+      assert.equal(document.querySelectorAll('.bt-product-resource-grant input')[2].value, 'github:acme/repo')
       const scopeInputs = document.querySelectorAll('.bt-product-resource-grant input')
       await change(scopeInputs[0], 'item-one')
       await change(scopeInputs[1], 'work-one')

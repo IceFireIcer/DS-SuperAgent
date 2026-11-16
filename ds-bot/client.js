@@ -93,7 +93,7 @@ var ZH = {
   "Message Main": "与 Main 对话",
   "Attached files": "已附文件",
   "Credential resources": "凭据资源",
-  "Managed Feishu source and delivery use separate grants. Worker MCP tools require a separate grant and approval.": "受管飞书的来源和外发分别授权；Worker MCP 工具还需要单独授权与审批。",
+  "Managed Feishu and GitHub source credentials use separate grants. Feishu delivery and Worker MCP tools need their own grants.": "受管飞书和 GitHub 来源分别授权；飞书外发与 Worker MCP 工具各需单独授权。",
   "MCP tools": "MCP 工具",
   "No trusted Host MCP tool is configured.": "Host 尚未配置受信 MCP 工具。",
   "Host only; remote execution unsupported.": "仅在 Host 本地运行；暂不支持远端执行。",
@@ -118,6 +118,14 @@ var ZH = {
   "Unavailable resource": "资源不可用",
   "Clear Feishu selection": "清除飞书资源选择",
   "Feishu credential selection saved.": "飞书资源选择已保存。",
+  "GitHub credential selection saved.": "GitHub 资源选择已保存。",
+  "GitHub source Instance": "GitHub 来源 Instance",
+  "Grant Main/source for this exact GitHub source Instance, then reconnect.": "请为该 GitHub 来源 Instance 授予 Main/source 权限，然后重新连接。",
+  "Selected GitHub resource": "已选 GitHub 资源",
+  "No GitHub resource selected": "尚未选择 GitHub 资源",
+  "Clear GitHub selection": "清除 GitHub 资源选择",
+  "Reconnect GitHub with this resource": "用此资源重连 GitHub",
+  "Use for GitHub": "用于 GitHub",
   "Feishu uses an explicit legacy Host secret. Remove it and restart the Host to select a managed resource.": "飞书目前使用 Host 显式配置的旧密钥。移除该配置并重启 Host 后可选择受管资源。",
   "Reconnect Feishu with this resource": "使用此资源重连飞书",
   "Use for Feishu": "用于飞书",
@@ -23231,6 +23239,7 @@ function ProductCredentialSettings({ binding, call: call2 }) {
   const [requestCursor, setRequestCursor] = (0, import_react57.useState)(null);
   const [requestError, setRequestError] = (0, import_react57.useState)(null);
   const [feishu, setFeishu] = (0, import_react57.useState)(null);
+  const [github, setGithub] = (0, import_react57.useState)(null);
   const [selectedId, setSelectedId] = (0, import_react57.useState)(null);
   const [label, setLabel] = (0, import_react57.useState)("");
   const [value, setValue] = (0, import_react57.useState)("");
@@ -23294,9 +23303,15 @@ function ProductCredentialSettings({ binding, call: call2 }) {
     setRequests(requestResult.items);
     setRequestCursor(requestResult.cursor);
     setRequestError(requestResult.error ?? null);
-    const status = await call2("feishu-status", { instanceId }).catch(() => null);
+    const [status, githubStatus] = await Promise.all([
+      call2("feishu-status", { instanceId }).catch(() => null),
+      call2("github-status", { instanceId }).catch(() => null)
+    ]);
     setFeishu(status);
-    if (status?.credentialMode === "managed") setSourceInstanceId((current) => current || status.sourceInstanceId);
+    setGithub(githubStatus);
+    if (status?.credentialMode === "managed" || githubStatus?.credentialMode === "managed") {
+      setSourceInstanceId((current) => current || status?.sourceInstanceId || githubStatus?.sourceInstanceId);
+    }
     return requestResult.available;
   };
   (0, import_react57.useEffect)(() => {
@@ -23333,15 +23348,23 @@ function ProductCredentialSettings({ binding, call: call2 }) {
       }
     } catch {
     }
-    Promise.all([load(), readRequests(), call2("feishu-status", { instanceId }).catch(() => null)]).then(
-      ([items, requestResult, status]) => {
+    Promise.all([
+      load(),
+      readRequests(),
+      call2("feishu-status", { instanceId }).catch(() => null),
+      call2("github-status", { instanceId }).catch(() => null)
+    ]).then(
+      ([items, requestResult, status, githubStatus]) => {
         if (!live) return;
         setResources(items);
         setRequests(requestResult.items);
         setRequestCursor(requestResult.cursor);
         setRequestError(requestResult.error ?? null);
         setFeishu(status);
-        if (status?.credentialMode === "managed") setSourceInstanceId((current) => current || status.sourceInstanceId);
+        setGithub(githubStatus);
+        if (status?.credentialMode === "managed" || githubStatus?.credentialMode === "managed") {
+          setSourceInstanceId((current) => current || status?.sourceInstanceId || githubStatus?.sourceInstanceId);
+        }
       },
       (failure) => {
         if (live) setError(failure.message);
@@ -23556,10 +23579,19 @@ function ProductCredentialSettings({ binding, call: call2 }) {
       "Feishu credential selection saved."
     );
   };
+  const selectGithub = (resourceId) => {
+    if (busy) return;
+    if (resourceId && github?.sourceInstanceId) setSourceInstanceId(github.sourceInstanceId);
+    void run2(
+      "select-github",
+      () => call2("resource-select-github", { instanceId, commandId: crypto.randomUUID(), resourceId }),
+      "GitHub credential selection saved."
+    );
+  };
   return (0, import_react57.createElement)(
     Card2,
     { title: t("Credential resources") },
-    (0, import_react57.createElement)("p", { className: "bt-product-resource-note" }, t("Managed Feishu source and delivery use separate grants. Worker MCP tools require a separate grant and approval.")),
+    (0, import_react57.createElement)("p", { className: "bt-product-resource-note" }, t("Managed Feishu and GitHub source credentials use separate grants. Feishu delivery and Worker MCP tools need their own grants.")),
     feishu?.credentialMode === "managed" ? (0, import_react57.createElement)(
       "div",
       { className: "bt-product-resource-selected" },
@@ -23572,6 +23604,14 @@ function ProductCredentialSettings({ binding, call: call2 }) {
       { className: "bt-product-resource-note" },
       t("Feishu uses an explicit legacy Host secret. Remove it and restart the Host to select a managed resource."),
       feishu.lastError ? ` · ${feishu.lastError}` : ""
+    ) : null,
+    github?.credentialMode === "managed" ? (0, import_react57.createElement)(
+      "div",
+      { className: "bt-product-resource-selected" },
+      (0, import_react57.createElement)("p", { className: "bt-product-resource-note" }, `${t("GitHub source Instance")}: ${github.sourceInstanceId}`),
+      (0, import_react57.createElement)("p", { className: "bt-product-resource-note" }, t("Grant Main/source for this exact GitHub source Instance, then reconnect.")),
+      (0, import_react57.createElement)("p", { role: "status" }, `${t("Selected GitHub resource")}: ${github.resourceId ? resources?.find((item) => item.id === github.resourceId)?.label ?? t("Unavailable resource") : t("No GitHub resource selected")} · ${github.state}${github.lastError ? ` · ${github.lastError}` : ""}`),
+      github.resourceId ? (0, import_react57.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy), onClick: () => selectGithub(null) }, t("Clear GitHub selection")) : null
     ) : null,
     error ? (0, import_react57.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
     notice ? (0, import_react57.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
@@ -23659,6 +23699,12 @@ function ProductCredentialSettings({ binding, call: call2 }) {
         disabled: Boolean(busy),
         onClick: () => selectFeishu(selected.id)
       }, t(feishu.resourceId === selected.id ? "Reconnect Feishu with this resource" : "Use for Feishu")) : null,
+      github?.credentialMode === "managed" ? (0, import_react57.createElement)("button", {
+        className: "bt-soft",
+        type: "button",
+        disabled: Boolean(busy),
+        onClick: () => selectGithub(selected.id)
+      }, t(github.resourceId === selected.id ? "Reconnect GitHub with this resource" : "Use for GitHub")) : null,
       (0, import_react57.createElement)(
         "form",
         { onSubmit: (event) => {

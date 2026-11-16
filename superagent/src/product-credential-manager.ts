@@ -379,6 +379,36 @@ export class ProductCredentialManager {
     })
   }
 
+  selectedGitHubCredential(sourceInstanceId: string) {
+    identifier(sourceInstanceId, 'sourceInstanceId')
+    return this.storage.transaction(this.instanceId, async tx =>
+      (await tx.get<{ resourceId: string | null }>('product-github-credential', sourceInstanceId))?.resourceId ?? null)
+  }
+
+  selectGitHubCredential(request: { instanceId: string; sourceInstanceId: string; commandId: string; resourceId: string | null }) {
+    this.assertInstance(request.instanceId)
+    identifier(request.sourceInstanceId, 'sourceInstanceId'); identifier(request.commandId, 'commandId')
+    if (request.resourceId !== null) identifier(request.resourceId, 'resourceId')
+    const fingerprint = createHash('sha256').update(canonicalJson([request.sourceInstanceId, request.resourceId])).digest('hex')
+    return commandTransaction(this.storage, this.instanceId, async tx => {
+      const previous = await tx.get<{ fingerprint: string; resourceId: string | null }>('product-github-credential-command', request.commandId)
+      if (previous) {
+        if (previous.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The GitHub credential selection command changed.')
+        return { resourceId: previous.resourceId }
+      }
+      if (request.resourceId !== null) {
+        const resource = await tx.get<{ status: string }>('resource-credential', request.resourceId)
+        if (resource?.status !== 'active') throw new CoreError('RESOURCE_UNAVAILABLE', 'Select an active credential resource.')
+      }
+      const selection = { resourceId: request.resourceId, updatedAt: Date.now() }
+      if (!await tx.replace('product-github-credential', request.sourceInstanceId, selection)) {
+        await tx.insert('product-github-credential', request.sourceInstanceId, selection)
+      }
+      await tx.insert('product-github-credential-command', request.commandId, { fingerprint, resourceId: request.resourceId })
+      return { resourceId: request.resourceId }
+    })
+  }
+
   private async cleanupOne(resourceId: string): Promise<boolean> {
     const reference = await this.resources.deletedVaultReference({ instanceId: this.instanceId, resourceId })
     if (!reference) return true

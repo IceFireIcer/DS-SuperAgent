@@ -8,6 +8,7 @@ export function ProductCredentialSettings({ binding, call }) {
   const [requestCursor, setRequestCursor] = useState(null)
   const [requestError, setRequestError] = useState(null)
   const [feishu, setFeishu] = useState(null)
+  const [github, setGithub] = useState(null)
   const [selectedId, setSelectedId] = useState(null)
   const [label, setLabel] = useState('')
   const [value, setValue] = useState('')
@@ -68,9 +69,14 @@ export function ProductCredentialSettings({ binding, call }) {
     const [items, requestResult] = await Promise.all([load(), readRequests()])
     setResources(items)
     setRequests(requestResult.items); setRequestCursor(requestResult.cursor); setRequestError(requestResult.error ?? null)
-    const status = await call('feishu-status', { instanceId }).catch(() => null)
-    setFeishu(status)
-    if (status?.credentialMode === 'managed') setSourceInstanceId(current => current || status.sourceInstanceId)
+    const [status, githubStatus] = await Promise.all([
+      call('feishu-status', { instanceId }).catch(() => null),
+      call('github-status', { instanceId }).catch(() => null),
+    ])
+    setFeishu(status); setGithub(githubStatus)
+    if (status?.credentialMode === 'managed' || githubStatus?.credentialMode === 'managed') {
+      setSourceInstanceId(current => current || status?.sourceInstanceId || githubStatus?.sourceInstanceId)
+    }
     return requestResult.available
   }
   useEffect(() => {
@@ -101,11 +107,14 @@ export function ProductCredentialSettings({ binding, call }) {
         setSourceInstanceId(payload.scope.sourceInstanceId ?? '')
       }
     } catch { /* Session storage may be unavailable. */ }
-    Promise.all([load(), readRequests(), call('feishu-status', { instanceId }).catch(() => null)]).then(([items, requestResult, status]) => {
+    Promise.all([load(), readRequests(), call('feishu-status', { instanceId }).catch(() => null),
+      call('github-status', { instanceId }).catch(() => null)]).then(([items, requestResult, status, githubStatus]) => {
       if (!live) return
       setResources(items); setRequests(requestResult.items); setRequestCursor(requestResult.cursor)
-      setRequestError(requestResult.error ?? null); setFeishu(status)
-      if (status?.credentialMode === 'managed') setSourceInstanceId(current => current || status.sourceInstanceId)
+      setRequestError(requestResult.error ?? null); setFeishu(status); setGithub(githubStatus)
+      if (status?.credentialMode === 'managed' || githubStatus?.credentialMode === 'managed') {
+        setSourceInstanceId(current => current || status?.sourceInstanceId || githubStatus?.sourceInstanceId)
+      }
     },
       failure => { if (live) setError(failure.message) })
     return () => { live = false }
@@ -263,9 +272,15 @@ export function ProductCredentialSettings({ binding, call }) {
     void run('select-feishu', () => call('resource-select-feishu', { instanceId, commandId: crypto.randomUUID(), resourceId }),
       'Feishu credential selection saved.')
   }
+  const selectGithub = resourceId => {
+    if (busy) return
+    if (resourceId && github?.sourceInstanceId) setSourceInstanceId(github.sourceInstanceId)
+    void run('select-github', () => call('resource-select-github', { instanceId, commandId: crypto.randomUUID(), resourceId }),
+      'GitHub credential selection saved.')
+  }
 
   return h(Card, { title: t('Credential resources') },
-    h('p', { className: 'bt-product-resource-note' }, t('Managed Feishu source and delivery use separate grants. Worker MCP tools require a separate grant and approval.')),
+    h('p', { className: 'bt-product-resource-note' }, t('Managed Feishu and GitHub source credentials use separate grants. Feishu delivery and Worker MCP tools need their own grants.')),
     feishu?.credentialMode === 'managed' ? h('div', { className: 'bt-product-resource-selected' },
       h('p', { className: 'bt-product-resource-note' }, `${t('Feishu source Instance')}: ${feishu.sourceInstanceId}`),
       h('p', { className: 'bt-product-resource-note' }, t('Grant Main/source and Router/outbound for this exact source Instance, then reconnect.')),
@@ -276,6 +291,13 @@ export function ProductCredentialSettings({ binding, call }) {
       : feishu?.credentialMode === 'legacy' ? h('p', { className: 'bt-product-resource-note' },
         t('Feishu uses an explicit legacy Host secret. Remove it and restart the Host to select a managed resource.'),
         feishu.lastError ? ` · ${feishu.lastError}` : '') : null,
+    github?.credentialMode === 'managed' ? h('div', { className: 'bt-product-resource-selected' },
+      h('p', { className: 'bt-product-resource-note' }, `${t('GitHub source Instance')}: ${github.sourceInstanceId}`),
+      h('p', { className: 'bt-product-resource-note' }, t('Grant Main/source for this exact GitHub source Instance, then reconnect.')),
+      h('p', { role: 'status' }, `${t('Selected GitHub resource')}: ${github.resourceId
+        ? resources?.find(item => item.id === github.resourceId)?.label ?? t('Unavailable resource')
+        : t('No GitHub resource selected')} · ${github.state}${github.lastError ? ` · ${github.lastError}` : ''}`),
+      github.resourceId ? h('button', { className: 'bt-soft', type: 'button', disabled: Boolean(busy), onClick: () => selectGithub(null) }, t('Clear GitHub selection')) : null) : null,
     error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
     notice ? h('p', { className: 'bt-main-status', role: 'status' }, notice) : null,
     requestError ? h('div', { className: 'bt-product-resource-row' },
@@ -308,6 +330,8 @@ export function ProductCredentialSettings({ binding, call }) {
       h('h3', null, selected.label),
       feishu?.credentialMode === 'managed' ? h('button', { className: 'bt-soft', type: 'button', disabled: Boolean(busy),
         onClick: () => selectFeishu(selected.id) }, t(feishu.resourceId === selected.id ? 'Reconnect Feishu with this resource' : 'Use for Feishu')) : null,
+      github?.credentialMode === 'managed' ? h('button', { className: 'bt-soft', type: 'button', disabled: Boolean(busy),
+        onClick: () => selectGithub(selected.id) }, t(github.resourceId === selected.id ? 'Reconnect GitHub with this resource' : 'Use for GitHub')) : null,
       h('form', { onSubmit: event => { event.preventDefault(); if (!rename.trim() || busy) return
         void run('rename', () => call('resource-rename', { instanceId, commandId: crypto.randomUUID(), resourceId: selected.id,
           expectedRevision: selected.revision, label: rename.trim() }), 'Resource name changed.') } },

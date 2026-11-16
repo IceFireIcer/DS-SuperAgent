@@ -93,7 +93,7 @@ export const recordKinds = [...coreRecordKinds, 'main-state', 'main-message', 'm
   'work-attention-answer', 'work-outcome', 'instance-directory', 'instance-directory-command', 'product-directory',
   'resource-credential', 'resource-command', 'resource-request', 'resource-vault-intent', 'resource-rotation-intent', 'product-attachment',
   'browser-resource', 'browser-command', 'browser-grant', 'browser-lease', 'browser-operation',
-  'product-feishu-credential', 'product-feishu-credential-command',
+  'product-feishu-credential', 'product-feishu-credential-command', 'product-github-credential', 'product-github-credential-command',
   'product-mcp-selection', 'product-mcp-command', 'worker-mcp-call', 'worker-mcp-block',
   'role-preset', 'role-preset-version', 'role-preset-image', 'role-preset-command', 'role-preset-preview',
   'role-preset-import', 'role-preset-review', 'role-preset-source', 'role-preset-application', 'supervisor-run', 'supervisor-cursor-key',
