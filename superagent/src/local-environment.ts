@@ -6,7 +6,7 @@ import { FileSystemSkillProvider } from '@deepseek-ai/dsh-skill-filesystem'
 import type { FsTarget } from '@deepseek-ai/dsh-fs'
 import type { SubprocessHandle, SubprocessTerminalHandle } from '@deepseek-ai/dsh-subprocess'
 import { createHash, randomUUID } from 'node:crypto'
-import { mkdir, stat } from 'node:fs/promises'
+import { mkdir, open, stat } from 'node:fs/promises'
 import { isAbsolute, relative, resolve, matchesGlob, sep, parse } from 'node:path'
 import { CoreError, identifier } from './model.js'
 import type { EnvironmentConfig, ExecutionEnvironment, PreparedEnvironment } from './environment.js'
@@ -449,6 +449,53 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
       reference: this.assetReference('artifact', { id: fileAssetId(sha256), path: relativePath, bytes: bytes.length, sha256 }) }
   }
 
+  async stageAttachment(reference: EnvironmentAssetReference, path: string, signal?: AbortSignal) {
+    this.permission('read'); this.permission('write')
+    if (reference.kind !== 'attachment' || !matchesEnvironment(reference, this.environmentIdentity())
+      || reference.bytes > maxProductAttachmentBytes) throw new CoreError('REFERENCE_STALE', 'The attachment belongs to another execution world.')
+    if (!reference.name?.toLowerCase().endsWith('.docx') || !path?.toLowerCase().endsWith('.docx')) {
+      throw new CoreError('INVALID_INPUT', 'Stage a Word document at a new .docx path.')
+    }
+    const target = await this.target(path, signal)
+    const read = await this.store().read(reference.id, 0, reference.bytes)
+    if (read.bytes !== reference.bytes || read.sha256 !== reference.sha256 || read.data.length !== reference.bytes) {
+      throw new CoreError('REFERENCE_STALE', 'The original attachment bytes changed.')
+    }
+    signal?.throwIfAborted()
+    const handle = await open(this.context.fs.processPath(target), 'wx')
+    try { await handle.writeFile(read.data) } finally { await handle.close() }
+    return { path, bytes: reference.bytes, sha256: reference.sha256 }
+  }
+
+  async runOffice(args: Record<string, string>, signal?: AbortSignal) {
+    this.permission('read'); this.permission('command')
+    const configured = this.owner.config.commands.office
+    if (!configured || !this.owner.config.skillsPath) throw new CoreError('UNSUPPORTED_CAPABILITY', 'Office is unavailable in this Environment.')
+    if (Object.keys(args).some(key => !['operation', 'input', 'output', 'ops'].includes(key))) throw new CoreError('INVALID_INPUT', 'Office accepts an operation, input, output and edit operations only.')
+    const operation = args.operation
+    if (!operation || !['check', 'docx-read', 'docx-edit'].includes(operation) || !args.input?.toLowerCase().endsWith('.docx')) {
+      throw new CoreError('INVALID_INPUT', 'Choose check, docx-read or docx-edit with a .docx path.')
+    }
+    const input = this.context.fs.processPath(await this.target(args.input, signal))
+    if ((await this.context.fs.stat(await this.target(args.input, signal)))?.type !== 'file') throw new CoreError('NOT_FOUND', 'The Office input file is unavailable.')
+    if (operation !== 'docx-edit' && (args.output !== undefined || args.ops !== undefined)) throw new CoreError('INVALID_INPUT', 'This Office operation is read-only.')
+    let argv: string[]
+    if (operation === 'docx-edit') {
+      if (!args.output?.toLowerCase().endsWith('.docx') || !args.ops || Buffer.byteLength(args.ops) > 16384) throw new CoreError('INVALID_INPUT', 'A Word edit needs a new .docx path and bounded operations.')
+      let operations: unknown
+      try { operations = JSON.parse(args.ops) } catch { throw new CoreError('INVALID_INPUT', 'Word edit operations must be JSON.') }
+      if (!Array.isArray(operations) || !operations.length || operations.length > 20) throw new CoreError('INVALID_INPUT', 'Provide one to twenty Word edit operations.')
+      const target = await this.target(args.output!, signal)
+      const output = this.context.fs.processPath(target)
+      if (output === input || await this.context.fs.stat(target, signal)) throw new CoreError('PATH_DENIED', 'Write a new Office file inside this work directory.')
+      argv = ['docx', 'edit', input, '-o', output, '--ops', args.ops]
+    } else argv = operation === 'check' ? ['check', input] : ['docx', 'read', input]
+    const result = await this.runArgv([...configured.argv, ...argv, '--json'], configured.timeoutMs, signal)
+    if (result.cancelled || result.truncated || result.exitCode === null) throw new CoreError('COMMAND_UNKNOWN', 'Office completion could not be confirmed; inspect the original file before any retry.')
+    if (result.exitCode !== 0) throw new CoreError('OFFICE_CHECK_FAILED', 'Office reported an error or package findings; inspect the original command result.')
+    return { operation, input: args.input, ...(args.output ? { output: args.output } : {}), ...result }
+  }
+
   async command(name: string, signal?: AbortSignal) {
     this.permission('command')
     const configured = Object.hasOwn(this.owner.config.commands, name) ? this.owner.config.commands[name] : undefined
@@ -579,6 +626,7 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
 
   private async execute(name: string, args: Record<string, string>, signal?: AbortSignal): Promise<Record<string, unknown>> {
     signal?.throwIfAborted()
+    if (name === 'run_office') return this.runOffice(args, signal)
     if (name === 'save_attachment') return this.saveAttachmentTool(args)
     if (name === 'read_asset') return this.readAssetTool(args)
     if (name === 'list_skills') return { skills: await this.listSkills() }

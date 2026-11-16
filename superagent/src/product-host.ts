@@ -1,6 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import { createHash } from 'node:crypto'
+import { existsSync } from 'node:fs'
 import { realpath, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative } from 'node:path'
@@ -31,6 +32,8 @@ import { productStatusPublisher, productWatchdogProbe } from './product-watchdog
 import { createProductSupervision } from './product-supervision.js'
 
 export interface ProductHostConfig { databasePath: string; workspaceRoot?: string; instanceId?: string; actorId?: string; main?: RoleModel; router?: RoleModel; worker?: RoleModel; timeoutMs?: number;
+  /** Trusted local Office runtime supplied by the product Host, never a window request. */
+  office?: { node: string; cli: string; skillsPath: string };
   /** Trusted process configuration; an external Watchdog reads this atomic status file. */
   watchdogStatusPath?: string;
   clientGateway?: Omit<ClientGatewayOptions, 'product'>;
@@ -110,6 +113,11 @@ export async function createProductHost(context: Context, config: ProductHostCon
   identifier(instanceId, 'instanceId'); identifier(actorId, 'actorId')
   const browserAdapter = config.browserAdapter ?? (process.env.DS_BOT_APP === '1' && typeof process.send === 'function'
     ? new HostBrowserAdapter() : undefined)
+  if (config.office && (![config.office.node, config.office.cli, config.office.skillsPath].every(isAbsolute)
+    || ![config.office.node, config.office.cli, join(config.office.skillsPath, 'office', 'SKILL.md'),
+      join(config.office.skillsPath, 'office-docx', 'SKILL.md')].every(path => existsSync(path)))) {
+    throw new CoreError('INVALID_CONFIG', 'The trusted Office runtime needs its Node, CLI and Word skill files.')
+  }
   if (config.workerMcpTool) workerMcpName(config.workerMcpTool)
   const route = (configured?: RoleModel): RoleModel => {
     const value = configured ?? context.get('agentDefaultModel')?.currentSelection?.()
@@ -205,7 +213,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
     return root
   }
   const openDirectory = async (root: string) => LocalEnvironment.open({ id: directoryId(root), instanceId, root,
-    allowedActorIds: [actorId], permissions: ['read', 'write', 'search', 'command'], commands: {}, allowShell: true,
+    allowedActorIds: [actorId], permissions: ['read', 'write', 'search', 'command'], allowShell: true,
+    commands: config.office ? { office: { argv: [config.office.node, config.office.cli], timeoutMs: 10000 } } : {},
+    ...(config.office ? { skillsPath: config.office.skillsPath } : {}),
     assetsPath: join(dirname(config.databasePath), 'assets', directoryId(root)) })
   const publicLlm = () => context.get('llm') as unknown as PublicLlm
   const settingsSections = (settings: PublicSettings) => new Map(settings.describe({ redactSecrets: true }).map(section => [section.ns, section]))
