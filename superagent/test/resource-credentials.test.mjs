@@ -61,6 +61,10 @@ test('creation has no implicit grant, and the projection and receipt never conta
 test('role, work, Environment and purpose grants are checked at use, including after revocation and restart', async t => {
   const { credentials, adapter, database, connections } = await fixture(t)
   const created = await credentials.create({ instanceId: 'personal', commandId: 'create', label: 'Connector', vaultReference: 'vault:personal' })
+  await assert.rejects(credentials.grant({ instanceId: 'personal', commandId: 'unscoped-grant', resourceId: created.id,
+    expectedRevision: 1, scope: { role: 'worker' }, purposes: ['tool'] }), { code: 'INVALID_INPUT' })
+  await assert.rejects(credentials.request({ instanceId: 'personal', commandId: 'unscoped-request', resourceId: created.id,
+    scope: { role: 'worker' }, purpose: 'tool' }), { code: 'INVALID_INPUT' })
   const scope = { role: 'worker', workItemId: 'work-1', environmentId: 'remote-1' }
   const granted = await credentials.grant({ instanceId: 'personal', commandId: 'grant-1', resourceId: created.id,
     expectedRevision: 1, scope, purposes: ['tool'] })
@@ -89,6 +93,14 @@ test('role, work, Environment and purpose grants are checked at use, including a
   await assert.rejects(credentials.use(use, async () => {}), { code: 'GRANT_DENIED' })
   assert.deepEqual(await reopened.revoke({ instanceId: 'personal', commandId: 'revoke-1', resourceId: created.id,
     grantId: granted.grants[0].id, expectedRevision: 2 }), revoked)
+  await reopenedStorage.transaction('personal', async tx => {
+    const current = await tx.get('resource-credential', created.id)
+    await tx.replace('resource-credential', created.id, { ...current, grants: [{ id: 'legacy-wide-grant',
+      scope: { role: 'worker' }, purposes: ['tool'], grantedAt: Date.now() }] })
+  })
+  await assert.rejects(credentials.use(use, async () => {}), { code: 'GRANT_DENIED' })
+  await assert.rejects(credentials.use({ instanceId: 'personal', resourceId: created.id, role: 'worker', purpose: 'tool' },
+    async () => {}), { code: 'GRANT_DENIED' })
 })
 
 test('source, tool and outbound authorizations are independent and a cancelled request never grants access', async t => {
@@ -160,7 +172,7 @@ test('rotation changes only the trusted vault reference, deletion is a persisten
   assert.deepEqual((await reopened.pendingVaultDeletes({ instanceId: 'personal' })).items, [])
   assert.equal((await reopened.get({ instanceId: 'personal', resourceId: resource.id })).cleanupPending, undefined)
   await assert.rejects(reopened.grant({ instanceId: 'personal', commandId: 'later', resourceId: resource.id,
-    expectedRevision: 4, scope: { role: 'worker' }, purposes: ['tool'] }), { code: 'RESOURCE_UNAVAILABLE' })
+    expectedRevision: 4, scope: { role: 'worker', workItemId: 'work-1' }, purposes: ['tool'] }), { code: 'RESOURCE_UNAVAILABLE' })
   assert.equal(granted.grants.length, 1)
   assert.equal(JSON.stringify(deleted).includes('vault:'), false)
 })

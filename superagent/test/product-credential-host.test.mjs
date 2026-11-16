@@ -77,7 +77,7 @@ test('the trusted product Host manages durable credential records without exposi
   assert.equal(deleted.status, 'deleted')
   assert.equal(deleted.cleanupPending, undefined)
   await assert.rejects(host.dispatch('resource-grant', { instanceId, commandId: 'later', resourceId: created.id,
-    expectedRevision: deleted.revision, scope: { role: 'worker' }, purposes: ['tool'] }), { code: 'RESOURCE_UNAVAILABLE' })
+    expectedRevision: deleted.revision, scope: { role: 'worker', workItemId: 'item-one' }, purposes: ['tool'] }), { code: 'RESOURCE_UNAVAILABLE' })
   assert.deepEqual(await host.dispatch('resource-cleanup', { instanceId }),
     { creations: { reconciled: 0, pending: 0 }, rotations: { reconciled: 1, pending: 0 }, deletions: { cleaned: 0, pending: 0 } })
 })

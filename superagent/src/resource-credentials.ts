@@ -102,6 +102,10 @@ function grantPurposes(value: unknown, target: CredentialScope): CredentialPurpo
   if (normalized.some(item => item !== 'tool') && target.sourceInstanceId === undefined) {
     throw new CoreError('INVALID_INPUT', 'Source and outbound grants need an exact source Instance.')
   }
+  if (normalized.includes('tool') && target.role === 'worker'
+    && target.workItemId === undefined && target.environmentId === undefined) {
+    throw new CoreError('INVALID_INPUT', 'A Worker tool grant needs a work item or Environment.')
+  }
   return normalized
 }
 
@@ -409,11 +413,15 @@ export class ResourceCredentials {
       ...(input.environmentId === undefined ? {} : { environmentId: input.environmentId }),
       ...(input.sourceInstanceId === undefined ? {} : { sourceInstanceId: input.sourceInstanceId }) })
     const requestedPurpose = purpose(input.purpose)
-    grantPurposes([requestedPurpose], requested)
-    const isAllowed = (current: StoredResource) => current.grants.some(grant => grant.purposes.includes(requestedPurpose)
+    if (requestedPurpose !== 'tool') grantPurposes([requestedPurpose], requested)
+    const workerToolBound = requestedPurpose !== 'tool' || requested.role !== 'worker'
+      || requested.workItemId !== undefined || requested.environmentId !== undefined
+    const isAllowed = (current: StoredResource) => workerToolBound && current.grants.some(grant => grant.purposes.includes(requestedPurpose)
       && grant.scope.role === requested.role && (grant.scope.workItemId === undefined || grant.scope.workItemId === requested.workItemId)
       && (grant.scope.environmentId === undefined || grant.scope.environmentId === requested.environmentId)
-      && (grant.scope.sourceInstanceId === undefined || grant.scope.sourceInstanceId === requested.sourceInstanceId))
+      && (grant.scope.sourceInstanceId === undefined || grant.scope.sourceInstanceId === requested.sourceInstanceId)
+      && (requestedPurpose !== 'tool' || requested.role !== 'worker'
+        || grant.scope.workItemId !== undefined || grant.scope.environmentId !== undefined))
     const reference = await this.storage.transaction(this.instanceId, async tx => {
       const current = await this.active(tx, input.resourceId)
       if (!isAllowed(current)) {
