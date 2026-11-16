@@ -28,6 +28,7 @@ test('local MCP settings save, approve, disconnect and retry at the actual Worke
   const secret = 'mock-mcp-setting-credential'
   const requests = []
   const calls = []
+  let failNextCall = false
   const server = createServer(async (req, res) => {
     const chunks = []
     for await (const chunk of req) chunks.push(chunk)
@@ -45,7 +46,9 @@ test('local MCP settings save, approve, disconnect and retry at the actual Worke
       : message.method === 'tools/list'
         ? { tools: [{ name: 'check', inputSchema: { type: 'object', properties: { text: { type: 'string' } } } }] }
         : message.method === 'tools/call'
-          ? (calls.push(message.params), { content: [{ type: 'text', text: `checked ${message.params.arguments.text}` }] })
+          ? (calls.push(message.params), failNextCall
+            ? { isError: true, content: [{ type: 'text', text: 'mock tool rejected input' }] }
+            : { content: [{ type: 'text', text: `checked ${message.params.arguments.text}` }] })
           : null
     if (!result) { res.writeHead(404).end(); return }
     res.end(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }))
@@ -137,25 +140,48 @@ test('local MCP settings save, approve, disconnect and retry at the actual Worke
   assert.equal(mcpFacts[0].outcome, 'success')
   assert.equal(mcpFacts[0].output.text, 'checked fixture')
   assert.match(mcpFacts[0].output.requestId, /^[a-f0-9-]{36}$/u)
+  assert.equal(mcpFacts[0].output.state, 'confirmed')
+  const observed = await host.dispatch('observe-list', { instanceId: 'personal', query: first.receipt.ticketId })
+  const worker = observed.items.find(item => item.role === 'worker' && item.ticketId === first.receipt.ticketId)
+  assert.ok(worker)
+  const confirmed = await host.dispatch('observe-read', { instanceId: 'personal', observationId: worker.id,
+    generation: worker.generation })
+  assert.ok(confirmed.facts.some(fact => fact.label === 'MCP request'
+    && fact.value.includes(`confirmed success · approved/check · original request ${mcpFacts[0].output.requestId}`)))
+  assert.ok(confirmed.facts.some(fact => fact.label === 'Tool fact 1: mcp__approved__check'
+    && fact.value.includes(mcpFacts[0].output.requestId)))
+  failNextCall = true
+  const failed = await send('server-rejected')
+  assert.equal(failed.status, 'failed')
+  const rejected = (await host.dispatch('observe-list', { instanceId: 'personal', query: failed.receipt.ticketId }))
+    .items.find(item => item.role === 'worker' && item.ticketId === failed.receipt.ticketId)
+  assert.ok(rejected)
+  const failedDetail = await host.dispatch('observe-read', { instanceId: 'personal', observationId: rejected.id,
+    generation: rejected.generation })
+  assert.ok(failedDetail.facts.some(fact => fact.label === 'MCP request'
+    && fact.value.includes('confirmed failed · approved/check') && fact.value.includes('code MCP_TOOL_FAILED')))
+  assert.equal(failedDetail.facts.some(fact => fact.label === 'Result'), false,
+    'a failed tool does not invent a ReadyReport')
+  failNextCall = false
   assert.equal((await command('mcp-disconnect', 'disconnect')).state, 'off')
   await host.close()
   host = await createProductHost(native, config)
   assert.equal((await state()).state, 'off')
   assert.equal((await send('disconnected')).status, 'failed')
-  assert.equal(calls.length, 1, 'disconnect prevents another MCP handshake after Host restart')
+  assert.equal(calls.length, 2, 'disconnect prevents another MCP handshake after Host restart')
   assert.equal((await command('mcp-retry', 'retry')).state, 'ready')
   assert.equal((await send('reconnected')).status, 'success')
-  assert.equal(calls.length, 2)
+  assert.equal(calls.length, 3)
   assert.equal((await command('mcp-approve', 'revoke-approval', { approved: false })).state, 'needs-approval')
   assert.equal((await send('unapproved')).status, 'failed')
-  assert.equal(calls.length, 2, 'tool approval revocation prevents a new MCP connection')
+  assert.equal(calls.length, 3, 'tool approval revocation prevents a new MCP connection')
   assert.equal((await command('mcp-approve', 'approve-again', { approved: true })).state, 'off')
   assert.equal((await command('mcp-connect', 'connect-again')).state, 'ready')
   await host.dispatch('resource-revoke', { instanceId: 'personal', commandId: 'revoke', resourceId: resource.id,
     grantId: granted.grants[0].id, expectedRevision: granted.revision })
   assert.equal((await state()).state, 'needs-grant')
   assert.equal((await send('revoked')).status, 'failed')
-  assert.equal(calls.length, 2, 'revocation is checked at the tool use site')
+  assert.equal(calls.length, 3, 'revocation is checked at the tool use site')
   assert.ok(requests.every(request => request.authorized))
   assert.ok(mainTools.every(name => !name.startsWith('mcp__')))
   assert.ok(routerTools.every(name => !name.startsWith('mcp__')))
@@ -164,5 +190,5 @@ test('local MCP settings save, approve, disconnect and retry at the actual Worke
   host = await createProductHost(native, { ...config, workerMcpTool: { ...config.workerMcpTool, toolName: 'different' } })
   assert.equal((await state()).error, 'CONFIG_CHANGED')
   assert.equal((await send('changed-declaration')).status, 'failed')
-  assert.equal(calls.length, 2, 'a changed trusted endpoint declaration needs fresh approval')
+  assert.equal(calls.length, 3, 'a changed trusted endpoint declaration needs fresh approval')
 })

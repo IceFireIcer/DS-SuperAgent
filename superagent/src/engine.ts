@@ -55,7 +55,7 @@ import { MainSourceHandoffs, type MainSourceDeliveryPage, type MainSourceDeliver
 import { ProductSchedules, authorizedScheduleEvent, scheduledOccurrenceKey,
   type ProductSchedule, type ScheduleCreate, type ScheduleTarget, type ScheduledOccurrence } from './product-schedules.js'
 import type { ProactiveWorkRecord } from './proactive-work.js'
-import { ProductMemory, memoryToolsFor, type MemoryReader, type MemoryScope } from './product-memory.js'
+import { ProductMemory, memoryToolsFor, type MemoryReader, type MemoryScope, type MemorySideTarget } from './product-memory.js'
 
 interface StoredPolicy { revision: number; configuration: Omit<IntakePolicy, 'assess'>; origin: 'bootstrap' | 'manual' | 'sync'; sourceRevision?: string; updatedAt: number }
 interface ProcessingState { paused: boolean; revision: number; updatedAt: number }
@@ -1526,6 +1526,14 @@ export class Engine {
   async readProductMemory(request: { instanceId: string; reader: MemoryReader; id: string; after?: string; maxBytes?: number }) {
     this.requireProductMemory(request)
     return this.memory.read(request.reader, request.id, request.after, request.maxBytes)
+  }
+  async queryProductMemorySide(request: { instanceId: string; target: MemorySideTarget; query: string; limit?: number }) {
+    this.requireProductMemory(request)
+    return this.memory.sideSearch(request.target, request.query, request.limit)
+  }
+  async readProductMemorySide(request: { instanceId: string; target: MemorySideTarget; id: string; after?: string; maxBytes?: number }) {
+    this.requireProductMemory(request)
+    return this.memory.sideRead(request.target, request.id, request.after, request.maxBytes)
   }
   async saveProductMemory(request: { instanceId: string; commandId: string; scope: MemoryScope; text: string }) {
     this.requireProductMemory(request); await this.assertHostAdmission()

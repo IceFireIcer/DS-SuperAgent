@@ -49,6 +49,7 @@ export function workerMcpTool(binding: WorkerMcpBinding, scope: () => Promise<Cr
     execute: async (args, signal) => {
       let dispatched = false
       let settled = false
+      let confirmedOutcome: 'success' | 'failed' | undefined
       let reportedCode: string | undefined
       let call: WorkerMcpCall | undefined
       try {
@@ -109,12 +110,14 @@ export function workerMcpTool(binding: WorkerMcpBinding, scope: () => Promise<Cr
               reportedCode = 'MCP_TOOL_FAILED'
               await dispatch.confirm(call!, 'failed', reportedCode)
               settled = true
+              confirmedOutcome = 'failed'
               throw new CoreError('MCP_TOOL_FAILED', 'The approved MCP tool reported failure.')
             }
             if (!Array.isArray(result.content) || result.content.some(block => block.type !== 'text' || typeof block.text !== 'string')) {
               reportedCode = 'MCP_RESULT_UNSUPPORTED'
               await dispatch.confirm(call!, 'failed', reportedCode)
               settled = true
+              confirmedOutcome = 'failed'
               throw new CoreError('MCP_RESULT_UNSUPPORTED', 'Only MCP text results are supported for this tool.')
             }
             const text = result.content.map(block => block.type === 'text' ? block.text : '').join('\n')
@@ -122,21 +125,27 @@ export function workerMcpTool(binding: WorkerMcpBinding, scope: () => Promise<Cr
               reportedCode = 'MCP_RESULT_UNSUPPORTED'
               await dispatch.confirm(call!, 'failed', reportedCode)
               settled = true
+              confirmedOutcome = 'failed'
               throw new CoreError('MCP_RESULT_UNSUPPORTED', 'The MCP result could not be presented safely.')
             }
             await dispatch.confirm(call!, 'success')
             settled = true
+            confirmedOutcome = 'success'
             signal.throwIfAborted()
             return text
           } finally { await client.close().catch(() => {}) }
         })
-        record('success', { text: output, requestId: call!.requestId })
+        record('success', { text: output, requestId: call!.requestId, state: 'confirmed', outcome: 'success' })
         return output
       } catch (error) {
         const code = dispatched && !settled ? 'MCP_OUTCOME_UNKNOWN'
           : reportedCode ?? (signal.aborted ? 'TICKET_BLOCKED' : error instanceof CoreError ? error.code : 'MCP_TOOL_FAILED')
-        record('failed', { code, ...(call ? { requestId: call.requestId } : {}) })
-        throw new CoreError(code, 'The approved MCP tool was not confirmed; check its tool fact before retrying.')
+        record('failed', { code, state: settled ? 'confirmed' : call || reportedCode === 'MCP_OUTCOME_UNKNOWN' ? 'unknown' : 'not-dispatched',
+          outcome: confirmedOutcome ?? (call || reportedCode === 'MCP_OUTCOME_UNKNOWN' ? 'unknown' : 'failed'),
+          ...(call ? { requestId: call.requestId } : {}) })
+        throw new CoreError(code, settled
+          ? 'The approved MCP request was confirmed; review its outcome before continuing.'
+          : 'The approved MCP tool was not confirmed; check its tool fact before retrying.')
       }
     },
   }

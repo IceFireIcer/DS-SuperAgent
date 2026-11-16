@@ -1227,6 +1227,11 @@ var ZH = {
   "Explicitly shared": "明确共享",
   "No readers": "暂无读取者",
   "Choose work": "选择工作",
+  "Side query": "侧边查询",
+  "Reader": "读取角色",
+  "Ask about saved memory": "查询已保存的记忆",
+  "View tool facts": "查看工具事实",
+  "Worker activity is unavailable.": "Worker 活动暂时不可用。",
   "Work memory access": "工作记忆授权",
   "Grant Worker access": "授权 Worker 读取",
   "Revoke Worker access": "撤销 Worker 读取权",
@@ -23806,7 +23811,7 @@ var PRODUCT_CREDENTIAL_CSS = `
 
 // src/client/product-memory.js
 var import_react58 = require("react");
-var scopeLabel2 = (scope) => scope.kind === "main" ? "Main" : scope.kind === "work" ? `${t("Work private")} · ${scope.workItemId}` : `${t("Explicitly shared")} · ${[scope.main ? "Main" : "", ...scope.workItemIds].filter(Boolean).join(", ") || t("No readers")}`;
+var scopeLabel2 = (scope) => scope.kind === "main" ? t("Main") : scope.kind === "work" ? `${t("Work private")} · ${scope.workItemId}` : `${t("Explicitly shared")} · ${[scope.main ? t("Main") : "", ...scope.workItemIds].filter(Boolean).join(", ") || t("No readers")}`;
 function ProductMemorySettings({ binding, works, call: call2 }) {
   const instanceId = binding.instanceId;
   const workItems = works.filter((work) => work.brief?.workItemId && work.receipt?.status === "accepted").map((work) => ({ id: work.brief.workItemId, goal: work.brief.goal }));
@@ -23822,6 +23827,14 @@ function ProductMemorySettings({ binding, works, call: call2 }) {
   const [selected, setSelected] = (0, import_react58.useState)(null);
   const [full2, setFull] = (0, import_react58.useState)(null);
   const [access, setAccess] = (0, import_react58.useState)(null);
+  const [sideKind, setSideKind] = (0, import_react58.useState)("main");
+  const [sideWorkId, setSideWorkId] = (0, import_react58.useState)("");
+  const [sideQuery, setSideQuery] = (0, import_react58.useState)("");
+  const [sideMatches, setSideMatches] = (0, import_react58.useState)([]);
+  const [sideSelected, setSideSelected] = (0, import_react58.useState)(null);
+  const [sideFull, setSideFull] = (0, import_react58.useState)(null);
+  const [sideBusy, setSideBusy] = (0, import_react58.useState)(false);
+  const sideGeneration = (0, import_react58.useRef)(0);
   const [busy, setBusy] = (0, import_react58.useState)(false);
   const [error, setError] = (0, import_react58.useState)("");
   const [notice, setNotice] = (0, import_react58.useState)("");
@@ -23838,6 +23851,13 @@ function ProductMemorySettings({ binding, works, call: call2 }) {
   };
   (0, import_react58.useEffect)(() => {
     void reload().catch((failure) => setError(failure.message));
+  }, [instanceId]);
+  (0, import_react58.useEffect)(() => {
+    sideGeneration.current++;
+    setSideMatches([]);
+    setSideSelected(null);
+    setSideFull(null);
+    setSideBusy(false);
   }, [instanceId]);
   (0, import_react58.useEffect)(() => {
     let live = true;
@@ -23857,6 +23877,11 @@ function ProductMemorySettings({ binding, works, call: call2 }) {
     setNotice("");
     try {
       await action();
+      sideGeneration.current++;
+      setSideMatches([]);
+      setSideSelected(null);
+      setSideFull(null);
+      setSideBusy(false);
       await reload();
       setNotice(t(success));
     } catch (failure) {
@@ -23906,6 +23931,11 @@ function ProductMemorySettings({ binding, works, call: call2 }) {
     setError("");
     try {
       await call2("memory-forget", { instanceId, commandId: crypto.randomUUID(), id: entry.id, expectedRevision: entry.revision });
+      sideGeneration.current++;
+      setSideMatches([]);
+      setSideSelected(null);
+      setSideFull(null);
+      setSideBusy(false);
       setFull(null);
       setSelected(null);
       await reload();
@@ -23967,11 +23997,127 @@ function ProductMemorySettings({ binding, works, call: call2 }) {
       setError(failure.message);
     }
   };
+  const clearSide = () => {
+    sideGeneration.current++;
+    setSideMatches([]);
+    setSideSelected(null);
+    setSideFull(null);
+    setSideBusy(false);
+    setError("");
+  };
+  const sideTarget = () => sideKind === "main" ? { kind: "main" } : { kind: "work", workItemId: sideWorkId };
+  const sideSearch = async (event) => {
+    event.preventDefault();
+    if (sideBusy || !sideQuery.trim() || sideKind === "work" && !sideWorkId) return;
+    const generation = ++sideGeneration.current;
+    setSideBusy(true);
+    setError("");
+    setSideSelected(null);
+    setSideFull(null);
+    setSideMatches([]);
+    try {
+      const matches = await call2("memory-side-query", { instanceId, target: sideTarget(), query: sideQuery.trim() });
+      if (generation === sideGeneration.current) setSideMatches(matches);
+    } catch (failure) {
+      if (generation === sideGeneration.current) setError(failure.message);
+    } finally {
+      if (generation === sideGeneration.current) setSideBusy(false);
+    }
+  };
+  const sideOpen = async (match) => {
+    const generation = ++sideGeneration.current;
+    setSideSelected(match);
+    setSideFull(null);
+    setError("");
+    try {
+      const page = await call2("memory-side-read", { instanceId, target: sideTarget(), id: match.id, maxBytes: 4096 });
+      if (generation === sideGeneration.current) setSideFull(page);
+    } catch (failure) {
+      if (generation === sideGeneration.current) {
+        setSideFull(null);
+        setError(failure.message);
+      }
+    }
+  };
+  const sideMore = async () => {
+    if (!sideFull?.pagination.cursor || !sideSelected) return;
+    const generation = sideGeneration.current;
+    try {
+      const page = await call2("memory-side-read", {
+        instanceId,
+        target: sideTarget(),
+        id: sideSelected.id,
+        after: sideFull.pagination.cursor,
+        maxBytes: 4096
+      });
+      if (generation === sideGeneration.current) setSideFull((current) => current?.id === page.id ? { ...page, text: current.text + page.text } : page);
+    } catch (failure) {
+      if (generation === sideGeneration.current) {
+        setSideFull(null);
+        setError(failure.message);
+      }
+    }
+  };
   return (0, import_react58.createElement)(
     "div",
     { className: "bt-product-memory" },
     error ? (0, import_react58.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
     notice ? (0, import_react58.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
+    (0, import_react58.createElement)(
+      Card2,
+      { title: t("Side query") },
+      (0, import_react58.createElement)(
+        "form",
+        { className: "bt-product-memory-form", onSubmit: sideSearch },
+        (0, import_react58.createElement)(
+          "select",
+          { value: sideKind, "aria-label": t("Reader"), onChange: (event) => {
+            setSideKind(event.target.value);
+            clearSide();
+          } },
+          (0, import_react58.createElement)("option", { value: "main" }, t("Main")),
+          (0, import_react58.createElement)("option", { value: "work" }, t("Work"))
+        ),
+        sideKind === "work" ? (0, import_react58.createElement)(
+          "select",
+          {
+            value: sideWorkId,
+            "aria-label": t("Work"),
+            onChange: (event) => {
+              setSideWorkId(event.target.value);
+              clearSide();
+            }
+          },
+          (0, import_react58.createElement)("option", { value: "" }, t("Choose work")),
+          workItems.map((work) => (0, import_react58.createElement)("option", { key: work.id, value: work.id }, work.goal))
+        ) : null,
+        (0, import_react58.createElement)("input", {
+          type: "search",
+          value: sideQuery,
+          maxLength: 256,
+          "aria-label": t("Side query"),
+          placeholder: t("Ask about saved memory"),
+          onChange: (event) => {
+            setSideQuery(event.target.value);
+            clearSide();
+          }
+        }),
+        (0, import_react58.createElement)("button", { type: "submit", className: "bt-soft", disabled: sideBusy || !sideQuery.trim() || sideKind === "work" && !sideWorkId }, t("Search"))
+      ),
+      sideMatches.length ? (0, import_react58.createElement)("ul", { className: "bt-mem-list" }, sideMatches.map((match) => (0, import_react58.createElement)(
+        "li",
+        { key: match.id, className: "bt-mem-entry" },
+        (0, import_react58.createElement)("span", { className: "bt-mem-entry-copy" }, (0, import_react58.createElement)("span", { className: "bt-mem-entry-text" }, match.snippet)),
+        (0, import_react58.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: () => void sideOpen(match) }, t("View full detail"))
+      ))) : null,
+      sideSelected ? (0, import_react58.createElement)(
+        "section",
+        { className: "bt-product-memory-detail", "aria-label": t("Full detail") },
+        (0, import_react58.createElement)("strong", null, scopeLabel2(sideSelected.scope)),
+        sideFull ? (0, import_react58.createElement)("pre", null, sideFull.text) : null,
+        sideFull?.pagination.truncated ? (0, import_react58.createElement)("button", { type: "button", className: "bt-soft", onClick: () => void sideMore() }, t("Load more detail")) : null
+      ) : null
+    ),
     (0, import_react58.createElement)(
       Card2,
       { title: t("Saved memory") },
@@ -24004,7 +24150,7 @@ function ProductMemorySettings({ binding, works, call: call2 }) {
         (0, import_react58.createElement)(
           "div",
           { className: "bt-product-memory-form" },
-          (0, import_react58.createElement)("label", null, (0, import_react58.createElement)("input", { type: "checkbox", checked: mainReader, onChange: (event) => setMainReader(event.target.checked) }), "Main"),
+          (0, import_react58.createElement)("label", null, (0, import_react58.createElement)("input", { type: "checkbox", checked: mainReader, onChange: (event) => setMainReader(event.target.checked) }), t("Main")),
           workItems.map((work) => (0, import_react58.createElement)("label", { key: work.id }, (0, import_react58.createElement)("input", {
             type: "checkbox",
             checked: recipients.includes(work.id),
@@ -24023,7 +24169,7 @@ function ProductMemorySettings({ binding, works, call: call2 }) {
         (0, import_react58.createElement)(Row, { label: t("Owner") }, (0, import_react58.createElement)(
           "select",
           { value: kind, onChange: (event) => setKind(event.target.value) },
-          (0, import_react58.createElement)("option", { value: "main" }, "Main"),
+          (0, import_react58.createElement)("option", { value: "main" }, t("Main")),
           (0, import_react58.createElement)("option", { value: "work" }, t("Work private")),
           (0, import_react58.createElement)("option", { value: "shared" }, t("Explicitly shared"))
         )),
@@ -24036,7 +24182,7 @@ function ProductMemorySettings({ binding, works, call: call2 }) {
         kind === "shared" ? (0, import_react58.createElement)(
           "div",
           { className: "bt-product-memory-form" },
-          (0, import_react58.createElement)("label", null, (0, import_react58.createElement)("input", { type: "checkbox", checked: mainReader, onChange: (event) => setMainReader(event.target.checked) }), "Main"),
+          (0, import_react58.createElement)("label", null, (0, import_react58.createElement)("input", { type: "checkbox", checked: mainReader, onChange: (event) => setMainReader(event.target.checked) }), t("Main")),
           workItems.map((work) => (0, import_react58.createElement)("label", { key: work.id }, (0, import_react58.createElement)("input", {
             type: "checkbox",
             checked: recipients.includes(work.id),
@@ -24812,6 +24958,8 @@ function applyProduct(ctx) {
     const canCommand = !state.connection?.connected || state.connection.capabilities.includes("command");
     const [controlBusy, setControlBusy] = (0, import_react61.useState)(null);
     const [controlError, setControlError] = (0, import_react61.useState)(null);
+    const [toolFactsBusy, setToolFactsBusy] = (0, import_react61.useState)(false);
+    const [toolFactsError, setToolFactsError] = (0, import_react61.useState)(null);
     const [attentionDraft, setAttentionDraft] = (0, import_react61.useState)("");
     const control = work.control;
     const [artifactBusy, setArtifactBusy] = (0, import_react61.useState)(null);
@@ -24857,6 +25005,35 @@ function applyProduct(ctx) {
       }
     };
     const stop = control?.stop;
+    const openToolFacts = async () => {
+      if (!state.binding || !work.receipt.ticketId || toolFactsBusy) return;
+      setToolFactsBusy(true);
+      setToolFactsError(null);
+      try {
+        const page = await productCall("observe-list", {
+          instanceId: state.binding.instanceId,
+          query: work.receipt.ticketId,
+          limit: 100
+        });
+        const item = page.items.find((candidate) => candidate.role === "worker" && candidate.ticketId === work.receipt.ticketId);
+        if (!item) throw new Error(t("Worker activity is unavailable."));
+        view.set((current) => ({
+          ...current,
+          route: "observe",
+          selectedObservation: item,
+          observationGeneration: item.generation ?? null,
+          observation: null,
+          observationError: null,
+          observationDetail: null,
+          observationDetailError: null
+        }));
+        await loadObservation(state.binding, item, { reset: true });
+      } catch (error) {
+        setToolFactsError(error.message);
+      } finally {
+        setToolFactsBusy(false);
+      }
+    };
     const attention = control?.attention;
     const answer = async (event) => {
       event.preventDefault();
@@ -24987,6 +25164,7 @@ function applyProduct(ctx) {
         ))
       ) : null,
       artifactError ? (0, import_react61.createElement)("p", { className: "bt-main-error", role: "alert" }, artifactError) : null,
+      toolFactsError ? (0, import_react61.createElement)("p", { className: "bt-main-error", role: "alert" }, toolFactsError) : null,
       control && canCommand ? (0, import_react61.createElement)(
         "div",
         { className: "bt-main-work-controls" },
@@ -25024,7 +25202,12 @@ function applyProduct(ctx) {
       work.receipt.status === "accepted" ? (0, import_react61.createElement)(
         "div",
         { className: "bt-main-work-evidence-actions" },
-        (0, import_react61.createElement)("button", { type: "button", className: "bt-soft", onClick: () => onEvidence(work) }, t("View original request"))
+        (0, import_react61.createElement)("button", { type: "button", className: "bt-soft", onClick: () => onEvidence(work) }, t("View original request")),
+        (0, import_react61.createElement)(
+          "button",
+          { type: "button", className: "bt-soft", disabled: toolFactsBusy, onClick: () => void openToolFacts() },
+          toolFactsBusy ? t("Loading…") : t("View tool facts")
+        )
       ) : null
     );
   }
@@ -26291,7 +26474,7 @@ function applyProduct(ctx) {
               roleSettings: snapshot,
               onApplied: refreshAfterPreset,
               onReload: refreshAfterPreset
-            }) : page === "memory" ? (0, import_react61.createElement)(ProductMemorySettings, { binding, works: view.getSnapshot().works, call: productCall }) : page === "supervision" ? (0, import_react61.createElement)(ProductSupervisionSettings, { binding, call: productCall }) : (0, import_react61.createElement)(
+            }) : page === "memory" ? (0, import_react61.createElement)(ProductMemorySettings, { key: binding.instanceId, binding, works: view.getSnapshot().works, call: productCall }) : page === "supervision" ? (0, import_react61.createElement)(ProductSupervisionSettings, { binding, call: productCall }) : (0, import_react61.createElement)(
               import_react61.Fragment,
               null,
               error ? (0, import_react61.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,

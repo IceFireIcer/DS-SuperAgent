@@ -4,9 +4,9 @@ import { MemoryEntryRow } from './memory-panel.js'
 import { ProductMemoryProposalCard } from './learning-card.js'
 import { t } from './i18n.js'
 
-const scopeLabel = scope => scope.kind === 'main' ? 'Main'
+const scopeLabel = scope => scope.kind === 'main' ? t('Main')
   : scope.kind === 'work' ? `${t('Work private')} · ${scope.workItemId}`
-    : `${t('Explicitly shared')} · ${[scope.main ? 'Main' : '', ...scope.workItemIds].filter(Boolean).join(', ') || t('No readers')}`
+    : `${t('Explicitly shared')} · ${[scope.main ? t('Main') : '', ...scope.workItemIds].filter(Boolean).join(', ') || t('No readers')}`
 
 export function ProductMemorySettings({ binding, works, call }) {
   const instanceId = binding.instanceId
@@ -24,6 +24,14 @@ export function ProductMemorySettings({ binding, works, call }) {
   const [selected, setSelected] = useState(null)
   const [full, setFull] = useState(null)
   const [access, setAccess] = useState(null)
+  const [sideKind, setSideKind] = useState('main')
+  const [sideWorkId, setSideWorkId] = useState('')
+  const [sideQuery, setSideQuery] = useState('')
+  const [sideMatches, setSideMatches] = useState([])
+  const [sideSelected, setSideSelected] = useState(null)
+  const [sideFull, setSideFull] = useState(null)
+  const [sideBusy, setSideBusy] = useState(false)
+  const sideGeneration = useRef(0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -39,6 +47,10 @@ export function ProductMemorySettings({ binding, works, call }) {
   }
   useEffect(() => { void reload().catch(failure => setError(failure.message)) }, [instanceId])
   useEffect(() => {
+    sideGeneration.current++
+    setSideMatches([]); setSideSelected(null); setSideFull(null); setSideBusy(false)
+  }, [instanceId])
+  useEffect(() => {
     let live = true
     setAccess(null)
     if (workId) void call('memory-access-read', { instanceId, workItemId: workId })
@@ -50,6 +62,8 @@ export function ProductMemorySettings({ binding, works, call }) {
     setBusy(true); setError(''); setNotice('')
     try {
       await action()
+      sideGeneration.current++
+      setSideMatches([]); setSideSelected(null); setSideFull(null); setSideBusy(false)
       await reload()
       setNotice(t(success))
     } catch (failure) { setError(failure.message) }
@@ -88,6 +102,8 @@ export function ProductMemorySettings({ binding, works, call }) {
     setBusy(true); setError('')
     try {
       await call('memory-forget', { instanceId, commandId: crypto.randomUUID(), id: entry.id, expectedRevision: entry.revision })
+      sideGeneration.current++
+      setSideMatches([]); setSideSelected(null); setSideFull(null); setSideBusy(false)
       setFull(null); setSelected(null); await reload()
       setNotice(t('Memory forgotten.'))
       return true
@@ -126,10 +142,62 @@ export function ProductMemorySettings({ binding, works, call }) {
       setItems(current => [...current, ...page.items]); setCursor(page.cursor ?? null)
     } catch (failure) { setError(failure.message) }
   }
+  const clearSide = () => {
+    sideGeneration.current++
+    setSideMatches([]); setSideSelected(null); setSideFull(null); setSideBusy(false); setError('')
+  }
+  const sideTarget = () => sideKind === 'main' ? { kind: 'main' } : { kind: 'work', workItemId: sideWorkId }
+  const sideSearch = async event => {
+    event.preventDefault()
+    if (sideBusy || !sideQuery.trim() || sideKind === 'work' && !sideWorkId) return
+    const generation = ++sideGeneration.current
+    setSideBusy(true); setError(''); setSideSelected(null); setSideFull(null); setSideMatches([])
+    try {
+      const matches = await call('memory-side-query', { instanceId, target: sideTarget(), query: sideQuery.trim() })
+      if (generation === sideGeneration.current) setSideMatches(matches)
+    } catch (failure) { if (generation === sideGeneration.current) setError(failure.message) }
+    finally { if (generation === sideGeneration.current) setSideBusy(false) }
+  }
+  const sideOpen = async match => {
+    const generation = ++sideGeneration.current
+    setSideSelected(match); setSideFull(null); setError('')
+    try {
+      const page = await call('memory-side-read', { instanceId, target: sideTarget(), id: match.id, maxBytes: 4096 })
+      if (generation === sideGeneration.current) setSideFull(page)
+    } catch (failure) { if (generation === sideGeneration.current) { setSideFull(null); setError(failure.message) } }
+  }
+  const sideMore = async () => {
+    if (!sideFull?.pagination.cursor || !sideSelected) return
+    const generation = sideGeneration.current
+    try {
+      const page = await call('memory-side-read', { instanceId, target: sideTarget(), id: sideSelected.id,
+        after: sideFull.pagination.cursor, maxBytes: 4096 })
+      if (generation === sideGeneration.current) setSideFull(current => current?.id === page.id
+        ? { ...page, text: current.text + page.text } : page)
+    } catch (failure) { if (generation === sideGeneration.current) { setSideFull(null); setError(failure.message) } }
+  }
 
   return h('div', { className: 'bt-product-memory' },
     error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
     notice ? h('p', { className: 'bt-main-status', role: 'status' }, notice) : null,
+    h(Card, { title: t('Side query') },
+      h('form', { className: 'bt-product-memory-form', onSubmit: sideSearch },
+        h('select', { value: sideKind, 'aria-label': t('Reader'), onChange: event => { setSideKind(event.target.value); clearSide() } },
+          h('option', { value: 'main' }, t('Main')), h('option', { value: 'work' }, t('Work'))),
+        sideKind === 'work' ? h('select', { value: sideWorkId, 'aria-label': t('Work'),
+          onChange: event => { setSideWorkId(event.target.value); clearSide() } },
+          h('option', { value: '' }, t('Choose work')),
+          workItems.map(work => h('option', { key: work.id, value: work.id }, work.goal))) : null,
+        h('input', { type: 'search', value: sideQuery, maxLength: 256, 'aria-label': t('Side query'),
+          placeholder: t('Ask about saved memory'), onChange: event => { setSideQuery(event.target.value); clearSide() } }),
+        h('button', { type: 'submit', className: 'bt-soft', disabled: sideBusy || !sideQuery.trim() || sideKind === 'work' && !sideWorkId }, t('Search'))),
+      sideMatches.length ? h('ul', { className: 'bt-mem-list' }, sideMatches.map(match => h('li', { key: match.id, className: 'bt-mem-entry' },
+        h('span', { className: 'bt-mem-entry-copy' }, h('span', { className: 'bt-mem-entry-text' }, match.snippet)),
+        h('button', { type: 'button', className: 'bt-soft bt-soft-sm', onClick: () => void sideOpen(match) }, t('View full detail'))))) : null,
+      sideSelected ? h('section', { className: 'bt-product-memory-detail', 'aria-label': t('Full detail') },
+        h('strong', null, scopeLabel(sideSelected.scope)),
+        sideFull ? h('pre', null, sideFull.text) : null,
+        sideFull?.pagination.truncated ? h('button', { type: 'button', className: 'bt-soft', onClick: () => void sideMore() }, t('Load more detail')) : null) : null),
     h(Card, { title: t('Saved memory') },
       h('p', null, t('Main, work private, and explicitly shared memories have separate readers. Searching does not save new memory.')),
       h('form', { className: 'bt-product-memory-form', onSubmit: search },
@@ -145,20 +213,20 @@ export function ProductMemorySettings({ binding, works, call }) {
         full ? h('pre', null, full.text) : null,
         full?.pagination.truncated ? h('button', { type: 'button', className: 'bt-soft', onClick: () => void moreText() }, t('Load more detail')) : null,
         h('div', { className: 'bt-product-memory-form' },
-          h('label', null, h('input', { type: 'checkbox', checked: mainReader, onChange: event => setMainReader(event.target.checked) }), 'Main'),
+          h('label', null, h('input', { type: 'checkbox', checked: mainReader, onChange: event => setMainReader(event.target.checked) }), t('Main')),
           workItems.map(work => h('label', { key: work.id }, h('input', { type: 'checkbox', checked: recipients.includes(work.id),
             onChange: () => toggleRecipient(work.id) }), work.goal)),
           h('button', { type: 'button', className: 'bt-soft', disabled: busy, onClick: share }, t('Update sharing')))) : null),
     h(Card, { title: t('Save memory') },
       h('form', { className: 'bt-product-memory-form', onSubmit: save },
         h(Row, { label: t('Owner') }, h('select', { value: kind, onChange: event => setKind(event.target.value) },
-          h('option', { value: 'main' }, 'Main'), h('option', { value: 'work' }, t('Work private')),
+          h('option', { value: 'main' }, t('Main')), h('option', { value: 'work' }, t('Work private')),
           h('option', { value: 'shared' }, t('Explicitly shared')))),
         kind === 'work' ? h('select', { value: workId, 'aria-label': t('Work'), onChange: event => setWorkId(event.target.value) },
           h('option', { value: '' }, t('Choose work')),
           workItems.map(work => h('option', { key: work.id, value: work.id }, work.goal))) : null,
         kind === 'shared' ? h('div', { className: 'bt-product-memory-form' },
-          h('label', null, h('input', { type: 'checkbox', checked: mainReader, onChange: event => setMainReader(event.target.checked) }), 'Main'),
+          h('label', null, h('input', { type: 'checkbox', checked: mainReader, onChange: event => setMainReader(event.target.checked) }), t('Main')),
           workItems.map(work => h('label', { key: work.id }, h('input', { type: 'checkbox', checked: recipients.includes(work.id),
             onChange: () => toggleRecipient(work.id) }), work.goal))) : null,
         h('textarea', { value: text, maxLength: 4096, 'aria-label': t('Memory text'), placeholder: t('One lasting fact'),

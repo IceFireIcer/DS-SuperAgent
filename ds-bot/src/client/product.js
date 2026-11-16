@@ -308,6 +308,8 @@ export function applyProduct(ctx) {
     const canCommand = !state.connection?.connected || state.connection.capabilities.includes('command')
     const [controlBusy, setControlBusy] = useState(null)
     const [controlError, setControlError] = useState(null)
+    const [toolFactsBusy, setToolFactsBusy] = useState(false)
+    const [toolFactsError, setToolFactsError] = useState(null)
     const [attentionDraft, setAttentionDraft] = useState('')
     const control = work.control
     const [artifactBusy, setArtifactBusy] = useState(null)
@@ -345,6 +347,21 @@ export function applyProduct(ctx) {
       }
     }
     const stop = control?.stop
+    const openToolFacts = async () => {
+      if (!state.binding || !work.receipt.ticketId || toolFactsBusy) return
+      setToolFactsBusy(true); setToolFactsError(null)
+      try {
+        const page = await productCall('observe-list', { instanceId: state.binding.instanceId,
+          query: work.receipt.ticketId, limit: 100 })
+        const item = page.items.find(candidate => candidate.role === 'worker' && candidate.ticketId === work.receipt.ticketId)
+        if (!item) throw new Error(t('Worker activity is unavailable.'))
+        view.set(current => ({ ...current, route: 'observe', selectedObservation: item,
+          observationGeneration: item.generation ?? null, observation: null, observationError: null,
+          observationDetail: null, observationDetailError: null }))
+        await loadObservation(state.binding, item, { reset: true })
+      } catch (error) { setToolFactsError(error.message) }
+      finally { setToolFactsBusy(false) }
+    }
     const attention = control?.attention
     const answer = async event => {
       event.preventDefault()
@@ -421,6 +438,7 @@ export function applyProduct(ctx) {
             disabled: artifactBusy === artifact.path, onClick: () => void downloadArtifact(artifact) },
           artifactBusy === artifact.path ? t('Loading…') : t('Download')) : null))) : null,
       artifactError ? h('p', { className: 'bt-main-error', role: 'alert' }, artifactError) : null,
+      toolFactsError ? h('p', { className: 'bt-main-error', role: 'alert' }, toolFactsError) : null,
       control && canCommand ? h('div', { className: 'bt-main-work-controls' },
         control.permissions.canStop ? h('button', { type: 'button', className: 'bt-soft',
           disabled: Boolean(controlBusy), onClick: () => runControl('work-stop') },
@@ -432,7 +450,9 @@ export function applyProduct(ctx) {
           disabled: Boolean(controlBusy), onClick: () => runControl('work-retry') },
         controlBusy === 'work-retry' ? t('Retrying…') : t('Retry work')) : null) : null,
       work.receipt.status === 'accepted' ? h('div', { className: 'bt-main-work-evidence-actions' },
-        h('button', { type: 'button', className: 'bt-soft', onClick: () => onEvidence(work) }, t('View original request'))) : null)
+        h('button', { type: 'button', className: 'bt-soft', onClick: () => onEvidence(work) }, t('View original request')),
+        h('button', { type: 'button', className: 'bt-soft', disabled: toolFactsBusy, onClick: () => void openToolFacts() },
+          toolFactsBusy ? t('Loading…') : t('View tool facts'))) : null)
   }
 
   function MainPreparationCard({ preparation }) {
@@ -1167,7 +1187,7 @@ export function applyProduct(ctx) {
               : page === 'preparations' ? h(ProductProactiveSettings, { binding, call: productCall })
               : page === 'presets' ? h(ProductPresetSettings, { binding, call: productCall,
                 settingsRevision: snapshot.revision, roleSettings: snapshot, onApplied: refreshAfterPreset, onReload: refreshAfterPreset })
-                : page === 'memory' ? h(ProductMemorySettings, { binding, works: view.getSnapshot().works, call: productCall })
+                : page === 'memory' ? h(ProductMemorySettings, { key: binding.instanceId, binding, works: view.getSnapshot().works, call: productCall })
                 : page === 'supervision' ? h(ProductSupervisionSettings, { binding, call: productCall }) : h(Fragment, null,
             error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
             viewState.directoryError ? h('p', { className: 'bt-main-error', role: 'alert' }, viewState.directoryError) : null,

@@ -8,6 +8,7 @@ export type MemoryScope = { kind: 'main' } | { kind: 'work'; workItemId: string 
   | { kind: 'shared'; main: boolean; workItemIds: string[] }
 export type MemoryReader = { role: 'main'; sessionId: string }
   | { role: 'worker'; ticketId: string; assignmentId: string; sessionId: string }
+export type MemorySideTarget = { kind: 'main' } | { kind: 'work'; workItemId: string }
 
 export interface MemoryEntry {
   id: string
@@ -152,26 +153,73 @@ export class ProductMemory {
       || entry.scope.kind === 'shared' && entry.scope.workItemIds.includes(workItemId!)
   }
 
+  private readerScope(scope: MemoryScope, reader: MemoryReader, workItemId?: string): MemoryScope {
+    if (reader.role !== 'worker' || scope.kind !== 'shared') return scope
+    return { kind: 'shared', main: false, workItemIds: [workItemId!] }
+  }
+
+  private async sideReader(tx: AsyncTx, target: MemorySideTarget): Promise<{ reader: MemoryReader; workItemId?: string }> {
+    if (target?.kind === 'main' && Object.keys(target).length === 1) {
+      const reader: MemoryReader = { role: 'main', sessionId: (await this.main(tx)).mainSessionId }
+      await this.authorize(tx, reader)
+      return { reader }
+    }
+    if (target?.kind !== 'work' || Object.keys(target).length !== 2) {
+      throw new CoreError('INVALID_INPUT', 'Choose Main or one work for a side query.')
+    }
+    identifier(target.workItemId, 'workItemId')
+    const ticketId = await this.work(tx, target.workItemId)
+    const assignment = await tx.get<Assignment>('assignment', ticketId)
+    if (!assignment) throw new CoreError('MEMORY_DENIED', 'No current Worker can read this work memory.')
+    const reader: MemoryReader = { role: 'worker', ticketId, assignmentId: assignment.id, sessionId: assignment.sessionId }
+    const { workItemId } = await this.authorize(tx, reader)
+    if (workItemId !== target.workItemId) throw new CoreError('MEMORY_DENIED', 'The Worker no longer owns this work memory.')
+    return { reader, workItemId }
+  }
+
+  private async searchIn(tx: AsyncTx, reader: MemoryReader, workItemId: string | undefined, wanted: string[], limit: number) {
+    const matches: Array<{ id: string; scope: MemoryScope; snippet: string; score: number }> = []
+    let after: string | undefined
+    for (let scanned = 0; scanned < MAX_SCAN; scanned += 100) {
+      const page = await tx.scan<MemoryEntry>('product-memory', { limit: 100, ...(after ? { after } : {}) })
+      for (const { value } of page.items) {
+        if (!this.visible(value, reader, workItemId)) continue
+        const text = value.text!.toLocaleLowerCase()
+        const score = wanted.filter(token => text.includes(token)).length
+        if (score) matches.push({ id: value.id, scope: this.readerScope(value.scope, reader, workItemId), snippet: value.text!.slice(0, 200), score })
+      }
+      if (!page.cursor) break
+      if (scanned + 100 >= MAX_SCAN) throw new CoreError('MEMORY_BUDGET', 'Search exceeded its bounded memory index.')
+      after = page.cursor
+    }
+    return matches.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id)).slice(0, limit)
+  }
+
   async search(reader: MemoryReader, query: string, limit = 10) {
     const wanted = validText(query, 'Search', 256).toLocaleLowerCase().split(/\s+/u)
     bounded(limit, 20)
     return this.storage.transaction(this.instanceId, async tx => {
       const { workItemId } = await this.authorize(tx, reader)
-      const matches: Array<{ id: string; scope: MemoryScope; snippet: string; score: number }> = []
-      let after: string | undefined
-      for (let scanned = 0; scanned < MAX_SCAN; scanned += 100) {
-        const page = await tx.scan<MemoryEntry>('product-memory', { limit: 100, ...(after ? { after } : {}) })
-        for (const { value } of page.items) {
-          if (!this.visible(value, reader, workItemId)) continue
-          const text = value.text!.toLocaleLowerCase()
-          const score = wanted.filter(token => text.includes(token)).length
-          if (score) matches.push({ id: value.id, scope: value.scope, snippet: value.text!.slice(0, 200), score })
-        }
-        if (!page.cursor) break
-        if (scanned + 100 >= MAX_SCAN) throw new CoreError('MEMORY_BUDGET', 'Search exceeded its bounded memory index.')
-        after = page.cursor
-      }
-      return matches.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id)).slice(0, limit)
+      return this.searchIn(tx, reader, workItemId, wanted, limit)
+    })
+  }
+
+  async sideSearch(target: MemorySideTarget, query: string, limit = 10) {
+    const wanted = validText(query, 'Search', 256).toLocaleLowerCase().split(/\s+/u)
+    bounded(limit, 20)
+    return this.storage.transaction(this.instanceId, async tx => {
+      const { reader, workItemId } = await this.sideReader(tx, target)
+      return this.searchIn(tx, reader, workItemId, wanted, limit)
+    })
+  }
+
+  async sideRead(target: MemorySideTarget, id: string, after?: string, maxBytes = 4096) {
+    identifier(id, 'memoryId')
+    return this.storage.transaction(this.instanceId, async tx => {
+      const { reader, workItemId } = await this.sideReader(tx, target)
+      const entry = await tx.get<MemoryEntry>('product-memory', id)
+      if (!entry || !this.visible(entry, reader, workItemId)) throw new CoreError('NOT_FOUND', 'The memory is unavailable in this scope.')
+      return { ...pageText(entry, after, maxBytes), scope: this.readerScope(entry.scope, reader, workItemId) }
     })
   }
 
@@ -181,7 +229,7 @@ export class ProductMemory {
       const { workItemId } = await this.authorize(tx, reader)
       const entry = await tx.get<MemoryEntry>('product-memory', id)
       if (!entry || !this.visible(entry, reader, workItemId)) throw new CoreError('NOT_FOUND', 'The memory is unavailable in this scope.')
-      return pageText(entry, after, maxBytes)
+      return { ...pageText(entry, after, maxBytes), scope: this.readerScope(entry.scope, reader, workItemId) }
     })
   }
 

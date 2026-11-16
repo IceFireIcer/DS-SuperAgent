@@ -111,6 +111,8 @@ const browserFields: Record<string, string[]> = {
 const memoryFields: Record<string, string[]> = {
   'memory-list': ['instanceId', 'after', 'limit', 'query'],
   'memory-read': ['instanceId', 'id', 'after', 'maxBytes'],
+  'memory-side-query': ['instanceId', 'target', 'query', 'limit'],
+  'memory-side-read': ['instanceId', 'target', 'id', 'after', 'maxBytes'],
   'memory-save': ['instanceId', 'commandId', 'scope', 'text'],
   'memory-share': ['instanceId', 'commandId', 'id', 'expectedRevision', 'main', 'workItemIds'],
   'memory-forget': ['instanceId', 'commandId', 'id', 'expectedRevision'],
@@ -590,6 +592,13 @@ export async function createProductHost(context: Context, config: ProductHostCon
           ...(payload.limit === undefined ? {} : { limit: payload.limit as number }),
           ...(payload.query === undefined ? {} : { query: payload.query as string }) })
         if (endpoint === 'memory-read') return engine!.getProductMemory({ instanceId, id: payload.id as string,
+          ...(payload.after === undefined ? {} : { after: payload.after as string }),
+          ...(payload.maxBytes === undefined ? {} : { maxBytes: payload.maxBytes as number }) })
+        if (endpoint === 'memory-side-query') return engine!.queryProductMemorySide({ instanceId,
+          target: payload.target as import('./product-memory.js').MemorySideTarget, query: payload.query as string,
+          ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
+        if (endpoint === 'memory-side-read') return engine!.readProductMemorySide({ instanceId,
+          target: payload.target as import('./product-memory.js').MemorySideTarget, id: payload.id as string,
           ...(payload.after === undefined ? {} : { after: payload.after as string }),
           ...(payload.maxBytes === undefined ? {} : { maxBytes: payload.maxBytes as number }) })
         if (endpoint === 'memory-save') return engine!.saveProductMemory({ instanceId, commandId,

@@ -6,7 +6,7 @@ import type { Assignment } from './execution.js'
 import type { Attention } from './attention.js'
 import type { MainWorkBrief, MainWorkItem, MainWorkOutcome, MainWorkPlanConflict, MainWorkReceipt,
   MainWorkUpdate } from './work-delegation.js'
-import { mcpBlockIn } from './worker-mcp-calls.js'
+import { mcpBlockIn, mcpCallPageIn, type WorkerMcpCall } from './worker-mcp-calls.js'
 
 type ObservationRole = 'router' | 'worker'
 
@@ -307,6 +307,16 @@ function workerStatus(ticket: Work['ticket'] | undefined, intent: Work['intent']
   return { status: 'pending', summary: 'The Ticket is waiting for Worker execution.', nextStep: 'Wait for the assigned Worker to start.' }
 }
 
+function unknownMcpStatus(ticket: Work['ticket'] | undefined, call: WorkerMcpCall) {
+  if (ticket?.constraint?.kind === 'stopped') {
+    return { status: 'stopped',
+      summary: `The Ticket is stopped; MCP request ${call.requestId} has no confirmed result.`,
+      nextStep: 'Reconcile the original MCP request before resuming or retrying.' }
+  }
+  return { status: 'unknown', summary: `MCP request ${call.requestId} has no confirmed result.`,
+    nextStep: 'Reconcile the original MCP request before retrying.' }
+}
+
 function observationNextStep(status: string) {
   if (status === 'success') return 'Review the verified result and evidence.'
   if (status === 'waiting') return 'Answer the current work question.'
@@ -471,9 +481,7 @@ export class WorkObservations {
         const currentUpdate = update && latestAssignment && update.createdAt >= latestAssignment.createdAt ? update : undefined
         const currentOutcome = outcome && report && report.assignmentId === latestAssignment?.id && outcome.reportId === report.id
           ? outcome : undefined
-        const state = mcpUnknown && ticket?.constraint?.kind !== 'stopped'
-          ? { status: 'unknown', summary: `MCP request ${mcpUnknown.requestId} has no confirmed result.`,
-            nextStep: 'Reconcile the original MCP request before retrying.' }
+        const state = mcpUnknown ? unknownMcpStatus(ticket, mcpUnknown)
           : workerStatus(ticket, intent, currentUpdate, currentOutcome)
         items.push({
           id: observationId({ version: 1, role: 'worker', workBriefId: brief.id, workItemId: item.id, ticketId }),
@@ -574,6 +582,7 @@ export class WorkObservations {
     const report = reports.filter(candidate => candidate.assignmentId === selected.id).sort((left, right) => right.createdAt - left.createdAt)[0]
     const currentReport = await transaction.get<ReadyReport>('report', ticketId)
     const mcpUnknown = await mcpBlockIn(transaction, ticketId)
+    const mcpCalls = await this.mcpCalls(transaction, ticketId, selected.id)
     const attentionHead = await transaction.get<{ attentionId: string }>('attention-head', JSON.stringify(['attention-head', ticketId]))
     const attention = attentionHead ? await transaction.get<Attention>('attention', attentionHead.attentionId) : undefined
     const stopHead = await transaction.get<{ stopId: string }>('stop-head', JSON.stringify(['stop-head', ticketId]))
@@ -581,9 +590,8 @@ export class WorkObservations {
       cancellationConfirmedAt?: number }>('stop-state', stopHead.stopId) : undefined
     const currentUpdate = update && update.createdAt >= selected.createdAt ? update : undefined
     const currentOutcome = outcome && currentReport?.assignmentId === selected.id && outcome.reportId === currentReport.id ? outcome : undefined
-    const state = current && mcpUnknown && ticket.constraint?.kind !== 'stopped'
-      ? { status: 'unknown', summary: `MCP request ${mcpUnknown.requestId} has no confirmed result.`,
-        nextStep: 'Reconcile the original MCP request before retrying.' }
+    const state = current && mcpUnknown
+      ? unknownMcpStatus(ticket, mcpUnknown)
       : current ? workerStatus(ticket, intent, currentUpdate, currentOutcome)
       : { status: selected.state, summary: 'This Assignment generation is retained in history.',
         nextStep: 'Return to the current generation for the next executable step.' }
@@ -626,9 +634,17 @@ export class WorkObservations {
           ? 'unknown' : String(selected.configurationRevision) },
         { label: 'Generation state', value: current ? 'Current' : 'Historical' },
         { label: 'Environment', value: selected.environment?.id ?? 'unknown' },
-        ...(mcpUnknown && mcpUnknown.assignmentId === selected.id
+        ...mcpCalls.items.map(call => ({ label: 'MCP request', value: [
+          `${call.state === 'confirmed' ? `confirmed ${call.outcome ?? 'unknown'}` : 'unknown'} · ${call.serverName}/${call.toolName}`,
+          `original request ${call.requestId}`, `input SHA-256 ${call.inputSha256}`,
+          `started ${new Date(call.startedAt).toISOString()}`,
+          ...(call.settledAt ? [`settled ${new Date(call.settledAt).toISOString()}`] : []),
+          ...(call.code ? [`code ${call.code}`] : []),
+        ].join(' · ') })),
+        ...(mcpUnknown && mcpUnknown.assignmentId === selected.id && !mcpCalls.items.some(call => call.id === mcpUnknown.id)
           ? [{ label: 'MCP request', value: `unknown · ${mcpUnknown.serverName}/${mcpUnknown.toolName} · original request ${mcpUnknown.requestId} · input SHA-256 ${mcpUnknown.inputSha256}` }]
           : []),
+        ...(mcpCalls.truncated ? [{ label: 'MCP history', value: 'The 1000-record scan limit was reached; later MCP requests may be omitted.' }] : []),
         ...(selected.environment?.deviceId ? [{ label: 'Device', value: selected.environment.deviceId }] : []),
         ...(selected.environment?.root ? [{ label: 'Directory', value: selected.environment.root }] : []),
         { label: 'Goal', value: summary(item.goal) },
@@ -723,6 +739,18 @@ export class WorkObservations {
       if (pageCount === 9) throw new CoreError('REPORT_BUDGET', 'The observation report history exceeds its 1000-record budget.')
     }
     return [...reports.values()]
+  }
+
+  private async mcpCalls(transaction: AsyncTx, ticketId: string, assignmentId: string) {
+    const calls: WorkerMcpCall[] = []
+    let after: string | undefined
+    for (let pageCount = 0; pageCount < 10; pageCount++) {
+      const page = await mcpCallPageIn(transaction, ticketId, after)
+      calls.push(...page.items.filter(call => call.assignmentId === assignmentId))
+      if (!page.cursor) return { items: calls.sort((a, b) => a.startedAt - b.startedAt || a.id.localeCompare(b.id)), truncated: false }
+      after = page.cursor
+    }
+    return { items: calls.sort((a, b) => a.startedAt - b.startedAt || a.id.localeCompare(b.id)), truncated: true }
   }
 
   private async assignments(transaction: AsyncTx, ticketId: string) {

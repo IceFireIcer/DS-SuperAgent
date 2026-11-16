@@ -56,6 +56,57 @@ test('Main, private work and explicit sharing stay isolated across search and fu
   await assert.rejects(engine.readProductMemory({ instanceId, reader: { ...workerA, assignmentId: 'forged' }, id: privateA.id }), { code: 'MEMORY_DENIED' })
 })
 
+test('side queries derive current roles and recheck work grants, scopes, and page versions', { timeout: 15000 }, async t => {
+  const { engine, storage, work } = await fixture(t)
+  await work('item-a', 'ticket-a'); await work('item-b', 'ticket-b')
+  const main = { kind: 'main' }, workerA = { kind: 'work', workItemId: 'item-a' }, workerB = { kind: 'work', workItemId: 'item-b' }
+  const save = async (id, scope, text) => engine.saveProductMemory({ instanceId, commandId: id, scope, text })
+  const own = await save('side-own', main, 'fictional main-only fact')
+  const privateA = await save('side-private', workerA, 'fictional private-only fact')
+  const shared = await save('side-shared', { kind: 'shared', main: true, workItemIds: ['item-a', 'item-b'] }, 'fictional shared fact ' + 'x'.repeat(550))
+  const workerOnly = await save('side-worker-only', { kind: 'shared', main: false, workItemIds: ['item-b'] }, 'fictional worker-only fact')
+  const search = target => engine.queryProductMemorySide({ instanceId, target, query: 'fictional' })
+  const read = (target, id, after) => engine.readProductMemorySide({ instanceId, target, id, ...(after ? { after } : {}), maxBytes: 256 })
+  assert.deepEqual((await search(main)).map(item => item.id).sort(), [own.id, shared.id].sort())
+  await assert.rejects(read(main, privateA.id), { code: 'NOT_FOUND' })
+  await assert.rejects(read(main, workerOnly.id), { code: 'NOT_FOUND' })
+  await assert.rejects(search(workerA), { code: 'MEMORY_DENIED' })
+  await engine.grantProductWorkMemory({ instanceId, commandId: 'side-grant-a', workItemId: 'item-a', expectedRevision: 0, enabled: true })
+  await engine.grantProductWorkMemory({ instanceId, commandId: 'side-grant-b', workItemId: 'item-b', expectedRevision: 0, enabled: true })
+  const workerAMatches = await search(workerA)
+  assert.deepEqual(workerAMatches.map(item => item.id).sort(), [privateA.id, shared.id].sort())
+  assert.deepEqual(workerAMatches.find(item => item.id === shared.id).scope,
+    { kind: 'shared', main: false, workItemIds: ['item-a'] })
+  const workerBMatches = await search(workerB)
+  assert.deepEqual(workerBMatches.map(item => item.id).sort(), [shared.id, workerOnly.id].sort())
+  assert.deepEqual(workerBMatches.find(item => item.id === shared.id).scope,
+    { kind: 'shared', main: false, workItemIds: ['item-b'] })
+  await assert.rejects(read(workerB, privateA.id), { code: 'NOT_FOUND' })
+  const first = await read(workerA, shared.id)
+  assert.deepEqual(first.scope, { kind: 'shared', main: false, workItemIds: ['item-a'] })
+  assert.deepEqual((await read(workerB, shared.id)).scope,
+    { kind: 'shared', main: false, workItemIds: ['item-b'] })
+  assert.equal(first.pagination.truncated, true)
+  await engine.grantProductWorkMemory({ instanceId, commandId: 'side-revoke', workItemId: 'item-a', expectedRevision: 1, enabled: false })
+  await assert.rejects(read(workerA, shared.id, first.pagination.cursor), { code: 'MEMORY_DENIED' })
+  await assert.rejects(search(workerA), { code: 'MEMORY_DENIED' })
+  await engine.grantProductWorkMemory({ instanceId, commandId: 'side-regrant', workItemId: 'item-a', expectedRevision: 2, enabled: true })
+  await engine.shareProductMemory({ instanceId, commandId: 'side-unshare', id: shared.id,
+    expectedRevision: 1, main: true, workItemIds: [] })
+  await assert.rejects(read(workerA, shared.id, first.pagination.cursor), { code: 'NOT_FOUND' })
+  await assert.rejects(read(main, shared.id, first.pagination.cursor), { code: 'MEMORY_CURSOR_STALE' })
+  await storage.transaction(instanceId, async tx => {
+    const assignment = await tx.get('assignment', 'ticket-a')
+    await tx.replace('assignment', 'ticket-a', { ...assignment, state: 'ended' })
+  })
+  await assert.rejects(search(workerA), { code: 'MEMORY_DENIED' })
+  await assert.rejects(read(workerA, privateA.id), { code: 'MEMORY_DENIED' })
+  await engine.forgetProductMemory({ instanceId, commandId: 'side-forget', id: own.id, expectedRevision: 1 })
+  await assert.rejects(read(main, own.id), { code: 'NOT_FOUND' })
+  await assert.rejects(search({ kind: 'work', workItemId: 'unknown' }), { code: 'NOT_FOUND' })
+  await assert.rejects(search({ kind: 'main', workItemId: 'item-a' }), { code: 'INVALID_INPUT' })
+})
+
 test('filtered memory lists count scanned rows rather than pages', { timeout: 15000 }, async t => {
   const { engine, storage } = await fixture(t)
   await storage.transaction(instanceId, async tx => {
@@ -143,9 +194,14 @@ test('the product Host serves local memory settings and rejects remote clients a
   const saved = await host.dispatch('memory-save', { instanceId, commandId: 'local-save', scope: { kind: 'main' }, text: 'Fictional Main fact' })
   assert.equal((await host.dispatch('memory-list', { instanceId })).items[0].id, saved.id)
   assert.equal((await host.dispatch('memory-read', { instanceId, id: saved.id })).text, 'Fictional Main fact')
+  assert.deepEqual((await host.dispatch('memory-side-query', { instanceId, target: { kind: 'main' }, query: 'Fictional' })).map(item => item.id), [saved.id])
+  assert.equal((await host.dispatch('memory-side-read', { instanceId, target: { kind: 'main' }, id: saved.id })).text, 'Fictional Main fact')
   const remote = { id: 'remote', label: 'Reader', grants: [{ instanceId, capabilities: ['read', 'command'] }] }
   await assert.rejects(host.dispatch('memory-list', { instanceId }, remote), { code: 'SOURCE_NOT_AUTHORIZED' })
   await assert.rejects(host.dispatch('memory-read', { instanceId, id: saved.id }, remote), { code: 'SOURCE_NOT_AUTHORIZED' })
+  await assert.rejects(host.dispatch('memory-side-query', { instanceId, target: { kind: 'main' }, query: 'Fictional' }, remote), { code: 'SOURCE_NOT_AUTHORIZED' })
+  await assert.rejects(host.dispatch('memory-side-read', { instanceId, target: { kind: 'main' }, id: saved.id }, remote), { code: 'SOURCE_NOT_AUTHORIZED' })
+  await assert.rejects(host.dispatch('memory-side-query', { instanceId, target: { kind: 'main' }, query: 'Fictional', sessionId: 'forged' }), { code: 'INVALID_INPUT' })
   await assert.rejects(host.dispatch('memory-save', { instanceId, commandId: 'remote', scope: { kind: 'main' }, text: 'No' }, remote), { code: 'SOURCE_NOT_AUTHORIZED' })
   await assert.rejects(host.dispatch('memory-list', { instanceId: 'foreign' }), { code: 'SOURCE_NOT_AUTHORIZED' })
 })
