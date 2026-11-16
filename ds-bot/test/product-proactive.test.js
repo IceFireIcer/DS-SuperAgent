@@ -38,7 +38,8 @@ test('product settings save scoped rules and review and stop a prepared result',
     const call = async (endpoint, payload) => {
       calls.push([endpoint, payload])
       if (endpoint === 'proactive-rules') return { revision, rules, control: { paused },
-        sources: [{ sourceInstanceId: 'feishu:fixture', label: 'Feishu' }] }
+        sources: [{ sourceInstanceId: 'feishu:fixture', label: 'Feishu', kind: 'feishu' },
+          { sourceInstanceId: 'github:acme/repo', label: 'GitHub acme/repo', kind: 'github' }] }
       if (endpoint === 'proactive-list') return { items: [run], total: 1 }
       if (endpoint === 'proactive-read') return run
       if (endpoint === 'proactive-artifact') return { text: 'review', nextOffset: 6, hasMore: false }
@@ -65,6 +66,14 @@ test('product settings save scoped rules and review and stop a prepared result',
       const saved = calls.find(([endpoint]) => endpoint === 'proactive-save')[1].rules[0]
       assert.deepEqual(saved.match.sourceInstanceIds, ['feishu:fixture'])
       assert.equal(saved.mode, 'auto')
+      await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Edit rule'))
+      await change(document.querySelectorAll('form select')[0], 'github:acme/repo')
+      assert.deepEqual([...document.querySelectorAll('fieldset input')].map(input => input.checked), [true, true])
+      await click(document.querySelector('fieldset input'))
+      await click(document.querySelector('form button[type="submit"]'))
+      const githubRule = calls.filter(([endpoint]) => endpoint === 'proactive-save').at(-1)[1].rules[0]
+      assert.deepEqual(githubRule.match.sourceInstanceIds, ['github:acme/repo'])
+      assert.deepEqual(Array.from(githubRule.match.actorKinds), ['ci'])
       const toggle = document.querySelector('[role="switch"]')
       await click(toggle)
       assert.equal(calls.find(([endpoint]) => endpoint === 'proactive-pause')[1].paused, true)

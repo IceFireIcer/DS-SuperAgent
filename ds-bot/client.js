@@ -46,7 +46,10 @@ var ZH = {
   "Pause proactive preparation": "暂停主动准备",
   "Paused preparations cannot submit a result. Existing work continues.": "暂停后准备结果无法提交，已有工作继续。",
   "Rules use an authenticated source event. Preparation cannot send messages, create PRs or merge changes.": "规则依据已验证的来源事件；准备过程不能发信、创建 PR 或合并。",
-  "Configure a Feishu source to enable preparation rules.": "配置飞书来源后才能启用准备规则。",
+  "Configure a source to enable preparation rules.": "配置来源后才能启用准备规则。",
+  "Event actors": "事件发送者",
+  "CI events": "CI 事件",
+  "Bot events": "机器人事件",
   "New rule": "新建规则",
   "Edit rule": "编辑规则",
   "Disable rule": "停用规则",
@@ -22113,12 +22116,17 @@ function ProductProactiveSettings({ binding, call: call2 }) {
     setConfirmDelete(null);
     void save(snapshot.rules.filter((rule) => rule.id !== ruleId));
   };
+  const sourceFor = (id) => snapshot.sources.find((source) => source.sourceInstanceId === id);
   const edit = (rule) => setDraft(rule ? structuredClone(rule) : {
     id: `review-${crypto.randomUUID().slice(0, 8)}`,
     name: "",
     mode: "observe",
     enabled: true,
-    match: { actorKinds: ["bot"], addressing: ["direct", "mention"], sourceInstanceIds: [snapshot.sources[0].sourceInstanceId] },
+    match: {
+      actorKinds: snapshot.sources[0].kind === "github" ? ["bot", "ci"] : ["bot"],
+      addressing: ["direct", "mention"],
+      sourceInstanceIds: [snapshot.sources[0].sourceInstanceId]
+    },
     scope: "",
     communication: "silent",
     budget: { maxRuns: 2, windowMs: 36e5, maxArtifactBytes: 65536 }
@@ -22162,7 +22170,7 @@ function ProductProactiveSettings({ binding, call: call2 }) {
         className: "bt-soft bt-soft-sm",
         disabled: busy,
         onClick: () => edit(null)
-      }, t("New rule")) : (0, import_react55.createElement)("p", null, t("Configure a Feishu source to enable preparation rules."))
+      }, t("New rule")) : (0, import_react55.createElement)("p", null, t("Configure a source to enable preparation rules."))
     ),
     error ? (0, import_react55.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
     snapshot?.rules.map((rule) => (0, import_react55.createElement)(
@@ -22205,10 +22213,32 @@ function ProductProactiveSettings({ binding, call: call2 }) {
         {
           className: "bt-select",
           value: draft.match.sourceInstanceIds[0],
-          onChange: (event) => update(["match", "sourceInstanceIds"], [event.target.value])
+          onChange: (event) => setDraft((current) => ({
+            ...current,
+            match: {
+              ...current.match,
+              sourceInstanceIds: [event.target.value],
+              actorKinds: sourceFor(event.target.value)?.kind === "github" ? ["bot", "ci"] : ["bot"]
+            }
+          }))
         },
         snapshot.sources.map((source) => (0, import_react55.createElement)("option", { key: source.sourceInstanceId, value: source.sourceInstanceId }, source.label))
       )),
+      sourceFor(draft.match.sourceInstanceIds[0])?.kind === "github" ? (0, import_react55.createElement)(
+        "fieldset",
+        null,
+        (0, import_react55.createElement)("legend", null, t("Event actors")),
+        ["bot", "ci"].map((kind) => (0, import_react55.createElement)(
+          "label",
+          { key: kind },
+          (0, import_react55.createElement)("input", {
+            type: "checkbox",
+            checked: draft.match.actorKinds.includes(kind),
+            onChange: (event) => update(["match", "actorKinds"], event.target.checked ? [...draft.match.actorKinds, kind] : draft.match.actorKinds.filter((item) => item !== kind))
+          }),
+          t(kind === "ci" ? "CI events" : "Bot events")
+        ))
+      ) : null,
       (0, import_react55.createElement)("label", null, t("Mode"), (0, import_react55.createElement)(
         "select",
         {
@@ -22258,7 +22288,7 @@ function ProductProactiveSettings({ binding, call: call2 }) {
       (0, import_react55.createElement)(
         "div",
         { className: "bt-actions" },
-        (0, import_react55.createElement)("button", { type: "submit", className: "bt-soft", disabled: busy }, t("Save rule")),
+        (0, import_react55.createElement)("button", { type: "submit", className: "bt-soft", disabled: busy || !draft.match.actorKinds.length }, t("Save rule")),
         (0, import_react55.createElement)("button", { type: "button", className: "bt-soft", onClick: () => setDraft(null) }, t("Cancel"))
       )
     ) : null,

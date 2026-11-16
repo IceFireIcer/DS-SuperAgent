@@ -45,11 +45,14 @@ test('a configured Feishu bot event prepares a bounded review without granting p
   const config = { databasePath: join(directory, 'data', 'state.sqlite'), workspaceRoot: join(directory, 'workspace'),
     instanceId: 'private', actorId: 'owner', main: { provider: 'mock', model: 'main' },
     router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' },
+    github: { owner: 'acme', repo: 'repo', actorId: 'github-receiver', allowedActorIds: ['github-receiver'],
+      transport: { listEvents: async () => ({ events: [] }) }, intervalMs: 500 },
     feishu: { tenantKey: 'tenant', chatIds: ['group'], actorId: 'receiver', selfActorIds: ['ou_self'],
       allowedActorIds: ['receiver'], api: { appId: 'cli_test', appSecret: 'fixture-secret', fetch }, intervalMs: 500 } }
   host = await createProductHost(native, config)
   const call = (endpoint, payload = {}) => host.dispatch(endpoint, { instanceId: 'private', ...payload })
   const settings = await call('proactive-rules')
+  assert.deepEqual(settings.sources.map(source => source.kind), ['feishu', 'github'])
   const sourceInstanceId = settings.sources[0].sourceInstanceId
   const rule = { id: 'review-failures', name: 'Review failures', mode: 'observe', enabled: true,
     match: { sourceInstanceIds: [sourceInstanceId], actorKinds: ['bot'], addressing: ['mention'], textPattern: 'failure' },
