@@ -32,7 +32,7 @@ export interface ProductHostConfig { databasePath: string; workspaceRoot?: strin
   watchdogStatusPath?: string;
   clientGateway?: Omit<ClientGatewayOptions, 'product'>;
   /** Supplied by a trusted Host, never by the window or a model turn. */
-  feishu?: Omit<FeishuRuntimeOptions, 'storage' | 'instanceId' | 'mainIntake'>;
+  feishu?: Omit<FeishuRuntimeOptions, 'storage' | 'instanceId' | 'mainIntake' | 'attachmentIntake'>;
   /** Trusted deployment selection; one exact Host-local MCP tool, with no model-supplied endpoint or credential. */
   workerMcpTool?: WorkerMcpConfig;
   feishuConfigurationError?: 'INVALID_CONFIG';
@@ -106,7 +106,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
   const environments: LocalEnvironment[] = []
   const nativeAttachments = context.get('attachments') as AttachmentStore | undefined
   const attachments = nativeAttachments ? new ProductAttachments(storage, instanceId, nativeAttachments,
-    id => environments.find(environment => environment.config.id === id)) : undefined
+    id => environments.find(environment => environment.config.id === id), actorId) : undefined
   let engine: Engine | undefined
   let gateway: Awaited<ReturnType<typeof createClientGateway>> | undefined
   let feishuRuntime: FeishuRuntime | undefined
@@ -298,7 +298,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
           return manager.use({ instanceId, resourceId, sourceInstanceId,
             role: purpose === 'source' ? 'main' : 'router', purpose }, consume)
         },
-      }, storage, instanceId, mainIntake: true })
+      }, storage, instanceId, mainIntake: true,
+      ...(attachments ? { attachmentIntake: { upload: (request: import('./product-attachments.js').ProductAttachmentUpload) => attachments.upload(request),
+        environmentId: async () => (await engine!.getInstanceDirectory({ instanceId })).environmentId } } : {}) })
       feishuEngine = new Engine(storage, instanceId, feishuRuntime.sourceBinding, {}, sessions, [], {}, {}, {}, {}, {}, proactive)
       feishuRuntime.bind(feishuEngine)
     }
