@@ -19,6 +19,7 @@ import type { ProactiveRule } from './proactive.js'
 import type { ProductCredentialRecords } from './product-credential-vault.js'
 import type { ProductCredentialManager } from './product-credential-manager.js'
 import { workerMcpName, type WorkerMcpConfig } from './worker-mcp-tool.js'
+import type { ProductMcpConfiguration } from './product-mcp-configuration.js'
 import { assertReferenceShape } from './environment-assets.js'
 import { localDeliveryChannel, type DeliveryChannel } from './deliveries.js'
 import type { RoleConfig, RoleModel } from './config.js'
@@ -82,6 +83,12 @@ const resourceFields: Record<string, string[]> = {
   'resource-revoke': ['instanceId', 'commandId', 'resourceId', 'grantId', 'expectedRevision'],
   'resource-cleanup': ['instanceId', 'resourceId'],
   'resource-select-feishu': ['instanceId', 'commandId', 'resourceId'],
+  'mcp-status': ['instanceId'],
+  'mcp-save': ['instanceId', 'commandId', 'expectedRevision', 'resourceId'],
+  'mcp-approve': ['instanceId', 'commandId', 'expectedRevision', 'approved'],
+  'mcp-connect': ['instanceId', 'commandId', 'expectedRevision'],
+  'mcp-disconnect': ['instanceId', 'commandId', 'expectedRevision'],
+  'mcp-retry': ['instanceId', 'commandId', 'expectedRevision'],
 }
 
 export async function createProductHost(context: Context, config: ProductHostConfig): Promise<ProductHost> {
@@ -120,6 +127,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
         || candidate.sourceInstanceId === githubRuntime?.sourceBinding.sourceInstanceId
         && githubRuntime.health().state !== 'polling') ? 'SOURCE_STOPPED' : undefined }
   let resourceManager: ProductCredentialManager | undefined
+  let mcpConfiguration: ProductMcpConfiguration | undefined
+  let selectedMcpTool: WorkerMcpConfig | undefined
   let statusPublisher: ReturnType<typeof productStatusPublisher> | undefined
   let statusTimer: ReturnType<typeof setInterval> | undefined
   let supervision: ReturnType<typeof createProductSupervision> | undefined
@@ -316,7 +325,18 @@ export async function createProductHost(context: Context, config: ProductHostCon
       && typeof records.deleteRecord === 'function') resourceManager = engine.createProductCredentialManager(records)
     if (config.workerMcpTool) {
       if (!resourceManager) throw new CoreError('UNAVAILABLE', 'The approved MCP tool requires a durable DSH record service.')
-      engine.configureWorkerMcp({ config: config.workerMcpTool, credentials: resourceManager })
+      mcpConfiguration = engine.createProductMcpConfiguration(config.workerMcpTool)
+      const selected = await mcpConfiguration.get({ instanceId })
+      selectedMcpTool = { ...config.workerMcpTool, resourceId: selected.resourceId }
+      engine.configureWorkerMcp({ config: selectedMcpTool, credentials: {
+        use: async (request, consume) => {
+          await mcpConfiguration!.assertUse(request)
+          return resourceManager!.use(request, async secret => {
+            await mcpConfiguration!.assertUse(request)
+            return consume(secret)
+          })
+        },
+      } })
     }
     if (environments[0] && config.workspaceRoot) await engine.addWorkDirectory({ instanceId,
       commandId: `bootstrap:${environments[0].config.id}`, environment: environments[0] })
@@ -449,8 +469,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
         if (client && endpoint.startsWith('preset-')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Role presets require the local authorized product settings.')
         }
-        if (client && endpoint.startsWith('resource-')) {
-          throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Credential resources require the local authorized product settings.')
+        if (client && (endpoint.startsWith('resource-') || endpoint.startsWith('mcp-'))) {
+          throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Credential and MCP settings require the local authorized product settings.')
         }
         if (client && (endpoint.startsWith('attachment-') || endpoint === 'artifact-read')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'File access requires the local authorized product window.')
@@ -590,6 +610,27 @@ export async function createProductHost(context: Context, config: ProductHostCon
               return { ...selected, sourceInstanceId: feishuRuntime.sourceBinding.sourceInstanceId, ...feishuRuntime.health() }
             } finally { feishuSelectionActive = false }
           }
+        }
+        if (endpoint.startsWith('mcp-')) {
+          if (!mcpConfiguration) {
+            if (endpoint === 'mcp-status') return { configured: false, state: 'unavailable', location: 'host', remote: 'unsupported' }
+            throw new CoreError('UNAVAILABLE', 'No trusted Host MCP tool is configured.')
+          }
+          if (endpoint === 'mcp-status') {
+            const current = await mcpConfiguration.get({ instanceId })
+            selectedMcpTool!.resourceId = current.resourceId
+            return current
+          }
+          const request = { instanceId, commandId, expectedRevision: payload.expectedRevision as number }
+          if (endpoint === 'mcp-save') {
+            const saved = await mcpConfiguration.save({ ...request, resourceId: payload.resourceId as string })
+            selectedMcpTool!.resourceId = saved.resourceId
+            return saved
+          }
+          if (endpoint === 'mcp-approve') return mcpConfiguration.approve({ ...request, approved: payload.approved as boolean })
+          if (endpoint === 'mcp-connect') return mcpConfiguration.connect(request)
+          if (endpoint === 'mcp-disconnect') return mcpConfiguration.disconnect(request)
+          if (endpoint === 'mcp-retry') return mcpConfiguration.connect(request, true)
         }
         if (endpoint === 'schedule-list') return engine!.listSchedules({ instanceId })
         if (endpoint === 'supervision') return supervision!.state(payload.ticketId as string | undefined)
