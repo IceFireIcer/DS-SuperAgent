@@ -32,6 +32,8 @@ export function installProduct(ctx) {
           const code = typeof error?.code === 'string' ? error.code : 'PRODUCT_UNAVAILABLE'
           const message = typeof body?.endpoint === 'string' && body.endpoint.startsWith('preset-') && (code.startsWith('PRESET_') || code.startsWith('INVALID_PRESET')
             || code === 'IDENTITY_CONFLICT' || code === 'COMMIT_UNKNOWN') ? String(error?.message ?? 'Check the preset request.')
+            : typeof body?.endpoint === 'string' && body.endpoint.startsWith('memory-') && code.startsWith('MEMORY_')
+              ? String(error?.message ?? 'Review the current memory scope.')
             : code === 'SOURCE_NOT_AUTHORIZED' ? 'This conversation is outside the authorized workspace.'
             : code === 'IDENTITY_CONFLICT' ? 'This message identity was already used for different text.'
               : code === 'CONFIG_REVISION_CONFLICT' ? 'The configuration changed elsewhere. Your draft is still here.'
@@ -41,9 +43,10 @@ export function installProduct(ctx) {
                   : code === 'UNAVAILABLE' ? 'This product capability is not connected yet.'
                     : code === 'RUNTIME_CLOSED' ? 'The product Host is closed.'
                       : 'Main is unavailable. Your accepted messages remain in the conversation.'
-          const status = code === 'SOURCE_NOT_AUTHORIZED' ? 403 : code === 'NOT_FOUND' ? 404
+          const status = code === 'SOURCE_NOT_AUTHORIZED' || code === 'MEMORY_DENIED' ? 403 : code === 'NOT_FOUND' ? 404
             : code === 'RUNTIME_CLOSED' || code === 'COMMIT_UNKNOWN' ? 503
-              : code === 'IDENTITY_CONFLICT' || code === 'CONFIG_REVISION_CONFLICT' || code.startsWith('PRESET_') ? 409 : 400
+              : code === 'IDENTITY_CONFLICT' || code === 'CONFIG_REVISION_CONFLICT' || code.startsWith('PRESET_')
+                || code === 'MEMORY_STALE' || code === 'MEMORY_CURSOR_STALE' ? 409 : 400
           return Response.json({ ok: false, error: { code, message } }, { status })
         }
       },

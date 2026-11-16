@@ -195,7 +195,8 @@ export class Execution {
     private readonly deliveryState?: import('./delivery-state.js').DeliveryState, private readonly hostId = 'local-host',
     private readonly hostCapabilities: HostCapabilities = {},
     private readonly hostEpoch?: () => number | undefined,
-    private readonly proactiveGuard?: (transaction: AsyncTx, ticketId: string, runId: string) => Promise<void>) {
+    private readonly proactiveGuard?: (transaction: AsyncTx, ticketId: string, runId: string) => Promise<void>,
+    private readonly memoryTools: (ticketId: string, assignment: Assignment) => NativeTool[] = () => []) {
     this.jobs = jobs
     this.previews = previews
     this.subagents = subagents
@@ -1241,6 +1242,7 @@ export class Execution {
      * A child gets the same local capabilities but its own accounting: its calls must not consume the parent's
      * tool budget or satisfy the parent's verification rule for `report_ready`.
      */
+    const scopedMemoryTools = this.memoryTools(ticketId, assignment)
     const childTools = (): NativeTool[] => bound ? [...environmentTools.map(tool => ({
       name: tool.name, description: tool.description, parameters: tool.parameters,
       execute: async (args: Record<string, string>, signal: AbortSignal) => {
@@ -1259,7 +1261,7 @@ export class Execution {
     { name: 'browser_use', description: browserTools[1]!.description, parameters: browserTools[1]!.parameters,
       execute: async (args: Record<string, string>, signal: AbortSignal) => (await this.browser!.use(await workScope(), {
         resourceId: args.resourceId!, action: args.action as 'open' | 'snapshot', ...(args.url === undefined ? {} : { url: args.url }),
-      }, signal)).text }] : [])] : []
+      }, signal)).text }] : []), ...scopedMemoryTools] : []
     // Background work outlives the turn: the tool returns a job identity at once, and the completion event
     // arrives as a later turn on this same Session instead of holding the Router or this step open.
     const startLocalJob = async (name: string, start: (jobId: string) => Promise<LocalJob>) => {
@@ -1608,6 +1610,7 @@ export class Execution {
       ...environmentTools,
       ...mcpTools,
       ...browserTools,
+      ...scopedMemoryTools,
       ...jobTools,
       ...subagentTools,
       {

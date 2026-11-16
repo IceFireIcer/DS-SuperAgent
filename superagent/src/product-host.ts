@@ -106,6 +106,17 @@ const browserFields: Record<string, string[]> = {
   'browser-revoke': ['instanceId', 'commandId', 'resourceId', 'expectedRevision'],
   'browser-resolve': ['instanceId', 'commandId', 'resourceId', 'operationId', 'reason'],
 }
+const memoryFields: Record<string, string[]> = {
+  'memory-list': ['instanceId', 'after', 'limit', 'query'],
+  'memory-read': ['instanceId', 'id', 'after', 'maxBytes'],
+  'memory-save': ['instanceId', 'commandId', 'scope', 'text'],
+  'memory-share': ['instanceId', 'commandId', 'id', 'expectedRevision', 'main', 'workItemIds'],
+  'memory-forget': ['instanceId', 'commandId', 'id', 'expectedRevision'],
+  'memory-access-read': ['instanceId', 'workItemId'],
+  'memory-grant': ['instanceId', 'commandId', 'workItemId', 'expectedRevision', 'enabled'],
+  'memory-proposals': ['instanceId'],
+  'memory-decide': ['instanceId', 'commandId', 'proposalId', 'approve'],
+}
 
 export async function createProductHost(context: Context, config: ProductHostConfig): Promise<ProductHost> {
   const instanceId = config.instanceId ?? 'personal'
@@ -447,7 +458,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
           return engine!.openMain({ instanceId })
         }
         if (payload.instanceId !== instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This request is outside the authorized Instance.')
-        const fields = resourceFields[endpoint] ?? browserFields[endpoint] ?? (endpoint === 'proactive-rules' || endpoint === 'proactive-control' ? ['instanceId']
+        const fields = memoryFields[endpoint] ?? resourceFields[endpoint] ?? browserFields[endpoint]
+          ?? (endpoint === 'proactive-rules' || endpoint === 'proactive-control' ? ['instanceId']
           : endpoint === 'proactive-list' ? ['instanceId', 'before']
           : endpoint === 'proactive-read' ? ['instanceId', 'runId']
             : endpoint === 'proactive-artifact' ? ['instanceId', 'runId', 'path', 'offset', 'maxBytes']
@@ -528,6 +540,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
         if (client && endpoint.startsWith('browser-')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Browser resources require the local authorized product window.')
         }
+        if (client && endpoint.startsWith('memory-')) {
+          throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Memory management requires the local authorized product window.')
+        }
         if (client && (endpoint.startsWith('attachment-') || endpoint === 'artifact-read')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'File access requires the local authorized product window.')
         }
@@ -555,6 +570,28 @@ export async function createProductHost(context: Context, config: ProductHostCon
           if (endpoint === 'browser-resolve') return engine!.resolveBrowserOperation({ instanceId, commandId,
             resourceId: payload.resourceId as string, operationId: payload.operationId as string, reason: payload.reason as string })
         }
+        if (endpoint === 'memory-list') return engine!.listProductMemory({ instanceId,
+          ...(payload.after === undefined ? {} : { after: payload.after as string }),
+          ...(payload.limit === undefined ? {} : { limit: payload.limit as number }),
+          ...(payload.query === undefined ? {} : { query: payload.query as string }) })
+        if (endpoint === 'memory-read') return engine!.getProductMemory({ instanceId, id: payload.id as string,
+          ...(payload.after === undefined ? {} : { after: payload.after as string }),
+          ...(payload.maxBytes === undefined ? {} : { maxBytes: payload.maxBytes as number }) })
+        if (endpoint === 'memory-save') return engine!.saveProductMemory({ instanceId, commandId,
+          scope: payload.scope as import('./product-memory.js').MemoryScope, text: payload.text as string })
+        if (endpoint === 'memory-share') return engine!.shareProductMemory({ instanceId, commandId,
+          id: payload.id as string, expectedRevision: payload.expectedRevision as number,
+          main: payload.main as boolean, workItemIds: payload.workItemIds as string[] })
+        if (endpoint === 'memory-forget') return engine!.forgetProductMemory({ instanceId, commandId,
+          id: payload.id as string, expectedRevision: payload.expectedRevision as number })
+        if (endpoint === 'memory-access-read') return engine!.getProductWorkMemoryAccess({ instanceId,
+          workItemId: payload.workItemId as string })
+        if (endpoint === 'memory-grant') return engine!.grantProductWorkMemory({ instanceId, commandId,
+          workItemId: payload.workItemId as string, expectedRevision: payload.expectedRevision as number,
+          enabled: payload.enabled as boolean })
+        if (endpoint === 'memory-proposals') return engine!.listProductMemoryProposals({ instanceId })
+        if (endpoint === 'memory-decide') return engine!.decideProductMemoryProposal({ instanceId, commandId,
+          proposalId: payload.proposalId as string, approve: payload.approve as boolean })
         if (endpoint === 'proactive-rules') {
           const [configured, control] = await Promise.all([engine!.getProactiveRules(), engine!.getProactiveControl()])
           return { ...configured, control, sources: [
