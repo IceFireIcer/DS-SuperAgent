@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { createProductHost, CoreError, Engine } from '../dist/index.js'
+import { createProductHost, CoreError, Engine, NativeSessions } from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, textResponse } from '../dev/native-mock.mjs'
 import { installProduct } from '../../ds-bot/src/host/product.js'
@@ -14,6 +14,41 @@ const copy = (identity = 'export-one') => ({ sourceIdentity: identity, sourceBot
   state: { mainBotIds: ['old-bot'], bots: { 'old-bot': { name: 'Old reviewer', model: 'mock/writer',
     instructions: '{{goal}} under {{constraints}}.', skills: ['review'], main: true,
     admin: true, permissions: ['all'], unknownResource: 'private-value' } } } })
+
+test('applying a preset preserves an in-flight Worker model and routes the next turn to the new revision', { timeout: 20000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'r5-preset-in-flight-'))
+  const requests = []
+  let signalStarted
+  let releaseOld
+  const started = new Promise(resolve => { signalStarted = resolve })
+  const oldTurn = new Promise(resolve => { releaseOld = resolve })
+  const native = await nativeContext(join(directory, 'sessions'), async function* (options) {
+    requests.push(options.model)
+    if (options.model === 'worker') { signalStarted(); await oldTurn }
+    yield* textResponse('Ready.')
+  })
+  const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  const sessions = new NativeSessions(native, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  const engine = new Engine(storage, 'personal', { sourceInstanceId: 'desktop', actorId: 'owner', allowedActorIds: ['owner'] }, {}, sessions)
+  t.after(async () => {
+    releaseOld()
+    await engine.shutdown(); await sessions.close(); await native.fiber.dispose(); await storage.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+  const initial = await engine.getRoleConfig()
+  await engine.createRolePreset({ instanceId: 'personal', commandId: 'create', preset: preset() })
+  const running = sessions.run({ sessionId: 'worker-before', role: 'worker', text: 'Review this.', tools: [] })
+  try {
+    await started
+    const applied = await engine.applyRolePreset({ instanceId: 'personal', commandId: 'apply',
+      presetId: 'reviewer', targetRole: 'worker', expectedRevision: initial.revision })
+    assert.equal(applied.revision, initial.revision + 1)
+  } finally { releaseOld() }
+  await running
+  await sessions.run({ sessionId: 'worker-after', role: 'worker', text: 'Review this.', tools: [] })
+  assert.deepEqual(requests, ['worker', 'writer'])
+  assert.equal((await engine.getRoleConfig()).roles.worker.model.model, 'writer')
+})
 
 test('product Host authorizes preset commands and persists reviewed choices and role revision ownership', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'r5-product-presets-'))
