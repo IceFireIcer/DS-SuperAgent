@@ -19,6 +19,24 @@ async function fixture(t, channel, effects = {}, versioned = false) {
   return { engine, storage, directory }
 }
 
+test('a product work result cannot be reconstructed from its Worker report when the Delivery is missing', async t => {
+  const sent = []
+  const { engine, storage } = await fixture(t, {
+    deliver: async delivery => { sent.push(delivery); return { type: 'success' } },
+  })
+  const accepted = await engine.submit({ commandId: 'product-result', eventId: 'product-input', text: 'Do the work.' })
+  const effect = await storage.transaction('private', async tx => {
+    await tx.insert('work-ticket', accepted.ticketId, { workBriefId: 'brief', workItemId: 'item', ticketId: accepted.ticketId })
+    await tx.insert('report', accepted.ticketId, { id: 'ready-report', ticketId: accepted.ticketId,
+      assignmentId: 'assignment', directionVersion: 1, result: 'Worker-only text' })
+    return engine.effects.enqueue(tx, { key: 'missing-delivery', stream: 'outbox', scope: accepted.ticketId,
+      payload: { purpose: 'result', ticketId: accepted.ticketId } })
+  })
+  await engine.effects.drain()
+  assert.equal(sent.some(delivery => delivery.purpose === 'result'), false)
+  assert.equal((await engine.effects.receipt(effect.id, effect.generation)).delivery, 'dropped')
+})
+
 test('acknowledgement is queryable before delivery and retries reuse one channel message', async t => {
   const calls = []
   const { engine } = await fixture(t, {
