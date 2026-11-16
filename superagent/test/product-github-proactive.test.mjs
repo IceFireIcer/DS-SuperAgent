@@ -298,7 +298,10 @@ test('auto CI preparation enters a real bounded Router Ticket without treating p
   let prepared
   for (let attempt = 0; attempt < 200; attempt++) {
     const run = (await call('proactive-list')).items[0]
-    if (run?.work?.ticketId && run.work.assignment?.id) { prepared = run; break }
+    if (run?.work?.ticketId && run.work.assignment?.id) {
+      prepared = await call('proactive-read', { runId: run.id })
+      break
+    }
     await delay(30)
   }
   assert.ok(prepared?.work?.ticketId, 'Router established an auditable Ticket for the rule-authorized source')
@@ -332,10 +335,14 @@ test('auto CI preparation enters a real bounded Router Ticket without treating p
   let verified
   for (let attempt = 0; attempt < 200; attempt++) {
     const run = (await call('proactive-list')).items.find(item => item.work?.status === 'ready')
-    if (run) { verified = run; break }
+    if (run) {
+      verified = await call('proactive-read', { runId: run.id })
+      break
+    }
     await delay(30)
   }
   assert.ok(verified?.work?.ticketId)
+  assert.equal(verified.work.control.canStop, false)
   assert.equal(verified.work.report.result, 'Verified the isolated CI finding.')
   assert.equal(originalSourceRead, true, 'the Worker read the current original CI event before reporting')
   assert.deepEqual(verified.work.report.artifacts.map(item => item.path), ['verified.txt'])
@@ -357,8 +364,11 @@ test('auto CI preparation enters a real bounded Router Ticket without treating p
     updatedAt: '2026-11-16T00:02:00Z' })
   let third
   for (let attempt = 0; attempt < 200; attempt++) {
-    third = (await call('proactive-list')).items.find(item => item.work?.status === 'ready' && item.id !== verified.id)
-    if (third) break
+    const run = (await call('proactive-list')).items.find(item => item.work?.status === 'ready' && item.id !== verified.id)
+    if (run) {
+      third = await call('proactive-read', { runId: run.id })
+      break
+    }
     await delay(30)
   }
   assert.ok(third?.work?.ticketId)
@@ -415,5 +425,10 @@ test('pausing a standing rule before the Router tool runs prevents a late CI Tic
   const [run] = (await call('proactive-list')).items
   assert.equal(run.work.status, 'suppressed')
   assert.equal(run.work.ticketId, undefined)
+  const detail = await call('proactive-read', { runId: run.id })
+  assert.equal(detail.work.ticketId, undefined)
+  assert.equal(detail.work.budgets.ruleRunLimit, 1)
+  assert.equal(detail.work.budgets.routerStepLimit, 2)
+  assert.equal(detail.work.usage.cost.status, 'unavailable')
   assert.equal((await call('history')).works.length, 0)
 })

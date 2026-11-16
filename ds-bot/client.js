@@ -90,6 +90,50 @@ var ZH = {
   "Runs per hour": "每小时运行次数",
   "Max file bytes": "文件字节上限",
   Unavailable: "不可用",
+  "Work control": "工作控制",
+  State: "状态",
+  Stage: "阶段",
+  Assignment: "执行安排",
+  "No Worker assignment yet.": "尚未安排 Worker。",
+  "Step budgets": "步数预算",
+  Preparation: "准备",
+  "Worker turn": "Worker 当前回合",
+  Total: "合计",
+  "Rule run budget": "规则运行预算",
+  "Artifact byte budget": "文件字节预算",
+  "Worker assignments included": "已纳入的 Worker 执行安排",
+  Unknown: "未知",
+  "A newer Worker assignment makes the previous report stale.": "新的 Worker 执行安排使旧报告失效。",
+  "Pending start": "等待开始",
+  "Worker running": "Worker 执行中",
+  "Worker idle": "Worker 空闲",
+  Ended: "已结束",
+  "Waiting for human": "等待人工",
+  "Worker ended without a verified report": "Worker 已结束，但没有核验报告",
+  "Worker is executing": "Worker 正在执行",
+  "Waiting for background work": "等待后台工作",
+  "Verified report recorded": "已记录核验报告",
+  "Waiting for a human answer": "等待人工回答",
+  Stopping: "正在停止",
+  "Waiting for an execution environment": "等待执行环境",
+  "Environment setup failed": "环境设置失败",
+  "Pending execution": "等待执行",
+  Running: "运行中",
+  "Inferred mandate": "推断授权",
+  "Explicit mandate": "明确授权",
+  Local: "本机",
+  Remote: "远端",
+  "Token usage by role": "各角色 Token 用量",
+  "Provider usage was not reported.": "模型服务未报告用量。",
+  "No model calls.": "没有模型调用。",
+  "{tokens} tok · {reported} of {calls} calls reported": "{tokens} tok · {reported}/{calls} 次调用有报告",
+  "{count} Session reads unavailable": "{count} 个 Session 读取不可用",
+  Cost: "费用",
+  "Cost unavailable": "费用不可用",
+  "No model price catalog is configured for this work.": "当前工作没有可用的模型价格目录。",
+  "Worker report": "Worker 报告",
+  "No ready report yet.": "尚无就绪报告。",
+  "Read verified file": "读取核验文件",
   "Message Main": "与 Main 对话",
   "Attached files": "已附文件",
   "Credential resources": "凭据资源",
@@ -22159,24 +22203,67 @@ var stateText = {
   failed: "Preparation failed",
   stopped: "Stopped"
 };
+var workStageText = {
+  pending: "Pending start",
+  draft: "Worker running",
+  idle: "Worker idle",
+  ready: "Ready",
+  ended: "Ended",
+  "waiting-human": "Waiting for human"
+};
+var workReasonText = {
+  "worker-idle": "Worker ended without a verified report",
+  "worker-running": "Worker is executing",
+  "worker-background": "Waiting for background work",
+  "ready-report": "Verified report recorded",
+  "waiting-human": "Waiting for a human answer",
+  stopping: "Stopping",
+  stopped: "Stopped",
+  "environment-waiting": "Waiting for an execution environment",
+  "setup-failed": "Environment setup failed"
+};
+var assignmentStateText = { pending: "Pending execution", running: "Running", stopping: "Stopping", ended: "Ended" };
+var mandateStrengthText = { inferred: "Inferred mandate", explicit: "Explicit mandate" };
+var lifecycleText = { open: "Open", ended: "Ended" };
+var environmentText = { local: "Local", remote: "Remote" };
+var workText = (value, labels) => t(value === void 0 ? "Unavailable" : labels[value] ?? value);
+function usageLine(label, usage) {
+  const count = Number(usage?.totalTokens ?? 0).toLocaleString();
+  const detail = usage?.status === "none" ? t("No model calls.") : usage?.status === "unavailable" ? t("Provider usage was not reported.") : t("{tokens} tok · {reported} of {calls} calls reported", {
+    tokens: count,
+    reported: usage?.reportedCalls ?? 0,
+    calls: usage?.calls ?? 0
+  });
+  const unavailable = usage?.unavailableSessions ? ` · ${t("{count} Session reads unavailable", { count: usage.unavailableSessions })}` : "";
+  return (0, import_react55.createElement)("li", { key: label }, (0, import_react55.createElement)("span", null, t(label)), (0, import_react55.createElement)("span", null, detail + unavailable));
+}
 function ProactiveReview({ runId, instanceId, call: call2, remote = false, canStop = true, onStopped }) {
   const [run2, setRun] = (0, import_react55.useState)(null);
   const [error, setError] = (0, import_react55.useState)("");
   const [artifact, setArtifact] = (0, import_react55.useState)(null);
+  const [workArtifact, setWorkArtifact] = (0, import_react55.useState)(null);
   const [busy, setBusy] = (0, import_react55.useState)(false);
   (0, import_react55.useEffect)(() => {
     let live = true;
     setRun(null);
     setArtifact(null);
-    void call2("proactive-read", { instanceId, runId }).then((value) => {
+    const refresh = () => call2("proactive-read", { instanceId, runId }).then((value) => {
       if (live) setRun(value);
     }).catch((failure) => {
       if (live) setError(failure.message);
     });
+    void refresh();
+    const timer = setInterval(() => {
+      void refresh();
+    }, 15e3);
     return () => {
       live = false;
+      clearInterval(timer);
     };
   }, [runId, instanceId, call2]);
+  (0, import_react55.useEffect)(() => {
+    setWorkArtifact(null);
+  }, [run2?.work?.report?.id]);
   const readArtifact = async (path) => {
     setBusy(true);
     setError("");
@@ -22213,8 +22300,28 @@ function ProactiveReview({ runId, instanceId, call: call2, remote = false, canSt
       setBusy(false);
     }
   };
+  const readWorkArtifact = async (path) => {
+    setBusy(true);
+    setError("");
+    try {
+      let text = "", offset = 0, hasMore = true;
+      for (let page = 0; page < 16 && hasMore; page++) {
+        const result = await call2("proactive-work-artifact", { instanceId, runId, path, offset, maxBytes: 8192 });
+        text += result.text;
+        offset = result.nextOffset;
+        hasMore = result.hasMore;
+      }
+      setWorkArtifact({ path, text, hasMore });
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  };
   if (error && !run2) return (0, import_react55.createElement)("p", { className: "bt-main-error", role: "alert" }, error);
   if (!run2) return (0, import_react55.createElement)("p", { role: "status" }, t("Loading…"));
+  const work = run2.work;
+  const report = work?.report;
   return (0, import_react55.createElement)(
     "section",
     { className: "bt-product-preparation-detail", "aria-label": t("Preparation review") },
@@ -22225,6 +22332,66 @@ function ProactiveReview({ runId, instanceId, call: call2, remote = false, canSt
     run2.evidence ? (0, import_react55.createElement)("p", null, `${t("Evidence")}: ${run2.evidence}`) : null,
     run2.reason ? (0, import_react55.createElement)("p", null, `${t("Reason")}: ${run2.reason}`) : null,
     run2.isolatedDirectory && !remote ? (0, import_react55.createElement)("p", null, `${t("Preparation directory")}: ${run2.isolatedDirectory}`) : null,
+    work && (work.ticketId || work.usage) ? (0, import_react55.createElement)(
+      "section",
+      { className: "bt-product-preparation-work", "aria-label": t("Work control") },
+      (0, import_react55.createElement)("strong", null, t("Work control")),
+      work.ticketId ? (0, import_react55.createElement)("p", null, `${t("Ticket")}: ${work.ticket?.id ?? work.ticketId} · ${t("State")}: ${workText(work.ticket?.state ?? work.lifecycle, lifecycleText)}`) : null,
+      (0, import_react55.createElement)("p", null, `${t("Stage")}: ${workText(work.stage, workStageText)} · ${t("Reason")}: ${workText(work.reason, workReasonText)}`),
+      work.mandate ? (0, import_react55.createElement)("p", null, `${t("Mandate")}: ${work.mandate.id} · ${workText(work.mandate.strength, mandateStrengthText)} · ${work.mandate.scope}`) : null,
+      work.assignment ? (0, import_react55.createElement)("p", null, `${t("Assignment")}: ${work.assignment.id} · ${t("Generation")}: ${work.assignment.generation} · ${t("State")}: ${workText(work.assignment.state, assignmentStateText)}${work.assignment.environment?.kind ? ` · ${t("Environment")}: ${workText(work.assignment.environment.kind, environmentText)}` : ""}`) : (0, import_react55.createElement)("p", null, t("No Worker assignment yet.")),
+      (0, import_react55.createElement)("p", null, `${t("Step budgets")}: ${t("Preparation")} ${work.budgets?.preparationSteps ?? 0}/${work.budgets?.preparationStepLimit ?? 0} · ${t("Router")} ${work.budgets?.routerSteps ?? 0}/${work.budgets?.routerStepLimit ?? 0} · ${t("Worker turn")} ${work.budgets?.workerLastTurnSteps ?? 0}/${work.budgets?.workerTurnStepLimit ?? 0}`),
+      work.budgets?.workerAssignments > 1 ? (0, import_react55.createElement)("p", null, `${t("Worker assignments included")}: ${work.budgets.workerAssignments}`) : null,
+      work.budgets?.ruleRunLimit ? (0, import_react55.createElement)("p", null, `${t("Rule run budget")}: ${work.budgets.ruleRunsUsed ?? t("Unknown")} / ${work.budgets.ruleRunLimit} · ${work.budgets.ruleWindowMs / 36e5} h`) : null,
+      work.budgets?.maxArtifactBytes ? (0, import_react55.createElement)("p", null, `${t("Artifact byte budget")}: ${work.budgets.maxArtifactBytes}`) : null,
+      work.usage ? (0, import_react55.createElement)(
+        "div",
+        null,
+        (0, import_react55.createElement)("strong", null, t("Token usage by role")),
+        (0, import_react55.createElement)(
+          "ul",
+          { className: "bt-product-preparation-usage" },
+          usageLine("Preparation", work.usage.roles?.preparation),
+          usageLine("Router", work.usage.roles?.router),
+          usageLine("Worker", work.usage.roles?.worker),
+          usageLine("Total", work.usage.total)
+        ),
+        (0, import_react55.createElement)("p", null, `${t("Cost")}: ${work.usage.cost?.status === "unavailable" ? t("Cost unavailable") : work.usage.cost?.amount}`),
+        work.usage.cost?.status === "unavailable" ? (0, import_react55.createElement)("p", { className: "bt-product-preparation-hint" }, t("No model price catalog is configured for this work.")) : null
+      ) : null,
+      report ? (0, import_react55.createElement)(
+        "section",
+        { className: "bt-product-preparation-report" },
+        (0, import_react55.createElement)("strong", null, t("Worker report")),
+        (0, import_react55.createElement)("p", null, report.result),
+        (0, import_react55.createElement)("p", null, `${t("Evidence")}: ${report.evidence}`),
+        report.artifacts?.length ? (0, import_react55.createElement)(
+          "div",
+          null,
+          (0, import_react55.createElement)("strong", null, t("Verified files")),
+          report.artifacts.map((item) => (0, import_react55.createElement)(
+            "div",
+            { key: item.path },
+            (0, import_react55.createElement)("span", null, `${item.path} · ${item.bytes} ${t("bytes")}`),
+            !remote ? (0, import_react55.createElement)("button", {
+              type: "button",
+              className: "bt-soft bt-soft-sm",
+              disabled: busy,
+              onClick: () => {
+                void readWorkArtifact(item.path);
+              }
+            }, t("Read verified file")) : null
+          ))
+        ) : null,
+        workArtifact ? (0, import_react55.createElement)(
+          "div",
+          null,
+          (0, import_react55.createElement)("strong", null, workArtifact.path),
+          (0, import_react55.createElement)("pre", { className: "bt-product-preparation-file" }, workArtifact.text),
+          workArtifact.hasMore ? (0, import_react55.createElement)("p", null, t("Partial evidence")) : null
+        ) : null
+      ) : work.reportState === "stale" ? (0, import_react55.createElement)("p", null, t("A newer Worker assignment makes the previous report stale.")) : (0, import_react55.createElement)("p", null, t("No ready report yet."))
+    ) : null,
     run2.artifacts?.length ? (0, import_react55.createElement)(
       "div",
       null,
@@ -22250,7 +22417,7 @@ function ProactiveReview({ runId, instanceId, call: call2, remote = false, canSt
       (0, import_react55.createElement)("pre", { className: "bt-product-preparation-file" }, artifact.text),
       artifact.hasMore ? (0, import_react55.createElement)("p", null, t("Partial evidence")) : null
     ) : null,
-    canStop && (run2.state === "running" || run2.state === "prepared") ? (0, import_react55.createElement)("button", {
+    canStop && (work?.control?.canStop ?? (run2.state === "running" || run2.state === "prepared")) ? (0, import_react55.createElement)("button", {
       type: "button",
       className: "bt-soft bt-soft-sm",
       disabled: busy,
@@ -22564,6 +22731,11 @@ var PRODUCT_PROACTIVE_CSS = `
 .bt-product-preparation-row button{justify-self:start}
 .bt-product-preparation-detail{border-top:1px solid var(--bt-line);padding-top:12px;overflow-wrap:anywhere;font-size:13px}
 .bt-product-preparation-file{white-space:pre-wrap;overflow-wrap:anywhere;max-height:280px;overflow:auto}
+.bt-product-preparation-work{margin:14px 0;padding:12px;border:1px solid var(--bt-line);border-radius:12px}
+.bt-product-preparation-usage{display:grid;gap:6px;padding:0;list-style:none}
+.bt-product-preparation-usage li{display:flex;justify-content:space-between;gap:12px}
+.bt-product-preparation-hint{color:var(--bt-muted)}
+.bt-product-preparation-report{display:grid;gap:6px;margin-top:12px}
 `;
 
 // src/client/product-presets.js
@@ -26880,6 +27052,19 @@ function applyProduct(ctx) {
       )
     );
     const models = snapshot.providers.flatMap((provider) => provider.models);
+    const viewWork = ({ ticketIds = [], workBriefId } = {}) => {
+      onClose();
+      view.set((current) => ({ ...current, route: "main" }));
+      void refreshMain(binding).then(() => {
+        requestAnimationFrame(() => {
+          const cards = [...document.querySelectorAll("[data-ticket-id], [data-work-brief-id]")];
+          const card = cards.find((item) => ticketIds.includes(item.dataset.ticketId) || workBriefId && item.dataset.workBriefId === workBriefId);
+          if (!card) return;
+          card.focus({ preventScroll: true });
+          card.scrollIntoView?.({ behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+        });
+      });
+    };
     return (0, import_react62.createElement)(
       "div",
       { className: "bt-settings-layer" },
@@ -26945,19 +27130,7 @@ function applyProduct(ctx) {
               binding,
               works: view.getSnapshot().works,
               call: productCall,
-              onViewWork: ({ ticketIds = [], workBriefId } = {}) => {
-                onClose();
-                view.set((current) => ({ ...current, route: "main" }));
-                void refreshMain(binding).then(() => {
-                  requestAnimationFrame(() => {
-                    const cards = [...document.querySelectorAll("[data-ticket-id], [data-work-brief-id]")];
-                    const card = cards.find((item) => ticketIds.includes(item.dataset.ticketId) || workBriefId && item.dataset.workBriefId === workBriefId);
-                    if (!card) return;
-                    card.focus({ preventScroll: true });
-                    card.scrollIntoView?.({ behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
-                  });
-                });
-              }
+              onViewWork: viewWork
             }) : page === "preparations" ? (0, import_react62.createElement)(ProductProactiveSettings, { binding, call: productCall }) : page === "presets" ? (0, import_react62.createElement)(ProductPresetSettings, {
               binding,
               call: productCall,

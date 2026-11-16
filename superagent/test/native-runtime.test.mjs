@@ -45,6 +45,25 @@ test('the native Session adapter preserves original input and an idle turn is no
   assert.ok(resumed.events.length > outcome.events.length)
 })
 
+test('the native Session adapter attributes provider token usage to one durable Session', { timeout: 10000 }, async context => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-native-usage-'))
+  let runtime
+  let native
+  let turn = 0
+  context.after(async () => { await runtime?.close(); await native?.fiber.dispose(); await rm(directory, { recursive: true, force: true }) })
+  native = await nativeContext(directory, () => ++turn === 1
+    ? textResponse('First turn.', { inputTokens: 100, outputTokens: 20, cacheReadTokens: 30,
+      cacheWriteTokens: 10, totalTokens: 160, reasoningTokens: 5 })
+    : textResponse('Second turn.', { inputTokens: 50, outputTokens: 10, totalTokens: 60 }))
+  runtime = new core.NativeSessions(native, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  await runtime.run({ sessionId: 'worker-with-usage', role: 'worker', text: 'First request.', tools: [] })
+  await runtime.run({ sessionId: 'worker-with-usage', role: 'worker', text: 'Second request.', tools: [] })
+  assert.deepEqual(await runtime.readUsage('worker-with-usage'), {
+    calls: 2, reportedCalls: 2, inputTokens: 150, outputTokens: 30,
+    cacheReadTokens: 30, cacheWriteTokens: 10, reasoningTokens: 5, totalTokens: 220,
+  })
+})
+
 test('an admitted file remains a native content block in the durable Session', { timeout: 10000 }, async context => {
   const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-native-file-'))
   let native, runtime

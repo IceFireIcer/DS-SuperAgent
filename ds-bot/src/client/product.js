@@ -1148,6 +1148,20 @@ export function applyProduct(ctx) {
           h('div', { className: 'bt-settings-scroll' }, h('p', { className: 'bt-main-error', role: 'alert' }, error ?? t('Configuration is unavailable.')))),
         close))
     const models = snapshot.providers.flatMap(provider => provider.models)
+    const viewWork = ({ ticketIds = [], workBriefId } = {}) => {
+      onClose()
+      view.set(current => ({ ...current, route: 'main' }))
+      void refreshMain(binding).then(() => {
+        requestAnimationFrame(() => {
+          const cards = [...document.querySelectorAll('[data-ticket-id], [data-work-brief-id]')]
+          const card = cards.find(item => ticketIds.includes(item.dataset.ticketId)
+            || workBriefId && item.dataset.workBriefId === workBriefId)
+          if (!card) return
+          card.focus({ preventScroll: true })
+          card.scrollIntoView?.({ behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' })
+        })
+      })
+    }
     return h('div', { className: 'bt-settings-layer' },
       h('div', { className: 'bt-scrim', onMouseDown: onClose }),
       h('div', { className: 'bt-settings bt-main-settings-dialog', role: 'dialog', 'aria-modal': true, 'aria-label': t('Super-agent settings') },
@@ -1174,20 +1188,7 @@ export function applyProduct(ctx) {
                 : page === 'supervision' ? t('Supervision') : t('Super-agent settings'))),
           h('div', { className: 'bt-settings-scroll' },
             page === 'schedules' ? h(ProductScheduleSettings, { binding, works: view.getSnapshot().works, call: productCall,
-              onViewWork: ({ ticketIds = [], workBriefId } = {}) => {
-                onClose()
-                view.set(current => ({ ...current, route: 'main' }))
-                void refreshMain(binding).then(() => {
-                  requestAnimationFrame(() => {
-                    const cards = [...document.querySelectorAll('[data-ticket-id], [data-work-brief-id]')]
-                    const card = cards.find(item => ticketIds.includes(item.dataset.ticketId)
-                      || workBriefId && item.dataset.workBriefId === workBriefId)
-                    if (!card) return
-                    card.focus({ preventScroll: true })
-                    card.scrollIntoView?.({ behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' })
-                  })
-                })
-              } })
+              onViewWork: viewWork })
               : page === 'preparations' ? h(ProductProactiveSettings, { binding, call: productCall })
               : page === 'presets' ? h(ProductPresetSettings, { binding, call: productCall,
                 settingsRevision: snapshot.revision, roleSettings: snapshot, onApplied: refreshAfterPreset, onReload: refreshAfterPreset })

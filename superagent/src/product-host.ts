@@ -654,7 +654,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
         if (endpoint === 'proactive-read') {
           const run = await engine!.getProactiveRun(payload.runId as string)
           if (!run) return null
-          const work = await workRouter!.view(run)
+          const work = await workRouter!.view(run, { detail: true })
           return { ...run, ...(work ? { work } : {}) }
         }
         if (endpoint === 'proactive-artifact') return engine!.readProactiveArtifact(payload.runId as string,

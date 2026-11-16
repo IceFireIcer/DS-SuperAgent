@@ -34,7 +34,23 @@ test('product settings save scoped rules and review and stop a prepared result',
     let revision = 1, rules = [], paused = false
     const run = { id: 'review-one', ruleId: 'review-one', ruleRevision: 1, state: 'prepared', sourceInstanceId: 'feishu:fixture',
       eventId: 'event-one', summary: 'Review ready.', evidence: 'Verified source event.', modelSteps: 2,
-      artifacts: [{ path: 'review.md', bytes: 6, sha256: 'a'.repeat(64) }] }
+      artifacts: [{ path: 'review.md', bytes: 6, sha256: 'a'.repeat(64) }],
+      work: { ticketId: 'ticket-one', status: 'idle', stage: 'idle', lifecycle: 'open', reason: 'worker-idle',
+        ticket: { id: 'ticket-one', state: 'open', directionVersion: 1 },
+        mandate: { id: 'mandate-one', scope: 'Review the verified failure only.', strength: 'inferred', environment: 'local' },
+        assignment: { id: 'assignment-one', generation: 'generation-two', state: 'running', environment: { kind: 'local' } },
+        budgets: { preparationSteps: 2, preparationStepLimit: 8, routerSteps: 1, routerStepLimit: 2,
+          workerLastTurnSteps: 4, workerTurnStepLimit: 8, workerAssignments: 2, maxArtifactBytes: 4096,
+          ruleRunLimit: 3, ruleRunsUsed: 2, ruleWindowMs: 3_600_000 },
+        usage: { roles: {
+          preparation: { status: 'available', calls: 2, reportedCalls: 2, inputTokens: 120, outputTokens: 30, totalTokens: 150 },
+          router: { status: 'available', calls: 1, reportedCalls: 1, inputTokens: 40, outputTokens: 10, totalTokens: 50 },
+          worker: { status: 'partial', calls: 2, reportedCalls: 1, inputTokens: 80, outputTokens: 20, totalTokens: 100 },
+        }, total: { status: 'partial', calls: 5, reportedCalls: 4, inputTokens: 240, outputTokens: 60, totalTokens: 300 },
+        cost: { status: 'unavailable', amount: null, currency: null } },
+        control: { canStop: true }, reportState: 'current',
+        report: { id: 'report-one', result: 'The verified review is ready.', evidence: 'Checked the source and artifact.',
+          artifacts: [{ path: 'work.md', bytes: 12, sha256: 'b'.repeat(64) }] } } }
     const call = async (endpoint, payload) => {
       calls.push([endpoint, payload])
       if (endpoint === 'proactive-rules') return { revision, rules, control: { paused },
@@ -43,6 +59,7 @@ test('product settings save scoped rules and review and stop a prepared result',
       if (endpoint === 'proactive-list') return { items: [run], total: 1 }
       if (endpoint === 'proactive-read') return run
       if (endpoint === 'proactive-artifact') return { text: 'review', nextOffset: 6, hasMore: false }
+      if (endpoint === 'proactive-work-artifact') return { text: 'verified work', nextOffset: 13, hasMore: false }
       if (endpoint === 'proactive-save') { rules = payload.rules; revision++; return { revision, rules } }
       if (endpoint === 'proactive-pause') { paused = payload.paused; return { paused } }
       if (endpoint === 'proactive-stop') { run.state = 'stopped'; return run }
@@ -79,8 +96,18 @@ test('product settings save scoped rules and review and stop a prepared result',
       assert.equal(calls.find(([endpoint]) => endpoint === 'proactive-pause')[1].paused, true)
       await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Review'))
       assert.match(document.body.textContent, /Verified source event/u)
+      assert.match(document.body.textContent, /ticket-one/u)
+      assert.match(document.body.textContent, /Review the verified failure only\./u)
+      assert.match(document.body.textContent, /generation-two/u)
+      assert.match(document.body.textContent, /The verified review is ready\./u)
+      assert.match(document.body.textContent, /300 tok/u)
+      assert.match(document.body.textContent, /Cost unavailable/u)
+      assert.match(document.body.textContent, /Rule run budget: 2 \/ 3/u)
+      assert.equal([...document.querySelectorAll('button')].some(button => button.textContent === 'View work'), false)
       await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Read file'))
       assert.match(document.body.textContent, /review/u)
+      await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Read verified file'))
+      assert.match(document.body.textContent, /verified work/u)
       await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Stop preparation'))
       assert.equal(calls.find(([endpoint]) => endpoint === 'proactive-stop')[1].runId, 'review-one')
       await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Delete rule'))

@@ -3,11 +3,12 @@ import { realpath, stat } from 'node:fs/promises'
 import { basename, dirname, join, relative } from 'node:path'
 import { LocalEnvironment } from './local-environment.js'
 import { assertReferenceShape } from './environment-assets.js'
-import { CoreError } from './model.js'
+import { CoreError, type Work } from './model.js'
 import type { Engine } from './engine.js'
-import type { NativeSessions } from './native-sessions.js'
-import type { ProactiveRun } from './proactive.js'
+import type { NativeSessions, SessionTokenUsage } from './native-sessions.js'
+import type { ProactiveRule, ProactiveRun } from './proactive.js'
 import type { AsyncTx, Storage } from './storage.js'
+import type { Assignment } from './execution.js'
 
 export interface ProactiveWorkRecord {
   runId: string
@@ -24,6 +25,94 @@ export interface ProactiveWorkRecord {
 }
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex')
+
+type UsageStatus = 'available' | 'partial' | 'unavailable' | 'none'
+interface UsageView extends SessionTokenUsage { status: UsageStatus; unavailableSessions: number }
+interface UsageRead { usage?: SessionTokenUsage; failed: boolean }
+
+function usageView(usage: SessionTokenUsage | undefined, failedSessions = 0): UsageView {
+  if (!usage) return { status: 'unavailable', calls: 0, reportedCalls: 0, inputTokens: 0, outputTokens: 0,
+    cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0, totalTokens: 0, unavailableSessions: failedSessions }
+  return { ...usage, status: failedSessions > 0 ? usage.reportedCalls > 0 ? 'partial' : 'unavailable'
+    : !usage.calls ? 'none' : usage.reportedCalls === 0 ? 'unavailable'
+      : usage.reportedCalls < usage.calls ? 'partial' : 'available', unavailableSessions: failedSessions }
+}
+
+function combineUsage(usages: (SessionTokenUsage | undefined)[]): SessionTokenUsage | undefined {
+  const present = usages.filter((usage): usage is SessionTokenUsage => usage !== undefined)
+  if (!present.length) return undefined
+  return present.reduce((total, usage) => ({
+    calls: total.calls + usage.calls, reportedCalls: total.reportedCalls + usage.reportedCalls,
+    inputTokens: total.inputTokens + usage.inputTokens, outputTokens: total.outputTokens + usage.outputTokens,
+    cacheReadTokens: total.cacheReadTokens + usage.cacheReadTokens, cacheWriteTokens: total.cacheWriteTokens + usage.cacheWriteTokens,
+    reasoningTokens: total.reasoningTokens + usage.reasoningTokens, totalTokens: total.totalTokens + usage.totalTokens,
+  }), { calls: 0, reportedCalls: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0,
+    reasoningTokens: 0, totalTokens: 0 })
+}
+
+function totalUsage(roles: UsageView[], expected: number) {
+  const available = roles.filter(role => role.status !== 'unavailable' && role.status !== 'none')
+  const calls = roles.reduce((sum, role) => sum + role.calls, 0)
+  const reportedCalls = roles.reduce((sum, role) => sum + role.reportedCalls, 0)
+  const unavailableSessions = roles.reduce((sum, role) => sum + role.unavailableSessions, 0)
+  if (!available.length) return { status: calls === 0 && unavailableSessions === 0 ? 'none' as const : 'unavailable' as const,
+    calls, reportedCalls, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0,
+    reasoningTokens: 0, totalTokens: 0, unavailableSessions }
+  const total = available.reduce((sum, role) => ({
+    inputTokens: sum.inputTokens + role.inputTokens, outputTokens: sum.outputTokens + role.outputTokens,
+    cacheReadTokens: sum.cacheReadTokens + role.cacheReadTokens, cacheWriteTokens: sum.cacheWriteTokens + role.cacheWriteTokens,
+    reasoningTokens: sum.reasoningTokens + role.reasoningTokens, totalTokens: sum.totalTokens + role.totalTokens,
+  }), { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0,
+    reasoningTokens: 0, totalTokens: 0 })
+  const status: UsageStatus = available.length < expected || unavailableSessions > 0
+    || available.some(role => role.status === 'partial' || role.status === 'unavailable')
+    ? 'partial' : reportedCalls < calls ? 'partial' : 'available'
+  return { status, calls, reportedCalls, unavailableSessions, ...total }
+}
+
+function ticketView(ticket: Work['ticket'] | undefined) {
+  return ticket ? { id: ticket.id, mandateId: ticket.mandateId, triggerId: ticket.triggerId, state: ticket.state,
+    directionVersion: ticket.directionVersion ?? 1, ...(ticket.constraint ? { constraint: ticket.constraint } : {}) } : undefined
+}
+
+function assignmentView(assignment: Assignment | undefined) {
+  return assignment ? { id: assignment.id, generation: assignment.generation, state: assignment.state,
+    createdAt: assignment.createdAt, sessionId: assignment.sessionId,
+    ...(assignment.configurationRevision === undefined ? {} : { configurationRevision: assignment.configurationRevision }),
+    ...(assignment.sessionStartSeq === undefined ? {} : { sessionStartSeq: assignment.sessionStartSeq }),
+    ...(assignment.sessionEndSeq === undefined ? {} : { sessionEndSeq: assignment.sessionEndSeq }),
+    ...(assignment.environment ? { environment: assignment.environment } : {}),
+    ...(assignment.recovery ? { recovery: assignment.recovery } : {}) } : undefined
+}
+
+function workStage(ticket: Work['ticket'] | undefined, intent: Work['intent'] | undefined) {
+  if (ticket?.constraint?.kind === 'stopped') return 'stopped'
+  if (ticket?.constraint?.kind === 'waiting-human') return 'waiting-human'
+  if (ticket?.state === 'ended') return 'ended'
+  if (!intent) return undefined
+  if (intent.state === 'ready' || intent.reason === 'ready-report') return 'ready'
+  if (intent.reason === 'worker-idle') return 'idle'
+  if (intent.reason === 'worker-running' || intent.reason === 'worker-background') return 'draft'
+  return 'pending'
+}
+
+function budgetView(run: ProactiveRun, rule?: ProactiveRule) {
+  const budget = run.budgetSnapshot
+  return {
+    ...(budget ? { ruleRunLimit: budget.maxRuns, ruleWindowMs: budget.windowMs, ruleRunsUsed: budget.usedRuns,
+      ruleRunsRemaining: budget.remainingRuns, ruleBudgetSource: 'run' as const }
+      : rule ? { ruleRunLimit: rule.budget.maxRuns, ruleWindowMs: rule.budget.windowMs, ruleBudgetSource: 'current-rule' as const } : {}),
+    ...(budget?.maxArtifactBytes === undefined ? {} : { maxArtifactBytes: budget.maxArtifactBytes }),
+  }
+}
+
+function canStop(run: ProactiveRun, ticket: Work['ticket'] | undefined, recordStatus: ProactiveWorkRecord['status'],
+  status: string | undefined) {
+  return (run.state === 'running' || run.state === 'prepared')
+    && (recordStatus === 'routing' || recordStatus === 'accepted')
+    && !['ready', 'stopped', 'stopping'].includes(status ?? '')
+    && (!ticket || ticket.state === 'open' && ticket.constraint?.kind !== 'stopped')
+}
 
 /** The trusted Host owns routing; a model can only accept or decline the already bounded standing rule. */
 export class ProactiveWork {
@@ -186,29 +275,92 @@ export class ProactiveWork {
     })
   }
 
-  async view(run: ProactiveRun) {
+  async view(run: ProactiveRun, options: { detail?: boolean } = {}) {
     const record = await this.storage.transaction(this.instanceId, tx => tx.get<ProactiveWorkRecord>('proactive-work', run.id))
     if (!record) return undefined
-    if (!record.ticketId) return record
+    const readUsage = async (sessionId?: string): Promise<UsageRead> => {
+      if (!sessionId) return { failed: false }
+      try {
+        const usage = await this.sessions.readUsage(sessionId)
+        return usage ? { usage, failed: false } : { failed: false }
+      }
+      catch { return { failed: true } }
+    }
+    if (!record.ticketId) {
+      if (!options.detail) return record
+      const configured = await this.engine.getProactiveRules().catch(() => undefined)
+      const rule = !run.budgetSnapshot && configured?.revision === run.ruleRevision
+        ? configured.rules.find(item => item.id === run.ruleId) : undefined
+      const budgets = budgetView(run, rule)
+      const [preparationUsage, routerUsage] = await Promise.all([readUsage(`proactive-${digest(run.id)}`), readUsage(record.routerSessionId)])
+      const roles = { preparation: usageView(preparationUsage.usage, Number(preparationUsage.failed)),
+        router: usageView(routerUsage.usage, Number(routerUsage.failed)), worker: usageView(undefined) }
+      return { ...record, status: record.status, reason: record.reason,
+        budgets: { preparationSteps: run.modelSteps ?? null, preparationStepLimit: 8,
+          routerSteps: record.routerSteps ?? null, routerStepLimit: 2, workerLastTurnSteps: null, workerTurnStepLimit: 8, ...budgets },
+        usage: { roles, total: totalUsage(Object.values(roles), 3),
+          cost: { status: 'unavailable', amount: null, currency: null, reason: 'MODEL_PRICE_NOT_CONFIGURED' } },
+        control: { canStop: canStop(run, undefined, record.status, record.status) } }
+    }
+    if (!options.detail) {
+      const stored = await this.storage.transaction(this.instanceId, async tx => ({
+        ticket: await tx.get<Work['ticket']>('ticket', record.ticketId!),
+        intent: await tx.get<Work['intent']>('intent', record.ticketId!),
+        assignment: await tx.get<Assignment>('assignment', record.ticketId!),
+      }))
+      const status = stored.ticket?.constraint?.kind ?? stored.intent?.state ?? record.status
+      return { ...record, status,
+        stage: workStage(stored.ticket, stored.intent), lifecycle: stored.ticket?.state ?? 'open',
+        reason: stored.ticket?.constraint?.reason ?? stored.intent?.reason ?? record.reason,
+        ticket: ticketView(stored.ticket), assignment: assignmentView(stored.assignment),
+        control: { canStop: canStop(run, stored.ticket, record.status, status) } }
+    }
+    const configured = await this.engine.getProactiveRules().catch(() => undefined)
+    const rule = !run.budgetSnapshot && configured?.revision === run.ruleRevision
+      ? configured.rules.find(item => item.id === run.ruleId) : undefined
+    const budgets = budgetView(run, rule)
     const [ticket, conversation] = await Promise.all([this.engine.getTicket(record.ticketId), this.engine.conversation(record.ticketId)])
     const worker = conversation.assignments[0]
-    const workerSession = worker ? await this.storage.transaction(this.instanceId,
-      tx => tx.get<{ stepCount?: number }>('session', worker.sessionId)) : undefined
+    const workerSessionIds = [...new Set([...conversation.assignmentHistory, ...(worker ? [worker] : [])]
+      .map(assignment => assignment.sessionId))]
+    const [workerSession, preparationUsage, routerUsage, workerUsageParts] = await Promise.all([
+      worker ? this.storage.transaction(this.instanceId, tx => tx.get<{ stepCount?: number }>('session', worker.sessionId)) : undefined,
+      readUsage(`proactive-${digest(run.id)}`), readUsage(record.routerSessionId),
+      Promise.all(workerSessionIds.map(readUsage)),
+    ])
+    const workerUsage = combineUsage(workerUsageParts.map(result => result.usage))
+    const roles = { preparation: usageView(preparationUsage.usage, Number(preparationUsage.failed)),
+      router: usageView(routerUsage.usage, Number(routerUsage.failed)),
+      worker: usageView(workerUsage, workerUsageParts.filter(result => result.failed).length) }
+    const report = conversation.reports[0]
+    const currentReport = worker && report?.assignmentId === worker.id
+      && report.directionVersion === (ticket?.ticket.directionVersion ?? 1) && conversation.status === 'ready' ? report : undefined
     return { ...record, status: conversation.status, mandate: ticket?.mandate, trigger: ticket?.trigger,
-      assignment: worker, reason: conversation.reason,
+      ticket: ticketView(ticket?.ticket), assignment: assignmentView(worker),
+      stage: conversation.stage, lifecycle: conversation.lifecycle, reason: conversation.reason,
       budgets: { preparationSteps: run.modelSteps ?? null, preparationStepLimit: 8,
         routerSteps: record.routerSteps ?? null, routerStepLimit: 2, workerLastTurnSteps: workerSession?.stepCount ?? null,
-        workerTurnStepLimit: 8, maxArtifactBytes: ticket?.trigger.proactive?.maxArtifactBytes ?? null },
-      ...(conversation.reports[0] ? { report: { id: conversation.reports[0].id, result: conversation.reports[0].result,
-        evidence: conversation.reports[0].evidence, artifacts: conversation.reports[0].artifacts } } : {}) }
+        workerTurnStepLimit: 8, workerAssignments: workerSessionIds.length,
+        maxArtifactBytes: budgets.maxArtifactBytes ?? ticket?.trigger.proactive?.maxArtifactBytes ?? null, ...budgets },
+      usage: { roles, total: totalUsage(Object.values(roles), 3),
+        cost: { status: 'unavailable', amount: null, currency: null, reason: 'MODEL_PRICE_NOT_CONFIGURED' } },
+      control: { canStop: canStop(run, ticket?.ticket, record.status, conversation.status) },
+      reportState: !report ? 'none' : currentReport ? 'current' : 'stale',
+      ...(currentReport ? { report: { id: currentReport.id, result: currentReport.result, evidence: currentReport.evidence,
+        artifacts: currentReport.artifacts, createdAt: currentReport.createdAt, toolFactCount: currentReport.toolFacts.length } } : {}) }
   }
 
   async readArtifact(runId: string, path: string, offset?: number, maxBytes?: number) {
     const run = await this.engine.getProactiveRun(runId)
     const record = await this.storage.transaction(this.instanceId, tx => tx.get<ProactiveWorkRecord>('proactive-work', runId))
     if (!run || !record?.ticketId) throw new CoreError('NOT_FOUND', 'The proactive Ticket artifact is unavailable.')
-    const conversation = await this.engine.conversation(record.ticketId)
-    const reference = conversation.reports[0]?.artifacts.find(artifact => artifact.path === path)?.reference
+    await this.engine.assertProactiveWorkCurrent(runId)
+    const [ticket, conversation] = await Promise.all([this.engine.getTicket(record.ticketId), this.engine.conversation(record.ticketId)])
+    const worker = conversation.assignments[0]
+    const report = conversation.reports[0]
+    if (!worker || report?.assignmentId !== worker.id || report.directionVersion !== (ticket?.ticket.directionVersion ?? 1)
+      || conversation.status !== 'ready') throw new CoreError('REFERENCE_STALE', 'The Ticket has no current Worker report.')
+    const reference = report.artifacts.find(artifact => artifact.path === path)?.reference
     if (!reference) throw new CoreError('NOT_FOUND', 'This Ticket has no verified artifact at that path.')
     assertReferenceShape(reference)
     const environment = await this.environment(run)

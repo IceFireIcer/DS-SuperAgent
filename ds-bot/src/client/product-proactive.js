@@ -5,19 +5,45 @@ import { t } from './i18n.js'
 const stateText = { running: 'Preparing', observed: 'Would prepare', prepared: 'Ready for review',
   silent: 'Ended quietly', suppressed: 'No longer current', 'budget-exhausted': 'Budget exhausted',
   failed: 'Preparation failed', stopped: 'Stopped' }
+const workStageText = { pending: 'Pending start', draft: 'Worker running', idle: 'Worker idle',
+  ready: 'Ready', ended: 'Ended', 'waiting-human': 'Waiting for human' }
+const workReasonText = { 'worker-idle': 'Worker ended without a verified report', 'worker-running': 'Worker is executing',
+  'worker-background': 'Waiting for background work', 'ready-report': 'Verified report recorded',
+  'waiting-human': 'Waiting for a human answer', stopping: 'Stopping', stopped: 'Stopped',
+  'environment-waiting': 'Waiting for an execution environment', 'setup-failed': 'Environment setup failed' }
+const assignmentStateText = { pending: 'Pending execution', running: 'Running', stopping: 'Stopping', ended: 'Ended' }
+const mandateStrengthText = { inferred: 'Inferred mandate', explicit: 'Explicit mandate' }
+const lifecycleText = { open: 'Open', ended: 'Ended' }
+const environmentText = { local: 'Local', remote: 'Remote' }
+const workText = (value, labels) => t(value === undefined ? 'Unavailable' : labels[value] ?? value)
+
+function usageLine(label, usage) {
+  const count = Number(usage?.totalTokens ?? 0).toLocaleString()
+  const detail = usage?.status === 'none' ? t('No model calls.')
+    : usage?.status === 'unavailable' ? t('Provider usage was not reported.')
+      : t('{tokens} tok · {reported} of {calls} calls reported', {
+        tokens: count, reported: usage?.reportedCalls ?? 0, calls: usage?.calls ?? 0 })
+  const unavailable = usage?.unavailableSessions
+    ? ` · ${t('{count} Session reads unavailable', { count: usage.unavailableSessions })}` : ''
+  return h('li', { key: label }, h('span', null, t(label)), h('span', null, detail + unavailable))
+}
 
 export function ProactiveReview({ runId, instanceId, call, remote = false, canStop = true, onStopped }) {
   const [run, setRun] = useState(null)
   const [error, setError] = useState('')
   const [artifact, setArtifact] = useState(null)
+  const [workArtifact, setWorkArtifact] = useState(null)
   const [busy, setBusy] = useState(false)
   useEffect(() => {
     let live = true
     setRun(null); setArtifact(null)
-    void call('proactive-read', { instanceId, runId }).then(value => { if (live) setRun(value) })
+    const refresh = () => call('proactive-read', { instanceId, runId }).then(value => { if (live) setRun(value) })
       .catch(failure => { if (live) setError(failure.message) })
-    return () => { live = false }
+    void refresh()
+    const timer = setInterval(() => { void refresh() }, 15_000)
+    return () => { live = false; clearInterval(timer) }
   }, [runId, instanceId, call])
+  useEffect(() => { setWorkArtifact(null) }, [run?.work?.report?.id])
   const readArtifact = async path => {
     setBusy(true); setError('')
     try {
@@ -39,8 +65,22 @@ export function ProactiveReview({ runId, instanceId, call, remote = false, canSt
     } catch (failure) { setError(failure.message) }
     finally { setBusy(false) }
   }
+  const readWorkArtifact = async path => {
+    setBusy(true); setError('')
+    try {
+      let text = '', offset = 0, hasMore = true
+      for (let page = 0; page < 16 && hasMore; page++) {
+        const result = await call('proactive-work-artifact', { instanceId, runId, path, offset, maxBytes: 8192 })
+        text += result.text; offset = result.nextOffset; hasMore = result.hasMore
+      }
+      setWorkArtifact({ path, text, hasMore })
+    } catch (failure) { setError(failure.message) }
+    finally { setBusy(false) }
+  }
   if (error && !run) return h('p', { className: 'bt-main-error', role: 'alert' }, error)
   if (!run) return h('p', { role: 'status' }, t('Loading…'))
+  const work = run.work
+  const report = work?.report
   return h('section', { className: 'bt-product-preparation-detail', 'aria-label': t('Preparation review') },
     h('p', null, `${t(stateText[run.state] ?? run.state)} · ${run.ruleId}`),
     h('p', null, `${t('Source Instance ID')}: ${run.sourceInstanceId} · ${t('Event')}: ${run.eventId}`),
@@ -49,6 +89,43 @@ export function ProactiveReview({ runId, instanceId, call, remote = false, canSt
     run.evidence ? h('p', null, `${t('Evidence')}: ${run.evidence}`) : null,
     run.reason ? h('p', null, `${t('Reason')}: ${run.reason}`) : null,
     run.isolatedDirectory && !remote ? h('p', null, `${t('Preparation directory')}: ${run.isolatedDirectory}`) : null,
+    work && (work.ticketId || work.usage) ? h('section', { className: 'bt-product-preparation-work', 'aria-label': t('Work control') },
+      h('strong', null, t('Work control')),
+      work.ticketId ? h('p', null, `${t('Ticket')}: ${work.ticket?.id ?? work.ticketId} · ${t('State')}: ${workText(work.ticket?.state ?? work.lifecycle, lifecycleText)}`) : null,
+      h('p', null, `${t('Stage')}: ${workText(work.stage, workStageText)} · ${t('Reason')}: ${workText(work.reason, workReasonText)}`),
+      work.mandate ? h('p', null, `${t('Mandate')}: ${work.mandate.id} · ${workText(work.mandate.strength, mandateStrengthText)} · ${work.mandate.scope}`) : null,
+      work.assignment ? h('p', null, `${t('Assignment')}: ${work.assignment.id} · ${t('Generation')}: ${work.assignment.generation} · ${t('State')}: ${workText(work.assignment.state, assignmentStateText)}`
+        + `${work.assignment.environment?.kind ? ` · ${t('Environment')}: ${workText(work.assignment.environment.kind, environmentText)}` : ''}`) : h('p', null, t('No Worker assignment yet.')),
+      h('p', null, `${t('Step budgets')}: ${t('Preparation')} ${work.budgets?.preparationSteps ?? 0}/${work.budgets?.preparationStepLimit ?? 0}`
+        + ` · ${t('Router')} ${work.budgets?.routerSteps ?? 0}/${work.budgets?.routerStepLimit ?? 0}`
+        + ` · ${t('Worker turn')} ${work.budgets?.workerLastTurnSteps ?? 0}/${work.budgets?.workerTurnStepLimit ?? 0}`),
+      work.budgets?.workerAssignments > 1 ? h('p', null, `${t('Worker assignments included')}: ${work.budgets.workerAssignments}`) : null,
+      work.budgets?.ruleRunLimit ? h('p', null, `${t('Rule run budget')}: ${work.budgets.ruleRunsUsed ?? t('Unknown')} / ${work.budgets.ruleRunLimit}`
+        + ` · ${work.budgets.ruleWindowMs / 3_600_000} h`) : null,
+      work.budgets?.maxArtifactBytes ? h('p', null, `${t('Artifact byte budget')}: ${work.budgets.maxArtifactBytes}`) : null,
+      work.usage ? h('div', null, h('strong', null, t('Token usage by role')),
+        h('ul', { className: 'bt-product-preparation-usage' },
+          usageLine('Preparation', work.usage.roles?.preparation),
+          usageLine('Router', work.usage.roles?.router),
+          usageLine('Worker', work.usage.roles?.worker),
+          usageLine('Total', work.usage.total)),
+        h('p', null, `${t('Cost')}: ${work.usage.cost?.status === 'unavailable' ? t('Cost unavailable') : work.usage.cost?.amount}`),
+        work.usage.cost?.status === 'unavailable'
+          ? h('p', { className: 'bt-product-preparation-hint' }, t('No model price catalog is configured for this work.')) : null) : null,
+      report ? h('section', { className: 'bt-product-preparation-report' },
+        h('strong', null, t('Worker report')),
+        h('p', null, report.result),
+        h('p', null, `${t('Evidence')}: ${report.evidence}`),
+        report.artifacts?.length ? h('div', null, h('strong', null, t('Verified files')),
+          report.artifacts.map(item => h('div', { key: item.path },
+            h('span', null, `${item.path} · ${item.bytes} ${t('bytes')}`),
+            !remote ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: busy,
+              onClick: () => { void readWorkArtifact(item.path) } }, t('Read verified file')) : null))) : null,
+        workArtifact ? h('div', null, h('strong', null, workArtifact.path),
+          h('pre', { className: 'bt-product-preparation-file' }, workArtifact.text),
+          workArtifact.hasMore ? h('p', null, t('Partial evidence')) : null) : null)
+        : work.reportState === 'stale' ? h('p', null, t('A newer Worker assignment makes the previous report stale.'))
+          : h('p', null, t('No ready report yet.'))) : null,
     run.artifacts?.length ? h('div', null, h('strong', null, t('Verified files')),
       run.artifacts.map(item => h('div', { key: item.path },
         h('span', null, `${item.path} · ${item.bytes} ${t('bytes')} · SHA-256 ${item.sha256}`),
@@ -57,7 +134,7 @@ export function ProactiveReview({ runId, instanceId, call, remote = false, canSt
     artifact ? h('div', null, h('strong', null, artifact.path),
       h('pre', { className: 'bt-product-preparation-file' }, artifact.text),
       artifact.hasMore ? h('p', null, t('Partial evidence')) : null) : null,
-    canStop && (run.state === 'running' || run.state === 'prepared') ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm',
+    canStop && (work?.control?.canStop ?? (run.state === 'running' || run.state === 'prepared')) ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm',
       disabled: busy, onClick: () => { void stop() } }, t('Stop preparation')) : null,
     error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null)
 }
@@ -212,4 +289,9 @@ export const PRODUCT_PROACTIVE_CSS = `
 .bt-product-preparation-row button{justify-self:start}
 .bt-product-preparation-detail{border-top:1px solid var(--bt-line);padding-top:12px;overflow-wrap:anywhere;font-size:13px}
 .bt-product-preparation-file{white-space:pre-wrap;overflow-wrap:anywhere;max-height:280px;overflow:auto}
+.bt-product-preparation-work{margin:14px 0;padding:12px;border:1px solid var(--bt-line);border-radius:12px}
+.bt-product-preparation-usage{display:grid;gap:6px;padding:0;list-style:none}
+.bt-product-preparation-usage li{display:flex;justify-content:space-between;gap:12px}
+.bt-product-preparation-hint{color:var(--bt-muted)}
+.bt-product-preparation-report{display:grid;gap:6px;margin-top:12px}
 `

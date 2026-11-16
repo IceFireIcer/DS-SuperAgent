@@ -15,7 +15,7 @@ R5-12/#105 的飞书原生讨论/问题答复及无工作 Main 原回复有[定�
 
 R5-22/#114 的授权日程 occurrence 投递和逐次历史/工作回执查看见[定向实施记录](r5-22.md)及[双轴复核](reviews/r5-22.md)；定向 UI 行为已补齐并收口。R5-32/#124 已在集成分支接通，生产 TLS 与跨机 SSH 隧道的三层产品证据仍待补齐，见[实施记录](r5-32.md)。
 
-R5-23/#115 的飞书 app 与 GitHub/CI 来源 observe/auto 隔离准备已接产品规则设置、持久运行索引、主对话审阅摘要及正式 Router Ticket/Mandate/Assignment 工作链；受权仓库复现、完整工作控制卡及真实成本/环境验收仍待补齐，见[实施记录](r5-23.md)及[双轴自检](reviews/r5-23.md)。工单保持开放。
+R5-23/#115 的飞书 app 与 GitHub/CI 来源 observe/auto 隔离准备已接产品规则设置、持久运行索引、主对话审阅摘要、正式 Router Ticket/Mandate/Assignment 工作链及现有设置页工作控制卡。准备/Router/Worker 的 provider token 用量按持久 DSH Session 分别归因；没有模型价格目录时费用明确显示不可用。受权仓库复现与真实模型/价格/GitHub/Feishu/托管组合仍作为环境证据分层收集，见[实施记录](r5-23.md)及[双轴自检](reviews/r5-23.md)。
 
 R5-24/#116 的产品健康快照、独立 Watchdog CLI 和受信语义监督入口见[实施记录](r5-24.md)及[双轴自检](reviews/r5-24.md)；语义巡检已接超单轮上限的持久续查、覆盖核对和受信重启入口，默认桌面 Host 自动替换与真实服务器仍缺验收，工单保持开放。
 

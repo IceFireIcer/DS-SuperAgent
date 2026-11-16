@@ -2,7 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { AdmittedPromptContentPart } from '@deepseek-ai/dsh-attachment'
 import { randomUUID } from 'node:crypto'
 import type { Agent, AgentHandle, AgentOptions } from '@deepseek-ai/dsh-agent'
-import { MessageId, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import { MessageId, ReasoningEffortId, type TokenUsage } from '@deepseek-ai/dsh-llm'
 import { buildForkSeed, SessionId, SessionLogOffset, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { defineTool, type ParameterSchemaSpec, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { CoreError, type IntakeAssessment } from './model.js'
@@ -20,9 +20,49 @@ export interface NativeSessionRequest { sessionId: string; role: 'main' | 'route
 export interface NativeSessionsOptions { main?: AgentOptions; router: AgentOptions; worker: AgentOptions; timeoutMs?: number }
 interface NativeSessionResult { sessionId: string; status: string; events: readonly unknown[]; forkedSessionId?: string
   turnStartSeq?: number; turnEndSeq?: number; stepCount: number }
+export interface SessionTokenUsage {
+  calls: number
+  reportedCalls: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+  reasoningTokens: number
+  totalTokens: number
+}
 interface RouterTask { request: NativeSessionRequest; resolve: (value: NativeSessionResult) => void; reject: (error: unknown) => void }
 const maxCoalescedRouterTools = 7
 const maxCoalescedRouterBytes = 100000
+
+function tokenCount(value: unknown) {
+  return Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : 0
+}
+
+function sessionUsage(events: readonly unknown[]): SessionTokenUsage {
+  const total: SessionTokenUsage = { calls: 0, reportedCalls: 0, inputTokens: 0, outputTokens: 0,
+    cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0, totalTokens: 0 }
+  for (const event of events) {
+    const entry = event as { type?: unknown; data?: { usage?: TokenUsage } }
+    if (entry.type !== 'assistant/message') continue
+    total.calls++
+    const usage = entry.data?.usage
+    if (!usage) continue
+    total.reportedCalls++
+    const inputTokens = tokenCount(usage.inputTokens)
+    const outputTokens = tokenCount(usage.outputTokens)
+    const cacheReadTokens = tokenCount(usage.cacheReadTokens)
+    const cacheWriteTokens = tokenCount(usage.cacheWriteTokens)
+    total.inputTokens += inputTokens
+    total.outputTokens += outputTokens
+    total.cacheReadTokens += cacheReadTokens
+    total.cacheWriteTokens += cacheWriteTokens
+    total.reasoningTokens += tokenCount(usage.reasoningTokens)
+    total.totalTokens += usage.totalTokens === undefined
+      ? inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens
+      : tokenCount(usage.totalTokens)
+  }
+  return total
+}
 
 export class NativeSessions {
   readonly timeoutMs: number
@@ -293,6 +333,16 @@ export class NativeSessions {
     try {
       const events = (await handle.read()).events.filter(event => options.after === undefined || Number(event.seq) > options.after)
       return { sessionId, events: events.slice(0, limit), ...(events.length > limit ? { cursor: Number(events[limit - 1]!.seq) } : {}) }
+    } finally { await handle.close() }
+  }
+
+  /** Token accounting is summed from provider-reported assistant-message usage, never estimated here. */
+  async readUsage(sessionId: string): Promise<SessionTokenUsage | undefined> {
+    const persistence = this.context.get('sessionPersistence')
+    if (!persistence || !await persistence.stat(SessionId(sessionId))) return undefined
+    const handle = await persistence.open(SessionId(sessionId), 'read')
+    try {
+      return sessionUsage((await handle.read()).events)
     } finally { await handle.close() }
   }
 

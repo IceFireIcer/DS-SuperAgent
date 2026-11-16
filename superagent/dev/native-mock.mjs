@@ -42,10 +42,11 @@ export function* toolResponse(name, args, id = 'call-1') {
   yield { type: 'finish', reason: { kind: 'tool-calls' } }
 }
 
-export function* textResponse(text) {
+export function* textResponse(text, usage) {
   yield { type: 'block-start', index: 0, blockType: 'text' }
   yield { type: 'text-delta', index: 0, text }
   yield { type: 'block-end', index: 0, block: { type: 'text', text } }
+  if (usage) yield { type: 'usage', usage }
   yield { type: 'finish', reason: { kind: 'stop' } }
 }
 

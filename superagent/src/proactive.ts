@@ -40,6 +40,13 @@ export interface ProactivePreparation {
   modelSteps?: number
   artifacts?: ProactiveArtifact[]
 }
+export interface ProactiveBudgetSnapshot {
+  maxRuns: number
+  windowMs: number
+  usedRuns: number
+  remainingRuns: number
+  maxArtifactBytes?: number
+}
 export interface ProactiveRun {
   id: string
   instanceId: string
@@ -63,6 +70,7 @@ export interface ProactiveRun {
   evidence?: string
   modelSteps?: number
   artifacts?: ProactiveArtifact[]
+  budgetSnapshot?: ProactiveBudgetSnapshot
   reason?: string
   createdAt: number
 }
@@ -277,9 +285,14 @@ export class Proactive {
         const used = await this.countRuns(tx, rule.id, rule.budget.windowMs)
         if (used >= rule.budget.maxRuns) {
           return { run: await this.insert(tx, { ...base, state: 'budget-exhausted',
+            budgetSnapshot: { maxRuns: rule.budget.maxRuns, windowMs: rule.budget.windowMs, usedRuns: used, remainingRuns: 0,
+              ...(rule.budget.maxArtifactBytes === undefined ? {} : { maxArtifactBytes: rule.budget.maxArtifactBytes }) },
             reason: `${used}/${rule.budget.maxRuns} runs used in the declared window.` }) }
         }
-        return { run: await this.insert(tx, { ...base, state: 'running', isolatedDirectory: this.isolatedDirectory(rule, candidate.eventId) }),
+        return { run: await this.insert(tx, { ...base, state: 'running', isolatedDirectory: this.isolatedDirectory(rule, candidate.eventId),
+          budgetSnapshot: { maxRuns: rule.budget.maxRuns, windowMs: rule.budget.windowMs, usedRuns: used + 1,
+            remainingRuns: rule.budget.maxRuns - used - 1,
+            ...(rule.budget.maxArtifactBytes === undefined ? {} : { maxArtifactBytes: rule.budget.maxArtifactBytes }) } }),
           remaining: rule.budget.maxRuns - used }
       })
       if ('replay' in reserved) { runs.push(reserved.replay!); continue }
