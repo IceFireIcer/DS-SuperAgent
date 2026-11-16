@@ -1128,6 +1128,7 @@ const ZH = {
   'Save memory': '保存记忆',
   'Search memory': '搜索记忆',
   'Memory text': '记忆内容',
+  Owner: '归属',
   'One lasting fact': '一条长期有效的事实',
   'Work private': '工作私有',
   'Explicitly shared': '明确共享',
