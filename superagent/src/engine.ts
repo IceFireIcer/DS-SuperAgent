@@ -28,6 +28,7 @@ import { ProductCredentialManager } from './product-credential-manager.js'
 import type { ProductCredentialRecords } from './product-credential-vault.js'
 import type { ProductAttachments } from './product-attachments.js'
 import { listSupervisorProposals, Supervisor, type SupervisorOptions, type SupervisorProposal } from './supervisor.js'
+import { boundedInteger } from './bounds.js'
 import { assertHostTakeoverSettled, loadHostTakeover, type HostTakeoverRecord, type HostTakeoverTicket } from './host-takeover.js'
 import { ContextReader, type ContextCandidate, type ContextCard, type ContextRef, type ContextRequest } from './context.js'
 import { RoleConfigStore, validateRoleConfig, type RoleConfig, type RoleConfigUse, type RoleConfigView } from './config.js'
@@ -2298,12 +2299,13 @@ export class Engine {
     })
   }
 
-  async getSupervision(options: { includeHistory?: boolean; cursor?: string } = {}) {
+  async getSupervision(options: { includeHistory?: boolean; cursor?: string; pageLimit?: number } = {}) {
     const tickets: Work[] = []
     let cursor = options.cursor
     let hasMore = false
     let nextCursor: string | undefined
-    for (let pageCount = 0; pageCount < 10; pageCount++) {
+    const pageLimit = boundedInteger(options.pageLimit, 10, 1, 10, 'pageLimit')
+    for (let pageCount = 0; pageCount < pageLimit; pageCount++) {
       const page = await this.listTickets(cursor)
       tickets.push(...page.items)
       if (!page.hasMore) { hasMore = false; nextCursor = undefined; break }
@@ -2388,13 +2390,14 @@ export class Engine {
 
   /** The semantic supervisor reads the same Host-fenced facts and only writes proposals; decisions run separately. */
   createSupervisor(options: Omit<SupervisorOptions, 'engine' | 'storage' | 'instanceId' | 'actorId'> = {}) {
-    const { assess, stallMs, stallObservations, loopObservations, proposalWindowMs, maxProposals, historyLimit, version, now } = options
+    const { assess, stallMs, stallObservations, loopObservations, proposalWindowMs, maxProposals, historyLimit, maxPages, version, now } = options
     return new Supervisor({
       engine: this, storage: this.storage, instanceId: this.instanceId, actorId: this.source.actorId,
       ...(assess === undefined ? {} : { assess }), ...(stallMs === undefined ? {} : { stallMs }),
       ...(stallObservations === undefined ? {} : { stallObservations }), ...(loopObservations === undefined ? {} : { loopObservations }),
       ...(proposalWindowMs === undefined ? {} : { proposalWindowMs }), ...(maxProposals === undefined ? {} : { maxProposals }),
       ...(historyLimit === undefined ? {} : { historyLimit }), version: version ?? `supervisor-r${String(this.roleConfigRevision)}`,
+      ...(maxPages === undefined ? {} : { maxPages }),
       ...(now === undefined ? {} : { now }),
     })
   }
