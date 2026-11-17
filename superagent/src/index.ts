@@ -18,7 +18,8 @@ export { createProductHost } from './product-host.js'
 export type { ProductHost, ProductHostConfig } from './product-host.js'
 export { ProductAttachments } from './product-attachments.js'
 export { BrowserResources } from './browser-resources.js'
-export type { BrowserAdapter, BrowserWork, BrowserOperation, BrowserControl } from './browser-resources.js'
+export type { BrowserAdapter, BrowserWork, BrowserOperation, BrowserControl, BrowserImportPreview,
+  BrowserImportReport } from './browser-resources.js'
 export type { ProductViewCard, ProductViewAnswer } from './product-views.js'
 export type { ProductAttachmentUpload, ProductAttachmentView } from './product-attachments.js'
 export type { MainAddress, MainBinding, MainHealth, MainMessage, MainMessageSource, MainPage, MainRunResult, MainSend,

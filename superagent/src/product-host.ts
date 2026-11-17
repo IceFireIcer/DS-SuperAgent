@@ -110,6 +110,9 @@ const resourceFields: Record<string, string[]> = {
 
 const browserFields: Record<string, string[]> = {
   'browser-list': ['instanceId'], 'browser-read': ['instanceId', 'resourceId'],
+  'browser-import-list': ['instanceId', 'limit'], 'browser-import-read': ['instanceId', 'importId'],
+  'browser-import': ['instanceId', 'commandId', 'sourceRef', 'pendingId', 'preview', 'environmentId', 'label'],
+  'browser-import-cancel': ['instanceId', 'commandId', 'importId'],
   'browser-create': ['instanceId', 'commandId', 'environmentId', 'label'],
   'browser-grant': ['instanceId', 'commandId', 'resourceId', 'workItemId', 'expectedRevision', 'active'],
   'browser-revoke': ['instanceId', 'commandId', 'resourceId', 'expectedRevision'],
@@ -683,6 +686,16 @@ export async function createProductHost(context: Context, config: ProductHostCon
         if (endpoint.startsWith('browser-')) {
           if (endpoint === 'browser-list') return engine!.listBrowserResources({ instanceId })
           if (endpoint === 'browser-read') return engine!.readBrowserResource({ instanceId, resourceId: payload.resourceId as string })
+          if (endpoint === 'browser-import-list') return engine!.listBrowserImports({ instanceId,
+            ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
+          if (endpoint === 'browser-import-read') return engine!.readBrowserImport({ instanceId,
+            importId: payload.importId as string })
+          if (endpoint === 'browser-import') return engine!.importBrowserData({ instanceId, commandId,
+            sourceRef: payload.sourceRef as string, pendingId: payload.pendingId as string,
+            preview: payload.preview as import('./browser-resources.js').BrowserImportPreview,
+            environmentId: payload.environmentId as string, label: payload.label as string })
+          if (endpoint === 'browser-import-cancel') return engine!.cancelBrowserImport({ instanceId, commandId,
+            importId: payload.importId as string })
           if (endpoint === 'browser-create') return engine!.createBrowserResource({ instanceId, commandId,
             environmentId: payload.environmentId as string, label: payload.label as string })
           if (endpoint === 'browser-grant') return engine!.grantBrowserResource({ instanceId, commandId,

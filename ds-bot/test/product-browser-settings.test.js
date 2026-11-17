@@ -50,6 +50,7 @@ test('product browser settings manage isolated resources, work grants and unknow
     const call = async (endpoint, payload) => {
       calls.push({ endpoint, payload })
       if (endpoint === 'browser-list') return structuredClone(resources)
+      if (endpoint === 'browser-import-list') return { items: [] }
       if (receipts.has(payload.commandId)) return structuredClone(receipts.get(payload.commandId))
       if (endpoint === 'browser-create') {
         const resource = { id: 'browser-two', environmentId: payload.environmentId, label: payload.label,
@@ -219,7 +220,7 @@ test('product browser settings manage isolated resources, work grants and unknow
         place: async (...args) => { viewCalls.push(['place', ...args]); return true },
         navigate: async (...args) => { viewCalls.push(['navigate', ...args]) },
         close: async (...args) => { viewCalls.push(['close', ...args]) },
-      } }
+      }, importSources: async () => [] }
       await React.act(async () => root.render(React.createElement(ProductBrowserSettings, { ...props, browserBridge })))
       await click('Take over browser')
       assert.equal(calls.find(entry => entry.endpoint === 'browser-take').payload.workItemId, 'item-one')

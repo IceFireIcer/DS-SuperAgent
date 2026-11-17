@@ -13,7 +13,7 @@ import electronUpdater from 'electron-updater'
 import { BotBrowserGuests, partitionOf } from './bot-browser.mjs'
 import { BotViews, isBotId } from './bot-views.mjs'
 import { importFromBrowser, listSources } from './browser-sources.mjs'
-import { applyCookies, CookieImports } from './cookie-import.mjs'
+import { applyCookies, CookieImports, isProductBrowserImportId, ProductCookieImports } from './cookie-import.mjs'
 import { parseCookieFile } from './cookie-parse.mjs'
 import { downloadSaver } from './downloads.mjs'
 import { canonicalExecPath } from './canonical-path.mjs'
@@ -51,6 +51,7 @@ const IPC = {
 }
 // A cookie export larger than this is not a cookie export.
 const IMPORT_FILE_MAX = 32 * 1024 * 1024
+const PRODUCT_BROWSER_IMPORT_ERRORS = new Set(['BROWSER_IMPORT_NOT_FOUND', 'BROWSER_IMPORT_CONFLICT'])
 const MOVE_PROBLEMS = { drive: 'moveDrive', nested: 'moveNested', workspace: 'moveWorkspace', program: 'inProgram', notEmpty: 'moveNotEmpty' }
 const UPDATE_CHECK_WAIT_MS = 15_000
 const UPDATE_DOWNLOAD_WAIT_MS = 15 * 60_000
@@ -112,6 +113,7 @@ const botViews = new BotViews({
   onChange: state => mainWindow?.webContents.send(IPC.browserViewChanged, state),
 })
 const cookieImports = new CookieImports()
+const productCookieImports = new ProductCookieImports()
 const remoteProduct = new RemoteProductClient()
 
 // The window and the tray: closing the window hides it, the tray is the way back to it and
@@ -219,6 +221,21 @@ function hostFailure(error) {
 // A Host that the shell listens to: the Bot browser's endpoint and a failure both arrive here.
 function wireHost(instance) {
   instance.onMessage(message => {
+    if (message?.type === 'ds-superagent:browser-import' && typeof message.id === 'string'
+      && isBotId(message.profileKey)
+      && typeof message.pendingImportId === 'string' && /^[\da-f-]{36}$/iu.test(message.pendingImportId)
+      && isProductBrowserImportId(message.importId)) {
+      const storage = session.fromPartition(partitionOf(`bot:${message.profileKey}`))
+      void productCookieImports.apply(storage, message.pendingImportId, message.importId,
+        message.profileKey, cookieImports).then(report => {
+        instance.send({ type: 'ds-superagent:browser-import-response', id: message.id, report })
+      }).catch(error => {
+        const code = PRODUCT_BROWSER_IMPORT_ERRORS.has(error?.code) ? error.code : 'BROWSER_IMPORT_UNKNOWN'
+        instance.send({ type: 'ds-superagent:browser-import-response', id: message.id,
+          code })
+      })
+      return
+    }
     if (message?.type === 'ds-superagent:browser-hold' && typeof message.id === 'string'
       && isBotId(message.profileKey) && typeof message.held === 'boolean'
       && typeof message.controlId === 'string' && /^[\da-f-]{36}$/iu.test(message.controlId)) {

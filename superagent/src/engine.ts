@@ -28,7 +28,7 @@ import { ProductCredentialManager } from './product-credential-manager.js'
 import type { WorkerMcpBinding } from './worker-mcp-tool.js'
 import { ProductMcpConfiguration } from './product-mcp-configuration.js'
 import type { WorkerMcpConfig } from './worker-mcp-tool.js'
-import { BrowserResources, type BrowserAdapter } from './browser-resources.js'
+import { BrowserResources, type BrowserAdapter, type BrowserImportPreview } from './browser-resources.js'
 import type { ProductCredentialRecords } from './product-credential-vault.js'
 import type { ProductAttachments } from './product-attachments.js'
 import { validateProductViewAnswer, type ProductViewAnswer } from './product-views.js'
@@ -1709,6 +1709,17 @@ export class Engine {
   }
   listBrowserResources(request: { instanceId: string }) { return this.browser().list(request) }
   readBrowserResource(request: { instanceId: string; resourceId: string }) { return this.browser().read(request) }
+  importBrowserData(command: { instanceId: string; commandId: string; sourceRef: string; pendingId: string; preview: BrowserImportPreview;
+    environmentId: string; label: string }) {
+    this.assertAuthoringActor()
+    return this.browser().importData(command)
+  }
+  listBrowserImports(request: { instanceId: string; limit?: number }) { return this.browser().listImports(request) }
+  readBrowserImport(request: { instanceId: string; importId: string }) { return this.browser().readImport(request) }
+  cancelBrowserImport(command: { instanceId: string; commandId: string; importId: string }) {
+    this.assertAuthoringActor()
+    return this.browser().cancelImport(command)
+  }
   closeBrowserResources() { return this.browserResources?.close() ?? Promise.resolve() }
 
   async createSchedule(request: ScheduleCreate) {

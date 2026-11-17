@@ -3,12 +3,14 @@ import { canonicalJson, commandTransaction } from './commands.js'
 import type { ExecutionEnvironment } from './environment.js'
 import type { Assignment } from './execution.js'
 import { CoreError, identifier, type Work } from './model.js'
+import { credentialLike } from './product-memory-import.js'
 import type { AsyncTx, Storage } from './storage.js'
 import type { MainWorkBrief, MainWorkItem } from './work-delegation.js'
 
 export interface BrowserAdapter {
   execute(request: { profileKey: string; action: 'open' | 'snapshot'; url?: string }, signal: AbortSignal): Promise<string>
   hold?(profileKey: string, held: boolean, controlId: string): Promise<void>
+  importProfile?(request: { profileKey: string; pendingImportId: string; importId: string }): Promise<unknown>
   close?(): Promise<void>
 }
 
@@ -28,7 +30,7 @@ interface BrowserResource {
   label: string
   profileKey: string
   revision: number
-  state: 'active' | 'revoked'
+  state: 'active' | 'importing' | 'revoked'
   operationIds: string[]
   createdAt: number
 }
@@ -72,13 +74,174 @@ export class BrowserOutcomeUnknown extends CoreError {
 
 interface BrowserGrant { resourceId: string; workItemId: string; active: boolean }
 interface BrowserReceipt { fingerprint: string; result: unknown }
+export interface BrowserImportPreview {
+  source: { kind: 'file' | 'chrome' | 'edge' | 'brave' | 'chromium' | 'firefox'; label: string }
+  format: string | null
+  flavor: string | null
+  sourceDigest: string
+  entries: number
+  cookies: number
+  sites: Array<{ site: string; cookies: number; session: number; httpOnly: number; skipped: number }>
+  warnings: Array<{ code: string; message: string; count: number }>
+  skipped: Array<{ where: string; name?: string; domain?: string; path?: string; code: string; reason: string }>
+  notes: Array<'session-cookies' | 'local-storage-left'>
+}
+export interface BrowserImportReport {
+  stored: number
+  droppedCount: number
+  failedCount: number
+  dropped: Array<{ name: string; domain: string; path: string; code?: string; reason: string }>
+  failed: Array<{ name: string; domain: string; path: string; code?: string; reason: string }>
+  flushed: boolean
+}
+export interface BrowserImportView {
+  id: string
+  sourceRef: string
+  resourceId: string
+  environmentId: string
+  label: string
+  status: 'pending' | 'unknown' | 'applied' | 'cancelled'
+  preview: BrowserImportPreview
+  report?: BrowserImportReport
+  code?: string
+  createdAt: number
+  updatedAt: number
+}
+interface BrowserImportRecord {
+  id: string
+  sourceRef: string
+  instanceId: string
+  sourceKey: string
+  previewHash: string
+  preview: BrowserImportPreview
+  resourceId: string
+  environmentId: string
+  label: string
+  status: 'pending' | 'unknown' | 'applied' | 'cancelled'
+  report?: BrowserImportReport
+  code?: string
+  createdAt: number
+  updatedAt: number
+}
+interface BrowserImportCommand { fingerprint: string; importId: string }
+interface BrowserImportSource { importId: string; sourceKey: string }
 
 const grantKey = (resourceId: string, workItemId: string) => canonicalJson([resourceId, workItemId])
 const browserObservations = ['UNCHANGED', 'CHANGED', 'CLOSED', 'INSPECTED'] as const
+const browserImportId = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu
+
+function importText(value: unknown, label: string, max = 256) {
+  if (typeof value !== 'string' || !value.trim() || Buffer.byteLength(value) > max
+    || credentialLike(value)) throw new CoreError('INVALID_INPUT', `${label} must be bounded text without credentials.`)
+  return value.trim()
+}
+
+function importCount(value: unknown, label: string, max = 100_000) {
+  if (!Number.isSafeInteger(value) || (value as number) < 0 || (value as number) > max) {
+    throw new CoreError('INVALID_INPUT', `${label} must be a bounded count.`)
+  }
+  return value as number
+}
+
+function importPreview(value: unknown): BrowserImportPreview {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new CoreError('INVALID_INPUT', 'A browser import needs a value-free preview.')
+  const preview = value as Record<string, unknown>
+  const source = preview.source && typeof preview.source === 'object' && !Array.isArray(preview.source)
+    ? preview.source as Record<string, unknown> : undefined
+  const kind = source?.kind
+  if (!['file', 'chrome', 'edge', 'brave', 'chromium', 'firefox'].includes(kind as string)) {
+    throw new CoreError('INVALID_INPUT', 'A browser import source is not recognized.')
+  }
+  const sites = Array.isArray(preview.sites) ? preview.sites.slice(0, 20).map((item, index) => {
+    const site = item && typeof item === 'object' && !Array.isArray(item) ? item as Record<string, unknown> : {}
+    return {
+      site: importText(site.site, `Import site ${index + 1}`, 256),
+      cookies: importCount(site.cookies, `Import site ${index + 1} cookies`, 100_000),
+      session: importCount(site.session, `Import site ${index + 1} session cookies`, 100_000),
+      httpOnly: importCount(site.httpOnly, `Import site ${index + 1} HTTP-only cookies`, 100_000),
+      skipped: importCount(site.skipped, `Import site ${index + 1} skipped cookies`, 100_000),
+    }
+  }) : []
+  const warnings = Array.isArray(preview.warnings) ? preview.warnings.slice(0, 20).map((item, index) => {
+    const warning = item && typeof item === 'object' && !Array.isArray(item) ? item as Record<string, unknown> : {}
+    return {
+      code: importText(warning.code, `Import warning ${index + 1} code`, 64),
+      message: importText(warning.message, `Import warning ${index + 1}`, 512),
+      count: importCount(warning.count, `Import warning ${index + 1} count`, 100_000),
+    }
+  }) : []
+  const skipped = Array.isArray(preview.skipped) ? preview.skipped.slice(0, 50).map((item, index) => {
+    const skippedItem = item && typeof item === 'object' && !Array.isArray(item) ? item as Record<string, unknown> : {}
+    return {
+      where: importText(skippedItem.where, `Skipped import entry ${index + 1} location`, 256),
+      ...(skippedItem.name === undefined ? {} : { name: importText(skippedItem.name, `Skipped import entry ${index + 1} name`, 256) }),
+      ...(skippedItem.domain === undefined ? {} : { domain: importText(skippedItem.domain, `Skipped import entry ${index + 1} domain`, 256) }),
+      ...(skippedItem.path === undefined ? {} : { path: importText(skippedItem.path, `Skipped import entry ${index + 1} path`, 512) }),
+      code: importText(skippedItem.code, `Skipped import entry ${index + 1} code`, 64),
+      reason: importText(skippedItem.reason, `Skipped import entry ${index + 1} reason`, 512),
+    }
+  }) : []
+  const notes = Array.isArray(preview.notes)
+    ? preview.notes.filter(note => note === 'session-cookies' || note === 'local-storage-left') as BrowserImportPreview['notes'] : []
+  if (typeof preview.sourceDigest !== 'string' || !/^[a-f0-9]{64}$/u.test(preview.sourceDigest)) {
+    throw new CoreError('INVALID_INPUT', 'A browser import needs its source digest.')
+  }
+  return {
+    source: { kind: kind as BrowserImportPreview['source']['kind'], label: importText(source?.label, 'Import source label', 256) },
+    format: preview.format == null ? null : importText(preview.format, 'Import format', 64),
+    flavor: preview.flavor == null ? null : importText(preview.flavor, 'Import flavor', 64),
+    sourceDigest: preview.sourceDigest,
+    entries: importCount(preview.entries, 'Import entries'),
+    cookies: importCount(preview.cookies, 'Imported cookie count'),
+    sites, warnings, skipped, notes,
+  }
+}
+
+function importReportItem(value: unknown, index: number): BrowserImportReport['dropped'][number] {
+  const item = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+  const rawReason = typeof item.reason === 'string' ? item.reason : ''
+  const reason = rawReason === 'the browser did not store it' ? rawReason
+    : rawReason.includes('different cookie with the same name and domain') ? 'The browser kept a different cookie with the same name and domain.'
+      : 'The browser did not confirm this cookie.'
+  const code = typeof item.code === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/u.test(item.code) ? item.code : undefined
+  return {
+    name: importText(item.name, `Browser import result ${index + 1} name`, 256),
+    domain: importText(item.domain, `Browser import result ${index + 1} domain`, 256),
+    path: importText(item.path ?? '/', `Browser import result ${index + 1} path`, 512),
+    ...(code ? { code } : {}),
+    reason,
+  }
+}
+
+function importReport(value: unknown): BrowserImportReport {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new CoreError('BROWSER_IMPORT_UNKNOWN', 'The browser import returned no verifiable report.')
+  }
+  const report = value as Record<string, unknown>
+  if (typeof report.flushed !== 'boolean' || !Array.isArray(report.dropped) || !Array.isArray(report.failed)) {
+    throw new CoreError('BROWSER_IMPORT_UNKNOWN', 'The browser import report is malformed.')
+  }
+  return {
+    stored: importCount(report.stored, 'Stored cookie count'),
+    droppedCount: report.dropped.length,
+    failedCount: report.failed.length,
+    dropped: report.dropped.slice(0, 100).map(importReportItem),
+    failed: report.failed.slice(0, 100).map(importReportItem),
+    flushed: report.flushed,
+  }
+}
+
+const browserImportErrors = new Set(['BROWSER_IMPORT_NOT_FOUND', 'BROWSER_IMPORT_CONFLICT',
+  'BROWSER_IMPORT_UNKNOWN', 'BROWSER_UNAVAILABLE'])
+function importErrorCode(error: unknown) {
+  const code = error && typeof error === 'object' && 'code' in error ? (error as { code?: unknown }).code : undefined
+  return typeof code === 'string' && browserImportErrors.has(code) ? code : 'BROWSER_IMPORT_UNKNOWN'
+}
 
 /** Product-owned profiles and durable, single-Assignment write control. No Bot identity is imported. */
 export class BrowserResources {
   private readonly runtimeId = randomUUID()
+  private readonly importFlights = new Map<string, Promise<BrowserImportView>>()
   constructor(private readonly storage: Storage, private readonly instanceId: string,
     private readonly actorId: string, private readonly environments: ExecutionEnvironment[], private readonly adapter: BrowserAdapter,
     private readonly authorizeHost: (tx: AsyncTx) => Promise<void>) {}
@@ -92,6 +255,20 @@ export class BrowserResources {
     const resource = await tx.get<BrowserResource>('browser-resource', resourceId)
     if (!resource || resource.instanceId !== this.instanceId) throw new CoreError('NOT_FOUND', 'The browser resource is unavailable.')
     return resource
+  }
+
+  private async importRecord(tx: AsyncTx, importId: string) {
+    identifier(importId, 'browserImportId')
+    const record = await tx.get<BrowserImportRecord>('browser-import', importId)
+    if (!record || record.instanceId !== this.instanceId) throw new CoreError('NOT_FOUND', 'The browser import is unavailable.')
+    return record
+  }
+
+  private importView(record: BrowserImportRecord): BrowserImportView {
+    return { id: record.id, sourceRef: record.sourceRef, resourceId: record.resourceId, environmentId: record.environmentId,
+      label: record.label, status: record.status, preview: structuredClone(record.preview),
+      ...(record.report ? { report: structuredClone(record.report) } : {}),
+      ...(record.code ? { code: record.code } : {}), createdAt: record.createdAt, updatedAt: record.updatedAt }
   }
 
   private async resourceGrants(tx: AsyncTx, resourceId: string) {
@@ -279,6 +456,152 @@ export class BrowserResources {
     })
   }
 
+  async importData(input: {
+    instanceId: string; commandId: string; sourceRef: string; pendingId: string; preview: BrowserImportPreview
+    environmentId: string; label: string
+  }) {
+    this.identity(input.instanceId)
+    identifier(input.commandId, 'commandId'); identifier(input.sourceRef, 'browserImportSourceRef')
+    identifier(input.pendingId, 'browserImportPendingId')
+    if (!browserImportId.test(input.sourceRef)) throw new CoreError('INVALID_INPUT', 'A browser import source reference is invalid.')
+    identifier(input.environmentId, 'environmentId')
+    const label = importText(input.label, 'Imported browser label', 128)
+    const preview = importPreview(input.preview)
+    const sourceKey = createHash('sha256').update(canonicalJson(['browser-import-source-v1', this.instanceId, input.pendingId])).digest('hex')
+    const previewHash = createHash('sha256').update(canonicalJson(['browser-import-preview-v1', preview])).digest('hex')
+    const commandKey = createHash('sha256').update(canonicalJson([this.instanceId, input.commandId, 'browser-import'])).digest('hex')
+    const fingerprint = createHash('sha256').update(canonicalJson(['browser-import-v1', input.sourceRef, sourceKey, previewHash,
+      input.environmentId, label])).digest('hex')
+    const prepared = await commandTransaction(this.storage, this.instanceId, async tx => {
+      await this.authorizeHost(tx)
+      const previous = await tx.get<BrowserImportCommand>('browser-import-command', commandKey)
+      if (previous) {
+        if (previous.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The browser import command has different input.')
+        const record = await this.importRecord(tx, previous.importId)
+        const resource = await this.resource(tx, record.resourceId)
+        return { record, profileKey: resource.profileKey }
+      }
+      const mapped = await tx.get<BrowserImportSource>('browser-import-source', sourceKey)
+      if (mapped && mapped.importId !== input.sourceRef) {
+        throw new CoreError('IDENTITY_CONFLICT', 'This browser import source already belongs to another batch.')
+      }
+      const existing = await tx.get<BrowserImportRecord>('browser-import', input.sourceRef)
+      if (existing) {
+        if (existing.previewHash !== previewHash) throw new CoreError('IDENTITY_CONFLICT', 'This browser import source changed after preview.')
+        if (existing.environmentId !== input.environmentId || existing.label !== label) {
+          throw new CoreError('IDENTITY_CONFLICT', 'This browser import already has another target.')
+        }
+        if (existing.status === 'cancelled') throw new CoreError('BROWSER_IMPORT_CANCELLED', 'This browser import was cancelled.')
+        if (!mapped) await tx.insert('browser-import-source', sourceKey, { sourceKey, importId: existing.id })
+        if (existing.sourceKey !== sourceKey && existing.status !== 'applied') {
+          await tx.replace('browser-import', existing.id, { ...existing, sourceKey, updatedAt: Date.now() })
+        }
+        await tx.insert('browser-import-command', commandKey, { fingerprint, importId: existing.id })
+        const resource = await this.resource(tx, existing.resourceId)
+        return { record: existing.sourceKey === sourceKey ? existing : { ...existing, sourceKey }, profileKey: resource.profileKey }
+      }
+      const environment = this.environments.find(candidate => candidate.config.id === input.environmentId)
+      if (!environment || environment.kind !== 'local' || environment.config.instanceId !== this.instanceId
+        || !environment.config.allowedActorIds.includes(this.actorId)) {
+        throw new CoreError('ENVIRONMENT_DENIED', 'Choose an authorized local Environment for this browser import.')
+      }
+      if ((await tx.list('browser-resource', 101)).length >= 100) throw new CoreError('RESOURCE_LIMIT', 'The Instance browser resource limit was reached.')
+      const now = Date.now()
+      const resourceId = randomUUID()
+      const importId = input.sourceRef
+      const resource: BrowserResource = { id: resourceId, instanceId: this.instanceId, environmentId: input.environmentId,
+        label, profileKey: `session-${randomUUID()}`, revision: 1, state: 'importing', operationIds: [], createdAt: now }
+      const record: BrowserImportRecord = { id: importId, sourceRef: input.sourceRef, instanceId: this.instanceId, sourceKey, previewHash, preview,
+        resourceId, environmentId: input.environmentId, label, status: 'pending', createdAt: now, updatedAt: now }
+      await tx.insert('browser-resource', resourceId, resource)
+      await tx.insert('browser-import', importId, record)
+      await tx.insert('browser-import-source', sourceKey, { sourceKey, importId })
+      await tx.insert('browser-import-command', commandKey, { fingerprint, importId })
+      return { record, profileKey: resource.profileKey }
+    })
+    if (prepared.record.status === 'applied') return this.importView(prepared.record)
+    if (prepared.record.status === 'cancelled') throw new CoreError('BROWSER_IMPORT_CANCELLED', 'This browser import was cancelled.')
+    const active = this.importFlights.get(prepared.record.id)
+    if (active) return active
+    const flight = this.dispatchImport(prepared.record.id, prepared.profileKey, input.pendingId)
+    this.importFlights.set(prepared.record.id, flight)
+    try { return await flight }
+    finally { if (this.importFlights.get(prepared.record.id) === flight) this.importFlights.delete(prepared.record.id) }
+  }
+
+  private async dispatchImport(importId: string, profileKey: string, pendingId: string) {
+    if (!this.adapter.importProfile) {
+      await this.markImportUnknown(importId, 'BROWSER_UNAVAILABLE')
+      throw new CoreError('BROWSER_UNAVAILABLE', 'The desktop Host cannot import browser data.')
+    }
+    let report: BrowserImportReport
+    try {
+      report = importReport(await this.adapter.importProfile({ profileKey, pendingImportId: pendingId, importId }))
+    } catch (error) {
+      const code = importErrorCode(error)
+      await this.markImportUnknown(importId, code)
+      if (error instanceof CoreError && error.code === code) throw error
+      throw new CoreError(code, 'The browser import result is unknown; retry the same preview before using the resource.')
+    }
+    const applied = await commandTransaction(this.storage, this.instanceId, async tx => {
+      await this.authorizeHost(tx)
+      const current = await this.importRecord(tx, importId)
+      if (current.status === 'cancelled') throw new CoreError('BROWSER_IMPORT_CANCELLED', 'This browser import was cancelled.')
+      if (current.status === 'applied') return current
+      const resource = await this.resource(tx, current.resourceId)
+      if (resource.state !== 'importing') throw new CoreError('BROWSER_IMPORT_CANCELLED',
+        'The browser resource changed before its import completed.')
+      const active: BrowserResource = { ...resource, state: 'active' }
+      await tx.replace('browser-resource', resource.id, active)
+      const { code: _code, ...applied } = current
+      const next: BrowserImportRecord = { ...applied, status: 'applied', report, updatedAt: Date.now() }
+      await tx.replace('browser-import', current.id, next)
+      return next
+    })
+    return this.importView(applied)
+  }
+
+  private async markImportUnknown(importId: string, code: string) {
+    await this.storage.transaction(this.instanceId, async tx => {
+      await this.authorizeHost(tx)
+      const current = await this.importRecord(tx, importId)
+      if (current.status === 'applied' || current.status === 'cancelled') return
+      await tx.replace('browser-import', current.id,
+        { ...current, status: 'unknown', code, updatedAt: Date.now() })
+    }).catch(() => { /* The pending import remains visible and retryable. */ })
+  }
+
+  async listImports(input: { instanceId: string; limit?: number }) {
+    this.identity(input.instanceId)
+    const limit = input.limit ?? 20
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new CoreError('INVALID_INPUT', 'Choose between 1 and 100 browser imports.')
+    return this.storage.transaction(this.instanceId, async tx => {
+      const records = await tx.list<BrowserImportRecord>('browser-import', 101)
+      if (records.length > 100) throw new CoreError('RESOURCE_LIMIT', 'The browser import index exceeds its declared limit.')
+      return { items: records.sort((left, right) => right.updatedAt - left.updatedAt).slice(0, limit).map(record => this.importView(record)) }
+    })
+  }
+
+  async readImport(input: { instanceId: string; importId: string }) {
+    this.identity(input.instanceId)
+    return this.storage.transaction(this.instanceId, async tx => this.importView(await this.importRecord(tx, input.importId)))
+  }
+
+  async cancelImport(input: { instanceId: string; commandId: string; importId: string }) {
+    this.identity(input.instanceId)
+    return this.command(input.commandId, ['cancel-import', input.importId], async tx => {
+      const current = await this.importRecord(tx, input.importId)
+      if (current.status === 'cancelled') return this.importView(current)
+      if (current.status === 'applied') throw new CoreError('INVALID_INPUT', 'Revoke an applied browser resource instead of cancelling its import.')
+      const resource = await this.resource(tx, current.resourceId)
+      if (resource.state !== 'revoked') await tx.replace('browser-resource', resource.id,
+        { ...resource, state: 'revoked', revision: resource.revision + 1 })
+      const next: BrowserImportRecord = { ...current, status: 'cancelled', updatedAt: Date.now() }
+      await tx.replace('browser-import', current.id, next)
+      return this.importView(next)
+    })
+  }
+
   async create(input: { instanceId: string; commandId: string; environmentId: string; label: string }) {
     this.identity(input.instanceId)
     identifier(input.environmentId, 'environmentId')
@@ -325,6 +648,7 @@ export class BrowserResources {
     this.identity(input.instanceId)
     return this.command(input.commandId, ['revoke', input.resourceId, input.expectedRevision], async tx => {
       const resource = await this.resource(tx, input.resourceId)
+      if (resource.state === 'importing') throw new CoreError('INVALID_INPUT', 'Cancel the pending browser import instead of revoking its resource.')
       if (resource.revision !== input.expectedRevision) throw new CoreError('RESOURCE_STALE', 'The browser resource changed.')
       const updated = { ...resource, revision: resource.revision + 1, state: 'revoked' as const }
       await tx.replace('browser-resource', resource.id, updated)
@@ -340,7 +664,8 @@ export class BrowserResources {
     const grants = await this.resourceGrants(tx, resource.id)
     const occupied = owner && lease && owner.id === lease.assignmentId && owner.generation === lease.generation && owner.state === 'running'
     const state = operation?.state === 'unknown' || operation?.state === 'pending' && !occupied ? 'unknown'
-      : resource.state === 'revoked' ? 'revoked'
+      : resource.state === 'importing' ? 'importing'
+        : resource.state === 'revoked' ? 'revoked'
         : control && control.state !== 'returned' ? 'human'
         : occupied ? 'busy' : 'available'
     return { id: resource.id, environmentId: resource.environmentId, label: resource.label,

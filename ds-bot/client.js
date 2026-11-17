@@ -264,11 +264,44 @@ var ZH = {
   "This view is no longer active.": "此视图已不再有效。",
   "The local Host has no CDP browser bridge. Browser work remains unavailable.": "本地 Host 没有 CDP 浏览器桥；浏览器工作当前不可用。",
   "Each browser keeps an isolated profile. A local Worker needs an exact work-item grant before navigation or a read-only snapshot.": "每个浏览器使用独立 profile；本地 Worker 必须获得精确工作项授权，才能导航或读取只读快照。",
+  "Import browser data": "导入浏览器数据",
+  "Preview a cookie export or installed browser profile before creating a new isolated browser.": "创建新的隔离浏览器前，先预览 cookie 导出或本机浏览器资料。",
+  "Choose cookie export": "选择 cookie 导出文件",
+  "Installed browser profile": "本机浏览器资料",
+  "Preview installed profile": "预览本机资料",
+  "The browser preview is unavailable.": "浏览器预览不可用。",
+  "Browser data previewed. Review the source and target before importing.": "浏览器数据已预览。导入前请核对来源和目标。",
+  "Source ownership": "来源归属",
+  "Privacy scope": "隐私范围",
+  "Isolated browser profile": "隔离浏览器 profile",
+  "Local browser": "本地浏览器",
+  "Choose Environment": "选择执行环境",
+  "Use preview to retry": "用当前预览重试",
+  "The new browser starts with no work grants.": "新浏览器初始不授予任何工作访问权。",
+  "The browser export could not be read.": "无法读取该浏览器导出文件。",
+  "Close the selected browser briefly to copy its cookies, then reopen it with your tabs?": "需要短暂关闭所选浏览器以复制 cookie，之后重新打开并恢复标签页吗？",
+  "The selected browser profile could not be copied.": "无法复制所选浏览器资料。",
+  "Browser import preview cancelled.": "浏览器数据导入预览已取消。",
+  "Browser data imported into a new isolated resource.": "浏览器数据已导入新的隔离资源。",
+  "Browser import needs another retry.": "浏览器数据导入需要再次重试。",
+  "Browser import cancelled.": "浏览器数据导入已取消。",
+  "Browser import is already complete.": "浏览器数据导入已经完成。",
+  "Import into new browser": "导入为新浏览器",
+  "Cancel preview": "取消预览",
+  "Recent browser imports": "最近的浏览器导入",
+  "Stored cookies": "已存储 cookie",
+  Dropped: "已丢弃",
+  Failed: "失败",
+  "Cancel browser import": "取消浏览器导入",
+  "Import pending": "导入待确认",
+  "Import needs retry": "导入需要重试",
+  "Import applied": "导入已完成",
   "Refresh browser resources": "刷新浏览器资源",
   Available: "可用",
   "In use": "使用中",
   "Human control": "人工控制中",
   "Outcome unknown": "结果未确认",
+  Importing: "导入中",
   Pending: "等待确认",
   Succeeded: "已成功",
   Checked: "已核查",
@@ -2383,8 +2416,8 @@ function bodyOf(def, paint, flat = false) {
     return "";
   }
 }
-var eyeMarkup = ([cx, cy, w, h61, tilt]) => `<g transform="translate(${cx} ${cy}) rotate(${tilt})"><rect class="bt-eye" x="${-w / 2}" y="${-h61 / 2}" width="${w}" height="${h61}" rx="${w / 2}"/></g>`;
-var happyEyeMarkup = ([cx, cy, w, h61, tilt]) => `<g transform="translate(${cx} ${cy}) rotate(${tilt})"><path class="bt-eye-happy" opacity="0" d="M${-w * 0.62} ${h61 * 0.14}Q0 ${-h61 * 0.42} ${w * 0.62} ${h61 * 0.14}" fill="none" stroke="#000" stroke-width="${w * 0.5}" stroke-linecap="round"/></g>`;
+var eyeMarkup = ([cx, cy, w, h62, tilt]) => `<g transform="translate(${cx} ${cy}) rotate(${tilt})"><rect class="bt-eye" x="${-w / 2}" y="${-h62 / 2}" width="${w}" height="${h62}" rx="${w / 2}"/></g>`;
+var happyEyeMarkup = ([cx, cy, w, h62, tilt]) => `<g transform="translate(${cx} ${cy}) rotate(${tilt})"><path class="bt-eye-happy" opacity="0" d="M${-w * 0.62} ${h62 * 0.14}Q0 ${-h62 * 0.42} ${w * 0.62} ${h62 * 0.14}" fill="none" stroke="#000" stroke-width="${w * 0.5}" stroke-linecap="round"/></g>`;
 var maskBox = (size) => `maskUnits="userSpaceOnUse" x="${-size}" y="${-size}" width="${size * 3}" height="${size * 3}"`;
 var holes = (def, eyes) => `<rect x="${-def.size}" y="${-def.size}" width="${def.size * 3}" height="${def.size * 3}" fill="#fff"/>${eyes}`;
 var MASK_ID = "%MASK%";
@@ -3136,12 +3169,12 @@ function liveSprings(apply2) {
     const dt = Math.min(0.5, Math.max(1e-3, (now - last) / 1e3));
     last = now;
     const steps = Math.ceil(dt * 240);
-    const h61 = dt / steps;
+    const h62 = dt / steps;
     let moving = false;
     for (const value of values.values()) {
       for (let index = 0; index < steps; index += 1) {
-        value.v += (-value.k * (value.x - value.to) - value.c * value.v) * h61;
-        value.x += value.v * h61;
+        value.v += (-value.k * (value.x - value.to) - value.c * value.v) * h62;
+        value.x += value.v * h62;
       }
       if (Math.abs(value.x - value.to) < 0.05 && Math.abs(value.v) < 1) {
         value.x = value.to;
@@ -25348,13 +25381,351 @@ function ProductMcpSettings({ binding, call: call2 }) {
   );
 }
 
-// src/client/product-browser-settings.js
+// src/client/product-browser-import.js
 var import_react61 = require("react");
+var IMPORT_STATES = {
+  pending: "Import pending",
+  unknown: "Import needs retry",
+  applied: "Import applied",
+  cancelled: "Import cancelled"
+};
+var previewText = (preview) => `${preview.source.label} · ${preview.format ?? preview.source.kind} · ${preview.cookies} cookies`;
+function ProductBrowserImport({ binding, call: call2, browserBridge, directoryOptions, onChanged }) {
+  const instanceId = binding.instanceId;
+  const storageKey = `product-browser-import:${instanceId}`;
+  const directories = directoryOptions?.directories ?? [];
+  const [pending, setPending] = (0, import_react61.useState)(null);
+  const [batches, setBatches] = (0, import_react61.useState)([]);
+  const [sources, setSources] = (0, import_react61.useState)([]);
+  const [sourceId, setSourceId] = (0, import_react61.useState)("");
+  const [environmentId, setEnvironmentId] = (0, import_react61.useState)("");
+  const [label, setLabel] = (0, import_react61.useState)("");
+  const [busy, setBusy] = (0, import_react61.useState)(false);
+  const [error, setError] = (0, import_react61.useState)(null);
+  const [notice, setNotice] = (0, import_react61.useState)(null);
+  const generation = (0, import_react61.useRef)(0);
+  const persist = (value) => {
+    setPending(value);
+    try {
+      if (value) window.sessionStorage.setItem(storageKey, JSON.stringify(value));
+      else window.sessionStorage.removeItem(storageKey);
+    } catch {
+    }
+  };
+  const refresh = async () => {
+    const current = ++generation.current;
+    try {
+      const [imports, available] = await Promise.all([
+        call2("browser-import-list", { instanceId, limit: 20 }),
+        browserBridge?.importSources ? browserBridge.importSources() : Promise.resolve([])
+      ]);
+      if (current !== generation.current) return;
+      setBatches(imports.items);
+      setSources(available);
+      setSourceId((value) => available.some((source) => source.id === value) ? value : available[0]?.id ?? "");
+    } catch (failure) {
+      if (current === generation.current) setError(failure.message);
+    }
+  };
+  (0, import_react61.useEffect)(() => {
+    try {
+      const saved = JSON.parse(window.sessionStorage.getItem(storageKey));
+      if (saved && typeof saved.id === "string" && typeof saved.sourceRef === "string" && saved.preview && typeof saved.commandId === "string") {
+        setPending(saved);
+        setEnvironmentId(saved.environmentId ?? "");
+        setLabel(saved.label ?? saved.preview.source?.label ?? "");
+      }
+    } catch {
+    }
+    void refresh();
+    return () => {
+      generation.current += 1;
+    };
+  }, [call2, instanceId]);
+  (0, import_react61.useEffect)(() => {
+    if (!pending?.targetLocked && !directories.some((directory) => directory.id === environmentId)) {
+      setEnvironmentId("");
+    }
+  }, [directoryOptions, pending?.targetLocked, environmentId]);
+  const acceptPreview = (result) => {
+    if (!result?.id || !result.preview) throw new Error(t("The browser preview is unavailable."));
+    const next = {
+      id: result.id,
+      sourceRef: crypto.randomUUID(),
+      preview: result.preview,
+      commandId: crypto.randomUUID(),
+      environmentId: "",
+      label: "",
+      targetLocked: false
+    };
+    setEnvironmentId("");
+    setLabel("");
+    persist(next);
+    setError(null);
+    setNotice(t("Browser data previewed. Review the source and target before importing."));
+  };
+  const chooseFile = async () => {
+    if (busy || !browserBridge?.importPick) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await browserBridge.importPick();
+      if (result?.canceled) return;
+      if (result?.error) throw new Error(t("The browser export could not be read."));
+      acceptPreview(result);
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const chooseLive = async () => {
+    if (busy || !sourceId || !browserBridge?.importLive) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      let result = await browserBridge.importLive(sourceId, false);
+      if (result?.running) {
+        if (!window.confirm(t("Close the selected browser briefly to copy its cookies, then reopen it with your tabs?"))) return;
+        result = await browserBridge.importLive(sourceId, true);
+      }
+      if (result?.error) throw new Error(t("The selected browser profile could not be copied."));
+      acceptPreview(result);
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const cancelPreview = async () => {
+    if (!pending || busy) return;
+    try {
+      await browserBridge?.importCancel?.(pending.id);
+    } catch {
+    }
+    persist(null);
+    setLabel("");
+    setNotice(t("Browser import preview cancelled."));
+  };
+  const sendImport = async (next) => {
+    if (!next || !next.environmentId || !next.label.trim() || busy) return;
+    persist(next);
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await call2("browser-import", {
+        instanceId,
+        commandId: next.commandId,
+        sourceRef: next.sourceRef,
+        pendingId: next.id,
+        preview: next.preview,
+        environmentId: next.environmentId,
+        label: next.label
+      });
+      persist(null);
+      setLabel("");
+      setNotice(t(result.status === "applied" ? "Browser data imported into a new isolated resource." : "Browser import needs another retry."));
+      await refresh();
+      if (result.status === "applied") onChanged?.();
+    } catch (failure) {
+      setError(failure.message);
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+  const commit = () => sendImport(pending && {
+    ...pending,
+    environmentId,
+    label: label.trim(),
+    targetLocked: true
+  });
+  const retryBatch = (batch) => {
+    if (!pending || busy) return;
+    const next = {
+      ...pending,
+      sourceRef: batch.sourceRef,
+      environmentId: batch.environmentId,
+      label: batch.label,
+      commandId: crypto.randomUUID(),
+      targetLocked: true
+    };
+    setEnvironmentId(batch.environmentId);
+    setLabel(batch.label);
+    void sendImport(next);
+  };
+  const cancelImport = async (batch) => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await call2("browser-import-cancel", { instanceId, commandId: crypto.randomUUID(), importId: batch.id });
+      if (pending?.sourceRef === batch.sourceRef) {
+        try {
+          await browserBridge?.importCancel?.(pending.id);
+        } catch {
+        }
+        persist(null);
+      }
+      setNotice(t(result.status === "cancelled" ? "Browser import cancelled." : "Browser import is already complete."));
+      await refresh();
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (0, import_react61.createElement)(
+    "section",
+    { className: "bt-product-browser-import", "aria-label": t("Import browser data") },
+    (0, import_react61.createElement)("h3", null, t("Import browser data")),
+    (0, import_react61.createElement)(
+      "p",
+      { className: "bt-product-resource-note" },
+      t("Preview a cookie export or installed browser profile before creating a new isolated browser.")
+    ),
+    browserBridge?.importPick ? (0, import_react61.createElement)(
+      "div",
+      { className: "bt-product-resource-row" },
+      (0, import_react61.createElement)(
+        "button",
+        { type: "button", className: "bt-soft", disabled: busy, onClick: () => void chooseFile() },
+        t("Choose cookie export")
+      )
+    ) : null,
+    sources.length ? (0, import_react61.createElement)(
+      "div",
+      { className: "bt-product-resource-row" },
+      (0, import_react61.createElement)(
+        "select",
+        {
+          className: "bt-bs-input",
+          value: sourceId,
+          "aria-label": t("Installed browser profile"),
+          disabled: busy,
+          onChange: (event) => setSourceId(event.target.value)
+        },
+        sources.map((source) => (0, import_react61.createElement)("option", { key: source.id, value: source.id }, source.label))
+      ),
+      (0, import_react61.createElement)("button", {
+        type: "button",
+        className: "bt-soft",
+        disabled: busy || !sourceId,
+        onClick: () => void chooseLive()
+      }, t("Preview installed profile"))
+    ) : null,
+    pending ? (0, import_react61.createElement)(
+      "div",
+      { className: "bt-product-browser-import-preview" },
+      (0, import_react61.createElement)("strong", null, pending.preview.source.label),
+      (0, import_react61.createElement)("p", null, previewText(pending.preview)),
+      (0, import_react61.createElement)("p", null, `${t("Source ownership")}: ${pending.preview.source.kind} · ${t("Privacy scope")}: ${t("Isolated browser profile")}`),
+      (0, import_react61.createElement)("p", null, `${t("Target instance")}: ${instanceId} · ${t("Target role")}: ${t("Local browser")} · ${t("The new browser starts with no work grants.")}`),
+      pending.preview.sites?.length ? (0, import_react61.createElement)("ul", null, pending.preview.sites.slice(0, 20).map((site) => (0, import_react61.createElement)("li", { key: site.site }, `${site.site} · ${site.cookies} cookies · ${site.httpOnly} HTTP-only`))) : null,
+      (0, import_react61.createElement)(Row, { label: t("Browser Environment") }, (0, import_react61.createElement)("select", {
+        className: "bt-bs-input",
+        value: environmentId,
+        disabled: busy || pending.targetLocked || directories.length === 0,
+        onChange: (event) => {
+          const value = event.target.value;
+          setEnvironmentId(value);
+          persist({ ...pending, environmentId: value, label: label.trim() || pending.label });
+        }
+      }, (0, import_react61.createElement)("option", { value: "" }, t("Choose Environment")), directories.map((directory) => (0, import_react61.createElement)(
+        "option",
+        { key: directory.id, value: directory.id },
+        directory.title ?? directory.id
+      )))),
+      (0, import_react61.createElement)(Row, { label: t("Browser name") }, (0, import_react61.createElement)("input", {
+        className: "bt-bs-input",
+        value: label,
+        maxLength: 128,
+        disabled: busy || pending.targetLocked,
+        onChange: (event) => {
+          setLabel(event.target.value);
+          persist({ ...pending, environmentId, label: event.target.value });
+        }
+      })),
+      (0, import_react61.createElement)(
+        "div",
+        { className: "bt-product-resource-row" },
+        (0, import_react61.createElement)("button", {
+          type: "button",
+          className: "bt-soft",
+          disabled: busy || !environmentId || !label.trim(),
+          onClick: () => void commit()
+        }, busy ? t("Importing…") : t("Import into new browser")),
+        (0, import_react61.createElement)("button", {
+          type: "button",
+          className: "bt-soft",
+          disabled: busy,
+          onClick: () => void cancelPreview()
+        }, t("Cancel preview"))
+      )
+    ) : null,
+    error ? (0, import_react61.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+    notice ? (0, import_react61.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
+    batches.length ? (0, import_react61.createElement)(
+      "div",
+      { className: "bt-product-browser-import-history" },
+      (0, import_react61.createElement)("h4", null, t("Recent browser imports")),
+      batches.map((batch) => (0, import_react61.createElement)(
+        "div",
+        { key: batch.id, className: "bt-product-browser-import-row" },
+        (0, import_react61.createElement)(
+          "div",
+          null,
+          (0, import_react61.createElement)("strong", null, batch.label),
+          (0, import_react61.createElement)("p", null, `${previewText(batch.preview)} · ${t(IMPORT_STATES[batch.status] ?? batch.status)}`),
+          batch.report ? (0, import_react61.createElement)("p", null, `${t("Stored cookies")}: ${batch.report.stored} · ${t("Dropped")}: ${batch.report.droppedCount} · ${t("Failed")}: ${batch.report.failedCount}`) : null
+        ),
+        (0, import_react61.createElement)(
+          "div",
+          { className: "bt-product-resource-row" },
+          batch.status === "pending" || batch.status === "unknown" ? (0, import_react61.createElement)(
+            import_react61.Fragment,
+            null,
+            pending ? (0, import_react61.createElement)("button", {
+              type: "button",
+              className: "bt-soft",
+              disabled: busy,
+              onClick: () => retryBatch(batch)
+            }, t("Use preview to retry")) : null,
+            (0, import_react61.createElement)("button", {
+              type: "button",
+              className: "bt-soft",
+              disabled: busy,
+              onClick: () => void cancelImport(batch)
+            }, t("Cancel browser import"))
+          ) : null
+        )
+      ))
+    ) : null
+  );
+}
+var PRODUCT_BROWSER_IMPORT_CSS = `
+.bt-product-browser-import{display:flex;flex-direction:column;gap:8px;margin:14px 0;padding:12px;border:1px solid var(--bt-line);border-radius:8px}
+.bt-product-browser-import h3,.bt-product-browser-import h4{margin:0;font-size:13px}
+.bt-product-browser-import p{margin:3px 0;color:var(--bt-ink-2);font-size:12px;line-height:18px}
+.bt-product-browser-import-preview{padding:10px;border:1px solid var(--bt-line);border-radius:8px}
+.bt-product-browser-import-preview ul{padding-left:18px;margin:6px 0;font-size:12px}
+.bt-product-browser-import-history{display:flex;flex-direction:column;gap:6px}
+.bt-product-browser-import-row{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--bt-line)}
+.bt-product-browser-import button:focus-visible,.bt-product-browser-import select:focus-visible,.bt-product-browser-import input:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+@media(max-width:640px){.bt-product-browser-import-row{align-items:flex-start;flex-direction:column}}
+`;
+
+// src/client/product-browser-settings.js
+var import_react62 = require("react");
 var BROWSER_STATES = {
   available: "Available",
   busy: "In use",
   human: "Human control",
   unknown: "Outcome unknown",
+  importing: "Importing",
   revoked: "Revoked"
 };
 var OPERATION_STATES = {
@@ -25387,20 +25758,20 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call: c
   const storageKey = `product-browser-command:${instanceId}`;
   const acceptedWorks = works.filter((work) => work.receipt?.status === "accepted" && work.brief?.workItemId);
   const directories = directoryOptions?.directories ?? [];
-  const [resources, setResources] = (0, import_react61.useState)(null);
-  const [selectedId, setSelectedId] = (0, import_react61.useState)("");
-  const [workItemId, setWorkItemId] = (0, import_react61.useState)("");
-  const [environmentId, setEnvironmentId] = (0, import_react61.useState)(directories[0]?.id ?? "");
-  const [label, setLabel] = (0, import_react61.useState)("");
-  const [reasons, setReasons] = (0, import_react61.useState)({});
-  const [pending, setPending] = (0, import_react61.useState)({});
-  const [busy, setBusy] = (0, import_react61.useState)(false);
-  const [unavailable, setUnavailable] = (0, import_react61.useState)(false);
-  const [error, setError] = (0, import_react61.useState)(null);
-  const [notice, setNotice] = (0, import_react61.useState)(null);
-  const [manual, setManual] = (0, import_react61.useState)(null);
-  const inFlight = (0, import_react61.useRef)({});
-  const refreshGeneration = (0, import_react61.useRef)(0);
+  const [resources, setResources] = (0, import_react62.useState)(null);
+  const [selectedId, setSelectedId] = (0, import_react62.useState)("");
+  const [workItemId, setWorkItemId] = (0, import_react62.useState)("");
+  const [environmentId, setEnvironmentId] = (0, import_react62.useState)(directories[0]?.id ?? "");
+  const [label, setLabel] = (0, import_react62.useState)("");
+  const [reasons, setReasons] = (0, import_react62.useState)({});
+  const [pending, setPending] = (0, import_react62.useState)({});
+  const [busy, setBusy] = (0, import_react62.useState)(false);
+  const [unavailable, setUnavailable] = (0, import_react62.useState)(false);
+  const [error, setError] = (0, import_react62.useState)(null);
+  const [notice, setNotice] = (0, import_react62.useState)(null);
+  const [manual, setManual] = (0, import_react62.useState)(null);
+  const inFlight = (0, import_react62.useRef)({});
+  const refreshGeneration = (0, import_react62.useRef)(0);
   const selected = resources?.find((resource) => resource.id === selectedId);
   const selectedWorks = acceptedWorks.filter((work) => !selected?.environmentId || !work.brief.environmentId || work.brief.environmentId === selected.environmentId);
   const activeGrant = selected?.grants?.find((grant) => grant.workItemId === workItemId && grant.active);
@@ -25438,7 +25809,7 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call: c
       return [];
     }
   };
-  (0, import_react61.useEffect)(() => {
+  (0, import_react62.useEffect)(() => {
     let live = true;
     try {
       const saved = JSON.parse(window.sessionStorage.getItem(storageKey));
@@ -25461,13 +25832,13 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call: c
       window.clearInterval(timer);
     };
   }, [call2, instanceId]);
-  (0, import_react61.useEffect)(() => {
+  (0, import_react62.useEffect)(() => {
     if (!directories.some((directory) => directory.id === environmentId)) setEnvironmentId(directories[0]?.id ?? "");
   }, [directoryOptions]);
-  (0, import_react61.useEffect)(() => {
+  (0, import_react62.useEffect)(() => {
     if (!selectedWorks.some((work) => work.brief.workItemId === workItemId)) setWorkItemId(selectedWorks[0]?.brief?.workItemId ?? "");
   }, [selectedId, resources, workItemId]);
-  (0, import_react61.useEffect)(() => {
+  (0, import_react62.useEffect)(() => {
     let live = true;
     const control = selected?.control;
     if (control?.state === "held" && browserBridge) {
@@ -25521,7 +25892,7 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call: c
     );
   };
   const revoke = () => {
-    if (!selected || busy || selected.state === "revoked" || !window.confirm(t("Revoke this browser resource and all of its work grants?"))) return;
+    if (!selected || busy || !["available", "busy", "human", "unknown"].includes(selected.state) || !window.confirm(t("Revoke this browser resource and all of its work grants?"))) return;
     void execute(
       "browser-revoke",
       { resourceId: selected.id, expectedRevision: selected.revision },
@@ -25581,23 +25952,32 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call: c
       reason: "Stopped by the user during browser control."
     }, "Work stop requested.");
   };
-  if (unavailable) return (0, import_react61.createElement)(
+  if (unavailable) return (0, import_react62.createElement)(
     Card2,
     { title: t("Browser resources") },
-    (0, import_react61.createElement)("p", { className: "bt-product-resource-note" }, t("The local Host has no CDP browser bridge. Browser work remains unavailable."))
+    (0, import_react62.createElement)("p", { className: "bt-product-resource-note" }, t("The local Host has no CDP browser bridge. Browser work remains unavailable."))
   );
-  return (0, import_react61.createElement)(
-    import_react61.Fragment,
+  return (0, import_react62.createElement)(
+    import_react62.Fragment,
     null,
-    (0, import_react61.createElement)(
+    (0, import_react62.createElement)(
       Card2,
       { title: t("Browser resources") },
-      (0, import_react61.createElement)(
+      (0, import_react62.createElement)(
         "p",
         { className: "bt-product-resource-note" },
         t("Each browser keeps an isolated profile. A local Worker needs an exact work-item grant before navigation or a read-only snapshot.")
       ),
-      (0, import_react61.createElement)("button", {
+      browserBridge ? (0, import_react62.createElement)(ProductBrowserImport, {
+        binding,
+        call: call2,
+        browserBridge,
+        directoryOptions,
+        onChanged: () => {
+          void refresh();
+        }
+      }) : null,
+      (0, import_react62.createElement)("button", {
         type: "button",
         className: "bt-product-browser-refresh bt-soft bt-soft-sm",
         disabled: Boolean(busy),
@@ -25605,28 +25985,28 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call: c
           void refresh();
         }
       }, t("Refresh browser resources")),
-      !resources ? (0, import_react61.createElement)("p", { role: "status" }, t("Loading…")) : resources.length === 0 ? (0, import_react61.createElement)("p", { className: "bt-main-status" }, t("No browser resources yet.")) : (0, import_react61.createElement)("div", { className: "bt-product-resource-list" }, resources.map((resource) => (0, import_react61.createElement)(
+      !resources ? (0, import_react62.createElement)("p", { role: "status" }, t("Loading…")) : resources.length === 0 ? (0, import_react62.createElement)("p", { className: "bt-main-status" }, t("No browser resources yet.")) : (0, import_react62.createElement)("div", { className: "bt-product-resource-list" }, resources.map((resource) => (0, import_react62.createElement)(
         "div",
         {
           key: resource.id,
           className: "bt-product-browser-resource"
         },
-        (0, import_react61.createElement)("button", {
+        (0, import_react62.createElement)("button", {
           type: "button",
           className: "bt-soft",
           disabled: Boolean(busy),
           "aria-pressed": selectedId === resource.id,
           onClick: () => setSelectedId(resource.id)
         }, resource.label),
-        (0, import_react61.createElement)("span", { role: "status" }, `${t(BROWSER_STATES[resource.state] ?? "Unavailable")} · v${resource.revision} · ${resource.environmentId}`)
+        (0, import_react62.createElement)("span", { role: "status" }, `${t(BROWSER_STATES[resource.state] ?? "Unavailable")} · v${resource.revision} · ${resource.environmentId}`)
       ))),
-      error ? (0, import_react61.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
-      notice ? (0, import_react61.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
-      Object.values(pending).map((attempt) => (0, import_react61.createElement)(
+      error ? (0, import_react62.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+      notice ? (0, import_react62.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
+      Object.values(pending).map((attempt) => (0, import_react62.createElement)(
         "div",
         { key: attempt.commandId, className: "bt-product-resource-row", role: "status" },
-        (0, import_react61.createElement)("span", null, `${actionLabel(attempt)} · ${t("pending confirmation. Retry the same command.")}`),
-        (0, import_react61.createElement)(
+        (0, import_react62.createElement)("span", null, `${actionLabel(attempt)} · ${t("pending confirmation. Retry the same command.")}`),
+        (0, import_react62.createElement)(
           "button",
           {
             className: "bt-soft",
@@ -25638,10 +26018,10 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call: c
           t("Retry pending browser change")
         )
       )),
-      (0, import_react61.createElement)(
+      (0, import_react62.createElement)(
         "form",
         { className: "bt-product-browser-create", onSubmit: create },
-        (0, import_react61.createElement)(Row, { label: t("Browser name") }, (0, import_react61.createElement)("input", {
+        (0, import_react62.createElement)(Row, { label: t("Browser name") }, (0, import_react62.createElement)("input", {
           className: "bt-bs-input",
           value: label,
           maxLength: 128,
@@ -25649,7 +26029,7 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call: c
           placeholder: t("Research browser"),
           onChange: (event) => setLabel(event.target.value)
         })),
-        (0, import_react61.createElement)(Row, { label: t("Browser Environment") }, (0, import_react61.createElement)(
+        (0, import_react62.createElement)(Row, { label: t("Browser Environment") }, (0, import_react62.createElement)(
           "select",
           {
             className: "bt-bs-input",
@@ -25657,65 +26037,65 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call: c
             disabled: Boolean(busy) || directories.length === 0,
             onChange: (event) => setEnvironmentId(event.target.value)
           },
-          directories.length === 0 ? (0, import_react61.createElement)("option", { value: "" }, t("No local Environment")) : null,
-          directories.map((directory) => (0, import_react61.createElement)(
+          directories.length === 0 ? (0, import_react62.createElement)("option", { value: "" }, t("No local Environment")) : null,
+          directories.map((directory) => (0, import_react62.createElement)(
             "option",
             { key: directory.id, value: directory.id },
             directory.title ?? directory.id
           ))
         )),
-        (0, import_react61.createElement)(
+        (0, import_react62.createElement)(
           "button",
           { className: "bt-soft", type: "submit", disabled: Boolean(busy) || Boolean(pending[actionKey("browser-create", { environmentId })]) || !label.trim() || !environmentId },
           busy ? t("Saving…") : t("Create browser resource")
         )
       )
     ),
-    selected ? (0, import_react61.createElement)(
+    selected ? (0, import_react62.createElement)(
       Card2,
       { title: t("Browser work access") },
-      (0, import_react61.createElement)(
+      (0, import_react62.createElement)(
         "div",
         { className: "bt-product-resource-selected" },
-        (0, import_react61.createElement)("h3", null, selected.label),
-        (0, import_react61.createElement)("p", { role: "status" }, `${t(BROWSER_STATES[selected.state] ?? "Unavailable")} · v${selected.revision}`),
-        selected.owner ? (0, import_react61.createElement)(
+        (0, import_react62.createElement)("h3", null, selected.label),
+        (0, import_react62.createElement)("p", { role: "status" }, `${t(BROWSER_STATES[selected.state] ?? "Unavailable")} · v${selected.revision}`),
+        selected.owner ? (0, import_react62.createElement)(
           "p",
           { className: "bt-product-resource-note" },
           `${t("Browser owner")}: ${selected.owner.ticketId} · ${selected.owner.generation}`
         ) : null,
-        selected.control ? (0, import_react61.createElement)(
+        selected.control ? (0, import_react62.createElement)(
           "div",
           { className: "bt-product-browser-control", role: "status" },
-          (0, import_react61.createElement)("p", null, t("A person controls this browser. Worker browser calls wait for explicit return.")),
-          selected.control.state === "held" && manual?.controlId === selected.control.id && manual.profile && browserBridge ? (0, import_react61.createElement)(ManualBrowserView, { browserBridge, profile: manual.profile, label: selected.label }) : null,
-          selected.control.state === "held" || selected.control.state === "returning" ? (0, import_react61.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy) || Boolean(pending[actionKey("browser-return", { resourceId: selected.id })]), onClick: giveBack }, t("Give browser back")) : null,
-          selected.control.state === "taking" ? (0, import_react61.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy), onClick: reconcileTake }, t("Reconnect browser control")) : null
-        ) : selectedWorks.length > 0 && browserBridge ? (0, import_react61.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy) || selected.state === "revoked" || !workItemId || !activeGrant || Boolean(pending[actionKey("browser-take", { resourceId: selected.id })]), onClick: take }, t("Take over browser")) : null,
-        selected.control && works.some((item) => item.brief?.workItemId === selected.control.workItemId && item.control?.assignment && item.control.stop?.state !== "stopped") ? (0, import_react61.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy), onClick: stop }, t("Stop browser work")) : null,
-        (0, import_react61.createElement)(
+          (0, import_react62.createElement)("p", null, t("A person controls this browser. Worker browser calls wait for explicit return.")),
+          selected.control.state === "held" && manual?.controlId === selected.control.id && manual.profile && browserBridge ? (0, import_react62.createElement)(ManualBrowserView, { browserBridge, profile: manual.profile, label: selected.label }) : null,
+          selected.control.state === "held" || selected.control.state === "returning" ? (0, import_react62.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy) || Boolean(pending[actionKey("browser-return", { resourceId: selected.id })]), onClick: giveBack }, t("Give browser back")) : null,
+          selected.control.state === "taking" ? (0, import_react62.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy), onClick: reconcileTake }, t("Reconnect browser control")) : null
+        ) : selectedWorks.length > 0 && browserBridge ? (0, import_react62.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy) || selected.state === "revoked" || !workItemId || !activeGrant || Boolean(pending[actionKey("browser-take", { resourceId: selected.id })]), onClick: take }, t("Take over browser")) : null,
+        selected.control && works.some((item) => item.brief?.workItemId === selected.control.workItemId && item.control?.assignment && item.control.stop?.state !== "stopped") ? (0, import_react62.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy), onClick: stop }, t("Stop browser work")) : null,
+        (0, import_react62.createElement)(
           "div",
           { className: "bt-product-resource-row" },
-          (0, import_react61.createElement)("button", {
+          (0, import_react62.createElement)("button", {
             className: "bt-soft",
             type: "button",
-            disabled: Boolean(busy) || Boolean(pending[actionKey("browser-revoke", { resourceId: selected.id })]) || selected.state === "revoked",
+            disabled: Boolean(busy) || Boolean(pending[actionKey("browser-revoke", { resourceId: selected.id })]) || selected.state === "importing" || selected.state === "revoked",
             onClick: revoke
           }, t("Revoke browser resource"))
         ),
-        selected.grantsTruncated ? (0, import_react61.createElement)(
+        selected.grantsTruncated ? (0, import_react62.createElement)(
           "p",
           { className: "bt-product-resource-note", role: "status" },
           t("This resource has more than 100 grants. No new grant can be added until stored grants are cleaned up.")
         ) : null,
-        selectedWorks.length === 0 ? (0, import_react61.createElement)(
+        selectedWorks.length === 0 ? (0, import_react62.createElement)(
           "p",
           { className: "bt-main-status" },
           t("No accepted work item is available in this Environment.")
-        ) : (0, import_react61.createElement)(
-          import_react61.Fragment,
+        ) : (0, import_react62.createElement)(
+          import_react62.Fragment,
           null,
-          (0, import_react61.createElement)(Row, { label: t("Browser work item") }, (0, import_react61.createElement)(
+          (0, import_react62.createElement)(Row, { label: t("Browser work item") }, (0, import_react62.createElement)(
             "select",
             {
               className: "bt-bs-input",
@@ -25723,49 +26103,49 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call: c
               disabled: Boolean(busy) || selected.state === "revoked",
               onChange: (event) => setWorkItemId(event.target.value)
             },
-            selectedWorks.map((work) => (0, import_react61.createElement)("option", { key: work.brief.workItemId, value: work.brief.workItemId }, work.brief.goal))
+            selectedWorks.map((work) => (0, import_react62.createElement)("option", { key: work.brief.workItemId, value: work.brief.workItemId }, work.brief.goal))
           )),
-          (0, import_react61.createElement)(
+          (0, import_react62.createElement)(
             "div",
             { className: "bt-product-resource-row" },
-            (0, import_react61.createElement)(
+            (0, import_react62.createElement)(
               "button",
               { className: "bt-soft", type: "button", disabled: Boolean(busy) || Boolean(selected && pending[actionKey("browser-grant", { resourceId: selected.id, workItemId })]) || selected.state === "revoked" || !workItemId, onClick: () => setGrant(!activeGrant) },
               t(activeGrant ? "Revoke browser from this work" : "Grant browser to this work")
             )
           )
         ),
-        selected.grants?.length ? (0, import_react61.createElement)(
+        selected.grants?.length ? (0, import_react62.createElement)(
           "div",
           { className: "bt-product-resource-list" },
-          selected.grants.map((grant) => (0, import_react61.createElement)(
+          selected.grants.map((grant) => (0, import_react62.createElement)(
             "div",
             { key: grant.workItemId, className: "bt-product-resource-row" },
-            (0, import_react61.createElement)("span", null, `${grant.workItemId} · ${t(grant.active ? "Allowed" : "Revoked")}`)
+            (0, import_react62.createElement)("span", null, `${grant.workItemId} · ${t(grant.active ? "Allowed" : "Revoked")}`)
           ))
         ) : null,
-        (0, import_react61.createElement)(
+        (0, import_react62.createElement)(
           "details",
           { className: "bt-product-browser-operations", open: selected.state === "unknown" || void 0 },
-          (0, import_react61.createElement)("summary", null, t("Recent browser operations")),
-          selected.operations?.length ? selected.operations.slice().reverse().map((operation) => (0, import_react61.createElement)(
+          (0, import_react62.createElement)("summary", null, t("Recent browser operations")),
+          selected.operations?.length ? selected.operations.slice().reverse().map((operation) => (0, import_react62.createElement)(
             "div",
             {
               key: operation.id,
               className: "bt-product-browser-operation"
             },
-            (0, import_react61.createElement)("p", null, `${operation.action} · ${t(OPERATION_STATES[operation.state] ?? operation.state)} · ${new Date(operation.createdAt).toLocaleString()}`),
-            (0, import_react61.createElement)("span", { className: "bt-set-hint" }, operation.id),
-            operation.code ? (0, import_react61.createElement)("p", { className: "bt-main-error" }, operation.code) : null,
-            operation.resolution ? (0, import_react61.createElement)(
+            (0, import_react62.createElement)("p", null, `${operation.action} · ${t(OPERATION_STATES[operation.state] ?? operation.state)} · ${new Date(operation.createdAt).toLocaleString()}`),
+            (0, import_react62.createElement)("span", { className: "bt-set-hint" }, operation.id),
+            operation.code ? (0, import_react62.createElement)("p", { className: "bt-main-error" }, operation.code) : null,
+            operation.resolution ? (0, import_react62.createElement)(
               "p",
               { className: "bt-set-hint" },
               t(OBSERVATIONS[operation.resolution] ?? "Browser operation checked")
             ) : null,
-            operation.state === "unknown" || selected.state === "unknown" && operation.state === "pending" ? (0, import_react61.createElement)(
+            operation.state === "unknown" || selected.state === "unknown" && operation.state === "pending" ? (0, import_react62.createElement)(
               "div",
               { className: "bt-product-browser-resolve" },
-              (0, import_react61.createElement)(
+              (0, import_react62.createElement)(
                 "select",
                 {
                   className: "bt-bs-input",
@@ -25774,28 +26154,28 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call: c
                   disabled: Boolean(busy),
                   onChange: (event) => setReasons((current) => ({ ...current, [operation.id]: event.target.value }))
                 },
-                (0, import_react61.createElement)("option", { value: "" }, t("Choose the observed browser state")),
-                Object.entries(OBSERVATIONS).map(([value, label2]) => (0, import_react61.createElement)("option", { key: value, value }, t(label2)))
+                (0, import_react62.createElement)("option", { value: "" }, t("Choose the observed browser state")),
+                Object.entries(OBSERVATIONS).map(([value, label2]) => (0, import_react62.createElement)("option", { key: value, value }, t(label2)))
               ),
-              (0, import_react61.createElement)(
+              (0, import_react62.createElement)(
                 "button",
                 { className: "bt-soft", type: "button", disabled: Boolean(busy) || Boolean(pending[actionKey("browser-resolve", { resourceId: selected.id, operationId: operation.id })]) || !(reasons[operation.id] ?? "").trim(), onClick: () => resolve2(operation) },
                 t("Record browser check")
               )
             ) : null
-          )) : (0, import_react61.createElement)("p", { className: "bt-set-hint" }, t("No browser operations yet."))
+          )) : (0, import_react62.createElement)("p", { className: "bt-set-hint" }, t("No browser operations yet."))
         )
       )
     ) : null
   );
 }
 function ManualBrowserView({ browserBridge, profile, label }) {
-  const frame = (0, import_react61.useRef)(null);
-  const tabId = (0, import_react61.useRef)(null);
+  const frame = (0, import_react62.useRef)(null);
+  const tabId = (0, import_react62.useRef)(null);
   if (!tabId.current) tabId.current = crypto.randomUUID();
-  const [address, setAddress] = (0, import_react61.useState)("");
-  const [error, setError] = (0, import_react61.useState)(null);
-  (0, import_react61.useEffect)(() => {
+  const [address, setAddress] = (0, import_react62.useState)("");
+  const [error, setError] = (0, import_react62.useState)(null);
+  (0, import_react62.useEffect)(() => {
     let live = true;
     const tab = tabId.current;
     const place = () => {
@@ -25833,26 +26213,26 @@ function ManualBrowserView({ browserBridge, profile, label }) {
     setError(null);
     void browserBridge.views.navigate(profile, tabId.current, url).catch((failure) => setError(failure.message));
   };
-  return (0, import_react61.createElement)(
+  return (0, import_react62.createElement)(
     "div",
     { className: "bt-product-manual-browser" },
-    (0, import_react61.createElement)("p", { className: "bt-product-resource-note" }, t("Manual browser control: {label}", { label })),
-    (0, import_react61.createElement)(
+    (0, import_react62.createElement)("p", { className: "bt-product-resource-note" }, t("Manual browser control: {label}", { label })),
+    (0, import_react62.createElement)(
       "form",
       { onSubmit: open, className: "bt-product-manual-browser-form" },
-      (0, import_react61.createElement)("input", {
+      (0, import_react62.createElement)("input", {
         className: "bt-bs-input",
         value: address,
         "aria-label": t("Browser address"),
         onChange: (event) => setAddress(event.target.value)
       }),
-      (0, import_react61.createElement)("button", { className: "bt-soft", type: "submit" }, t("Open"))
+      (0, import_react62.createElement)("button", { className: "bt-soft", type: "submit" }, t("Open"))
     ),
-    error ? (0, import_react61.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
-    (0, import_react61.createElement)("div", { ref: frame, className: "bt-product-manual-browser-frame", role: "region", "aria-label": t("Manual browser") })
+    error ? (0, import_react62.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+    (0, import_react62.createElement)("div", { ref: frame, className: "bt-product-manual-browser-frame", role: "region", "aria-label": t("Manual browser") })
   );
 }
-var PRODUCT_BROWSER_CSS = `
+var PRODUCT_BROWSER_CSS = PRODUCT_BROWSER_IMPORT_CSS + `
 .bt-product-browser-resource{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .bt-product-browser-control{margin-top:10px;padding:10px;border:1px solid var(--bt-line-2);border-radius:8px;background:var(--bt-hover)}
 .bt-product-browser-control>p{margin:0 0 8px;font-size:12px;color:var(--bt-ink-2)}
@@ -25874,7 +26254,7 @@ var PRODUCT_BROWSER_CSS = `
 `;
 
 // src/client/product-execution.js
-var import_react62 = require("react");
+var import_react63 = require("react");
 var targets = [["local", "Local"], ["remote-only", "Remote only"], ["auto", "Auto"]];
 var permissions = ["read", "write", "search", "command"];
 var permissionLabels = {
@@ -25931,23 +26311,23 @@ function pairingStatusCopy(status) {
   }[status] ?? t("Unknown");
 }
 function ProductExecutionSettings({ binding, call: call2, onChanged }) {
-  const [snapshot, setSnapshot] = (0, import_react62.useState)(null);
-  const [draft, setDraft] = (0, import_react62.useState)(null);
-  const [pairing, setPairing] = (0, import_react62.useState)(null);
-  const [pairIssue, setPairIssue] = (0, import_react62.useState)(null);
-  const [confirmPairAbandon, setConfirmPairAbandon] = (0, import_react62.useState)(false);
-  const [revocation, setRevocation] = (0, import_react62.useState)(null);
-  const [cleanup, setCleanup] = (0, import_react62.useState)(null);
-  const [busy, setBusy] = (0, import_react62.useState)(false);
-  const [error, setError] = (0, import_react62.useState)("");
-  const [notice, setNotice] = (0, import_react62.useState)("");
+  const [snapshot, setSnapshot] = (0, import_react63.useState)(null);
+  const [draft, setDraft] = (0, import_react63.useState)(null);
+  const [pairing, setPairing] = (0, import_react63.useState)(null);
+  const [pairIssue, setPairIssue] = (0, import_react63.useState)(null);
+  const [confirmPairAbandon, setConfirmPairAbandon] = (0, import_react63.useState)(false);
+  const [revocation, setRevocation] = (0, import_react63.useState)(null);
+  const [cleanup, setCleanup] = (0, import_react63.useState)(null);
+  const [busy, setBusy] = (0, import_react63.useState)(false);
+  const [error, setError] = (0, import_react63.useState)("");
+  const [notice, setNotice] = (0, import_react63.useState)("");
   const load = async () => {
     const value = await call2("execution-options", { instanceId: binding.instanceId });
     setSnapshot(value);
     setDraft((current) => current ?? { ...value.policy, requiredPermissions: [...value.policy.requiredPermissions] });
     return value;
   };
-  (0, import_react62.useEffect)(() => {
+  (0, import_react63.useEffect)(() => {
     let live = true;
     setSnapshot(null);
     setDraft(null);
@@ -26101,58 +26481,58 @@ function ProductExecutionSettings({ binding, call: call2, onChanged }) {
     target[path.at(-1)] = value;
     return next;
   });
-  if (!snapshot || !draft) return (0, import_react62.createElement)("p", { role: "status" }, error || t("Loading…"));
-  return (0, import_react62.createElement)(
+  if (!snapshot || !draft) return (0, import_react63.createElement)("p", { role: "status" }, error || t("Loading…"));
+  return (0, import_react63.createElement)(
     "section",
     { className: "bt-product-execution", "aria-label": t("Execution targets") },
-    error ? (0, import_react62.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
-    notice ? (0, import_react62.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
-    cleanup ? (0, import_react62.createElement)(
+    error ? (0, import_react63.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+    notice ? (0, import_react63.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
+    cleanup ? (0, import_react63.createElement)(
       "div",
       { className: "bt-product-execution-cleanup" },
-      (0, import_react62.createElement)("p", { className: "bt-main-error" }, t("Credential cleanup is pending for a device operation.")),
-      (0, import_react62.createElement)(
+      (0, import_react63.createElement)("p", { className: "bt-main-error" }, t("Credential cleanup is pending for a device operation.")),
+      (0, import_react63.createElement)(
         "button",
         { type: "button", className: "bt-soft bt-danger", disabled: busy, onClick: retryCleanup },
         t("Retry credential cleanup")
       )
     ) : null,
-    snapshot.remoteLoadErrors?.length ? (0, import_react62.createElement)(
+    snapshot.remoteLoadErrors?.length ? (0, import_react63.createElement)(
       Card2,
       { title: t("Unavailable remote devices") },
-      snapshot.remoteLoadErrors.map((item) => (0, import_react62.createElement)(
+      snapshot.remoteLoadErrors.map((item) => (0, import_react63.createElement)(
         "p",
         { key: item.id, className: "bt-main-error" },
         `${item.id}: ${capabilityReadErrorCopy(item.reason)}`
       ))
     ) : null,
-    (0, import_react62.createElement)(
+    (0, import_react63.createElement)(
       Card2,
       { title: t("Execution policy") },
-      (0, import_react62.createElement)("p", null, t("This policy chooses a target for new work. Active assignments keep their original Environment.")),
-      (0, import_react62.createElement)("label", null, t("Default target"), (0, import_react62.createElement)("select", {
+      (0, import_react63.createElement)("p", null, t("This policy chooses a target for new work. Active assignments keep their original Environment.")),
+      (0, import_react63.createElement)("label", null, t("Default target"), (0, import_react63.createElement)("select", {
         className: "bt-select",
         value: draft.defaultTarget,
         onChange: (event) => update(["defaultTarget"], event.target.value)
-      }, targets.map(([value, label]) => (0, import_react62.createElement)("option", { key: value, value }, t(label))))),
-      (0, import_react62.createElement)("label", null, t("Preferred Environment"), (0, import_react62.createElement)(
+      }, targets.map(([value, label]) => (0, import_react63.createElement)("option", { key: value, value }, t(label))))),
+      (0, import_react63.createElement)("label", null, t("Preferred Environment"), (0, import_react63.createElement)(
         "select",
         {
           className: "bt-select",
           value: draft.preferredEnvironmentId ?? "",
           onChange: (event) => update(["preferredEnvironmentId"], event.target.value || void 0)
         },
-        (0, import_react62.createElement)("option", { value: "" }, t("No preference")),
-        snapshot.environments.map((environment) => (0, import_react62.createElement)("option", { key: environment.id, value: environment.id }, environmentLabel(environment)))
+        (0, import_react63.createElement)("option", { value: "" }, t("No preference")),
+        snapshot.environments.map((environment) => (0, import_react63.createElement)("option", { key: environment.id, value: environment.id }, environmentLabel(environment)))
       )),
-      (0, import_react62.createElement)(
+      (0, import_react63.createElement)(
         "fieldset",
         null,
-        (0, import_react62.createElement)("legend", null, t("Required capabilities")),
-        permissions.map((permission) => (0, import_react62.createElement)(
+        (0, import_react63.createElement)("legend", null, t("Required capabilities")),
+        permissions.map((permission) => (0, import_react63.createElement)(
           "label",
           { key: permission },
-          (0, import_react62.createElement)("input", {
+          (0, import_react63.createElement)("input", {
             type: "checkbox",
             checked: draft.requiredPermissions.includes(permission),
             onChange: (event) => update(["requiredPermissions"], event.target.checked ? [...draft.requiredPermissions, permission] : draft.requiredPermissions.filter((item) => item !== permission))
@@ -26160,59 +26540,59 @@ function ProductExecutionSettings({ binding, call: call2, onChanged }) {
           permissionLabel(permission)
         ))
       ),
-      (0, import_react62.createElement)("button", {
+      (0, import_react63.createElement)("button", {
         type: "button",
         className: "bt-soft",
         disabled: busy || !draft.requiredPermissions.length,
         onClick: savePolicy
       }, t("Save execution policy"))
     ),
-    (0, import_react62.createElement)(
+    (0, import_react63.createElement)(
       Card2,
       { title: t("Devices and Environments") },
-      snapshot.environments.map((environment) => (0, import_react62.createElement)(
+      snapshot.environments.map((environment) => (0, import_react63.createElement)(
         "article",
         { key: environment.id, className: "bt-product-execution-row" },
-        (0, import_react62.createElement)("strong", null, environmentLabel(environment)),
-        (0, import_react62.createElement)("p", null, `${t("Status")}: ${environment.kind === "remote" ? environment.online === false ? t("Offline") : t("Configured") : t("Local")} · ${t("Permissions")}: ${permissionCopy(environment.permissions)}`),
-        (0, import_react62.createElement)("p", null, `${t("Device")}: ${environment.deviceId ?? t("This Host")} · ${t("Directory")}: ${environment.root}`),
-        environment.reasons?.length ? (0, import_react62.createElement)(
+        (0, import_react63.createElement)("strong", null, environmentLabel(environment)),
+        (0, import_react63.createElement)("p", null, `${t("Status")}: ${environment.kind === "remote" ? environment.online === false ? t("Offline") : t("Configured") : t("Local")} · ${t("Permissions")}: ${permissionCopy(environment.permissions)}`),
+        (0, import_react63.createElement)("p", null, `${t("Device")}: ${environment.deviceId ?? t("This Host")} · ${t("Directory")}: ${environment.root}`),
+        environment.reasons?.length ? (0, import_react63.createElement)(
           "p",
           { className: "bt-main-work-detail" },
           `${t("Selection issues")}: ${environment.reasons.map(candidateReasonCopy).join("; ")}`
         ) : null,
-        environment.capabilities?.unavailable ? (0, import_react62.createElement)(
+        environment.capabilities?.unavailable ? (0, import_react63.createElement)(
           "p",
           { className: "bt-main-error" },
           `${t("Capabilities unavailable")}: ${capabilityReadErrorCopy(environment.capabilities.reason)}`
-        ) : (0, import_react62.createElement)(
+        ) : (0, import_react63.createElement)(
           "p",
           null,
           `${t("Attachments")}: ${environment.capabilities?.attachments?.supported ? t("Available") : t("Unavailable")} · ${t("Skills")}: ${environment.capabilities?.skills?.supported ? t("Available") : t("Unavailable")}`
         ),
-        environment.kind === "remote" ? (0, import_react62.createElement)("button", {
+        environment.kind === "remote" ? (0, import_react63.createElement)("button", {
           type: "button",
           className: `bt-soft bt-soft-sm${revocation?.environmentId === environment.id ? " bt-danger" : ""}`,
           disabled: busy,
           onClick: () => revoke(environment.id)
         }, t(revocation?.environmentId === environment.id ? "Confirm revoke device" : "Revoke device")) : null
       )),
-      pairing ? (0, import_react62.createElement)(
+      pairing ? (0, import_react63.createElement)(
         "form",
         { className: "bt-product-execution-form", onSubmit: pair },
-        pairIssue ? (0, import_react62.createElement)(
+        pairIssue ? (0, import_react63.createElement)(
           "section",
           { className: "bt-product-execution-pair-issue" },
-          (0, import_react62.createElement)("p", { role: "status" }, `${t("Pairing status")}: ${pairingStatusCopy(pairIssue.status)}${pairIssue.active ? ` · ${t("Command running")}` : ""}${pairIssue.recoverable ? ` · ${t("Saved device can be restored after Host restart")}` : ""}`),
-          (0, import_react62.createElement)(
+          (0, import_react63.createElement)("p", { role: "status" }, `${t("Pairing status")}: ${pairingStatusCopy(pairIssue.status)}${pairIssue.active ? ` · ${t("Command running")}` : ""}${pairIssue.recoverable ? ` · ${t("Saved device can be restored after Host restart")}` : ""}`),
+          (0, import_react63.createElement)(
             "div",
             { className: "bt-actions" },
-            (0, import_react62.createElement)(
+            (0, import_react63.createElement)(
               "button",
               { type: "button", className: "bt-soft", disabled: busy, onClick: () => void run2(checkPairing) },
               t("Check pairing status")
             ),
-            pairIssue.canAbandon ? (0, import_react62.createElement)("button", {
+            pairIssue.canAbandon ? (0, import_react63.createElement)("button", {
               type: "button",
               className: "bt-soft bt-danger",
               disabled: busy,
@@ -26220,20 +26600,20 @@ function ProductExecutionSettings({ binding, call: call2, onChanged }) {
             }, t(confirmPairAbandon ? "Confirm abandon pairing" : "Abandon uncertain pairing")) : null
           )
         ) : null,
-        (0, import_react62.createElement)("label", null, t("Device name"), (0, import_react62.createElement)("input", {
+        (0, import_react63.createElement)("label", null, t("Device name"), (0, import_react63.createElement)("input", {
           className: "bt-bs-input",
           required: true,
           maxLength: 128,
           value: pairing.label,
           onChange: (event) => setPairing((current) => ({ ...current, label: event.target.value }))
         })),
-        (0, import_react62.createElement)("label", null, t("Environment ID"), (0, import_react62.createElement)("input", {
+        (0, import_react63.createElement)("label", null, t("Environment ID"), (0, import_react63.createElement)("input", {
           className: "bt-bs-input",
           required: true,
           value: pairing.environmentId,
           onChange: (event) => setPairing((current) => ({ ...current, environmentId: event.target.value }))
         })),
-        (0, import_react62.createElement)("label", null, t("Device endpoint"), (0, import_react62.createElement)("input", {
+        (0, import_react63.createElement)("label", null, t("Device endpoint"), (0, import_react63.createElement)("input", {
           className: "bt-bs-input",
           required: true,
           inputMode: "url",
@@ -26241,20 +26621,20 @@ function ProductExecutionSettings({ binding, call: call2, onChanged }) {
           value: pairing.endpoint,
           onChange: (event) => setPairing((current) => ({ ...current, endpoint: event.target.value }))
         })),
-        (0, import_react62.createElement)("label", null, t("Device ID"), (0, import_react62.createElement)("input", {
+        (0, import_react63.createElement)("label", null, t("Device ID"), (0, import_react63.createElement)("input", {
           className: "bt-bs-input",
           required: true,
           value: pairing.deviceId,
           onChange: (event) => setPairing((current) => ({ ...current, deviceId: event.target.value }))
         })),
-        (0, import_react62.createElement)("label", null, t("Device key fingerprint"), (0, import_react62.createElement)("input", {
+        (0, import_react63.createElement)("label", null, t("Device key fingerprint"), (0, import_react63.createElement)("input", {
           className: "bt-bs-input",
           required: true,
           pattern: "[a-f0-9]{64}",
           value: pairing.deviceKey,
           onChange: (event) => setPairing((current) => ({ ...current, deviceKey: event.target.value }))
         })),
-        (0, import_react62.createElement)("label", null, t("Pairing code"), (0, import_react62.createElement)("input", {
+        (0, import_react63.createElement)("label", null, t("Pairing code"), (0, import_react63.createElement)("input", {
           className: "bt-bs-input",
           required: true,
           type: "password",
@@ -26262,14 +26642,14 @@ function ProductExecutionSettings({ binding, call: call2, onChanged }) {
           value: pairing.pairingCode,
           onChange: (event) => setPairing((current) => ({ ...current, pairingCode: event.target.value }))
         })),
-        (0, import_react62.createElement)(
+        (0, import_react63.createElement)(
           "fieldset",
           null,
-          (0, import_react62.createElement)("legend", null, t("Device permissions")),
-          permissions.map((permission) => (0, import_react62.createElement)(
+          (0, import_react63.createElement)("legend", null, t("Device permissions")),
+          permissions.map((permission) => (0, import_react63.createElement)(
             "label",
             { key: permission },
-            (0, import_react62.createElement)("input", {
+            (0, import_react63.createElement)("input", {
               type: "checkbox",
               checked: pairing.permissions.includes(permission),
               onChange: (event) => setPairing((current) => ({ ...current, permissions: event.target.checked ? [...current.permissions, permission] : current.permissions.filter((item) => item !== permission) }))
@@ -26277,13 +26657,13 @@ function ProductExecutionSettings({ binding, call: call2, onChanged }) {
             permissionLabel(permission)
           ))
         ),
-        (0, import_react62.createElement)(
+        (0, import_react63.createElement)(
           "div",
           { className: "bt-actions" },
-          (0, import_react62.createElement)("button", { type: "submit", className: "bt-soft", disabled: busy || !pairing.permissions.length }, t("Pair device")),
-          (0, import_react62.createElement)("button", { type: "button", className: "bt-soft", onClick: () => setPairing(null) }, t("Cancel"))
+          (0, import_react63.createElement)("button", { type: "submit", className: "bt-soft", disabled: busy || !pairing.permissions.length }, t("Pair device")),
+          (0, import_react63.createElement)("button", { type: "button", className: "bt-soft", onClick: () => setPairing(null) }, t("Cancel"))
         )
-      ) : (0, import_react62.createElement)("button", { type: "button", className: "bt-soft", onClick: openPairing }, t("Pair a device"))
+      ) : (0, import_react63.createElement)("button", { type: "button", className: "bt-soft", onClick: openPairing }, t("Pair a device"))
     )
   );
 }
@@ -26300,7 +26680,7 @@ var PRODUCT_EXECUTION_CSS = `
 `;
 
 // src/client/product.js
-var import_react63 = require("react");
+var import_react64 = require("react");
 var clientBridge = () => window.dsBotApp?.productClient;
 var activeHost = "local";
 function offerDownload(data, name, mediaType = "application/octet-stream") {
@@ -26374,7 +26754,7 @@ function applyProduct(ctx) {
     directoryBusy: false,
     directoryError: null
   });
-  const useView = () => (0, import_react63.useSyncExternalStore)(view.subscribe, view.getSnapshot);
+  const useView = () => (0, import_react64.useSyncExternalStore)(view.subscribe, view.getSnapshot);
   let stopped = false;
   let observationListRequest = 0;
   let observationRequest = 0;
@@ -26718,15 +27098,15 @@ function applyProduct(ctx) {
   function MainWorkCard({ work, onEvidence }) {
     const state = useView();
     const canCommand = !state.connection?.connected || state.connection.capabilities.includes("command");
-    const [controlBusy, setControlBusy] = (0, import_react63.useState)(null);
-    const [controlError, setControlError] = (0, import_react63.useState)(null);
-    const [toolFactsBusy, setToolFactsBusy] = (0, import_react63.useState)(false);
-    const [toolFactsError, setToolFactsError] = (0, import_react63.useState)(null);
-    const [attentionDraft, setAttentionDraft] = (0, import_react63.useState)("");
+    const [controlBusy, setControlBusy] = (0, import_react64.useState)(null);
+    const [controlError, setControlError] = (0, import_react64.useState)(null);
+    const [toolFactsBusy, setToolFactsBusy] = (0, import_react64.useState)(false);
+    const [toolFactsError, setToolFactsError] = (0, import_react64.useState)(null);
+    const [attentionDraft, setAttentionDraft] = (0, import_react64.useState)("");
     const control = work.control;
-    const [artifactBusy, setArtifactBusy] = (0, import_react63.useState)(null);
-    const [artifactError, setArtifactError] = (0, import_react63.useState)(null);
-    const [viewError, setViewError] = (0, import_react63.useState)(null);
+    const [artifactBusy, setArtifactBusy] = (0, import_react64.useState)(null);
+    const [artifactError, setArtifactError] = (0, import_react64.useState)(null);
+    const [viewError, setViewError] = (0, import_react64.useState)(null);
     const downloadArtifact = async (artifact) => {
       if (!state.binding) return;
       setArtifactBusy(artifact.path);
@@ -26848,7 +27228,7 @@ function applyProduct(ctx) {
         setControlBusy(null);
       }
     };
-    return (0, import_react63.createElement)(
+    return (0, import_react64.createElement)(
       "article",
       {
         className: "bt-main-work",
@@ -26857,51 +27237,51 @@ function applyProduct(ctx) {
         "data-work-brief-id": work.brief.id,
         tabIndex: -1
       },
-      (0, import_react63.createElement)(
+      (0, import_react64.createElement)(
         "div",
         { className: "bt-main-work-head" },
-        (0, import_react63.createElement)(
+        (0, import_react64.createElement)(
           "div",
           { className: "bt-main-work-title" },
-          (0, import_react63.createElement)("span", { className: "bt-main-work-source" }, t("System work fact")),
-          (0, import_react63.createElement)("strong", null, work.brief.goal)
+          (0, import_react64.createElement)("span", { className: "bt-main-work-source" }, t("System work fact")),
+          (0, import_react64.createElement)("strong", null, work.brief.goal)
         ),
-        (0, import_react63.createElement)("span", { className: "bt-main-work-status", role: "status" }, statusCopy(work.status))
+        (0, import_react64.createElement)("span", { className: "bt-main-work-status", role: "status" }, statusCopy(work.status))
       ),
-      (0, import_react63.createElement)("p", { className: "bt-main-work-id" }, `${t("Work brief")} ${work.brief.id}`),
-      work.brief.configurationRevision ? (0, import_react63.createElement)(
+      (0, import_react64.createElement)("p", { className: "bt-main-work-id" }, `${t("Work brief")} ${work.brief.id}`),
+      work.brief.configurationRevision ? (0, import_react64.createElement)(
         "p",
         { className: "bt-main-work-id" },
         `${t("Configuration version")} v${work.brief.configurationRevision}`
       ) : null,
-      work.brief.target ? (0, import_react63.createElement)(
+      work.brief.target ? (0, import_react64.createElement)(
         "p",
         { className: "bt-main-work-id" },
         `${t("Execution target")}: ${executionTargetCopy(work.brief.target)}`
       ) : null,
-      work.brief.capabilities?.length ? (0, import_react63.createElement)(
+      work.brief.capabilities?.length ? (0, import_react64.createElement)(
         "p",
         { className: "bt-main-work-id" },
         `${t("Required capabilities")}: ${permissionCopy2(work.brief.capabilities)}`
       ) : null,
-      work.brief.directory ? (0, import_react63.createElement)("p", { className: "bt-main-work-id" }, `${t("Work directory")}: ${work.brief.directory}`) : null,
-      work.executionLocation ? (0, import_react63.createElement)(
+      work.brief.directory ? (0, import_react64.createElement)("p", { className: "bt-main-work-id" }, `${t("Work directory")}: ${work.brief.directory}`) : null,
+      work.executionLocation ? (0, import_react64.createElement)(
         "p",
         { className: "bt-main-work-id" },
         `${t("Bound Environment")}: ${work.executionLocation.kind === "remote" ? t("Remote") : t("Local")}${work.executionLocation.deviceId ? ` · ${t("Device")}: ${work.executionLocation.deviceId}` : ""} · ${t("Directory")}: ${work.executionLocation.root}${work.executionLocation.version ? ` · ${t("Version")}: ${work.executionLocation.version}` : ""}`
       ) : null,
-      work.executionSelection ? (0, import_react63.createElement)(
+      work.executionSelection ? (0, import_react64.createElement)(
         "div",
         { className: "bt-main-work-detail" },
-        (0, import_react63.createElement)("p", null, `${t("Selection basis")}: ${executionSourceCopy(work.executionSelection.source)} · ${executionStatusCopy(work.executionSelection.status)}${work.executionSelection.reason ? ` · ${capabilityReasonCopy(work.executionSelection.reason)}` : ""}`),
-        work.executionSelection.candidates?.length ? (0, import_react63.createElement)("ul", null, work.executionSelection.candidates.slice(0, 8).map((candidate) => (0, import_react63.createElement)("li", { key: candidate.id }, `${candidate.kind === "remote" ? t("Remote") : t("Local")} · ${candidate.id}${candidate.deviceId ? ` · ${t("Device")}: ${candidate.deviceId}` : ""} · ${candidate.eligible ? t("Eligible") : t("Not eligible")}${candidate.permissions?.length ? ` · ${t("Capabilities")}: ${permissionCopy2(candidate.permissions)}` : ""}${candidate.reasons?.length ? ` · ${candidate.reasons.map(capabilityReasonCopy).join("; ")}` : ""}`))) : null
+        (0, import_react64.createElement)("p", null, `${t("Selection basis")}: ${executionSourceCopy(work.executionSelection.source)} · ${executionStatusCopy(work.executionSelection.status)}${work.executionSelection.reason ? ` · ${capabilityReasonCopy(work.executionSelection.reason)}` : ""}`),
+        work.executionSelection.candidates?.length ? (0, import_react64.createElement)("ul", null, work.executionSelection.candidates.slice(0, 8).map((candidate) => (0, import_react64.createElement)("li", { key: candidate.id }, `${candidate.kind === "remote" ? t("Remote") : t("Local")} · ${candidate.id}${candidate.deviceId ? ` · ${t("Device")}: ${candidate.deviceId}` : ""} · ${candidate.eligible ? t("Eligible") : t("Not eligible")}${candidate.permissions?.length ? ` · ${t("Capabilities")}: ${permissionCopy2(candidate.permissions)}` : ""}${candidate.reasons?.length ? ` · ${candidate.reasons.map(capabilityReasonCopy).join("; ")}` : ""}`))) : null
       ) : null,
-      (0, import_react63.createElement)("p", { className: "bt-main-work-id" }, `${t("Receipt")}: ${receiptCopy(work.receipt.status)}`),
-      work.receipt.ticketId ? (0, import_react63.createElement)("p", { className: "bt-main-work-id" }, `${t("Ticket")} ${work.receipt.ticketId}`) : null,
-      control ? (0, import_react63.createElement)("p", { className: "bt-main-work-id" }, `${t("Ticket version")}: ${control.ticketVersion}`) : null,
-      assignment ? (0, import_react63.createElement)("p", { className: "bt-main-work-id" }, `${t("Execution version")}: ${assignment.generation}`) : null,
-      stop ? (0, import_react63.createElement)("p", { className: "bt-main-work-detail" }, stop.pendingDeviceConfirmation ? t("Stopping · waiting for device cancellation confirmation.") : stop.state === "stopping" ? t("Stopping · waiting for the current execution to become quiet.") : stop.cancellationConfirmedAt ? t("Stopped · execution cancellation confirmed.") : t("Stopped · cancellation confirmation is unavailable.")) : null,
-      stop?.pendingDeviceConfirmation && canCommand ? (0, import_react63.createElement)(
+      (0, import_react64.createElement)("p", { className: "bt-main-work-id" }, `${t("Receipt")}: ${receiptCopy(work.receipt.status)}`),
+      work.receipt.ticketId ? (0, import_react64.createElement)("p", { className: "bt-main-work-id" }, `${t("Ticket")} ${work.receipt.ticketId}`) : null,
+      control ? (0, import_react64.createElement)("p", { className: "bt-main-work-id" }, `${t("Ticket version")}: ${control.ticketVersion}`) : null,
+      assignment ? (0, import_react64.createElement)("p", { className: "bt-main-work-id" }, `${t("Execution version")}: ${assignment.generation}`) : null,
+      stop ? (0, import_react64.createElement)("p", { className: "bt-main-work-detail" }, stop.pendingDeviceConfirmation ? t("Stopping · waiting for device cancellation confirmation.") : stop.state === "stopping" ? t("Stopping · waiting for the current execution to become quiet.") : stop.cancellationConfirmedAt ? t("Stopped · execution cancellation confirmed.") : t("Stopped · cancellation confirmation is unavailable.")) : null,
+      stop?.pendingDeviceConfirmation && canCommand ? (0, import_react64.createElement)(
         "button",
         {
           type: "button",
@@ -26911,37 +27291,37 @@ function applyProduct(ctx) {
         },
         controlBusy === "work-reconcile-stop" ? t("Checking device stop…") : t("Check device stop")
       ) : null,
-      attention?.view ? (0, import_react63.createElement)(
+      attention?.view ? (0, import_react64.createElement)(
         "div",
         { className: "bt-main-work-attention" },
-        (0, import_react63.createElement)("p", { className: "bt-main-work-id" }, `${t("View version")} ${attention.version} · ${attention.status}`),
-        (0, import_react63.createElement)(ProductWorkView, {
+        (0, import_react64.createElement)("p", { className: "bt-main-work-id" }, `${t("View version")} ${attention.version} · ${attention.status}`),
+        (0, import_react64.createElement)(ProductWorkView, {
           title: attention.view.title,
           view: attention.view.view,
           answer: attention.answerView ?? null,
           busy: controlBusy === "work-answer-view",
           ...attention.status === "waiting" && canCommand && control.permissions.canAnswer && assignment ? { onSubmit: answerView } : {}
         }),
-        attention.status === "waiting" ? (0, import_react63.createElement)(
+        attention.status === "waiting" ? (0, import_react64.createElement)(
           "p",
           { className: "bt-main-work-detail" },
           t("Answer this view to continue the same work.")
-        ) : attention.status === "answered" ? (0, import_react63.createElement)(
+        ) : attention.status === "answered" ? (0, import_react64.createElement)(
           "p",
           { className: "bt-main-work-detail" },
           `${t("Answered by")} ${attention.answeredBy ?? control.permissions.actorId}`
-        ) : (0, import_react63.createElement)("p", { className: "bt-main-work-detail" }, t("This view is no longer active."))
-      ) : attention ? (0, import_react63.createElement)(
+        ) : (0, import_react64.createElement)("p", { className: "bt-main-work-detail" }, t("This view is no longer active."))
+      ) : attention ? (0, import_react64.createElement)(
         "div",
         { className: "bt-main-work-attention" },
-        (0, import_react63.createElement)("p", { className: "bt-main-work-id" }, `${t("Question version")} ${attention.version} · ${attention.status}`),
-        (0, import_react63.createElement)("p", null, attention.question),
-        attention.status === "waiting" && canCommand && control.permissions.canAnswer && assignment ? (0, import_react63.createElement)(
+        (0, import_react64.createElement)("p", { className: "bt-main-work-id" }, `${t("Question version")} ${attention.version} · ${attention.status}`),
+        (0, import_react64.createElement)("p", null, attention.question),
+        attention.status === "waiting" && canCommand && control.permissions.canAnswer && assignment ? (0, import_react64.createElement)(
           "form",
           { className: "bt-main-work-answer", onSubmit: answer },
-          attention.options.length ? (0, import_react63.createElement)("div", { className: "bt-main-work-options" }, attention.options.map((option) => (0, import_react63.createElement)("button", { key: option, type: "button", className: "bt-soft", onClick: () => setAttentionDraft(option) }, option))) : null,
-          (0, import_react63.createElement)("label", { htmlFor: `work-answer-${attention.id}` }, t("Answer this work question")),
-          (0, import_react63.createElement)("textarea", {
+          attention.options.length ? (0, import_react64.createElement)("div", { className: "bt-main-work-options" }, attention.options.map((option) => (0, import_react64.createElement)("button", { key: option, type: "button", className: "bt-soft", onClick: () => setAttentionDraft(option) }, option))) : null,
+          (0, import_react64.createElement)("label", { htmlFor: `work-answer-${attention.id}` }, t("Answer this work question")),
+          (0, import_react64.createElement)("textarea", {
             id: `work-answer-${attention.id}`,
             value: attentionDraft,
             maxLength: 65536,
@@ -26949,49 +27329,49 @@ function applyProduct(ctx) {
             placeholder: t("Type an answer…"),
             onChange: (event) => setAttentionDraft(event.currentTarget.value)
           }),
-          (0, import_react63.createElement)(
+          (0, import_react64.createElement)(
             "button",
             { type: "submit", className: "bt-soft", disabled: Boolean(controlBusy) || !attentionDraft.trim() },
             controlBusy === "work-answer" ? t("Sending answer…") : t("Send answer")
           )
-        ) : (0, import_react63.createElement)("p", { className: "bt-main-work-detail" }, attention.status === "answered" ? `${t("Answered by")} ${attention.answeredBy ?? control.permissions.actorId}${attention.answerText ? `: ${attention.answerText}` : ""}` : t("This question is no longer active."))
+        ) : (0, import_react64.createElement)("p", { className: "bt-main-work-detail" }, attention.status === "answered" ? `${t("Answered by")} ${attention.answeredBy ?? control.permissions.actorId}${attention.answerText ? `: ${attention.answerText}` : ""}` : t("This question is no longer active."))
       ) : null,
-      controlError ? (0, import_react63.createElement)("p", { className: "bt-main-error", role: "alert" }, controlError) : null,
-      viewError ? (0, import_react63.createElement)("p", { className: "bt-main-error", role: "alert" }, viewError) : null,
-      work.receipt.reason ? (0, import_react63.createElement)("p", { className: "bt-main-error" }, `${t("Work receipt")}: ${work.receipt.reason}`) : null,
-      work.receipt.status === "routing" ? (0, import_react63.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${work.receipt.nextStep}`) : null,
-      (0, import_react63.createElement)("p", { className: "bt-main-work-detail" }, `${t("Constraints")}: ${work.brief.constraints}`),
-      (0, import_react63.createElement)("p", { className: "bt-main-work-detail" }, `${t("Acceptance criteria")}: ${work.brief.acceptanceCriteria}`),
-      work.followUps?.length ? (0, import_react63.createElement)(
+      controlError ? (0, import_react64.createElement)("p", { className: "bt-main-error", role: "alert" }, controlError) : null,
+      viewError ? (0, import_react64.createElement)("p", { className: "bt-main-error", role: "alert" }, viewError) : null,
+      work.receipt.reason ? (0, import_react64.createElement)("p", { className: "bt-main-error" }, `${t("Work receipt")}: ${work.receipt.reason}`) : null,
+      work.receipt.status === "routing" ? (0, import_react64.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${work.receipt.nextStep}`) : null,
+      (0, import_react64.createElement)("p", { className: "bt-main-work-detail" }, `${t("Constraints")}: ${work.brief.constraints}`),
+      (0, import_react64.createElement)("p", { className: "bt-main-work-detail" }, `${t("Acceptance criteria")}: ${work.brief.acceptanceCriteria}`),
+      work.followUps?.length ? (0, import_react64.createElement)(
         "div",
         { className: "bt-main-work-followups", "aria-label": t("Follow-up history") },
-        work.followUps.map((followUp) => (0, import_react63.createElement)(
+        work.followUps.map((followUp) => (0, import_react64.createElement)(
           "div",
           { key: followUp.id, className: "bt-main-work-followup" },
-          (0, import_react63.createElement)("p", null, `${t("Direction v{version}", { version: followUp.directionVersion })}: ${followUpCopy(followUp.status)}`),
-          (0, import_react63.createElement)("p", { className: "bt-main-work-detail" }, followUp.text),
-          (0, import_react63.createElement)(
+          (0, import_react64.createElement)("p", null, `${t("Direction v{version}", { version: followUp.directionVersion })}: ${followUpCopy(followUp.status)}`),
+          (0, import_react64.createElement)("p", { className: "bt-main-work-detail" }, followUp.text),
+          (0, import_react64.createElement)(
             "p",
             { className: "bt-main-work-detail" },
             `${followUp.persisted ? t("Input persisted") : t("Input not yet persisted")} · ${followUp.adopted ? t("Direction adopted by Worker") : t("Direction not yet adopted")}`
           ),
-          followUp.displayReason ? (0, import_react63.createElement)("p", { className: "bt-main-work-detail" }, `${t("Reason")}: ${followUp.displayReason}`) : null
+          followUp.displayReason ? (0, import_react64.createElement)("p", { className: "bt-main-work-detail" }, `${t("Reason")}: ${followUp.displayReason}`) : null
         ))
       ) : null,
-      work.outcome ? (0, import_react63.createElement)(
+      work.outcome ? (0, import_react64.createElement)(
         "div",
         { className: "bt-main-work-result" },
-        (0, import_react63.createElement)("p", null, work.outcome.summary),
-        (0, import_react63.createElement)("p", { className: "bt-main-work-detail" }, `${t("Verification")}: ${work.outcome.evidence}`),
-        (0, import_react63.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${work.outcome.nextStep}`),
-        work.outcome.view ? (0, import_react63.createElement)(ProductWorkView, { title: work.outcome.view.title, view: work.outcome.view.view }) : null,
-        work.outcome.artifacts.map((artifact) => (0, import_react63.createElement)(
+        (0, import_react64.createElement)("p", null, work.outcome.summary),
+        (0, import_react64.createElement)("p", { className: "bt-main-work-detail" }, `${t("Verification")}: ${work.outcome.evidence}`),
+        (0, import_react64.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${work.outcome.nextStep}`),
+        work.outcome.view ? (0, import_react64.createElement)(ProductWorkView, { title: work.outcome.view.title, view: work.outcome.view.view }) : null,
+        work.outcome.artifacts.map((artifact) => (0, import_react64.createElement)(
           "p",
           { key: artifact.path, className: "bt-main-work-artifact" },
-          (0, import_react63.createElement)("code", null, artifact.path),
+          (0, import_react64.createElement)("code", null, artifact.path),
           " ",
-          (0, import_react63.createElement)("span", null, `${artifact.bytes} ${t("bytes")} · ${artifact.sha256.slice(0, 12)}`),
-          artifact.reference && !state.connection?.connected ? (0, import_react63.createElement)(
+          (0, import_react64.createElement)("span", null, `${artifact.bytes} ${t("bytes")} · ${artifact.sha256.slice(0, 12)}`),
+          artifact.reference && !state.connection?.connected ? (0, import_react64.createElement)(
             "button",
             {
               type: "button",
@@ -27003,12 +27383,12 @@ function applyProduct(ctx) {
           ) : null
         ))
       ) : null,
-      artifactError ? (0, import_react63.createElement)("p", { className: "bt-main-error", role: "alert" }, artifactError) : null,
-      toolFactsError ? (0, import_react63.createElement)("p", { className: "bt-main-error", role: "alert" }, toolFactsError) : null,
-      control && canCommand ? (0, import_react63.createElement)(
+      artifactError ? (0, import_react64.createElement)("p", { className: "bt-main-error", role: "alert" }, artifactError) : null,
+      toolFactsError ? (0, import_react64.createElement)("p", { className: "bt-main-error", role: "alert" }, toolFactsError) : null,
+      control && canCommand ? (0, import_react64.createElement)(
         "div",
         { className: "bt-main-work-controls" },
-        control.permissions.canStop ? (0, import_react63.createElement)(
+        control.permissions.canStop ? (0, import_react64.createElement)(
           "button",
           {
             type: "button",
@@ -27018,7 +27398,7 @@ function applyProduct(ctx) {
           },
           controlBusy === "work-stop" ? t("Stopping…") : t("Stop work")
         ) : null,
-        assignment && control.permissions.canResume ? (0, import_react63.createElement)(
+        assignment && control.permissions.canResume ? (0, import_react64.createElement)(
           "button",
           {
             type: "button",
@@ -27028,7 +27408,7 @@ function applyProduct(ctx) {
           },
           controlBusy === "work-resume" ? t("Resuming…") : t("Resume work")
         ) : null,
-        assignment && control.permissions.canRetry ? (0, import_react63.createElement)(
+        assignment && control.permissions.canRetry ? (0, import_react64.createElement)(
           "button",
           {
             type: "button",
@@ -27039,11 +27419,11 @@ function applyProduct(ctx) {
           controlBusy === "work-retry" ? t("Retrying…") : t("Retry work")
         ) : null
       ) : null,
-      work.receipt.status === "accepted" ? (0, import_react63.createElement)(
+      work.receipt.status === "accepted" ? (0, import_react64.createElement)(
         "div",
         { className: "bt-main-work-evidence-actions" },
-        (0, import_react63.createElement)("button", { type: "button", className: "bt-soft", onClick: () => onEvidence(work) }, t("View original request")),
-        (0, import_react63.createElement)(
+        (0, import_react64.createElement)("button", { type: "button", className: "bt-soft", onClick: () => onEvidence(work) }, t("View original request")),
+        (0, import_react64.createElement)(
           "button",
           { type: "button", className: "bt-soft", disabled: toolFactsBusy, onClick: () => void openToolFacts() },
           toolFactsBusy ? t("Loading…") : t("View tool facts")
@@ -27053,24 +27433,24 @@ function applyProduct(ctx) {
   }
   function MainPreparationCard({ preparation }) {
     const state = useView();
-    const [expanded, setExpanded] = (0, import_react63.useState)(false);
-    return (0, import_react63.createElement)(
+    const [expanded, setExpanded] = (0, import_react64.useState)(false);
+    return (0, import_react64.createElement)(
       "article",
       { className: "bt-main-work", "aria-label": t("Prepared review") },
-      (0, import_react63.createElement)(
+      (0, import_react64.createElement)(
         "div",
         { className: "bt-main-work-head" },
-        (0, import_react63.createElement)("strong", null, t("Prepared review")),
-        (0, import_react63.createElement)("span", { className: "bt-main-work-status" }, preparation.ruleId)
+        (0, import_react64.createElement)("strong", null, t("Prepared review")),
+        (0, import_react64.createElement)("span", { className: "bt-main-work-status" }, preparation.ruleId)
       ),
-      (0, import_react63.createElement)("p", { className: "bt-main-work-detail" }, preparation.summary),
-      (0, import_react63.createElement)("button", {
+      (0, import_react64.createElement)("p", { className: "bt-main-work-detail" }, preparation.summary),
+      (0, import_react64.createElement)("button", {
         type: "button",
         className: "bt-soft bt-soft-sm",
         "aria-expanded": expanded,
         onClick: () => setExpanded((value) => !value)
       }, t(expanded ? "Hide review" : "Review")),
-      expanded ? (0, import_react63.createElement)(ProactiveReview, {
+      expanded ? (0, import_react64.createElement)(ProactiveReview, {
         runId: preparation.id,
         instanceId: state.binding.instanceId,
         call: productCall,
@@ -27083,13 +27463,13 @@ function applyProduct(ctx) {
     );
   }
   function MainSourceCard({ source, instanceId, onRefresh, canCommand }) {
-    const [receipts, setReceipts] = (0, import_react63.useState)(source.deliveries ?? []);
-    const [receiptCursor, setReceiptCursor] = (0, import_react63.useState)(source.deliveryCursor ?? null);
-    const [receiptsBusy, setReceiptsBusy] = (0, import_react63.useState)(false);
-    const [receiptsError, setReceiptsError] = (0, import_react63.useState)(null);
-    const [reconciling, setReconciling] = (0, import_react63.useState)(null);
-    const receiptPagesLoaded = (0, import_react63.useRef)(false);
-    (0, import_react63.useEffect)(() => {
+    const [receipts, setReceipts] = (0, import_react64.useState)(source.deliveries ?? []);
+    const [receiptCursor, setReceiptCursor] = (0, import_react64.useState)(source.deliveryCursor ?? null);
+    const [receiptsBusy, setReceiptsBusy] = (0, import_react64.useState)(false);
+    const [receiptsError, setReceiptsError] = (0, import_react64.useState)(null);
+    const [reconciling, setReconciling] = (0, import_react64.useState)(null);
+    const receiptPagesLoaded = (0, import_react64.useRef)(false);
+    (0, import_react64.useEffect)(() => {
       setReceipts((current) => {
         const merged = new Map(current.map((receipt) => [`${receipt.ticketId}:${receipt.id}:${receipt.sequence}`, receipt]));
         for (const receipt of source.deliveries ?? []) merged.set(`${receipt.ticketId}:${receipt.id}:${receipt.sequence}`, receipt);
@@ -27136,31 +27516,31 @@ function applyProduct(ctx) {
     };
     const scheduled = source.sourceInstanceId.startsWith("schedule:");
     const feishu = source.sourceInstanceId.startsWith("feishu:");
-    return (0, import_react63.createElement)(
+    return (0, import_react64.createElement)(
       "article",
       { className: "bt-main-source", "aria-label": t(scheduled ? "Scheduled occurrence" : feishu ? "Feishu source request" : "GitHub source request") },
-      (0, import_react63.createElement)(
+      (0, import_react64.createElement)(
         "div",
         { className: "bt-main-work-head" },
-        (0, import_react63.createElement)("strong", null, t(scheduled ? "Scheduled occurrence" : feishu ? "Feishu request" : "GitHub request")),
-        (0, import_react63.createElement)("span", { className: "bt-main-work-status", role: "status" }, sourceStatusCopy(source.state))
+        (0, import_react64.createElement)("strong", null, t(scheduled ? "Scheduled occurrence" : feishu ? "Feishu request" : "GitHub request")),
+        (0, import_react64.createElement)("span", { className: "bt-main-work-status", role: "status" }, sourceStatusCopy(source.state))
       ),
-      (0, import_react63.createElement)("p", { className: "bt-main-work-detail" }, `${source.objectId} · @${source.authorId}`),
-      (0, import_react63.createElement)("p", { className: "bt-main-work-detail" }, source.text),
-      (0, import_react63.createElement)("code", { className: "bt-main-source-reference" }, source.reference),
-      source.lastError ? (0, import_react63.createElement)("p", { className: "bt-main-error", role: "status" }, `${t("Main source failed")}: ${source.lastError}`) : null,
-      receipts.length ? (0, import_react63.createElement)(
+      (0, import_react64.createElement)("p", { className: "bt-main-work-detail" }, `${source.objectId} · @${source.authorId}`),
+      (0, import_react64.createElement)("p", { className: "bt-main-work-detail" }, source.text),
+      (0, import_react64.createElement)("code", { className: "bt-main-source-reference" }, source.reference),
+      source.lastError ? (0, import_react64.createElement)("p", { className: "bt-main-error", role: "status" }, `${t("Main source failed")}: ${source.lastError}`) : null,
+      receipts.length ? (0, import_react64.createElement)(
         "div",
         { className: "bt-main-source-deliveries", "aria-label": t("Delivery receipts") },
-        receipts.map((delivery) => (0, import_react63.createElement)(
+        receipts.map((delivery) => (0, import_react64.createElement)(
           "div",
           {
             key: `${delivery.ticketId}:${delivery.id}:${delivery.sequence}`,
             className: delivery.state === "unknown" ? "bt-main-error" : "bt-main-work-detail"
           },
-          (0, import_react63.createElement)("p", null, `${deliveryPurposeCopy(delivery.purpose)}: ${deliveryCopy(delivery.state)}${delivery.reason ? ` · ${delivery.reason}` : ""}`),
-          (0, import_react63.createElement)("p", null, `${delivery.destination.sourceInstanceId} · ${delivery.destination.eventId}${delivery.destination.threadId ? ` · ${delivery.destination.threadId}` : ""} · @${delivery.destination.actorId}`),
-          canCommand && (delivery.state === "unknown" || delivery.state === "pending" && delivery.attempts > 0) ? (0, import_react63.createElement)(
+          (0, import_react64.createElement)("p", null, `${deliveryPurposeCopy(delivery.purpose)}: ${deliveryCopy(delivery.state)}${delivery.reason ? ` · ${delivery.reason}` : ""}`),
+          (0, import_react64.createElement)("p", null, `${delivery.destination.sourceInstanceId} · ${delivery.destination.eventId}${delivery.destination.threadId ? ` · ${delivery.destination.threadId}` : ""} · @${delivery.destination.actorId}`),
+          canCommand && (delivery.state === "unknown" || delivery.state === "pending" && delivery.attempts > 0) ? (0, import_react64.createElement)(
             "button",
             {
               type: "button",
@@ -27171,18 +27551,18 @@ function applyProduct(ctx) {
             reconciling === delivery.id ? t("Reconciling…") : t("Reconcile delivery")
           ) : null
         )),
-        receiptCursor ? (0, import_react63.createElement)("button", {
+        receiptCursor ? (0, import_react64.createElement)("button", {
           type: "button",
           className: "bt-soft",
           disabled: receiptsBusy,
           onClick: () => void loadEarlierReceipts()
         }, receiptsBusy ? t("Loading…") : t("Load earlier receipts")) : null,
-        receiptsError ? (0, import_react63.createElement)("p", { className: "bt-main-error", role: "status" }, receiptsError) : null
+        receiptsError ? (0, import_react64.createElement)("p", { className: "bt-main-error", role: "status" }, receiptsError) : null
       ) : null,
-      !feishu && source.conditions.length ? (0, import_react63.createElement)(
+      !feishu && source.conditions.length ? (0, import_react64.createElement)(
         "div",
         { className: "bt-main-source-deliveries", "aria-label": t("Pull request conditions") },
-        source.conditions.map((condition) => (0, import_react63.createElement)(
+        source.conditions.map((condition) => (0, import_react64.createElement)(
           "p",
           { key: `${condition.ticketId}:${condition.number}`, className: "bt-main-work-detail" },
           `#${condition.number}: ${conditionCopy(condition.state)}${condition.reason ? ` · ${condition.reason}` : ""}`
@@ -27193,17 +27573,17 @@ function applyProduct(ctx) {
   function MainConversation() {
     const state = useView();
     const canCommand = !state.connection?.connected || state.connection.capabilities.includes("command");
-    const [sending, setSending] = (0, import_react63.useState)(false);
-    const [sendError, setSendError] = (0, import_react63.useState)(null);
-    const [attachments, setAttachments] = (0, import_react63.useState)([]);
-    const [uploading, setUploading] = (0, import_react63.useState)(false);
-    const [speakingId, setSpeakingId] = (0, import_react63.useState)(null);
-    (0, import_react63.useEffect)(() => () => window.speechSynthesis?.cancel(), []);
-    const bottom = (0, import_react63.useRef)(null);
-    const pending = (0, import_react63.useRef)(null);
-    const scroll = (0, import_react63.useRef)(null);
-    const follow = (0, import_react63.useRef)(true);
-    const restoreHeight = (0, import_react63.useRef)(null);
+    const [sending, setSending] = (0, import_react64.useState)(false);
+    const [sendError, setSendError] = (0, import_react64.useState)(null);
+    const [attachments, setAttachments] = (0, import_react64.useState)([]);
+    const [uploading, setUploading] = (0, import_react64.useState)(false);
+    const [speakingId, setSpeakingId] = (0, import_react64.useState)(null);
+    (0, import_react64.useEffect)(() => () => window.speechSynthesis?.cancel(), []);
+    const bottom = (0, import_react64.useRef)(null);
+    const pending = (0, import_react64.useRef)(null);
+    const scroll = (0, import_react64.useRef)(null);
+    const follow = (0, import_react64.useRef)(true);
+    const restoreHeight = (0, import_react64.useRef)(null);
     const execution = state.directoryOptions?.execution;
     const policyTarget = execution?.policy?.defaultTarget === "remote-only" ? "remote-only" : execution?.policy?.defaultTarget === "auto" ? "auto" : "local-only";
     const executionTarget = state.executionTarget ?? policyTarget;
@@ -27213,7 +27593,7 @@ function applyProduct(ctx) {
     const selectedLocalEnvironmentId = state.directoryOverride ?? state.directoryOptions?.default?.environmentId ?? state.localEnvironmentOverride ?? (state.connection?.connected ? localEnvironments[0]?.id : void 0);
     const selectedEnvironmentId = executionTarget === "remote-only" ? selectedRemoteEnvironment?.id : executionTarget === "local-only" ? selectedLocalEnvironmentId : void 0;
     const selectedEnvironment = execution?.environments?.find((environment) => environment.id === selectedEnvironmentId);
-    (0, import_react63.useEffect)(() => {
+    (0, import_react64.useEffect)(() => {
       if (restoreHeight.current !== null && scroll.current) {
         scroll.current.scrollTop += scroll.current.scrollHeight - restoreHeight.current;
         restoreHeight.current = null;
@@ -27381,11 +27761,11 @@ function applyProduct(ctx) {
       }
       view.set((current) => ({ ...current, executionTarget: value, localEnvironmentOverride: null, remoteEnvironmentOverride: null }));
     };
-    const targetControl = execution ? (0, import_react63.createElement)(
+    const targetControl = execution ? (0, import_react64.createElement)(
       "div",
       { className: "bt-main-directory" },
-      (0, import_react63.createElement)("span", { className: "bt-main-label" }, t("Execution target")),
-      (0, import_react63.createElement)(
+      (0, import_react64.createElement)("span", { className: "bt-main-label" }, t("Execution target")),
+      (0, import_react64.createElement)(
         "select",
         {
           className: "bt-select",
@@ -27394,11 +27774,11 @@ function applyProduct(ctx) {
           onChange: (event) => chooseTarget(event.target.value),
           disabled: busy
         },
-        (0, import_react63.createElement)("option", { value: "local-only" }, t("Local")),
-        (0, import_react63.createElement)("option", { value: "remote-only" }, t("Remote only")),
-        (0, import_react63.createElement)("option", { value: "auto" }, t("Auto"))
+        (0, import_react64.createElement)("option", { value: "local-only" }, t("Local")),
+        (0, import_react64.createElement)("option", { value: "remote-only" }, t("Remote only")),
+        (0, import_react64.createElement)("option", { value: "auto" }, t("Auto"))
       ),
-      executionTarget === "remote-only" ? (0, import_react63.createElement)(
+      executionTarget === "remote-only" ? (0, import_react64.createElement)(
         "select",
         {
           className: "bt-select",
@@ -27413,14 +27793,14 @@ function applyProduct(ctx) {
           },
           disabled: busy
         },
-        (0, import_react63.createElement)("option", { value: "" }, t("Choose an authorized remote Environment")),
-        remoteEnvironments.map((environment) => (0, import_react63.createElement)(
+        (0, import_react64.createElement)("option", { value: "" }, t("Choose an authorized remote Environment")),
+        remoteEnvironments.map((environment) => (0, import_react64.createElement)(
           "option",
           { key: environment.id, value: environment.id },
           `${environment.label || environment.title || environment.id} · ${environment.root}`
         ))
       ) : null,
-      state.connection?.connected && executionTarget === "local-only" ? (0, import_react63.createElement)(
+      state.connection?.connected && executionTarget === "local-only" ? (0, import_react64.createElement)(
         "select",
         {
           className: "bt-select",
@@ -27428,71 +27808,71 @@ function applyProduct(ctx) {
           value: selectedLocalEnvironmentId ?? "",
           onChange: (event) => view.set((current) => ({ ...current, localEnvironmentOverride: event.target.value || null }))
         },
-        (0, import_react63.createElement)("option", { value: "" }, t("Choose an authorized local Environment")),
-        localEnvironments.map((environment) => (0, import_react63.createElement)(
+        (0, import_react64.createElement)("option", { value: "" }, t("Choose an authorized local Environment")),
+        localEnvironments.map((environment) => (0, import_react64.createElement)(
           "option",
           { key: environment.id, value: environment.id },
           `${environment.title || environment.id} · ${environment.root}`
         ))
       ) : null,
-      selectedEnvironment ? (0, import_react63.createElement)(
+      selectedEnvironment ? (0, import_react64.createElement)(
         "span",
         { className: "bt-main-directory-note" },
         `${selectedEnvironment.eligible ? t("Eligible") : t("Not eligible")}${selectedEnvironment.version ? ` · ${t("Version")}: ${selectedEnvironment.version}` : ""}${selectedEnvironment.deviceId ? ` · ${t("Device")}: ${selectedEnvironment.deviceId}` : ""}${selectedEnvironment.reasons?.length ? ` · ${selectedEnvironment.reasons.map(capabilityReasonCopy).join("; ")}` : ""}`
       ) : null,
-      (0, import_react63.createElement)("span", { className: "bt-main-directory-note" }, executionTarget === "auto" ? t("This work chooses an eligible Environment when its Ticket starts. Attachments need an exact target.") : executionTarget === "remote-only" && !selectedEnvironmentId ? t("No remote Environment is available. This work will wait for an eligible device.") : t("New work uses this Environment. Active work keeps its original binding."))
+      (0, import_react64.createElement)("span", { className: "bt-main-directory-note" }, executionTarget === "auto" ? t("This work chooses an eligible Environment when its Ticket starts. Attachments need an exact target.") : executionTarget === "remote-only" && !selectedEnvironmentId ? t("No remote Environment is available. This work will wait for an eligible device.") : t("New work uses this Environment. Active work keeps its original binding."))
     ) : null;
-    return (0, import_react63.createElement)(
+    return (0, import_react64.createElement)(
       "section",
       { className: "bt-main-conversation", "aria-label": "Main" },
-      (0, import_react63.createElement)(
+      (0, import_react64.createElement)(
         "header",
         { className: "bt-main-header" },
-        (0, import_react63.createElement)(BrandMark, { size: 28 }),
-        (0, import_react63.createElement)("span", null, "Main"),
-        (0, import_react63.createElement)(
+        (0, import_react64.createElement)(BrandMark, { size: 28 }),
+        (0, import_react64.createElement)("span", null, "Main"),
+        (0, import_react64.createElement)(
           "span",
           { className: `bt-main-health bt-main-health-${state.health?.state ?? "ready"}`, role: "status" },
           mainHealthCopy(state.health)
         ),
-        state.health?.queuedInputs ? (0, import_react63.createElement)(
+        state.health?.queuedInputs ? (0, import_react64.createElement)(
           "span",
           { className: "bt-main-health-detail" },
           t("{count} inputs queued", { count: state.health.queuedInputs })
         ) : null,
-        state.connection?.connected ? (0, import_react63.createElement)(
+        state.connection?.connected ? (0, import_react64.createElement)(
           "span",
           { className: "bt-main-remote", title: state.connection.address },
           `${t("Remote Host")} · ${state.connection.client.label}`
         ) : null,
-        clientBridge() ? (0, import_react63.createElement)(
+        clientBridge() ? (0, import_react64.createElement)(
           "button",
           { type: "button", className: "bt-soft", onClick: () => view.set((current) => ({ ...current, connectOpen: true })) },
           state.connection?.connected ? t("Connection") : t("Connect to Host")
         ) : null,
-        !state.connection?.connected ? (0, import_react63.createElement)("button", {
+        !state.connection?.connected ? (0, import_react64.createElement)("button", {
           type: "button",
           className: "bt-icon-btn bt-main-settings",
           title: t("Settings"),
           "aria-label": t("Settings"),
           onClick: () => view.set((current) => ({ ...current, settingsOpen: true }))
-        }, (0, import_react63.createElement)(SlidersIcon)) : null
+        }, (0, import_react64.createElement)(SlidersIcon)) : null
       ),
-      state.health?.state === "degraded" ? (0, import_react63.createElement)(
+      state.health?.state === "degraded" ? (0, import_react64.createElement)(
         "p",
         { className: "bt-main-health-warning", role: "alert" },
         t("Main model failed. Durable work facts remain available.")
       ) : null,
-      (0, import_react63.createElement)(
+      (0, import_react64.createElement)(
         "div",
         { className: "bt-main-history", ref: scroll, onScroll: () => {
           const node = scroll.current;
           follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80;
         } },
-        (0, import_react63.createElement)(
+        (0, import_react64.createElement)(
           "div",
           { className: "bt-main-messages" },
-          !state.messagesComplete && state.messageBefore ? (0, import_react63.createElement)("button", {
+          !state.messagesComplete && state.messageBefore ? (0, import_react64.createElement)("button", {
             type: "button",
             className: "bt-soft bt-main-history-more",
             disabled: state.messagesLoading,
@@ -27502,38 +27882,38 @@ function applyProduct(ctx) {
               await loadEarlierMessages(state.binding);
             }
           }, state.messagesLoading ? t("Loading…") : t("Load earlier messages")) : null,
-          state.messages.length === 0 ? (0, import_react63.createElement)("p", { className: "bt-main-empty" }, t("What would you like to discuss?")) : null,
-          state.messages.map((message) => (0, import_react63.createElement)(
+          state.messages.length === 0 ? (0, import_react64.createElement)("p", { className: "bt-main-empty" }, t("What would you like to discuss?")) : null,
+          state.messages.map((message) => (0, import_react64.createElement)(
             "div",
             { key: message.id },
-            message.role === "system" ? (0, import_react63.createElement)(
+            message.role === "system" ? (0, import_react64.createElement)(
               "div",
               { className: "bt-main-system-fact", role: "status" },
-              (0, import_react63.createElement)("span", null, t("System fact")),
-              (0, import_react63.createElement)("p", null, message.text)
-            ) : (0, import_react63.createElement)(
+              (0, import_react64.createElement)("span", null, t("System fact")),
+              (0, import_react64.createElement)("p", null, message.text)
+            ) : (0, import_react64.createElement)(
               "div",
               null,
-              message.source ? (0, import_react63.createElement)(
+              message.source ? (0, import_react64.createElement)(
                 "p",
                 { className: "bt-main-source-label" },
                 message.source.kind === "client" ? `${t("Client")} · ${message.source.clientId}` : message.source.kind === "schedule" ? `${t("Scheduled occurrence")} · ${message.source.objectId}` : `${t(message.source.kind === "feishu" ? "Feishu" : "GitHub")} · @${message.source.authorId} · ${message.source.objectId}`
               ) : null,
-              (0, import_react63.createElement)(ChatRows, {
+              (0, import_react64.createElement)(ChatRows, {
                 items: [{ kind: message.role === "main" ? "bot" : "user", text: message.text, time: message.createdAt }],
                 sessionId: "main",
                 roster: emptyRoster,
                 actions: {}
               }),
-              message.role === "main" && message.text && window.speechSynthesis ? (0, import_react63.createElement)("button", {
+              message.role === "main" && message.text && window.speechSynthesis ? (0, import_react64.createElement)("button", {
                 type: "button",
                 className: "bt-soft bt-main-read-aloud",
                 onClick: () => speakReply(message)
               }, t(speakingId === message.id ? "Stop reading" : "Read aloud")) : null,
-              message.attachments?.length ? (0, import_react63.createElement)(
+              message.attachments?.length ? (0, import_react64.createElement)(
                 "div",
                 { className: "bt-main-message-attachments", "aria-label": t("Attached files") },
-                message.attachments.map((attachment) => (0, import_react63.createElement)(
+                message.attachments.map((attachment) => (0, import_react64.createElement)(
                   "button",
                   {
                     key: attachment.id,
@@ -27545,47 +27925,47 @@ function applyProduct(ctx) {
                   `${t("Download")} ${attachment.name} · ${attachment.bytes} ${t("bytes")}`
                 ))
               ) : null,
-              message.status === "failed" ? (0, import_react63.createElement)(
+              message.status === "failed" ? (0, import_react64.createElement)(
                 "p",
                 { className: "bt-main-error", role: "status" },
                 t("Main could not finish this reply. Your message is saved.")
               ) : null
             )
           )),
-          !state.connection?.connected ? (0, import_react63.createElement)(FeishuSourceStatus, { instanceId: state.binding?.instanceId, call: productCall }) : null,
-          state.sources.map((source) => (0, import_react63.createElement)(MainSourceCard, {
+          !state.connection?.connected ? (0, import_react64.createElement)(FeishuSourceStatus, { instanceId: state.binding?.instanceId, call: productCall }) : null,
+          state.sources.map((source) => (0, import_react64.createElement)(MainSourceCard, {
             key: source.id,
             source,
             instanceId: state.binding?.instanceId,
             onRefresh: refresh,
             canCommand
           })),
-          state.preparations.map((preparation) => (0, import_react63.createElement)(MainPreparationCard, { key: preparation.id, preparation })),
-          state.works.map((work) => (0, import_react63.createElement)(MainWorkCard, {
+          state.preparations.map((preparation) => (0, import_react64.createElement)(MainPreparationCard, { key: preparation.id, preparation })),
+          state.works.map((work) => (0, import_react64.createElement)(MainWorkCard, {
             key: work.brief.workItemId ?? work.brief.id,
             work,
             onEvidence: (selected) => {
               if (state.binding) void loadMainEvidence(state.binding, selected);
             }
           })),
-          state.mainEvidenceError && !state.mainEvidence ? (0, import_react63.createElement)("p", { role: "alert", className: "bt-main-error" }, state.mainEvidenceError) : null,
-          state.mainEvidence ? (0, import_react63.createElement)(
+          state.mainEvidenceError && !state.mainEvidence ? (0, import_react64.createElement)("p", { role: "alert", className: "bt-main-error" }, state.mainEvidenceError) : null,
+          state.mainEvidence ? (0, import_react64.createElement)(
             "section",
             { className: "bt-main-evidence", "aria-label": t("Original request evidence") },
-            (0, import_react63.createElement)(
+            (0, import_react64.createElement)(
               "div",
               { className: "bt-main-evidence-head" },
-              (0, import_react63.createElement)(
+              (0, import_react64.createElement)(
                 "div",
                 null,
-                (0, import_react63.createElement)("strong", null, t("Original request evidence")),
-                (0, import_react63.createElement)("p", null, t(state.mainEvidence.goal))
+                (0, import_react64.createElement)("strong", null, t("Original request evidence")),
+                (0, import_react64.createElement)("p", null, t(state.mainEvidence.goal))
               ),
-              (0, import_react63.createElement)("span", null, t(state.mainEvidence.pagination.truncated ? "Partial evidence" : "Complete evidence"))
+              (0, import_react64.createElement)("span", null, t(state.mainEvidence.pagination.truncated ? "Partial evidence" : "Complete evidence"))
             ),
-            (0, import_react63.createElement)("pre", null, redactObservationText(state.mainEvidence.text)),
-            state.mainEvidenceError ? (0, import_react63.createElement)("p", { role: "alert", className: "bt-main-error" }, state.mainEvidenceError) : null,
-            state.mainEvidence.pagination.truncated ? (0, import_react63.createElement)(
+            (0, import_react64.createElement)("pre", null, redactObservationText(state.mainEvidence.text)),
+            state.mainEvidenceError ? (0, import_react64.createElement)("p", { role: "alert", className: "bt-main-error" }, state.mainEvidenceError) : null,
+            state.mainEvidence.pagination.truncated ? (0, import_react64.createElement)(
               "button",
               {
                 type: "button",
@@ -27602,11 +27982,11 @@ function applyProduct(ctx) {
               state.mainEvidenceLoading ? t("Loading…") : t("Load more evidence")
             ) : null
           ) : null,
-          stopping ? (0, import_react63.createElement)("p", { className: "bt-main-status", role: "status" }, t("Stopping this Main reply…")) : busy ? (0, import_react63.createElement)("p", { className: "bt-main-status", role: "status" }, t("Main is replying…")) : null,
-          (0, import_react63.createElement)("div", { ref: bottom })
+          stopping ? (0, import_react64.createElement)("p", { className: "bt-main-status", role: "status" }, t("Stopping this Main reply…")) : busy ? (0, import_react64.createElement)("p", { className: "bt-main-status", role: "status" }, t("Main is replying…")) : null,
+          (0, import_react64.createElement)("div", { ref: bottom })
         )
       ),
-      (0, import_react63.createElement)(MainComposer, {
+      (0, import_react64.createElement)(MainComposer, {
         onSend: send,
         onStop: canCommand && state.activeTurn ? stop : void 0,
         busy,
@@ -27620,15 +28000,15 @@ function applyProduct(ctx) {
         onRemoveAttachment: removeAttachment,
         speechRemote: () => ctx.get("remote.speech") ?? void 0,
         onFiles: !state.connection?.connected && executionTarget !== "auto" && selectedEnvironmentId ? (files) => void uploadFiles(files) : void 0,
-        directoryControl: execution ? (0, import_react63.createElement)(
+        directoryControl: execution ? (0, import_react64.createElement)(
           "div",
           { className: "bt-main-directory" },
           targetControl,
-          !state.connection?.connected && executionTarget === "local-only" && options?.default ? (0, import_react63.createElement)(
-            import_react63.Fragment,
+          !state.connection?.connected && executionTarget === "local-only" && options?.default ? (0, import_react64.createElement)(
+            import_react64.Fragment,
             null,
-            (0, import_react63.createElement)("span", { className: "bt-main-label" }, t("Work directory")),
-            (0, import_react63.createElement)(FolderMenu, {
+            (0, import_react64.createElement)("span", { className: "bt-main-label" }, t("Work directory")),
+            (0, import_react64.createElement)(FolderMenu, {
               value: override?.root,
               label: t("Work directory"),
               fallbackLabel: t("Instance default"),
@@ -27638,15 +28018,15 @@ function applyProduct(ctx) {
               disabled: busy || state.directoryBusy
             })
           ) : null,
-          state.directoryError ? (0, import_react63.createElement)("p", { className: "bt-main-error", role: "alert" }, state.directoryError) : null
+          state.directoryError ? (0, import_react64.createElement)("p", { className: "bt-main-error", role: "alert" }, state.directoryError) : null
         ) : null
       })
     );
   }
   function ObservationConversation() {
     const state = useView();
-    const [copyState, setCopyState] = (0, import_react63.useState)("idle");
-    const [detailCopyState, setDetailCopyState] = (0, import_react63.useState)("idle");
+    const [copyState, setCopyState] = (0, import_react64.useState)("idle");
+    const [detailCopyState, setDetailCopyState] = (0, import_react64.useState)("idle");
     const observation = state.observation;
     const openDetail = (detailId, append = false) => {
       if (state.binding && state.selectedObservation) {
@@ -27687,79 +28067,79 @@ function applyProduct(ctx) {
         setDetailCopyState("failed");
       }
     };
-    return (0, import_react63.createElement)(
+    return (0, import_react64.createElement)(
       "section",
       { className: "bt-observation", "aria-label": t("Read-only work activity") },
-      (0, import_react63.createElement)(
+      (0, import_react64.createElement)(
         "header",
         { className: "bt-observation-header" },
-        (0, import_react63.createElement)("button", { type: "button", className: "bt-soft", onClick: backToMain }, t("Back to Main")),
-        (0, import_react63.createElement)(
+        (0, import_react64.createElement)("button", { type: "button", className: "bt-soft", onClick: backToMain }, t("Back to Main")),
+        (0, import_react64.createElement)(
           "div",
           { className: "bt-observation-heading" },
-          (0, import_react63.createElement)("span", { className: "bt-observation-role" }, observation?.role === "router" ? "Router" : "Worker"),
-          (0, import_react63.createElement)("strong", null, observation?.title ?? state.selectedObservation?.title ?? "")
+          (0, import_react64.createElement)("span", { className: "bt-observation-role" }, observation?.role === "router" ? "Router" : "Worker"),
+          (0, import_react64.createElement)("strong", null, observation?.title ?? state.selectedObservation?.title ?? "")
         ),
-        (0, import_react63.createElement)("span", { className: "bt-observation-readonly" }, t("Read-only")),
-        !state.connection?.connected ? (0, import_react63.createElement)("button", {
+        (0, import_react64.createElement)("span", { className: "bt-observation-readonly" }, t("Read-only")),
+        !state.connection?.connected ? (0, import_react64.createElement)("button", {
           type: "button",
           className: "bt-icon-btn",
           title: t("Settings"),
           "aria-label": t("Settings"),
           onClick: () => view.set((current) => ({ ...current, settingsOpen: true }))
-        }, (0, import_react63.createElement)(SlidersIcon)) : null
+        }, (0, import_react64.createElement)(SlidersIcon)) : null
       ),
-      (0, import_react63.createElement)(
+      (0, import_react64.createElement)(
         "div",
         { className: "bt-observation-body" },
-        state.observationLoading && !observation ? (0, import_react63.createElement)("p", { role: "status", className: "bt-main-status" }, t("Loading history…")) : null,
-        state.observationError ? (0, import_react63.createElement)("p", { role: "alert", className: "bt-main-error" }, state.observationError) : null,
-        observation ? (0, import_react63.createElement)(
+        state.observationLoading && !observation ? (0, import_react64.createElement)("p", { role: "status", className: "bt-main-status" }, t("Loading history…")) : null,
+        state.observationError ? (0, import_react64.createElement)("p", { role: "alert", className: "bt-main-error" }, state.observationError) : null,
+        observation ? (0, import_react64.createElement)(
           "div",
           { className: "bt-observation-content" },
-          (0, import_react63.createElement)(
+          (0, import_react64.createElement)(
             "div",
             { className: "bt-observation-summary" },
-            (0, import_react63.createElement)(
+            (0, import_react64.createElement)(
               "div",
               null,
-              (0, import_react63.createElement)(
+              (0, import_react64.createElement)(
                 "p",
                 { className: "bt-observation-status", role: "status" },
                 `${statusCopy(observation.status)}${observation.generation && !observation.current ? ` · ${t("Historical generation")}` : ""}`
               ),
-              (0, import_react63.createElement)("p", null, t(observation.summary)),
-              (0, import_react63.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${t(observation.nextStep)}`)
+              (0, import_react64.createElement)("p", null, t(observation.summary)),
+              (0, import_react64.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${t(observation.nextStep)}`)
             ),
-            observation.historyStatus === "missing" ? (0, import_react63.createElement)(
+            observation.historyStatus === "missing" ? (0, import_react64.createElement)(
               "p",
               { className: "bt-main-error", role: "alert" },
               t("The Session history is missing. Durable work facts remain available.")
             ) : null,
-            observation.historyStatus === "not-started" ? (0, import_react63.createElement)(
+            observation.historyStatus === "not-started" ? (0, import_react64.createElement)(
               "p",
               { className: "bt-main-status", role: "status" },
               t("The assigned Session has not started.")
             ) : null,
-            (0, import_react63.createElement)(
+            (0, import_react64.createElement)(
               "div",
               { className: "bt-observation-actions" },
-              (0, import_react63.createElement)(
+              (0, import_react64.createElement)(
                 "button",
                 { type: "button", className: "bt-soft", onClick: copy2 },
                 copyState === "copied" ? t("Copied") : copyState === "failed" ? t("Copy failed") : t("Copy details")
               )
             )
           ),
-          (0, import_react63.createElement)("dl", { className: "bt-observation-facts" }, observation.facts.map((fact, index) => (0, import_react63.createElement)(
+          (0, import_react64.createElement)("dl", { className: "bt-observation-facts" }, observation.facts.map((fact, index) => (0, import_react64.createElement)(
             "div",
             { key: `${fact.label}:${index}` },
-            (0, import_react63.createElement)("dt", null, t(fact.label)),
-            (0, import_react63.createElement)(
+            (0, import_react64.createElement)("dt", null, t(fact.label)),
+            (0, import_react64.createElement)(
               "dd",
               null,
-              (0, import_react63.createElement)("span", null, t(fact.value)),
-              fact.detailId ? (0, import_react63.createElement)(
+              (0, import_react64.createElement)("span", null, t(fact.value)),
+              fact.detailId ? (0, import_react64.createElement)(
                 "button",
                 {
                   type: "button",
@@ -27770,20 +28150,20 @@ function applyProduct(ctx) {
               ) : null
             )
           ))),
-          state.observationDetail ? (0, import_react63.createElement)(
+          state.observationDetail ? (0, import_react64.createElement)(
             "section",
             { className: "bt-observation-detail", "aria-label": t("Full detail") },
-            (0, import_react63.createElement)(
+            (0, import_react64.createElement)(
               "div",
               { className: "bt-observation-detail-head" },
-              (0, import_react63.createElement)("h2", null, t(state.observationDetail.label)),
-              (0, import_react63.createElement)("span", null, `${state.observationDetail.bytes} ${t("bytes")}`)
+              (0, import_react64.createElement)("h2", null, t(state.observationDetail.label)),
+              (0, import_react64.createElement)("span", null, `${state.observationDetail.bytes} ${t("bytes")}`)
             ),
-            (0, import_react63.createElement)("pre", null, redactObservationText(state.observationDetail.text)),
-            (0, import_react63.createElement)(
+            (0, import_react64.createElement)("pre", null, redactObservationText(state.observationDetail.text)),
+            (0, import_react64.createElement)(
               "div",
               { className: "bt-observation-detail-actions" },
-              state.observationDetail.hasMore ? (0, import_react63.createElement)(
+              state.observationDetail.hasMore ? (0, import_react64.createElement)(
                 "button",
                 {
                   type: "button",
@@ -27793,19 +28173,19 @@ function applyProduct(ctx) {
                 },
                 state.observationDetailLoading ? t("Loading…") : t("Load more detail")
               ) : null,
-              (0, import_react63.createElement)(
+              (0, import_react64.createElement)(
                 "button",
                 { type: "button", className: "bt-soft", onClick: copyDetail },
                 detailCopyState === "copied" ? t("Copied") : detailCopyState === "failed" ? t("Copy failed") : t("Copy loaded detail")
               )
             ),
-            state.observationDetailError ? (0, import_react63.createElement)("p", { role: "alert", className: "bt-main-error" }, state.observationDetailError) : null
+            state.observationDetailError ? (0, import_react64.createElement)("p", { role: "alert", className: "bt-main-error" }, state.observationDetailError) : null
           ) : null,
-          observation.generations.length > 1 ? (0, import_react63.createElement)(
+          observation.generations.length > 1 ? (0, import_react64.createElement)(
             "section",
             { className: "bt-observation-generations", "aria-label": t("Assignment generations") },
-            (0, import_react63.createElement)("h2", null, t("Assignment generations")),
-            observation.generations.map((generation) => (0, import_react63.createElement)(
+            (0, import_react64.createElement)("h2", null, t("Assignment generations")),
+            observation.generations.map((generation) => (0, import_react64.createElement)(
               "button",
               {
                 key: generation.assignmentId,
@@ -27825,31 +28205,31 @@ function applyProduct(ctx) {
                   void loadObservation(state.binding, state.selectedObservation, { reset: true });
                 }
               },
-              (0, import_react63.createElement)("span", null, generation.generation),
-              (0, import_react63.createElement)(
+              (0, import_react64.createElement)("span", null, generation.generation),
+              (0, import_react64.createElement)(
                 "span",
                 null,
                 `${generation.configurationRevision ? `${t("Configuration")} v${generation.configurationRevision} · ` : ""}${generation.current ? t("Current generation") : t("Historical generation")}`
               ),
-              (0, import_react63.createElement)("span", null, statusCopy(generation.state))
+              (0, import_react64.createElement)("span", null, statusCopy(generation.state))
             ))
           ) : null,
-          (0, import_react63.createElement)(
+          (0, import_react64.createElement)(
             "section",
             { className: "bt-observation-history", "aria-label": t("Observation history") },
-            (0, import_react63.createElement)("h2", null, t("Observation history")),
-            observation.events.length ? observation.events.map((event) => (0, import_react63.createElement)(
+            (0, import_react64.createElement)("h2", null, t("Observation history")),
+            observation.events.length ? observation.events.map((event) => (0, import_react64.createElement)(
               "article",
               { key: event.seq, className: "bt-observation-event" },
-              (0, import_react63.createElement)(
+              (0, import_react64.createElement)(
                 "div",
                 { className: "bt-observation-event-head" },
-                (0, import_react63.createElement)("span", null, event.kind === "user-message" ? t("Input") : event.kind === "assistant-message" ? t("Response") : event.kind === "tool-call" ? t("Tool call") : event.kind === "tool-result" ? t("Tool result") : t("Turn")),
-                (0, import_react63.createElement)("time", null, event.time ? new Date(event.time).toLocaleTimeString() : "")
+                (0, import_react64.createElement)("span", null, event.kind === "user-message" ? t("Input") : event.kind === "assistant-message" ? t("Response") : event.kind === "tool-call" ? t("Tool call") : event.kind === "tool-result" ? t("Tool result") : t("Turn")),
+                (0, import_react64.createElement)("time", null, event.time ? new Date(event.time).toLocaleTimeString() : "")
               ),
-              (0, import_react63.createElement)("p", null, event.kind === "tool-call" ? t("Called {tool}.", { tool: event.tool ?? "tool" }) : event.kind === "tool-result" ? t(event.isError ? "Tool call failed." : "Tool call completed.") : event.kind === "turn" && event.reason ? t("Turn ended: {reason}.", { reason: event.reason }) : redactObservationText(event.text)),
-              event.detail ? (0, import_react63.createElement)("p", { className: "bt-main-work-detail" }, redactObservationText(event.detail)) : null,
-              event.detailId ? (0, import_react63.createElement)(
+              (0, import_react64.createElement)("p", null, event.kind === "tool-call" ? t("Called {tool}.", { tool: event.tool ?? "tool" }) : event.kind === "tool-result" ? t(event.isError ? "Tool call failed." : "Tool call completed.") : event.kind === "turn" && event.reason ? t("Turn ended: {reason}.", { reason: event.reason }) : redactObservationText(event.text)),
+              event.detail ? (0, import_react64.createElement)("p", { className: "bt-main-work-detail" }, redactObservationText(event.detail)) : null,
+              event.detailId ? (0, import_react64.createElement)(
                 "button",
                 {
                   type: "button",
@@ -27858,9 +28238,9 @@ function applyProduct(ctx) {
                 },
                 `${t("View full detail")}${event.detailBytes ? ` · ${event.detailBytes} ${t("bytes")}` : ""}`
               ) : null,
-              event.argumentKeys?.length ? (0, import_react63.createElement)("p", { className: "bt-main-work-detail" }, `${t("Arguments")}: ${event.argumentKeys.join(", ")}`) : null
-            )) : (0, import_react63.createElement)("p", { className: "bt-main-status" }, observation.historyStatus === "missing" ? t("The Session history is missing. Durable work facts remain available.") : observation.historyStatus === "not-started" ? t("The assigned Session has not started.") : t("No execution history has been recorded yet.")),
-            observation.hasMore ? (0, import_react63.createElement)("button", { type: "button", className: "bt-soft bt-observation-more", onClick: () => {
+              event.argumentKeys?.length ? (0, import_react64.createElement)("p", { className: "bt-main-work-detail" }, `${t("Arguments")}: ${event.argumentKeys.join(", ")}`) : null
+            )) : (0, import_react64.createElement)("p", { className: "bt-main-status" }, observation.historyStatus === "missing" ? t("The Session history is missing. Durable work facts remain available.") : observation.historyStatus === "not-started" ? t("The assigned Session has not started.") : t("No execution history has been recorded yet.")),
+            observation.hasMore ? (0, import_react64.createElement)("button", { type: "button", className: "bt-soft bt-observation-more", onClick: () => {
               if (state.binding && state.selectedObservation) void loadObservation(state.binding, state.selectedObservation, { older: true });
             } }, t("Load more history")) : null
           )
@@ -27870,9 +28250,9 @@ function applyProduct(ctx) {
   }
   function MainNavigation() {
     const state = useView();
-    const [search, setSearch] = (0, import_react63.useState)(state.observationQuery);
-    const timer = (0, import_react63.useRef)(null);
-    (0, import_react63.useEffect)(() => () => clearTimeout(timer.current), []);
+    const [search, setSearch] = (0, import_react64.useState)(state.observationQuery);
+    const timer = (0, import_react64.useRef)(null);
+    (0, import_react64.useEffect)(() => () => clearTimeout(timer.current), []);
     const changeSearch = (value) => {
       setSearch(value);
       clearTimeout(timer.current);
@@ -27882,10 +28262,10 @@ function applyProduct(ctx) {
         void loadObservations(state.binding, { reset: true });
       }, 180);
     };
-    return (0, import_react63.createElement)(
+    return (0, import_react64.createElement)(
       "nav",
       { className: "bt-main-nav", "aria-label": t("Work navigation") },
-      (0, import_react63.createElement)("button", {
+      (0, import_react64.createElement)("button", {
         type: "button",
         className: "bt-soft",
         "aria-current": state.route === "main" ? "page" : void 0,
@@ -27903,8 +28283,8 @@ function applyProduct(ctx) {
           void refresh();
           setTimeout(() => document.querySelector("#main-message, .bt-main-composer textarea")?.focus(), 0);
         }
-      }, (0, import_react63.createElement)(BrandMark, { size: 24 }), "Main"),
-      clientBridge() ? (0, import_react63.createElement)(
+      }, (0, import_react64.createElement)(BrandMark, { size: 24 }), "Main"),
+      clientBridge() ? (0, import_react64.createElement)(
         "button",
         {
           type: "button",
@@ -27913,11 +28293,11 @@ function applyProduct(ctx) {
         },
         state.connection?.connected ? `${t("Remote Host")} · ${state.connection.client.label}` : t("Connect to Host")
       ) : null,
-      (0, import_react63.createElement)(
+      (0, import_react64.createElement)(
         "div",
         { className: "bt-observation-search" },
-        (0, import_react63.createElement)("label", { htmlFor: "work-observation-search" }, t("Find activity")),
-        (0, import_react63.createElement)("input", {
+        (0, import_react64.createElement)("label", { htmlFor: "work-observation-search" }, t("Find activity")),
+        (0, import_react64.createElement)("input", {
           id: "work-observation-search",
           type: "search",
           value: search,
@@ -27925,13 +28305,13 @@ function applyProduct(ctx) {
           onChange: (event) => changeSearch(event.currentTarget.value)
         })
       ),
-      (0, import_react63.createElement)(
+      (0, import_react64.createElement)(
         "div",
         { className: "bt-observation-nav-head" },
-        (0, import_react63.createElement)("span", null, t("Work activity")),
-        (0, import_react63.createElement)("span", null, t("Read-only"))
+        (0, import_react64.createElement)("span", null, t("Work activity")),
+        (0, import_react64.createElement)("span", null, t("Read-only"))
       ),
-      state.observations.length ? state.observations.map((item) => (0, import_react63.createElement)(
+      state.observations.length ? state.observations.map((item) => (0, import_react64.createElement)(
         "button",
         {
           key: item.id,
@@ -27952,11 +28332,11 @@ function applyProduct(ctx) {
             if (state.binding) void loadObservation(state.binding, item, { reset: true });
           }
         },
-        (0, import_react63.createElement)("span", { className: "bt-observation-role" }, item.role === "router" ? "Router" : "Worker"),
-        (0, import_react63.createElement)("span", { className: "bt-observation-nav-copy" }, (0, import_react63.createElement)("strong", null, item.title), (0, import_react63.createElement)("span", null, statusCopy(item.status)))
-      )) : (0, import_react63.createElement)("p", { className: "bt-observation-empty" }, t("No Router or Worker activity yet.")),
-      state.activityError ? (0, import_react63.createElement)("p", { role: "alert", className: "bt-main-error" }, state.activityError) : null,
-      state.observationCursor ? (0, import_react63.createElement)(
+        (0, import_react64.createElement)("span", { className: "bt-observation-role" }, item.role === "router" ? "Router" : "Worker"),
+        (0, import_react64.createElement)("span", { className: "bt-observation-nav-copy" }, (0, import_react64.createElement)("strong", null, item.title), (0, import_react64.createElement)("span", null, statusCopy(item.status)))
+      )) : (0, import_react64.createElement)("p", { className: "bt-observation-empty" }, t("No Router or Worker activity yet.")),
+      state.activityError ? (0, import_react64.createElement)("p", { role: "alert", className: "bt-main-error" }, state.activityError) : null,
+      state.observationCursor ? (0, import_react64.createElement)(
         "button",
         {
           type: "button",
@@ -27971,15 +28351,15 @@ function applyProduct(ctx) {
     );
   }
   function ClientSettings({ binding }) {
-    const [clients, setClients] = (0, import_react63.useState)([]);
-    const [label, setLabel] = (0, import_react63.useState)("");
-    const [readOnly, setReadOnly] = (0, import_react63.useState)(false);
-    const [issued, setIssued] = (0, import_react63.useState)(null);
-    const [busy, setBusy] = (0, import_react63.useState)(false);
-    const [error, setError] = (0, import_react63.useState)(null);
-    const pending = (0, import_react63.useRef)(null);
+    const [clients, setClients] = (0, import_react64.useState)([]);
+    const [label, setLabel] = (0, import_react64.useState)("");
+    const [readOnly, setReadOnly] = (0, import_react64.useState)(false);
+    const [issued, setIssued] = (0, import_react64.useState)(null);
+    const [busy, setBusy] = (0, import_react64.useState)(false);
+    const [error, setError] = (0, import_react64.useState)(null);
+    const pending = (0, import_react64.useRef)(null);
     const load = async () => setClients(await productCall("clients-list", { instanceId: binding.instanceId }));
-    (0, import_react63.useEffect)(() => {
+    (0, import_react64.useEffect)(() => {
       void load().catch((failure) => setError(failure.message));
     }, [binding.instanceId]);
     const enroll = async (event) => {
@@ -28029,16 +28409,16 @@ function applyProduct(ctx) {
         setBusy(false);
       }
     };
-    return (0, import_react63.createElement)(
+    return (0, import_react64.createElement)(
       Card2,
       { title: t("Authorized clients") },
-      (0, import_react63.createElement)(
+      (0, import_react64.createElement)(
         "form",
         { className: "bt-main-client-form", onSubmit: (event) => {
           void enroll(event);
         } },
-        (0, import_react63.createElement)("label", { htmlFor: "client-label" }, t("Client name")),
-        (0, import_react63.createElement)("input", {
+        (0, import_react64.createElement)("label", { htmlFor: "client-label" }, t("Client name")),
+        (0, import_react64.createElement)("input", {
           id: "client-label",
           className: "bt-bs-input",
           value: label,
@@ -28046,8 +28426,8 @@ function applyProduct(ctx) {
           required: true,
           onChange: (event) => setLabel(event.currentTarget.value)
         }),
-        (0, import_react63.createElement)("label", { htmlFor: "client-scope" }, t("Client access")),
-        (0, import_react63.createElement)(
+        (0, import_react64.createElement)("label", { htmlFor: "client-scope" }, t("Client access")),
+        (0, import_react64.createElement)(
           "select",
           {
             id: "client-scope",
@@ -28055,32 +28435,32 @@ function applyProduct(ctx) {
             value: readOnly ? "read" : "command",
             onChange: (event) => setReadOnly(event.currentTarget.value === "read")
           },
-          (0, import_react63.createElement)("option", { value: "command" }, t("Read and command")),
-          (0, import_react63.createElement)("option", { value: "read" }, t("Read-only"))
+          (0, import_react64.createElement)("option", { value: "command" }, t("Read and command")),
+          (0, import_react64.createElement)("option", { value: "read" }, t("Read-only"))
         ),
-        (0, import_react63.createElement)("button", { type: "submit", className: "bt-soft", disabled: busy || !label.trim() }, t("Issue credential"))
+        (0, import_react64.createElement)("button", { type: "submit", className: "bt-soft", disabled: busy || !label.trim() }, t("Issue credential"))
       ),
-      issued ? (0, import_react63.createElement)(
+      issued ? (0, import_react64.createElement)(
         "div",
         { className: "bt-main-client-issued", role: "status" },
-        (0, import_react63.createElement)("p", null, t("This credential is shown once. Transfer it to the desktop client securely.")),
-        (0, import_react63.createElement)("input", { type: "password", readOnly: true, value: issued, "aria-label": t("Issued client credential") }),
-        (0, import_react63.createElement)("button", { type: "button", className: "bt-soft", onClick: () => {
+        (0, import_react64.createElement)("p", null, t("This credential is shown once. Transfer it to the desktop client securely.")),
+        (0, import_react64.createElement)("input", { type: "password", readOnly: true, value: issued, "aria-label": t("Issued client credential") }),
+        (0, import_react64.createElement)("button", { type: "button", className: "bt-soft", onClick: () => {
           void navigator.clipboard.writeText(issued).catch(() => setError(t("Could not copy the credential.")));
         } }, t("Copy credential"))
       ) : null,
-      error ? (0, import_react63.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
-      clients.map((client) => (0, import_react63.createElement)(
+      error ? (0, import_react64.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+      clients.map((client) => (0, import_react64.createElement)(
         "div",
         { key: client.id, className: "bt-main-client-row" },
-        (0, import_react63.createElement)(
+        (0, import_react64.createElement)(
           "div",
           null,
-          (0, import_react63.createElement)("strong", null, client.label),
-          (0, import_react63.createElement)("span", null, client.id),
-          (0, import_react63.createElement)("span", null, client.revokedAt ? t("Revoked") : client.grants[0]?.capabilities.includes("command") ? t("Read and command") : t("Read-only"))
+          (0, import_react64.createElement)("strong", null, client.label),
+          (0, import_react64.createElement)("span", null, client.id),
+          (0, import_react64.createElement)("span", null, client.revokedAt ? t("Revoked") : client.grants[0]?.capabilities.includes("command") ? t("Read and command") : t("Read-only"))
         ),
-        client.revokedAt ? null : (0, import_react63.createElement)("button", {
+        client.revokedAt ? null : (0, import_react64.createElement)("button", {
           type: "button",
           className: "bt-soft",
           disabled: busy,
@@ -28092,21 +28472,21 @@ function applyProduct(ctx) {
     );
   }
   function SettingsDialog2({ binding, onClose }) {
-    const [page, setPage] = (0, import_react63.useState)("roles");
+    const [page, setPage] = (0, import_react64.useState)("roles");
     const viewState = useView();
-    const [snapshot, setSnapshot] = (0, import_react63.useState)(null);
-    const [draft, setDraft] = (0, import_react63.useState)(null);
-    const [base, setBase] = (0, import_react63.useState)(null);
-    const [efforts, setEfforts] = (0, import_react63.useState)({});
-    const [keyDrafts, setKeyDrafts] = (0, import_react63.useState)({});
-    const [error, setError] = (0, import_react63.useState)(null);
-    const [notice, setNotice] = (0, import_react63.useState)(null);
-    const [conflict, setConflict] = (0, import_react63.useState)(false);
-    const [loading, setLoading] = (0, import_react63.useState)(true);
-    const [saving, setSaving] = (0, import_react63.useState)(false);
-    const draftRef = (0, import_react63.useRef)(draft);
-    const draftVersion = (0, import_react63.useRef)(0);
-    const savingRef = (0, import_react63.useRef)(false);
+    const [snapshot, setSnapshot] = (0, import_react64.useState)(null);
+    const [draft, setDraft] = (0, import_react64.useState)(null);
+    const [base, setBase] = (0, import_react64.useState)(null);
+    const [efforts, setEfforts] = (0, import_react64.useState)({});
+    const [keyDrafts, setKeyDrafts] = (0, import_react64.useState)({});
+    const [error, setError] = (0, import_react64.useState)(null);
+    const [notice, setNotice] = (0, import_react64.useState)(null);
+    const [conflict, setConflict] = (0, import_react64.useState)(false);
+    const [loading, setLoading] = (0, import_react64.useState)(true);
+    const [saving, setSaving] = (0, import_react64.useState)(false);
+    const draftRef = (0, import_react64.useRef)(draft);
+    const draftVersion = (0, import_react64.useRef)(0);
+    const savingRef = (0, import_react64.useRef)(false);
     const clone = (value) => JSON.parse(JSON.stringify(value));
     const roleRows = [["main", "Main"], ["router", "Router"], ["worker", "Worker"]];
     const refOf = (model) => `${model.provider}/${model.model}`;
@@ -28145,10 +28525,10 @@ function applyProduct(ctx) {
         setLoading(false);
       }
     };
-    (0, import_react63.useEffect)(() => {
+    (0, import_react64.useEffect)(() => {
       void load();
     }, [binding.instanceId]);
-    (0, import_react63.useEffect)(() => {
+    (0, import_react64.useEffect)(() => {
       const close2 = (event) => {
         if (event.key === "Escape") onClose();
       };
@@ -28295,35 +28675,35 @@ function applyProduct(ctx) {
         view.set((current) => ({ ...current, directoryBusy: false }));
       }
     };
-    const close = (0, import_react63.createElement)("button", { type: "button", className: "bt-settings-close", "aria-label": t("Close settings"), onClick: onClose }, (0, import_react63.createElement)(CloseIcon));
-    if (loading && !draft) return (0, import_react63.createElement)(
+    const close = (0, import_react64.createElement)("button", { type: "button", className: "bt-settings-close", "aria-label": t("Close settings"), onClick: onClose }, (0, import_react64.createElement)(CloseIcon));
+    if (loading && !draft) return (0, import_react64.createElement)(
       "div",
       { className: "bt-settings-layer" },
-      (0, import_react63.createElement)("div", { className: "bt-scrim", onMouseDown: onClose }),
-      (0, import_react63.createElement)(
+      (0, import_react64.createElement)("div", { className: "bt-scrim", onMouseDown: onClose }),
+      (0, import_react64.createElement)(
         "div",
         { className: "bt-settings bt-main-settings-dialog", role: "dialog", "aria-modal": true, "aria-label": t("Super-agent settings") },
-        (0, import_react63.createElement)(
+        (0, import_react64.createElement)(
           "div",
           { className: "bt-settings-main" },
-          (0, import_react63.createElement)("div", { className: "bt-settings-head" }, (0, import_react63.createElement)("h2", null, t("Super-agent settings"))),
-          (0, import_react63.createElement)("div", { className: "bt-settings-scroll" }, (0, import_react63.createElement)("p", { className: "bt-main-status", role: "status" }, t("Loading configuration…")))
+          (0, import_react64.createElement)("div", { className: "bt-settings-head" }, (0, import_react64.createElement)("h2", null, t("Super-agent settings"))),
+          (0, import_react64.createElement)("div", { className: "bt-settings-scroll" }, (0, import_react64.createElement)("p", { className: "bt-main-status", role: "status" }, t("Loading configuration…")))
         ),
         close
       )
     );
-    if (!draft) return (0, import_react63.createElement)(
+    if (!draft) return (0, import_react64.createElement)(
       "div",
       { className: "bt-settings-layer" },
-      (0, import_react63.createElement)("div", { className: "bt-scrim", onMouseDown: onClose }),
-      (0, import_react63.createElement)(
+      (0, import_react64.createElement)("div", { className: "bt-scrim", onMouseDown: onClose }),
+      (0, import_react64.createElement)(
         "div",
         { className: "bt-settings bt-main-settings-dialog", role: "dialog", "aria-modal": true, "aria-label": t("Super-agent settings") },
-        (0, import_react63.createElement)(
+        (0, import_react64.createElement)(
           "div",
           { className: "bt-settings-main" },
-          (0, import_react63.createElement)("div", { className: "bt-settings-head" }, (0, import_react63.createElement)("h2", null, t("Super-agent settings"))),
-          (0, import_react63.createElement)("div", { className: "bt-settings-scroll" }, (0, import_react63.createElement)("p", { className: "bt-main-error", role: "alert" }, error ?? t("Configuration is unavailable.")))
+          (0, import_react64.createElement)("div", { className: "bt-settings-head" }, (0, import_react64.createElement)("h2", null, t("Super-agent settings"))),
+          (0, import_react64.createElement)("div", { className: "bt-settings-scroll" }, (0, import_react64.createElement)("p", { className: "bt-main-error", role: "alert" }, error ?? t("Configuration is unavailable.")))
         ),
         close
       )
@@ -28342,118 +28722,118 @@ function applyProduct(ctx) {
         });
       });
     };
-    return (0, import_react63.createElement)(
+    return (0, import_react64.createElement)(
       "div",
       { className: "bt-settings-layer" },
-      (0, import_react63.createElement)("div", { className: "bt-scrim", onMouseDown: onClose }),
-      (0, import_react63.createElement)(
+      (0, import_react64.createElement)("div", { className: "bt-scrim", onMouseDown: onClose }),
+      (0, import_react64.createElement)(
         "div",
         { className: "bt-settings bt-main-settings-dialog", role: "dialog", "aria-modal": true, "aria-label": t("Super-agent settings") },
-        (0, import_react63.createElement)(
+        (0, import_react64.createElement)(
           "nav",
           { className: "bt-settings-nav", "aria-label": t("Settings pages") },
-          (0, import_react63.createElement)("button", {
+          (0, import_react64.createElement)("button", {
             type: "button",
             className: "bt-settings-item bt-main-settings-nav-item",
             "aria-current": page === "roles" ? "page" : void 0,
             onClick: () => setPage("roles")
-          }, (0, import_react63.createElement)(SlidersIcon), t("Roles and providers")),
-          (0, import_react63.createElement)("button", {
+          }, (0, import_react64.createElement)(SlidersIcon), t("Roles and providers")),
+          (0, import_react64.createElement)("button", {
             type: "button",
             className: "bt-settings-item bt-main-settings-nav-item",
             "aria-current": page === "execution" ? "page" : void 0,
             onClick: () => setPage("execution")
-          }, (0, import_react63.createElement)(GlobeIcon), t("Execution")),
-          (0, import_react63.createElement)("button", {
+          }, (0, import_react64.createElement)(GlobeIcon), t("Execution")),
+          (0, import_react64.createElement)("button", {
             type: "button",
             className: "bt-settings-item bt-main-settings-nav-item",
             "aria-current": page === "schedules" ? "page" : void 0,
             onClick: () => setPage("schedules")
-          }, (0, import_react63.createElement)(ClockIcon), t("Scheduled tasks")),
-          (0, import_react63.createElement)("button", {
+          }, (0, import_react64.createElement)(ClockIcon), t("Scheduled tasks")),
+          (0, import_react64.createElement)("button", {
             type: "button",
             className: "bt-settings-item bt-main-settings-nav-item",
             "aria-current": page === "preparations" ? "page" : void 0,
             onClick: () => setPage("preparations")
-          }, (0, import_react63.createElement)(ClockIcon), t("Proactive preparation")),
-          (0, import_react63.createElement)("button", {
+          }, (0, import_react64.createElement)(ClockIcon), t("Proactive preparation")),
+          (0, import_react64.createElement)("button", {
             type: "button",
             className: "bt-settings-item bt-main-settings-nav-item",
             "aria-current": page === "presets" ? "page" : void 0,
             onClick: () => setPage("presets")
-          }, (0, import_react63.createElement)(SlidersIcon), t("Role presets")),
-          (0, import_react63.createElement)("button", {
+          }, (0, import_react64.createElement)(SlidersIcon), t("Role presets")),
+          (0, import_react64.createElement)("button", {
             type: "button",
             className: "bt-settings-item bt-main-settings-nav-item",
             "aria-current": page === "memory" ? "page" : void 0,
             onClick: () => setPage("memory")
-          }, (0, import_react63.createElement)(MemoryIcon), t("Memory")),
-          !viewState.connection?.connected ? (0, import_react63.createElement)("button", {
+          }, (0, import_react64.createElement)(MemoryIcon), t("Memory")),
+          !viewState.connection?.connected ? (0, import_react64.createElement)("button", {
             type: "button",
             className: "bt-settings-item bt-main-settings-nav-item",
             "aria-current": page === "browser" ? "page" : void 0,
             onClick: () => setPage("browser")
-          }, (0, import_react63.createElement)(GlobeIcon), t("Browser resources")) : null,
-          !viewState.connection?.connected ? (0, import_react63.createElement)("button", {
+          }, (0, import_react64.createElement)(GlobeIcon), t("Browser resources")) : null,
+          !viewState.connection?.connected ? (0, import_react64.createElement)("button", {
             type: "button",
             className: "bt-settings-item bt-main-settings-nav-item",
             "aria-current": page === "supervision" ? "page" : void 0,
             onClick: () => setPage("supervision")
-          }, (0, import_react63.createElement)(SlidersIcon), t("Supervision")) : null,
-          (0, import_react63.createElement)("span", { className: "bt-main-settings-revision" }, `${t("Configuration")} v${snapshot.revision}`)
+          }, (0, import_react64.createElement)(SlidersIcon), t("Supervision")) : null,
+          (0, import_react64.createElement)("span", { className: "bt-main-settings-revision" }, `${t("Configuration")} v${snapshot.revision}`)
         ),
-        (0, import_react63.createElement)(
+        (0, import_react64.createElement)(
           "div",
           { className: "bt-settings-main" },
-          (0, import_react63.createElement)("div", { className: "bt-settings-head" }, (0, import_react63.createElement)("h2", null, page === "execution" ? t("Execution") : page === "schedules" ? t("Scheduled tasks") : page === "presets" ? t("Role presets") : page === "preparations" ? t("Proactive preparation") : page === "memory" ? t("Memory") : page === "browser" ? t("Browser resources") : page === "supervision" ? t("Supervision") : t("Super-agent settings"))),
-          (0, import_react63.createElement)(
+          (0, import_react64.createElement)("div", { className: "bt-settings-head" }, (0, import_react64.createElement)("h2", null, page === "execution" ? t("Execution") : page === "schedules" ? t("Scheduled tasks") : page === "presets" ? t("Role presets") : page === "preparations" ? t("Proactive preparation") : page === "memory" ? t("Memory") : page === "browser" ? t("Browser resources") : page === "supervision" ? t("Supervision") : t("Super-agent settings"))),
+          (0, import_react64.createElement)(
             "div",
             { className: "bt-settings-scroll" },
-            page === "execution" ? (0, import_react63.createElement)(ProductExecutionSettings, {
+            page === "execution" ? (0, import_react64.createElement)(ProductExecutionSettings, {
               binding,
               call: productCall,
               onChanged: () => {
                 void loadDirectories(binding);
               }
-            }) : page === "schedules" ? (0, import_react63.createElement)(ProductScheduleSettings, {
+            }) : page === "schedules" ? (0, import_react64.createElement)(ProductScheduleSettings, {
               binding,
               works: view.getSnapshot().works,
               call: productCall,
               onViewWork: viewWork
-            }) : page === "preparations" ? (0, import_react63.createElement)(ProductProactiveSettings, { binding, call: productCall }) : page === "presets" ? (0, import_react63.createElement)(ProductPresetSettings, {
+            }) : page === "preparations" ? (0, import_react64.createElement)(ProductProactiveSettings, { binding, call: productCall }) : page === "presets" ? (0, import_react64.createElement)(ProductPresetSettings, {
               binding,
               call: productCall,
               settingsRevision: snapshot.revision,
               roleSettings: snapshot,
               onApplied: refreshAfterPreset,
               onReload: refreshAfterPreset
-            }) : page === "memory" ? (0, import_react63.createElement)(ProductMemorySettings, { key: binding.instanceId, binding, works: view.getSnapshot().works, call: productCall }) : page === "browser" ? (0, import_react63.createElement)(ProductBrowserSettings, {
+            }) : page === "memory" ? (0, import_react64.createElement)(ProductMemorySettings, { key: binding.instanceId, binding, works: view.getSnapshot().works, call: productCall }) : page === "browser" ? (0, import_react64.createElement)(ProductBrowserSettings, {
               binding,
               works: view.getSnapshot().works,
               directoryOptions: viewState.directoryOptions,
               call: productCall,
               browserBridge: globalThis.dsBotApp?.browser
-            }) : page === "supervision" ? (0, import_react63.createElement)(ProductSupervisionSettings, { binding, call: productCall }) : (0, import_react63.createElement)(
-              import_react63.Fragment,
+            }) : page === "supervision" ? (0, import_react64.createElement)(ProductSupervisionSettings, { binding, call: productCall }) : (0, import_react64.createElement)(
+              import_react64.Fragment,
               null,
-              error ? (0, import_react63.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
-              viewState.directoryError ? (0, import_react63.createElement)("p", { className: "bt-main-error", role: "alert" }, viewState.directoryError) : null,
-              conflict ? (0, import_react63.createElement)(
+              error ? (0, import_react64.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+              viewState.directoryError ? (0, import_react64.createElement)("p", { className: "bt-main-error", role: "alert" }, viewState.directoryError) : null,
+              conflict ? (0, import_react64.createElement)(
                 "div",
                 { className: "bt-main-settings-conflict", role: "status" },
-                (0, import_react63.createElement)("p", null, t("Newer settings exist. Rebase only your changed fields, then review and save.")),
-                (0, import_react63.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", disabled: saving, onClick: () => {
+                (0, import_react64.createElement)("p", null, t("Newer settings exist. Rebase only your changed fields, then review and save.")),
+                (0, import_react64.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", disabled: saving, onClick: () => {
                   void rebase();
                 } }, t("Rebase my edits"))
               ) : null,
-              notice ? (0, import_react63.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
-              viewState.directoryOptions?.default ? (0, import_react63.createElement)(
+              notice ? (0, import_react64.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
+              viewState.directoryOptions?.default ? (0, import_react64.createElement)(
                 Card2,
                 { title: t("Work directories") },
-                (0, import_react63.createElement)(
+                (0, import_react64.createElement)(
                   Row,
                   { label: t("Instance default directory"), hint: t("New work starts here unless you choose a work directory in Main.") },
-                  (0, import_react63.createElement)(FolderMenu, {
+                  (0, import_react64.createElement)(FolderMenu, {
                     value: viewState.directoryOptions.default.root,
                     team: true,
                     label: t("Instance default directory"),
@@ -28469,13 +28849,13 @@ function applyProduct(ctx) {
                 if (!profile) return null;
                 const ref = refOf(profile.model);
                 const reasoning = efforts[ref];
-                return (0, import_react63.createElement)(
+                return (0, import_react64.createElement)(
                   Card2,
                   { key: role, title: label },
-                  (0, import_react63.createElement)(
+                  (0, import_react64.createElement)(
                     Row,
                     { label: t("Model"), hint: t("The provider and model this role uses. New turns use the saved version.") },
-                    (0, import_react63.createElement)(
+                    (0, import_react64.createElement)(
                       "select",
                       {
                         className: "bt-select bt-main-settings-select",
@@ -28486,18 +28866,18 @@ function applyProduct(ctx) {
                           void updateModel(role, event.target.value);
                         }
                       },
-                      !models.some((model) => model.ref === ref) ? (0, import_react63.createElement)("option", { value: ref }, ref) : null,
-                      snapshot.providers.map((provider) => (0, import_react63.createElement)(
+                      !models.some((model) => model.ref === ref) ? (0, import_react64.createElement)("option", { value: ref }, ref) : null,
+                      snapshot.providers.map((provider) => (0, import_react64.createElement)(
                         "optgroup",
                         { key: provider.id, label: provider.name },
-                        provider.models.map((model) => (0, import_react63.createElement)("option", { key: model.ref, value: model.ref }, model.name))
+                        provider.models.map((model) => (0, import_react64.createElement)("option", { key: model.ref, value: model.ref }, model.name))
                       ))
                     )
                   ),
-                  reasoning?.efforts?.length ? (0, import_react63.createElement)(
+                  reasoning?.efforts?.length ? (0, import_react64.createElement)(
                     Row,
                     { label: t("Thinking effort"), hint: t("Kept with the model route and recorded in configuration uses.") },
-                    (0, import_react63.createElement)(
+                    (0, import_react64.createElement)(
                       "select",
                       {
                         className: "bt-select bt-main-settings-select",
@@ -28506,14 +28886,14 @@ function applyProduct(ctx) {
                         disabled: saving,
                         onChange: (event) => updateEffort(role, event.target.value)
                       },
-                      (0, import_react63.createElement)("option", { value: "" }, t("Provider default")),
-                      reasoning.efforts.map((effort) => (0, import_react63.createElement)("option", { key: effort.id, value: effort.id }, effort.name))
+                      (0, import_react64.createElement)("option", { value: "" }, t("Provider default")),
+                      reasoning.efforts.map((effort) => (0, import_react64.createElement)("option", { key: effort.id, value: effort.id }, effort.name))
                     )
                   ) : null,
-                  (0, import_react63.createElement)(
+                  (0, import_react64.createElement)(
                     Row,
                     { label: t("Instructions"), hint: t("Role prompts are versioned. Router keeps {{goal}}; Worker keeps {{goal}} and {{constraints}}."), stack: true },
-                    (0, import_react63.createElement)("textarea", {
+                    (0, import_react64.createElement)("textarea", {
                       className: "bt-bs-input bt-bs-area bt-main-settings-prompt",
                       value: profile.instructions,
                       maxLength: 16384,
@@ -28523,18 +28903,18 @@ function applyProduct(ctx) {
                       onChange: (event) => updateRole(role, { instructions: event.target.value })
                     })
                   ),
-                  (0, import_react63.createElement)(
+                  (0, import_react64.createElement)(
                     Row,
                     { label: t("Profile"), hint: `${profile.name} · ${profile.skills.length ? t("Skills: {skills}", { skills: profile.skills.join(", ") }) : t("No reserved skills")}` },
-                    (0, import_react63.createElement)("span", { className: "bt-main-settings-route" }, ref)
+                    (0, import_react64.createElement)("span", { className: "bt-main-settings-route" }, ref)
                   )
                 );
               }),
-              (0, import_react63.createElement)(
+              (0, import_react64.createElement)(
                 "div",
                 { className: "bt-actions bt-main-settings-save" },
-                (0, import_react63.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", disabled: saving, onClick: onClose }, t("Cancel")),
-                (0, import_react63.createElement)(
+                (0, import_react64.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", disabled: saving, onClick: onClose }, t("Cancel")),
+                (0, import_react64.createElement)(
                   "button",
                   { type: "button", className: "bt-send bt-soft bt-soft-sm", disabled: saving, onClick: () => {
                     void save();
@@ -28542,21 +28922,21 @@ function applyProduct(ctx) {
                   saving ? t("Saving…") : t("Save configuration")
                 )
               ),
-              (0, import_react63.createElement)(
+              (0, import_react64.createElement)(
                 Card2,
                 { title: t("Providers") },
-                snapshot.providers.length ? snapshot.providers.map((provider) => (0, import_react63.createElement)(
+                snapshot.providers.length ? snapshot.providers.map((provider) => (0, import_react64.createElement)(
                   "div",
                   { key: provider.id, className: "bt-main-provider" },
-                  (0, import_react63.createElement)("div", { className: "bt-main-provider-copy" }, (0, import_react63.createElement)("strong", null, provider.name), (0, import_react63.createElement)("span", null, t("{count} models", { count: provider.models.length }))),
-                  provider.key ? (0, import_react63.createElement)(
+                  (0, import_react64.createElement)("div", { className: "bt-main-provider-copy" }, (0, import_react64.createElement)("strong", null, provider.name), (0, import_react64.createElement)("span", null, t("{count} models", { count: provider.models.length }))),
+                  provider.key ? (0, import_react64.createElement)(
                     "div",
                     { className: "bt-main-provider-key" },
-                    (0, import_react63.createElement)("span", { role: "status" }, provider.key.configured ? t("API key configured") : t("API key missing")),
-                    provider.key.writable ? (0, import_react63.createElement)(
-                      import_react63.Fragment,
+                    (0, import_react64.createElement)("span", { role: "status" }, provider.key.configured ? t("API key configured") : t("API key missing")),
+                    provider.key.writable ? (0, import_react64.createElement)(
+                      import_react64.Fragment,
                       null,
-                      (0, import_react63.createElement)("input", {
+                      (0, import_react64.createElement)("input", {
                         type: "password",
                         value: keyDrafts[provider.id] ?? "",
                         autoComplete: "off",
@@ -28565,7 +28945,7 @@ function applyProduct(ctx) {
                         placeholder: t("Paste a new key"),
                         onChange: (event) => setKeyDrafts((current) => ({ ...current, [provider.id]: event.target.value }))
                       }),
-                      (0, import_react63.createElement)("button", {
+                      (0, import_react64.createElement)("button", {
                         type: "button",
                         className: "bt-soft bt-soft-sm",
                         disabled: saving || !(keyDrafts[provider.id] ?? "").trim(),
@@ -28573,7 +28953,7 @@ function applyProduct(ctx) {
                           void saveKey(provider.id, keyDrafts[provider.id]);
                         }
                       }, t("Save key")),
-                      provider.key.configured ? (0, import_react63.createElement)("button", {
+                      provider.key.configured ? (0, import_react64.createElement)("button", {
                         type: "button",
                         className: "bt-soft bt-soft-sm bt-bs-danger",
                         disabled: saving,
@@ -28581,27 +28961,27 @@ function applyProduct(ctx) {
                           void saveKey(provider.id, null);
                         }
                       }, t("Remove key")) : null
-                    ) : (0, import_react63.createElement)("span", null, t("Set outside this product"))
+                    ) : (0, import_react64.createElement)("span", null, t("Set outside this product"))
                   ) : null
-                )) : (0, import_react63.createElement)("p", { className: "bt-main-status" }, t("No provider catalog is available. Configure providers in DSH settings."))
+                )) : (0, import_react64.createElement)("p", { className: "bt-main-status" }, t("No provider catalog is available. Configure providers in DSH settings."))
               ),
-              (0, import_react63.createElement)(ProductCredentialSettings, { binding, call: productCall }),
-              (0, import_react63.createElement)(ProductMcpSettings, { binding, call: productCall }),
-              (0, import_react63.createElement)(ClientSettings, { binding }),
-              (0, import_react63.createElement)(
+              (0, import_react64.createElement)(ProductCredentialSettings, { binding, call: productCall }),
+              (0, import_react64.createElement)(ProductMcpSettings, { binding, call: productCall }),
+              (0, import_react64.createElement)(ClientSettings, { binding }),
+              (0, import_react64.createElement)(
                 Card2,
                 { title: t("Recent configuration uses") },
-                snapshot.uses.length ? snapshot.uses.slice(0, 20).map((use) => (0, import_react63.createElement)(
+                snapshot.uses.length ? snapshot.uses.slice(0, 20).map((use) => (0, import_react64.createElement)(
                   "div",
                   { key: use.id, className: "bt-main-settings-use" },
-                  (0, import_react63.createElement)("span", { className: "bt-observation-role" }, use.role),
-                  (0, import_react63.createElement)("span", null, `${t("Configuration")} v${use.revision}`),
-                  (0, import_react63.createElement)("span", null, refOf(use[use.role] ?? use.worker ?? use.router)),
-                  (0, import_react63.createElement)("span", { className: "bt-main-settings-use-session", title: use.sessionId }, use.sessionId),
-                  (0, import_react63.createElement)("time", null, new Date(use.createdAt).toLocaleString())
-                )) : (0, import_react63.createElement)("p", { className: "bt-main-status" }, t("No role turn has recorded a configuration version yet."))
+                  (0, import_react64.createElement)("span", { className: "bt-observation-role" }, use.role),
+                  (0, import_react64.createElement)("span", null, `${t("Configuration")} v${use.revision}`),
+                  (0, import_react64.createElement)("span", null, refOf(use[use.role] ?? use.worker ?? use.router)),
+                  (0, import_react64.createElement)("span", { className: "bt-main-settings-use-session", title: use.sessionId }, use.sessionId),
+                  (0, import_react64.createElement)("time", null, new Date(use.createdAt).toLocaleString())
+                )) : (0, import_react64.createElement)("p", { className: "bt-main-status" }, t("No role turn has recorded a configuration version yet."))
               ),
-              (0, import_react63.createElement)("p", { className: "bt-main-status" }, t("Configuration versions apply at request boundaries. A turn already running keeps the version it started with."))
+              (0, import_react64.createElement)("p", { className: "bt-main-status" }, t("Configuration versions apply at request boundaries. A turn already running keeps the version it started with."))
             )
           ),
           close
@@ -28610,12 +28990,12 @@ function applyProduct(ctx) {
     );
   }
   function ConnectionDialog({ connection, onClose }) {
-    const [address, setAddress] = (0, import_react63.useState)("");
-    const [instanceId, setInstanceId] = (0, import_react63.useState)("personal");
-    const [credential, setCredential] = (0, import_react63.useState)("");
-    const [busy, setBusy] = (0, import_react63.useState)(false);
-    const [error, setError] = (0, import_react63.useState)(null);
-    (0, import_react63.useEffect)(() => {
+    const [address, setAddress] = (0, import_react64.useState)("");
+    const [instanceId, setInstanceId] = (0, import_react64.useState)("personal");
+    const [credential, setCredential] = (0, import_react64.useState)("");
+    const [busy, setBusy] = (0, import_react64.useState)(false);
+    const [error, setError] = (0, import_react64.useState)(null);
+    (0, import_react64.useEffect)(() => {
       document.getElementById("product-host-address")?.focus();
     }, []);
     const connect = async (event) => {
@@ -28644,11 +29024,11 @@ function applyProduct(ctx) {
         setBusy(false);
       }
     };
-    return (0, import_react63.createElement)(
+    return (0, import_react64.createElement)(
       "div",
       { className: "bt-settings-layer" },
-      (0, import_react63.createElement)("div", { className: "bt-scrim", onMouseDown: onClose }),
-      (0, import_react63.createElement)(
+      (0, import_react64.createElement)("div", { className: "bt-scrim", onMouseDown: onClose }),
+      (0, import_react64.createElement)(
         "div",
         {
           className: "bt-settings bt-main-connect-dialog",
@@ -28659,24 +29039,24 @@ function applyProduct(ctx) {
             if (event.key === "Escape") onClose();
           }
         },
-        (0, import_react63.createElement)(
+        (0, import_react64.createElement)(
           "div",
           { className: "bt-settings-main" },
-          (0, import_react63.createElement)("div", { className: "bt-settings-head" }, (0, import_react63.createElement)("h2", null, t("Host connection"))),
-          connection?.connected ? (0, import_react63.createElement)(
+          (0, import_react64.createElement)("div", { className: "bt-settings-head" }, (0, import_react64.createElement)("h2", null, t("Host connection"))),
+          connection?.connected ? (0, import_react64.createElement)(
             "div",
             { className: "bt-main-connect-body" },
-            (0, import_react63.createElement)("p", { role: "status" }, `${t("Remote Host")} · ${connection.address} · ${connection.instanceId}`),
-            (0, import_react63.createElement)("p", null, `${t("Client")} · ${connection.client.label} · ${connection.capabilities.includes("command") ? t("Read and command") : t("Read-only")}`),
-            error ? (0, import_react63.createElement)("p", { role: "alert", className: "bt-main-error" }, error) : null,
-            (0, import_react63.createElement)("button", { type: "button", className: "bt-soft", disabled: busy, onClick: () => void disconnect() }, t("Disconnect"))
-          ) : (0, import_react63.createElement)(
+            (0, import_react64.createElement)("p", { role: "status" }, `${t("Remote Host")} · ${connection.address} · ${connection.instanceId}`),
+            (0, import_react64.createElement)("p", null, `${t("Client")} · ${connection.client.label} · ${connection.capabilities.includes("command") ? t("Read and command") : t("Read-only")}`),
+            error ? (0, import_react64.createElement)("p", { role: "alert", className: "bt-main-error" }, error) : null,
+            (0, import_react64.createElement)("button", { type: "button", className: "bt-soft", disabled: busy, onClick: () => void disconnect() }, t("Disconnect"))
+          ) : (0, import_react64.createElement)(
             "form",
             { className: "bt-main-connect-body", onSubmit: (event) => {
               void connect(event);
             } },
-            (0, import_react63.createElement)("label", { htmlFor: "product-host-address" }, t("Host address")),
-            (0, import_react63.createElement)("input", {
+            (0, import_react64.createElement)("label", { htmlFor: "product-host-address" }, t("Host address")),
+            (0, import_react64.createElement)("input", {
               id: "product-host-address",
               type: "url",
               required: true,
@@ -28684,15 +29064,15 @@ function applyProduct(ctx) {
               placeholder: "https://host.example:8443",
               onChange: (event) => setAddress(event.currentTarget.value)
             }),
-            (0, import_react63.createElement)("label", { htmlFor: "product-host-instance" }, t("Instance")),
-            (0, import_react63.createElement)("input", {
+            (0, import_react64.createElement)("label", { htmlFor: "product-host-instance" }, t("Instance")),
+            (0, import_react64.createElement)("input", {
               id: "product-host-instance",
               required: true,
               value: instanceId,
               onChange: (event) => setInstanceId(event.currentTarget.value)
             }),
-            (0, import_react63.createElement)("label", { htmlFor: "product-host-credential" }, t("Client credential")),
-            (0, import_react63.createElement)("input", {
+            (0, import_react64.createElement)("label", { htmlFor: "product-host-credential" }, t("Client credential")),
+            (0, import_react64.createElement)("input", {
               id: "product-host-credential",
               type: "password",
               required: true,
@@ -28700,26 +29080,26 @@ function applyProduct(ctx) {
               value: credential,
               onChange: (event) => setCredential(event.currentTarget.value)
             }),
-            (0, import_react63.createElement)("p", { className: "bt-main-status" }, t("Use HTTPS or an authorized local SSH tunnel. The credential stays in this app process until disconnect or quit.")),
-            error ? (0, import_react63.createElement)("p", { role: "alert", className: "bt-main-error" }, error) : null,
-            (0, import_react63.createElement)("button", { type: "submit", className: "bt-soft", disabled: busy }, busy ? t("Connecting…") : t("Connect"))
+            (0, import_react64.createElement)("p", { className: "bt-main-status" }, t("Use HTTPS or an authorized local SSH tunnel. The credential stays in this app process until disconnect or quit.")),
+            error ? (0, import_react64.createElement)("p", { role: "alert", className: "bt-main-error" }, error) : null,
+            (0, import_react64.createElement)("button", { type: "submit", className: "bt-soft", disabled: busy }, busy ? t("Connecting…") : t("Connect"))
           )
         ),
-        (0, import_react63.createElement)("button", { type: "button", className: "bt-settings-close", "aria-label": t("Close connection"), onClick: onClose }, (0, import_react63.createElement)(CloseIcon))
+        (0, import_react64.createElement)("button", { type: "button", className: "bt-settings-close", "aria-label": t("Close connection"), onClick: onClose }, (0, import_react64.createElement)(CloseIcon))
       )
     );
   }
   function ProductSurface() {
     const state = useView();
-    return (0, import_react63.createElement)(
-      import_react63.Fragment,
+    return (0, import_react64.createElement)(
+      import_react64.Fragment,
       null,
-      state.route === "observe" ? (0, import_react63.createElement)(ObservationConversation) : (0, import_react63.createElement)(MainConversation),
-      state.settingsOpen && state.binding && !state.connection?.connected ? (0, import_react63.createElement)(SettingsDialog2, {
+      state.route === "observe" ? (0, import_react64.createElement)(ObservationConversation) : (0, import_react64.createElement)(MainConversation),
+      state.settingsOpen && state.binding && !state.connection?.connected ? (0, import_react64.createElement)(SettingsDialog2, {
         binding: state.binding,
         onClose: () => view.set((current) => ({ ...current, settingsOpen: false }))
       }) : null,
-      state.connectOpen && clientBridge() ? (0, import_react63.createElement)(ConnectionDialog, {
+      state.connectOpen && clientBridge() ? (0, import_react64.createElement)(ConnectionDialog, {
         connection: state.connection,
         onClose: () => view.set((current) => ({ ...current, connectOpen: false }))
       }) : null
@@ -28733,7 +29113,7 @@ function applyProduct(ctx) {
   }, "superagent: existing theme");
   shadow("main.conversation", ProductSurface);
   shadow("sidebar.workspaces", MainNavigation);
-  shadow("sidebar.brand.name", () => (0, import_react63.createElement)("span", null, "DS-SuperAgent"));
+  shadow("sidebar.brand.name", () => (0, import_react64.createElement)("span", null, "DS-SuperAgent"));
   shadow("sidebar.brand.mark", BrandMark);
 }
 function redactObservationText(value) {

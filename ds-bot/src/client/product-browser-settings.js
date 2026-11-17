@@ -1,12 +1,14 @@
 import { createElement as h, Fragment, useEffect, useRef, useState } from 'react'
 import { Card, Row } from './bot-settings.js'
 import { t } from './i18n.js'
+import { ProductBrowserImport, PRODUCT_BROWSER_IMPORT_CSS } from './product-browser-import.js'
 
 const BROWSER_STATES = {
   available: 'Available',
   busy: 'In use',
   human: 'Human control',
   unknown: 'Outcome unknown',
+  importing: 'Importing',
   revoked: 'Revoked',
 }
 const OPERATION_STATES = {
@@ -167,7 +169,7 @@ export function ProductBrowserSettings({ binding, works = [], directoryOptions, 
       active ? 'Browser access granted.' : 'Browser access revoked.')
   }
   const revoke = () => {
-    if (!selected || busy || selected.state === 'revoked'
+    if (!selected || busy || !['available', 'busy', 'human', 'unknown'].includes(selected.state)
       || !window.confirm(t('Revoke this browser resource and all of its work grants?'))) return
     void execute('browser-revoke', { resourceId: selected.id, expectedRevision: selected.revision },
       'Browser resource revoked.')
@@ -212,6 +214,8 @@ export function ProductBrowserSettings({ binding, works = [], directoryOptions, 
     h(Card, { title: t('Browser resources') },
       h('p', { className: 'bt-product-resource-note' },
         t('Each browser keeps an isolated profile. A local Worker needs an exact work-item grant before navigation or a read-only snapshot.')),
+      browserBridge ? h(ProductBrowserImport, { binding, call, browserBridge, directoryOptions,
+        onChanged: () => { void refresh() } }) : null,
       h('button', { type: 'button', className: 'bt-product-browser-refresh bt-soft bt-soft-sm', disabled: Boolean(busy),
         onClick: () => { void refresh() } }, t('Refresh browser resources')),
       !resources ? h('p', { role: 'status' }, t('Loading…'))
@@ -266,7 +270,8 @@ export function ProductBrowserSettings({ binding, works = [], directoryOptions, 
           ? h('button', { className: 'bt-soft', type: 'button', disabled: Boolean(busy), onClick: stop }, t('Stop browser work')) : null,
         h('div', { className: 'bt-product-resource-row' },
           h('button', { className: 'bt-soft', type: 'button', disabled: Boolean(busy)
-            || Boolean(pending[actionKey('browser-revoke', { resourceId: selected.id })]) || selected.state === 'revoked',
+            || Boolean(pending[actionKey('browser-revoke', { resourceId: selected.id })])
+            || selected.state === 'importing' || selected.state === 'revoked',
           onClick: revoke }, t('Revoke browser resource'))),
         selected.grantsTruncated ? h('p', { className: 'bt-product-resource-note', role: 'status' },
           t('This resource has more than 100 grants. No new grant can be added until stored grants are cleaned up.')) : null,
@@ -362,7 +367,7 @@ function ManualBrowserView({ browserBridge, profile, label }) {
     h('div', { ref: frame, className: 'bt-product-manual-browser-frame', role: 'region', 'aria-label': t('Manual browser') }))
 }
 
-export const PRODUCT_BROWSER_CSS = `
+export const PRODUCT_BROWSER_CSS = PRODUCT_BROWSER_IMPORT_CSS + `
 .bt-product-browser-resource{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .bt-product-browser-control{margin-top:10px;padding:10px;border:1px solid var(--bt-line-2);border-radius:8px;background:var(--bt-hover)}
 .bt-product-browser-control>p{margin:0 0 8px;font-size:12px;color:var(--bt-ink-2)}

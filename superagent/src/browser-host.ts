@@ -5,6 +5,37 @@ import type { BrowserAdapter } from './browser-resources.js'
 
 /** The app's existing, one-use CDP endpoint owns the profile and its Electron storage partition. */
 export class HostBrowserAdapter implements BrowserAdapter {
+  async importProfile(request: { profileKey: string; pendingImportId: string; importId: string }) {
+    const send = process.send
+    if (!send) throw new CoreError('BROWSER_UNAVAILABLE', 'The desktop browser Host bridge is unavailable.')
+    const id = randomUUID()
+    return new Promise<unknown>((resolve, reject) => {
+      const finish = (error?: Error, report?: unknown) => {
+        clearTimeout(timeout)
+        process.off('message', receive)
+        if (error) reject(error)
+        else resolve(report)
+      }
+      const receive = (message: unknown) => {
+        const reply = message as { type?: string; id?: string; code?: string; report?: unknown } | null
+        if (reply?.type !== 'ds-superagent:browser-import-response' || reply.id !== id) return
+        if (reply.code) {
+          const code = ['BROWSER_IMPORT_NOT_FOUND', 'BROWSER_IMPORT_CONFLICT', 'BROWSER_IMPORT_UNKNOWN']
+            .includes(reply.code) ? reply.code : 'BROWSER_IMPORT_UNKNOWN'
+          finish(new CoreError(code, 'The desktop browser import could not be confirmed.'))
+        }
+        else finish(undefined, reply.report)
+      }
+      const timeout = setTimeout(() => finish(new CoreError('BROWSER_IMPORT_UNKNOWN',
+        'The desktop browser import timed out.')), 30_000)
+      process.on('message', receive)
+      send.call(process, { type: 'ds-superagent:browser-import', id,
+        profileKey: request.profileKey, pendingImportId: request.pendingImportId, importId: request.importId }, error => {
+        if (error) finish(new CoreError('BROWSER_IMPORT_UNKNOWN', 'The desktop browser import could not be requested.'))
+      })
+    })
+  }
+
   async hold(profileKey: string, held: boolean, controlId: string) {
     const send = process.send
     if (!send) throw new CoreError('BROWSER_UNAVAILABLE', 'The desktop browser Host bridge is unavailable.')

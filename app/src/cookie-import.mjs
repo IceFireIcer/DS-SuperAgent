@@ -2,11 +2,13 @@
 // parsed first and held in memory under a pending id (cookie values never leave the main
 // process); the page sees a value-free preview, and applying writes the cookies into the
 // partition's session and verifies what the store actually kept.
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { describeCookie, summarizeBySite } from './cookie-parse.mjs'
 
 const PENDING_TTL_MS = 10 * 60_000
 const PENDING_MAX = 16
+const BROWSER_IMPORT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu
+export const isProductBrowserImportId = value => typeof value === 'string' && BROWSER_IMPORT_ID.test(value)
 
 const SAME_SITE = { Strict: 'strict', Lax: 'lax', None: 'no_restriction' }
 
@@ -69,8 +71,8 @@ export async function applyCookies(storage, cookies) {
   for (const cookie of cookies) {
     try {
       await storage.cookies.set(toSetDetails(cookie))
-    } catch (error) {
-      failed.push({ ...describeCookie(cookie), reason: error?.message ?? String(error) })
+    } catch {
+      failed.push({ ...describeCookie(cookie), reason: 'the browser rejected this cookie' })
       failedIds.add(identityOf(cookie))
     }
   }
@@ -142,7 +144,12 @@ export class CookieImports {
     while (this.#pending.size >= PENDING_MAX) this.#pending.delete(this.#pending.keys().next().value)
     const id = randomUUID()
     this.#pending.set(id, { cookies: result.cookies, expiresAt: Date.now() + PENDING_TTL_MS })
-    return { id, preview: previewOf(result, source) }
+    const digestInput = result.cookies.map(cookie => [
+      cookie.name, cookie.value, cookie.domain ?? '', cookie.path ?? '/', Boolean(cookie.secure), Boolean(cookie.httpOnly),
+      cookie.sameSite ?? '', cookie.expires ?? null,
+    ]).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)))
+    const sourceDigest = createHash('sha256').update(JSON.stringify(digestInput)).digest('hex')
+    return { id, preview: { ...previewOf(result, source), sourceDigest } }
   }
 
   /** The pending import, or null when it is gone or expired. Taking it leaves it for apply/drop. */
@@ -165,5 +172,65 @@ export class CookieImports {
   sweep() {
     const now = Date.now()
     for (const [id, entry] of this.#pending) if (entry.expiresAt < now) this.#pending.delete(id)
+  }
+}
+
+/** Idempotent Host-to-App apply for product browser imports. Cookie values stay in this process. */
+export class ProductCookieImports {
+  #receipts = new Map()
+  #flights = new Map()
+
+  async apply(storage, pendingImportId, importId, profileKey, imports) {
+    if (!isProductBrowserImportId(pendingImportId) || !isProductBrowserImportId(importId)) {
+      const error = new Error('This browser import identity is invalid.')
+      error.code = 'BROWSER_IMPORT_NOT_FOUND'
+      throw error
+    }
+    this.sweep()
+    const previous = this.#receipts.get(importId)
+    if (previous) {
+      if (previous.profileKey !== profileKey) {
+        const error = new Error('This browser import already belongs to another isolated profile.')
+        error.code = 'BROWSER_IMPORT_CONFLICT'
+        throw error
+      }
+      return structuredClone(previous.report)
+    }
+    const flight = this.#flights.get(importId)
+    if (flight) {
+      if (flight.profileKey !== profileKey) {
+        const error = new Error('This browser import already belongs to another isolated profile.')
+        error.code = 'BROWSER_IMPORT_CONFLICT'
+        throw error
+      }
+      return flight.promise
+    }
+    const promise = this.#apply(storage, pendingImportId, importId, profileKey, imports)
+    this.#flights.set(importId, { profileKey, promise })
+    try { return await promise }
+    finally { if (this.#flights.get(importId)?.promise === promise) this.#flights.delete(importId) }
+  }
+
+  async #apply(storage, pendingImportId, importId, profileKey, imports) {
+    const pending = imports.peek(pendingImportId)
+    if (!pending) {
+      const error = new Error('This browser import preview is no longer pending.')
+      error.code = 'BROWSER_IMPORT_NOT_FOUND'
+      throw error
+    }
+    const report = await applyCookies(storage, pending.cookies)
+    imports.drop(pendingImportId)
+    this.#receipts.set(importId, { profileKey, report, expiresAt: Date.now() + PENDING_TTL_MS })
+    while (this.#receipts.size > PENDING_MAX) this.#receipts.delete(this.#receipts.keys().next().value)
+    return structuredClone(report)
+  }
+
+  cancel(imports, pendingImportId) {
+    imports.drop(pendingImportId)
+  }
+
+  sweep() {
+    const now = Date.now()
+    for (const [id, receipt] of this.#receipts) if (receipt.expiresAt < now) this.#receipts.delete(id)
   }
 }
