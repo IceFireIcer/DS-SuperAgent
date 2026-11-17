@@ -4,7 +4,9 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { apply as applyProfile, feishuProfileConfig, githubProfileConfig, profilePaths } from '../dist/profile.js'
+import {
+  apply as applyProfile, feishuProfileConfig, githubProfileConfig, postgresProfileConfig, profilePaths,
+} from '../dist/profile.js'
 import { nativeContext, textResponse } from '../dev/native-mock.mjs'
 
 test('the ds-superagent profile keeps its business store under the profile home', () => {
@@ -21,6 +23,14 @@ test('the ds-superagent profile keeps its business store under the profile home'
 
 test('the ds-superagent profile fails closed without a DSH home', () => {
   assert.throws(() => profilePaths({}), /DSH_HOME/u)
+})
+
+test('the managed profile reads PostgreSQL and Host lease settings from trusted process environment', () => {
+  assert.equal(postgresProfileConfig({}), undefined)
+  const value = { host: '127.0.0.1', port: 5432, user: 'fixture', password: 'fixture-password', database: 'product', ssl: false }
+  assert.deepEqual(postgresProfileConfig({ DS_SUPERAGENT_POSTGRES: JSON.stringify(value) }), value)
+  assert.throws(() => postgresProfileConfig({ DS_SUPERAGENT_POSTGRES: '{' }), { code: 'INVALID_CONFIG' })
+  assert.throws(() => postgresProfileConfig({ DS_SUPERAGENT_POSTGRES: '[]' }), { code: 'INVALID_CONFIG' })
 })
 
 test('Feishu profile opt-in needs explicit tenant, chats, identities and a requester allowlist', () => {
@@ -105,6 +115,8 @@ test('an incomplete Feishu opt-in leaves Main running and shows a bounded source
 test('the package mounts the profile host as a DSH bundle', () => {
   const patch = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
   assert.match(patch, /name: ds-superagent\/profile/u)
+  assert.match(patch, /name: ds-superagent\/session-persistence-postgres/u)
+  assert.match(patch, /id: session-persistence-jsonl[\s\S]*?disabled: !!js/u)
   const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
   assert.equal(manifest.dsh.bundle.patch, './cordis.patch.yml')
   assert.equal(manifest.exports['./profile'].default, './dist/profile.js')

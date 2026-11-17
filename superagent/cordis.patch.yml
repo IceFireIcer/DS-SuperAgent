@@ -3,6 +3,15 @@
 - insert:
     - id: superagent-profile
       name: ds-superagent/profile
+    # The managed profile uses the same PostgreSQL store family for the native
+    # Session log. Connection settings remain in the trusted Host environment.
+    - id: session-persistence-postgres
+      name: ds-superagent/session-persistence-postgres
+      disabled: !!js "!process.env.DS_SUPERAGENT_POSTGRES?.trim()"
+      config: !!js "process.env.DS_SUPERAGENT_POSTGRES?.trim() ? JSON.parse(process.env.DS_SUPERAGENT_POSTGRES) : {}"
+
+- id: session-persistence-jsonl
+  disabled: !!js "Boolean(process.env.DS_SUPERAGENT_POSTGRES?.trim())"
 
 - id: bot
   config:

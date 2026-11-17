@@ -202,7 +202,7 @@ test('a Host takeover preserves a waiting human question and lets the answer con
     const ticket = await transaction.get('ticket', receipt.ticketId)
     await transaction.replace('ticket', receipt.ticketId, { ...ticket, constraint: { kind: 'waiting-human', attentionId, reason: attention.question } })
     const assignment = await transaction.get('assignment', receipt.ticketId)
-    await transaction.replace('assignment', receipt.ticketId, { ...assignment, state: 'running', runtimeToken: 'prior-host-runtime' })
+    await transaction.replace('assignment', receipt.ticketId, { ...assignment, state: 'ended', runtimeToken: 'prior-host-runtime' })
     const intent = await transaction.get('intent', receipt.ticketId)
     await transaction.replace('intent', receipt.ticketId, { ...intent, state: 'pending', reason: 'waiting-human' })
   })

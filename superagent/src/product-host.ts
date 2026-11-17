@@ -11,6 +11,7 @@ import { createClientGateway, type ClientGatewayOptions } from './client-gateway
 import type { ClientAccess, ClientCapability, ClientIdentity } from './client-access.js'
 import { NativeSessions } from './native-sessions.js'
 import { SqliteStorage } from './storage.js'
+import { PostgresStorage, type PostgresOptions } from './postgres-storage.js'
 import { LocalEnvironment } from './local-environment.js'
 import type { ExecutionEnvironment } from './environment.js'
 import { RemoteEnvironment, type PersistedRemoteEnvironmentState } from './remote-environment.js'
@@ -40,7 +41,9 @@ import type { LegacyPresetCopy, PresetRole } from './role-presets.js'
 import { productStatusPublisher, productWatchdogProbe } from './product-watchdog.js'
 import { createProductSupervision } from './product-supervision.js'
 
-export interface ProductHostConfig { databasePath: string; workspaceRoot?: string; instanceId?: string; actorId?: string; main?: RoleModel; router?: RoleModel; worker?: RoleModel; timeoutMs?: number;
+export interface ProductHostConfig { databasePath?: string; postgres?: PostgresOptions; stateRoot?: string;
+  hostId?: string; leaseMs?: number; workspaceRoot?: string; instanceId?: string; actorId?: string;
+  main?: RoleModel; router?: RoleModel; worker?: RoleModel; timeoutMs?: number;
   /** Trusted local Office runtime supplied by the product Host, never a window request. */
   office?: { node: string; cli: string; skillsPath: string };
   /** Trusted process configuration; an external Watchdog reads this atomic status file. */
@@ -156,6 +159,13 @@ export async function createProductHost(context: Context, config: ProductHostCon
   const instanceId = config.instanceId ?? 'personal'
   const actorId = config.actorId ?? 'local-user'
   identifier(instanceId, 'instanceId'); identifier(actorId, 'actorId')
+  if (Boolean(config.databasePath) === Boolean(config.postgres)) {
+    throw new CoreError('INVALID_CONFIG', 'A product Host needs exactly one SQLite database path or PostgreSQL connection.')
+  }
+  const stateRoot = config.stateRoot ?? (config.databasePath ? dirname(config.databasePath) : undefined)
+  if (!stateRoot || !isAbsolute(stateRoot)) {
+    throw new CoreError('INVALID_CONFIG', 'A product Host needs an absolute local state root.')
+  }
   const credentialRecords = context.get('credentials') as RemoteCredentialRecords | undefined
   const remoteSecrets = credentialRecords && typeof credentialRecords.readRecord === 'function'
     && typeof credentialRecords.modifyRecord === 'function' && typeof credentialRecords.deleteRecord === 'function'
@@ -176,7 +186,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
     return { provider: value.provider, model: value.model }
   }
   const sessions = new NativeSessions(context, { main: route(config.main), router: route(config.router), worker: route(config.worker), ...(config.timeoutMs === undefined ? {} : { timeoutMs: config.timeoutMs }) })
-  const storage = await SqliteStorage.open(config.databasePath)
+  const storage = config.postgres
+    ? await PostgresStorage.open(config.postgres)
+    : await SqliteStorage.open(config.databasePath!)
   const environments: ExecutionEnvironment[] = []
   const remoteEnvironments = new Map<string, { environment: RemoteEnvironment; label: string; pairedAt: number;
     credentialReference: string }>()
@@ -196,7 +208,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
   let feishuLegacyConflict = false
   let feishuSelectionActive = false
   let githubSelectionActive = false
-  const proactiveRoot = join(dirname(config.databasePath), 'proactive-preparations')
+  const proactiveRoot = join(stateRoot, 'proactive-preparations')
   const proactive = { rootDirectory: proactiveRoot, prepareTimeoutMs: 30_000, pauseSourceInstanceId: 'product-desktop',
     onPrepared: (tx: import('./storage.js').AsyncTx, run: import('./proactive.js').ProactiveRun) => workRouter!.enqueue(tx, run),
     route: (runId: string, signal: AbortSignal) => workRouter!.route(runId, signal),
@@ -259,7 +271,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
       root = await realpath(path)
       if (!(await stat(root)).isDirectory()) throw new Error('Not a directory')
     } catch { throw new CoreError('PATH_DENIED', 'The selected working directory does not exist or cannot be read.') }
-    const core = await realpath(dirname(config.databasePath))
+    const core = await realpath(stateRoot)
     const userHome = await realpath(join(homedir(), '.dsh')).catch(() => undefined)
     const overlap = (left: string, right: string) => {
       const path = relative(left, right)
@@ -274,7 +286,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
     allowedActorIds: [actorId], permissions: ['read', 'write', 'search', 'command'], allowShell: true,
     commands: config.office ? { office: { argv: [config.office.node, config.office.cli], timeoutMs: 10000 } } : {},
     ...(config.office ? { skillsPath: config.office.skillsPath } : {}),
-    assetsPath: join(dirname(config.databasePath), 'assets', directoryId(root)) })
+    assetsPath: join(stateRoot, 'assets', directoryId(root)) })
   const publicLlm = () => context.get('llm') as unknown as PublicLlm
   const settingsSections = (settings: PublicSettings) => new Map(settings.describe({ redactSecrets: true }).map(section => [section.ns, section]))
   const derivedKeyRef = (provider: string) => `${provider.toUpperCase().replace(/[^A-Z0-9]+/gu, '_')}_API_KEY`
@@ -520,7 +532,10 @@ export async function createProductHost(context: Context, config: ProductHostCon
       ...(config.workerMcpTool || browserAdapter ? { hostCapabilities: {
         ...(config.workerMcpTool ? { mcp: true } : {}), ...(browserAdapter ? { browser: true } : {}),
       } } : {}) }, {}, sessions,
-      environments, {}, {}, {}, channel ? { channel } : {}, {}, proactive, attachments)
+      environments, {}, {}, {}, channel ? { channel } : {},
+      { ...(config.hostId === undefined ? {} : { hostId: config.hostId }),
+        ...(config.leaseMs === undefined ? {} : { leaseMs: config.leaseMs }) }, proactive, attachments)
+    await engine.acquireHost()
     workRouter = new ProactiveWork(storage, instanceId, engine, sessions, actorId)
     const records = credentialRecords as ProductCredentialRecords | undefined
     if (records && typeof records.readRecord === 'function' && typeof records.modifyRecord === 'function'
@@ -546,7 +561,6 @@ export async function createProductHost(context: Context, config: ProductHostCon
     if (browserAdapter) engine.configureWorkerBrowser(browserAdapter)
     if (environments[0] && config.workspaceRoot) await engine.addWorkDirectory({ instanceId,
       commandId: `bootstrap:${environments[0].config.id}`, environment: environments[0] })
-    await engine.acquireHost()
     if (feishuRuntime && config.feishu?.api.appSecret) {
       const selected = await storage.transaction(instanceId, tx => tx.get<{ resourceId: string | null }>(
         'product-feishu-credential', feishuRuntime!.sourceBinding.sourceInstanceId))

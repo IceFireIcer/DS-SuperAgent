@@ -2511,7 +2511,8 @@ export class Execution {
     for (let pageCount = 0; pageCount < 10; pageCount++) {
       const page = await transaction.scan<Assignment>('assignment', { limit: 100, ...(cursor ? { after: cursor } : {}) })
       for (const item of page.items) {
-        if (item.value.state === 'ended' || item.value.runtimeToken === this.runtimeToken) continue
+        if (item.value.runtimeToken === this.runtimeToken) continue
+        if (item.value.state === 'ended' && !await this.endedAssignmentNeedsTakeover(transaction, item.value.ticketId)) continue
         ticketIds.push(item.value.ticketId)
       }
       if (!page.cursor) return ticketIds
@@ -2519,6 +2520,22 @@ export class Execution {
       if (pageCount === 9) throw new CoreError('HOST_TAKEOVER_BUDGET', 'The Host takeover Assignment scan exceeded its 1000-record budget.')
     }
     return ticketIds
+  }
+
+  private async endedAssignmentNeedsTakeover(transaction: AsyncTx, ticketId: string) {
+    const ticket = await transaction.get<Work['ticket']>('ticket', ticketId)
+    if (!ticket || ticket.state !== 'open') return false
+    const intent = await transaction.get<Work['intent']>('intent', ticketId)
+    const attention = await this.attentions.current(transaction, ticketId)
+    const stop = await this.activeStop(transaction, ticketId)
+    if (intent?.state === 'pending' || ticket.constraint || attention?.status === 'waiting' || stop) return true
+    const jobs = this.jobs ? await this.jobs.listIn(transaction, ticketId) : []
+    if (jobs.some(job => ['starting', 'running', 'cancelling', 'unknown'].includes(job.state))) return true
+    const subagents = this.subagents ? await this.subagents.listIn(transaction, ticketId) : []
+    if (subagents.some(subagent => ['running', 'cancelling', 'unknown'].includes(subagent.state))) return true
+    if (await this.effects.hasUnknownScopeInTransaction(transaction, ticketId) || await mcpBlockIn(transaction, ticketId)) return true
+    if (this.browser && (await this.browser.unconfirmed(transaction, ticketId)).length) return true
+    return this.previewCleanupPending(transaction, ticketId)
   }
 
   private async takeOverTicket(ticketId: string, takeoverId: string): Promise<HostTakeoverTicket | undefined> {
@@ -2529,7 +2546,7 @@ export class Execution {
     const snapshot = await this.storage.transaction(this.instanceId, async transaction => {
       const ticket = await transaction.get<Work['ticket']>('ticket', ticketId)
       const assignment = await transaction.get<Assignment>('assignment', ticketId)
-      if (!assignment || assignment.state === 'ended' || assignment.runtimeToken === this.runtimeToken) return undefined
+      if (!assignment || assignment.runtimeToken === this.runtimeToken) return undefined
       const stop = await this.recoverStaleStop(transaction, ticketId, 'HOST_REPLACED')
       const intent = await transaction.get<Work['intent']>('intent', ticketId)
       const attention = await this.attentions.current(transaction, ticketId)

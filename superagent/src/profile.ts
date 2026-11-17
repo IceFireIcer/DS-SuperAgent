@@ -4,13 +4,14 @@ import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import { createProductHost, type ProductHostConfig } from './product-host.js'
 import { CoreError } from './model.js'
+import type { PostgresOptions } from './postgres-storage.js'
 
 export interface SuperagentProfilePaths {
   root: string
   databasePath: string
 }
 
-export type SuperagentProfileConfig = Omit<ProductHostConfig, 'databasePath'>
+export type SuperagentProfileConfig = Omit<ProductHostConfig, 'databasePath' | 'stateRoot' | 'postgres'>
 
 /** The app's already-mounted Office payload is the only automatic Office grant. */
 export function officeProfileConfig(env: NodeJS.ProcessEnv = process.env): ProductHostConfig['office'] | undefined {
@@ -38,6 +39,30 @@ export function profilePaths(env: NodeJS.ProcessEnv = process.env): SuperagentPr
   }
   const root = join(home, 'core')
   return { root, databasePath: join(root, 'state.sqlite') }
+}
+
+/** Trusted deployment configuration; connection secrets stay in the Host process environment. */
+export function postgresProfileConfig(env: NodeJS.ProcessEnv = process.env): PostgresOptions | undefined {
+  const value = env.DS_SUPERAGENT_POSTGRES
+  if (value === undefined || value.trim() === '') return undefined
+  if (Buffer.byteLength(value) > 65_536) throw new CoreError('INVALID_CONFIG', 'The PostgreSQL profile configuration is too large.')
+  let parsed: unknown
+  try { parsed = JSON.parse(value) }
+  catch { throw new CoreError('INVALID_CONFIG', 'The PostgreSQL profile configuration must be JSON.') }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new CoreError('INVALID_CONFIG', 'The PostgreSQL profile configuration must be an object.')
+  }
+  return parsed as PostgresOptions
+}
+
+function leaseFromProfile(env: NodeJS.ProcessEnv): number | undefined {
+  const value = env.DS_SUPERAGENT_LEASE_MS
+  if (value === undefined || value === '') return undefined
+  const leaseMs = Number(value)
+  if (!Number.isInteger(leaseMs) || leaseMs < 10 || leaseMs > 3_600_000) {
+    throw new CoreError('INVALID_CONFIG', 'The Host lease must be between 10 and 3600000 milliseconds.')
+  }
+  return leaseMs
 }
 
 /** Opt-in source settings come from the trusted Host process, never a model or browser request. */
@@ -96,6 +121,9 @@ export const inject = ['sessionPersistence', 'agents', 'sessions']
 export async function apply(context: Context, config: SuperagentProfileConfig = {}) {
   const paths = profilePaths()
   mkdirSync(paths.root, { recursive: true })
+  const postgres = postgresProfileConfig()
+  const hostId = config.hostId ?? process.env.DS_SUPERAGENT_HOST_ID
+  const leaseMs = config.leaseMs ?? leaseFromProfile(process.env)
   const workspaceRoot = config.workspaceRoot ?? process.env.DS_BOT_WORKSPACE
   if (workspaceRoot) mkdirSync(workspaceRoot, { recursive: true })
   const gatewayPort = process.env.DS_SUPERAGENT_CLIENT_PORT
@@ -144,7 +172,10 @@ export async function apply(context: Context, config: SuperagentProfileConfig = 
     ...(feishuConfigurationError ? { feishuConfigurationError } : {}),
     ...(github ? { github } : {}),
     ...(githubConfigurationError ? { githubConfigurationError } : {}),
-    databasePath: paths.databasePath,
+    ...(hostId ? { hostId } : {}),
+    ...(leaseMs === undefined ? {} : { leaseMs }),
+    stateRoot: paths.root,
+    ...(postgres ? { postgres } : { databasePath: paths.databasePath }),
   })
   context.provide('superagentProduct', host)
   context.effect(() => () => host.close())

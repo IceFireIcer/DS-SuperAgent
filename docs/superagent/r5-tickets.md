@@ -22,6 +22,8 @@
 
 2026-11-16 后续代码审计重开 R5-22/#114，发现设置页只显示最近 occurrence。现已补逐次发生历史、每条关联工作回查及定向 UI 验证，重新收口 #114；上述增量记录只代表当时状态。
 
+2026-11-17 收口 R5-33/#125：产品 Host 支持共享 PostgreSQL 业务库与 Session provider，托管 profile 在租约替换前取得新 epoch，并把真实 ended waiting-human Assignment 纳入接管对账。真实两进程测试恢复同一 Main/Router/Worker 工作；分层窄测继续覆盖停止、unknown、设备作业、客户端游标、业务提交失败和 Session writer epoch。详见[实施记录](implementation/r5-33.md)及[双轴复核](implementation/reviews/r5-33.md)。真实服务器、第二设备、持续四目标与飞书租户仍分别归 T58/T55 或暂缓。
+
 ## 新票映射
 
 | 计划 ID | GitHub Issue / 交付行为 | 直接阻塞 |
