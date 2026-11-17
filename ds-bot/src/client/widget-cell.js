@@ -16,6 +16,12 @@ const VIEW_UI = { t: viewT, Markdown: MarkdownText }
 const Card = props => h(ViewUi.Provider, { value: VIEW_UI }, h(WidgetCard, props))
 const withUi = Component => props => h(ViewUi.Provider, { value: VIEW_UI }, h(Component, props))
 
+/** A structured work card rendered in Main's existing card stack, not the Worker transcript. */
+export function ProductWorkView({ title, view, answer, onSubmit, busy = false }) {
+  return h('div', { className: 'bt-main-work-view' },
+    h(Card, { title, view, ...(onSubmit ? { onSubmit, busy } : { settled: true, answer }) }))
+}
+
 // Direct renders (tests, history) still see ds-bot's labels.
 export const WidgetView = withUi(CoreWidgetView)
 export const ViewMenuList = withUi(CoreViewMenuList)

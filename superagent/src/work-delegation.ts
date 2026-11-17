@@ -18,6 +18,7 @@ import type { EnvironmentKind } from './environment.js'
 import type { EnvironmentLocation } from './environment.js'
 import type { ExecutionSelectionView } from './execution-target.js'
 import { validateRequiredCapabilities, type CapabilityId } from './capability-locations.js'
+import type { ProductViewAnswer, ProductViewCard } from './product-views.js'
 
 export interface MainWorkIntent {
   goal: string
@@ -81,6 +82,7 @@ export interface MainWorkOutcome {
   summary: string
   evidence: string
   artifacts: { path: string; bytes: number; sha256: string; reference?: unknown }[]
+  view?: ProductViewCard
   reportId?: string
   nextStep: string
   updatedAt: number
@@ -342,7 +344,7 @@ export interface MainWorkTicketSnapshot {
   setupCode?: string
   executionLocation?: EnvironmentLocation | null
   executionSelection?: ExecutionSelectionView
-  report?: { id: string; result: string; evidence: string; artifacts: MainWorkOutcome['artifacts'] }
+  report?: { id: string; result: string; evidence: string; artifacts: MainWorkOutcome['artifacts']; view?: ProductViewCard }
   control?: MainWorkControl
 }
 
@@ -365,6 +367,8 @@ export interface MainWorkControl {
     answeredAt?: number
     answeredBy?: string
     answerText?: string
+    view?: ProductViewCard
+    answerView?: ProductViewAnswer
   }
   stop?: {
     id: string
@@ -1606,6 +1610,7 @@ export class WorkDelegation {
     if (report && status === 'success') return { version: 1, workBriefId, workItemId, ticketId: snapshot.ticketId, status: 'success',
       summary: report.result.slice(0, 2048), evidence: report.evidence.slice(0, 2048),
       artifacts: report.artifacts.slice(0, 10).map(({ path, bytes, sha256, reference }) => ({ path, bytes, sha256, ...(reference === undefined ? {} : { reference }) })),
+      ...(report.view ? { view: structuredClone(report.view) } : {}),
       reportId: report.id, nextStep: 'Review the verified result and artifact references.', updatedAt: this.now() }
     const details = {
       blocked: ['The Worker could not prepare the configured local workspace.', `Setup status: ${snapshot.setupCode ?? snapshot.reason}.`, 'Resolve the workspace blocker before retrying.'],

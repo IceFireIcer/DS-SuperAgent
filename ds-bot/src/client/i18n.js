@@ -134,6 +134,8 @@ const ZH = {
   'MCP change pending confirmation. Retry the same command.': 'MCP 设置结果待确认，请用同一命令重试。',
   'Retry pending change': '重试待确认的更改',
   'Browser resources': '浏览器资源',
+  'View version': '视图版本', 'Answer this view to continue the same work.': '请答复此视图以继续同一工作。',
+  'This view is no longer active.': '此视图已不再有效。',
   'The local Host has no CDP browser bridge. Browser work remains unavailable.': '本地 Host 没有 CDP 浏览器桥；浏览器工作当前不可用。',
   'Each browser keeps an isolated profile. A local Worker needs an exact work-item grant before navigation or a read-only snapshot.': '每个浏览器使用独立 profile；本地 Worker 必须获得精确工作项授权，才能导航或读取只读快照。',
   'Refresh browser resources': '刷新浏览器资源',

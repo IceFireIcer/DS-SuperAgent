@@ -5,6 +5,7 @@ import type { SourceEvent, SourceEvents } from './source-events.js'
 import type { Effects } from './effects.js'
 import type { WorkInput, WorkInputs } from './work-inputs.js'
 import type { Deliveries } from './deliveries.js'
+import type { ProductViewAnswer, ProductViewCard } from './product-views.js'
 
 export interface Attention {
   id: string
@@ -22,6 +23,8 @@ export interface Attention {
   answeredAt?: number
   answeredBy?: string
   answerText?: string
+  view?: ProductViewCard
+  answerView?: ProductViewAnswer
   answerCommandId?: string
   answerSourceEventId?: string
   supersededAt?: number
@@ -44,7 +47,15 @@ export class Attentions {
     private readonly now: () => number = Date.now,
   ) {}
 
-  async ask(tx: AsyncTx, request: { ticketId: string; assignmentId: string; sessionId: string; question: string; options: string[]; input?: WorkInput }) {
+  ask(tx: AsyncTx, request: { ticketId: string; assignmentId: string; sessionId: string; question: string; options: string[]; input?: WorkInput }) {
+    return this.create(tx, request)
+  }
+
+  askView(tx: AsyncTx, request: { ticketId: string; assignmentId: string; sessionId: string; title: string; view: ProductViewCard; input?: WorkInput }) {
+    return this.create(tx, { ...request, question: request.title ? `View: ${request.title}` : 'View card', options: [], view: request.view })
+  }
+
+  private async create(tx: AsyncTx, request: { ticketId: string; assignmentId: string; sessionId: string; question: string; options: string[]; input?: WorkInput; view?: ProductViewCard }) {
     identifier(request.ticketId, 'ticketId'); identifier(request.assignmentId, 'assignmentId'); identifier(request.sessionId, 'sessionId')
     if (!request.question.trim() || Buffer.byteLength(request.question) > 4096) throw new CoreError('INVALID_INPUT', 'A human question needs bounded nonempty text.')
     if (!Array.isArray(request.options) || request.options.length > 10 || request.options.some(option => !option.trim() || Buffer.byteLength(option) > 512)) throw new CoreError('INVALID_ATTENTION', 'Attention options must contain at most ten bounded labels.')
@@ -71,7 +82,8 @@ export class Attentions {
       const previous = await tx.get<Attention>('attention', previousHead.attentionId)
       const options = [...new Set(request.options.map(option => option.trim()).filter(Boolean))]
       if (previous?.status === 'waiting' && previous.question.trim() === request.question.trim()
-        && previous.options.length === options.length && previous.options.every((option, index) => option === options[index])) {
+        && previous.options.length === options.length && previous.options.every((option, index) => option === options[index])
+        && JSON.stringify(previous.view ?? null) === JSON.stringify(request.view ?? null)) {
         return previous
       }
       if (previous?.status === 'waiting') await tx.replace('attention', previous.id, { ...previous, status: 'superseded', supersededAt: this.now(), supersededBy: id })
@@ -79,6 +91,7 @@ export class Attentions {
     const attention: Attention = { id, instanceId: this.instanceId, ticketId: request.ticketId, assignmentId: request.assignmentId, sessionId: request.sessionId,
       question: request.question, options: [...new Set(request.options.map(option => option.trim()).filter(Boolean))], destination,
       ...(inputEvent || originalEvent ? { questionSourceEventId: inputEvent?.id ?? originalEvent!.id } : {}), status: 'waiting', sequence, createdAt: this.now() }
+    if (request.view) attention.view = structuredClone(request.view)
     await tx.insert('attention', id, attention)
     if (!await tx.replace('attention-head', headKey(request.ticketId), { attentionId: id })) await tx.insert('attention-head', headKey(request.ticketId), { attentionId: id })
     await tx.replace('ticket', ticket.id, { ...ticket, constraint: { kind: 'waiting-human', attentionId: id, reason: request.question } })
@@ -92,7 +105,7 @@ export class Attentions {
   }
 
   async answer(tx: AsyncTx, request: { ticketId: string; attentionId: string; text: string; commandId: string; actorId: string;
-    sourceEventId?: string; expectedGeneration?: string; expectedVersion?: number }) {
+    sourceEventId?: string; expectedGeneration?: string; expectedVersion?: number; viewAnswer?: ProductViewAnswer }) {
     identifier(request.ticketId, 'ticketId'); identifier(request.attentionId, 'attentionId'); identifier(request.commandId, 'commandId'); identifier(request.actorId, 'actorId')
     if (!request.text.trim() || Buffer.byteLength(request.text) > 65536) throw new CoreError('INVALID_INPUT', 'An Attention answer needs bounded nonempty text.')
     const attention = await tx.get<Attention>('attention', request.attentionId)
@@ -118,7 +131,8 @@ export class Attentions {
       reason: `Answer to ${attention.id}`, dispatch: true })
     const answeredAt = this.now()
     const answered: Attention = { ...attention, status: 'answered', answeredAt, answeredBy: request.actorId, answerText: request.text,
-      answerCommandId: request.commandId, answerSourceEventId: answerEventId }
+      answerCommandId: request.commandId, answerSourceEventId: answerEventId,
+      ...(request.viewAnswer ? { answerView: structuredClone(request.viewAnswer) } : {}) }
     await tx.replace('attention', attention.id, answered)
     const updatedTicket = (await tx.get<Work['ticket']>('ticket', request.ticketId))!
     const { constraint: _constraint, ...openTicket } = updatedTicket

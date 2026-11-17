@@ -259,6 +259,9 @@ var ZH = {
   "MCP change pending confirmation. Retry the same command.": "MCP 设置结果待确认，请用同一命令重试。",
   "Retry pending change": "重试待确认的更改",
   "Browser resources": "浏览器资源",
+  "View version": "视图版本",
+  "Answer this view to continue the same work.": "请答复此视图以继续同一工作。",
+  "This view is no longer active.": "此视图已不再有效。",
   "The local Host has no CDP browser bridge. Browser work remains unavailable.": "本地 Host 没有 CDP 浏览器桥；浏览器工作当前不可用。",
   "Each browser keeps an isolated profile. A local Worker needs an exact work-item grant before navigation or a read-only snapshot.": "每个浏览器使用独立 profile；本地 Worker 必须获得精确工作项授权，才能导航或读取只读快照。",
   "Refresh browser resources": "刷新浏览器资源",
@@ -7628,6 +7631,13 @@ var viewT = (key, params) => key === "Send" ? t("Send to Bot") : t(key, params);
 var VIEW_UI = { t: viewT, Markdown: import_dsh_client_ui_primitives.MarkdownText };
 var Card = (props) => (0, import_react12.createElement)(ViewUi.Provider, { value: VIEW_UI }, (0, import_react12.createElement)(WidgetCard, props));
 var withUi = (Component) => (props) => (0, import_react12.createElement)(ViewUi.Provider, { value: VIEW_UI }, (0, import_react12.createElement)(Component, props));
+function ProductWorkView({ title, view, answer, onSubmit, busy = false }) {
+  return (0, import_react12.createElement)(
+    "div",
+    { className: "bt-main-work-view" },
+    (0, import_react12.createElement)(Card, { title, view, ...onSubmit ? { onSubmit, busy } : { settled: true, answer } })
+  );
+}
 var WidgetView2 = withUi(WidgetView);
 var ViewMenuList2 = withUi(ViewMenuList);
 function PendingView({ sessionId, view, actions, inline }) {
@@ -26359,6 +26369,7 @@ function applyProduct(ctx) {
     const control = work.control;
     const [artifactBusy, setArtifactBusy] = (0, import_react63.useState)(null);
     const [artifactError, setArtifactError] = (0, import_react63.useState)(null);
+    const [viewError, setViewError] = (0, import_react63.useState)(null);
     const downloadArtifact = async (artifact) => {
       if (!state.binding) return;
       setArtifactBusy(artifact.path);
@@ -26456,6 +26467,30 @@ function applyProduct(ctx) {
         setControlBusy(null);
       }
     };
+    const answerView = async (action, values) => {
+      if (!state.binding || !control || !assignment || !attention?.view) return;
+      setControlBusy("work-answer-view");
+      setViewError(null);
+      try {
+        await productCall("work-answer-view", {
+          instanceId: state.binding.instanceId,
+          commandId: crypto.randomUUID(),
+          workItemId: control.workItemId,
+          ticketId: control.ticketId,
+          expectedGeneration: assignment.generation,
+          attentionId: attention.id,
+          attentionVersion: attention.version,
+          action,
+          values
+        });
+        await refreshMain(state.binding);
+      } catch (error) {
+        setViewError(error.message);
+        await refreshMain(state.binding);
+      } finally {
+        setControlBusy(null);
+      }
+    };
     return (0, import_react63.createElement)(
       "article",
       {
@@ -26519,7 +26554,27 @@ function applyProduct(ctx) {
         },
         controlBusy === "work-reconcile-stop" ? t("Checking device stop…") : t("Check device stop")
       ) : null,
-      attention ? (0, import_react63.createElement)(
+      attention?.view ? (0, import_react63.createElement)(
+        "div",
+        { className: "bt-main-work-attention" },
+        (0, import_react63.createElement)("p", { className: "bt-main-work-id" }, `${t("View version")} ${attention.version} · ${attention.status}`),
+        (0, import_react63.createElement)(ProductWorkView, {
+          title: attention.view.title,
+          view: attention.view.view,
+          answer: attention.answerView ?? null,
+          busy: controlBusy === "work-answer-view",
+          ...attention.status === "waiting" && canCommand && control.permissions.canAnswer && assignment ? { onSubmit: answerView } : {}
+        }),
+        attention.status === "waiting" ? (0, import_react63.createElement)(
+          "p",
+          { className: "bt-main-work-detail" },
+          t("Answer this view to continue the same work.")
+        ) : attention.status === "answered" ? (0, import_react63.createElement)(
+          "p",
+          { className: "bt-main-work-detail" },
+          `${t("Answered by")} ${attention.answeredBy ?? control.permissions.actorId}`
+        ) : (0, import_react63.createElement)("p", { className: "bt-main-work-detail" }, t("This view is no longer active."))
+      ) : attention ? (0, import_react63.createElement)(
         "div",
         { className: "bt-main-work-attention" },
         (0, import_react63.createElement)("p", { className: "bt-main-work-id" }, `${t("Question version")} ${attention.version} · ${attention.status}`),
@@ -26545,6 +26600,7 @@ function applyProduct(ctx) {
         ) : (0, import_react63.createElement)("p", { className: "bt-main-work-detail" }, attention.status === "answered" ? `${t("Answered by")} ${attention.answeredBy ?? control.permissions.actorId}${attention.answerText ? `: ${attention.answerText}` : ""}` : t("This question is no longer active."))
       ) : null,
       controlError ? (0, import_react63.createElement)("p", { className: "bt-main-error", role: "alert" }, controlError) : null,
+      viewError ? (0, import_react63.createElement)("p", { className: "bt-main-error", role: "alert" }, viewError) : null,
       work.receipt.reason ? (0, import_react63.createElement)("p", { className: "bt-main-error" }, `${t("Work receipt")}: ${work.receipt.reason}`) : null,
       work.receipt.status === "routing" ? (0, import_react63.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${work.receipt.nextStep}`) : null,
       (0, import_react63.createElement)("p", { className: "bt-main-work-detail" }, `${t("Constraints")}: ${work.brief.constraints}`),
@@ -26571,6 +26627,7 @@ function applyProduct(ctx) {
         (0, import_react63.createElement)("p", null, work.outcome.summary),
         (0, import_react63.createElement)("p", { className: "bt-main-work-detail" }, `${t("Verification")}: ${work.outcome.evidence}`),
         (0, import_react63.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${work.outcome.nextStep}`),
+        work.outcome.view ? (0, import_react63.createElement)(ProductWorkView, { title: work.outcome.view.title, view: work.outcome.view.view }) : null,
         work.outcome.artifacts.map((artifact) => (0, import_react63.createElement)(
           "p",
           { key: artifact.path, className: "bt-main-work-artifact" },
@@ -28312,7 +28369,7 @@ function applyProduct(ctx) {
     );
   }
   const shadow = (name, component) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200 }, component));
-  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SCHEDULE_CSS + MODEL_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_EXECUTION_CSS + LEARNING_CSS, "main"), "superagent: existing chat styles");
+  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SCHEDULE_CSS + MODEL_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_EXECUTION_CSS + WIDGET_CSS2 + LEARNING_CSS, "main"), "superagent: existing chat styles");
   ctx.effect(() => {
     const style = installStyles(themeCss(allThemes().deepseek), "main-theme");
     return () => style.remove();

@@ -32,6 +32,7 @@ import { resolveProductAttachments } from './product-attachments.js'
 import { workerMcpName, workerMcpTool, type WorkerMcpBinding } from './worker-mcp-tool.js'
 import { WorkerMcpCalls, mcpBlockIn, mcpCallPageIn } from './worker-mcp-calls.js'
 import { BrowserOutcomeUnknown, BrowserResources, type BrowserWork } from './browser-resources.js'
+import { parseInteractiveView, parseReportView, sanitizeProductView, type ProductViewCard } from './product-views.js'
 
 const maxRecoveryAttempts = 3
 const maxDeliveryAttempts = 5
@@ -135,7 +136,7 @@ export interface StopState {
 }
 
 interface StopHead { stopId: string }
-export interface ReadyReport { id: string; ticketId: string; assignmentId: string; sessionId: string; kind: 'ready'; result: string; evidence: string; artifacts: Artifact[]; toolFacts: ToolFact[]; inputId?: string; directionVersion: number; createdAt: number }
+export interface ReadyReport { id: string; ticketId: string; assignmentId: string; sessionId: string; kind: 'ready'; result: string; evidence: string; artifacts: Artifact[]; toolFacts: ToolFact[]; view?: ProductViewCard; inputId?: string; directionVersion: number; createdAt: number }
 export interface Artifact { path: string; bytes: number; sha256: string; reference?: EnvironmentAssetReference }
 export interface ToolFact { tool: string; outcome: 'success' | 'failed'; output: Record<string, unknown> }
 export interface SetupState { assignmentId: string; state: 'failed' | 'ready' | 'pending'; output?: Record<string, unknown>; code?: string }
@@ -1700,6 +1701,25 @@ export class Execution {
           })
         },
       }] : []),
+      ...(trigger.source.sourceInstanceId === 'product-desktop' ? [{
+        name: 'show_view',
+        description: 'Ask the user to answer one validated view card, then stop this Worker turn until the exact current work is resumed. Use report_ready with a display-only view for a completed result.',
+        parameters: { title: { type: 'string' as const }, view: { type: 'string' as const, required: true as const } },
+        execute: async (args: Record<string, string>) => {
+          if (reported || askedAttention) throw new CoreError('ATTENTION_ACTIVE', 'The Worker turn has already completed or is waiting for a human.')
+          const check = sanitizeProductView(parseInteractiveView(args.title ?? '', args.view),
+            bound ? text => bound.sanitize(text) : text => text)
+          askedAttention = await this.storage.transaction(this.instanceId, async transaction => {
+            const current = await transaction.get<Assignment>('assignment', ticketId)
+            if (current?.id !== assignment.id || current.state !== 'running') throw new CoreError('STALE_ASSIGNMENT', 'The asking Assignment is no longer current.')
+            const attention = await this.attentions.askView(transaction, { ticketId, assignmentId: assignment.id, sessionId: assignment.sessionId,
+              title: check.title, view: check, ...(input ? { input } : {}) })
+            if (input) await this.inputs.completeDelivery(transaction, input.id, 'attention')
+            return attention
+          })
+          return JSON.stringify({ attentionId: askedAttention.id, title: check.title, view: check.view })
+        },
+      }] : []),
       {
         name: 'ask_human',
         description: 'Ask one concise structured question when a human decision is required. Consequential or ambiguous actions must wait for an authorized answer.',
@@ -1720,9 +1740,11 @@ export class Execution {
       },
       {
       name: 'report_ready', description: 'Record a completed answer and concrete verification evidence for the original request.',
-      parameters: { result: { type: 'string', required: true }, evidence: { type: 'string', required: true }, ...(bound ? { artifacts: { type: 'string' as const, required: true as const } } : {}) },
+      parameters: { result: { type: 'string', required: true }, evidence: { type: 'string', required: true }, view: { type: 'string' as const }, ...(bound ? { artifacts: { type: 'string' as const, required: true as const } } : {}) },
       execute: async (args, signal) => {
         if (askedAttention) throw new CoreError('ATTENTION_ACTIVE', 'A ready report cannot be submitted while a human answer is pending.')
+        const reportView = args.view === undefined ? undefined
+          : sanitizeProductView(parseReportView(args.view), bound ? text => bound.sanitize(text) : text => text)
         for (const value of [args.result!, args.evidence!]) if (!value?.trim() || Buffer.byteLength(value) > 16384) throw new CoreError('INVALID_REPORT', 'A ready report needs bounded nonempty result and verification evidence.')
         if (bound) {
           const lastWrite = toolFacts.findLastIndex(fact => (fact.tool === 'write_file' || fact.tool === 'stage_attachment') && fact.outcome === 'success')
@@ -1765,7 +1787,7 @@ export class Execution {
           const existing = await transaction.get<ReadyReport>('report', ticketId)
           if (existing?.assignmentId === assignment.id && !input) return existing.id
           const report: ReadyReport = { id: randomUUID(), ticketId, assignmentId: assignment.id, sessionId: assignment.sessionId, kind: 'ready', result: bound ? bound.sanitize(args.result!) : args.result!, evidence: bound ? bound.sanitize(args.evidence!) : args.evidence!, artifacts: structuredClone(artifacts), toolFacts: structuredClone(toolFacts),
-            ...(input ? { inputId: input.id } : {}), directionVersion: input?.directionVersion ?? 1, createdAt: Date.now() }
+            ...(reportView ? { view: structuredClone(reportView) } : {}), ...(input ? { inputId: input.id } : {}), directionVersion: input?.directionVersion ?? 1, createdAt: Date.now() }
           const historyKey = `${JSON.stringify(['report-history', ticketId])}:${report.id}`
           if (!await transaction.replace('report-history', historyKey, report)) await transaction.insert('report-history', historyKey, report)
           if (!await transaction.replace('report', ticketId, report)) await transaction.insert('report', ticketId, report)

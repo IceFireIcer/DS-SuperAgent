@@ -605,6 +605,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
               ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'reason']
               : endpoint === 'work-resume' ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration']
                 : endpoint === 'work-answer' ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'attentionId', 'attentionVersion', 'text']
+              : endpoint === 'work-answer-view' ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'attentionId', 'attentionVersion', 'action', 'values']
                 : endpoint === 'supervision' ? ['instanceId', 'ticketId']
                   : endpoint === 'supervision-inspect' ? ['instanceId', 'restart']
                     : endpoint === 'supervision-decide' ? ['instanceId', 'commandId', 'proposalId', 'decision', 'fingerprint', 'reason']
@@ -1333,6 +1334,11 @@ export async function createProductHost(context: Context, config: ProductHostCon
           workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
           expectedGeneration: payload.expectedGeneration as string, attentionId: payload.attentionId as string,
           attentionVersion: payload.attentionVersion as number, text: payload.text as string })
+        if (endpoint === 'work-answer-view') return engine!.answerMainView({ instanceId, commandId,
+          workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
+          expectedGeneration: payload.expectedGeneration as string, attentionId: payload.attentionId as string,
+          attentionVersion: payload.attentionVersion as number, action: payload.action as string,
+          values: payload.values as Record<string, unknown> })
         if (endpoint === 'work-retry') return engine!.retryMainWork({ instanceId, commandId,
           workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
           expectedGeneration: payload.expectedGeneration as string, reason: payload.reason as string })

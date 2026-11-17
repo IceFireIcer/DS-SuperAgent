@@ -25,6 +25,7 @@ import { SHELL_CSS, CONVERSATION_CSS, installCompiledStyles, installStyles } fro
 import { ProductMcpSettings } from './product-mcp-settings.js'
 import { ProductBrowserSettings, PRODUCT_BROWSER_CSS } from './product-browser-settings.js'
 import { ProductExecutionSettings, PRODUCT_EXECUTION_CSS } from './product-execution.js'
+import { ProductWorkView, WIDGET_CSS } from './widget-cell.js'
 
 const clientBridge = () => window.dsBotApp?.productClient
 let activeHost = 'local'
@@ -354,6 +355,7 @@ export function applyProduct(ctx) {
     const control = work.control
     const [artifactBusy, setArtifactBusy] = useState(null)
     const [artifactError, setArtifactError] = useState(null)
+    const [viewError, setViewError] = useState(null)
     const downloadArtifact = async artifact => {
       if (!state.binding) return
       setArtifactBusy(artifact.path); setArtifactError(null)
@@ -422,6 +424,22 @@ export function applyProduct(ctx) {
         setControlBusy(null)
       }
     }
+    const answerView = async (action, values) => {
+      if (!state.binding || !control || !assignment || !attention?.view) return
+      setControlBusy('work-answer-view')
+      setViewError(null)
+      try {
+        await productCall('work-answer-view', { instanceId: state.binding.instanceId, commandId: crypto.randomUUID(),
+          workItemId: control.workItemId, ticketId: control.ticketId, expectedGeneration: assignment.generation,
+          attentionId: attention.id, attentionVersion: attention.version, action, values })
+        await refreshMain(state.binding)
+      } catch (error) {
+        setViewError(error.message)
+        await refreshMain(state.binding)
+      } finally {
+        setControlBusy(null)
+      }
+    }
     return h('article', { className: 'bt-main-work', 'aria-label': t('Work item: {goal}', { goal: work.brief.goal }),
       'data-ticket-id': control?.ticketId ?? work.receipt.ticketId, 'data-work-brief-id': work.brief.id, tabIndex: -1 },
       h('div', { className: 'bt-main-work-head' }, h('div', { className: 'bt-main-work-title' },
@@ -460,7 +478,17 @@ export function applyProduct(ctx) {
       stop?.pendingDeviceConfirmation && canCommand ? h('button', { type: 'button', className: 'bt-soft',
         disabled: Boolean(controlBusy), onClick: () => runControl('work-reconcile-stop') },
       controlBusy === 'work-reconcile-stop' ? t('Checking device stop…') : t('Check device stop')) : null,
-      attention ? h('div', { className: 'bt-main-work-attention' },
+      attention?.view ? h('div', { className: 'bt-main-work-attention' },
+        h('p', { className: 'bt-main-work-id' }, `${t('View version')} ${attention.version} · ${attention.status}`),
+        h(ProductWorkView, { title: attention.view.title, view: attention.view.view,
+          answer: attention.answerView ?? null, busy: controlBusy === 'work-answer-view',
+          ...(attention.status === 'waiting' && canCommand && control.permissions.canAnswer && assignment
+            ? { onSubmit: answerView } : {}) }),
+        attention.status === 'waiting' ? h('p', { className: 'bt-main-work-detail' },
+          t('Answer this view to continue the same work.'))
+          : attention.status === 'answered' ? h('p', { className: 'bt-main-work-detail' },
+            `${t('Answered by')} ${attention.answeredBy ?? control.permissions.actorId}`)
+            : h('p', { className: 'bt-main-work-detail' }, t('This view is no longer active.'))) : attention ? h('div', { className: 'bt-main-work-attention' },
         h('p', { className: 'bt-main-work-id' }, `${t('Question version')} ${attention.version} · ${attention.status}`),
         h('p', null, attention.question),
         attention.status === 'waiting' && canCommand && control.permissions.canAnswer && assignment
@@ -476,6 +504,7 @@ export function applyProduct(ctx) {
             ? `${t('Answered by')} ${attention.answeredBy ?? control.permissions.actorId}${attention.answerText ? `: ${attention.answerText}` : ''}`
             : t('This question is no longer active.'))) : null,
       controlError ? h('p', { className: 'bt-main-error', role: 'alert' }, controlError) : null,
+      viewError ? h('p', { className: 'bt-main-error', role: 'alert' }, viewError) : null,
       work.receipt.reason ? h('p', { className: 'bt-main-error' }, `${t('Work receipt')}: ${work.receipt.reason}`) : null,
       work.receipt.status === 'routing' ? h('p', { className: 'bt-main-work-detail' }, `${t('Next step')}: ${work.receipt.nextStep}`) : null,
       h('p', { className: 'bt-main-work-detail' }, `${t('Constraints')}: ${work.brief.constraints}`),
@@ -492,6 +521,7 @@ export function applyProduct(ctx) {
       work.outcome ? h('div', { className: 'bt-main-work-result' },
         h('p', null, work.outcome.summary), h('p', { className: 'bt-main-work-detail' }, `${t('Verification')}: ${work.outcome.evidence}`),
         h('p', { className: 'bt-main-work-detail' }, `${t('Next step')}: ${work.outcome.nextStep}`),
+        work.outcome.view ? h(ProductWorkView, { title: work.outcome.view.title, view: work.outcome.view.view }) : null,
         work.outcome.artifacts.map(artifact => h('p', { key: artifact.path, className: 'bt-main-work-artifact' },
           h('code', null, artifact.path), ' ', h('span', null, `${artifact.bytes} ${t('bytes')} · ${artifact.sha256.slice(0, 12)}`),
           artifact.reference && !state.connection?.connected ? h('button', { type: 'button', className: 'bt-soft',
@@ -1450,7 +1480,7 @@ export function applyProduct(ctx) {
         onClose: () => view.set(current => ({ ...current, connectOpen: false })) }) : null)
   }
   const shadow = (name, component) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200 }, component))
-  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SCHEDULE_CSS + MODEL_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_EXECUTION_CSS + LEARNING_CSS, 'main'), 'superagent: existing chat styles')
+  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SCHEDULE_CSS + MODEL_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_EXECUTION_CSS + WIDGET_CSS + LEARNING_CSS, 'main'), 'superagent: existing chat styles')
   ctx.effect(() => { const style = installStyles(themeCss(allThemes().deepseek), 'main-theme'); return () => style.remove() }, 'superagent: existing theme')
   shadow('main.conversation', ProductSurface)
   shadow('sidebar.workspaces', MainNavigation)

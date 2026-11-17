@@ -31,6 +31,7 @@ import type { WorkerMcpConfig } from './worker-mcp-tool.js'
 import { BrowserResources, type BrowserAdapter } from './browser-resources.js'
 import type { ProductCredentialRecords } from './product-credential-vault.js'
 import type { ProductAttachments } from './product-attachments.js'
+import { validateProductViewAnswer, type ProductViewAnswer } from './product-views.js'
 import { listSupervisorProposals, Supervisor, type SupervisorOptions, type SupervisorProposal } from './supervisor.js'
 import { boundedInteger } from './bounds.js'
 import { assertHostTakeoverSettled, loadHostTakeover, type HostTakeoverRecord, type HostTakeoverTicket } from './host-takeover.js'
@@ -394,6 +395,8 @@ export class Engine {
             ...(attention ? { attention: { id: attention.id, version: attention.sequence, status: attention.status,
               question: attention.question, options: [...attention.options], freeText: true as const,
               assignmentId: attention.assignmentId, sessionId: attention.sessionId,
+              ...(attention.view ? { view: structuredClone(attention.view) } : {}),
+              ...(attention.answerView ? { answerView: structuredClone(attention.answerView) } : {}),
               ...(attention.answeredAt === undefined ? {} : { answeredAt: attention.answeredAt }),
               ...(attention.answeredBy === undefined ? {} : { answeredBy: attention.answeredBy }),
               ...(attention.answerText === undefined ? {} : { answerText: attention.answerText }) } } : {}),
@@ -407,7 +410,8 @@ export class Engine {
             ...(conversation.setup?.state === 'failed' ? { setupCode: conversation.setup.code ?? 'SETUP_FAILED' } : {}),
             executionLocation: conversation.executionLocation,
             ...(conversation.executionSelection ? { executionSelection: conversation.executionSelection } : {}),
-            ...(report ? { report: { id: report.id, result: report.result, evidence: report.evidence, artifacts: report.artifacts } } : {}),
+            ...(report ? { report: { id: report.id, result: report.result, evidence: report.evidence, artifacts: report.artifacts,
+              ...(report.view ? { view: structuredClone(report.view) } : {}) } } : {}),
             control }
         },
         routerProfile: async () => {
@@ -3030,7 +3034,7 @@ export class Engine {
     return this.storage.transaction(this.instanceId, tx => this.deliveries.view(tx, delivery))
   }
 
-  async answerAttention(command: { commandId: string; attentionId: string; text: string; sourceEventId?: string;
+  async answerAttention(command: { commandId: string; attentionId: string; text?: string; viewAction?: string; viewValues?: Record<string, unknown>; sourceEventId?: string;
     ticketId?: string; expectedGeneration?: string; expectedVersion?: number }, receiver?: Engine,
   requireMainWorkFact = false) {
     await this.ensurePolicy()
@@ -3038,7 +3042,7 @@ export class Engine {
       if (!(receiver instanceof Engine) || receiver.instanceId !== this.instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The answer receiver must be a trusted Engine in this Instance.')
       await receiver.ensurePolicy()
     }
-    if (!command || Object.keys(command).some(key => !['commandId', 'attentionId', 'text', 'sourceEventId', 'ticketId', 'expectedGeneration', 'expectedVersion'].includes(key))) {
+    if (!command || Object.keys(command).some(key => !['commandId', 'attentionId', 'text', 'viewAction', 'viewValues', 'sourceEventId', 'ticketId', 'expectedGeneration', 'expectedVersion'].includes(key))) {
       throw new CoreError('INVALID_INPUT', 'Answering Attention accepts one exact question and bounded answer only.')
     }
     identifier(command.commandId, 'commandId'); identifier(command.attentionId, 'attentionId')
@@ -3048,10 +3052,14 @@ export class Engine {
     if (command.expectedVersion !== undefined && (!Number.isSafeInteger(command.expectedVersion) || command.expectedVersion < 1)) {
       throw new CoreError('INVALID_INPUT', 'The Attention version must be a positive integer.')
     }
-    if (typeof command.text !== 'string' || !command.text.trim() || Buffer.byteLength(command.text) > 65536) throw new CoreError('INVALID_INPUT', 'An Attention answer needs bounded nonempty text.')
+    const viewAnswer = command.viewAction !== undefined || command.viewValues !== undefined
+    if (viewAnswer ? typeof command.viewAction !== 'string' || !command.viewAction || command.viewValues === undefined
+      : typeof command.text !== 'string' || !command.text.trim() || Buffer.byteLength(command.text) > 65536) {
+      throw new CoreError('INVALID_INPUT', 'An Attention answer needs bounded text or one current view answer.')
+    }
     const commandKey = this.commandKey(command.commandId)
     const fingerprint = createHash('sha256').update(canonicalJson(['attention-answer-v2', this.source.sourceInstanceId, this.source.actorId,
-      command.attentionId, command.text, command.sourceEventId ?? null, command.ticketId ?? null,
+      command.attentionId, command.text ?? null, command.viewAction ?? null, command.viewValues ?? null, command.sourceEventId ?? null, command.ticketId ?? null,
       command.expectedGeneration ?? null, command.expectedVersion ?? null,
       ...(receiver ? [receiver.source.sourceInstanceId, receiver.source.actorId] : [])])).digest('hex')
     return commandTransaction(this.storage, this.instanceId, async tx => {
@@ -3079,6 +3087,13 @@ export class Engine {
       if (!ticket || !trigger || trigger.source.sourceInstanceId !== this.source.sourceInstanceId
         && trigger.deliveryOrigin?.source.sourceInstanceId !== this.source.sourceInstanceId) {
         throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The Attention Ticket belongs to a different source instance.')
+      }
+      let checkedViewAnswer: { answer: ProductViewAnswer; text: string } | undefined
+      if (attention.view) {
+        if (!viewAnswer || command.sourceEventId) throw new CoreError('INVALID_INPUT', 'A view card accepts only its validated product answer.')
+        checkedViewAnswer = validateProductViewAnswer(attention.view, command.viewAction, command.viewValues)
+      } else if (viewAnswer) {
+        throw new CoreError('INVALID_INPUT', 'This Attention is not an answerable view card.')
       }
       const managedOrigin = !!trigger.deliveryOrigin
         && attention.destination.sourceInstanceId === trigger.deliveryOrigin.source.sourceInstanceId
@@ -3112,7 +3127,7 @@ export class Engine {
       }
       const answerers = this.source.intake?.allowedRequesterIds ?? this.source.allowedActorIds
       let actorId = this.source.actorId
-      let answerText = command.text
+      let answerText = checkedViewAnswer?.text ?? command.text!
       if (command.sourceEventId) {
         const inputSource = receiver ?? this
         const policy = await tx.get<StoredPolicy>('policy-state', inputSource.policyKey())
@@ -3132,7 +3147,8 @@ export class Engine {
       const result = await this.attentions.answer(tx, { ticketId: attention.ticketId, attentionId: attention.id, text: answerText,
         commandId: command.commandId, actorId, ...(command.sourceEventId ? { sourceEventId: command.sourceEventId } : {}),
         ...(command.expectedGeneration === undefined ? {} : { expectedGeneration: command.expectedGeneration }),
-        ...(command.expectedVersion === undefined ? {} : { expectedVersion: command.expectedVersion }) })
+        ...(command.expectedVersion === undefined ? {} : { expectedVersion: command.expectedVersion }),
+        ...(checkedViewAnswer ? { viewAnswer: checkedViewAnswer.answer } : {}) })
       if (command.sourceEventId && crossQuestionInput?.association) {
         result.input = { ...result.input, association: { ...crossQuestionInput.association, sourceActorId: actorId,
           reason: `Authorized native answer to ${attention.id}`, checkedAt: Date.now() } }
@@ -3184,6 +3200,27 @@ export class Engine {
       expectedGeneration: command.expectedGeneration,
       expectedVersion: command.attentionVersion,
       text: command.text,
+    }, undefined, true)
+    this.effects.wake()
+    return result
+  }
+
+  async answerMainView(command: { instanceId: string; commandId: string; workItemId: string; ticketId: string;
+    expectedGeneration: string; attentionId: string; attentionVersion: number; action: string; values: Record<string, unknown> }) {
+    if (!command || Object.keys(command).some(key => !['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration',
+      'attentionId', 'attentionVersion', 'action', 'values'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Answering a Main view accepts only its exact current work and submitted values.')
+    }
+    identifier(command.action, 'action')
+    await this.requireMainWorkControl(command)
+    const result = await this.answerAttention({
+      commandId: command.commandId,
+      attentionId: command.attentionId,
+      ticketId: command.ticketId,
+      expectedGeneration: command.expectedGeneration,
+      expectedVersion: command.attentionVersion,
+      viewAction: command.action,
+      viewValues: command.values,
     }, undefined, true)
     this.effects.wake()
     return result

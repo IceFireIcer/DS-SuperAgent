@@ -50,7 +50,15 @@ test('an authorized Word upload becomes a checked, downloadable work artifact', 
       output: 'edited.docx', ops: JSON.stringify([{ replace: { find: 'north region', with: 'south area' } }]) }, 'edit-word')
     else if (count === 4) yield* toolResponse('run_office', { operation: 'check', input: 'edited.docx' }, 'check-word')
     else if (count === 5) yield* toolResponse('report_ready', { result: 'Created edited.docx.',
-      evidence: 'Read the source and checked the edited Word package.', artifacts: 'edited.docx' }, 'report-word')
+      evidence: 'The Word package is valid.', artifacts: 'edited.docx',
+      view: JSON.stringify({ title: 'Invalid interactive report', view: { type: 'options', id: 'choice',
+        options: [{ label: 'Continue' }] } }) }, 'invalid-report-view')
+    else if (count === 6) yield* toolResponse('report_ready', { result: 'Created edited.docx.',
+      evidence: 'Read the source and checked the edited Word package.', artifacts: 'edited.docx',
+      view: JSON.stringify({ title: 'Edited Word document', view: { type: 'stack', children: [
+        { type: 'metric', label: 'Changed region', value: '1' },
+        { type: 'text', text: 'The edited Word package passed its structure check.' },
+      ] } }) }, 'report-word')
     else yield* textResponse('The verified Word file is available.')
   })
   await native.plugin(LocalAttachmentStore, { dshHome: join(root, 'harness-home') })
@@ -77,6 +85,9 @@ test('an authorized Word upload becomes a checked, downloadable work artifact', 
   assert.equal(card.outcome.artifacts.length, 1)
   assert.equal(card.outcome.artifacts[0].path, 'edited.docx')
   assert.equal(card.outcome.artifacts[0].reference.environmentId, directory.default.environmentId)
+  assert.equal(card.outcome.view.title, 'Edited Word document')
+  assert.equal(card.outcome.view.view.children[0].value, 1)
+  assert.equal(card.outcome.summary, 'Created edited.docx.')
   let offset = 0
   const pages = []
   do {

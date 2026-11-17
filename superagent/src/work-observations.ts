@@ -37,6 +37,7 @@ interface ReadyReport {
   result: string
   evidence: string
   artifacts: { path: string; bytes: number; sha256: string }[]
+  view?: import('./product-views.js').ProductViewCard
   toolFacts: { tool: string; outcome: 'success' | 'failed'; output: Record<string, unknown> }[]
   createdAt: number
 }

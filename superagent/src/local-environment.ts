@@ -430,7 +430,11 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
   }
 
   sanitize(text: string) {
-    return sanitizeSecrets(text).split(this.cwd).join('<workdir>')
+    let safe = sanitizeSecrets(text)
+    for (const root of new Set([this.cwd, this.owner.config.root, resolve(this.owner.config.root)].filter(Boolean))) {
+      safe = safe.split(root).join('<workdir>')
+    }
+    return safe
   }
 
   async inspectWorkCopy(signal?: AbortSignal) {

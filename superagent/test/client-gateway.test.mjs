@@ -131,6 +131,30 @@ test('the dedicated entry authenticates, authorizes read and command per Instanc
   assert.equal((await engine.getReceipt('client-request')).ticketId, accepted.body.ticketId)
 })
 
+test('the product gateway exposes view answers only to clients with command access', async t => {
+  const { access, open } = await fixture(t)
+  const calls = []
+  const gateway = await open({ product: { dispatch: async (endpoint, body, client) => {
+    calls.push({ endpoint, body, clientId: client.id })
+    return { attention: { status: 'answered' }, input: { id: 'view-input' } }
+  } } })
+  const command = await access.enroll({ commandId: 'view-command', label: 'View commander',
+    grants: [{ instanceId: 'private', capabilities: ['command'] }] })
+  const viewer = await access.enroll({ commandId: 'view-reader', label: 'View reader',
+    grants: [{ instanceId: 'private', capabilities: ['read'] }] })
+  const answer = { commandId: 'answer-view', workItemId: 'item', ticketId: 'ticket', expectedGeneration: 'generation',
+    attentionId: 'attention', attentionVersion: 1, action: 'layout', values: { selected: ['Detailed'] } }
+  const accepted = await send(`${gateway.url}/instances/private/product/work-answer-view`, { method: 'POST',
+    token: command.token, body: answer })
+  assert.equal(accepted.status, 200)
+  assert.deepEqual(calls.map(call => call.endpoint), ['work-answer-view'])
+  assert.deepEqual(calls[0].body, answer)
+  const refused = await send(`${gateway.url}/instances/private/product/work-answer-view`, { method: 'POST',
+    token: viewer.token, body: { ...answer, commandId: 'read-only-answer' } })
+  assert.equal(refused.status, 403)
+  assert.equal(calls.length, 1)
+})
+
 test('the gateway refuses a public bind without TLS and serves a self-signed protected listener when configured', async t => {
   const { access, open } = await fixture(t)
   await assert.rejects(open({ host: '0.0.0.0' }), { code: 'TRANSPORT_INSECURE' })

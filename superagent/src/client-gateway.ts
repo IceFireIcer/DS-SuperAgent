@@ -25,7 +25,8 @@ const commandRoutes = new Map<string, (engine: Engine, body: Record<string, unkn
 ])
 const productReads = new Set(['open', 'history', 'observe-list', 'observe-read', 'observe-detail', 'evidence', 'source-deliveries',
   'proactive-list', 'proactive-read', 'proactive-control', 'execution-options'])
-const productCommands = new Set(['send', 'stop-main', 'work-stop', 'work-reconcile-stop', 'work-answer', 'work-resume', 'work-retry', 'reconcile-delivery', 'proactive-stop'])
+const productCommands = new Set(['send', 'stop-main', 'work-stop', 'work-reconcile-stop', 'work-answer', 'work-answer-view',
+  'work-resume', 'work-retry', 'reconcile-delivery', 'proactive-stop'])
 
 function statusOf(error: unknown) {
   if (error instanceof SyntaxError) return 400
