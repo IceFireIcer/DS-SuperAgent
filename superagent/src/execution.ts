@@ -2786,7 +2786,12 @@ export class Execution {
     let terminal = true
     for (const job of snapshot.jobs) {
       const environment = this.environments.find(candidate => candidate.config.id === job.environmentId)
-      if (!environment) { terminal = false; continue }
+      if (!environment || environment.kind !== 'remote'
+        || environment.deviceId !== job.remote?.deviceId
+        || environment.deviceIncarnation !== job.remote?.deviceIncarnation) {
+        terminal = false
+        continue
+      }
       try {
         environment.authorize({ instanceId: this.instanceId, actorId: snapshot.trigger.source.actorId })
         const bound = await environment.prepare({ instanceId: this.instanceId, actorId: snapshot.trigger.source.actorId })

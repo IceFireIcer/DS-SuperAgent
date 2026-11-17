@@ -26900,7 +26900,7 @@ function applyProduct(ctx) {
       work.receipt.ticketId ? (0, import_react63.createElement)("p", { className: "bt-main-work-id" }, `${t("Ticket")} ${work.receipt.ticketId}`) : null,
       control ? (0, import_react63.createElement)("p", { className: "bt-main-work-id" }, `${t("Ticket version")}: ${control.ticketVersion}`) : null,
       assignment ? (0, import_react63.createElement)("p", { className: "bt-main-work-id" }, `${t("Execution version")}: ${assignment.generation}`) : null,
-      stop ? (0, import_react63.createElement)("p", { className: "bt-main-work-detail" }, stop.state === "stopping" ? stop.pendingDeviceConfirmation ? t("Stopping · waiting for device cancellation confirmation.") : t("Stopping · waiting for the current execution to become quiet.") : stop.cancellationConfirmedAt ? t("Stopped · execution cancellation confirmed.") : t("Stopped · cancellation confirmation is unavailable.")) : null,
+      stop ? (0, import_react63.createElement)("p", { className: "bt-main-work-detail" }, stop.pendingDeviceConfirmation ? t("Stopping · waiting for device cancellation confirmation.") : stop.state === "stopping" ? t("Stopping · waiting for the current execution to become quiet.") : stop.cancellationConfirmedAt ? t("Stopped · execution cancellation confirmed.") : t("Stopped · cancellation confirmation is unavailable.")) : null,
       stop?.pendingDeviceConfirmation && canCommand ? (0, import_react63.createElement)(
         "button",
         {

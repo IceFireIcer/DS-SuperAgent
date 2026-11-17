@@ -8,12 +8,13 @@ import { test } from 'node:test'
 import * as core from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, routerResponse, textResponse, toolResponse } from '../dev/native-mock.mjs'
+import { breakableProxy } from './fixtures/breakable-proxy.mjs'
 import { completedToolCount, lastUserText } from './input-support.mjs'
 
-const until = async (check, label) => {
-  const deadline = Date.now() + 8_000
+const until = async (check, label, timeout = 8_000) => {
+  const deadline = Date.now() + timeout
   while (!await check()) {
-    if (Date.now() >= deadline) throw new Error(`Product execution did not reach ${label} within 8000 ms.`)
+    if (Date.now() >= deadline) throw new Error(`Product execution did not reach ${label} within ${timeout} ms.`)
     await sleep(30)
   }
 }
@@ -265,6 +266,136 @@ test('the product pairs a device and binds remote-only work to its own filesyste
   assert.equal((await call('remote-environment-pair-read', { commandId: 'uncertain-pair' })).status, 'abandoned')
   assert.equal((await native.credentials.listRecords()).some(item =>
     String(item.key).startsWith('ds-superagent-profile/remote-environment-')), false)
+})
+
+test('an offline remote stop survives Host restart, keeps unrelated local work available, and confirms only the original range', {
+  timeout: 120000,
+}, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'r5-product-remote-stop-'))
+  let device, proxy, native, host
+  t.after(async () => {
+    await host?.close().catch(() => {})
+    await proxy?.close().catch(() => {})
+    await device?.close().catch(() => {})
+    await native?.fiber.dispose().catch(() => {})
+    await rm(directory, { recursive: true, force: true })
+  })
+  const workspace = join(directory, 'workspace')
+  const deviceRoot = join(directory, 'device-work')
+  await mkdir(join(directory, 'data'))
+  await mkdir(workspace)
+  await mkdir(deviceRoot)
+  device = await core.RemoteDevice.open({
+    deviceId: 'offline-stop-device', root: deviceRoot,
+    grants: [{ instanceId: 'private', environmentId: 'remote-project', allowedActorIds: ['owner'],
+      permissions: ['read', 'write', 'search', 'command'] }],
+    jobsPath: join(directory, 'device-jobs'), statePath: join(directory, 'device-state.json'),
+    commands: { hold: { argv: [process.execPath, '-e',
+      "const fs=require('node:fs');fs.writeFileSync('hold.pid',String(process.pid));console.log('started');setInterval(()=>{},1000)"],
+    timeoutMs: 5000, backgroundTimeoutMs: 120000 } },
+  })
+  const endpoint = await device.start()
+  proxy = await breakableProxy(endpoint)
+  native = await nativeContext(join(directory, 'sessions'), function* (request) {
+    if (request.model === 'router') { yield* routerResponse(request); return }
+    const text = lastUserText(request)
+    const completed = completedToolCount(request)
+    if (request.model === 'main') {
+      if (!completed) yield* toolResponse('delegate_work', { items: [{ goal: text,
+        constraints: 'Keep this work independent.', acceptanceCriteria: 'Record the requested result.' }] })
+      else yield* textResponse('Delegated.')
+      return
+    }
+    if (text.includes('remote job')) {
+      if (!completed) yield* toolResponse('start_command', { name: 'hold' })
+      else yield* textResponse('The remote range was started.')
+      return
+    }
+    if (!completed) yield* toolResponse('ask_human', { question: 'The independent local work reached its review point.',
+      options: 'Continue\nStop' })
+    else yield* textResponse('The independent local work is waiting for review.')
+  })
+  await native.plugin(LocalCredentials, { path: join(directory, 'credentials.yaml'), watch: false })
+  const config = { databasePath: join(directory, 'data', 'state.sqlite'), workspaceRoot: workspace,
+    instanceId: 'private', actorId: 'owner', main: { provider: 'mock', model: 'main' },
+    router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } }
+  host = await core.createProductHost(native, config)
+  const call = (name, payload = {}) => host.dispatch(name, { instanceId: 'private', ...payload })
+  await call('remote-environment-pair', { commandId: 'pair-offline-stop', environmentId: 'remote-project',
+    label: 'Offline stop device', endpoint: proxy.endpoint, pairingCode: device.pairingCode,
+    expectedDeviceId: 'offline-stop-device', expectedDeviceKey: device.deviceKeyFingerprint,
+    permissions: ['read', 'write', 'search', 'command'] })
+
+  await call('send', { commandId: 'remote-stop-request', target: 'remote-only',
+    text: 'Start a long remote job.' })
+  let remoteWork
+  await until(async () => {
+    remoteWork = (await call('history', { limit: 100 })).works?.find(work => work.brief.goal === 'Start a long remote job.')
+    return remoteWork?.control?.assignment && await readFile(join(deviceRoot, 'hold.pid'), 'utf8').catch(() => false)
+  }, 'the running remote Work card and device process', 25000)
+  const pid = Number(await readFile(join(deviceRoot, 'hold.pid'), 'utf8'))
+  proxy.state.blocked = true
+  await sleep(1000)
+  await call('work-stop', { commandId: 'offline-work-stop', workItemId: remoteWork.control.workItemId,
+    ticketId: remoteWork.control.ticketId, expectedGeneration: remoteWork.control.assignment.generation,
+    expectedTicketVersion: remoteWork.control.ticketVersion, reason: 'Stop while the device is disconnected.' })
+  remoteWork = (await call('history', { limit: 100 })).works.find(work => work.brief.goal === 'Start a long remote job.')
+  assert.equal(remoteWork.control.stop.pendingDeviceConfirmation, true)
+  await assert.rejects(call('work-resume', { commandId: 'resume-before-device-quiet',
+    workItemId: remoteWork.control.workItemId, ticketId: remoteWork.control.ticketId,
+    expectedGeneration: remoteWork.control.assignment.generation }), { code: 'STOPPING' })
+
+  await call('send', { commandId: 'unrelated-local-request', target: 'local-only',
+    text: 'Complete an independent local check.' })
+  let localHistory
+  try {
+    await until(async () => {
+      localHistory = await call('history', { limit: 100 })
+      return localHistory.works?.some(work =>
+        work.brief.goal === 'Complete an independent local check.' && work.status === 'waiting')
+    }, 'unrelated local work while the remote stop is pending', 25000)
+  } catch (error) {
+    throw new Error(`${error.message}: ${JSON.stringify(localHistory)}`, { cause: error })
+  }
+
+  await host.close()
+  host = await core.createProductHost(native, config)
+  remoteWork = (await call('history', { limit: 100 })).works.find(work => work.brief.goal === 'Start a long remote job.')
+  assert.equal(remoteWork.control.stop.pendingDeviceConfirmation, true)
+  assert.equal((await call('history', { limit: 100 })).works.some(work =>
+    work.brief.goal === 'Complete an independent local check.' && work.status === 'waiting'), true)
+
+  await call('work-reconcile-stop', { commandId: 'offline-reconcile-blocked',
+    workItemId: remoteWork.control.workItemId, ticketId: remoteWork.control.ticketId })
+  remoteWork = (await call('history', { limit: 100 })).works.find(work => work.brief.goal === 'Start a long remote job.')
+  assert.equal(remoteWork.control.stop.pendingDeviceConfirmation, true)
+
+  proxy.state.blocked = false
+  let reconciled
+  for (let attempt = 0; attempt < 20 && remoteWork.control.stop.pendingDeviceConfirmation; attempt++) {
+    reconciled = await call('work-reconcile-stop', { commandId: `offline-reconcile-${attempt}`,
+      workItemId: remoteWork.control.workItemId, ticketId: remoteWork.control.ticketId })
+    await sleep(250)
+    remoteWork = (await call('history', { limit: 100 })).works.find(work => work.brief.goal === 'Start a long remote job.')
+  }
+  assert.equal(remoteWork.control.stop.pendingDeviceConfirmation, false)
+  assert.equal(remoteWork.control.stop.state, 'stopped')
+  assert.equal(typeof remoteWork.control.stop.cancellationConfirmedAt, 'number')
+  assert.equal(remoteWork.control.permissions.canResume, true)
+  assert.equal(remoteWork.outcome?.status, 'stopped')
+  assert.equal(reconciled.jobs.some(job => job.state === 'cancelled'), true, JSON.stringify(reconciled.jobs))
+  await until(() => {
+    try { process.kill(pid, 0); return false } catch { return true }
+  }, 'the original remote range to stop', 15000)
+  const confirmedGeneration = remoteWork.control.assignment.generation
+  await call('work-resume', { commandId: 'resume-after-device-confirmation',
+    workItemId: remoteWork.control.workItemId, ticketId: remoteWork.control.ticketId,
+    expectedGeneration: confirmedGeneration })
+  await until(async () => {
+    remoteWork = (await call('history', { limit: 100 })).works.find(work => work.brief.goal === 'Start a long remote job.')
+    return remoteWork.control.assignment?.generation && remoteWork.control.assignment.generation !== confirmedGeneration
+  }, 'an explicit new Assignment after the confirmed stop', 15000)
+  assert.notEqual(remoteWork.control.assignment.id, reconciled.assignments[0].id)
 })
 
 test('revocation commit failure keeps local access blocked and replays without claiming a second device confirmation', async t => {

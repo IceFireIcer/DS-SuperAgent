@@ -486,6 +486,52 @@ test('a remote job stays starting until its start response arrives', { timeout: 
   await until(async () => (await engine.getJob(receipt.ticketId, intent.id)).state === 'running', 'the delayed start response', 10000)
 })
 
+test('a late remote start answer after a stop stays unknown and cannot clear the stop', { timeout: 20000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-delayed-stop-'))
+  let native, storage, sessions, engine
+  const delayed = delayedRemoteEnvironment(join(directory, 'device-work'))
+  t.after(async () => {
+    delayed.release()
+    await engine?.shutdown()
+    await engine?.effects.stop()
+    await sessions?.close()
+    await native?.fiber.dispose()
+    await storage?.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+  let workerCalls = 0
+  native = await nativeContext(join(directory, 'sessions'), options => {
+    if (options.model === 'worker') {
+      if (workerCalls++ === 0) return toolResponse('start_command', { name: 'hold' }, 'delayed-stop-start')
+      return textResponse('The delayed device job returned late.')
+    }
+    return toolResponse('assign_worker', {}, 'delayed-stop-assign')
+  })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  sessions = new core.NativeSessions(native, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] },
+    { retryDelayMs: 10, scanIntervalMs: 20 }, sessions, [delayed.environment], {}, { waitMs: 60000 })
+  engine.effects.start()
+  const receipt = await engine.submit({ commandId: 'delayed-stop', eventId: 'delayed-stop',
+    text: 'Start the delayed device job.', environmentId: 'remote-project' })
+  await until(async () => (await engine.listJobs(receipt.ticketId)).some(job => job.state === 'starting'),
+    'the pending remote start', 10000)
+  const stopping = engine.stopTicket({ commandId: 'stop-delayed-device', ticketId: receipt.ticketId,
+    reason: 'Stop before the start response.' })
+  await sleep(50)
+  delayed.release()
+  await stopping
+  for (let index = 0; index < 10; index++) await engine.effects.drain()
+  await until(async () => (await engine.listJobs(receipt.ticketId))[0]?.state !== 'running',
+    'the late remote start to remain cancelled', 10000)
+  const conversation = await engine.conversation(receipt.ticketId)
+  const [job] = await engine.listJobs(receipt.ticketId)
+  assert.equal(job.state, 'unknown')
+  assert.equal(conversation.stop.state, 'stopping')
+  assert.equal(conversation.stop.pendingDeviceConfirmation, true)
+  assert.deepEqual(conversation.reports, [])
+})
+
 test('an offline stop remains pending and is confirmed after a daemon restart proves the original range gone', { timeout: 90000 }, async context => {
   const device = await fixture(context)
   const directory = await mkdtemp(join(tmpdir(), 'ds-bot-remote-stop-recovery-'))

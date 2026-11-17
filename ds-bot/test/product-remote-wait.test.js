@@ -10,7 +10,7 @@ const plugin = dirname(dirname(fileURLToPath(import.meta.url)))
 const requireHarness = createRequire(join(plugin, 'dev/harness/package.json'))
 const { JSDOM } = requireHarness('jsdom')
 
-test('Main composer submits remote-only work without a paired Environment', async () => {
+test('Main submits remote-only work and keeps a restarted device stop pending', async () => {
   const dom = new JSDOM('<!doctype html><html><body><main id="root"></main></body></html>', { url: 'http://localhost/' })
   const previous = { window: globalThis.window, document: globalThis.document, navigator: globalThis.navigator,
     HTMLElement: globalThis.HTMLElement, IS_REACT_ACT_ENVIRONMENT: globalThis.IS_REACT_ACT_ENVIRONMENT }
@@ -47,7 +47,7 @@ test('Main composer submits remote-only work without a paired Environment', asyn
           receipt: { status: 'accepted', ticketId: 'ticket' }, status: 'stopped',
           control: { workItemId: 'item', ticketId: 'ticket', ticketVersion: 1,
             permissions: { canStop: false, canResume: false, canRetry: false, canAnswer: false },
-            stop: { id: 'stop', state: 'stopping', pendingDeviceConfirmation: true } } }] }
+            stop: { id: 'stop', state: 'stopped', pendingDeviceConfirmation: true } } }] }
           : endpoint === 'directory-options' ? { default: { environmentId: 'local-work', root: '/work' }, directories: [] }
             : endpoint === 'execution-options' ? { policy: { defaultTarget: 'remote-only', requiredPermissions: ['read'] },
               environments: [{ id: 'local-work', kind: 'local', root: '/work' }] }
@@ -74,6 +74,8 @@ test('Main composer submits remote-only work without a paired Environment', asyn
     const document = dom.window.document
     assert.equal(document.querySelector('select[aria-label="Execution target"]').value, 'remote-only')
     assert.match(document.body.textContent, /This work will wait for an eligible device/u)
+    assert.match(document.body.textContent, /Stopping · waiting for device cancellation confirmation\./u)
+    assert.equal(document.body.textContent.includes('Stopped · cancellation confirmation is unavailable.'), false)
     const reconcile = [...document.querySelectorAll('button')].find(button => button.textContent === 'Check device stop')
     assert.ok(reconcile)
     await React.act(async () => { reconcile.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })

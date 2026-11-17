@@ -470,9 +470,9 @@ export function applyProduct(ctx) {
       work.receipt.ticketId ? h('p', { className: 'bt-main-work-id' }, `${t('Ticket')} ${work.receipt.ticketId}`) : null,
       control ? h('p', { className: 'bt-main-work-id' }, `${t('Ticket version')}: ${control.ticketVersion}`) : null,
       assignment ? h('p', { className: 'bt-main-work-id' }, `${t('Execution version')}: ${assignment.generation}`) : null,
-      stop ? h('p', { className: 'bt-main-work-detail' }, stop.state === 'stopping'
-        ? stop.pendingDeviceConfirmation ? t('Stopping · waiting for device cancellation confirmation.')
-          : t('Stopping · waiting for the current execution to become quiet.')
+      stop ? h('p', { className: 'bt-main-work-detail' }, stop.pendingDeviceConfirmation
+        ? t('Stopping · waiting for device cancellation confirmation.')
+        : stop.state === 'stopping' ? t('Stopping · waiting for the current execution to become quiet.')
         : stop.cancellationConfirmedAt ? t('Stopped · execution cancellation confirmed.')
           : t('Stopped · cancellation confirmation is unavailable.')) : null,
       stop?.pendingDeviceConfirmation && canCommand ? h('button', { type: 'button', className: 'bt-soft',
