@@ -84,6 +84,23 @@ test('product browser settings manage isolated resources, work grants and unknow
         receipts.set(payload.commandId, next)
         return structuredClone(next)
       }
+      if (endpoint === 'browser-take') {
+        const current = resources.find(resource => resource.id === payload.resourceId)
+        const control = { id: 'control-one', state: 'held', ticketId: 'ticket-one', workItemId: payload.workItemId,
+          assignmentId: 'assignment-one', generation: 'generation-one', responsibleActorId: 'alice' }
+        resources = resources.map(resource => resource.id === current.id ? { ...current, state: 'human', control,
+          revision: current.revision + 1 } : resource)
+        receipts.set(payload.commandId, control)
+        return structuredClone(control)
+      }
+      if (endpoint === 'browser-control-view') return { profileKey: 'session-11111111-1111-4111-8111-111111111111' }
+      if (endpoint === 'browser-return') {
+        const current = resources.find(resource => resource.id === payload.resourceId)
+        resources = resources.map(resource => resource.id === current.id ? { ...current, state: 'available', control: undefined } : resource)
+        const result = { id: payload.controlId, state: 'returned' }
+        receipts.set(payload.commandId, result)
+        return result
+      }
       throw new Error(`Unexpected endpoint: ${endpoint}`)
     }
     const props = { binding: { instanceId: 'personal' }, call,
@@ -191,6 +208,31 @@ test('product browser settings manage isolated resources, work grants and unknow
       await React.act(async () => pendingReads[0]([{ ...raceResource, revision: 1, state: 'available' }]))
       assert.match(dom.window.document.body.textContent, /In use/u)
       assert.match(dom.window.document.body.textContent, /v9/u)
+      await React.act(async () => root.unmount())
+      root = createRoot(dom.window.document.querySelector('#root'))
+      dom.window.sessionStorage.clear()
+      resources = [{ id: 'browser-one', environmentId: 'local', label: 'Research browser', revision: 3,
+        state: 'available', grants: [{ workItemId: 'item-one', active: true }], operations: [] }]
+      const viewCalls = []
+      const browserBridge = { views: {
+        create: async (...args) => { viewCalls.push(['create', ...args]); return args[1] },
+        place: async (...args) => { viewCalls.push(['place', ...args]); return true },
+        navigate: async (...args) => { viewCalls.push(['navigate', ...args]) },
+        close: async (...args) => { viewCalls.push(['close', ...args]) },
+      } }
+      await React.act(async () => root.render(React.createElement(ProductBrowserSettings, { ...props, browserBridge })))
+      await click('Take over browser')
+      assert.equal(calls.find(entry => entry.endpoint === 'browser-take').payload.workItemId, 'item-one')
+      assert.match(dom.window.document.body.textContent, /Human control/u)
+      assert.equal(viewCalls.some(entry => entry[0] === 'create'
+        && entry[1] === 'session-11111111-1111-4111-8111-111111111111'), true)
+      await change(dom.window.document.querySelector('.bt-product-manual-browser-form input'), 'https://example.test/')
+      await React.act(async () => dom.window.document.querySelector('.bt-product-manual-browser-form')
+        .dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })))
+      assert.equal(viewCalls.some(entry => entry[0] === 'navigate' && entry[3] === 'https://example.test/'), true)
+      await click('Give browser back')
+      assert.equal(calls.find(entry => entry.endpoint === 'browser-return').payload.controlId, 'control-one')
+      assert.equal(viewCalls.some(entry => entry[0] === 'close'), true)
       await React.act(async () => root.unmount())
       root = createRoot(dom.window.document.querySelector('#root'))
       await React.act(async () => root.render(React.createElement(ProductBrowserSettings, {

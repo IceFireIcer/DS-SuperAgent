@@ -264,6 +264,7 @@ var ZH = {
   "Refresh browser resources": "刷新浏览器资源",
   Available: "可用",
   "In use": "使用中",
+  "Human control": "人工控制中",
   "Outcome unknown": "结果未确认",
   Pending: "等待确认",
   Succeeded: "已成功",
@@ -286,6 +287,18 @@ var ZH = {
   "Browser resource created.": "浏览器资源已创建。",
   "Browser work access": "浏览器工作授权",
   "Browser owner": "浏览器当前占用",
+  "A person controls this browser. Worker browser calls wait for explicit return.": "当前由人工控制浏览器；Worker 的浏览器调用会等待明确归还。",
+  "Take over browser": "接管浏览器",
+  "Give browser back": "归还浏览器",
+  "Reconnect browser control": "重连浏览器控制",
+  "Stop browser work": "停止浏览器工作",
+  "Work stop requested.": "已请求停止工作。",
+  "Browser control taken.": "已接管浏览器。",
+  "Browser control returned.": "已归还浏览器。",
+  "Manual browser control: {label}": "人工控制浏览器：{label}",
+  "Browser address": "浏览器地址",
+  "Manual browser": "人工浏览器",
+  "Enter an HTTP or HTTPS address.": "请输入 HTTP 或 HTTPS 地址。",
   "No accepted work item is available in this Environment.": "该执行环境没有可授权的已接收工作。",
   "Browser work item": "工作项",
   "Revoke browser from this work": "撤销此工作的浏览器权限",
@@ -24973,6 +24986,7 @@ var import_react61 = require("react");
 var BROWSER_STATES = {
   available: "Available",
   busy: "In use",
+  human: "Human control",
   unknown: "Outcome unknown",
   revoked: "Revoked"
 };
@@ -24996,10 +25010,12 @@ var DETERMINISTIC = /* @__PURE__ */ new Set([
   "RESOURCE_LIMIT",
   "IDENTITY_CONFLICT",
   "BROWSER_RECONCILE_REQUIRED",
+  "BROWSER_DENIED",
+  "BROWSER_HUMAN_CONTROL",
   "NOT_FOUND",
   "UNAVAILABLE"
 ]);
-function ProductBrowserSettings({ binding, works = [], directoryOptions, call: call2 }) {
+function ProductBrowserSettings({ binding, works = [], directoryOptions, call: call2, browserBridge }) {
   const instanceId = binding.instanceId;
   const storageKey = `product-browser-command:${instanceId}`;
   const acceptedWorks = works.filter((work) => work.receipt?.status === "accepted" && work.brief?.workItemId);
@@ -25015,13 +25031,14 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call: c
   const [unavailable, setUnavailable] = (0, import_react61.useState)(false);
   const [error, setError] = (0, import_react61.useState)(null);
   const [notice, setNotice] = (0, import_react61.useState)(null);
+  const [manual, setManual] = (0, import_react61.useState)(null);
   const inFlight = (0, import_react61.useRef)({});
   const refreshGeneration = (0, import_react61.useRef)(0);
   const selected = resources?.find((resource) => resource.id === selectedId);
   const selectedWorks = acceptedWorks.filter((work) => !selected?.environmentId || !work.brief.environmentId || work.brief.environmentId === selected.environmentId);
   const activeGrant = selected?.grants?.find((grant) => grant.workItemId === workItemId && grant.active);
-  const actionKey = (endpoint, input) => endpoint === "browser-create" ? `create:${input.environmentId}` : endpoint === "browser-grant" ? `grant:${input.resourceId}:${input.workItemId}` : endpoint === "browser-revoke" ? `resource:${input.resourceId}` : endpoint === "browser-resolve" ? `resolve:${input.resourceId}:${input.operationId}` : endpoint;
-  const actionLabel = (attempt) => attempt.endpoint === "browser-create" ? t("Create browser in {environment}", { environment: attempt.input.environmentId }) : attempt.endpoint === "browser-grant" ? t("Change browser grant for {workItemId}", { workItemId: attempt.input.workItemId }) : attempt.endpoint === "browser-revoke" ? t("Revoke browser {resourceId}", { resourceId: attempt.input.resourceId }) : t("Check browser operation {operationId}", { operationId: attempt.input.operationId });
+  const actionKey = (endpoint, input) => endpoint === "browser-create" ? `create:${input.environmentId}` : endpoint === "browser-grant" ? `grant:${input.resourceId}:${input.workItemId}` : endpoint === "browser-revoke" ? `resource:${input.resourceId}` : endpoint === "browser-resolve" ? `resolve:${input.resourceId}:${input.operationId}` : endpoint === "browser-take" || endpoint === "browser-return" ? `control:${input.resourceId}` : endpoint;
+  const actionLabel = (attempt) => attempt.endpoint === "browser-create" ? t("Create browser in {environment}", { environment: attempt.input.environmentId }) : attempt.endpoint === "browser-grant" ? t("Change browser grant for {workItemId}", { workItemId: attempt.input.workItemId }) : attempt.endpoint === "browser-revoke" ? t("Revoke browser {resourceId}", { resourceId: attempt.input.resourceId }) : attempt.endpoint === "browser-take" ? t("Take over browser") : attempt.endpoint === "browser-return" ? t("Give browser back") : t("Check browser operation {operationId}", { operationId: attempt.input.operationId });
   const remember = (attempt, key) => {
     const next = { ...inFlight.current };
     if (attempt) next[key] = attempt;
@@ -25059,7 +25076,7 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call: c
     try {
       const saved = JSON.parse(window.sessionStorage.getItem(storageKey));
       const values = saved && typeof saved === "object" ? saved.endpoint ? [saved] : Object.values(saved) : [];
-      const valid = Object.fromEntries(values.filter((attempt) => attempt && ["browser-create", "browser-grant", "browser-revoke", "browser-resolve"].includes(attempt.endpoint) && typeof attempt.commandId === "string" && attempt.input && typeof attempt.input === "object").map((attempt) => [actionKey(attempt.endpoint, attempt.input), attempt]));
+      const valid = Object.fromEntries(values.filter((attempt) => attempt && ["browser-create", "browser-grant", "browser-revoke", "browser-resolve", "browser-take", "browser-return"].includes(attempt.endpoint) && typeof attempt.commandId === "string" && attempt.input && typeof attempt.input === "object").map((attempt) => [actionKey(attempt.endpoint, attempt.input), attempt]));
       inFlight.current = valid;
       setPending(valid);
     } catch {
@@ -25083,6 +25100,20 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call: c
   (0, import_react61.useEffect)(() => {
     if (!selectedWorks.some((work) => work.brief.workItemId === workItemId)) setWorkItemId(selectedWorks[0]?.brief?.workItemId ?? "");
   }, [selectedId, resources, workItemId]);
+  (0, import_react61.useEffect)(() => {
+    let live = true;
+    const control = selected?.control;
+    if (control?.state === "held" && browserBridge) {
+      void call2("browser-control-view", { instanceId, resourceId: selected.id, controlId: control.id }).then((result) => {
+        if (live) setManual({ resourceId: selected.id, controlId: control.id, profile: result.profileKey });
+      }).catch((failure) => {
+        if (live) setError(failure.message);
+      });
+    } else setManual(null);
+    return () => {
+      live = false;
+    };
+  }, [selected?.id, selected?.control?.id, selected?.control?.state, browserBridge, call2, instanceId]);
   const execute = async (endpoint, input, success, retry = false, explicit = null) => {
     const key = actionKey(endpoint, input);
     if (busy || inFlight.current[key] && !retry) return;
@@ -25141,6 +25172,47 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call: c
     ).then((result) => {
       if (result) setReasons((current) => ({ ...current, [operation.id]: "" }));
     });
+  };
+  const take = () => {
+    if (!selected || !workItemId || busy || selected.state === "revoked" || !browserBridge) return;
+    void execute(
+      "browser-take",
+      { resourceId: selected.id, workItemId, expectedRevision: selected.revision },
+      "Browser control taken."
+    );
+  };
+  const reconcileTake = () => {
+    if (!selected?.control || busy) return;
+    setBusy(true);
+    setError(null);
+    void call2("browser-reconcile-take", { instanceId, resourceId: selected.id, controlId: selected.control.id }).then(
+      async () => {
+        remember(null, actionKey("browser-take", { resourceId: selected.id }));
+        await refresh();
+      },
+      (failure) => setError(failure.message)
+    ).finally(() => setBusy(false));
+  };
+  const giveBack = () => {
+    if (!selected?.control || busy) return;
+    void execute(
+      "browser-return",
+      { resourceId: selected.id, controlId: selected.control.id },
+      "Browser control returned."
+    ).then((result) => {
+      if (result) setManual(null);
+    });
+  };
+  const stop = () => {
+    const work = works.find((item) => item.brief?.workItemId === selected?.control?.workItemId);
+    if (!work?.receipt?.ticketId || !work.control?.assignment || busy) return;
+    void execute("work-stop", {
+      workItemId: selected.control.workItemId,
+      ticketId: work.receipt.ticketId,
+      expectedGeneration: work.control.assignment.generation,
+      expectedTicketVersion: work.control.ticketVersion,
+      reason: "Stopped by the user during browser control."
+    }, "Work stop requested.");
   };
   if (unavailable) return (0, import_react61.createElement)(
     Card2,
@@ -25245,6 +25317,15 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call: c
           { className: "bt-product-resource-note" },
           `${t("Browser owner")}: ${selected.owner.ticketId} · ${selected.owner.generation}`
         ) : null,
+        selected.control ? (0, import_react61.createElement)(
+          "div",
+          { className: "bt-product-browser-control", role: "status" },
+          (0, import_react61.createElement)("p", null, t("A person controls this browser. Worker browser calls wait for explicit return.")),
+          selected.control.state === "held" && manual?.controlId === selected.control.id && manual.profile && browserBridge ? (0, import_react61.createElement)(ManualBrowserView, { browserBridge, profile: manual.profile, label: selected.label }) : null,
+          selected.control.state === "held" || selected.control.state === "returning" ? (0, import_react61.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy) || Boolean(pending[actionKey("browser-return", { resourceId: selected.id })]), onClick: giveBack }, t("Give browser back")) : null,
+          selected.control.state === "taking" ? (0, import_react61.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy), onClick: reconcileTake }, t("Reconnect browser control")) : null
+        ) : selectedWorks.length > 0 && browserBridge ? (0, import_react61.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy) || selected.state === "revoked" || !workItemId || !activeGrant || Boolean(pending[actionKey("browser-take", { resourceId: selected.id })]), onClick: take }, t("Take over browser")) : null,
+        selected.control && works.some((item) => item.brief?.workItemId === selected.control.workItemId && item.control?.assignment && item.control.stop?.state !== "stopped") ? (0, import_react61.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy), onClick: stop }, t("Stop browser work")) : null,
         (0, import_react61.createElement)(
           "div",
           { className: "bt-product-resource-row" },
@@ -25341,8 +25422,77 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call: c
     ) : null
   );
 }
+function ManualBrowserView({ browserBridge, profile, label }) {
+  const frame = (0, import_react61.useRef)(null);
+  const tabId = (0, import_react61.useRef)(null);
+  if (!tabId.current) tabId.current = crypto.randomUUID();
+  const [address, setAddress] = (0, import_react61.useState)("");
+  const [error, setError] = (0, import_react61.useState)(null);
+  (0, import_react61.useEffect)(() => {
+    let live = true;
+    const tab = tabId.current;
+    const place = () => {
+      if (!live || !frame.current) return;
+      const box = frame.current.getBoundingClientRect();
+      const scroll = frame.current.closest(".bt-settings-scroll")?.getBoundingClientRect();
+      const visible = !document.hidden && box.width > 0 && box.height > 0 && (!scroll || box.top >= scroll.top && box.bottom <= scroll.bottom);
+      void browserBridge.views.place(tab, { left: box.left, top: box.top, width: box.width, height: box.height }, visible);
+    };
+    void browserBridge.views.create(profile, tab, "about:blank").then(place, (failure) => {
+      if (live) setError(failure.message);
+    });
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(place) : null;
+    if (frame.current) observer?.observe(frame.current);
+    window.addEventListener("resize", place);
+    document.addEventListener("scroll", place, true);
+    document.addEventListener("visibilitychange", place);
+    return () => {
+      live = false;
+      observer?.disconnect();
+      window.removeEventListener("resize", place);
+      document.removeEventListener("scroll", place, true);
+      document.removeEventListener("visibilitychange", place);
+      void browserBridge.views.place(tab, null, false);
+      void browserBridge.views.close(profile, tab);
+    };
+  }, [browserBridge, profile]);
+  const open = (event) => {
+    event.preventDefault();
+    const url = address.trim();
+    if (!/^https?:\/\//iu.test(url)) {
+      setError(t("Enter an HTTP or HTTPS address."));
+      return;
+    }
+    setError(null);
+    void browserBridge.views.navigate(profile, tabId.current, url).catch((failure) => setError(failure.message));
+  };
+  return (0, import_react61.createElement)(
+    "div",
+    { className: "bt-product-manual-browser" },
+    (0, import_react61.createElement)("p", { className: "bt-product-resource-note" }, t("Manual browser control: {label}", { label })),
+    (0, import_react61.createElement)(
+      "form",
+      { onSubmit: open, className: "bt-product-manual-browser-form" },
+      (0, import_react61.createElement)("input", {
+        className: "bt-bs-input",
+        value: address,
+        "aria-label": t("Browser address"),
+        onChange: (event) => setAddress(event.target.value)
+      }),
+      (0, import_react61.createElement)("button", { className: "bt-soft", type: "submit" }, t("Open"))
+    ),
+    error ? (0, import_react61.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+    (0, import_react61.createElement)("div", { ref: frame, className: "bt-product-manual-browser-frame", role: "region", "aria-label": t("Manual browser") })
+  );
+}
 var PRODUCT_BROWSER_CSS = `
 .bt-product-browser-resource{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.bt-product-browser-control{margin-top:10px;padding:10px;border:1px solid var(--bt-line-2);border-radius:8px;background:var(--bt-hover)}
+.bt-product-browser-control>p{margin:0 0 8px;font-size:12px;color:var(--bt-ink-2)}
+.bt-product-manual-browser{margin:10px 0}
+.bt-product-manual-browser-form{display:flex;gap:6px;margin-bottom:8px}
+.bt-product-manual-browser-form input{flex:1;min-width:0}
+.bt-product-manual-browser-frame{height:280px;min-height:160px;border:1px solid var(--bt-line-2);border-radius:8px;overflow:hidden;background:var(--bt-main)}
 .bt-product-browser-resource>span{color:var(--bt-ink-2);font-size:12px}
 .bt-product-browser-create{display:flex;flex-direction:column;align-items:stretch;gap:8px;margin-top:12px}
 .bt-product-browser-operations{margin-top:12px}
@@ -25352,7 +25502,7 @@ var PRODUCT_BROWSER_CSS = `
 .bt-product-browser-resolve{display:flex;gap:8px;align-items:center;margin-top:8px}
 .bt-product-browser-resolve input{flex:1;min-width:0}
 .bt-product-browser-resolve select{flex:1;min-width:0}
-.bt-product-browser-refresh:focus-visible,.bt-product-browser-resource button:focus-visible,.bt-product-browser-create button:focus-visible,.bt-product-browser-create input:focus-visible,.bt-product-browser-create select:focus-visible,.bt-product-resource-selected select:focus-visible,.bt-product-browser-operation button:focus-visible,.bt-product-browser-operation select:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-product-browser-refresh:focus-visible,.bt-product-browser-resource button:focus-visible,.bt-product-browser-create button:focus-visible,.bt-product-browser-create input:focus-visible,.bt-product-browser-create select:focus-visible,.bt-product-resource-selected select:focus-visible,.bt-product-browser-operation button:focus-visible,.bt-product-browser-operation select:focus-visible,.bt-product-manual-browser input:focus-visible,.bt-product-manual-browser button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 @media(max-width:640px){.bt-product-browser-resource{align-items:flex-start;flex-direction:column}.bt-product-browser-resolve{align-items:stretch;flex-direction:column}}
 `;
 
@@ -27867,7 +28017,8 @@ function applyProduct(ctx) {
               binding,
               works: view.getSnapshot().works,
               directoryOptions: viewState.directoryOptions,
-              call: productCall
+              call: productCall,
+              browserBridge: globalThis.dsBotApp?.browser
             }) : page === "supervision" ? (0, import_react63.createElement)(ProductSupervisionSettings, { binding, call: productCall }) : (0, import_react63.createElement)(
               import_react63.Fragment,
               null,

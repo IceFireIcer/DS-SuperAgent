@@ -1653,6 +1653,22 @@ export class Engine {
     this.assertAuthoringActor()
     return this.browser().revoke(command)
   }
+  takeBrowserResource(command: { instanceId: string; commandId: string; resourceId: string; workItemId: string; expectedRevision: number }) {
+    this.assertAuthoringActor()
+    return this.browser().take(command)
+  }
+  reconcileBrowserTake(request: { instanceId: string; resourceId: string; controlId: string }) {
+    this.assertAuthoringActor()
+    return this.browser().reconcileTake(request)
+  }
+  giveBackBrowserResource(command: { instanceId: string; commandId: string; resourceId: string; controlId: string }) {
+    this.assertAuthoringActor()
+    return this.browser().giveBack(command)
+  }
+  viewBrowserControl(request: { instanceId: string; resourceId: string; controlId: string }) {
+    this.assertAuthoringActor()
+    return this.browser().controlView(request)
+  }
   async resolveBrowserOperation(command: { instanceId: string; commandId: string; resourceId: string; operationId: string; reason: string }) {
     this.assertAuthoringActor()
     const operation = await this.browser().resolve(command)

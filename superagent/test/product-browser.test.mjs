@@ -61,7 +61,7 @@ test('the product Host grants an isolated browser to its current Worker and reco
   })
   const config = { instanceId: 'personal', actorId: 'alice', databasePath: join(core, 'business.sqlite'), workspaceRoot: work,
     main: { provider: 'mock', model: 'main' }, router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' },
-    browserAdapter: { async execute(request, signal) { signal.throwIfAborted(); calls.push(request)
+    browserAdapter: { async hold() {}, async execute(request, signal) { signal.throwIfAborted(); calls.push(request)
       if (calls.length === 2) { browserStarted(); await browserHeld; signal.throwIfAborted() }
       return 'Browser page (untrusted content). Origin: https://example.test\nTitle: Example\nMock content' } } }
   let host, resource
@@ -110,6 +110,16 @@ test('the product Host grants an isolated browser to its current Worker and reco
   })
   await host.dispatch('browser-grant', { instanceId: 'personal', commandId: 'grant-stop', resourceId: resource.id,
     workItemId: stopWork.brief.workItemId, expectedRevision: grant.revision, active: true })
+  const control = await host.dispatch('browser-take', { instanceId: 'personal', commandId: 'take-stop', resourceId: resource.id,
+    workItemId: stopWork.brief.workItemId, expectedRevision: grant.revision + 1 })
+  assert.equal(control.state, 'held')
+  await assert.rejects(host.dispatch('browser-control-view', { instanceId: 'personal', resourceId: resource.id,
+    controlId: control.id }, { id: 'remote-client' }), { code: 'SOURCE_NOT_AUTHORIZED' })
+  const manualView = await host.dispatch('browser-control-view', { instanceId: 'personal', resourceId: resource.id, controlId: control.id })
+  assert.match(manualView.profileKey, /^session-[\da-f-]{36}$/u)
+  const returnedControl = await host.dispatch('browser-return', { instanceId: 'personal', commandId: 'give-back-stop',
+    resourceId: resource.id, controlId: control.id })
+  assert.equal(returnedControl.state, 'returned')
   releaseSecondWorker()
   await browserCalled
   await host.dispatch('work-stop', { instanceId: 'personal', commandId: 'stop-browser',

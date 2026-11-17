@@ -75,6 +75,29 @@ test('Bot endpoints accept only up to four absolute download roots', async t => 
   assert.match(await manager.endpoint('a', { downloadRoots: ['/a', '/b', '/c', '/d'] }), /^ws:\/\//u)
 })
 
+test('product browser views require an active Host-confirmed human hold', async t => {
+  const { manager } = fixture()
+  t.after(() => manager.dispose())
+  const profile = 'session-11111111-1111-4111-8111-111111111111'
+  await manager.hold(profile, true, true, 'control-a')
+  manager.create(profile, { tabId: 'manual-tab' })
+  await manager.operate(profile, 'navigate', { tabId: 'manual-tab', url: 'https://example.test/' })
+  await assert.rejects(manager.hold(profile, false), /Only the product Host/u)
+  await manager.hold(profile, false, true, 'control-a')
+  await assert.rejects(manager.hold(profile, true, true, 'control-a'), /control was returned/u)
+  await assert.rejects(manager.hold(profile, false, true, 'control-b'), /control changed/u)
+  assert.throws(() => manager.create(profile, { tabId: 'late-tab' }), /Take over the product browser/u)
+  await assert.rejects(manager.operate(profile, 'navigate', { tabId: 'manual-tab', url: 'https://example.test/late' }),
+    /The product browser has been returned/u)
+  assert.throws(() => manager.place('manual-tab', null, true), /The product browser has been returned/u)
+  await manager.hold(profile, true, true, 'control-b')
+  await assert.rejects(manager.operate(profile, 'navigate', { tabId: 'manual-tab', url: 'https://example.test/stale' }),
+    /control changed/u)
+  assert.throws(() => manager.place('manual-tab', null, true), /control changed/u)
+  manager.create(profile, { tabId: 'new-tab' })
+  await manager.operate(profile, 'navigate', { tabId: 'new-tab', url: 'https://example.test/current' })
+})
+
 function openSocket(url, options) {
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(url, options)

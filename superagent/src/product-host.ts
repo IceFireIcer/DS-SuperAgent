@@ -113,6 +113,10 @@ const browserFields: Record<string, string[]> = {
   'browser-grant': ['instanceId', 'commandId', 'resourceId', 'workItemId', 'expectedRevision', 'active'],
   'browser-revoke': ['instanceId', 'commandId', 'resourceId', 'expectedRevision'],
   'browser-resolve': ['instanceId', 'commandId', 'resourceId', 'operationId', 'reason'],
+  'browser-take': ['instanceId', 'commandId', 'resourceId', 'workItemId', 'expectedRevision'],
+  'browser-return': ['instanceId', 'commandId', 'resourceId', 'controlId'],
+  'browser-control-view': ['instanceId', 'resourceId', 'controlId'],
+  'browser-reconcile-take': ['instanceId', 'resourceId', 'controlId'],
 }
 const memoryFields: Record<string, string[]> = {
   'memory-list': ['instanceId', 'after', 'limit', 'query'],
@@ -680,6 +684,14 @@ export async function createProductHost(context: Context, config: ProductHostCon
             resourceId: payload.resourceId as string, expectedRevision: payload.expectedRevision as number })
           if (endpoint === 'browser-resolve') return engine!.resolveBrowserOperation({ instanceId, commandId,
             resourceId: payload.resourceId as string, operationId: payload.operationId as string, reason: payload.reason as string })
+          if (endpoint === 'browser-take') return engine!.takeBrowserResource({ instanceId, commandId,
+            resourceId: payload.resourceId as string, workItemId: payload.workItemId as string, expectedRevision: payload.expectedRevision as number })
+          if (endpoint === 'browser-return') return engine!.giveBackBrowserResource({ instanceId, commandId,
+            resourceId: payload.resourceId as string, controlId: payload.controlId as string })
+          if (endpoint === 'browser-control-view') return engine!.viewBrowserControl({ instanceId,
+            resourceId: payload.resourceId as string, controlId: payload.controlId as string })
+          if (endpoint === 'browser-reconcile-take') return engine!.reconcileBrowserTake({ instanceId,
+            resourceId: payload.resourceId as string, controlId: payload.controlId as string })
         }
         if (endpoint === 'memory-list') return engine!.listProductMemory({ instanceId,
           ...(payload.after === undefined ? {} : { after: payload.after as string }),

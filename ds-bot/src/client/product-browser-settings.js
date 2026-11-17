@@ -5,6 +5,7 @@ import { t } from './i18n.js'
 const BROWSER_STATES = {
   available: 'Available',
   busy: 'In use',
+  human: 'Human control',
   unknown: 'Outcome unknown',
   revoked: 'Revoked',
 }
@@ -21,9 +22,9 @@ const OBSERVATIONS = {
   INSPECTED: 'I inspected the page without recording its contents',
 }
 const DETERMINISTIC = new Set(['INVALID_INPUT', 'RESOURCE_STALE', 'SOURCE_NOT_AUTHORIZED', 'ENVIRONMENT_DENIED',
-  'RESOURCE_LIMIT', 'IDENTITY_CONFLICT', 'BROWSER_RECONCILE_REQUIRED', 'NOT_FOUND', 'UNAVAILABLE'])
+  'RESOURCE_LIMIT', 'IDENTITY_CONFLICT', 'BROWSER_RECONCILE_REQUIRED', 'BROWSER_DENIED', 'BROWSER_HUMAN_CONTROL', 'NOT_FOUND', 'UNAVAILABLE'])
 
-export function ProductBrowserSettings({ binding, works = [], directoryOptions, call }) {
+export function ProductBrowserSettings({ binding, works = [], directoryOptions, call, browserBridge }) {
   const instanceId = binding.instanceId
   const storageKey = `product-browser-command:${instanceId}`
   const acceptedWorks = works.filter(work => work.receipt?.status === 'accepted' && work.brief?.workItemId)
@@ -39,6 +40,7 @@ export function ProductBrowserSettings({ binding, works = [], directoryOptions, 
   const [unavailable, setUnavailable] = useState(false)
   const [error, setError] = useState(null)
   const [notice, setNotice] = useState(null)
+  const [manual, setManual] = useState(null)
   const inFlight = useRef({})
   const refreshGeneration = useRef(0)
   const selected = resources?.find(resource => resource.id === selectedId)
@@ -49,12 +51,15 @@ export function ProductBrowserSettings({ binding, works = [], directoryOptions, 
   const actionKey = (endpoint, input) => endpoint === 'browser-create' ? `create:${input.environmentId}`
     : endpoint === 'browser-grant' ? `grant:${input.resourceId}:${input.workItemId}`
       : endpoint === 'browser-revoke' ? `resource:${input.resourceId}`
-        : endpoint === 'browser-resolve' ? `resolve:${input.resourceId}:${input.operationId}` : endpoint
+        : endpoint === 'browser-resolve' ? `resolve:${input.resourceId}:${input.operationId}`
+          : endpoint === 'browser-take' || endpoint === 'browser-return' ? `control:${input.resourceId}` : endpoint
   const actionLabel = attempt => attempt.endpoint === 'browser-create'
     ? t('Create browser in {environment}', { environment: attempt.input.environmentId })
     : attempt.endpoint === 'browser-grant' ? t('Change browser grant for {workItemId}', { workItemId: attempt.input.workItemId })
       : attempt.endpoint === 'browser-revoke' ? t('Revoke browser {resourceId}', { resourceId: attempt.input.resourceId })
-        : t('Check browser operation {operationId}', { operationId: attempt.input.operationId })
+        : attempt.endpoint === 'browser-take' ? t('Take over browser')
+          : attempt.endpoint === 'browser-return' ? t('Give browser back')
+            : t('Check browser operation {operationId}', { operationId: attempt.input.operationId })
   const remember = (attempt, key) => {
     const next = { ...inFlight.current }
     if (attempt) next[key] = attempt
@@ -95,7 +100,7 @@ export function ProductBrowserSettings({ binding, works = [], directoryOptions, 
       const values = saved && typeof saved === 'object'
         ? saved.endpoint ? [saved] : Object.values(saved) : []
       const valid = Object.fromEntries(values.filter(attempt =>
-        attempt && ['browser-create', 'browser-grant', 'browser-revoke', 'browser-resolve'].includes(attempt.endpoint)
+        attempt && ['browser-create', 'browser-grant', 'browser-revoke', 'browser-resolve', 'browser-take', 'browser-return'].includes(attempt.endpoint)
         && typeof attempt.commandId === 'string' && attempt.input && typeof attempt.input === 'object')
         .map(attempt => [actionKey(attempt.endpoint, attempt.input), attempt]))
       inFlight.current = valid
@@ -115,6 +120,17 @@ export function ProductBrowserSettings({ binding, works = [], directoryOptions, 
   useEffect(() => {
     if (!selectedWorks.some(work => work.brief.workItemId === workItemId)) setWorkItemId(selectedWorks[0]?.brief?.workItemId ?? '')
   }, [selectedId, resources, workItemId])
+
+  useEffect(() => {
+    let live = true
+    const control = selected?.control
+    if (control?.state === 'held' && browserBridge) {
+      void call('browser-control-view', { instanceId, resourceId: selected.id, controlId: control.id })
+        .then(result => { if (live) setManual({ resourceId: selected.id, controlId: control.id, profile: result.profileKey }) })
+        .catch(failure => { if (live) setError(failure.message) })
+    } else setManual(null)
+    return () => { live = false }
+  }, [selected?.id, selected?.control?.id, selected?.control?.state, browserBridge, call, instanceId])
 
   const execute = async (endpoint, input, success, retry = false, explicit = null) => {
     const key = actionKey(endpoint, input)
@@ -164,6 +180,30 @@ export function ProductBrowserSettings({ binding, works = [], directoryOptions, 
       if (result) setReasons(current => ({ ...current, [operation.id]: '' }))
     })
   }
+  const take = () => {
+    if (!selected || !workItemId || busy || selected.state === 'revoked' || !browserBridge) return
+    void execute('browser-take', { resourceId: selected.id, workItemId, expectedRevision: selected.revision },
+      'Browser control taken.')
+  }
+  const reconcileTake = () => {
+    if (!selected?.control || busy) return
+    setBusy(true); setError(null)
+    void call('browser-reconcile-take', { instanceId, resourceId: selected.id, controlId: selected.control.id })
+      .then(async () => { remember(null, actionKey('browser-take', { resourceId: selected.id })); await refresh() },
+        failure => setError(failure.message)).finally(() => setBusy(false))
+  }
+  const giveBack = () => {
+    if (!selected?.control || busy) return
+    void execute('browser-return', { resourceId: selected.id, controlId: selected.control.id },
+      'Browser control returned.').then(result => { if (result) setManual(null) })
+  }
+  const stop = () => {
+    const work = works.find(item => item.brief?.workItemId === selected?.control?.workItemId)
+    if (!work?.receipt?.ticketId || !work.control?.assignment || busy) return
+    void execute('work-stop', { workItemId: selected.control.workItemId, ticketId: work.receipt.ticketId,
+      expectedGeneration: work.control.assignment.generation, expectedTicketVersion: work.control.ticketVersion,
+      reason: 'Stopped by the user during browser control.' }, 'Work stop requested.')
+  }
 
   if (unavailable) return h(Card, { title: t('Browser resources') },
     h('p', { className: 'bt-product-resource-note' }, t('The local Host has no CDP browser bridge. Browser work remains unavailable.')))
@@ -209,6 +249,21 @@ export function ProductBrowserSettings({ binding, works = [], directoryOptions, 
         h('p', { role: 'status' }, `${t(BROWSER_STATES[selected.state] ?? 'Unavailable')} · v${selected.revision}`),
         selected.owner ? h('p', { className: 'bt-product-resource-note' },
           `${t('Browser owner')}: ${selected.owner.ticketId} · ${selected.owner.generation}`) : null,
+        selected.control ? h('div', { className: 'bt-product-browser-control', role: 'status' },
+          h('p', null, t('A person controls this browser. Worker browser calls wait for explicit return.')),
+          selected.control.state === 'held' && manual?.controlId === selected.control.id && manual.profile && browserBridge
+            ? h(ManualBrowserView, { browserBridge, profile: manual.profile, label: selected.label }) : null,
+          selected.control.state === 'held' || selected.control.state === 'returning'
+            ? h('button', { className: 'bt-soft', type: 'button', disabled: Boolean(busy)
+              || Boolean(pending[actionKey('browser-return', { resourceId: selected.id })]), onClick: giveBack }, t('Give browser back')) : null,
+          selected.control.state === 'taking'
+            ? h('button', { className: 'bt-soft', type: 'button', disabled: Boolean(busy), onClick: reconcileTake }, t('Reconnect browser control')) : null)
+          : selectedWorks.length > 0 && browserBridge ? h('button', { className: 'bt-soft', type: 'button', disabled: Boolean(busy)
+            || selected.state === 'revoked' || !workItemId || !activeGrant
+            || Boolean(pending[actionKey('browser-take', { resourceId: selected.id })]), onClick: take }, t('Take over browser')) : null,
+        selected.control && works.some(item => item.brief?.workItemId === selected.control.workItemId
+          && item.control?.assignment && item.control.stop?.state !== 'stopped')
+          ? h('button', { className: 'bt-soft', type: 'button', disabled: Boolean(busy), onClick: stop }, t('Stop browser work')) : null,
         h('div', { className: 'bt-product-resource-row' },
           h('button', { className: 'bt-soft', type: 'button', disabled: Boolean(busy)
             || Boolean(pending[actionKey('browser-revoke', { resourceId: selected.id })]) || selected.state === 'revoked',
@@ -256,8 +311,65 @@ export function ProductBrowserSettings({ binding, works = [], directoryOptions, 
             : h('p', { className: 'bt-set-hint' }, t('No browser operations yet.'))))) : null)
 }
 
+function ManualBrowserView({ browserBridge, profile, label }) {
+  const frame = useRef(null)
+  const tabId = useRef(null)
+  if (!tabId.current) tabId.current = crypto.randomUUID()
+  const [address, setAddress] = useState('')
+  const [error, setError] = useState(null)
+  useEffect(() => {
+    let live = true
+    const tab = tabId.current
+    const place = () => {
+      if (!live || !frame.current) return
+      const box = frame.current.getBoundingClientRect()
+      const scroll = frame.current.closest('.bt-settings-scroll')?.getBoundingClientRect()
+      const visible = !document.hidden && box.width > 0 && box.height > 0 && (!scroll || box.top >= scroll.top && box.bottom <= scroll.bottom)
+      void browserBridge.views.place(tab, { left: box.left, top: box.top, width: box.width, height: box.height }, visible)
+    }
+    void browserBridge.views.create(profile, tab, 'about:blank').then(place, failure => {
+      if (live) setError(failure.message)
+    })
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(place) : null
+    if (frame.current) observer?.observe(frame.current)
+    window.addEventListener('resize', place)
+    document.addEventListener('scroll', place, true)
+    document.addEventListener('visibilitychange', place)
+    return () => {
+      live = false
+      observer?.disconnect()
+      window.removeEventListener('resize', place)
+      document.removeEventListener('scroll', place, true)
+      document.removeEventListener('visibilitychange', place)
+      void browserBridge.views.place(tab, null, false)
+      void browserBridge.views.close(profile, tab)
+    }
+  }, [browserBridge, profile])
+  const open = event => {
+    event.preventDefault()
+    const url = address.trim()
+    if (!/^https?:\/\//iu.test(url)) { setError(t('Enter an HTTP or HTTPS address.')); return }
+    setError(null)
+    void browserBridge.views.navigate(profile, tabId.current, url).catch(failure => setError(failure.message))
+  }
+  return h('div', { className: 'bt-product-manual-browser' },
+    h('p', { className: 'bt-product-resource-note' }, t('Manual browser control: {label}', { label })),
+    h('form', { onSubmit: open, className: 'bt-product-manual-browser-form' },
+      h('input', { className: 'bt-bs-input', value: address, 'aria-label': t('Browser address'),
+        onChange: event => setAddress(event.target.value) }),
+      h('button', { className: 'bt-soft', type: 'submit' }, t('Open'))),
+    error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
+    h('div', { ref: frame, className: 'bt-product-manual-browser-frame', role: 'region', 'aria-label': t('Manual browser') }))
+}
+
 export const PRODUCT_BROWSER_CSS = `
 .bt-product-browser-resource{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.bt-product-browser-control{margin-top:10px;padding:10px;border:1px solid var(--bt-line-2);border-radius:8px;background:var(--bt-hover)}
+.bt-product-browser-control>p{margin:0 0 8px;font-size:12px;color:var(--bt-ink-2)}
+.bt-product-manual-browser{margin:10px 0}
+.bt-product-manual-browser-form{display:flex;gap:6px;margin-bottom:8px}
+.bt-product-manual-browser-form input{flex:1;min-width:0}
+.bt-product-manual-browser-frame{height:280px;min-height:160px;border:1px solid var(--bt-line-2);border-radius:8px;overflow:hidden;background:var(--bt-main)}
 .bt-product-browser-resource>span{color:var(--bt-ink-2);font-size:12px}
 .bt-product-browser-create{display:flex;flex-direction:column;align-items:stretch;gap:8px;margin-top:12px}
 .bt-product-browser-operations{margin-top:12px}
@@ -267,6 +379,6 @@ export const PRODUCT_BROWSER_CSS = `
 .bt-product-browser-resolve{display:flex;gap:8px;align-items:center;margin-top:8px}
 .bt-product-browser-resolve input{flex:1;min-width:0}
 .bt-product-browser-resolve select{flex:1;min-width:0}
-.bt-product-browser-refresh:focus-visible,.bt-product-browser-resource button:focus-visible,.bt-product-browser-create button:focus-visible,.bt-product-browser-create input:focus-visible,.bt-product-browser-create select:focus-visible,.bt-product-resource-selected select:focus-visible,.bt-product-browser-operation button:focus-visible,.bt-product-browser-operation select:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-product-browser-refresh:focus-visible,.bt-product-browser-resource button:focus-visible,.bt-product-browser-create button:focus-visible,.bt-product-browser-create input:focus-visible,.bt-product-browser-create select:focus-visible,.bt-product-resource-selected select:focus-visible,.bt-product-browser-operation button:focus-visible,.bt-product-browser-operation select:focus-visible,.bt-product-manual-browser input:focus-visible,.bt-product-manual-browser button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 @media(max-width:640px){.bt-product-browser-resource{align-items:flex-start;flex-direction:column}.bt-product-browser-resolve{align-items:stretch;flex-direction:column}}
 `

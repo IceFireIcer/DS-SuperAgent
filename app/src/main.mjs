@@ -219,6 +219,14 @@ function hostFailure(error) {
 // A Host that the shell listens to: the Bot browser's endpoint and a failure both arrive here.
 function wireHost(instance) {
   instance.onMessage(message => {
+    if (message?.type === 'ds-superagent:browser-hold' && typeof message.id === 'string'
+      && isBotId(message.profileKey) && typeof message.held === 'boolean'
+      && typeof message.controlId === 'string' && /^[\da-f-]{36}$/iu.test(message.controlId)) {
+      void botViews.hold(message.profileKey, message.held, true, message.controlId).then(() => {
+        instance.send({ type: 'ds-superagent:browser-hold-response', id: message.id, held: message.held })
+      }).catch(() => instance.send({ type: 'ds-superagent:browser-hold-response', id: message.id }))
+      return
+    }
     if (message?.type !== 'ds-bot:browser-endpoint' || typeof message.id !== 'string' || !isBotId(message.botId)) return
     const downloadRoots = message.downloadRoots
     if (!Array.isArray(downloadRoots) || downloadRoots.length > 4 || !Array.from(downloadRoots).every(root => typeof root === 'string' && isAbsolute(root))) {

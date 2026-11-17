@@ -1316,7 +1316,7 @@ export function applyProduct(ctx) {
                 settingsRevision: snapshot.revision, roleSettings: snapshot, onApplied: refreshAfterPreset, onReload: refreshAfterPreset })
                 : page === 'memory' ? h(ProductMemorySettings, { key: binding.instanceId, binding, works: view.getSnapshot().works, call: productCall })
                 : page === 'browser' ? h(ProductBrowserSettings, { binding, works: view.getSnapshot().works,
-                  directoryOptions: viewState.directoryOptions, call: productCall })
+                  directoryOptions: viewState.directoryOptions, call: productCall, browserBridge: globalThis.dsBotApp?.browser })
                 : page === 'supervision' ? h(ProductSupervisionSettings, { binding, call: productCall }) : h(Fragment, null,
             error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
             viewState.directoryError ? h('p', { className: 'bt-main-error', role: 'alert' }, viewState.directoryError) : null,

@@ -47,6 +47,8 @@ export class BotViews {
   #saved = {}
   #active = new Map()
   #held = new Set()
+  #productProfiles = new Set()
+  #productControls = new Map()
   // The tabs whose view waits for a window to belong to.
   #waiting = new Set()
 
@@ -104,6 +106,7 @@ export class BotViews {
   }
 
   create(botId, { url = 'about:blank', createdByBot = false, openerId, tabId: requestedTabId } = {}) {
+    if (this.#productProfiles.has(botId) && !this.#held.has(botId)) throw new Error('Take over the product browser before opening its view')
     const tabId = requestedTabId ?? randomUUID()
     const existing = this.#views.get(tabId)
     if (existing) {
@@ -118,7 +121,9 @@ export class BotViews {
         webviewTag: false, plugins: false, navigateOnDragDrop: false, disableDialogs: true, devTools: this.#devTools,
       },
     })
-    const entry = { tabId, botId, view, createdByBot, openerId, sessions: new Map(), sessionMaps: new Map(), downloads: new Map(), downloadPath: this.#downloadPaths.get(botId), mainFrameId: undefined }
+    const entry = { tabId, botId, view, createdByBot, openerId,
+      ...(this.#productProfiles.has(botId) ? { controlId: this.#productControls.get(botId)?.id } : {}),
+      sessions: new Map(), sessionMaps: new Map(), downloads: new Map(), downloadPath: this.#downloadPaths.get(botId), mainFrameId: undefined }
     this.#views.set(tabId, entry)
     const owner = this.#window()
     if (owner !== undefined && owner !== null) owner.contentView.addChildView(view)
@@ -254,6 +259,12 @@ export class BotViews {
   place(tabId, rect, visible = rect !== null) {
     const entry = this.#views.get(tabId)
     if (!entry) return false
+    if (visible && this.#productProfiles.has(entry.botId) && !this.#held.has(entry.botId)) {
+      throw new Error('The product browser has been returned')
+    }
+    if (visible && this.#productProfiles.has(entry.botId) && entry.controlId !== this.#productControls.get(entry.botId)?.id) {
+      throw new Error('The product browser control changed')
+    }
     if (rect !== null) entry.view.setBounds(rectOf(rect))
     entry.view.setVisible(visible === true)
     if (visible === true) {
@@ -265,7 +276,11 @@ export class BotViews {
   }
 
   async operate(botId, action, payload = {}) {
+    if (action !== 'close' && this.#productProfiles.has(botId) && !this.#held.has(botId)) throw new Error('The product browser has been returned')
     const entry = this.#owned(botId, payload.tabId)
+    if (action !== 'close' && this.#productProfiles.has(botId) && entry.controlId !== this.#productControls.get(botId)?.id) {
+      throw new Error('The product browser control changed')
+    }
     const contents = entry.view.webContents
     switch (action) {
       case 'navigate': {
@@ -382,7 +397,17 @@ export class BotViews {
     this.#server.close()
   }
 
-  async hold(botId, held) {
+  async hold(botId, held, product = false, controlId) {
+    if (product) {
+      if (!controlId) throw new Error('Product browser control requires the original control ID')
+      const prior = this.#productControls.get(botId)
+      if (prior?.id === controlId && prior.returned && held) throw new Error('The product browser control was returned')
+      if (prior?.id !== controlId && !held) throw new Error('The product browser control changed')
+      if (prior?.id !== controlId && prior && !prior.returned) throw new Error('The product browser is already held')
+      this.#productProfiles.add(botId)
+      this.#productControls.set(botId, { id: controlId, returned: !held })
+    }
+    if (!product && this.#productProfiles.has(botId)) throw new Error('Only the product Host may change browser control')
     if (!held) {
       this.#held.delete(botId)
       return true

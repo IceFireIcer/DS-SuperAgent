@@ -8,6 +8,7 @@ import type { MainWorkBrief, MainWorkItem } from './work-delegation.js'
 
 export interface BrowserAdapter {
   execute(request: { profileKey: string; action: 'open' | 'snapshot'; url?: string }, signal: AbortSignal): Promise<string>
+  hold?(profileKey: string, held: boolean, controlId: string): Promise<void>
   close?(): Promise<void>
 }
 
@@ -38,6 +39,15 @@ interface BrowserLease extends BrowserWork {
   operationId?: string
 }
 
+export interface BrowserControl extends BrowserWork {
+  id: string
+  resourceId: string
+  state: 'taking' | 'held' | 'returning' | 'returned'
+  responsibleActorId: string
+  createdAt: number
+  returnedAt?: number
+}
+
 export interface BrowserOperation {
   id: string
   resourceId: string
@@ -62,14 +72,6 @@ export class BrowserOutcomeUnknown extends CoreError {
 
 interface BrowserGrant { resourceId: string; workItemId: string; active: boolean }
 interface BrowserReceipt { fingerprint: string; result: unknown }
-
-function profileKey(instanceId: string, resourceId: string) {
-  const bytes = createHash('sha256').update(canonicalJson(['ds-superagent-browser', instanceId, resourceId])).digest()
-  bytes[6] = (bytes[6]! & 0x0f) | 0x40
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80
-  const value = bytes.toString('hex')
-  return `session-${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20, 32)}`
-}
 
 const grantKey = (resourceId: string, workItemId: string) => canonicalJson([resourceId, workItemId])
 const browserObservations = ['UNCHANGED', 'CHANGED', 'CLOSED', 'INSPECTED'] as const
@@ -136,7 +138,7 @@ export class BrowserResources {
     return index.ticketId
   }
 
-  private async authorized(tx: AsyncTx, scope: BrowserWork, resource: BrowserResource) {
+  private async authorized(tx: AsyncTx, scope: BrowserWork, resource: BrowserResource, allowHuman = false) {
     this.identity(scope.instanceId)
     if (resource.state !== 'active' || resource.environmentId !== scope.environmentId) {
       throw new CoreError('BROWSER_DENIED', 'The browser resource is revoked or belongs to another Environment.')
@@ -151,6 +153,130 @@ export class BrowserResources {
       || !ticket || ticket.state !== 'open' || ticket.constraint) {
       throw new CoreError('BROWSER_DENIED', 'Only the granted, current local Worker Assignment can use this browser.')
     }
+    const control = await tx.get<BrowserControl>('browser-control', resource.id)
+    if (!allowHuman && control && control.state !== 'returned') {
+      throw new CoreError('BROWSER_HUMAN_CONTROL', 'A person controls this browser; wait for its explicit return.')
+    }
+  }
+
+  async take(input: { instanceId: string; commandId: string; resourceId: string; workItemId: string; expectedRevision: number }) {
+    this.identity(input.instanceId)
+    identifier(input.workItemId, 'workItemId')
+    if (!Number.isSafeInteger(input.expectedRevision) || !this.adapter.hold) {
+      throw new CoreError('BROWSER_UNAVAILABLE', 'The desktop Host cannot transfer this browser to a person.')
+    }
+    const control = await this.command(input.commandId, ['take', input.resourceId, input.workItemId, input.expectedRevision], async tx => {
+      const resource = await this.resource(tx, input.resourceId)
+      if (resource.state !== 'active' || resource.revision !== input.expectedRevision) throw new CoreError('RESOURCE_STALE', 'The browser resource changed.')
+      const existing = await tx.get<BrowserControl>('browser-control', resource.id)
+      if (existing && existing.state !== 'returned') throw new CoreError('BROWSER_HUMAN_CONTROL', 'This browser already awaits a person.')
+      const ticketId = await this.work(tx, input.workItemId, resource.environmentId)
+      const assignment = await tx.get<Assignment>('assignment', ticketId)
+      const ticket = await tx.get<Work['ticket']>('ticket', ticketId)
+      if (!assignment || assignment.state !== 'running' || assignment.environment?.kind !== 'local'
+        || assignment.environment.id !== resource.environmentId
+        || ticket?.state !== 'open' || ticket.constraint
+        || !(await tx.get<BrowserGrant>('browser-grant', grantKey(resource.id, input.workItemId)))?.active) {
+        throw new CoreError('BROWSER_DENIED', 'A current local Worker grant is required to take over this browser.')
+      }
+      const lease = await tx.get<BrowserLease>('browser-lease', resource.id)
+      if (lease && (lease.assignmentId !== assignment.id || lease.generation !== assignment.generation)) {
+        const owner = await tx.get<Assignment>('assignment', lease.ticketId)
+        if (owner?.id === lease.assignmentId && owner.generation === lease.generation && owner.state === 'running') {
+          throw new CoreError('BROWSER_BUSY', 'Another Worker holds this browser.')
+        }
+      }
+      const control: BrowserControl = { id: randomUUID(), instanceId: this.instanceId, resourceId: resource.id,
+        ticketId, workItemId: input.workItemId, assignmentId: assignment.id, generation: assignment.generation,
+        environmentId: resource.environmentId, state: 'taking', responsibleActorId: this.actorId, createdAt: Date.now() }
+      if (!await tx.replace('browser-control', resource.id, control)) await tx.insert('browser-control', resource.id, control)
+      await tx.replace('browser-resource', resource.id, { ...resource, revision: resource.revision + 1 })
+      return control
+    })
+    return this.reconcileTake({ instanceId: input.instanceId, resourceId: input.resourceId, controlId: control.id })
+  }
+
+  async reconcileTake(input: { instanceId: string; resourceId: string; controlId: string }) {
+    this.identity(input.instanceId)
+    identifier(input.controlId, 'controlId')
+    if (!this.adapter.hold) throw new CoreError('BROWSER_UNAVAILABLE', 'The desktop Host cannot confirm manual browser control.')
+    const control = await this.storage.transaction(this.instanceId, async tx => {
+      await this.authorizeHost(tx)
+      const resource = await this.resource(tx, input.resourceId)
+      const current = await tx.get<BrowserControl>('browser-control', resource.id)
+      if (!current || current.id !== input.controlId || current.responsibleActorId !== this.actorId
+        || current.state !== 'taking' && current.state !== 'held') {
+        throw new CoreError('BROWSER_RECONCILE_REQUIRED', 'Only the original pending takeover can be confirmed.')
+      }
+      return { control: current, profileKey: resource.profileKey }
+    })
+    await this.adapter.hold(control.profileKey, true, control.control.id)
+    return commandTransaction(this.storage, this.instanceId, async tx => {
+      await this.authorizeHost(tx)
+      const current = await tx.get<BrowserControl>('browser-control', input.resourceId)
+      if (!current || current.id !== control.control.id) throw new CoreError('BROWSER_RECONCILE_REQUIRED', 'The takeover changed before Host confirmation.')
+      if (current.state === 'held') return current
+      if (current.state !== 'taking') throw new CoreError('BROWSER_RECONCILE_REQUIRED', 'The takeover changed before Host confirmation.')
+      const lease = await tx.get<BrowserLease>('browser-lease', input.resourceId)
+      if (lease?.operationId) {
+        const operation = await tx.get<BrowserOperation>('browser-operation', lease.operationId)
+        if (operation?.state === 'pending') await tx.replace('browser-operation', operation.id,
+          { ...operation, state: 'unknown', code: 'BROWSER_OUTCOME_UNKNOWN', settledAt: Date.now() })
+      }
+      const held: BrowserControl = { ...current, state: 'held' }
+      await tx.replace('browser-control', input.resourceId, held)
+      return held
+    })
+  }
+
+  async controlView(input: { instanceId: string; resourceId: string; controlId: string }) {
+    this.identity(input.instanceId)
+    const view = await this.storage.transaction(this.instanceId, async tx => {
+      await this.authorizeHost(tx)
+      const resource = await this.resource(tx, input.resourceId)
+      const control = await tx.get<BrowserControl>('browser-control', resource.id)
+      if (!control || control.id !== input.controlId || control.state !== 'held') throw new CoreError('BROWSER_DENIED', 'Take over this browser before opening its manual view.')
+      return { profileKey: resource.profileKey, controlId: control.id }
+    })
+    await this.adapter.hold?.(view.profileKey, true, view.controlId)
+    return view
+  }
+
+  async giveBack(input: { instanceId: string; commandId: string; resourceId: string; controlId: string }) {
+    this.identity(input.instanceId)
+    identifier(input.controlId, 'controlId')
+    if (!this.adapter.hold) throw new CoreError('BROWSER_UNAVAILABLE', 'The desktop Host cannot return this browser.')
+    const control = await this.command(input.commandId, ['return', input.resourceId, input.controlId], async tx => {
+      const resource = await this.resource(tx, input.resourceId)
+      const current = await tx.get<BrowserControl>('browser-control', resource.id)
+      if (!current || current.id !== input.controlId || current.responsibleActorId !== this.actorId) {
+        throw new CoreError('BROWSER_DENIED', 'This browser control belongs to another person or generation.')
+      }
+      if (current.state === 'returned') return current
+      if (current.state !== 'held' && current.state !== 'returning') throw new CoreError('BROWSER_RECONCILE_REQUIRED', 'The browser takeover has not been confirmed.')
+      const lease = await tx.get<BrowserLease>('browser-lease', resource.id)
+      if (lease?.operationId) throw new CoreError('BROWSER_RECONCILE_REQUIRED', 'Inspect the original browser operation before returning control.')
+      const returning: BrowserControl = { ...current, state: 'returning' }
+      await tx.replace('browser-control', resource.id, returning)
+      return returning
+    })
+    if (control.state === 'returned') return control
+    const latest = await this.storage.transaction(this.instanceId, tx => tx.get<BrowserControl>('browser-control', input.resourceId))
+    if (latest?.id !== control.id) throw new CoreError('BROWSER_RECONCILE_REQUIRED', 'The browser control changed while returning it.')
+    if (latest.state === 'returned') return latest
+    if (latest.state !== 'returning') throw new CoreError('BROWSER_RECONCILE_REQUIRED', 'The browser control is still held.')
+    const resource = await this.storage.transaction(this.instanceId, tx => this.resource(tx, input.resourceId))
+    await this.adapter.hold(resource.profileKey, false, control.id)
+    return commandTransaction(this.storage, this.instanceId, async tx => {
+      await this.authorizeHost(tx)
+      const current = await tx.get<BrowserControl>('browser-control', input.resourceId)
+      if (!current || current.id !== control.id) throw new CoreError('BROWSER_RECONCILE_REQUIRED', 'The browser control changed while returning it.')
+      if (current.state === 'returned') return current
+      if (current.state !== 'returning') throw new CoreError('BROWSER_RECONCILE_REQUIRED', 'The browser control is still held.')
+      const returned: BrowserControl = { ...current, state: 'returned', returnedAt: Date.now() }
+      await tx.replace('browser-control', input.resourceId, returned)
+      return returned
+    })
   }
 
   async create(input: { instanceId: string; commandId: string; environmentId: string; label: string }) {
@@ -168,7 +294,7 @@ export class BrowserResources {
       if ((await tx.list('browser-resource', 101)).length >= 100) throw new CoreError('RESOURCE_LIMIT', 'The Instance browser resource limit was reached.')
       const id = randomUUID()
       const resource: BrowserResource = { id, instanceId: this.instanceId, environmentId: input.environmentId,
-        label: input.label.trim(), profileKey: profileKey(this.instanceId, id), revision: 1, state: 'active',
+        label: input.label.trim(), profileKey: `session-${randomUUID()}`, revision: 1, state: 'active',
         operationIds: [], createdAt: Date.now() }
       await tx.insert('browser-resource', id, resource)
       return this.view(tx, resource)
@@ -207,6 +333,7 @@ export class BrowserResources {
   }
 
   private async view(tx: AsyncTx, resource: BrowserResource) {
+    const control = await tx.get<BrowserControl>('browser-control', resource.id)
     const lease = await tx.get<BrowserLease>('browser-lease', resource.id)
     const owner = lease ? await tx.get<Assignment>('assignment', lease.ticketId) : undefined
     const operation = lease?.operationId ? await tx.get<BrowserOperation>('browser-operation', lease.operationId) : undefined
@@ -214,9 +341,13 @@ export class BrowserResources {
     const occupied = owner && lease && owner.id === lease.assignmentId && owner.generation === lease.generation && owner.state === 'running'
     const state = operation?.state === 'unknown' || operation?.state === 'pending' && !occupied ? 'unknown'
       : resource.state === 'revoked' ? 'revoked'
+        : control && control.state !== 'returned' ? 'human'
         : occupied ? 'busy' : 'available'
     return { id: resource.id, environmentId: resource.environmentId, label: resource.label,
       revision: resource.revision, state,
+      ...(control && control.state !== 'returned' ? { control: { id: control.id, state: control.state,
+        ticketId: control.ticketId, workItemId: control.workItemId, assignmentId: control.assignmentId,
+        generation: control.generation, responsibleActorId: control.responsibleActorId } } : {}),
       grants: grants.items.map(grant => ({ workItemId: grant.workItemId, active: grant.active })),
       grantsTruncated: grants.truncated,
       ...(state === 'busy' || state === 'unknown' ? { owner: { ticketId: lease!.ticketId, assignmentId: lease!.assignmentId, generation: lease!.generation } } : {}),
@@ -246,9 +377,9 @@ export class BrowserResources {
       for (const resource of resources) {
         if (resource.state !== 'active' || resource.environmentId !== scope.environmentId) continue
         if (!(await tx.get<BrowserGrant>('browser-grant', grantKey(resource.id, scope.workItemId)))?.active) continue
-        await this.authorized(tx, scope, resource)
+        await this.authorized(tx, scope, resource, true)
         const view = await this.view(tx, resource)
-        visible.push({ id: view.id, environmentId: view.environmentId, label: view.label, state: view.state })
+        visible.push({ id: view.id, environmentId: view.environmentId, label: view.label, state: view.control ? 'human' : view.state })
       }
       return visible
     })

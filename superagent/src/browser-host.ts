@@ -5,6 +5,30 @@ import type { BrowserAdapter } from './browser-resources.js'
 
 /** The app's existing, one-use CDP endpoint owns the profile and its Electron storage partition. */
 export class HostBrowserAdapter implements BrowserAdapter {
+  async hold(profileKey: string, held: boolean, controlId: string) {
+    const send = process.send
+    if (!send) throw new CoreError('BROWSER_UNAVAILABLE', 'The desktop browser Host bridge is unavailable.')
+    const id = randomUUID()
+    await new Promise<void>((resolve, reject) => {
+      const finish = (error?: Error) => {
+        clearTimeout(timeout)
+        process.off('message', receive)
+        if (error) reject(error)
+        else resolve()
+      }
+      const receive = (message: unknown) => {
+        const reply = message as { type?: string; id?: string; held?: boolean } | null
+        if (reply?.type !== 'ds-superagent:browser-hold-response' || reply.id !== id) return
+        finish(reply.held === held ? undefined : new CoreError('BROWSER_UNAVAILABLE', 'The desktop browser did not confirm manual control.'))
+      }
+      const timeout = setTimeout(() => finish(new CoreError('BROWSER_UNAVAILABLE', 'The desktop browser control timed out.')), 10_000)
+      process.on('message', receive)
+      send.call(process, { type: 'ds-superagent:browser-hold', id, profileKey, held, controlId }, error => {
+        if (error) finish(new CoreError('BROWSER_UNAVAILABLE', 'The desktop browser could not change control.'))
+      })
+    })
+  }
+
   private async endpoint(profileKey: string, signal: AbortSignal) {
     const send = process.send
     if (!send) throw new CoreError('BROWSER_UNAVAILABLE', 'The desktop browser Host bridge is unavailable.')

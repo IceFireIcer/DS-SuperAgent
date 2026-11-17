@@ -162,3 +162,101 @@ test('stop or grant revocation during a browser request leaves a durable unknown
   await assert.rejects(attempt, { code: 'BROWSER_OUTCOME_UNKNOWN' })
   assert.equal((await second.read({ instanceId: 'personal', resourceId: resource.id })).operations.at(-1).state, 'unknown')
 })
+
+test('human browser control fences the Worker across restarts and requires explicit return', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'r5-browser-human-'))
+  const storage = await SqliteStorage.open(join(root, 'business.sqlite'))
+  t.after(async () => { await storage.close(); await rm(root, { recursive: true, force: true }) })
+  const environment = { kind: 'local', config: { id: 'local', instanceId: 'personal', root,
+    allowedActorIds: ['alice'], permissions: ['read', 'write'], commands: {} } }
+  const scope = { instanceId: 'personal', ticketId: 'ticket', workItemId: 'item', assignmentId: 'assignment',
+    generation: 'generation', environmentId: 'local' }
+  await storage.transaction('personal', async tx => {
+    await tx.insert('work-brief', 'brief', { id: 'brief', instanceId: 'personal', environmentId: 'local' })
+    await tx.insert('work-item', 'item', { id: 'item', workBriefId: 'brief' })
+    await tx.insert('work-item-ticket', 'item', { ticketId: 'ticket' })
+    await tx.insert('ticket', 'ticket', { state: 'open' })
+    await tx.insert('assignment', 'ticket', { id: 'assignment', generation: 'generation', state: 'running',
+      environment: { id: 'local', kind: 'local', root } })
+  })
+  const holds = []
+  let failHold = false
+  let pauseUse = false, callStarted, releaseUse
+  const startedUse = new Promise(resolve => { callStarted = resolve })
+  const heldUse = new Promise(resolve => { releaseUse = resolve })
+  t.after(() => releaseUse())
+  const adapter = { execute: async () => {
+    if (pauseUse) { callStarted(); await heldUse }
+    return 'Page content'
+  }, hold: async (key, held) => {
+    holds.push([key, held])
+    if (failHold) throw new Error('Host hold response lost')
+  } }
+  const browsers = new BrowserResources(storage, 'personal', 'alice', [environment], adapter, allowHost)
+  const resource = await browsers.create({ instanceId: 'personal', commandId: 'create-human', environmentId: 'local', label: 'Human browser' })
+  await browsers.grant({ instanceId: 'personal', commandId: 'grant-human', resourceId: resource.id,
+    workItemId: 'item', expectedRevision: 1, active: true })
+  const control = await browsers.take({ instanceId: 'personal', commandId: 'take', resourceId: resource.id,
+    workItemId: 'item', expectedRevision: 2 })
+  assert.equal(control.state, 'held')
+  assert.deepEqual([control.ticketId, control.assignmentId, control.generation], ['ticket', 'assignment', 'generation'])
+  assert.equal((await browsers.take({ instanceId: 'personal', commandId: 'take', resourceId: resource.id,
+    workItemId: 'item', expectedRevision: 2 })).id, control.id)
+  assert.equal((await browsers.read({ instanceId: 'personal', resourceId: resource.id })).state, 'human')
+  await assert.rejects(browsers.use(scope, { resourceId: resource.id, action: 'snapshot' }, new AbortController().signal),
+    { code: 'BROWSER_HUMAN_CONTROL' })
+  const reopened = new BrowserResources(storage, 'personal', 'alice', [environment], adapter, allowHost)
+  await assert.rejects(reopened.use(scope, { resourceId: resource.id, action: 'snapshot' }, new AbortController().signal),
+    { code: 'BROWSER_HUMAN_CONTROL' })
+  const view = await reopened.controlView({ instanceId: 'personal', resourceId: resource.id, controlId: control.id })
+  assert.match(view.profileKey, /^session-[\da-f-]{36}$/u)
+  await storage.transaction('personal', async tx => {
+    await tx.insert('browser-operation', 'old-operation', { id: 'old-operation', resourceId: resource.id,
+      ticketId: 'ticket', workItemId: 'item', assignmentId: 'assignment', generation: 'generation',
+      ownerRuntime: 'old-host', action: 'open', state: 'unknown', createdAt: Date.now() })
+    await tx.insert('browser-lease', resource.id, { ...scope, resourceId: resource.id,
+      acquiredAt: Date.now(), operationId: 'old-operation' })
+  })
+  await assert.rejects(reopened.giveBack({ instanceId: 'personal', commandId: 'unsafe-return', resourceId: resource.id,
+    controlId: control.id }), { code: 'BROWSER_RECONCILE_REQUIRED' })
+  await reopened.resolve({ instanceId: 'personal', commandId: 'inspect-old', resourceId: resource.id,
+    operationId: 'old-operation', reason: 'INSPECTED' })
+  await storage.transaction('personal', async tx => {
+    await tx.insert('stop-head', JSON.stringify(['stop-head', 'ticket']), { stopId: 'manual-stop' })
+    await tx.insert('stop-state', 'manual-stop', { state: 'stopped', requestedBy: 'alice' })
+  })
+  const returned = await reopened.giveBack({ instanceId: 'personal', commandId: 'return', resourceId: resource.id,
+    controlId: control.id })
+  assert.equal(returned.state, 'returned')
+  assert.equal((await reopened.read({ instanceId: 'personal', resourceId: resource.id })).state, 'busy')
+  assert.equal((await storage.transaction('personal', tx => tx.get('stop-state', 'manual-stop'))).state, 'stopped')
+  assert.deepEqual(holds.map(([, held]) => held), [true, true, true, false])
+  failHold = true
+  await assert.rejects(reopened.take({ instanceId: 'personal', commandId: 'take-lost', resourceId: resource.id,
+    workItemId: 'item', expectedRevision: 3 }), /Host hold response lost/u)
+  const pending = (await reopened.read({ instanceId: 'personal', resourceId: resource.id })).control
+  assert.equal(pending.state, 'taking')
+  await assert.rejects(browsers.use(scope, { resourceId: resource.id, action: 'snapshot' }, new AbortController().signal),
+    { code: 'BROWSER_HUMAN_CONTROL' })
+  failHold = false
+  const recovered = await reopened.reconcileTake({ instanceId: 'personal', resourceId: resource.id, controlId: pending.id })
+  assert.equal(recovered.state, 'held')
+  await assert.rejects(reopened.reconcileTake({ instanceId: 'personal', resourceId: resource.id, controlId: control.id }),
+    { code: 'BROWSER_RECONCILE_REQUIRED' })
+  await reopened.giveBack({ instanceId: 'personal', commandId: 'return-recovered', resourceId: resource.id, controlId: recovered.id })
+  pauseUse = true
+  const late = reopened.use(scope, { resourceId: resource.id, action: 'open', url: 'https://example.test/' }, new AbortController().signal)
+  await startedUse
+  const takeover = await reopened.take({ instanceId: 'personal', commandId: 'take-inflight', resourceId: resource.id,
+    workItemId: 'item', expectedRevision: 4 })
+  assert.equal(takeover.state, 'held')
+  const original = (await reopened.read({ instanceId: 'personal', resourceId: resource.id })).operations.at(-1)
+  assert.equal(original.state, 'unknown')
+  releaseUse()
+  await assert.rejects(late, { code: 'BROWSER_OUTCOME_UNKNOWN' })
+  await assert.rejects(reopened.giveBack({ instanceId: 'personal', commandId: 'return-before-check',
+    resourceId: resource.id, controlId: takeover.id }), { code: 'BROWSER_RECONCILE_REQUIRED' })
+  await reopened.resolve({ instanceId: 'personal', commandId: 'inspect-inflight', resourceId: resource.id,
+    operationId: original.id, reason: 'INSPECTED' })
+  await reopened.giveBack({ instanceId: 'personal', commandId: 'return-inflight', resourceId: resource.id, controlId: takeover.id })
+})
