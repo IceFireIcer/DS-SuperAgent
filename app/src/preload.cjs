@@ -76,6 +76,10 @@ function browserBridge() {
     importLive: (source, close) => ipcRenderer.invoke('ds-bot:browser-import-live', String(source), close === true),
     importApply: (key, pending) => ipcRenderer.invoke('ds-bot:browser-import-apply', String(key), String(pending)),
     importCancel: (pending) => ipcRenderer.invoke('ds-bot:browser-import-cancel', String(pending)),
+    credentialImport: {
+      pick: () => ipcRenderer.invoke('ds-bot:credential-import-pick'),
+      cancel: pending => ipcRenderer.invoke('ds-bot:credential-import-cancel', String(pending)),
+    },
     onOpenRequested(lease, listener) {
       const id = String(lease)
       let set = listeners.get(id)

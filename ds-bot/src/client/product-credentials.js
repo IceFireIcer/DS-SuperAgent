@@ -2,7 +2,11 @@ import { createElement as h, useEffect, useRef, useState } from 'react'
 import { Card, Row } from './bot-settings.js'
 import { t } from './i18n.js'
 
-export function ProductCredentialSettings({ binding, call }) {
+const credentialImportStatusText = status => t(({ pending: 'Credential import pending', importing: 'Credential import in progress',
+  unknown: 'Credential import result unknown', applied: 'Credential import completed', conflict: 'Credential import conflict',
+  cancelled: 'Credential import cancelled' })[status] ?? 'Credential import status unavailable')
+
+export function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
   const [resources, setResources] = useState(null)
   const [requests, setRequests] = useState([])
   const [requestCursor, setRequestCursor] = useState(null)
@@ -24,9 +28,15 @@ export function ProductCredentialSettings({ binding, call }) {
   const [busy, setBusy] = useState(null)
   const [error, setError] = useState(null)
   const [notice, setNotice] = useState(null)
+  const [credentialImports, setCredentialImports] = useState([])
+  const [credentialImportBatch, setCredentialImportBatch] = useState(null)
+  const [credentialImportTargets, setCredentialImportTargets] = useState({})
+  const [credentialImportError, setCredentialImportError] = useState(null)
+  const [credentialImportBusy, setCredentialImportBusy] = useState(false)
   const pendingCreate = useRef(null)
   const pendingRotation = useRef(null)
   const pendingRequest = useRef(null)
+  const pendingCredentialPreview = useRef(null)
   const pendingDecisions = useRef(new Map())
   const instanceId = binding.instanceId
 
@@ -64,6 +74,16 @@ export function ProductCredentialSettings({ binding, call }) {
       const page = await call('resource-request-list', { instanceId, limit: 100 })
       return { items: page.items, cursor: page.cursor ?? null, available: true }
     } catch (failure) { return { items: [], cursor: null, available: false, error: failure.message } }
+  }
+  const readCredentialImports = async () => {
+    try {
+      const result = await call('credential-import-list', { instanceId, limit: 100 })
+      setCredentialImports(result.items)
+      return true
+    } catch (failure) {
+      setCredentialImportError(failure.message)
+      return false
+    }
   }
   const refresh = async () => {
     const [items, requestResult] = await Promise.all([load(), readRequests()])
@@ -108,10 +128,12 @@ export function ProductCredentialSettings({ binding, call }) {
       }
     } catch { /* Session storage may be unavailable. */ }
     Promise.all([load(), readRequests(), call('feishu-status', { instanceId }).catch(() => null),
-      call('github-status', { instanceId }).catch(() => null)]).then(([items, requestResult, status, githubStatus]) => {
+      call('github-status', { instanceId }).catch(() => null), call('credential-import-list', { instanceId, limit: 100 }).catch(() => null)]).then(([items, requestResult, status, githubStatus, importResult]) => {
       if (!live) return
       setResources(items); setRequests(requestResult.items); setRequestCursor(requestResult.cursor)
       setRequestError(requestResult.error ?? null); setFeishu(status); setGithub(githubStatus)
+      if (importResult) { setCredentialImports(importResult.items); setCredentialImportError(null) }
+      else setCredentialImportError(t('Credential export import is available only in the desktop app.'))
       if (status?.credentialMode === 'managed' || githubStatus?.credentialMode === 'managed') {
         setSourceInstanceId(current => current || status?.sourceInstanceId || githubStatus?.sourceInstanceId)
       }
@@ -119,6 +141,12 @@ export function ProductCredentialSettings({ binding, call }) {
       failure => { if (live) setError(failure.message) })
     return () => { live = false }
   }, [call, instanceId])
+
+  useEffect(() => () => {
+    const pendingId = pendingCredentialPreview.current
+    pendingCredentialPreview.current = null
+    if (pendingId) void credentialImportBridge?.cancel(pendingId).catch(() => {})
+  }, [credentialImportBridge, instanceId])
 
   const loadMoreRequests = async () => {
     if (!requestCursor || busy) return
@@ -278,9 +306,148 @@ export function ProductCredentialSettings({ binding, call }) {
     void run('select-github', () => call('resource-select-github', { instanceId, commandId: crypto.randomUUID(), resourceId }),
       'GitHub credential selection saved.')
   }
+  const pickCredentialExport = async () => {
+    if (credentialImportBusy || !credentialImportBridge) return
+    setCredentialImportBusy(true); setCredentialImportError(null)
+    let picked
+    try {
+      picked = await credentialImportBridge.pick()
+      if (picked.canceled) return
+      if (picked.error) throw new Error(t(picked.error === 'too-large'
+        ? 'Credential export must be at most 1 MiB.' : 'The credential export could not be read.'))
+      const saved = await call('credential-import-preview', { instanceId, pendingId: picked.id, preview: picked.preview })
+      if (pendingCredentialPreview.current && pendingCredentialPreview.current !== picked.id) {
+        await credentialImportBridge.cancel(pendingCredentialPreview.current)
+      }
+      pendingCredentialPreview.current = picked.id
+      setCredentialImportBatch({ ...picked.preview, pendingId: picked.id, items: saved.items })
+      setCredentialImportTargets(Object.fromEntries(picked.preview.entries.map(entry => {
+        const prior = saved.items.find(item => item.sourceRef === entry.sourceRef)?.target
+        return [entry.sourceRef, { label: prior?.label ?? entry.label, role: prior?.scope.role ?? '',
+          purpose: prior?.purpose ?? '', workItemId: prior?.scope.workItemId ?? '',
+          environmentId: prior?.scope.environmentId ?? '', sourceInstanceId: prior?.scope.sourceInstanceId ?? '' }]
+      })))
+      await readCredentialImports()
+    } catch (failure) {
+      if (picked?.id) await credentialImportBridge.cancel(picked.id).catch(() => {})
+      setCredentialImportError(failure.message)
+    }
+    finally { setCredentialImportBusy(false) }
+  }
+  const updateCredentialImportTarget = (sourceRef, patch) => setCredentialImportTargets(current => ({
+    ...current, [sourceRef]: { ...current[sourceRef], ...patch },
+  }))
+  const commitCredentialImport = async entry => {
+    if (!credentialImportBatch || credentialImportBusy) return
+    const target = credentialImportTargets[entry.sourceRef]
+    if (!target?.label.trim() || !target.role || !target.purpose) {
+      setCredentialImportError(t('Choose a new resource name, role, purpose, and exact scope before importing.'))
+      return
+    }
+    if (target.purpose === 'tool' && !target.workItemId.trim() && !target.environmentId.trim()) {
+      setCredentialImportError(t('Choose a work item or Environment for a tool grant.'))
+      return
+    }
+    if (target.purpose !== 'tool' && !target.sourceInstanceId.trim()) {
+      setCredentialImportError(t('Choose the exact source Instance for this authorization.'))
+      return
+    }
+    const scope = { role: target.role,
+      ...(target.workItemId.trim() ? { workItemId: target.workItemId.trim() } : {}),
+      ...(target.environmentId.trim() ? { environmentId: target.environmentId.trim() } : {}),
+      ...(target.sourceInstanceId.trim() ? { sourceInstanceId: target.sourceInstanceId.trim() } : {}) }
+    setCredentialImportBusy(true); setCredentialImportError(null)
+    try {
+      await call('credential-import-commit', { instanceId, commandId: crypto.randomUUID(),
+        pendingId: credentialImportBatch.pendingId, sourceRef: entry.sourceRef, credentialId: entry.id,
+        target: { label: target.label.trim(), purpose: target.purpose, scope } })
+      setNotice(t('Credential imported with a new authorization.'))
+      const [items, imports] = await Promise.all([load(), call('credential-import-list', { instanceId, limit: 100 })])
+      setResources(items); setCredentialImports(imports.items)
+      setCredentialImportBatch(current => current ? { ...current,
+        items: current.items.map(item => item.sourceRef === entry.sourceRef
+          ? imports.items.find(saved => saved.sourceRef === item.sourceRef) ?? item : item) } : current)
+    } catch (failure) {
+      setCredentialImportError(failure.message)
+      await readCredentialImports()
+    } finally { setCredentialImportBusy(false) }
+  }
+  const cancelCredentialImport = async item => {
+    if (credentialImportBusy) return
+    setCredentialImportBusy(true); setCredentialImportError(null)
+    try {
+      const result = await call('credential-import-cancel', { instanceId, commandId: crypto.randomUUID(),
+        sourceRef: item.sourceRef,
+        ...(credentialImportBatch?.pendingId ? { pendingId: credentialImportBatch.pendingId } : {}) })
+      setCredentialImports(current => current.map(saved => saved.sourceRef === result.sourceRef ? result : saved))
+    } catch (failure) { setCredentialImportError(failure.message); await readCredentialImports() }
+    finally { setCredentialImportBusy(false) }
+  }
 
   return h(Card, { title: t('Credential resources') },
     h('p', { className: 'bt-product-resource-note' }, t('Managed Feishu and GitHub source credentials use separate grants. Feishu delivery and Worker MCP tools need their own grants.')),
+    h('section', { className: 'bt-product-credential-import', 'aria-label': t('Import credential resources') },
+      h('h3', null, t('Import credential resources')),
+      h('p', { className: 'bt-product-resource-note' }, t('Import accepts a controlled ds-superagent-credential-export version 1 JSON file. DSH does not provide a safe way to browse old vault records; if you do not have an export, create a new resource manually. Old grants are never copied.')),
+      credentialImportBridge ? h('button', { className: 'bt-soft', type: 'button', disabled: credentialImportBusy,
+        onClick: () => void pickCredentialExport() }, credentialImportBusy ? t('Reading export…') : t('Choose credential export')) : null,
+      credentialImportError ? h('p', { className: 'bt-main-error', role: 'alert' }, credentialImportError) : null,
+      credentialImportBatch ? h('div', { className: 'bt-product-credential-import-preview' },
+        h('strong', null, credentialImportBatch.sourceLabel),
+        h('span', null, `${t('Original owner')}: ${credentialImportBatch.owner.label}`),
+        credentialImportBatch.owner.instanceId ? h('span', null, `${t('Original instance')}: ${credentialImportBatch.owner.instanceId}`) : null,
+        h('button', { className: 'bt-soft', type: 'button', disabled: credentialImportBusy,
+          onClick: () => {
+            void credentialImportBridge.cancel(credentialImportBatch.pendingId).catch(() => {})
+            pendingCredentialPreview.current = null
+            setCredentialImportBatch(null)
+          } }, t('Clear credential preview')),
+        credentialImportBatch.items.map(item => {
+          const entry = credentialImportBatch.entries.find(candidate => candidate.sourceRef === item.sourceRef)
+          if (!entry) return null
+          const target = credentialImportTargets[entry.sourceRef] ?? {}
+          const status = credentialImports.find(saved => saved.sourceRef === entry.sourceRef) ?? item
+          const canImport = ['pending', 'unknown', 'importing'].includes(status.status)
+          return h('article', { key: entry.sourceRef, className: 'bt-product-credential-import-item' },
+            h('div', { className: 'bt-product-resource-row' },
+              h('strong', null, entry.label),
+              h('span', null, `${t('Credential type')}: ${entry.type}`),
+              h('span', null, `${t('Original scope')}: ${[entry.originalScope.kind, entry.originalScope.role,
+                entry.originalScope.work, entry.originalScope.environment,
+                ...(entry.originalScope.sharedWith ?? [])].filter(Boolean).join(' · ')}`),
+              h('span', { role: 'status' }, `${t('Import status')}: ${credentialImportStatusText(status.status)}${status.code ? ` · ${t(status.code)}` : ''}`),
+              status.resourceId ? h('span', null, `${t('Imported resource')}: ${resources?.find(resource => resource.id === status.resourceId)?.label ?? status.resourceId}`) : null,
+              status.cleanupPending ? h('span', { className: 'bt-main-error' }, t('Import cleanup pending.')) : null),
+            canImport ? h('div', { className: 'bt-product-resource-grant' },
+              h('label', null, t('New resource name'), h('input', { value: target.label ?? '', maxLength: 128,
+                disabled: credentialImportBusy, onChange: event => updateCredentialImportTarget(entry.sourceRef, { label: event.target.value }) })),
+              h('label', null, t('New authorization role'), h('select', { value: target.role ?? '', disabled: credentialImportBusy,
+                onChange: event => updateCredentialImportTarget(entry.sourceRef, { role: event.target.value }) },
+                h('option', { value: '' }, t('Choose target role')),
+                ...['main', 'router', 'worker'].map(value => h('option', { key: value, value }, t(value === 'main' ? 'Main' : value === 'router' ? 'Router' : 'Worker'))))),
+              h('label', null, t('New authorization purpose'), h('select', { value: target.purpose ?? '', disabled: credentialImportBusy,
+                onChange: event => updateCredentialImportTarget(entry.sourceRef, { purpose: event.target.value }) },
+                h('option', { value: '' }, t('Choose purpose')),
+                ...['source', 'tool', 'outbound'].map(value => h('option', { key: value, value }, t(value))))),
+              h('label', null, t('Target work item ID'), h('input', { value: target.workItemId ?? '', maxLength: 512,
+                disabled: credentialImportBusy, onChange: event => updateCredentialImportTarget(entry.sourceRef, { workItemId: event.target.value }) })),
+              h('label', null, t('Target Environment ID'), h('input', { value: target.environmentId ?? '', maxLength: 512,
+                disabled: credentialImportBusy, onChange: event => updateCredentialImportTarget(entry.sourceRef, { environmentId: event.target.value }) })),
+              h('label', null, t('Target source Instance ID'), h('input', { value: target.sourceInstanceId ?? '', maxLength: 512,
+                disabled: credentialImportBusy, onChange: event => updateCredentialImportTarget(entry.sourceRef, { sourceInstanceId: event.target.value }) })),
+              h('span', { className: 'bt-product-resource-note' }, `${t('New authorization')}: ${[target.role, target.purpose,
+                target.workItemId, target.environmentId, target.sourceInstanceId].filter(Boolean).join(' · ') || t('Not selected')}`),
+              h('button', { className: 'bt-soft', type: 'button', disabled: credentialImportBusy,
+                onClick: () => void commitCredentialImport(entry) }, t(status.status === 'unknown' ? 'Retry import' : 'Create resource and grant')),
+              h('button', { className: 'bt-soft', type: 'button', disabled: credentialImportBusy,
+                onClick: () => void cancelCredentialImport(status) }, t(status.status === 'cancelled' ? 'Retry cleanup' : 'Cancel import'))) : null)
+        })) : null,
+      credentialImports.length ? h('div', { className: 'bt-product-resource-list' }, credentialImports.map(item => h('div', {
+        key: item.sourceRef, className: 'bt-product-resource-row' },
+        h('span', null, `${item.sourceLabel} · ${item.credentialLabel} · ${credentialImportStatusText(item.status)}`),
+        item.resourceId ? h('span', null, resources?.find(resource => resource.id === item.resourceId)?.label ?? item.resourceId) : null,
+        item.cleanupPending ? h('button', { className: 'bt-soft', type: 'button', disabled: credentialImportBusy,
+          onClick: () => void cancelCredentialImport(item) }, t('Retry cleanup')) : null))) : null),
     feishu?.credentialMode === 'managed' ? h('div', { className: 'bt-product-resource-selected' },
       h('p', { className: 'bt-product-resource-note' }, `${t('Feishu source Instance')}: ${feishu.sourceInstanceId}`),
       h('p', { className: 'bt-product-resource-note' }, t('Grant Main/source and Router/outbound for this exact source Instance, then reconnect.')),
@@ -396,8 +563,13 @@ export const PRODUCT_CREDENTIAL_CSS = `
 .bt-product-resource-row>span{min-width:0;overflow-wrap:anywhere;color:var(--bt-ink-2)}
 .bt-product-resource-grant{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%}
 .bt-product-resource-grant label{display:flex;flex-direction:column;gap:4px;min-width:0;font-size:12px;color:var(--bt-ink-2)}
-.bt-product-resource-grant input,.bt-product-resource-grant select{height:32px;min-width:0;box-sizing:border-box;border:1px solid var(--bt-line);border-radius:6px;background:var(--bt-main);color:var(--bt-ink);font:inherit;padding:0 8px}
+.bt-product-resource-grant input,.bt-product-resource-grant select{height:32px;min-width:0;box-sizing:border-box;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-main);color:var(--bt-ink);font:inherit;padding:0 8px}
 .bt-product-resource-grant button{justify-self:start}.bt-product-resource-create button:focus-visible,.bt-product-resource-row button:focus-visible,.bt-product-resource-selected button:focus-visible,.bt-product-resource-grant button:focus-visible,.bt-product-resource-create input:focus-visible,.bt-product-resource-selected input:focus-visible,.bt-product-resource-grant input:focus-visible,.bt-product-resource-grant select:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 .bt-product-resource-request-actions{display:flex;flex-wrap:wrap;gap:8px}
+.bt-product-credential-import{display:flex;flex-direction:column;gap:8px;margin:14px 0;padding:10px 0;border-top:1px solid var(--bt-line-2)}
+.bt-product-credential-import>button:focus-visible,.bt-product-credential-import-preview>button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-product-credential-import h3{margin:0;font-size:13px}
+.bt-product-credential-import-preview{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.bt-product-credential-import-item{padding:8px 0;border-top:1px solid var(--bt-line-2)}
 @media(max-width:640px){.bt-product-resource-grant{grid-template-columns:minmax(0,1fr)}}
 `

@@ -3,7 +3,7 @@
 // origin as the address the browser comes back to, and accepts only a loopback one.
 import { app, BrowserWindow, WebContentsView, dialog, ipcMain, Menu, nativeImage, nativeTheme, powerMonitor, session, shell as electronShell, Tray } from 'electron'
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { readFile, rm } from 'node:fs/promises'
+import { readFile, rm, stat } from 'node:fs/promises'
 import { release } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -14,6 +14,7 @@ import { BotBrowserGuests, partitionOf } from './bot-browser.mjs'
 import { BotViews, isBotId } from './bot-views.mjs'
 import { importFromBrowser, listSources } from './browser-sources.mjs'
 import { applyCookies, CookieImports, isProductBrowserImportId, ProductCookieImports } from './cookie-import.mjs'
+import { CredentialImports } from './credential-import.mjs'
 import { parseCookieFile } from './cookie-parse.mjs'
 import { downloadSaver } from './downloads.mjs'
 import { canonicalExecPath } from './canonical-path.mjs'
@@ -43,6 +44,7 @@ const IPC = {
   browserImportSources: 'ds-bot:browser-import-sources', browserImportPick: 'ds-bot:browser-import-pick',
   browserImportLive: 'ds-bot:browser-import-live', browserImportApply: 'ds-bot:browser-import-apply',
   browserImportCancel: 'ds-bot:browser-import-cancel',
+  credentialImportPick: 'ds-bot:credential-import-pick', credentialImportCancel: 'ds-bot:credential-import-cancel',
   appUpdateState: 'ds-bot:app-update-state', appUpdateCheck: 'ds-bot:app-update-check',
   appUpdateInstall: 'ds-bot:app-update-install', appUpdateOpen: 'ds-bot:app-update-open',
   appUpdateChanged: 'ds-bot:app-update-changed',
@@ -51,6 +53,7 @@ const IPC = {
 }
 // A cookie export larger than this is not a cookie export.
 const IMPORT_FILE_MAX = 32 * 1024 * 1024
+const CREDENTIAL_IMPORT_FILE_MAX = 1024 * 1024
 const PRODUCT_BROWSER_IMPORT_ERRORS = new Set(['BROWSER_IMPORT_NOT_FOUND', 'BROWSER_IMPORT_CONFLICT'])
 const MOVE_PROBLEMS = { drive: 'moveDrive', nested: 'moveNested', workspace: 'moveWorkspace', program: 'inProgram', notEmpty: 'moveNotEmpty' }
 const UPDATE_CHECK_WAIT_MS = 15_000
@@ -114,6 +117,7 @@ const botViews = new BotViews({
 })
 const cookieImports = new CookieImports()
 const productCookieImports = new ProductCookieImports()
+const credentialImports = new CredentialImports()
 const remoteProduct = new RemoteProductClient()
 
 // The window and the tray: closing the window hides it, the tray is the way back to it and
@@ -221,6 +225,32 @@ function hostFailure(error) {
 // A Host that the shell listens to: the Bot browser's endpoint and a failure both arrive here.
 function wireHost(instance) {
   instance.onMessage(message => {
+    if (message?.type === 'ds-superagent:credential-import-read' && typeof message.id === 'string'
+      && typeof message.pendingId === 'string' && /^[\da-f-]{36}$/iu.test(message.pendingId)
+      && typeof message.credentialId === 'string' && typeof message.sourceRef === 'string'
+      && /^[a-f0-9]{64}$/u.test(message.sourceRef)) {
+      try {
+        const result = credentialImports.read(message.pendingId, message.sourceRef, message.credentialId)
+        instance.send({ type: 'ds-superagent:credential-import-response', id: message.id,
+          credentialId: result.id, sourceRef: result.sourceRef, value: result.value })
+      } catch (error) {
+        const code = error?.code === 'CREDENTIAL_IMPORT_NOT_FOUND' ? error.code : 'CREDENTIAL_IMPORT_UNAVAILABLE'
+        instance.send({ type: 'ds-superagent:credential-import-response', id: message.id, code })
+      }
+      return
+    }
+    if (message?.type === 'ds-superagent:credential-import-cancel' && typeof message.pendingId === 'string'
+      && /^[\da-f-]{36}$/iu.test(message.pendingId)
+      && typeof message.sourceRef === 'string' && /^[a-f0-9]{64}$/u.test(message.sourceRef)) {
+      credentialImports.cancel(message.pendingId, message.sourceRef)
+      return
+    }
+    if (message?.type === 'ds-superagent:credential-import-finish' && typeof message.pendingId === 'string'
+      && /^[\da-f-]{36}$/iu.test(message.pendingId)
+      && typeof message.sourceRef === 'string' && /^[a-f0-9]{64}$/u.test(message.sourceRef)) {
+      credentialImports.finish(message.pendingId, message.sourceRef)
+      return
+    }
     if (message?.type === 'ds-superagent:browser-import' && typeof message.id === 'string'
       && isBotId(message.profileKey)
       && typeof message.pendingImportId === 'string' && /^[\da-f-]{36}$/iu.test(message.pendingImportId)
@@ -424,6 +454,26 @@ async function start() {
   ipcMain.handle(IPC.browserImportCancel, (event, id) => {
     assertWindow(event)
     if (typeof id === 'string') cookieImports.drop(id)
+  })
+  ipcMain.handle(IPC.credentialImportPick, async event => {
+    assertWindow(event)
+    const picked = await dialog.showOpenDialog(mainWindow, { properties: ['openFile'],
+      filters: [{ name: 'Credential export', extensions: ['json'] }] })
+    if (picked.canceled || !picked.filePaths[0]) return { canceled: true }
+    try {
+      const path = picked.filePaths[0]
+      if ((await stat(path)).size > CREDENTIAL_IMPORT_FILE_MAX) return { error: 'too-large' }
+      const bytes = await readFile(path)
+      if (bytes.length > CREDENTIAL_IMPORT_FILE_MAX) return { error: 'too-large' }
+      const pending = credentialImports.store(bytes, basename(picked.filePaths[0]))
+      return pending
+    } catch {
+      return { error: 'unreadable' }
+    }
+  })
+  ipcMain.handle(IPC.credentialImportCancel, (event, id) => {
+    assertWindow(event)
+    if (typeof id === 'string') credentialImports.drop(id)
   })
   // The app's own update state, for the About row. `updates` exists once the ready block
   // created it; before that (and in runs without an updater) the state is null.

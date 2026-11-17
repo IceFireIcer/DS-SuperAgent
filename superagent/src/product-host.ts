@@ -25,6 +25,8 @@ import { ProactiveWork } from './proactive-work.js'
 import type { ProactiveRule } from './proactive.js'
 import type { ProductCredentialRecords } from './product-credential-vault.js'
 import type { ProductCredentialManager } from './product-credential-manager.js'
+import { ProductCredentialImports, type CredentialImportAdapter } from './product-credential-imports.js'
+import { HostCredentialImportAdapter } from './credential-import-host.js'
 import { workerMcpName, type WorkerMcpConfig } from './worker-mcp-tool.js'
 import type { ProductMcpConfiguration } from './product-mcp-configuration.js'
 import { HostBrowserAdapter } from './browser-host.js'
@@ -50,6 +52,8 @@ export interface ProductHostConfig { databasePath: string; workspaceRoot?: strin
   workerMcpTool?: WorkerMcpConfig;
   /** Trusted Host seam; tests may supply a fake bridge without touching a user browser. */
   browserAdapter?: BrowserAdapter;
+  /** Trusted local App bridge for one-item credential reads from an explicitly selected export. */
+  credentialImportAdapter?: CredentialImportAdapter;
   feishuConfigurationError?: 'INVALID_CONFIG';
   github?: Omit<GitHubRuntimeOptions, 'storage' | 'instanceId'>;
   githubConfigurationError?: 'INVALID_CONFIG' }
@@ -107,6 +111,12 @@ const resourceFields: Record<string, string[]> = {
   'mcp-disconnect': ['instanceId', 'commandId', 'expectedRevision'],
   'mcp-retry': ['instanceId', 'commandId', 'expectedRevision'],
 }
+const credentialImportFields: Record<string, string[]> = {
+  'credential-import-list': ['instanceId', 'limit'],
+  'credential-import-preview': ['instanceId', 'pendingId', 'preview'],
+  'credential-import-commit': ['instanceId', 'commandId', 'pendingId', 'sourceRef', 'credentialId', 'target'],
+  'credential-import-cancel': ['instanceId', 'commandId', 'sourceRef', 'pendingId'],
+}
 
 const browserFields: Record<string, string[]> = {
   'browser-list': ['instanceId'], 'browser-read': ['instanceId', 'resourceId'],
@@ -152,6 +162,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
     ? new RemoteEnvironmentSecrets(credentialRecords) : undefined
   const browserAdapter = config.browserAdapter ?? (process.env.DS_BOT_APP === '1' && typeof process.send === 'function'
     ? new HostBrowserAdapter() : undefined)
+  const credentialImportAdapter = config.credentialImportAdapter
+    ?? (process.env.DS_BOT_APP === '1' && typeof process.send === 'function' ? new HostCredentialImportAdapter() : undefined)
   if (config.office && (![config.office.node, config.office.cli, config.office.skillsPath].every(isAbsolute)
     || ![config.office.node, config.office.cli, join(config.office.skillsPath, 'office', 'SKILL.md'),
       join(config.office.skillsPath, 'office-docx', 'SKILL.md')].every(path => existsSync(path)))) {
@@ -213,6 +225,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
         || candidate.sourceInstanceId === githubRuntime?.sourceBinding.sourceInstanceId
         && githubRuntime.health().state !== 'polling') ? 'SOURCE_STOPPED' : undefined }
   let resourceManager: ProductCredentialManager | undefined
+  let credentialImportManager: ProductCredentialImports | undefined
   let mcpConfiguration: ProductMcpConfiguration | undefined
   let selectedMcpTool: WorkerMcpConfig | undefined
   let statusPublisher: ReturnType<typeof productStatusPublisher> | undefined
@@ -495,7 +508,10 @@ export async function createProductHost(context: Context, config: ProductHostCon
     workRouter = new ProactiveWork(storage, instanceId, engine, sessions, actorId)
     const records = credentialRecords as ProductCredentialRecords | undefined
     if (records && typeof records.readRecord === 'function' && typeof records.modifyRecord === 'function'
-      && typeof records.deleteRecord === 'function') resourceManager = engine.createProductCredentialManager(records)
+      && typeof records.deleteRecord === 'function') {
+      resourceManager = engine.createProductCredentialManager(records)
+      if (credentialImportAdapter) credentialImportManager = engine.createProductCredentialImports(records, credentialImportAdapter)
+    }
     if (config.workerMcpTool) {
       if (!resourceManager) throw new CoreError('UNAVAILABLE', 'The approved MCP tool requires a durable DSH record service.')
       mcpConfiguration = engine.createProductMcpConfiguration(config.workerMcpTool)
@@ -572,7 +588,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
           return engine!.openMain({ instanceId })
         }
         if (payload.instanceId !== instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This request is outside the authorized Instance.')
-        const fields = memoryFields[endpoint] ?? resourceFields[endpoint] ?? browserFields[endpoint]
+        const fields = memoryFields[endpoint] ?? resourceFields[endpoint] ?? credentialImportFields[endpoint] ?? browserFields[endpoint]
           ?? (endpoint === 'proactive-rules' || endpoint === 'proactive-control' ? ['instanceId']
           : endpoint === 'proactive-list' ? ['instanceId', 'before']
           : endpoint === 'proactive-read' ? ['instanceId', 'runId']
@@ -660,7 +676,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
         if (client && endpoint.startsWith('preset-')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Role presets require the local authorized product settings.')
         }
-        if (client && (endpoint.startsWith('resource-') || endpoint.startsWith('mcp-'))) {
+        if (client && (endpoint.startsWith('resource-') || endpoint.startsWith('credential-import-') || endpoint.startsWith('mcp-'))) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Credential and MCP settings require the local authorized product settings.')
         }
         if (client && endpoint.startsWith('browser-')) {
@@ -683,6 +699,18 @@ export async function createProductHost(context: Context, config: ProductHostCon
         const commandId = client && payload.commandId !== undefined
           ? (() => { identifier(payload.commandId, 'commandId'); return `client:${client.id}:${createHash('sha256').update(payload.commandId).digest('hex')}` })()
           : payload.commandId as string
+        if (endpoint.startsWith('credential-import-')) {
+          if (!credentialImportManager) throw new CoreError('UNAVAILABLE', 'This Host has no secure credential export import bridge.')
+          if (endpoint === 'credential-import-list') return credentialImportManager.list({ instanceId,
+            ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
+          if (endpoint === 'credential-import-preview') return credentialImportManager.preview({ instanceId,
+            pendingId: payload.pendingId as string, preview: payload.preview })
+          if (endpoint === 'credential-import-commit') return credentialImportManager.commit({ instanceId, commandId,
+            pendingId: payload.pendingId as string, sourceRef: payload.sourceRef as string,
+            credentialId: payload.credentialId as string, target: payload.target })
+          if (endpoint === 'credential-import-cancel') return credentialImportManager.cancel({ instanceId, commandId,
+            sourceRef: payload.sourceRef as string, ...(payload.pendingId === undefined ? {} : { pendingId: payload.pendingId as string }) })
+        }
         if (endpoint.startsWith('browser-')) {
           if (endpoint === 'browser-list') return engine!.listBrowserResources({ instanceId })
           if (endpoint === 'browser-read') return engine!.readBrowserResource({ instanceId, resourceId: payload.resourceId as string })

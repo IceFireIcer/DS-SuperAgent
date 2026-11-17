@@ -41,6 +41,7 @@ test('credential settings keep values out of projections and show exact grant an
     let loseRequestReceipt = true
     let failRequestList = false
     let paginateRequests = false
+    let importedItems = []
     const call = async (endpoint, payload) => {
       calls.push({ endpoint, payload })
       if (endpoint === 'feishu-status') return { configured: true, credentialMode: 'managed', sourceInstanceId: 'source-one',
@@ -54,6 +55,23 @@ test('credential settings keep values out of projections and show exact grant an
         if (payload.after) return { items: [{ id: 'resource-last', label: 'Last resource', status: 'active', revision: 1, grants: [] }] }
         return { items: [{ ...resource }, ...Array.from({ length: 99 }, (_, index) => ({ id: `other-${index}`,
           label: `Other resource ${index}`, status: 'active', revision: 1, grants: [] }))], cursor: 'next-page' }
+      }
+      if (endpoint === 'credential-import-list') return { items: importedItems }
+      if (endpoint === 'credential-import-preview') {
+        importedItems = [{ id: payload.preview.entries[0].sourceRef, sourceRef: payload.preview.entries[0].sourceRef,
+          credentialId: payload.preview.entries[0].id, credentialLabel: payload.preview.entries[0].label,
+          credentialType: payload.preview.entries[0].type, originalScope: payload.preview.entries[0].originalScope,
+          owner: payload.preview.owner, sourceLabel: payload.preview.sourceLabel, status: 'pending' }]
+        return { items: importedItems }
+      }
+      if (endpoint === 'credential-import-commit') {
+        importedItems = importedItems.map(item => item.sourceRef === payload.sourceRef
+          ? { ...item, target: payload.target, status: 'applied', resourceId: 'imported-resource' } : item)
+        return importedItems[0]
+      }
+      if (endpoint === 'credential-import-cancel') {
+        importedItems = importedItems.map(item => item.sourceRef === payload.sourceRef ? { ...item, status: 'cancelled' } : item)
+        return importedItems[0]
       }
       if (endpoint === 'resource-request-list') {
         if (failRequestList) { failRequestList = false; throw new Error('Request list unavailable') }
@@ -103,6 +121,10 @@ test('credential settings keep values out of projections and show exact grant an
       Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(field, value)
       field.dispatchEvent(new dom.window.Event('input', { bubbles: true }))
     })
+      const changeSelect = async (field, value) => React.act(async () => {
+        Object.getOwnPropertyDescriptor(dom.window.HTMLSelectElement.prototype, 'value').set.call(field, value)
+        field.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
+      })
     try {
       await React.act(async () => root.render(React.createElement(ProductCredentialSettings,
         { binding: { instanceId: 'personal' }, call })))
@@ -179,6 +201,36 @@ test('credential settings keep values out of projections and show exact grant an
       await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Delete resource'))
       assert.equal(calls.find(entry => entry.endpoint === 'resource-delete').payload.resourceId, 'resource-one')
       assert.match(document.body.textContent, /deleted · v5/u)
+
+      const sourceRef = '595d5b2f0f4fe2ffb1e7b760606be561be229bb2e1b76c0f820fc3ed0b2a7a7e'
+      const credentialImportBridge = { pick: async () => ({ id: '11111111-1111-4111-8111-111111111111', preview: {
+        sourceLabel: 'credential-export.json', owner: { label: 'Legacy owner', instanceId: 'legacy-instance' }, entries: [{
+          id: 'legacy-key', sourceRef, label: 'Old API key', type: 'api-key',
+          originalScope: { kind: 'work', role: 'Legacy Main', work: 'Old work' },
+        }],
+      } }), cancel: async () => {} }
+      await React.act(async () => root.render(React.createElement(ProductCredentialSettings,
+        { binding: { instanceId: 'personal' }, call, credentialImportBridge })))
+      await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Choose credential export'))
+      assert.match(document.querySelector('.bt-product-credential-import-preview').textContent, /Legacy owner/u)
+      assert.match(document.querySelector('.bt-product-credential-import-item').textContent, /Legacy Main · Old work/u)
+      const importItem = document.querySelector('.bt-product-credential-import-item')
+      const fields = importItem.querySelectorAll('input')
+      await changeSelect(importItem.querySelectorAll('select')[0], 'worker')
+      await changeSelect(importItem.querySelectorAll('select')[1], 'tool')
+      await click([...importItem.querySelectorAll('button')].find(button => button.textContent === 'Create resource and grant'))
+      assert.equal(calls.some(entry => entry.endpoint === 'credential-import-commit'), false,
+        'the settings UI must reject role-wide tool grants before sending')
+      assert.match(document.body.textContent, /Choose a work item or Environment for a tool grant/u)
+      await change(fields[1], 'work-imported')
+      await change(fields[2], 'environment-imported')
+      await click([...importItem.querySelectorAll('button')].find(button => button.textContent === 'Create resource and grant'))
+      const importCall = calls.find(entry => entry.endpoint === 'credential-import-commit')
+      assert.deepEqual(JSON.parse(JSON.stringify(importCall.payload.target)), {
+        label: 'Old API key', purpose: 'tool', scope: { role: 'worker', workItemId: 'work-imported', environmentId: 'environment-imported' },
+      })
+      assert.equal(JSON.stringify(importCall.payload).includes('fictional-import-secret'), false)
+      assert.match(document.body.textContent, /Credential imported with a new authorization/u)
     } finally { await React.act(async () => root.unmount()) }
   } finally {
     dom.window.close()

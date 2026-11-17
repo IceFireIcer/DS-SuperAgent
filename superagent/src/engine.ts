@@ -25,6 +25,7 @@ import { HostLease, type HostOptions } from './host.js'
 import { ClientAccess } from './client-access.js'
 import { feishuQuestionCode } from './feishu-delivery.js'
 import { ProductCredentialManager } from './product-credential-manager.js'
+import { ProductCredentialImports, type CredentialImportAdapter } from './product-credential-imports.js'
 import type { WorkerMcpBinding } from './worker-mcp-tool.js'
 import { ProductMcpConfiguration } from './product-mcp-configuration.js'
 import type { WorkerMcpConfig } from './worker-mcp-tool.js'
@@ -93,6 +94,7 @@ export class Engine {
   private readonly hostCapabilities: HostCapabilities
   private readonly deliveryState: DeliveryState
   private browserResources: BrowserResources | undefined
+  private productCredentialManager: ProductCredentialManager | undefined
   private readonly proactive: Proactive | undefined
   private readonly membership: SourceMembership
   private activationGate: ActivationGate | undefined
@@ -1640,7 +1642,13 @@ export class Engine {
       throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Only an authorized product actor can manage credential resources.')
     }
     this.assertAuthoringActor()
-    return new ProductCredentialManager(this.storage, this.instanceId, records)
+    this.productCredentialManager ??= new ProductCredentialManager(this.storage, this.instanceId, records)
+    return this.productCredentialManager
+  }
+
+  createProductCredentialImports(records: ProductCredentialRecords, adapter: CredentialImportAdapter) {
+    const manager = this.createProductCredentialManager(records)
+    return new ProductCredentialImports(this.storage, this.instanceId, manager, adapter)
   }
 
   createProductMcpConfiguration(config: WorkerMcpConfig) {

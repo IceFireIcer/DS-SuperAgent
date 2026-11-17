@@ -1403,7 +1403,7 @@ export function applyProduct(ctx) {
                     provider.key.configured ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm bt-bs-danger',
                       disabled: saving, onClick: () => { void saveKey(provider.id, null) } }, t('Remove key')) : null) : h('span', null, t('Set outside this product'))) : null))
                 : h('p', { className: 'bt-main-status' }, t('No provider catalog is available. Configure providers in DSH settings.'))),
-            h(ProductCredentialSettings, { binding, call: productCall }),
+            h(ProductCredentialSettings, { binding, call: productCall, credentialImportBridge: globalThis.dsBotApp?.browser?.credentialImport }),
             h(ProductMcpSettings, { binding, call: productCall }),
             h(ClientSettings, { binding }),
             h(Card, { title: t('Recent configuration uses') },

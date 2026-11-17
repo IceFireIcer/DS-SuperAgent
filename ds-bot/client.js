@@ -245,6 +245,41 @@ var ZH = {
   "Attached files": "已附文件",
   "Credential resources": "凭据资源",
   "Managed Feishu and GitHub source credentials use separate grants. Feishu delivery and Worker MCP tools need their own grants.": "受管飞书和 GitHub 来源分别授权；飞书外发与 Worker MCP 工具各需单独授权。",
+  "Import credential resources": "导入凭据资源",
+  "Import accepts a controlled ds-superagent-credential-export version 1 JSON file. DSH does not provide a safe way to browse old vault records; if you do not have an export, create a new resource manually. Old grants are never copied.": "导入仅接受受控的 ds-superagent-credential-export v1 JSON。DSH 没有安全浏览旧凭据库记录的公开接口；如果没有此类导出，请手动新建资源。不会复制旧授权。",
+  "Choose credential export": "选择凭据导出文件",
+  "Reading export…": "正在读取导出文件…",
+  "Credential export import is available only in the desktop app.": "凭据导入仅在桌面应用中可用。",
+  "Credential export must be at most 1 MiB.": "凭据导出文件不能超过 1 MiB。",
+  "The credential export could not be read.": "无法读取凭据导出文件。",
+  "Credential type": "凭据类型",
+  "Imported resource": "导入后的资源",
+  "Import cleanup pending.": "导入资源清理尚未完成。",
+  "New authorization role": "新授权角色",
+  "New authorization purpose": "新授权用途",
+  "Target work item ID": "目标工作项 ID",
+  "Target Environment ID": "目标执行环境 ID",
+  "Target source Instance ID": "目标来源 Instance ID",
+  "Choose target role": "选择目标角色",
+  "Choose purpose": "选择用途",
+  "Create resource and grant": "创建资源并授权",
+  "Credential imported with a new authorization.": "凭据已导入并使用新授权。",
+  "Choose a new resource name, role, purpose, and exact scope before importing.": "导入前请明确选择新资源名称、角色、用途和精确范围。",
+  "Choose a work item or Environment for a tool grant.": "工具授权必须选择工作项或执行环境。",
+  "Choose the exact source Instance for this authorization.": "来源或外发授权必须选择精确来源 Instance。",
+  "Credential import pending": "待处理",
+  "Credential import in progress": "正在导入",
+  "Credential import result unknown": "结果待确认",
+  "Credential import completed": "已导入",
+  "Credential import conflict": "冲突",
+  "Credential import cancelled": "已取消",
+  "Credential import status unavailable": "导入状态不可用",
+  "New authorization": "新授权",
+  source: "来源",
+  tool: "工具",
+  outbound: "外发",
+  "Not selected": "未选择",
+  "Clear credential preview": "清除凭据预览",
   "MCP tools": "MCP 工具",
   "No trusted Host MCP tool is configured.": "Host 尚未配置受信 MCP 工具。",
   "Host only; remote execution unsupported.": "仅在 Host 本地运行；暂不支持远端执行。",
@@ -23666,7 +23701,15 @@ var PRODUCT_PRESET_CSS = `
 
 // src/client/product-credentials.js
 var import_react57 = require("react");
-function ProductCredentialSettings({ binding, call: call2 }) {
+var credentialImportStatusText = (status) => t({
+  pending: "Credential import pending",
+  importing: "Credential import in progress",
+  unknown: "Credential import result unknown",
+  applied: "Credential import completed",
+  conflict: "Credential import conflict",
+  cancelled: "Credential import cancelled"
+}[status] ?? "Credential import status unavailable");
+function ProductCredentialSettings({ binding, call: call2, credentialImportBridge }) {
   const [resources, setResources] = (0, import_react57.useState)(null);
   const [requests, setRequests] = (0, import_react57.useState)([]);
   const [requestCursor, setRequestCursor] = (0, import_react57.useState)(null);
@@ -23688,9 +23731,15 @@ function ProductCredentialSettings({ binding, call: call2 }) {
   const [busy, setBusy] = (0, import_react57.useState)(null);
   const [error, setError] = (0, import_react57.useState)(null);
   const [notice, setNotice] = (0, import_react57.useState)(null);
+  const [credentialImports, setCredentialImports] = (0, import_react57.useState)([]);
+  const [credentialImportBatch, setCredentialImportBatch] = (0, import_react57.useState)(null);
+  const [credentialImportTargets, setCredentialImportTargets] = (0, import_react57.useState)({});
+  const [credentialImportError, setCredentialImportError] = (0, import_react57.useState)(null);
+  const [credentialImportBusy, setCredentialImportBusy] = (0, import_react57.useState)(false);
   const pendingCreate = (0, import_react57.useRef)(null);
   const pendingRotation = (0, import_react57.useRef)(null);
   const pendingRequest = (0, import_react57.useRef)(null);
+  const pendingCredentialPreview = (0, import_react57.useRef)(null);
   const pendingDecisions = (0, import_react57.useRef)(/* @__PURE__ */ new Map());
   const instanceId = binding.instanceId;
   const rememberRotation = (attempt) => {
@@ -23728,6 +23777,16 @@ function ProductCredentialSettings({ binding, call: call2 }) {
       return { items: page.items, cursor: page.cursor ?? null, available: true };
     } catch (failure) {
       return { items: [], cursor: null, available: false, error: failure.message };
+    }
+  };
+  const readCredentialImports = async () => {
+    try {
+      const result = await call2("credential-import-list", { instanceId, limit: 100 });
+      setCredentialImports(result.items);
+      return true;
+    } catch (failure) {
+      setCredentialImportError(failure.message);
+      return false;
     }
   };
   const refresh = async () => {
@@ -23785,9 +23844,10 @@ function ProductCredentialSettings({ binding, call: call2 }) {
       load(),
       readRequests(),
       call2("feishu-status", { instanceId }).catch(() => null),
-      call2("github-status", { instanceId }).catch(() => null)
+      call2("github-status", { instanceId }).catch(() => null),
+      call2("credential-import-list", { instanceId, limit: 100 }).catch(() => null)
     ]).then(
-      ([items, requestResult, status, githubStatus]) => {
+      ([items, requestResult, status, githubStatus, importResult]) => {
         if (!live) return;
         setResources(items);
         setRequests(requestResult.items);
@@ -23795,6 +23855,10 @@ function ProductCredentialSettings({ binding, call: call2 }) {
         setRequestError(requestResult.error ?? null);
         setFeishu(status);
         setGithub(githubStatus);
+        if (importResult) {
+          setCredentialImports(importResult.items);
+          setCredentialImportError(null);
+        } else setCredentialImportError(t("Credential export import is available only in the desktop app."));
         if (status?.credentialMode === "managed" || githubStatus?.credentialMode === "managed") {
           setSourceInstanceId((current) => current || status?.sourceInstanceId || githubStatus?.sourceInstanceId);
         }
@@ -23807,6 +23871,12 @@ function ProductCredentialSettings({ binding, call: call2 }) {
       live = false;
     };
   }, [call2, instanceId]);
+  (0, import_react57.useEffect)(() => () => {
+    const pendingId = pendingCredentialPreview.current;
+    pendingCredentialPreview.current = null;
+    if (pendingId) void credentialImportBridge?.cancel(pendingId).catch(() => {
+    });
+  }, [credentialImportBridge, instanceId]);
   const loadMoreRequests = async () => {
     if (!requestCursor || busy) return;
     setBusy("requests");
@@ -24021,10 +24091,255 @@ function ProductCredentialSettings({ binding, call: call2 }) {
       "GitHub credential selection saved."
     );
   };
+  const pickCredentialExport = async () => {
+    if (credentialImportBusy || !credentialImportBridge) return;
+    setCredentialImportBusy(true);
+    setCredentialImportError(null);
+    let picked;
+    try {
+      picked = await credentialImportBridge.pick();
+      if (picked.canceled) return;
+      if (picked.error) throw new Error(t(picked.error === "too-large" ? "Credential export must be at most 1 MiB." : "The credential export could not be read."));
+      const saved = await call2("credential-import-preview", { instanceId, pendingId: picked.id, preview: picked.preview });
+      if (pendingCredentialPreview.current && pendingCredentialPreview.current !== picked.id) {
+        await credentialImportBridge.cancel(pendingCredentialPreview.current);
+      }
+      pendingCredentialPreview.current = picked.id;
+      setCredentialImportBatch({ ...picked.preview, pendingId: picked.id, items: saved.items });
+      setCredentialImportTargets(Object.fromEntries(picked.preview.entries.map((entry) => {
+        const prior = saved.items.find((item) => item.sourceRef === entry.sourceRef)?.target;
+        return [entry.sourceRef, {
+          label: prior?.label ?? entry.label,
+          role: prior?.scope.role ?? "",
+          purpose: prior?.purpose ?? "",
+          workItemId: prior?.scope.workItemId ?? "",
+          environmentId: prior?.scope.environmentId ?? "",
+          sourceInstanceId: prior?.scope.sourceInstanceId ?? ""
+        }];
+      })));
+      await readCredentialImports();
+    } catch (failure) {
+      if (picked?.id) await credentialImportBridge.cancel(picked.id).catch(() => {
+      });
+      setCredentialImportError(failure.message);
+    } finally {
+      setCredentialImportBusy(false);
+    }
+  };
+  const updateCredentialImportTarget = (sourceRef, patch) => setCredentialImportTargets((current) => ({
+    ...current,
+    [sourceRef]: { ...current[sourceRef], ...patch }
+  }));
+  const commitCredentialImport = async (entry) => {
+    if (!credentialImportBatch || credentialImportBusy) return;
+    const target = credentialImportTargets[entry.sourceRef];
+    if (!target?.label.trim() || !target.role || !target.purpose) {
+      setCredentialImportError(t("Choose a new resource name, role, purpose, and exact scope before importing."));
+      return;
+    }
+    if (target.purpose === "tool" && !target.workItemId.trim() && !target.environmentId.trim()) {
+      setCredentialImportError(t("Choose a work item or Environment for a tool grant."));
+      return;
+    }
+    if (target.purpose !== "tool" && !target.sourceInstanceId.trim()) {
+      setCredentialImportError(t("Choose the exact source Instance for this authorization."));
+      return;
+    }
+    const scope = {
+      role: target.role,
+      ...target.workItemId.trim() ? { workItemId: target.workItemId.trim() } : {},
+      ...target.environmentId.trim() ? { environmentId: target.environmentId.trim() } : {},
+      ...target.sourceInstanceId.trim() ? { sourceInstanceId: target.sourceInstanceId.trim() } : {}
+    };
+    setCredentialImportBusy(true);
+    setCredentialImportError(null);
+    try {
+      await call2("credential-import-commit", {
+        instanceId,
+        commandId: crypto.randomUUID(),
+        pendingId: credentialImportBatch.pendingId,
+        sourceRef: entry.sourceRef,
+        credentialId: entry.id,
+        target: { label: target.label.trim(), purpose: target.purpose, scope }
+      });
+      setNotice(t("Credential imported with a new authorization."));
+      const [items, imports] = await Promise.all([load(), call2("credential-import-list", { instanceId, limit: 100 })]);
+      setResources(items);
+      setCredentialImports(imports.items);
+      setCredentialImportBatch((current) => current ? {
+        ...current,
+        items: current.items.map((item) => item.sourceRef === entry.sourceRef ? imports.items.find((saved) => saved.sourceRef === item.sourceRef) ?? item : item)
+      } : current);
+    } catch (failure) {
+      setCredentialImportError(failure.message);
+      await readCredentialImports();
+    } finally {
+      setCredentialImportBusy(false);
+    }
+  };
+  const cancelCredentialImport = async (item) => {
+    if (credentialImportBusy) return;
+    setCredentialImportBusy(true);
+    setCredentialImportError(null);
+    try {
+      const result = await call2("credential-import-cancel", {
+        instanceId,
+        commandId: crypto.randomUUID(),
+        sourceRef: item.sourceRef,
+        ...credentialImportBatch?.pendingId ? { pendingId: credentialImportBatch.pendingId } : {}
+      });
+      setCredentialImports((current) => current.map((saved) => saved.sourceRef === result.sourceRef ? result : saved));
+    } catch (failure) {
+      setCredentialImportError(failure.message);
+      await readCredentialImports();
+    } finally {
+      setCredentialImportBusy(false);
+    }
+  };
   return (0, import_react57.createElement)(
     Card2,
     { title: t("Credential resources") },
     (0, import_react57.createElement)("p", { className: "bt-product-resource-note" }, t("Managed Feishu and GitHub source credentials use separate grants. Feishu delivery and Worker MCP tools need their own grants.")),
+    (0, import_react57.createElement)(
+      "section",
+      { className: "bt-product-credential-import", "aria-label": t("Import credential resources") },
+      (0, import_react57.createElement)("h3", null, t("Import credential resources")),
+      (0, import_react57.createElement)("p", { className: "bt-product-resource-note" }, t("Import accepts a controlled ds-superagent-credential-export version 1 JSON file. DSH does not provide a safe way to browse old vault records; if you do not have an export, create a new resource manually. Old grants are never copied.")),
+      credentialImportBridge ? (0, import_react57.createElement)("button", {
+        className: "bt-soft",
+        type: "button",
+        disabled: credentialImportBusy,
+        onClick: () => void pickCredentialExport()
+      }, credentialImportBusy ? t("Reading export…") : t("Choose credential export")) : null,
+      credentialImportError ? (0, import_react57.createElement)("p", { className: "bt-main-error", role: "alert" }, credentialImportError) : null,
+      credentialImportBatch ? (0, import_react57.createElement)(
+        "div",
+        { className: "bt-product-credential-import-preview" },
+        (0, import_react57.createElement)("strong", null, credentialImportBatch.sourceLabel),
+        (0, import_react57.createElement)("span", null, `${t("Original owner")}: ${credentialImportBatch.owner.label}`),
+        credentialImportBatch.owner.instanceId ? (0, import_react57.createElement)("span", null, `${t("Original instance")}: ${credentialImportBatch.owner.instanceId}`) : null,
+        (0, import_react57.createElement)("button", {
+          className: "bt-soft",
+          type: "button",
+          disabled: credentialImportBusy,
+          onClick: () => {
+            void credentialImportBridge.cancel(credentialImportBatch.pendingId).catch(() => {
+            });
+            pendingCredentialPreview.current = null;
+            setCredentialImportBatch(null);
+          }
+        }, t("Clear credential preview")),
+        credentialImportBatch.items.map((item) => {
+          const entry = credentialImportBatch.entries.find((candidate) => candidate.sourceRef === item.sourceRef);
+          if (!entry) return null;
+          const target = credentialImportTargets[entry.sourceRef] ?? {};
+          const status = credentialImports.find((saved) => saved.sourceRef === entry.sourceRef) ?? item;
+          const canImport = ["pending", "unknown", "importing"].includes(status.status);
+          return (0, import_react57.createElement)(
+            "article",
+            { key: entry.sourceRef, className: "bt-product-credential-import-item" },
+            (0, import_react57.createElement)(
+              "div",
+              { className: "bt-product-resource-row" },
+              (0, import_react57.createElement)("strong", null, entry.label),
+              (0, import_react57.createElement)("span", null, `${t("Credential type")}: ${entry.type}`),
+              (0, import_react57.createElement)("span", null, `${t("Original scope")}: ${[
+                entry.originalScope.kind,
+                entry.originalScope.role,
+                entry.originalScope.work,
+                entry.originalScope.environment,
+                ...entry.originalScope.sharedWith ?? []
+              ].filter(Boolean).join(" · ")}`),
+              (0, import_react57.createElement)("span", { role: "status" }, `${t("Import status")}: ${credentialImportStatusText(status.status)}${status.code ? ` · ${t(status.code)}` : ""}`),
+              status.resourceId ? (0, import_react57.createElement)("span", null, `${t("Imported resource")}: ${resources?.find((resource) => resource.id === status.resourceId)?.label ?? status.resourceId}`) : null,
+              status.cleanupPending ? (0, import_react57.createElement)("span", { className: "bt-main-error" }, t("Import cleanup pending.")) : null
+            ),
+            canImport ? (0, import_react57.createElement)(
+              "div",
+              { className: "bt-product-resource-grant" },
+              (0, import_react57.createElement)("label", null, t("New resource name"), (0, import_react57.createElement)("input", {
+                value: target.label ?? "",
+                maxLength: 128,
+                disabled: credentialImportBusy,
+                onChange: (event) => updateCredentialImportTarget(entry.sourceRef, { label: event.target.value })
+              })),
+              (0, import_react57.createElement)("label", null, t("New authorization role"), (0, import_react57.createElement)(
+                "select",
+                {
+                  value: target.role ?? "",
+                  disabled: credentialImportBusy,
+                  onChange: (event) => updateCredentialImportTarget(entry.sourceRef, { role: event.target.value })
+                },
+                (0, import_react57.createElement)("option", { value: "" }, t("Choose target role")),
+                ...["main", "router", "worker"].map((value2) => (0, import_react57.createElement)("option", { key: value2, value: value2 }, t(value2 === "main" ? "Main" : value2 === "router" ? "Router" : "Worker")))
+              )),
+              (0, import_react57.createElement)("label", null, t("New authorization purpose"), (0, import_react57.createElement)(
+                "select",
+                {
+                  value: target.purpose ?? "",
+                  disabled: credentialImportBusy,
+                  onChange: (event) => updateCredentialImportTarget(entry.sourceRef, { purpose: event.target.value })
+                },
+                (0, import_react57.createElement)("option", { value: "" }, t("Choose purpose")),
+                ...["source", "tool", "outbound"].map((value2) => (0, import_react57.createElement)("option", { key: value2, value: value2 }, t(value2)))
+              )),
+              (0, import_react57.createElement)("label", null, t("Target work item ID"), (0, import_react57.createElement)("input", {
+                value: target.workItemId ?? "",
+                maxLength: 512,
+                disabled: credentialImportBusy,
+                onChange: (event) => updateCredentialImportTarget(entry.sourceRef, { workItemId: event.target.value })
+              })),
+              (0, import_react57.createElement)("label", null, t("Target Environment ID"), (0, import_react57.createElement)("input", {
+                value: target.environmentId ?? "",
+                maxLength: 512,
+                disabled: credentialImportBusy,
+                onChange: (event) => updateCredentialImportTarget(entry.sourceRef, { environmentId: event.target.value })
+              })),
+              (0, import_react57.createElement)("label", null, t("Target source Instance ID"), (0, import_react57.createElement)("input", {
+                value: target.sourceInstanceId ?? "",
+                maxLength: 512,
+                disabled: credentialImportBusy,
+                onChange: (event) => updateCredentialImportTarget(entry.sourceRef, { sourceInstanceId: event.target.value })
+              })),
+              (0, import_react57.createElement)("span", { className: "bt-product-resource-note" }, `${t("New authorization")}: ${[
+                target.role,
+                target.purpose,
+                target.workItemId,
+                target.environmentId,
+                target.sourceInstanceId
+              ].filter(Boolean).join(" · ") || t("Not selected")}`),
+              (0, import_react57.createElement)("button", {
+                className: "bt-soft",
+                type: "button",
+                disabled: credentialImportBusy,
+                onClick: () => void commitCredentialImport(entry)
+              }, t(status.status === "unknown" ? "Retry import" : "Create resource and grant")),
+              (0, import_react57.createElement)("button", {
+                className: "bt-soft",
+                type: "button",
+                disabled: credentialImportBusy,
+                onClick: () => void cancelCredentialImport(status)
+              }, t(status.status === "cancelled" ? "Retry cleanup" : "Cancel import"))
+            ) : null
+          );
+        })
+      ) : null,
+      credentialImports.length ? (0, import_react57.createElement)("div", { className: "bt-product-resource-list" }, credentialImports.map((item) => (0, import_react57.createElement)(
+        "div",
+        {
+          key: item.sourceRef,
+          className: "bt-product-resource-row"
+        },
+        (0, import_react57.createElement)("span", null, `${item.sourceLabel} · ${item.credentialLabel} · ${credentialImportStatusText(item.status)}`),
+        item.resourceId ? (0, import_react57.createElement)("span", null, resources?.find((resource) => resource.id === item.resourceId)?.label ?? item.resourceId) : null,
+        item.cleanupPending ? (0, import_react57.createElement)("button", {
+          className: "bt-soft",
+          type: "button",
+          disabled: credentialImportBusy,
+          onClick: () => void cancelCredentialImport(item)
+        }, t("Retry cleanup")) : null
+      ))) : null
+    ),
     feishu?.credentialMode === "managed" ? (0, import_react57.createElement)(
       "div",
       { className: "bt-product-resource-selected" },
@@ -24282,9 +24597,14 @@ var PRODUCT_CREDENTIAL_CSS = `
 .bt-product-resource-row>span{min-width:0;overflow-wrap:anywhere;color:var(--bt-ink-2)}
 .bt-product-resource-grant{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%}
 .bt-product-resource-grant label{display:flex;flex-direction:column;gap:4px;min-width:0;font-size:12px;color:var(--bt-ink-2)}
-.bt-product-resource-grant input,.bt-product-resource-grant select{height:32px;min-width:0;box-sizing:border-box;border:1px solid var(--bt-line);border-radius:6px;background:var(--bt-main);color:var(--bt-ink);font:inherit;padding:0 8px}
+.bt-product-resource-grant input,.bt-product-resource-grant select{height:32px;min-width:0;box-sizing:border-box;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-main);color:var(--bt-ink);font:inherit;padding:0 8px}
 .bt-product-resource-grant button{justify-self:start}.bt-product-resource-create button:focus-visible,.bt-product-resource-row button:focus-visible,.bt-product-resource-selected button:focus-visible,.bt-product-resource-grant button:focus-visible,.bt-product-resource-create input:focus-visible,.bt-product-resource-selected input:focus-visible,.bt-product-resource-grant input:focus-visible,.bt-product-resource-grant select:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 .bt-product-resource-request-actions{display:flex;flex-wrap:wrap;gap:8px}
+.bt-product-credential-import{display:flex;flex-direction:column;gap:8px;margin:14px 0;padding:10px 0;border-top:1px solid var(--bt-line-2)}
+.bt-product-credential-import>button:focus-visible,.bt-product-credential-import-preview>button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-product-credential-import h3{margin:0;font-size:13px}
+.bt-product-credential-import-preview{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.bt-product-credential-import-item{padding:8px 0;border-top:1px solid var(--bt-line-2)}
 @media(max-width:640px){.bt-product-resource-grant{grid-template-columns:minmax(0,1fr)}}
 `;
 
@@ -28965,7 +29285,7 @@ function applyProduct(ctx) {
                   ) : null
                 )) : (0, import_react64.createElement)("p", { className: "bt-main-status" }, t("No provider catalog is available. Configure providers in DSH settings."))
               ),
-              (0, import_react64.createElement)(ProductCredentialSettings, { binding, call: productCall }),
+              (0, import_react64.createElement)(ProductCredentialSettings, { binding, call: productCall, credentialImportBridge: globalThis.dsBotApp?.browser?.credentialImport }),
               (0, import_react64.createElement)(ProductMcpSettings, { binding, call: productCall }),
               (0, import_react64.createElement)(ClientSettings, { binding }),
               (0, import_react64.createElement)(
