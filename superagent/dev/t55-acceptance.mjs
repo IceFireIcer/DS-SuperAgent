@@ -23,7 +23,6 @@ const phases = [
   { id: 'handoff', files: ['execution-target', 'handoff', 'handoff-recovery'], scope: 'Local/loopback target selection, both handoff directions and interruption boundaries.' },
   { id: 'proactive-supervision', files: ['proactive', 'supervisor-session', 'supervisor'], scope: 'Rule-bound preparation and semantic proposals through deterministic mock Sessions.' },
   { id: 'client-host', files: ['client-process', 'watchdog-process', 'host-takeover-process'], scope: 'Independent client and Host processes, revocation, fault recovery and real isolated PostgreSQL; no hosted server.' },
-  { id: 'migration', files: ['activation-process', 'reversal-process'], scope: 'Isolated mock legacy/new entry activation, crash and reverse handoff; no production app cutover.' },
 ]
 const unaccepted = [
   'A26: one continuous real desktop/GitHub/second-device/Host/Watchdog product scenario',

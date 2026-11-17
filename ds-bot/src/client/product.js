@@ -1,22 +1,19 @@
 import { Fragment, createElement as h, useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { ChatRows } from './cells.js'
+import { ProductChatRow } from './product-chat.js'
 import { MainComposer } from './composer.js'
-import { plainSpeech } from './voice.js'
+import { plainSpeech } from './product-speech.js'
 import { readProductArtifact, readProductAttachment, uploadPayload, uploadWithRetry } from './product-attachments.js'
 import { FeishuSourceStatus } from './product-feishu.js'
-import { BrandMark } from './sidebar.js'
-import { Card, Row } from './bot-settings.js'
+import { ProductBrandMark } from './product-brand.js'
+import { Card, Row } from './product-card.js'
 import { ClockIcon, CloseIcon, GlobeIcon, MemoryIcon, SlidersIcon } from './icons.js'
-import { SCHEDULE_CSS } from './schedules.js'
 import { ProductScheduleSettings, PRODUCT_SCHEDULE_CSS } from './product-schedules.js'
 import { ProductProactiveSettings, ProactiveReview, PRODUCT_PROACTIVE_CSS } from './product-proactive.js'
 import { ProductPresetSettings, PRODUCT_PRESET_CSS } from './product-presets.js'
 import { ProductCredentialSettings, PRODUCT_CREDENTIAL_CSS } from './product-credentials.js'
 import { ProductMemorySettings, PRODUCT_MEMORY_CSS } from './product-memory.js'
-import { LEARNING_CSS } from './learning-card.js'
 import { ProductSupervisionSettings, PRODUCT_SUPERVISION_CSS } from './product-supervision.js'
 import { FolderMenu, FOLDER_CSS } from './folder-menu.js'
-import { MODEL_CSS } from './model-menu.js'
 import { createSource } from './sources.js'
 import { mergeMessages, mergeObservationItems, rebaseRoleDraft } from './product-state.js'
 import { installLocale, t } from './i18n.js'
@@ -25,7 +22,7 @@ import { SHELL_CSS, CONVERSATION_CSS, installCompiledStyles, installStyles } fro
 import { ProductMcpSettings } from './product-mcp-settings.js'
 import { ProductBrowserSettings, PRODUCT_BROWSER_CSS } from './product-browser-settings.js'
 import { ProductExecutionSettings, PRODUCT_EXECUTION_CSS } from './product-execution.js'
-import { ProductWorkView, WIDGET_CSS } from './widget-cell.js'
+import { ProductWorkView } from './product-work-view.js'
 
 const clientBridge = () => window.dsBotApp?.productClient
 let activeHost = 'local'
@@ -297,7 +294,6 @@ export function applyProduct(ctx) {
     return () => { stopped = true; clearTimeout(timer) }
   }, 'superagent: follow the shared Main')
 
-  const emptyRoster = { bots: [], byId: {}, roomsById: {}, prefs: {} }
   const statusCopy = status => ({ routing: t('Routing work'), pending: t('Pending work'), running: t('Running work'),
     waiting: t('Waiting for an answer'), blocked: t('Blocked work'), stopped: t('Stopped work'), success: t('Work complete'),
     failed: t('Work failed'), rejected: t('Work declined'), accepted: t('Accepted by Router'), ended: t('Generation ended'),
@@ -931,7 +927,7 @@ export function applyProduct(ctx) {
           ? t('No remote Environment is available. This work will wait for an eligible device.')
           : t('New work uses this Environment. Active work keeps its original binding.'))) : null
     return h('section', { className: 'bt-main-conversation', 'aria-label': 'Main' },
-      h('header', { className: 'bt-main-header' }, h(BrandMark, { size: 28 }), h('span', null, 'Main'),
+      h('header', { className: 'bt-main-header' }, h(ProductBrandMark, { size: 28 }), h('span', null, 'Main'),
         h('span', { className: `bt-main-health bt-main-health-${state.health?.state ?? 'ready'}`, role: 'status' },
           mainHealthCopy(state.health)),
         state.health?.queuedInputs ? h('span', { className: 'bt-main-health-detail' },
@@ -962,8 +958,7 @@ export function applyProduct(ctx) {
                   message.source.kind === 'client' ? `${t('Client')} · ${message.source.clientId}`
                     : message.source.kind === 'schedule' ? `${t('Scheduled occurrence')} · ${message.source.objectId}`
                       : `${t(message.source.kind === 'feishu' ? 'Feishu' : 'GitHub')} · @${message.source.authorId} · ${message.source.objectId}`) : null,
-                h(ChatRows, { items: [{ kind: message.role === 'main' ? 'bot' : 'user', text: message.text, time: message.createdAt }],
-                  sessionId: 'main', roster: emptyRoster, actions: {} }),
+                h(ProductChatRow, { kind: message.role === 'main' ? 'bot' : 'user', text: message.text }),
                 message.role === 'main' && message.text && window.speechSynthesis
                   ? h('button', { type: 'button', className: 'bt-soft bt-main-read-aloud',
                     onClick: () => speakReply(message) }, t(speakingId === message.id ? 'Stop reading' : 'Read aloud')) : null,
@@ -1151,7 +1146,7 @@ export function applyProduct(ctx) {
             observation: null, observationError: null, observationDetail: null, observationDetailError: null }))
           void refresh()
           setTimeout(() => document.querySelector('#main-message, .bt-main-composer textarea')?.focus(), 0)
-        } }, h(BrandMark, { size: 24 }), 'Main'),
+        } }, h(ProductBrandMark, { size: 24 }), 'Main'),
       clientBridge() ? h('button', { type: 'button', className: 'bt-soft',
         onClick: () => view.set(current => ({ ...current, connectOpen: true })) },
         state.connection?.connected ? `${t('Remote Host')} · ${state.connection.client.label}` : t('Connect to Host')) : null,
@@ -1607,12 +1602,12 @@ export function applyProduct(ctx) {
         onClose: () => view.set(current => ({ ...current, connectOpen: false })) }) : null)
   }
   const shadow = (name, component) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200 }, component))
-  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SCHEDULE_CSS + MODEL_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_EXECUTION_CSS + WIDGET_CSS + LEARNING_CSS, 'main'), 'superagent: existing chat styles')
+  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_EXECUTION_CSS, 'main'), 'superagent: existing chat styles')
   ctx.effect(() => { const style = installStyles(themeCss(allThemes().deepseek), 'main-theme'); return () => style.remove() }, 'superagent: existing theme')
   shadow('main.conversation', ProductSurface)
   shadow('sidebar.workspaces', MainNavigation)
   shadow('sidebar.brand.name', () => h('span', null, 'DS-SuperAgent'))
-  shadow('sidebar.brand.mark', BrandMark)
+  shadow('sidebar.brand.mark', ProductBrandMark)
 }
 
 function redactObservationText(value) {
@@ -1621,6 +1616,7 @@ function redactObservationText(value) {
 }
 
 const PRODUCT_CSS = `
+.bt-product-message{display:flex;margin:10px 0}.bt-product-message-bot{justify-content:flex-start}.bt-product-message-user{justify-content:flex-end}.bt-product-message .bt-bubble{max-width:min(720px,88%);box-sizing:border-box;padding:12px 14px;border-radius:16px;background:var(--bt-bubble);color:var(--bt-ink)}.bt-product-message-user .bt-bubble{background:var(--bt-user);color:var(--bt-user-ink)}
 .bt-main-settings-nav-item{display:flex;width:100%;border:0;text-align:left;cursor:pointer;font:inherit}
 .bt-main-settings-nav-item:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 .bt-main-conversation{height:100%;min-height:0;display:flex;flex-direction:column;background:var(--bt-main);color:var(--bt-ink);font-family:var(--bt-font)}

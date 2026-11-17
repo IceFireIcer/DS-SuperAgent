@@ -17,7 +17,7 @@ export const SHELL_TEXT = {
     stopped: 'Host not running',
     failed: 'Host could not start',
     suspended: 'Paused while this computer sleeps',
-    notice: 'DS Bot keeps running in the system tray. Its Bots go on working while the window is closed, as long as this computer is awake.',
+    notice: 'DS Bot keeps running in the system tray. Main, Router and Worker continue while the window is closed, as long as this computer is awake.',
     noticeConfirm: 'OK',
     fallback: 'The system tray is not available, so DS Bot cannot stay in the background. Do you want to end it?',
     cancel: 'Cancel',
@@ -31,7 +31,7 @@ export const SHELL_TEXT = {
     stopped: 'Host 未运行',
     failed: 'Host 未能启动',
     suspended: '电脑休眠时暂停',
-    notice: 'DS Bot 会留在系统托盘里继续运行。只要电脑没有休眠，关掉窗口时 Bot 们照常工作。',
+    notice: 'DS Bot 会留在系统托盘里继续运行。只要电脑没有休眠，关掉窗口时 Main、Router 和 Worker 照常工作。',
     noticeConfirm: '好',
     fallback: '系统托盘不可用，DS Bot 不能留在后台。要结束它吗？',
     cancel: '取消',
@@ -72,7 +72,7 @@ export function createShell(options) {
   let quitAsked = false
   let sessionEnding = false
   // The computer is asleep: the Host cannot run, so the tray says so instead of claiming
-  // that the Bots go on working.
+  // that product work continues.
   let suspended = false
   // The windows the shell has hidden: they do not show themselves again.
   const hidden = new WeakSet()

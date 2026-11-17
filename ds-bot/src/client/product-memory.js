@@ -1,7 +1,5 @@
-import { createElement as h, useEffect, useRef, useState } from 'react'
-import { Card, Row } from './bot-settings.js'
-import { MemoryEntryRow } from './memory-panel.js'
-import { ProductMemoryProposalCard } from './learning-card.js'
+import { createElement as h, useEffect, useId, useRef, useState } from 'react'
+import { Card, Row } from './product-card.js'
 import { t } from './i18n.js'
 
 const scopeLabel = scope => scope.kind === 'main' ? t('Main')
@@ -30,6 +28,51 @@ const fileBase64 = async file => {
     binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000))
   }
   return window.btoa(binary)
+}
+
+function ProductMemoryEntryRow({ entry, remove, open }) {
+  const [confirming, setConfirming] = useState(false)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    if (!confirming) return undefined
+    const timer = setTimeout(() => setConfirming(false), 3000)
+    return () => clearTimeout(timer)
+  }, [confirming])
+  const meta = [entry.added, entry.source === 'memory panel' ? t('by you') : entry.by ? t('by {name}', { name: entry.by }) : null]
+    .filter(Boolean).join(' · ')
+  const click = async () => {
+    if (!confirming) { setConfirming(true); return }
+    setBusy(true)
+    if (!await remove(entry)) setBusy(false)
+  }
+  return h('li', { className: 'bt-product-memory-entry', 'data-busy': busy || undefined },
+    h('div', null, h('span', { className: 'bt-product-memory-entry-text' }, entry.text),
+      meta ? h('span', { className: 'bt-product-memory-entry-meta' }, meta) : null),
+    open ? h('button', { type: 'button', className: 'bt-soft', onClick: () => open(entry) }, t('View full detail')) : null,
+    h('button', { type: 'button', className: 'bt-soft', disabled: busy, onClick: () => void click() },
+      confirming ? t('Click again to remove') : t('Remove from memory')))
+}
+
+function ProductMemoryProposalCard({ proposal, onAnswer }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const titleId = useId()
+  const answer = async approve => {
+    setBusy(true); setError('')
+    try { await onAnswer(proposal, approve) }
+    catch (failure) { setError(failure?.message ?? String(failure)) }
+    finally { setBusy(false) }
+  }
+  const scope = proposal.scope.kind === 'main' ? 'Main' : `${t('Work private')} · ${proposal.scope.workItemId}`
+  return h('section', { className: 'bt-product-memory-proposal', 'aria-labelledby': titleId, 'aria-busy': busy },
+    h('h4', { id: titleId }, t('Learning proposal')),
+    h('p', null, `${scope} · ${proposal.reason}`),
+    h('pre', null, proposal.text ?? ''),
+    h('p', null, `${t('Expires')}: ${new Date(proposal.expiresAt).toLocaleString()}`),
+    error ? h('p', { className: 'bt-product-memory-error', role: 'alert' }, error) : null,
+    h('div', { className: 'bt-product-memory-form' },
+      h('button', { type: 'button', className: 'bt-soft', disabled: busy, onClick: () => void answer(false) }, t('Decline')),
+      h('button', { type: 'button', className: 'bt-soft', disabled: busy, onClick: () => void answer(true) }, t('Approve'))))
 }
 
 export function ProductMemorySettings({ binding, works, call }) {
@@ -306,7 +349,7 @@ export function ProductMemorySettings({ binding, works, call }) {
         h('input', { type: 'search', value: query, 'aria-label': t('Search memory'), placeholder: t('Search memory'),
           onChange: event => setQuery(event.target.value) }),
         h('button', { type: 'submit', className: 'bt-soft' }, t('Search'))),
-      items.length ? h('ul', { className: 'bt-mem-list' }, items.map(entry => h(MemoryEntryRow, {
+      items.length ? h('ul', { className: 'bt-product-memory-list' }, items.map(entry => h(ProductMemoryEntryRow, {
         key: entry.id, entry: { ...entry, source: 'memory panel' }, open, remove,
       }))) : h('p', null, t('Nothing saved yet')),
       cursor ? h('button', { type: 'button', className: 'bt-soft', onClick: () => void loadMore() }, t('Load more')) : null,
@@ -428,6 +471,15 @@ export const PRODUCT_MEMORY_CSS = `
 .bt-product-memory textarea{width:100%;min-height:72px;resize:vertical}
 .bt-product-memory-detail{padding:10px 0;border-top:1px solid var(--bt-line-2);font-size:12px}
 .bt-product-memory-detail pre{max-height:240px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+.bt-product-memory-list{display:flex;flex-direction:column;gap:7px;margin:0;padding:0;list-style:none}
+.bt-product-memory-entry{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:9px;border:1px solid var(--bt-line);border-radius:6px}
+.bt-product-memory-entry>div{flex:1;min-width:180px;display:flex;flex-direction:column;gap:3px}
+.bt-product-memory-entry-text{font-size:12px;line-height:17px;overflow-wrap:anywhere}
+.bt-product-memory-entry-meta{font-size:11px;color:var(--bt-ink-3)}
+.bt-product-memory-proposal{display:flex;flex-direction:column;gap:7px;padding:10px;border:1px solid var(--bt-line);border-radius:6px}
+.bt-product-memory-proposal h4,.bt-product-memory-proposal p{margin:0}
+.bt-product-memory-proposal pre{max-height:240px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:7px;border-radius:6px;background:var(--bt-hover);font-size:12px}
+.bt-product-memory-error{color:var(--bt-danger)}
 .bt-product-memory-import-file{display:flex;flex-direction:column;gap:6px;font-size:12px}
 .bt-product-memory-import{display:flex;flex-direction:column;gap:10px;margin-top:10px}
 .bt-product-memory-import-meta{display:flex;flex-direction:column;gap:4px;padding:9px;border:1px solid var(--bt-line);border-radius:6px;font-size:12px;overflow-wrap:anywhere}

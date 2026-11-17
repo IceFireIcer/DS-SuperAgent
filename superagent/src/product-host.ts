@@ -272,7 +272,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
       if (!(await stat(root)).isDirectory()) throw new Error('Not a directory')
     } catch { throw new CoreError('PATH_DENIED', 'The selected working directory does not exist or cannot be read.') }
     const core = await realpath(stateRoot)
-    const userHome = await realpath(join(homedir(), '.dsh')).catch(() => undefined)
+    const configuredUserHome = process.env.DS_BOT_USER_DSH_HOME?.trim()
+    const userHome = await realpath(configuredUserHome || join(homedir(), '.dsh')).catch(() => undefined)
     const overlap = (left: string, right: string) => {
       const path = relative(left, right)
       return path === '' || path !== '..' && !path.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(path)

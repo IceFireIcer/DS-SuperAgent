@@ -167,8 +167,8 @@ test('old copy review excludes permissions and history, reports conflict, and pe
     await click('Review old configuration')
     assert.equal(doc.querySelector('.bt-product-preset-target .bt-mark')?.getAttribute('data-shape'), 'moon')
     await change('Copy identity', 'old-export')
-    await change('Old Bot ID', 'bot-a')
-    await change('Old configuration copy', JSON.stringify({ mainBotIds: ['bot-a'], bots: { 'bot-a': {
+    await change('Legacy role ID', 'bot-a')
+    await change('Legacy role configuration', JSON.stringify({ mainBotIds: ['bot-a'], bots: { 'bot-a': {
       name: 'Old reviewer', model: 'mock/legacy', instructions: '{{goal}} {{constraints}}', skills: ['review'],
       avatar: { shape: 'star', secret: 'private' }, color: 'blue', admin: true,
       permissions: { command: true }, history: ['private'],
@@ -229,8 +229,8 @@ test('a source conflict needs an explicit replacement decision and keeps the pri
   await withPresets(call, 3, async ({ doc, click, change }) => {
     await click('Review old configuration')
     await change('Copy identity', 'old-export')
-    await change('Old Bot ID', 'bot-a')
-    await change('Old configuration copy', JSON.stringify({ bots: { 'bot-a': { name: 'Updated', model: 'mock/one' } } }))
+    await change('Legacy role ID', 'bot-a')
+    await change('Legacy role configuration', JSON.stringify({ bots: { 'bot-a': { name: 'Updated', model: 'mock/one' } } }))
     await click('Preview')
     await click('Select preset')
     assert.match(doc.body.textContent, /Replace only this source binding/u)
@@ -272,9 +272,9 @@ test('a confirmed selection creates one preset; repeating the same source report
     const source = JSON.stringify({ bots: { 'bot-a': { name: 'Imported', model: 'mock/one', instructions: '', skills: [] } } })
     await click('Review old configuration')
     await change('Copy identity', 'old-export')
-    await change('Old Bot ID', 'bot-a')
+    await change('Legacy role ID', 'bot-a')
     await change('Target role', 'main')
-    await change('Old configuration copy', source)
+    await change('Legacy role configuration', source)
     await click('Preview')
     await click('Select preset')
     assert.match(doc.querySelector('[role="alert"]').textContent, /not confirmed/u)
@@ -286,7 +286,7 @@ test('a confirmed selection creates one preset; repeating the same source report
     assert.match(doc.body.textContent, /Preset selected from the reviewed copy/u)
     assert.equal(calls.some(([endpoint]) => endpoint === 'preset-apply'), false)
     await click('Review old configuration')
-    await change('Old configuration copy', source)
+    await change('Legacy role configuration', source)
     await click('Preview')
     await click('Select preset')
     assert.equal(selects[1].preset.id, calls.filter(([endpoint]) => endpoint === 'preset-select')[2][1].preset.id)

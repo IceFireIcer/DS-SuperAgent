@@ -50,7 +50,7 @@ Anyone on the team can do any kind of work: triage, bug fixes, features, the int
 |---|---|
 | Type | `bug` · `enhancement` · `documentation` |
 | Priority | `P0` crash, data loss or cannot use · `P1` hurts daily use · `P2` ordinary bug or feature · `P3` suggestion or narrow case |
-| Area | `area/host` server side (`index.js`, `src/host/`) · `area/client` interface (`src/client/`) · `area/group` group chats, mentions, Bot-to-Bot messages · `area/memory` memory, conversation parts, context · `area/browser` Bot browser, page reading, web search · `area/build` CI, release, scripts, test bench · `area/docs` |
+| Area | `area/host` product Host and Engine · `area/client` existing UI · `area/memory` memory and context · `area/browser` browser resources and web search · `area/build` CI, release and scripts · `area/docs` |
 | Flow | `maintainer` waits for the maintainer · `needs-info` waits for the reporter · `upstream` the cause is in DSH or another plugin · `duplicate` · `auto-found` found by automated testing |
 
 An issue that spans several areas, or none, gets no area label.
@@ -82,7 +82,7 @@ You need:
 
 - Node.js `24` or later.
 - Git.
-- For the test bench only: pnpm `11` and a checkout of DeepSeek Harness at the DSH version that the plugin is tested with.
+- For the product profile check only: pnpm `11` and a checkout of DeepSeek Harness at the tested version.
 
 ```sh
 git clone https://github.com/Fei2411/DS-Bot.git ds-bot-repo
@@ -95,7 +95,8 @@ npm ci
 npm run harness
 ```
 
-For the test bench, add the DeepSeek Harness checkout next to the plugin folder (this folder is ignored by Git):
+For the product profile check, add the DeepSeek Harness checkout next to the plugin folder (this folder is ignored by
+Git):
 
 ```sh
 cd ..
@@ -112,13 +113,15 @@ The `@deepseek-ai/*` packages are peer dependencies: in a real install, the DSH 
 
 | Path | What it is |
 |---|---|
-| `ds-bot/index.js`, `ds-bot/src/host/` | The server side: Bot roster and store, tools, turns and delivery, group chats, conversation parts and the search index, images, the Bot browser bridge, the `api/bot` channel |
-| `ds-bot/src/client/` | The browser side: sidebar, chat, panels and dialogs, themes, characters, the Bot browser panel |
+| `superagent/` | Engine, Host, storage, execution and retained capability adapters |
+| `ds-bot/index.js`, `ds-bot/src/host/product.js` | `/api/product`, native Session refusal and the product service dependency |
+| `ds-bot/src/client/` | The existing Main conversation, work cards and product settings |
 | `ds-bot/client.js` | Generated from `src/client/` by `scripts/build-client.mjs`. It is committed, so that Git installs need no build step |
 | `ds-bot/web-search.js` | The `auto` web-search provider. It does not depend on the Bot team code |
 | `ds-bot/cordis.patch.yml` | The profile patch that the plugin brings |
 | `ds-bot/test/` | Unit tests and fixtures |
-| `ds-bot/dev/` | The DSH packages for the unit tests (`harness/`), the mock model, the test bench, the smoke test, the character generator, the Desktop scripts for Linux, and two tools for real models: the steward evaluation and a logging pass-through |
+| `ds-bot/dev/` | The DSH packages for unit tests, the minimal product mock model, retained asset/Office/MCP utilities and a real-model logging pass-through |
+| `app/` | The single-product profile, Electron shell, data isolation, lifecycle and packaging |
 
 ## Test a change
 
@@ -145,26 +148,22 @@ Before committing, run the UI boundary check from the repository root:
 node scripts/check-ui-boundary.mjs --base origin/dev
 ```
 
-It lists changes under `app/ui/`, `ds-bot/src/client/` and `ds-bot/client.js`. Those files need an explicit request for the UI change; only then run the check again with `DSBOT_UI_CHANGE_APPROVED=1`. The check compares the working tree and untracked files with the base, so it also catches an edit that has not been staged yet.
+It lists changes under `ds-bot/src/client/` and `ds-bot/client.js`. Those files need an explicit request for the UI
+change; only then run the check again with `DSBOT_UI_CHANGE_APPROVED=1`. The check compares the working tree and
+untracked files with the base, so it also catches an edit that has not been staged yet.
 
-For a change to the server side (`index.js`, `src/host/`), also run the smoke test. It starts the mock model and a DSH Web with the plugin linked from your checkout, and walks through the main flows (Bots, group chats, conversation parts, condensing, settings). `CONTEXT_WINDOW` and `CHECK_RATIO` give the mock models a small window, so a few long replies reach the check line:
-
-```sh
-CONTEXT_WINDOW=100000 CHECK_RATIO=0.45 dev/bench.sh smoke 3096 8796 reset && node dev/smoke.mjs smoke 3096
-dev/bench.sh smoke 3096 8796 stop
-```
-
-To try the plugin by hand, start a bench and open the address that it prints:
+For Engine or Host changes, also run in `superagent/`:
 
 ```sh
-dev/bench.sh dev 3081 8771 reset    # mock model + DSH Web; data in ../.dsh-test-dev
+npm run typecheck
+npm run build
+npm run lint
 ```
 
-The mock model answers a fixed set of commands, so a bench costs no tokens. The commands are listed at the top of `dev/mock-llm.mjs`. Bench data stays in `.dsh-test-<name>/` next to the plugin folder and never touches your own `~/.dsh`.
-
-For a change to the context steward or its prompts (`src/host/steward.js`), also check it on a real model. `dev/steward-eval.mjs` runs its decisions on fixed conversation endings, and `dev/llm-tap.mjs` logs every call a real bench makes. Both cost tokens and explain their use at the top.
-
-For a change to the Bot browser, check it in DSH Desktop. On Linux, the scripts in `dev/desktop-linux/` run DSH Desktop under Xvfb; each script explains its use at the top.
+For the assembled product profile, run `node app/scripts/check-superagent-profile.mjs` on throwaway data. For product
+UI changes, run `npm test` in `app/`, the generated client check and the UI boundary check. Use the minimal
+`ds-bot/dev/mock-llm.mjs` when a packaged-app smoke needs a model; real model checks cost tokens and must use explicit
+temporary configuration.
 
 ## Write a change
 

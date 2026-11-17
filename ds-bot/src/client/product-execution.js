@@ -1,5 +1,5 @@
 import { createElement as h, useEffect, useState } from 'react'
-import { Card } from './bot-settings.js'
+import { Card } from './product-card.js'
 import { t } from './i18n.js'
 
 const targets = [['local', 'Local'], ['remote-only', 'Remote only'], ['auto', 'Auto']]

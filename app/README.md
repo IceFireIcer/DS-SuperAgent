@@ -1,6 +1,9 @@
-# DS Bot desktop app
+# DS SuperAgent desktop app
 
-The Electron app for Windows, macOS and Linux. It installs a pinned DeepSeek Harness (DSH 0.2.1-rc.4) and the `ds-bot` plugin of this repository, boots its own DSH profile `ds-bot` through `@deepseek-ai/dsh/profile-boot`, and keeps its data in its own `DSH_HOME`. It never writes to `~/.dsh`. Its window shows DSH's Web front end with the plugin, as DSH Desktop does. The design is in [docs/plans/2026-10-16-desktop-app.md](../docs/plans/2026-10-16-desktop-app.md).
+The Electron app for Windows, macOS and Linux. It installs a pinned DeepSeek Harness (DSH 0.2.1-rc.4), boots the
+single `ds-superagent` profile through `@deepseek-ai/dsh/profile-boot`, and keeps its data in its own `DSH_HOME`. It
+never writes to `~/.dsh`. Its window shows DSH's existing Web front end with the repository's `ds-bot` product
+surface. The design is in [docs/plans/2026-10-16-desktop-app.md](../docs/plans/2026-10-16-desktop-app.md).
 
 ## Run
 
@@ -18,12 +21,13 @@ npm installs `ds-bot` from `../ds-bot` as a copy of its package files (`install-
 
 | Variable | What it sets | Default |
 |---|---|---|
-| `DS_BOT_HOME` | The data location: the `DSH_HOME` of the app. When it is set, the app asks nothing at its first start and imports nothing | The folder chosen at the first start |
-| `DS_BOT_WORKSPACE` | With `DS_BOT_HOME`: the team workspace | `bot/workspace` in the data location |
+| `DS_BOT_HOME` | The outer data location; the product profile is under its `superagent` folder. When set, the app asks nothing at its first start | The folder chosen at the first start |
+| `DS_BOT_WORKSPACE` | With `DS_BOT_HOME`: the initial product workspace | `superagent/workspace` in the data location |
 | `DS_BOT_SHELL_DATA` | The app's own data (window, Chromium storage, the Bot browsers' logins, `locations.json`) | Electron's `userData` (Windows: `%APPDATA%\DS Bot`; macOS: `~/Library/Application Support/DS Bot`) |
 | `DS_BOT_UPDATE_URL` | Windows and a Linux AppImage: a folder URL with `latest.yml` / `latest-linux.yml` and the installer. macOS and a Linux deb: a URL returning a JSON list like GitHub's `releases` API; a release counts only when this machine's package is attached. Prereleases count only for prerelease installs (see [Updates](#updates)). With `DS_BOT_HOME`, the app checks only when this is set | The newest GitHub release |
 
-Existing installations keep their shell data, browser logins and saved locations in place. New installations use the DS Bot directory. A saved team workspace keeps its path; only a new workspace defaults to `~/DS Bot`.
+Existing installations keep their shell data, browser logins and saved locations in place. New installations use
+the DS Bot directory. A saved workspace keeps its path; only a new workspace defaults to `~/DS Bot`.
 
 ## Run from source (Windows)
 
@@ -35,41 +39,62 @@ From the repository root, run in PowerShell (Node.js 24 or later and npm require
 
 The launcher builds the plugin, installs dependencies when they change, refreshes the app's copy of the plugin when its source changes, and starts the desktop app. The first run downloads dependencies and Electron; later runs reuse them. Configure real model providers in the app's Settings.
 
-Data persists across starts under the gitignored `.ds-bot-local/` in the repository: `data/` holds profiles, model settings, credentials, Bots and chats; `workspace` holds the Bots' files; `shell/` holds window and browser storage. The launcher does not clear these folders or import another team's data. Back up this directory before removing the checkout. Close the app before updating dependencies or launching changed source.
+Data persists across starts under the gitignored `.ds-bot-local/` in the repository: `data/` holds the product
+profile, model settings, credentials and business store; `workspace` holds Main and Worker files; `shell/` holds
+window and browser storage. The launcher does not clear these folders or read the user's old team. Back up this
+directory before removing the checkout. Close the app before updating dependencies or launching changed source.
 
 Use `.\start.ps1 -DataRoot <folder>` for a different data root (relative paths are resolved against the repository root). The launcher always uses `data/`, `workspace` and `shell/` inside that root. It does not use the installed app's data or the user's `~/.dsh`. `-PrepareOnly` installs and builds without opening a window. If script execution is blocked, use `pwsh -NoProfile -ExecutionPolicy Bypass -File .\start.ps1`; this applies only to that process.
 
-## First start and import
+## First start
 
-At its first start the app asks, in system dialogs, for the data location (`~/.ds-bot` by default) and the team workspace (`~/DS Bot`), and keeps the answer in `locations.json` in its own data. Neither folder may be inside the other or inside the user's DSH data.
+At its first start the app asks, in system dialogs, for the data location (`~/.ds-bot` by default) and workspace
+(`~/DS Bot`), and keeps the answer in `locations.json` in its own data. Neither folder may be inside the other or
+inside the user's DSH data.
 
-Both change later in DS Bot's Settings > General > Locations. The plugin moves the team workspace and tells the app, which writes it into `locations.json`. The app names the user's DSH data to the plugin (`DS_BOT_USER_DSH_HOME`), so that neither the team workspace nor a Bot's folder can be set there. The data location moves through the app (`src/move-data.mjs`): the new folder must be empty or new and apart from the old data, the team workspace, the user's DSH data and the program folder. The app stops the Host, copies the data (without the team's lock) into a staging folder beside the new one, renames it to the new folder once it is whole, writes `locations.json` and starts again. A failed or interrupted copy leaves the old location in use and removes the staging folder; the old folder always stays. A run on throwaway folders (`DS_BOT_HOME`) keeps its data location.
+Both change later in DS SuperAgent's Settings > General > Locations. The app names the user's DSH data to the
+product (`DS_BOT_USER_DSH_HOME`), so neither the workspace nor an execution directory can be set there. The data
+location moves through the app (`src/move-data.mjs`): the new folder must be empty or new and apart from the old
+data, the workspace, the user's DSH data and the program folder. The app stops the Host, copies the data into a
+staging folder beside the new one, renames it to the new folder once it is whole, writes `locations.json` and starts
+again. A failed or interrupted copy leaves the old location in use and removes the staging folder; the old folder
+always stays. A run on throwaway folders (`DS_BOT_HOME`) keeps its data location.
 
-When the user's DSH (`DSH_HOME`, else `~/.dsh`) has a Bot team, the app offers to copy it (`src/import.mjs`). It only reads there. Before the copy it checks that no running DSH holds the team and that no chat is in a newer session format than the pinned DSH reads. Then the pinned DSH reads each chat once: a newer DSH can write records that the pinned one refuses in the same format. It reads a throwaway copy in the data location, with a profile of its own (`import-check`: `dsh-base` and `dsh-web-app`, without `ds-bot`), and removes the copy afterwards. A chat that a newer DSH wrote stops the copy as a newer format does; a damaged one does not, since the user's DSH cannot read it either. Then the app starts the Host once on the new data location, so that DSH does not register the copied Sessions' folders as projects. The copy takes `bot/` (without its lock, turns in flight and workspace), every Session the team names, the attachments, `.credentials.yaml`, `.env`, the model rows of one profile's `cordis.patch.yml`, and the old team workspace's files, which go into the new folder without replacing a file there. `bot/imported.json` records it. At its next turn, each Bot and group moves on to a fresh part in the new folder.
+The app does not import or activate the old Bot team runtime. Existing DSH and DS Bot files remain untouched.
+Optional browser, credential and memory import are product actions inside the running SuperAgent profile and use
+their own isolated import contracts.
 
 The Host reads model settings and keys the way DSH does: environment variables such as `DEEPSEEK_API_KEY`, and `.env` and `.credentials.yaml` in the data location. DSH's settings in the window set up model providers and their keys; DSH keeps the providers in the profile's `cordis.patch.yml` and the keys in `.credentials.yaml`.
 
 ## The profile
 
-The Host's profile `ds-bot` is in `profiles/ds-bot` in the data location. It stacks three bundles, and after them the bundles that the user installs:
+The Host's profile `ds-superagent` is in `profiles/ds-superagent` in the product home. It stacks these bundles, and
+after them the bundles that the user installs:
 
 | Bundle | What it adds |
 |---|---|
 | `@deepseek-ai/dsh-base` | DSH's shared core: models, Sessions, tools, settings, plugin management |
 | `@deepseek-ai/dsh-web-app` | DSH's Web front end, which the window shows, and the host services that it and ds-bot use |
-| `ds-bot` | The Bot team |
+| `@deepseek-ai/dsh-experimental-voice-input-bundle` | DSH's optional speech input surface |
+| `ds-bot` | The existing product UI and `POST /api/product` bridge |
+| `ds-superagent` | The Engine, Host, business store and execution adapters |
 
-At every start the Host puts these three bundles at the head of the profile's bundle list. Settings for one machine go into the profile's `cordis.patch.yml`, as in DSH. A profile from an earlier build that lists `dsbot-engine` gets `@deepseek-ai/dsh-web-app` in its place.
+At every start the Host puts these bundles at the head of the profile's bundle list, removes retired standalone UI
+and engine bundles from older manifests, and keeps the user's later bundles. Settings for one machine go into the
+profile's `cordis.patch.yml`, as in DSH. The profile fails to start when `superagentProduct` or `workspaceRegistry`
+is missing, so it cannot silently fall back to an old runtime.
 
-### The Super-agent profile
-
-Set `DS_BOT_PROFILE=ds-superagent` to start the isolated Super-agent profile instead of `ds-bot`. It keeps its data under `<data location>/superagent`, with the business store at `core/state.sqlite`; the old `ds-bot` profile and team stay untouched. It stacks `@deepseek-ai/dsh-base`, `@deepseek-ai/dsh-web-app`, `ds-superagent` and the existing `ds-bot` chat UI. `ds-superagent` publishes the production Engine as the `botExecutionAdapter` service, and an overlay sets `executionAdapterRequired: true` so the profile fails instead of falling back to the old core.
-
-This first profile does not import the old team. It is a migration boundary, not a copy: the old `ds-bot` profile keeps its Bots and chats. `node scripts/check-superagent-profile.mjs` boots the profile without the Electron shell and checks that the adapter, web server, connection and Session services start.
+`node scripts/check-superagent-profile.mjs` boots the profile without the Electron shell and checks that the product
+service, workspace registry, web server and connection start.
 
 ## Check a change
 
-`npm test` checks the composition of the profile, the import on throwaway folders, the first-run check on a chat with a record that the pinned DSH does not know, and that every package the app runs on is a dependency (see [Package](#package)). It also checks the window and the tray: the close hides the window, the tray opens it again, a window that is gone is built anew against the Host that runs, the application menu of macOS has no Quit of its own, the launch URL of the Host is used once, and the update waits for a window that is hidden. The main process runs there with the Electron parts as test doubles (`test/helpers/`), so that no display, no DSH and no data of the user are needed.
+`npm test` checks the single profile and its retired-bundle cleanup, first-run boundaries, data moves and that every
+package the app runs is a dependency (see [Package](#package)). It also checks the window and the tray: the close
+hides the window, the tray opens it again, a window that is gone is built anew against the Host that runs, the
+application menu of macOS has no Quit of its own, the launch URL of the Host is used once, and the update waits for
+a window that is hidden. The main process runs with Electron test doubles (`test/helpers/`), so no display, DSH or
+user data is needed.
 
 `scripts/shot.mjs` starts the app on throwaway folders, saves a screenshot of its window, prints the page text, closes the window the way a user does (it hides, and the app goes on) and ends the app the way the tray's Quit ends it. Use the mock model of the plugin, `../ds-bot/dev/mock-llm.mjs` (`MOCK_PORT=<port> node ../ds-bot/dev/mock-llm.mjs`).
 
@@ -105,7 +130,9 @@ Linux gets one AppImage for every distribution — it runs on any glibc system, 
 
 The installed app on Windows updates itself with electron-updater (`src/updates.mjs`), and so does an AppImage on Linux (`APPIMAGE` is set then). At its start and every 4 hours it reads `latest.yml` (Windows) or `latest-linux.yml` (AppImage) of the newest GitHub release, which names the installer and its sha512. It downloads that installer in the background and checks its sha512. When the download is done, a dialog on the window asks whether to restart now: then the app stops its Host and runs the installer, which opens the app again. Otherwise the installer runs when the app quits.
 
-The checks start before the Host (after a first start's import), so that a version whose Host does not start can still update. When the start fails, the app waits up to 15 seconds for the newest check. When it found a newer version, the error box says so; after the box the app waits for the download, then installs it and opens again.
+The checks start before the Host, so that a version whose Host does not start can still update. When the start
+fails, the app waits up to 15 seconds for the newest check. When it found a newer version, the error box says so;
+after the box the app waits for the download, then installs it and opens again.
 
 On macOS, the app checks GitHub's releases at start and every 4 hours. It asks once per version, after that release's zip for this Mac is attached. A Linux deb works the same way, except that it waits for the `linux-amd64` deb (Debian's name for x64). Stable installs ignore prereleases; prerelease installs can see them. Download opens the release page; Later closes the dialog. The app does not install the update itself. `DS_BOT_UPDATE_URL` on macOS and for a deb points to a JSON list like the `releases` API response. A release needs `tag_name`, an HTTPS `html_url`, and the machine's package in `assets`.
 
@@ -133,11 +160,22 @@ The script serves a releases list with one release of that version that has this
 
 The app builds a system tray icon on Windows, macOS and Linux (`src/shell.mjs`, `src/tray.mjs`); the icon is the app's own whale (`assets/tray.*`, drawn by `npm run icon`). The menu says what the Host is doing ("Host running", "Starting the Host…", "Host not running", "Host could not start", or "Paused while this computer sleeps"), then holds "Open DS Bot" and "Quit DS Bot". Whether the icon is visible belongs to the desktop: on Linux, GNOME and KDE draw it only with a tray extension.
 
-Closing the window hides it: the Host and the Bots go on working, and the Bot browsers' tabs stay. Starting the app again brings the window back, because the second copy hands itself to the one that runs. When the window is gone for good, the tray's Open builds a new one that talks to the Host that runs: it loads the Host's plain address, and the cookie of the first load still carries the session, so neither the launch token nor a second Host is needed.
+Closing the window hides it: Main, Router and Worker go on running, and browser resource tabs stay. Starting the
+app again brings the window back, because the second copy hands itself to the one that runs. When the window is gone
+for good, the tray's Open builds a new one that talks to the Host that runs: it loads the Host's plain address, and
+the cookie of the first load still carries the session, so neither the launch token nor a second Host is needed.
 
-No window closed ends the app; the tray's Quit is the one ordinary way out. The first close asks once, because the app stays in the tray; the answer is kept in the app's own data (the `tray-close-acknowledged` file in its user data folder). A close during the first start's import or during a data move cancels that work, as it did before. An update that restarts the app, a data move that restarts it, a failed start and the end of the operating system's session close the window for good.
+No window closed ends the app; the tray's Quit is the one ordinary way out. The first close asks once, because
+the app stays in the tray; the answer is kept in the app's own data (the `tray-close-acknowledged` file in its
+user data folder). A close during the first start or during a data move cancels that work. An update that restarts
+the app, a data move that restarts it, a failed start and the end of the operating system's session close the
+window for good.
 
-A computer that sleeps pauses the Host with it: the tray says so instead of claiming that the Bots go on working. When the computer wakes, the app reads the Host again; a window that was closed loads what the Host kept. If the Host did not survive the sleep, the app starts it again on the same profile and data, and only when that fails does it show the error. A Host that does not start outside a sleep is not the end of the app either: the error box offers "Try again", so a directory or an account can be fixed and checked again without starting the first run over.
+A computer that sleeps pauses the Host with it: the tray says so instead of claiming that work continues. When the
+computer wakes, the app reads the Host again; a window that was closed loads what the Host kept. If the Host did not
+survive the sleep, the app starts it again on the same profile and data, and only when that fails does it show the
+error. A Host that does not start outside a sleep is not the end of the app either: the error box offers "Try again",
+so a directory or an account can be fixed and checked again without starting the first run over.
 
 The application menu of macOS has no Quit and no ⌘Q, for the same reason: the tray's Quit is the one ordinary way out. Only when the tray cannot be built does the menu carry a Quit, so that the app can still be ended.
 
@@ -149,7 +187,10 @@ The launch URL of the Host is good for one use only. When the first load never c
 
 `scripts/check-resident.mjs` (`npm run check-resident`) runs the real app with the real DSH Host on throwaway folders: it closes the window, asks the Host for its own page, starts a second copy that must bring the same window and Host back, and quits explicitly, after which the Host must stop listening. It needs a desktop and the DSH packages of `node_modules`.
 
-An upgrade does not migrate the Host's data: the app only puts its own bundles first in the profile and keeps the user's bundles, dependencies, role preset and settings after them. The team's business state and Sessions stay where the Host keeps them; the profile file is the only file the upgrade rewrites (see `test/upgrade.test.mjs`). A business or Session backup restore is the new core's own contract, not an app migration.
+An upgrade does not migrate the Host's data: the app only puts its own bundles first in the product profile and
+keeps the user's bundles, dependencies, role presets and settings after them. Business state and native Sessions
+stay where the Host keeps them; the profile file is the only file the upgrade rewrites (see
+`test/upgrade.test.mjs`). A business or Session backup restore is the new core's own contract.
 
 ## Layout
 
@@ -159,21 +200,18 @@ An upgrade does not migrate the Host's data: the app only puts its own bundles f
 | `src/shell.mjs`, `src/tray.mjs`, `src/background-notice.mjs` | The window and the tray: the window hides instead of closing, the tray opens it again and quits the app, and the one-time confirmation before the window hides |
 | `src/update-prompt.mjs` | An update prompt that waits for the window to be shown again |
 | `src/host-port.mjs` | The Host's port, kept between starts, since the page keeps its storage per address |
-| `src/preload.cjs` | Hands DS Bot's settings the data location and its move, and DS Bot's Bot browsers their webview leases and cookie imports. On Windows it marks the page for the frameless window and sends the caption buttons the colors of the surface under them |
+| `src/preload.cjs` | Hands the product settings the data location and data move, and browser imports their isolated IPC. On Windows it marks the page for the frameless window and sends caption button colors |
 | `src/bot-browser.mjs` | The Bot browsers' webviews: only a leased one attaches, with fixed preferences; each Bot's logins stay on disk until the Bot is deleted; pages cannot reach the Host |
 | `src/cookie-parse.mjs`, `src/cookie-import.mjs`, `src/browser-sources.mjs` | Cookie imports: the cookie-file parser (Cookie-Editor JSON, Netscape, Playwright storageState), the write into a Bot's partition with read-back and flush, and the installed-browser profiles a source is cloned from — the source browser itself decrypts its own store over a CDP pipe; values never leave the main process |
 | `src/window-frame.mjs`, `src/mica.css` | The frameless Windows window: the caption band, when Mica is available (Windows 11 22H2 and later), and the stylesheet that lets Mica through the sidebar |
 | `src/host-process.mjs` | Starts the Host in the bundled plain Node on Linux, Electron's Node mode elsewhere, and owns its exit |
-| `src/host.mjs` | The Host: boots the profile with `runProfile()` and reports the launch URL and the page injections; for the first-run check (`DS_BOT_CHECK`), the chats it cannot read |
-| `src/profile.mjs` | The profiles: the app's own and the first-run check's, their bundles, and their creation and update |
-| `src/session-check.mjs` | Which chats the pinned DSH refuses because a newer DSH wrote them |
-| `src/first-run.mjs` | The first start's dialogs (the two folders and the offer to import) and the texts of the data move |
-| `src/import.mjs` | The import of a Bot team from the user's DSH |
+| `src/host.mjs` | Boots the single product profile with `runProfile()`, verifies its public services and reports the launch URL |
+| `src/profile.mjs` | The one `ds-superagent` profile, its bundles and retired-bundle cleanup |
+| `src/dsh-home.mjs` | Resolves the user's DSH home for read-only path isolation checks |
+| `src/first-run.mjs` | The first start's data and workspace dialogs plus data-move copy |
 | `src/move-data.mjs` | The move of the data location: which folders can take it, and the copy through a staging folder |
 | `src/updates.mjs` | The self-updates (Windows installer, Linux AppImage) and the release-page checks (macOS, Linux deb) |
-| `engine/` | On hold, not installed: the bundle `dsbot-engine` for the app's own window in `ui/` |
 | `test/` | `npm test`: the composition of the profile, the dependencies that the package needs, and the window and the tray (the main process runs there with the Electron parts as test doubles, in `test/helpers/`) |
-| `ui/` | On hold, not built or packaged: the app's own window. React, built with Vite (`vite.config.js`) into `ui/dist`. It draws the plugin's own Bot views from `../ds-bot/src/client/` (sidebar, chat rows, docks, dialogs and their stylesheets) and puts its own Markdown in place of DSH's. It uses ds-bot's `api/bot` channel and its live feed `api/bot/feed` |
 | `assets/` | The app icon: `icon.svg`, `icon.png` (1024 px) and `icon.ico` (Windows, 16 to 256 px), and the tray marks: `tray.ico` (Windows), `tray.png` (Linux) and `trayTemplate.png` with its `@2x` (macOS). `npm run icon` (`scripts/icon.mjs`) draws them again from the Main Bot's whale in `../ds-bot` |
 | `electron-builder.yml`, `build/` | The package and the installers: app identity, files, icons, the Windows installer, the macOS zip and the Linux AppImage and deb |
 | `scripts/check-packed.mjs` | `npm run check-packed`: the check of a packaged app |

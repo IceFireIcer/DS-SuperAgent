@@ -1,5 +1,5 @@
 import { createElement as h, Fragment, useEffect, useRef, useState } from 'react'
-import { Row } from './bot-settings.js'
+import { Row } from './product-card.js'
 import { t } from './i18n.js'
 
 const IMPORT_STATES = {

@@ -38,7 +38,7 @@ const files = (dir) => {
   return found.sort()
 }
 
-test('the new data location is an empty or new folder apart from the data, the team workspace, DSH and the program', (t) => {
+test('the new data location is an empty or new folder apart from the data, workspace, DSH and the program', (t) => {
   const { root, from } = setup(t)
   const places = { from, workspace: join(root, 'work'), dshHome: join(root, 'dsh'), program: join(root, 'program') }
   const problem = to => moveProblem({ ...places, to })

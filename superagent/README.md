@@ -1,6 +1,7 @@
-# DS Bot Super-agent core
+# DS SuperAgent core
 
-This private ESM package hosts the independent TypeScript core. Its public Cordis plugin exposes only the instance-bound Engine; the existing DS Bot entry point does not feed it requests.
+This private ESM package hosts the TypeScript Engine and `createProductHost`. The existing `ds-bot` UI calls the
+product Host through `POST /api/product`; the public Engine remains available for direct Cordis and CLI use.
 
 ## Requirements
 
@@ -8,7 +9,7 @@ This private ESM package hosts the independent TypeScript core. Its public Cordi
 - An explicitly configured, absolute, writable SQLite database path isolated for this instance.
 - An explicit instance ID and trusted desktop source configuration. `allowedActorIds` is a deployment-owned allowlist, not data from the submitted request.
 
-The runtime core does not read `DSH_HOME` or use a user's DSH data as its working store. The opt-in `ds-superagent/legacy-archive` importer reads only an absolute legacy source the operator names, writes a separate read-only archive, and never executes the old Agent loop; it is not part of a running Engine. The core runs on an explicitly configured local Environment or a separately paired remote fs/search/command Environment; the two never substitute for each other silently. Without a configured native Session adapter, accepted work remains pending with `worker-not-enabled`. T02 adds the optional Router/Worker execution path below.
+The runtime core does not read `DSH_HOME` or use a user's DSH data as its working store. The core runs on an explicitly configured local Environment or a separately paired remote fs/search/command Environment; the two never substitute for each other silently. Without a configured native Session adapter, accepted work remains pending with `worker-not-enabled`. T02 adds the optional Router/Worker execution path below.
 
 ## Use from Cordis
 
@@ -34,42 +35,20 @@ await ctx.fiber.dispose()
 
 The receiving desktop adapter binds `sourceInstanceId` and `actorId` in plugin configuration. Request fields cannot replace identity, policy or mandate scope. Reuse the stable `commandId` for transport retries. A reused command or event ID with different content is an `IDENTITY_CONFLICT`. The returned work keeps the original text and records an immutable explicit Mandate and pending local intent.
 
-## ds-bot Host factory
+## The product Host and DSH profile
 
-The existing `ds-bot` Host can consume the public Engine through the optional
-`botExecutionAdapter` service. Load `ds-superagent/ds-bot-host` before `ds-bot`
-and configure an absolute business database path; the plugin publishes the
-adapter and closes it with its own Host effect.
+`createProductHost(context, config)` opens the business store, acquires the Host lease, reconciles a previous Host,
+restores local or remote Environments and publishes `superagentProduct`. It accepts either SQLite `databasePath` or
+shared PostgreSQL `postgres` configuration, plus the trusted Instance, actor, role routes and local `stateRoot`.
 
-```js
-import * as DsBotHost from 'ds-superagent/ds-bot-host'
+`ds-superagent/profile` reads `DSH_HOME`, creates the local SQLite store at `<DSH_HOME>/core/state.sqlite`, and
+publishes `superagentProduct`. When `DS_SUPERAGENT_POSTGRES` is present, the profile uses the PostgreSQL business
+store and Session provider instead; credentials remain in the Host environment.
 
-await ctx.plugin(DsBotHost, {
-  databasePath: '/absolute/isolated/ds-bot-ui.sqlite',
-  router: { provider, model },
-  worker: { provider, model },
-})
-```
-
-The factory creates one Engine per UI Session over one shared business store.
-The Host's public `sessionPersistence` service owns the native Agent logs, so a
-restart can resume the same Session. Without explicit routes, the factory reads
-the profile's `agentDefaultModel` selection; a missing route or database path
-fails at startup. A per-scope `dispose` stops Effects, shuts down the Engine and
-closes the native Session adapter; the adapter refuses new work after close.
-
-## The ds-superagent DSH profile
-
-`ds-superagent/profile` is the standalone profile host. It reads `DSH_HOME`,
-creates the business store at `<DSH_HOME>/core/state.sqlite`, publishes
-`botExecutionAdapter`, and closes every Engine and native Session with the Host
-effect. The app selects it with `DS_BOT_PROFILE=ds-superagent`; its DSH home is
-`<app data>/superagent`, so the old `ds-bot` team and Sessions are not touched.
-
-The bundle patch mounts `ds-superagent/profile`. The app then adds the existing
-`ds-bot` chat UI as a later bundle and a small overlay that sets
-`executionAdapterRequired: true`. The profile fails closed when the adapter,
-database path or model route is missing.
+The app has one `ds-superagent` profile. Its bundles are `@deepseek-ai/dsh-base`,
+`@deepseek-ai/dsh-web-app`, the voice-input bundle, `ds-bot` and `ds-superagent`. The app's DSH home is
+`<app data>/superagent`. The profile fails closed when `superagentProduct`, `workspaceRegistry`, a role route or the
+selected database is missing. There is no old/new profile switch, activation gate or `botExecutionAdapter` fallback.
 
 ## Command-line entry
 
@@ -273,59 +252,18 @@ A revision conflict stores one `config-draft` per instruction with the pending c
 
 The config command never cancels a human stop, grants a device or publication permission, or gives the Watchdog/Supervisor a write path. There is no chat/settings UI or remote authoring route in this ticket; the public Engine command is the entry point. The tests use deterministic/injected interpreters and the mock Session; no real-model endpoint sample was run.
 
-## Legacy read-only archive
+## Removed old-runtime migration
 
-T50 adds `ds-superagent/legacy-archive`: an opt-in migration importer for a legacy DS Bot home (`bot/state.json`, `sessions`, `memory`, and optional workspace and attachment data). It reads the source, never writes it, and never starts an old Agent or creates a new Ticket queue. The source and target must be separate absolute paths and the target must be empty or an existing archive store.
-
-```js
-import { prepareLegacyArchive, verifyLegacyArchive, publishLegacyArchive } from 'ds-superagent/legacy-archive'
-
-await prepareLegacyArchive({ source, target, batchId, sourceIdentity, profile, mapping })
-await verifyLegacyArchive(target, batchId)
-await publishLegacyArchive(target, batchId)
-```
-
-`prepareLegacyArchive` writes `.staging/<batchId>` and a `manifest.json`; nothing is visible in `archives/` until `publish`. The manifest records the source path/identity/profile, source digest and state revision, batch ID, mapping/digest, summary counts, Session checksums, commands, and review items. The same batch is idempotent while source and mapping are unchanged; changed content is `ARCHIVE_CONFLICT`. A batch ID, role ID or Session ID that could escape a path is rejected.
-
-Session logs are checked for the known `session.v<version>.jsonl[.zstd|.zst|.gz|.br]` format, version, decompression, JSON, and contiguous `seq`. Missing, newer, malformed, or gapped history leaves the archive `invalid` and un-publishable. `verify` rehashes staging and recomputes the source digest; `publish` verifies again before the atomic rename. A tampered staging copy, a source changed after prepare, or an existing target is not published.
-
-The explicit `mapping.roles` prepares role records from reviewed Bot fields; role names/models remain archive facts, `permissions` is empty, `sourceMainBot` is only evidence, and `readOnly` is true. `mapping.sharedMemory` selects `team`/`group:<roomId>` scopes; all archived memory stays historical, but `readLegacyObject` marks mapped memory `shared: true` and private memory `shared: false`. `bot/workspace` and `attachments` are opt-in through `include`, so the default archive follows D18's team/group/memory/Session scope.
-
-Old `works`, `requests`, `questions`, live `agents`, and `inflight.json` are review items, not new work. Unfinished, stopped, and unknown work is listed for a person; completed work and old refs remain readable through `work:`, `request:`, `question:`, `agent:`, `inflight:`, `bot:`, `room:`, `role:`, `review:`, `memory:`, `session:`, `file:`, and `attachment:` references. There is no old agent loop, no Main Bot authority, and no new queue.
-
-Credentials (`.credentials.yaml`/`.env`) and raw profile patches are not copied. The archive has bounded file/byte limits and is local-file based; the Engine does not import it automatically. The tests use fictional isolated legacy homes, including cancellation, retry, missing/newer/zstd history, and source-digest invariance; no user DSH data is used. T51 prepares quiescence and the gap buffer; T52 activates the current entry; T53 provides abandon and reverse handoff.
-
-## Switchover preparation and gap intake
-
-T51 adds `ds-superagent/switchover`: the preparation half of a migration, not activation. `Switchover.begin` requires a published T50 archive and the current, unexpired Host lease epoch. It records `quiescing`, asks the caller's `LegacyCore` to stop old consumption and to persistently disable the old restart entry, then binds the old intake's loopback port itself. A lock inside the old home is recorded as evidence only (`usedAsFence: false`); the actual port bind rejects an old process that never learned the new lock. If the bind or restart-disable proof is missing, the record stays `quiescing` with a blocker.
-
-`quiesced` also needs two old-core snapshots separated by a bounded settle window. Active turns, jobs and pending outbound must be empty; increments must be zero; every source cursor must be complete; acceptance receipts must not be pending or unknown; and the two snapshots must have the same digest. A later recheck that sees a new increment, a changed source revision or an unreachable restart entry downgrades the record back to `quiescing`.
-
-The isolated intake speaks newline-delimited JSON and acknowledges only after SQLite commit. A stable ID is derived from the source instance, thread, object and native version. Inputs become `held` for T52, `legacy-accepted` when the old receipt already accepted them, or `quarantined` when the identity, cursor or receipt is missing or unreliable. The final snapshot is re-read against every buffered input: a receipt must exist in old facts; a held input that old actually accepted becomes `legacy-accepted`; a claimed acceptance without old evidence, an incomparable receipt cursor or an uncovered cursor is quarantined. Nothing in this module creates a Ticket, Assignment, Effect or old Agent loop.
-
-`Switchover` exposes `begin`, `recheck`, `status`, `ingestGapInput`, `listGapInputs`, `getGapInput` and `close`. `LegacyCore` (`stop`, `disableRestart`, `restartDisabled`, `snapshot`) is supplied by the host for its real old process/service. The tests run a fictional old launcher/receiver and a separate new runner over real TCP and SQLite: the old launcher is renamed on quiesce, the new runner survives SIGKILL and rebinds the same port, buffered ownership is recovered, old receipts are not replayed, and the new database still has zero Tickets and Effects. T52 owns activation and buffer release; T53 owns abandon and reverse handoff.
-
-## Activation and the current entry
-
-T52 adds `ds-superagent/activation`. `Activation.activate` runs the T51 final recheck and then, in one command transaction, writes the activation manifest (`currentCore: ds-superagent`, batch, new Host epoch, switchover/archive digests, final checkpoints and gap counts), an `activation-command` receipt, activation history, the per-gap release ledger, and switches the `switchover` record to `active`. It refuses a batch that is not quiesced, whose archive/host epoch changed, or whose gap buffer changed after the final recheck. A COMMIT whose response is lost is reconciled by the original activation command ID.
-
-`Activation.gate()` checks the active manifest and the current Host lease, including its owner process token. `engine.setActivationGate(gate)` makes `receiveSource`, source assessment, every acceptance path and `Effects.enqueue` fail with `CORE_NOT_ACTIVE` until activation; a replay of an existing command receipt still returns the original result. The plugin accepts `activationGate` in its config and installs it in `apply`.
-
-Activation releases only `held` gap input, with the stable command `release:<activationId>:<gapId>`. Legacy-accepted and quarantined inputs become `skipped` and never become new work. Each release is claimed once per call, unknown outcomes remain visible, and bounded retries reuse the same release command; a successful release also marks the original `switchover` gap record `released`/`released-to-current-entry`. The process drill stops a real old receiver and launcher, commits activation in a child process that exits after its external acceptance, and shows the parent cannot release under another process's lease. The isolated Engine test reads the old review through the archive, creates a new Session for post-activation work and keeps a manual stop. Cross-process holder takeover and real Electron application data remain T55; T53 owns reverse handoff.
-
-## Abandonment and reverse handoff
-
-T53 adds `ds-superagent/reversal`. Before activation, `Reversal.abandon` re-runs the final quiescence check, scans every gap input, and leaves the old entry disabled when any held or quarantined ownership needs review. Only a gap empty of review items lets it mark the `switchover` record `abandoned`, release the entry and call the old launcher's `enableRestart`; the command is idempotent and does not touch the archive, another batch or the source.
-
-After activation, `Reversal.reverse` changes the activation record to `stopping` immediately, so the Engine gate rejects new receive/accept/Effect writes. The caller's `ReverseControl.stopAndSnapshot()` then stops new turns, jobs and outbound and returns durable evidence: active work, unknown effects/jobs, pending receipts, manual stops and old-core compatibility. Any unresolved item keeps the record `blocked`; a clear snapshot becomes `ready`. A newer Host epoch may resume the same reverse command, and an interrupted stop is retried without a second external effect. `completeReverse` rechecks the current Host owner/epoch and old-core compatibility before calling `enableRestart`; it then marks the activation `reversed` and the switchover `abandoned`. The old queue is never replayed by this path.
-
-The tests cover a held-quarantine abandon blocker, another published archive surviving an abandon, a real Engine outbound backlog blocking reverse, unknown effects and compatibility blockers, interrupted reverse resumption, a newer Host epoch, and a real invalid old launcher drill. The process test releases a real held gap into the new core, exits a reverse child after its stop marker, resumes under a newer Host, reopens the real old launcher and verifies the old receipts stay empty and the source state is unchanged.
+R5-34 removes the old team runtime and its cutover products. The former archive, switchover, activation and reversal
+packages are no longer built or exported. Existing user files are left on disk; the product starts one
+`ds-superagent` profile and does not reconstruct, resume or expose the old roster, round, group, Bot-to-Bot or native
+Session history paths.
 
 ## Collaboration load comparison
 
 T54 adds `dev/collaboration-bench.mjs`, a fixed mock workload (`seed=20261111`, 6 initial requests, 6 same-thread follow-ups, 20 ms Worker turns, Router batch limit 20, 2 normal + 1 priority slot) that runs the same stream as one Native Session, as independent Router/Worker tickets, and as a subscribed Ticket with direct follow-ups. It reports acceptance/response p50/p95, Router calls and batches, Worker calls, direct-follow-up ratio, notifications, duplicate replay, and state reopen in JSON. The captured result is `docs/superagent/implementation/t54-bench.json`; it is a development measurement, not a product SLA.
 
-The mock reports no token usage; the run records that explicitly instead of inventing tokens. The budget table in `docs/superagent/implementation/t54.md` compares the declared Effects/slots/jobs/subagents/Input/Host/Watchdog/Supervisor/switchover/activation/PostgreSQL/SQLite budgets with historical evidence. Real-model token/latency, remote and managed Hosts, proactive/supervisor reruns, unknown outcomes and crash recovery remain explicitly unverified in this ticket.
+The mock reports no token usage; the run records that explicitly instead of inventing tokens. The budget table in `docs/superagent/implementation/t54.md` compares the declared Effects/slots/jobs/subagents/Input/Host/Watchdog/Supervisor/PostgreSQL/SQLite budgets with historical evidence. Real-model token/latency, remote and managed Hosts, proactive/supervisor reruns, unknown outcomes and crash recovery remain explicitly unverified in this ticket.
 
 ## Context cards and bounded reads
 

@@ -168,6 +168,8 @@ test('the product pairs a device and binds remote-only work to its own filesyste
   assert.equal(fact('Selection status'), 'selected')
   assert.equal(workerDetail.facts.some(item => item.label === 'Execution candidate'
     && item.value.includes('remote-project (remote): eligible')), true)
+  assert.equal(workerDetail.facts.some(item => item.label === 'Execution candidate'
+    && item.value.includes(': blocked; target remote-only excludes local Environments')), true)
   assert.equal(fact('Device'), 'execution-device')
   assert.equal(fact('Directory'), deviceRoot)
   await assert.rejects(call('work-reconcile-stop', { commandId: 'guess-stop', workItemId: 'guessed',

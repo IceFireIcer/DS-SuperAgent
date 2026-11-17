@@ -19,6 +19,7 @@ let open
 export const state = {
   starts: 0,
   stops: 0,
+  options: undefined,
   stopFails: false,
   fail: false,
   running: false,
@@ -40,7 +41,7 @@ export class HostProcess {
   #options
   #messageListeners = new Set()
 
-  constructor(options) { this.#options = options }
+  constructor(options) { this.#options = options; state.options = options }
 
   async start() {
     state.starts += 1

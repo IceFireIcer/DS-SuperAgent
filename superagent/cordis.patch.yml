@@ -13,10 +13,6 @@
 - id: session-persistence-jsonl
   disabled: !!js "Boolean(process.env.DS_SUPERAGENT_POSTGRES?.trim())"
 
-- id: bot
-  config:
-    product: true
-
 # Keep the public client module available while removing the native Session
 # controller from the Gateway's product scope, including its WebSocket carrier.
 - id: session-controller

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
 import { before, test } from 'node:test'
 import { hostLockPath } from '../src/host-lock.mjs'
-import { profileHome, SUPERAGENT_PROFILE } from '../src/profile.mjs'
+import { profileHome } from '../src/profile.mjs'
 import { app, powerMonitor, state } from './helpers/fake-electron.mjs'
 import { state as hostState } from './helpers/fake-host-process.mjs'
 import { startApp, trayOpen, trayQuit, waitFor, window } from './helpers/app-harness.mjs'
@@ -14,11 +14,14 @@ import { installHooks } from './helpers/register.mjs'
 await installHooks()
 
 let home
-before(async () => { ({ home } = await startApp()) })
+let workspace
+before(async () => { ({ home, workspace } = await startApp()) })
 
 test('the app starts with a window and a tray', async () => {
   await waitFor(() => state.windows.length > 0, 'open the window')
   await waitFor(() => state.tray !== undefined, 'build the tray')
+  assert.equal(hostState.options.env.DSH_HOME, profileHome(home))
+  assert.equal(hostState.options.env.DS_BOT_WORKSPACE, workspace)
   assert.match(state.tray.tooltip, /^DS Bot — /u, 'the tray says what the Host is doing')
   assert.equal(state.quits, 0, 'the app goes on')
 })
@@ -99,7 +102,7 @@ test('a Host that dies during the sleep is replaced when the computer wakes', as
 })
 
 test('Host stop and tray refresh failures do not strand quit or leave the Host lock behind', async () => {
-  const lock = hostLockPath(profileHome(home, SUPERAGENT_PROFILE))
+  const lock = hostLockPath(profileHome(home))
   assert.equal(existsSync(lock), true, 'the running Host owns its lock')
   hostState.stopFails = true
   state.trayUpdatesFail = true

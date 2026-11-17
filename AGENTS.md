@@ -4,18 +4,17 @@ Instructions for AI coding agents that work on this repository. Human contributo
 
 ## What this project is
 
-DS Bot is a team of long-lived Bots, built on DeepSeek Harness (DSH). It has two parts:
+DS SuperAgent has three product layers built on DeepSeek Harness (DSH): Main owns the user conversation, Router turns
+accepted work into durable tickets, and independent Workers execute those tickets. The repository has three parts:
 
-- `ds-bot/`: the Bot features, written as a DSH plugin. The plugin runs in DSH Desktop, in DSH Web and in the desktop app.
-- `app/`: the desktop app for Windows, macOS and Linux. It runs a pinned DSH with the `ds-bot` plugin, in its own profile and its own `DSH_HOME`, and imports an existing team from the user's DSH.
+- `superagent/`: the Domain Engine, durable business store, Host and execution adapters.
+- `ds-bot/`: the existing DSH client UI and `/api/product` bridge.
+- `app/`: the desktop app for Windows, macOS and Linux. It runs a pinned DSH with `ds-bot` and `ds-superagent` in one
+  product profile and its own `DSH_HOME`; it never writes the user's `~/.dsh`.
 
-The Bot team:
-
-- Every Bot is a long-lived identity whose work runs in DSH Sessions: one for its own chat, one for each group it is in, and a fresh one when the context fills up (earlier ones stay readable). Every turn runs through the normal DSH agent loop, tools and model routes.
-- The team works together: Bots message each other, share group chats and can see what the other Bots are doing. Each Bot still runs on its own and does not disturb the others.
-- Bots have clear, different roles. A Main Bot has the highest rights: it creates, changes and removes other Bots. Other Bots do not get these rights. There can be more than one Main Bot.
-- Users customize each Bot (name, role label, instructions, model, character).
-- Behavior must be reliable: a Bot acts on evidence, stays inside its goal, and its results can be checked.
+Main, Router and Worker run as separate DSH Agent Sessions. Accepted work keeps durable work identity, authority,
+execution generation and delivery facts. The product does not load the former roster, group/round, Bot-to-Bot,
+production Bot governance, old history or profile-switch compatibility runtime.
 
 ## Hard rules
 
@@ -24,7 +23,7 @@ The Bot team:
 3. **Only original material.** Do not copy code, text, icons, logos or graphics from other products or websites. Code under a license compatible with Apache 2.0 is the only exception: say where it comes from and add its notice to the `NOTICE` file.
 4. **`client.js` is generated.** Change `ds-bot/src/client/`, then run `npm run build` and commit both files. Never edit `client.js` by hand.
 5. **Do not touch the user's own DSH data.** The desktop app keeps its data in its own `DSH_HOME`; its import only reads `~/.dsh` and never writes there. The test bench keeps its data in `.dsh-test-<name>/`. Never point a test at `~/.dsh`, at the desktop app's data or at a DSH that the user runs.
-6. **Preserve the existing product UI.** Do not create a renderer, replacement desktop surface, or alternate frontend. Integrate the Super-agent core through documented DSH APIs and the existing `ds-bot` client protocol (`/api/bot`, SSE events, session/chat, question, delivery and resume shapes). Changes to `app/`, `app/ui/`, `ds-bot/src/client/` or `client.js` require an explicit user request for that UI change.
+6. **Preserve the existing product UI.** Do not create a renderer, replacement desktop surface, or alternate frontend. Integrate the Super-agent core through documented DSH APIs and the existing `ds-bot` product protocol (`/api/product`, client events, Main history/work cards, questions and delivery history). Changes to `app/`, `ds-bot/src/client/` or `client.js` require an explicit user request for that UI change.
 
 ## Commands
 
@@ -38,13 +37,19 @@ npm test                               # unit tests; also fail if client.js is s
 node scripts/build-client.mjs --check  # client.js matches src/client
 npm run lint                           # oxlint
 node ../scripts/check-ui-boundary.mjs --base origin/dev  # UI files need DSBOT_UI_CHANGE_APPROVED=1
-CONTEXT_WINDOW=100000 CHECK_RATIO=0.45 dev/bench.sh smoke 3096 8796 reset && node dev/smoke.mjs smoke 3096   # smoke test
-dev/bench.sh smoke 3096 8796 stop
 ```
 
-On Windows, run `npm`, `node` and the repository's `.mjs` wrappers in PowerShell; use `bash` only for POSIX-only fixtures such as `dev/bench.sh`. Prefer the `.mjs` scripts over ad-hoc multi-line shell commands for long checks.
+Run `npm run typecheck`, `npm run build` and `npm run lint` in `superagent/` after Engine or Host changes. Run
+`npm test` in `app/` after profile, lifecycle or packaging changes. A product-profile boot on throwaway data is
+`node app/scripts/check-superagent-profile.mjs`; use it for assembly changes that need more than unit tests.
 
-A change is done when `npm test`, the `--check` and `npm run lint` pass. CI selects its jobs from the changed paths, and the **Test result** gate fails when a required job is skipped or does not pass. Before committing, run the UI boundary check; it lists changes under `app/ui/`, `ds-bot/src/client/` and `ds-bot/client.js` and fails unless the user asked for that UI change and the check runs with `DSBOT_UI_CHANGE_APPROVED=1`. Run the smoke test as well for changes to `index.js` or `src/host/`. Use a free port for each bench, and stop every bench and process that you started.
+On Windows, run `npm`, `node` and the repository's `.mjs` wrappers in PowerShell. Prefer the `.mjs` scripts over
+ad-hoc multi-line shell commands for long checks.
+
+Targeted checks are the normal ticket loop. Run the checks for every changed package before committing. Full CI is a
+release gate unless the current ticket says otherwise. Before committing UI changes, run the UI boundary check; it
+lists changes under `ds-bot/src/client/` and `ds-bot/client.js` and fails unless the user asked for that UI change and
+the check runs with `DSBOT_UI_CHANGE_APPROVED=1`.
 
 ## Branches, pull requests and issues
 
@@ -61,11 +66,13 @@ The full workflow is in [CONTRIBUTING.md](CONTRIBUTING.md#how-we-work). The part
 
 ## Layout
 
-- `ds-bot/index.js` and `ds-bot/src/host/`: the server side (roster and store, tools, turns and delivery, groups, conversation parts and the search index, images, the browser bridge, the `api/bot` channel).
-- `ds-bot/src/client/`: the browser side (sidebar, chat, panels, themes, characters, the Bot browser panel).
-- `ds-bot/web-search.js`: the `auto` web-search provider, independent of the Bot team code.
-- `ds-bot/test/`: unit tests and fixtures. `ds-bot/dev/`: the DSH packages for the tests (`harness/`), mock model, test bench, smoke test, character generator, Desktop scripts for Linux.
-- `app/`: the desktop app (Electron main process and window, first-run setup and import, installer and updates).
+- `superagent/`: the business Engine, Host, persistence, execution and retained capability adapters.
+- `ds-bot/index.js` and `ds-bot/src/host/product.js`: the product HTTP and native-Session boundary.
+- `ds-bot/src/client/`: the existing DSH browser surface for Main, work cards and product settings.
+- `ds-bot/web-search.js`: the `auto` web-search provider, independent of the product Engine.
+- `ds-bot/test/`: product UI and Office tests. `ds-bot/dev/`: the DSH test packages, minimal model mock and
+  retained asset/Office/MCP utilities.
+- `app/`: the desktop app, one DSH product profile, data isolation, lifecycle and packaging.
 
 ## Style
 

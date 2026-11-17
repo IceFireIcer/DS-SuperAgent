@@ -4,15 +4,15 @@
   "engines": {
     "node": ">=24.0.0"
   },
-  "description": "DS Bot: a team of long-lived Bots for DeepSeek Harness, with Main Bots, Bot-to-Bot messages and group chats",
+  "description": "The DS SuperAgent host API and existing DSH client for DeepSeek Harness",
   "keywords": [
     "dsh-plugin",
     "deepseek-harness",
     "dsh",
     "deepseek",
-    "bot",
-    "multi-agent",
-    "agents"
+    "superagent",
+    "main",
+    "worker"
   ],
   "homepage": "https://github.com/Fei2411/DS-Bot#readme",
   "bugs": {
@@ -35,7 +35,6 @@
   "files": [
     "index.js",
     "src/host/",
-    "src/shared/",
     "src/office/",
     "client.js",
     "office.js",
@@ -48,8 +47,7 @@
     "build": "node scripts/build-client.mjs",
     "test": "node --import ./test/harness-resolve.mjs --test \"test/*.test.js\"",
     "lint": "node scripts/lint.mjs",
-    "harness": "npm install --prefix dev/harness --legacy-peer-deps=false --no-package-lock --no-fund --no-audit",
-    "check": "sh dev/check.sh"
+    "harness": "npm install --prefix dev/harness --legacy-peer-deps=false --no-package-lock --no-fund --no-audit"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "*",

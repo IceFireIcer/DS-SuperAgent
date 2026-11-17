@@ -56,10 +56,9 @@ export class Outbox {
       const trigger = await this.trigger(transaction, ticketId)
       let delivery = deliveryId ? await this.deliveries.get(transaction, deliveryId) : undefined
       if (!delivery) {
-        if (reconciling) return { invalid: 'INVALID_DELIVERY: reconciliation requires the immutable delivery record.' }
-        const legacy = await this.legacyDelivery(transaction, effect, trigger)
-        if (!legacy) return { invalid: 'INVALID_DELIVERY: the outbox effect has no delivery record.' }
-        delivery = await this.deliveries.record(transaction, legacy, effect)
+        return { invalid: reconciling
+          ? 'INVALID_DELIVERY: reconciliation requires the immutable delivery record.'
+          : 'INVALID_DELIVERY: the outbox effect has no immutable delivery record.' }
       }
       if (reconciling) {
         const invalid = await this.validateImmutableDelivery(transaction, delivery, effect)
@@ -153,31 +152,6 @@ export class Outbox {
     const trigger = ticket && await transaction.get<Work['trigger']>('trigger', ticket.triggerId)
     if (!ticket || !trigger) throw new CoreError('NOT_FOUND', 'The work does not exist in this instance.')
     return trigger
-  }
-
-  private async legacyDelivery(transaction: AsyncTx, effect: Effect, trigger: Work['trigger']): Promise<Omit<Delivery, 'instanceId' | 'sequence' | 'createdAt'> | undefined> {
-    const purpose = effect.payload.purpose
-    if (purpose !== 'acknowledgement' && purpose !== 'result' && purpose !== 'attention' && purpose !== 'policy') return undefined
-    const ticketId = String(effect.payload.ticketId)
-    const target = triggerDeliveryTarget(trigger)
-    const destination = { ...target.source, eventId: target.eventId, ...(target.threadId ? { threadId: target.threadId } : {}) }
-    if (purpose === 'acknowledgement') return { id: `${ticketId}:acknowledgement`, ticketId, purpose,
-      text: 'Request accepted.', destination, basis: { kind: 'accepted-request', triggerId: trigger.id },
-      effectId: effect.id, effectGeneration: effect.generation }
-    if (purpose === 'result') {
-      // A missing immutable Delivery cannot be reconstructed from a Worker report.
-      return undefined
-    }
-    if (purpose === 'attention') {
-      const attention = await transaction.get<Attention>('attention', String(effect.payload.attentionId))
-      if (!attention) return undefined
-      return { id: `${ticketId}:attention:${attention.id}`, ticketId, purpose, text: attention.question,
-        destination: attention.destination, basis: { kind: 'waiting-attention', attentionId: attention.id },
-        effectId: effect.id, effectGeneration: effect.generation }
-    }
-    const revision = Number(effect.payload.revision)
-    return { id: `${ticketId}:policy:${revision}`, ticketId, purpose, text: `Policy updated to revision ${revision}.`,
-      destination, basis: { kind: 'policy-update', revision }, effectId: effect.id, effectGeneration: effect.generation }
   }
 
   private async validateDelivery(transaction: AsyncTx, delivery: Delivery, trigger: Work['trigger'], effect: Effect): Promise<string | undefined> {

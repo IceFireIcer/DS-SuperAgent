@@ -50,7 +50,6 @@ import { ExecutionPolicyStore, loadExecutionSelection, selectExecutionTarget, ta
   type ExecutionPolicyConfig, type ExecutionPolicyView, type ExecutionTarget } from './execution-target.js'
 import { compareWorkCopy, WorkCopyUnsupported, workCopyGaps,
   uniqueBlockers, type HandoffCopyView, type WorkCopyBlocker, type WorkCopyComparison, type WorkCopyFile, type WorkCopySnapshot } from './work-copy.js'
-import type { ActivationGate } from './activation.js'
 import { MainConversation, type MainAddress, type MainSend } from './main-conversation.js'
 import { WorkDelegation, type MainEvidenceCard, type MainWorkCard, type MainWorkControl,
   type MainWorkHandoffProjection, type MainWorkItem } from './work-delegation.js'
@@ -99,7 +98,6 @@ export class Engine {
   private productCredentialManager: ProductCredentialManager | undefined
   private readonly proactive: Proactive | undefined
   private readonly membership: SourceMembership
-  private activationGate: ActivationGate | undefined
   private roleConfigRevision = 1
   private policyRevision = 1
   private processingPaused = false
@@ -504,7 +502,6 @@ export class Engine {
 
   async receiveSource(event: ReceiveSourceEvent) {
     await this.ensurePolicy()
-    await this.assertActivationCurrent()
     await this.assertHostAdmission()
     if (this.processingPaused) this.evaluations?.setPaused(true)
     const receipt = await this.sourceEvents.receive(event, async (tx, sourceEvent) => {
@@ -529,7 +526,6 @@ export class Engine {
    */
   async receiveSourceForMain(event: ReceiveSourceEvent) {
     await this.ensurePolicy()
-    await this.assertActivationCurrent()
     await this.assertHostAdmission()
     const binding = await this.main.open({ instanceId: this.instanceId })
     const allowed = await this.storage.transaction(this.instanceId, async tx => {
@@ -665,7 +661,6 @@ export class Engine {
   /** Trusted adapters preserve unversioned observations without treating them as actionable native versions. */
   async receiveUnverifiedSource(event: ReceiveSourceEvent) {
     await this.ensurePolicy()
-    await this.assertActivationCurrent()
     await this.assertHostAdmission()
     const receipt = await this.sourceEvents.receiveUnverified(event)
     if (receipt.status === 'recorded') this.proactiveOptions?.onSourceChanged?.(this.source.sourceInstanceId)
@@ -719,7 +714,6 @@ export class Engine {
 
   async assessSourceBatch(command: { commandId: string; threadId: string; eventIds: string[] }): Promise<SourceEvaluation> {
     await this.ensurePolicy()
-    await this.assertActivationCurrent()
     await this.assertHostAdmission()
     if (!this.evaluations) throw new CoreError('INTAKE_NOT_CONFIGURED', 'Configure an Intake Policy before evaluating source candidates.')
     if (this.processingPaused) throw new CoreError('PROCESSING_PAUSED', 'Source events remain recorded while new evaluations are paused.')
@@ -791,7 +785,6 @@ export class Engine {
   private async createDelegatedWorkItem(brief: import('./work-delegation.js').MainWorkBrief, item: MainWorkItem): Promise<Receipt> {
     await this.ensurePolicy()
     if (this.processingPaused) throw new CoreError('PROCESSING_PAUSED', 'New work cannot be accepted while processing is paused.')
-    await this.assertActivationCurrent()
     await this.assertHostAdmission()
     if (!brief.sourceEventId) throw new CoreError('INCOMPLETE_STATE', 'The Main WorkBrief source event is missing.')
     identifier(brief.id, 'workBriefId'); identifier(item.id, 'workItemId'); identifier(brief.sourceEventId, 'sourceEventId')
@@ -851,7 +844,6 @@ export class Engine {
     options: { strength?: 'explicit' | 'inferred'; policyVersion?: string; mandateScope?: string; proactive?: boolean;
       linkTicket?: (tx: AsyncTx, receipt: Receipt) => Promise<void> } = {}): Promise<Receipt> {
     const triggerId = trigger.id
-    await this.assertActivationIn(tx)
     const event = await tx.get<EventRecord>('event', triggerId)
     if (event) {
       const receipt = this.replay(event, fingerprint, 'event')
@@ -1545,7 +1537,6 @@ export class Engine {
    */
   async acquireHost() {
     const acquired = await this.host.acquireWithPrevious()
-    await this.activationGate?.reattach?.(acquired.lease.epoch)
     if (!acquired.previous && !await this.storage.transaction(this.instanceId, transaction => this.hostTakeoverPending(transaction))) {
       return acquired.lease
     }
@@ -1594,27 +1585,10 @@ export class Engine {
     await assertHostTakeoverSettled(transaction, this.instanceId, this.host.epoch())
   }
 
-  setActivationGate(gate: ActivationGate | undefined) {
-    this.activationGate = gate
-    this.configureEffectsGate()
-  }
-
   private configureEffectsGate() {
     this.effects.setGate({
-      paused: async tx => (await tx.get<ProcessingState>('processing-state', this.processingKey()))?.paused === true
-        || (this.activationGate ? !(await this.activationGate.active(tx)) : false),
-      blocked: async tx => this.activationGate ? !(await this.activationGate.active(tx)) : false,
+      paused: async tx => (await tx.get<ProcessingState>('processing-state', this.processingKey()))?.paused === true,
     })
-  }
-
-  private async assertActivationIn(transaction: AsyncTx) {
-    if (!this.activationGate) return
-    if (!await this.activationGate.active(transaction)) throw new CoreError('CORE_NOT_ACTIVE', 'Only the active core entry may write an acceptance or an Effect intent.')
-  }
-
-  private async assertActivationCurrent() {
-    if (!this.activationGate) return
-    await this.storage.transaction(this.instanceId, transaction => this.assertActivationIn(transaction))
   }
 
   private async completeTakeoverWithoutRuntime() {
@@ -1882,7 +1856,6 @@ export class Engine {
 
   private async receiveScheduledOccurrence(rule: ProductSchedule, occurrence: ScheduledOccurrence): Promise<Partial<ScheduledOccurrence>> {
     await this.ensurePolicy()
-    await this.assertActivationCurrent()
     await this.assertHostAdmission()
     const source = new SourceEvents(this.storage, this.instanceId, { kind: 'schedule', sourceInstanceId: `schedule:${rule.ruleId}`,
       actorId: 'schedule', allowedActorIds: ['schedule'], allowedThreadIds: [`schedule:${rule.ruleId}`], versionOrder: 'sequence' })

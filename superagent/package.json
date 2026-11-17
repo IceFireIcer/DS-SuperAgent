@@ -36,10 +36,6 @@
       "types": "./dist/client-gateway.d.ts",
       "default": "./dist/client-gateway.js"
     },
-    "./ds-bot-host": {
-      "types": "./dist/ds-bot-host.d.ts",
-      "default": "./dist/ds-bot-host.js"
-    },
     "./profile": {
       "types": "./dist/profile.d.ts",
       "default": "./dist/profile.js"
@@ -63,22 +59,6 @@
     "./config-instructions": {
       "types": "./dist/config-instructions.d.ts",
       "default": "./dist/config-instructions.js"
-    },
-    "./legacy-archive": {
-      "types": "./dist/legacy-archive.d.ts",
-      "default": "./dist/legacy-archive.js"
-    },
-    "./switchover": {
-      "types": "./dist/switchover.d.ts",
-      "default": "./dist/switchover.js"
-    },
-    "./activation": {
-      "types": "./dist/activation.d.ts",
-      "default": "./dist/activation.js"
-    },
-    "./reversal": {
-      "types": "./dist/reversal.d.ts",
-      "default": "./dist/reversal.js"
     }
   },
   "scripts": {

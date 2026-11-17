@@ -13,13 +13,18 @@ test('the product directory picker saves a default and a work override across Ho
   const first = join(base, 'first')
   const second = join(base, 'second')
   const core = join(base, 'core')
-  await Promise.all([mkdir(first), mkdir(second), mkdir(core)])
-  const [firstRoot, secondRoot] = await Promise.all([realpath(first), realpath(second)])
+  const userDsh = join(base, 'user-dsh')
+  await Promise.all([mkdir(first), mkdir(second), mkdir(core), mkdir(userDsh)])
+  const [firstRoot, secondRoot, userDshRoot] = await Promise.all([realpath(first), realpath(second), realpath(userDsh)])
+  const previousUserDsh = process.env.DS_BOT_USER_DSH_HOME
+  process.env.DS_BOT_USER_DSH_HOME = userDsh
   const native = await nativeContext(join(base, 'sessions'), function* () { yield* textResponse('Main is ready.') })
   native.provide('directoryPicker', { capability: () => ({ kind: 'native', pick: async () => second }) })
   let host
   t.after(async () => {
     await host?.close(); await native.fiber.dispose(); await rm(base, { recursive: true, force: true })
+    if (previousUserDsh === undefined) delete process.env.DS_BOT_USER_DSH_HOME
+    else process.env.DS_BOT_USER_DSH_HOME = previousUserDsh
   })
   const config = { databasePath: join(core, 'state.sqlite'), workspaceRoot: first, instanceId: 'personal', actorId: 'alice',
     main: { provider: 'mock', model: 'main' }, router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } }
@@ -33,6 +38,7 @@ test('the product directory picker saves a default and a work override across Ho
   assert.equal(chosen.root, secondRoot)
   assert.equal((await call('directory-register', { commandId: 'register-second', path: second })).id, chosen.id)
   await assert.rejects(call('directory-register', { commandId: 'register-second', path: core }), { code: 'PATH_DENIED' })
+  await assert.rejects(call('directory-register', { commandId: 'personal-dsh', path: userDshRoot }), { code: 'PATH_DENIED' })
   await assert.rejects(call('send', { commandId: 'untrusted', text: 'Hello.', environmentId: 'another-instance' }), { code: 'ENVIRONMENT_DENIED' })
   const saved = await call('directory-default-save', { commandId: 'default-second', expectedRevision: 0, environmentId: chosen.id })
   assert.equal(saved.root, secondRoot)

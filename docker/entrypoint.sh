@@ -9,10 +9,19 @@ groupmod -o -g "$PGID" node
 usermod -o -u "$PUID" node
 
 # First start: seed the data volume with the template home built into the image
-# (a web profile that already has ds-bot installed).
+# (a web profile with ds-superagent and the existing ds-bot client installed).
 if [ ! -d /data/profiles/web ]; then
   mkdir -p /data
   cp -a /opt/dsh-template/. /data/
+fi
+PROFILE_PACKAGE=/data/profiles/web/package.json
+if [ -f "$PROFILE_PACKAGE" ] && ! node -e '
+  const p = require(process.argv[1])
+  if (!p.dependencies?.["ds-superagent"]) process.exit(1)
+' "$PROFILE_PACKAGE"; then
+  echo "entrypoint: this /data profile predates the R5 product and has no ds-superagent." >&2
+  echo "entrypoint: archive or choose a new DATA_DIR; the container does not import the old team profile." >&2
+  exit 1
 fi
 # Existing profiles and restored backups can belong to a previous PUID/PGID.
 # Do not follow links into workspace shares or descend into other filesystems.

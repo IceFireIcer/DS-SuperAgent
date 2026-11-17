@@ -16,7 +16,7 @@ describe('an upgrade on the app data', () => {
   let beforeProfile
   before(() => {
     home = mkdtempSync(join(tmpdir(), 'ds-bot-app-upgrade-'))
-    profile = join(home, 'profiles', 'ds-bot')
+    profile = join(home, 'profiles', 'ds-superagent')
     mkdirSync(join(home, 'bot'), { recursive: true })
     mkdirSync(join(home, 'sessions'), { recursive: true })
     mkdirSync(profile, { recursive: true })
@@ -25,7 +25,7 @@ describe('an upgrade on the app data', () => {
     writeFileSync(business, '{"bots":{"chief":{"name":"Chief"}}}\n')
     writeFileSync(session, '{"seq":0,"type":"session/created"}\n')
     writeFileSync(join(profile, 'package.json'), `${JSON.stringify({
-      name: 'dsh-profile-ds-bot', private: true,
+      name: 'dsh-profile-ds-superagent', private: true,
       dependencies: { 'a-plugin': '1.0.0' },
       dsh: {
         profile: { bundles: ['@deepseek-ai/dsh-base', 'ds-bot', 'a-plugin'], preset: 'team', settings: { model: 'a-model' } },

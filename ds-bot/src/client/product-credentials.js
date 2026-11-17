@@ -1,5 +1,5 @@
 import { createElement as h, useEffect, useRef, useState } from 'react'
-import { Card, Row } from './bot-settings.js'
+import { Card, Row } from './product-card.js'
 import { t } from './i18n.js'
 
 const credentialImportStatusText = status => t(({ pending: 'Credential import pending', importing: 'Credential import in progress',

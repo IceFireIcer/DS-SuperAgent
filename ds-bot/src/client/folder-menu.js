@@ -1,8 +1,57 @@
-import { createElement as h, Fragment, useState } from 'react'
+import { createElement as h, Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, FolderIcon, PencilIcon } from './icons.js'
-import { Caret, useAnchoredMenu } from './model-menu.js'
 import { t } from './i18n.js'
+import { useLinger, useViewport, viewBottom } from './motion.js'
+
+const MENU_EXIT_MS = 120
+const Caret = () => h('svg', {
+  className: 'bt-model-caret', width: 12, height: 12, viewBox: '0 0 20 20', fill: 'none',
+  stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true,
+}, h('path', { d: 'M5.5 8l4.5 4.5L14.5 8' }))
+
+function useAnchoredMenu() {
+  const [anchor, setAnchor] = useState(null)
+  const [place, setPlace] = useState(null)
+  const [shownPlace, leaving] = useLinger(place, MENU_EXIT_MS)
+  const button = useRef(null)
+  const menu = useRef(null)
+  const tick = useViewport()
+  const close = () => { setAnchor(null); setPlace(null) }
+  useEffect(() => {
+    if (place === null) return undefined
+    const onDown = (event) => {
+      if (menu.current?.contains(event.target) || button.current?.contains(event.target)) return
+      close()
+    }
+    const onKey = (event) => {
+      if (event.key !== 'Escape') return
+      event.stopPropagation()
+      close()
+      button.current?.focus()
+    }
+    const onScroll = (event) => { if (!menu.current?.contains(event.target)) close() }
+    window.addEventListener('mousedown', onDown)
+    window.addEventListener('keydown', onKey, true)
+    window.addEventListener('scroll', onScroll, true)
+    return () => {
+      window.removeEventListener('mousedown', onDown)
+      window.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('scroll', onScroll, true)
+    }
+  }, [place])
+  useLayoutEffect(() => {
+    if (anchor === null || !button.current) return
+    const rect = button.current.getBoundingClientRect()
+    const width = Math.max(240, rect.width)
+    const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8))
+    const below = viewBottom() - rect.bottom
+    setPlace(below >= 260 || below >= rect.top
+      ? { left, width, top: rect.bottom + 4, maxHeight: below - 16, '--bt-origin': 'top right' }
+      : { left, width, bottom: viewBottom() - rect.top + 4, maxHeight: rect.top - 16, '--bt-origin': 'bottom right' })
+  }, [anchor, tick])
+  return { isOpen: place !== null, shownPlace, leaving, button, menu, open: () => setAnchor({}), close }
+}
 
 // The last segment of a host path, Windows or POSIX; a root keeps its own spelling.
 export const folderName = path => String(path).replace(/[\\/]+$/, '').split(/[\\/]/).pop() || String(path)
@@ -99,6 +148,12 @@ export function FolderMenu({ value, group = false, team = false, actions, run, o
 
 export const FOLDER_CSS = `
 .bt-folder-view{display:flex;flex-direction:column;gap:2px;animation:bt-veil-in .14s ease-out}
+.bt-model-caret{flex:none;color:var(--bt-ink-3);transition:transform .12s ease}
+[aria-expanded=true]>.bt-model-caret{transform:rotate(180deg)}
+.bt-model-group{flex:none;padding:8px 8px 2px;font-size:11px;line-height:14px;font-weight:500;color:var(--bt-ink-3)}
+.bt-model-group:first-child{padding-top:2px}
+.bt-model-tick{flex:none;width:16px;height:16px;display:inline-flex;color:var(--bt-ink-2)}
+.bt-model-none{padding:8px;font-size:13px;line-height:18px;color:var(--bt-ink-2)}
 .bt-folder-copy{flex:1;display:flex;flex-direction:column;min-width:0}
 .bt-folder-copy .bt-menu-label{flex:none}
 .bt-folder-path{min-width:0;font-size:11px;line-height:14px;color:var(--bt-ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

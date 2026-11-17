@@ -67,7 +67,7 @@ test('T55 --plan needs no prerequisites and leaves prior evidence untouched', t 
   assert.equal(plan.model, 'mock')
   assert.equal(plan.phaseTimeoutMs, 300000)
   assert.equal(plan.testFileConcurrency, 1)
-  assert.deepEqual(plan.phases.map(phase => phase.id), ['continuous-mock', 'long-command-stop', 'handoff', 'proactive-supervision', 'client-host', 'migration'])
+  assert.deepEqual(plan.phases.map(phase => phase.id), ['continuous-mock', 'long-command-stop', 'handoff', 'proactive-supervision', 'client-host'])
   assert.equal(plan.phases[0].files.includes('product-scenario'), true)
   assert.ok(plan.unaccepted.some(item => item.startsWith('A26:')))
   assert.equal(existsSync(output), false)

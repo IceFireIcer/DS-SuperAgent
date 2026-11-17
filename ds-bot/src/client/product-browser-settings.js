@@ -1,5 +1,5 @@
 import { createElement as h, Fragment, useEffect, useRef, useState } from 'react'
-import { Card, Row } from './bot-settings.js'
+import { Card, Row } from './product-card.js'
 import { t } from './i18n.js'
 import { ProductBrowserImport, PRODUCT_BROWSER_IMPORT_CSS } from './product-browser-import.js'
 

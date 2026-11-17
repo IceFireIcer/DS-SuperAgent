@@ -8,8 +8,9 @@
 
 最先需要解决的是 **T45/#73、T46/#74 的最小真实桌面绑定缺失**。T55 应记录或回报给行为票，不把它实现进最终验证脚本：
 
-- [app/src/profile.mjs](../../../app/src/profile.mjs) 的 `BUNDLES` 仅挂载 DSH base/web/voice 和 `ds-bot`；[app/package.json](../../../app/package.json) 依赖 `ds-bot`，没有 `ds-superagent`。
-- [app/src/host.mjs](../../../app/src/host.mjs) 用公开 `runProfile()` 启动上述 profile；`app/src`/`app/scripts` 未发现新核心或 `createClientGateway` 绑定。[app/electron-builder.yml](../../../app/electron-builder.yml) 打包现有 `src`/assets；[app/vite.config.js](../../../app/vite.config.js) 仍取旧插件的 Bot views，构建它不会自动绑定新核心。
+- 上述 profile/界面缺口是 R5 前的历史快照。R5-34 后应用改为单一
+  [ds-superagent profile](../../../app/src/profile.mjs) 并同时挂载 `ds-bot` 与 `ds-superagent`；独立
+  `app/ui`/Vite renderer 已删除，见 [r5-34](r5-34.md)。真实桌面组合证据仍按本表未完成项继续收集。
 - T45 最小缺口：真实 Electron 客户端绑定认证的新核心网关，按 Instance 授权提交/读取、持久游标补读、原 command ID 重试及撤销；T46 最小缺口：实际运行或连接该 Host，关窗/重连保留工作，显式退出遵循部署的服务归属，休眠/唤醒按中断恢复。现有旧 Host 页面及其常驻检查无法证明这组新核心行为。参见 [t45.md](t45.md)、[t46.md](t46.md)。
 
 ## 可用环境及已有证据

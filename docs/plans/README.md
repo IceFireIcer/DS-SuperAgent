@@ -41,7 +41,7 @@
 | [隐私 Bot](2026-10-27-private-bots.md) | 只有用户能开关；其他 Bot 读不到它的文件夹、记忆和会话，外发由用户批准；独立文件夹、删除后的保护和隔离边界 |
 | [群聊](2026-10-07-group-chat.md) | 谁来回答、按顺序发言、@ 提及、轮数上限、干活中的进度和迟到的回复、审批 |
 | [浏览器、搜索、密钥和连接器](2026-10-08-browser-and-secrets.md) | 每个 Bot 的浏览器和 `read_browser`、`auto` 联网搜索、密钥卡和替换规则、GitHub 连接器 |
-| [浏览器插件](2026-10-21-browser-plugins.md) | 全团队一个浏览器后端，每个 Bot 一份 profile；`refs` / `script` / `task` |
+| [浏览器插件](2026-10-21-browser-plugins.md) | 历史设计，R5-34 已由产品 Browser resource/lease 和受控 Electron bridge 取代 |
 | [上下文与记忆](2026-10-09-context-and-memory.md) | 对话分段、上下文管家（压缩还是换段）、交接包、`read_own_chat`；记忆的存放、格式、权限、整理和冻结 |
 | [Bot 运行配置](2026-10-10-bot-runtime.md) | Agent 预设、每个 Bot 的模型和思考强度、工作文件夹、能力（MCP、技能、能力包） |
 | [AGENTS.md 维护](2026-10-27-agents-md-upkeep.md) | 从项目工作中审阅持久规则；用户批准后才原子写入 |

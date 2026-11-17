@@ -1,6 +1,6 @@
 import { createElement as h, useCallback, useEffect, useRef, useState } from 'react'
-import { Card, CharacterGrid, Row } from './bot-settings.js'
-import { avatarImage } from './avatar-library.js'
+import { Card, CharacterGrid, Row } from './product-card.js'
+import { productAvatarImage } from './product-avatar.js'
 import { lookOf, BotMark } from './mark.js'
 import { t } from './i18n.js'
 
@@ -13,7 +13,7 @@ function selectedCopy(text, sourceIdentity, sourceBotId, targetRole) {
   const state = JSON.parse(text)
   const bot = state?.bots?.[sourceBotId]
   if (!bot || typeof bot !== 'object' || Array.isArray(bot) || !Object.hasOwn(state.bots, sourceBotId)) {
-    throw new Error(t('The copy has no selected Bot configuration.'))
+    throw new Error(t('The copy has no selected role configuration.'))
   }
   const selected = Object.fromEntries(legacyFields.filter(field => Object.hasOwn(bot, field)).map(field => [field, bot[field]]))
   if (selected.avatar && typeof selected.avatar === 'object' && !Array.isArray(selected.avatar)) {
@@ -83,7 +83,7 @@ function DraftFields({ draft, onChange, onUploading, busy }) {
     event.target.value = ''
     if (!file) return
     onUploading(true)
-    try { appearance({ image: await avatarImage(file) }) }
+    try { appearance({ image: await productAvatarImage(file) }) }
     catch (failure) { onChange(current => current, failure.message) }
     finally { onUploading(false) }
   }
@@ -343,7 +343,7 @@ export function ProductPresetSettings({ binding, call, settingsRevision, roleSet
         h(Row, { label: t('Copy identity'), hint: t('A name for the explicit copy you provide.') },
           h('input', { className: 'bt-bs-input', 'aria-label': t('Copy identity'), value: sourceIdentity, required: true,
             disabled: Boolean(busy), onChange: event => setSourceIdentity(event.target.value) })),
-        h(Row, { label: t('Old Bot ID') }, h('input', { className: 'bt-bs-input', 'aria-label': t('Old Bot ID'),
+        h(Row, { label: t('Legacy role ID') }, h('input', { className: 'bt-bs-input', 'aria-label': t('Legacy role ID'),
           value: sourceBotId, required: true, disabled: Boolean(busy), onChange: event => setSourceBotId(event.target.value) })),
         h(Row, { label: t('Target role') }, h('div', { className: 'bt-product-preset-target' },
           h(BotMark, { look: lookOf({ id: `role-${targetRole}`, color: roleSettings?.roles?.[targetRole]?.appearance?.color,
@@ -352,8 +352,8 @@ export function ProductPresetSettings({ binding, call, settingsRevision, roleSet
           h('select', { className: 'bt-select', 'aria-label': t('Target role'), value: targetRole,
             disabled: Boolean(busy), onChange: event => setTargetRole(event.target.value) },
           roles.map(([id, name]) => h('option', { key: id, value: id }, t(name)))))),
-        h(Row, { label: t('Old configuration copy'), hint: t('Paste a copy of bot/state.json. Only the selected profile fields are sent for review.'), stack: true },
-          h('textarea', { className: 'bt-bs-input bt-bs-area', 'aria-label': t('Old configuration copy'), rows: 5,
+        h(Row, { label: t('Legacy role configuration'), hint: t('Paste a legacy role profile copy. Only the selected configuration fields are reviewed.'), stack: true },
+          h('textarea', { className: 'bt-bs-input bt-bs-area', 'aria-label': t('Legacy role configuration'), rows: 5,
             required: true, value: sourceText, disabled: Boolean(busy), onChange: event => setSourceText(event.target.value) }))),
       h('div', { className: 'bt-actions' }, h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: Boolean(busy),
         onClick: () => { setMode(null); setSourceText('') } }, t('Cancel')),

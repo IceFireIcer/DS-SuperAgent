@@ -49,7 +49,7 @@
 |---|---|
 | 类型 | `bug` · `enhancement` · `documentation` |
 | 优先级 | `P0` 崩溃、丢数据或无法使用 · `P1` 影响日常使用 · `P2` 一般缺陷或功能 · `P3` 建议或窄场景 |
-| 领域 | `area/host` 服务端（`index.js`、`src/host/`）· `area/client` 界面（`src/client/`）· `area/group` 群聊、@ 提及、Bot 之间的消息 · `area/memory` 记忆、对话分段、上下文 · `area/browser` Bot 浏览器、读网页、网页搜索 · `area/build` CI、发版、脚本、测试台 · `area/docs` |
+| 领域 | `area/host` 产品 Host 与 Engine · `area/client` 现有界面 · `area/memory` 记忆与上下文 · `area/browser` 浏览器资源与网页搜索 · `area/build` CI、发版与脚本 · `area/docs` |
 | 流程 | `maintainer` 等维护者 · `needs-info` 等报告人 · `upstream` 原因在 DSH 或其他插件 · `duplicate` · `auto-found` 自动测试发现 |
 
 跨多个领域或不属于任何领域的 Issue，不打领域标签。
@@ -81,7 +81,7 @@
 
 - Node.js `24` 或更高。
 - Git。
-- 仅测试台需要：pnpm `11`，以及插件测试所用 DSH 版本的 DeepSeek Harness 源码。
+- 仅产品 profile 检查需要：pnpm `11`，以及受测 DSH 版本的 DeepSeek Harness 源码。
 
 ```sh
 git clone https://github.com/Fei2411/DS-Bot.git ds-bot-repo
@@ -94,7 +94,7 @@ npm ci
 npm run harness
 ```
 
-测试台需要把 DeepSeek Harness 源码放在插件目录旁边（这个目录被 Git 忽略）：
+产品 profile 检查需要把 DeepSeek Harness 源码放在插件目录旁边（这个目录被 Git 忽略）：
 
 ```sh
 cd ..
@@ -111,13 +111,15 @@ git -C deepseek-harness checkout dsh-v0.2.1-rc.3
 
 | 路径 | 内容 |
 |---|---|
-| `ds-bot/index.js`、`ds-bot/src/host/` | 服务端：Bot 名册与存储、工具、回合与投递、群聊、对话分段与搜索索引、图片、Bot 浏览器桥接、`api/bot` 通道 |
-| `ds-bot/src/client/` | 浏览器端：侧栏、聊天、面板与对话框、主题、角色、Bot 浏览器面板 |
+| `superagent/` | Engine、Host、存储、执行与保留能力适配器 |
+| `ds-bot/index.js`、`ds-bot/src/host/product.js` | `/api/product`、原生 Session 拒绝与产品 service 依赖 |
+| `ds-bot/src/client/` | 现有 Main 对话、工作卡与产品设置 |
 | `ds-bot/client.js` | 由 `scripts/build-client.mjs` 从 `src/client/` 生成。它被提交进仓库，这样用 Git 安装时不需要构建 |
 | `ds-bot/web-search.js` | `auto` 网页搜索提供方。不依赖 Bot 团队代码 |
 | `ds-bot/cordis.patch.yml` | 插件带的 profile patch |
 | `ds-bot/test/` | 单元测试和测试数据 |
-| `ds-bot/dev/` | 单元测试用的 DSH 包（`harness/`）、模拟模型、测试台、冒烟测试、角色生成器、Linux 上的 Desktop 脚本，以及两个用真实模型的工具：上下文管家评测和日志转发 |
+| `ds-bot/dev/` | 单元测试用的 DSH 包、最小产品模拟模型、保留的素材/Office/MCP 工具与真实模型调用日志 |
+| `app/` | 单一产品 profile、Electron 外壳、数据隔离、生命周期与打包 |
 
 ## 测试改动
 
@@ -144,26 +146,20 @@ mkdir -p /tmp/ds-bot-tree && git archive HEAD | tar -x -C /tmp/ds-bot-tree && no
 node scripts/check-ui-boundary.mjs --base origin/dev
 ```
 
-它会列出 `app/ui/`、`ds-bot/src/client/` 和 `ds-bot/client.js` 的改动。这些文件必须有明确的 UI 改动请求；确认后才用 `DSBOT_UI_CHANGE_APPROVED=1` 再运行一次。检查会比较工作区和未跟踪文件与基线的差异，所以尚未暂存的编辑也会被发现。
+它会列出 `ds-bot/src/client/` 和 `ds-bot/client.js` 的改动。这些文件必须有明确的 UI 改动请求；确认后才用
+`DSBOT_UI_CHANGE_APPROVED=1` 再运行一次。检查会比较工作区和未跟踪文件与基线的差异，所以尚未暂存的编辑也会被发现。
 
-改服务端（`index.js`、`src/host/`）时，还要跑冒烟测试。它启动模拟模型和一个链接到你本地插件的 DSH Web，走一遍主要流程（Bot、群聊、对话分段、压缩、设置）。`CONTEXT_WINDOW` 和 `CHECK_RATIO` 让模拟模型的上下文窗口变小，几条长回复就能到达检查线：
-
-```sh
-CONTEXT_WINDOW=100000 CHECK_RATIO=0.45 dev/bench.sh smoke 3096 8796 reset && node dev/smoke.mjs smoke 3096
-dev/bench.sh smoke 3096 8796 stop
-```
-
-想手动试用插件，启动一个测试台，打开它打印的地址：
+改 Engine 或 Host 时，还在 `superagent/` 执行：
 
 ```sh
-dev/bench.sh dev 3081 8771 reset    # 模拟模型 + DSH Web；数据在 ../.dsh-test-dev
+npm run typecheck
+npm run build
+npm run lint
 ```
 
-模拟模型只回应一组固定命令，所以测试台不花 token。命令列在 `dev/mock-llm.mjs` 开头。测试台数据放在插件目录旁边的 `.dsh-test-<名字>/`，不会碰你自己的 `~/.dsh`。
-
-改上下文管家或它的提示词（`src/host/steward.js`）时，还要用真实模型检查。`dev/steward-eval.mjs` 在固定的对话结尾上跑它的决策，`dev/llm-tap.mjs` 记录真实测试台的每次调用。两者都花 token，用法写在文件开头。
-
-改 Bot 浏览器时，要在 DSH Desktop 里检查。在 Linux 上，`dev/desktop-linux/` 里的脚本用 Xvfb 运行 DSH Desktop；每个脚本的用法写在开头。
+检查完整产品包装配时，用临时数据运行 `node app/scripts/check-superagent-profile.mjs`。改产品 UI 时运行
+`app/` 的 `npm test`、生成客户端一致性和 UI 边界检查。打包应用的快速检查需要模型时使用最小
+`ds-bot/dev/mock-llm.mjs`；真实模型检查会花 token，必须显式使用临时配置。
 
 ## 写改动
 

@@ -78,6 +78,23 @@ try {
   `)
   console.log('PASS: executable entrypoint and first start')
 
+  const legacyData = `${name}-legacy-data`
+  docker(['volume', 'create', legacyData])
+  volumes.push(legacyData)
+  docker([
+    'run', '--rm', '--network', 'none',
+    '--mount', `type=volume,src=${legacyData},dst=/data`,
+    '--entrypoint', '/bin/sh', image, '-eu', '-c',
+    'mkdir -p /data/profiles/web && printf "{\\"name\\":\\"web\\",\\"dependencies\\":{\\"ds-bot\\":\\"0.2.5\\"}}" > /data/profiles/web/package.json',
+  ])
+  const legacy = docker([
+    'run', '--rm', '--network', 'none',
+    '--mount', `type=volume,src=${legacyData},dst=/data`, image, '--help',
+  ], { allowFailure: true })
+  assert.notEqual(legacy.status, 0, 'a pre-R5 profile must fail closed')
+  assert.match(legacy.stderr, /predates the R5 product/u)
+  console.log('PASS: pre-R5 data fails closed without importing the old team')
+
   startHelp(1234, 1234)
   checkDataOwner(1234, 1234)
   console.log('PASS: UID/GID migration preserves data and workspace link targets')

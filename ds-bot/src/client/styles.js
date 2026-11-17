@@ -1,6 +1,4 @@
 import { INKS } from './inks.js'
-import { DEFAULT_MASK } from './characters.js'
-import { MENTION_ORIGIN } from './text.js'
 import { SPRING_SHAPE, SPRING_TAP, SPRING_STRETCH, SPRING_POP, spring } from './motion.js'
 
 // The pill stretches for "Memory updated" on SPRING_STRETCH, and its icon pops on
@@ -221,8 +219,6 @@ body{--bt-msg-w:.8;--bt-flat-w:1}
 /* line-height:1 keeps the monospace line box from making an inline code line taller. */
 .bt-bubble [class*="_markdown"] :not(pre)>code{line-height:1;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .bt-bubble :is(img,video),.bt-ububble :is(img,video),[data-chat-flow] [class*="_bubble"] :is(img,video){max-width:100%;height:auto}
-.bt-bubble a[href^="${MENTION_ORIGIN}"]{text-decoration:none;font-weight:400;cursor:pointer;white-space:nowrap}
-.bt-bubble a[href^="${MENTION_ORIGIN}"]::before{content:"";display:inline-block;width:16px;height:16px;margin-right:3px;vertical-align:-3px;background:currentColor;-webkit-mask:${DEFAULT_MASK} center/contain no-repeat;mask:${DEFAULT_MASK} center/contain no-repeat}
 .bt-group-msg{display:flex;flex-direction:column;gap:4px;margin:16px 0 0}
 .bt-group-msg:first-child{margin-top:0}
 .bt-lead{flex:none;display:flex;margin-bottom:1px}
@@ -680,7 +676,6 @@ body[data-bt-layout=flat] .bt-tools::after{display:none}
 .bt-react:hover{background:var(--bt-hover)}
 .bt-react:active{scale:.92}
 @keyframes bt-react-pop{from{transform:scale(.6);opacity:0}}
-.bt-bubble a[href^="${MENTION_ORIGIN}"] svg{display:none}
 .bt-you{width:36px;height:36px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bt-ink) 5%,var(--bt-sidebar));color:var(--bt-ink-2);box-shadow:inset 0 0 0 1px var(--bt-line);transition:background-color .12s ease}
 button:hover .bt-you{background:color-mix(in srgb,var(--bt-ink) 9%,var(--bt-sidebar))}
 .bt-you-wrap{display:inline-flex;padding:0}

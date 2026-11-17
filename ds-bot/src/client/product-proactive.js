@@ -1,5 +1,5 @@
 import { createElement as h, useEffect, useState } from 'react'
-import { Card, SwitchRow } from './bot-settings.js'
+import { Card, SwitchRow } from './product-card.js'
 import { t } from './i18n.js'
 
 const stateText = { running: 'Preparing', observed: 'Would prepare', prepared: 'Ready for review',
@@ -249,7 +249,7 @@ export function ProductProactiveSettings({ binding, call }) {
           ['bot', 'ci'].map(kind => h('label', { key: kind }, h('input', { type: 'checkbox', checked: draft.match.actorKinds.includes(kind),
             onChange: event => update(['match', 'actorKinds'], event.target.checked
               ? [...draft.match.actorKinds, kind] : draft.match.actorKinds.filter(item => item !== kind)) }),
-          t(kind === 'ci' ? 'CI events' : 'Bot events')))) : null,
+          t(kind === 'ci' ? 'CI events' : 'Actor events')))) : null,
       h('label', null, t('Mode'), h('select', { className: 'bt-select', value: draft.mode,
         onChange: event => update(['mode'], event.target.value) },
       h('option', { value: 'observe' }, t('Observe')), h('option', { value: 'auto' }, t('Auto')))),

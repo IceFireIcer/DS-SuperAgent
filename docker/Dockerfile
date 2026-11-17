@@ -7,7 +7,7 @@
 FROM node:24-bookworm-slim AS build
 
 ARG NPM_REGISTRY=https://registry.npmjs.org/
-ARG DSH_VERSION=0.2.0-rc.2
+ARG DSH_VERSION=0.2.1-rc.4
 
 RUN corepack enable \
     && npm config set registry "$NPM_REGISTRY" --global \
@@ -16,12 +16,20 @@ RUN corepack enable \
         --allow-scripts=@deepseek-ai/dsh-subprocess-local,node-pty,koffi,@google/genai,protobufjs
 
 COPY ds-bot/ /src/ds-bot/
+COPY superagent/ /src/superagent/
 
-# ds-bot has no build step at install (client.js is committed), so pack it as-is
-# and let `dsh plugin add` set up the web profile from dsh's own template.
+# The client bundle is committed. Build the Super-agent package, then let
+# `dsh plugin add` install the one product stack into the web profile.
+RUN cd /src/superagent \
+    && npm ci --ignore-scripts --no-fund --no-audit \
+    && npm run build
 RUN cd /src/ds-bot \
     && npm pack --pack-destination /tmp \
-    && mv /tmp/ds-bot-*.tgz /tmp/ds-bot.tgz \
+    && mv /tmp/ds-bot-*.tgz /tmp/ds-bot.tgz
+RUN cd /src/superagent \
+    && npm pack --pack-destination /tmp \
+    && mv /tmp/ds-superagent-*.tgz /tmp/ds-superagent.tgz \
+    && DSH_HOME=/opt/dsh-template dsh plugin --profile web add /tmp/ds-superagent.tgz \
     && DSH_HOME=/opt/dsh-template dsh plugin --profile web add /tmp/ds-bot.tgz
 
 FROM node:24-bookworm-slim
@@ -40,13 +48,14 @@ COPY --chmod=0755 docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY docker/docker.patch.yml /opt/ds-bot/docker.patch.yml
 
 ENV DSH_HOME=/data \
-    DSH_PERMISSION_MODE=danger-full-access
+    DSH_PERMISSION_MODE=danger-full-access \
+    DS_BOT_WORKSPACE=/workspace
 
 WORKDIR /workspace
 EXPOSE 3080
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 LABEL org.opencontainers.image.title="DS Bot" \
-      org.opencontainers.image.description="A team of long-lived Bots on DeepSeek Harness, served by dsh web" \
+      org.opencontainers.image.description="DS SuperAgent Main, Router and Workers served by dsh web" \
       org.opencontainers.image.source="https://github.com/Fei2411/DS-Bot" \
       org.opencontainers.image.licenses="Apache-2.0"

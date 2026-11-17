@@ -1,6 +1,6 @@
 # DS Bot in Docker
 
-This directory deploys DS Bot as a Docker image: a `dsh web` server (DeepSeek
+This directory deploys DS SuperAgent's existing DS Bot interface as a Docker image: a `dsh web` server (DeepSeek
 Harness) with the `ds-bot` plugin installed, ready for a NAS or any always-on
 box. The container is the sandbox boundary — see [Permissions](#permissions).
 
@@ -34,8 +34,8 @@ http://172.x.x.x:3080/?token=…)`. Take the token from it and open
 `http://<NAS IP>:13080/?token=…` once in your browser: the token sets a signed
 cookie (valid 30 days, bound to that authority), after which
 `http://<NAS IP>:13080/` opens the UI directly. The printed port is the container's;
-use the host port from `ports:` when opening it. The first time the team opens,
-DS Bot creates a Main Bot called Chief.
+use the host port from `ports:` when opening it. The first time the product opens, configure a model in DSH settings;
+Main, Router and Worker share the one product profile and business store.
 
 An alternative for users who prefer `.env` is still available in `docker/`:
 
@@ -54,7 +54,7 @@ method; do not run both against the same data directory.
 The container is the only sandbox. DSH's own kernel sandbox (bubblewrap /
 Landlock) does not run inside Docker's default seccomp profile or on most NAS
 kernels, so the image offers exactly one permission preset, **Full access**:
-every Bot command runs without asking. Only mount folders the Bots may change
+every Agent command runs without asking. Only mount folders that Main and Workers may change
 into `/workspace`, and run the container with `PUID`/`PGID` of the share owner
 so file ownership stays right.
 
@@ -124,7 +124,7 @@ layer, applied after the profile's own — with an `llm-pi-ai` provider and an
           - id: my-model
             contextWindow: 131072
             maxTokens: 8192
-# New Bots made from the Create Bot form start on DSH's default model;
+# Role routes start on the configured DSH models;
 # point it at the relay too, or they start on deepseek-official without a key.
 - id: agent-default-model
   config:
@@ -138,13 +138,16 @@ UI, which writes the same config.
 
 ## Data
 
-- `/data` (`DATA_DIR`) is `DSH_HOME`: the team and chats (`bot/`, `sessions/`),
+- `/data` (`DATA_DIR`) is the product `DSH_HOME`: business state under `core/`, native Sessions, profile data and credentials,
   profiles, settings and the login cookie key (`.credentials.yaml`).
-- `/workspace` (`WORKSPACE_DIR`) is the team workspace where the Bots work.
+- `/workspace` (`WORKSPACE_DIR`) is the directory Main and Workers use by default.
 
 A rebuild reuses the persisted data and workspace. Keep their container
 destinations `/data` and `/workspace` unchanged when you rebuild or move the
-host directories; the team records those destinations, not the host paths.
+host directories; the product records those destinations, not the host paths.
+An existing `/data/profiles/web` from a pre-R5 image does not contain
+`ds-superagent`; the entrypoint refuses to start and asks for a new or archived
+`DATA_DIR` instead of silently running the removed Bot team.
 
 **Backup**: stop the container, then copy both `DATA_DIR` and `WORKSPACE_DIR`.
 Restore by putting both folders back and starting again.
@@ -165,7 +168,7 @@ docker compose up -d
 
 A rebuild changes the image and the DSH it contains. An existing persisted
 profile is reused, and the entrypoint does not manage plugin upgrades. The
-image is built and tested with dsh `0.2.0-rc.2`, the version
+image is built and tested with dsh `0.2.1-rc.4`, the version
 DS Bot is verified with; a `DSH_VERSION` build arg exists, but other releases
 are untested and newer ones change how the server binds.
 
@@ -213,11 +216,11 @@ existing persisted profile is not upgraded automatically.
 
 ## Limits
 
-- No Bot browser / `read_browser` tool: those exist in dsh Desktop and the
+- No desktop browser resource bridge: that exists in dsh Desktop and the
   desktop app only.
 - Over plain http, API keys and secret values you type cross the network in
   clear text — use HTTPS off-box (see [Network](#network)).
-- Full access is the only permission mode: a Bot can change everything the
+- Full access is the only permission mode: an Agent can change everything the
   container can see.
 
 ## Testing

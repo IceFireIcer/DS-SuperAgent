@@ -2,7 +2,6 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
-import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
@@ -162,10 +161,4 @@ test('mounting and unmounting compiled styles twice leaves no extra nodes', asyn
   }
   await tick()
   assert.equal(tagged(document).length, 0)
-})
-
-test('the chat-room rule is installed through installStyles, so it is owned too', () => {
-  const pane = readFileSync(new URL('../src/client/frame-watch.js', import.meta.url), 'utf8')
-  assert.match(pane, /installStyles\(.*'chat-room'/)
-  assert.equal(pane.includes("dataset.dshBot = 'chat-room'"), false)
 })

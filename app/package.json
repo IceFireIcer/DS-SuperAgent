@@ -6,7 +6,7 @@
     "node": ">=24.0.0"
   },
   "private": true,
-  "description": "DS Bot desktop app: the ds-bot team on its own pinned DeepSeek Harness.",
+  "description": "DS SuperAgent desktop app on its own pinned DeepSeek Harness.",
   "author": "Fei2411",
   "homepage": "https://github.com/Fei2411/DS-Bot",
   "desktopName": "dsbot.desktop",
@@ -14,7 +14,6 @@
   "type": "module",
   "main": "src/main.mjs",
   "scripts": {
-    "build": "vite build",
     "start": "electron .",
     "pack": "electron-builder --dir --publish never",
     "dist": "electron-builder --publish never",
@@ -76,12 +75,7 @@
     "electron-builder": "26.17.0",
     "extract-zip": "2.0.1",
     "papaparse": "5.5.3",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
-    "react-markdown": "10.1.0",
-    "remark-gfm": "4.0.1",
-    "tar": "7.5.22",
-    "vite": "8.3.4"
+    "tar": "7.5.22"
   },
   "overrides": {
     "@deepseek-ai/cordis": "4.0.5",

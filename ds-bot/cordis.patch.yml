@@ -1,5 +1,5 @@
-# Mounts the Bot team host plugin; the browser half is discovered through the
-# package's dsh.client manifest and ./client export.
+# Mounts the DS-SuperAgent product host; the browser half is discovered through
+# the package's dsh.client manifest and ./client export.
 - insert:
     - id: bot
       name: ds-bot
