@@ -37,23 +37,55 @@ test('Main submits remote-only work and keeps a restarted device stop pending', 
       external: ['react', 'react-dom', '@deepseek-ai/*'] })
     const module = { exports: {} }
     const requests = []
+    let handoffCopyStatus = 'prepared'
+    let handoffState = 'blocked'
     const fetch = async (_url, options) => {
       const { endpoint, payload } = JSON.parse(options.body)
       requests.push([endpoint, payload])
       const value = endpoint === 'open' ? { instanceId: 'private' }
         : endpoint === 'history' ? { messages: [], sources: [], preparations: [], health: { state: 'ready' },
-          works: [{ brief: { id: 'brief', workItemId: 'item', goal: 'Stop remote work.', constraints: 'Original work.',
-            acceptanceCriteria: 'Confirm device stop.', target: 'remote-only' },
-          receipt: { status: 'accepted', ticketId: 'ticket' }, status: 'stopped',
-          control: { workItemId: 'item', ticketId: 'ticket', ticketVersion: 1,
-            permissions: { canStop: false, canResume: false, canRetry: false, canAnswer: false },
-            stop: { id: 'stop', state: 'stopped', pendingDeviceConfirmation: true } } }] }
+          works: [
+            { brief: { id: 'brief', workItemId: 'item', goal: 'Stop remote work.', constraints: 'Original work.',
+              acceptanceCriteria: 'Confirm device stop.', target: 'remote-only' },
+            receipt: { status: 'accepted', ticketId: 'ticket' }, status: 'stopped',
+            control: { workItemId: 'item', ticketId: 'ticket', ticketVersion: 1,
+              permissions: { canStop: false, canResume: false, canRetry: false, canAnswer: false, canHandoff: false },
+              stop: { id: 'stop', state: 'stopped', pendingDeviceConfirmation: true } } },
+            { brief: { id: 'handoff-brief', workItemId: 'handoff-item', goal: 'Hand off local work.',
+              constraints: 'Keep the same work.', acceptanceCriteria: 'Resume on the remote.', target: 'local-only' },
+            receipt: { status: 'accepted', ticketId: 'handoff-ticket' }, status: 'running',
+            executionLocation: { id: 'local-work', kind: 'local', root: '/work' },
+            control: { workItemId: 'handoff-item', ticketId: 'handoff-ticket', ticketVersion: 1,
+              permissions: { canStop: true, canResume: false, canRetry: false, canAnswer: false, canHandoff: true },
+              handoff: { status: handoffState === 'blocked' ? 'blocked' : handoffState,
+                owner: handoffState === 'completed' ? 'worker' : 'operator',
+                nextStep: handoffState === 'completed' ? 'continue' : 'resolve',
+                blockers: handoffState === 'blocked' ? [{ code: 'target-ineligible',
+                  message: 'The target Environment is not eligible for this handoff.', nextOwner: 'operator' }] : [],
+                targets: [{ id: 'remote-work', kind: 'remote', root: '/remote', deviceId: 'device' }],
+                copy: { id: 'copy', status: handoffCopyStatus, assignmentId: 'old-assignment',
+                  source: { id: 'local-work', kind: 'local', root: '/work' },
+                  target: { id: 'remote-work', kind: 'remote', root: '/remote', deviceId: 'device' },
+                  baseCommit: 'a'.repeat(40), files: [{ path: 'tracked.txt', state: 'modified', bytes: 12, executable: false,
+                    sha256: 'b'.repeat(64) }, { path: 'new.txt', state: 'untracked', bytes: 8, executable: false,
+                    sha256: 'c'.repeat(64) }], totalBytes: 20, blockers: [], preparedAt: 1 },
+                record: { id: 'handoff', state: handoffState, source: { id: 'local-work', kind: 'local', root: '/work' },
+                  target: { id: 'remote-work', kind: 'remote', root: '/remote', deviceId: 'device' },
+                  blockers: handoffState === 'blocked' ? [{ code: 'target-ineligible',
+                    message: 'The target Environment is not eligible for this handoff.', nextOwner: 'operator' }] : [],
+                  steps: [] } },
+              assignment: { id: 'old-assignment', generation: 'old-generation', sessionId: 'session',
+                state: 'running', environment: { id: 'local-work', kind: 'local', root: '/work' } } } },
+          ] }
           : endpoint === 'directory-options' ? { default: { environmentId: 'local-work', root: '/work' }, directories: [] }
             : endpoint === 'execution-options' ? { policy: { defaultTarget: 'remote-only', requiredPermissions: ['read'] },
               environments: [{ id: 'local-work', kind: 'local', root: '/work' }] }
               : endpoint === 'observe-list' ? { items: [] }
               : endpoint === 'send' ? { status: 'completed' }
                 : endpoint === 'work-reconcile-stop' ? { ticketId: 'ticket' }
+                  : endpoint === 'work-handoff-prepare' ? { status: 'prepared' }
+                    : endpoint === 'work-handoff-verify' ? (handoffCopyStatus = 'verified', { status: 'verified' })
+                      : endpoint === 'work-handoff' ? (handoffState = 'completed', { state: 'completed' })
                   : null
       if (value === null) throw new Error(`Unexpected endpoint: ${endpoint}`)
       return { ok: true, json: async () => ({ ok: true, value }) }
@@ -99,6 +131,35 @@ test('Main submits remote-only work and keeps a restarted device stop pending', 
     assert.equal(sent?.text, 'Wait for a remote device.')
     assert.equal(typeof sent?.commandId, 'string')
     assert.equal(Object.hasOwn(sent, 'environmentId'), false)
+    const handoffCard = [...document.querySelectorAll('.bt-main-work')].find(card =>
+      card.textContent.includes('Hand off local work.'))
+    assert.ok(handoffCard)
+    assert.match(handoffCard.textContent, /Responsible: Operator/u)
+    assert.match(handoffCard.textContent, /The target Environment is not eligible for this handoff\./u)
+    assert.equal(handoffCard.querySelector('select[aria-label="Handoff target"]').value, 'remote-work')
+    const prepare = [...handoffCard.querySelectorAll('button')].find(button => button.textContent === 'Prepare handoff')
+    assert.ok(prepare)
+    await React.act(async () => { prepare.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
+    assert.deepEqual(requests.find(([endpoint]) => endpoint === 'work-handoff-prepare')?.[1], {
+      instanceId: 'private', commandId: requests.find(([endpoint]) => endpoint === 'work-handoff-prepare')?.[1].commandId,
+      workItemId: 'handoff-item', ticketId: 'handoff-ticket', expectedGeneration: 'old-generation',
+      targetEnvironmentId: 'remote-work',
+    })
+    const currentHandoffCard = () => [...document.querySelectorAll('.bt-main-work')].find(card =>
+      card.textContent.includes('Hand off local work.'))
+    const verify = [...currentHandoffCard().querySelectorAll('button')].find(button =>
+      button.textContent === 'Verify handoff copy')
+    assert.ok(verify)
+    await React.act(async () => { verify.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
+    const handoff = [...currentHandoffCard().querySelectorAll('button')].find(button =>
+      button.textContent === 'Hand off work')
+    assert.ok(handoff)
+    await React.act(async () => { handoff.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
+    assert.deepEqual(requests.find(([endpoint]) => endpoint === 'work-handoff')?.[1], {
+      instanceId: 'private', commandId: requests.find(([endpoint]) => endpoint === 'work-handoff')?.[1].commandId,
+      workItemId: 'handoff-item', ticketId: 'handoff-ticket', expectedGeneration: 'old-generation',
+      targetEnvironmentId: 'remote-work', reason: 'Hand off from the Main work card.',
+    })
   } finally {
     cleanup?.()
     if (root) await requireHarness('react').act(async () => root.unmount())

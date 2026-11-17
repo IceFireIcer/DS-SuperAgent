@@ -1,6 +1,8 @@
 const READS = new Set(['open', 'history', 'observe-list', 'observe-read', 'observe-detail', 'evidence', 'source-deliveries',
   'proactive-list', 'proactive-read', 'proactive-control', 'execution-options'])
-const COMMANDS = new Set(['send', 'stop-main', 'work-stop', 'work-reconcile-stop', 'work-answer', 'work-resume', 'work-retry', 'reconcile-delivery', 'proactive-stop'])
+const COMMANDS = new Set(['send', 'stop-main', 'work-stop', 'work-reconcile-stop',
+  'work-handoff-prepare', 'work-handoff-verify', 'work-handoff', 'work-answer', 'work-resume',
+  'work-retry', 'reconcile-delivery', 'proactive-stop'])
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]'])
 
 function targetOf(address, instanceId) {

@@ -408,6 +408,21 @@ export async function createProductHost(context: Context, config: ProductHostCon
       ...saved.map(item => item.root),
     ]
     for (const root of new Set(roots)) environments.push(await openDirectory(root))
+    const pendingRevocations = new Set<string>()
+    let commandAfter: string | undefined
+    for (let page = 0; page < 10; page++) {
+      const slice = await storage.transaction(instanceId, transaction => transaction.scan<{
+        operation?: string; status: string; environmentId?: string
+      }>('product-remote-environment-command', { limit: 100, ...(commandAfter ? { after: commandAfter } : {}) }))
+      for (const item of slice.items) {
+        if (item.value.status === 'pending' && item.value.operation === 'revoke'
+          && typeof item.value.environmentId === 'string') pendingRevocations.add(item.value.environmentId)
+      }
+      if (!slice.cursor) break
+      if (page === 9) throw new CoreError('REMOTE_COMMAND_BUDGET',
+        'The product remote Environment command registry exceeds 1000 entries.')
+      commandAfter = slice.cursor
+    }
     let remoteAfter: string | undefined
     for (let page = 0; page < 10; page++) {
       const slice = await storage.transaction(instanceId, transaction => transaction.scan<{
@@ -426,6 +441,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
             async privateKey => RemoteEnvironment.restorePersisted(item.value.state, privateKey))
           if (!environment) throw new CoreError('INVALID_CONFIG', 'A saved remote Environment could not be restored.')
           const restoredEnvironment = environment
+          if (pendingRevocations.has(item.id)) restoredEnvironment.beginRevocation()
           if (restoredEnvironment.config.instanceId !== instanceId || !restoredEnvironment.config.allowedActorIds.includes(actorId)
             || remoteEnvironments.has(restoredEnvironment.config.id)
             || environments.some(candidate => candidate.config.id === restoredEnvironment.config.id)) {
@@ -627,6 +643,12 @@ export async function createProductHost(context: Context, config: ProductHostCon
             : endpoint === 'work-stop'
               ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'expectedTicketVersion', 'reason']
             : endpoint === 'work-reconcile-stop' ? ['instanceId', 'commandId', 'workItemId', 'ticketId']
+            : endpoint === 'work-handoff-prepare' ? ['instanceId', 'commandId', 'workItemId', 'ticketId',
+              'expectedGeneration', 'targetEnvironmentId']
+              : endpoint === 'work-handoff-verify' ? ['instanceId', 'commandId', 'workItemId', 'ticketId',
+                'expectedGeneration']
+                : endpoint === 'work-handoff' ? ['instanceId', 'commandId', 'workItemId', 'ticketId',
+                  'expectedGeneration', 'targetEnvironmentId', 'reason']
             : endpoint === 'work-retry'
               ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'reason']
               : endpoint === 'work-resume' ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration']
@@ -1260,6 +1282,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
           }
           const current = remoteEnvironments.get(environmentId)
           if (!current) throw new CoreError('NOT_FOUND', 'The remote Environment is not paired in this Host.')
+          current.environment.beginRevocation()
           await storage.transaction(instanceId, async tx => {
             const value = { fingerprint, status: 'pending', operation: 'revoke', environmentId,
               credentialReference: current.credentialReference }
@@ -1389,6 +1412,17 @@ export async function createProductHost(context: Context, config: ProductHostCon
           expectedTicketVersion: payload.expectedTicketVersion as number, reason: payload.reason as string })
         if (endpoint === 'work-reconcile-stop') return engine!.reconcileMainStop({ instanceId, commandId,
           workItemId: payload.workItemId as string, ticketId: payload.ticketId as string })
+        if (endpoint === 'work-handoff-prepare') return engine!.prepareMainHandoff({ instanceId, commandId,
+          workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
+          expectedGeneration: payload.expectedGeneration as string,
+          targetEnvironmentId: payload.targetEnvironmentId as string })
+        if (endpoint === 'work-handoff-verify') return engine!.verifyMainHandoff({ instanceId, commandId,
+          workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
+          expectedGeneration: payload.expectedGeneration as string })
+        if (endpoint === 'work-handoff') return engine!.requestMainHandoff({ instanceId, commandId,
+          workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
+          expectedGeneration: payload.expectedGeneration as string,
+          targetEnvironmentId: payload.targetEnvironmentId as string, reason: payload.reason as string })
         if (endpoint === 'work-resume') return engine!.resumeMainWork({ instanceId, commandId,
           workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
           expectedGeneration: payload.expectedGeneration as string })

@@ -43,7 +43,7 @@ async function repository(directory, name = 'repo') {
   return root
 }
 
-async function fixture(context, environments, sourceEnvironmentId, resources = []) {
+async function fixture(context, environments, sourceEnvironmentId, resources = [], target) {
   const directory = await mkdtemp(join(tmpdir(), 'ds-bot-t39-'))
   const native = await nativeContext(join(directory, 'sessions'), options => {
     const user = options.messages.filter(message => message.role === 'user').at(-1)
@@ -70,7 +70,7 @@ async function fixture(context, environments, sourceEnvironmentId, resources = [
     },
   ], 'Work-copy fixture cleanup failed.'))
   const receipt = await engine.submit({ commandId: `t39-${sourceEnvironmentId}`, eventId: `t39-${sourceEnvironmentId}`,
-    text: 'Prepare a handoff copy.', environmentId: sourceEnvironmentId })
+    text: 'Prepare a handoff copy.', environmentId: sourceEnvironmentId, ...(target ? { target } : {}) })
   let conversation
   for (let index = 0; index < 500; index++) {
     await engine.effects.drain()
@@ -221,7 +221,7 @@ test('a real paired device can inspect and verify the prepared copy', { timeout:
   const remote = await core.RemoteEnvironment.pair({ id: 'remote', instanceId: 'private', allowedActorIds: ['user'],
     permissions: ['read'], endpoint: await device.start(), pairingCode: device.pairingCode,
     expectedDeviceId: 't39-device', expectedDeviceKey: device.deviceKeyFingerprint })
-  const { engine, ticketId } = await fixture(context, [source, remote], 'source', [device])
+  const { engine, ticketId } = await fixture(context, [source, remote], 'source', [device], 'auto')
   const prepared = await engine.prepareHandoffCopy({ commandId: 'remote-prepare', ticketId, targetEnvironmentId: 'remote' })
   assert.equal(prepared.status, 'prepared', JSON.stringify(prepared))
   await replicateChanges(sourceRoot, targetRoot, prepared.files)

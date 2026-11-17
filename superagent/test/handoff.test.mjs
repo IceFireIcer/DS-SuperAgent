@@ -84,6 +84,36 @@ async function replicateChanges(sourceRoot, targetRoot, files) {
   }
 }
 
+function delayedProbe(environment) {
+  let wait = false
+  let entered
+  let release
+  const wrapper = new Proxy(environment, {
+    get(target, property) {
+      if (property === 'probe') return async identity => {
+        if (wait) {
+          entered()
+          await new Promise(resolve => { release = resolve })
+        }
+        return target.probe(identity)
+      }
+      const value = Reflect.get(target, property, target)
+      return typeof value === 'function' ? value.bind(target) : value
+    },
+  })
+  return {
+    environment: wrapper,
+    waitForProbe() {
+      wait = true
+      return new Promise(resolve => { entered = resolve })
+    },
+    releaseProbe() {
+      wait = false
+      release?.()
+    },
+  }
+}
+
 test('a local Assignment hands off to a paired remote Environment and keeps the Session', { timeout: 40000 }, async context => {
   const directory = await mkdtemp(join(tmpdir(), 'ds-bot-t40-local-remote-'))
   const sourceRoot = await repository(directory)
@@ -227,11 +257,45 @@ test('a source change after verification blocks the handoff', { timeout: 30000 }
   await replicateChanges(sourceRoot, targetRoot, prepared.files)
   await engine.verifyHandoffCopy({ commandId: 't40-stale-verify', ticketId })
   await writeFile(join(sourceRoot, 'tracked.txt'), 'second\n')
-  const reverified = await engine.verifyHandoffCopy({ commandId: 't40-stale-verify', ticketId })
+  const reverified = await engine.verifyHandoffCopy({ commandId: 't40-stale-reverify', ticketId })
   assert.equal(reverified.status, 'handoff-blocked')
   assert.equal(reverified.blockers.some(blocker => blocker.code === 'source-changed'), true)
   const handoff = await engine.requestHandoff({ commandId: 't40-stale-handoff', ticketId, targetEnvironmentId: 'target', reason: 'Stale copy.' })
   assert.equal(handoff.state, 'blocked')
   assert.equal(handoff.blockers.some(blocker => blocker.code === 'handoff-copy-not-verified'), true)
   assert.equal(workerTurns.length, 1)
+})
+
+test('a generation change during target selection prevents an old handoff request from recording state', {
+  timeout: 40000,
+}, async context => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-t41-request-stale-'))
+  const sourceRoot = await repository(directory)
+  const targetRoot = join(directory, 'target')
+  await run('git', ['clone', sourceRoot, targetRoot], directory)
+  await writeFile(join(sourceRoot, 'tracked.txt'), 'requested change\n')
+  const source = await core.LocalEnvironment.open({ id: 'source', instanceId: 'private', root: sourceRoot,
+    allowedActorIds: ['user'], permissions: ['read'], commands: {} })
+  const target = await core.LocalEnvironment.open({ id: 'target', instanceId: 'private', root: targetRoot,
+    allowedActorIds: ['user'], permissions: ['read'], commands: {} })
+  const delayed = delayedProbe(target)
+  const { engine, ticketId, conversation } = await fixture(context, [source, delayed.environment],
+    { commandId: 'stale-request', eventId: 'stale-request', text: 'Keep this generation.', environmentId: 'source' })
+  context.after(() => cleanupDirectory(directory))
+  const before = conversation.assignments[0]
+  const prepared = await engine.prepareHandoffCopy({ commandId: 'stale-copy', ticketId,
+    targetEnvironmentId: 'target', expectedGeneration: before.generation })
+  await replicateChanges(sourceRoot, targetRoot, prepared.files)
+  await engine.verifyHandoffCopy({ commandId: 'stale-verify', ticketId, expectedGeneration: before.generation })
+  const entered = delayed.waitForProbe()
+  const request = engine.requestHandoff({ commandId: 'stale-request-command', ticketId,
+    targetEnvironmentId: 'target', reason: 'Use the old generation.', expectedGeneration: before.generation })
+  await entered
+  await engine.stopTicket({ commandId: 'stale-stop', ticketId, reason: 'Stop the old generation.' })
+  await engine.resumeTicket({ commandId: 'stale-resume', ticketId })
+  delayed.releaseProbe()
+  await assert.rejects(request, { code: 'HANDOFF_STALE' })
+  assert.equal(await engine.getEnvironmentHandoff(ticketId), undefined)
+  const after = await engine.conversation(ticketId)
+  assert.notEqual(after.assignments[0].generation, before.generation)
 })

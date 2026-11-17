@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import LocalCredentials from '@deepseek-ai/dsh-credentials-local'
+import { execFile } from 'node:child_process'
 import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -17,6 +18,22 @@ const until = async (check, label, timeout = 8_000) => {
     if (Date.now() >= deadline) throw new Error(`Product execution did not reach ${label} within ${timeout} ms.`)
     await sleep(30)
   }
+}
+
+const git = (cwd, ...args) => new Promise((resolve, reject) => {
+  execFile('git', args, { cwd, windowsHide: true }, (error, stdout, stderr) => {
+    if (error) reject(new Error(`${args.join(' ')}: ${stderr || error.message}`))
+    else resolve(stdout.trim())
+  })
+})
+
+async function initializeRepository(root) {
+  await git(root, 'init')
+  await git(root, 'config', 'user.email', 'r5-31@example.invalid')
+  await git(root, 'config', 'user.name', 'R5-31')
+  await writeFile(join(root, 'tracked.txt'), 'base\n')
+  await git(root, 'add', 'tracked.txt')
+  await git(root, 'commit', '-m', 'base')
 }
 
 test('the product pairs a device and binds remote-only work to its own filesystem across Host restart', { timeout: 120000 }, async t => {
@@ -341,6 +358,11 @@ test('an offline remote stop survives Host restart, keeps unrelated local work a
     expectedTicketVersion: remoteWork.control.ticketVersion, reason: 'Stop while the device is disconnected.' })
   remoteWork = (await call('history', { limit: 100 })).works.find(work => work.brief.goal === 'Start a long remote job.')
   assert.equal(remoteWork.control.stop.pendingDeviceConfirmation, true)
+  assert.equal(remoteWork.control.permissions.canHandoff, false)
+  assert.equal(remoteWork.control.handoff.status, 'blocked')
+  assert.equal(remoteWork.control.handoff.owner, 'human')
+  assert.equal(remoteWork.control.handoff.nextStep, 'resolve')
+  assert.equal(remoteWork.control.handoff.blockers.some(blocker => blocker.code === 'ticket-stopping'), true)
   await assert.rejects(call('work-resume', { commandId: 'resume-before-device-quiet',
     workItemId: remoteWork.control.workItemId, ticketId: remoteWork.control.ticketId,
     expectedGeneration: remoteWork.control.assignment.generation }), { code: 'STOPPING' })
@@ -364,6 +386,12 @@ test('an offline remote stop survives Host restart, keeps unrelated local work a
   assert.equal(remoteWork.control.stop.pendingDeviceConfirmation, true)
   assert.equal((await call('history', { limit: 100 })).works.some(work =>
     work.brief.goal === 'Complete an independent local check.' && work.status === 'waiting'), true)
+  assert.equal((await call('history', { limit: 100 })).works.find(work =>
+    work.brief.goal === 'Complete an independent local check.').control.permissions.canHandoff, false)
+  const waitingHandoff = (await call('history', { limit: 100 })).works.find(work =>
+    work.brief.goal === 'Complete an independent local check.').control.handoff
+  assert.equal(waitingHandoff.status, 'blocked')
+  assert.equal(waitingHandoff.blockers.some(blocker => blocker.code === 'waiting-human'), true)
 
   await call('work-reconcile-stop', { commandId: 'offline-reconcile-blocked',
     workItemId: remoteWork.control.workItemId, ticketId: remoteWork.control.ticketId })
@@ -396,6 +424,175 @@ test('an offline remote stop survives Host restart, keeps unrelated local work a
     return remoteWork.control.assignment?.generation && remoteWork.control.assignment.generation !== confirmedGeneration
   }, 'an explicit new Assignment after the confirmed stop', 15000)
   assert.notEqual(remoteWork.control.assignment.id, reconciled.assignments[0].id)
+})
+
+test('a Main work card hands the same work to a paired remote after verified copy synchronization', {
+  timeout: 120000,
+}, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'r5-product-handoff-'))
+  const sourceRoot = join(directory, 'source')
+  const targetRoot = join(directory, 'target')
+  await Promise.all([mkdir(sourceRoot), mkdir(join(directory, 'data'))])
+  await initializeRepository(sourceRoot)
+  await git(directory, 'clone', sourceRoot, targetRoot)
+  await writeFile(join(sourceRoot, 'tracked.txt'), 'changed locally\n')
+  await writeFile(join(sourceRoot, 'new.txt'), 'untracked locally\n')
+  const device = await core.RemoteDevice.open({
+    deviceId: 'handoff-device', root: targetRoot,
+    grants: [{ instanceId: 'private', environmentId: 'handoff-remote', allowedActorIds: ['owner'],
+      permissions: ['read', 'write', 'search'] }],
+    statePath: join(directory, 'device-state.json'),
+  })
+  const endpoint = await device.start()
+  const workerTurns = []
+  const native = await nativeContext(join(directory, 'sessions'), function* (request) {
+    if (request.model === 'router') { yield* routerResponse(request); return }
+    if (request.model === 'main') {
+      if (!completedToolCount(request)) yield* toolResponse('delegate_work', {
+        items: [{ goal: 'Keep this work ready to move.', constraints: 'Preserve uncommitted and untracked content.',
+          acceptanceCriteria: 'Continue in the same work and Session after the handoff.' }],
+      })
+      else yield* textResponse('The movable work was delegated.')
+      return
+    }
+    workerTurns.push(lastUserText(request))
+    yield* textResponse('The Worker reached a safe handoff boundary.')
+  })
+  await native.plugin(LocalCredentials, { path: join(directory, 'credentials.yaml'), watch: false })
+  let host
+  t.after(async () => {
+    await host?.close().catch(() => {})
+    await device.close().catch(() => {})
+    await native.fiber.dispose().catch(() => {})
+    await rm(directory, { recursive: true, force: true })
+  })
+  host = await core.createProductHost(native, {
+    databasePath: join(directory, 'data', 'state.sqlite'), workspaceRoot: sourceRoot,
+    instanceId: 'private', actorId: 'owner', main: { provider: 'mock', model: 'main' },
+    router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' },
+  })
+  const call = (endpoint, payload = {}) => host.dispatch(endpoint, { instanceId: 'private', ...payload })
+  const sourceEnvironment = (await call('directory-options')).default
+  await call('remote-environment-pair', {
+    commandId: 'pair-handoff-device', environmentId: 'handoff-remote', label: 'Handoff device',
+    endpoint, pairingCode: device.pairingCode, expectedDeviceId: 'handoff-device',
+    expectedDeviceKey: device.deviceKeyFingerprint, permissions: ['read', 'write', 'search'],
+  })
+  await call('send', {
+    commandId: 'handoff-work', text: 'Keep this work ready to move.',
+    target: 'auto', environmentId: sourceEnvironment.environmentId,
+  })
+  let work
+  await until(async () => {
+    work = (await call('history', { limit: 100 })).works.find(candidate =>
+      candidate.brief.goal === 'Keep this work ready to move.')
+    return work?.control?.assignment && work.status === 'failed'
+  }, 'the safe Worker boundary', 25000)
+  const sourceAssignment = structuredClone(work.control.assignment)
+  const prepared = await call('work-handoff-prepare', {
+    commandId: 'prepare-main-handoff', workItemId: work.control.workItemId,
+    ticketId: work.control.ticketId, expectedGeneration: sourceAssignment.generation,
+    targetEnvironmentId: 'handoff-remote',
+  })
+  assert.equal(prepared.status, 'prepared', JSON.stringify(prepared))
+  assert.deepEqual(prepared.files.map(file => [file.path, file.state]).sort(), [
+    ['new.txt', 'untracked'], ['tracked.txt', 'modified'],
+  ])
+  const preparedWork = (await call('history', { limit: 100 })).works.find(candidate =>
+    candidate.brief.workItemId === work.control.workItemId)
+  assert.equal(preparedWork.control.handoff.copy.status, 'prepared')
+  assert.equal(preparedWork.control.permissions.canHandoff, true)
+  assert.equal(preparedWork.control.handoff.targets.some(target => target.id === 'handoff-remote'
+    && target.deviceId === 'handoff-device'), true)
+  for (const file of prepared.files) {
+    await writeFile(join(targetRoot, ...file.path.split('/')), await readFile(join(sourceRoot, ...file.path.split('/'))))
+  }
+  const verified = await call('work-handoff-verify', {
+    commandId: 'verify-main-handoff', workItemId: work.control.workItemId,
+    ticketId: work.control.ticketId, expectedGeneration: sourceAssignment.generation,
+  })
+  assert.equal(verified.status, 'verified', JSON.stringify(verified))
+  const handoff = await call('work-handoff', {
+    commandId: 'request-main-handoff', workItemId: work.control.workItemId,
+    ticketId: work.control.ticketId, expectedGeneration: sourceAssignment.generation,
+    targetEnvironmentId: 'handoff-remote', reason: 'Move safely to the paired remote.',
+  })
+  assert.equal(handoff.state, 'completed', JSON.stringify(handoff))
+  assert.equal(handoff.sourceAssignmentId, sourceAssignment.id)
+  assert.notEqual(handoff.targetAssignmentId, sourceAssignment.id)
+  assert.equal(handoff.sourceGeneration, sourceAssignment.generation)
+  assert.equal((await call('work-handoff-prepare', {
+    commandId: 'prepare-main-handoff', workItemId: work.control.workItemId,
+    ticketId: work.control.ticketId, expectedGeneration: sourceAssignment.generation,
+    targetEnvironmentId: 'handoff-remote',
+  })).id, prepared.id, 'a lost prepare response replays after the Assignment generation changes')
+  assert.equal((await call('work-handoff-verify', {
+    commandId: 'verify-main-handoff', workItemId: work.control.workItemId,
+    ticketId: work.control.ticketId, expectedGeneration: sourceAssignment.generation,
+  })).status, 'verified', 'a lost verify response replays after the Assignment generation changes')
+  assert.equal((await call('work-handoff', {
+    commandId: 'request-main-handoff', workItemId: work.control.workItemId,
+    ticketId: work.control.ticketId, expectedGeneration: sourceAssignment.generation,
+    targetEnvironmentId: 'handoff-remote', reason: 'Move safely to the paired remote.',
+  })).id, handoff.id, 'a lost handoff response returns the committed handoff after generation changes')
+  const after = (await call('history', { limit: 100 })).works.find(candidate =>
+    candidate.brief.workItemId === work.control.workItemId)
+  assert.equal(after.receipt.ticketId, work.receipt.ticketId)
+  assert.equal(after.executionLocation.id, 'handoff-remote')
+  assert.equal(after.executionLocation.deviceId, 'handoff-device')
+  assert.equal(after.control.assignment.sessionId, sourceAssignment.sessionId)
+  assert.equal(after.control.assignment.generation, handoff.targetGeneration)
+  assert.equal(after.control.handoff.record.state, 'completed')
+  assert.equal(Object.hasOwn(after.control.handoff.record, 'command'), false)
+  assert.equal(after.control.handoff.copy.status, 'verified')
+  await until(async () => {
+    const current = (await call('history', { limit: 100 })).works.find(candidate =>
+      candidate.brief.workItemId === work.control.workItemId)
+    return workerTurns.length === 2 && current?.control?.assignment?.generation === handoff.targetGeneration
+      && current.status === 'failed'
+  }, 'the remote Worker safe boundary', 25000)
+  const remoteAssignment = (await call('history', { limit: 100 })).works.find(candidate =>
+    candidate.brief.workItemId === work.control.workItemId).control.assignment
+  const preparedBack = await call('work-handoff-prepare', {
+    commandId: 'prepare-main-handoff-back', workItemId: work.control.workItemId,
+    ticketId: work.control.ticketId, expectedGeneration: remoteAssignment.generation,
+    targetEnvironmentId: sourceEnvironment.environmentId,
+  })
+  assert.equal(preparedBack.status, 'prepared', JSON.stringify(preparedBack))
+  const verifiedBack = await call('work-handoff-verify', {
+    commandId: 'verify-main-handoff-back', workItemId: work.control.workItemId,
+    ticketId: work.control.ticketId, expectedGeneration: remoteAssignment.generation,
+  })
+  assert.equal(verifiedBack.status, 'verified', JSON.stringify(verifiedBack))
+  const handoffBack = await call('work-handoff', {
+    commandId: 'request-main-handoff-back', workItemId: work.control.workItemId,
+    ticketId: work.control.ticketId, expectedGeneration: remoteAssignment.generation,
+    targetEnvironmentId: sourceEnvironment.environmentId, reason: 'Return safely to the Host.',
+  })
+  assert.equal(handoffBack.state, 'completed', JSON.stringify(handoffBack))
+  assert.equal(handoffBack.sourceAssignmentId, remoteAssignment.id)
+  assert.notEqual(handoffBack.targetAssignmentId, remoteAssignment.id)
+  const returned = (await call('history', { limit: 100 })).works.find(candidate =>
+    candidate.brief.workItemId === work.control.workItemId)
+  assert.equal(returned.receipt.ticketId, work.receipt.ticketId)
+  assert.equal(returned.executionLocation.id, sourceEnvironment.environmentId)
+  assert.equal(returned.control.assignment.sessionId, sourceAssignment.sessionId)
+  assert.equal(returned.control.assignment.generation, handoffBack.targetGeneration)
+  const observation = (await call('observe-list', {
+    query: work.receipt.ticketId, limit: 100,
+  })).items.find(item => item.role === 'worker')
+  const detail = await call('observe-read', {
+    observationId: observation.id, generation: observation.generation, limit: 100,
+  })
+  assert.equal(detail.sessionId, sourceAssignment.sessionId)
+  assert.equal(detail.generations.length, 3)
+  assert.equal(detail.generations.find(generation => generation.generation === sourceAssignment.generation)?.current, false)
+  assert.equal(detail.generations.find(generation => generation.generation === handoff.targetGeneration)?.current, false)
+  assert.equal(detail.generations.find(generation => generation.generation === handoffBack.targetGeneration)?.current, true)
+  for (let index = 0; index < 200 && workerTurns.length < 3; index++) await sleep(30)
+  assert.equal(workerTurns.length, 3, JSON.stringify(workerTurns))
+  assert.match(workerTurns[1], /new execution Environment/u)
+  assert.match(workerTurns[2], /new execution Environment/u)
 })
 
 test('revocation commit failure keeps local access blocked and replays without claiming a second device confirmation', async t => {
@@ -442,6 +639,12 @@ test('revocation commit failure keeps local access blocked and replays without c
   assert.equal((await call('execution-options')).environments.some(environment => environment.id === 'remote-project'), true)
   await host.close()
   host = await core.createProductHost(native, config)
+  const pendingOptions = await call('execution-options')
+  const pendingEnvironment = pendingOptions.environments.find(environment => environment.id === 'remote-project')
+  assert.ok(pendingEnvironment)
+  assert.notEqual(pendingEnvironment.eligible, true,
+    'a pending revoke must quarantine the restored Environment after Host restart')
+  assert.notEqual(pendingEnvironment.online, true)
   const replay = await call('remote-environment-revoke', { commandId: 'revoke', environmentId: 'remote-project' })
   assert.equal(replay.revoked, true)
   assert.equal(replay.deviceConfirmed, false)

@@ -344,6 +344,111 @@ export function applyProduct(ctx) {
     if (capacity) return t('Execution capacity is full ({count}).', { count: capacity[1] })
     return t(reason)
   }
+  const handoffStatusCopy = status => ({ requested: t('Handoff requested'), blocked: t('Handoff blocked'),
+    flushing: t('Flushing source Session'), switching: t('Switching execution Environment'),
+    completed: t('Handoff completed'), prepared: t('Handoff prepared'), verified: t('Handoff copy verified'),
+    'handoff-blocked': t('Handoff blocked'), available: t('Handoff available') })[status] ?? status
+  const handoffOwnerCopy = owner => ({ worker: t('Worker'), operator: t('Operator'), human: t('You'),
+    host: t('Host') })[owner] ?? t('Unknown')
+  const handoffNextStepCopy = nextStep => ({ prepare: t('Choose a target Environment and prepare the work copy.'),
+    synchronize: t('Synchronize the prepared changes to the target, then verify the copy.'),
+    verify: t('Verify the prepared work copy before handing off.'),
+    handoff: t('The copied work is verified. Hand off the same work when ready.'),
+    reconcile: t('The Host is reconciling the original execution before switching generations.'),
+    continue: t('Continue in the new execution Environment.'),
+    resolve: t('Resolve the current handoff blocker.') })[nextStep] ?? t('Review the handoff state.')
+  const handoffBlockerCopy = blocker => {
+    const excluded = /^The (local|remote) Environment is excluded by the Ticket execution target (.+)$/u.exec(blocker.message)
+    if (excluded) return t('The {kind} Environment is excluded by the Ticket execution target {target}.',
+      { kind: excluded[1] === 'local' ? t('Local') : t('Remote'), target: executionTargetCopy(excluded[2]) })
+    const unknownChange = /^The target has an unlisted change at (.+); it will not be overwritten\.$/u.exec(blocker.message)
+    if (unknownChange) return t('The target has an unlisted change at {path}; it will not be overwritten.',
+      { path: unknownChange[1] })
+    const conflict = /^The target already has a different change at (.+)\.$/u.exec(blocker.message)
+    if (conflict) return t('The target already has a different change at {path}.', { path: conflict[1] })
+    const mismatch = /^The target content at (.+) does not match the prepared copy\.$/u.exec(blocker.message)
+    if (mismatch) return t('The target content at {path} does not match the prepared copy.', { path: mismatch[1] })
+    const messages = {
+      'target-ineligible': t('The target Environment is not eligible for this handoff.'),
+      'source-environment-changed': t('The source Environment changed after the work copy was prepared.'),
+      'target-environment-changed': t('The target Environment changed after the work copy was prepared.'),
+      'handoff-copy-missing': t('Prepare and verify a work copy before handing off.'),
+      'handoff-copy-not-verified': t('The work copy has not been verified.'),
+      'handoff-copy-stale': t('The work copy belongs to another execution generation or Environment.'),
+      'assignment-changed': t('The work Assignment changed during the handoff.'),
+      'source-changed': t('The source work copy changed after preparation.'),
+      'target-commit-mismatch': t('The target repository version differs from the source.'),
+      'target-missing-change': t('The target is missing a prepared work-copy file.'),
+      'target-file-conflict': t('A prepared work-copy file conflicts with the target.'),
+      'ticket-ended': t('The work has ended.'),
+      'ticket-constrained': t('The work is stopped or waiting for a person.'),
+      'ticket-stopping': t('The work has an active stop request.'),
+      'waiting-human': t('Answer the current work question before handing off.'),
+      'unknown-effect': t('Reconcile an external result before handing off.'),
+      'handoff-superseded': t('The source Assignment was replaced before recovery.'),
+      'session-flush-failed': t('The source Session could not be flushed.'),
+      'handoff-recovery-failed': t('The interrupted handoff could not be reconciled.'),
+      'active-turn': t('Wait for the Worker turn to reach a safe boundary.'),
+      'active-job': t('Wait for the background job to settle.'),
+      'active-subagent': t('Wait for the child Agent to settle.'),
+      'active-preview': t('Close the retained preview before handing off.'),
+      'handoff-stale': t('The work generation changed during the handoff.'),
+      'handoff-revalidation-failed': t('The target or work copy could not be revalidated after flush.'),
+      'same-environment': t('Choose a different target Environment.'),
+      'no-assignment': t('The work has no active Assignment.'),
+      'assignment-not-running': t('The source Assignment is not running.'),
+      'ready-report': t('A verified result already ended this Assignment.'),
+      'setup-failed': t('The source workspace setup failed.'),
+      'processing-paused': t('Processing is paused, so a handoff cannot start.'),
+      'WORK_COPY_UNSUPPORTED': t('The work copy uses a format or size outside the safe handoff limits.'),
+      'WORK_COPY_GIT_FAILED': t('The work copy could not be inspected safely.'),
+    }
+    return messages[blocker.code] ?? t('This handoff step is blocked.')
+  }
+  function MainWorkHandoffPanel({ handoff, busy, canHandoff, onRun }) {
+    const [targetId, setTargetId] = useState('')
+    const targets = handoff.targets ?? []
+    const copy = handoff.copy
+    const record = handoff.record
+    const selectedTarget = targets.find(target => target.id === targetId) ?? targets[0]
+    const active = ['requested', 'flushing', 'switching'].includes(handoff.status)
+    const completed = record?.state === 'completed'
+    return h('section', {
+      className: 'bt-main-work-handoff', 'aria-label': t('Execution Environment handoff') },
+      h('h3', null, t('Execution Environment handoff')),
+      h('p', { role: 'status' }, `${t('Handoff status')}: ${handoffStatusCopy(handoff.status)}`),
+      h('p', { className: 'bt-main-work-detail' }, `${t('Responsible')}: ${handoffOwnerCopy(handoff.owner)}`),
+      h('p', { className: 'bt-main-work-detail' }, `${t('Next step')}: ${handoffNextStepCopy(handoff.nextStep)}`),
+      handoff.blockers?.length ? h('ul', { className: 'bt-main-work-handoff-blockers' }, handoff.blockers.map(blocker =>
+        h('li', { key: `${blocker.code}:${blocker.message}` },
+          `${handoffBlockerCopy(blocker)} · ${t('Responsible')}: ${handoffOwnerCopy(blocker.nextOwner)}`))) : null,
+      copy ? h('div', { className: 'bt-main-work-handoff-copy' },
+        h('p', null, `${t('Source')}: ${copy.source.id} · ${copy.source.root}`),
+        h('p', null, `${t('Target')}: ${copy.target.id} · ${copy.target.root}`),
+        h('p', null, `${t('Base version')}: ${copy.baseCommit.slice(0, 12)} · ${t('Changed files')}: ${copy.files.length}`
+          + ` · ${copy.totalBytes} ${t('bytes')}`),
+        h('ul', { 'aria-label': t('Prepared work-copy files') }, copy.files.map(file =>
+          h('li', { key: file.path }, h('code', null, file.path), ` · ${t(file.state)} · ${file.bytes} ${t('bytes')}`)))) : null,
+      canHandoff ? h('div', { className: 'bt-main-work-handoff-actions' },
+        targets.length ? h('label', null, t('Handoff target'), h('select', {
+          className: 'bt-select', 'aria-label': t('Handoff target'), value: selectedTarget?.id ?? '',
+          disabled: busy, onChange: event => setTargetId(event.target.value),
+        }, targets.map(target => h('option', { key: target.id, value: target.id },
+          `${target.id} · ${target.kind === 'remote' ? t('Remote') : t('Local')}`
+            + `${target.deviceId ? ` · ${t('Device')}: ${target.deviceId}` : ''}`)))) : null,
+        h('button', { type: 'button', className: 'bt-soft', disabled: busy || !selectedTarget,
+          onClick: () => void onRun('work-handoff-prepare', selectedTarget.id) },
+        busy === 'work-handoff-prepare' ? t('Preparing handoff…') : t('Prepare handoff')),
+        copy && !active && !completed ? h('button', { type: 'button', className: 'bt-soft', disabled: busy,
+          onClick: () => void onRun('work-handoff-verify') },
+        busy === 'work-handoff-verify' ? t('Verifying handoff copy…') : t('Verify handoff copy')) : null,
+        copy?.status === 'verified' && !active && !completed ? h('button', {
+          type: 'button', className: 'bt-soft', disabled: busy,
+          onClick: () => void onRun('work-handoff', selectedTarget.id),
+        }, busy === 'work-handoff' ? t('Handing off…') : t('Hand off work')) : null,
+        !targets.length ? h('p', { className: 'bt-main-work-detail' },
+          t('No other Environment is available for handoff.')) : null) : null)
+  }
   function MainWorkCard({ work, onEvidence }) {
     const state = useView()
     const canCommand = !state.connection?.connected || state.connection.capabilities.includes('command')
@@ -366,6 +471,7 @@ export function applyProduct(ctx) {
       finally { setArtifactBusy(null) }
     }
     const assignment = control?.assignment
+    const handoff = control?.handoff
     const runControl = async endpoint => {
       if (!state.binding || !control || !assignment && endpoint !== 'work-stop' && endpoint !== 'work-reconcile-stop') return
       setControlBusy(endpoint)
@@ -378,6 +484,25 @@ export function applyProduct(ctx) {
         payload.reason = t('Stopped from the Main work card.')
       }
       if (endpoint === 'work-retry') payload.reason = t('Retry requested from the Main work card.')
+      try {
+        await productCall(endpoint, payload)
+        await refreshMain(state.binding)
+      } catch (error) {
+        setControlError(error.message)
+        await refreshMain(state.binding)
+      } finally {
+        setControlBusy(null)
+      }
+    }
+    const runHandoff = async (endpoint, targetEnvironmentId) => {
+      if (!state.binding || !control || !assignment || controlBusy) return
+      if (endpoint !== 'work-handoff-verify' && !targetEnvironmentId) return
+      setControlBusy(endpoint)
+      setControlError(null)
+      const payload = { instanceId: state.binding.instanceId, commandId: crypto.randomUUID(),
+        workItemId: control.workItemId, ticketId: control.ticketId, expectedGeneration: assignment.generation,
+        ...(endpoint === 'work-handoff-verify' ? {} : { targetEnvironmentId }),
+        ...(endpoint === 'work-handoff' ? { reason: t('Hand off from the Main work card.') } : {}) }
       try {
         await productCall(endpoint, payload)
         await refreshMain(state.binding)
@@ -470,6 +595,8 @@ export function applyProduct(ctx) {
       work.receipt.ticketId ? h('p', { className: 'bt-main-work-id' }, `${t('Ticket')} ${work.receipt.ticketId}`) : null,
       control ? h('p', { className: 'bt-main-work-id' }, `${t('Ticket version')}: ${control.ticketVersion}`) : null,
       assignment ? h('p', { className: 'bt-main-work-id' }, `${t('Execution version')}: ${assignment.generation}`) : null,
+      control && canCommand && handoff ? h(MainWorkHandoffPanel, { handoff, busy: controlBusy,
+        canHandoff: control.permissions.canHandoff, onRun: runHandoff }) : null,
       stop ? h('p', { className: 'bt-main-work-detail' }, stop.pendingDeviceConfirmation
         ? t('Stopping · waiting for device cancellation confirmation.')
         : stop.state === 'stopping' ? t('Stopping · waiting for the current execution to become quiet.')
@@ -1558,6 +1685,15 @@ const PRODUCT_CSS = `
 .bt-main-work-followup p{margin:0}
 .bt-main-work-controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;padding-top:8px;border-top:.5px solid var(--bt-line-2)}
 .bt-main-work-controls button{height:32px}
+.bt-main-work-handoff{margin-top:10px;padding:10px;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-main);font-size:13px;line-height:18px;overflow-wrap:anywhere}
+.bt-main-work-handoff h3{margin:0 0 6px;font-size:13px;line-height:18px}
+.bt-main-work-handoff p{margin:0 0 6px}.bt-main-work-handoff-copy p{margin:6px 0 0}
+.bt-main-work-handoff ul{max-height:240px;overflow:auto;margin:8px 0 0;padding-left:20px}
+.bt-main-work-handoff li{margin:4px 0}.bt-main-work-handoff-blockers{color:var(--bt-danger)}
+.bt-main-work-handoff-actions{display:flex;flex-wrap:wrap;align-items:end;gap:8px;margin-top:10px}
+.bt-main-work-handoff-actions label{display:flex;flex-direction:column;gap:4px;min-width:220px;font-size:12px;color:var(--bt-ink-2)}
+.bt-main-work-handoff-actions button{height:32px}
+.bt-main-work-handoff button:focus-visible,.bt-main-work-handoff select:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 .bt-main-work-attention{margin-top:10px;padding:10px;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-main);font-size:13px;line-height:18px;overflow-wrap:anywhere}
 .bt-main-work-attention p{margin:0 0 8px}.bt-main-work-options{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
 .bt-main-work-answer label{display:block;margin-bottom:6px;font-size:12px;color:var(--bt-ink-2)}

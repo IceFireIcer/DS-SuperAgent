@@ -77,7 +77,9 @@ export interface EnvironmentHandoffRequest {
   copy?: HandoffCopyView
   targetBlockers?: HandoffBlocker[]
   revalidate?: () => Promise<EnvironmentHandoffRevalidation>
+  authorize?: () => void
   command?: EnvironmentHandoffCommand
+  expectedGeneration?: string
   /** A restart continues the recorded attempt; the copy was already checked before the crash. */
   recovering?: boolean
   actorId: string
@@ -510,7 +512,7 @@ export class Execution {
       requestedBy: request.actorId, requestedAt: now, ...(settledJobs.length ? { settledJobs } : {}), blockers: [],
       ...(request.command ? { command: request.command } : {}),
       steps: [{ name: 'requested', state: 'completed', at: now }] }
-    await this.saveEnvironmentHandoff(record, request.command)
+    await this.saveEnvironmentHandoff(record, request.command, request.expectedGeneration)
     if (!blockers.length && this.workerControllers.has(request.ticketId)) {
       blockers.push({ code: 'active-turn', message: 'A Worker turn started before the handoff request was durable.' })
     }
@@ -621,6 +623,12 @@ export class Execution {
       if (activeBackgroundBlockers(jobs, subagents, previews).length) {
         return { blocker: { code: 'handoff-stale', message: 'New background work appeared during the handoff.' } }
       }
+      try {
+        request.authorize?.()
+      } catch {
+        return { blocker: { code: 'handoff-stale',
+          message: 'The source or target authorization changed during the handoff.' } }
+      }
       const ended: Assignment = { ...current, state: 'ended' }
       const next: Assignment = { ...current, id: randomUUID(), generation: randomUUID(), state: 'pending',
         createdAt: Date.now(), runtimeToken: this.runtimeToken, environment: structuredClone(record.target) }
@@ -658,7 +666,8 @@ export class Execution {
   }
 
   /** A restart reconciles an unfinished handoff against current facts, then continues the same recorded step. */
-  async recoverEnvironmentHandoff(record: EnvironmentHandoffView, revalidate: () => Promise<EnvironmentHandoffRevalidation>) {
+  async recoverEnvironmentHandoff(record: EnvironmentHandoffView, revalidate: () => Promise<EnvironmentHandoffRevalidation>,
+    authorize: () => void) {
     const initial = await this.storage.transaction(this.instanceId, async transaction => ({
       ticket: await transaction.get<Work['ticket']>('ticket', record.ticketId),
       assignment: await transaction.get<Assignment>('assignment', record.ticketId),
@@ -675,7 +684,7 @@ export class Execution {
     const settledJobs = initial.jobs.filter(job => (job.state === 'exited' || job.state === 'cancelled')
       && (job.environmentKind !== 'remote' || job.remote?.rangeSettled === true)).map(job => job.id)
     const request: EnvironmentHandoffRequest = { ticketId: record.ticketId, source: record.source, target: record.target,
-      revalidate, recovering: true, actorId: record.requestedBy, reason: record.reason,
+      revalidate, authorize, recovering: true, actorId: record.requestedBy, reason: record.reason,
       ...(record.command ? { command: record.command } : {}) }
     const blockers = this.handoffBoundaryBlockers(initial, request, assignment)
     if (assignment && (assignment.id !== record.sourceAssignmentId || assignment.generation !== record.sourceGeneration)) {
@@ -2084,8 +2093,17 @@ export class Execution {
     if (await this.storage.transaction(this.instanceId, transaction => this.slots?.hasWaiting(transaction) ?? Promise.resolve(false))) this.effects.wake()
   }
 
-  private async saveEnvironmentHandoff(record: EnvironmentHandoffView, command?: EnvironmentHandoffCommand) {
-    return this.storage.transaction(this.instanceId, transaction => saveEnvironmentHandoffIn(transaction, record, command))
+  private async saveEnvironmentHandoff(record: EnvironmentHandoffView, command?: EnvironmentHandoffCommand,
+    expectedGeneration?: string) {
+    return this.storage.transaction(this.instanceId, async transaction => {
+      if (expectedGeneration !== undefined) {
+        const assignment = await transaction.get<Assignment>('assignment', record.ticketId)
+        if (!assignment || assignment.state === 'ended' || assignment.generation !== expectedGeneration) {
+          throw new CoreError('HANDOFF_STALE', 'The work generation changed before the handoff was recorded.')
+        }
+      }
+      return saveEnvironmentHandoffIn(transaction, record, command)
+    })
   }
 
   private async history<T>(transaction: AsyncTx, kind: 'report-history' | 'delivery-history' | 'retry-decision' | 'session-rollover'

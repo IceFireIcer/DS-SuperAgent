@@ -16,6 +16,8 @@ import { resolveProductAttachments } from './product-attachments.js'
 import type { ExecutionTarget } from './execution-target.js'
 import type { EnvironmentKind } from './environment.js'
 import type { EnvironmentLocation } from './environment.js'
+import type { HandoffBlocker, VisibleEnvironmentHandoffView } from './environment-handoff.js'
+import type { HandoffCopyView } from './work-copy.js'
 import type { ExecutionSelectionView } from './execution-target.js'
 import { validateRequiredCapabilities, type CapabilityId } from './capability-locations.js'
 import type { ProductViewAnswer, ProductViewCard } from './product-views.js'
@@ -352,9 +354,10 @@ export interface MainWorkControl {
   workItemId: string
   ticketId: string
   ticketVersion: number
-  permissions: { actorId: string; canStop: boolean; canResume: boolean; canRetry: boolean; canAnswer: boolean }
+  permissions: { actorId: string; canStop: boolean; canResume: boolean; canRetry: boolean; canAnswer: boolean; canHandoff: boolean }
   assignment?: { id: string; generation: string; sessionId: string; state: 'pending' | 'running' | 'stopping' | 'ended'
     environment?: EnvironmentLocation }
+  handoff?: MainWorkHandoffProjection
   attention?: {
     id: string
     version: number
@@ -380,6 +383,16 @@ export interface MainWorkControl {
     cancellationConfirmedAt?: number
     resumedAt?: number
   }
+}
+
+export interface MainWorkHandoffProjection {
+  status: string
+  owner: 'worker' | 'operator' | 'human' | 'host'
+  nextStep: 'prepare' | 'synchronize' | 'verify' | 'handoff' | 'reconcile' | 'continue' | 'resolve'
+  blockers: HandoffBlocker[]
+  targets: EnvironmentLocation[]
+  copy?: HandoffCopyView
+  record?: VisibleEnvironmentHandoffView
 }
 
 export interface WorkDelegationOptions {

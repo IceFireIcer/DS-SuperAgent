@@ -6,6 +6,7 @@ import type { AsyncTx, Storage } from './storage.js'
 import { canonicalJson, commandTransaction } from './commands.js'
 import { Effects, type EffectsOptions } from './effects.js'
 import { Execution, type Assignment } from './execution.js'
+import { visibleEnvironmentHandoff, withHandoffOwners } from './environment-handoff.js'
 import type { EnvironmentHandoffRevalidation, EnvironmentHandoffView, HandoffBlocker } from './environment-handoff.js'
 import type { NativeSessions } from './native-sessions.js'
 import { environmentLocation, type EnvironmentLocation, type EnvironmentProbe, type ExecutionEnvironment } from './environment.js'
@@ -51,7 +52,8 @@ import { compareWorkCopy, WorkCopyUnsupported, workCopyGaps,
   uniqueBlockers, type HandoffCopyView, type WorkCopyBlocker, type WorkCopyComparison, type WorkCopyFile, type WorkCopySnapshot } from './work-copy.js'
 import type { ActivationGate } from './activation.js'
 import { MainConversation, type MainAddress, type MainSend } from './main-conversation.js'
-import { WorkDelegation, type MainEvidenceCard, type MainWorkCard, type MainWorkControl, type MainWorkItem } from './work-delegation.js'
+import { WorkDelegation, type MainEvidenceCard, type MainWorkCard, type MainWorkControl,
+  type MainWorkHandoffProjection, type MainWorkItem } from './work-delegation.js'
 import { WorkObservations } from './work-observations.js'
 import { MainSourceHandoffs, type MainSourceDeliveryPage, type MainSourceDeliveryView, type MainSourceHandoff, type MainSourceView } from './main-source.js'
 import { ProductSchedules, authorizedScheduleEvent, scheduledOccurrenceKey,
@@ -375,9 +377,74 @@ export class Engine {
           const assignment = conversation.assignments[0]
           const attention = conversation.attention
           const stop = conversation.stop
-          const ticketVersion = (await storage.transaction(instanceId,
-            tx => tx.get<Work['ticket']>('ticket', ticketId)))?.directionVersion ?? 1
+          const currentTicket = await storage.transaction(instanceId,
+            tx => tx.get<Work['ticket']>('ticket', ticketId))
+          const ticketVersion = currentTicket?.directionVersion ?? 1
+          const handoffCopy = await storage.transaction(instanceId,
+            tx => loadHandoffCopy(tx, ticketId))
+          const handoffRecord = conversation.environmentHandoff?.state === 'completed' && handoffCopy
+            && handoffCopy.assignmentId === assignment?.id
+            && handoffCopy.preparedAt > (conversation.environmentHandoff.completedAt ?? 0)
+            ? undefined : conversation.environmentHandoff
+          const handoff = handoffRecord ? visibleEnvironmentHandoff(handoffRecord) : undefined
           const actorAllowed = this.source.allowedActorIds.includes(this.source.actorId)
+          const activeStop = stop && stop.resumedAt === undefined
+          const handoffActive = handoff && ['requested', 'flushing', 'switching'].includes(handoff.state)
+          const handoffBoundaryBlockers = [
+            ...(!actorAllowed ? [{ code: 'source-environment-changed',
+              message: 'The requesting actor no longer has access to this work.' }] : []),
+            ...(this.processingPaused ? [{ code: 'processing-paused',
+              message: 'Processing is paused, so a handoff cannot start.' }] : []),
+            ...(!currentTicket || currentTicket.state !== 'open' ? [{ code: 'ticket-ended',
+              message: 'The Ticket is not open.' }] : []),
+            ...(activeStop ? [{ code: 'ticket-stopping', message: 'The Ticket has an active stop request.' }] : []),
+            ...(attention?.status === 'waiting'
+              ? [{ code: 'waiting-human', message: 'A human question must be answered before this handoff.' }] : []),
+            ...(status === 'unknown'
+              ? [{ code: 'unknown-effect', message: 'An external outcome is still unknown.' }] : []),
+            ...(conversation.setup?.state === 'failed'
+              ? [{ code: 'setup-failed', message: 'The source workspace setup failed.' }] : []),
+            ...(status === 'ready'
+              ? [{ code: 'ready-report', message: 'A ready report already ended this Assignment.' }] : []),
+            ...(!assignment ? [{ code: 'no-assignment', message: 'The Ticket has no active Assignment.' }]
+              : assignment.state === 'ended' ? [{ code: 'assignment-not-running',
+                message: 'The source Assignment is not running.' }] : []),
+          ]
+          const canHandoff = handoffBoundaryBlockers.length === 0 && !handoffActive
+          const handoffTargets = canHandoff ? this.environments
+            .filter(environment => environment.config.id !== assignment?.environment?.id)
+            .filter(environment => {
+              try {
+                environment.authorize({ instanceId, actorId: this.source.actorId })
+                return true
+              } catch {
+                return false
+              }
+            })
+            .map(environmentLocation) : []
+          const handoffBlockers = handoffBoundaryBlockers.length ? withHandoffOwners([
+            ...handoffBoundaryBlockers,
+            ...(handoff?.blockers ?? []),
+            ...(handoffCopy?.blockers ?? []),
+          ])
+            : handoff?.blockers.length ? handoff.blockers
+              : handoffCopy?.blockers.length ? withHandoffOwners(handoffCopy.blockers) : []
+          const handoffOwner: MainWorkHandoffProjection['owner'] = handoff?.state === 'completed' ? 'worker'
+            : handoffActive ? 'host' : handoffBlockers[0]?.nextOwner ?? (handoffCopy ? 'operator' : 'human')
+          const handoffNextStep: MainWorkHandoffProjection['nextStep'] = handoffActive ? 'reconcile'
+            : handoff?.state === 'completed' ? 'continue'
+              : handoffBlockers.length ? 'resolve'
+                : handoffCopy?.status === 'verified' ? 'handoff'
+                  : handoffCopy ? 'synchronize' : 'prepare'
+          const handoffProjection: MainWorkHandoffProjection = {
+            status: handoffBoundaryBlockers.length ? 'blocked' : handoff?.state ?? handoffCopy?.status ?? 'available',
+            owner: handoffOwner,
+            nextStep: handoffNextStep,
+            blockers: handoffBlockers,
+            targets: handoffTargets,
+            ...(handoffCopy ? { copy: handoffCopy } : {}),
+            ...(handoff ? { record: handoff } : {}),
+          }
           const control: MainWorkControl = {
             workItemId: '',
             ticketId,
@@ -390,10 +457,12 @@ export class Engine {
               canRetry: actorAllowed && status !== 'unknown' && (conversation.reason === 'worker-idle'
                 || conversation.reason === 'recovery-blocked' || conversation.reason === 'recovery-exhausted'),
               canAnswer: actorAllowed && attention?.status === 'waiting' && status === 'waiting-human',
+              canHandoff,
             },
             ...(assignment ? { assignment: { id: assignment.id, generation: assignment.generation,
               sessionId: assignment.sessionId, state: assignment.state,
               ...(assignment.environment ? { environment: assignment.environment } : {}) } } : {}),
+            ...(actorAllowed ? { handoff: handoffProjection } : {}),
             ...(attention ? { attention: { id: attention.id, version: attention.sequence, status: attention.status,
               question: attention.question, options: [...attention.options], freeText: true as const,
               assignmentId: attention.assignmentId, sessionId: attention.sessionId,
@@ -1028,24 +1097,33 @@ export class Engine {
     return (await this.conversation(ticketId)).capabilityPlan
   }
 
-  async prepareHandoffCopy(command: { commandId: string; ticketId: string; targetEnvironmentId: string }): Promise<HandoffCopyView> {
+  async prepareHandoffCopy(command: { commandId: string; ticketId: string; targetEnvironmentId: string;
+    expectedGeneration?: string }): Promise<HandoffCopyView> {
     await this.ensurePolicy()
-    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'targetEnvironmentId'].includes(key))) {
-      throw new CoreError('INVALID_INPUT', 'Preparing a work copy accepts commandId, ticketId and targetEnvironmentId only.')
+    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'targetEnvironmentId',
+      'expectedGeneration'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Preparing a work copy accepts only its exact Ticket, target and generation.')
     }
     identifier(command.commandId, 'commandId'); identifier(command.ticketId, 'ticketId'); identifier(command.targetEnvironmentId, 'targetEnvironmentId')
+    if (command.expectedGeneration !== undefined) identifier(command.expectedGeneration, 'expectedGeneration')
     if (!this.source.allowedActorIds.includes(this.source.actorId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This actor cannot prepare a work copy.')
     const key = this.commandKey(command.commandId)
-    const fingerprint = createHash('sha256').update(canonicalJson(['prepare-handoff-copy', this.instanceId, command.ticketId, command.targetEnvironmentId])).digest('hex')
+    const fingerprint = createHash('sha256').update(canonicalJson(['prepare-handoff-copy', this.instanceId,
+      command.ticketId, command.targetEnvironmentId, ...(command.expectedGeneration === undefined ? [] : [command.expectedGeneration])])).digest('hex')
     const initial = await this.storage.transaction(this.instanceId, async transaction => ({
       ticket: await transaction.get<Work['ticket']>('ticket', command.ticketId),
-      assignment: await transaction.get<{ id: string; environment?: EnvironmentLocation }>('assignment', command.ticketId),
+      assignment: await transaction.get<{ id: string; generation: string; state: string;
+        environment?: EnvironmentLocation }>('assignment', command.ticketId),
       trigger: await this.triggerFor(transaction, command.ticketId),
       prior: await transaction.get<{ fingerprint: string; record: HandoffCopyView }>('work-command', key),
     }))
     if (initial.prior) {
       if (initial.prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The work-copy command was reused for different input.')
       return initial.prior.record
+    }
+    if (command.expectedGeneration !== undefined && (!initial.assignment
+      || initial.assignment.state === 'ended' || initial.assignment.generation !== command.expectedGeneration)) {
+      throw new CoreError('HANDOFF_STALE', 'The work generation changed before the handoff copy was prepared.')
     }
     if (!initial.ticket || initial.ticket.state !== 'open') throw new CoreError('NOT_FOUND', 'The Ticket is not open.')
     if (initial.trigger.source.sourceInstanceId !== this.sourceEvents.sourceInstanceId || initial.trigger.source.actorId !== this.source.actorId) {
@@ -1069,7 +1147,10 @@ export class Engine {
     const sourceLocation: EnvironmentLocation = { ...assignment.environment,
       ...(sourceProbe && !assignment.environment.version ? { version: sourceProbe.version } : {}),
       ...(sourceProbe && !assignment.environment.fingerprint ? { fingerprint: sourceProbe.fingerprint } : {}) }
-    const targetLocation: EnvironmentLocation = { ...environmentLocation(target),
+    const targetCheck = await this.handoffTarget({ ticketId: command.ticketId,
+      targetEnvironmentId: command.targetEnvironmentId, trigger: initial.trigger, target })
+    blockers.push(...targetCheck.blockers)
+    const targetLocation: EnvironmentLocation = { ...targetCheck.target,
       ...(targetProbe ? { version: targetProbe.version, fingerprint: targetProbe.fingerprint } : {}) }
     let sourceSnapshot: WorkCopySnapshot | undefined
     let targetSnapshot: WorkCopySnapshot | undefined
@@ -1100,33 +1181,55 @@ export class Engine {
         if (prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The work-copy command was reused for different input.')
         return prior.record
       }
+      if (command.expectedGeneration !== undefined) {
+        const assignment = await transaction.get<{ generation: string; state: string }>('assignment', command.ticketId)
+        if (!assignment || assignment.state === 'ended' || assignment.generation !== command.expectedGeneration) {
+          throw new CoreError('HANDOFF_STALE', 'The work generation changed before the work copy was saved.')
+        }
+      }
       await saveHandoffCopy(transaction, record)
       await transaction.insert('work-command', key, { fingerprint, record })
       return record
     })
   }
 
-  async verifyHandoffCopy(command: { commandId: string; ticketId: string }): Promise<HandoffCopyView> {
+  async verifyHandoffCopy(command: { commandId: string; ticketId: string; expectedGeneration?: string }): Promise<HandoffCopyView> {
     await this.ensurePolicy()
-    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId'].includes(key))) {
-      throw new CoreError('INVALID_INPUT', 'Verifying a work copy accepts commandId and ticketId only.')
+    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'expectedGeneration'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Verifying a work copy accepts only its exact Ticket and generation.')
     }
     identifier(command.commandId, 'commandId'); identifier(command.ticketId, 'ticketId')
+    if (command.expectedGeneration !== undefined) identifier(command.expectedGeneration, 'expectedGeneration')
     if (!this.source.allowedActorIds.includes(this.source.actorId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This actor cannot verify a work copy.')
     const key = this.commandKey(command.commandId)
-    const fingerprint = createHash('sha256').update(canonicalJson(['verify-handoff-copy', this.instanceId, command.ticketId])).digest('hex')
-    const prior = await this.storage.transaction(this.instanceId, transaction => transaction.get<{ fingerprint: string; recordId: string }>('work-command', key))
-    if (prior && prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The work-copy verification command was reused for different input.')
-    const { record, assignmentId } = await this.storage.transaction(this.instanceId, async transaction => {
+    const fingerprint = createHash('sha256').update(canonicalJson(['verify-handoff-copy', this.instanceId, command.ticketId,
+      ...(command.expectedGeneration === undefined ? [] : [command.expectedGeneration])])).digest('hex')
+    const { prior, replay } = await this.storage.transaction(this.instanceId, async transaction => {
+      const prior = await transaction.get<{ fingerprint: string; recordId: string; record?: HandoffCopyView }>(
+        'work-command', key)
+      if (prior && prior.fingerprint !== fingerprint) {
+        throw new CoreError('IDENTITY_CONFLICT', 'The work-copy verification command was reused for different input.')
+      }
+      const replay = prior?.record ?? (prior?.recordId
+        ? await loadHandoffCopyById(transaction, command.ticketId, prior.recordId) : undefined)
+      return { prior, replay }
+    })
+    if (replay) return replay
+    const { record, assignmentId, assignmentGeneration, assignmentState } = await this.storage.transaction(this.instanceId, async transaction => {
       const current = await loadHandoffCopy(transaction, command.ticketId)
       if (!current) throw new CoreError('NOT_FOUND', 'Prepare a work copy before verifying it.')
       const trigger = await this.triggerFor(transaction, command.ticketId)
       if (trigger.source.sourceInstanceId !== this.sourceEvents.sourceInstanceId || trigger.source.actorId !== this.source.actorId) {
         throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Only the original source actor may verify this work copy.')
       }
-      const assignment = await transaction.get<{ id: string }>('assignment', command.ticketId)
-      return { record: current, assignmentId: assignment?.id }
+      const assignment = await transaction.get<{ id: string; generation: string; state: string }>('assignment', command.ticketId)
+      return { record: current, assignmentId: assignment?.id, assignmentGeneration: assignment?.generation,
+        assignmentState: assignment?.state }
     })
+    if (!prior && command.expectedGeneration !== undefined
+      && (assignmentGeneration !== command.expectedGeneration || assignmentState === 'ended')) {
+      throw new CoreError('HANDOFF_STALE', 'The work generation changed before the handoff copy was verified.')
+    }
     const source = this.environments.find(environment => environment.config.id === record.source.id)
     const target = this.environments.find(environment => environment.config.id === record.target.id)
     if (!source || !target) throw new CoreError('ENVIRONMENT_DENIED', 'The prepared source or target Environment is no longer configured.')
@@ -1179,9 +1282,16 @@ export class Engine {
     return commandTransaction(this.storage, this.instanceId, async transaction => {
       const current = await loadHandoffCopy(transaction, command.ticketId)
       if (!current || current.id !== record.id) throw new CoreError('COMMIT_UNKNOWN', 'The work-copy preparation changed during verification.')
+      if (command.expectedGeneration !== undefined) {
+        const assignment = await transaction.get<{ generation: string; state: string }>('assignment', command.ticketId)
+        if (!assignment || assignment.state === 'ended' || assignment.generation !== command.expectedGeneration) {
+          throw new CoreError('HANDOFF_STALE', 'The work generation changed before the work copy was verified.')
+        }
+      }
       await saveHandoffCopy(transaction, next)
-      if (!await transaction.replace('work-command', key, { fingerprint, recordId: next.id })) {
-        await transaction.insert('work-command', key, { fingerprint, recordId: next.id })
+      const receipt = { fingerprint, recordId: next.id, record: next }
+      if (!await transaction.replace('work-command', key, receipt)) {
+        await transaction.insert('work-command', key, receipt)
       }
       return next
     })
@@ -1198,27 +1308,35 @@ export class Engine {
     })
   }
 
-  async requestHandoff(command: { commandId: string; ticketId: string; targetEnvironmentId: string; reason: string }): Promise<EnvironmentHandoffView> {
+  async requestHandoff(command: { commandId: string; ticketId: string; targetEnvironmentId: string; reason: string;
+    expectedGeneration?: string }): Promise<EnvironmentHandoffView> {
     await this.ensurePolicy()
-    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'targetEnvironmentId', 'reason'].includes(key))) {
-      throw new CoreError('INVALID_INPUT', 'A handoff accepts commandId, ticketId, targetEnvironmentId and reason only.')
+    if (!command || Object.keys(command).some(key => !['commandId', 'ticketId', 'targetEnvironmentId', 'reason',
+      'expectedGeneration'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'A handoff accepts only its exact Ticket, target, generation and reason.')
     }
     identifier(command.commandId, 'commandId'); identifier(command.ticketId, 'ticketId'); identifier(command.targetEnvironmentId, 'targetEnvironmentId')
+    if (command.expectedGeneration !== undefined) identifier(command.expectedGeneration, 'expectedGeneration')
     if (!command.reason.trim() || Buffer.byteLength(command.reason) > 2048) throw new CoreError('INVALID_INPUT', 'A handoff needs a bounded reason.')
     if (!this.execution) throw new CoreError('WORKER_NOT_ENABLED', 'A handoff requires a configured native runtime.')
     if (!this.source.allowedActorIds.includes(this.source.actorId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This actor cannot hand off work.')
     const key = this.commandKey(command.commandId)
     const fingerprint = createHash('sha256').update(canonicalJson(['request-handoff', this.instanceId, command.ticketId,
-      command.targetEnvironmentId, command.reason])).digest('hex')
+      command.targetEnvironmentId, command.reason, ...(command.expectedGeneration === undefined ? [] : [command.expectedGeneration])])).digest('hex')
     const initial = await this.storage.transaction(this.instanceId, async transaction => ({
       ticket: await transaction.get<Work['ticket']>('ticket', command.ticketId),
-      assignment: await transaction.get<{ id: string; generation: string; environment?: EnvironmentLocation }>('assignment', command.ticketId),
+      assignment: await transaction.get<{ id: string; generation: string; state: string;
+        environment?: EnvironmentLocation }>('assignment', command.ticketId),
       trigger: await this.triggerFor(transaction, command.ticketId),
       prior: await transaction.get<{ fingerprint: string; record: EnvironmentHandoffView }>('work-command', key),
     }))
     if (initial.prior) {
       if (initial.prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The handoff command was reused for different input.')
       return initial.prior.record
+    }
+    if (command.expectedGeneration !== undefined && (!initial.assignment
+      || initial.assignment.state === 'ended' || initial.assignment.generation !== command.expectedGeneration)) {
+      throw new CoreError('HANDOFF_STALE', 'The work generation changed before the handoff was requested.')
     }
     if (this.processingPaused) throw new CoreError('PROCESSING_PAUSED', 'A handoff cannot start while processing is paused.')
     if (!initial.ticket || initial.ticket.state !== 'open') throw new CoreError('NOT_FOUND', 'The Ticket is not open.')
@@ -1241,8 +1359,11 @@ export class Engine {
     const copy = await this.getHandoffCopy(command.ticketId)
     return this.execution.requestEnvironmentHandoff({ ticketId: command.ticketId, source: sourceLocation,
       target: targetCheck.target, ...(copy ? { copy } : {}), ...(targetCheck.blockers.length ? { targetBlockers: targetCheck.blockers } : {}),
-      revalidate: () => this.revalidateHandoff(command.commandId, command.ticketId, command.targetEnvironmentId),
-      command: { key, fingerprint }, actorId: this.source.actorId, reason: command.reason })
+      revalidate: () => this.revalidateHandoff(command.commandId, command.ticketId, command.targetEnvironmentId, sourceLocation),
+      authorize: () => this.authorizeHandoffEnvironments(sourceLocation, targetCheck.target),
+      command: { key, fingerprint }, ...(command.expectedGeneration === undefined
+        ? {} : { expectedGeneration: command.expectedGeneration }),
+      actorId: this.source.actorId, reason: command.reason })
   }
 
   private async handoffTarget(request: { ticketId: string; targetEnvironmentId: string; trigger: Work['trigger'];
@@ -1267,9 +1388,25 @@ export class Engine {
   }
 
   private async revalidateHandoff(commandId: string, ticketId: string,
-    targetEnvironmentId: string): Promise<EnvironmentHandoffRevalidation> {
+    targetEnvironmentId: string, expectedSource: EnvironmentLocation): Promise<EnvironmentHandoffRevalidation> {
     return this.revalidateHandoffTarget({ ticketId, targetEnvironmentId, actorId: this.source.actorId,
-      verifyCommandId: `handoff-verify:${commandId}` })
+      verifyCommandId: `handoff-verify:${commandId}`, expectedSource })
+  }
+
+  private authorizeHandoffEnvironments(sourceLocation: EnvironmentLocation, targetLocation: EnvironmentLocation) {
+    const identity = { instanceId: this.instanceId, actorId: this.source.actorId }
+    const source = this.environments.find(environment => environment.config.id === sourceLocation.id)
+    const target = this.environments.find(environment => environment.config.id === targetLocation.id)
+    const matches = (environment: ExecutionEnvironment | undefined, location: EnvironmentLocation) => Boolean(environment
+      && environment.kind === location.kind && environment.config.root === location.root
+      && (environment.kind === 'local' || !location.deviceId || environment.deviceId === location.deviceId)
+      && (environment.kind === 'local' || !location.deviceIncarnation
+        || environment.deviceIncarnation === location.deviceIncarnation))
+    if (!matches(source, sourceLocation) || !matches(target, targetLocation)) {
+      throw new CoreError('ENVIRONMENT_DENIED', 'The recorded source or target Environment identity changed.')
+    }
+    source!.authorize(identity)
+    target!.authorize(identity)
   }
 
   private async revalidateHandoffTarget(request: { ticketId: string; targetEnvironmentId: string; actorId: string;
@@ -1335,7 +1472,8 @@ export class Engine {
       try {
         const trigger = await this.storage.transaction(this.instanceId, transaction => this.triggerFor(transaction, record.ticketId))
         if (trigger.source.sourceInstanceId !== this.sourceEvents.sourceInstanceId || trigger.source.actorId !== this.source.actorId) continue
-        await this.execution.recoverEnvironmentHandoff(record, () => this.revalidateHandoffRecord(record))
+        await this.execution.recoverEnvironmentHandoff(record, () => this.revalidateHandoffRecord(record),
+          () => this.authorizeHandoffEnvironments(record.source, record.target))
         recovered++
       } catch (error) {
         await this.execution.failInterruptedHandoff(record, error).catch(() => {})
@@ -3232,6 +3370,40 @@ export class Engine {
     })
   }
 
+  async prepareMainHandoff(command: { instanceId: string; commandId: string; workItemId: string; ticketId: string;
+    expectedGeneration: string; targetEnvironmentId: string }) {
+    if (!command || Object.keys(command).some(key => !['instanceId', 'commandId', 'workItemId', 'ticketId',
+      'expectedGeneration', 'targetEnvironmentId'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Preparing a Main handoff accepts only its exact work card and target.')
+    }
+    await this.requireMainWorkControl(command)
+    return this.prepareHandoffCopy({ commandId: command.commandId, ticketId: command.ticketId,
+      targetEnvironmentId: command.targetEnvironmentId, expectedGeneration: command.expectedGeneration })
+  }
+
+  async verifyMainHandoff(command: { instanceId: string; commandId: string; workItemId: string; ticketId: string;
+    expectedGeneration: string }) {
+    if (!command || Object.keys(command).some(key => !['instanceId', 'commandId', 'workItemId', 'ticketId',
+      'expectedGeneration'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Verifying a Main handoff accepts only its exact work card.')
+    }
+    await this.requireMainWorkControl(command)
+    return this.verifyHandoffCopy({ commandId: command.commandId, ticketId: command.ticketId,
+      expectedGeneration: command.expectedGeneration })
+  }
+
+  async requestMainHandoff(command: { instanceId: string; commandId: string; workItemId: string; ticketId: string;
+    expectedGeneration: string; targetEnvironmentId: string; reason: string }) {
+    if (!command || Object.keys(command).some(key => !['instanceId', 'commandId', 'workItemId', 'ticketId',
+      'expectedGeneration', 'targetEnvironmentId', 'reason'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Requesting a Main handoff accepts only its exact work card, target and reason.')
+    }
+    await this.requireMainWorkControl(command)
+    return this.requestHandoff({ commandId: command.commandId, ticketId: command.ticketId,
+      targetEnvironmentId: command.targetEnvironmentId, reason: command.reason,
+      expectedGeneration: command.expectedGeneration })
+  }
+
   async answerMainAttention(command: { instanceId: string; commandId: string; workItemId: string; ticketId: string;
     expectedGeneration: string; attentionId: string; attentionVersion: number; text: string }) {
     if (!command || Object.keys(command).some(key => !['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration',
@@ -4049,4 +4221,21 @@ async function saveHandoffCopy(transaction: AsyncTx, record: HandoffCopyView) {
 
 function loadHandoffCopy(transaction: AsyncTx, ticketId: string) {
   return transaction.get<HandoffCopyView>('handoff-copy', handoffCopyKey(ticketId))
+}
+
+async function loadHandoffCopyById(transaction: AsyncTx, ticketId: string, recordId: string) {
+  const current = await loadHandoffCopy(transaction, ticketId)
+  if (current?.id === recordId) return current
+  const prefix = `${handoffCopyHistoryPrefix(ticketId)}:`
+  let after = prefix
+  for (let pageCount = 0; pageCount < 10; pageCount++) {
+    const page = await transaction.scan<HandoffCopyView>('handoff-copy-history', { limit: 100, after })
+    const found = page.items.find(entry => entry.id.startsWith(prefix) && entry.value.id === recordId)?.value
+    if (found) return found
+    if (!page.cursor || !page.cursor.startsWith(prefix)) break
+    after = page.cursor
+    if (pageCount === 9) throw new CoreError('WORK_COPY_HISTORY_BUDGET',
+      'The work-copy history exceeds its 1000-record lookup budget.')
+  }
+  return undefined
 }

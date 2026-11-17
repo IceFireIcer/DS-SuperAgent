@@ -92,6 +92,18 @@ test('the peer cannot read a file through a symbolic link or a revoked pairing',
   await assert.rejects(bound.invoke('read_file', { path: 'nothing.txt' }), { code: 'DEVICE_REVOKED' })
 })
 
+test('a pending revocation fails closed before the device acknowledgement returns', async context => {
+  const { device, endpoint } = await fixture(context)
+  const environment = await core.RemoteEnvironment.pair(pairOptions(endpoint, device.pairingCode,
+    { expectedDeviceKey: device.deviceKeyFingerprint }))
+  context.after(() => environment.close())
+  environment.beginRevocation()
+  assert.equal(environment.revoked, true)
+  assert.equal(environment.online, false)
+  assert.throws(() => environment.authorize({ instanceId: 'private', actorId: 'user' }), { code: 'DEVICE_REVOKING' })
+  assert.throws(() => environment.snapshot(), { code: 'DEVICE_REVOKED' })
+})
+
 test('requests and results stay encrypted on the wire', async context => {
   const { root, device, endpoint } = await fixture(context)
   const seen = []

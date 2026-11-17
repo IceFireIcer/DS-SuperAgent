@@ -33,6 +33,7 @@ export interface EnvironmentHandoffView {
   command?: EnvironmentHandoffCommand
 }
 export interface EnvironmentHandoffCommand { key: string; fingerprint: string }
+export type VisibleEnvironmentHandoffView = Omit<EnvironmentHandoffView, 'command'>
 export interface EnvironmentHandoffRevalidation {
   target?: EnvironmentLocation
   copy?: HandoffCopyView
@@ -88,6 +89,7 @@ const ownerByCode: Record<string, HandoffOwner> = {
   'no-assignment': 'host',
   'assignment-not-running': 'host',
   'ready-report': 'human',
+  'processing-paused': 'host',
 }
 
 export function withHandoffOwners(blockers: HandoffBlocker[]): HandoffBlocker[] {
@@ -96,6 +98,11 @@ export function withHandoffOwners(blockers: HandoffBlocker[]): HandoffBlocker[] 
 
 export function isEnvironmentHandoffActive(record: EnvironmentHandoffView) {
   return Boolean(record && ['requested', 'flushing', 'switching'].includes(record.state))
+}
+
+export function visibleEnvironmentHandoff(record: EnvironmentHandoffView): VisibleEnvironmentHandoffView {
+  const { command: _command, ...visible } = record
+  return visible
 }
 
 export function isHandoffPromptPending(record: EnvironmentHandoffView | undefined, assignmentId: string | undefined) {

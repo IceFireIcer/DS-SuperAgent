@@ -175,6 +175,8 @@ export class RemoteEnvironment implements ExecutionEnvironment {
   private skillsState: { supported: true } | undefined
   private readonly requestTimeoutMs: number
   private revokedState = false
+  private revokingState = false
+  private revokeSentState = false
   private closed = false
   private onlineState = true
 
@@ -319,7 +321,7 @@ export class RemoteEnvironment implements ExecutionEnvironment {
 
   snapshot(): RemoteEnvironmentState {
     if (this.closed) throw new CoreError('ENVIRONMENT_CLOSED', 'The remote Environment is closed.')
-    if (this.revokedState) throw new CoreError('DEVICE_REVOKED', 'A revoked device connection cannot be exported again.')
+    if (this.revoked) throw new CoreError('DEVICE_REVOKED', 'A revoked device connection cannot be exported again.')
     return { version: 3, id: this.config.id, instanceId: this.config.instanceId, allowedActorIds: [...this.config.allowedActorIds],
       permissions: [...this.config.permissions] as RemoteEnvironmentPermission[], endpoint: this.endpoint, deviceId: this.deviceId,
       deviceIncarnation: this.deviceIncarnation, deviceKeyFingerprint: this.deviceKeyFingerprint,
@@ -338,8 +340,8 @@ export class RemoteEnvironment implements ExecutionEnvironment {
     return { ...state, hostExchangePrivateReference }
   }
 
-  get revoked() { return this.revokedState }
-  get online() { return this.onlineState && !this.revokedState && !this.closed }
+  get revoked() { return this.revokedState || this.revokingState }
+  get online() { return this.onlineState && !this.revoked && !this.closed }
   get assetSupport() {
     return { attachments: Boolean(this.assetsState), spill: Boolean(this.assetsState), skills: Boolean(this.skillsState) }
   }
@@ -347,6 +349,7 @@ export class RemoteEnvironment implements ExecutionEnvironment {
   authorize(identity: { instanceId: string; actorId: string }) {
     if (this.closed) throw new CoreError('ENVIRONMENT_CLOSED', 'The remote Environment is closed.')
     if (this.revokedState) throw new CoreError('DEVICE_REVOKED', 'This device connection was revoked.')
+    if (this.revokingState) throw new CoreError('DEVICE_REVOKING', 'This device connection is being revoked.')
     if (identity.instanceId !== this.config.instanceId || !this.config.allowedActorIds.includes(identity.actorId)) {
       throw new CoreError('ENVIRONMENT_DENIED', 'This actor or Instance cannot use the remote Environment.')
     }
@@ -429,13 +432,22 @@ export class RemoteEnvironment implements ExecutionEnvironment {
   async revoke(signal?: AbortSignal) {
     if (this.closed) throw new CoreError('ENVIRONMENT_CLOSED', 'The remote Environment is closed.')
     if (this.revokedState) throw new CoreError('DEVICE_REVOKED', 'The earlier device revocation cannot be confirmed again.')
+    if (this.revokeSentState) throw new CoreError('REVOKE_PENDING', 'The earlier device revocation is still pending.')
+    this.beginRevocation()
+    this.revokeSentState = true
     try {
       await this.call({ instanceId: this.config.instanceId, environmentId: this.config.id, actorId: this.config.allowedActorIds[0]!, operation: 'revoke', args: {} }, signal, true)
     } finally {
       // The host side stops using the connection even when the device acknowledgement is lost.
+      this.revokingState = false
       this.revokedState = true
       this.onlineState = false
     }
+  }
+
+  beginRevocation() {
+    this.revokingState = true
+    this.onlineState = false
   }
 
   async close() {
@@ -446,7 +458,7 @@ export class RemoteEnvironment implements ExecutionEnvironment {
   async call(request: RemoteRequest,
     signal?: AbortSignal, permitRevoke = false): Promise<unknown> {
     if (this.closed) throw new CoreError('ENVIRONMENT_CLOSED', 'The remote Environment is closed.')
-    if (this.revokedState && !permitRevoke) throw new CoreError('DEVICE_REVOKED', 'This device connection was revoked.')
+    if (this.revoked && !permitRevoke) throw new CoreError('DEVICE_REVOKED', 'This device connection was revoked.')
     const requestId = randomToken(18)
     const at = Date.now()
     let response: Response

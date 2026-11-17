@@ -73,6 +73,9 @@ test('an authorized desktop reconnects to the same Main and catches up without r
   error => error.code === 'NOT_FOUND')
   await assert.rejects(client.call('work-reconcile-stop', { instanceId: 'personal', commandId: 'reconcile-guessed',
     workItemId: 'guessed', ticketId: 'guessed' }), error => error.code === 'NOT_FOUND')
+  await assert.rejects(client.call('work-handoff-prepare', { instanceId: 'personal', commandId: 'handoff-guessed',
+    workItemId: 'guessed', ticketId: 'guessed', expectedGeneration: 'guessed',
+    targetEnvironmentId: 'guessed' }), error => error.code === 'NOT_FOUND')
   await assert.rejects(client.call('work-answer', { instanceId: 'personal', commandId: 'answer-guessed',
     workItemId: 'guessed', ticketId: 'guessed', expectedGeneration: 'guessed', attentionId: 'guessed',
     attentionVersion: 1, text: 'No.' }), error => error.code === 'NOT_FOUND')
@@ -94,7 +97,9 @@ test('read-only client routes cannot write, guessed routes cannot bypass product
   assert.deepEqual((await client.call('observe-list', { instanceId: 'personal' })).items, [])
   assert.equal((await client.call('execution-options', { instanceId: 'personal' })).policy.defaultTarget, 'local')
   await assert.rejects(client.call('send', { instanceId: 'personal', commandId: 'blocked', text: 'No.' }), /not authorized/u)
-  for (const endpoint of ['send', 'stop-main', 'work-stop', 'work-reconcile-stop', 'work-answer', 'work-resume', 'work-retry', 'reconcile-delivery', 'proactive-stop']) {
+  for (const endpoint of ['send', 'stop-main', 'work-stop', 'work-reconcile-stop',
+    'work-handoff-prepare', 'work-handoff-verify', 'work-handoff', 'work-answer', 'work-resume',
+    'work-retry', 'reconcile-delivery', 'proactive-stop']) {
     assert.equal((await direct(address, viewer.token, `product/${endpoint}`, { instanceId: 'personal', commandId: 'no' })).status, 403)
   }
   assert.equal((await direct(address, viewer.token, 'product/settings-save', {})).status, 404)
