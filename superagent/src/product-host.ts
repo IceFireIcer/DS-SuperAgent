@@ -596,6 +596,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
           : endpoint === 'stop-main' ? ['instanceId', 'commandId', 'messageId']
             : endpoint === 'work-stop'
               ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'expectedTicketVersion', 'reason']
+            : endpoint === 'work-reconcile-stop' ? ['instanceId', 'commandId', 'workItemId', 'ticketId']
             : endpoint === 'work-retry'
               ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration', 'reason']
               : endpoint === 'work-resume' ? ['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration']
@@ -1311,6 +1312,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
           workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
           ...(payload.expectedGeneration === undefined ? {} : { expectedGeneration: payload.expectedGeneration as string }),
           expectedTicketVersion: payload.expectedTicketVersion as number, reason: payload.reason as string })
+        if (endpoint === 'work-reconcile-stop') return engine!.reconcileMainStop({ instanceId, commandId,
+          workItemId: payload.workItemId as string, ticketId: payload.ticketId as string })
         if (endpoint === 'work-resume') return engine!.resumeMainWork({ instanceId, commandId,
           workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
           expectedGeneration: payload.expectedGeneration as string })

@@ -214,6 +214,8 @@ var ZH = {
   "Selection status": "选择状态",
   "Selection reason": "选择原因",
   "Execution candidate": "执行候选",
+  "Check device stop": "核查设备停止状态",
+  "Checking device stop…": "正在核查设备停止状态…",
   "Bound Environment": "绑定执行环境",
   Version: "版本",
   "Selection basis": "选择依据",
@@ -26222,7 +26224,7 @@ function applyProduct(ctx) {
     };
     const assignment = control?.assignment;
     const runControl = async (endpoint) => {
-      if (!state.binding || !control || !assignment && endpoint !== "work-stop") return;
+      if (!state.binding || !control || !assignment && endpoint !== "work-stop" && endpoint !== "work-reconcile-stop") return;
       setControlBusy(endpoint);
       setControlError(null);
       const payload = {
@@ -26357,6 +26359,16 @@ function applyProduct(ctx) {
       control ? (0, import_react63.createElement)("p", { className: "bt-main-work-id" }, `${t("Ticket version")}: ${control.ticketVersion}`) : null,
       assignment ? (0, import_react63.createElement)("p", { className: "bt-main-work-id" }, `${t("Execution version")}: ${assignment.generation}`) : null,
       stop ? (0, import_react63.createElement)("p", { className: "bt-main-work-detail" }, stop.state === "stopping" ? stop.pendingDeviceConfirmation ? t("Stopping · waiting for device cancellation confirmation.") : t("Stopping · waiting for the current execution to become quiet.") : stop.cancellationConfirmedAt ? t("Stopped · execution cancellation confirmed.") : t("Stopped · cancellation confirmation is unavailable.")) : null,
+      stop?.pendingDeviceConfirmation && canCommand ? (0, import_react63.createElement)(
+        "button",
+        {
+          type: "button",
+          className: "bt-soft",
+          disabled: Boolean(controlBusy),
+          onClick: () => runControl("work-reconcile-stop")
+        },
+        controlBusy === "work-reconcile-stop" ? t("Checking device stop…") : t("Check device stop")
+      ) : null,
       attention ? (0, import_react63.createElement)(
         "div",
         { className: "bt-main-work-attention" },

@@ -365,7 +365,7 @@ export function applyProduct(ctx) {
     }
     const assignment = control?.assignment
     const runControl = async endpoint => {
-      if (!state.binding || !control || !assignment && endpoint !== 'work-stop') return
+      if (!state.binding || !control || !assignment && endpoint !== 'work-stop' && endpoint !== 'work-reconcile-stop') return
       setControlBusy(endpoint)
       setControlError(null)
       const payload = { instanceId: state.binding.instanceId, commandId: crypto.randomUUID(),
@@ -457,6 +457,9 @@ export function applyProduct(ctx) {
           : t('Stopping · waiting for the current execution to become quiet.')
         : stop.cancellationConfirmedAt ? t('Stopped · execution cancellation confirmed.')
           : t('Stopped · cancellation confirmation is unavailable.')) : null,
+      stop?.pendingDeviceConfirmation && canCommand ? h('button', { type: 'button', className: 'bt-soft',
+        disabled: Boolean(controlBusy), onClick: () => runControl('work-reconcile-stop') },
+      controlBusy === 'work-reconcile-stop' ? t('Checking device stop…') : t('Check device stop')) : null,
       attention ? h('div', { className: 'bt-main-work-attention' },
         h('p', { className: 'bt-main-work-id' }, `${t('Question version')} ${attention.version} · ${attention.status}`),
         h('p', null, attention.question),

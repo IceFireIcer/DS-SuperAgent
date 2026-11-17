@@ -152,6 +152,10 @@ test('the product pairs a device and binds remote-only work to its own filesyste
     && item.value.includes('remote-project (remote): eligible')), true)
   assert.equal(fact('Device'), 'execution-device')
   assert.equal(fact('Directory'), deviceRoot)
+  await assert.rejects(call('work-reconcile-stop', { commandId: 'guess-stop', workItemId: 'guessed',
+    ticketId: work.receipt.ticketId }), { code: 'NOT_FOUND' })
+  assert.equal((await call('work-reconcile-stop', { commandId: 'inspect-stop', workItemId: work.brief.workItemId,
+    ticketId: work.receipt.ticketId })).ticketId, work.receipt.ticketId)
   assert.equal(work.control.assignment.environment.kind, 'remote')
   for (const name of ['glob', 'grep', 'run_command', 'list_skills', 'read_asset', 'save_attachment', 'delegate_subagent']) {
     assert.equal(workerToolNames.includes(name), true, `${name} must inherit the remote Assignment world`)

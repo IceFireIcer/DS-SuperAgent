@@ -34,12 +34,19 @@ test('Main composer submits remote-only work without a paired Environment', asyn
       const { endpoint, payload } = JSON.parse(options.body)
       requests.push([endpoint, payload])
       const value = endpoint === 'open' ? { instanceId: 'private' }
-        : endpoint === 'history' ? { messages: [], works: [], sources: [], preparations: [], health: { state: 'ready' } }
+        : endpoint === 'history' ? { messages: [], sources: [], preparations: [], health: { state: 'ready' },
+          works: [{ brief: { id: 'brief', workItemId: 'item', goal: 'Stop remote work.', constraints: 'Original work.',
+            acceptanceCriteria: 'Confirm device stop.', target: 'remote-only' },
+          receipt: { status: 'accepted', ticketId: 'ticket' }, status: 'stopped',
+          control: { workItemId: 'item', ticketId: 'ticket', ticketVersion: 1,
+            permissions: { canStop: false, canResume: false, canRetry: false, canAnswer: false },
+            stop: { id: 'stop', state: 'stopping', pendingDeviceConfirmation: true } } }] }
           : endpoint === 'directory-options' ? { default: { environmentId: 'local-work', root: '/work' }, directories: [] }
             : endpoint === 'execution-options' ? { policy: { defaultTarget: 'remote-only', requiredPermissions: ['read'] },
               environments: [{ id: 'local-work', kind: 'local', root: '/work' }] }
               : endpoint === 'observe-list' ? { items: [] }
-                : endpoint === 'send' ? { status: 'completed' }
+              : endpoint === 'send' ? { status: 'completed' }
+                : endpoint === 'work-reconcile-stop' ? { ticketId: 'ticket' }
                   : null
       if (value === null) throw new Error(`Unexpected endpoint: ${endpoint}`)
       return { ok: true, json: async () => ({ ok: true, value }) }
@@ -60,6 +67,10 @@ test('Main composer submits remote-only work without a paired Environment', asyn
     const document = dom.window.document
     assert.equal(document.querySelector('select[aria-label="Execution target"]').value, 'remote-only')
     assert.match(document.body.textContent, /This work will wait for an eligible device/u)
+    const reconcile = [...document.querySelectorAll('button')].find(button => button.textContent === 'Check device stop')
+    assert.ok(reconcile)
+    await React.act(async () => { reconcile.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
+    assert.deepEqual(requests.find(([endpoint]) => endpoint === 'work-reconcile-stop')?.[1].workItemId, 'item')
     const input = document.querySelector('textarea')
     assert.ok(input)
     await React.act(async () => {

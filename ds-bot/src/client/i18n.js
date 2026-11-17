@@ -100,6 +100,7 @@ const ZH = {
   'No remote Environment is available. This work will wait for an eligible device.': '当前没有远端执行环境；这项工作会等待符合条件的设备。',
   'Selection source': '选择来源', 'Selection status': '选择状态', 'Selection reason': '选择原因',
   'Execution candidate': '执行候选',
+  'Check device stop': '核查设备停止状态', 'Checking device stop…': '正在核查设备停止状态…',
   'Bound Environment': '绑定执行环境', Version: '版本', 'Selection basis': '选择依据', Eligible: '符合条件', 'Not eligible': '不符合条件',
   'Selection issues': '选择问题',
   'Policy default': '策略默认值', 'Main request': '主对话请求', 'Exact Environment': '指定执行环境',

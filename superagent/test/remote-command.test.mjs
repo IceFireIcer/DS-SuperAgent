@@ -308,11 +308,14 @@ test('the durable Engine job record uses the device-stable job identity', async 
     const job = { jobId, done: Promise.resolve({ exitCode: 0, cancelled: false, truncated: false, settled: true }),
       read: () => ({ stdout: { text: 'done', lossy: false }, stderr: { text: '', lossy: false } }),
       terminate: () => {}, waitForExit: async () => true }
-    const record = await storage.transaction('private', transaction => jobs.start(transaction, {
+    const record = await storage.transaction('private', transaction => jobs.beginLocal(transaction, {
       ticketId: 'ticket', assignmentId: 'assignment', generation: 'generation',
-      environmentId: 'remote-project', command: 'quick', job }))
+      environmentId: 'remote-project', environmentKind: 'remote', command: 'quick', jobId }))
     assert.equal(record.id, jobId)
-    jobs.attach(record)
+    const active = await storage.transaction('private', transaction => jobs.activateLocal(transaction,
+      { ticketId: 'ticket', jobId, job }))
+    assert.equal(active.id, jobId)
+    jobs.attach(active)
   } finally {
     jobs.shutdown()
     await storage.close()

@@ -3188,6 +3188,14 @@ export class Engine {
       expectedTicketVersion: command.expectedTicketVersion })
   }
 
+  async reconcileMainStop(command: { instanceId: string; commandId: string; workItemId: string; ticketId: string }) {
+    if (!command || Object.keys(command).some(key => !['instanceId', 'commandId', 'workItemId', 'ticketId'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'Reconciling a Main stop accepts only its exact work card.')
+    }
+    await this.requireMainWorkControl(command)
+    return this.reconcileStop({ commandId: command.commandId, ticketId: command.ticketId })
+  }
+
   async resumeMainWork(command: { instanceId: string; commandId: string; workItemId: string; ticketId: string; expectedGeneration: string }) {
     if (!command || Object.keys(command).some(key => !['instanceId', 'commandId', 'workItemId', 'ticketId', 'expectedGeneration'].includes(key))) {
       throw new CoreError('INVALID_INPUT', 'Resuming work accepts only its exact card target.')
