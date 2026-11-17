@@ -24,6 +24,7 @@ import { allThemes, themeCss } from './themes.js'
 import { SHELL_CSS, CONVERSATION_CSS, installCompiledStyles, installStyles } from './styles.js'
 import { ProductMcpSettings } from './product-mcp-settings.js'
 import { ProductBrowserSettings, PRODUCT_BROWSER_CSS } from './product-browser-settings.js'
+import { ProductExecutionSettings, PRODUCT_EXECUTION_CSS } from './product-execution.js'
 
 const clientBridge = () => window.dsBotApp?.productClient
 let activeHost = 'local'
@@ -89,6 +90,9 @@ export function applyProduct(ctx) {
     connectOpen: false,
     directoryOptions: null,
     directoryOverride: null,
+    executionTarget: null,
+    localEnvironmentOverride: null,
+    remoteEnvironmentOverride: null,
     directoryBusy: false,
     directoryError: null,
   })
@@ -118,7 +122,11 @@ export function applyProduct(ctx) {
 
   const loadDirectories = async binding => {
     try {
-      const options = await productCall('directory-options', { instanceId: binding.instanceId })
+      const [options, execution] = await Promise.all([
+        productCall('directory-options', { instanceId: binding.instanceId }),
+        productCall('execution-options', { instanceId: binding.instanceId }),
+      ])
+      options.execution = execution
       if (!stopped) view.set(state => ({ ...state, directoryOptions: options }))
       return options
     } catch (error) {
@@ -268,7 +276,11 @@ export function applyProduct(ctx) {
       const current = view.getSnapshot()
       const binding = current.binding ?? await productCall('open')
       if (current.route === 'main') await refreshMain(binding)
-      if (!connection.connected) await loadDirectories(binding)
+      if (!connection.connected && !view.getSnapshot().directoryOptions) await loadDirectories(binding)
+      else if (connection.connected && !view.getSnapshot().directoryOptions?.execution) {
+        const execution = await productCall('execution-options', { instanceId: binding.instanceId })
+        if (!stopped) view.set(state => ({ ...state, directoryOptions: { ...state.directoryOptions, execution } }))
+      }
       await loadObservations(binding)
       const selected = view.getSnapshot().route === 'observe' ? view.getSnapshot().selectedObservation : null
       if (selected) await loadObservation(binding, selected)
@@ -304,6 +316,33 @@ export function applyProduct(ctx) {
     attention: t('Question'), result: t('Result'), policy: t('Policy update') })[purpose] ?? purpose
   const conditionCopy = state => ({ open: t('Pull request open'), draft: t('Pull request draft'),
     merged: t('Pull request merged'), closed: t('Pull request closed') })[state] ?? state
+  const executionTargetCopy = target => ({ 'local-only': t('Local'), 'remote-only': t('Remote only'),
+    auto: t('Auto') })[target] ?? target
+  const executionSourceCopy = source => ({ default: t('Policy default'), ticket: t('Main request'),
+    explicit: t('Exact Environment') })[source] ?? source
+  const executionStatusCopy = status => ({ selected: t('Selected'),
+    waiting: t('Waiting for an eligible Environment') })[status] ?? status
+  const permissionLabels = { read: t('Read access'), write: t('Write access'), search: t('Search access'),
+    command: t('Command access'), browser: t('Browser'), mcp: t('MCP'), office: t('Office') }
+  const permissionCopy = values => (values ?? []).map(value => permissionLabels[value] ?? t(value)).join(', ')
+  const capabilityReasonCopy = reason => {
+    const target = /^target ([^ ]+) excludes (local|remote) Environments$/u.exec(reason)
+    if (target) return t('target {target} excludes {kind} Environments',
+      { target: executionTargetCopy(target[1]), kind: target[2] === 'local' ? t('Local') : t('Remote') })
+    if (reason.startsWith('Environment is offline:')) return t('Environment is offline: {reason}',
+      { reason: reason.slice('Environment is offline: '.length) })
+    if (reason === 'Environment is offline') return t('Environment is offline')
+    if (reason === 'Environment version is unverified') return t('Environment version is unverified')
+    if (reason === 'Environment fingerprint is unverified') return t('Environment fingerprint is unverified')
+    if (reason === 'Environment capacity is unknown') return t('Environment capacity is unknown')
+    const missing = /^missing capability: ([^ (]+)(?: \((.+)\))?$/u.exec(reason)
+    if (missing) return missing[2]
+      ? t('Missing capability: {capability} ({detail})', { capability: t(missing[1]), detail: missing[2] })
+      : t('Missing capability: {capability}', { capability: t(missing[1]) })
+    const capacity = /^capacity is full \((.+)\)$/u.exec(reason)
+    if (capacity) return t('Execution capacity is full ({count}).', { count: capacity[1] })
+    return t(reason)
+  }
   function MainWorkCard({ work, onEvidence }) {
     const state = useView()
     const canCommand = !state.connection?.connected || state.connection.capabilities.includes('command')
@@ -391,7 +430,24 @@ export function applyProduct(ctx) {
       h('p', { className: 'bt-main-work-id' }, `${t('Work brief')} ${work.brief.id}`),
       work.brief.configurationRevision ? h('p', { className: 'bt-main-work-id' },
         `${t('Configuration version')} v${work.brief.configurationRevision}`) : null,
+      work.brief.target ? h('p', { className: 'bt-main-work-id' },
+        `${t('Execution target')}: ${executionTargetCopy(work.brief.target)}`) : null,
+      work.brief.capabilities?.length ? h('p', { className: 'bt-main-work-id' },
+        `${t('Required capabilities')}: ${permissionCopy(work.brief.capabilities)}`) : null,
       work.brief.directory ? h('p', { className: 'bt-main-work-id' }, `${t('Work directory')}: ${work.brief.directory}`) : null,
+      work.executionLocation ? h('p', { className: 'bt-main-work-id' },
+        `${t('Bound Environment')}: ${work.executionLocation.kind === 'remote' ? t('Remote') : t('Local')}`
+        + `${work.executionLocation.deviceId ? ` · ${t('Device')}: ${work.executionLocation.deviceId}` : ''}`
+        + ` · ${t('Directory')}: ${work.executionLocation.root}`
+        + `${work.executionLocation.version ? ` · ${t('Version')}: ${work.executionLocation.version}` : ''}`) : null,
+      work.executionSelection ? h('div', { className: 'bt-main-work-detail' },
+        h('p', null, `${t('Selection basis')}: ${executionSourceCopy(work.executionSelection.source)} · ${executionStatusCopy(work.executionSelection.status)}`
+          + `${work.executionSelection.reason ? ` · ${capabilityReasonCopy(work.executionSelection.reason)}` : ''}`),
+        work.executionSelection.candidates?.length ? h('ul', null, work.executionSelection.candidates.slice(0, 8).map(candidate =>
+          h('li', { key: candidate.id }, `${candidate.kind === 'remote' ? t('Remote') : t('Local')} · ${candidate.id}`
+            + `${candidate.deviceId ? ` · ${t('Device')}: ${candidate.deviceId}` : ''} · ${candidate.eligible ? t('Eligible') : t('Not eligible')}`
+            + `${candidate.permissions?.length ? ` · ${t('Capabilities')}: ${permissionCopy(candidate.permissions)}` : ''}`
+            + `${candidate.reasons?.length ? ` · ${candidate.reasons.map(capabilityReasonCopy).join('; ')}` : ''}`))) : null) : null,
       h('p', { className: 'bt-main-work-id' }, `${t('Receipt')}: ${receiptCopy(work.receipt.status)}`),
       work.receipt.ticketId ? h('p', { className: 'bt-main-work-id' }, `${t('Ticket')} ${work.receipt.ticketId}`) : null,
       control ? h('p', { className: 'bt-main-work-id' }, `${t('Ticket version')}: ${control.ticketVersion}`) : null,
@@ -553,6 +609,19 @@ export function applyProduct(ctx) {
     const scroll = useRef(null)
     const follow = useRef(true)
     const restoreHeight = useRef(null)
+    const execution = state.directoryOptions?.execution
+    const policyTarget = execution?.policy?.defaultTarget === 'remote-only' ? 'remote-only'
+      : execution?.policy?.defaultTarget === 'auto' ? 'auto' : 'local-only'
+    const executionTarget = state.executionTarget ?? policyTarget
+    const localEnvironments = execution?.environments?.filter(environment => environment.kind === 'local') ?? []
+    const remoteEnvironments = execution?.environments?.filter(environment => environment.kind === 'remote') ?? []
+    const selectedRemoteEnvironment = remoteEnvironments.find(environment =>
+      environment.id === state.remoteEnvironmentOverride) ?? remoteEnvironments[0]
+    const selectedLocalEnvironmentId = state.directoryOverride ?? state.directoryOptions?.default?.environmentId
+      ?? state.localEnvironmentOverride ?? (state.connection?.connected ? localEnvironments[0]?.id : undefined)
+    const selectedEnvironmentId = executionTarget === 'remote-only' ? selectedRemoteEnvironment?.id
+      : executionTarget === 'local-only' ? selectedLocalEnvironmentId : undefined
+    const selectedEnvironment = execution?.environments?.find(environment => environment.id === selectedEnvironmentId)
     useEffect(() => {
       if (restoreHeight.current !== null && scroll.current) {
         scroll.current.scrollTop += scroll.current.scrollHeight - restoreHeight.current
@@ -560,7 +629,8 @@ export function applyProduct(ctx) {
       } else if (follow.current) bottom.current?.scrollIntoView({ block: 'end', behavior: 'instant' })
     }, [state.messages.length])
     const uploadFiles = async files => {
-      const environmentId = state.directoryOverride ?? state.directoryOptions?.default?.environmentId
+      if (executionTarget === 'auto') { setSendError(t('Choose Local or Remote only before adding files.')); return }
+      const environmentId = selectedEnvironmentId
       if (!state.binding || !environmentId) { setSendError(t('Choose a work directory before adding files.')); return }
       if (attachments.some(attachment => attachment.environmentId !== environmentId)) {
         setSendError(t('Remove attached files before changing directories.')); return
@@ -605,7 +675,13 @@ export function applyProduct(ctx) {
     const send = async text => {
       if (!state.binding) return false
       const attachmentIds = attachments.map(attachment => attachment.id)
-      const environmentId = attachments[0]?.environmentId ?? state.directoryOverride
+      const environmentId = attachments[0]?.environmentId ?? selectedEnvironmentId
+      if (executionTarget === 'local-only' && !environmentId || attachmentIds.length && !environmentId) {
+        setSendError(t('Choose an authorized Environment for this execution target.')); return false
+      }
+      if (executionTarget === 'auto' && attachmentIds.length) {
+        setSendError(t('Remove attached files before using automatic target selection.')); return false
+      }
       const storageKey = `superagent:pending:${state.connection?.connected
         ? `${state.connection.address}:${state.connection.client.id}` : 'local'}:${state.binding.instanceId}`
       try {
@@ -614,10 +690,12 @@ export function applyProduct(ctx) {
           try { pending.current = JSON.parse(sessionStorage.getItem(storageKey) ?? 'null') } catch { /* Draft storage is optional. */ }
         }
         if (!pending.current || pending.current.text !== text
+          || pending.current.target !== executionTarget
+          || pending.current.environmentId !== environmentId
           || JSON.stringify(pending.current.attachments ?? []) !== JSON.stringify(attachmentIds)) {
           pending.current = { commandId: crypto.randomUUID(), text,
           ...(attachmentIds.length ? { attachments: attachmentIds } : {}),
-          ...(environmentId ? { environmentId } : {}) }
+          target: executionTarget, ...(environmentId ? { environmentId } : {}) }
         }
         try { sessionStorage.setItem(storageKey, JSON.stringify(pending.current)) } catch { /* The stable identity still lives until this window closes. */ }
         const result = await productCall('send', { instanceId: state.binding.instanceId, ...pending.current })
@@ -625,7 +703,7 @@ export function applyProduct(ctx) {
         try { sessionStorage.removeItem(storageKey) } catch { /* Draft storage is optional. */ }
         await refreshMain(state.binding)
         setAttachments([])
-        view.set(current => ({ ...current, directoryOverride: null }))
+        view.set(current => ({ ...current, directoryOverride: null, localEnvironmentOverride: null, remoteEnvironmentOverride: null }))
         if (result.status === 'failed') { setSendError(t('Main could not finish this reply. Your message is saved.')); return false }
         return true
       } catch (error) { setSendError(error.message); await refreshMain(state.binding); return false }
@@ -657,6 +735,41 @@ export function applyProduct(ctx) {
       } catch (error) { view.set(current => ({ ...current, directoryError: error.message })) }
       finally { view.set(current => ({ ...current, directoryBusy: false })) }
     }
+    const chooseTarget = value => {
+      if (attachments.length) { setSendError(t('Remove attached files before changing execution targets.')); return }
+      view.set(current => ({ ...current, executionTarget: value, localEnvironmentOverride: null, remoteEnvironmentOverride: null }))
+    }
+    const targetControl = execution ? h('div', { className: 'bt-main-directory' },
+      h('span', { className: 'bt-main-label' }, t('Execution target')),
+      h('select', { className: 'bt-select', 'aria-label': t('Execution target'), value: executionTarget,
+        onChange: event => chooseTarget(event.target.value), disabled: busy },
+      h('option', { value: 'local-only' }, t('Local')),
+      h('option', { value: 'remote-only' }, t('Remote only')),
+      h('option', { value: 'auto' }, t('Auto'))),
+      executionTarget === 'remote-only' ? h('select', { className: 'bt-select', 'aria-label': t('Remote Environment'),
+        value: selectedRemoteEnvironment?.id ?? '', onChange: event => {
+          if (attachments.length) { setSendError(t('Remove attached files before changing Environments.')); return }
+          view.set(current => ({ ...current, remoteEnvironmentOverride: event.target.value || null }))
+        }, disabled: busy },
+      h('option', { value: '' }, t('Choose an authorized remote Environment')),
+      remoteEnvironments.map(environment => h('option', { key: environment.id, value: environment.id },
+        `${environment.label || environment.title || environment.id} · ${environment.root}`))) : null,
+      state.connection?.connected && executionTarget === 'local-only' ? h('select', { className: 'bt-select',
+        'aria-label': t('Local Environment'), value: selectedLocalEnvironmentId ?? '',
+        onChange: event => view.set(current => ({ ...current, localEnvironmentOverride: event.target.value || null })) },
+      h('option', { value: '' }, t('Choose an authorized local Environment')),
+      localEnvironments.map(environment => h('option', { key: environment.id, value: environment.id },
+        `${environment.title || environment.id} · ${environment.root}`))) : null,
+      selectedEnvironment ? h('span', { className: 'bt-main-directory-note' },
+        `${selectedEnvironment.eligible ? t('Eligible') : t('Not eligible')}`
+        + `${selectedEnvironment.version ? ` · ${t('Version')}: ${selectedEnvironment.version}` : ''}`
+        + `${selectedEnvironment.deviceId ? ` · ${t('Device')}: ${selectedEnvironment.deviceId}` : ''}`
+        + `${selectedEnvironment.reasons?.length ? ` · ${selectedEnvironment.reasons.map(capabilityReasonCopy).join('; ')}` : ''}`) : null,
+      h('span', { className: 'bt-main-directory-note' }, executionTarget === 'auto'
+        ? t('This work chooses an eligible Environment when its Ticket starts. Attachments need an exact target.')
+        : executionTarget === 'remote-only' && !selectedEnvironmentId
+          ? t('No remote Environment is available. This work will wait for an eligible device.')
+          : t('New work uses this Environment. Active work keeps its original binding.'))) : null
     return h('section', { className: 'bt-main-conversation', 'aria-label': 'Main' },
       h('header', { className: 'bt-main-header' }, h(BrandMark, { size: 28 }), h('span', null, 'Main'),
         h('span', { className: `bt-main-health bt-main-health-${state.health?.state ?? 'ready'}`, role: 'status' },
@@ -726,15 +839,16 @@ export function applyProduct(ctx) {
         value: state.mainDraft, onValueChange: mainDraft => view.set(current => ({ ...current, mainDraft })),
         attachments, uploading, onRemoveAttachment: removeAttachment,
         speechRemote: () => ctx.get('remote.speech') ?? undefined,
-        onFiles: !state.connection?.connected && (state.directoryOverride || options?.default?.environmentId)
+        onFiles: !state.connection?.connected && executionTarget !== 'auto' && selectedEnvironmentId
           ? files => void uploadFiles(files) : undefined,
-        directoryControl: !state.connection?.connected && options?.default ? h('div', { className: 'bt-main-directory' },
-          h('span', { className: 'bt-main-label' }, t('Work directory')),
-          h(FolderMenu, { value: override?.root, label: t('Work directory'), fallbackLabel: t('Instance default'),
-            actions: directoryActions(state.binding), run: promise => void Promise.resolve(promise).catch(error =>
-              view.set(current => ({ ...current, directoryError: error.message }))), onPick: chooseWorkDirectory,
-            disabled: busy || state.directoryBusy }),
-          h('span', { className: 'bt-main-directory-note' }, t('New work uses this directory. Active work keeps its own directory.')),
+        directoryControl: execution ? h('div', { className: 'bt-main-directory' },
+          targetControl,
+          !state.connection?.connected && executionTarget === 'local-only' && options?.default ? h(Fragment, null,
+            h('span', { className: 'bt-main-label' }, t('Work directory')),
+            h(FolderMenu, { value: override?.root, label: t('Work directory'), fallbackLabel: t('Instance default'),
+              actions: directoryActions(state.binding), run: promise => void Promise.resolve(promise).catch(error =>
+                view.set(current => ({ ...current, directoryError: error.message }))), onPick: chooseWorkDirectory,
+              disabled: busy || state.directoryBusy })) : null,
           state.directoryError ? h('p', { className: 'bt-main-error', role: 'alert' }, state.directoryError) : null) : null }))
   }
 
@@ -1169,6 +1283,8 @@ export function applyProduct(ctx) {
           h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
             'aria-current': page === 'roles' ? 'page' : undefined, onClick: () => setPage('roles') }, h(SlidersIcon), t('Roles and providers')),
           h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
+            'aria-current': page === 'execution' ? 'page' : undefined, onClick: () => setPage('execution') }, h(GlobeIcon), t('Execution')),
+          h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
             'aria-current': page === 'schedules' ? 'page' : undefined, onClick: () => setPage('schedules') }, h(ClockIcon), t('Scheduled tasks')),
           h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
             'aria-current': page === 'preparations' ? 'page' : undefined, onClick: () => setPage('preparations') }, h(ClockIcon), t('Proactive preparation')),
@@ -1182,12 +1298,15 @@ export function applyProduct(ctx) {
             'aria-current': page === 'supervision' ? 'page' : undefined, onClick: () => setPage('supervision') }, h(SlidersIcon), t('Supervision')) : null,
           h('span', { className: 'bt-main-settings-revision' }, `${t('Configuration')} v${snapshot.revision}`)),
         h('div', { className: 'bt-settings-main' },
-          h('div', { className: 'bt-settings-head' }, h('h2', null, page === 'schedules' ? t('Scheduled tasks')
+          h('div', { className: 'bt-settings-head' }, h('h2', null, page === 'execution' ? t('Execution')
+            : page === 'schedules' ? t('Scheduled tasks')
             : page === 'presets' ? t('Role presets') : page === 'preparations' ? t('Proactive preparation')
               : page === 'memory' ? t('Memory') : page === 'browser' ? t('Browser resources')
                 : page === 'supervision' ? t('Supervision') : t('Super-agent settings'))),
           h('div', { className: 'bt-settings-scroll' },
-            page === 'schedules' ? h(ProductScheduleSettings, { binding, works: view.getSnapshot().works, call: productCall,
+            page === 'execution' ? h(ProductExecutionSettings, { binding, call: productCall,
+              onChanged: () => { void loadDirectories(binding) } })
+              : page === 'schedules' ? h(ProductScheduleSettings, { binding, works: view.getSnapshot().works, call: productCall,
               onViewWork: viewWork })
               : page === 'preparations' ? h(ProductProactiveSettings, { binding, call: productCall })
               : page === 'presets' ? h(ProductPresetSettings, { binding, call: productCall,
@@ -1328,7 +1447,7 @@ export function applyProduct(ctx) {
         onClose: () => view.set(current => ({ ...current, connectOpen: false })) }) : null)
   }
   const shadow = (name, component) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200 }, component))
-  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SCHEDULE_CSS + MODEL_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + LEARNING_CSS, 'main'), 'superagent: existing chat styles')
+  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SCHEDULE_CSS + MODEL_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_EXECUTION_CSS + LEARNING_CSS, 'main'), 'superagent: existing chat styles')
   ctx.effect(() => { const style = installStyles(themeCss(allThemes().deepseek), 'main-theme'); return () => style.remove() }, 'superagent: existing theme')
   shadow('main.conversation', ProductSurface)
   shadow('sidebar.workspaces', MainNavigation)

@@ -3,6 +3,7 @@ import { CoreError, identifier, type Work } from './model.js'
 import type { NativeSessions } from './native-sessions.js'
 import type { AsyncTx, Storage } from './storage.js'
 import type { Assignment } from './execution.js'
+import { loadExecutionSelection } from './execution-target.js'
 import type { Attention } from './attention.js'
 import type { MainWorkBrief, MainWorkItem, MainWorkOutcome, MainWorkPlanConflict, MainWorkReceipt,
   MainWorkUpdate } from './work-delegation.js'
@@ -569,6 +570,7 @@ export class WorkObservations {
     const ticket = await transaction.get<Work['ticket']>('ticket', ticketId)
     const trigger = ticket ? await transaction.get<Work['trigger']>('trigger', ticket.triggerId) : undefined
     if (!ticket || !trigger) throw new CoreError('NOT_FOUND', 'The requested work observation is unavailable.')
+    const selection = await loadExecutionSelection(transaction, ticketId)
     const assignments = await this.assignments(transaction, ticketId)
     const currentAssignment = await transaction.get<Assignment>('assignment', ticketId)
     const selected = typeof requestedGeneration === 'string'
@@ -635,6 +637,16 @@ export class WorkObservations {
           ? 'unknown' : String(selected.configurationRevision) },
         { label: 'Generation state', value: current ? 'Current' : 'Historical' },
         { label: 'Environment', value: selected.environment?.id ?? 'unknown' },
+        { label: 'Execution target', value: brief.target ?? selection?.target ?? 'local-only' },
+        { label: 'Required capabilities', value: brief.capabilities?.join(', ') || 'none' },
+        ...(selection ? [
+          { label: 'Selection source', value: selection.source },
+          { label: 'Selection status', value: selection.status },
+          ...(selection.reason ? [{ label: 'Selection reason', value: summary(selection.reason) }] : []),
+          ...selection.candidates.map(candidate => ({ label: 'Execution candidate', value: summary(
+            `${candidate.id} (${candidate.kind}): ${candidate.eligible ? 'eligible' : 'blocked'}${candidate.reasons.length ? `; ${candidate.reasons.join('; ')}` : ''}`,
+            2048) })),
+        ] : []),
         ...mcpCalls.items.map(call => ({ label: 'MCP request', value: [
           `${call.state === 'confirmed' ? `confirmed ${call.outcome ?? 'unknown'}` : 'unknown'} · ${call.serverName}/${call.toolName}`,
           `original request ${call.requestId}`, `input SHA-256 ${call.inputSha256}`,

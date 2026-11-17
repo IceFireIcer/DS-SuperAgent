@@ -9,13 +9,14 @@ export type ExecutionDefaultTarget = 'local' | 'remote-only' | 'auto'
 
 export interface ExecutionPolicyConfig {
   defaultTarget: ExecutionDefaultTarget
-  preferredEnvironmentId?: string
+  preferredEnvironmentId?: string | null
   requiredPermissions: LocalPermission[]
 }
 
-export interface ExecutionPolicyView extends ExecutionPolicyConfig {
+export interface ExecutionPolicyView extends Omit<ExecutionPolicyConfig, 'preferredEnvironmentId'> {
   revision: number
   updatedAt: number
+  preferredEnvironmentId?: string | null
 }
 
 interface StoredExecutionPolicy extends ExecutionPolicyView { version: 1 }
@@ -66,7 +67,9 @@ export function validateExecutionPolicy(value: ExecutionPolicyConfig) {
   if (!['local', 'remote-only', 'auto'].includes(value.defaultTarget)) {
     throw new CoreError('INVALID_CONFIG', 'The default execution target is local, remote-only or auto.')
   }
-  if (value.preferredEnvironmentId !== undefined) identifier(value.preferredEnvironmentId, 'preferredEnvironmentId')
+  if (value.preferredEnvironmentId !== undefined && value.preferredEnvironmentId !== null) {
+    identifier(value.preferredEnvironmentId, 'preferredEnvironmentId')
+  }
   if (!Array.isArray(value.requiredPermissions) || !value.requiredPermissions.length
     || new Set(value.requiredPermissions).size !== value.requiredPermissions.length
     || value.requiredPermissions.some(permission => !permissions.has(permission))) {

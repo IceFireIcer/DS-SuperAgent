@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import type { AdmittedPromptContentPart, AttachmentStore, FileAttachmentRef, ImageAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import { canonicalJson, commandTransaction } from './commands.js'
 import { maxProductAttachmentBytes, type EnvironmentAssetPage, type EnvironmentAssetReference } from './environment-assets.js'
-import type { LocalEnvironment } from './local-environment.js'
+import type { ExecutionEnvironment } from './environment.js'
 import { CoreError, identifier } from './model.js'
 import type { AsyncTx, Storage } from './storage.js'
 
@@ -101,7 +101,7 @@ export async function resolveProductAttachments(tx: AsyncTx, request: {
 export class ProductAttachments {
   constructor(private readonly storage: Storage, private readonly instanceId: string,
     private readonly attachments: Pick<AttachmentStore, 'admitEncodedFile' | 'admitPromptContent'>,
-    private readonly environment: (id: string) => LocalEnvironment | undefined,
+    private readonly environment: (id: string) => ExecutionEnvironment | undefined,
     private readonly environmentActorId?: string) {}
 
   private identity(request: { instanceId: string; actorId: string; clientId?: string }) {
@@ -162,8 +162,9 @@ export class ProductAttachments {
       if (admitted?.type !== 'image') throw new CoreError('ATTACHMENT_UNAVAILABLE', 'The attachment service did not admit the image.')
       native = admitted.attachment
     }
-    const asset = await (await owner.prepare({ instanceId: this.instanceId, actorId: this.environmentActorId ?? request.actorId }))
-      .saveProductAttachment({ name: request.name, data: bytes, ...(request.mediaType ? { mediaType: request.mediaType } : {}) })
+    const bound = await owner.prepare({ instanceId: this.instanceId, actorId: this.environmentActorId ?? request.actorId })
+    if (!bound.saveAttachment) throw new CoreError('ENVIRONMENT_UNSUPPORTED', 'This Environment has no attachment store.')
+    const asset = await bound.saveAttachment({ name: request.name, data: bytes, ...(request.mediaType ? { mediaType: request.mediaType } : {}) })
     const id = key.slice('upload:'.length)
     return commandTransaction(this.storage, this.instanceId, async tx => {
       const existing = await tx.get<UploadReceipt>('product-attachment', key)
@@ -193,7 +194,8 @@ export class ProductAttachments {
     const owner = this.environment(record.environmentId)
     if (!owner) throw new CoreError('ENVIRONMENT_NOT_FOUND', 'The original work directory is unavailable.')
     const bound = await owner.prepare({ instanceId: this.instanceId, actorId: this.environmentActorId ?? request.actorId })
-    const page = await bound.readProductAsset(record.asset, { ...(request.offset === undefined ? {} : { offset: request.offset }),
+    if (!bound.readAsset) throw new CoreError('ENVIRONMENT_UNSUPPORTED', 'This Environment cannot read attachments.')
+    const page = await bound.readAsset(record.asset, { ...(request.offset === undefined ? {} : { offset: request.offset }),
       ...(request.maxBytes === undefined ? {} : { maxBytes: request.maxBytes }) })
     const current = await this.storage.transaction(this.instanceId, tx => this.record(tx, request.id, request))
     if (current.state !== 'active') throw new CoreError('ATTACHMENT_REVOKED', 'The attachment was revoked during this read.')

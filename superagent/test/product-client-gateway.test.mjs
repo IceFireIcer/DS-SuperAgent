@@ -90,6 +90,7 @@ test('read-only client routes cannot write, guessed routes cannot bypass product
   const client = new RemoteProductClient()
   await client.connect({ address, instanceId: 'personal', credential: viewer.token })
   assert.deepEqual((await client.call('observe-list', { instanceId: 'personal' })).items, [])
+  assert.equal((await client.call('execution-options', { instanceId: 'personal' })).policy.defaultTarget, 'local')
   await assert.rejects(client.call('send', { instanceId: 'personal', commandId: 'blocked', text: 'No.' }), /not authorized/u)
   for (const endpoint of ['send', 'stop-main', 'work-stop', 'work-answer', 'work-resume', 'work-retry', 'reconcile-delivery', 'proactive-stop']) {
     assert.equal((await direct(address, viewer.token, `product/${endpoint}`, { instanceId: 'personal', commandId: 'no' })).status, 403)
@@ -100,6 +101,9 @@ test('read-only client routes cannot write, guessed routes cannot bypass product
   assert.equal((await direct(address, viewer.token, 'product/schedule-list', { instanceId: 'personal' })).status, 404)
   assert.equal((await direct(address, viewer.token, 'product/schedule-create', { instanceId: 'personal' })).status, 404)
   assert.equal((await direct(address, viewer.token, 'product/proactive-save', { instanceId: 'personal' })).status, 404)
+  assert.equal((await direct(address, viewer.token, 'product/execution-policy-save', { instanceId: 'personal' })).status, 404)
+  assert.equal((await direct(address, viewer.token, 'product/remote-environment-pair', { instanceId: 'personal' })).status, 404)
+  assert.equal((await direct(address, viewer.token, 'product/remote-environment-revoke', { instanceId: 'personal' })).status, 404)
   assert.deepEqual((await client.call('proactive-list', { instanceId: 'personal' })).items, [])
   assert.equal((await direct(address, viewer.token, 'commands/submit', {})).status, 404)
   assert.equal((await direct(address, viewer.token, 'product/observe-read', { instanceId: 'personal', observationId: 'guessed', text: 'write' })).status, 400)

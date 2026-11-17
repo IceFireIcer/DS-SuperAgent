@@ -12,6 +12,9 @@ import type { ClientAccess, ClientCapability, ClientIdentity } from './client-ac
 import { NativeSessions } from './native-sessions.js'
 import { SqliteStorage } from './storage.js'
 import { LocalEnvironment } from './local-environment.js'
+import type { ExecutionEnvironment } from './environment.js'
+import { RemoteEnvironment, type PersistedRemoteEnvironmentState } from './remote-environment.js'
+import { RemoteEnvironmentSecrets, type RemoteCredentialRecords } from './remote-environment-secrets.js'
 import { FeishuRuntime, type FeishuRuntimeOptions } from './feishu-runtime.js'
 import type { FeishuSourceReply } from './feishu-delivery.js'
 import { GitHubRuntime, type GitHubRuntimeOptions } from './github-runtime.js'
@@ -27,6 +30,7 @@ import type { ProductMcpConfiguration } from './product-mcp-configuration.js'
 import { HostBrowserAdapter } from './browser-host.js'
 import type { BrowserAdapter } from './browser-resources.js'
 import { assertReferenceShape } from './environment-assets.js'
+import { canonicalJson } from './commands.js'
 import { localDeliveryChannel, type DeliveryChannel } from './deliveries.js'
 import type { RoleConfig, RoleModel } from './config.js'
 import type { LegacyPresetCopy, PresetRole } from './role-presets.js'
@@ -128,6 +132,10 @@ export async function createProductHost(context: Context, config: ProductHostCon
   const instanceId = config.instanceId ?? 'personal'
   const actorId = config.actorId ?? 'local-user'
   identifier(instanceId, 'instanceId'); identifier(actorId, 'actorId')
+  const credentialRecords = context.get('credentials') as RemoteCredentialRecords | undefined
+  const remoteSecrets = credentialRecords && typeof credentialRecords.readRecord === 'function'
+    && typeof credentialRecords.modifyRecord === 'function' && typeof credentialRecords.deleteRecord === 'function'
+    ? new RemoteEnvironmentSecrets(credentialRecords) : undefined
   const browserAdapter = config.browserAdapter ?? (process.env.DS_BOT_APP === '1' && typeof process.send === 'function'
     ? new HostBrowserAdapter() : undefined)
   if (config.office && (![config.office.node, config.office.cli, config.office.skillsPath].every(isAbsolute)
@@ -143,7 +151,12 @@ export async function createProductHost(context: Context, config: ProductHostCon
   }
   const sessions = new NativeSessions(context, { main: route(config.main), router: route(config.router), worker: route(config.worker), ...(config.timeoutMs === undefined ? {} : { timeoutMs: config.timeoutMs }) })
   const storage = await SqliteStorage.open(config.databasePath)
-  const environments: LocalEnvironment[] = []
+  const environments: ExecutionEnvironment[] = []
+  const remoteEnvironments = new Map<string, { environment: RemoteEnvironment; label: string; pairedAt: number;
+    credentialReference: string }>()
+  const remoteLoadErrors = new Map<string, string>()
+  const activePairCommands = new Set<string>()
+  const activeRevokeCommands = new Set<string>()
   const nativeAttachments = context.get('attachments') as AttachmentStore | undefined
   const attachments = nativeAttachments ? new ProductAttachments(storage, instanceId, nativeAttachments,
     id => environments.find(environment => environment.config.id === id), actorId) : undefined
@@ -318,6 +331,26 @@ export async function createProductHost(context: Context, config: ProductHostCon
     }
     return { provider, configured: value !== null }
   }
+  const executionOptions = async () => {
+    const policy = await engine!.getExecutionPolicy()
+    const preview = await engine!.getExecutionPreview()
+    const candidates = new Map(preview.candidates.map(candidate => [candidate.id, candidate]))
+    const items = await Promise.all(engine!.listEnvironments().map(async environment => {
+      const remote = environment.kind === 'remote' ? remoteEnvironments.get(environment.id) : undefined
+      const candidate = candidates.get(environment.id)
+      const capabilities = await engine!.getEnvironmentCapabilities(environment.id).catch(error =>
+        error instanceof CoreError ? { unavailable: true, reason: error.code } : { unavailable: true, reason: 'CAPABILITY_READ_FAILED' })
+      return { ...environment, target: environment.kind === 'remote' ? 'remote-only' : 'local-only',
+        ...(remote ? { label: remote.label, pairedAt: remote.pairedAt } : {}),
+        ...(candidate ? { online: candidate.online, eligible: candidate.eligible, reasons: candidate.reasons,
+          version: candidate.version, fingerprint: candidate.fingerprint, capacity: candidate.capacity,
+          ...(candidate.productCapabilities ? { productCapabilities: candidate.productCapabilities } : {}) } : {}),
+        capabilities }
+    }))
+    return { policy, preview: { status: preview.status, source: preview.source, target: preview.target,
+      ...(preview.reason ? { reason: preview.reason } : {}), capabilities: preview.capabilities ?? [] }, environments: items,
+      remoteLoadErrors: [...remoteLoadErrors].map(([id, reason]) => ({ id, reason })) }
+  }
   async function dispose() {
     if (scheduleTimer) clearInterval(scheduleTimer)
     if (statusTimer) clearInterval(statusTimer)
@@ -348,6 +381,42 @@ export async function createProductHost(context: Context, config: ProductHostCon
       ...saved.map(item => item.root),
     ]
     for (const root of new Set(roots)) environments.push(await openDirectory(root))
+    let remoteAfter: string | undefined
+    for (let page = 0; page < 10; page++) {
+      const slice = await storage.transaction(instanceId, transaction => transaction.scan<{
+        label: string; pairedAt: number; state: PersistedRemoteEnvironmentState }>('product-remote-environment', {
+        limit: 100, ...(remoteAfter ? { after: remoteAfter } : {}),
+      }))
+      for (const item of slice.items) {
+        let environment: RemoteEnvironment | undefined
+        try {
+          if (typeof item.value.label !== 'string' || !item.value.label.trim() || Buffer.byteLength(item.value.label) > 128
+            || !Number.isSafeInteger(item.value.pairedAt) || item.value.pairedAt < 0) {
+            throw new CoreError('INVALID_CONFIG', 'A saved remote Environment has invalid display metadata.')
+          }
+          if (!remoteSecrets) throw new CoreError('INVALID_CONFIG', 'Saved remote Environments require the DSH credential record service.')
+          environment = await remoteSecrets.withSecret(item.value.state.hostExchangePrivateReference,
+            async privateKey => RemoteEnvironment.restorePersisted(item.value.state, privateKey))
+          if (!environment) throw new CoreError('INVALID_CONFIG', 'A saved remote Environment could not be restored.')
+          const restoredEnvironment = environment
+          if (restoredEnvironment.config.instanceId !== instanceId || !restoredEnvironment.config.allowedActorIds.includes(actorId)
+            || remoteEnvironments.has(restoredEnvironment.config.id)
+            || environments.some(candidate => candidate.config.id === restoredEnvironment.config.id)) {
+            throw new CoreError('INVALID_CONFIG', 'A saved remote Environment has a conflicting identity.')
+          }
+          remoteEnvironments.set(restoredEnvironment.config.id, { environment: restoredEnvironment, label: item.value.label,
+            pairedAt: item.value.pairedAt,
+            credentialReference: item.value.state.hostExchangePrivateReference })
+          environments.push(restoredEnvironment)
+        } catch (error) {
+          await environment?.close().catch(() => {})
+          remoteLoadErrors.set(item.id, error instanceof CoreError ? error.code : 'REMOTE_ENVIRONMENT_RESTORE_FAILED')
+        }
+      }
+      if (!slice.cursor) break
+      if (page === 9) throw new CoreError('DIRECTORY_BUDGET', 'The product remote Environment registry exceeds 1000 entries.')
+      remoteAfter = slice.cursor
+    }
     if (config.feishu) {
       const { withCredential: _externalCredential, ...api } = config.feishu.api
       feishuRuntime = new FeishuRuntime({ ...config.feishu, api: api.appSecret ? api : {
@@ -410,7 +479,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
       } } : {}) }, {}, sessions,
       environments, {}, {}, {}, channel ? { channel } : {}, {}, proactive, attachments)
     workRouter = new ProactiveWork(storage, instanceId, engine, sessions, actorId)
-    const records = context.get('credentials') as ProductCredentialRecords | undefined
+    const records = credentialRecords as ProductCredentialRecords | undefined
     if (records && typeof records.readRecord === 'function' && typeof records.modifyRecord === 'function'
       && typeof records.deleteRecord === 'function') resourceManager = engine.createProductCredentialManager(records)
     if (config.workerMcpTool) {
@@ -503,7 +572,14 @@ export async function createProductHost(context: Context, config: ProductHostCon
             : endpoint === 'schedule-read' ? ['instanceId', 'ruleId']
               : endpoint === 'schedule-create' ? ['instanceId', 'commandId', 'title', 'text', 'timezone', 'when', 'target']
                 : endpoint === 'schedule-cancel' ? ['instanceId', 'commandId', 'ruleId']
-                : endpoint === 'send' ? ['instanceId', 'commandId', 'text', 'environmentId', 'attachments']
+                : endpoint === 'send' ? ['instanceId', 'commandId', 'text', 'environmentId', 'target', 'attachments']
+                  : endpoint === 'execution-options' ? ['instanceId']
+                    : endpoint === 'execution-policy-save' ? ['instanceId', 'commandId', 'expectedRevision', 'policy']
+                      : endpoint === 'remote-environment-pair' ? ['instanceId', 'commandId', 'environmentId', 'label', 'endpoint',
+                        'pairingCode', 'expectedDeviceId', 'expectedDeviceKey', 'permissions']
+                        : endpoint === 'remote-environment-pair-read' || endpoint === 'remote-environment-pair-abandon'
+                          ? ['instanceId', 'commandId']
+                          : endpoint === 'remote-environment-revoke' ? ['instanceId', 'commandId', 'environmentId']
                   : endpoint === 'attachment-upload' ? ['instanceId', 'commandId', 'environmentId', 'kind', 'name', 'mediaType', 'data']
                     : endpoint === 'attachment-read' ? ['instanceId', 'id', 'offset', 'maxBytes']
                       : endpoint === 'attachment-revoke' ? ['instanceId', 'id']
@@ -552,6 +628,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
         if (Object.keys(payload).some(key => !fields.includes(key))) throw new CoreError('INVALID_INPUT', 'The product request contains unsupported fields.')
         if (client && endpoint.startsWith('schedule-')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Schedule administration requires the local authorized product settings.')
+        }
+        if (client && (endpoint === 'execution-policy-save' || endpoint.startsWith('remote-environment-'))) {
+          throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Execution and device administration requires the local authorized product settings.')
         }
         if (client && (endpoint === 'github-start' || endpoint === 'github-stop')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'GitHub source administration requires the local authorized product settings.')
@@ -911,13 +990,254 @@ export async function createProductHost(context: Context, config: ProductHostCon
             && current.has(run.ruleId)).map(run => ({ id: run.id, ruleId: run.ruleId,
               sourceInstanceId: run.sourceInstanceId, eventId: run.eventId, summary: run.summary, createdAt: run.createdAt })) }
         }
+        if (endpoint === 'execution-options') return executionOptions()
+        if (endpoint === 'execution-policy-save') return engine!.updateExecutionPolicy({
+          commandId: payload.commandId as string, expectedRevision: payload.expectedRevision as number,
+          policy: payload.policy as import('./execution-target.js').ExecutionPolicyConfig })
+        if (endpoint === 'remote-environment-pair') {
+          if (!remoteSecrets) throw new CoreError('UNAVAILABLE', 'Remote device pairing requires the DSH credential record service.')
+          identifier(payload.commandId, 'commandId')
+          const commandKey = `product-remote-environment-command:${payload.commandId as string}`
+          if (activePairCommands.has(commandKey)) {
+            throw new CoreError('PAIRING_PENDING', 'The device pairing command is still running.')
+          }
+          activePairCommands.add(commandKey)
+          try {
+          const environmentId = payload.environmentId as string
+          identifier(environmentId, 'environmentId')
+          const label = typeof payload.label === 'string' ? payload.label.trim() : ''
+          if (!label || Buffer.byteLength(label) > 128) throw new CoreError('INVALID_INPUT', 'A remote Environment needs a bounded label.')
+          const permissions = payload.permissions as import('./remote-environment.js').RemoteEnvironmentPermission[]
+          const fingerprint = createHash('sha256').update(canonicalJson(['product-remote-pair-v1', instanceId, actorId,
+            environmentId, label, payload.endpoint, payload.expectedDeviceId, payload.expectedDeviceKey, permissions])).digest('hex')
+          const credentialReference = remoteSecrets.referenceFor(instanceId, payload.commandId as string)
+          const prior = await storage.transaction(instanceId, tx => tx.get<{ fingerprint: string; status: string;
+            environmentId?: string; label?: string; pairedAt?: number; credentialReference?: string }>(
+            'product-remote-environment-command', commandKey))
+          if (prior) {
+            if (prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The device pairing command changed its input.')
+            if (prior.status === 'pending') {
+              await storage.transaction(instanceId, tx => tx.replace('product-remote-environment-command', commandKey,
+                { ...prior, status: 'unknown', credentialReference: prior.credentialReference ?? credentialReference }))
+              throw new CoreError('PAIRING_UNKNOWN', 'The device pairing result is unknown. Inspect the device before issuing a new pairing.')
+            }
+            const current = prior.environmentId ? remoteEnvironments.get(prior.environmentId) : undefined
+            if (current && prior.label && prior.pairedAt) return { id: current.environment.config.id, label: prior.label,
+              pairedAt: prior.pairedAt, kind: 'remote', deviceId: current.environment.deviceId, root: current.environment.config.root,
+              permissions: [...current.environment.config.permissions] }
+            if (prior.status === 'unknown') throw new CoreError('PAIRING_UNKNOWN', 'The device pairing result is unknown. Inspect the device before issuing a new pairing.')
+            if (prior.status === 'abandoned') throw new CoreError('PAIRING_STALE', 'This pairing command was abandoned.')
+            if (prior.status === 'completed') throw new CoreError('PAIRING_STALE', 'This pairing command was already applied and the device was removed.')
+          }
+          if (remoteEnvironments.has(environmentId) || environments.some(environment => environment.config.id === environmentId)) {
+            throw new CoreError('IDENTITY_CONFLICT', 'This Environment ID is already in use.')
+          }
+          await storage.transaction(instanceId, async tx => {
+            if (await tx.get('product-remote-environment-command', commandKey)) {
+              throw new CoreError('PAIRING_UNKNOWN', 'The device pairing result is unknown.')
+            }
+            await tx.insert('product-remote-environment-command', commandKey,
+              { fingerprint, status: 'pending', operation: 'pair', credentialReference })
+          })
+          let environment: RemoteEnvironment
+          try {
+            environment = await RemoteEnvironment.pair({ id: environmentId, instanceId, allowedActorIds: [actorId], permissions,
+              endpoint: payload.endpoint as string, pairingCode: payload.pairingCode as string,
+              expectedDeviceId: payload.expectedDeviceId as string, expectedDeviceKey: payload.expectedDeviceKey as string })
+          } catch (error) {
+            const known = error instanceof CoreError && ['PAIRING_DENIED', 'GRANT_DENIED', 'DEVICE_IDENTITY_MISMATCH', 'INVALID_CONFIG'].includes(error.code)
+            await storage.transaction(instanceId, tx => known ? tx.remove('product-remote-environment-command', commandKey)
+              : tx.replace('product-remote-environment-command', commandKey,
+                { fingerprint, status: 'unknown', operation: 'pair', credentialReference })).catch(() => {})
+            if (known) await remoteSecrets.ensureRemoved(credentialReference).catch(() => {})
+            throw error
+          }
+          const pairedAt = Date.now()
+          try {
+            await remoteSecrets.create(credentialReference, environment.snapshot().hostExchangePrivate)
+            await storage.transaction(instanceId, async tx => {
+              const pending = await tx.get<{ fingerprint: string; status: string }>('product-remote-environment-command', commandKey)
+              if (pending?.fingerprint !== fingerprint || pending.status !== 'pending') {
+                throw new CoreError('PAIRING_STALE', 'This pairing command is no longer pending.')
+              }
+              if (await tx.get('product-remote-environment', environmentId)) throw new CoreError('IDENTITY_CONFLICT', 'This Environment ID is already in use.')
+              await tx.insert('product-remote-environment', environmentId,
+                { label, pairedAt, state: environment.persistedSnapshot(credentialReference) })
+              await tx.replace('product-remote-environment-command', commandKey,
+                { fingerprint, status: 'completed', operation: 'pair', environmentId, label, pairedAt, credentialReference })
+            })
+          } catch (error) {
+            await environment.close()
+            const abandoned = await storage.transaction(instanceId, async tx => {
+              const current = await tx.get<{ status: string }>('product-remote-environment-command', commandKey)
+              if (current?.status === 'pending') await tx.replace('product-remote-environment-command', commandKey,
+                { fingerprint, status: 'unknown', operation: 'pair', credentialReference, environmentId, label, pairedAt })
+              return current?.status === 'abandoned'
+            }).catch(() => false)
+            if (abandoned) {
+              try { await remoteSecrets.ensureRemoved(credentialReference) }
+              catch {
+                await storage.transaction(instanceId, async tx => {
+                  const current = await tx.get<{ status: string }>('product-remote-environment-command', commandKey)
+                  if (current?.status === 'abandoned') await tx.replace('product-remote-environment-command', commandKey,
+                    { fingerprint, status: 'abandoned', operation: 'pair', credentialReference, cleanupPending: true })
+                }).catch(() => {})
+              }
+            }
+            throw error
+          }
+          remoteEnvironments.set(environmentId, { environment, label, pairedAt, credentialReference })
+          environments.push(environment)
+          engine!.registerExecutionEnvironment(environment)
+          return { id: environmentId, label, pairedAt, kind: 'remote', deviceId: environment.deviceId,
+            root: environment.config.root, permissions: [...environment.config.permissions] }
+          } finally {
+            activePairCommands.delete(commandKey)
+          }
+        }
+        if (endpoint === 'remote-environment-pair-read') {
+          identifier(payload.commandId, 'commandId')
+          const commandKey = `product-remote-environment-command:${payload.commandId as string}`
+          const record = await storage.transaction(instanceId, tx => tx.get<{ status: string; operation?: string;
+            environmentId?: string; cleanupPending?: boolean }>('product-remote-environment-command', commandKey))
+          if (!record || record.operation !== undefined && record.operation !== 'pair') {
+            throw new CoreError('NOT_FOUND', 'This pairing command is unavailable.')
+          }
+          const saved = record.environmentId
+            ? await storage.transaction(instanceId, tx => tx.get('product-remote-environment', record.environmentId!))
+            : undefined
+          return { commandId: payload.commandId, status: record.status, active: activePairCommands.has(commandKey),
+            canAbandon: !activePairCommands.has(commandKey) && !saved && ['pending', 'unknown'].includes(record.status),
+            ...(saved ? { recoverable: true } : {}),
+            ...(record.environmentId ? { environmentId: record.environmentId } : {}),
+            ...(record.cleanupPending ? { cleanupPending: true } : {}) }
+        }
+        if (endpoint === 'remote-environment-pair-abandon') {
+          if (!remoteSecrets) throw new CoreError('UNAVAILABLE', 'Remote device pairing requires the DSH credential record service.')
+          identifier(payload.commandId, 'commandId')
+          const commandKey = `product-remote-environment-command:${payload.commandId as string}`
+          if (activePairCommands.has(commandKey)) {
+            throw new CoreError('PAIRING_PENDING', 'The device pairing command is still running.')
+          }
+          const record = await storage.transaction(instanceId, tx => tx.get<{ fingerprint: string; status: string;
+            operation?: string; environmentId?: string; credentialReference?: string; cleanupPending?: boolean }>(
+            'product-remote-environment-command', commandKey))
+          if (!record || record.operation !== undefined && record.operation !== 'pair') {
+            throw new CoreError('NOT_FOUND', 'This pairing command is unavailable.')
+          }
+          if (record.status === 'completed') throw new CoreError('PAIRING_STALE', 'A completed pairing cannot be abandoned here.')
+          if (record.environmentId && await storage.transaction(instanceId, tx =>
+            tx.get('product-remote-environment', record.environmentId!))) {
+            throw new CoreError('PAIRING_STALE', 'A saved device exists for this pairing command. Restart the Host before changing it.')
+          }
+          if (record.status === 'abandoned' && !record.cleanupPending) return { commandId: payload.commandId, abandoned: true }
+          const credentialReference = record.credentialReference
+            ?? remoteSecrets.referenceFor(instanceId, payload.commandId as string)
+          await storage.transaction(instanceId, tx => tx.replace('product-remote-environment-command', commandKey,
+            { ...record, status: 'abandoned', operation: 'pair', credentialReference, cleanupPending: true }))
+          let cleaned = true
+          try { await remoteSecrets.ensureRemoved(credentialReference) }
+          catch {
+            cleaned = false
+            await storage.transaction(instanceId, tx => tx.replace('product-remote-environment-command', commandKey,
+              { ...record, status: 'abandoned', operation: 'pair', credentialReference, cleanupPending: true }))
+          }
+          if (cleaned) {
+            await storage.transaction(instanceId, tx => tx.replace('product-remote-environment-command', commandKey,
+              { ...record, status: 'abandoned', operation: 'pair', credentialReference, cleanupPending: false }))
+          }
+          return { commandId: payload.commandId, abandoned: true, ...(cleaned ? {} : { secretCleanupPending: true }) }
+        }
+        if (endpoint === 'remote-environment-revoke') {
+          if (!remoteSecrets) throw new CoreError('UNAVAILABLE', 'Remote device revocation requires the DSH credential record service.')
+          identifier(payload.commandId, 'commandId')
+          const environmentId = payload.environmentId as string
+          identifier(environmentId, 'environmentId')
+          const commandKey = `product-remote-environment-command:${payload.commandId as string}`
+          if (activeRevokeCommands.has(commandKey)) {
+            throw new CoreError('REVOKE_PENDING', 'The device revocation command is still running.')
+          }
+          activeRevokeCommands.add(commandKey)
+          try {
+          const fingerprint = createHash('sha256').update(canonicalJson(['product-remote-revoke-v1', instanceId, environmentId])).digest('hex')
+          const prior = await storage.transaction(instanceId, tx => tx.get<{ fingerprint: string; status: string;
+            operation?: string; deviceConfirmed?: boolean; reason?: string; credentialReference?: string; cleanupPending?: boolean }>(
+            'product-remote-environment-command', commandKey))
+          if (prior) {
+            if (prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'The device revoke command changed its target.')
+            if (prior.operation !== undefined && prior.operation !== 'revoke') {
+              throw new CoreError('IDENTITY_CONFLICT', 'This command belongs to another device operation.')
+            }
+            if (prior.status === 'completed') {
+              let cleanupPending = prior.cleanupPending === true
+              if (prior.credentialReference) {
+                try {
+                  await remoteSecrets.ensureRemoved(prior.credentialReference)
+                  cleanupPending = false
+                  await storage.transaction(instanceId, tx => tx.replace('product-remote-environment-command', commandKey,
+                    { ...prior, cleanupPending: false }))
+                } catch { cleanupPending = true }
+              }
+              return { environmentId, revoked: true, deviceConfirmed: prior.deviceConfirmed === true,
+                ...(prior.reason ? { reason: prior.reason } : {}), ...(cleanupPending ? { secretCleanupPending: true } : {}) }
+            }
+          }
+          const current = remoteEnvironments.get(environmentId)
+          if (!current) throw new CoreError('NOT_FOUND', 'The remote Environment is not paired in this Host.')
+          await storage.transaction(instanceId, async tx => {
+            const value = { fingerprint, status: 'pending', operation: 'revoke', environmentId,
+              credentialReference: current.credentialReference }
+            if (!await tx.replace('product-remote-environment-command', commandKey, value)) {
+              await tx.insert('product-remote-environment-command', commandKey, value)
+            }
+          })
+          let deviceConfirmed = true
+          let reason: string | undefined
+          if (prior?.status === 'pending') {
+            deviceConfirmed = false
+            reason = 'DEVICE_REVOKE_UNKNOWN'
+          } else {
+            try { await current.environment.revoke() }
+            catch (error) {
+              deviceConfirmed = false
+              reason = error instanceof CoreError ? error.code : 'DEVICE_REVOKE_UNKNOWN'
+            }
+          }
+          await storage.transaction(instanceId, async tx => {
+            await tx.remove('product-remote-environment', environmentId)
+            const value = { fingerprint, status: 'completed', operation: 'revoke', deviceConfirmed,
+              ...(reason ? { reason } : {}), environmentId,
+              credentialReference: current.credentialReference }
+            if (!await tx.replace('product-remote-environment-command', commandKey, value)) {
+              await tx.insert('product-remote-environment-command', commandKey, value)
+            }
+          })
+          await current.environment.close()
+          remoteEnvironments.delete(environmentId)
+          const index = environments.indexOf(current.environment)
+          if (index >= 0) environments.splice(index, 1)
+          engine!.unregisterExecutionEnvironment(environmentId)
+          let secretCleanupPending = false
+          try { await remoteSecrets.ensureRemoved(current.credentialReference) }
+          catch { secretCleanupPending = true }
+          if (secretCleanupPending) {
+            await storage.transaction(instanceId, tx => tx.replace('product-remote-environment-command', commandKey,
+              { fingerprint, status: 'completed', operation: 'revoke', deviceConfirmed, ...(reason ? { reason } : {}), environmentId,
+                credentialReference: current.credentialReference, cleanupPending: true }))
+          }
+          return { environmentId, revoked: true, deviceConfirmed, ...(reason ? { reason } : {}),
+            ...(secretCleanupPending ? { secretCleanupPending: true } : {}) }
+          } finally {
+            activeRevokeCommands.delete(commandKey)
+          }
+        }
         if (endpoint === 'directory-options') {
           const current = await engine!.getInstanceDirectory({ instanceId }).catch(error => {
             if (error instanceof CoreError && error.code === 'DELEGATION_UNAVAILABLE') return null
             throw error
           })
           return { default: current, picker: picker()?.kind ?? null,
-            directories: environments.map(environment => ({ id: environment.config.id, root: environment.config.root,
+            directories: environments.filter(environment => environment.kind === 'local').map(environment => ({ id: environment.config.id, root: environment.config.root,
               title: basename(environment.config.root) || environment.config.root })) }
         }
         if (endpoint === 'directory-pick') {
@@ -938,10 +1258,12 @@ export async function createProductHost(context: Context, config: ProductHostCon
           const root = await directoryRoot(payload.path)
           const id = directoryId(root)
           let environment = environments.find(item => item.config.id === id)
+          if (environment && environment.kind !== 'local') throw new CoreError('IDENTITY_CONFLICT', 'A remote Environment already owns this identity.')
           if (environment && environment.config.root !== root) throw new CoreError('ENVIRONMENT_CHANGED', 'Directory identity changed.')
           const opened = environment ? undefined : await openDirectory(root)
           try {
             environment = environment ?? opened!
+            if (!environment.probe) throw new CoreError('INVALID_CONFIG', 'The local Environment cannot verify its directory.')
             await environment.probe({ instanceId, actorId })
             const record = await engine!.addWorkDirectory({ instanceId, commandId: payload.commandId as string, environment })
             if (opened) environments.push(opened)
@@ -974,12 +1296,14 @@ export async function createProductHost(context: Context, config: ProductHostCon
           const owner = environments.find(environment => environment.config.id === reference.environmentId)
           if (!owner) throw new CoreError('ENVIRONMENT_DENIED', 'This artifact belongs to an unavailable work directory.')
           const bound = await owner.prepare({ instanceId, actorId })
-          return bound.readProductAsset(reference, {
+          if (!bound.readAsset) throw new CoreError('ENVIRONMENT_UNSUPPORTED', 'This Environment cannot read the reported artifact.')
+          return bound.readAsset(reference, {
             ...(payload.offset === undefined ? {} : { offset: payload.offset as number }),
             ...(payload.maxBytes === undefined ? {} : { maxBytes: payload.maxBytes as number }) })
         }
         if (endpoint === 'send') return engine!.sendMainMessage({ instanceId, commandId, text: payload.text as string,
           ...(payload.environmentId === undefined ? {} : { environmentId: payload.environmentId as string }),
+          ...(payload.target === undefined ? {} : { target: payload.target as import('./execution-target.js').ExecutionTarget }),
           ...(payload.attachments === undefined ? {} : { attachments: payload.attachments as string[] }),
           ...(client ? { clientId: client.id } : {}) })
         if (endpoint === 'stop-main') return engine!.stopMainTurn({ instanceId, commandId, messageId: payload.messageId as string })

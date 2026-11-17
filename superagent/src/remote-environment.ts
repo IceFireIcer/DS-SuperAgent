@@ -52,6 +52,10 @@ export interface RemoteEnvironmentState {
   skills?: { supported: true } | null
 }
 
+export interface PersistedRemoteEnvironmentState extends Omit<RemoteEnvironmentState, 'hostExchangePrivate'> {
+  hostExchangePrivateReference: string
+}
+
 interface PairResponse {
   v: number
   pairingId: string
@@ -305,6 +309,14 @@ export class RemoteEnvironment implements ExecutionEnvironment {
       ...(assets ? { assets } : {}), ...(skills ? { skills } : {}), identity, key })
   }
 
+  static restorePersisted(state: PersistedRemoteEnvironmentState, hostExchangePrivate: string): RemoteEnvironment {
+    if (!state || typeof state.hostExchangePrivateReference !== 'string' || !state.hostExchangePrivateReference) {
+      throw new CoreError('INVALID_CONFIG', 'The saved remote connection is missing its credential reference.')
+    }
+    const { hostExchangePrivateReference: _hostExchangePrivateReference, ...restored } = state
+    return RemoteEnvironment.restore({ ...restored, hostExchangePrivate })
+  }
+
   snapshot(): RemoteEnvironmentState {
     if (this.closed) throw new CoreError('ENVIRONMENT_CLOSED', 'The remote Environment is closed.')
     if (this.revokedState) throw new CoreError('DEVICE_REVOKED', 'A revoked device connection cannot be exported again.')
@@ -316,6 +328,14 @@ export class RemoteEnvironment implements ExecutionEnvironment {
       hostExchangePublic: exportPublicKey(this.identity.publicKey), hostNonce: this.hostNonce, root: this.config.root,
       commands: structuredClone(this.commandSpecs), ...(this.assetsState ? { assets: { ...this.assetsState } } : {}),
       ...(this.skillsState ? { skills: { ...this.skillsState } } : {}) }
+  }
+
+  persistedSnapshot(hostExchangePrivateReference: string): PersistedRemoteEnvironmentState {
+    if (typeof hostExchangePrivateReference !== 'string' || !hostExchangePrivateReference) {
+      throw new CoreError('INVALID_CONFIG', 'A remote Environment needs a durable credential reference.')
+    }
+    const { hostExchangePrivate: _hostExchangePrivate, ...state } = this.snapshot()
+    return { ...state, hostExchangePrivateReference }
   }
 
   get revoked() { return this.revokedState }
@@ -408,7 +428,7 @@ export class RemoteEnvironment implements ExecutionEnvironment {
 
   async revoke(signal?: AbortSignal) {
     if (this.closed) throw new CoreError('ENVIRONMENT_CLOSED', 'The remote Environment is closed.')
-    if (this.revokedState) return
+    if (this.revokedState) throw new CoreError('DEVICE_REVOKED', 'The earlier device revocation cannot be confirmed again.')
     try {
       await this.call({ instanceId: this.config.instanceId, environmentId: this.config.id, actorId: this.config.allowedActorIds[0]!, operation: 'revoke', args: {} }, signal, true)
     } finally {

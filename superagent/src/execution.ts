@@ -1025,6 +1025,7 @@ export class Execution {
         && (!attachmentId || attachment.id === attachmentId))
       if (attachmentId && !granted.length) return { item, brief, granted }
       const owner = brief.attachmentOwner ?? { actorId: brief.authorization.actorId }
+      if (!brief.environmentId) throw new CoreError('INCOMPLETE_STATE', 'The attached WorkBrief has no bound Environment.')
       const resolved = await resolveProductAttachments(tx, { instanceId: this.instanceId, actorId: owner.actorId,
         ...(owner.clientId ? { clientId: owner.clientId } : {}), environmentId: brief.environmentId,
         ids: granted.map(attachment => attachment.id) })

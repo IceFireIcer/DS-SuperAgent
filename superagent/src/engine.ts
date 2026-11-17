@@ -355,10 +355,12 @@ export class Engine {
     if (sessions?.mainRoute && this.execution) {
       this.workDelegation = new WorkDelegation({ storage, instanceId, source, sessions, effects: this.effects,
         environmentId: environment?.config.id ?? 'unconfigured',
-        defaultEnvironmentId: async transaction => (await this.instanceDirectoryIn(transaction))?.environmentId ?? 'unconfigured',
+        defaultEnvironmentId: async transaction => (await this.instanceDirectoryIn(transaction))?.environmentId,
         environmentRoot: id => this.environments.find(candidate => candidate.config.id === id
-          && candidate.config.instanceId === instanceId && candidate.kind === 'local'
-          && candidate.config.allowedActorIds.includes(source.actorId))?.config.root,
+          && candidate.config.instanceId === instanceId && candidate.config.allowedActorIds.includes(source.actorId)
+          && candidate.config.permissions.includes('read') && candidate.config.permissions.includes('write'))?.config.root,
+        environmentKind: id => this.environments.find(candidate => candidate.config.id === id
+          && candidate.config.instanceId === instanceId && candidate.config.allowedActorIds.includes(source.actorId))?.kind,
         createTicket: (brief, item) => this.createDelegatedWorkItem(brief, item),
         readTicket: async ticketId => {
           const conversation = await this.conversation(ticketId)
@@ -387,7 +389,8 @@ export class Engine {
               canAnswer: actorAllowed && attention?.status === 'waiting' && status === 'waiting-human',
             },
             ...(assignment ? { assignment: { id: assignment.id, generation: assignment.generation,
-              sessionId: assignment.sessionId, state: assignment.state } } : {}),
+              sessionId: assignment.sessionId, state: assignment.state,
+              ...(assignment.environment ? { environment: assignment.environment } : {}) } } : {}),
             ...(attention ? { attention: { id: attention.id, version: attention.sequence, status: attention.status,
               question: attention.question, options: [...attention.options], freeText: true as const,
               assignmentId: attention.assignmentId, sessionId: attention.sessionId,
@@ -402,6 +405,8 @@ export class Engine {
           }
           return { ticketId, status, reason: conversation.reason, lifecycle: conversation.lifecycle,
             ...(conversation.setup?.state === 'failed' ? { setupCode: conversation.setup.code ?? 'SETUP_FAILED' } : {}),
+            executionLocation: conversation.executionLocation,
+            ...(conversation.executionSelection ? { executionSelection: conversation.executionSelection } : {}),
             ...(report ? { report: { id: report.id, result: report.result, evidence: report.evidence, artifacts: report.artifacts } } : {}),
             control }
         },
@@ -744,11 +749,14 @@ export class Engine {
         ...(event.threadId ? { threadId: event.threadId } : {}), nativeVersion: event.version, reference: handoff.reference }
     }) : undefined
     const trigger: Work['trigger'] = { id: triggerId, instanceId: this.instanceId, source, eventId: brief.sourceEventId,
-      text, environmentId: brief.environmentId, target: 'local-only', targetSource: 'ticket',
+      text, ...(brief.environmentId ? { environmentId: brief.environmentId } : {}), target: brief.target ?? 'local-only',
+      targetSource: brief.environmentId ? 'explicit' : 'ticket',
+      ...(brief.capabilities?.length ? { capabilities: [...brief.capabilities] } : {}),
       ...(images.length ? { nativeImages: images } : {}), ...(deliveryOrigin ? { deliveryOrigin } : {}) }
     const commandId = `main-work-ticket:${brief.id}:${item.id}`
     const fingerprint = `sha256:main-work-item-${brief.attachments ? 'v2' : 'v1'}:${createHash('sha256').update(canonicalJson([
-      this.instanceId, source, brief.sourceEventId, item.id, item.goal, item.constraints, item.acceptanceCriteria, brief.environmentId,
+      this.instanceId, source, brief.sourceEventId, item.id, item.goal, item.constraints, item.acceptanceCriteria,
+      brief.environmentId ?? null, brief.target ?? 'local-only', brief.capabilities ?? [],
       deliveryOrigin?.sourceEventId ?? null, ...(brief.attachments ? [item.attachmentIds, resources, images] : []),
     ])).digest('hex')}`
     return commandTransaction(this.storage, this.instanceId, async transaction => {
@@ -945,6 +953,13 @@ export class Engine {
     return this.executionPolicy.get()
   }
 
+  async getExecutionPreview() {
+    const policy = await this.executionPolicy.get()
+    return selectExecutionTarget({ ticketId: 'execution-preview', instanceId: this.instanceId, actorId: this.source.actorId,
+      hostId: this.host.hostId, environments: this.environments, policy, ticketTarget: 'auto',
+      hostCapabilities: this.hostCapabilities, source: 'default' })
+  }
+
   async updateExecutionPolicy(command: { commandId: string; expectedRevision: number; policy: Partial<ExecutionPolicyConfig> }) {
     await this.ensurePolicy()
     if (!command || Object.keys(command).some(key => !['commandId', 'expectedRevision', 'policy'].includes(key))) {
@@ -957,7 +972,7 @@ export class Engine {
     if (!this.source.allowedActorIds.includes(this.source.actorId)) {
       throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This actor cannot change the execution policy.')
     }
-    if (command.policy.preferredEnvironmentId !== undefined) {
+    if (command.policy.preferredEnvironmentId !== undefined && command.policy.preferredEnvironmentId !== null) {
       const preferred = this.environments.find(environment => environment.config.id === command.policy.preferredEnvironmentId
         && environment.config.instanceId === this.instanceId && environment.config.allowedActorIds.includes(this.source.actorId))
       if (!preferred) throw new CoreError('ENVIRONMENT_DENIED', 'The preferred Environment is not configured and authorized for this actor.')
@@ -1729,9 +1744,24 @@ export class Engine {
       || !environment.config.permissions.includes('read') || !environment.config.permissions.includes('write')) {
       throw new CoreError('ENVIRONMENT_DENIED', 'The work directory must be a writable local Environment for this Instance.')
     }
+    this.registerExecutionEnvironment(environment)
+  }
+
+  registerExecutionEnvironment(environment: ExecutionEnvironment) {
+    if (environment.config.instanceId !== this.instanceId || !environment.config.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('ENVIRONMENT_DENIED', 'This Environment is not authorized for the current Instance and actor.')
+    }
     const existing = this.environments.find(candidate => candidate.config.id === environment.config.id)
-    if (existing && existing.config.root !== environment.config.root) throw new CoreError('ENVIRONMENT_CHANGED', 'An Environment ID cannot change its directory.')
+    if (existing && (existing.kind !== environment.kind || existing.config.root !== environment.config.root
+      || existing.deviceId !== environment.deviceId || existing.deviceIncarnation !== environment.deviceIncarnation)) {
+      throw new CoreError('ENVIRONMENT_CHANGED', 'An Environment ID cannot change its execution world.')
+    }
     if (!existing) this.environments.push(environment)
+  }
+
+  unregisterExecutionEnvironment(environmentId: string) {
+    const index = this.environments.findIndex(environment => environment.config.id === environmentId)
+    if (index >= 0) this.environments.splice(index, 1)
   }
 
   async addWorkDirectory(command: MainAddress & { commandId: string; environment: ExecutionEnvironment }) {
@@ -1805,8 +1835,23 @@ export class Engine {
   }
 
   sendMainMessage(request: MainSend) {
-    if (request.environmentId !== undefined) this.directoryEnvironment(request.environmentId)
-    return this.main.send(request)
+    if (request.target !== undefined && !['local-only', 'remote-only', 'auto'].includes(request.target)) {
+      throw new CoreError('INVALID_INPUT', 'A Main message target is local-only, remote-only or auto.')
+    }
+    let target = request.target
+    if (request.environmentId !== undefined) {
+      const environment = this.environments.find(candidate => candidate.config.id === request.environmentId
+        && candidate.config.instanceId === this.instanceId && candidate.config.allowedActorIds.includes(this.source.actorId)
+        && candidate.config.permissions.includes('read') && candidate.config.permissions.includes('write'))
+      if (!environment) throw new CoreError('ENVIRONMENT_DENIED', 'The selected execution Environment is not authorized for this Instance.')
+      if (request.target && request.target !== 'auto'
+        && (request.target === 'local-only' && environment.kind !== 'local'
+          || request.target === 'remote-only' && environment.kind !== 'remote')) {
+        throw new CoreError('ENVIRONMENT_DENIED', 'The selected Environment does not match the Main message target.')
+      }
+      if (target === undefined) target = environment.kind === 'remote' ? 'remote-only' : 'local-only'
+    }
+    return this.main.send({ ...request, ...(target === undefined ? {} : { target }) })
   }
   stopMainTurn(request: MainAddress & { commandId: string; messageId: string }) { return this.main.stop(request) }
   resumeMainInputs(request: MainAddress) { return this.main.resume(request) }

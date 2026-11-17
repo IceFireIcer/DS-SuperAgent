@@ -23,7 +23,8 @@ const commandRoutes = new Map<string, (engine: Engine, body: Record<string, unkn
   ['retry', (engine, body) => engine.retryTicket(body as never)],
   ['status', (engine, body) => engine.requestStatus(body as never)],
 ])
-const productReads = new Set(['open', 'history', 'observe-list', 'observe-read', 'observe-detail', 'evidence', 'source-deliveries', 'proactive-list', 'proactive-read', 'proactive-control'])
+const productReads = new Set(['open', 'history', 'observe-list', 'observe-read', 'observe-detail', 'evidence', 'source-deliveries',
+  'proactive-list', 'proactive-read', 'proactive-control', 'execution-options'])
 const productCommands = new Set(['send', 'stop-main', 'work-stop', 'work-answer', 'work-resume', 'work-retry', 'reconcile-delivery', 'proactive-stop'])
 
 function statusOf(error: unknown) {

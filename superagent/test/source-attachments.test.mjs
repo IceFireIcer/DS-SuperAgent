@@ -66,11 +66,11 @@ test('an external source keeps admitted files and image blocks through a two-ite
   const github = new Engine(storage, 'private', { kind: 'github', sourceInstanceId: 'github:sample/project', actorId: 'github-receiver',
     allowedActorIds: ['github-receiver'], allowedThreadPrefixes: ['github:sample/project#'], versionOrder: 'sequence',
     intake: { mode: 'auto', maxBatchSize: 5, maxAttempts: 1, timeoutMs: 5000, allowedRequesterIds: ['alice'], allowedBotActorIds: [], rules: [] } },
-  {}, sessions)
+  { claimUnowned: false, streamOwners: { notice: 'desktop', relay: 'desktop' } }, sessions)
   const feishu = new Engine(storage, 'private', { kind: 'feishu', sourceInstanceId: 'feishu:tenant:group', actorId: 'feishu-receiver',
     allowedActorIds: ['feishu-receiver'], allowedThreadPrefixes: ['feishu:tenant:'], versionOrder: 'sequence',
     intake: { mode: 'auto', maxBatchSize: 5, maxAttempts: 1, timeoutMs: 5000, allowedRequesterIds: ['alice'], allowedBotActorIds: [], rules: [] } },
-  {}, sessions)
+  { claimUnowned: false, streamOwners: { notice: 'desktop', relay: 'desktop' } }, sessions)
   t.after(async () => { await desktop.effects.stop(); await github.effects.stop(); await feishu.effects.stop()
     await desktop.shutdown(); await github.shutdown(); await feishu.shutdown()
     await sessions.close(); await native.fiber.dispose(); await environment.close(); await storage.close(); await rm(root, { recursive: true, force: true }) })
@@ -103,8 +103,13 @@ test('an external source keeps admitted files and image blocks through a two-ite
   foreign = { ...a.reference, attachmentId: noteA.id }
   assert.equal((await attachments.read({ instanceId: 'private', actorId: 'github-receiver', id: noteB.id })).sha256, foreign.sha256)
   for (let attempt = 0; attempt < 30; attempt++) await desktop.effects.drain()
-  await waitFor(async () => (await desktop.getRecentMainConversation({ instanceId: 'private' })).works?.every(work => work.outcome?.status === 'success')
-    && (await desktop.getRecentMainConversation({ instanceId: 'private' })).works.length === 2)
+  try {
+    await waitFor(async () => (await desktop.getRecentMainConversation({ instanceId: 'private' })).works?.every(work => work.outcome?.status === 'success')
+      && (await desktop.getRecentMainConversation({ instanceId: 'private' })).works.length === 2)
+  } catch (error) {
+    throw new Error(`${error.message}: ${JSON.stringify({ page: await desktop.getRecentMainConversation({ instanceId: 'private' }),
+      effects: await desktop.effects.list() })}`, { cause: error })
+  }
   const page = await desktop.getRecentMainConversation({ instanceId: 'private' })
   const [workA, workB] = [page.works.find(work => work.brief.goal === 'Inspect source A.'), page.works.find(work => work.brief.goal === 'Inspect source B.')]
   assert.ok(workA?.receipt.ticketId && workB?.receipt.ticketId)
@@ -253,8 +258,8 @@ test('a product download rechecks revocation after the Environment returns bytes
   const prepare = environment.prepare.bind(environment)
   environment.prepare = async (...args) => {
     const bound = await prepare(...args)
-    const read = bound.readProductAsset.bind(bound)
-    bound.readProductAsset = async (...params) => {
+    const read = bound.readAsset.bind(bound)
+    bound.readAsset = async (...params) => {
       const page = await read(...params)
       reading()
       await heldRead

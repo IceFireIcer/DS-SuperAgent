@@ -91,6 +91,7 @@ export const recordKinds = [...coreRecordKinds, 'main-state', 'main-message', 'm
   'work-split', 'work-plan-conflict', 'work-plan-conflict-head', 'work-item', 'work-item-ticket', 'work-receipt',
   'work-ticket', 'work-router-turn', 'work-follow-up', 'work-follow-up-command', 'work-update', 'work-update-head',
   'work-attention-answer', 'work-outcome', 'instance-directory', 'instance-directory-command', 'product-directory',
+  'product-remote-environment', 'product-remote-environment-command',
   'resource-credential', 'resource-command', 'resource-request', 'resource-vault-intent', 'resource-rotation-intent', 'product-attachment',
   'browser-resource', 'browser-command', 'browser-grant', 'browser-lease', 'browser-operation',
   'product-feishu-credential', 'product-feishu-credential-command', 'product-github-credential', 'product-github-credential-command',

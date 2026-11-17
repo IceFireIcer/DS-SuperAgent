@@ -13,6 +13,11 @@ import type { ContextCard, ContextRef, ContextRequest } from './context.js'
 import { assertReferenceShape, type EnvironmentAssetReference } from './environment-assets.js'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import { resolveProductAttachments } from './product-attachments.js'
+import type { ExecutionTarget } from './execution-target.js'
+import type { EnvironmentKind } from './environment.js'
+import type { EnvironmentLocation } from './environment.js'
+import type { ExecutionSelectionView } from './execution-target.js'
+import { validateRequiredCapabilities, type CapabilityId } from './capability-locations.js'
 
 export interface MainWorkIntent {
   goal: string
@@ -47,7 +52,9 @@ export interface MainWorkBrief {
   requestedItems?: MainWorkIntent[]
   sourceEventId?: string
   evidence: { kind: 'main-message'; id: string }
-  environmentId: string
+  environmentId?: string
+  target: ExecutionTarget
+  capabilities?: CapabilityId[]
   configurationRevision: number
   sourceHandoffId?: string
   createdAt: number
@@ -135,6 +142,8 @@ export interface MainWorkCardBrief extends MainWorkIntent {
   mainMessageId: string
   configurationRevision?: number
   environmentId?: string
+  target: ExecutionTarget
+  capabilities?: CapabilityId[]
   directory?: string
   createdAt: number
 }
@@ -146,6 +155,8 @@ export interface MainWorkCard {
   outcome?: MainWorkOutcome
   followUps?: MainWorkFollowUpView[]
   control?: MainWorkControl
+  executionLocation?: EnvironmentLocation | null
+  executionSelection?: ExecutionSelectionView
 }
 
 export interface MainWorkHandoff {
@@ -191,6 +202,8 @@ export interface MainWorkRequest {
   acceptanceCriteria?: string
   configurationRevision: number
   environmentId?: string
+  target?: ExecutionTarget
+  capabilities?: CapabilityId[]
   sourceHandoffId?: string
 }
 
@@ -327,6 +340,8 @@ export interface MainWorkTicketSnapshot {
   reason: Work['intent']['reason']
   lifecycle: Work['ticket']['state']
   setupCode?: string
+  executionLocation?: EnvironmentLocation | null
+  executionSelection?: ExecutionSelectionView
   report?: { id: string; result: string; evidence: string; artifacts: MainWorkOutcome['artifacts'] }
   control?: MainWorkControl
 }
@@ -336,7 +351,8 @@ export interface MainWorkControl {
   ticketId: string
   ticketVersion: number
   permissions: { actorId: string; canStop: boolean; canResume: boolean; canRetry: boolean; canAnswer: boolean }
-  assignment?: { id: string; generation: string; sessionId: string; state: 'pending' | 'running' | 'stopping' | 'ended' }
+  assignment?: { id: string; generation: string; sessionId: string; state: 'pending' | 'running' | 'stopping' | 'ended'
+    environment?: EnvironmentLocation }
   attention?: {
     id: string
     version: number
@@ -369,8 +385,9 @@ export interface WorkDelegationOptions {
   sessions: NativeSessions
   effects: Effects
   environmentId: string
-  defaultEnvironmentId?: (transaction: AsyncTx) => Promise<string>
+  defaultEnvironmentId?: (transaction: AsyncTx) => Promise<string | undefined>
   environmentRoot?: (environmentId: string) => string | undefined
+  environmentKind?: (environmentId: string) => EnvironmentKind | undefined
   now?: () => number
   createTicket(brief: MainWorkBrief, item: MainWorkItem): Promise<{ ticketId: string }>
   readTicket(ticketId: string): Promise<MainWorkTicketSnapshot>
@@ -439,7 +456,8 @@ export class WorkDelegation {
 
   async create(request: MainWorkRequest) {
     if (!request || Object.keys(request).some(key => !['commandId', 'mainId', 'mainSessionId', 'routerSessionId', 'mainMessageId', 'originalUserText',
-      'items', 'goal', 'constraints', 'acceptanceCriteria', 'configurationRevision', 'sourceHandoffId', 'environmentId', 'resources', 'images', 'attachments', 'attachmentClientId'].includes(key))) {
+      'items', 'goal', 'constraints', 'acceptanceCriteria', 'configurationRevision', 'sourceHandoffId', 'environmentId', 'target', 'capabilities',
+      'resources', 'images', 'attachments', 'attachmentClientId'].includes(key))) {
       throw new CoreError('INVALID_INPUT', 'A Main delegation accepts only its source and independent work items.')
     }
     if (request.items !== undefined && (request.goal !== undefined || request.constraints !== undefined || request.acceptanceCriteria !== undefined)) {
@@ -448,6 +466,10 @@ export class WorkDelegation {
     identifier(request.commandId, 'commandId'); identifier(request.mainId, 'mainId'); identifier(request.mainSessionId, 'mainSessionId')
     identifier(request.routerSessionId, 'routerSessionId'); identifier(request.mainMessageId, 'mainMessageId')
     if (request.environmentId !== undefined) identifier(request.environmentId, 'environmentId')
+    if (request.target !== undefined && !['local-only', 'remote-only', 'auto'].includes(request.target)) {
+      throw new CoreError('INVALID_INPUT', 'A delegation target is local-only, remote-only or auto.')
+    }
+    const capabilities = validateRequiredCapabilities(request.capabilities)
     if (request.sourceHandoffId !== undefined) identifier(request.sourceHandoffId, 'sourceHandoffId')
     if (request.attachmentClientId !== undefined) identifier(request.attachmentClientId, 'attachmentClientId')
     if (!this.options.source.allowedActorIds.includes(this.options.source.actorId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This actor cannot delegate work in the Main Instance.')
@@ -522,29 +544,55 @@ export class WorkDelegation {
       const existing = await transaction.get<{ fingerprint: string; workBriefId: string }>('work-brief-command', key)
       const oldBrief = existing ? await transaction.get<MainWorkBrief>('work-brief', existing.workBriefId) : undefined
       if (existing && !oldBrief) throw new CoreError('INCOMPLETE_STATE', 'The accepted WorkBrief is missing.')
-      const environmentId = request.environmentId ?? oldBrief?.environmentId
-        ?? await this.options.defaultEnvironmentId?.(transaction) ?? this.options.environmentId
-      if (this.options.environmentRoot && !this.options.environmentRoot(environmentId)) {
+      const sourceHandoff = request.sourceHandoffId
+        ? await transaction.get<MainSourceHandoff>('main-source-handoff', request.sourceHandoffId) : undefined
+      const sourceEnvironmentKind = sourceHandoff?.environmentId
+        ? this.options.environmentKind?.(sourceHandoff.environmentId) : undefined
+      const target = request.target ?? oldBrief?.target ?? (sourceEnvironmentKind === 'remote' ? 'remote-only' : 'local-only')
+      const explicitEnvironmentId = request.environmentId ?? oldBrief?.environmentId ?? sourceHandoff?.environmentId
+      const defaultEnvironmentId = target === 'local-only'
+        ? await this.options.defaultEnvironmentId?.(transaction)
+          ?? (this.options.environmentId === 'unconfigured' ? undefined : this.options.environmentId) : undefined
+      const environmentId = explicitEnvironmentId ?? defaultEnvironmentId
+      if (environmentId && this.options.environmentRoot && !this.options.environmentRoot(environmentId)) {
         throw new CoreError('ENVIRONMENT_DENIED', 'The selected work directory is no longer authorized for this Instance.')
+      }
+      const environmentKind = environmentId
+        ? this.options.environmentKind?.(environmentId)
+          ?? (environmentId === this.options.environmentId ? 'local' as const : undefined) : undefined
+      const mismatchedTarget = environmentId && environmentKind && target !== 'auto'
+        && (target === 'local-only' && environmentKind !== 'local'
+          || target === 'remote-only' && environmentKind !== 'remote')
+      if (mismatchedTarget) {
+        throw new CoreError('ENVIRONMENT_DENIED', 'The selected Environment does not match the work target.')
+      }
+      if ((resources?.length || attachments?.length) && !environmentId) {
+        throw new CoreError('ATTACHMENT_SCOPE_AMBIGUOUS', 'Attached work needs one exact local or remote Environment.')
       }
       if (resources?.some(reference => reference.environmentId !== environmentId)
         || attachments?.some(attachment => attachment.asset.environmentId !== environmentId)) {
         throw new CoreError('ENVIRONMENT_DENIED', 'The attached resources belong to a different work directory.')
       }
-      const fingerprint = createHash('sha256').update(canonicalJson(['main-work-brief-v2', this.options.instanceId, request.mainId,
+      const briefInput = [this.options.instanceId, request.mainId,
         request.mainSessionId, request.routerSessionId, request.mainMessageId, originalUserText, requestedItems,
-        environmentId, request.configurationRevision, request.sourceHandoffId ?? null, resources ?? [], images ?? [],
-        ...(attachments ? [attachments] : []), ...(request.attachmentClientId ? [request.attachmentClientId] : [])])).digest('hex')
+        environmentId ?? null, target, capabilities, request.configurationRevision, request.sourceHandoffId ?? null, resources ?? [], images ?? [],
+        ...(attachments ? [attachments] : []), ...(request.attachmentClientId ? [request.attachmentClientId] : [])]
+      const fingerprint = createHash('sha256').update(canonicalJson(['main-work-brief-v3', ...briefInput])).digest('hex')
       if (existing) {
         if (existing.fingerprint !== fingerprint) {
           const formerItems = requestedItems.map(({ attachmentIds: _ids, ...item }) => item)
           const formerResources = attachments?.map(attachment => attachment.asset) ?? resources ?? []
           const formerImages = attachments?.flatMap(attachment => attachment.image ? [attachment.image] : []) ?? images ?? []
-          const formerFingerprint = createHash('sha256').update(canonicalJson(['main-work-brief-v2', this.options.instanceId,
+          const formerFingerprint = createHash('sha256').update(canonicalJson(['main-work-brief-v3', this.options.instanceId,
+            request.mainId, request.mainSessionId, request.routerSessionId, request.mainMessageId,
+            originalUserText.trim(), formerItems, environmentId ?? null, target, capabilities, request.configurationRevision,
+            request.sourceHandoffId ?? null, formerResources, formerImages])).digest('hex')
+          const legacyFingerprint = createHash('sha256').update(canonicalJson(['main-work-brief-v2', this.options.instanceId,
             request.mainId, request.mainSessionId, request.routerSessionId, request.mainMessageId,
             originalUserText.trim(), formerItems, environmentId, request.configurationRevision,
             request.sourceHandoffId ?? null, formerResources, formerImages])).digest('hex')
-          if (requestedItems.length !== 1 || oldBrief?.attachments || existing.fingerprint !== formerFingerprint) {
+          if (requestedItems.length !== 1 || oldBrief?.attachments
+            || existing.fingerprint !== formerFingerprint && existing.fingerprint !== legacyFingerprint) {
             throw new CoreError('IDENTITY_CONFLICT', 'This Main delegation identity was already used for different work.')
           }
         }
@@ -553,9 +601,7 @@ export class WorkDelegation {
         return brief
       }
       const id = randomUUID()
-      let sourceHandoff: MainSourceHandoff | undefined
       if (request.sourceHandoffId) {
-        sourceHandoff = await transaction.get<MainSourceHandoff>('main-source-handoff', request.sourceHandoffId)
         if (!sourceHandoff || sourceHandoff.instanceId !== this.options.instanceId || sourceHandoff.mainId !== request.mainId
           || !['pending', 'presented'].includes(sourceHandoff.state)) {
           throw new CoreError('NOT_FOUND', 'The Main source handoff is unavailable or belongs to another Main.')
@@ -579,7 +625,7 @@ export class WorkDelegation {
           throw new CoreError('ATTACHMENT_SCOPE_AMBIGUOUS', 'The work must retain its exact original source attachments and Environment.')
         }
       }
-      if (attachments) await this.checkAttachments(transaction, attachments, environmentId, sourceHandoff?.sourceActorId ?? this.options.source.actorId,
+      if (attachments) await this.checkAttachments(transaction, attachments, environmentId!, sourceHandoff?.sourceActorId ?? this.options.source.actorId,
         request.attachmentClientId)
       const brief: MainWorkBrief = { id, version: 1, instanceId: this.options.instanceId,
         mainId: request.mainId, mainSessionId: request.mainSessionId, routerSessionId: request.routerSessionId,
@@ -588,7 +634,8 @@ export class WorkDelegation {
           ...(request.attachmentClientId ? { clientId: request.attachmentClientId } : {}) } } : {}),
         authorization: { kind: 'authorized-main-actor', sourceInstanceId: this.options.source.sourceInstanceId, actorId: this.options.source.actorId },
         goal, constraints, acceptanceCriteria, requestedItems, sourceEventId: `main-work-source:${id}`,
-        evidence: { kind: 'main-message', id: request.mainMessageId }, environmentId,
+        evidence: { kind: 'main-message', id: request.mainMessageId }, target, ...(capabilities.length ? { capabilities } : {}),
+        ...(environmentId ? { environmentId } : {}),
         configurationRevision: request.configurationRevision, ...(sourceHandoff ? { sourceHandoffId: sourceHandoff.id } : {}), createdAt: this.now() }
       const receipt: MainWorkReceipt = { version: 1, workBriefId: brief.id, status: 'routing',
         nextStep: 'Router is deciding the independent work items.', createdAt: this.now() }
@@ -717,9 +764,10 @@ export class WorkDelegation {
                       : !policy.configuration.allowedRequesterIds.includes(sourceEvent.authorId) ? 'SOURCE_ACTOR_NOT_ALLOWED' : undefined
             let attachmentReason: string | undefined
             if (!staleReason && current.attachments?.length) {
-              try {
+              if (!current.environmentId || !current.sourceActorId) attachmentReason = 'ATTACHMENT_ENVIRONMENT_MISSING'
+              else try {
                 await resolveProductAttachments(tx, { instanceId: this.options.instanceId, actorId: current.sourceActorId!,
-                  environmentId: current.environmentId!, ids: current.attachments.map(attachment => attachment.id), expected: current.attachments })
+                  environmentId: current.environmentId, ids: current.attachments.map(attachment => attachment.id), expected: current.attachments })
               } catch (error) {
                 if (!(error instanceof CoreError)) throw error
                 attachmentReason = error.code
@@ -863,12 +911,14 @@ export class WorkDelegation {
     let ticket: { ticketId: string }
     try {
       if (brief.attachments?.length) {
+        if (!brief.environmentId) throw new CoreError('ATTACHMENT_SCOPE_AMBIGUOUS', 'Attached work has no exact Environment.')
         const granted = brief.attachments.filter(attachment => item.attachmentIds?.includes(attachment.id))
         if (!item.attachmentIds || granted.length !== item.attachmentIds.length) {
           throw new CoreError('ATTACHMENT_SCOPE_AMBIGUOUS', 'The work item has no valid attachment grant.')
         }
+        const environmentId = brief.environmentId
         await this.options.storage.transaction(this.options.instanceId, tx =>
-          this.checkAttachments(tx, granted, brief.environmentId,
+          this.checkAttachments(tx, granted, environmentId,
             brief.attachmentOwner?.actorId ?? this.options.source.actorId, brief.attachmentOwner?.clientId))
       }
       ticket = await this.options.createTicket(brief, item)
@@ -1501,8 +1551,11 @@ export class WorkDelegation {
     const cardBrief: MainWorkCardBrief = { id: brief.id, workItemId: item.id, sourceEventId: item.sourceEventId,
       position: item.position, mainMessageId: brief.mainMessageId, goal: item.goal, constraints: item.constraints, acceptanceCriteria: item.acceptanceCriteria,
       ...(item.attachmentIds ? { attachmentIds: item.attachmentIds } : {}),
-      configurationRevision: brief.configurationRevision, environmentId: brief.environmentId,
-      ...(this.options.environmentRoot?.(brief.environmentId) ? { directory: this.options.environmentRoot(brief.environmentId)! } : {}),
+      configurationRevision: brief.configurationRevision, target: brief.target ?? 'local-only',
+      ...(brief.capabilities ? { capabilities: [...brief.capabilities] } : {}),
+      ...(brief.environmentId ? { environmentId: brief.environmentId } : {}),
+      ...(brief.environmentId && this.options.environmentRoot?.(brief.environmentId)
+        ? { directory: this.options.environmentRoot(brief.environmentId)! } : {}),
       createdAt: brief.createdAt }
     const projection = await this.options.storage.transaction(this.options.instanceId, async tx => ({
       update: await tx.get<MainWorkUpdate>('work-update-head', item.id), outcome: await tx.get<MainWorkOutcome>('work-outcome', item.id),
@@ -1524,6 +1577,8 @@ export class WorkDelegation {
         : outcome?.status ?? (snapshotStatus === 'success' ? 'running' : snapshotStatus)
     return { brief: cardBrief, receipt, status,
       ...(update ? { update } : {}), ...(outcome ? { outcome } : {}), ...followUps,
+      ...(snapshot.executionLocation === undefined ? {} : { executionLocation: snapshot.executionLocation }),
+      ...(snapshot.executionSelection ? { executionSelection: snapshot.executionSelection } : {}),
       ...(snapshot.control ? { control: { ...snapshot.control, workItemId: item.id } } : {}) }
   }
 

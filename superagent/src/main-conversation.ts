@@ -13,6 +13,8 @@ import { resolveProductAttachments } from './product-attachments.js'
 import { isCurrentSourceEvent, type SourceEvent } from './source-events.js'
 import type { EnvironmentAssetReference } from './environment-assets.js'
 import type { Effect, EffectRequest } from './effects.js'
+import type { ExecutionTarget } from './execution-target.js'
+import { validateRequiredCapabilities } from './capability-locations.js'
 
 export interface MainBinding { instanceId: string; mainId: string; mainSessionId: string; routerSessionId: string; generation: number }
 interface MainState extends MainBinding { sequence: number; activeCommand?: string }
@@ -56,6 +58,7 @@ interface MainCommand {
   messageId: string
   userSequence: number
   environmentId?: string | null
+  target?: ExecutionTarget
   content?: AdmittedPromptContentPart[]
   assets?: EnvironmentAssetReference[]
   attachmentIds?: string[]
@@ -123,7 +126,7 @@ export interface MainHealth {
   errorCode?: string
 }
 export interface MainAddress { instanceId: string }
-export interface MainSend extends MainAddress { commandId: string; text: string; environmentId?: string; clientId?: string; attachments?: string[] }
+export interface MainSend extends MainAddress { commandId: string; text: string; environmentId?: string; target?: ExecutionTarget; clientId?: string; attachments?: string[] }
 export interface MainSessionRollover {
   id: string
   mainId: string
@@ -348,6 +351,9 @@ export class MainConversation {
     identifier(request.commandId, 'commandId')
     if (request.clientId !== undefined) identifier(request.clientId, 'clientId')
     if (request.environmentId !== undefined) identifier(request.environmentId, 'environmentId')
+    if (request.target !== undefined && !['local-only', 'remote-only', 'auto'].includes(request.target)) {
+      throw new CoreError('INVALID_INPUT', 'A Main message target is local-only, remote-only or auto.')
+    }
     if (typeof request.text !== 'string' || Buffer.byteLength(request.text) > 32768
       || !request.text.trim() && !request.attachments?.length) throw new CoreError('INVALID_INPUT', 'Send text or an authorized attachment within the Main message limit.')
     if (request.attachments !== undefined && (!Array.isArray(request.attachments) || request.attachments.length > 10
@@ -358,6 +364,7 @@ export class MainConversation {
       : [this.source.sourceInstanceId, this.source.actorId, request.commandId])).digest('hex')
     const fingerprint = createHash('sha256').update(canonicalJson([request.instanceId, request.text, request.attachments ?? [],
       ...(request.environmentId === undefined ? [] : [request.environmentId]),
+      ...(request.target === undefined ? [] : [request.target]),
       ...(request.clientId === undefined ? [] : [request.clientId])])).digest('hex')
     await commandTransaction(this.storage, this.instanceId, async tx => {
       const prior = await tx.get<MainCommand>('main-command', key)
@@ -373,7 +380,9 @@ export class MainConversation {
       const state = await this.state(tx)
       const sequence = state.sequence + 1
       const messageId = `main-input-${randomUUID()}`
-      const environmentId = request.environmentId ?? await this.defaultEnvironment?.(tx) ?? null
+      const target = request.target ?? 'local-only'
+      const environmentId = request.environmentId
+        ?? (target === 'local-only' ? await this.defaultEnvironment?.(tx) ?? null : null)
       const references = request.attachments?.length ? await this.attachments?.resolve(tx, { instanceId: this.instanceId,
         actorId: this.source.actorId, ...(request.clientId ? { clientId: request.clientId } : {}),
         environmentId: environmentId ?? '', ids: request.attachments }) : undefined
@@ -384,7 +393,8 @@ export class MainConversation {
         createdAt: Date.now(), status: 'queued', ...(references ? { attachments: references.views } : {}),
         ...(request.clientId ? { source: { kind: 'client', clientId: request.clientId } as const } : {}) })
       const command: MainCommand = { fingerprint, messageId, userSequence: sequence, status: 'queued', updatedAt: Date.now(),
-        environmentId, ...(content ? { content, assets: references!.assets, attachmentIds: [...request.attachments!] } : {}),
+        environmentId, target,
+        ...(content ? { content, assets: references!.assets, attachmentIds: [...request.attachments!] } : {}),
         ...(request.clientId ? { clientId: request.clientId } : {}) }
       await tx.insert<MainCommand>('main-command', key, command)
       await tx.insert('main-message-command', messageId, { commandKey: key })
@@ -528,7 +538,7 @@ export class MainConversation {
     }
     return [
       ...this.memoryTools(binding),
-      { name: 'delegate_work', description: 'Create one durable local WorkBrief for one to four independent items. Give every item a clear goal, strict constraints and observable acceptance criteria. When attachments are present, assign their exact IDs to each item with attachmentIds; an item without attachments uses an empty array. The Router cannot expand these grants. The Router decides and establishes the Tickets; this tool does not mean any Worker started or completed.'
+      { name: 'delegate_work', description: 'Create one durable WorkBrief for one to four independent items on the execution target selected by the user. Give every item a clear goal, strict constraints and observable acceptance criteria. When attachments are present, assign their exact IDs to each item with attachmentIds; an item without attachments uses an empty array. Set capabilities to browser, mcp or office when the request requires one. The Router cannot expand these grants. The Router decides and establishes the Tickets; this tool does not mean any Worker started or completed.'
           + (command.attachmentIds?.length ? ` Available attachments: ${JSON.stringify(command.attachmentIds.map((id, index) => ({ id, name: command.assets?.[index]?.name ?? '' })))}.` : ''),
         parameters: {
           items: {
@@ -546,10 +556,12 @@ export class MainConversation {
           goal: { type: 'string' },
           constraints: { type: 'string' },
           acceptanceCriteria: { type: 'string' },
+          capabilities: { type: 'array', items: { type: 'string' } },
         },
         execute: async args => {
           const work = this.work?.()
-          if (!work || command.environmentId === null) return JSON.stringify({ status: 'rejected', code: 'DELEGATION_UNAVAILABLE', ticketCreated: false, message: 'No authorized local workspace was selected for this input; no work was started.' })
+          const target = command.target ?? 'local-only'
+          if (!work || target === 'local-only' && !command.environmentId) return JSON.stringify({ status: 'rejected', code: 'DELEGATION_UNAVAILABLE', ticketCreated: false, message: 'No authorized execution target was selected for this input; no work was started.' })
           const items = Array.isArray(args.items) ? args.items.map(item => {
             const value = item && typeof item === 'object' ? item as Record<string, unknown> : {}
             return {
@@ -565,6 +577,7 @@ export class MainConversation {
               message: 'Assign the original attachment IDs to each work item explicitly.' })
           }
           await checkAttachments()
+          const capabilities = validateRequiredCapabilities(args.capabilities)
           const content = command.content?.filter(block => block.type !== 'text')
           if (command.attachmentIds?.length && (command.assets?.length !== command.attachmentIds.length
             || content?.length !== command.attachmentIds.length)) {
@@ -577,7 +590,8 @@ export class MainConversation {
             originalUserText, ...(attachments?.length ? { attachments } : {}),
             ...(command.clientId ? { attachmentClientId: command.clientId } : {}),
             ...(items ? { items } : { goal: args.goal ?? '', constraints: args.constraints ?? '', acceptanceCriteria: args.acceptanceCriteria ?? '' }),
-            configurationRevision, ...(command.environmentId ? { environmentId: command.environmentId } : {}) })
+            configurationRevision, target, ...(capabilities?.length ? { capabilities } : {}),
+            ...(command.environmentId ? { environmentId: command.environmentId } : {}) })
           return JSON.stringify(await work.query(binding.mainId, { workBriefId: brief.id }))
         } },
       { name: 'query_work', description: 'Read a bounded status, receipt and verified result for a work item already visible in the Main conversation.',
@@ -653,6 +667,7 @@ export class MainConversation {
       description: handoff.sourceInstanceId.startsWith('schedule:')
         ? 'Delegate this authorized scheduled occurrence within its saved rule to one to four independent work items. Do not expand its scope or send it to another audience.'
         : 'Delegate this one authorized source request to one to four independent work items. The original source remains the default acknowledgement and result audience until a separately verified authority changes it.'
+          + ' Set capabilities to browser, mcp or office only when the source request requires one.'
           + (handoff.attachments?.length ? ` Assign exact attachment IDs to each item; empty items use []. Available: ${JSON.stringify(handoff.attachments.map(({ id, name }) => ({ id, name })))}.` : ''),
       parameters: {
         items: {
@@ -670,6 +685,7 @@ export class MainConversation {
         goal: { type: 'string' },
         constraints: { type: 'string' },
         acceptanceCriteria: { type: 'string' },
+        capabilities: { type: 'array', items: { type: 'string' } },
       },
       execute: async args => {
         const work = this.work?.()
@@ -686,6 +702,7 @@ export class MainConversation {
         await this.storage.transaction(this.instanceId, tx => this.sourceAttachments(tx, handoff))
         const attachments = handoff.attachments?.map(({ id, asset, content }) => ({ id, asset,
           ...(content.type === 'image' ? { image: content.attachment } : {}) }))
+        const capabilities = validateRequiredCapabilities(args.capabilities)
         const brief = await work.create({
           commandId: `main-source-work:${handoff.id}`,
           mainId: binding.mainId,
@@ -696,7 +713,7 @@ export class MainConversation {
           sourceHandoffId: handoff.id,
           ...(attachments?.length ? { attachments, environmentId: handoff.environmentId } : {}),
           ...(items ? { items } : { goal: args.goal ?? '', constraints: args.constraints ?? '', acceptanceCriteria: args.acceptanceCriteria ?? '' }),
-          configurationRevision,
+          configurationRevision, ...(capabilities?.length ? { capabilities } : {}),
         })
         return JSON.stringify(await work.query(binding.mainId, { workBriefId: brief.id }))
       },

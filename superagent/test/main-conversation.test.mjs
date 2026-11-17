@@ -54,6 +54,26 @@ test('one Instance keeps a distinct Main conversation across windows and restart
   assert.deepEqual((await engine.listTickets()).items, [])
 })
 
+test('an exact remote Environment infers the remote execution target from a Main message', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'r5-main-remote-target-'))
+  const native = await nativeContext(join(directory, 'sessions'), function* () { yield* textResponse('Remote target recorded.') })
+  const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  const sessions = new NativeSessions(native, routes)
+  const remote = { kind: 'remote',
+    config: { id: 'remote-work', instanceId: 'personal', root: '/device/work', allowedActorIds: ['alice'],
+      permissions: ['read', 'write'], commands: {}, commandNames: [] } }
+  const engine = new Engine(storage, 'personal', source, {}, sessions, [remote])
+  t.after(async () => {
+    await engine.shutdown(); await sessions.close(); await native.fiber.dispose(); await storage.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+  await engine.openMain({ instanceId: 'personal' })
+  await engine.sendMainMessage({ instanceId: 'personal', commandId: 'remote-exact', text: 'Use the remote workspace.',
+    environmentId: 'remote-work' })
+  const commands = (await storage.transaction('personal', tx => tx.scan('main-command', { limit: 10 }))).items
+  assert.equal(commands.find(item => item.value.messageId)?.value.target, 'remote-only')
+})
+
 test('refresh reconciles a completed native reply after the business projection commit fails', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'r5-main-reconcile-'))
   let calls = 0
