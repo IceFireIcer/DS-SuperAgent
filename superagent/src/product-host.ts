@@ -31,6 +31,7 @@ import { HostBrowserAdapter } from './browser-host.js'
 import type { BrowserAdapter } from './browser-resources.js'
 import { assertReferenceShape } from './environment-assets.js'
 import { canonicalJson } from './commands.js'
+import { decodeMemoryExportBase64 } from './product-memory-import.js'
 import { localDeliveryChannel, type DeliveryChannel } from './deliveries.js'
 import type { RoleConfig, RoleModel } from './config.js'
 import type { LegacyPresetCopy, PresetRole } from './role-presets.js'
@@ -123,6 +124,12 @@ const memoryFields: Record<string, string[]> = {
   'memory-read': ['instanceId', 'id', 'after', 'maxBytes'],
   'memory-side-query': ['instanceId', 'target', 'query', 'limit'],
   'memory-side-read': ['instanceId', 'target', 'id', 'after', 'maxBytes'],
+  'memory-import-list': ['instanceId', 'limit'],
+  'memory-import-preview': ['instanceId', 'commandId', 'sourceName', 'dataBase64'],
+  'memory-import-read': ['instanceId', 'batchId'],
+  'memory-import-commit': ['instanceId', 'commandId', 'batchId', 'selections'],
+  'memory-import-cancel': ['instanceId', 'commandId', 'batchId'],
+  'memory-import-retry': ['instanceId', 'commandId', 'batchId'],
   'memory-save': ['instanceId', 'commandId', 'scope', 'text'],
   'memory-share': ['instanceId', 'commandId', 'id', 'expectedRevision', 'main', 'workItemIds'],
   'memory-forget': ['instanceId', 'commandId', 'id', 'expectedRevision'],
@@ -708,6 +715,20 @@ export async function createProductHost(context: Context, config: ProductHostCon
           target: payload.target as import('./product-memory.js').MemorySideTarget, id: payload.id as string,
           ...(payload.after === undefined ? {} : { after: payload.after as string }),
           ...(payload.maxBytes === undefined ? {} : { maxBytes: payload.maxBytes as number }) })
+        if (endpoint === 'memory-import-list') return engine!.listProductMemoryImports({ instanceId,
+          ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
+        if (endpoint === 'memory-import-preview') return engine!.previewProductMemoryImport({ instanceId,
+          commandId, sourceName: payload.sourceName as string,
+          data: decodeMemoryExportBase64(payload.dataBase64) })
+        if (endpoint === 'memory-import-read') return engine!.getProductMemoryImport({ instanceId,
+          batchId: payload.batchId as string })
+        if (endpoint === 'memory-import-commit') return engine!.commitProductMemoryImport({ instanceId,
+          commandId, batchId: payload.batchId as string,
+          selections: payload.selections as Array<{ sourceId: string; scope: import('./product-memory.js').MemoryScope }> })
+        if (endpoint === 'memory-import-cancel') return engine!.cancelProductMemoryImport({ instanceId,
+          commandId, batchId: payload.batchId as string })
+        if (endpoint === 'memory-import-retry') return engine!.retryProductMemoryImport({ instanceId,
+          commandId, batchId: payload.batchId as string })
         if (endpoint === 'memory-save') return engine!.saveProductMemory({ instanceId, commandId,
           scope: payload.scope as import('./product-memory.js').MemoryScope, text: payload.text as string })
         if (endpoint === 'memory-share') return engine!.shareProductMemory({ instanceId, commandId,

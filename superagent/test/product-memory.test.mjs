@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { mkdtemp, mkdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -196,11 +197,25 @@ test('the product Host serves local memory settings and rejects remote clients a
   assert.equal((await host.dispatch('memory-read', { instanceId, id: saved.id })).text, 'Fictional Main fact')
   assert.deepEqual((await host.dispatch('memory-side-query', { instanceId, target: { kind: 'main' }, query: 'Fictional' })).map(item => item.id), [saved.id])
   assert.equal((await host.dispatch('memory-side-read', { instanceId, target: { kind: 'main' }, id: saved.id })).text, 'Fictional Main fact')
+  const importData = JSON.stringify({ schema: 'ds-bot-memory-export', version: 1,
+    origin: { owner: 'Fictional source' }, items: [{ id: 'source-1', text: 'Portable fictional note',
+      originalScope: { kind: 'main' } }] })
+  const preview = await host.dispatch('memory-import-preview', { instanceId, commandId: 'local-import-preview',
+    sourceName: 'fictional.json', dataBase64: Buffer.from(importData).toString('base64') })
+  assert.equal(preview.sourceHash, createHash('sha256').update(importData).digest('hex'))
+  await assert.rejects(host.dispatch('memory-import-preview', { instanceId, commandId: 'bad-import-base64',
+    sourceName: 'fictional.json', dataBase64: '*' }), { code: 'INVALID_INPUT' })
+  assert.equal((await host.dispatch('memory-import-read', { instanceId, batchId: preview.id })).items[0].status, 'ready')
+  assert.deepEqual((await host.dispatch('memory-import-list', { instanceId })).items.map(batch => batch.id), [preview.id])
   const remote = { id: 'remote', label: 'Reader', grants: [{ instanceId, capabilities: ['read', 'command'] }] }
   await assert.rejects(host.dispatch('memory-list', { instanceId }, remote), { code: 'SOURCE_NOT_AUTHORIZED' })
   await assert.rejects(host.dispatch('memory-read', { instanceId, id: saved.id }, remote), { code: 'SOURCE_NOT_AUTHORIZED' })
   await assert.rejects(host.dispatch('memory-side-query', { instanceId, target: { kind: 'main' }, query: 'Fictional' }, remote), { code: 'SOURCE_NOT_AUTHORIZED' })
   await assert.rejects(host.dispatch('memory-side-read', { instanceId, target: { kind: 'main' }, id: saved.id }, remote), { code: 'SOURCE_NOT_AUTHORIZED' })
+  await assert.rejects(host.dispatch('memory-import-read', { instanceId, batchId: preview.id }, remote), { code: 'SOURCE_NOT_AUTHORIZED' })
+  await assert.rejects(host.dispatch('memory-import-list', { instanceId }, remote), { code: 'SOURCE_NOT_AUTHORIZED' })
+  await assert.rejects(host.dispatch('memory-import-preview', { instanceId, commandId: 'remote-import-preview',
+    sourceName: 'fictional.json', dataBase64: Buffer.from(importData).toString('base64') }, remote), { code: 'SOURCE_NOT_AUTHORIZED' })
   await assert.rejects(host.dispatch('memory-side-query', { instanceId, target: { kind: 'main' }, query: 'Fictional', sessionId: 'forged' }), { code: 'INVALID_INPUT' })
   await assert.rejects(host.dispatch('memory-save', { instanceId, commandId: 'remote', scope: { kind: 'main' }, text: 'No' }, remote), { code: 'SOURCE_NOT_AUTHORIZED' })
   await assert.rejects(host.dispatch('memory-list', { instanceId: 'foreign' }), { code: 'SOURCE_NOT_AUTHORIZED' })

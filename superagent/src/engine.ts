@@ -1546,6 +1546,34 @@ export class Engine {
     this.requireProductMemory(request)
     return this.memory.read(request.reader, request.id, request.after, request.maxBytes)
   }
+  async previewProductMemoryImport(request: {
+    instanceId: string; commandId: string; sourceName: string; data: string | Uint8Array
+  }) {
+    this.requireProductMemory(request); await this.assertHostAdmission()
+    return this.memory.previewImport(request)
+  }
+  async listProductMemoryImports(request: { instanceId: string; limit?: number }) {
+    this.requireProductMemory(request)
+    return this.memory.importBatches(request.limit)
+  }
+  async getProductMemoryImport(request: { instanceId: string; batchId: string }) {
+    this.requireProductMemory(request)
+    return this.memory.importBatch(request.batchId)
+  }
+  async commitProductMemoryImport(request: {
+    instanceId: string; commandId: string; batchId: string; selections: Array<{ sourceId: string; scope: MemoryScope }>
+  }) {
+    this.requireProductMemory(request); await this.assertHostAdmission()
+    return this.memory.commitImport(request)
+  }
+  async cancelProductMemoryImport(request: { instanceId: string; commandId: string; batchId: string }) {
+    this.requireProductMemory(request); await this.assertHostAdmission()
+    return this.memory.cancelImport(request)
+  }
+  async retryProductMemoryImport(request: { instanceId: string; commandId: string; batchId: string }) {
+    this.requireProductMemory(request); await this.assertHostAdmission()
+    return this.memory.retryImport(request)
+  }
   async queryProductMemorySide(request: { instanceId: string; target: MemorySideTarget; query: string; limit?: number }) {
     this.requireProductMemory(request)
     return this.memory.sideSearch(request.target, request.query, request.limit)

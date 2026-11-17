@@ -37,6 +37,7 @@ test('memory side query selects a role, searches, and reads bounded pages throug
       calls.push([endpoint, payload])
       if (endpoint === 'memory-list') return { items: [] }
       if (endpoint === 'memory-proposals') return []
+      if (endpoint === 'memory-import-list') return { items: [] }
       if (endpoint === 'memory-access-read') return { revision: 0, enabled: true }
       if (endpoint === 'memory-side-query') {
         if (payload.query === 'stale') return new Promise(resolve => { resolvePendingSideQuery = resolve })

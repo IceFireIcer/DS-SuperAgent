@@ -98,7 +98,8 @@ export const recordKinds = [...coreRecordKinds, 'main-state', 'main-message', 'm
   'product-mcp-selection', 'product-mcp-command', 'worker-mcp-call', 'worker-mcp-block', 'worker-mcp-denial',
   'role-preset', 'role-preset-version', 'role-preset-image', 'role-preset-command', 'role-preset-preview',
   'role-preset-import', 'role-preset-review', 'role-preset-source', 'role-preset-application', 'supervisor-run', 'supervisor-cursor-key',
-  'product-memory', 'product-memory-command', 'product-memory-access', 'product-memory-proposal'] as const
+  'product-memory', 'product-memory-command', 'product-memory-access', 'product-memory-proposal',
+  'product-memory-import', 'product-memory-import-item', 'product-memory-import-source'] as const
 export type RecordKind = typeof recordKinds[number]
 
 export function identifier(value: unknown, label: string): asserts value is string {

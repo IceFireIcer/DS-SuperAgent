@@ -8,6 +8,30 @@ const scopeLabel = scope => scope.kind === 'main' ? t('Main')
   : scope.kind === 'work' ? `${t('Work private')} · ${scope.workItemId}`
     : `${t('Explicitly shared')} · ${[scope.main ? t('Main') : '', ...scope.workItemIds].filter(Boolean).join(', ') || t('No readers')}`
 
+const originalScopeLabel = scope => {
+  const kind = scope.kind === 'main' ? t('Main')
+    : scope.kind === 'work' ? t('Work private')
+      : scope.kind === 'shared' ? t('Explicitly shared') : t('Unknown original scope')
+  return [kind, scope.role, scope.work, scope.label, ...(scope.sharedWith ?? [])].filter(Boolean).join(' · ')
+}
+
+const importStatusLabel = status => t(status === 'ready' ? 'Ready to import'
+  : status === 'partial' ? 'Partially imported'
+    : status === 'completed' ? 'Import completed'
+      : status === 'cancelled' ? 'Import cancelled'
+        : status === 'rejected' ? 'Import item rejected'
+          : status === 'imported' ? 'Import item completed'
+            : status === 'conflict' ? 'Import conflict' : status)
+
+const fileBase64 = async file => {
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  let binary = ''
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000))
+  }
+  return window.btoa(binary)
+}
+
 export function ProductMemorySettings({ binding, works, call }) {
   const instanceId = binding.instanceId
   const workItems = works.filter(work => work.brief?.workItemId && work.receipt?.status === 'accepted')
@@ -32,17 +56,24 @@ export function ProductMemorySettings({ binding, works, call }) {
   const [sideFull, setSideFull] = useState(null)
   const [sideBusy, setSideBusy] = useState(false)
   const sideGeneration = useRef(0)
+  const [importBatch, setImportBatch] = useState(null)
+  const [importBatches, setImportBatches] = useState([])
+  const [savedImportId, setSavedImportId] = useState('')
+  const [importChoices, setImportChoices] = useState({})
+  const [importBusy, setImportBusy] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const pending = useRef(null)
+  const importPending = useRef(null)
 
   const reload = async (search = query) => {
-    const [page, pendingProposals] = await Promise.all([
+    const [page, pendingProposals, savedImports] = await Promise.all([
       call('memory-list', { instanceId, limit: 50, ...(search ? { query: search } : {}) }),
       call('memory-proposals', { instanceId }),
+      call('memory-import-list', { instanceId, limit: 20 }),
     ])
-    setItems(page.items); setCursor(page.cursor ?? null); setProposals(pendingProposals)
+    setItems(page.items); setCursor(page.cursor ?? null); setProposals(pendingProposals); setImportBatches(savedImports.items)
     setSelected(current => current ? page.items.find(item => item.id === current.id) ?? null : null)
   }
   useEffect(() => { void reload().catch(failure => setError(failure.message)) }, [instanceId])
@@ -176,6 +207,77 @@ export function ProductMemorySettings({ binding, works, call }) {
         ? { ...page, text: current.text + page.text } : page)
     } catch (failure) { if (generation === sideGeneration.current) { setSideFull(null); setError(failure.message) } }
   }
+  const acceptImportBatch = batch => {
+    const preserveChoices = importBatch?.id === batch.id
+    setImportBatch(batch)
+    setSavedImportId(batch.id)
+    setImportBatches(current => [batch, ...current.filter(item => item.id !== batch.id)])
+    setImportChoices(current => Object.fromEntries(batch.items.map(item => [item.sourceId,
+      preserveChoices && current[item.sourceId]
+        ? current[item.sourceId] : { checked: false, kind: '', workId: '', main: false, workIds: [] }])))
+  }
+  const chooseImportFile = async event => {
+    const file = event.target.files?.[0]
+    if (!file || importBusy) return
+    setImportBusy(true); setError(''); setNotice('')
+    try {
+      if (file.size > 512 * 1024) throw new Error(t('Memory export must be at most 512 KiB.'))
+      const dataBase64 = await fileBase64(file)
+      const key = `${file.name}\0${dataBase64}`
+      if (importPending.current?.key !== key) importPending.current = { key, commandId: crypto.randomUUID() }
+      const batch = await call('memory-import-preview', { instanceId, commandId: importPending.current.commandId,
+        sourceName: file.name, dataBase64 })
+      acceptImportBatch(batch)
+      setNotice(t('Memory export previewed. Choose each item and target explicitly.'))
+    } catch (failure) { setError(failure.message) }
+    finally { setImportBusy(false); event.target.value = '' }
+  }
+  const updateImportChoice = (sourceId, patch) => setImportChoices(current => ({
+    ...current, [sourceId]: { ...(current[sourceId]
+      ?? { checked: false, kind: '', workId: '', main: false, workIds: [] }), ...patch },
+  }))
+  const importSelected = async () => {
+    if (!importBatch || importBusy) return
+    const selections = importBatch.items.filter(item => importChoices[item.sourceId]?.checked).map(item => {
+      const choice = importChoices[item.sourceId]
+      if (choice.kind === 'main') return { sourceId: item.sourceId, scope: { kind: 'main' } }
+      if (choice.kind === 'work' && choice.workId) return { sourceId: item.sourceId,
+        scope: { kind: 'work', workItemId: choice.workId } }
+      if (choice.kind === 'shared' && (choice.main || choice.workIds.length)) return { sourceId: item.sourceId,
+        scope: { kind: 'shared', main: choice.main, workItemIds: choice.workIds } }
+        throw new Error(t('Choose a target for every selected item.'))
+    })
+    if (!selections.length) { setError(t('Select at least one memory item.')); return }
+    setImportBusy(true); setError(''); setNotice('')
+    try {
+      const batch = await call('memory-import-commit', { instanceId, commandId: crypto.randomUUID(),
+        batchId: importBatch.id, selections })
+      acceptImportBatch(batch); await reload()
+      setNotice(t(batch.status === 'completed' ? 'Memory import completed.'
+        : 'Memory import saved. Review remaining or conflicting items.'))
+    } catch (failure) { setError(failure.message) }
+    finally { setImportBusy(false) }
+  }
+  const changeImportStatus = async retry => {
+    if (!importBatch || importBusy) return
+    setImportBusy(true); setError(''); setNotice('')
+    try {
+      const batch = await call(retry ? 'memory-import-retry' : 'memory-import-cancel',
+        { instanceId, commandId: crypto.randomUUID(), batchId: importBatch.id })
+      acceptImportBatch(batch)
+      setNotice(t(retry ? 'Memory import is ready to continue.' : 'Memory import cancelled.'))
+    } catch (failure) { setError(failure.message) }
+    finally { setImportBusy(false) }
+  }
+  const openSavedImport = async () => {
+    if (!savedImportId || importBusy) return
+    setImportBusy(true); setError(''); setNotice('')
+    try {
+      acceptImportBatch(await call('memory-import-read', { instanceId, batchId: savedImportId }))
+      setNotice(t('Saved memory import opened.'))
+    } catch (failure) { setError(failure.message) }
+    finally { setImportBusy(false) }
+  }
 
   return h('div', { className: 'bt-product-memory' },
     error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
@@ -210,6 +312,7 @@ export function ProductMemorySettings({ binding, works, call }) {
       cursor ? h('button', { type: 'button', className: 'bt-soft', onClick: () => void loadMore() }, t('Load more')) : null,
       selected ? h('section', { className: 'bt-product-memory-detail', 'aria-label': t('Full detail') },
         h('strong', null, scopeLabel(selected.scope)),
+        full?.provenance ? h('p', null, `${t('Imported from')} ${full.provenance.originalOwner}: ${originalScopeLabel(full.provenance.originalScope)}`) : null,
         full ? h('pre', null, full.text) : null,
         full?.pagination.truncated ? h('button', { type: 'button', className: 'bt-soft', onClick: () => void moreText() }, t('Load more detail')) : null,
         h('div', { className: 'bt-product-memory-form' },
@@ -217,6 +320,78 @@ export function ProductMemorySettings({ binding, works, call }) {
           workItems.map(work => h('label', { key: work.id }, h('input', { type: 'checkbox', checked: recipients.includes(work.id),
             onChange: () => toggleRecipient(work.id) }), work.goal)),
           h('button', { type: 'button', className: 'bt-soft', disabled: busy, onClick: share }, t('Update sharing')))) : null),
+    h(Card, { title: t('Import memory') },
+      h('p', null, t('Preview a portable JSON memory copy before importing selected items.')),
+      importBatches.length ? h('div', { className: 'bt-product-memory-form' },
+        h('select', { value: savedImportId, 'aria-label': t('Saved memory imports'),
+          onChange: event => setSavedImportId(event.target.value) },
+          h('option', { value: '' }, t('Choose saved import')),
+          importBatches.map(batch => h('option', { key: batch.id, value: batch.id },
+            `${batch.sourceName} · ${importStatusLabel(batch.status)}`))),
+        h('button', { type: 'button', className: 'bt-soft', disabled: importBusy || !savedImportId,
+          onClick: () => void openSavedImport() }, t('Open import'))) : null,
+      h('label', { className: 'bt-product-memory-import-file' }, t('Choose memory export'),
+        h('input', { type: 'file', accept: '.json,application/json', 'aria-label': t('Choose memory export'),
+          disabled: importBusy, onChange: event => void chooseImportFile(event) })),
+      importBatch ? h('section', { className: 'bt-product-memory-import', 'aria-label': t('Memory import preview') },
+        h('div', { className: 'bt-product-memory-import-meta' },
+          h('strong', null, importBatch.sourceName),
+          h('span', null, `${t('Original owner')}: ${importBatch.origin.owner}`),
+          importBatch.origin.instanceId ? h('span', null, `${t('Original instance')}: ${importBatch.origin.instanceId}`) : null,
+          h('span', null, `${t('Original hash')}: ${importBatch.sourceHash}`),
+          h('span', null, `${t('Target instance')}: ${importBatch.targetInstanceId}`),
+          h('span', null, `${t('Import status')}: ${importStatusLabel(importBatch.status)}`)),
+        importBatch.items.length ? h('ul', { className: 'bt-product-memory-import-items' }, importBatch.items.map(item => {
+          const choice = importChoices[item.sourceId]
+            ?? { checked: false, kind: '', workId: '', main: false, workIds: [] }
+          const active = item.status === 'ready'
+            || (item.status === 'conflict' && item.reason !== 'SOURCE_CONTENT_CONFLICT')
+          return h('li', { key: item.sourceId }, h('div', { className: 'bt-product-memory-import-head' },
+            h('input', { type: 'checkbox', checked: choice.checked, disabled: !active || importBatch.status === 'cancelled' || importBusy,
+              'aria-label': `${t('Import item')} ${item.sourceId}`,
+              onChange: event => updateImportChoice(item.sourceId, { checked: event.target.checked }) }),
+            h('strong', null, item.sourceId),
+            h('span', null, `${t('Original scope')}: ${originalScopeLabel(item.originalScope)}`),
+            h('span', { className: `bt-product-memory-import-status is-${item.status}` },
+              importStatusLabel(item.status), item.reason ? ` · ${t(item.reason)}` : '')),
+            item.text ? h('pre', null, item.text) : h('p', null, t('Rejected item content is not retained.')),
+            item.status === 'imported' ? h('p', null, `${t('Imported to')}: ${scopeLabel(item.target)}`) : null,
+            item.status === 'conflict' ? h('p', null,
+              `${t('Conflicts with')}: ${item.existingMemoryId ?? item.existingBatchId ?? t('Earlier import')}`) : null,
+            choice.checked && active ? h('div', { className: 'bt-product-memory-form' },
+              h('label', null, t('Target role'),
+                h('select', { value: choice.kind, 'aria-label': `${t('Target role')} ${item.sourceId}`,
+                  onChange: event => updateImportChoice(item.sourceId, { kind: event.target.value }) },
+                  h('option', { value: '' }, t('Choose target')),
+                  (importBatch.targetRoles ?? ['main', 'worker', 'shared']).map(role => h('option', {
+                    key: role, value: role,
+                  }, t(role === 'main' ? 'Main' : role === 'worker' ? 'Worker' : 'Explicitly shared'))))),
+              choice.kind === 'work' ? h('label', null, `${t('Target work')} `,
+                h('select', { value: choice.workId, 'aria-label': `${t('Target work')} ${item.sourceId}`,
+                  onChange: event => updateImportChoice(item.sourceId, { workId: event.target.value }) },
+                  h('option', { value: '' }, t('Choose work')),
+                  workItems.map(work => h('option', { key: work.id, value: work.id }, work.goal)))) : null,
+              choice.kind === 'shared' ? h('fieldset', { className: 'bt-product-memory-import-sharing' },
+                h('legend', null, t('Choose shared recipients')),
+                h('label', null, h('input', { type: 'checkbox', checked: choice.main,
+                  'aria-label': `${t('Share with Main')} ${item.sourceId}`,
+                  onChange: event => updateImportChoice(item.sourceId, { main: event.target.checked }) }), t('Main')),
+                workItems.map(work => h('label', { key: work.id }, h('input', { type: 'checkbox',
+                  checked: choice.workIds.includes(work.id),
+                  'aria-label': `${t('Share with work')} ${work.id} ${item.sourceId}`,
+                  onChange: event => updateImportChoice(item.sourceId, { workIds: event.target.checked
+                    ? [...choice.workIds, work.id] : choice.workIds.filter(id => id !== work.id) }) }), work.goal))) : null,
+              h('span', null, `${t('Target instance')}: ${importBatch.targetInstanceId}`)) : null)
+        })) : null,
+        h('div', { className: 'bt-product-memory-form' },
+          h('button', { type: 'button', className: 'bt-soft',
+            disabled: importBusy || importBatch.status === 'cancelled' || !importBatch.items.some(item => importChoices[item.sourceId]?.checked),
+            onClick: () => void importSelected() }, t('Import selected')),
+          importBatch.status === 'ready' || importBatch.status === 'partial'
+            ? h('button', { type: 'button', className: 'bt-soft', disabled: importBusy,
+              onClick: () => void changeImportStatus(false) }, t('Cancel import')) : null,
+          importBatch.status === 'cancelled' ? h('button', { type: 'button', className: 'bt-soft', disabled: importBusy,
+            onClick: () => void changeImportStatus(true) }, t('Retry import')) : null)) : null),
     h(Card, { title: t('Save memory') },
       h('form', { className: 'bt-product-memory-form', onSubmit: save },
         h(Row, { label: t('Owner') }, h('select', { value: kind, onChange: event => setKind(event.target.value) },
@@ -253,5 +428,17 @@ export const PRODUCT_MEMORY_CSS = `
 .bt-product-memory textarea{width:100%;min-height:72px;resize:vertical}
 .bt-product-memory-detail{padding:10px 0;border-top:1px solid var(--bt-line-2);font-size:12px}
 .bt-product-memory-detail pre{max-height:240px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+.bt-product-memory-import-file{display:flex;flex-direction:column;gap:6px;font-size:12px}
+.bt-product-memory-import{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.bt-product-memory-import-meta{display:flex;flex-direction:column;gap:4px;padding:9px;border:1px solid var(--bt-line);border-radius:6px;font-size:12px;overflow-wrap:anywhere}
+.bt-product-memory-import-items{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
+.bt-product-memory-import-items>li{padding:10px;border:1px solid var(--bt-line);border-radius:6px}
+.bt-product-memory-import-head{display:flex;flex-wrap:wrap;align-items:center;gap:7px;font-size:12px}
+.bt-product-memory-import-head pre{width:100%;max-height:180px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin:2px 0}
+.bt-product-memory-import-sharing{display:flex;flex-wrap:wrap;gap:7px;margin:0;padding:7px;border:1px solid var(--bt-line);border-radius:6px}
+.bt-product-memory-import-sharing legend{padding:0 4px;font-size:12px}
+.bt-product-memory-import-sharing label{display:inline-flex;align-items:center;gap:4px;font-size:12px}
+.bt-product-memory-import-status{padding:2px 6px;border-radius:999px;background:var(--bt-line-2)}
+.bt-product-memory-import-status.is-conflict,.bt-product-memory-import-status.is-rejected{color:var(--bt-danger)}
 .bt-product-memory button:focus-visible,.bt-product-memory select:focus-visible,.bt-product-memory input:focus-visible,.bt-product-memory textarea:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 `

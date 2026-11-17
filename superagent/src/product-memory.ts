@@ -1,6 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { canonicalJson, commandTransaction } from './commands.js'
 import { CoreError, identifier, type Work } from './model.js'
+import {
+  credentialLike, decodeMemoryExport, parseMemoryImport,
+  type MemoryImportOrigin, type MemoryImportOriginalScope,
+} from './product-memory-import.js'
 import type { AsyncTx, Storage } from './storage.js'
 import type { NativeTool } from './native-sessions.js'
 
@@ -10,12 +14,21 @@ export type MemoryReader = { role: 'main'; sessionId: string }
   | { role: 'worker'; ticketId: string; assignmentId: string; sessionId: string }
 export type MemorySideTarget = { kind: 'main' } | { kind: 'work'; workItemId: string }
 
+export interface MemoryProvenance {
+  batchId: string
+  sourceItemId: string
+  sourceHash: string
+  originalOwner: string
+  originalScope: MemoryImportOriginalScope
+}
 export interface MemoryEntry {
   id: string
   scope: MemoryScope
   revision: number
   status: 'active' | 'forgotten'
   text?: string
+  contentHash?: string
+  provenance?: MemoryProvenance
   createdAt: number
   updatedAt: number
 }
@@ -33,7 +46,38 @@ export interface MemoryProposal {
   entryId?: string
 }
 export interface WorkAccess { revision: number; enabled: boolean }
-interface Receipt { fingerprint: string; entryId?: string; proposalId?: string; revision?: number; status: string }
+export interface MemoryImportBatch {
+  id: string
+  sourceHash: string
+  sourceName: string
+  origin: MemoryImportOrigin
+  status: 'ready' | 'partial' | 'completed' | 'cancelled'
+  itemIds: string[]
+  createdAt: number
+  updatedAt: number
+}
+export interface MemoryImportItem {
+  id: string
+  sourceId: string
+  sourceHash: string
+  originalScope: MemoryImportOriginalScope
+  status: 'ready' | 'rejected' | 'imported' | 'conflict'
+  text?: string
+  reason?: string
+  target?: MemoryScope
+  entryId?: string
+  existingMemoryId?: string
+  existingBatchId?: string
+}
+interface MemoryImportSourceIdentity {
+  id: string
+  sourceId: string
+  contentHash: string
+  batchId: string
+  itemId: string
+  createdAt: number
+}
+interface Receipt { fingerprint: string; entryId?: string; proposalId?: string; batchId?: string; revision?: number; status: string }
 interface MainState { instanceId: string; mainId: string; mainSessionId: string }
 interface Assignment { id: string; sessionId: string; state: string }
 
@@ -46,7 +90,7 @@ function validText(value: unknown, label: string, max = 4096): string {
     throw new CoreError('INVALID_INPUT', `${label} needs 1–${max} bytes of text.`)
   }
   const text = value.trim()
-  if (/-----BEGIN .*PRIVATE KEY-----|\b(?:bearer\s+\S+|(?:api[_-]?key|password|secret|token)\s*[:=]\s*\S+)/iu.test(text)) {
+  if (credentialLike(text)) {
     throw new CoreError('MEMORY_SENSITIVE', 'Credentials belong in the protected credential store, not memory.')
   }
   return text
@@ -100,7 +144,8 @@ function pageText(entry: MemoryEntry, after: string | undefined, maxBytes: numbe
   }
   if (counted !== offset + bytes) throw new CoreError('INVALID_INPUT', 'The memory cursor is invalid.')
   const truncated = offset + bytes < totalBytes
-  return { id: entry.id, scope: entry.scope, revision: entry.revision, text: text.slice(from, end),
+  return { id: entry.id, scope: entry.scope, revision: entry.revision, ...(entry.provenance ? { provenance: entry.provenance } : {}),
+    text: text.slice(from, end),
     pagination: { totalBytes, returnedBytes: bytes, truncated,
       ...(truncated ? { cursor: `${offset + bytes}:${version}` } : {}) } }
 }
@@ -270,6 +315,220 @@ export class ProductMemory {
     })
   }
 
+  private async importItems(tx: AsyncTx, batch: MemoryImportBatch) {
+    const items: MemoryImportItem[] = []
+    for (const id of batch.itemIds) {
+      const item = await tx.get<MemoryImportItem>('product-memory-import-item', id)
+      if (!item) throw new CoreError('MEMORY_IMPORT_STALE', 'A memory import item is missing.')
+      items.push(item)
+    }
+    return items
+  }
+
+  private async loadImportBatch(tx: AsyncTx, batchId: string) {
+    const batch = await tx.get<MemoryImportBatch>('product-memory-import', batchId)
+    if (!batch) throw new CoreError('NOT_FOUND', 'This memory import batch does not exist.')
+    return { batch, items: await this.importItems(tx, batch) }
+  }
+
+  private async importBatchView(tx: AsyncTx, batchId: string) {
+    identifier(batchId, 'importBatchId')
+    const { batch, items } = await this.loadImportBatch(tx, batchId)
+    return { ...batch, targetInstanceId: this.instanceId, targetRoles: ['main', 'worker', 'shared'], items }
+  }
+
+  private importStatus(items: MemoryImportItem[]): MemoryImportBatch['status'] {
+    if (items.every(item => item.status === 'imported')) return 'completed'
+    if (items.every(item => item.status === 'ready')) return 'ready'
+    return 'partial'
+  }
+
+  private async scanActiveMemory(tx: AsyncTx) {
+    const entries: MemoryEntry[] = []
+    let after: string | undefined
+    for (let scanned = 0; scanned < MAX_SCAN; scanned += 100) {
+      const page = await tx.scan<MemoryEntry>('product-memory', { limit: 100, ...(after ? { after } : {}) })
+      entries.push(...page.items.map(item => item.value).filter(entry => entry.status === 'active' && entry.text))
+      if (!page.cursor) return entries
+      if (scanned + 100 >= MAX_SCAN) throw new CoreError('MEMORY_BUDGET', 'The import conflict check exceeded its bounded scan.')
+      after = page.cursor
+    }
+    return entries
+  }
+
+  private importSelection(value: { sourceId: string; scope: MemoryScope }) {
+    identifier(value.sourceId, 'sourceMemoryId')
+    const scope = scopeOf(value.scope)
+    if (scope.kind === 'shared' && !scope.main && !scope.workItemIds.length) {
+      throw new CoreError('INVALID_INPUT', 'Choose at least one recipient for imported shared memory.')
+    }
+    return { sourceId: value.sourceId, scope }
+  }
+
+  async importBatches(limit = 20) {
+    const take = bounded(limit, 100)
+    return this.storage.transaction(this.instanceId, async tx => {
+      await this.main(tx)
+      const batches: MemoryImportBatch[] = []
+      let after: string | undefined
+      for (let scanned = 0; scanned < MAX_SCAN; scanned += 100) {
+        const page = await tx.scan<MemoryImportBatch>('product-memory-import', { limit: 100, ...(after ? { after } : {}) })
+        batches.push(...page.items.map(item => item.value))
+        if (!page.cursor) break
+        if (scanned + 100 >= MAX_SCAN) throw new CoreError('MEMORY_BUDGET', 'The import list exceeded its bounded scan.')
+        after = page.cursor
+      }
+      return { items: batches.sort((left, right) => right.updatedAt - left.updatedAt).slice(0, take) }
+    })
+  }
+
+  async importBatch(batchId: string) {
+    return this.storage.transaction(this.instanceId, async tx => {
+      await this.main(tx)
+      return this.importBatchView(tx, batchId)
+    })
+  }
+
+  async previewImport(command: { commandId: string; sourceName: string; data: string | Uint8Array }) {
+    const sourceName = validText(command.sourceName, 'Memory export file name', 256)
+    const { bytes, text: exported } = decodeMemoryExport(command.data)
+    const sourceHash = createHash('sha256').update(bytes).digest('hex')
+    return this.command(command.commandId, { sourceName, sourceHash }, async tx => {
+      await this.main(tx)
+      const batchId = digest(['memory-import-batch', sourceHash])
+      const existing = await tx.get<MemoryImportBatch>('product-memory-import', batchId)
+      if (existing) {
+        return { receipt: { fingerprint: '', batchId, status: existing.status }, value: await this.importBatchView(tx, batchId) }
+      }
+      const parsed = parseMemoryImport(exported, (value, label) => validText(value, label))
+      const now = this.now()
+      const items: MemoryImportItem[] = []
+      for (const item of parsed.items) {
+        const id = digest(['memory-import-item', batchId, item.sourceId])
+        const contentHash = item.text ? digest(item.text) : digest([item.sourceId, item.originalScope, item.status])
+        const sourceId = digest(['memory-import-source', parsed.origin.owner, parsed.origin.instanceId ?? '', item.sourceId])
+        const previous = item.status === 'ready'
+          ? await tx.get<MemoryImportSourceIdentity>('product-memory-import-source', sourceId) : undefined
+        const conflict = previous && previous.contentHash !== contentHash
+        if (item.status === 'ready' && !previous) {
+          await tx.insert('product-memory-import-source', sourceId, { id: sourceId, sourceId: item.sourceId,
+            contentHash, batchId, itemId: id, createdAt: now })
+        }
+        items.push({
+          id, sourceId: item.sourceId, sourceHash: contentHash, originalScope: item.originalScope,
+          status: conflict ? 'conflict' : item.status,
+          ...(conflict ? { reason: 'SOURCE_CONTENT_CONFLICT', existingBatchId: previous.batchId } : {}),
+          ...(item.text ? { text: item.text } : {}),
+          ...(item.reason ? { reason: item.reason } : {}),
+        })
+      }
+      const batch: MemoryImportBatch = {
+        id: batchId, sourceHash, sourceName, origin: parsed.origin, status: this.importStatus(items),
+        itemIds: items.map(item => item.id), createdAt: now, updatedAt: now,
+      }
+      for (const item of items) await tx.insert('product-memory-import-item', item.id, item)
+      await tx.insert('product-memory-import', batch.id, batch)
+      return { receipt: { fingerprint: '', batchId: batch.id, status: batch.status },
+        value: await this.importBatchView(tx, batch.id) }
+    }, async (tx, receipt) => this.importBatchView(tx, receipt.batchId!))
+  }
+
+  async commitImport(command: {
+    commandId: string; batchId: string; selections: Array<{ sourceId: string; scope: MemoryScope }>
+  }) {
+    identifier(command.batchId, 'importBatchId')
+    if (!Array.isArray(command.selections) || command.selections.length < 1 || command.selections.length > 50) {
+      throw new CoreError('INVALID_INPUT', 'Choose between 1 and 50 memory items to import.')
+    }
+    const selections = command.selections.map(value => this.importSelection(value))
+    if (new Set(selections.map(selection => selection.sourceId)).size !== selections.length) {
+      throw new CoreError('INVALID_INPUT', 'Each imported memory item can be selected only once.')
+    }
+    return this.command(command.commandId, { batchId: command.batchId, selections }, async tx => {
+      await this.main(tx)
+      const { batch, items } = await this.loadImportBatch(tx, command.batchId)
+      if (batch.status === 'cancelled') throw new CoreError('MEMORY_IMPORT_CANCELLED', 'Retry this import before choosing items.')
+      const bySource = new Map(items.map(item => [item.sourceId, item]))
+      for (const selection of selections) {
+        const item = bySource.get(selection.sourceId)
+        if (!item || item.status === 'rejected') throw new CoreError('MEMORY_IMPORT_STALE', 'A selected memory item cannot be imported.')
+        if (item.reason === 'SOURCE_CONTENT_CONFLICT') {
+          throw new CoreError('MEMORY_IMPORT_CONFLICT', 'This source item changed after it was first previewed.')
+        }
+        await this.checkScope(tx, selection.scope)
+        if (item.status === 'imported' && digest(item.target) !== digest(selection.scope)) {
+          throw new CoreError('MEMORY_IMPORT_CONFLICT', 'This item was already imported to another target.')
+        }
+      }
+      const activeEntries = await this.scanActiveMemory(tx)
+      for (const selection of selections) {
+        const item = bySource.get(selection.sourceId)!
+        if (item.status === 'imported') continue
+        const duplicate = activeEntries.find(entry => digest(entry.scope) === digest(selection.scope)
+          && (entry.contentHash ?? digest(entry.text!)) === item.sourceHash)
+        if (duplicate) {
+          const conflict: MemoryImportItem = { ...item, status: 'conflict', reason: 'DUPLICATE_MEMORY',
+            existingMemoryId: duplicate.id, target: selection.scope }
+          bySource.set(item.sourceId, conflict)
+          await tx.replace('product-memory-import-item', item.id, conflict)
+          continue
+        }
+        const entry = await this.createImportedMemory(tx, batch, item, selection.scope)
+        activeEntries.push(entry)
+        const imported: MemoryImportItem = { ...item, status: 'imported', target: selection.scope, entryId: entry.id }
+        bySource.set(item.sourceId, imported)
+        await tx.replace('product-memory-import-item', item.id, imported)
+      }
+      const nextItems = items.map(item => bySource.get(item.sourceId)!)
+      const updated = { ...batch, status: this.importStatus(nextItems), updatedAt: this.now() }
+      await tx.replace('product-memory-import', batch.id, updated)
+      return { receipt: { fingerprint: '', batchId: batch.id, status: updated.status },
+        value: await this.importBatchView(tx, batch.id) }
+    }, async (tx, receipt) => this.importBatchView(tx, receipt.batchId!))
+  }
+
+  private async createImportedMemory(tx: AsyncTx, batch: MemoryImportBatch, item: MemoryImportItem, scope: MemoryScope) {
+    const now = this.now()
+    const entry: MemoryEntry = {
+      id: randomUUID(), scope, revision: 1, status: 'active', text: item.text!, contentHash: item.sourceHash,
+      provenance: {
+        batchId: batch.id, sourceItemId: item.sourceId, sourceHash: batch.sourceHash,
+        originalOwner: batch.origin.owner, originalScope: item.originalScope,
+      },
+      createdAt: now, updatedAt: now,
+    }
+    await tx.insert('product-memory', entry.id, entry)
+    return entry
+  }
+
+  async cancelImport(command: { commandId: string; batchId: string }) {
+    identifier(command.batchId, 'importBatchId')
+    return this.command(command.commandId, command, async tx => {
+      await this.main(tx)
+      const { batch } = await this.loadImportBatch(tx, command.batchId)
+      const updated = batch.status === 'ready' || batch.status === 'partial'
+        ? { ...batch, status: 'cancelled' as const, updatedAt: this.now() } : batch
+      if (updated !== batch) await tx.replace('product-memory-import', batch.id, updated)
+      return { receipt: { fingerprint: '', batchId: batch.id, status: updated.status },
+        value: await this.importBatchView(tx, batch.id) }
+    }, async (tx, receipt) => this.importBatchView(tx, receipt.batchId!))
+  }
+
+  async retryImport(command: { commandId: string; batchId: string }) {
+    identifier(command.batchId, 'importBatchId')
+    return this.command(command.commandId, command, async tx => {
+      await this.main(tx)
+      const { batch, items } = await this.loadImportBatch(tx, command.batchId)
+      let updated = batch
+      if (batch.status === 'cancelled') {
+        updated = { ...batch, status: this.importStatus(items), updatedAt: this.now() }
+        await tx.replace('product-memory-import', batch.id, updated)
+      }
+      return { receipt: { fingerprint: '', batchId: batch.id, status: updated.status },
+        value: await this.importBatchView(tx, batch.id) }
+    }, async (tx, receipt) => this.importBatchView(tx, receipt.batchId!))
+  }
+
   private async checkScope(tx: AsyncTx, scope: MemoryScope) {
     if (scope.kind === 'work') await this.work(tx, scope.workItemId)
     if (scope.kind === 'shared') for (const id of scope.workItemIds) await this.work(tx, id)
@@ -298,7 +557,8 @@ export class ProductMemory {
     }
     return this.command(command.commandId, { scope, text }, async tx => {
       await this.main(tx); await this.checkScope(tx, scope)
-      const now = this.now(), entry: MemoryEntry = { id: randomUUID(), scope, revision: 1, status: 'active', text, createdAt: now, updatedAt: now }
+      const now = this.now(), entry: MemoryEntry = { id: randomUUID(), scope, revision: 1, status: 'active',
+        text, contentHash: digest(text), createdAt: now, updatedAt: now }
       await tx.insert('product-memory', entry.id, entry)
       return { receipt: { fingerprint: '', entryId: entry.id, status: 'saved' }, value: { id: entry.id, revision: 1, status: 'saved' } }
     }, async (tx, receipt) => {
@@ -412,7 +672,7 @@ export class ProductMemory {
       if (status === 'approved') {
         const now = this.now()
         const entry: MemoryEntry = { id: randomUUID(), scope: proposal.scope, revision: 1, status: 'active',
-          text: proposal.text!, createdAt: now, updatedAt: now }
+          text: proposal.text!, contentHash: digest(proposal.text!), createdAt: now, updatedAt: now }
         entryId = entry.id
         await tx.insert('product-memory', entry.id, entry)
       }

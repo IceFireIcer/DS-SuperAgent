@@ -1451,6 +1451,7 @@ var ZH = {
   "One lasting fact": "一条长期有效的事实",
   "Work private": "工作私有",
   "Explicitly shared": "明确共享",
+  "Unknown original scope": "原归属未知",
   "No readers": "暂无读取者",
   "Choose work": "选择工作",
   "Side query": "侧边查询",
@@ -1478,6 +1479,52 @@ var ZH = {
   "Learning approved and saved.": "学习已批准并保存。",
   "Learning declined.": "学习提案已拒绝。",
   "Nothing saved yet": "还没有保存内容",
+  "Import memory": "导入记忆",
+  "Preview a portable JSON memory copy before importing selected items.": "导入选中项前，先预览可移植的 JSON 记忆副本。",
+  "Choose memory export": "选择记忆导出文件",
+  "Saved memory imports": "已保存的记忆导入",
+  "Choose saved import": "选择已保存的导入",
+  "Open import": "打开导入",
+  "Saved memory import opened.": "已打开保存的记忆导入。",
+  "Memory import preview": "记忆导入预览",
+  "Original owner": "原归属者",
+  "Original instance": "原 Instance",
+  "Original hash": "原件哈希",
+  "Target instance": "目标 Instance",
+  "Import status": "导入状态",
+  "Import item": "导入项",
+  "Original scope": "原归属范围",
+  "Choose target": "选择目标",
+  "Target work": "目标工作",
+  "Import selected": "导入选中项",
+  "Cancel import": "取消导入",
+  "Retry import": "重试导入",
+  "Memory export previewed. Choose each item and target explicitly.": "记忆导出文件已预览。请逐项选择目标和内容。",
+  "Memory export must be at most 512 KiB.": "记忆导出文件不能超过 512 KiB。",
+  "Choose a target for every selected item.": "请为每个选中项选择目标。",
+  "Choose shared recipients": "选择共享范围",
+  "Share with Main": "共享给 Main",
+  "Share with work": "共享给工作",
+  "Select at least one memory item.": "请至少选择一个记忆项。",
+  "Memory import completed.": "记忆导入已完成。",
+  "Memory import saved. Review remaining or conflicting items.": "记忆已导入。请检查剩余项或冲突项。",
+  "Memory import is ready to continue.": "记忆导入已恢复，可以继续。",
+  "Memory import cancelled.": "记忆导入已取消。",
+  "Rejected item content is not retained.": "被拒绝项的内容未保留。",
+  "Imported to": "已导入至",
+  "Conflicts with": "冲突于",
+  "Earlier import": "较早的导入",
+  "Imported from": "导入自",
+  "Ready to import": "待处理",
+  "Partially imported": "部分完成",
+  "Import completed": "已完成",
+  "Import cancelled": "已取消",
+  "Import item rejected": "已拒绝",
+  "Import item completed": "已导入",
+  "Import conflict": "冲突",
+  MEMORY_SENSITIVE: "包含凭据或敏感值",
+  DUPLICATE_MEMORY: "目标范围内已有相同记忆",
+  SOURCE_CONTENT_CONFLICT: "同一来源项的内容与较早预览不同",
   "1 entry": "1 条",
   "{count} entries": "{count} 条",
   "Manage {name}'s memory": "管理 {name} 的记忆",
@@ -24211,6 +24258,19 @@ var PRODUCT_CREDENTIAL_CSS = `
 // src/client/product-memory.js
 var import_react58 = require("react");
 var scopeLabel2 = (scope) => scope.kind === "main" ? t("Main") : scope.kind === "work" ? `${t("Work private")} · ${scope.workItemId}` : `${t("Explicitly shared")} · ${[scope.main ? t("Main") : "", ...scope.workItemIds].filter(Boolean).join(", ") || t("No readers")}`;
+var originalScopeLabel = (scope) => {
+  const kind = scope.kind === "main" ? t("Main") : scope.kind === "work" ? t("Work private") : scope.kind === "shared" ? t("Explicitly shared") : t("Unknown original scope");
+  return [kind, scope.role, scope.work, scope.label, ...scope.sharedWith ?? []].filter(Boolean).join(" · ");
+};
+var importStatusLabel = (status) => t(status === "ready" ? "Ready to import" : status === "partial" ? "Partially imported" : status === "completed" ? "Import completed" : status === "cancelled" ? "Import cancelled" : status === "rejected" ? "Import item rejected" : status === "imported" ? "Import item completed" : status === "conflict" ? "Import conflict" : status);
+var fileBase64 = async (file) => {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary2 = "";
+  for (let offset = 0; offset < bytes.length; offset += 32768) {
+    binary2 += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
+  }
+  return window.btoa(binary2);
+};
 function ProductMemorySettings({ binding, works, call: call2 }) {
   const instanceId = binding.instanceId;
   const workItems = works.filter((work) => work.brief?.workItemId && work.receipt?.status === "accepted").map((work) => ({ id: work.brief.workItemId, goal: work.brief.goal }));
@@ -24234,18 +24294,26 @@ function ProductMemorySettings({ binding, works, call: call2 }) {
   const [sideFull, setSideFull] = (0, import_react58.useState)(null);
   const [sideBusy, setSideBusy] = (0, import_react58.useState)(false);
   const sideGeneration = (0, import_react58.useRef)(0);
+  const [importBatch, setImportBatch] = (0, import_react58.useState)(null);
+  const [importBatches, setImportBatches] = (0, import_react58.useState)([]);
+  const [savedImportId, setSavedImportId] = (0, import_react58.useState)("");
+  const [importChoices, setImportChoices] = (0, import_react58.useState)({});
+  const [importBusy, setImportBusy] = (0, import_react58.useState)(false);
   const [busy, setBusy] = (0, import_react58.useState)(false);
   const [error, setError] = (0, import_react58.useState)("");
   const [notice, setNotice] = (0, import_react58.useState)("");
   const pending = (0, import_react58.useRef)(null);
+  const importPending = (0, import_react58.useRef)(null);
   const reload = async (search2 = query) => {
-    const [page, pendingProposals] = await Promise.all([
+    const [page, pendingProposals, savedImports] = await Promise.all([
       call2("memory-list", { instanceId, limit: 50, ...search2 ? { query: search2 } : {} }),
-      call2("memory-proposals", { instanceId })
+      call2("memory-proposals", { instanceId }),
+      call2("memory-import-list", { instanceId, limit: 20 })
     ]);
     setItems(page.items);
     setCursor(page.cursor ?? null);
     setProposals(pendingProposals);
+    setImportBatches(savedImports.items);
     setSelected((current) => current ? page.items.find((item) => item.id === current.id) ?? null : null);
   };
   (0, import_react58.useEffect)(() => {
@@ -24457,6 +24525,116 @@ function ProductMemorySettings({ binding, works, call: call2 }) {
       }
     }
   };
+  const acceptImportBatch = (batch) => {
+    const preserveChoices = importBatch?.id === batch.id;
+    setImportBatch(batch);
+    setSavedImportId(batch.id);
+    setImportBatches((current) => [batch, ...current.filter((item) => item.id !== batch.id)]);
+    setImportChoices((current) => Object.fromEntries(batch.items.map((item) => [
+      item.sourceId,
+      preserveChoices && current[item.sourceId] ? current[item.sourceId] : { checked: false, kind: "", workId: "", main: false, workIds: [] }
+    ])));
+  };
+  const chooseImportFile = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file || importBusy) return;
+    setImportBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      if (file.size > 512 * 1024) throw new Error(t("Memory export must be at most 512 KiB."));
+      const dataBase64 = await fileBase64(file);
+      const key = `${file.name}\0${dataBase64}`;
+      if (importPending.current?.key !== key) importPending.current = { key, commandId: crypto.randomUUID() };
+      const batch = await call2("memory-import-preview", {
+        instanceId,
+        commandId: importPending.current.commandId,
+        sourceName: file.name,
+        dataBase64
+      });
+      acceptImportBatch(batch);
+      setNotice(t("Memory export previewed. Choose each item and target explicitly."));
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setImportBusy(false);
+      event.target.value = "";
+    }
+  };
+  const updateImportChoice = (sourceId, patch) => setImportChoices((current) => ({
+    ...current,
+    [sourceId]: { ...current[sourceId] ?? { checked: false, kind: "", workId: "", main: false, workIds: [] }, ...patch }
+  }));
+  const importSelected = async () => {
+    if (!importBatch || importBusy) return;
+    const selections = importBatch.items.filter((item) => importChoices[item.sourceId]?.checked).map((item) => {
+      const choice = importChoices[item.sourceId];
+      if (choice.kind === "main") return { sourceId: item.sourceId, scope: { kind: "main" } };
+      if (choice.kind === "work" && choice.workId) return {
+        sourceId: item.sourceId,
+        scope: { kind: "work", workItemId: choice.workId }
+      };
+      if (choice.kind === "shared" && (choice.main || choice.workIds.length)) return {
+        sourceId: item.sourceId,
+        scope: { kind: "shared", main: choice.main, workItemIds: choice.workIds }
+      };
+      throw new Error(t("Choose a target for every selected item."));
+    });
+    if (!selections.length) {
+      setError(t("Select at least one memory item."));
+      return;
+    }
+    setImportBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const batch = await call2("memory-import-commit", {
+        instanceId,
+        commandId: crypto.randomUUID(),
+        batchId: importBatch.id,
+        selections
+      });
+      acceptImportBatch(batch);
+      await reload();
+      setNotice(t(batch.status === "completed" ? "Memory import completed." : "Memory import saved. Review remaining or conflicting items."));
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setImportBusy(false);
+    }
+  };
+  const changeImportStatus = async (retry) => {
+    if (!importBatch || importBusy) return;
+    setImportBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const batch = await call2(
+        retry ? "memory-import-retry" : "memory-import-cancel",
+        { instanceId, commandId: crypto.randomUUID(), batchId: importBatch.id }
+      );
+      acceptImportBatch(batch);
+      setNotice(t(retry ? "Memory import is ready to continue." : "Memory import cancelled."));
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setImportBusy(false);
+    }
+  };
+  const openSavedImport = async () => {
+    if (!savedImportId || importBusy) return;
+    setImportBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      acceptImportBatch(await call2("memory-import-read", { instanceId, batchId: savedImportId }));
+      setNotice(t("Saved memory import opened."));
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setImportBusy(false);
+    }
+  };
   return (0, import_react58.createElement)(
     "div",
     { className: "bt-product-memory" },
@@ -24544,6 +24722,7 @@ function ProductMemorySettings({ binding, works, call: call2 }) {
         "section",
         { className: "bt-product-memory-detail", "aria-label": t("Full detail") },
         (0, import_react58.createElement)("strong", null, scopeLabel2(selected.scope)),
+        full2?.provenance ? (0, import_react58.createElement)("p", null, `${t("Imported from")} ${full2.provenance.originalOwner}: ${originalScopeLabel(full2.provenance.originalScope)}`) : null,
         full2 ? (0, import_react58.createElement)("pre", null, full2.text) : null,
         full2?.pagination.truncated ? (0, import_react58.createElement)("button", { type: "button", className: "bt-soft", onClick: () => void moreText() }, t("Load more detail")) : null,
         (0, import_react58.createElement)(
@@ -24556,6 +24735,172 @@ function ProductMemorySettings({ binding, works, call: call2 }) {
             onChange: () => toggleRecipient(work.id)
           }), work.goal)),
           (0, import_react58.createElement)("button", { type: "button", className: "bt-soft", disabled: busy, onClick: share }, t("Update sharing"))
+        )
+      ) : null
+    ),
+    (0, import_react58.createElement)(
+      Card2,
+      { title: t("Import memory") },
+      (0, import_react58.createElement)("p", null, t("Preview a portable JSON memory copy before importing selected items.")),
+      importBatches.length ? (0, import_react58.createElement)(
+        "div",
+        { className: "bt-product-memory-form" },
+        (0, import_react58.createElement)(
+          "select",
+          {
+            value: savedImportId,
+            "aria-label": t("Saved memory imports"),
+            onChange: (event) => setSavedImportId(event.target.value)
+          },
+          (0, import_react58.createElement)("option", { value: "" }, t("Choose saved import")),
+          importBatches.map((batch) => (0, import_react58.createElement)(
+            "option",
+            { key: batch.id, value: batch.id },
+            `${batch.sourceName} · ${importStatusLabel(batch.status)}`
+          ))
+        ),
+        (0, import_react58.createElement)("button", {
+          type: "button",
+          className: "bt-soft",
+          disabled: importBusy || !savedImportId,
+          onClick: () => void openSavedImport()
+        }, t("Open import"))
+      ) : null,
+      (0, import_react58.createElement)(
+        "label",
+        { className: "bt-product-memory-import-file" },
+        t("Choose memory export"),
+        (0, import_react58.createElement)("input", {
+          type: "file",
+          accept: ".json,application/json",
+          "aria-label": t("Choose memory export"),
+          disabled: importBusy,
+          onChange: (event) => void chooseImportFile(event)
+        })
+      ),
+      importBatch ? (0, import_react58.createElement)(
+        "section",
+        { className: "bt-product-memory-import", "aria-label": t("Memory import preview") },
+        (0, import_react58.createElement)(
+          "div",
+          { className: "bt-product-memory-import-meta" },
+          (0, import_react58.createElement)("strong", null, importBatch.sourceName),
+          (0, import_react58.createElement)("span", null, `${t("Original owner")}: ${importBatch.origin.owner}`),
+          importBatch.origin.instanceId ? (0, import_react58.createElement)("span", null, `${t("Original instance")}: ${importBatch.origin.instanceId}`) : null,
+          (0, import_react58.createElement)("span", null, `${t("Original hash")}: ${importBatch.sourceHash}`),
+          (0, import_react58.createElement)("span", null, `${t("Target instance")}: ${importBatch.targetInstanceId}`),
+          (0, import_react58.createElement)("span", null, `${t("Import status")}: ${importStatusLabel(importBatch.status)}`)
+        ),
+        importBatch.items.length ? (0, import_react58.createElement)("ul", { className: "bt-product-memory-import-items" }, importBatch.items.map((item) => {
+          const choice = importChoices[item.sourceId] ?? { checked: false, kind: "", workId: "", main: false, workIds: [] };
+          const active = item.status === "ready" || item.status === "conflict" && item.reason !== "SOURCE_CONTENT_CONFLICT";
+          return (0, import_react58.createElement)(
+            "li",
+            { key: item.sourceId },
+            (0, import_react58.createElement)(
+              "div",
+              { className: "bt-product-memory-import-head" },
+              (0, import_react58.createElement)("input", {
+                type: "checkbox",
+                checked: choice.checked,
+                disabled: !active || importBatch.status === "cancelled" || importBusy,
+                "aria-label": `${t("Import item")} ${item.sourceId}`,
+                onChange: (event) => updateImportChoice(item.sourceId, { checked: event.target.checked })
+              }),
+              (0, import_react58.createElement)("strong", null, item.sourceId),
+              (0, import_react58.createElement)("span", null, `${t("Original scope")}: ${originalScopeLabel(item.originalScope)}`),
+              (0, import_react58.createElement)(
+                "span",
+                { className: `bt-product-memory-import-status is-${item.status}` },
+                importStatusLabel(item.status),
+                item.reason ? ` · ${t(item.reason)}` : ""
+              )
+            ),
+            item.text ? (0, import_react58.createElement)("pre", null, item.text) : (0, import_react58.createElement)("p", null, t("Rejected item content is not retained.")),
+            item.status === "imported" ? (0, import_react58.createElement)("p", null, `${t("Imported to")}: ${scopeLabel2(item.target)}`) : null,
+            item.status === "conflict" ? (0, import_react58.createElement)(
+              "p",
+              null,
+              `${t("Conflicts with")}: ${item.existingMemoryId ?? item.existingBatchId ?? t("Earlier import")}`
+            ) : null,
+            choice.checked && active ? (0, import_react58.createElement)(
+              "div",
+              { className: "bt-product-memory-form" },
+              (0, import_react58.createElement)(
+                "label",
+                null,
+                t("Target role"),
+                (0, import_react58.createElement)(
+                  "select",
+                  {
+                    value: choice.kind,
+                    "aria-label": `${t("Target role")} ${item.sourceId}`,
+                    onChange: (event) => updateImportChoice(item.sourceId, { kind: event.target.value })
+                  },
+                  (0, import_react58.createElement)("option", { value: "" }, t("Choose target")),
+                  (importBatch.targetRoles ?? ["main", "worker", "shared"]).map((role) => (0, import_react58.createElement)("option", {
+                    key: role,
+                    value: role
+                  }, t(role === "main" ? "Main" : role === "worker" ? "Worker" : "Explicitly shared")))
+                )
+              ),
+              choice.kind === "work" ? (0, import_react58.createElement)(
+                "label",
+                null,
+                `${t("Target work")} `,
+                (0, import_react58.createElement)(
+                  "select",
+                  {
+                    value: choice.workId,
+                    "aria-label": `${t("Target work")} ${item.sourceId}`,
+                    onChange: (event) => updateImportChoice(item.sourceId, { workId: event.target.value })
+                  },
+                  (0, import_react58.createElement)("option", { value: "" }, t("Choose work")),
+                  workItems.map((work) => (0, import_react58.createElement)("option", { key: work.id, value: work.id }, work.goal))
+                )
+              ) : null,
+              choice.kind === "shared" ? (0, import_react58.createElement)(
+                "fieldset",
+                { className: "bt-product-memory-import-sharing" },
+                (0, import_react58.createElement)("legend", null, t("Choose shared recipients")),
+                (0, import_react58.createElement)("label", null, (0, import_react58.createElement)("input", {
+                  type: "checkbox",
+                  checked: choice.main,
+                  "aria-label": `${t("Share with Main")} ${item.sourceId}`,
+                  onChange: (event) => updateImportChoice(item.sourceId, { main: event.target.checked })
+                }), t("Main")),
+                workItems.map((work) => (0, import_react58.createElement)("label", { key: work.id }, (0, import_react58.createElement)("input", {
+                  type: "checkbox",
+                  checked: choice.workIds.includes(work.id),
+                  "aria-label": `${t("Share with work")} ${work.id} ${item.sourceId}`,
+                  onChange: (event) => updateImportChoice(item.sourceId, { workIds: event.target.checked ? [...choice.workIds, work.id] : choice.workIds.filter((id) => id !== work.id) })
+                }), work.goal))
+              ) : null,
+              (0, import_react58.createElement)("span", null, `${t("Target instance")}: ${importBatch.targetInstanceId}`)
+            ) : null
+          );
+        })) : null,
+        (0, import_react58.createElement)(
+          "div",
+          { className: "bt-product-memory-form" },
+          (0, import_react58.createElement)("button", {
+            type: "button",
+            className: "bt-soft",
+            disabled: importBusy || importBatch.status === "cancelled" || !importBatch.items.some((item) => importChoices[item.sourceId]?.checked),
+            onClick: () => void importSelected()
+          }, t("Import selected")),
+          importBatch.status === "ready" || importBatch.status === "partial" ? (0, import_react58.createElement)("button", {
+            type: "button",
+            className: "bt-soft",
+            disabled: importBusy,
+            onClick: () => void changeImportStatus(false)
+          }, t("Cancel import")) : null,
+          importBatch.status === "cancelled" ? (0, import_react58.createElement)("button", {
+            type: "button",
+            className: "bt-soft",
+            disabled: importBusy,
+            onClick: () => void changeImportStatus(true)
+          }, t("Retry import")) : null
         )
       ) : null
     ),
@@ -24626,6 +24971,18 @@ var PRODUCT_MEMORY_CSS = `
 .bt-product-memory textarea{width:100%;min-height:72px;resize:vertical}
 .bt-product-memory-detail{padding:10px 0;border-top:1px solid var(--bt-line-2);font-size:12px}
 .bt-product-memory-detail pre{max-height:240px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+.bt-product-memory-import-file{display:flex;flex-direction:column;gap:6px;font-size:12px}
+.bt-product-memory-import{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.bt-product-memory-import-meta{display:flex;flex-direction:column;gap:4px;padding:9px;border:1px solid var(--bt-line);border-radius:6px;font-size:12px;overflow-wrap:anywhere}
+.bt-product-memory-import-items{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
+.bt-product-memory-import-items>li{padding:10px;border:1px solid var(--bt-line);border-radius:6px}
+.bt-product-memory-import-head{display:flex;flex-wrap:wrap;align-items:center;gap:7px;font-size:12px}
+.bt-product-memory-import-head pre{width:100%;max-height:180px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin:2px 0}
+.bt-product-memory-import-sharing{display:flex;flex-wrap:wrap;gap:7px;margin:0;padding:7px;border:1px solid var(--bt-line);border-radius:6px}
+.bt-product-memory-import-sharing legend{padding:0 4px;font-size:12px}
+.bt-product-memory-import-sharing label{display:inline-flex;align-items:center;gap:4px;font-size:12px}
+.bt-product-memory-import-status{padding:2px 6px;border-radius:999px;background:var(--bt-line-2)}
+.bt-product-memory-import-status.is-conflict,.bt-product-memory-import-status.is-rejected{color:var(--bt-danger)}
 .bt-product-memory button:focus-visible,.bt-product-memory select:focus-visible,.bt-product-memory input:focus-visible,.bt-product-memory textarea:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 `;
 
