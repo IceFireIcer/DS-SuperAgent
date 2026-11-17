@@ -1297,9 +1297,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
           const owner = environments.find(environment => environment.config.id === reference.environmentId)
           if (!owner) throw new CoreError('ENVIRONMENT_DENIED', 'This artifact belongs to an unavailable work directory.')
           const bound = await owner.prepare({ instanceId, actorId })
-          const read = bound.readProductAsset?.bind(bound) ?? bound.readAsset?.bind(bound)
-          if (!read) throw new CoreError('ENVIRONMENT_UNSUPPORTED', 'This Environment cannot read the reported artifact.')
-          return read(reference, {
+          if (!bound.readProductAsset) throw new CoreError('ENVIRONMENT_UNSUPPORTED', 'This Environment cannot download the reported artifact.')
+          return bound.readProductAsset(reference, {
             ...(payload.offset === undefined ? {} : { offset: payload.offset as number }),
             ...(payload.maxBytes === undefined ? {} : { maxBytes: payload.maxBytes as number }) })
         }

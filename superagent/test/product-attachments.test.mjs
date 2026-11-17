@@ -104,7 +104,10 @@ test('Main passes admitted resources to one Worker and serves only its recorded 
     } else if (count === 1) {
       readText = JSON.stringify(options.messages.filter(message => message.role === 'tool').at(-1)?.content)
       yield* toolResponse('write_file', { path: 'derived.txt', text: `verified from attachment\n${work}\n` }, 'write-derived')
-    } else if (count === 2) yield* toolResponse('run_shell', { command: `node -e "if(!require('fs').readFileSync('derived.txt','utf8').startsWith('verified from attachment\\n')) process.exit(1)"` }, 'verify-derived')
+    } else if (count === 2) {
+      const expected = Buffer.from(`verified from attachment\n${work}\n`).toString('base64')
+      yield* toolResponse('run_shell', { command: `node -e "if(require('fs').readFileSync('derived.txt').toString('base64') !== '${expected}') process.exit(1)"` }, 'verify-derived')
+    }
     else if (count === 3) yield* toolResponse('report_ready', { result: 'Produced the derived file.',
       evidence: 'Read the original attached note and verified the derived file.', artifacts: 'derived.txt' }, 'report-derived')
     else yield* textResponse('No further work.')

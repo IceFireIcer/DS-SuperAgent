@@ -195,9 +195,8 @@ export class ProductAttachments {
     const owner = this.environment(record.environmentId)
     if (!owner) throw new CoreError('ENVIRONMENT_NOT_FOUND', 'The original work directory is unavailable.')
     const bound = await owner.prepare({ instanceId: this.instanceId, actorId: this.environmentActorId ?? request.actorId })
-    const read = bound.readProductAsset?.bind(bound) ?? bound.readAsset?.bind(bound)
-    if (!read) throw new CoreError('ENVIRONMENT_UNSUPPORTED', 'This Environment cannot read attachments.')
-    const page = await read(record.asset, { ...(request.offset === undefined ? {} : { offset: request.offset }),
+    if (!bound.readProductAsset) throw new CoreError('ENVIRONMENT_UNSUPPORTED', 'This Environment cannot download original attachments.')
+    const page = await bound.readProductAsset(record.asset, { ...(request.offset === undefined ? {} : { offset: request.offset }),
       ...(request.maxBytes === undefined ? {} : { maxBytes: request.maxBytes }) })
     const current = await this.storage.transaction(this.instanceId, tx => this.record(tx, request.id, request))
     if (current.state !== 'active') throw new CoreError('ATTACHMENT_REVOKED', 'The attachment was revoked during this read.')

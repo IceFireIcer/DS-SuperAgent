@@ -20,6 +20,13 @@ test('Main composer submits remote-only work without a paired Environment', asyn
   globalThis.HTMLElement = dom.window.HTMLElement
   globalThis.IS_REACT_ACT_ENVIRONMENT = true
   dom.window.HTMLElement.prototype.scrollIntoView = () => {}
+  let recognition
+  dom.window.SpeechRecognition = class {
+    constructor() { recognition = this }
+    start() {}
+    stop() { this.onend?.() }
+    abort() { this.onend?.() }
+  }
   let cleanup
   let root
   try {
@@ -57,7 +64,7 @@ test('Main composer submits remote-only work without a paired Environment', asyn
       navigator: dom.window.navigator, fetch, crypto: globalThis.crypto, sessionStorage: dom.window.sessionStorage,
       setTimeout, clearTimeout, setInterval, clearInterval, structuredClone, Blob, URL, console })
     let surface
-    module.exports.applyProduct({ get: () => 'en-US', effect: (effect, label) => {
+    module.exports.applyProduct({ get: name => name === 'locale' ? 'en-US' : undefined, effect: (effect, label) => {
       if (label === 'superagent: follow the shared Main') cleanup = effect()
     }, slots: { inject: (_name, register) => register(), register: ({ name }, component) => {
       if (name === 'main.conversation') surface = component
@@ -74,15 +81,21 @@ test('Main composer submits remote-only work without a paired Environment', asyn
     const input = document.querySelector('textarea')
     assert.ok(input)
     await React.act(async () => {
-      Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, 'value').set.call(input, 'Wait for a remote device.')
-      input.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
+      document.querySelector('button[aria-label="Start dictation"]').click()
     })
+    await React.act(async () => {
+      recognition.onresult({ resultIndex: 0, results: [Object.assign([{ transcript: 'Wait for a remote device.' }], { isFinal: true })] })
+    })
+    await React.act(async () => { document.querySelector('button[aria-label="Stop dictation"]').click() })
+    assert.equal(input.value, 'Wait for a remote device.')
     const send = document.querySelector('.bt-main-composer button[type="submit"]')
     assert.ok(send)
     assert.equal(send.disabled, false)
     await React.act(async () => { send.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
     const sent = requests.find(([endpoint]) => endpoint === 'send')?.[1]
     assert.equal(sent?.target, 'remote-only')
+    assert.equal(sent?.text, 'Wait for a remote device.')
+    assert.equal(typeof sent?.commandId, 'string')
     assert.equal(Object.hasOwn(sent, 'environmentId'), false)
   } finally {
     cleanup?.()

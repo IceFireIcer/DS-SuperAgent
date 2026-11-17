@@ -78,7 +78,13 @@ test('the product Feishu receiver admits native file and image bytes into Main w
   const reader = new NativeSessions(native, { main: { provider: 'mock', model: 'main' },
     router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
   try {
-    const session = await reader.readSession(page.mainSessionId, { limit: 100 })
+    let session
+    for (let attempt = 0; attempt < 100; attempt++) {
+      session = await reader.readSession(page.mainSessionId, { limit: 100 })
+      if (session.events.some(event => event.type === 'user/message' && event.data?.content?.some(block => block.type === 'file'))
+        && session.events.some(event => event.type === 'user/message' && event.data?.content?.some(block => block.type === 'image'))) break
+      await sleep(40)
+    }
     assert.equal(session.events.some(event => event.type === 'user/message'
       && event.data?.content?.some(block => block.type === 'file')), true)
     assert.equal(session.events.some(event => event.type === 'user/message'

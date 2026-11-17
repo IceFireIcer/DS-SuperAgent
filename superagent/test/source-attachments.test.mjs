@@ -258,8 +258,8 @@ test('a product download rechecks revocation after the Environment returns bytes
   const prepare = environment.prepare.bind(environment)
   environment.prepare = async (...args) => {
     const bound = await prepare(...args)
-    const read = bound.readAsset.bind(bound)
-    bound.readAsset = async (...params) => {
+    const read = bound.readProductAsset.bind(bound)
+    bound.readProductAsset = async (...params) => {
       const page = await read(...params)
       reading()
       await heldRead
