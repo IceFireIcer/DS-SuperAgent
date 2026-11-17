@@ -103,8 +103,8 @@ test('Main passes admitted resources to one Worker and serves only its recorded 
         attachmentId: reference.attachmentId, bytes: String(reference.bytes), path: '', offset: '0', maxBytes: '1024' }, 'read-attached')
     } else if (count === 1) {
       readText = JSON.stringify(options.messages.filter(message => message.role === 'tool').at(-1)?.content)
-      yield* toolResponse('write_file', { path: 'derived.txt', text: 'verified from attachment\n' }, 'write-derived')
-    } else if (count === 2) yield* toolResponse('run_shell', { command: `node -e "if(require('fs').readFileSync('derived.txt','utf8').trim() !== 'verified from attachment') process.exit(1)"` }, 'verify-derived')
+      yield* toolResponse('write_file', { path: 'derived.txt', text: `verified from attachment\n${work}\n` }, 'write-derived')
+    } else if (count === 2) yield* toolResponse('run_shell', { command: `node -e "if(!require('fs').readFileSync('derived.txt','utf8').startsWith('verified from attachment\\n')) process.exit(1)"` }, 'verify-derived')
     else if (count === 3) yield* toolResponse('report_ready', { result: 'Produced the derived file.',
       evidence: 'Read the original attached note and verified the derived file.', artifacts: 'derived.txt' }, 'report-derived')
     else yield* textResponse('No further work.')
@@ -154,7 +154,7 @@ test('Main passes admitted resources to one Worker and serves only its recorded 
     && event.data?.content?.some(block => block.type === 'image')), true,
   'the authorized Worker Session must retain the original native image block')
   const artifact = await host.dispatch('artifact-read', { instanceId, workItemId: workItem.brief.workItemId, path: 'derived.txt' })
-  assert.equal(artifact.text, 'verified from attachment\n')
+  assert.equal(artifact.text, `verified from attachment\n${work}\n`, 'product artifact download keeps original bytes')
   await assert.rejects(host.dispatch('artifact-read', { instanceId, workItemId: workItem.brief.workItemId, path: '../note.txt' }), { code: 'NOT_FOUND' })
   await host.dispatch('send', { instanceId, commandId: 'no-shared-resources', text: 'Split attached work.', attachments: [upload.id, image.id] })
   const afterSplit = await host.dispatch('history', { instanceId })

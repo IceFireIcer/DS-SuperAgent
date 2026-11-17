@@ -180,7 +180,7 @@ test('a spill redacts credentials as one stream so no page can start inside a va
 })
 
 test('remote attachments stay on the device and a same-named Host file cannot substitute', { timeout: 30000 }, async context => {
-  const { bound, environment, root, hostRoot, assetsPath } = await remoteFixture(context, { skills: true })
+  const { bound, environment, root, resolvedRoot, hostRoot, assetsPath } = await remoteFixture(context, { skills: true })
   const content = Buffer.from('device attachment content\n')
   const reference = await bound.saveAttachment({ name: 'evidence.txt', data: content })
   assert.equal(reference.environmentKind, 'remote')
@@ -192,10 +192,11 @@ test('remote attachments stay on the device and a same-named Host file cannot su
   await writeFile(join(hostRoot, 'evidence.txt'), 'same-named host work file\n')
   assert.equal(await readAll(bound, reference, 7), content.toString('utf8'))
 
-  await writeFile(join(root, 'artifact.txt'), 'artifact bytes\n')
+  await writeFile(join(root, 'artifact.txt'), `artifact bytes ${resolvedRoot}\n`)
   const artifact = await bound.artifact('artifact.txt')
   assert.equal(artifact.reference.kind, 'artifact')
-  assert.equal(await readAll(bound, artifact.reference), 'artifact bytes\n')
+  assert.equal(await readAll(bound, artifact.reference), 'artifact bytes <device-workdir>\n')
+  assert.equal((await bound.readProductAsset(artifact.reference)).text, `artifact bytes ${resolvedRoot}\n`)
   await writeFile(join(root, 'artifact.txt'), 'replacement bytes\n')
   await assert.rejects(bound.readAsset(artifact.reference), { code: 'REFERENCE_STALE' })
 

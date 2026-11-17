@@ -53,7 +53,11 @@ export interface PreparedEnvironment {
   stageAttachment?(reference: EnvironmentAssetReference, path: string, signal?: AbortSignal): Promise<{ path: string; bytes: number; sha256: string }>
   assetCapabilities?(signal?: AbortSignal): Promise<EnvironmentAssetCapabilities>
   saveAttachment?(input: { name: string; data: Uint8Array; mediaType?: string }, signal?: AbortSignal): Promise<EnvironmentAssetReference>
+  /** Trusted product admission; Worker tools keep their smaller attachment limit. */
+  saveProductAttachment?(input: { name: string; data: Uint8Array; mediaType?: string }, signal?: AbortSignal): Promise<EnvironmentAssetReference>
   readAsset?(reference: EnvironmentAssetReference, options?: { offset?: number; maxBytes?: number }, signal?: AbortSignal): Promise<EnvironmentAssetPage>
+  /** Trusted product download returns original bytes, after the caller checks ownership. */
+  readProductAsset?(reference: EnvironmentAssetReference, options?: { offset?: number; maxBytes?: number }, signal?: AbortSignal): Promise<EnvironmentAssetPage>
   spillReference?(jobId: string, stream: SpillStream, signal?: AbortSignal): Promise<EnvironmentAssetReference>
   listSkills?(signal?: AbortSignal): Promise<EnvironmentSkillSummary[]>
   sanitize(text: string): string

@@ -163,8 +163,9 @@ export class ProductAttachments {
       native = admitted.attachment
     }
     const bound = await owner.prepare({ instanceId: this.instanceId, actorId: this.environmentActorId ?? request.actorId })
-    if (!bound.saveAttachment) throw new CoreError('ENVIRONMENT_UNSUPPORTED', 'This Environment has no attachment store.')
-    const asset = await bound.saveAttachment({ name: request.name, data: bytes, ...(request.mediaType ? { mediaType: request.mediaType } : {}) })
+    const save = bound.saveProductAttachment?.bind(bound) ?? bound.saveAttachment?.bind(bound)
+    if (!save) throw new CoreError('ENVIRONMENT_UNSUPPORTED', 'This Environment has no attachment store.')
+    const asset = await save({ name: request.name, data: bytes, ...(request.mediaType ? { mediaType: request.mediaType } : {}) })
     const id = key.slice('upload:'.length)
     return commandTransaction(this.storage, this.instanceId, async tx => {
       const existing = await tx.get<UploadReceipt>('product-attachment', key)
@@ -194,8 +195,9 @@ export class ProductAttachments {
     const owner = this.environment(record.environmentId)
     if (!owner) throw new CoreError('ENVIRONMENT_NOT_FOUND', 'The original work directory is unavailable.')
     const bound = await owner.prepare({ instanceId: this.instanceId, actorId: this.environmentActorId ?? request.actorId })
-    if (!bound.readAsset) throw new CoreError('ENVIRONMENT_UNSUPPORTED', 'This Environment cannot read attachments.')
-    const page = await bound.readAsset(record.asset, { ...(request.offset === undefined ? {} : { offset: request.offset }),
+    const read = bound.readProductAsset?.bind(bound) ?? bound.readAsset?.bind(bound)
+    if (!read) throw new CoreError('ENVIRONMENT_UNSUPPORTED', 'This Environment cannot read attachments.')
+    const page = await read(record.asset, { ...(request.offset === undefined ? {} : { offset: request.offset }),
       ...(request.maxBytes === undefined ? {} : { maxBytes: request.maxBytes }) })
     const current = await this.storage.transaction(this.instanceId, tx => this.record(tx, request.id, request))
     if (current.state !== 'active') throw new CoreError('ATTACHMENT_REVOKED', 'The attachment was revoked during this read.')

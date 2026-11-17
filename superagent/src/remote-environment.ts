@@ -654,6 +654,18 @@ class RemoteBoundEnvironment implements PreparedEnvironment {
   }
 
   async readAsset(reference: EnvironmentAssetReference, options: { offset?: number; maxBytes?: number } = {}, signal?: AbortSignal): Promise<EnvironmentAssetPage> {
+    return this.readAssetPage(reference, options, signal, false)
+  }
+
+  async readProductAsset(reference: EnvironmentAssetReference, options: { offset?: number; maxBytes?: number } = {}, signal?: AbortSignal): Promise<EnvironmentAssetPage> {
+    if (reference.kind !== 'attachment' && reference.kind !== 'artifact') {
+      throw new CoreError('INVALID_INPUT', 'A product download needs an attachment or recorded artifact.')
+    }
+    return this.readAssetPage(reference, options, signal, true)
+  }
+
+  private async readAssetPage(reference: EnvironmentAssetReference, options: { offset?: number; maxBytes?: number },
+    signal: AbortSignal | undefined, original: boolean): Promise<EnvironmentAssetPage> {
     this.owner.authorize(this.identity)
     this.permission('read')
     assertReferenceShape(reference)
@@ -681,7 +693,7 @@ class RemoteBoundEnvironment implements PreparedEnvironment {
       }
       const window = Buffer.from(result.data, 'base64')
       if (window.length !== result.nextOffset - offset) throw new CoreError('DEVICE_FAILED', 'The device attachment page has an invalid length.')
-      return pageOf(reference, window, offset, maxBytes, text => this.owner.sanitize(text))
+      return pageOf(reference, window, offset, maxBytes, original ? undefined : text => this.owner.sanitize(text))
     }
     if (reference.kind === 'spill') {
       const { jobId, stream } = parseSpillAssetId(reference.id)
@@ -708,7 +720,7 @@ class RemoteBoundEnvironment implements PreparedEnvironment {
     }
     const window = Buffer.from(result.data, 'base64')
     if (window.length !== result.nextOffset - offset) throw new CoreError('DEVICE_FAILED', 'The device artifact page has an invalid length.')
-    return pageOf(reference, window, offset, maxBytes, text => this.owner.sanitize(text))
+    return pageOf(reference, window, offset, maxBytes, original ? undefined : text => this.owner.sanitize(text))
   }
 
   async listSkills(signal?: AbortSignal): Promise<EnvironmentSkillSummary[]> {

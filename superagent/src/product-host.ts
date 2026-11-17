@@ -1291,14 +1291,15 @@ export async function createProductHost(context: Context, config: ProductHostCon
           if (!artifact?.reference) throw new CoreError('NOT_FOUND', 'This work has no authorized artifact at that path.')
           const reference = artifact.reference
           assertReferenceShape(reference)
-          if (reference.environmentId !== work.brief.environmentId) {
+          if (reference.environmentId !== (work.executionLocation?.id ?? work.brief.environmentId)) {
             throw new CoreError('REFERENCE_STALE', 'The artifact belongs to another work Environment.')
           }
           const owner = environments.find(environment => environment.config.id === reference.environmentId)
           if (!owner) throw new CoreError('ENVIRONMENT_DENIED', 'This artifact belongs to an unavailable work directory.')
           const bound = await owner.prepare({ instanceId, actorId })
-          if (!bound.readAsset) throw new CoreError('ENVIRONMENT_UNSUPPORTED', 'This Environment cannot read the reported artifact.')
-          return bound.readAsset(reference, {
+          const read = bound.readProductAsset?.bind(bound) ?? bound.readAsset?.bind(bound)
+          if (!read) throw new CoreError('ENVIRONMENT_UNSUPPORTED', 'This Environment cannot read the reported artifact.')
+          return read(reference, {
             ...(payload.offset === undefined ? {} : { offset: payload.offset as number }),
             ...(payload.maxBytes === undefined ? {} : { maxBytes: payload.maxBytes as number }) })
         }

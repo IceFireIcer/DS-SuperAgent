@@ -161,6 +161,8 @@ test('the product pairs a device and binds remote-only work to its own filesyste
     assert.equal(workerToolNames.includes(name), true, `${name} must inherit the remote Assignment world`)
   }
   assert.equal(await readFile(join(deviceRoot, 'remote-result.txt'), 'utf8'), 'remote execution\n')
+  assert.equal((await call('artifact-read', { workItemId: work.brief.workItemId, path: 'remote-result.txt' })).text,
+    'remote execution\n', 'the reported remote artifact is downloadable through its work card')
   await assert.rejects(access(join(workspace, 'remote-result.txt')))
   await call('send', { commandId: 'remote-office-request', text: 'Use Office on this device.', target: 'remote-only' })
   let officeWork
