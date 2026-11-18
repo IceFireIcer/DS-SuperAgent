@@ -19,8 +19,8 @@ Fixes #
 
 ## How I checked it / 怎么验证的
 
-- [ ] `npm test` (in `ds-bot/`)
-- [ ] `node scripts/build-client.mjs --check`
+- [ ] `npm test` (in `superagent/`)
+- [ ] `node dsh/scripts/build-client.mjs --check` (in `superagent/`)
 - [ ] `npm run lint`
 - [ ] `npm run typecheck` and `npm run build` in `superagent/`, for Engine/Host changes / 改 Engine 或 Host 时运行
 - [ ] `node app/scripts/check-superagent-profile.mjs`, for profile or product assembly changes / 改 profile 或产品装配时运行

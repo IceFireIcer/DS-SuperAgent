@@ -1,7 +1,6 @@
 import { pathToFileURL } from 'node:url'
 
 export const jobs = [
-  ['test', 'SCOPE_TEST', 'RESULT_TEST'],
   ['superagent', 'SCOPE_SUPERAGENT', 'RESULT_SUPERAGENT'],
   ['app', 'SCOPE_APP', 'RESULT_APP'],
   ['mobile', 'SCOPE_MOBILE', 'RESULT_MOBILE'],

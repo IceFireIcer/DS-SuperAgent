@@ -5,11 +5,11 @@ Instructions for AI coding agents that work on this repository. Human contributo
 ## What this project is
 
 DS SuperAgent has three product layers built on DeepSeek Harness (DSH): Main owns the user conversation, Router turns
-accepted work into durable tickets, and independent Workers execute those tickets. The repository has three parts:
+accepted work into durable tickets, and independent Workers execute those tickets. The repository has two parts:
 
-- `superagent/`: the Domain Engine, durable business store, Host and execution adapters.
-- `ds-bot/`: the existing DSH client UI and `/api/product` bridge.
-- `app/`: the desktop app for Windows, macOS and Linux. It runs a pinned DSH with `ds-bot` and `ds-superagent` in one
+- `superagent/`: the single DSH package. Its package root runs the Domain Engine and product Host, `./client`
+  provides the existing browser UI, and `./web-search` provides search.
+- `app/`: the desktop app for Windows, macOS and Linux. It runs a pinned DSH with `ds-superagent` in one
   product profile and its own `DSH_HOME`; it never writes the user's `~/.dsh`.
 
 Main, Router and Worker run as separate DSH Agent Sessions. Accepted work keeps durable work identity, authority,
@@ -19,24 +19,23 @@ production Bot governance, old history or profile-switch compatibility runtime.
 ## Hard rules
 
 1. **Build on DSH; never patch it.** Bot features use the documented plugin APIs. The desktop app starts DSH only through its documented entry points (`@deepseek-ai/dsh/profile-boot`, the `dsh` CLI). Never patch DeepSeek Harness or depend on files inside a DSH install. If something is missing in DSH, stop and say so; do not work around it with a patch.
-2. **No secrets.** Never write, print or commit API keys, tokens, cookies or `DSH_HOME` contents. Use the mock model (`ds-bot/dev/mock-llm.mjs`) for tests; it needs no key.
+2. **No secrets.** Never write, print or commit API keys, tokens, cookies or `DSH_HOME` contents. Use the mock model (`superagent/dsh/dev/mock-llm.mjs`) for tests; it needs no key.
 3. **Only original material.** Do not copy code, text, icons, logos or graphics from other products or websites. Code under a license compatible with Apache 2.0 is the only exception: say where it comes from and add its notice to the `NOTICE` file.
-4. **`client.js` is generated.** Change `ds-bot/src/client/`, then run `npm run build` and commit both files. Never edit `client.js` by hand.
+4. **`client.js` is generated.** Change `superagent/dsh/src/client/`, then run `npm run build` in `superagent/` and commit the generated `superagent/dsh/client.js`. Never edit it by hand.
 5. **Do not touch the user's own DSH data.** The desktop app keeps its data in its own `DSH_HOME`; its import only reads `~/.dsh` and never writes there. The test bench keeps its data in `.dsh-test-<name>/`. Never point a test at `~/.dsh`, at the desktop app's data or at a DSH that the user runs.
-6. **Preserve the existing product UI.** Do not create a renderer, replacement desktop surface, or alternate frontend. Integrate the Super-agent core through documented DSH APIs and the existing `ds-bot` product protocol (`/api/product`, client events, Main history/work cards, questions and delivery history). Changes to `app/`, `ds-bot/src/client/` or `client.js` require an explicit user request for that UI change.
+6. **Preserve the existing product UI.** Do not create a renderer, replacement desktop surface, or alternate frontend. Integrate the Super-agent core through documented DSH APIs and the existing product protocol (`/api/product`, client events, Main history/work cards, questions and delivery history). Changes to `app/`, `superagent/dsh/src/client/` or `superagent/dsh/client.js` require an explicit user request for that UI change.
 
 ## Commands
 
-Run in `ds-bot/`. The unit tests and the linter load the `@deepseek-ai/*` packages from `dev/harness/`, which `npm run harness` installs from npm at the DSH version in `dev/harness/package.json`. `DSH_HARNESS` points them at another install or at a DeepSeek Harness checkout instead. The test bench needs a checkout at `../deepseek-harness` (or `DSH_HARNESS`), at the DSH version in the README.
+Run package commands in `superagent/`. `DSH_HARNESS` can point source-resolving tests at a DeepSeek Harness checkout.
 
 ```sh
-npm ci                                 # build tool only (esbuild)
-npm run harness                        # once: the DSH packages for the tests and the linter
-npm run build                          # src/client → client.js
-npm test                               # unit tests; also fail if client.js is stale
-node scripts/build-client.mjs --check  # client.js matches src/client
+npm ci                                 # package dependencies
+npm run build                          # TypeScript + dsh/client.js + dsh/office.js
+npm test                               # Server and browser-side tests
+node dsh/scripts/build-client.mjs --check
 npm run lint                           # oxlint
-node ../scripts/check-ui-boundary.mjs --base origin/dev  # UI files need DSBOT_UI_CHANGE_APPROVED=1
+node ../scripts/check-ui-boundary.mjs --base origin/dev  # UI files need DS_SUPERAGENT_UI_CHANGE_APPROVED=1
 ```
 
 Run `npm run typecheck`, `npm run build` and `npm run lint` in `superagent/` after Engine or Host changes. Run
@@ -48,8 +47,8 @@ ad-hoc multi-line shell commands for long checks.
 
 Targeted checks are the normal ticket loop. Run the checks for every changed package before committing. Full CI is a
 release gate unless the current ticket says otherwise. Before committing UI changes, run the UI boundary check; it
-lists changes under `ds-bot/src/client/` and `ds-bot/client.js` and fails unless the user asked for that UI change and
-the check runs with `DSBOT_UI_CHANGE_APPROVED=1`.
+lists changes under `superagent/dsh/src/client/` and `superagent/dsh/client.js` and fails unless the user asked for
+that UI change and the check runs with `DS_SUPERAGENT_UI_CHANGE_APPROVED=1`.
 
 ## Branches, pull requests and issues
 
@@ -66,12 +65,12 @@ The full workflow is in [CONTRIBUTING.md](CONTRIBUTING.md#how-we-work). The part
 
 ## Layout
 
-- `superagent/`: the business Engine, Host, persistence, execution and retained capability adapters.
-- `ds-bot/index.js` and `ds-bot/src/host/product.js`: the product HTTP and native-Session boundary.
-- `ds-bot/src/client/`: the existing DSH browser surface for Main, work cards and product settings.
-- `ds-bot/web-search.js`: the `auto` web-search provider, independent of the product Engine.
-- `ds-bot/test/`: product UI and Office tests. `ds-bot/dev/`: the DSH test packages, minimal model mock and
-  retained asset/Office/MCP utilities.
+- `superagent/src/`: the business Engine, Host, persistence, execution and retained capability adapters.
+- `superagent/dsh/src/client/`: the existing DSH browser surface for Main, work cards and product settings.
+- `superagent/dsh/office.js` and `superagent/dsh/src/office/`: the Office tooling.
+- `superagent/dsh/web-search.js`: the `auto` web-search provider.
+- `superagent/test/` and `superagent/dsh/test/`: Engine, product UI, Office and search tests.
+- `superagent/dev/` and `superagent/dsh/dev/`: test fixtures, the minimal model mock and retained utilities.
 - `app/`: the desktop app, one DSH product profile, data isolation, lifecycle and packaging.
 
 ## Style

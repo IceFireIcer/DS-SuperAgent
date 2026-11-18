@@ -1,5 +1,5 @@
 // Boot the app's ds-superagent profile without the Electron shell: the real
-// profile bundles, the production Engine host and the existing ds-bot chat UI.
+// profile bundles, the production Engine host and the existing chat UI.
 // Uses throwaway data and a mock model route; stops the Host before it exits.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -23,7 +23,7 @@ process.env.DS_BOT_WORKSPACE = join(home, 'workspace')
 mkdirSync(join(home, 'profiles'), { recursive: true })
 const routePatch = join(home, 'profiles', 'superagent-mock-route.patch.yml')
 writeFileSync(routePatch, [
-  '- id: superagent-profile',
+  '- id: superagent',
   '  config:',
   '    main: { provider: mock, model: main }',
   '    router: { provider: mock, model: router }',

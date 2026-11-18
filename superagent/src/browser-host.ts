@@ -88,7 +88,7 @@ export class HostBrowserAdapter implements BrowserAdapter {
       }
       const receive = (message: unknown) => {
         const value = message as { type?: string; id?: string; url?: string } | null
-        if (value?.type !== 'ds-bot:browser-endpoint-response' || value.id !== id) return
+        if (value?.type !== 'ds-superagent:browser-endpoint-response' || value.id !== id) return
         finish(value.url ? undefined : new CoreError('BROWSER_UNAVAILABLE', 'The desktop browser endpoint was refused.'), value.url)
       }
       const abort = () => finish(new CoreError('TICKET_BLOCKED', 'The Worker turn was stopped.'))
@@ -96,7 +96,7 @@ export class HostBrowserAdapter implements BrowserAdapter {
       process.on('message', receive)
       signal.addEventListener('abort', abort, { once: true })
       if (signal.aborted) { abort(); return }
-      send.call(process, { type: 'ds-bot:browser-endpoint', id, botId: profileKey, downloadRoots: [] }, error => {
+        send.call(process, { type: 'ds-superagent:browser-endpoint', id, botId: profileKey, downloadRoots: [] }, error => {
         if (error) finish(new CoreError('BROWSER_UNAVAILABLE', 'The browser endpoint could not be requested.'))
       })
     })

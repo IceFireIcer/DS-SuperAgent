@@ -24,7 +24,7 @@ import { ProductBrowserSettings, PRODUCT_BROWSER_CSS } from './product-browser-s
 import { ProductExecutionSettings, PRODUCT_EXECUTION_CSS } from './product-execution.js'
 import { ProductWorkView } from './product-work-view.js'
 
-const clientBridge = () => window.dsBotApp?.productClient
+const clientBridge = () => window.dsSuperagentApp?.productClient
 let activeHost = 'local'
 
 function offerDownload(data, name, mediaType = 'application/octet-stream') {
@@ -47,7 +47,7 @@ export async function productCall(endpoint, payload = {}) {
   const response = await fetch('api/product', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint, payload }) })
   let result
   try { result = await response.json() } catch { throw new Error(t('Could not reach Main. Check that the app is running.')) }
-  if (!response.ok || !result.ok) throw Object.assign(new Error(result.error?.message ?? t('Main is unavailable.')), { code: result.error?.code })
+  if (!response.ok || !result.ok) throw Object.assign(new Error(t(result.error?.message ?? 'Main is unavailable.')), { code: result.error?.code })
   return result.value
 }
 
@@ -1468,7 +1468,7 @@ export function applyProduct(ctx) {
                 settingsRevision: snapshot.revision, roleSettings: snapshot, onApplied: refreshAfterPreset, onReload: refreshAfterPreset })
                 : page === 'memory' ? h(ProductMemorySettings, { key: binding.instanceId, binding, works: view.getSnapshot().works, call: productCall })
                 : page === 'browser' ? h(ProductBrowserSettings, { binding, works: view.getSnapshot().works,
-                  directoryOptions: viewState.directoryOptions, call: productCall, browserBridge: globalThis.dsBotApp?.browser })
+                  directoryOptions: viewState.directoryOptions, call: productCall, browserBridge: globalThis.dsSuperagentApp?.browser })
                 : page === 'supervision' ? h(ProductSupervisionSettings, { binding, call: productCall }) : h(Fragment, null,
             error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
             viewState.directoryError ? h('p', { className: 'bt-main-error', role: 'alert' }, viewState.directoryError) : null,
@@ -1525,7 +1525,7 @@ export function applyProduct(ctx) {
                     provider.key.configured ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm bt-bs-danger',
                       disabled: saving, onClick: () => { void saveKey(provider.id, null) } }, t('Remove key')) : null) : h('span', null, t('Set outside this product'))) : null))
                 : h('p', { className: 'bt-main-status' }, t('No provider catalog is available. Configure providers in DSH settings.'))),
-            h(ProductCredentialSettings, { binding, call: productCall, credentialImportBridge: globalThis.dsBotApp?.browser?.credentialImport }),
+            h(ProductCredentialSettings, { binding, call: productCall, credentialImportBridge: globalThis.dsSuperagentApp?.browser?.credentialImport }),
             h(ProductMcpSettings, { binding, call: productCall }),
             h(ClientSettings, { binding }),
             h(Card, { title: t('Recent configuration uses') },

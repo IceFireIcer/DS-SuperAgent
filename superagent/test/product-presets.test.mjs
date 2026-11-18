@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import { createProductHost, CoreError, Engine, NativeSessions } from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, textResponse } from '../dev/native-mock.mjs'
-import { installProduct } from '../../ds-bot/src/host/product.js'
+import { productHttpPlugin } from '../dist/index.js'
 
 const preset = (id = 'reviewer') => ({ id, name: 'Reviewer', model: { provider: 'mock', model: 'writer' },
   instructions: '{{goal}} under {{constraints}}.', skills: ['review'], appearance: { shape: 'square' } })
@@ -63,7 +63,7 @@ test('product Host authorizes preset commands and persists reviewed choices and 
       worker: { provider: 'mock', model: 'worker' } })
     native.provide('connection', { fetch: { register(route) { routes.set(route.path, route); return () => routes.delete(route.path) } } })
     native.provide('superagentProduct', host)
-    await native.plugin({ name: 'preset-http', inject: ['connection', 'superagentProduct'], apply: installProduct })
+    await native.plugin(productHttpPlugin)
     opened.push({ host, native })
     return host
   }

@@ -3,8 +3,8 @@ import { randomUUID } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { setTimeout } from 'node:timers/promises'
 
-const image = process.argv[2] ?? 'ds-bot:local'
-const name = `ds-bot-test-${randomUUID()}`
+const image = process.argv[2] ?? 'ds-superagent:local'
+const name = `ds-superagent-test-${randomUUID()}`
 const data = `${name}-data`
 const workspace = `${name}-workspace`
 const containers = new Set()
@@ -85,7 +85,7 @@ try {
     'run', '--rm', '--network', 'none',
     '--mount', `type=volume,src=${legacyData},dst=/data`,
     '--entrypoint', '/bin/sh', image, '-eu', '-c',
-    'mkdir -p /data/profiles/web && printf "{\\"name\\":\\"web\\",\\"dependencies\\":{\\"ds-bot\\":\\"0.2.5\\"}}" > /data/profiles/web/package.json',
+    'mkdir -p /data/profiles/web && printf "{\\"name\\":\\"web\\",\\"dependencies\\":{\\"removed-plugin\\":\\"0.2.5\\"}}" > /data/profiles/web/package.json',
   ])
   const legacy = docker([
     'run', '--rm', '--network', 'none',

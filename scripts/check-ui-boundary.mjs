@@ -1,12 +1,12 @@
 import { execFileSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 
-export const APPROVAL_ENV = 'DSBOT_UI_CHANGE_APPROVED'
-const prefixes = ['app/ui/', 'ds-bot/src/client/']
-const files = new Set(['ds-bot/client.js'])
+export const APPROVAL_ENV = 'DS_SUPERAGENT_UI_CHANGE_APPROVED'
+const prefixes = ['app/ui/', 'superagent/dsh/src/client/']
+const files = new Set(['superagent/dsh/client.js'])
 
 const usage = `Usage: node scripts/check-ui-boundary.mjs [--base <ref>] [--json]
-Lists changes under app/ui/, ds-bot/src/client/ and ds-bot/client.js. Those files need
+Lists changes under app/ui/, superagent/dsh/src/client/ and superagent/dsh/client.js. Those files need
 an explicit UI change request, marked with ${APPROVAL_ENV}=1 in the environment.`
 
 export function uiChanges(paths) {

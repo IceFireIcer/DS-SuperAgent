@@ -1,7 +1,9 @@
 import { build } from 'esbuild'
 import { spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, rmSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+
+rmSync(new URL('../dist/', import.meta.url), { recursive: true, force: true })
 
 const typescript = fileURLToPath(new URL('../node_modules/typescript/bin/tsc', import.meta.url))
 const declarations = spawnSync(process.execPath, [typescript, '--noEmit', 'false', '--declaration', '--emitDeclarationOnly', '--outDir', 'dist'], { stdio: 'inherit' })

@@ -1202,7 +1202,7 @@ div:has(> nav [class*="_marks"]){display:none!important}
 // DSH's ClientModuleSystem claims every <style> without a `data-plugin` for the module
 // it is materializing and deletes a module's styles when it unloads. Ours carry our
 // module id from the start, so another plugin's claim or teardown never takes them.
-const PLUGIN_ID = 'ds-bot'
+const PLUGIN_ID = 'ds-superagent'
 
 export function installStyles(text, tag) {
   const style = document.createElement('style')

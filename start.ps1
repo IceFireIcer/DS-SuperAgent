@@ -1,13 +1,13 @@
 #Requires -Version 5.1
 [CmdletBinding()]
 param(
-    [string]$DataRoot = (Join-Path $PSScriptRoot '.ds-bot-local'),
+    [string]$DataRoot = (Join-Path $PSScriptRoot '.ds-superagent-local'),
     [switch]$PrepareOnly
 )
 
 $ErrorActionPreference = 'Stop'
 $repo = [IO.Path]::GetFullPath($PSScriptRoot)
-$plugin = Join-Path $repo 'ds-bot'
+$plugin = Join-Path $repo 'superagent'
 $appDir = Join-Path $repo 'app'
 if (-not [IO.Path]::IsPathRooted($DataRoot)) { $DataRoot = Join-Path $repo $DataRoot }
 $DataRoot = [IO.Path]::GetFullPath($DataRoot)
@@ -55,12 +55,12 @@ foreach ($name in $envNames) { $savedEnv[$name] = [Environment]::GetEnvironmentV
 try {
     & $node --version
     if ($LASTEXITCODE -ne 0) { throw 'Node.js could not start.' }
-    $pluginHash = Get-SourceHash @((Join-Path $plugin 'package.json'), (Join-Path $plugin 'package-lock.json'), (Join-Path $plugin '.npmrc'))
+    $pluginHash = Get-SourceHash @((Join-Path $plugin 'package.json'), (Join-Path $plugin 'package-lock.json'))
     Install-IfChanged $plugin $pluginHash (Join-Path $plugin 'node_modules/esbuild/package.json')
-    Write-Host 'Building the plugin from this checkout...'
+    Write-Host 'Building the Super-agent package from this checkout...'
     Invoke-Npm $plugin @('run', 'build')
 
-    # The desktop app installs a copy of the plugin. Hash npm's package file list so new
+    # The desktop app installs a copy of the package. Hash npm's package file list so new
     # or removed source files also refresh that copy, even when its version is unchanged.
     $packJson = Invoke-Npm $plugin @('pack', '--dry-run', '--json', '--ignore-scripts')
     $package = @((($packJson -join "`n") | ConvertFrom-Json))[0]

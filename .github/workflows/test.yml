@@ -28,7 +28,6 @@ jobs:
     name: Change scope
     runs-on: ubuntu-latest
     outputs:
-      test: ${{ steps.scope.outputs.test }}
       superagent: ${{ steps.scope.outputs.superagent }}
       app: ${{ steps.scope.outputs.app }}
       mobile: ${{ steps.scope.outputs.mobile }}
@@ -36,7 +35,6 @@ jobs:
       docker: ${{ steps.scope.outputs.docker }}
       full: ${{ steps.scope.outputs.full }}
       base: ${{ steps.scope.outputs.base }}
-      bot_matrix: ${{ steps.scope.outputs.bot_matrix }}
       shards: ${{ steps.scope.outputs.shards }}
     steps:
       - uses: actions/checkout@v4
@@ -56,10 +54,8 @@ jobs:
           if [ "$FULL" = true ]; then
             node scripts/change-scope.mjs --full --github-output
             echo 'shards=[1,2,3,4]' >> "$GITHUB_OUTPUT"
-            echo 'bot_matrix={"include":[{"os":"ubuntu-latest","dsh":"0.2.1-rc.4"},{"os":"windows-latest","dsh":"0.2.1-rc.4"},{"os":"ubuntu-latest","dsh":"0.2.0-rc.2"}]}' >> "$GITHUB_OUTPUT"
           else
             echo 'shards=[1]' >> "$GITHUB_OUTPUT"
-            echo 'bot_matrix={"include":[{"os":"ubuntu-latest","dsh":"0.2.1-rc.4"}]}' >> "$GITHUB_OUTPUT"
           fi
           if [ "$FULL" = true ]; then
             exit 0
@@ -68,34 +64,6 @@ jobs:
           else
             node scripts/change-scope.mjs --base "$BASE" --head "${{ github.sha }}" --github-output
           fi
-
-  test:
-    name: DS-SuperAgent plugin · ${{ matrix.os }} · DSH ${{ matrix.dsh }}
-    needs: changes
-    if: needs.changes.outputs.test == 'true'
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.changes.outputs.bot_matrix) }}
-    defaults:
-      run:
-        shell: bash
-        working-directory: ds-bot
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: |
-            ds-bot/package-lock.json
-            ds-bot/dev/harness/package.json
-      - run: npm ci --no-fund --no-audit
-      - name: Install DSH ${{ matrix.dsh }}
-        run: npm run harness -- --no-save "@deepseek-ai/dsh@${{ matrix.dsh }}"
-      - run: npm test
-      - run: node scripts/build-client.mjs --check
-      - run: npm run lint
 
   scan:
     name: Leak scan
@@ -132,8 +100,13 @@ jobs:
           cache: npm
           cache-dependency-path: superagent/package-lock.json
       - run: npm ci --no-fund --no-audit
+      - run: npm run build
+      - run: node dsh/scripts/build-client.mjs --check
       - run: npm run typecheck
       - run: npm run lint
+      - name: Run all product-client tests for daily changes
+        if: needs.changes.outputs.full != 'true'
+        run: npm run test:client
 
   superagent-tests:
     name: Super-agent ${{ needs.changes.outputs.full == 'true' && 'full' || 'smoke + changed tests' }} · shard ${{ matrix.shard }}
@@ -163,9 +136,12 @@ jobs:
         env:
           CI_TEST_BASE: ${{ needs.changes.outputs.base }}
         run: node ../scripts/superagent-ci-tests.mjs
-      - name: Run every test for release validation
+      - name: Run every Server test for release validation
         if: needs.changes.outputs.full == 'true'
-        run: npm test -- --test-shard=${{ matrix.shard }}/4
+        run: node scripts/test.mjs --test-shard=${{ matrix.shard }}/4
+      - name: Run every product-client test for release validation
+        if: needs.changes.outputs.full == 'true'
+        run: npm run test:client -- --test-shard=${{ matrix.shard }}/4
 
   superagent:
     name: Super-agent CI
@@ -464,15 +440,12 @@ jobs:
     name: Docker startup and data migration
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: [changes, test, scan]
-    # A Docker-only change leaves the test job skipped. Always evaluate this condition so
-    # that skip does not also skip Docker, but still require a test job that the change needs.
+    needs: [changes, scan]
     if: >-
       always() &&
       needs.changes.result == 'success' &&
       needs.scan.result == 'success' &&
-      needs.changes.outputs.docker == 'true' &&
-      (needs.test.result == 'success' || (needs.changes.outputs.test != 'true' && needs.test.result == 'skipped'))
+      needs.changes.outputs.docker == 'true'
     permissions:
       contents: read
       packages: write
@@ -483,10 +456,10 @@ jobs:
           node-version: 24
       - run: docker compose -f docker-compose.yml config --quiet
       - run: docker compose -f docker/compose.yml config --quiet
-      - run: docker build -f docker/Dockerfile -t ds-bot:test .
-      - run: node docker/test.mjs ds-bot:test
+      - run: docker build -f docker/Dockerfile -t ds-superagent:test .
+      - run: node docker/test.mjs ds-superagent:test
       - name: Publish the tested image
-        if: github.event_name == 'push' && github.repository == 'Fei2411/DS-Bot'
+        if: github.event_name == 'push' && github.repository == 'IceFireIcer/DS-SuperAgent'
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_ACTOR: ${{ github.actor }}
@@ -502,8 +475,8 @@ jobs:
             *) exit 0 ;;
           esac
           printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_ACTOR" --password-stdin
-          docker tag ds-bot:test "$image:sha-$GHCR_SHA"
-          docker tag ds-bot:test "$image:$tag"
+          docker tag ds-superagent:test "$image:sha-$GHCR_SHA"
+          docker tag ds-superagent:test "$image:$tag"
           docker push "$image:sha-$GHCR_SHA"
           docker push "$image:$tag"
 
@@ -513,7 +486,7 @@ jobs:
   # the change does not require may be skipped; it may never fail or be cancelled.
   result:
     name: Test result
-    needs: [changes, test, scan, superagent, app, mobile, app-package, app-package-macos, app-package-linux, docker]
+    needs: [changes, scan, superagent, app, mobile, app-package, app-package-macos, app-package-linux, docker]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -522,13 +495,11 @@ jobs:
         env:
           CHANGES: ${{ needs.changes.result }}
           SCAN: ${{ needs.scan.result }}
-          SCOPE_TEST: ${{ needs.changes.outputs.test }}
           SCOPE_SUPERAGENT: ${{ needs.changes.outputs.superagent }}
           SCOPE_APP: ${{ needs.changes.outputs.app }}
           SCOPE_MOBILE: ${{ needs.changes.outputs.mobile }}
           SCOPE_APP_PACKAGE: ${{ needs.changes.outputs.app_package }}
           SCOPE_DOCKER: ${{ needs.changes.outputs.docker }}
-          RESULT_TEST: ${{ needs.test.result }}
           RESULT_SUPERAGENT: ${{ needs.superagent.result }}
           RESULT_APP: ${{ needs.app.result }}
           RESULT_MOBILE: ${{ needs.mobile.result }}

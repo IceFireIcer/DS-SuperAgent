@@ -32,21 +32,21 @@ import { createDeferredPrompt } from './update-prompt.mjs'
 import { CAPTION_HEIGHT, cssColor, micaAvailable, nativeThemeSource } from './window-frame.mjs'
 
 const IPC = {
-  caption: 'ds-bot:caption-colors', nativeTheme: 'ds-bot:native-theme', fullscreen: 'ds-bot:fullscreen',
-  dataLocation: 'ds-bot:data-location', moveData: 'ds-bot:move-data', teamWorkspace: 'ds-bot:team-workspace',
-  browserAcquire: 'ds-bot:browser-acquire', browserRelease: 'ds-bot:browser-release', browserForget: 'ds-bot:browser-forget',
-  browserViewChanged: 'ds-bot:browser-view-changed', browserViewCreate: 'ds-bot:browser-view-create',
-  browserViewSync: 'ds-bot:browser-view-sync', browserViewPlace: 'ds-bot:browser-view-place',
-  browserViewNavigate: 'ds-bot:browser-view-navigate', browserViewCommand: 'ds-bot:browser-view-command',
-  browserViewFocus: 'ds-bot:browser-view-focus', browserViewRead: 'ds-bot:browser-view-read',
-  browserViewClose: 'ds-bot:browser-view-close', browserViewHold: 'ds-bot:browser-view-hold',
-  browserImportSources: 'ds-bot:browser-import-sources', browserImportPick: 'ds-bot:browser-import-pick',
-  browserImportLive: 'ds-bot:browser-import-live', browserImportApply: 'ds-bot:browser-import-apply',
-  browserImportCancel: 'ds-bot:browser-import-cancel',
-  credentialImportPick: 'ds-bot:credential-import-pick', credentialImportCancel: 'ds-bot:credential-import-cancel',
-  appUpdateState: 'ds-bot:app-update-state', appUpdateCheck: 'ds-bot:app-update-check',
-  appUpdateInstall: 'ds-bot:app-update-install', appUpdateOpen: 'ds-bot:app-update-open',
-  appUpdateChanged: 'ds-bot:app-update-changed',
+  caption: 'ds-superagent:caption-colors', nativeTheme: 'ds-superagent:native-theme', fullscreen: 'ds-superagent:fullscreen',
+  dataLocation: 'ds-superagent:data-location', moveData: 'ds-superagent:move-data', teamWorkspace: 'ds-superagent:team-workspace',
+  browserAcquire: 'ds-superagent:browser-acquire', browserRelease: 'ds-superagent:browser-release', browserForget: 'ds-superagent:browser-forget',
+  browserViewChanged: 'ds-superagent:browser-view-changed', browserViewCreate: 'ds-superagent:browser-view-create',
+  browserViewSync: 'ds-superagent:browser-view-sync', browserViewPlace: 'ds-superagent:browser-view-place',
+  browserViewNavigate: 'ds-superagent:browser-view-navigate', browserViewCommand: 'ds-superagent:browser-view-command',
+  browserViewFocus: 'ds-superagent:browser-view-focus', browserViewRead: 'ds-superagent:browser-view-read',
+  browserViewClose: 'ds-superagent:browser-view-close', browserViewHold: 'ds-superagent:browser-view-hold',
+  browserImportSources: 'ds-superagent:browser-import-sources', browserImportPick: 'ds-superagent:browser-import-pick',
+  browserImportLive: 'ds-superagent:browser-import-live', browserImportApply: 'ds-superagent:browser-import-apply',
+  browserImportCancel: 'ds-superagent:browser-import-cancel',
+  credentialImportPick: 'ds-superagent:credential-import-pick', credentialImportCancel: 'ds-superagent:credential-import-cancel',
+  appUpdateState: 'ds-superagent:app-update-state', appUpdateCheck: 'ds-superagent:app-update-check',
+  appUpdateInstall: 'ds-superagent:app-update-install', appUpdateOpen: 'ds-superagent:app-update-open',
+  appUpdateChanged: 'ds-superagent:app-update-changed',
   productConnect: 'ds-superagent:client-connect', productDisconnect: 'ds-superagent:client-disconnect',
   productStatus: 'ds-superagent:client-status', productCall: 'ds-superagent:client-call', productEvents: 'ds-superagent:client-events',
 }
@@ -273,15 +273,15 @@ function wireHost(instance) {
       }).catch(() => instance.send({ type: 'ds-superagent:browser-hold-response', id: message.id }))
       return
     }
-    if (message?.type !== 'ds-bot:browser-endpoint' || typeof message.id !== 'string' || !isBotId(message.botId)) return
+    if (message?.type !== 'ds-superagent:browser-endpoint' || typeof message.id !== 'string' || !isBotId(message.botId)) return
     const downloadRoots = message.downloadRoots
     if (!Array.isArray(downloadRoots) || downloadRoots.length > 4 || !Array.from(downloadRoots).every(root => typeof root === 'string' && isAbsolute(root))) {
-      instance.send({ type: 'ds-bot:browser-endpoint-response', id: message.id, error: 'Could not create the browser endpoint.' })
+      instance.send({ type: 'ds-superagent:browser-endpoint-response', id: message.id, error: 'Could not create the browser endpoint.' })
       return
     }
     void botViews.endpoint(message.botId, { downloadRoots }).then(url => {
-      instance.send({ type: 'ds-bot:browser-endpoint-response', id: message.id, url })
-    }).catch(() => instance.send({ type: 'ds-bot:browser-endpoint-response', id: message.id, error: 'Could not create the browser endpoint.' }))
+      instance.send({ type: 'ds-superagent:browser-endpoint-response', id: message.id, url })
+    }).catch(() => instance.send({ type: 'ds-superagent:browser-endpoint-response', id: message.id, error: 'Could not create the browser endpoint.' }))
   })
 }
 
@@ -355,7 +355,7 @@ async function start() {
   ipcMain.handle(IPC.productStatus, (event) => { assertWindow(event); return remoteProduct.status() })
   ipcMain.handle(IPC.productCall, (event, endpoint, payload) => { assertWindow(event); return remoteProduct.call(endpoint, payload) })
   ipcMain.handle(IPC.productEvents, (event) => { assertWindow(event); return remoteProduct.events() })
-  // ds-bot's Bot browsers: one webview per lease, in the storage of the Bot's key.
+  // Product browser resources: one webview per lease, in the storage of the resource key.
   ipcMain.handle(IPC.browserAcquire, (event, key) => {
     assertWindow(event)
     return browserGuests.acquire(event.sender, key)
@@ -656,7 +656,7 @@ function createWindow() {
   const dark = nativeTheme.shouldUseDarkColors
   const win32 = process.platform === 'win32'
   const win = new BrowserWindow({
-    // The window never squeezes the chat: RAIL_WIDTH + MIN_CHAT from ds-bot's
+    // The window never squeezes the chat: RAIL_WIDTH + MIN_CHAT from the product client's
     // src/client/frame-layout.js is the avatar rail plus the smallest chat column.
     width: 1320, height: 860, minWidth: 508, minHeight: 480,
     title: 'DS Bot', show: false, icon: iconFile,
@@ -670,7 +670,7 @@ function createWindow() {
     } : {}),
     webPreferences: {
       preload: join(here, 'preload.cjs'), contextIsolation: true, sandbox: true, webviewTag: true,
-      additionalArguments: [`--ds-bot-origin=${origin}`, ...(win32 ? [`--ds-bot-caption=${String(CAPTION_HEIGHT)}`, ...(mica ? ['--ds-bot-mica'] : [])] : [])],
+      additionalArguments: [`--ds-superagent-origin=${origin}`, ...(win32 ? [`--ds-superagent-caption=${String(CAPTION_HEIGHT)}`, ...(mica ? ['--ds-superagent-mica'] : [])] : [])],
     },
   })
   mainWindow = win

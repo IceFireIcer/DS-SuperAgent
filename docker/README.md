@@ -1,7 +1,7 @@
-# DS Bot in Docker
+# DS SuperAgent in Docker
 
-This directory deploys DS SuperAgent's existing DS Bot interface as a Docker image: a `dsh web` server (DeepSeek
-Harness) with the `ds-bot` plugin installed, ready for a NAS or any always-on
+This directory deploys DS SuperAgent's existing interface as a Docker image: a `dsh web` server (DeepSeek
+Harness) with the single `ds-superagent` package installed, ready for a NAS or any always-on
 box. The container is the sandbox boundary — see [Permissions](#permissions).
 
 ## Requirements
@@ -22,7 +22,7 @@ configured directly in this file; no `.env` is needed. Do not commit real keys.
 
 ```sh
 docker compose up -d --build
-docker compose logs ds-bot
+docker compose logs ds-superagent
 ```
 
 This builds the local image without pulling a published DS Bot image. The root
@@ -162,7 +162,7 @@ share on the host.
 ## Updating
 
 ```sh
-docker compose build   # or: docker build -f docker/Dockerfile -t ds-bot:local .
+docker compose build   # or: docker build -f docker/Dockerfile -t ds-superagent:local .
 docker compose up -d
 ```
 
@@ -187,8 +187,8 @@ from the repository root would use the local root Compose file instead.
 
 ```yaml
 services:
-  ds-bot:
-    image: ghcr.io/fei2411/ds-bot:dev
+  ds-superagent:
+    image: ghcr.io/icefireicer/ds-superagent:dev
     ports:
       - "13080:3080"
     environment:
@@ -225,7 +225,7 @@ existing persisted profile is not upgraded automatically.
 
 ## Testing
 
-After building the image, run `node docker/test.mjs ds-bot:local` from the
+After building the image, run `node docker/test.mjs ds-superagent:local` from the
 repository root. The test uses isolated, network-disabled containers and
 temporary Docker volumes, with no host directory mounts or model calls. It
 checks entrypoint permissions, first start, UID/GID changes, restored files,

@@ -1,12 +1,12 @@
 services:
-  ds-bot:
+  ds-superagent:
     build:
       context: ..
       dockerfile: docker/Dockerfile
       args:
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
-        DSH_VERSION: ${DSH_VERSION:-0.2.0-rc.2}
-    image: ds-bot:local
+        DSH_VERSION: ${DSH_VERSION:-0.2.1-rc.4}
+    image: ds-superagent:local
     ports:
       - "${DSH_PORT:-3080}:3080"
     env_file:

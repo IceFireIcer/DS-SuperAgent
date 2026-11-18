@@ -31,7 +31,7 @@ describe('the app profile', () => {
 
   test('mounts the one DS-SuperAgent product profile over DSH Web', () => {
     const on = new Set(entries.filter(entry => entry.disabled !== true).map(entry => entry.id))
-    for (const id of ['superagent-profile', 'webserver', 'connection', 'bot']) assert.ok(on.has(id), `${id} is mounted`)
+    for (const id of ['superagent', 'webserver', 'connection']) assert.ok(on.has(id), `${id} is mounted`)
     assert.ok(rows(entries).some(entry => DSH_WEB_FRONT_END.test(entry.name ?? '')), 'the DSH Web front end is mounted')
   })
 })
@@ -47,16 +47,18 @@ describe('claimBundles', () => {
   before(() => { dir = mkdtempSync(join(tmpdir(), 'ds-bot-app-bundles-')) })
   after(() => { rmSync(dir, { recursive: true, force: true }) })
 
-  const write = bundles => {
+  const write = (bundles, retiredDependency = false) => {
     mkdirSync(dir, { recursive: true })
     writeFileSync(join(dir, 'package.json'), `${JSON.stringify({ name: 'dsh-profile-ds-superagent', private: true,
-      dependencies: { 'a-plugin': '1.0.0' }, dsh: { profile: { bundles } } }, undefined, 2)}\n`)
+      dependencies: { 'a-plugin': '1.0.0', ...(retiredDependency ? { 'ds-bot': 'file:../ds-bot' } : {}) },
+      dsh: { profile: { bundles } } }, undefined, 2)}\n`)
   }
   const read = () => JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
 
   test('puts product bundles first, keeps user bundles and drops every retired runtime', () => {
-    write(['@deepseek-ai/dsh-base', 'deepseek-bot-engine', 'dsbot-engine',
-      'ds-superagent-host', 'ds-superagent-ui', 'ds-bot', 'a-plugin'])
+    const legacyBundles = ['@deepseek-ai/dsh-base', 'deepseek-bot-engine', 'dsbot-engine',
+      'ds-superagent-host', 'ds-superagent-ui', 'ds-bot', 'a-plugin']
+    write(legacyBundles, true)
     claimBundles(dir)
     assert.deepEqual(read().dsh.profile.bundles, [...BUNDLES, 'a-plugin'])
     assert.deepEqual(read().dependencies, { 'a-plugin': '1.0.0' })

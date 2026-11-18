@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import { test } from 'node:test'
 import * as Profile from '../dist/profile.js'
-import { installProduct } from '../../ds-bot/src/host/product.js'
+import { productHttpPlugin } from '../dist/index.js'
 import { nativeContext, textResponse } from '../dev/native-mock.mjs'
 
 test('the product HTTP boundary chats with Main and refuses cross-scope and unavailable operations', async t => {
@@ -48,7 +48,7 @@ test('the product HTTP boundary chats with Main and refuses cross-scope and unav
   })
   native.provide('connection', { fetch: { register(route) { routes.set(route.path, route); return () => routes.delete(route.path) } } })
   await native.plugin(Profile, { main: { provider: 'mock', model: 'main' }, router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
-  await native.plugin({ name: 'product-http', inject: ['connection', 'superagentProduct'], apply: installProduct })
+  await native.plugin(productHttpPlugin)
   assert.deepEqual([...routes.keys()], ['/api/product'])
   assert.equal(native.get('botExecutionAdapter'), undefined)
   assert.equal(native.get('superagentUi'), undefined)

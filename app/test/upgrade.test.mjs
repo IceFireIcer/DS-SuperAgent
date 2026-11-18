@@ -28,7 +28,7 @@ describe('an upgrade on the app data', () => {
       name: 'dsh-profile-ds-superagent', private: true,
       dependencies: { 'a-plugin': '1.0.0' },
       dsh: {
-        profile: { bundles: ['@deepseek-ai/dsh-base', 'ds-bot', 'a-plugin'], preset: 'team', settings: { model: 'a-model' } },
+        profile: { bundles: ['@deepseek-ai/dsh-base', 'ds-superagent', 'a-plugin'], preset: 'team', settings: { model: 'a-model' } },
         custom: { keep: true },
       },
     }, undefined, 2)}\n`)

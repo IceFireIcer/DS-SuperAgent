@@ -31,11 +31,11 @@ test('the boundary lists only product UI changes', () => {
   assert.deepEqual(uiChanges([
     'app/main.js',
     'app/ui/index.html',
-    'ds-bot/src/client/chat.js',
-    'ds-bot/client.js',
-    'ds-bot/src/host/roster.js',
+    'superagent/dsh/src/client/product.js',
+    'superagent/dsh/client.js',
+    'superagent/src/engine.ts',
     'docs/ui.md',
-  ]), ['app/ui/index.html', 'ds-bot/client.js', 'ds-bot/src/client/chat.js'])
+  ]), ['app/ui/index.html', 'superagent/dsh/client.js', 'superagent/dsh/src/client/product.js'])
   assert.equal(checkUiBoundary({ paths: ['docs/ui.md'], approved: false }).allowed, true)
 })
 

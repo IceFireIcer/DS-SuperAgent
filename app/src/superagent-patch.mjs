@@ -1,6 +1,5 @@
-// The Super-agent profile must not fall back to the old ds-bot execution path.
-// This overlay sits beside the profile, like the Office and search overlays, and
-// is read only through runProfile's patchFiles.
+// The Super-agent profile keeps the existing Main conversation and removes
+// native Session surfaces that bypass its authorization.
 import { rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { stringify } from 'yaml'
@@ -19,7 +18,6 @@ export function reconcileSuperagentProfile(profile, enabled) {
     return []
   }
   writeFileSync(file, stringify([
-    { id: 'bot', config: { product: true } },
     { id: 'session-log-download', disabled: true },
     { id: 'session-reference', disabled: true },
     { id: 'ui-reference', disabled: true },

@@ -10,7 +10,7 @@ Third-party code in this repository
 DeepSeek Harness (https://github.com/deepseek-ai/deepseek-harness)
 MIT License, Copyright (c) 2026 DeepSeek
 
-  - ds-bot/dev/desktop-linux/launch.mts follows the steps of
+  - superagent/dsh/dev/desktop-linux/launch.mts follows the steps of
     apps/desktop/scripts/dev.ts in DeepSeek Harness and reuses a few of its
     lines (the release record and the Electron launch arguments). It is a
     developer script for screenshots on Linux and is not in the npm package.
@@ -19,7 +19,7 @@ MIT License, Copyright (c) 2026 DeepSeek
     shutdown messages. app/src/office-patch.mjs follows
     apps/desktop-host/src/office.ts: the workspace-dependencies and skill-office
     plugin rows with the payload's Node and the unpacked LibreOffice Kit CLI.
-  - ds-bot/src/office/skills/office/SKILL.md adapts the office routing skill
+  - superagent/dsh/src/office/skills/office/SKILL.md adapts the office routing skill
     (assets/office/SKILL.md in @deepseek-ai/dsh-skill-office): the routing body
     is kept, with one added row that routes package checks and in-place edits
     to office-tools.
@@ -81,12 +81,12 @@ Apache License, Version 2.0, Copyright (c) Microsoft Corporation
 
 No other third-party code is copied into this repository. At run time the
 plugin uses the @deepseek-ai/* packages of the DeepSeek Harness install it
-runs in; they are not bundled. The bundled ds-bot/office.js includes
+runs in; they are not bundled. The bundled superagent/dsh/office.js includes
 @xmldom/xmldom (https://github.com/xmldom/xmldom, MIT License, Copyright (c)
 jindw and contributors) from npm. esbuild is a build tool only. The desktop app
 in app/ installs the pinned @deepseek-ai/* packages, Electron and pnpm from
 npm; they keep their own licenses. Its window uses DSH's existing Web front end
-and the ds-bot client bundle; it does not ship a second renderer.
+and the `ds-superagent` client bundle; it does not ship a second renderer.
 
 ==============================================================================
 Projects that gave us ideas (no code copied)

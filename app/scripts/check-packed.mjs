@@ -43,7 +43,7 @@ if (!existsSync(executable)) {
     join('primary-runtime', 'dependencies', 'node', 'bin', windows ? 'node.exe' : 'node'),
     join('office-skills', 'office', 'SKILL.md'),
     join(unpacked, 'node_modules', '@deepseek-ai', 'libreoffice-kit', 'lib', 'cli.js'),
-    join(unpacked, 'node_modules', 'ds-bot', 'office.js'),
+    join(unpacked, 'node_modules', 'ds-superagent', 'dsh', 'office.js'),
   ]
   const missing = required.filter((entry) => !existsSync(join(resources, entry)))
   if (missing.length > 0) {
@@ -52,7 +52,7 @@ if (!existsSync(executable)) {
   }
 }
 
-const work = realpathSync.native(mkdtempSync(join(realpathSync.native(tmpdir()), 'ds-bot-packed-')))
+const work = realpathSync.native(mkdtempSync(join(realpathSync.native(tmpdir()), 'ds-superagent-packed-')))
 mkdirSync(join(work, 'home'))
 mkdirSync(join(work, 'shell'))
 // CDP cannot answer the native first-close dialog. The notice has its own tests; this check
@@ -116,7 +116,7 @@ function checkSharp(app) {
 }
 
 function startMock() {
-  const mock = spawn(process.execPath, [join(root, '..', 'ds-bot', 'dev', 'mock-llm.mjs')], {
+  const mock = spawn(process.execPath, [join(root, '..', 'superagent', 'dsh', 'dev', 'mock-llm.mjs')], {
     env: { ...process.env, MOCK_PORT: '0', MOCK_LOG: join(work, 'mock.log') }, stdio: ['ignore', 'pipe', 'inherit'],
   })
   children.push(mock)
@@ -319,7 +319,7 @@ try {
   const profileDir = join(work, 'home', 'superagent', 'profiles', 'ds-superagent')
   mkdirSync(profileDir, { recursive: true })
   writeFileSync(join(profileDir, 'cordis.patch.yml'), [
-    '- id: superagent-profile',
+    '- id: superagent',
     '  config:',
     '    main: { provider: deepseek-official, model: deepseek-flash }',
     '    router: { provider: deepseek-official, model: deepseek-flash }',

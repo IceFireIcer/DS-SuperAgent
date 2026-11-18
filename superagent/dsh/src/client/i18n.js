@@ -2,7 +2,7 @@
 // Copy is looked up at render time and every slot outlet re-renders on a language
 // switch, so nothing caches a translated string.
 
-export const NAMESPACE = 'ds-bot'
+export const NAMESPACE = 'ds-superagent'
 
 const ZH = {
   'Proactive preparation': '主动准备',
@@ -531,6 +531,19 @@ const ZH = {
   'Complete evidence': '完整证据',
   'Load more evidence': '加载更多证据',
   'Main is unavailable.': 'Main 暂不可用。',
+  'Send a JSON product request.': '请发送 JSON 产品请求。',
+  'Use the authorized Main conversation. Native Session access is unavailable.': '请使用已授权的 Main 对话；原生 Session 入口不可用。',
+  'This conversation is outside the authorized workspace.': '这个对话不在已授权的工作区内。',
+  'This message identity was already used for different text.': '这条消息身份已经用于不同内容。',
+  'The configuration changed elsewhere. Your draft is still here.': '配置已在别处更新，你的草稿仍保留。',
+  'Check the role configuration.': '检查角色配置。',
+  'Check the request fields.': '检查请求字段。',
+  'The requested work activity is unavailable.': '请求的工作活动不可用。',
+  'This product capability is not connected yet.': '这个产品能力还没有接通。',
+  'The product Host is closed.': '产品 Host 已关闭。',
+  'Main is unavailable. Your accepted messages remain in the conversation.': 'Main 暂不可用；已接受的消息仍保留在对话中。',
+  'Check the preset request.': '检查预设请求。',
+  'Review the current memory scope.': '检查当前记忆范围。',
   'Main could not finish this reply. Your message is saved.': 'Main 未能完成回复，你的消息已保存。',
   'Could not reach Main. Check that the app is running.': '无法连接 Main，请检查应用是否仍在运行。',
   'Work item: {goal}': '工作：{goal}',

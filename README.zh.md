@@ -38,27 +38,25 @@ DS SuperAgent 是面向 [DeepSeek Harness](https://github.com/deepseek-ai/deepse
 
 ## 从当前仓库运行
 
-使用 Node.js 24。应用从本仓库安装 `ds-bot` 与 `ds-superagent`：
+使用 Node.js 24。应用从本仓库安装唯一的 `ds-superagent` 产品包：
 
 ```powershell
 npm --prefix app ci
 npm --prefix app start
 ```
 
-不使用 Electron 外壳时，可在 DSH profile 中把两个包目录作为 linked dependency，并列出
-`@deepseek-ai/dsh-base`、`@deepseek-ai/dsh-web-app`、`ds-bot` 和 `ds-superagent` bundles。详见
-[`ds-bot/README.md`](ds-bot/README.md) 与 [`superagent/README.md`](superagent/README.md)。
+不使用 Electron 外壳时，可在 DSH profile 中链接 [`superagent/`](superagent/README.md)，并列出
+`@deepseek-ai/dsh-base`、`@deepseek-ai/dsh-web-app` 和 `ds-superagent` bundles。
 
 ## 验证
 
 仓库按改动范围执行定向检查：
 
 ```powershell
-npm --prefix ds-bot run build
-node ds-bot/scripts/build-client.mjs --check
-npm --prefix ds-bot run lint
 npm --prefix superagent run typecheck
 npm --prefix superagent run build
+npm --prefix superagent run test:client
+npm --prefix superagent run lint
 npm --prefix app test
 ```
 
@@ -75,13 +73,13 @@ node app/scripts/check-superagent-profile.mjs
 
 | 目录 | 作用 |
 |---|---|
-| `ds-bot/` | 现有客户端 UI、`/api/product` 桥、Office 工具和 Web 搜索 provider |
-| `superagent/` | Engine、持久业务库、Host、执行适配器和公开产品命令 |
+| `superagent/` | 唯一的 DSH 包：Engine、持久业务库、Host、产品 HTTP 桥、现有客户端 UI、Office 工具和 Web 搜索 provider |
 | `app/` | Electron 外壳、单一产品 profile、数据隔离、进程生命周期与打包 |
 | `docs/superagent/` | R5 规格、实施记录与环境证据 |
 
 R5-34 已删除旧 roster、群/round、Bot 互派、团队治理、原生历史写入口、activation/reversal 与双 profile
-兼容路径。仓库不再附带第二个 renderer 或独立 app engine。
+兼容路径。原第二包已收进 `ds-superagent` 的 `dsh/`；仓库不再附带第二个 renderer、独立 app engine 或额外
+DSH 插件。
 
 ## 许可
 

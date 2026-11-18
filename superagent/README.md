@@ -1,7 +1,8 @@
-# DS SuperAgent core
+# DS SuperAgent package
 
-This private ESM package hosts the TypeScript Engine and `createProductHost`. The existing `ds-bot` UI calls the
-product Host through `POST /api/product`; the public Engine remains available for direct Cordis and CLI use.
+This ESM package is the product's one DSH package. Its root exports the production profile and Host, `./client`
+provides the existing browser UI, and `./web-search` provides the `auto` search provider. The TypeScript Engine,
+`createProductHost`, Office tools and direct Cordis/CLI entry points ship in the same package.
 
 ## Requirements
 
@@ -18,7 +19,7 @@ import { Context } from '@deepseek-ai/cordis'
 import * as Superagent from 'ds-superagent'
 
 const ctx = new Context()
-await ctx.plugin(Superagent, {
+await ctx.plugin(Superagent.enginePlugin, {
   databasePath: '/var/lib/ds-superagent/private.sqlite',
   instanceId: 'private',
   source: {
@@ -41,14 +42,28 @@ The receiving desktop adapter binds `sourceInstanceId` and `actorId` in plugin c
 restores local or remote Environments and publishes `superagentProduct`. It accepts either SQLite `databasePath` or
 shared PostgreSQL `postgres` configuration, plus the trusted Instance, actor, role routes and local `stateRoot`.
 
-`ds-superagent/profile` reads `DSH_HOME`, creates the local SQLite store at `<DSH_HOME>/core/state.sqlite`, and
-publishes `superagentProduct`. When `DS_SUPERAGENT_POSTGRES` is present, the profile uses the PostgreSQL business
-store and Session provider instead; credentials remain in the Host environment.
+The package root reads `DSH_HOME`, creates the local SQLite store at `<DSH_HOME>/core/state.sqlite`, publishes
+`superagentProduct`, and registers `POST /api/product`. When `DS_SUPERAGENT_POSTGRES` is present, the profile uses the
+PostgreSQL business store and Session provider instead; credentials remain in the Host environment.
 
 The app has one `ds-superagent` profile. Its bundles are `@deepseek-ai/dsh-base`,
-`@deepseek-ai/dsh-web-app`, the voice-input bundle, `ds-bot` and `ds-superagent`. The app's DSH home is
+`@deepseek-ai/dsh-web-app`, the voice-input bundle and `ds-superagent`. The app's DSH home is
 `<app data>/superagent`. The profile fails closed when `superagentProduct`, `workspaceRegistry`, a role route or the
-selected database is missing. There is no old/new profile switch, activation gate or `botExecutionAdapter` fallback.
+selected database is missing. There is no second plugin row, old/new profile switch, activation gate or
+`botExecutionAdapter` fallback.
+
+The package manifest supplies both DSH bundle and client metadata:
+
+```yaml
+- insert:
+    - id: superagent
+      name: ds-superagent
+    - id: web-search-auto
+      name: ds-superagent/web-search
+```
+
+`dsh/client.js` and `dsh/office.js` are generated assets. `client.js` registers the existing UI as the
+`ds-superagent` module and uses the same namespace for style ownership and translations.
 
 ## Command-line entry
 
@@ -70,17 +85,20 @@ The CLI emits one JSON result on stdout. Keep the database in an isolated projec
 
 ```sh
 npm ci
+npm run build
 npm run typecheck
 npm test
 npm run lint
 npm run mock
 ```
 
-`npm test` rebuilds before running tests and stops if the build fails. Use the same entry for a file or a named regression:
+`npm test` builds the TypeScript, generated client and Office assets, then runs the Server and browser-side suites.
+For a targeted Server test:
 
 ```sh
-npm test -- test/execution.test.mjs
-npm test -- --test-name-pattern="Engine notices" test/execution.test.mjs
+npm run test:server -- test/execution.test.mjs
+npm run test:server -- --test-name-pattern="Engine notices" test/execution.test.mjs
+npm run test:client
 ```
 
 Native model fixtures in `dev/native-mock.mjs` accept a responder returning a synchronous or asynchronous iterable of provider chunks. Use `async function*` for asynchronous responses; a Promise-returning async function is rejected before Session startup. `routerResponse` handles the supplied notification tools, including coalesced turns.

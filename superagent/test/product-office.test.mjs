@@ -13,8 +13,8 @@ import { completedToolCount, lastUserText } from './input-support.mjs'
 import { nativeContext, routerResponse, textResponse, toolResponse } from '../dev/native-mock.mjs'
 
 const project = fileURLToPath(new URL('../../', import.meta.url))
-const cli = join(project, 'ds-bot', 'office.js')
-const original = join(project, 'ds-bot', 'test', 'fixtures', 'office', 'sample.docx')
+const cli = join(project, 'superagent', 'dsh', 'office.js')
+const original = join(project, 'superagent', 'dsh', 'test', 'fixtures', 'office', 'sample.docx')
 
 test('an authorized Word upload becomes a checked, downloadable work artifact', { timeout: 30000 }, async t => {
   const root = await mkdtemp(join(tmpdir(), 'r5-product-word-'))

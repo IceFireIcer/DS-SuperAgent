@@ -6,7 +6,7 @@
 
 ## 谁可以提 Pull Request
 
-本仓库的协作者直接在这里推分支，向 `dev` 提 Pull Request（见[协作方式](#协作方式)）。目前只有协作者能提 Pull Request。如果你不是协作者，发现 bug 请开 Issue（见[报告问题](#报告问题)），提问或建议请到 [Discussions](https://github.com/Fei2411/DS-Bot/discussions)。
+本仓库的协作者直接在这里推分支，向 `dev` 提 Pull Request（见[协作方式](#协作方式)）。目前只有协作者能提 Pull Request。如果你不是协作者，发现 bug 请开 Issue（见[报告问题](#报告问题)），提问或建议请到 [Discussions](https://github.com/IceFireIcer/DS-SuperAgent/discussions)。
 
 ## 最重要的规则
 
@@ -65,12 +65,12 @@
 
 ### 合并冲突
 
-- **`ds-bot/client.js`**：不要手工解决。先解决 `ds-bot/src/client/` 里的冲突，再在 `ds-bot/` 里运行 `npm run build`，提交新生成的 `client.js`。
+- **`superagent/dsh/client.js`**：不要手工解决。先解决 `superagent/dsh/src/client/` 里的冲突，再在 `superagent/` 里运行 `npm run build`，提交新生成的 `client.js`。
 - **`CHANGELOG.md`**：Pull Request 不改它，所以不应该冲突。如果冲突了，两边都保留。
 
 ### 发版（维护者）
 
-1. 向 `dev` 提一个 Pull Request：修改 `ds-bot/package.json` 里的版本号，根据已合并 Pull Request 的 Changelog 句子写 `CHANGELOG.md` 的这一版。
+1. 向 `dev` 提一个 Pull Request：修改 `superagent/package.json` 里的版本号，根据已合并 Pull Request 的 Changelog 句子写 `CHANGELOG.md` 的这一版。
 2. 提一个从 `dev` 到 `main` 的 Pull Request，标题为 `release: vX.Y.Z`。在描述里列出这一版所有的 `Fixes #<号>`，合并时这些 Issue 会一起关闭。
 3. 合并前在 Windows 真机上做一遍[发版前真机检查](docs/dev/release-checklist.md)，改动涉及 macOS 时在 macOS 上也做一遍，结果贴在这个 PR 里。用 merge commit 合并，在 `main` 上发布 GitHub Release `vX.Y.Z`。Release 工作流会检查 tag 与版本号一致、且在 `main` 上，跑完检查后把包发到 npm（预发布版本发到 npm 的 `next` 标签）。不要手动 `npm publish`。
 4. 热修：从 `main` 切 `fix/hot-<短名>`，向 `main` 提 Pull Request，发一个补丁版本，再把 `main` 合回 `dev`。
@@ -84,14 +84,11 @@
 - 仅产品 profile 检查需要：pnpm `11`，以及受测 DSH 版本的 DeepSeek Harness 源码。
 
 ```sh
-git clone https://github.com/Fei2411/DS-Bot.git ds-bot-repo
-cd ds-bot-repo/ds-bot
+git clone https://github.com/IceFireIcer/DS-SuperAgent.git ds-superagent
+cd ds-superagent/superagent
 
-# 插件自己的构建工具（只有 esbuild）。
+# 构建和测试依赖。
 npm ci
-
-# 单元测试和 lint 要加载的 DSH 包，从 npm 装进 dev/harness/。
-npm run harness
 ```
 
 产品 profile 检查需要把 DeepSeek Harness 源码放在插件目录旁边（这个目录被 Git 忽略）：
@@ -99,43 +96,40 @@ npm run harness
 ```sh
 cd ..
 git clone https://github.com/deepseek-ai/deepseek-harness.git
-git -C deepseek-harness checkout dsh-v0.2.1-rc.3
+git -C deepseek-harness checkout dsh-v0.2.1-rc.4
 (cd deepseek-harness && pnpm install)
 ```
 
-如果 DeepSeek Harness 源码放在别处，把 `DSH_HARNESS` 设为它的路径。`DSH_HARNESS` 也会代替 `dev/harness/`，供单元测试和 lint 使用。
-
-`@deepseek-ai/*` 包是 peer 依赖：真实安装时由 DSH 的 profile 提供。`ds-bot/.npmrc` 阻止 npm 把它们装进插件目录。
+如果 DeepSeek Harness 源码放在别处，把 `DSH_HARNESS` 设为它的路径，供从源码解析 DSH 包的测试使用。
 
 ## 目录结构
 
 | 路径 | 内容 |
 |---|---|
-| `superagent/` | Engine、Host、存储、执行与保留能力适配器 |
-| `ds-bot/index.js`、`ds-bot/src/host/product.js` | `/api/product`、原生 Session 拒绝与产品 service 依赖 |
-| `ds-bot/src/client/` | 现有 Main 对话、工作卡与产品设置 |
-| `ds-bot/client.js` | 由 `scripts/build-client.mjs` 从 `src/client/` 生成。它被提交进仓库，这样用 Git 安装时不需要构建 |
-| `ds-bot/web-search.js` | `auto` 网页搜索提供方。不依赖 Bot 团队代码 |
-| `ds-bot/cordis.patch.yml` | 插件带的 profile patch |
-| `ds-bot/test/` | 单元测试和测试数据 |
-| `ds-bot/dev/` | 单元测试用的 DSH 包、最小产品模拟模型、保留的素材/Office/MCP 工具与真实模型调用日志 |
+| `superagent/src/` | Engine、Host、存储、执行与保留能力适配器 |
+| `superagent/dsh/src/client/` | 现有 Main 对话、工作卡与产品设置 |
+| `superagent/dsh/client.js` | 由 `dsh/scripts/build-client.mjs` 从 `dsh/src/client/` 生成。它被提交进仓库，这样用 Git 安装时不需要构建 |
+| `superagent/dsh/web-search.js` | `auto` 网页搜索提供方 |
+| `superagent/cordis.patch.yml` | 唯一包自带的 DSH bundle patch |
+| `superagent/test/`、`superagent/dsh/test/` | Engine 与产品客户端测试 |
+| `superagent/dev/`、`superagent/dsh/dev/` | 隔离开发夹具与最小产品模拟模型 |
 | `app/` | 单一产品 profile、Electron 外壳、数据隔离、生命周期与打包 |
 
 ## 测试改动
 
-在 `ds-bot/` 里运行：
+在 `superagent/` 里运行：
 
 ```sh
-npm run build                          # src/client → client.js
-npm test                               # 单元测试；client.js 过期时也会失败
-node scripts/build-client.mjs --check  # client.js 与 src/client 一致
+npm run build                          # TypeScript + client.js + office.js
+npm test                               # Server 与客户端测试
+node dsh/scripts/build-client.mjs --check
 npm run lint                           # oxlint
 ```
 
-CI 对 `ds-bot/` 的改动用 Linux 和 Windows 跑同样的三项检查。其他作业只在其路径变化时运行；唯一的检查 **Test result** 会核对本次改动需要的作业，任一作业被跳过或未通过都会失败。CI 还会扫描入库的文件，查找密钥、token、个人路径和邮箱，以及只应留在本地的材料。想自己扫描，在仓库根目录运行：
+CI 对 `superagent/` 的改动运行这些检查。其他作业只在其路径变化时运行；唯一的检查 **Test result** 会核对本次改动需要的作业，任一作业被跳过或未通过都会失败。CI 还会扫描入库的文件，查找密钥、token、个人路径和邮箱，以及只应留在本地的材料。想自己扫描，在仓库根目录运行：
 
 ```sh
-mkdir -p /tmp/ds-bot-tree && git archive HEAD | tar -x -C /tmp/ds-bot-tree && node scripts/scan.mjs /tmp/ds-bot-tree
+mkdir -p /tmp/ds-superagent-tree && git archive HEAD | tar -x -C /tmp/ds-superagent-tree && node scripts/scan.mjs /tmp/ds-superagent-tree
 ```
 
 「must fix」的结果会让 CI 失败；「can stay」的结果仅供阅读。分支规则只要求一项检查 **Test result**，所有检查都通过它才通过。
@@ -146,8 +140,8 @@ mkdir -p /tmp/ds-bot-tree && git archive HEAD | tar -x -C /tmp/ds-bot-tree && no
 node scripts/check-ui-boundary.mjs --base origin/dev
 ```
 
-它会列出 `ds-bot/src/client/` 和 `ds-bot/client.js` 的改动。这些文件必须有明确的 UI 改动请求；确认后才用
-`DSBOT_UI_CHANGE_APPROVED=1` 再运行一次。检查会比较工作区和未跟踪文件与基线的差异，所以尚未暂存的编辑也会被发现。
+它会列出 `superagent/dsh/src/client/` 和 `superagent/dsh/client.js` 的改动。这些文件必须有明确的 UI 改动请求；确认后才用
+`DS_SUPERAGENT_UI_CHANGE_APPROVED=1` 再运行一次。检查会比较工作区和未跟踪文件与基线的差异，所以尚未暂存的编辑也会被发现。
 
 改 Engine 或 Host 时，还在 `superagent/` 执行：
 
@@ -159,7 +153,7 @@ npm run lint
 
 检查完整产品包装配时，用临时数据运行 `node app/scripts/check-superagent-profile.mjs`。改产品 UI 时运行
 `app/` 的 `npm test`、生成客户端一致性和 UI 边界检查。打包应用的快速检查需要模型时使用最小
-`ds-bot/dev/mock-llm.mjs`；真实模型检查会花 token，必须显式使用临时配置。
+`superagent/dsh/dev/mock-llm.mjs`；真实模型检查会花 token，必须显式使用临时配置。
 
 ## 写改动
 

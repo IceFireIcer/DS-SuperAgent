@@ -14,7 +14,7 @@ const boundary = phase === 'before' ? {
   close: () => storage.close(),
 } : storage
 const ctx = new Context()
-await ctx.plugin(plugin, { databasePath, instanceId: 'private', source: { sourceInstanceId: 'desktop-one', actorId: 'local-user', allowedActorIds: ['local-user'] },
+await ctx.plugin(plugin.enginePlugin, { databasePath, instanceId: 'private', source: { sourceInstanceId: 'desktop-one', actorId: 'local-user', allowedActorIds: ['local-user'] },
   storage: boundary, host: { leaseMs: 20, now: () => Date.now() + (phase === 'after' ? 600000 : 0) } })
 armed = true
 await ctx.get('superagent').submit({ commandId: 'crash-command', eventId: 'crash-event', text: 'Preserve the original request.' })

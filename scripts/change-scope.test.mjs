@@ -26,23 +26,23 @@ function fixture(context) {
 
 test('documentation changes skip product jobs while code changes select their job', () => {
   assert.deepEqual(classifyChanges(['docs/vision.md', 'README.md', 'LICENSE']), {
-    docsOnly: true, test: false, superagent: false, app: false, mobile: false, app_package: false, docker: false,
+    docsOnly: true, superagent: false, app: false, mobile: false, app_package: false, docker: false,
   })
-  assert.deepEqual(classifyChanges(['ds-bot/src/host/roster.js', 'scripts/scan.mjs']), {
-    docsOnly: false, test: true, superagent: false, app: false, mobile: false, app_package: false, docker: false,
+  assert.deepEqual(classifyChanges(['scripts/scan.mjs']), {
+    docsOnly: false, superagent: false, app: false, mobile: false, app_package: false, docker: false,
   })
   assert.deepEqual(classifyChanges(['superagent/src/engine.ts']), {
-    docsOnly: false, test: false, superagent: true, app: false, mobile: false, app_package: false, docker: false,
+    docsOnly: false, superagent: true, app: false, mobile: false, app_package: false, docker: false,
   })
   assert.deepEqual(classifyChanges(['app/main.js', 'mobile/App.tsx']), {
-    docsOnly: false, test: false, superagent: false, app: true, mobile: true, app_package: false, docker: false,
+    docsOnly: false, superagent: false, app: true, mobile: true, app_package: false, docker: false,
   })
 })
 
 test('workflow and unknown changes run daily checks without installation matrices', () => {
   for (const path of ['.github/workflows/test.yml', 'start.ps1', '.editorconfig']) {
     assert.deepEqual(classifyChanges([path]), {
-      docsOnly: false, test: true, superagent: true, app: true, mobile: true, app_package: false, docker: false,
+      docsOnly: false, superagent: true, app: true, mobile: true, app_package: false, docker: false,
     })
   }
 })
@@ -50,7 +50,7 @@ test('workflow and unknown changes run daily checks without installation matrice
 test('release validation ignores the changed paths and requires every job', () => {
   for (const paths of [[], ['docs/vision.md'], ['superagent/src/engine.ts']]) {
     assert.deepEqual(classifyChanges(paths, { full: true }), {
-      docsOnly: false, test: true, superagent: true, app: true, mobile: true, app_package: true, docker: true,
+      docsOnly: false, superagent: true, app: true, mobile: true, app_package: true, docker: true,
     })
   }
   assert.equal(classifyChanges(['docker/Dockerfile']).docker, true)
@@ -67,7 +67,7 @@ test('the CLI writes GitHub outputs and reads a base/head diff', context => {
   writeFileSync(output, '')
   const result = run(['--base', 'main', '--head', 'docs', '--github-output'], { GITHUB_OUTPUT: output })
   assert.equal(result.status, 0, result.stderr)
-  assert.match(readFileSync(output, 'utf8'), /^test=false$/mu)
+  assert.match(readFileSync(output, 'utf8'), /^superagent=false$/mu)
   assert.match(readFileSync(output, 'utf8'), /^docs_only=true$/mu)
   const json = run(['--base', 'main', '--head', 'docs', '--json'])
   assert.equal(json.status, 0, json.stderr)

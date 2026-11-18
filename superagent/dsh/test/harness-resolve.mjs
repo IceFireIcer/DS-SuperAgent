@@ -1,8 +1,6 @@
-// Tests import web-search.js outside a dsh profile, so its @deepseek-ai peers resolve from a
-// DeepSeek Harness, as a profile would supply them: DSH_HARNESS, else the packages that
-// `npm run harness` installs in dev/harness, else the nearest deepseek-harness/ checkout in a
-// folder above ds-bot, else the same search from ds-bot's place in the main worktree (a git
-// worktree has no checkout of its own).
+// Tests import the browser-side peers outside a dsh profile. DSH_HARNESS wins, then the
+// superagent package's npm install or its optional dev/harness install, then a nearby
+// deepseek-harness checkout.
 import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { registerHooks } from 'node:module'
@@ -10,16 +8,19 @@ import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const plugin = resolve(import.meta.dirname, '..')
+const packageRoot = resolve(plugin, '..')
 const above = (start) => {
   for (let dir = start; ; dir = dirname(dir)) {
     if (existsSync(join(dir, 'deepseek-harness'))) return join(dir, 'deepseek-harness')
     if (dirname(dir) === dir) return undefined
   }
 }
-const installed = join(plugin, 'dev', 'harness')
+const installed = join(packageRoot, 'node_modules')
+const nestedHarness = join(plugin, 'dev', 'harness')
 const findHarness = () => {
   if (process.env.DSH_HARNESS) return process.env.DSH_HARNESS
-  if (existsSync(join(installed, 'node_modules'))) return installed
+  if (existsSync(join(installed, '@deepseek-ai', 'dsh'))) return packageRoot
+  if (existsSync(join(nestedHarness, 'node_modules'))) return nestedHarness
   const near = above(dirname(plugin))
   if (near) return near
   const beside = resolve(plugin, '../deepseek-harness')

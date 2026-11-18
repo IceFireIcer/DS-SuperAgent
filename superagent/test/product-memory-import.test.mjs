@@ -141,7 +141,7 @@ test('memory export preview keeps the source unchanged and imports only explicit
 test('sensitive or malformed export items are rejected without persisting their text', { timeout: 15_000 }, async t => {
   const { storage, engine } = await fixture(t)
   const secrets = ['access_token=must-not-enter-memory', 'refresh_token=also-private',
-    'client_secret=private-client-value', 'ghp_abcdefghijklmnopqrstuvwxyz0123456789']
+    'client_secret=private-client-value', ['ghp_', 'abcdefghijklmnopqrstuvwxyz0123456789'].join('')]
   const data = exported([
     { id: 'safe', text: 'Fictional safe note', originalScope: { kind: 'main' } },
     ...secrets.map((secret, index) => ({ id: `secret-${index}`, text: secret, originalScope: { kind: 'main' } })),

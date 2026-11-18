@@ -1,5 +1,5 @@
 # Image-owned overlay: the container is the sandbox boundary, so only full
-# access is offered. DS_BOT_WORKSPACE supplies the product workspace. The
+# access is offered. DS_SUPERAGENT_WORKSPACE supplies the product workspace. The
 # webserver bind host/port come from a second overlay the entrypoint writes.
 - id: permission
   config:

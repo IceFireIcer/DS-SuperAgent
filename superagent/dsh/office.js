@@ -8734,7 +8734,7 @@ function contactSheet(images, { cols = 4, width = 320 } = {}) {
 var rowBaseline = (rowH, row) => rowH.slice(0, row).reduce((a, b) => a + b + 10, 0);
 
 // src/office/cli.js
-var USAGE = `ds-bot office — inspect, check and edit .docx/.pptx/.xlsx
+var USAGE = `ds-superagent office — inspect, check and edit .docx/.pptx/.xlsx
 
 unpack <file> <dir>                        extract with pretty-printed XML (new or reused dir)
 pack <dir> <file> [--against <orig>]       repack (strips formatting whitespace) and check

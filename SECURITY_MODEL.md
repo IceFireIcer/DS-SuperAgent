@@ -31,15 +31,15 @@ Trust boundaries:
 
 - **engine/host** — `superagent/src/`: Engine commands, durable TTL/Receipts, Host lease/fencing, execution,
   Sources, Effects, delivery, client access and product Host.
-- **client** — `ds-bot/src/client/`: the existing DSH UI for Main, work cards and settings; generated
-  `ds-bot/client.js`.
-- **product bridge** — `ds-bot/index.js`, `ds-bot/src/host/product.js`: `/api/product`, native Session refusal and
+- **client** — `superagent/dsh/src/client/`: the existing DSH UI for Main, work cards and settings; generated
+  `superagent/dsh/client.js`.
+- **product bridge** — `superagent/src/profile.ts`, `superagent/src/product-http.ts`: `/api/product`, native Session refusal and
   `superagentProduct` dependency.
 - **retained capability adapters** — memory, browser resources, MCP, credentials, schedules, Office, attachments,
   remote devices, PostgreSQL Session persistence, Watchdog and Supervisor under `superagent/src/`.
 - **desktop app** — `app/src/`: one profile, data isolation, lifecycle, credential/cookie import, browser guest IPC,
   updates and packaging.
-- **web search** — `ds-bot/web-search.js`.
+- **web search** — `superagent/dsh/web-search.js`.
 - **Docker** — `docker/`: DSH Web plus the one product stack; the container is the sandbox boundary.
 
 ## Entry points and who reaches them

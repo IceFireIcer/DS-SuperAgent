@@ -1,8 +1,8 @@
 // The Bot browsers' webviews in the app window, adapted from DeepSeek Harness
-// apps/desktop/src/browser-guests.ts (see NOTICE). ds-bot asks for a lease on a storage key
+// apps/desktop/src/browser-guests.ts (see NOTICE). The product asks for a lease on a storage key
 // (`bot:<id>`) and creates a webview that carries the lease; only such a webview attaches, and it
 // gets fixed preferences. Unlike DSH Desktop's, a key's storage is kept on disk: a Bot stays signed
-// in after a restart until ds-bot forgets the key.
+// in after a restart until the product forgets the key.
 import { createHash, randomUUID } from 'node:crypto'
 
 const KEY_MAX = 4096
@@ -148,11 +148,11 @@ export class BotBrowserGuests {
         attached = id
         guest.once('destroyed', () => { this.#leases.delete(id) })
       })
-      // A page's new window becomes a new tab of the same Bot, which ds-bot opens on this request.
+      // A page's new window becomes a new tab of the same resource, which the product opens on this request.
       guest.setWindowOpenHandler(({ url, postBody }) => {
         const lease = attached === undefined ? undefined : this.#leases.get(attached)
         if (lease?.guest === guest && !owner.isDestroyed() && postBody === undefined && allowedNavigation(url, this.origin())) {
-          owner.send('ds-bot:browser-open-requested', { lease: attached, url: new URL(url).href })
+          owner.send('ds-superagent:browser-open-requested', { lease: attached, url: new URL(url).href })
         }
         return { action: 'deny' }
       })

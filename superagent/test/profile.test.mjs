@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { fileURLToPath } from 'node:url'
 import {
-  apply as applyProfile, feishuProfileConfig, githubProfileConfig, postgresProfileConfig, profilePaths,
+  apply as applyProfile, feishuProfileConfig, githubProfileConfig, officeProfileConfig, postgresProfileConfig, profilePaths,
 } from '../dist/profile.js'
 import { nativeContext, textResponse } from '../dev/native-mock.mjs'
 
@@ -27,10 +28,25 @@ test('the ds-superagent profile fails closed without a DSH home', () => {
 
 test('the managed profile reads PostgreSQL and Host lease settings from trusted process environment', () => {
   assert.equal(postgresProfileConfig({}), undefined)
-  const value = { host: '127.0.0.1', port: 5432, user: 'fixture', password: 'fixture-password', database: 'product', ssl: false }
+  const fixturePassword = 'fixture-password'
+  const value = { host: '127.0.0.1', port: 5432, user: 'fixture', password: fixturePassword, database: 'product', ssl: false }
   assert.deepEqual(postgresProfileConfig({ DS_SUPERAGENT_POSTGRES: JSON.stringify(value) }), value)
   assert.throws(() => postgresProfileConfig({ DS_SUPERAGENT_POSTGRES: '{' }), { code: 'INVALID_CONFIG' })
   assert.throws(() => postgresProfileConfig({ DS_SUPERAGENT_POSTGRES: '[]' }), { code: 'INVALID_CONFIG' })
+})
+
+test('the package resolves its own nested Office bundle', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'ds-superagent-office-'))
+  try {
+    for (const skill of ['office', 'office-docx']) {
+      mkdirSync(join(directory, 'office-skills', skill), { recursive: true })
+      writeFileSync(join(directory, 'office-skills', skill, 'SKILL.md'), '---\ndescription: fixture\n---\n')
+    }
+    const office = officeProfileConfig({ DS_BOT_OFFICE_NODE: process.execPath, DS_BOT_RUNTIME_DIR: directory })
+    assert.equal(office.cli, fileURLToPath(new URL('../dsh/office.js', import.meta.url)))
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
 })
 
 test('Feishu profile opt-in needs explicit tenant, chats, identities and a requester allowlist', () => {
@@ -83,7 +99,7 @@ test('GitHub profile opt-in requires a bounded repository and explicit Main requ
 })
 
 test('an incomplete Feishu opt-in leaves Main running and shows a bounded source error', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-profile-feishu-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-profile-feishu-'))
   const keys = ['APP_ID', 'APP_SECRET', 'TENANT_KEY', 'CHAT_IDS', 'SELF_ACTOR_IDS', 'ALLOWED_REQUESTER_IDS']
     .map(key => `DS_SUPERAGENT_FEISHU_${key}`)
   const previous = new Map(keys.map(key => [key, process.env[key]]))
@@ -114,10 +130,14 @@ test('an incomplete Feishu opt-in leaves Main running and shows a bounded source
 
 test('the package mounts the profile host as a DSH bundle', () => {
   const patch = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
-  assert.match(patch, /name: ds-superagent\/profile/u)
+  assert.match(patch, /id: superagent[\s\S]*?name: ds-superagent/u)
+  assert.match(patch, /name: ds-superagent\/web-search/u)
   assert.match(patch, /name: ds-superagent\/session-persistence-postgres/u)
   assert.match(patch, /id: session-persistence-jsonl[\s\S]*?disabled: !!js/u)
   const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
   assert.equal(manifest.dsh.bundle.patch, './cordis.patch.yml')
+  assert.equal(manifest.dsh.client.platform, 'web')
+  assert.equal(manifest.exports['./client'], './dsh/client.js')
+  assert.equal(manifest.exports['./web-search'], './dsh/web-search.js')
   assert.equal(manifest.exports['./profile'].default, './dist/profile.js')
 })

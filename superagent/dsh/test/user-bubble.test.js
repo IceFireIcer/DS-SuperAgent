@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { ACCENT_INKS, INKS, luminance } from '../src/client/inks.js'
 import { allThemes, shellTokens, themeCss } from '../src/client/themes.js'
 
-// The browser bundle holds every style sheet ds-bot installs; the bundle test
+// The browser bundle holds every style sheet the product installs; the bundle test
 // keeps it in step with src/client.
 const bundle = readFileSync(new URL('../client.js', import.meta.url), 'utf8')
 
@@ -36,13 +36,13 @@ test('every rule that writes in the user ink paints the user surface under it', 
   }
 })
 
-test('no ds-bot text color sits on a surface that a skin owns', () => {
+test('no product text color sits on a surface that a skin owns', () => {
   for (const { selector, body } of rulesWith(/(?<=[{;])color:var\(--bt-/g)) {
     assert.doesNotMatch(surface(body) ?? '', /--dsw-/, selector)
   }
 })
 
-test('ds-bot leaves the host bubble variables to the host and its skins', () => {
+test('the product leaves host bubble variables to the host and its skins', () => {
   assert.doesNotMatch(bundle, /--dsw-specific-bubble/)
   assert.doesNotMatch(bundle, /conversationTokens|installBubbleTokens/)
   for (const [id, theme] of Object.entries(allThemes())) {
@@ -137,9 +137,6 @@ test('every danger color reads --bt-danger, which the base sheet sets once', () 
   assert.deepEqual(loose, [])
 })
 
-// A dark skin repaints the host bubble surface (dsh-dream-skin's underwater theme
-// sets this value) and leaves ds-bot's colors alone.
-const DARK_SKIN = { '--dsw-specific-bubble': 'rgba(31,33,38,.92)', '--dsw-alias-label-primary': '#ffffff' }
 const resolve = (value, vars) => {
   const plain = value.replace(/!important$/, '')
   const match = plain.match(/^var\((--[\w-]+)(?:,(.+))?\)$/)
@@ -149,21 +146,20 @@ const resolve = (value, vars) => {
   return resolve(match[2], vars)
 }
 
-test('a user message stays readable when a dark skin repaints the host bubble', () => {
+test('the product user bubble stays readable in every built-in theme', () => {
   for (const id of ['deepseek', 'mono', 'paper', 'moonlight']) {
-    const vars = { ...themeVars(allThemes()[id], true), ...DARK_SKIN }
+    const vars = themeVars(allThemes()[id], true)
     const page = vars['--bt-main']
-    for (const selector of ['.bt-ubody', '[class*="_userRow"] [class*="_bubble"]']) {
-      const { body } = ruleFor(selector)
-      const paper = over(resolve(surface(body), vars), page)
-      const ink = over(resolve(declared(body, 'color'), vars), paper)
-      assert.ok(contrast(ink, paper) >= 4.5, `${id} ${selector}: ${contrast(ink, paper).toFixed(2)}:1`)
-    }
+    const selector = '.bt-product-message-user .bt-bubble'
+    const { body } = ruleFor(selector)
+    const paper = over(resolve(surface(body), vars), page)
+    const ink = over(resolve(declared(body, 'color'), vars), paper)
+    assert.ok(contrast(ink, paper) >= 4.5, `${id} ${selector}: ${contrast(ink, paper).toFixed(2)}:1`)
   }
 })
 
-test('the surface wins over the host bubble rule that reads the skin variable', () => {
-  const { body } = ruleFor('[class*="_userRow"] [class*="_bubble"]')
-  assert.equal(surface(body), 'var(--bt-user)!important')
-  assert.equal(declared(body, 'color'), 'var(--bt-user-ink)!important')
+test('the product user bubble paints its own surface and ink', () => {
+  const { body } = ruleFor('.bt-product-message-user .bt-bubble')
+  assert.equal(surface(body), 'var(--bt-user)')
+  assert.equal(declared(body, 'color'), 'var(--bt-user-ink)')
 })

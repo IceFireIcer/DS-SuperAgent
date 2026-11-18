@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url'
 const usage = `Usage: node scripts/change-scope.mjs [--base <ref>] [--head <ref>] [--all] [--full] [--github-output] [--json]
 Classifies daily checks by changed paths. --full requires every release check regardless of paths.`
 
-const scopes = ['test', 'superagent', 'app', 'mobile', 'app_package', 'docker']
+const scopes = ['superagent', 'app', 'mobile', 'app_package', 'docker']
 const docs = path => path === 'LICENSE' || path === 'NOTICE' || path === 'CHANGELOG.md'
   || path.startsWith('docs/') || path.startsWith('.agents/') || path.startsWith('super-agent-references/')
   || path.endsWith('.md')
@@ -19,9 +19,7 @@ export function classifyChanges(paths, { full = false } = {}) {
     if (!path) continue
     if (docs(path)) continue
     docsOnly = false
-    if (path.startsWith('ds-bot/')) {
-      result.test = true
-    } else if (path.startsWith('superagent/')) result.superagent = true
+    if (path.startsWith('superagent/')) result.superagent = true
     else if (path.startsWith('app/')) {
       result.app = true
     } else if (path.startsWith('mobile/')) result.mobile = true
@@ -31,7 +29,7 @@ export function classifyChanges(paths, { full = false } = {}) {
     } else {
       // Unknown paths and workflow edits run the daily checks. Install/update matrices
       // belong to the release gate; they must not turn every push into a release rehearsal.
-      for (const scope of ['test', 'superagent', 'app', 'mobile']) result[scope] = true
+      for (const scope of ['superagent', 'app', 'mobile']) result[scope] = true
     }
   }
   return { docsOnly, ...result }

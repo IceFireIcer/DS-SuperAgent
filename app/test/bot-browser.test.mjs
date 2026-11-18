@@ -97,7 +97,7 @@ test('only a leased webview attaches, with fixed preferences, and its new window
   guest.emit('dom-ready')
   assert.deepEqual(guest.openHandler({ url: 'https://example.com/next' }), { action: 'deny' })
   assert.deepEqual(guest.openHandler({ url: `${ORIGIN}/` }), { action: 'deny' })
-  assert.deepEqual(electron.owner.sent, [['ds-bot:browser-open-requested', { lease, url: 'https://example.com/next' }]])
+  assert.deepEqual(electron.owner.sent, [['ds-superagent:browser-open-requested', { lease, url: 'https://example.com/next' }]])
 
   const navigation = { isMainFrame: true, url: `${ORIGIN}/api`, prevented: false, preventDefault() { this.prevented = true } }
   guest.emit('will-frame-navigate', navigation)

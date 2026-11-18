@@ -29,10 +29,11 @@ R5-31/#123 的[安全边界双向工作交接](r5-31.md)已接现有 Main 工作
 
 R5-33/#125 的[托管替换后恢复三层会话与工作权威](r5-33.md)现已支持 SQLite 或共享 PostgreSQL 业务库、托管 PostgreSQL Session provider、稳定 Host ID/lease 和本地 state root。真实两进程产品测试强杀旧 Host，在 lease 过期后按新 epoch 接管 waiting-human 工作，保留同一 Main/Router/Worker Session，并由断连客户端重连、回答和取得同一 Main 结果。停止、unknown、设备作业、客户端游标和 Session writer epoch 使用既有窄测分层核验；真实服务器、第二设备与持续四目标仍归 T58/T55。
 
-R5-34/#126 的[移除旧 Bot 运行架构及兼容入口](r5-34.md)已完成代码验收：`ds-bot` 只挂载
-`installProduct`，应用只启动一个 `ds-superagent` profile，旧 roster/group/round/tools/channel/API、原生历史入口、
-activation/reversal、双 profile 和未接线独立 UI/engine 已删除。当前浏览器、Office、记忆、MCP、日程、附件、
-资源、远端执行与监督均由 R5 消费者保留；85 项旧操作和 API 外 hooks/tools 的逐组处置及
+R5-34/#126 的[移除旧 Bot 运行架构及兼容入口](r5-34.md)已完成代码验收：原 `ds-bot` 目录已收进唯一
+`ds-superagent` 包的 `dsh/`，包根同时发布 Engine/Host，manifest 提供 client 与 web-search；应用只启动一个
+`ds-superagent` profile。旧 roster/group/round/tools/channel/API、原生历史入口、activation/reversal、双
+profile、第二 package/loader 和未接线独立 UI/engine 已删除。当前浏览器、Office、记忆、MCP、日程、附件、资源、
+远端执行与监督均由 R5 消费者保留；85 项旧操作和 API 外 hooks/tools 的逐组处置及
 [双轴复核](reviews/r5-34.md)见记录。真实飞书、第二设备、托管组合和全量 CI 仍按 T58/T55 分层验收。
 
 R5-24/#116 的产品健康快照、独立 Watchdog CLI 和受信语义监督入口见[实施记录](r5-24.md)及[双轴自检](reviews/r5-24.md)；语义巡检已接超单轮上限的持久续查、覆盖核对和受信重启入口，默认桌面 Host 自动替换与真实服务器仍缺验收，工单保持开放。

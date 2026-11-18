@@ -1,8 +1,9 @@
 // Generated from src/client by `npm run build` (scripts/build-client.mjs). Do not edit by hand.
 window.__ModuleLoader__.load({
-  id: 'ds-bot',
+  id: 'ds-superagent',
   factory: (require) => {
 const module = { exports: {} }
+"use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -33,7 +34,7 @@ module.exports = __toCommonJS(index_exports);
 var import_dsh_client_ui_primitives = require("@deepseek-ai/dsh-client-ui-primitives");
 
 // src/client/i18n.js
-var NAMESPACE = "ds-bot";
+var NAMESPACE = "ds-superagent";
 var ZH = {
   "Proactive preparation": "主动准备",
   "Pause proactive preparation": "暂停主动准备",
@@ -678,6 +679,19 @@ var ZH = {
   "Complete evidence": "完整证据",
   "Load more evidence": "加载更多证据",
   "Main is unavailable.": "Main 暂不可用。",
+  "Send a JSON product request.": "请发送 JSON 产品请求。",
+  "Use the authorized Main conversation. Native Session access is unavailable.": "请使用已授权的 Main 对话；原生 Session 入口不可用。",
+  "This conversation is outside the authorized workspace.": "这个对话不在已授权的工作区内。",
+  "This message identity was already used for different text.": "这条消息身份已经用于不同内容。",
+  "The configuration changed elsewhere. Your draft is still here.": "配置已在别处更新，你的草稿仍保留。",
+  "Check the role configuration.": "检查角色配置。",
+  "Check the request fields.": "检查请求字段。",
+  "The requested work activity is unavailable.": "请求的工作活动不可用。",
+  "This product capability is not connected yet.": "这个产品能力还没有接通。",
+  "The product Host is closed.": "产品 Host 已关闭。",
+  "Main is unavailable. Your accepted messages remain in the conversation.": "Main 暂不可用；已接受的消息仍保留在对话中。",
+  "Check the preset request.": "检查预设请求。",
+  "Review the current memory scope.": "检查当前记忆范围。",
   "Main could not finish this reply. Your message is saved.": "Main 未能完成回复，你的消息已保存。",
   "Could not reach Main. Check that the app is running.": "无法连接 Main，请检查应用是否仍在运行。",
   "Work item: {goal}": "工作：{goal}",
@@ -7560,12 +7574,6 @@ function registerTheme(id, theme) {
   };
 }
 var allThemes = () => ({ ...THEMES, ...customThemes });
-var MESSAGE_WIDTH = { min: 50, max: 100, step: 5 };
-var percent = (value, initial) => Number.isInteger(value) && value >= MESSAGE_WIDTH.min && value <= MESSAGE_WIDTH.max ? value : initial;
-var layoutOf = (prefs) => prefs?.layout === "flat" ? "flat" : "bubble";
-var thinkingShown = (prefs) => prefs?.thinking === true;
-var widthOf = (prefs) => percent(prefs?.width, 80);
-var flatWidthOf = (prefs) => percent(prefs?.flatWidth, 100);
 
 // src/client/styles.js
 var SHELL_CSS = `
@@ -8753,7 +8761,7 @@ div:has(> nav [class*="_marks"]){display:none!important}
 .bt-btw-fail{margin:0 0 6px;color:var(--bt-danger);font-size:13px;line-height:18px}
 @media (prefers-reduced-motion:reduce){.bt-btw-chevron{transition:none}}
 `;
-var PLUGIN_ID = "ds-bot";
+var PLUGIN_ID = "ds-superagent";
 function installStyles(text, tag) {
   const style = document.createElement("style");
   style.dataset.dshBot = tag;
@@ -12014,15 +12022,15 @@ function WidgetTable({ node, lookup }) {
 }
 function WidgetProgress({ node, lookup }) {
   const ui = useViewUi();
-  let percent2;
-  if (node.percent !== void 0) percent2 = Number(resolve(node.percent, lookup, 0));
+  let percent;
+  if (node.percent !== void 0) percent = Number(resolve(node.percent, lookup, 0));
   else {
     const max = Number(resolve(node.max, lookup, 0));
-    percent2 = max > 0 ? Number(resolve(node.value, lookup, 0)) / max * 100 : 0;
+    percent = max > 0 ? Number(resolve(node.value, lookup, 0)) / max * 100 : 0;
   }
-  percent2 = Math.max(0, Math.min(100, Number.isFinite(percent2) ? percent2 : 0));
+  percent = Math.max(0, Math.min(100, Number.isFinite(percent) ? percent : 0));
   const tone = resolve(node.tone, lookup);
-  const right = node.valueLabel !== void 0 ? asText(resolve(node.valueLabel, lookup, "")) : `${Math.round(percent2)}%`;
+  const right = node.valueLabel !== void 0 ? asText(resolve(node.valueLabel, lookup, "")) : `${Math.round(percent)}%`;
   return (0, import_react23.createElement)(
     "div",
     { className: "dv-widget-progress", "data-tone": TONES2.includes(tone) ? tone : void 0 },
@@ -12030,12 +12038,12 @@ function WidgetProgress({ node, lookup }) {
     (0, import_react23.createElement)("div", {
       className: "dv-widget-progress-track",
       role: "progressbar",
-      "aria-valuenow": Math.round(percent2),
+      "aria-valuenow": Math.round(percent),
       "aria-valuemin": 0,
       "aria-valuemax": 100,
       "aria-label": node.label ?? ui.t("Progress"),
       "aria-valuetext": right
-    }, (0, import_react23.createElement)("div", { className: "dv-widget-progress-fill", style: { width: `${percent2}%` } }))
+    }, (0, import_react23.createElement)("div", { className: "dv-widget-progress-fill", style: { width: `${percent}%` } }))
   );
 }
 function WidgetMetric({ node, lookup }) {
@@ -12088,7 +12096,7 @@ var grouped2 = (value) => typeof value === "number" && Number.isFinite(value) ? 
 function SliderInput({ node, ctx }) {
   const id = (0, import_react23.useId)();
   const value = Number(ctx.values[node.id]);
-  const percent2 = node.max > node.min ? (value - node.min) / (node.max - node.min) * 100 : 0;
+  const percent = node.max > node.min ? (value - node.min) / (node.max - node.min) * 100 : 0;
   return (0, import_react23.createElement)(
     "div",
     { className: "dv-view-input" },
@@ -12102,7 +12110,7 @@ function SliderInput({ node, ctx }) {
       step: node.step ?? "any",
       value,
       disabled: ctx.locked,
-      style: { "--dv-fill": `${percent2}%` },
+      style: { "--dv-fill": `${percent}%` },
       onChange: (event) => ctx.setInput(node.id, Number(event.target.value))
     })
   );
@@ -12586,7 +12594,7 @@ function ProductWorkView({ title, view, answer, onSubmit, busy = false }) {
 
 // src/client/product.js
 var import_react26 = require("react");
-var clientBridge = () => window.dsBotApp?.productClient;
+var clientBridge = () => window.dsSuperagentApp?.productClient;
 var activeHost = "local";
 function offerDownload(data, name, mediaType = "application/octet-stream") {
   const url = URL.createObjectURL(new Blob([data], { type: mediaType }));
@@ -12613,7 +12621,7 @@ async function productCall(endpoint, payload = {}) {
   } catch {
     throw new Error(t("Could not reach Main. Check that the app is running."));
   }
-  if (!response.ok || !result.ok) throw Object.assign(new Error(result.error?.message ?? t("Main is unavailable.")), { code: result.error?.code });
+  if (!response.ok || !result.ok) throw Object.assign(new Error(t(result.error?.message ?? "Main is unavailable.")), { code: result.error?.code });
   return result.value;
 }
 function applyProduct(ctx) {
@@ -14899,7 +14907,7 @@ function applyProduct(ctx) {
               works: view.getSnapshot().works,
               directoryOptions: viewState.directoryOptions,
               call: productCall,
-              browserBridge: globalThis.dsBotApp?.browser
+              browserBridge: globalThis.dsSuperagentApp?.browser
             }) : page === "supervision" ? (0, import_react26.createElement)(ProductSupervisionSettings, { binding, call: productCall }) : (0, import_react26.createElement)(
               import_react26.Fragment,
               null,
@@ -15052,7 +15060,7 @@ function applyProduct(ctx) {
                   ) : null
                 )) : (0, import_react26.createElement)("p", { className: "bt-main-status" }, t("No provider catalog is available. Configure providers in DSH settings."))
               ),
-              (0, import_react26.createElement)(ProductCredentialSettings, { binding, call: productCall, credentialImportBridge: globalThis.dsBotApp?.browser?.credentialImport }),
+              (0, import_react26.createElement)(ProductCredentialSettings, { binding, call: productCall, credentialImportBridge: globalThis.dsSuperagentApp?.browser?.credentialImport }),
               (0, import_react26.createElement)(ProductMcpSettings, { binding, call: productCall }),
               (0, import_react26.createElement)(ClientSettings, { binding }),
               (0, import_react26.createElement)(

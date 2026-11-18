@@ -1,8 +1,12 @@
-# The ds-superagent DSH profile: the production Engine host for the existing
-# ds-bot chat UI. The UI bundle follows this layer in the profile's bundle list.
+# The production Super-agent host for the existing chat UI. The browser bundle
+# is discovered from this package's dsh.client manifest and ./client export.
 - insert:
-    - id: superagent-profile
-      name: ds-superagent/profile
+    - id: superagent
+      name: ds-superagent
+    # Web search with the current conversation route's own key, else a keyless
+    # results-page fallback.
+    - id: web-search-auto
+      name: ds-superagent/web-search
     # The managed profile uses the same PostgreSQL store family for the native
     # Session log. Connection settings remain in the trusted Host environment.
     - id: session-persistence-postgres
@@ -12,6 +16,12 @@
 
 - id: session-persistence-jsonl
   disabled: !!js "Boolean(process.env.DS_SUPERAGENT_POSTGRES?.trim())"
+
+# A config override replaces the whole entry config, so fetchProvider is restated.
+- id: web
+  config:
+    searchProvider: auto
+    fetchProvider: http
 
 # Keep the public client module available while removing the native Session
 # controller from the Gateway's product scope, including its WebSocket carrier.

@@ -14,7 +14,7 @@ asarUnpack:
   - node_modules/pnpm/**
   - node_modules/@deepseek-ai/libreoffice-kit/**
   # The payload Node cannot read office.js through the asar.
-  - node_modules/ds-bot/office.js
+  - node_modules/ds-superagent/dsh/office.js
   # Automatic unpacking misses versioned Linux libraries such as libvips-cpp.so.8.18.7.
   - node_modules/@img/sharp*/**
 # The Office payload that scripts/prepare-runtime.mjs writes in beforePack (see package.json's
@@ -84,5 +84,5 @@ deb:
 # so the build itself never publishes (--publish never).
 publish:
   provider: github
-  owner: Fei2411
-  repo: DS-Bot
+  owner: IceFireIcer
+  repo: DS-SuperAgent

@@ -30,7 +30,7 @@ async function open(t, options = {}) {
   }
   cleanups.get(t).contexts.push(ctx)
   cleanups.get(t).directories.push(directory)
-  await ctx.plugin(plugin, { databasePath: join(directory, 'state.sqlite'), instanceId: 'private', source, ...options })
+  await ctx.plugin(plugin.enginePlugin, { databasePath: join(directory, 'state.sqlite'), instanceId: 'private', source, ...options })
   return { engine: ctx.get('superagent'), ctx, directory }
 }
 

@@ -8,4 +8,5 @@ export const loadProfileDirectory = () => ({})
 export const readProfileManifest = () => ({ dsh: { profile: { bundles: [] } } })
 export const resolveProfileDir = (name) => name
 export const writeProfileBundles = () => {}
+export const writeProfileManifest = () => {}
 export const composeEntries = (entries) => entries.flat()

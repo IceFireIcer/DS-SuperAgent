@@ -6,7 +6,7 @@ Thank you for helping. This file explains how the team works, how to set up the 
 
 ## Who can open pull requests
 
-Collaborators of this repository push branches here and open pull requests into `dev` (see [How we work](#how-we-work)). For now, only collaborators can open pull requests. If you are not a collaborator, please open an issue for a bug (see [Report a problem](#report-a-problem)) or use [Discussions](https://github.com/Fei2411/DS-Bot/discussions) for a question or an idea.
+Collaborators of this repository push branches here and open pull requests into `dev` (see [How we work](#how-we-work)). For now, only collaborators can open pull requests. If you are not a collaborator, please open an issue for a bug (see [Report a problem](#report-a-problem)) or use [Discussions](https://github.com/IceFireIcer/DS-SuperAgent/discussions) for a question or an idea.
 
 ## The rules that matter most
 
@@ -66,12 +66,12 @@ Keep one pull request to one issue. Split a large change into several pull reque
 
 ### Merge conflicts
 
-- **`ds-bot/client.js`**: never resolve it by hand. Resolve the conflicts in `ds-bot/src/client/`, run `npm run build` in `ds-bot/` and commit the new `client.js`.
+- **`superagent/dsh/client.js`**: never resolve it by hand. Resolve the conflicts in `superagent/dsh/src/client/`, run `npm run build` in `superagent/` and commit the new `client.js`.
 - **`CHANGELOG.md`**: pull requests do not change it, so it should not conflict. If it does, keep both sides.
 
 ### Releases (maintainer)
 
-1. In a pull request into `dev`, set the version in `ds-bot/package.json` and write the `CHANGELOG.md` section from the Changelog sentences of the merged pull requests.
+1. In a pull request into `dev`, set the version in `superagent/package.json` and write the `CHANGELOG.md` section from the Changelog sentences of the merged pull requests.
 2. Open a pull request from `dev` into `main` titled `release: vX.Y.Z`. List every `Fixes #<number>` of the release in its description, so that these issues close when it is merged.
 3. Before you merge it, run the [release checklist](docs/dev/release-checklist.md) (in Chinese) on a real Windows machine, and on macOS when the change touches it, and post the result in the pull request. Merge it with a merge commit and publish a GitHub release `vX.Y.Z` on `main`. The Release workflow checks that the tag matches the version and is on `main`, runs the checks and publishes the package to npm (a pre-release version under the npm tag `next`). Do not run `npm publish` by hand.
 4. For a hotfix, start `fix/hot-<name>` from `main`, open the pull request into `main`, release a patch version, then merge `main` into `dev`.
@@ -85,59 +85,53 @@ You need:
 - For the product profile check only: pnpm `11` and a checkout of DeepSeek Harness at the tested version.
 
 ```sh
-git clone https://github.com/Fei2411/DS-Bot.git ds-bot-repo
-cd ds-bot-repo/ds-bot
+git clone https://github.com/IceFireIcer/DS-SuperAgent.git ds-superagent
+cd ds-superagent/superagent
 
-# The plugin's own build tool (esbuild only).
+# The package's build and test dependencies.
 npm ci
-
-# The DSH packages that the unit tests and the linter load, from npm, into dev/harness/.
-npm run harness
 ```
 
-For the product profile check, add the DeepSeek Harness checkout next to the plugin folder (this folder is ignored by
+For the product profile check, add the DeepSeek Harness checkout next to `superagent/` (this folder is ignored by
 Git):
 
 ```sh
 cd ..
 git clone https://github.com/deepseek-ai/deepseek-harness.git
-git -C deepseek-harness checkout dsh-v0.2.1-rc.3
+git -C deepseek-harness checkout dsh-v0.2.1-rc.4
 (cd deepseek-harness && pnpm install)
 ```
 
-If your DeepSeek Harness checkout is somewhere else, set `DSH_HARNESS` to its path. `DSH_HARNESS` also takes the place of `dev/harness/` for the unit tests and the linter.
-
-The `@deepseek-ai/*` packages are peer dependencies: in a real install, the DSH profile supplies them. `ds-bot/.npmrc` keeps npm from installing them into the plugin folder.
+If your DeepSeek Harness checkout is somewhere else, set `DSH_HARNESS` to its path for tests that resolve its packages from source.
 
 ## Layout
 
 | Path | What it is |
 |---|---|
-| `superagent/` | Engine, Host, storage, execution and retained capability adapters |
-| `ds-bot/index.js`, `ds-bot/src/host/product.js` | `/api/product`, native Session refusal and the product service dependency |
-| `ds-bot/src/client/` | The existing Main conversation, work cards and product settings |
-| `ds-bot/client.js` | Generated from `src/client/` by `scripts/build-client.mjs`. It is committed, so that Git installs need no build step |
-| `ds-bot/web-search.js` | The `auto` web-search provider. It does not depend on the Bot team code |
-| `ds-bot/cordis.patch.yml` | The profile patch that the plugin brings |
-| `ds-bot/test/` | Unit tests and fixtures |
-| `ds-bot/dev/` | The DSH packages for unit tests, the minimal product mock model, retained asset/Office/MCP utilities and a real-model logging pass-through |
+| `superagent/src/` | Engine, Host, storage, execution and retained capability adapters |
+| `superagent/dsh/src/client/` | The existing Main conversation, work cards and product settings |
+| `superagent/dsh/client.js` | Generated from `dsh/src/client/` by `dsh/scripts/build-client.mjs`. It is committed, so Git installs need no build step |
+| `superagent/dsh/web-search.js` | The `auto` web-search provider |
+| `superagent/cordis.patch.yml` | The single package's DSH bundle patch |
+| `superagent/test/` and `superagent/dsh/test/` | Engine and product-client tests |
+| `superagent/dev/` and `superagent/dsh/dev/` | Isolated development fixtures and the minimal mock model |
 | `app/` | The single-product profile, Electron shell, data isolation, lifecycle and packaging |
 
 ## Test a change
 
-Run these in `ds-bot/`:
+Run these in `superagent/`:
 
 ```sh
-npm run build                          # src/client → client.js
-npm test                               # unit tests; they also fail if client.js is stale
-node scripts/build-client.mjs --check  # client.js matches src/client
+npm run build                          # TypeScript + client.js + office.js
+npm test                               # Server and client tests
+node dsh/scripts/build-client.mjs --check
 npm run lint                           # oxlint
 ```
 
-CI runs the same three checks for changes under `ds-bot/`, on Linux and Windows. Other jobs run only when their paths change; the single check **Test result** evaluates the jobs that the change requires and fails if one of them was skipped or did not pass. CI also scans the tracked files for keys, tokens, personal paths and e-mail addresses, and for material that must stay local. To run the scan yourself, from the repository root:
+CI runs these checks for changes under `superagent/`. Other jobs run only when their paths change; the single check **Test result** evaluates the jobs that the change requires and fails if one of them was skipped or did not pass. CI also scans the tracked files for keys, tokens, personal paths and e-mail addresses, and for material that must stay local. To run the scan yourself, from the repository root:
 
 ```sh
-mkdir -p /tmp/ds-bot-tree && git archive HEAD | tar -x -C /tmp/ds-bot-tree && node scripts/scan.mjs /tmp/ds-bot-tree
+mkdir -p /tmp/ds-superagent-tree && git archive HEAD | tar -x -C /tmp/ds-superagent-tree && node scripts/scan.mjs /tmp/ds-superagent-tree
 ```
 
 A "must fix" finding fails CI; "can stay" findings are for reading. The branch rules require the single check **Test result**, which passes only when all the checks pass.
@@ -148,8 +142,8 @@ Before committing, run the UI boundary check from the repository root:
 node scripts/check-ui-boundary.mjs --base origin/dev
 ```
 
-It lists changes under `ds-bot/src/client/` and `ds-bot/client.js`. Those files need an explicit request for the UI
-change; only then run the check again with `DSBOT_UI_CHANGE_APPROVED=1`. The check compares the working tree and
+It lists changes under `superagent/dsh/src/client/` and `superagent/dsh/client.js`. Those files need an explicit request for the UI
+change; only then run the check again with `DS_SUPERAGENT_UI_CHANGE_APPROVED=1`. The check compares the working tree and
 untracked files with the base, so it also catches an edit that has not been staged yet.
 
 For Engine or Host changes, also run in `superagent/`:
@@ -162,7 +156,7 @@ npm run lint
 
 For the assembled product profile, run `node app/scripts/check-superagent-profile.mjs` on throwaway data. For product
 UI changes, run `npm test` in `app/`, the generated client check and the UI boundary check. Use the minimal
-`ds-bot/dev/mock-llm.mjs` when a packaged-app smoke needs a model; real model checks cost tokens and must use explicit
+`superagent/dsh/dev/mock-llm.mjs` when a packaged-app smoke needs a model; real model checks cost tokens and must use explicit
 temporary configuration.
 
 ## Write a change

@@ -14,7 +14,6 @@ test('the Super-agent profile mounts only the product projection', () => {
     const patchFiles = reconcileSuperagentProfile({ dir }, true)
     assert.deepEqual(patchFiles, [join(home, 'profiles', 'superagent.patch.yml')])
     assert.deepEqual(parse(readFileSync(patchFiles[0], 'utf8')), [
-      { id: 'bot', config: { product: true } },
       { id: 'session-log-download', disabled: true },
       { id: 'session-reference', disabled: true },
       { id: 'ui-reference', disabled: true },
@@ -24,7 +23,7 @@ test('the Super-agent profile mounts only the product projection', () => {
   }
 })
 
-test('the ds-bot profile drops a stale Super-agent overlay', () => {
+test('the Super-agent profile drops a stale overlay', () => {
   const home = mkdtempSync(join(tmpdir(), 'ds-superagent-patch-off-'))
   try {
     const dir = join(home, 'profiles', 'ds-bot')

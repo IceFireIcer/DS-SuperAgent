@@ -9,7 +9,7 @@ groupmod -o -g "$PGID" node
 usermod -o -u "$PUID" node
 
 # First start: seed the data volume with the template home built into the image
-# (a web profile with ds-superagent and the existing ds-bot client installed).
+# (a web profile with the single ds-superagent package installed).
 if [ ! -d /data/profiles/web ]; then
   mkdir -p /data
   cp -a /opt/dsh-template/. /data/
@@ -62,7 +62,7 @@ EOF
 
 # --patch is a dsh option and must precede the app's own flags.
 set -- dsh --profile web \
-  --patch /opt/ds-bot/docker.patch.yml --patch /tmp/listen.patch.yml \
+  --patch /opt/ds-superagent/docker.patch.yml --patch /tmp/listen.patch.yml \
   --no-open "$@"
 
 if [ -n "${DSH_TRUSTED_HOST:-}" ]; then

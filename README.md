@@ -42,27 +42,25 @@ DSH files untouched.
 
 ## Run from this checkout
 
-Use Node.js 24. The app installs `ds-bot` and `ds-superagent` from this repository:
+Use Node.js 24. The app installs the single `ds-superagent` product package from this repository:
 
 ```powershell
 npm --prefix app ci
 npm --prefix app start
 ```
 
-For a DSH profile without the Electron shell, add both package directories as linked dependencies and list
-`@deepseek-ai/dsh-base`, `@deepseek-ai/dsh-web-app`, `ds-bot` and `ds-superagent` as profile bundles. See
-[`ds-bot/README.md`](ds-bot/README.md) and [`superagent/README.md`](superagent/README.md).
+For a DSH profile without the Electron shell, link [`superagent/`](superagent/README.md) and list
+`@deepseek-ai/dsh-base`, `@deepseek-ai/dsh-web-app` and `ds-superagent` as profile bundles.
 
 ## Validate
 
 The repository uses targeted checks for a changed area:
 
 ```powershell
-npm --prefix ds-bot run build
-node ds-bot/scripts/build-client.mjs --check
-npm --prefix ds-bot run lint
 npm --prefix superagent run typecheck
 npm --prefix superagent run build
+npm --prefix superagent run test:client
+npm --prefix superagent run lint
 npm --prefix app test
 ```
 
@@ -79,13 +77,13 @@ gates. Mock UI or unit results do not replace those checks.
 
 | Directory | Purpose |
 |---|---|
-| `ds-bot/` | Existing client UI, `/api/product` bridge, Office tools and web-search provider |
-| `superagent/` | Engine, durable business store, Host, execution adapters and public product commands |
+| `superagent/` | The single DSH package: Engine, durable business store, Host, product HTTP bridge, existing client UI, Office tools and web-search provider |
 | `app/` | Electron shell, single product profile, data isolation, process lifecycle and packaging |
 | `docs/superagent/` | R5 specification, implementation records and environment evidence |
 
 R5-34 removed the old roster, group/round, Bot-to-Bot, team governance, native-history, activation/reversal and
-dual-profile compatibility paths. This repository no longer ships a second renderer or standalone app engine.
+dual-profile compatibility paths. The former second package is now the `dsh/` part of `ds-superagent`; this repository
+does not ship a second renderer, standalone app engine or separate DSH plugin.
 
 ## License
 

@@ -1,10 +1,11 @@
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { dirname, join, sep } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import { createProductHost, type ProductHostConfig } from './product-host.js'
 import { CoreError } from './model.js'
 import type { PostgresOptions } from './postgres-storage.js'
+import { apply as applyProductHttp } from './product-http.js'
 
 export interface SuperagentProfilePaths {
   root: string
@@ -19,7 +20,7 @@ export function officeProfileConfig(env: NodeJS.ProcessEnv = process.env): Produ
   const runtime = env.DS_BOT_RUNTIME_DIR
   if (!node || !runtime) return undefined
   let cli: string
-  try { cli = join(dirname(fileURLToPath(import.meta.resolve('ds-bot'))), 'office.js')
+  try { cli = join(dirname(createRequire(import.meta.url).resolve('ds-superagent/package.json')), 'dsh', 'office.js')
     .replace(`${sep}app.asar${sep}`, `${sep}app.asar.unpacked${sep}`) }
   catch { return undefined }
   const skillsPath = join(runtime, 'office-skills')
@@ -115,8 +116,8 @@ export function githubProfileConfig(env: NodeJS.ProcessEnv = process.env): Produ
       allowedRequesterIds, allowedBotActorIds: [], rules: [] } }
 }
 
-export const name = 'ds-superagent-profile'
-export const inject = ['sessionPersistence', 'agents', 'sessions']
+export const name = 'ds-superagent'
+export const inject = ['connection', 'sessionPersistence', 'agents', 'sessions']
 
 export async function apply(context: Context, config: SuperagentProfileConfig = {}) {
   const paths = profilePaths()
@@ -124,7 +125,7 @@ export async function apply(context: Context, config: SuperagentProfileConfig = 
   const postgres = postgresProfileConfig()
   const hostId = config.hostId ?? process.env.DS_SUPERAGENT_HOST_ID
   const leaseMs = config.leaseMs ?? leaseFromProfile(process.env)
-  const workspaceRoot = config.workspaceRoot ?? process.env.DS_BOT_WORKSPACE
+  const workspaceRoot = config.workspaceRoot ?? process.env.DS_SUPERAGENT_WORKSPACE ?? process.env.DS_BOT_WORKSPACE
   if (workspaceRoot) mkdirSync(workspaceRoot, { recursive: true })
   const gatewayPort = process.env.DS_SUPERAGENT_CLIENT_PORT
   const keyPath = process.env.DS_SUPERAGENT_CLIENT_TLS_KEY_PATH
@@ -179,4 +180,5 @@ export async function apply(context: Context, config: SuperagentProfileConfig = 
   })
   context.provide('superagentProduct', host)
   context.effect(() => () => host.close())
+  applyProductHttp(context)
 }

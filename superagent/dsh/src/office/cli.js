@@ -1,4 +1,4 @@
-// ds-bot Office CLI: inspect, check and edit .docx/.pptx/.xlsx packages without
+// DS SuperAgent Office CLI: inspect, check and edit .docx/.pptx/.xlsx packages without
 // installing anything. Bundled into ../office.js by `npm run build`.
 // Exit codes: 0 ok, 1 findings remain, 2 usage or failure. `--json` on any
 // command prints {"ok":true,"data":…} or {"ok":false,"error":{"code","message"}}.
@@ -13,7 +13,7 @@ import { xlsxInventory, xlsxRead } from './xlsx.js'
 import { decodePng, encodePng, contactSheet } from './png.js'
 import { stripPrettyWhitespace } from './xml.js'
 
-const USAGE = `ds-bot office — inspect, check and edit .docx/.pptx/.xlsx
+const USAGE = `ds-superagent office — inspect, check and edit .docx/.pptx/.xlsx
 
 unpack <file> <dir>                        extract with pretty-printed XML (new or reused dir)
 pack <dir> <file> [--against <orig>]       repack (strips formatting whitespace) and check

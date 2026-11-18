@@ -114,19 +114,21 @@ for (const file of files) {
 
 // Package checks: the license and the fields that npm and DSH read.
 if (!files.includes('LICENSE')) add(MUST, 'license', 'LICENSE', 0, 'no LICENSE at the root')
-if (!files.includes('ds-bot/package.json')) add(MUST, 'plugin-folder', '.', 0, 'no ds-bot/package.json')
+if (!files.includes('superagent/package.json')) add(MUST, 'plugin-folder', '.', 0, 'no superagent/package.json')
 else {
-  const pkg = JSON.parse(readFileSync(join(root, 'ds-bot/package.json'), 'utf8'))
-  if (pkg.name !== 'ds-bot') add(MUST, 'package', 'ds-bot/package.json', 0, `name is "${pkg.name}", expected "ds-bot"`)
-  if (!files.includes('ds-bot/LICENSE')) add(MUST, 'package', 'ds-bot/LICENSE', 0, 'the package has no LICENSE file')
-  if (!(pkg.files ?? []).includes('LICENSE')) add(MUST, 'package', 'ds-bot/package.json', 0, '"files" does not list LICENSE')
+  const pkg = JSON.parse(readFileSync(join(root, 'superagent/package.json'), 'utf8'))
+  if (pkg.name !== 'ds-superagent') add(MUST, 'package', 'superagent/package.json', 0, `name is "${pkg.name}", expected "ds-superagent"`)
+  if (!files.includes('superagent/LICENSE')) add(MUST, 'package', 'superagent/LICENSE', 0, 'the package has no LICENSE file')
+  if (!(pkg.files ?? []).includes('LICENSE')) add(MUST, 'package', 'superagent/package.json', 0, '"files" does not list LICENSE')
+  if (pkg.exports?.['./client'] !== './dsh/client.js') add(MUST, 'package', 'superagent/package.json', 0, 'the client export is missing')
+  if (pkg.exports?.['./web-search'] !== './dsh/web-search.js') add(MUST, 'package', 'superagent/package.json', 0, 'the web-search export is missing')
+  if (pkg.dsh?.client?.platform !== 'web') add(MUST, 'package', 'superagent/package.json', 0, 'the DSH client manifest is missing')
+  if (!pkg.dsh?.bundle?.patch) add(MUST, 'package', 'superagent/package.json', 0, 'the DSH bundle patch is missing')
   for (const field of ['repository', 'homepage', 'bugs']) {
-    if (!pkg[field]) add(MUST, 'package', 'ds-bot/package.json', 0, `no "${field}" field`)
-  }
-  for (const [name, range] of Object.entries(pkg.peerDependencies ?? {})) {
-    if (range !== '*') add(KEEP, 'package', 'ds-bot/package.json', 0, `peer ${name} is "${range}", not "*"`)
+    if (!pkg[field]) add(MUST, 'package', 'superagent/package.json', 0, `no "${field}" field`)
   }
 }
+if (files.some(file => file === 'ds-bot/package.json')) add(MUST, 'legacy-package', 'ds-bot/package.json', 0, 'the retired package remains')
 for (const name of ['README.md', 'README.zh.md', 'CONTRIBUTING.md', 'CHANGELOG.md', 'AGENTS.md', '.gitignore']) {
   if (!files.includes(name)) add(MUST, 'root-file', name, 0, 'missing at the root')
 }

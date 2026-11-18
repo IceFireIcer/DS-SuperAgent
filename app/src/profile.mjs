@@ -1,14 +1,15 @@
 // The app's single DS-SuperAgent DSH profile.
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
-import { initProfile, loadProfileDirectory, readProfileManifest, resolveProfileDir, writeProfileBundles } from '@deepseek-ai/dsh-app-boot'
+import { initProfile, loadProfileDirectory, readProfileManifest, resolveProfileDir, writeProfileBundles,
+  writeProfileManifest } from '@deepseek-ai/dsh-app-boot'
 
 export const SUPERAGENT_PROFILE = 'ds-superagent'
 export const BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app',
-  '@deepseek-ai/dsh-experimental-voice-input-bundle', 'ds-bot', 'ds-superagent']
+  '@deepseek-ai/dsh-experimental-voice-input-bundle', 'ds-superagent']
 
 // Bundles that earlier builds put in this profile and that no current profile may load.
-const RETIRED_BUNDLES = ['deepseek-bot-engine', 'dsbot-engine', 'ds-superagent-host', 'ds-superagent-ui']
+const LEGACY_BUNDLES = ['ds-bot', 'deepseek-bot-engine', 'dsbot-engine', 'ds-superagent-host', 'ds-superagent-ui']
 
 // The app's own manifest is the installation: DSH imports plugins only from the installation's dependency
 // graph, resolves bundles there first, and keeps the bundles it names as direct dependencies from removal.
@@ -21,8 +22,18 @@ export const INSTALL_ANCHOR = fileURLToPath(new URL('../package.json', import.me
 export function claimBundles(dir, bundles = BUNDLES) {
   const manifest = readProfileManifest('dsh', dir)
   const listed = manifest.dsh?.profile?.bundles ?? []
-  const next = [...bundles, ...listed.filter(name => !bundles.includes(name) && !RETIRED_BUNDLES.includes(name))]
-  if (next.join('\n') !== listed.join('\n')) writeProfileBundles(dir, manifest, next)
+  const next = [...bundles, ...listed.filter(name => !bundles.includes(name) && !LEGACY_BUNDLES.includes(name))]
+  const updated = next.join('\n') !== listed.join('\n') ? writeProfileBundles(dir, manifest, next) : manifest
+  let changed = updated !== manifest
+  const cleaned = { ...updated }
+  for (const field of ['dependencies', 'devDependencies', 'optionalDependencies']) {
+    if (cleaned[field] === undefined) continue
+    const entries = Object.entries(cleaned[field]).filter(([name]) => !LEGACY_BUNDLES.includes(name))
+    if (entries.length === Object.keys(cleaned[field]).length) continue
+    cleaned[field] = Object.fromEntries(entries)
+    changed = true
+  }
+  if (changed) writeProfileManifest(dir, cleaned)
 }
 
 /** Create or update the one DS-SuperAgent profile under the current DSH_HOME and load it. */
