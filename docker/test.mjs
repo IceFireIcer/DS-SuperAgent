@@ -131,6 +131,12 @@ try {
     }
     await setTimeout(300)
   }
+  if (!ready) {
+    const logs = docker(['logs', server], { allowFailure: true })
+    const state = docker(['inspect', '--format', '{{json .State}}', server], { allowFailure: true })
+    console.error(`web container state:\n${state.stdout}${state.stderr}`)
+    console.error(`web container logs:\n${logs.stdout}${logs.stderr}`)
+  }
   assert.ok(ready, 'web server must answer HTTP after ownership migration')
   const processOwner = docker(['exec', server, 'stat', '-c', '%u:%g', '/proc/1']).stdout.trim()
   assert.equal(processOwner, '1234:1235', 'web process must run under the new identity')
