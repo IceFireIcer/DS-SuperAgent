@@ -42,7 +42,7 @@ async function waitForLeaseExpiry() {
 
 test('two real processes share one PostgreSQL Instance; the replacement reconciles before accepting work and the old process stays fenced', { timeout: 120000 }, async t => {
   const database = await postgres.createDatabase()
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-host-takeover-process-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-host-takeover-process-'))
   const configuration = { ...postgres.configuration, database, sessionDirectory: join(directory, 'sessions') }
   const parentStorage = await PostgresStorage.open({ ...postgres.configuration, database })
   opened.push(parentStorage)

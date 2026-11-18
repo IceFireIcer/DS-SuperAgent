@@ -7,7 +7,7 @@ import * as core from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 
 test('the loopback administration entry enrolls, lists and revokes clients without exposing their secret', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-client-admin-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-client-admin-'))
   let storage, engine, access, chat, bare
   t.after(async () => {
     await chat?.close(); await bare?.close(); await storage?.close()

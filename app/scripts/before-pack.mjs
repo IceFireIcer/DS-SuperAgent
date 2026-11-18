@@ -41,7 +41,7 @@ export function officeRuntimeRequest(context) {
   return {
     target,
     output: join(appDir, 'build', 'runtime'),
-    cache: process.env.DS_BOT_RUNTIME_CACHE ?? join(appDir, 'build', 'runtime-cache'),
+    cache: process.env.DS_SUPERAGENT_RUNTIME_CACHE ?? join(appDir, 'build', 'runtime-cache'),
     version: context.packager?.appInfo?.version
       ?? JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version,
   }

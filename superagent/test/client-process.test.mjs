@@ -23,7 +23,7 @@ async function until(check, label, timeoutMs = 20000) {
 }
 
 test('a separate client process catches up the receipt and every result after disconnecting, and a revoke locks it out', { timeout: 60000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-client-process-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-client-process-'))
   let native, storage, sessions, engine, gateway
   t.after(async () => {
     await gateway?.close().catch(() => {})

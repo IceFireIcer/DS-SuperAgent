@@ -38,7 +38,7 @@ async function cleanupDirectory(directory) {
 }
 
 async function fixture(context, environments, submit) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-t40-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-t40-'))
   const workerTurns = []
   const native = await nativeContext(join(directory, 'sessions'), options => {
     const user = options.messages.filter(message => message.role === 'user').at(-1)
@@ -115,7 +115,7 @@ function delayedProbe(environment) {
 }
 
 test('a local Assignment hands off to a paired remote Environment and keeps the Session', { timeout: 40000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-t40-local-remote-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-t40-local-remote-'))
   const sourceRoot = await repository(directory)
   const targetRoot = join(directory, 'target')
   await run('git', ['clone', sourceRoot, targetRoot], directory)
@@ -163,7 +163,7 @@ test('a local Assignment hands off to a paired remote Environment and keeps the 
 })
 
 test('a remote Assignment hands off back to a local Environment', { timeout: 40000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-t40-remote-local-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-t40-remote-local-'))
   const sourceRoot = await repository(directory)
   const targetRoot = join(directory, 'target')
   await run('git', ['clone', sourceRoot, targetRoot], directory)
@@ -193,7 +193,7 @@ test('a remote Assignment hands off back to a local Environment', { timeout: 400
 })
 
 test('a target excluded by the Ticket execution target is handoff-blocked', { timeout: 40000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-t40-target-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-t40-target-'))
   const sourceRoot = await repository(directory)
   const targetRoot = join(directory, 'target')
   await run('git', ['clone', sourceRoot, targetRoot], directory)
@@ -220,7 +220,7 @@ test('a target excluded by the Ticket execution target is handoff-blocked', { ti
 })
 
 test('a handoff without a verified copy is blocked without changing the Assignment', { timeout: 30000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-t40-blocked-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-t40-blocked-'))
   const sourceRoot = await repository(directory)
   const targetRoot = join(directory, 'target')
   await run('git', ['clone', sourceRoot, targetRoot], directory)
@@ -241,7 +241,7 @@ test('a handoff without a verified copy is blocked without changing the Assignme
 })
 
 test('a source change after verification blocks the handoff', { timeout: 30000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-t40-stale-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-t40-stale-'))
   const sourceRoot = await repository(directory)
   const targetRoot = join(directory, 'target')
   await run('git', ['clone', sourceRoot, targetRoot], directory)
@@ -269,7 +269,7 @@ test('a source change after verification blocks the handoff', { timeout: 30000 }
 test('a generation change during target selection prevents an old handoff request from recording state', {
   timeout: 40000,
 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-t41-request-stale-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-t41-request-stale-'))
   const sourceRoot = await repository(directory)
   const targetRoot = join(directory, 'target')
   await run('git', ['clone', sourceRoot, targetRoot], directory)

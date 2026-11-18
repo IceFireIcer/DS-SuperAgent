@@ -16,7 +16,7 @@ test('Linux uses the bundled plain Node, not Electron in Node mode', () => {
 })
 
 test('the Linux Host loads sharp only in its plain Node child', { skip: process.platform === 'win32' }, async () => {
-  const work = mkdtempSync(join(tmpdir(), 'ds-bot-linux-image-'))
+  const work = mkdtempSync(join(tmpdir(), 'ds-superagent-linux-image-'))
   const node = join(work, 'primary-runtime', 'dependencies', 'node', 'bin', 'node')
   mkdirSync(dirname(node), { recursive: true })
   symlinkSync(process.execPath, node)

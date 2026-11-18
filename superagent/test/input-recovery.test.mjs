@@ -56,7 +56,7 @@ async function reopen(directory, databasePath, sessionDatabasePath, t) {
 
 for (const [phase, code] of phases) {
   test(`a real process exit at ${phase} reopens to the right unread boundary without re-appending the user message`, { timeout: 40000 }, async t => {
-    const directory = await mkdtemp(join(tmpdir(), `ds-bot-input-crash-${phase}-`))
+    const directory = await mkdtemp(join(tmpdir(), `ds-superagent-input-crash-${phase}-`))
     const databasePath = join(directory, 'state.sqlite')
     const sessionDatabasePath = join(directory, 'sessions.sqlite')
     const markerPath = join(directory, 'marker.txt')
@@ -126,7 +126,7 @@ for (const [phase, code] of phases) {
 }
 
 test('an idle turn keeps the Input unworked and a restart continues with a recovery note', { timeout: 40000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-input-idle-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-input-idle-'))
   const databasePath = join(directory, 'state.sqlite')
   const sessionDatabasePath = join(directory, 'sessions.sqlite')
   const storage = await SqliteStorage.open(databasePath)
@@ -194,7 +194,7 @@ test('an idle turn keeps the Input unworked and a restart continues with a recov
 })
 
 test('a handed-back Input stays unowned across a restart and is never re-attached to the same Ticket', { timeout: 40000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-input-handback-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-input-handback-'))
   const databasePath = join(directory, 'state.sqlite')
   const sessionDatabasePath = join(directory, 'sessions.sqlite')
   const storage = await SqliteStorage.open(databasePath)

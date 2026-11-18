@@ -25,7 +25,7 @@ function* maxTokensResponse(text) {
 }
 
 test('a context-full Worker forks a new Session, hands off its constraints and completes the request', { timeout: 25000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-context-rollover-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-context-rollover-'))
   let native, storage, sessions, engine
   t.after(async () => {
     await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
@@ -85,7 +85,7 @@ test('a context-full Worker forks a new Session, hands off its constraints and c
 })
 
 test('a context rollover cancels the previous generation background work', { timeout: 30000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-context-rollover-job-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-context-rollover-job-'))
   const root = join(directory, 'work')
   await mkdir(root)
   await writeFile(join(root, 'existing.txt'), 'verified\n')

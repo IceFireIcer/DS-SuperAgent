@@ -57,7 +57,7 @@ const longCommand = (timeoutMs = 10000) => ({ argv: [process.execPath, '-e',
   timeoutMs, backgroundTimeoutMs: 120000 })
 
 async function fixture(t, { plan, respond, jobs = {}, source = {}, twoTickets = false }) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-previews-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-previews-'))
   const roots = twoTickets ? [join(directory, 'one'), join(directory, 'two')] : [join(directory, 'one')]
   for (const root of roots) await mkdir(root, { recursive: true })
   let environments = [], native, storage, sessions, engine
@@ -514,7 +514,7 @@ test('retained previews are bounded per Ticket instead of bypassing the job budg
 })
 
 test('preview history returns the actual newest 100 records instead of a key-order window', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-preview-history-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-preview-history-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const previews = new core.Previews('runtime', Date.now, () => true, { maxPerTicket: 16 })

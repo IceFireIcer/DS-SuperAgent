@@ -75,7 +75,7 @@ function handoffFingerprint(ticketId, targetEnvironmentId, reason) {
 }
 
 async function fixture(context, targetOnline = true) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-t41-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-t41-'))
   const sourceRoot = await repository(directory, 'source')
   const targetRoot = join(directory, 'target')
   await run('git', ['clone', sourceRoot, targetRoot], directory)

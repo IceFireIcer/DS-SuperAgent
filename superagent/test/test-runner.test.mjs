@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 function fixture(t, build) {
-  const directory = mkdtempSync(join(tmpdir(), 'ds-bot-test-runner-'))
+  const directory = mkdtempSync(join(tmpdir(), 'ds-superagent-test-runner-'))
   t.after(() => rmSync(directory, { recursive: true, force: true }))
   mkdirSync(join(directory, 'scripts')); mkdirSync(join(directory, 'test'))
   copyFileSync(new URL('../scripts/test.mjs', import.meta.url), join(directory, 'scripts/test.mjs'))

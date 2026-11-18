@@ -13,15 +13,14 @@
 
 DS SuperAgent 是面向 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的三层 Agent
 产品。一个 **Main** 留在主对话中并拥有用户意图；**Router** 把已接受工作转成持久 Ticket；独立 **Worker**
-执行这些 Ticket 并提交可核验结果。现有 DS Bot 界面现在展示这套产品。
+执行这些 Ticket 并提交可核验结果。产品直接使用 DSH 现有客户端界面。
 
 ## 产品行为
 
 - Main 在同一主对话内处理聊天、跟进、问题、停止/恢复和最终结果。
 - Router、Worker Session 可自动查看但保持只读，不能成为绕过 Main 的写入入口。
 - 工作跨 Host 重启和客户端重连保留 Ticket、Assignment、Session 与交付历史。
-- 文件、Office、浏览器资源、记忆、MCP、凭据、日程、主动准备和监督通过明确的产品命令接入，不再启动旧 Bot
-  团队运行时。
+- 文件、Office、浏览器资源、记忆、MCP、凭据、日程、主动准备和监督通过明确的产品命令接入。
 - 执行目标可为本机 Host 或已配对远端设备；选择使用明确的候选能力探测，不会在两类执行世界之间静默回退。
 - 桌面应用只使用一个 `ds-superagent` DSH profile、自己的数据目录和现有 DSH Web 前端，不写用户的 `~/.dsh`。
 
@@ -34,7 +33,7 @@ DS SuperAgent 是面向 [DeepSeek Harness](https://github.com/deepseek-ai/deepse
 ```
 
 首次启动会询问数据目录和工作区，默认分别为 `~/.ds-superagent` 和 `~/DS SuperAgent`，随后打开 Main。
-发送工作前，在设置中配置服务商凭据，并为 Main、Router 和 Worker 选择模型。旧 DS Bot 和个人 DSH 文件保留在原处。
+发送工作前，在设置中配置服务商凭据，并为 Main、Router 和 Worker 选择模型。旧版产品资料和个人 DSH 文件保留在原处。
 
 ## 从当前仓库运行
 
@@ -79,8 +78,8 @@ node app/scripts/check-superagent-profile.mjs
 | `app/` | Electron 外壳、单一产品 profile、数据隔离、进程生命周期与打包 |
 | `docs/superagent/` | R5 规格、实施记录与环境证据 |
 
-R5-34 已删除旧 roster、群/round、Bot 互派、团队治理、原生历史写入口、activation/reversal 与双 profile
-兼容路径。原第二包已收进 `ds-superagent` 的 `dsh/`；仓库不再附带第二个 renderer、独立 app engine 或额外
+R5-34 已删除旧 roster、群/round、Agent 互派、团队治理、原生历史写入口、activation/reversal 与双 profile
+路径。原有客户端、Office 和 Web 搜索能力现位于 `ds-superagent` 的 `dsh/`；仓库不再附带第二个 renderer、独立 app engine 或额外
 DSH 插件。
 
 ## 许可

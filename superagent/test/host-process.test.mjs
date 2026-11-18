@@ -16,7 +16,7 @@ const firstLine = child => new Promise((resolve, reject) => {
 const run = (databasePath, hostId, mode = 'try') => spawn(process.execPath, [fixture, databasePath, hostId, mode, '5000'], { stdio: ['ignore', 'pipe', 'inherit'] })
 
 test('two real Host processes cannot both write until the old lease expires', { timeout: 25000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-host-process-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-host-process-'))
   const databasePath = join(directory, 'state.sqlite')
   const holder = run(databasePath, 'process-holder', 'hold')
   t.after(async () => {

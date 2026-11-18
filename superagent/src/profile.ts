@@ -31,7 +31,7 @@ export function officeProfileConfig(env: NodeJS.ProcessEnv = process.env): Produ
 
 /**
  * The profile home is the app's isolated DSH home for this profile. Keeping the
- * business store below it leaves the old ds-bot team and DSH session data apart.
+ * business store below it leaves previously created profile and DSH session data apart.
  */
 export function profilePaths(env: NodeJS.ProcessEnv = process.env): SuperagentProfilePaths {
   const home = env.DSH_HOME

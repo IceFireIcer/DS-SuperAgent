@@ -16,7 +16,7 @@ async function disposeAll(disposers, message) {
 }
 
 async function runtimeFixture(t, source, versioned = false, deliveryOptions = {}, workerGate) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-delivery-condition-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-delivery-condition-'))
   let native, storage, sessions, engine
   t.after(() => disposeAll([
     () => engine?.effects.stop(),
@@ -24,7 +24,7 @@ async function runtimeFixture(t, source, versioned = false, deliveryOptions = {}
     () => native?.fiber.dispose(),
     () => storage?.close(),
     async () => {
-      assert.ok(directory.startsWith(join(tmpdir(), 'ds-bot-delivery-condition-')))
+      assert.ok(directory.startsWith(join(tmpdir(), 'ds-superagent-delivery-condition-')))
       await rm(directory, { recursive: true, force: true })
     },
   ], 'Delivery-condition fixture cleanup failed.'))

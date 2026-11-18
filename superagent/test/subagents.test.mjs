@@ -46,7 +46,7 @@ function scripted(plan) {
 }
 
 async function fixture(t, { commands, plan, respond, source = {}, jobs = {}, subagents = {}, extraEnvironments = [], environmentByThread = {} }) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-subagents-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-subagents-'))
   const root = join(directory, 'work')
   await mkdir(root)
   const environments = []
@@ -516,7 +516,7 @@ test('a stop that cannot confirm the child stays stopping instead of claiming th
 })
 
 test('closing a stopped child keeps its claim until the cancellation fact commits', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-subagents-stop-claim-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-subagents-stop-claim-'))
   let storage
   t.after(async () => { await storage?.close(); await rm(directory, { recursive: true, force: true }) })
   storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
@@ -529,7 +529,7 @@ test('closing a stopped child keeps its claim until the cancellation fact commit
 })
 
 test('subagent history returns the actual newest records after the thousandth key', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-subagents-history-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-subagents-history-'))
   let storage
   t.after(async () => { await storage?.close(); await rm(directory, { recursive: true, force: true }) })
   storage = await SqliteStorage.open(join(directory, 'state.sqlite'))

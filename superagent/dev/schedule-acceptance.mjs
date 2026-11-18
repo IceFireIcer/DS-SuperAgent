@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import * as core from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 
-const directory = await mkdtemp(join(tmpdir(), 'ds-bot-schedule-acceptance-'))
+const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-schedule-acceptance-'))
 const database = join(directory, 'state.sqlite')
 const config = { ruleId: 'acceptance', timezone: 'Asia/Shanghai', intervalMs: 1000, text: 'Prepare the scheduled review.', catchUp: 'all', maxCatchUp: 5 }
 const sourceConfig = { kind: 'schedule', sourceInstanceId: 'schedule:acceptance', actorId: 'schedule',

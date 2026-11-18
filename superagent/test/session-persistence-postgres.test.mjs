@@ -205,7 +205,7 @@ test('a seeded fork stores its parent lineage and inherited cut on PostgreSQL', 
 test('two operating-system processes contend for one writer and recover an abandoned Session', { timeout: 120000 }, async t => {
   const database = await newDatabase()
   const { persistence } = await directProvider(t, database)
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-session-postgres-child-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-session-postgres-child-'))
   const scriptPath = join(directory, 'child.mjs')
   await writeFile(scriptPath, childScript)
   t.after(async () => { await rm(directory, { recursive: true, force: true }) })
@@ -417,7 +417,7 @@ test('a replaced provider reads the complete history and the old handle never re
 })
 
 test('the public DSH loop stores construction records before session/created over PostgreSQL', { timeout: 90000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-native-postgres-announce-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-native-postgres-announce-'))
   const database = await newDatabase()
   let native
   t.after(async () => { await native?.fiber.dispose(); await rm(directory, { recursive: true, force: true }) })
@@ -459,7 +459,7 @@ test('the public DSH loop stores construction records before session/created ove
 })
 
 test('a durability failure while storing the pre-publication suffix prevents session/created over PostgreSQL', { timeout: 90000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-native-postgres-rollback-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-native-postgres-rollback-'))
   const database = await newDatabase()
   let native
   t.after(async () => { await native?.fiber.dispose(); await rm(directory, { recursive: true, force: true }) })
@@ -490,7 +490,7 @@ test('a durability failure while storing the pre-publication suffix prevents ses
 })
 
 test('a Worker Session resumes its full history after the PostgreSQL adapter is replaced', { timeout: 90000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-native-postgres-resume-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-native-postgres-resume-'))
   const database = await newDatabase()
   let firstNative
   let secondNative

@@ -40,7 +40,7 @@ function harness({ platform = 'win32', trayFails = false, busy = false, ready = 
   const trays = []
   const menus = []
   const calls = { quit: 0, build: 0, reveal: 0, suspend: 0, resume: 0 }
-  const folder = mkdtempSync(join(tmpdir(), 'ds-bot-shell-'))
+  const folder = mkdtempSync(join(tmpdir(), 'ds-superagent-shell-'))
   const marker = join(folder, 'acknowledged')
   if (acknowledged) writeFileSync(marker, '')
   const asked = []
@@ -62,7 +62,7 @@ function harness({ platform = 'win32', trayFails = false, busy = false, ready = 
     },
     platform,
     messages: () => ({
-      tooltip: 'DS Bot', open: 'Open', quit: 'Quit', notice: 'The app goes on.', noticeConfirm: 'OK',
+      tooltip: 'DS SuperAgent', open: 'Open', quit: 'Quit', notice: 'The app goes on.', noticeConfirm: 'OK',
       running: 'Running in the background', suspended: 'Paused while this computer sleeps',
       starting: 'Starting the Host…', stopped: 'Host not running', failed: 'Host could not start',
       fallback: 'The system tray is not available, so the app cannot stay in the background. Do you want to end it?', cancel: 'Cancel',

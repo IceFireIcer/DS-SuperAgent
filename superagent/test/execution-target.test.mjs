@@ -54,7 +54,7 @@ class ProbeEnvironment {
 }
 
 async function fixture(context, environments) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-execution-target-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-execution-target-'))
   const native = await nativeContext(join(directory, 'sessions'), options => {
     const user = options.messages.filter(message => message.role === 'user').at(-1)
     const results = options.messages.slice(options.messages.lastIndexOf(user) + 1).filter(message => message.role === 'tool')
@@ -216,7 +216,7 @@ test('explicit or ticket selection cannot escape the actor allowlist or the tick
 })
 
 test('actual local and paired remote Environments form one dual-mode selection loop', { timeout: 20000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-execution-target-real-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-execution-target-real-'))
   const localRoot = join(directory, 'local-work')
   const remoteRoot = join(directory, 'remote-work')
   await mkdir(localRoot)

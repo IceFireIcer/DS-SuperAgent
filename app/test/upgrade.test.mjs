@@ -1,4 +1,4 @@
-// A DS Bot upgrade changes the app's own place in the profile. The team's business state and
+// A DS SuperAgent upgrade changes the app's own place in the profile. The product's business state and
 // Sessions are the Host's data, not the profile's, and the user's own bundles and settings
 // stay after the app's bundles.
 import assert from 'node:assert/strict'
@@ -15,7 +15,7 @@ describe('an upgrade on the app data', () => {
   let session
   let beforeProfile
   before(() => {
-    home = mkdtempSync(join(tmpdir(), 'ds-bot-app-upgrade-'))
+    home = mkdtempSync(join(tmpdir(), 'ds-superagent-app-upgrade-'))
     profile = join(home, 'profiles', 'ds-superagent')
     mkdirSync(join(home, 'bot'), { recursive: true })
     mkdirSync(join(home, 'sessions'), { recursive: true })

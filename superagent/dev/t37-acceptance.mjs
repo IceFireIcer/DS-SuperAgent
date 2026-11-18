@@ -28,7 +28,7 @@ const localPort = optionalArgument('local-port') === undefined ? undefined : Num
 if (!Number.isInteger(remotePort) || remotePort < 1 || remotePort > 65535) throw new Error('--remote-port must be a TCP port.')
 if (localPort !== undefined && (!Number.isInteger(localPort) || localPort < 1 || localPort > 65535)) throw new Error('--local-port must be a TCP port.')
 
-const directory = await mkdtemp(join(tmpdir(), 'ds-bot-t37-acceptance-'))
+const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-t37-acceptance-'))
 const remotePath = (...parts) => parts.join('/').replace(/\/+/gu, '/')
 const configPath = remotePath(deviceRoot, 'device.json')
 const pairingCodePath = remotePath(deviceRoot, 'pairing-code.txt')

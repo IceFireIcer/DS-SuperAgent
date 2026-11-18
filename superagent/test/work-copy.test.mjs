@@ -44,7 +44,7 @@ async function repository(directory, name = 'repo') {
 }
 
 async function fixture(context, environments, sourceEnvironmentId, resources = [], target) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-t39-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-t39-'))
   const native = await nativeContext(join(directory, 'sessions'), options => {
     const user = options.messages.filter(message => message.role === 'user').at(-1)
     const results = options.messages.slice(options.messages.lastIndexOf(user) + 1).filter(message => message.role === 'tool')
@@ -65,7 +65,7 @@ async function fixture(context, environments, sourceEnvironmentId, resources = [
     ...environments.map(environment => () => environment.close()),
     ...resources.map(resource => () => resource.close()),
     async () => {
-      assert.ok(directory.startsWith(join(tmpdir(), 'ds-bot-t39-')))
+      assert.ok(directory.startsWith(join(tmpdir(), 'ds-superagent-t39-')))
       await rm(directory, { recursive: true, force: true })
     },
   ], 'Work-copy fixture cleanup failed.'))
@@ -95,7 +95,7 @@ async function replicateChanges(sourceRoot, targetRoot, files) {
 }
 
 test('prepares and verifies a Git work copy with uncommitted and untracked files', { timeout: 30000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-t39-git-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-t39-git-'))
   const sourceRoot = await repository(directory, 'source')
   const targetRoot = join(directory, 'target')
   await run('git', ['clone', sourceRoot, targetRoot], directory)
@@ -129,7 +129,7 @@ test('prepares and verifies a Git work copy with uncommitted and untracked files
 })
 
 test('blocks an unknown target change or a different target commit', { timeout: 30000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-t39-blocked-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-t39-blocked-'))
   const sourceRoot = await repository(directory, 'source')
   const targetRoot = join(directory, 'target')
   await run('git', ['clone', sourceRoot, targetRoot], directory)
@@ -151,7 +151,7 @@ test('blocks an unknown target change or a different target commit', { timeout: 
 })
 
 test('a different target commit is handoff-blocked', { timeout: 30000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-t39-commit-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-t39-commit-'))
   const sourceRoot = await repository(directory, 'source')
   const targetRoot = join(directory, 'target')
   await run('git', ['clone', sourceRoot, targetRoot], directory)
@@ -172,7 +172,7 @@ test('a different target commit is handoff-blocked', { timeout: 30000 }, async c
 })
 
 test('a deleted target file that is not in the manifest is handoff-blocked', { timeout: 30000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-t39-target-delete-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-t39-target-delete-'))
   const sourceRoot = await repository(directory, 'source')
   const targetRoot = join(directory, 'target')
   await run('git', ['clone', sourceRoot, targetRoot], directory)
@@ -190,7 +190,7 @@ test('a deleted target file that is not in the manifest is handoff-blocked', { t
 })
 
 test('the change budget is a visible blocker, not a partial copy', { timeout: 30000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-t39-budget-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-t39-budget-'))
   const sourceRoot = await repository(directory, 'source')
   const targetRoot = join(directory, 'target')
   await run('git', ['clone', sourceRoot, targetRoot], directory)
@@ -208,7 +208,7 @@ test('the change budget is a visible blocker, not a partial copy', { timeout: 30
 })
 
 test('a real paired device can inspect and verify the prepared copy', { timeout: 30000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-t39-remote-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-t39-remote-'))
   const sourceRoot = await repository(directory, 'source')
   const targetRoot = join(directory, 'target')
   await run('git', ['clone', sourceRoot, targetRoot], directory)
@@ -231,7 +231,7 @@ test('a real paired device can inspect and verify the prepared copy', { timeout:
 })
 
 test('source changes after preparation block verification', { timeout: 30000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-t39-source-changed-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-t39-source-changed-'))
   const sourceRoot = await repository(directory, 'source')
   const targetRoot = join(directory, 'target')
   await run('git', ['clone', sourceRoot, targetRoot], directory)
@@ -251,7 +251,7 @@ test('source changes after preparation block verification', { timeout: 30000 }, 
 })
 
 test('a missing work-copy capability is handoff-blocked rather than executed', { timeout: 30000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-t39-missing-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-t39-missing-'))
   const sourceRoot = await repository(directory, 'source')
   const targetRoot = join(directory, 'target')
   await mkdir(targetRoot)
@@ -271,7 +271,7 @@ test('a missing work-copy capability is handoff-blocked rather than executed', {
 })
 
 test('a target probe failure is persisted as handoff-blocked', { timeout: 30000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-t39-probe-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-t39-probe-'))
   const sourceRoot = await repository(directory, 'source')
   const targetRoot = join(directory, 'target')
   await run('git', ['clone', sourceRoot, targetRoot], directory)

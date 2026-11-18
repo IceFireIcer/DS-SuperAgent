@@ -11,7 +11,7 @@ import { nativeContext, routerResponse, textResponse, toolResponse } from './nat
 const workload = { subtasks: 4, childSteps: 3, childStepDelayMs: 100, scanIntervalMs: 50, maxPerTicket: 4 }
 const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
 
-const directory = await mkdtemp(join(tmpdir(), 'ds-bot-subagent-load-'))
+const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-subagent-load-'))
 const root = join(directory, 'work')
 await mkdir(root)
 let context, storage, sessions, environment, engine

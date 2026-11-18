@@ -16,7 +16,7 @@ function policy(overrides = {}) {
 }
 
 async function fixture(t, overrides) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-policy-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-policy-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'],
@@ -69,7 +69,7 @@ test('replayed Policy and pause commands return the current result without rewin
 })
 
 test('pausing records source events without dispatching and resumes queued work without aborting an active turn', { timeout: 15000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-policy-pause-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-policy-pause-'))
   let native, storage, sessions, engine, release, entered
   const started = new Promise(resolve => { entered = resolve })
   const gate = new Promise(resolve => { release = resolve })
@@ -140,7 +140,7 @@ test('Policy and pause controls preserve waiting-human and stopped Ticket constr
 })
 
 test('a Policy change interrupts an in-flight Eval, requeues it under the new revision, and leaves another source instance alone', { timeout: 30000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-policy-requeue-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-policy-requeue-'))
   let storage, first, second
   let release, entered
   const started = new Promise(resolve => { entered = resolve })
@@ -190,7 +190,7 @@ test('a Policy change interrupts an in-flight Eval, requeues it under the new re
 })
 
 test('pausing after an Eval reaches its assessor survives the old deadline and records the paused Eval', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-policy-eval-pause-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-policy-eval-pause-'))
   let engine, release, entered
   const started = new Promise(resolve => { entered = resolve })
   const gate = new Promise(resolve => { release = resolve })

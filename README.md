@@ -14,7 +14,7 @@ English | [中文](README.zh.md)
 DS SuperAgent is a three-layer agent product for
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH). One **Main** stays in the conversation and
 owns user intent. A **Router** turns accepted work into durable tickets, and independent **Workers** execute those
-tickets with verified results. The existing DS Bot interface now presents this product in place.
+tickets with verified results. The existing DSH client interface presents this product directly.
 
 ## What the product does
 
@@ -22,7 +22,7 @@ tickets with verified results. The existing DS Bot interface now presents this p
 - Router and Worker Sessions are automatically discoverable but read-only in the product UI.
 - Work keeps a durable Ticket, Assignment, Session and delivery history across Host restarts and reconnects.
 - Files, Office documents, browser resources, memory, MCP tools, credentials, schedules, proactive preparation and
-  supervision are connected through explicit product commands instead of the former Bot team runtime.
+  supervision are connected through explicit product commands.
 - Execution can use the local Host or a paired remote device with an explicit capability probe. The product never
   substitutes one world silently.
 - The app keeps one `ds-superagent` DSH profile, its own data root and an existing DSH Web front end. It never writes
@@ -38,7 +38,7 @@ The [desktop packages](app/README.md) install **DS SuperAgent** on Windows, macO
 
 The first start asks for a data location and workspace, defaulting to `~/.ds-superagent` and `~/DS SuperAgent`, then
 opens Main. In Settings, configure the provider credentials and select models for Main, Router and Worker before
-sending work. Existing DS Bot and personal DSH files stay in their original locations.
+sending work. Data from previous product installs and personal DSH files stay in their original locations.
 
 ## Run from this checkout
 
@@ -83,8 +83,8 @@ gates. Mock UI or unit results do not replace those checks.
 | `app/` | Electron shell, single product profile, data isolation, process lifecycle and packaging |
 | `docs/superagent/` | R5 specification, implementation records and environment evidence |
 
-R5-34 removed the old roster, group/round, Bot-to-Bot, team governance, native-history, activation/reversal and
-dual-profile compatibility paths. The former second package is now the `dsh/` part of `ds-superagent`; this repository
+R5-34 removed the former roster, group/round, peer-agent, team governance, native-history, activation/reversal and
+dual-profile paths. The existing client and Office/web-search capabilities now live in the `dsh/` part of `ds-superagent`; this repository
 does not ship a second renderer, standalone app engine or separate DSH plugin.
 
 ## License

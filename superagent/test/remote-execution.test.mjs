@@ -15,7 +15,7 @@ const grant = {
 }
 
 test('a Worker reads, writes and searches on the paired device and records that execution location', { timeout: 20000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-remote-execution-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-remote-execution-'))
   const hostRoot = join(directory, 'host-work')
   const deviceRoot = join(directory, 'device-work')
   await mkdir(hostRoot)
@@ -80,7 +80,7 @@ test('a Worker reads, writes and searches on the paired device and records that 
 })
 
 test('a remote ready report needs post-write file evidence and cannot request a command tool', { timeout: 20000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-remote-verification-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-remote-verification-'))
   const deviceRoot = join(directory, 'device-work')
   await mkdir(deviceRoot)
   let device, environment, native, storage, sessions, engine

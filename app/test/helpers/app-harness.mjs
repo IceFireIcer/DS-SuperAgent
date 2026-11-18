@@ -25,10 +25,10 @@ export const waitFor = async (check, what, timeout = 20_000) => {
  * @param {{ packaged?: boolean }} options whether the app is a packaged one, with an updater
  */
 export const startApp = async ({ packaged = true } = {}) => {
-  const home = mkdtempSync(join(tmpdir(), 'ds-bot-main-home-'))
+  const home = mkdtempSync(join(tmpdir(), 'ds-superagent-main-home-'))
   process.once('exit', () => {
     const roots = [home, paths.root]
-    const expected = [join(tmpdir(), 'ds-bot-main-home-'), join(tmpdir(), 'ds-bot-fake-user-data-')]
+    const expected = [join(tmpdir(), 'ds-superagent-main-home-'), join(tmpdir(), 'ds-superagent-fake-user-data-')]
     const failures = []
     for (const [directory, prefix] of roots.map((directory, index) => [directory, expected[index]])) {
       if (!directory.startsWith(prefix)) {

@@ -8,7 +8,7 @@ import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, textResponse, toolResponse } from '../dev/native-mock.mjs'
 
 async function runtimeFixture(t) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-retry-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-retry-'))
   let native, storage, sessions, engine
   t.after(async () => {
     await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()

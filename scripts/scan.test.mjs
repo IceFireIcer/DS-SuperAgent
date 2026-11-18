@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process'
 
 const scanner = fileURLToPath(new URL('./scan.mjs', import.meta.url))
 const scan = (text) => {
-  const dir = mkdtempSync(join(tmpdir(), 'dsbot-scan-'))
+  const dir = mkdtempSync(join(tmpdir(), 'ds-superagent-scan-'))
   try {
     for (const file of ['LICENSE', 'README.md', 'README.zh.md', 'CONTRIBUTING.md', 'CHANGELOG.md', 'AGENTS.md', '.gitignore']) {
       writeFileSync(join(dir, file), '')

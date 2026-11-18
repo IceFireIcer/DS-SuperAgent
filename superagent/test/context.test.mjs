@@ -8,7 +8,7 @@ import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, textResponse, toolResponse } from '../dev/native-mock.mjs'
 
 async function directFixture(t) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-context-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-context-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] })
@@ -38,7 +38,7 @@ test('context cards paginate by UTF-8 bytes and reconstruct the full original re
 })
 
 test('a Worker reads the original request and the public cards expose report, question and delivery evidence', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-context-runtime-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-context-runtime-'))
   let native, storage, sessions, engine
   t.after(async () => {
     await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
@@ -97,7 +97,7 @@ test('a Worker reads the original request and the public cards expose report, qu
 })
 
 test('context reads stay inside the Ticket’s reachable source threads', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-context-scope-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-context-scope-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const source = { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'], allowedThreadIds: ['room-a', 'room-b'], versionOrder: 'sequence' }

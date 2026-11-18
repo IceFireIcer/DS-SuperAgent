@@ -62,3 +62,15 @@ test('the Office payload goes next to the asar for a platform the lock pins', ()
   assert.throws(() => officeRuntimeRequest({ arch: Arch.arm64, electronPlatformName: 'win32', packager: { projectDir: 'app-dir' } }), /No Office runtime payload for win32 arm64/)
   assert.match(readFileSync(new URL('../electron-builder.yml', import.meta.url), 'utf8'), /from: build\/runtime\/primary-runtime\r?\n\s+to: primary-runtime/u)
 })
+
+test('the package reads its runtime cache from the product environment', () => {
+  const previous = process.env.DS_SUPERAGENT_RUNTIME_CACHE
+  process.env.DS_SUPERAGENT_RUNTIME_CACHE = 'product-runtime-cache'
+  try {
+    const request = officeRuntimeRequest({ arch: Arch.x64, electronPlatformName: 'win32', packager: { projectDir: 'app-dir' } })
+    assert.equal(request.cache, 'product-runtime-cache')
+  } finally {
+    if (previous === undefined) delete process.env.DS_SUPERAGENT_RUNTIME_CACHE
+    else process.env.DS_SUPERAGENT_RUNTIME_CACHE = previous
+  }
+})

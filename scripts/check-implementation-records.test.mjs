@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import { checkCoverage, checkLinks, checkRecord, classifyReference, localLinks } from './check-implementation-records.mjs'
 
 function fixture(context) {
-  const root = mkdtempSync(join(tmpdir(), 'dsbot-records-'))
+  const root = mkdtempSync(join(tmpdir(), 'ds-superagent-records-'))
   context.after(() => rmSync(root, { recursive: true, force: true }))
   mkdirSync(join(root, 'docs/superagent/implementation/reviews'), { recursive: true })
   mkdirSync(join(root, 'docs/superagent/issues'), { recursive: true })

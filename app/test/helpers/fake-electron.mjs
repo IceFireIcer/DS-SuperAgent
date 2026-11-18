@@ -8,7 +8,7 @@ import { join } from 'node:path'
 
 // The data of the app in this process: a folder of its own, so that a test never writes
 // into the data of the user.
-const root = mkdtempSync(join(tmpdir(), 'ds-bot-fake-user-data-'))
+const root = mkdtempSync(join(tmpdir(), 'ds-superagent-fake-user-data-'))
 export const paths = {
   root,
   appData: join(root, 'appData'),

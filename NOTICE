@@ -1,5 +1,5 @@
-DS Bot
-Copyright 2026 Fei2411 and the DS Bot contributors
+DS SuperAgent
+Copyright 2026 IceFireIcer and the DS SuperAgent contributors
 
 This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 
@@ -92,7 +92,7 @@ and the `ds-superagent` client bundle; it does not ship a second renderer.
 Projects that gave us ideas (no code copied)
 ==============================================================================
 
-We thank these projects for the designs they published. DS Bot learned from
+We thank these projects for the designs they published. DS SuperAgent learned from
 their ideas; it does not contain their code.
 
   - AgentMemoryRepo (https://github.com/AgentMemoryRepo/agentmemoryrepo), MIT:

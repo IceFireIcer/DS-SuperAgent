@@ -52,7 +52,7 @@ function resolveLatest(options, args) {
 }
 
 async function fixture(t, { commands, plan, slots = {}, jobs = {}, source = {} }) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-jobs-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-jobs-'))
   const root = join(directory, 'work')
   await mkdir(root)
   let environment, native, storage, sessions, engine
@@ -312,7 +312,7 @@ test('a Ticket with more job records than the query budget still answers with it
 })
 
 test('the declared wait terminates a long job without a success claim, and a restart leaves it unknown', { timeout: 40000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-jobs-expire-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-jobs-expire-'))
   const root = join(directory, 'work')
   await mkdir(root)
   let environment, native, storage, sessions, engine, reopened
@@ -354,7 +354,7 @@ test('the declared wait terminates a long job without a success claim, and a res
 })
 
 test('a job record this process no longer holds reads unknown instead of holding work forever', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-jobs-unheld-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-jobs-unheld-'))
   let storage
   t.after(async () => { await storage?.close(); await rm(directory, { recursive: true, force: true }) })
   storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
@@ -403,7 +403,7 @@ test('an active job stays visible past the query budget, and a cancel keeps its 
 })
 
 test('a preview settlement keeps the stop claim until its confirmation commits', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-jobs-preview-claim-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-jobs-preview-claim-'))
   let storage
   t.after(async () => { await storage?.close(); await rm(directory, { recursive: true, force: true }) })
   storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
@@ -419,7 +419,7 @@ test('a preview settlement keeps the stop claim until its confirmation commits',
 })
 
 test('reassignment moves an old active job even when newer history exceeds the report budget', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-jobs-reassign-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-jobs-reassign-'))
   let storage
   t.after(async () => { await storage?.close(); await rm(directory, { recursive: true, force: true }) })
   storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
@@ -448,7 +448,7 @@ test('reassignment moves an old active job even when newer history exceeds the r
 })
 
 test('job history returns the actual newest records after the thousandth key', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-jobs-history-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-jobs-history-'))
   let storage
   t.after(async () => { await storage?.close(); await rm(directory, { recursive: true, force: true }) })
   storage = await SqliteStorage.open(join(directory, 'state.sqlite'))

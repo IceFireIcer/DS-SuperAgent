@@ -9,7 +9,7 @@ import { BackgroundNotice } from '../src/background-notice.mjs'
 const settle = () => new Promise(resolve => setImmediate(resolve))
 
 function harness({ answer = 0, marker, show } = {}) {
-  const folder = mkdtempSync(join(tmpdir(), 'ds-bot-notice-'))
+  const folder = mkdtempSync(join(tmpdir(), 'ds-superagent-notice-'))
   const asked = []
   const notice = new BackgroundNotice({
     marker: marker ?? join(folder, 'acknowledged'),

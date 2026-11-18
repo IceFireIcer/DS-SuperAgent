@@ -37,7 +37,7 @@ async function readAll(bound, reference, pageBytes = 4096) {
 }
 
 async function localFixture(context, { assets = true, skills = false, commands = big } = {}) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-local-assets-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-local-assets-'))
   const root = join(directory, 'work')
   await mkdir(root)
   const assetsPath = join(directory, 'assets')
@@ -55,7 +55,7 @@ async function localFixture(context, { assets = true, skills = false, commands =
 }
 
 async function remoteFixture(context, { assets = true, skills = false, commands = big, deviceId = 'asset-device' } = {}) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-remote-assets-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-remote-assets-'))
   const root = join(directory, 'device-work')
   const hostRoot = join(directory, 'host-work')
   await mkdir(root)
@@ -128,7 +128,7 @@ test('a local Environment without a configured skill root lists the explicit gap
 })
 
 test('asset stores in one deployment are namespaced per Environment', { timeout: 20000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-asset-namespace-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-asset-namespace-'))
   context.after(() => rm(directory, { recursive: true, force: true }))
   const first = await core.FileAssetStore.open(directory, core.assetNamespace('private', 'first'))
   const second = await core.FileAssetStore.open(directory, core.assetNamespace('private', 'second'))
@@ -261,7 +261,7 @@ test('a device without an asset store explicitly rejects attachments and spill w
 
 test('the public Engine can save and re-read an attachment through the Environment after a transport outage', { timeout: 30000 }, async context => {
   const { environment, device, config, endpoint } = await remoteFixture(context)
-  const stateDirectory = await mkdtemp(join(tmpdir(), 'ds-bot-asset-engine-'))
+  const stateDirectory = await mkdtemp(join(tmpdir(), 'ds-superagent-asset-engine-'))
   const storage = await SqliteStorage.open(join(stateDirectory, 'engine.sqlite'))
   const engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] },
     {}, undefined, [environment])
@@ -291,7 +291,7 @@ test('the public Engine can save and re-read an attachment through the Environme
 
 test('a delegated child inherits the same remote asset tools and reads its parent attachment', { timeout: 40000 }, async context => {
   const { environment, hostRoot } = await remoteFixture(context)
-  const stateDirectory = await mkdtemp(join(tmpdir(), 'ds-bot-asset-subagent-'))
+  const stateDirectory = await mkdtemp(join(tmpdir(), 'ds-superagent-asset-subagent-'))
   await writeFile(join(hostRoot, 'child-evidence.txt'), 'host substitute\n')
   const content = Buffer.from('remote-child-evidence\n')
   const sha256 = digest(content)

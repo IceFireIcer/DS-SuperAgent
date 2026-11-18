@@ -9,7 +9,7 @@ import { SqliteStorage } from '../dist/storage.js'
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 test('GitHub and Feishu pollers expose setup/per-source failures, keep the cursor and stop cleanly', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-pollers-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-pollers-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const githubEngine = new core.Engine(storage, 'private', { kind: 'github', sourceInstanceId: 'github:acme/repo', actorId: 'agent',
@@ -66,7 +66,7 @@ test('GitHub and Feishu pollers expose setup/per-source failures, keep the curso
 })
 
 test('a schedule runner ticks immediately and stops its timer', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-schedule-runner-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-schedule-runner-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const engine = new core.Engine(storage, 'private', { kind: 'schedule', sourceInstanceId: 'schedule:runner', actorId: 'schedule',
@@ -79,7 +79,7 @@ test('a schedule runner ticks immediately and stops its timer', async t => {
 })
 
 test('a Feishu poller runs transport setup before its first reception', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-feishu-setup-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-feishu-setup-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const engine = new core.Engine(storage, 'private', { kind: 'feishu', sourceInstanceId: 'feishu:tenant:chat', actorId: 'bot',

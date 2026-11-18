@@ -9,7 +9,7 @@ import { test } from 'node:test'
 const script = fileURLToPath(new URL('./branch-status.mjs', import.meta.url))
 
 function fixture(context) {
-  const directory = mkdtempSync(join(tmpdir(), 'dsbot-branch-status-'))
+  const directory = mkdtempSync(join(tmpdir(), 'ds-superagent-branch-status-'))
   context.after(() => rmSync(directory, { recursive: true, force: true }))
   const repository = join(directory, 'repository')
   mkdirSync(repository)

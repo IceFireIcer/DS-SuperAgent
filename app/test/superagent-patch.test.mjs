@@ -26,7 +26,7 @@ test('the Super-agent profile mounts only the product projection', () => {
 test('the Super-agent profile drops a stale overlay', () => {
   const home = mkdtempSync(join(tmpdir(), 'ds-superagent-patch-off-'))
   try {
-    const dir = join(home, 'profiles', 'ds-bot')
+    const dir = join(home, 'profiles', 'ds-superagent')
     mkdirSync(dir, { recursive: true })
     const file = join(home, 'profiles', 'superagent.patch.yml')
     reconcileSuperagentProfile({ dir }, true)

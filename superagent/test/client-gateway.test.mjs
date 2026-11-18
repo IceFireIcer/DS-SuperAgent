@@ -10,7 +10,7 @@ import * as core from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 
 async function fixture(t) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-client-gateway-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-client-gateway-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   const engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] })
   const access = engine.createClientAccess()
@@ -160,7 +160,7 @@ test('the gateway refuses a public bind without TLS and serves a self-signed pro
   await assert.rejects(open({ host: '0.0.0.0' }), { code: 'TRANSPORT_INSECURE' })
   const tool = openssl()
   if (!tool) return t.skip('OpenSSL is needed to generate the isolated TLS fixture.')
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-client-tls-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-client-tls-'))
   t.after(() => rm(directory, { recursive: true, force: true }))
   const keyPath = join(directory, 'key.pem'); const certPath = join(directory, 'cert.pem')
   const generated = spawnSync(tool, ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', keyPath, '-out', certPath, '-days', '1',

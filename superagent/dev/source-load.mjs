@@ -6,7 +6,7 @@ import { performance } from 'node:perf_hooks'
 import { Engine } from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 
-const directory = await mkdtemp(join(tmpdir(), 'ds-bot-source-load-'))
+const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-source-load-'))
 let storage
 try {
   storage = await SqliteStorage.open(join(directory, 'state.sqlite'))

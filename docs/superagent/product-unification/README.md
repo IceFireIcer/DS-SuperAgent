@@ -1,8 +1,10 @@
 # DS-SuperAgent 独立产品：三层运行时与 UI 方案
 
+> 历史方案记录：本文记录 R5 规格形成前的设计收敛，不是当前实现状态。当前产品以 [R5 正式规格](../spec-r5.md)、[实施记录](../implementation/README.md)及代码为准。
+
 - 修订：R5，2026-11-14，三轮访谈 Q1—Q14 收敛；Main / Router / Worker 三层，移除旧 Bot 架构，不做旧 ds-bot 产品兼容。
-- 状态：**产品决定已确认，R5 正式规格已发布至总 Issue #1；现有代码尚未实现完整三层。**
-- 本轮只更新文档、MMD 与 `temp/product-unification/index.html`。不改产品运行代码、原正式规格、用户数据、profile 或 GitHub Issues。
+- 当时状态：产品决定已确认，R5 正式规格正在发布；本目录不构成当前代码验收证据。
+- 原始范围：该轮只更新文档、MMD 与 `temp/product-unification/index.html`，未修改产品运行代码、用户数据、profile 或 GitHub Issues。
 
 ## 先纠正上一版
 

@@ -15,7 +15,7 @@ const roles = (workerModel = 'worker-custom', instructions = '{{goal}} {{constra
 })
 
 test('role configuration is revisioned, validated, replayed and persisted', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-config-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-config-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] })
@@ -73,7 +73,7 @@ test('PostgreSQL stores role appearance images in versioned records and restores
 })
 
 test('virtual defaults stay unpersisted until an explicit save and a second engine keeps the saved routes', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-config-shared-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-config-shared-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const desktop = new core.RoleConfigStore(storage, 'private', roles('desktop-worker'))
@@ -88,7 +88,7 @@ test('virtual defaults stay unpersisted until an explicit save and a second engi
 })
 
 test('a rolled back role configuration is not visible to currentView', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-config-rollback-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-config-rollback-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const store = new core.RoleConfigStore(storage, 'private', roles('default-worker'))
@@ -105,7 +105,7 @@ test('a rolled back role configuration is not visible to currentView', async t =
 })
 
 test('a new role model and instructions apply at the next real model request and are recorded per Session', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-config-runtime-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-config-runtime-'))
   let native, storage, sessions, engine
   t.after(async () => {
     await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
@@ -156,7 +156,7 @@ test('a new role model and instructions apply at the next real model request and
 })
 
 test('an asynchronous role verification cannot overwrite a newer save', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-config-verify-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-config-verify-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] })
@@ -176,7 +176,7 @@ test('an asynchronous role verification cannot overwrite a newer save', async t 
 })
 
 test('a committed role command replays before provider verification is attempted again', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-config-replay-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-config-replay-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] })
@@ -200,7 +200,7 @@ test('a committed role command replays before provider verification is attempted
 })
 
 test('recent configuration uses stay bounded after more than one thousand append-only records', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-config-recent-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-config-recent-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const store = new core.RoleConfigStore(storage, 'recent', roles())

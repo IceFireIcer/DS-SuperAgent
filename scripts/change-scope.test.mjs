@@ -10,7 +10,7 @@ import { classifyChanges } from './change-scope.mjs'
 const script = fileURLToPath(new URL('./change-scope.mjs', import.meta.url))
 
 function fixture(context) {
-  const directory = mkdtempSync(join(tmpdir(), 'dsbot-change-scope-'))
+  const directory = mkdtempSync(join(tmpdir(), 'ds-superagent-change-scope-'))
   context.after(() => rmSync(directory, { recursive: true, force: true }))
   const repository = join(directory, 'repository')
   execFileSync('git', ['init', '--initial-branch=main', repository], { stdio: 'ignore' })

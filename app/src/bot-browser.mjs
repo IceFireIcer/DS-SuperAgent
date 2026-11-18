@@ -1,8 +1,8 @@
-// The Bot browsers' webviews in the app window, adapted from DeepSeek Harness
+// Product browser resource webviews in the app window, adapted from DeepSeek Harness
 // apps/desktop/src/browser-guests.ts (see NOTICE). The product asks for a lease on a storage key
 // (`bot:<id>`) and creates a webview that carries the lease; only such a webview attaches, and it
-// gets fixed preferences. Unlike DSH Desktop's, a key's storage is kept on disk: a Bot stays signed
-// in after a restart until the product forgets the key.
+// gets fixed preferences. A resource key's storage is kept on disk after restart until the product
+// explicitly forgets that resource.
 import { createHash, randomUUID } from 'node:crypto'
 import { PRODUCT_NAME } from './product.mjs'
 
@@ -11,6 +11,7 @@ const BLANK = 'about:blank#'
 const LOOPBACK = new Set(['localhost', '0.0.0.0', '[::1]', '[::]', '[::ffff:7f00:1]'])
 
 /** The persistent partition of a storage key: the same key keeps the same storage across restarts. */
+// Keep this identifier stable so existing browser sessions remain available after app updates.
 export const partitionOf = key => `persist:ds-bot-browser-${createHash('sha256').update(key).digest('hex').slice(0, 32)}`
 
 /** Whether a URL reaches the app's own Host: its port answers under every loopback name. */

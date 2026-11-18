@@ -18,7 +18,7 @@ const rules = (overrides = {}) => [
 ]
 
 async function fixture(t, prepare) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-proactive-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-proactive-'))
   const root = join(directory, 'proactive-root')
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
@@ -97,7 +97,7 @@ test('observe never executes, auto prepares inside an isolated budget and never 
 })
 
 test('rule-scoped run scans never include another rule history', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-proactive-scope-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-proactive-scope-'))
   const root = join(directory, 'proactive-root')
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
@@ -116,7 +116,7 @@ test('rule-scoped run scans never include another rule history', { timeout: 2000
 })
 
 test('a rule budget counts its complete history beyond the first thousand records', { timeout: 30000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-proactive-history-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-proactive-history-'))
   const root = join(directory, 'proactive-root')
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
@@ -181,7 +181,7 @@ test('prepared artifacts are verified inside the isolated directory', { timeout:
 })
 
 test('a scheduled occurrence can trigger an authorized auto preparation', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-proactive-schedule-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-proactive-schedule-'))
   const root = join(directory, 'proactive-root')
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })

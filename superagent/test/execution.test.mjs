@@ -8,7 +8,7 @@ import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, textResponse, toolResponse } from '../dev/native-mock.mjs'
 
 for (const sourceMode of [false, true]) test(`a native Router keeps unowned ready evidence from becoming a ${sourceMode ? 'versioned source result' : 'desktop result'}`, { timeout: 15000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-native-loop-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-native-loop-'))
   let native
   let storage
   let sessions
@@ -94,7 +94,7 @@ for (const sourceMode of [false, true]) test(`a native Router keeps unowned read
 })
 
 test('idle Worker text never becomes a result and cannot invoke Router-only delivery tools', { timeout: 15000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-idle-worker-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-idle-worker-'))
   let native
   let storage
   let sessions
@@ -126,7 +126,7 @@ test('idle Worker text never becomes a result and cannot invoke Router-only deli
 })
 
 test('a failed Worker model attempt still records its configuration revision', { timeout: 15000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-failed-worker-config-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-failed-worker-config-'))
   let native, storage, sessions, engine
   context.after(async () => {
     await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
@@ -148,7 +148,7 @@ test('a failed Worker model attempt still records its configuration revision', {
 })
 
 test('a Router batch keeps the configuration captured at its request boundary', { timeout: 20000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-router-config-snapshot-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-router-config-snapshot-'))
   let native, storage, sessions, engine, release, entered
   const gate = new Promise(resolve => { release = resolve })
   const started = new Promise(resolve => { entered = resolve })
@@ -192,7 +192,7 @@ test('a Router batch keeps the configuration captured at its request boundary', 
 })
 
 test('a batched Router notice applies the current role configuration and records its use', { timeout: 10000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-engine-batch-config-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-engine-batch-config-'))
   let native, storage, sessions, engine, release, entered
   const gate = new Promise(resolve => { release = resolve })
   const started = new Promise(resolve => { entered = resolve })
@@ -242,7 +242,7 @@ test('a batched Router notice applies the current role configuration and records
 })
 
 for (const partial of [false, true]) test(`Engine notices share the next busy Router turn and ${partial ? 'retry an unhandled item' : 'keep individual receipts'}`, { timeout: 10000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-engine-burst-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-engine-burst-'))
   let native, storage, sessions, engine, release, entered
   const gate = new Promise(resolve => { release = resolve })
   const started = new Promise(resolve => { entered = resolve })

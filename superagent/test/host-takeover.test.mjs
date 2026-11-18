@@ -95,7 +95,7 @@ function remoteEnvironment(root, job) {
 }
 
 test('a legal Host takeover ends the previous Assignment and resumes with a recovery note', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-host-takeover-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-host-takeover-'))
   let now = 1000
   const workerTurns = []
   const first = await openRuntime(directory, { hostId: 'host-a', leaseMs: 100, now: () => now, workerTurns })
@@ -149,7 +149,7 @@ test('a legal Host takeover ends the previous Assignment and resumes with a reco
 })
 
 test('a Host takeover preserves an unconfirmed stop and does not create a successor', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-host-takeover-stop-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-host-takeover-stop-'))
   let now = 1000
   const first = await openRuntime(directory, { hostId: 'host-a', leaseMs: 100, now: () => now })
   const runtimes = [first]
@@ -185,7 +185,7 @@ test('a Host takeover preserves an unconfirmed stop and does not create a succes
 })
 
 test('a Host takeover preserves a waiting human question and lets the answer continue the work', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-host-takeover-waiting-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-host-takeover-waiting-'))
   let now = 1000
   const first = await openRuntime(directory, { hostId: 'host-a', leaseMs: 100, now: () => now })
   const runtimes = [first]
@@ -231,7 +231,7 @@ test('a Host takeover preserves a waiting human question and lets the answer con
 })
 
 test('unknown jobs and effects block the successor before a conflicting turn can start', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-host-takeover-unknown-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-host-takeover-unknown-'))
   let now = 1000
   const first = await openRuntime(directory, { hostId: 'host-a', leaseMs: 100, now: () => now })
   const runtimes = [first]
@@ -283,7 +283,7 @@ test('unknown jobs and effects block the successor before a conflicting turn can
 })
 
 test('a live remote job is adopted and rebound to the successor Assignment, then wakes it', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-host-takeover-live-job-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-host-takeover-live-job-'))
   const root = join(directory, 'device')
   await mkdir(root)
   let now = 1000
@@ -347,7 +347,7 @@ test('a live remote job is adopted and rebound to the successor Assignment, then
 })
 
 test('a queued person follow-up waits for takeover and is delivered exactly once', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-host-takeover-input-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-host-takeover-input-'))
   let now = 1000
   const workerTurns = []
   const first = await openRuntime(directory, { hostId: 'host-a', leaseMs: 100, now: () => now, workerTurns })
@@ -402,7 +402,7 @@ test('a queued person follow-up waits for takeover and is delivered exactly once
 })
 
 test('a pending takeover blocks new work and a repeated acquisition finishes the same record', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-host-takeover-pending-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-host-takeover-pending-'))
   let now = 1000
   const first = await openRuntime(directory, { hostId: 'host-a', leaseMs: 100, now: () => now })
   const runtimes = [first]
@@ -442,7 +442,7 @@ test('a pending takeover blocks new work and a repeated acquisition finishes the
 })
 
 test('a restarted process with the same Host ID needs an explicit new epoch, and a clean stop needs no reconciliation', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-host-takeover-same-id-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-host-takeover-same-id-'))
   let now = 1000
   const first = await openRuntime(directory, { hostId: 'host-a', leaseMs: 100, now: () => now })
   const runtimes = [first]
@@ -470,7 +470,7 @@ test('a restarted process with the same Host ID needs an explicit new epoch, and
 })
 
 test('revocation wins over a waiting question and leaves no resumable successor', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-host-takeover-revoked-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-host-takeover-revoked-'))
   let now = 1000
   const first = await openRuntime(directory, { hostId: 'host-a', leaseMs: 100, now: () => now })
   const runtimes = [first]
@@ -509,7 +509,7 @@ test('revocation wins over a waiting question and leaves no resumable successor'
 })
 
 test('a Host without a native runtime ends and blocks prior work instead of completing it silently', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-host-takeover-no-runtime-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-host-takeover-no-runtime-'))
   let now = 1000
   const first = await openRuntime(directory, { hostId: 'host-a', leaseMs: 100, now: () => now })
   const runtimes = [first]

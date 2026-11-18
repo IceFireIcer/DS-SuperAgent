@@ -9,7 +9,7 @@ import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, textResponse, toolResponse } from '../dev/native-mock.mjs'
 
 async function fixture(t, channel, effects = {}, versioned = false, sourceInstanceId = 'desktop') {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-delivery-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-delivery-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const engine = new core.Engine(storage, 'private', {
@@ -303,7 +303,7 @@ test('an answer requires a current human question and returns to that exact mess
 })
 
 test('a ready report without a Main-owned work link never becomes a user result', { timeout: 15000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-delivery-runtime-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-delivery-runtime-'))
   let native, storage, sessions, engine
   t.after(async () => {
     await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()

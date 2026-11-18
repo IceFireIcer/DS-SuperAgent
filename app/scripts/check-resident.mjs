@@ -13,8 +13,8 @@ import { fileURLToPath } from 'node:url'
 const require = createRequire(import.meta.url)
 const electron = require('electron')
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const home = mkdtempSync(join(tmpdir(), 'ds-bot-resident-home-'))
-const shellData = mkdtempSync(join(tmpdir(), 'ds-bot-resident-shell-'))
+const home = mkdtempSync(join(tmpdir(), 'ds-superagent-resident-home-'))
+const shellData = mkdtempSync(join(tmpdir(), 'ds-superagent-resident-shell-'))
 const workspace = join(home, 'workspace')
 mkdirSync(workspace, { recursive: true })
 // The one-time close notice is answered in advance: the check is about the Host, not the box.
@@ -222,7 +222,7 @@ try {
     try { await stop(child) } catch (error) { failures.push(error) }
   }
   for (const directory of [home, shellData]) {
-    if (!directory.startsWith(join(tmpdir(), 'ds-bot-resident-'))) {
+    if (!directory.startsWith(join(tmpdir(), 'ds-superagent-resident-'))) {
       failures.push(new Error('Unexpected resident-check cleanup directory.'))
     } else try {
       rmSync(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 })

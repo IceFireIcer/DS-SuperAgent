@@ -24,7 +24,7 @@ function sleep(milliseconds) {
 }
 
 test('an offline remote stop stays pending instead of claiming the device range is cancelled', { timeout: 90000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-remote-stop-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-remote-stop-'))
   const root = join(directory, 'device-work')
   await mkdir(root)
   let device, proxy, environment, native, storage, sessions, engine

@@ -51,7 +51,7 @@ class CapabilityEnvironment {
 }
 
 async function fixture(context, environments, source = {}) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-capability-locations-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-capability-locations-'))
   const native = await nativeContext(join(directory, 'sessions'), options => {
     const user = options.messages.filter(message => message.role === 'user').at(-1)
     const results = options.messages.slice(options.messages.lastIndexOf(user) + 1).filter(message => message.role === 'tool')
@@ -177,7 +177,7 @@ test('Office requires its local skills and command permissions without widening 
 })
 
 test('a real local Environment with skills and an office command satisfies Office', async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-office-capability-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-office-capability-'))
   const root = join(directory, 'work')
   const skills = join(directory, 'skills')
   await mkdir(root)
@@ -212,7 +212,7 @@ test('a non-capability blocker stays visible in the capability plan', async cont
 })
 
 test('a real paired device explicitly rejects Office while remaining an eligible non-Office target', async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-office-remote-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-office-remote-'))
   const root = join(directory, 'device-work')
   await mkdir(root)
   const device = await core.RemoteDevice.open({ deviceId: 'office-device', root,

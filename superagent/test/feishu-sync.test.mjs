@@ -7,7 +7,7 @@ import * as core from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 
 test('Feishu member sync merges chats under a monotonic revision', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-feishu-sync-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-feishu-sync-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const engine = new core.Engine(storage, 'private', { kind: 'feishu', sourceInstanceId: 'feishu:tenant:chat-a,chat-b', actorId: 'bot',

@@ -88,7 +88,7 @@ export function parseMemoryImport(data: string, validateText: (value: unknown, l
   const root = parsed as Record<string, unknown>
   exactKeys(root, ['schema', 'version', 'origin', 'items'], 'Memory export')
   if (root.schema !== 'ds-bot-memory-export' || root.version !== 1) {
-    throw new CoreError('INVALID_INPUT', 'Use a version 1 ds-bot-memory-export document.')
+    throw new CoreError('INVALID_INPUT', 'Use a version 1 memory export document.')
   }
   if (!root.origin || typeof root.origin !== 'object' || Array.isArray(root.origin)) {
     throw new CoreError('INVALID_INPUT', 'Memory export needs its original owner.')

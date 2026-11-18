@@ -20,7 +20,7 @@ describe('the app profile', () => {
   let home
   let entries
   before(() => {
-    home = mkdtempSync(join(tmpdir(), 'ds-bot-app-profile-'))
+    home = mkdtempSync(join(tmpdir(), 'ds-superagent-app-profile-'))
     process.env.DSH_HOME = home
     const profile = loadAppProfile()
     assert.deepEqual(profile.layers.map(layer => layer.packageName), BUNDLES)
@@ -44,7 +44,7 @@ describe('product selection', () => {
 
 describe('claimBundles', () => {
   let dir
-  before(() => { dir = mkdtempSync(join(tmpdir(), 'ds-bot-app-bundles-')) })
+  before(() => { dir = mkdtempSync(join(tmpdir(), 'ds-superagent-app-bundles-')) })
   after(() => { rmSync(dir, { recursive: true, force: true }) })
 
   const write = (bundles, retiredDependency = false) => {

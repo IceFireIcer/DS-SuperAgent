@@ -1,8 +1,8 @@
-# Contributing to DS Bot
+# Contributing to DS SuperAgent
 
 English | [中文](CONTRIBUTING.zh.md)
 
-Thank you for helping. This file explains how the team works, how to set up the plugin, how to test a change and which rules a change must follow. For what the plugin does and how users install it, see [README.md](README.md).
+Thank you for helping. This file explains how the team works, how to set up the product, how to test a change and which rules a change must follow. For product behavior and installation, see [README.md](README.md).
 
 ## Who can open pull requests
 
@@ -10,15 +10,15 @@ Collaborators of this repository push branches here and open pull requests into 
 
 ## The rules that matter most
 
-1. **Build on DSH; never patch it.** The Bot features are a DSH plugin: use the plugin APIs that DSH documents (Cordis services, the plugin client entry, profile patches). The desktop app starts DSH only through the entry points that DSH documents (`@deepseek-ai/dsh/profile-boot`, the `dsh` command). Do not patch DeepSeek Harness, and do not depend on files inside a DSH install. When a feature needs something that DSH does not offer, open an issue here first; the fix can belong in DSH.
-2. **Bots run in DSH Sessions.** A Bot keeps its identity while its work runs in DSH Sessions: one for its own chat, one for each group, a fresh one when the context fills up. Every turn goes through the normal DSH agent loop, tools and model routes. Do not add a second agent runtime.
+1. **Build on DSH; never patch it.** Use documented plugin APIs (Cordis services, the client entry and profile patches). The desktop app starts DSH only through documented entry points (`@deepseek-ai/dsh/profile-boot`, the `dsh` command). Do not depend on private files inside a DSH install. If DSH lacks a needed API, record the gap and stop at that boundary.
+2. **Main, Router and Worker use DSH Agent Sessions.** Main owns the conversation; Router creates durable work tickets; independent Workers execute assigned work. Product state and authority belong to the Engine, not to a second agent runtime or an alternate Session write path.
 3. **No real secrets anywhere.** Do not commit API keys, tokens, cookies, `DSH_HOME` folders, logs or screenshots with personal data. The tests and the test bench use a scripted mock model and need no key.
 4. **Only original material.** Do not copy code, text, icons, logos or other graphics from other products or websites. Code under a license compatible with Apache 2.0 is the only exception: say where it comes from and add its notice to a `NOTICE` file.
 5. **Every change is tested.** Run the unit tests and the client check for every change (see [Test a change](#test-a-change)).
 
 ## How we work
 
-Anyone on the team can do any kind of work: triage, bug fixes, features, the interface, docs. Only some decisions belong to the maintainer: the direction of the product, changes to a design that is already decided, these rules, releases and the architecture. Issues and pull requests that need such a decision carry the `maintainer` label; wait for the maintainer's answer before you start on them. What DS Bot is meant to be is in [docs/vision.md](docs/vision.md); the decided designs are in [docs/plans/](docs/plans/) and the UI standard is in [docs/design/ui-standard.md](docs/design/ui-standard.md) (in Chinese). When you are not sure whether something is a bug or works as designed, read them first, then ask in the issue.
+Anyone on the team can do any kind of work: triage, bug fixes, features, the interface, docs. Only some decisions belong to the maintainer: the direction of the product, changes to a design that is already decided, these rules, releases and the architecture. Issues and pull requests that need such a decision carry the `maintainer` label; wait for the maintainer's answer before you start on them. See the [product vision](docs/vision.md), [R5 specification](docs/superagent/spec-r5.md), [design notes](docs/plans/) and [UI standard](docs/design/ui-standard.md) (in Chinese). When you are not sure whether something is a bug or works as designed, read them first, then ask in the issue.
 
 ### Branches
 
@@ -171,22 +171,22 @@ temporary configuration.
 
 ## Report a problem
 
-The easiest way is from DS Bot itself: open **Settings → Feedback**, write what happened and select **Report on GitHub**. It opens a new issue with the DS Bot and DSH versions, your system, the models and the recent errors already filled in. **Copy** puts the same text on the clipboard, and **Download** saves the full error log (`<DSH_HOME>/bot/logs/diagnostics.jsonl`).
+The easiest way is from DS SuperAgent: open **Settings → Feedback**, write what happened and select **Report on GitHub**. It opens a new issue with the product and DSH versions, your system, the models and recent errors already filled in. **Copy** puts the same text on the clipboard, and **Download** saves the diagnostics log.
 
 If you open an issue by hand, include:
 
 - The DSH version (DSH Desktop or `@deepseek-ai/dsh`), your operating system, and whether you use DSH Desktop or DSH Web.
-- How you installed DS Bot (npm, release file, Git address or command line) and its version.
+- How you installed DS SuperAgent (release package or source checkout) and its version.
 - What you did, what you expected and what happened, with the exact error text.
 - A screenshot of the whole window, with the chat and the error.
 - The steps that make it happen again.
 
-DS Bot removes API keys, tokens, saved secrets and your home folder from its diagnostics. Read the text before you post it, and remove personal data from screenshots.
+DS SuperAgent removes API keys, tokens, saved secrets and your home folder from its diagnostics. Read the text before you post it, and remove personal data from screenshots.
 
 For a security problem, do not open a public issue. Use **Report a vulnerability** on the repository's **Security** tab.
 
-Issues are for bug reports. Questions, ideas and feature requests belong in [Discussions](https://github.com/Fei2411/DS-Bot/discussions). An idea that the maintainer accepts becomes an issue.
+Issues are for bug reports. Questions, ideas and feature requests belong in [Discussions](https://github.com/IceFireIcer/DS-SuperAgent/discussions). An idea that the maintainer accepts becomes an issue.
 
 ## License
 
-DS Bot is licensed under the [Apache License 2.0](LICENSE). When you submit a contribution, you agree that it is licensed under the same license, as section 5 of the license says.
+DS SuperAgent is licensed under the [Apache License 2.0](LICENSE). When you submit a contribution, you agree that it is licensed under the same license, as section 5 of the license says.

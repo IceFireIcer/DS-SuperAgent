@@ -12,7 +12,7 @@ const event = { commandId: 'receive-1', ...ref, type: 'created', version: '1', t
 const sourceFixture = () => ({ sourceInstanceId: 'desktop-one', actorId: 'user', allowedActorIds: ['user'] })
 
 async function fixture(t) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-source-events-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-source-events-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   return { storage, engine: new Engine(storage, 'private', source) }

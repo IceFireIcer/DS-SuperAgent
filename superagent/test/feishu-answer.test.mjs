@@ -8,7 +8,7 @@ import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, textResponse, toolResponse } from '../dev/native-mock.mjs'
 
 async function fixture(t, replies) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-feishu-answer-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-feishu-answer-'))
   let native, storage, sessions, engine
   t.after(async () => {
     await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()

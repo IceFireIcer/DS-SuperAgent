@@ -9,7 +9,7 @@ import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, textResponse, toolResponse } from '../dev/native-mock.mjs'
 
 async function fixture(t, effectsOptions = {}) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-followup-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-followup-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   let semanticCalls = 0
@@ -58,7 +58,7 @@ test('an accepted Thread fans out a stable human follow-up into the same Ticket 
 })
 
 test('a ready request without Main ownership resumes the same Ticket for an authorized follow-up', { timeout: 15000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-followup-runtime-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-followup-runtime-'))
   let native, storage, sessions, engine
   t.after(async () => {
     await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()

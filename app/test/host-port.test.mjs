@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 import { hostPort } from '../src/host-port.mjs'
 
-const root = mkdtempSync(join(tmpdir(), 'ds-bot-app-port-'))
+const root = mkdtempSync(join(tmpdir(), 'ds-superagent-app-port-'))
 after(() => { rmSync(root, { recursive: true, force: true }) })
 
 test('picks a free port once and keeps it', async () => {

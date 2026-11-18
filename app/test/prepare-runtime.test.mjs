@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { after, before, describe, test } from 'node:test'
 import { parsePrimaryRuntime, workspaceDependencyPaths } from '@deepseek-ai/dsh-tool-workspace-dependencies'
-import { primaryRuntimeManifest, runtimeReusable, runtimeTarget } from '../scripts/prepare-runtime.mjs'
+import { preparePrimaryRuntime, primaryRuntimeManifest, runtimeReusable, runtimeTarget } from '../scripts/prepare-runtime.mjs'
 
 describe('runtimeTarget', () => {
   test('maps the platforms electron-builder packs for to the lock\'s targets', () => {
@@ -49,7 +49,7 @@ describe('runtimeReusable', () => {
   let output
   let root
   before(() => {
-    output = mkdtempSync(join(tmpdir(), 'ds-bot-runtime-'))
+    output = mkdtempSync(join(tmpdir(), 'ds-superagent-runtime-'))
     root = join(output, 'primary-runtime')
   })
   after(() => { rmSync(output, { recursive: true, force: true }) })
@@ -67,4 +67,19 @@ describe('runtimeReusable', () => {
     writeFileSync(join(root, 'runtime.json'), JSON.stringify({ ...manifest, payloadDigest: '0'.repeat(64) }))
     assert.equal(runtimeReusable(output, manifest), false)
   })
+})
+
+test('runtime downloads validate the product timeout setting before fetching', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'ds-superagent-runtime-timeout-'))
+  t.after(() => { rmSync(root, { recursive: true, force: true }) })
+  const previous = process.env.DS_SUPERAGENT_RUNTIME_DOWNLOAD_TIMEOUT_MS
+  process.env.DS_SUPERAGENT_RUNTIME_DOWNLOAD_TIMEOUT_MS = '0'
+  try {
+    await assert.rejects(preparePrimaryRuntime({
+      target: 'win-x64', output: join(root, 'output'), cache: join(root, 'cache'), version: '1.0.0',
+    }), /DS_SUPERAGENT_RUNTIME_DOWNLOAD_TIMEOUT_MS must be an integer/u)
+  } finally {
+    if (previous === undefined) delete process.env.DS_SUPERAGENT_RUNTIME_DOWNLOAD_TIMEOUT_MS
+    else process.env.DS_SUPERAGENT_RUNTIME_DOWNLOAD_TIMEOUT_MS = previous
+  }
 })

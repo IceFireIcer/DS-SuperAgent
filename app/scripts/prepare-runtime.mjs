@@ -52,8 +52,8 @@ async function downloadPrimaryRuntimeAsset(url, sha256, cache) {
   try { bytes = readFileSync(destination) } catch (error) {
     if (error.code !== 'ENOENT') throw error
     cached = false
-    const timeout = Number(process.env.DS_BOT_RUNTIME_DOWNLOAD_TIMEOUT_MS ?? '300000')
-    if (!Number.isSafeInteger(timeout) || timeout < 1 || timeout > 2_147_483_647) throw new Error('DS_BOT_RUNTIME_DOWNLOAD_TIMEOUT_MS must be an integer from 1 to 2147483647')
+    const timeout = Number(process.env.DS_SUPERAGENT_RUNTIME_DOWNLOAD_TIMEOUT_MS ?? '300000')
+    if (!Number.isSafeInteger(timeout) || timeout < 1 || timeout > 2_147_483_647) throw new Error('DS_SUPERAGENT_RUNTIME_DOWNLOAD_TIMEOUT_MS must be an integer from 1 to 2147483647')
     const response = await fetch(url, { signal: AbortSignal.timeout(timeout) })
     if (!response.ok) throw new Error(`primary runtime download: ${String(response.status)} ${url}`)
     bytes = Buffer.from(await response.arrayBuffer())
@@ -83,7 +83,7 @@ async function downloadNodeRuntime(target, destination, cache) {
   const artifact = lock.targets[target]
   const filename = `node-v${lock.nodeVersion}-${artifact.nodeArchive}`
   const archive = await downloadPrimaryRuntimeAsset(`https://nodejs.org/dist/v${lock.nodeVersion}/${filename}`, artifact.nodeSha256, cache)
-  const staging = mkdtempSync(join(tmpdir(), 'ds-bot-node-'))
+  const staging = mkdtempSync(join(tmpdir(), 'ds-superagent-node-'))
   try {
     if (target === 'win-x64') await extractZip(archive, { dir: staging })
     else await extractTar({ file: archive, cwd: staging })
@@ -228,7 +228,7 @@ export async function preparePrimaryRuntime(options) {
   if (runtimeReusable(paths.runtime, manifest)) {
     console.log(`primary-runtime: payload in ${paths.runtime} is current (digest ${manifest.payloadDigest.slice(0, 12)}…)`)
   } else {
-    const staging = mkdtempSync(join(tmpdir(), 'ds-bot-primary-'))
+    const staging = mkdtempSync(join(tmpdir(), 'ds-superagent-primary-'))
     try {
       const output = join(staging, 'payload')
       const dependencies = join(output, 'dependencies')
@@ -281,7 +281,7 @@ if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(
   const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
   await preparePrimaryRuntime({
     target, output,
-    cache: values.cache ?? process.env.DS_BOT_RUNTIME_CACHE ?? join(here, '..', 'build', 'runtime-cache'),
+    cache: values.cache ?? process.env.DS_SUPERAGENT_RUNTIME_CACHE ?? join(here, '..', 'build', 'runtime-cache'),
     version,
   })
   smokePrimaryRuntime(join(output, 'primary-runtime'))

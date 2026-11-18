@@ -29,7 +29,7 @@ if (!executable || !source || !existsSync(executable)
   process.exit(2)
 }
 const version = releasePage ? source : /^version:\s*(\S+)/mu.exec(readFileSync(join(source, manifest), 'utf8'))?.[1]
-const work = mkdtempSync(join(tmpdir(), 'ds-bot-update-'))
+const work = mkdtempSync(join(tmpdir(), 'ds-superagent-update-'))
 mkdirSync(join(work, 'home'))
 
 const served = []

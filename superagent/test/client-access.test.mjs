@@ -7,7 +7,7 @@ import { ClientAccess } from '../dist/client-access.js'
 import { SqliteStorage } from '../dist/storage.js'
 
 async function fixture(t) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-client-access-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-client-access-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   return { storage, access: new ClientAccess(storage, 'private') }

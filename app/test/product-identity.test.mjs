@@ -10,7 +10,7 @@ import { configureIdentity } from '../src/product.mjs'
 function fixture(testContext) {
   const root = mkdtempSync(join(tmpdir(), 'ds-superagent-identity-'))
   testContext.after(() => rmSync(root, { recursive: true, force: true }))
-  const paths = { appData: root, userData: join(root, 'DS Bot') }
+  const paths = { appData: root, userData: join(root, 'DS SuperAgent') }
   const app = {
     getPath: name => paths[name],
     setPath: (name, value) => { paths[name] = value },
@@ -37,7 +37,7 @@ test('the desktop opens its own shell storage with former product folders presen
   assert.equal(app.name, 'DS SuperAgent')
   assert.equal(app.id, 'io.github.icefireicer.ds-superagent')
   assert.throws(() => readFileSync(join(settings, 'locations.json')), { code: 'ENOENT' })
-  assert.throws(() => configureIdentity(app, { env: { ...env, DS_SUPERAGENT_SHELL_DATA: join(root, 'DS Bot') } }), /former DS Bot data/u)
+  assert.throws(() => configureIdentity(app, { env: { ...env, DS_SUPERAGENT_SHELL_DATA: join(root, 'DS Bot') } }), /previous product data/u)
   for (const file of legacyFiles) assert.equal(readFileSync(file, 'utf8'), 'sentinel')
 })
 

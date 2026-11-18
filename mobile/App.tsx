@@ -6,8 +6,8 @@ export default function App() {
   const color = dark ? '#f2f2f2' : '#1a1a1a';
   return (
     <View style={[styles.screen, { backgroundColor: dark ? '#111' : '#fff' }]}>
-      <Text style={[styles.title, { color }]}>DS Bot</Text>
-      <Text style={[styles.hint, { color }]}>Pair with your computer to reach your Bot team.</Text>
+      <Text style={[styles.title, { color }]}>DS SuperAgent</Text>
+      <Text style={[styles.hint, { color }]}>Mobile access is not available in this build.</Text>
       <StatusBar style="auto" />
     </View>
   );

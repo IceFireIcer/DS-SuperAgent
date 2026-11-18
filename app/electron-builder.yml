@@ -1,6 +1,6 @@
 appId: io.github.icefireicer.ds-superagent
 productName: DS SuperAgent
-copyright: Copyright 2026 Fei2411 and the DS SuperAgent contributors
+copyright: Copyright 2026 IceFireIcer and the DS SuperAgent contributors
 artifactName: DS-SuperAgent-${version}-${os}-${arch}.${ext}
 directories:
   output: dist-pack
@@ -70,7 +70,7 @@ linux:
   # terminal command should not have.
   executableName: ds-superagent
   # A deb needs a maintainer; package.json's author has no email, so it goes here.
-  maintainer: Fei2411 <https://github.com/Fei2411>
+  maintainer: IceFireIcer <https://github.com/IceFireIcer>
   # Links the running window to the menu entry (WM_CLASS = app id).
   syncDesktopName: true
   icon: assets/icon.png

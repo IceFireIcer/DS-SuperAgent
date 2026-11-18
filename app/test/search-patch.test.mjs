@@ -11,7 +11,7 @@ const DSH_WEB = '@deepseek-ai/dsh-web'
 // provider and points the selector at it, and `user` rows model the profile's
 // own cordis.patch.yml.
 function profile(user = [], { auto = true } = {}) {
-  const dir = mkdtempSync(join(tmpdir(), 'ds-bot-search-patch-'))
+  const dir = mkdtempSync(join(tmpdir(), 'ds-superagent-search-patch-'))
   return {
     name: 'ds-superagent', dir, patchPath: join(dir, 'cordis.patch.yml'), skippedBundles: [],
     layers: [
@@ -48,7 +48,7 @@ describe('searchSelectorPatch', () => {
 
 describe('reconcileSearchSelector', () => {
   let dir
-  before(() => { dir = mkdtempSync(join(tmpdir(), 'ds-bot-search-reconcile-')) })
+  before(() => { dir = mkdtempSync(join(tmpdir(), 'ds-superagent-search-reconcile-')) })
   after(() => { rmSync(dir, { recursive: true, force: true }) })
 
   test('writes the overlay where DSH only reads it through patchFiles, and drops it when satisfied', () => {

@@ -15,7 +15,7 @@ const grant = {
 }
 
 async function fixture(context, options = {}) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-remote-environment-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-remote-environment-'))
   const rootPath = join(directory, 'device-work')
   await mkdir(rootPath)
   const root = await realpath(rootPath)
@@ -227,7 +227,7 @@ test('unauthenticated replay attempts cannot evict a valid request identity', { 
 })
 
 test('device state persists the paired host without persisting its pairing code', async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-remote-device-state-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-remote-device-state-'))
   const root = join(directory, 'work')
   await mkdir(root)
   const statePath = join(directory, 'device-state.json')
@@ -273,7 +273,7 @@ test('a host restores its protected connection state without the pairing code', 
 })
 
 test('the device re-checks its current grant and can revoke a pairing locally', async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-remote-grant-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-remote-grant-'))
   const root = join(directory, 'work')
   await mkdir(root)
   const statePath = join(directory, 'device-state.json')
@@ -302,7 +302,7 @@ test('the device re-checks its current grant and can revoke a pairing locally', 
 })
 
 test('a wildcard listener cannot advertise an unreachable loopback endpoint', async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-remote-advertise-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-remote-advertise-'))
   const root = join(directory, 'work')
   await mkdir(root)
   const device = await core.RemoteDevice.open({ deviceId: 'second-device', root, grants: [grant], listenHost: '0.0.0.0' })

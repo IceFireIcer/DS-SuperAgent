@@ -14,7 +14,7 @@ const write = (path, text) => {
 // The app's data with a team, a chat and a key, plus what stays behind: the engine's lock and
 // the temporary folders of a first-run copy and check that were cut short.
 function setup(t) {
-  const root = mkdtempSync(join(tmpdir(), 'ds-bot-move-'))
+  const root = mkdtempSync(join(tmpdir(), 'ds-superagent-move-'))
   t.after(() => { rmSync(root, { recursive: true, force: true, maxRetries: 5 }) })
   const from = join(root, 'data')
   write(join(from, 'bot', 'state.json'), '{"bots":{"a":{}}}')
@@ -60,8 +60,8 @@ test('the new data location is an empty or new folder apart from the data, works
 })
 
 test('the program folder is the whole app bundle on macOS', () => {
-  assert.equal(installFolder('/Applications/DS Bot.app/Contents/MacOS/DS Bot', 'darwin'), '/Applications/DS Bot.app')
-  assert.equal(installFolder(join('C:', 'Programs', 'DS Bot', 'DS Bot.exe'), 'win32'), join('C:', 'Programs', 'DS Bot'))
+  assert.equal(installFolder('/Applications/DS SuperAgent.app/Contents/MacOS/DS SuperAgent', 'darwin'), '/Applications/DS SuperAgent.app')
+  assert.equal(installFolder(join('C:', 'Programs', 'DS SuperAgent', 'DS SuperAgent.exe'), 'win32'), join('C:', 'Programs', 'DS SuperAgent'))
 })
 
 test('the data is copied whole, without the lock and the temporary folders, and the old folder stays', async (t) => {

@@ -29,7 +29,7 @@ npm installs `ds-superagent` from `../superagent` as a copy of its package files
 | `DS_SUPERAGENT_UPDATE_URL` | A test feed that overrides the GitHub release lookup (see [Updates](#updates)) | The newest DS SuperAgent release |
 
 Windows uses `%APPDATA%\DS SuperAgent` for shell settings. On macOS it is `~/Library/Application Support/DS SuperAgent`.
-The app starts with its own settings and leaves the former product's shell data, browser logins and saved locations in place.
+The app starts with its own settings and leaves data from previous product installs, browser logins and saved locations in place.
 
 ## Run from source (Windows)
 
@@ -52,7 +52,7 @@ Use `.\start.ps1 -DataRoot <folder>` for a different data root (relative paths a
 
 At its first start the app asks for a data location (`~/.ds-superagent` by default) and workspace (`~/DS SuperAgent`).
 It checks that both can be written and offers to change a location if it fails. The choices go into the app's own
-`locations.json`. Keep the folders outside each other, the program folder, personal DSH data and former DS Bot data.
+`locations.json`. Keep the folders outside each other, the program folder, personal DSH data and data from previous product installs.
 
 Both change later in DS SuperAgent's Settings > General > Locations. The app names the user's DSH data to the
 product (`DS_SUPERAGENT_USER_DSH_HOME`), so neither the workspace nor an execution directory can be set there. The data
@@ -62,7 +62,7 @@ staging folder beside the new one, renames it to the new folder once it is whole
 again. A failed or interrupted copy leaves the old location in use and removes the staging folder; the old folder
 always stays. A run on throwaway folders (`DS_SUPERAGENT_HOME`) keeps its data location.
 
-The app does not import or activate the old Bot team runtime. Existing DSH and DS Bot files remain untouched.
+The app does not import or activate a legacy team runtime. Existing DSH files and data from previous product installs remain untouched.
 Optional browser, credential and memory import are product actions inside the running SuperAgent profile and use
 their own isolated import contracts.
 
@@ -202,8 +202,8 @@ stay where the Host keeps them; the profile file is the only file the upgrade re
 | `src/update-prompt.mjs` | An update prompt that waits for the window to be shown again |
 | `src/host-port.mjs` | The Host's port, kept between starts, since the page keeps its storage per address |
 | `src/preload.cjs` | Hands the product settings the data location and data move, and browser imports their isolated IPC. On Windows it marks the page for the frameless window and sends caption button colors |
-| `src/bot-browser.mjs` | The Bot browsers' webviews: only a leased one attaches, with fixed preferences; each Bot's logins stay on disk until the Bot is deleted; pages cannot reach the Host |
-| `src/cookie-parse.mjs`, `src/cookie-import.mjs`, `src/browser-sources.mjs` | Cookie imports: the cookie-file parser (Cookie-Editor JSON, Netscape, Playwright storageState), the write into a Bot's partition with read-back and flush, and the installed-browser profiles a source is cloned from — the source browser itself decrypts its own store over a CDP pipe; values never leave the main process |
+| `src/bot-browser.mjs` | Product browser resource webviews: only a leased one attaches, with fixed preferences; each resource's storage stays on disk until the resource is forgotten; pages cannot reach the Host |
+| `src/cookie-parse.mjs`, `src/cookie-import.mjs`, `src/browser-sources.mjs` | Cookie imports: the cookie-file parser (Cookie-Editor JSON, Netscape, Playwright storageState), the write into an authorized resource partition with read-back and flush, and the installed-browser profiles a source is cloned from — the source browser itself decrypts its own store over a CDP pipe; values never leave the main process |
 | `src/window-frame.mjs`, `src/mica.css` | The frameless Windows window: the caption band, when Mica is available (Windows 11 22H2 and later), and the stylesheet that lets Mica through the sidebar |
 | `src/host-process.mjs` | Starts the Host in the bundled plain Node on Linux, Electron's Node mode elsewhere, and owns its exit |
 | `src/host.mjs` | Boots the single product profile with `runProfile()`, verifies its public services and reports the launch URL |

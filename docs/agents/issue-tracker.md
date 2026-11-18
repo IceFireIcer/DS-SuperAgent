@@ -11,7 +11,7 @@
 
 ## 当前规格
 
-- [Spec: Rebuild DS Bot around the Super-agent architecture](https://github.com/IceFireIcer/DS-SuperAgent/issues/1)
+- [总体规格 #1（当前以 R5 正式规格为准）](https://github.com/IceFireIcer/DS-SuperAgent/issues/1)
 - 本地正文：[Super-agent 三层独立产品规格 R5](../superagent/spec-r5.md)；它显式替代 v2.1 的 D01、D17、D18、D20 冲突条款。
 - 标签：ready-for-agent、enhancement。
 - 当前 R5 使用总规格 → R5-01—R5-36 的直接原生子 Issue，不再创建功能聚合父票；具体前置用原生 blocked-by 表达。[拆分正文](../superagent/r5-tickets-draft.md)记录已批准的范围，[r5-publication.json](../superagent/r5-publication.json)记录发布映射与回读状态；只有 `verified: true` 才表示整批发布核对完成。

@@ -8,7 +8,7 @@ import * as core from '../dist/index.js'
 import { nativeContext, textResponse } from '../dev/native-mock.mjs'
 
 test('the product Host exposes Feishu health, stop and reconnection without disclosing credentials', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-product-feishu-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-product-feishu-'))
   let host, native
   t.after(async () => {
     await host?.close()

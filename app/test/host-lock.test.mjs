@@ -9,7 +9,7 @@ import { assertHostLockFree, hostLockPath, readHostLock, releaseHostLock, writeH
 describe('the Host lock', () => {
   let directory
   let file
-  before(() => { directory = mkdtempSync(join(tmpdir(), 'ds-bot-host-lock-')); file = hostLockPath(directory) })
+  before(() => { directory = mkdtempSync(join(tmpdir(), 'ds-superagent-host-lock-')); file = hostLockPath(directory) })
   after(() => { rmSync(directory, { recursive: true, force: true }) })
 
   test('records the Host process and its port, and releases only its own record', () => {

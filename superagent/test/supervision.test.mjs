@@ -8,7 +8,7 @@ import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, textResponse, toolResponse } from '../dev/native-mock.mjs'
 
 test('supervision puts human questions, blocked work and stops before ordinary running work', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-supervision-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-supervision-'))
   let native, storage, sessions, engine, chat
   t.after(async () => {
     await chat?.close(); await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
@@ -63,7 +63,7 @@ test('supervision puts human questions, blocked work and stops before ordinary r
 })
 
 test('supervision reads every Ticket page instead of stopping at the first hundred', { timeout: 30000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-supervision-pages-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-supervision-pages-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   const engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] })
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })

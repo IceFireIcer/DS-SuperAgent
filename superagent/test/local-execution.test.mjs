@@ -8,7 +8,7 @@ import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, toolResponse, textResponse } from '../dev/native-mock.mjs'
 
 test('an authorized request binds one directory and returns a verified file plus actual native tool facts', { timeout: 15000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-local-execution-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-local-execution-'))
   const root = join(directory, 'work')
   await mkdir(root)
   let environment, native, sessions, storage, engine
@@ -63,7 +63,7 @@ test('an authorized request binds one directory and returns a verified file plus
 })
 
 test('failed setup remains visible without a Worker and only an explicit retry rechecks the original binding', { timeout: 15000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-setup-retry-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-setup-retry-'))
   const root = join(directory, 'work')
   await mkdir(root)
   let environment, native, sessions, storage, engine
@@ -106,7 +106,7 @@ test('failed setup remains visible without a Worker and only an explicit retry r
 })
 
 test('the owning Bot supplies the hidden Worker model and instructions', { timeout: 15000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-local-worker-profile-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-local-worker-profile-'))
   let native, sessions, storage, engine
   context.after(async () => {
     await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()

@@ -123,7 +123,7 @@ function delayedRemoteEnvironment(root) {
 }
 
 async function fixture(context) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-remote-recovery-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-remote-recovery-'))
   const root = join(directory, 'device-work')
   await mkdir(root)
   const listenPort = await freePort()
@@ -307,7 +307,7 @@ test('a completed job keeps its exit code and output through a daemon restart', 
 
 test('an unobservable recovered job blocks its Ticket with one evidence question that later reconciliation does not duplicate', { timeout: 90000 }, async context => {
   const device = await fixture(context)
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-remote-recovery-engine-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-remote-recovery-engine-'))
   let native, storage, sessions, engine
   context.after(async () => {
     await engine?.shutdown()
@@ -374,7 +374,7 @@ test('an unobservable recovered job blocks its Ticket with one evidence question
 
 test('a new Host adopts a running device job by its stable identity and can still cancel the original range', { timeout: 90000 }, async context => {
   const device = await fixture(context)
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-remote-host-recovery-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-remote-host-recovery-'))
   const sessionsDirectory = join(directory, 'sessions')
   const databasePath = join(directory, 'state.sqlite')
   let oldNative, oldStorage, oldSessions, oldEngine, native, storage, sessions, engine, restoredEnvironment
@@ -452,7 +452,7 @@ test('a new Host adopts a running device job by its stable identity and can stil
 })
 
 test('a remote job stays starting until its start response arrives', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-delayed-start-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-delayed-start-'))
   let native, storage, sessions, engine
   const { environment, release } = delayedRemoteEnvironment(join(directory, 'device-work'))
   t.after(async () => {
@@ -487,7 +487,7 @@ test('a remote job stays starting until its start response arrives', { timeout: 
 })
 
 test('a late remote start answer after a stop stays unknown and cannot clear the stop', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-delayed-stop-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-delayed-stop-'))
   let native, storage, sessions, engine
   const delayed = delayedRemoteEnvironment(join(directory, 'device-work'))
   t.after(async () => {
@@ -534,7 +534,7 @@ test('a late remote start answer after a stop stays unknown and cannot clear the
 
 test('an offline stop remains pending and is confirmed after a daemon restart proves the original range gone', { timeout: 90000 }, async context => {
   const device = await fixture(context)
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-remote-stop-recovery-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-remote-stop-recovery-'))
   let native, storage, sessions, engine
   context.after(async () => {
     await engine?.shutdown()
@@ -592,7 +592,7 @@ test('an offline stop remains pending and is confirmed after a daemon restart pr
 
 test('a foreground remote command keeps a durable start intent that an offline stop can reconcile by original ID', { timeout: 40000 }, async context => {
   const device = await fixture(context)
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-remote-foreground-recovery-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-remote-foreground-recovery-'))
   let native, storage, sessions, engine
   context.after(async () => {
     await engine?.shutdown()

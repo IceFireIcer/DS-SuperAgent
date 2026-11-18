@@ -29,7 +29,7 @@ export function configureIdentity(app, { env = process.env, platform = process.p
   const program = app.isPackaged ? installFolder(app.getPath('exe'), platform) : undefined
   const formerData = formerDataFolders(app)
   if (!isAbsolute(userData) || isolationProblem(userData, undefined, { dshHomes: userDshHomes(env), program, formerData })) {
-    throw new Error(`Choose an absolute desktop settings folder outside the program, DeepSeek Harness and former DS Bot data folders. Selected folder: ${userData}`)
+    throw new Error(`Choose an absolute desktop settings folder outside the program, DeepSeek Harness and previous product data folders. Selected folder: ${userData}`)
   }
   try { ensureWritableFolder(userData) }
   catch { throw new Error(`Cannot write to the desktop settings folder at ${userData}. Restore write access and reopen ${PRODUCT_NAME}.`) }

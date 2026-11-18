@@ -16,7 +16,7 @@ function harness({ platform = 'win32', status = 'Running in the background' } = 
   }
   const calls = { open: 0, quit: 0 }
   const tray = createTray({
-    Tray, Menu, platform, image: { empty: false }, tooltip: 'DS Bot',
+    Tray, Menu, platform, image: { empty: false }, tooltip: 'DS SuperAgent',
     status: () => status,
     open: { label: 'Open', run: () => { calls.open += 1 } },
     quit: { label: 'Quit', run: () => { calls.quit += 1 } },
@@ -29,7 +29,7 @@ describe('the tray', () => {
   test('the icon carries the tooltip, the status and a menu with Open and Quit', () => {
     const app = harness()
     assert.equal(app.trays.length, 1)
-    assert.equal(app.trays[0].tooltip, 'DS Bot — Running in the background')
+    assert.equal(app.trays[0].tooltip, 'DS SuperAgent — Running in the background')
     assert.deepEqual(app.menus[0].map(item => item.label ?? 'separator'), ['Running in the background', 'separator', 'Open', 'separator', 'Quit'])
     assert.equal(app.menus[0][0].enabled, false, 'the status is not a command')
   })
@@ -57,14 +57,14 @@ describe('the tray', () => {
     const menus = []
     const tray = createTray({
       Tray: class { constructor() { trays.push(this) } on() {} setToolTip(value) { this.tooltip = value } setContextMenu(menu) { this.menu = menu; menus.push(menu) } destroy() {} },
-      Menu: { buildFromTemplate: template => template }, platform: 'win32', image: {}, tooltip: 'DS Bot',
+      Menu: { buildFromTemplate: template => template }, platform: 'win32', image: {}, tooltip: 'DS SuperAgent',
       status: () => status,
       open: { label: 'Open', run: () => {} }, quit: { label: 'Quit', run: () => {} }, log: { warn: () => {} },
     })
-    assert.equal(trays[0].tooltip, 'DS Bot — Starting the Host…')
+    assert.equal(trays[0].tooltip, 'DS SuperAgent — Starting the Host…')
     status = 'Host not running'
     tray.relabel()
-    assert.equal(trays[0].tooltip, 'DS Bot — Host not running')
+    assert.equal(trays[0].tooltip, 'DS SuperAgent — Host not running')
     assert.equal(menus.at(-1)[0].label, 'Host not running')
   })
 

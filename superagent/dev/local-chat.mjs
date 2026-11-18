@@ -23,7 +23,7 @@ export async function* localDemonstration(options) {
 }
 
 export async function localPreview() {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-local-chat-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-local-chat-'))
   const root = join(directory, 'project')
   let context, storage, sessions, environment, engine, chat
   const close = async () => {

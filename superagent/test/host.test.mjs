@@ -7,7 +7,7 @@ import * as core from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 
 test('an unexpired Host lease blocks another writer, and only explicit expiry takeover gets a new epoch', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-host-lease-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-host-lease-'))
   let now = 1000
   const firstStorage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   const secondStorage = await SqliteStorage.open(join(directory, 'state.sqlite'))

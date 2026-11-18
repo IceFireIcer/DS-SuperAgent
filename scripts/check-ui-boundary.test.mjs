@@ -10,7 +10,7 @@ import { APPROVAL_ENV, checkUiBoundary, uiChanges } from './check-ui-boundary.mj
 const script = fileURLToPath(new URL('./check-ui-boundary.mjs', import.meta.url))
 
 function fixture(context) {
-  const directory = mkdtempSync(join(tmpdir(), 'dsbot-ui-boundary-'))
+  const directory = mkdtempSync(join(tmpdir(), 'ds-superagent-ui-boundary-'))
   context.after(() => rmSync(directory, { recursive: true, force: true }))
   const repository = join(directory, 'repository')
   mkdirSync(repository)

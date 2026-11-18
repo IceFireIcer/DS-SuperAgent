@@ -1,8 +1,6 @@
-# DS Bot mobile
+# DS SuperAgent mobile
 
-The DS Bot app for iOS and Android. It controls the Bot team that runs on your computer; nothing runs on the phone. The design is in [docs/plans/2026-10-24-mobile-app.md](../docs/plans/2026-10-24-mobile-app.md).
-
-This is the first skeleton: it opens one screen and does not connect yet.
+This iOS and Android starter opens one screen. It cannot connect to DS SuperAgent. See the [historical mobile design](../docs/plans/2026-10-24-mobile-app.md) for the original proposal.
 
 ## Run
 

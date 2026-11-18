@@ -47,7 +47,7 @@ export function loadAppProfile() {
   return profile
 }
 
-/** Product state is always separate from the user's old DS Bot data. */
+/** Product state stays separate from data created by previous product installs. */
 export function profileHome(dataDir) {
   return join(dataDir, 'superagent')
 }

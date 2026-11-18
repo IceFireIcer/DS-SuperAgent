@@ -18,7 +18,7 @@ async function until(check, label, timeout = 15000) {
 }
 
 test('a running Worker is stopped with explicit cancellation confirmation and resumes only by command', { timeout: 15000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-stop-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-stop-'))
   let native, storage, sessions, engine, release
   let started
   let startedOnce = false
@@ -110,7 +110,7 @@ test('a running Worker is stopped with explicit cancellation confirmation and re
 })
 
 test('opening an interrupted Engine cannot race an unconfirmed stop past the resume barrier', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-stop-recovery-race-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-stop-recovery-race-'))
   let native, storage, sessions, engine
   t.after(async () => {
     await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
@@ -133,7 +133,7 @@ test('opening an interrupted Engine cannot race an unconfirmed stop past the res
 })
 
 test('ordinary follow-ups and restart cannot clear a stopped Ticket', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-stop-followup-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-stop-followup-'))
   let native, storage, sessions, engine
   t.after(async () => {
     await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
@@ -163,7 +163,7 @@ test('ordinary follow-ups and restart cannot clear a stopped Ticket', async t =>
 })
 
 test('the chat preview exposes stop and resume controls through same-origin routes', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-stop-chat-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-stop-chat-'))
   let native, storage, sessions, engine, chat
   t.after(async () => {
     await chat?.close(); await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
@@ -186,7 +186,7 @@ test('the chat preview exposes stop and resume controls through same-origin rout
 })
 
 test('resuming a stopped ready Ticket drops the previous Assignment report', { timeout: 15000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-stop-report-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-stop-report-'))
   let native, storage, sessions, engine
   t.after(async () => {
     await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
@@ -231,7 +231,7 @@ test('resuming a stopped ready Ticket drops the previous Assignment report', { t
 })
 
 test('a stop with background work waits for the foreground turn before confirming', { timeout: 30000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-stop-background-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-stop-background-'))
   const root = join(directory, 'work')
   await mkdir(root)
   let native, storage, sessions, engine, environment, release

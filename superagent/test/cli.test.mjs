@@ -53,7 +53,7 @@ test('real process exits before and after commit preserve the correct acceptance
 })
 
 test('the source CLI receives edits, queries history and refuses deleted content for new work', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-source-cli-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-source-cli-'))
   t.after(() => rm(directory, { recursive: true, force: true }))
   const config = ['--database', join(directory, 'state.sqlite'), '--instance', 'private', '--source', 'desktop-one', '--actor', 'user', '--allow-actor', 'user', '--allow-thread', 'room', '--version-order', 'sequence']
   const run = async args => JSON.parse((await execute(process.execPath, [cli, ...args, ...config], { timeout: 10000 })).stdout)

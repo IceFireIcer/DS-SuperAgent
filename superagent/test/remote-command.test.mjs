@@ -95,7 +95,7 @@ async function proxyFixture(endpoint) {
 }
 
 async function fixture(context, options = {}) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-remote-command-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-remote-command-'))
   const root = join(directory, 'device-work')
   await mkdir(root)
   await writeFile(join(root, 'input.txt'), 'file-on-device\n')
@@ -300,7 +300,7 @@ test('a terminal device job record and its output survive a daemon restart', { t
 })
 
 test('the durable Engine job record uses the device-stable job identity', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-remote-command-record-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-remote-command-record-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   const jobs = new core.Jobs(storage, 'private', 'runtime')
   try {

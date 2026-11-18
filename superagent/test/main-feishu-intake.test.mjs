@@ -9,7 +9,7 @@ import { nativeContext, routerResponse, textResponse, toolResponse } from '../de
 import { completedToolCount, lastUserText } from './input-support.mjs'
 
 test('an addressed Feishu request enters Main while discussion and bot messages do not', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-main-feishu-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-main-feishu-'))
   const turns = []
   let storage, native, sessions, engine, environment
   t.after(async () => {
@@ -64,7 +64,7 @@ test('an addressed Feishu request enters Main while discussion and bot messages 
 })
 
 test('a no-work Main reply is delivered through a durable Feishu source reply', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-main-feishu-no-work-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-main-feishu-no-work-'))
   const turns = []
   const replies = []
   let storage, native, sessions, engine
@@ -119,7 +119,7 @@ test('a no-work Main reply is delivered through a durable Feishu source reply', 
 })
 
 test('an edited Feishu question cannot receive a queued Main reply', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-main-feishu-stale-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-main-feishu-stale-'))
   let storage, native, sessions, engine
   const replies = []
   t.after(async () => {
@@ -158,7 +158,7 @@ test('an edited Feishu question cannot receive a queued Main reply', { timeout: 
 })
 
 test('an unknown Main reply keeps its UUID after restart and does not resend under revoked policy', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-main-feishu-reconcile-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-main-feishu-reconcile-'))
   let storage, native, sessions, engine
   const replies = []
   let ambiguous = true
@@ -218,7 +218,7 @@ test('an unknown Main reply keeps its UUID after restart and does not resend und
 })
 
 test('the Feishu runtime polls a native discussion into the same Main and stops cleanly', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-main-feishu-runtime-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-main-feishu-runtime-'))
   let storage, native, sessions, runtime, engine, environment
   t.after(async () => {
     await runtime?.stop()
@@ -284,7 +284,7 @@ test('the Feishu runtime polls a native discussion into the same Main and stops 
 })
 
 test('Main delegates a Feishu discussion and the original thread receives the bounded result', { timeout: 25000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-main-feishu-delivery-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-main-feishu-delivery-'))
   let storage, native, sessions, desktop, feishu, environment
   const replies = []
   t.after(async () => {

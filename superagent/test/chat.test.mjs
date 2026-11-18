@@ -8,7 +8,7 @@ import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, textResponse } from '../dev/native-mock.mjs'
 
 test('the loopback chat accepts an explicit request, queries its pending state and rejects foreign origins', async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-chat-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-chat-'))
   let storage
   let native
   let sessions

@@ -25,7 +25,7 @@ docker compose up -d --build
 docker compose logs ds-superagent
 ```
 
-This builds the local image without pulling a published DS Bot image. The root
+This builds the local image without pulling a published product image. The root
 Compose file publishes host port **13080**, and stores data and workspace files
 in `docker/data` and `docker/workspace`.
 
@@ -171,7 +171,7 @@ docker compose up -d
 A rebuild changes the image and the DSH it contains. An existing persisted
 profile is reused, and the entrypoint does not manage plugin upgrades. The
 image is built and tested with dsh `0.2.1-rc.4`, the version
-DS Bot is verified with; a `DSH_VERSION` build arg exists, but other releases
+The product is verified with; a `DSH_VERSION` build arg exists, but other releases
 are untested and newer ones change how the server binds.
 
 ## Prebuilt image

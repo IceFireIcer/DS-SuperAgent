@@ -1,57 +1,31 @@
-# docs/plans：已定的设计
+# 设计记录
 
-这里收录 DS Bot 已经定下的设计：为什么这样做、已定的行为、不做什么、已知限制。拿不准一个现象是 bug 还是设计如此时，先查这里和 [愿景](../vision.zh.md)；这里没写的，在 Issue 里问。
+当前产品行为见[愿景](../vision.zh.md)、[R5 规格](../superagent/spec-r5.md)和各票的实施记录。下表的早期方案供查阅产品演进；其中的安装命令、代码路径和旧协作流程按记录时间理解。
 
-设计文档用中文写。
+## 记录
 
-## 什么时候写
-
-- **大功能**：在同一个 Pull Request 里附一份 `docs/plans/<日期>-<主题>.md`，和代码一起审、一起合。
-- **改动已定的设计**：先在 Issue 里和维护者确认（带 `maintainer` 标签），合并时同步改对应的文档。
-- **修 bug**：不用写。
-
-## 格式
-
-```markdown
-# 标题
-
-- 日期：设计定下的日期（之后的修改在文末「变更」里追加）
-- 相关：Issue / PR 编号
-
-## 为什么
-要解决的问题，以及当时的取舍。
-
-## 已定的行为
-可以验证的规则。写现在的行为，不写过程。
-
-## 不做什么
-
-## 已知限制
-
-## 变更
-- 日期：改了什么，对应的 PR。
-```
-
-## 目录
-
-| 文档 | 内容 |
+| 文档 | 历史主题 |
 |---|---|
-| [DSH 让步总账](2026-10-13-dsh-concessions.md) | 因 DSH 本身的限制而做的妥协，以及桌面应用之后怎么处理。判断「是 DS Bot 的 bug 还是 DSH 的限制」先看这里 |
-| [角色与权限](2026-10-07-roles-and-permissions.md) | 用户、Main Bot、群管理员、普通 Bot 各能做什么；Bot 的权限预设和群的统一权限 |
-| [隐私 Bot](2026-10-27-private-bots.md) | 只有用户能开关；其他 Bot 读不到它的文件夹、记忆和会话，外发由用户批准；独立文件夹、删除后的保护和隔离边界 |
-| [群聊](2026-10-07-group-chat.md) | 谁来回答、按顺序发言、@ 提及、轮数上限、干活中的进度和迟到的回复、审批 |
-| [浏览器、搜索、密钥和连接器](2026-10-08-browser-and-secrets.md) | 每个 Bot 的浏览器和 `read_browser`、`auto` 联网搜索、密钥卡和替换规则、GitHub 连接器 |
-| [浏览器插件](2026-10-21-browser-plugins.md) | 历史设计，R5-34 已由产品 Browser resource/lease 和受控 Electron bridge 取代 |
-| [上下文与记忆](2026-10-09-context-and-memory.md) | 对话分段、上下文管家（压缩还是换段）、交接包、`read_own_chat`；记忆的存放、格式、权限、整理和冻结 |
-| [Bot 运行配置](2026-10-10-bot-runtime.md) | Agent 预设、每个 Bot 的模型和思考强度、工作文件夹、能力（MCP、技能、能力包） |
-| [AGENTS.md 维护](2026-10-27-agents-md-upkeep.md) | 从项目工作中审阅持久规则；用户批准后才原子写入 |
-| [长消息](2026-10-16-long-messages.md) | state.json 只存开头；超过 2 万字的 Bot 消息转成 DSH 文件；成员和界面怎么读全文 |
-| [桌面应用](2026-10-16-desktop-app.md) | 壳、引擎和界面怎么分；锁定的 DSH 版本、独立的数据位置、首次启动和导入、插件怎么兼容 DSH、安装和更新 |
-| [Bot 之间派活](2026-10-16-bot-handoffs.md) | Bot 看得到对方的状态；没读的消息合成一条；派活树：下面的活交回后才往上交，不许发给在等结果的 Bot；不设总量和链长上限 |
-| [Bot 视图](2026-10-20-widget-views.md) | Bot 在回答里画视图：固定组件目录的 JSON 蓝图（含图表、输入和本地公式），目录外的放沙箱 html；提问卡回路的泛化 |
-| [Side chat（侧边对话）](2026-10-21-btw.md) | 人顺带问一句：侧栏里的常驻对话，以与会话同构的请求回答、不执行工具、不打断、不进模型可见历史；可追问、可开多条；Bot 之间的 `ask_bot` 另行提案 |
-| [消息布局和宽度](2026-10-22-message-layout.md) | 气泡 / 平铺两种布局；平铺时 Bot 的话带头像、名字、时间；气泡宽度和平铺正文宽度各用一个滑块，按正文列的百分比调 |
-| [手机 App](2026-10-24-mobile-app.md) | iOS 和 Android 远程操控电脑上的 Bot 团队：手机不跑 Agent；扫码配对、端到端加密、电脑只往外连；完整功能，高权限操作要解锁手机 |
-| [Office 文档](2026-10-27-office-documents.md) | Bot 离线处理 .docx/.pptx/.xlsx：应用带的 payload、`office.js` 命令行、office 路由换成带 `office-tools` 的版本 |
-| [Node 24 单一运行时](2026-11-10-node-24-support.md) | 只支持 Node 24；移除 Node 22 引擎声明、类型包和 CI 矩阵腿 |
-| [Super-agent 独立 profile 与聊天界面](2026-11-12-superagent-profile-and-ui.md) | 新 `ds-superagent` profile、两阶段 UI 接线、v1 范围和 DSH 升级保护 |
+| [DSH 让步总账](2026-10-13-dsh-concessions.md) | 早期 DSH 插件与客户端限制的处理方式 |
+| [角色与权限](2026-10-07-roles-and-permissions.md) | 早期协作者、群管理员和记忆权限模型 |
+| [隐私协作者](2026-10-27-private-bots.md) | 早期隐私隔离与授权边界 |
+| [群聊](2026-10-07-group-chat.md) | 早期群成员、发言轮次、提及和审批设计 |
+| [浏览器、搜索、密钥和连接器](2026-10-08-browser-and-secrets.md) | 早期资源与凭据设计；当前能力见 R5 规格 |
+| [浏览器插件](2026-10-21-browser-plugins.md) | 已被产品 Browser resource、lease 和受控 Electron bridge 取代 |
+| [上下文与记忆](2026-10-09-context-and-memory.md) | 早期会话分段、压缩、交接和记忆方案 |
+| [协作者运行配置](2026-10-10-bot-runtime.md) | 早期角色、模型、工作区和能力配置 |
+| [AGENTS.md 维护](2026-10-27-agents-md-upkeep.md) | 从项目工作中审阅持久规则 |
+| [长消息](2026-10-16-long-messages.md) | 早期消息正文与附件读取设计 |
+| [桌面应用](2026-10-16-desktop-app.md) | 早期桌面外壳、profile、数据位置和更新方案 |
+| [工作交接](2026-10-16-bot-handoffs.md) | 早期协作者间派活与交接模型 |
+| [结构化视图](2026-10-20-widget-views.md) | 早期结构化内容和交互视图方案 |
+| [Side chat（侧边对话）](2026-10-21-btw.md) | 早期侧边提问方案 |
+| [消息布局和宽度](2026-10-22-message-layout.md) | 早期聊天布局设置 |
+| [手机 App](2026-10-24-mobile-app.md) | 未接线的移动端设想，不代表当前可用功能 |
+| [Office 文档](2026-10-27-office-documents.md) | 早期 Office 工具与运行时方案；当前入口见产品文档 |
+| [Node 24 单一运行时](2026-11-10-node-24-support.md) | 当前 Node 运行时约束的决策记录 |
+| [独立 profile 与聊天界面](2026-11-12-superagent-profile-and-ui.md) | 被单 profile、单包方案取代的过渡设计 |
+
+## 新设计
+
+大功能请在同一个 Pull Request 中附上 `docs/plans/<日期>-<主题>.md`，记录相关 Issue、设计取舍、可验证行为和已知限制。改动已定设计前，先在 Issue 中和维护者确认。

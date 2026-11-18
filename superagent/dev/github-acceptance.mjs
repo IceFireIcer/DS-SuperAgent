@@ -77,7 +77,7 @@ try {
   }
   const checks = await waitForChecks()
 
-  directory = await mkdtemp(join(tmpdir(), 'ds-bot-github-acceptance-'))
+  directory = await mkdtemp(join(tmpdir(), 'ds-superagent-github-acceptance-'))
   storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   if (realModel) {
     if (!modelKey) throw new Error('Set SUPERAGENT_MODEL_KEY or POKEXIAO_API_KEY for a real-model acceptance run.')
@@ -191,7 +191,7 @@ try {
     () => storage?.close(),
     async () => {
       if (!directory) return
-      if (!directory.startsWith(join(tmpdir(), 'ds-bot-github-acceptance-'))) throw new Error('Unexpected GitHub acceptance cleanup directory.')
+      if (!directory.startsWith(join(tmpdir(), 'ds-superagent-github-acceptance-'))) throw new Error('Unexpected GitHub acceptance cleanup directory.')
       await rm(directory, { recursive: true, force: true })
     },
   ]) {

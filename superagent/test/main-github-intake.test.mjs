@@ -16,7 +16,7 @@ function* maxTokensResponse(text) {
 }
 
 test('a new GitHub request enters Main exclusively and later events stay on the same Ticket', { timeout: 25000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-main-github-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-main-github-'))
   const workspace = join(directory, 'workspace')
   await mkdir(workspace)
   let storage, native, sessions, desktop, github
@@ -25,7 +25,7 @@ test('a new GitHub request enters Main exclusively and later events stay on the 
     const disposers = [
       () => desktop?.effects.stop(), () => github?.effects.stop(), () => desktop?.shutdown(), () => github?.shutdown(),
       () => sessions?.close(), () => native?.fiber.dispose(), () => storage?.close(),
-      async () => { assert.ok(directory.startsWith(join(tmpdir(), 'ds-bot-main-github-'))); await rm(directory, { recursive: true, force: true }) },
+      async () => { assert.ok(directory.startsWith(join(tmpdir(), 'ds-superagent-main-github-'))); await rm(directory, { recursive: true, force: true }) },
     ]
     const errors = []
     for (const dispose of disposers) try { await dispose() } catch (error) { errors.push(error) }
@@ -157,7 +157,7 @@ test('a new GitHub request enters Main exclusively and later events stay on the 
 })
 
 test('pending Main handoffs recheck native currentness and authorization before notifying Main', { timeout: 25000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-main-github-stale-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-main-github-stale-'))
   const workspace = join(directory, 'workspace')
   await mkdir(workspace)
   let storage, native, sessions, desktop, github
@@ -165,7 +165,7 @@ test('pending Main handoffs recheck native currentness and authorization before 
     const errors = []
     for (const dispose of [() => desktop?.effects.stop(), () => github?.effects.stop(), () => desktop?.shutdown(), () => github?.shutdown(),
       () => sessions?.close(), () => native?.fiber.dispose(), () => storage?.close(),
-      async () => { assert.ok(directory.startsWith(join(tmpdir(), 'ds-bot-main-github-stale-'))); await rm(directory, { recursive: true, force: true }) }]) {
+      async () => { assert.ok(directory.startsWith(join(tmpdir(), 'ds-superagent-main-github-stale-'))); await rm(directory, { recursive: true, force: true }) }]) {
       try { await dispose() } catch (error) { errors.push(error) }
     }
     if (errors.length) throw new AggregateError(errors, 'Stale Main handoff fixture cleanup failed.')
@@ -218,7 +218,7 @@ test('pending Main handoffs recheck native currentness and authorization before 
 })
 
 test('a failed source Main turn recovers with a new stable turn while keeping the source request identity', { timeout: 25000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-main-github-recovery-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-main-github-recovery-'))
   const workspace = join(directory, 'workspace')
   await mkdir(workspace)
   let storage, native, sessions, desktop, github, sourceTurns = 0
@@ -226,7 +226,7 @@ test('a failed source Main turn recovers with a new stable turn while keeping th
     const errors = []
     for (const dispose of [() => desktop?.effects.stop(), () => github?.effects.stop(), () => desktop?.shutdown(), () => github?.shutdown(),
       () => sessions?.close(), () => native?.fiber.dispose(), () => storage?.close(),
-      async () => { assert.ok(directory.startsWith(join(tmpdir(), 'ds-bot-main-github-recovery-'))); await rm(directory, { recursive: true, force: true }) }]) {
+      async () => { assert.ok(directory.startsWith(join(tmpdir(), 'ds-superagent-main-github-recovery-'))); await rm(directory, { recursive: true, force: true }) }]) {
       try { await dispose() } catch (error) { errors.push(error) }
     }
     if (errors.length) throw new AggregateError(errors, 'Main source recovery fixture cleanup failed.')
@@ -274,7 +274,7 @@ test('a failed source Main turn recovers with a new stable turn while keeping th
 })
 
 test('a context-full source Main turn rolls over durably and retries the same handoff in the child Session', { timeout: 30000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-main-github-rollover-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-main-github-rollover-'))
   const workspace = join(directory, 'workspace')
   await mkdir(workspace)
   let storage, native, sessions, desktop, github
@@ -283,7 +283,7 @@ test('a context-full source Main turn rolls over durably and retries the same ha
     const errors = []
     for (const dispose of [() => desktop?.effects.stop(), () => github?.effects.stop(), () => desktop?.shutdown(), () => github?.shutdown(),
       () => sessions?.close(), () => native?.fiber.dispose(), () => storage?.close(),
-      async () => { assert.ok(directory.startsWith(join(tmpdir(), 'ds-bot-main-github-rollover-'))); await rm(directory, { recursive: true, force: true }) }]) {
+      async () => { assert.ok(directory.startsWith(join(tmpdir(), 'ds-superagent-main-github-rollover-'))); await rm(directory, { recursive: true, force: true }) }]) {
       try { await dispose() } catch (error) { errors.push(error) }
     }
     if (errors.length) throw new AggregateError(errors, 'Main source rollover fixture cleanup failed.')
