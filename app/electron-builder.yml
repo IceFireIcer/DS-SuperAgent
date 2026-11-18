@@ -1,6 +1,6 @@
 appId: io.github.icefireicer.ds-superagent
 productName: DS SuperAgent
-copyright: Copyright 2026 Fei2411 and the DS Bot contributors
+copyright: Copyright 2026 Fei2411 and the DS SuperAgent contributors
 artifactName: DS-SuperAgent-${version}-${os}-${arch}.${ext}
 directories:
   output: dist-pack
