@@ -14,7 +14,8 @@ export const REPOSITORY = 'IceFireIcer/DS-SuperAgent'
 
 export function formerDataFolders(app) {
   const appData = app.getPath('appData')
-  return [join(homedir(), '.ds-bot'), join(appData, 'DS Bot'), join(appData, 'DeepSeek Bot')]
+  const legacyShellNames = ['DS Bot', 'DeepSeek Bot']
+  return [join(homedir(), '.ds-bot'), ...legacyShellNames.map(name => join(appData, name))]
 }
 
 export function ensureWritableFolder(folder) {

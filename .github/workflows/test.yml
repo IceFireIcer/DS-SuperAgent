@@ -246,8 +246,8 @@ jobs:
       - name: Seed product and former user data
         shell: pwsh
         run: |
-          $folders = (Join-Path $HOME '.ds-superagent'), (Join-Path $env:APPDATA 'DS SuperAgent'),
-            (Join-Path $HOME '.ds-bot'), (Join-Path $env:APPDATA 'DS Bot'), (Join-Path $env:APPDATA 'DeepSeek Bot')
+          $legacyFolders = (Join-Path $HOME '.ds-bot'), (Join-Path $env:APPDATA 'DS Bot'), (Join-Path $env:APPDATA 'DeepSeek Bot')
+          $folders = @((Join-Path $HOME '.ds-superagent'), (Join-Path $env:APPDATA 'DS SuperAgent')) + $legacyFolders
           $files = foreach ($folder in $folders) {
             New-Item -ItemType Directory -Force $folder | Out-Null
             $file = Join-Path $folder 'kept.txt'

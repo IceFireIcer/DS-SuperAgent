@@ -23,7 +23,7 @@ function fixture(testContext) {
 
 test('the desktop opens its own shell storage with former product folders present', t => {
   const { root, paths, app, env } = fixture(t)
-  const oldFiles = ['DS Bot', 'DeepSeek Bot'].map(name => {
+  const legacyFiles = ['DS Bot', 'DeepSeek Bot'].map(name => {
     const dir = join(root, name)
     mkdirSync(dir)
     const file = join(dir, 'locations.json')
@@ -38,7 +38,7 @@ test('the desktop opens its own shell storage with former product folders presen
   assert.equal(app.id, 'io.github.icefireicer.ds-superagent')
   assert.throws(() => readFileSync(join(settings, 'locations.json')), { code: 'ENOENT' })
   assert.throws(() => configureIdentity(app, { env: { ...env, DS_SUPERAGENT_SHELL_DATA: join(root, 'DS Bot') } }), /former DS Bot data/u)
-  for (const file of oldFiles) assert.equal(readFileSync(file, 'utf8'), 'sentinel')
+  for (const file of legacyFiles) assert.equal(readFileSync(file, 'utf8'), 'sentinel')
 })
 
 test('a standalone test data override also isolates the desktop settings', t => {
@@ -51,7 +51,8 @@ test('the standalone installer does not take ownership of the former application
   const config = parse(readFileSync(new URL('../electron-builder.yml', import.meta.url), 'utf8'))
   const nsisNamespace = UUID.parse('50e065bc-3134-11e6-9bab-38c9862bdaf3')
   const identity = config.nsis.guid ?? UUID.v5(config.appId, nsisNamespace)
-  assert.notEqual(identity, UUID.v5('io.github.fei2411.deepseekbot', nsisNamespace))
+  const legacyInstaller = UUID.v5('io.github.fei2411.deepseekbot', nsisNamespace)
+  assert.notEqual(identity, legacyInstaller)
   assert.notEqual(identity, UUID.v5('io.github.fei2411.dsbot', nsisNamespace))
   assert.equal(config.nsis.deleteAppDataOnUninstall, false)
   assert.equal(config.deb.packageName, 'ds-superagent')
