@@ -1,5 +1,7 @@
 # T55 evidence index audit: T01–T54
 
+The current R5 acceptance results and the scope decision for T58 are in [T55 R5 local product acceptance](t55-r5-local.md). This audit preserves the earlier evidence.
+
 Audit date: 2026-11-11 (Asia/Shanghai). Issue: [T55 #83 — 验收四目标的完整产品协作场景](https://github.com/IceFireIcer/DS-SuperAgent/issues/83). Initial checkout: dev, commit `221c743544417623e00e14346bc5962550848b71`.
 
 ## Scope and evidence rules

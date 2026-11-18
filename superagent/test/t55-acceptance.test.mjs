@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { spawn, spawnSync } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -41,7 +41,7 @@ function previousSuccess(output) {
 test('T55 preflight failure replaces a previous success and archives the failed attempt', t => {
   const { output, run } = fixture(t)
   const prior = previousSuccess(output)
-  // No t01 document exists: the public CLI must publish this attempt's failure before building.
+  // A missing R5 record must publish this attempt's failure before building.
   const result = run()
   assert.equal(result.error, undefined, result.stderr)
   assert.equal(result.status, 1, result.stdout + result.stderr)
@@ -67,9 +67,10 @@ test('T55 --plan needs no prerequisites and leaves prior evidence untouched', t 
   assert.equal(plan.model, 'mock')
   assert.equal(plan.phaseTimeoutMs, 300000)
   assert.equal(plan.testFileConcurrency, 1)
-  assert.deepEqual(plan.phases.map(phase => phase.id), ['continuous-mock', 'long-command-stop', 'handoff', 'proactive-supervision', 'client-host'])
-  assert.equal(plan.phases[0].files.includes('product-scenario'), true)
-  assert.ok(plan.unaccepted.some(item => item.startsWith('A26:')))
+  assert.equal(plan.phases[0].script, 'app/scripts/check-packed.mjs')
+  assert.ok(plan.phases.some(phase => phase.files?.includes('product-client-gateway')))
+  assert.ok(plan.outOfScope.some(item => item.includes('second device')))
+  assert.ok(plan.unaccepted.some(item => item.includes('GitHub')))
   assert.equal(existsSync(output), false)
   const prior = previousSuccess(output)
   const before = readdirSync(directory, { recursive: true }).sort()
@@ -111,16 +112,22 @@ test('T55 real SIGTERM aborts the report and terminates its build process tree',
   const plan = JSON.parse(planResult.stdout)
   const implementation = join(directory, 'docs/superagent/implementation')
   mkdirSync(implementation, { recursive: true })
-  for (let number = 1; number <= 54; number++) writeFileSync(join(implementation, `t${String(number).padStart(2, '0')}.md`), `Fixture evidence T${number}.\n`)
+  for (let number = 1; number <= 36; number++) writeFileSync(join(implementation, `r5-${String(number).padStart(2, '0')}.md`), `Fixture evidence R5-${number}.\n`)
   for (const name of ['README.md', 't55-evidence.md']) writeFileSync(join(implementation, name), 'Fixture evidence index.\n')
-  mkdirSync(join(directory, 'superagent/test'), { recursive: true })
-  for (const phase of plan.phases) for (const name of phase.files) {
-    writeFileSync(join(directory, `superagent/test/${name}.test.mjs`), "throw new Error('An interrupted build must never reach a phase.');\n")
+  const inputs = ['docs/superagent/issues/T55.md', 'docs/superagent/issues/T58.md', 'superagent/dsh/dev/mock-llm.mjs',
+    ...plan.phases.flatMap(phase => phase.script ? [phase.script] : phase.files.map(name => `${phase.package ?? 'superagent'}/test/${name}.test.mjs`))]
+  for (const file of inputs) {
+    const path = join(directory, file)
+    mkdirSync(join(path, '..'), { recursive: true })
+    writeFileSync(path, 'Fixture input.\n')
   }
-  // The runner only queries HEAD; a minimal isolated Git fixture avoids touching the working repo.
-  mkdirSync(join(directory, '.git/objects'), { recursive: true })
-  mkdirSync(join(directory, '.git/refs'), { recursive: true })
-  writeFileSync(join(directory, '.git/HEAD'), `${'1'.repeat(40)}\n`)
+  const executable = join(directory, 'fixture.exe')
+  const installer = join(directory, 'installer.exe')
+  mkdirSync(join(directory, 'resources'))
+  for (const file of [executable, installer, join(directory, 'resources', 'app.asar')]) writeFileSync(file, 'Fixture artifact.\n')
+  execFileSync('git', ['init', '--quiet'], { cwd: directory, env })
+  execFileSync('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', '-c', 'commit.gpgsign=false',
+    'commit', '--quiet', '--allow-empty', '-m', 'Initialize isolated acceptance fixture'], { cwd: directory, env })
   mkdirSync(join(directory, 'superagent/scripts'), { recursive: true })
   writeFileSync(join(directory, 'superagent/scripts/build.mjs'), `
 import { spawn } from 'node:child_process'
@@ -132,7 +139,7 @@ writeFileSync('build-started.json', JSON.stringify(started))
 console.log(JSON.stringify(started))
 setTimeout(() => process.exit(0), 20000)
 `)
-  const child = spawn(process.execPath, [runner], { cwd: directory, env, stdio: ['ignore', 'pipe', 'pipe'] })
+  const child = spawn(process.execPath, [runner, '--app', executable, '--installer', installer], { cwd: directory, env, stdio: ['ignore', 'pipe', 'pipe'] })
   const logs = []
   child.stdout.on('data', data => logs.push(data))
   child.stderr.on('data', data => logs.push(data))

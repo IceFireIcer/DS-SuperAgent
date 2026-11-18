@@ -24,6 +24,10 @@
 
 2026-11-17 收口 R5-33/#125：产品 Host 支持共享 PostgreSQL 业务库与 Session provider，托管 profile 在租约替换前取得新 epoch，并把真实 ended waiting-human Assignment 纳入接管对账。真实两进程测试恢复同一 Main/Router/Worker 工作；分层窄测继续覆盖停止、unknown、设备作业、客户端游标、业务提交失败和 Session writer epoch。详见[实施记录](implementation/r5-33.md)及[双轴复核](implementation/reviews/r5-33.md)。真实服务器、第二设备、持续四目标与飞书租户仍分别归 T58/T55 或暂缓。
 
+## 2026-11-19 验收更新
+
+36 张 R5 实施工单均已收口。外部托管和实体第二设备已移出最终验收，T58/#92 按范围取消关闭。T55/#83 继续在本机验收四目标。当前产品的 GitHub 出站缺陷由 #129 跟踪。[本轮 T55 记录](implementation/t55-r5-local.md)
+
 ## 新票映射
 
 | 计划 ID | GitHub Issue / 交付行为 | 直接阻塞 |

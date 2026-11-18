@@ -2,8 +2,9 @@
 // send a message, wait for the reply, then close the window the way a user does: the window hides
 // and the app goes on. The window comes back when the app is started again, and the app ends the
 // way the tray's Quit ends it. Fails on a page error or a non-zero exit.
-// Usage: node scripts/check-packed.mjs [app executable] [screenshot.png]
+// Usage: node scripts/check-packed.mjs [app executable] [screenshot.png | --upgrade-to next executable | --upgrade-with NSIS installer]
 // The executable defaults to the one that `npm run pack` or `npm run dist` writes into dist-pack/.
+import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
 import { connect, createServer } from 'node:net'
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
@@ -13,10 +14,27 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { hostExecutable } from '../src/host-process.mjs'
 import { PRODUCT_NAME, PRODUCT_SLUG } from '../src/product.mjs'
+import { isNewer } from '../src/updates.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const [given, shotFile] = process.argv.slice(2)
+const [given, option, nextExecutable] = process.argv.slice(2)
+const installUpgrade = option === '--upgrade-with'
+const upgrade = option === '--upgrade-to' || installUpgrade
+const shotFile = upgrade ? undefined : option
 const executable = given || packedExecutable()
+
+if (upgrade && (!nextExecutable || !existsSync(nextExecutable))) {
+  console.error('check-packed: the next build is missing')
+  process.exit(2)
+}
+if (installUpgrade) {
+  const installed = realpathSync.native(dirname(resolve(executable)))
+  const root = dirname(installed)
+  if (process.platform !== 'win32' || basename(installed) !== 'program' || !basename(root).startsWith('ds-superagent-t55-install-')
+    || dirname(root) !== realpathSync.native(tmpdir())) {
+    throw new Error('Run --upgrade-with only on the temporary Windows installation prepared for T55.')
+  }
+}
 
 function packedExecutable() {
   const out = join(root, 'dist-pack')
@@ -83,10 +101,11 @@ function outsideCheckout(file) {
   const fromCheckout = relative(resolve(root, '..'), file)
   if (fromCheckout.startsWith('..') || isAbsolute(fromCheckout)) return file
   const appDir = process.platform === 'darwin' ? resolve(file, '..', '..', '..') : dirname(file)
-  const copy = join(work, basename(appDir))
-  cpSync(appDir, copy, { recursive: true, verbatimSymlinks: true })
-  console.log(`check-packed: runs a copy of ${appDir} in ${work}`)
-  return join(copy, relative(appDir, file))
+  const copy = mkdtempSync(join(work, 'program-'))
+  const installed = join(copy, basename(appDir))
+  cpSync(appDir, installed, { recursive: true, verbatimSymlinks: true })
+  console.log('check-packed: copied the package outside the checkout')
+  return join(installed, relative(appDir, file))
 }
 
 function checkSharp(app) {
@@ -311,6 +330,64 @@ async function chat(cdp) {
   console.log(`check-packed: chat ${JSON.stringify(await evaluate('document.body.innerText.slice(-200)'))}`)
 }
 
+async function productFacts(cdp, prepare = false) {
+  const result = await cdp.call('Runtime.evaluate', { expression: `(async () => {
+    const call = async (endpoint, payload = {}) => {
+      const response = await fetch('/api/product', { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ endpoint, payload }) });
+      const result = await response.json();
+      if (!result.ok) throw new Error('Product request failed: ' + endpoint + ' (' + response.status + ')');
+      return result.value;
+    };
+    const binding = await call('open');
+    const { instanceId } = binding;
+    if (${prepare}) await call('schedule-source-set', { instanceId, commandId: 't55-disable-schedule', enabled: false });
+    const [history, source, usage, diagnostics, backups] = await Promise.all([
+      call('history', { instanceId }), call('schedule-source-read', { instanceId }), call('product-usage', { instanceId }),
+      window.dsSuperagentApp.diagnostics(), window.dsSuperagentApp.backups.list(),
+    ]);
+    return { binding, messages: history.messages.map(message => ({ id: message.id, role: message.role })), enabled: source.enabled,
+      mainTokens: usage.roles.main.totalTokens, version: diagnostics.appVersion,
+      upgradeBackups: backups.filter(backup => backup.purpose === 'upgrade'), events: diagnostics.events.map(event => event.code) };
+  })()`, returnByValue: true, awaitPromise: true })
+  if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text)
+  return result.result.value
+}
+
+async function checkColdUpgrade(before, env) {
+  let packedApp
+  if (installUpgrade) {
+    packedApp = resolve(executable)
+    const setup = spawnSync(resolve(nextExecutable), ['/S', '--updated', '/no-desktop-shortcut', `/D=${dirname(packedApp)}`], {
+      env, windowsHide: true, windowsVerbatimArguments: true, timeout: 300_000,
+    })
+    assert.ifError(setup.error)
+    assert.equal(setup.status, 0, 'the native installer must finish replacing the program')
+    console.log('check-packed: native installer completed')
+  } else packedApp = outsideCheckout(resolve(nextExecutable))
+  const port = await freePort()
+  const app = spawn(packedApp, [`--remote-debugging-port=${port}`], { env, stdio: 'inherit' })
+  children.push(app)
+  const exited = new Promise(done => app.once('exit', done))
+  const cdp = devtools((await appPage(port, Date.now() + 120_000)).webSocketDebuggerUrl, [])
+  await cdp.opened
+  try {
+    const after = await productFacts(cdp)
+    assert.ok(isNewer(after.version, before.version), 'the next packaged version must be newer')
+    assert.deepEqual(after.binding, before.binding)
+    assert.deepEqual(after.messages, before.messages)
+    assert.equal(after.enabled, false)
+    assert.equal(after.mainTokens, before.mainTokens)
+    assert.ok(after.events.includes('UPGRADE_BACKUP_CREATED'))
+    assert.ok(after.upgradeBackups.some(backup => backup.restorable && backup.business.recordCount > 0 && backup.sessions.sessionCount > 0))
+    console.log(`check-packed: ${JSON.stringify({ coldUpgrade: [before.version, after.version],
+      mainId: after.binding.mainId, messages: after.messages.length, mainTokens: after.mainTokens, scheduleEnabled: after.enabled,
+      businessRecords: after.upgradeBackups[0].business.recordCount, sessions: after.upgradeBackups[0].sessions.sessionCount })}`)
+  } finally { cdp.close() }
+  await browserClose(port)
+  assert.equal(await Promise.race([exited, sleep(40_000).then(() => null)]), 0, 'the upgraded app must shut down normally')
+}
+
 let failed = false
 const problems = []
 try {
@@ -362,6 +439,11 @@ try {
     console.log(`check-packed: saved ${resolve(shotFile)}`)
   }
   if (chatError) throw chatError
+  const before = upgrade ? await productFacts(cdp, true) : undefined
+  if (before) {
+    assert.ok(before.mainTokens > 0 && before.messages.length >= 2)
+    assert.equal(before.enabled, false)
+  }
   // Close the native window: a renderer-initiated close can stop page CDP evaluations even
   // when Electron prevents the close. Read visibility from the main process as well.
   await windowState('win.close()')
@@ -390,6 +472,7 @@ try {
   if (outcome === undefined) throw new Error('the app did not exit after the quit')
   console.log(`check-packed: app exited (code ${String(outcome.code)}, signal ${String(outcome.signal)})`)
   if (outcome.code !== 0) throw new Error(`the app exited with code ${String(outcome.code)}`)
+  if (before) await checkColdUpgrade(before, env)
   console.log('check-packed: passed')
 } catch (error) {
   failed = true
