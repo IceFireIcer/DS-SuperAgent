@@ -4,6 +4,8 @@
 
 2026-11-18 完成一轮产品身份清理：当前面向用户的说明、愿景、反馈模板、UI 文案、安装元数据、移动端占位身份和临时测试目录统一使用 DS SuperAgent / `ds-superagent`。旧产品目录、安装 ID、profile bundle、迁移标记、浏览器持久分区与 v1 记忆导出 schema 保留为数据隔离或读取契约；早期 T/R5 记录中的路径与数字仍按当时证据解释。`CHANGELOG.md` 是受保护的历史发布记录，不在本轮修改范围内。
 
+身份收口提交 [`a196ccd2`](https://github.com/IceFireIcer/DS-SuperAgent/commit/a196ccd282848c024c5a859b6bf1f639ad9733f2) 的 Node 24 定向验证：桌面身份、首次运行、运行时和浏览器测试 **22/22**；仓库脚本 **16/16**；客户端生成一致性、UI 边界及实施记录检查通过。Windows、macOS arm64/x64、Linux deb/AppImage 安装包矩阵及 `Test result` 在[运行 44270836984](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/44270836984) 全部通过。未运行全量 CI。
+
 - 历史实施批次： [v2.1](../spec.md)、总体 Issue #1 的 T01—T60，保留当时实施记录。
 - 当前规格：[R5](../spec-r5.md)，总体 Issue #1 的 R5-01—R5-36，以当前 R5 实施记录和代码为验收依据。
 - 集成基线：`dev` 的 `14a692d`；集成分支：`feat/1-superagent-integration`。
