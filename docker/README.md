@@ -60,15 +60,17 @@ so file ownership stays right.
 
 ## Network
 
-`dsh web` binds only loopback or all interfaces (`0.0.0.0`) — never a concrete
-LAN address — and its `--host` flag refuses `0.0.0.0`, so the entrypoint writes
-a config overlay that binds all interfaces. Inside a container the publish rule
-is the real boundary, and the trust fence below still applies. The UI checks
+`dsh web` refuses wildcard addresses and requires one concrete IPv4 or IPv6
+interface address. The entrypoint defaults `DSH_HOST=auto`, selecting the
+container's first non-loopback address (or loopback in an isolated test
+container), and writes that address into a config overlay. Inside a container
+the publish rule is the real boundary, and the trust fence below still applies. The UI checks
 the `Host` header of every `/api` request: loopback is always trusted, and
 every other name or IP you open it at must be listed in `DSH_TRUSTED_HOST`
 (no port — a bare entry trusts it on any port), or the API answers 403.
 `DSH_HOST=127.0.0.1` narrows the bind to loopback (e.g. a reverse proxy in the
-same network namespace); published ports then no longer reach it.
+same network namespace); published ports then no longer reach it. `DSH_HOST`
+also accepts another concrete interface address.
 
 Alternatives:
 
@@ -98,7 +100,7 @@ see `docker/.env.example` for its full list. The main variables are:
 | `DEEPSEEK_BASE_URL` | Override the endpoint (Anthropic-Messages-compatible) |
 | `DSH_TRUSTED_HOST` | Comma-separated host names / IPs the UI answers to |
 | `DSH_PORT` | Alternative `.env` deployment's host port (default 3080); edit `ports` directly in the root Compose file |
-| `DSH_HOST` | Bind address: `0.0.0.0` (default) or `127.0.0.1`; only relevant with `network_mode: host` |
+| `DSH_HOST` | Concrete bind address; `auto` selects the first interface. Only relevant with `network_mode: host` |
 | `DSH_LISTEN_PORT` | Listen port inside the container (default 3080); only relevant with `network_mode: host` |
 | `PUID` / `PGID` | User/group the server runs as and new files belong to |
 | `DSH_TELEMETRY_DISABLED` | `1` turns off dsh's anonymous telemetry |
