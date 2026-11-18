@@ -19,7 +19,8 @@ import { RemoteEnvironmentSecrets, type RemoteCredentialRecords } from './remote
 import { FeishuRuntime, type FeishuRuntimeOptions } from './feishu-runtime.js'
 import type { FeishuSourceReply } from './feishu-delivery.js'
 import { GitHubRuntime, type GitHubRuntimeOptions } from './github-runtime.js'
-import { GitHubCliTransport } from './github-api.js'
+import { GitHubCliReplyTransport, GitHubCliTransport, pinGitHubCredential, type GitHubCredentialConsumer } from './github-api.js'
+import { GitHubDeliveryChannel } from './github-delivery.js'
 import { ProductAttachments } from './product-attachments.js'
 import { productProactivePreparation } from './product-proactive.js'
 import { ProactiveWork } from './proactive-work.js'
@@ -496,18 +497,23 @@ export async function createProductHost(context: Context, config: ProductHostCon
         { channel: feishuRuntime.channel }, {}, proactive)
       feishuRuntime.bind(feishuEngine)
     }
+    let githubDelivery: GitHubDeliveryChannel | undefined
     if (config.github) {
-      const sourceInstanceId = `github:${config.github.owner}/${config.github.repo}`
-      const githubCli = new GitHubCliTransport({ ...config.github.cli,
-        withCredential: async (purpose, consume) => {
-          const manager = resourceManager
-          if (!manager) throw new CoreError('RESOURCE_UNAVAILABLE', 'No GitHub credential resource is available.')
-          const resourceId = await manager.selectedGitHubCredential(sourceInstanceId)
-          if (!resourceId) throw new CoreError('RESOURCE_UNAVAILABLE', 'Select a GitHub credential resource in product settings.')
-          return manager.use({ instanceId, resourceId, sourceInstanceId, role: 'main', purpose }, consume)
-        } })
-      const { cli: _cli, transport: trustedTransport, ...github } = config.github
+      const { cli, transport: trustedTransport, ...github } = config.github
+      const { owner, repo, postingActorId } = github
+      const sourceInstanceId = `github:${owner}/${repo}`
+      const withCredential: GitHubCredentialConsumer = async (purpose, consume) => {
+        const manager = resourceManager
+        if (!manager) throw new CoreError('RESOURCE_UNAVAILABLE', 'No GitHub credential resource is available.')
+        return manager.useSelectedGitHubCredential(sourceInstanceId, purpose, consume)
+      }
+      const githubCli = new GitHubCliTransport({ ...cli, withCredential })
       githubRuntime = new GitHubRuntime({ ...github, transport: trustedTransport ?? githubCli, storage, instanceId })
+      if (postingActorId && !trustedTransport) {
+        githubDelivery = new GitHubDeliveryChannel(() => new GitHubCliReplyTransport({ ...cli, withCredential: pinGitHubCredential(withCredential) }), {
+          storage, instanceId, sources: [{ sourceInstanceId, host: 'github.com', owner, repo, actorId: postingActorId }],
+        })
+      }
       githubEngine = new Engine(storage, instanceId, githubRuntime.sourceBinding,
         { claimUnowned: false, streamOwners: { notice: 'product-desktop', relay: 'product-desktop' } }, sessions, [], {}, {}, {}, {}, {}, proactive)
       githubRuntime.bind(githubEngine)
@@ -516,27 +522,31 @@ export async function createProductHost(context: Context, config: ProductHostCon
       deliverSourceReply?: (reply: FeishuSourceReply, context: Parameters<DeliveryChannel['deliver']>[1]) => ReturnType<DeliveryChannel['deliver']>
       reconcileSourceReply?: (reply: FeishuSourceReply, context: Parameters<DeliveryChannel['deliver']>[1]) => ReturnType<DeliveryChannel['deliver']>
     }
-    const channel: ProductDeliveryChannel | undefined = feishuRuntime || githubRuntime ? {
-      deliver: (delivery, context) => delivery.destination.sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId
-        ? feishuRuntime!.channel.deliver(delivery, context)
-        : delivery.destination.sourceInstanceId === 'product-desktop' ? localDeliveryChannel.deliver(delivery, context)
-          : Promise.resolve({ type: 'permanent', reason: 'DESTINATION_SOURCE_DISABLED' }),
-      reconcile: (delivery, context) => delivery.destination.sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId
-        ? feishuRuntime!.channel.reconcile(delivery, context)
-        : delivery.destination.sourceInstanceId === 'product-desktop' ? localDeliveryChannel.deliver(delivery, context)
-          : Promise.resolve({ type: 'permanent', reason: 'DESTINATION_SOURCE_DISABLED' }),
+    const channelFor = (sourceInstanceId: string): DeliveryChannel | undefined => {
+      if (sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId) return feishuRuntime.channel
+      if (sourceInstanceId === githubRuntime?.sourceBinding.sourceInstanceId) return githubDelivery
+      if (sourceInstanceId === 'product-desktop') return localDeliveryChannel
+    }
+    const channel: ProductDeliveryChannel = {
+      deliver: async (delivery, context) => channelFor(delivery.destination.sourceInstanceId)?.deliver(delivery, context)
+        ?? { type: 'permanent', reason: 'DESTINATION_SOURCE_DISABLED' },
+      reconcile: async (delivery, context) => {
+        const target = channelFor(delivery.destination.sourceInstanceId)
+        if (target === localDeliveryChannel) return target.deliver(delivery, context)
+        return target?.reconcile?.(delivery, context) ?? { type: 'unknown', reason: 'DESTINATION_SOURCE_DISABLED' }
+      },
       deliverSourceReply: (reply, context) => reply.destination.sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId
         ? feishuRuntime!.channel.deliverSourceReply(reply, context)
         : Promise.resolve({ type: 'unknown', reason: 'DESTINATION_SOURCE_DISABLED' }),
       reconcileSourceReply: (reply, context) => reply.destination.sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId
         ? feishuRuntime!.channel.reconcileSourceReply(reply, context)
         : Promise.resolve({ type: 'unknown', reason: 'DESTINATION_SOURCE_DISABLED' }),
-    } : undefined
+    }
     engine = new Engine(storage, instanceId, { sourceInstanceId: 'product-desktop', actorId, allowedActorIds: [actorId],
       ...(config.workerMcpTool || browserAdapter ? { hostCapabilities: {
         ...(config.workerMcpTool ? { mcp: true } : {}), ...(browserAdapter ? { browser: true } : {}),
       } } : {}) }, {}, sessions,
-      environments, {}, {}, {}, channel ? { channel } : {},
+      environments, {}, {}, {}, { channel },
       { ...(config.hostId === undefined ? {} : { hostId: config.hostId }),
         ...(config.leaseMs === undefined ? {} : { leaseMs: config.leaseMs }) }, proactive, attachments)
     await engine.acquireHost()

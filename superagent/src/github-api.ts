@@ -1,6 +1,8 @@
 import { execFile } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { promisify } from 'node:util'
 import { CoreError } from './model.js'
+import { isGitHubDeliveryComment } from './github-delivery.js'
 import type { GitHubEvent } from './channels.js'
 import type { GitHubTransport } from './pollers.js'
 import type { GitHubComment, GitHubReplyRequest, GitHubReplyTransport } from './github-delivery.js'
@@ -22,6 +24,21 @@ export interface GitHubCliTransportOptions {
   /** Inject the API call for tests; the default runs the authenticated `gh api`. */
   runner?: GitHubApiRunner
   withCredential?: GitHubCredentialConsumer
+}
+
+/** Bind the native actor and all subsequent operations to the credential verified for this delivery. */
+export function pinGitHubCredential(withCredential: GitHubCredentialConsumer): GitHubCredentialConsumer {
+  let fingerprint: string | undefined
+  return async (purpose, consume) => {
+    const result = await withCredential(purpose, async secret => {
+      const current = createHash('sha256').update(secret).digest('hex')
+      fingerprint ??= current
+      if (fingerprint !== current) return { changed: true as const }
+      return { changed: false as const, value: await consume(secret) }
+    })
+    if (result.changed) throw new CoreError('RESOURCE_STALE', 'The GitHub credential changed during delivery.')
+    return result.value
+  }
 }
 
 /** Real GitHub transport over the authenticated `gh api` CLI; no token is stored or printed. */
@@ -80,8 +97,8 @@ export class GitHubCliTransport implements GitHubTransport {
     const changedActors = new ChangedActorEnricher(run, base)
     for (const issue of issues) {
       if (!issue?.pull_request) {
-        events.push(await changedActors.enrich(issueEvent(issue, repository), issue))
         const comments = await listPages(run, `${base}/issues/${issue.number}/comments?per_page=${pageSize}`, 'comment')
+        events.push(withCommentActivity(await changedActors.enrich(issueEvent(issue, repository), issue), comments))
         for (const comment of comments) if (comment?.id) events.push(commentEvent(comment, issue.number, repository))
         continue
       }
@@ -90,7 +107,7 @@ export class GitHubCliTransport implements GitHubTransport {
         events.push(await changedActors.enrich(deletedPullEvent(issue, repository), issue))
         continue
       }
-      events.push(await changedActors.enrich(pullEvent(pull, repository), pull))
+      const parent = await changedActors.enrich(pullEvent(pull, repository), pull)
       const reviews = await listPages(run, `${base}/pulls/${pull.number}/reviews?per_page=${pageSize}`, 'review')
       for (const review of reviews) if (review?.submitted_at) events.push(reviewEvent(review, pull.number, repository))
       if (pull.head?.sha) {
@@ -98,6 +115,7 @@ export class GitHubCliTransport implements GitHubTransport {
         for (const checkRun of checks) if (checkRun?.id) events.push(checkRunEvent(checkRun, pull.number, repository, pull.updated_at))
       }
       const comments = await listPages(run, `${base}/issues/${issue.number}/comments?per_page=${pageSize}`, 'comment')
+      events.push(withCommentActivity(parent, comments))
       for (const comment of comments) if (comment?.id) events.push(commentEvent(comment, issue.number, repository))
     }
     return events.sort((left, right) => left.cursor.localeCompare(right.cursor))
@@ -120,13 +138,28 @@ export class GitHubCliReplyTransport implements GitHubReplyTransport {
   }
 
   private async api(path: string, request: GitHubApiRequest & { signal: AbortSignal }) {
+    const withCredential = this.options.withCredential
+    if (!withCredential) return this.request(path, request)
+    const result = await withCredential('outbound', async secret => {
+      try { return { ok: true as const, value: await this.request(path, request, secret) } }
+      catch (error) {
+        const code = error instanceof CoreError && /^GITHUB_HTTP_\d{3}$/u.test(error.code) ? error.code : 'GITHUB_TRANSPORT_UNKNOWN'
+        return { ok: false as const, code }
+      }
+    })
+    if (!result.ok) throw new CoreError(result.code, 'The GitHub API did not return a confirmed response.')
+    return result.value
+  }
+
+  private async request(path: string, request: GitHubApiRequest & { signal: AbortSignal }, secret?: string) {
     request.signal.throwIfAborted()
     if (this.options.runner) return this.options.runner(path, request)
     const args = ['api', '--hostname', request.host ?? 'github.com', '--method', request.method ?? 'GET', path]
     if (request.body) args.push('--input', '-')
     return new Promise<unknown>((resolve, reject) => {
       const child = execFile(this.options.command ?? 'gh', args, { maxBuffer: this.options.maxBuffer ?? 4 * 1024 * 1024,
-        signal: request.signal, timeout: 30000, windowsHide: true }, (error, stdout, stderr) => {
+        signal: request.signal, timeout: 30000, windowsHide: true,
+        ...(secret === undefined ? {} : { env: { ...process.env, GH_TOKEN: secret } }) }, (error, stdout, stderr) => {
         if (error) {
           const status = stderr.match(/\bHTTP (\d{3})\b/u)?.[1]
           reject(new CoreError(status ? `GITHUB_HTTP_${status}` : 'GITHUB_TRANSPORT_UNKNOWN', 'The GitHub API did not return a confirmed response.'))
@@ -212,6 +245,13 @@ async function listCheckPages(run: GitHubApiRunner, path: string): Promise<Recor
 
 function cursorFor(updatedAt: string, kind: string, id: unknown) {
   return `${updatedAt}#${kind}#${String(id).padStart(12, '0')}`
+}
+
+function withCommentActivity(event: GitHubEvent, comments: Record<string, any>[]): GitHubEvent {
+  if (event.action !== 'edited' || event.authorKind !== 'system' || event.state !== 'open') return event
+  const comment = comments.find(item => item.created_at === event.updatedAt && isGitHubDeliveryComment(item.body))
+  const author = nativeActor(comment?.user)
+  return author ? { ...event, deliveryCommentActorId: author.login } : event
 }
 
 function issueEvent(issue: Record<string, any>, repository: string): GitHubEvent {

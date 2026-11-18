@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { canonicalJson } from './commands.js'
 import { CoreError, identifier } from './model.js'
 import type { DeliveryChannel, DeliveryContext, DeliveryResult, DeliveryView } from './deliveries.js'
-import type { Storage } from './storage.js'
+import type { AsyncTx, Storage } from './storage.js'
 
 export interface GitHubReplySource { sourceInstanceId: string; host: string; owner: string; repo: string; actorId: string }
 export interface GitHubComment { id: string; url: string; body: string; authorId: string }
@@ -24,10 +24,20 @@ export interface GitHubPlatformReceipt {
 export interface GitHubDeliveryChannelOptions { storage: Storage; instanceId: string; sources: GitHubReplySource[] }
 interface Dispatch { fingerprint: string; state: 'posting' | 'sent'; receipt?: GitHubPlatformReceipt }
 
+export function isGitHubDeliveryComment(body: string | undefined) {
+  return typeof body === 'string' && /\n\n<!-- ds-superagent:[a-f0-9]{64} -->$/u.test(body)
+}
+
+const receiptKey = (idempotencyKey: string) => `github-outbound:${createHash('sha256').update(idempotencyKey).digest('hex')}`
+
+export async function readGitHubDeliveryReceipt(tx: AsyncTx, idempotencyKey: string) {
+  return (await tx.get<Dispatch>('work-command', receiptKey(idempotencyKey)))?.receipt
+}
+
 /** GitHub has no POST idempotency key. Persist the intent first and only reconcile uncertain sends; never blindly repost. */
 export class GitHubDeliveryChannel implements DeliveryChannel {
   private readonly sources: GitHubReplySource[]
-  constructor(private readonly transport: GitHubReplyTransport, private readonly options: GitHubDeliveryChannelOptions) {
+  constructor(private readonly transport: GitHubReplyTransport | (() => GitHubReplyTransport), private readonly options: GitHubDeliveryChannelOptions) {
     identifier(options.instanceId, 'instanceId')
     this.sources = structuredClone(options.sources)
     if (!this.sources.length || new Set(this.sources.map(source => source.sourceInstanceId)).size !== this.sources.length) {
@@ -46,12 +56,7 @@ export class GitHubDeliveryChannel implements DeliveryChannel {
 
   async getReceipt(idempotencyKey: string): Promise<GitHubPlatformReceipt | undefined> {
     identifier(idempotencyKey, 'idempotencyKey')
-    return this.options.storage.transaction(this.options.instanceId, async tx =>
-      (await tx.get<Dispatch>('work-command', this.key(idempotencyKey)))?.receipt)
-  }
-
-  private key(idempotencyKey: string) {
-    return `github-outbound:${createHash('sha256').update(idempotencyKey).digest('hex')}`
+    return this.options.storage.transaction(this.options.instanceId, tx => readGitHubDeliveryReceipt(tx, idempotencyKey))
   }
 
   private async send(delivery: DeliveryView, context: DeliveryContext, reconcile: boolean): Promise<DeliveryResult> {
@@ -66,20 +71,24 @@ export class GitHubDeliveryChannel implements DeliveryChannel {
     const body = `${delivery.text}\n\n${marker}`
     if (Buffer.byteLength(body) > 60000) return { type: 'permanent', reason: 'MESSAGE_TOO_LARGE: the full GitHub reply exceeds the declared 60000-byte budget.' }
     const fingerprint = createHash('sha256').update(canonicalJson([delivery.id, delivery.purpose, delivery.destination, body])).digest('hex')
-    const key = this.key(context.idempotencyKey)
+    const key = receiptKey(context.idempotencyKey)
     const previous = await this.options.storage.transaction(this.options.instanceId, tx => tx.get<Dispatch>('work-command', key))
     if (previous?.fingerprint !== undefined && previous.fingerprint !== fingerprint) return { type: 'permanent', reason: 'IDENTITY_CONFLICT: this outbound identity was used for different content or destination.' }
     if (previous?.receipt) return { type: 'success' }
     const request = { host: source.host, owner: source.owner, repo: source.repo, number, signal: context.signal }
+    const transport = typeof this.transport === 'function' ? this.transport() : this.transport
     let mayHavePosted = previous !== undefined
+    let claimedHere = false
     try {
       context.signal.throwIfAborted()
-      if (await this.transport.getActor(request) !== source.actorId) return { type: 'permanent', reason: 'GITHUB_ACTOR_MISMATCH: the authenticated account is not the configured posting actor.' }
-      const target = await this.transport.getTarget({ ...request, objectId: delivery.destination.eventId })
-      if (target.number !== number) return { type: 'permanent', reason: 'DESTINATION_MISMATCH: native GitHub evidence points at a different discussion.' }
+      if (await transport.getActor(request) !== source.actorId) return { type: 'permanent', reason: 'GITHUB_ACTOR_MISMATCH: the authenticated account is not the configured posting actor.' }
+      if (!reconcile && !previous) {
+        const target = await transport.getTarget({ ...request, objectId: delivery.destination.eventId })
+        if (target.number !== number) return { type: 'permanent', reason: 'DESTINATION_MISMATCH: native GitHub evidence points at a different discussion.' }
+      }
       const matches: GitHubComment[] = []
       for (let page = 1; page <= 10; page++) {
-        const result = await this.transport.listComments({ ...request, page })
+        const result = await transport.listComments({ ...request, page })
         for (const comment of result.items) if (comment.body.includes(marker)) {
           if (comment.authorId !== source.actorId || comment.body !== body) {
             return { type: 'unknown', reason: 'MARKER_CONFLICT: a marker without the exact authenticated author and body is not a receipt.' }
@@ -98,12 +107,23 @@ export class GitHubDeliveryChannel implements DeliveryChannel {
         return true
       })
       if (!claimed) return { type: 'unknown', reason: 'GITHUB_POST_IN_PROGRESS: reconcile the original outbound identity.' }
+      claimedHere = true
       mayHavePosted = true
       context.signal.throwIfAborted()
-      const posted = await this.transport.createComment({ ...request, body })
+      const posted = await transport.createComment({ ...request, body })
       if (posted.body !== body || posted.authorId !== source.actorId) return { type: 'unknown', reason: 'GITHUB_RECEIPT_INVALID: the API response did not confirm the expected body and posting actor.' }
       return await this.record(key, fingerprint, source, number, marker, posted)
     } catch (error) {
+      if (error instanceof CoreError && ['GRANT_DENIED', 'RESOURCE_UNAVAILABLE', 'RESOURCE_STALE'].includes(error.code)) {
+        if (claimedHere) {
+          await this.options.storage.transaction(this.options.instanceId, async tx => {
+            const current = await tx.get<Dispatch>('work-command', key)
+            if (current?.fingerprint === fingerprint && current.state === 'posting') await tx.remove('work-command', key)
+          })
+          return { type: 'permanent', reason: error.code }
+        }
+        return { type: reconcile || mayHavePosted ? 'unknown' : 'permanent', reason: error.code }
+      }
       const status = error instanceof CoreError && /^GITHUB_HTTP_\d+$/u.test(error.code) ? Number(error.code.slice('GITHUB_HTTP_'.length)) : undefined
       if (status === 401 || status === 403 || status === 404 || status === 410 || status === 422) return { type: 'permanent', reason: `GITHUB_HTTP_${status}` }
       if (!mayHavePosted) return { type: 'transient', reason: status === undefined ? 'GITHUB_PREFLIGHT_TRANSIENT' : `GITHUB_HTTP_${status}` }

@@ -405,7 +405,7 @@ export class ResourceCredentials {
   }
 
   /** Trusted adapters call this at the use site; model tools receive no vault reference. */
-  async use<T>(input: CredentialUse, consume: (secret: string) => Promise<T>): Promise<T> {
+  async use<T>(input: CredentialUse, consume: (secret: string) => Promise<T>, authorize?: (tx: AsyncTx) => Promise<void>): Promise<T> {
     fields(input, ['instanceId', 'resourceId', 'role', 'workItemId', 'environmentId', 'sourceInstanceId', 'purpose'], 'resource use')
     this.assertInstance(input.instanceId); identifier(input.resourceId, 'resourceId')
     if (typeof consume !== 'function') throw new CoreError('INVALID_INPUT', 'A trusted resource consumer is required.')
@@ -443,6 +443,11 @@ export class ResourceCredentials {
           if (!isAllowed(current)) {
             authorizationFailure = new CoreError('GRANT_DENIED', 'This resource is no longer granted for the requested use.')
             throw authorizationFailure
+          }
+          try { await authorize?.(tx) }
+          catch (error) {
+            if (error instanceof CoreError) authorizationFailure = error
+            throw error
           }
         })
         return consume(secret)

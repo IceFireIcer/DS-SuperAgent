@@ -2,6 +2,7 @@ import { CoreError } from './model.js'
 import type { Storage } from './storage.js'
 import type { Engine } from './engine.js'
 import type { ReceiveSourceEvent, SourceReceipt } from './source-events.js'
+import { isGitHubDeliveryComment } from './github-delivery.js'
 
 interface Cursor { cursor: string; updatedAt: number }
 const cursorKey = (sourceInstanceId: string) => JSON.stringify(['channel-cursor', sourceInstanceId])
@@ -38,12 +39,14 @@ export interface GitHubEvent {
   deletionEvidence?: string
   draft?: boolean
   state?: 'open' | 'closed' | 'merged'
+  deliveryCommentActorId?: string
 }
 
 export interface GitHubSourceConfig {
   owner: string
   repo: string
   selfActorIds?: string[]
+  postingActorId?: string
   /** New authorized human discussions are routed to Main; existing ownership stays on its Ticket. */
   mainIntake?: boolean
 }
@@ -71,12 +74,23 @@ export class GitHubSource {
     if (event.action === 'deleted' && (event.attachmentIds !== undefined || event.environmentId !== undefined)) {
       throw new CoreError('INVALID_INPUT', 'A source deletion cannot carry attachments.')
     }
-    if (this.config.selfActorIds?.includes(event.authorId)) {
+    if (this.config.selfActorIds?.includes(event.authorId) || (event.kind === 'comment'
+      && event.authorId === this.config.postingActorId && isGitHubDeliveryComment(event.body))) {
       await this.advance(event.cursor)
       return { status: 'filtered', reason: 'SOURCE_SELF' }
     }
     const threadId = `github:${this.config.owner}/${this.config.repo}#${event.number}`
     const objectId = githubObjectId(event)
+    if (this.config.postingActorId && event.deliveryCommentActorId === this.config.postingActorId
+      && event.action === 'edited' && event.authorKind === 'system' && event.state === 'open'
+      && (event.kind === 'issue' || event.kind === 'pull_request')) {
+      const current = await this.engine.getSourceCandidate({ threadId, objectId })
+      // A comment can change the parent timestamp without editing the request that authorized delivery.
+      if (current && (['created', 'edited', 'reopened'] as const).some(action => current.text === githubBody({ ...event, action }))) {
+        await this.advance(event.cursor)
+        return { status: 'filtered', reason: 'SOURCE_COMMENT_ACTIVITY' }
+      }
+    }
     const type = event.action === 'deleted' ? 'deleted' : event.action === 'edited' || event.action === 'synchronize' ? 'edited' : 'created'
     const body = githubBody(event)
     const authorKind = event.authorKind ?? (event.authorId.endsWith('[bot]') ? 'bot' : 'human')

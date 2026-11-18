@@ -45,6 +45,7 @@ export interface MainSourceDeliveryView {
   reconcileRequired: boolean
   attempts?: number
   reason?: string
+  platformReceipt?: { messageId: string; url: string }
   destination: { sourceInstanceId: string; actorId: string; eventId: string; threadId?: string }
 }
 

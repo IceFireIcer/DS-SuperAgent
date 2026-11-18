@@ -73,6 +73,7 @@ test('GitHub reconciles an accepted-but-lost POST by authenticated author, marke
   assert.equal((await channel.deliver(delivery, context)).type, 'unknown')
   assert.equal(await channel.getReceipt(context.idempotencyKey), undefined)
   const restarted = new core.GitHubDeliveryChannel(transport, channelOptions)
+  transport.getTarget = async () => { throw new core.CoreError('GITHUB_HTTP_404', 'The initiating comment was removed.') }
   assert.deepEqual(await restarted.reconcile(delivery, context), { type: 'success' })
   assert.equal(posts.length, 1)
   assert.equal((await restarted.getReceipt(context.idempotencyKey)).messageId, '9001')

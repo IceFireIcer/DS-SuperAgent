@@ -93,13 +93,14 @@ export function feishuProfileConfig(env: NodeJS.ProcessEnv = process.env): Produ
   }
 }
 
-/** The configured allowlist authorizes Main intake, never GitHub posting. */
+/** Outbound also needs a posting identity and a current Router grant. */
 export function githubProfileConfig(env: NodeJS.ProcessEnv = process.env): ProductHostConfig['github'] | undefined {
   const owner = env.DS_SUPERAGENT_GITHUB_OWNER
   const repo = env.DS_SUPERAGENT_GITHUB_REPO
   const requesters = env.DS_SUPERAGENT_GITHUB_ALLOWED_REQUESTER_IDS
   const self = env.DS_SUPERAGENT_GITHUB_SELF_ACTOR_IDS
-  if ([owner, repo, requesters, self].every(value => value === undefined || value === '')) return undefined
+  const postingActorId = env.DS_SUPERAGENT_GITHUB_POSTING_ACTOR_ID
+  if ([owner, repo, requesters, self, postingActorId].every(value => value === undefined || value === '')) return undefined
   if (!owner || !repo || requesters === undefined || !/^[a-zA-Z0-9-]{1,100}$/u.test(owner)
     || !/^[a-zA-Z0-9_.-]{1,100}$/u.test(repo) || repo === '.' || repo === '..') {
     throw new CoreError('INVALID_CONFIG', 'A GitHub source needs an owner, repository and explicit requester allowlist.')
@@ -108,10 +109,12 @@ export function githubProfileConfig(env: NodeJS.ProcessEnv = process.env): Produ
   const allowedRequesterIds = ids(requesters), selfActorIds = ids(self ?? '')
   if (allowedRequesterIds.length > 100 || selfActorIds.length > 100
     || [...allowedRequesterIds, ...selfActorIds].some(id => !/^[\w-]{1,256}$/u.test(id))
-    || new Set(allowedRequesterIds).size !== allowedRequesterIds.length || new Set(selfActorIds).size !== selfActorIds.length) {
+    || new Set(allowedRequesterIds).size !== allowedRequesterIds.length || new Set(selfActorIds).size !== selfActorIds.length
+    || postingActorId && !/^[a-zA-Z0-9-]{1,39}(?:\[bot\])?$/u.test(postingActorId)) {
     throw new CoreError('INVALID_CONFIG', 'GitHub actor allowlists must contain distinct bounded identities.')
   }
   return { owner, repo, actorId: 'github-receiver', allowedActorIds: ['github-receiver'], selfActorIds,
+    ...(postingActorId ? { postingActorId } : {}),
     intake: { mode: 'auto', maxBatchSize: 5, maxAttempts: 1, timeoutMs: 5000,
       allowedRequesterIds, allowedBotActorIds: [], rules: [] } }
 }

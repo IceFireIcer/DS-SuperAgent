@@ -29,7 +29,7 @@ node dev/t55-acceptance.mjs --app '../app/dist-pack/t55-51abf637/win-unpacked/DS
 ## 发现与当前边界
 
 - 初次连续阶段 6 通过、5 失败。四项 GitHub 测试缺少产品中 Main notice 和 relay 的 owner 映射。观察列表的排序与游标用两套 ID 比较规则，同时间记录可重复出现在下一页。`160d998b` 修复两处，定向 5/5。随后一次运行的 Windows 备份路径过长，缩短验收临时路径后重新跑通固定流程。[复核](reviews/t55-r5-local.md)
-- `t57-env-check.mjs` 只读访问授权的 GitHub 测试仓库通过。当前产品 Host 的 GitHub Outbox 对该目标返回 `DESTINATION_SOURCE_DISABLED`，缺原生结果回执和未知结果对账。历史 T57 的实际回执仍是当时版本的证据。[#129](https://github.com/IceFireIcer/DS-SuperAgent/issues/129) · [历史 T57](t57.md)
+- 首次运行中，GitHub Outbox 对已经委托并完成的工作返回 `DESTINATION_SOURCE_DISABLED`。#129 修复后，产品 Host 在测试仓库 #21 实际发出结果，回读到原生评论 `6985981343`，核对评论作者、目标、正文匹配及本地回执。此轮模型为 mock。[实施记录](github-product-delivery.md) · [真实 GitHub 回执](https://github.com/IceFireIcer/SuperAgentTest/issues/21#issuecomment-6985981343)
 - 真实模型缺授权配置，环境检查退出 2。真实飞书暂缓。原生休眠、关机以及完整的 Windows 主流程中问题卡与停止交互仍待组合验收。旧入口拒绝有公开 Profile 与产品协议的定向证据。
 
 ## Windows 原生安装和升级

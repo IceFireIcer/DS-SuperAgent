@@ -385,6 +385,16 @@ export class ProductCredentialManager {
       (await tx.get<{ resourceId: string | null }>('product-github-credential', sourceInstanceId))?.resourceId ?? null)
   }
 
+  async useSelectedGitHubCredential<T>(sourceInstanceId: string, purpose: 'source' | 'outbound', consume: (secret: string) => Promise<T>) {
+    const resourceId = await this.selectedGitHubCredential(sourceInstanceId)
+    if (!resourceId) throw new CoreError('RESOURCE_UNAVAILABLE', 'Select a GitHub credential resource in product settings.')
+    return this.resources.use({ instanceId: this.instanceId, resourceId, sourceInstanceId,
+      role: purpose === 'source' ? 'main' : 'router', purpose }, consume, async tx => {
+      const selection = await tx.get<{ resourceId: string | null }>('product-github-credential', sourceInstanceId)
+      if (selection?.resourceId !== resourceId) throw new CoreError('RESOURCE_STALE', 'The selected GitHub credential changed.')
+    })
+  }
+
   selectGitHubCredential(request: { instanceId: string; sourceInstanceId: string; commandId: string; resourceId: string | null }) {
     this.assertInstance(request.instanceId)
     identifier(request.sourceInstanceId, 'sourceInstanceId'); identifier(request.commandId, 'commandId')

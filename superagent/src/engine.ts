@@ -2139,6 +2139,7 @@ export class Engine {
     const items = all.slice(start, start + limit).map(delivery => ({ id: delivery.id, ticketId: delivery.ticketId, sequence: delivery.sequence,
       createdAt: delivery.createdAt, purpose: delivery.purpose, state: delivery.state, reconcileRequired: delivery.reconcileRequired,
       ...(delivery.attempts === undefined ? {} : { attempts: delivery.attempts }), ...(delivery.reason ? { reason: delivery.reason } : {}),
+      ...(delivery.platformReceipt ? { platformReceipt: delivery.platformReceipt } : {}),
       destination: delivery.destination }))
     const hasMore = start + items.length < all.length
     const last = items.at(-1)

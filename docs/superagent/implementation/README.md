@@ -16,7 +16,7 @@
 
 ## 当前进展
 
-T55/#83 的 R5 本机固定流程七个阶段通过，已修复观察列表翻页重复，并补齐 GitHub 来源夹具的队列归属。T58/#92 因外部服务器到期与无实体第二设备取消，已解除阻塞。真实模型仍缺凭据，GitHub 外发缺口由 #129 跟踪。[本机验收记录](t55-r5-local.md) · [复核](reviews/t55-r5-local.md)
+T55/#83 的 R5 本机固定流程七个阶段通过，补齐原生 Windows 安装升级。T58/#92 因外部服务器到期与无实体第二设备取消，已解除阻塞。#129 修复 GitHub 产品外发并核到真实回执，真实模型仍缺凭据。[本机验收记录](t55-r5-local.md) · [GitHub 外发](github-product-delivery.md)
 
 R5-28/#120 的[选择导入凭据引用并重新授权](r5-28.md)已完成代码验收：只读取用户明确选定的 JSON 导出；secret 留在 Electron main process 与 DSH credential record，业务库仅保存稳定来源引用和新授权目标；精确 scope、取消/重放/未知结果恢复均由 Host 和凭据资源管理器处理。[复核记录](reviews/r5-28.md)与定向验证已更新。真实飞书租户、用户 DSH profile、PostgreSQL 运行及全量 CI 未作为本票验收。
 

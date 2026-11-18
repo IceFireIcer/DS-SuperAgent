@@ -13,6 +13,7 @@ export interface GitHubRuntimeOptions {
   actorId: string
   allowedActorIds: string[]
   selfActorIds?: string[]
+  postingActorId?: string
   intake?: IntakePolicy
   transport?: GitHubTransport
   cli?: GitHubCliTransportOptions
@@ -32,7 +33,8 @@ export class GitHubRuntime {
     identifier(options.instanceId, 'instanceId'); identifier(options.actorId, 'actorId')
     if (!/^[a-zA-Z0-9-]{1,100}$/u.test(options.owner) || !/^[a-zA-Z0-9_.-]{1,100}$/u.test(options.repo)
       || options.repo === '.' || options.repo === '..' || !Array.isArray(options.allowedActorIds)
-      || !options.allowedActorIds.includes(options.actorId) || options.selfActorIds?.some(id => typeof id !== 'string' || !id)) {
+      || !options.allowedActorIds.includes(options.actorId) || options.selfActorIds?.some(id => typeof id !== 'string' || !id)
+      || options.postingActorId !== undefined && (typeof options.postingActorId !== 'string' || !/^[a-zA-Z0-9-]{1,39}(?:\[bot\])?$/u.test(options.postingActorId))) {
       throw new CoreError('INVALID_CONFIG', 'A GitHub receiver needs an explicit repository and receiving actor.')
     }
     for (const id of [...options.allowedActorIds, ...(options.selfActorIds ?? [])]) identifier(id, 'nativeActorId')
@@ -49,9 +51,10 @@ export class GitHubRuntime {
 
   bind(engine: Engine) {
     if (this.poller) throw new CoreError('RUNTIME_ACTIVE', 'The GitHub runtime is already bound.')
-    const { storage, instanceId, owner, repo } = this.options
+    const { storage, instanceId, owner, repo, postingActorId } = this.options
     const source = new GitHubSource(storage, instanceId, engine, {
       owner, repo, mainIntake: true,
+      ...(postingActorId === undefined ? {} : { postingActorId }),
       ...(this.options.selfActorIds ? { selfActorIds: this.options.selfActorIds } : {}),
     })
     this.poller = new GitHubPoller(source, this.options.transport ?? new GitHubCliTransport(this.options.cli), owner, repo, {

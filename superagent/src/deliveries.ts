@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { CoreError, identifier } from './model.js'
 import type { AsyncTx, Storage } from './storage.js'
 import type { Effect, Effects } from './effects.js'
+import { readGitHubDeliveryReceipt } from './github-delivery.js'
 
 export type DeliveryPurpose = 'acknowledgement' | 'answer' | 'result' | 'attention' | 'policy'
 export type DeliveryState = 'pending' | 'sent' | 'dropped' | 'unknown'
@@ -44,6 +45,7 @@ export interface DeliveryView extends Delivery {
   directionVersion?: number
   attentionId?: string
   policyRevision?: number
+  platformReceipt?: { messageId: string; url: string }
 }
 
 export type DeliveryResult = { type: 'success' } | { type: 'transient' | 'permanent' | 'unknown' | 'not-applied'; reason: string }
@@ -130,7 +132,11 @@ export class Deliveries {
   async view(transaction: AsyncTx, delivery: Delivery): Promise<DeliveryView> {
     const receipt = await this.effects.receiptInTransaction(transaction, delivery.effectId, delivery.effectGeneration)
     const state: DeliveryState = receipt?.delivery ?? 'pending'
+    const platform = state === 'sent' && delivery.destination.sourceInstanceId.startsWith('github:')
+      ? await readGitHubDeliveryReceipt(transaction, JSON.stringify([delivery.effectId, delivery.effectGeneration])) : undefined
+    const receiptMatches = platform?.sourceInstanceId === delivery.destination.sourceInstanceId && platform.threadId === delivery.destination.threadId
     return { ...delivery, state, reconcileRequired: state === 'unknown',
+      ...(receiptMatches ? { platformReceipt: { messageId: platform.messageId, url: platform.url } } : {}),
       ...(receipt?.reason ? { reason: receipt.reason } : {}), ...(receipt?.attempts === undefined ? {} : { attempts: receipt.attempts }),
       ...(delivery.basis.kind === 'ready-report' ? { reportId: delivery.basis.reportId, directionVersion: delivery.basis.directionVersion } : {}),
       ...(delivery.basis.kind === 'waiting-attention' ? { attentionId: delivery.basis.attentionId } : {}),
