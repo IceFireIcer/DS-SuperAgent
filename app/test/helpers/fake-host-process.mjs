@@ -60,11 +60,12 @@ export class HostProcess {
 
   send() {}
 
-  stop() {
+  stop({ forBackup = false } = {}) {
     state.stops += 1
     state.running = false
     if (state.stopFails) throw new Error('the Host could not stop')
-    return Promise.resolve()
+    return Promise.resolve(forBackup ? { count: 0, events: 0,
+      digest: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' } : undefined)
   }
 
   /** The test kills the Host: the app hears the same failure that a real close reports. */

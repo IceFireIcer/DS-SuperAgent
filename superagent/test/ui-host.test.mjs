@@ -14,7 +14,7 @@ test('the product HTTP boundary chats with Main and refuses cross-scope and unav
   const models = []
   const native = await nativeContext(join(directory, 'sessions'), function* (request) {
     models.push(request.model)
-    yield* textResponse('Main answered through the product boundary.')
+    yield* textResponse('Main answered through the product boundary.', { inputTokens: 11, outputTokens: 3, totalTokens: 14 })
   })
   t.after(async () => {
     await native.fiber.dispose()
@@ -66,6 +66,18 @@ test('the product HTTP boundary chats with Main and refuses cross-scope and unav
   assert.deepEqual(history.value.messages.map(message => [message.role, message.text]), [
     ['user', 'Hello Main.'], ['main', 'Main answered through the product boundary.'],
   ])
+  const usage = await call('product-usage', { instanceId })
+  assert.equal(usage.value.roles.main.totalTokens, 14)
+  assert.equal(usage.value.roles.main.reportedCalls, 1)
+  assert.equal(usage.value.cost.status, 'unavailable')
+  assert.equal(usage.value.coverage.status, 'available')
+  assert.equal((await call('product-usage', { instanceId: 'another-private-scope' })).status, 403)
+  const status = await call('product-status', { instanceId })
+  assert.equal(status.ok, true, JSON.stringify(status))
+  assert.equal(status.value.main.state, 'ready')
+  assert.equal(status.value.processingPaused, false)
+  assert.equal(status.value.roles.main, true)
+  assert.equal((await call('product-status', { instanceId: 'another-private-scope' })).status, 403)
   const scheduled = await call('schedule-create', { instanceId, commandId: 'schedule-http', title: 'Review', text: 'Check the release.',
     timezone: 'UTC', when: { kind: 'at', at: Date.now() + 60_000 }, target: { kind: 'main' } })
   assert.equal(scheduled.ok, true, JSON.stringify(scheduled))

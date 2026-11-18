@@ -59,6 +59,7 @@ import { ProductSchedules, authorizedScheduleEvent, scheduledOccurrenceKey,
   type ProductSchedule, type ScheduleCreate, type ScheduleTarget, type ScheduledOccurrence } from './product-schedules.js'
 import type { ProactiveWorkRecord } from './proactive-work.js'
 import { ProductMemory, memoryToolsFor, type MemoryReader, type MemoryScope, type MemorySideTarget } from './product-memory.js'
+import { ProductUsage, type ProductUsageReport } from './product-usage.js'
 
 interface StoredPolicy { revision: number; configuration: Omit<IntakePolicy, 'assess'>; origin: 'bootstrap' | 'manual' | 'sync'; sourceRevision?: string; updatedAt: number }
 interface ProcessingState { paused: boolean; revision: number; updatedAt: number }
@@ -90,6 +91,7 @@ export class Engine {
   private readonly context: ContextReader
   private readonly sessions: NativeSessions | undefined
   private readonly roleConfig: RoleConfigStore
+  private readonly productUsage: ProductUsage
   private readonly rolePresets: RolePresetStore
   private readonly executionPolicy: ExecutionPolicyStore
   private readonly hostCapabilities: HostCapabilities
@@ -237,6 +239,7 @@ export class Engine {
     this.host = new HostLease(rawStorage, instanceId, hostOptions)
     const storage = this.host.guard(rawStorage)
     this.storage = storage
+    this.productUsage = new ProductUsage(storage, instanceId, sessions)
     this.memory = new ProductMemory(storage, instanceId)
     this.sessions = sessions
     this.workObservations = sessions ? new WorkObservations(storage, instanceId, sessions) : undefined
@@ -2288,6 +2291,36 @@ export class Engine {
 
   getRecentRoleConfigUses(limit = 50): Promise<RoleConfigUse[]> {
     return this.roleConfig.recentUses(limit)
+  }
+
+  private assertProductStatusAccess(instanceId: string) {
+    if (instanceId !== this.instanceId || this.source.sourceInstanceId !== 'product-desktop'
+      || (this.source.kind ?? 'desktop') !== 'desktop' || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Product settings belong to another Instance or actor.')
+    }
+  }
+
+  async getProductUsage(request: { instanceId: string }): Promise<ProductUsageReport> {
+    this.assertProductStatusAccess(request?.instanceId)
+    return this.productUsage.read()
+  }
+
+  async getProductStatus(request: { instanceId: string }) {
+    this.assertProductStatusAccess(request?.instanceId)
+    const [main, configuration, processing, effects] = await Promise.all([
+      this.getMainConversation({ instanceId: this.instanceId, limit: 1 }),
+      this.getRoleConfig(),
+      this.storage.transaction(this.instanceId, tx => tx.get<ProcessingState>('processing-state', this.processingKey())),
+      this.effects.status(),
+    ])
+    return {
+      main: main.health,
+      processingPaused: processing?.paused ?? false,
+      roles: { main: configuration.roles.main?.model.provider !== undefined && configuration.roles.main.model.provider !== 'unconfigured',
+        router: configuration.roles.router.model.provider !== 'unconfigured', worker: configuration.roles.worker.model.provider !== 'unconfigured' },
+      roleRevision: configuration.revision,
+      effects,
+    }
   }
 
   getRoleConfigHistory(limit = 20) {

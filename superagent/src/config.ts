@@ -112,6 +112,20 @@ export function validateRoleConfig(roles: RoleConfig) {
   validateProfile(roles.router, 'Router'); validateProfile(roles.worker, 'Worker')
 }
 
+export function readRecentRoleUses(storage: Storage, instanceId: string, limit: number) {
+  if (!Number.isSafeInteger(limit) || limit < 1) throw new CoreError('INVALID_CONFIG', 'Role configuration use history needs a positive limit.')
+  const boundedLimit = Math.min(limit, recentUseLimit)
+  return storage.transaction(instanceId, async transaction => {
+    const meta = await transaction.get<RoleConfigUseIndexMeta>('role-config-use-meta', recentUseMetaKey)
+    const total = meta?.sequence ?? 0
+    if (!total) return { items: [], total }
+    const first = Math.max(1, total - boundedLimit + 1)
+    const page = await transaction.scan<RoleConfigUse>('role-config-use-recent', { limit: boundedLimit,
+      after: recentUseKey(first - 1) })
+    return { items: page.items.map(item => item.value).reverse(), total }
+  })
+}
+
 export class RoleConfigStore {
   constructor(
     private readonly storage: Storage,
@@ -192,14 +206,7 @@ export class RoleConfigStore {
 
   async recentUses(limit = 50): Promise<RoleConfigUse[]> {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new CoreError('INVALID_CONFIG', 'Role configuration use history needs a limit from 1 to 100.')
-    return this.storage.transaction(this.instanceId, async transaction => {
-      const meta = await transaction.get<RoleConfigUseIndexMeta>('role-config-use-meta', recentUseMetaKey)
-      if (!meta?.sequence) return []
-      const first = Math.max(1, meta.sequence - limit + 1)
-      const page = await transaction.scan<RoleConfigUse>('role-config-use-recent', { limit,
-        after: recentUseKey(first - 1) })
-      return page.items.map(item => item.value).reverse()
-    })
+    return (await readRecentRoleUses(this.storage, this.instanceId, limit)).items
   }
 
   async atRevision(revision: number): Promise<RoleConfigView | undefined> {

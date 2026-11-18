@@ -233,6 +233,20 @@ export class Effects {
     })
   }
 
+  async status() {
+    const counts = { pending: 0, running: 0, unknown: 0, failed: 0 }
+    return this.storage.transaction(this.instanceId, async tx => {
+      let after: string | undefined
+      for (let index = 0; index < 10; index++) {
+        const page = await tx.scan<Effect>('effect', { limit: 100, ...(after === undefined ? {} : { after }) })
+        for (const { value } of page.items) counts[value.state]++
+        if (!page.cursor) return { ...counts, partial: false }
+        after = page.cursor
+      }
+      return { ...counts, partial: true }
+    })
+  }
+
   receipt(id: string, generation: string): Promise<EffectReceipt | undefined> {
     identifier(id, 'effect ID')
     identifier(generation, 'effect generation')

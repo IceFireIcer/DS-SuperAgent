@@ -24,6 +24,12 @@ if (host !== undefined && location.origin === host) {
     },
     // The app's own updater, for the About row's state and buttons.
     updates: updatesBridge(),
+    backups: {
+      list: () => ipcRenderer.invoke('ds-superagent:backup-list'),
+      create: () => ipcRenderer.invoke('ds-superagent:backup-create'),
+      restore: id => ipcRenderer.invoke('ds-superagent:backup-restore', id),
+    },
+    diagnostics: () => ipcRenderer.invoke('ds-superagent:diagnostics-read'),
   })
   const caption = process.argv.find(value => value.startsWith('--ds-superagent-caption='))
   if (caption !== undefined) {

@@ -6,7 +6,7 @@ import { readProductArtifact, readProductAttachment, uploadPayload, uploadWithRe
 import { FeishuSourceStatus } from './product-feishu.js'
 import { ProductBrandMark } from './product-brand.js'
 import { Card, Row } from './product-card.js'
-import { ClockIcon, CloseIcon, GlobeIcon, MemoryIcon, SlidersIcon } from './icons.js'
+import { ClockIcon, CloseIcon, GaugeIcon, GlobeIcon, MemoryIcon, SlidersIcon } from './icons.js'
 import { ProductScheduleSettings, PRODUCT_SCHEDULE_CSS } from './product-schedules.js'
 import { ProductProactiveSettings, ProactiveReview, PRODUCT_PROACTIVE_CSS } from './product-proactive.js'
 import { ProductPresetSettings, PRODUCT_PRESET_CSS } from './product-presets.js'
@@ -23,6 +23,7 @@ import { ProductMcpSettings } from './product-mcp-settings.js'
 import { ProductBrowserSettings, PRODUCT_BROWSER_CSS } from './product-browser-settings.js'
 import { ProductExecutionSettings, PRODUCT_EXECUTION_CSS } from './product-execution.js'
 import { ProductWorkView } from './product-work-view.js'
+import { ProductOperationsSettings, PRODUCT_OPERATIONS_CSS } from './product-operations.js'
 
 const clientBridge = () => window.dsSuperagentApp?.productClient
 let activeHost = 'local'
@@ -1467,13 +1468,15 @@ export function applyProduct(ctx) {
             'aria-current': page === 'browser' ? 'page' : undefined, onClick: () => setPage('browser') }, h(GlobeIcon), t('Browser resources')) : null,
           !viewState.connection?.connected ? h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
             'aria-current': page === 'supervision' ? 'page' : undefined, onClick: () => setPage('supervision') }, h(SlidersIcon), t('Supervision')) : null,
+          h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
+            'aria-current': page === 'operations' ? 'page' : undefined, onClick: () => setPage('operations') }, h(GaugeIcon), t('Status and usage')),
           h('span', { className: 'bt-main-settings-revision' }, `${t('Configuration')} v${snapshot.revision}`)),
         h('div', { className: 'bt-settings-main' },
           h('div', { className: 'bt-settings-head' }, h('h2', null, page === 'execution' ? t('Execution')
             : page === 'schedules' ? t('Scheduled tasks')
             : page === 'presets' ? t('Role presets') : page === 'preparations' ? t('Proactive preparation')
               : page === 'memory' ? t('Memory') : page === 'browser' ? t('Browser resources')
-                : page === 'supervision' ? t('Supervision') : t('Super-agent settings'))),
+                : page === 'supervision' ? t('Supervision') : page === 'operations' ? t('Status and usage') : t('Super-agent settings'))),
           h('div', { className: 'bt-settings-scroll' },
             page === 'execution' ? h(ProductExecutionSettings, { binding, call: productCall,
               onChanged: () => { void loadDirectories(binding) } })
@@ -1485,7 +1488,9 @@ export function applyProduct(ctx) {
                 : page === 'memory' ? h(ProductMemorySettings, { key: binding.instanceId, binding, works: view.getSnapshot().works, call: productCall })
                 : page === 'browser' ? h(ProductBrowserSettings, { binding, works: view.getSnapshot().works,
                   directoryOptions: viewState.directoryOptions, call: productCall, browserBridge: globalThis.dsSuperagentApp?.browser })
-                : page === 'supervision' ? h(ProductSupervisionSettings, { binding, call: productCall }) : h(Fragment, null,
+                : page === 'supervision' ? h(ProductSupervisionSettings, { binding, call: productCall })
+                  : page === 'operations' ? h(ProductOperationsSettings, { binding, call: productCall,
+                    onNavigate: next => setPage(next) }) : h(Fragment, null,
             error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
             viewState.directoryError ? h('p', { className: 'bt-main-error', role: 'alert' }, viewState.directoryError) : null,
             conflict ? h('div', { className: 'bt-main-settings-conflict', role: 'status' },
@@ -1622,7 +1627,7 @@ export function applyProduct(ctx) {
         onClose: () => view.set(current => ({ ...current, connectOpen: false })) }) : null)
   }
   const shadow = (name, component) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200 }, component))
-  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_EXECUTION_CSS, 'main'), 'superagent: existing chat styles')
+  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_EXECUTION_CSS + PRODUCT_OPERATIONS_CSS, 'main'), 'superagent: existing chat styles')
   ctx.effect(() => { const style = installStyles(themeCss(allThemes().deepseek), 'main-theme'); return () => style.remove() }, 'superagent: existing theme')
   shadow('main.conversation', ProductSurface)
   shadow('sidebar.workspaces', MainNavigation)

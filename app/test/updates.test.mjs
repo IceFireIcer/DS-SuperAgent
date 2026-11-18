@@ -430,11 +430,11 @@ describe('watchReleases', () => {
 })
 
 describe('watchUpdates', () => {
-  test('downloads in the background, installs at the quit, and checks at once', (t) => {
+  test('downloads in the background and leaves installation to the app backup gate', (t) => {
     const updater = new FakeUpdater()
     t.after(watchUpdates({ updater, beforeInstall: async () => {}, log: quietLog() }).stop)
     assert.equal(updater.autoDownload, true)
-    assert.equal(updater.autoInstallOnAppQuit, true)
+    assert.equal(updater.autoInstallOnAppQuit, false)
     assert.equal(updater.checks, 1)
     assert.deepEqual(updater.feeds, [])
   })
@@ -524,8 +524,28 @@ describe('watchUpdates', () => {
     const updates = watchUpdates({ updater, beforeInstall: async () => { steps.push('host stopped') }, log: quietLog() })
     t.after(updates.stop)
     updater.quitAndInstall = (...args) => { steps.push(['install', ...args]) }
+    updater.emit('update-downloaded', { version: '0.1.9' })
     await updates.install()
     assert.deepEqual(steps, ['host stopped', ['install', true, true]])
+  })
+
+  test('catches a delayed installer spawn error after the application begins quitting', async (t) => {
+    const updater = new FakeUpdater()
+    const failures = []
+    let failed
+    const failureReported = new Promise(resolve => { failed = resolve })
+    const updates = watchUpdates({ updater, beforeInstall: async () => {},
+      onInstallFailure: async failure => { failures.push(failure); failed() }, log: quietLog() })
+    t.after(updates.stop)
+    updater.quitAndInstall = () => setImmediate(() => updater.emit('error', new Error('installer spawn failed')))
+    updater.emit('update-downloaded', { version: '0.1.9' })
+    const install = updates.install()
+    updater.emit('before-quit-for-update')
+    updates.stop()
+    await install
+    await failureReported
+    assert.deepEqual(failures, [{ asynchronous: true }])
+    assert.deepEqual(updates.state(), { phase: 'downloaded', version: '0.1.9', failure: 'install_failed' })
   })
 
   test('checks again every few hours until stopped', (t) => {
@@ -561,7 +581,7 @@ describe('watchUpdates', () => {
     assert.deepEqual(updates.state(), { phase: 'failed' })
     updater.emit('update-available', { version: '0.1.9' })
     updater.emit('error', new Error('sha512 checksum mismatch'))
-    assert.deepEqual(updates.state(), { phase: 'failed' })
+    assert.deepEqual(updates.state(), { phase: 'failed', failure: 'download_failed' })
     updater.emit('update-downloaded', { version: '0.1.9' })
     updater.emit('error', new Error('offline'))
     assert.deepEqual(updates.state(), { phase: 'downloaded', version: '0.1.9' })

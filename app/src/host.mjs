@@ -1,14 +1,12 @@
 // The Host boots the app's single DS-SuperAgent profile on a loopback port and reports the launch URL over IPC.
 // Follows DeepSeek Harness apps/desktop-host/src/index.ts (MIT); see NOTICE.
-import { inspect } from 'node:util'
 import { loadLayeredEnv, reportSkippedBundles } from '@deepseek-ai/dsh-app-boot'
 import { runProfile } from '@deepseek-ai/dsh/profile-boot'
 import { INSTALL_ANCHOR, SUPERAGENT_PROFILE, loadAppProfile } from './profile.mjs'
 import { reconcileOfficeRuntime } from './office-patch.mjs'
 import { reconcileSearchSelector } from './search-patch.mjs'
 import { reconcileSuperagentProfile } from './superagent-patch.mjs'
-
-const MAX_FATAL_DIAGNOSTIC_CHARS = 64 * 1024
+import { sessionInventory } from './product-backups.mjs'
 
 const send = message => new Promise((resolve, reject) => {
   if (!process.connected || process.send === undefined) { resolve(); return }
@@ -33,13 +31,24 @@ async function main() {
     }),
   })
   let stopping
-  const stop = () => stopping ??= (async () => {
+  const stop = (forBackup = false) => stopping ??= (async () => {
     const running = await application.catch(() => undefined)
+    let checkpoint
+    if (forBackup && running) {
+      try {
+        const product = running.ctx.get('superagentProduct')
+        const persistence = running.ctx.get('sessionPersistence')
+        if (process.env.DS_SUPERAGENT_POSTGRES?.trim() || !product || !persistence) throw new Error('Backup unavailable')
+        await product.close()
+        await persistence.flush()
+        checkpoint = await sessionInventory(persistence)
+      } catch { /* The parent requires a verified inventory before taking a snapshot. */ }
+    }
     await running?.shutdown.shutdown(0)
-    await send({ type: 'shutdown-complete' })
+    await send({ type: 'shutdown-complete', ...(checkpoint ? { checkpoint } : {}) })
     if (process.connected) process.disconnect()
   })()
-  process.on('message', message => { if (message?.type === 'shutdown') void stop() })
+  process.on('message', message => { if (message?.type === 'shutdown') void stop(message.forBackup === true) })
   process.once('disconnect', () => { void stop() })
   const { ctx } = await application
   const [webServer, connection] = [ctx.get('webServer'), ctx.get('connection')]
@@ -56,7 +65,6 @@ main().catch(async error => {
   console.error(error)
   process.exitCode = 1
   const message = error instanceof Error ? error.message : String(error)
-  const diagnostic = inspect(error, { depth: 4, maxArrayLength: 50 }).slice(0, MAX_FATAL_DIAGNOSTIC_CHARS)
-  await send({ type: 'fatal', message, diagnostic }).catch(() => undefined)
+  await send({ type: 'fatal', message }).catch(() => undefined)
   if (process.connected) process.disconnect()
 })

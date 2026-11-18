@@ -30,6 +30,17 @@ export interface SessionTokenUsage {
   reasoningTokens: number
   totalTokens: number
 }
+export interface SessionUsageRange {
+  id: string
+  startSeq: number
+  endSeq: number
+}
+export interface SessionUsageSnapshot {
+  status: 'available' | 'missing' | 'over-budget'
+  eventCount: number
+  usage: SessionTokenUsage
+  ranges: { id: string; usage: SessionTokenUsage }[]
+}
 interface RouterTask { request: NativeSessionRequest; resolve: (value: NativeSessionResult) => void; reject: (error: unknown) => void }
 const maxCoalescedRouterTools = 7
 const maxCoalescedRouterBytes = 100000
@@ -39,29 +50,35 @@ function tokenCount(value: unknown) {
 }
 
 function sessionUsage(events: readonly unknown[]): SessionTokenUsage {
-  const total: SessionTokenUsage = { calls: 0, reportedCalls: 0, inputTokens: 0, outputTokens: 0,
-    cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0, totalTokens: 0 }
+  const total = emptySessionUsage()
   for (const event of events) {
     const entry = event as { type?: unknown; data?: { usage?: TokenUsage } }
-    if (entry.type !== 'assistant/message') continue
-    total.calls++
-    const usage = entry.data?.usage
-    if (!usage) continue
-    total.reportedCalls++
-    const inputTokens = tokenCount(usage.inputTokens)
-    const outputTokens = tokenCount(usage.outputTokens)
-    const cacheReadTokens = tokenCount(usage.cacheReadTokens)
-    const cacheWriteTokens = tokenCount(usage.cacheWriteTokens)
-    total.inputTokens += inputTokens
-    total.outputTokens += outputTokens
-    total.cacheReadTokens += cacheReadTokens
-    total.cacheWriteTokens += cacheWriteTokens
-    total.reasoningTokens += tokenCount(usage.reasoningTokens)
-    total.totalTokens += usage.totalTokens === undefined
-      ? inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens
-      : tokenCount(usage.totalTokens)
+    if (entry.type === 'assistant/message') addSessionUsage(total, entry.data?.usage)
   }
   return total
+}
+
+function emptySessionUsage(): SessionTokenUsage {
+  return { calls: 0, reportedCalls: 0, inputTokens: 0, outputTokens: 0,
+    cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0, totalTokens: 0 }
+}
+
+function addSessionUsage(target: SessionTokenUsage, usage: TokenUsage | undefined) {
+  target.calls++
+  if (!usage) return
+  target.reportedCalls++
+  const inputTokens = tokenCount(usage.inputTokens)
+  const outputTokens = tokenCount(usage.outputTokens)
+  const cacheReadTokens = tokenCount(usage.cacheReadTokens)
+  const cacheWriteTokens = tokenCount(usage.cacheWriteTokens)
+  target.inputTokens += inputTokens
+  target.outputTokens += outputTokens
+  target.cacheReadTokens += cacheReadTokens
+  target.cacheWriteTokens += cacheWriteTokens
+  target.reasoningTokens += tokenCount(usage.reasoningTokens)
+  target.totalTokens += usage.totalTokens === undefined
+    ? inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens
+    : tokenCount(usage.totalTokens)
 }
 
 export class NativeSessions {
@@ -343,6 +360,55 @@ export class NativeSessions {
     const handle = await persistence.open(SessionId(sessionId), 'read')
     try {
       return sessionUsage((await handle.read()).events)
+    } finally { await handle.close() }
+  }
+
+  async readUsageSnapshot(sessionId: string, options: { maxEvents?: number; ranges?: SessionUsageRange[] } = {}): Promise<SessionUsageSnapshot> {
+    const persistence = this.context.get('sessionPersistence')
+    const ranges = options.ranges ?? []
+    const maxEvents = options.maxEvents ?? 20_000
+    if (!Number.isSafeInteger(maxEvents) || maxEvents < 1 || maxEvents > 100_000) {
+      throw new CoreError('INVALID_INPUT', 'A usage Session event budget must be from 1 to 100000.')
+    }
+    if (ranges.length > 1000 || ranges.some(range => !range || typeof range.id !== 'string' || !range.id
+      || !Number.isSafeInteger(range.startSeq) || range.startSeq < 0
+      || !Number.isSafeInteger(range.endSeq) || range.endSeq < range.startSeq)
+      || new Set(ranges.map(range => range.id)).size !== ranges.length) {
+      throw new CoreError('INVALID_INPUT', 'Usage attribution ranges must be distinct, ordered and bounded.')
+    }
+    const absent = (status: 'missing' | 'over-budget', eventCount = 0): SessionUsageSnapshot =>
+      ({ status, eventCount, usage: emptySessionUsage(), ranges: [] })
+    if (!persistence) return absent('missing')
+    const id = SessionId(sessionId)
+    const metadata = await persistence.stat(id)
+    if (!metadata) return absent('missing')
+    if (metadata.sizeBytes !== undefined && metadata.sizeBytes > 32 * 1024 * 1024
+      || metadata.eventCount !== undefined && metadata.eventCount > maxEvents) return absent('over-budget', metadata.eventCount)
+
+    const handle = await persistence.open(id, 'read')
+    try {
+      // A fork copies the prefix. Accounting starts where the new Session starts producing events.
+      const first = Number(handle.inheritedEventCount)
+      const events = (await handle.read(first, maxEvents + 1)).events
+      if (events.length > maxEvents) return absent('over-budget', first + events.length)
+      const starts = [...ranges].sort((left, right) => left.startSeq - right.startSeq)
+      const ends = [...ranges].sort((left, right) => left.endSeq - right.endSeq)
+      const rangeTotals = new Map(ranges.map(range => [range.id, emptySessionUsage()]))
+      const total = emptySessionUsage()
+      const active = new Set<string>()
+      let start = 0, end = 0
+      for (const raw of events) {
+        const event = raw as { type?: unknown; seq?: unknown; data?: { usage?: TokenUsage } }
+        if (event.type !== 'assistant/message') continue
+        addSessionUsage(total, event.data?.usage)
+        if (!Number.isSafeInteger(event.seq)) continue
+        const sequence = Number(event.seq)
+        while (starts[start] && starts[start]!.startSeq <= sequence) active.add(starts[start++]!.id)
+        while (ends[end] && ends[end]!.endSeq < sequence) active.delete(ends[end++]!.id)
+        if (active.size === 1) addSessionUsage(rangeTotals.get(active.values().next().value!)!, event.data?.usage)
+      }
+      return { status: 'available', eventCount: first + events.length, usage: total,
+        ranges: Array.from(rangeTotals, ([id, usage]) => ({ id, usage })) }
     } finally { await handle.close() }
   }
 

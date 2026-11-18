@@ -1,7 +1,7 @@
 // The app's single DS-SuperAgent DSH profile.
 import { fileURLToPath } from 'node:url'
-import { join } from 'node:path'
-import { initProfile, loadProfileDirectory, readProfileManifest, resolveProfileDir, writeProfileBundles,
+import { isAbsolute, join, resolve } from 'node:path'
+import { composeEntries, initProfile, loadOptionalPatches, loadProfileDirectory, readProfileManifest, resolveProfileDir, writeProfileBundles,
   writeProfileManifest } from '@deepseek-ai/dsh-app-boot'
 
 export const SUPERAGENT_PROFILE = 'ds-superagent'
@@ -50,4 +50,26 @@ export function loadAppProfile() {
 /** Product state stays separate from data created by previous product installs. */
 export function profileHome(dataDir) {
   return join(dataDir, 'superagent')
+}
+
+/** Check the configured provider without loading plugins or evaluating user expressions. */
+export function assertLocalBackupProfile(home) {
+  const profile = loadProfileDirectory('dsh', resolveProfileDir(SUPERAGENT_PROFILE, home), INSTALL_ANCHOR)
+  const layers = profile.layers.map(layer => layer.patches)
+  const homeLayer = loadOptionalPatches('dsh', join(home, 'cordis.patch.yml')) ?? []
+  const find = entries => entries.flatMap(entry => entry.group && Array.isArray(entry.config) ? find(entry.config) : [entry])
+  const providers = entries => find(entries).filter(entry => entry.name === '@deepseek-ai/dsh-session-persistence-jsonl'
+    || entry.name?.startsWith('ds-superagent/session-persistence'))
+  const base = providers(composeEntries(layers.slice(0, 1)))[0]
+  const configured = providers(composeEntries([...layers, profile.patches, homeLayer]))
+    .filter(entry => entry.disabled !== true && entry.name === '@deepseek-ai/dsh-session-persistence-jsonl')
+  const root = configured[0]?.config?.root
+  const local = typeof root === 'string' && isAbsolute(root) ? resolve(root) === resolve(home, 'sessions')
+    : base?.config?.root !== undefined && JSON.stringify(root) === JSON.stringify(base.config.root)
+  const alternate = [...profile.patches, ...homeLayer].some(patch => patch.id === 'session-persistence-postgres'
+    || patch.name?.startsWith('ds-superagent/session-persistence')
+    || patch.insert?.some(entry => entry.name?.startsWith('ds-superagent/session-persistence')))
+  if (profile.skippedBundles.length || configured.length !== 1 || !local || alternate) {
+    throw Object.assign(new Error('The product Session store could not be verified for offline backup.'), { code: 'BACKUP_SESSION_STORE_MISMATCH' })
+  }
 }

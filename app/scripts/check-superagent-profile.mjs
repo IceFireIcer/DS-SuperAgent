@@ -6,18 +6,22 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { loadLayeredEnv } from '@deepseek-ai/dsh-app-boot'
 import { runProfile } from '@deepseek-ai/dsh/profile-boot'
-import { INSTALL_ANCHOR, SUPERAGENT_PROFILE, loadAppProfile } from '../src/profile.mjs'
+import { INSTALL_ANCHOR, SUPERAGENT_PROFILE, assertLocalBackupProfile, loadAppProfile } from '../src/profile.mjs'
 import { reconcileSuperagentProfile } from '../src/superagent-patch.mjs'
 import { LlmAdapter } from '@deepseek-ai/dsh-llm'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { routerResponse, textResponse, toolResponse } from '../../superagent/dev/native-mock.mjs'
+import { backupBeforeProfileChange, completeProductRestore, restoreProductBackup } from '../src/product-backups.mjs'
 
 const log = console.log
 console.log = (...values) => log(...values.map(value => typeof value === 'string' ? value.replace(/([?&]token=)[^\s]+/gu, '$1[redacted]') : value))
 
-const home = mkdtempSync(join(tmpdir(), 'ds-superagent-profile-check-'))
+const sandbox = mkdtempSync(join(tmpdir(), 'ds-superagent-profile-check-'))
+const home = join(sandbox, 'profile-home')
+// The smoke always supplies its own profile and routes.
+for (const name of Object.keys(process.env)) if (name.startsWith('DS_SUPERAGENT_') || name.startsWith('DSH_')) delete process.env[name]
 process.env.DSH_HOME = home
 const workspace = join(home, 'workspace')
 process.env.DS_SUPERAGENT_WORKSPACE = workspace
@@ -33,16 +37,20 @@ writeFileSync(routePatch, [
 ].join('\n'))
 
 let application
-try {
-  const profile = loadAppProfile(SUPERAGENT_PROFILE)
+async function boot() {
+  const profile = loadAppProfile()
   const patchFiles = [reconcileSuperagentProfile(profile, true)[0], routePatch]
-  application = await runProfile({
+  return runProfile({
     environment: loadLayeredEnv('dsh'),
     profile: SUPERAGENT_PROFILE,
     resolvedProfile: { profile, installAnchor: INSTALL_ANCHOR },
     patchFiles,
     args: ['--no-open', '--port', '0'],
   })
+}
+
+try {
+  application = await boot()
   const { ctx } = application
   const services = ['superagentProduct', 'webServer', 'connection', 'sessionPersistence']
   const missing = services.filter(name => ctx.get(name) === undefined)
@@ -69,7 +77,10 @@ try {
             { goal: 'Create profile-beta.txt with the exact accepted text.', constraints: 'Only write inside the configured local workspace.',
               acceptanceCriteria: 'Read profile-beta.txt and confirm its exact contents.' },
           ] })
-        } else yield* textResponse('The independent Main answered through the public DSH loop.')
+        } else if (text === 'Wait for a remote device.' && toolCalls === 0) {
+          yield* toolResponse('delegate_work', { goal: 'Check the remote fixture.', constraints: 'Wait for the remote device.',
+            acceptanceCriteria: 'Read the remote fixture.' })
+        } else yield* textResponse('The independent Main answered through the public DSH loop.', { inputTokens: 3, outputTokens: 2, totalTokens: 5 })
         return
       }
       if (request.model === 'router') {
@@ -134,6 +145,10 @@ try {
   assert.equal(observationHistory.current, true)
   assert.equal(observationHistory.historyStatus, 'available')
   assert.equal(observationHistory.events.some(event => event.kind === 'tool-call'), true)
+  const usage = await ctx.superagentProduct.dispatch('product-usage', { instanceId: binding.instanceId })
+  assert.ok(usage.roles.main.totalTokens >= 5)
+  assert.ok(usage.planning.some(item => item.total.calls > 0))
+  assert.ok(usage.works.some(item => item.id === `item:${history.works[0].brief.workItemId}` && item.total.calls > 0))
   await assert.rejects(ctx.superagentProduct.dispatch('observe-read', {
     instanceId: binding.instanceId, observationId: workerObservation.id, text: 'This must be refused.',
   }), { code: 'INVALID_INPUT' })
@@ -145,12 +160,56 @@ try {
     instanceId: binding.instanceId, observationId: workerObservation.id, detailId: 'guessed-detail', write: true,
   }), { code: 'INVALID_INPUT' })
   if (ctx.get('botExecutionAdapter') !== undefined) throw new Error('The old execution adapter must not mount in the product profile.')
+  if (process.argv.includes('--check-upgrade')) {
+    const { instanceId } = binding
+    const call = (endpoint, payload = {}) => ctx.superagentProduct.dispatch(endpoint, { instanceId, ...payload })
+    await call('send', { commandId: 'wait-for-device', text: 'Wait for a remote device.', target: 'remote-only' })
+    let waiting
+    for (let attempt = 0; attempt < 200; attempt++) {
+      waiting = (await call('history')).works.find(work => work.brief.goal === 'Check the remote fixture.')
+      if (waiting?.executionSelection?.status === 'waiting') break
+      await sleep(50)
+    }
+    assert.equal(waiting?.executionSelection?.status, 'waiting')
+    await call('work-stop', { commandId: 'stop-before-upgrade', workItemId: waiting.control.workItemId,
+      ticketId: waiting.control.ticketId, expectedTicketVersion: waiting.control.ticketVersion, reason: 'Keep this work stopped after upgrading.' })
+    assert.equal((await call('schedule-source-set', { commandId: 'disable-schedule-before-upgrade', enabled: false })).enabled, false)
+    let effects
+    for (let attempt = 0; attempt < 200; attempt++) {
+      effects = (await call('product-status')).effects
+      if (!effects.pending && !effects.running) break
+      await sleep(50)
+    }
+    assert.equal(effects.pending + effects.running + effects.unknown, 0, JSON.stringify(effects))
+    const before = await call('history')
+    assert.equal(before.works.find(work => work.brief.workItemId === waiting.brief.workItemId).control.stop.state, 'stopped')
+    const roles = await call('settings', { limit: 1 })
+    await application.shutdown.shutdown(0)
+    application = undefined
+    const backupRoot = join(sandbox, 'backups')
+    const saved = await backupBeforeProfileChange({ home, backupRoot, version: 'profile-upgrade-fixture', assertProfile: () => assertLocalBackupProfile(home) })
+    assert.ok(saved?.sessions.sessionCount >= 3)
+    assert.ok(saved?.business.recordCount > 0)
+    assert.equal(saved.restorable, true, JSON.stringify(saved.blockers))
+    await restoreProductBackup({ home, backupRoot, backupId: saved.id })
+    application = await boot()
+    const restored = application.ctx.superagentProduct
+    assert.deepEqual(await restored.dispatch('open'), binding)
+    const after = await restored.dispatch('history', { instanceId })
+    assert.deepEqual(after.works.map(work => [work.brief.workItemId, work.status]), before.works.map(work => [work.brief.workItemId, work.status]))
+    assert.deepEqual(after.messages.map(message => message.id), before.messages.map(message => message.id))
+    assert.equal(after.works.find(work => work.brief.workItemId === waiting.brief.workItemId).control.stop.state, 'stopped')
+    assert.equal((await restored.dispatch('schedule-source-read', { instanceId })).enabled, false)
+    assert.deepEqual((await restored.dispatch('settings', { instanceId, limit: 1 })).roles, roles.roles)
+    assert.ok(await completeProductRestore({ home }))
+    log('Verified product backup, restore and public profile restart with the original work history, stop and schedule authorization.')
+  }
   console.log(JSON.stringify({ profile: SUPERAGENT_PROFILE, home, services, messages: history.messages.filter(message => !message.id.startsWith('reply:main-update:')).length,
     localWorkStatus: history.works.every(work => work.status === 'success') ? 'success' : 'failed', localWorkItems: history.works.length,
     observationItems: observations.items.length, observationHistoryEvents: observationHistory.events.length, observationWriteRejected: true,
     nativeSessionAccessDenied: true, nativeSessionExportDenied: true, nativeSessionReferenceDenied: true }))
 } finally {
   try { await application?.shutdown?.shutdown?.(0) } catch {}
-  rmSync(home, { recursive: true, force: true })
+  rmSync(sandbox, { recursive: true, force: true })
   console.log = log
 }

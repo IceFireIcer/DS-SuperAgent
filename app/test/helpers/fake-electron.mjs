@@ -79,6 +79,7 @@ export class FakeWindow extends EventEmitter {
   getBounds() { return { x: 0, y: 0, width: 800, height: 600 } }
   async loadURL(url) {
     this.url = url
+    this.webContents.mainFrame.url = url
     this.loaded.push(url)
     if (state.rejectLoads || this.rejectLoads) throw new Error(`the page ${url} did not load`)
     // The Host trades the token of the launch URL for a cookie of the browser's session.
@@ -146,6 +147,7 @@ class FakeApp extends EventEmitter {
 }
 
 export const app = new FakeApp()
+export const autoUpdater = new EventEmitter()
 
 export const BrowserWindow = FakeWindow
 

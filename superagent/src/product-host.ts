@@ -154,6 +154,7 @@ const memoryFields: Record<string, string[]> = {
   'memory-proposals': ['instanceId'],
   'memory-decide': ['instanceId', 'commandId', 'proposalId', 'approve'],
 }
+const statusFields: Record<string, string[]> = { 'product-usage': ['instanceId'], 'product-status': ['instanceId'] }
 
 export async function createProductHost(context: Context, config: ProductHostConfig): Promise<ProductHost> {
   const instanceId = config.instanceId ?? 'personal'
@@ -621,7 +622,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
           return engine!.openMain({ instanceId })
         }
         if (payload.instanceId !== instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This request is outside the authorized Instance.')
-        const fields = memoryFields[endpoint] ?? resourceFields[endpoint] ?? credentialImportFields[endpoint] ?? browserFields[endpoint]
+        const fields = statusFields[endpoint] ?? memoryFields[endpoint] ?? resourceFields[endpoint] ?? credentialImportFields[endpoint] ?? browserFields[endpoint]
           ?? (endpoint === 'proactive-rules' || endpoint === 'proactive-control' ? ['instanceId']
           : endpoint === 'proactive-list' ? ['instanceId', 'before']
           : endpoint === 'proactive-read' ? ['instanceId', 'runId']
@@ -726,6 +727,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
         }
         if (client && (endpoint.startsWith('attachment-') || endpoint === 'artifact-read')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'File access requires the local authorized product window.')
+        }
+        if (client && Object.hasOwn(statusFields, endpoint)) {
+          throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Product status and usage require the local authorized product settings.')
         }
         if (endpoint === 'clients-list' || endpoint === 'client-enroll' || endpoint === 'client-revoke') {
           if (client) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Client administration requires the local authorized product settings.')
@@ -1495,6 +1499,16 @@ export async function createProductHost(context: Context, config: ProductHostCon
           const info = await publicLlm().resolveModelInfo?.(payload.provider, payload.model)
           return { efforts: (info?.reasoning?.efforts ?? []).map(effort => ({ id: effort.id, name: effort.name ?? effort.id,
             ...(effort.description ? { description: effort.description } : {}) })), ...(info?.reasoning?.defaultEffort ? { defaultEffort: info.reasoning.defaultEffort } : {}) }
+        }
+        if (endpoint === 'product-usage') return engine!.getProductUsage({ instanceId })
+        if (endpoint === 'product-status') {
+          const [status, inspection] = await Promise.all([engine!.getProductStatus({ instanceId }), supervision!.state()])
+          const latest = inspection.run?.last
+          return { ...status, supervision: { watchdogConfigured: inspection.watchdogConfigured,
+            ...(inspection.watchdog?.last ? { watchdog: { kind: inspection.watchdog.last.kind,
+              at: inspection.watchdog.last.at, result: inspection.watchdog.last.result } } : {}),
+            ...(latest ? { semanticInspection: { status: latest.status, at: latest.at,
+              ...(latest.error ? { errorCode: latest.error } : {}), ...(latest.coverage ? { coverage: latest.coverage } : {}) } } : {}) } }
         }
         if (endpoint === 'provider-key') return setProviderKey(payload.provider as string, payload.value)
         if (endpoint === 'evidence') return engine!.readMainEvidence({ instanceId, workItemId: payload.workItemId as string,

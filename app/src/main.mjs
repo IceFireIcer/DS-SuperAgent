@@ -1,13 +1,17 @@
 // Electron main process: one window for DS SuperAgent, served by the app's own DSH Host.
 // The window loads the Host's loopback address as DSH Web does: DSH's sign-in sends the page's
 // origin as the address the browser comes back to, and accepts only a loopback one.
-import { app, BrowserWindow, WebContentsView, dialog, ipcMain, Menu, nativeImage, nativeTheme, powerMonitor, session, shell as electronShell, Tray } from 'electron'
+import { app, autoUpdater as nativeUpdater, BrowserWindow, WebContentsView, dialog, ipcMain, Menu, nativeImage, nativeTheme, powerMonitor, session, shell as electronShell, Tray } from 'electron'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { readFile, rm, stat } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { release } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { backupBeforeProfileChange, completeProductRestore, createProductBackup, listProductBackups, pendingProductRestore, recordProfileVersion,
+  recoverInterruptedProductRestore, restoreProductBackup } from './product-backups.mjs'
+import { createOperationsLog } from './operations-log.mjs'
 import electronUpdater from 'electron-updater'
 import { BotBrowserGuests, partitionOf } from './bot-browser.mjs'
 import { BotViews, isBotId } from './bot-views.mjs'
@@ -24,10 +28,10 @@ import { assertHostLockFree, hostLockPath, releaseHostLock, writeHostLock } from
 import { HostProcess } from './host-process.mjs'
 import { copyData, moveProblem } from './move-data.mjs'
 import { ARTIFACT_PREFIX, PRODUCT_NAME, configureIdentity } from './product.mjs'
-import { SUPERAGENT_PROFILE, profileHome } from './profile.mjs'
+import { SUPERAGENT_PROFILE, assertLocalBackupProfile, profileHome } from './profile.mjs'
 import { RemoteProductClient } from './remote-product-client.mjs'
 import { createShell, SHELL_TEXT } from './shell.mjs'
-import { UPDATE_TEXT, watchReleases, watchUpdates } from './updates.mjs'
+import { UPDATE_TEXT, isNewer, watchReleases, watchUpdates } from './updates.mjs'
 import { createDeferredPrompt } from './update-prompt.mjs'
 import { CAPTION_HEIGHT, cssColor, micaAvailable, nativeThemeSource } from './window-frame.mjs'
 
@@ -47,6 +51,8 @@ const IPC = {
   appUpdateState: 'ds-superagent:app-update-state', appUpdateCheck: 'ds-superagent:app-update-check',
   appUpdateInstall: 'ds-superagent:app-update-install', appUpdateOpen: 'ds-superagent:app-update-open',
   appUpdateChanged: 'ds-superagent:app-update-changed',
+  backupList: 'ds-superagent:backup-list', backupCreate: 'ds-superagent:backup-create',
+  backupRestore: 'ds-superagent:backup-restore', diagnosticsRead: 'ds-superagent:diagnostics-read',
   productConnect: 'ds-superagent:client-connect', productDisconnect: 'ds-superagent:client-disconnect',
   productStatus: 'ds-superagent:client-status', productCall: 'ds-superagent:client-call', productEvents: 'ds-superagent:client-events',
 }
@@ -59,6 +65,10 @@ const UPDATE_CHECK_WAIT_MS = 15_000
 const UPDATE_DOWNLOAD_WAIT_MS = 15 * 60_000
 
 const here = dirname(fileURLToPath(import.meta.url))
+const packageInfo = createRequire(import.meta.url)
+const dshVersion = packageInfo('@deepseek-ai/dsh/package.json').version
+const productVersion = packageInfo('ds-superagent/package.json').version
+const profileVersion = () => `${app.getVersion()}/${productVersion}/${dshVersion}`
 const assets = join(here, '..', 'assets')
 // Drawn by scripts/icon.mjs. Windows takes the .ico for its several sizes.
 const iconFile = join(assets, process.platform === 'win32' ? 'icon.ico' : 'icon.png')
@@ -77,6 +87,13 @@ let host
 let origin
 let hostStop
 let updates
+let maintenance
+let startup
+let updateLaunchPending = false
+let updateExitAllowed = false
+let updateExitCommitted = false
+let updateExitTimer
+let installOnQuit = true
 let stopping = false
 let stopped = false
 let failed = false
@@ -120,6 +137,15 @@ const cookieImports = new CookieImports()
 const productCookieImports = new ProductCookieImports()
 const credentialImports = new CredentialImports()
 const remoteProduct = new RemoteProductClient()
+const operationsLog = createOperationsLog(join(app.getPath('userData'), 'logs', 'operations.jsonl'))
+const productBackupRoot = join(app.getPath('userData'), 'backups')
+const note = (area, code, version) => void operationsLog.record(area, code, version).catch(() => {})
+const managed = () => Boolean(process.env.DS_SUPERAGENT_POSTGRES?.trim())
+
+function assertBackupLocation() {
+  const problem = placeProblem(text(), productBackupRoot)
+  if (problem !== undefined) throw Object.assign(new Error(problem), { code: 'BACKUP_LOCATION_UNAVAILABLE' })
+}
 
 // The window and the tray: closing the window hides it, the tray is the way back to it and
 // the tray's Quit is the one ordinary way out.
@@ -166,7 +192,22 @@ if (identityError !== undefined) {
   app.exit(0)
 } else {
   app.on('second-instance', () => { shell.open() })
+  nativeUpdater?.on('before-quit-for-update', () => { updateLaunchPending = updates?.state().phase === 'installing' })
   app.on('before-quit', (event) => {
+    if (updateLaunchPending && !updateExitAllowed) {
+      event.preventDefault()
+      if (!updateExitTimer) {
+        // NSIS reports a failed detached spawn after quitAndInstall has returned.
+        updateExitTimer = setTimeout(() => {
+          updateExitTimer = undefined
+          updateExitAllowed = true
+          app.quit()
+        }, 1000)
+        updateExitTimer.unref()
+      }
+      return
+    }
+    if (updateLaunchPending && updateExitAllowed) updateExitCommitted = true
     if (choosing !== undefined) {
       // A first-run dialog is open: the quit waits for it, and the app goes on meanwhile.
       event.preventDefault()
@@ -183,6 +224,16 @@ if (identityError !== undefined) {
       void copying.finally(() => { copying = undefined; app.quit() })
       return
     }
+    if (maintenance || startup) {
+      event.preventDefault()
+      if (startup) void startup.finally(() => app.quit()).catch(() => {})
+      return
+    }
+    if (installOnQuit && !stopping && hostState === HOST_STATE.running && updates?.install && updates.state().phase === 'downloaded') {
+      event.preventDefault()
+      void installUpdate().catch(() => { shell.cancelQuit(); showUpdateFailure() })
+      return
+    }
     // The app is on its way out: the window may close for good.
     shell.beginQuit()
     if (stopped || host === undefined) return
@@ -195,24 +246,36 @@ if (identityError !== undefined) {
   app.whenReady().then(async () => { shell.install(); await start() }).catch(fail)
 }
 
-function stopHost() {
+function lockProductData() {
+  assertHostLockFree(hostLock)
+  writeHostLock(hostLock, { pid: process.pid, port: hostPortNumber })
+  hostLockPid = process.pid
+}
+
+function unlockProductData() {
+  releaseHostLock(hostLock, hostLockPid)
+  hostLockPid = undefined
+}
+
+function stopHost({ forBackup = false, holdLock = forBackup } = {}) {
   stopping = true
-  hostStop ??= Promise.resolve().then(() => host?.stop()).then(() => {
+  const confirmedExit = () => {
     stopped = true
     hostState = HOST_STATE.stopped
-    releaseHostLock(hostLock, hostLockPid)
-    hostLockPid = undefined
+    if (holdLock) {
+      writeHostLock(hostLock, { pid: process.pid, port: hostPortNumber })
+      hostLockPid = process.pid
+    } else unlockProductData()
+  }
+  hostStop ??= Promise.resolve().then(() => host?.stop({ forBackup })).then(checkpoint => {
+    confirmedExit()
+    return checkpoint
   }, (error) => {
     console.error(error)
     // A Host that did not confirm its exit still owns the data: its lock stays, and nothing
     // may start on or replace that data.
-    if (error?.code !== 'STOP_UNKNOWN') {
-      stopped = true
-      releaseHostLock(hostLock, hostLockPid)
-      hostLockPid = undefined
-    } else {
-      hostState = HOST_STATE.failed
-    }
+    if (error?.code !== 'STOP_UNKNOWN') confirmedExit()
+    else hostState = HOST_STATE.failed
     throw error
   })
   shell.refresh()
@@ -222,6 +285,7 @@ function stopHost() {
 // The Host is gone while the computer sleeps: the app hears it when it wakes, and replaces it
 // then. Outside a sleep the failure is the user's now, with a chance to try again.
 function hostFailure(error) {
+  note('host', 'HOST_FAILED', app.getVersion())
   if (suspended) { deferredFailure = error; return }
   void fail(error)
 }
@@ -293,7 +357,6 @@ function wireHost(instance) {
 // A new Host takes the data lock before it starts. The lock names the Host child, not the
 // shell, so a Host that outlives its shell still blocks a second Router.
 function launchHost(instance) {
-  assertHostLockFree(hostLock)
   host = instance
   wireHost(instance)
   const starting = instance.start()
@@ -301,10 +364,38 @@ function launchHost(instance) {
     hostLockPid = instance.pid()
     writeHostLock(hostLock, { pid: hostLockPid, port: hostPortNumber })
   }
-  return starting.then((answer) => {
-    if (answer?.url !== undefined) { hostState = HOST_STATE.running; shell.refresh() }
+  return starting
+}
+
+function startProductHost(home, { rollback = false } = {}) {
+  startup = (async () => {
+    lockProductData()
+    try {
+      if (rollback) assertLocalBackupProfile(home)
+      const recovered = await recoverInterruptedProductRestore({ home, rollback })
+      if (recovered.status === 'rolled-back') note('backup', 'RESTORE_ROLLED_BACK')
+      if (!managed()) {
+        const saved = await backupBeforeProfileChange({ home, backupRoot: productBackupRoot, version: profileVersion(), assertProfile: () => {
+          assertBackupLocation()
+          assertLocalBackupProfile(home)
+        } })
+        if (saved) note('backup', saved.restorable ? 'UPGRADE_BACKUP_CREATED' : 'UPGRADE_BACKUP_RESTORE_BLOCKED', app.getVersion())
+      }
+    } catch (error) {
+      unlockProductData()
+      note('backup', error?.code === 'UNSUPPORTED_SCHEMA' ? 'BACKUP_SCHEMA_UNSUPPORTED' : 'PROFILE_PREPARATION_FAILED', app.getVersion())
+      throw error
+    }
+    const answer = await launchHost(hostFactory())
+    if (answer?.url !== undefined) {
+      await finishProfileStart(home)
+      hostState = HOST_STATE.running
+      shell.refresh()
+      note('host', 'HOST_READY', app.getVersion())
+    }
     return answer
-  })
+  })().finally(() => { startup = undefined })
+  return startup
 }
 
 async function start() {
@@ -341,12 +432,12 @@ async function start() {
   // After a failed or interrupted Host the shell starts another one on the same profile and
   // port, rather than sending the user back through the first run.
   hostFactory = newHost
-  const ready = (async () => {
-    updates = startUpdates()
-    updates?.subscribe((state) => { mainWindow?.webContents.send(IPC.appUpdateChanged, state) })
-    return launchHost(newHost())
-  })()
-  ready.catch(fail)
+  await checkLastInstall().catch(() => {})
+  updates = startUpdates()
+  updates?.subscribe((state) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(IPC.appUpdateChanged, state)
+    if (!['checking', 'installing'].includes(state.phase)) note('update', `UPDATE_${state.failure ?? state.phase}`.toUpperCase(), state.version)
+  })
   // A throwaway run (DS_SUPERAGENT_HOME) keeps its folders where it was told.
   const fixed = Boolean(process.env.DS_SUPERAGENT_HOME)
   ipcMain.handle(IPC.dataLocation, (event) => {
@@ -472,14 +563,30 @@ async function start() {
   })
   ipcMain.handle(IPC.appUpdateInstall, async (event) => {
     assertWindow(event)
-    if (updates?.state().phase === 'downloaded') await updates.install()
+    if (updates?.state().phase === 'downloaded') await installUpdate()
   })
   ipcMain.handle(IPC.appUpdateOpen, (event) => {
     assertWindow(event)
-    const state = updates?.state()
-    if (state?.phase === 'available' && typeof state.page === 'string' && state.page.startsWith('https://')) {
-      void electronShell.openExternal(state.page)
-    }
+    return openUpdatePage()
+  })
+  ipcMain.handle(IPC.backupList, event => {
+    assertWindow(event)
+    if (managed()) return []
+    assertBackupLocation()
+    return listProductBackups(productBackupRoot)
+  })
+  ipcMain.handle(IPC.backupCreate, event => {
+    assertWindow(event)
+    return maintainProduct('backup', async options => createProductBackup(options))
+  })
+  ipcMain.handle(IPC.backupRestore, (event, backupId) => {
+    assertWindow(event)
+    return maintainProduct('restore', options => restoreProductBackup({ ...options, backupId }))
+  })
+  ipcMain.handle(IPC.diagnosticsRead, async event => {
+    assertWindow(event)
+    return { product: PRODUCT_NAME, appVersion: app.getVersion(), dshVersion, platform: process.platform, arch: process.arch,
+      hostState, backupsAvailable: !managed(), events: (await operationsLog.read()).slice(-50).reverse() }
   })
   // The product keeps the workspace; the app remembers it for path and data-move checks.
   ipcMain.on(IPC.teamWorkspace, (event, path) => {
@@ -504,6 +611,8 @@ async function start() {
   // A packaged app has the icon in its bundle; Electron's own run shows Electron's.
   if (process.platform === 'darwin' && !app.isPackaged) app.dock?.setIcon(iconFile)
   createWindow()
+  const ready = startProductHost(hostHome)
+  void ready.catch(fail)
   // The launch URL trades its token for the Host's cookie and goes on to the page. The cookie
   // is there once that load came through. The token is good for one browser only: it is spent
   // as soon as a window carries it.
@@ -522,7 +631,7 @@ async function start() {
 // The data moves as a copy while the Host is stopped, and the app starts again on the new
 // folder; after a failed copy it starts again on the old one. The old folder stays.
 async function moveData(workspace) {
-  if (copying !== undefined || stopping || mainWindow === undefined) return false
+  if (copying !== undefined || maintenance || stopping || mainWindow === undefined) return false
   const t = text()
   const owner = mainWindow
   const { canceled, filePaths } = await dialog.showOpenDialog(owner, { title: t.pickMove, defaultPath: dirname(places.dataDir), properties: ['openDirectory', 'createDirectory', 'promptToCreate'] })
@@ -614,7 +723,28 @@ function startUpdates() {
     // installer replaces its files.
     return watchUpdates({
       updater: electronUpdater.autoUpdater, feed, ask: throwaway ? undefined : (version) => restartPrompt.prompt(version),
-      beforeInstall: () => { shell.beginQuit(); return stopHost() },
+      beforeInstall: () => maintainProduct('upgrade', options => createProductBackup({ ...options, requireRestorable: true })),
+      beforeLaunch: async version => {
+        await operationsLog.record('update', 'UPDATE_INSTALL_REQUESTED', version)
+        shell.beginQuit()
+      },
+      onInstallFailure: async ({ asynchronous }) => {
+        installOnQuit = false
+        clearTimeout(updateExitTimer)
+        updateExitTimer = undefined
+        updateLaunchPending = false
+        if (updateExitCommitted) {
+          app.relaunch()
+          return
+        }
+        updateExitAllowed = false
+        shell.cancelQuit()
+        if (failed && !asynchronous) {
+          resetStoppedHost()
+        } else if (stopped) {
+          await restartAfterMaintenance()
+        }
+      },
     })
   }
   return undefined
@@ -646,6 +776,85 @@ async function askDownloadNow(version) {
 // What the updater does when the user says yes. The answer may come later, when the window
 // is shown again; then the work is done here.
 async function installUpdate() { await updates?.install() }
+
+function showUpdateFailure() {
+  const message = localeText(UPDATE_TEXT).installFailed
+  void dialog.showMessageBox({ type: 'warning', title: PRODUCT_NAME, message }).catch(() => {})
+}
+
+async function checkLastInstall() {
+  const events = await operationsLog.read()
+  const last = events.findLast(event => event.area === 'update'
+    && ['UPDATE_INSTALL_REQUESTED', 'UPDATE_INSTALL_FAILED', 'UPDATE_INSTALLED', 'UPDATE_INSTALL_UNCONFIRMED'].includes(event.code))
+  if (last?.code !== 'UPDATE_INSTALL_REQUESTED' || !last.version) return
+  const current = app.getVersion()
+  const installed = current === last.version || isNewer(current, last.version)
+  await operationsLog.record('update', installed ? 'UPDATE_INSTALLED' : 'UPDATE_INSTALL_UNCONFIRMED', last.version)
+}
+
+async function finishProfileStart(home) {
+  if (!managed() && await stat(join(home, 'core', 'state.sqlite')).then(value => value.isFile(), () => false)) {
+    await recordProfileVersion(home, profileVersion())
+  }
+  if (await completeProductRestore({ home })) note('backup', 'RESTORE_READY')
+}
+
+function resetStoppedHost() {
+  if (!stopped) return
+  unlockProductData()
+  host = undefined
+  hostStop = undefined
+  stopped = false
+  stopping = false
+}
+
+async function restartAfterMaintenance() {
+  if (!stopped || !stopping) return
+  resetStoppedHost()
+  shell.cancelQuit()
+  await relaunchHost()
+}
+
+function maintainProduct(purpose, operation) {
+  if (managed()) throw new Error('Use your PostgreSQL deployment backup procedure for this Host.')
+  const running = hostState === HOST_STATE.running
+  if (maintenance || startup || !places || copying || stopping || suspended
+    || (!running && !(purpose === 'upgrade' && failed))) {
+    throw new Error('The product is busy or its data is unavailable for maintenance.')
+  }
+  const home = profileHome(places.dataDir)
+  const code = purpose === 'restore' ? 'RESTORE' : 'BACKUP'
+  const attempt = (async () => {
+    note('backup', `${code}_STARTED`)
+    let done = false
+    try {
+      assertBackupLocation()
+      assertLocalBackupProfile(home)
+      if (!host) lockProductData()
+      const expectedSessions = await stopHost({ forBackup: running, holdLock: true })
+      if (!running) {
+        const restore = await recoverInterruptedProductRestore({ home })
+        if (restore.status === 'installed') throw Object.assign(new Error('Complete or roll back the pending restore before installing an update.'), { code: 'RESTORE_PENDING' })
+      }
+      const result = await operation({ home, backupRoot: productBackupRoot, expectedSessions, purpose })
+      done = true
+      note('backup', `${code}_SAVED`)
+      return result
+    } catch (error) {
+      const code = error?.code ?? ''
+      note('backup', /^[A-Z][A-Z0-9_]{0,79}$/u.test(code) ? code : `${purpose.toUpperCase()}_FAILED`)
+      if (/^(BACKUP_|RESTORE_|UNSUPPORTED_)/u.test(code)) throw error
+      throw new Error('Product maintenance failed. Check the diagnostics log.')
+    } finally {
+      if (!done || purpose !== 'upgrade') {
+        if (running) await restartAfterMaintenance()
+        else resetStoppedHost()
+      }
+    }
+  })()
+  maintenance = attempt.finally(() => { maintenance = undefined })
+  return maintenance
+}
 
 async function openUpdatePage() {
   const state = updates?.state()
@@ -877,7 +1086,7 @@ async function resumeHost() {
 // Another Host on the same profile and port: after a failure or an interrupted sleep, without
 // sending the user back through the first run. The old Host goes first, so a replaced Host can
 // never overlap the new one; the old launch URL goes with it.
-async function relaunchHost(cause) {
+async function relaunchHost(cause, { rollback = false } = {}) {
   if (stopping || hostFactory === undefined) return
   if (cause !== undefined) console.warn(`${PRODUCT_NAME}: replacing the Host: ${cause instanceof Error ? cause.message : String(cause)}`)
   let confirmed = true
@@ -890,8 +1099,7 @@ async function relaunchHost(cause) {
     shell.refresh()
     return
   }
-  releaseHostLock(hostLock, hostLockPid)
-  hostLockPid = undefined
+  unlockProductData()
   host = undefined
   hostStop = undefined
   failed = false
@@ -902,7 +1110,7 @@ async function relaunchHost(cause) {
   launchUrl = undefined
   bootstrap = undefined
   try {
-    const answer = await launchHost(hostFactory())
+    const answer = await startProductHost(profileHome(places.dataDir), { rollback })
     if (answer?.url !== undefined) launchUrl = answer.url
     const win = mainWindow
     if (win !== undefined && !win.isDestroyed()) await connectHost(win)
@@ -916,16 +1124,22 @@ async function relaunchHost(cause) {
 
 // A directory or an account can be fixed without starting the whole app again: offer the same
 // Host on the same data again, and say what went wrong.
-async function askTryAgain(error, next) {
+async function askStartupAction(error, next) {
   const t = text()
+  const canRollback = !managed() && places
+    && await pendingProductRestore({ home: profileHome(places.dataDir) }).catch(() => false)
+  const log = (await operationsLog.read().catch(() => [])).slice(-6)
+  const diagnostics = log.map(event => `${new Date(event.at).toLocaleString()}  ${event.code}${event.version ? ` · ${event.version}` : ''}`)
+  const buttons = hostFactory ? [t.tryAgain, t.quit] : [t.quit]
+  if (canRollback) buttons.push(localeText(UPDATE_TEXT).rollbackRestore)
   const { response } = await dialog.showMessageBox({
     type: 'error', title: PRODUCT_NAME, noLink: true,
     message: t.notStarted,
-    detail: `${error instanceof Error ? error.message : String(error)}${next}`,
-    buttons: hostFactory === undefined ? [t.quit] : [t.tryAgain, t.quit],
-    defaultId: 0, cancelId: 0,
+    detail: [String(error?.message ?? error) + next, diagnostics.join('\n')].filter(Boolean).join('\n\n'),
+    buttons, defaultId: 0, cancelId: hostFactory ? 1 : 0,
   })
-  return hostFactory !== undefined && response === 0
+  if (canRollback && response === 2) return 'rollback'
+  return hostFactory && response === 0 ? 'retry' : 'quit'
 }
 
 async function fail(error) {
@@ -934,7 +1148,7 @@ async function fail(error) {
   failed = true
   hostState = HOST_STATE.failed
   shell.refresh()
-  const found = await Promise.race([updates?.latest() ?? null, sleep(UPDATE_CHECK_WAIT_MS).then(() => null)])
+  const found = installOnQuit && await Promise.race([updates?.latest() ?? null, sleep(UPDATE_CHECK_WAIT_MS, null, { ref: false })])
   const throwaway = Boolean(process.env.DS_SUPERAGENT_HOME)
   const t = localeText(UPDATE_TEXT)
   const next = found ? `\n\n${found.page ? t.onFailurePage(found.version) : t.onFailure(found.version)}` : ''
@@ -947,11 +1161,13 @@ async function fail(error) {
   if (found) {
     dialog.showErrorBox(PRODUCT_NAME, `${text().notStarted}\n\n${error instanceof Error ? error.message : String(error)}${next}`)
     mainWindow?.hide()
-    if (await Promise.race([found.downloaded, sleep(UPDATE_DOWNLOAD_WAIT_MS).then(() => false)])) {
-      await updates.install()
-      return
+    if (await Promise.race([found.downloaded, sleep(UPDATE_DOWNLOAD_WAIT_MS, false, { ref: false })])) {
+      try { await installUpdate(); return }
+      catch { showUpdateFailure() }
     }
   }
-  if (await askTryAgain(error, next)) { await relaunchHost(); return }
+  if (hostState === HOST_STATE.running) return
+  const action = await askStartupAction(error, next)
+  if (action !== 'quit') { await relaunchHost(undefined, { rollback: action === 'rollback' }); return }
   app.quit()
 }

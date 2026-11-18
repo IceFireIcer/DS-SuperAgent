@@ -5,7 +5,6 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { profileHome } from '../../src/profile.mjs'
 import { paths, state } from './fake-electron.mjs'
 import { hold } from './fake-host-process.mjs'
 
@@ -22,9 +21,9 @@ export const waitFor = async (check, what, timeout = 20_000) => {
 /**
  * Start the app on throwaway folders: the places are chosen already and the one-time notice
  * is answered, so that the app asks nothing. The Host answers when the test lets it.
- * @param {{ packaged?: boolean }} options whether the app is a packaged one, with an updater
+ * @param {{ packaged?: boolean, prepare?: (home: string) => Promise<void> }} options
  */
-export const startApp = async ({ packaged = true } = {}) => {
+export const startApp = async ({ packaged = true, prepare } = {}) => {
   const home = mkdtempSync(join(tmpdir(), 'ds-superagent-main-home-'))
   process.once('exit', () => {
     const roots = [home, paths.root]
@@ -40,11 +39,12 @@ export const startApp = async ({ packaged = true } = {}) => {
     if (failures.length) console.error(`DS SuperAgent app-test cleanup failed: ${failures.map(error => error instanceof Error ? error.message : String(error)).join('; ')}`)
   })
   const workspace = join(home, 'workspace')
-  mkdirSync(profileHome(home), { recursive: true })
+  mkdirSync(join(home, 'superagent'), { recursive: true })
   mkdirSync(workspace, { recursive: true })
   mkdirSync(paths.userData, { recursive: true })
   writeFileSync(join(paths.userData, 'locations.json'), JSON.stringify({ dataDir: home, workspace }))
   writeFileSync(join(paths.userData, 'tray-close-acknowledged'), '')
+  await prepare?.(join(home, 'superagent'))
   hold()
   await import('../../src/main.mjs')
   // The app is a packaged one, so that it has an updater. The flag comes after the start,

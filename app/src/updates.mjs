@@ -7,20 +7,24 @@ export const UPDATE_TEXT = {
     ready: version => `${PRODUCT_NAME} ${version} is ready to install.`,
     readyDetail: 'Restart now to update, or it is installed the next time you quit.',
     restart: 'Restart now', later: 'Later',
+    installFailed: 'The update could not be installed. Check Diagnostics in Status and usage.',
     onFailure: version => `${PRODUCT_NAME} ${version} is installed when its download is done, and then ${PRODUCT_NAME} opens again.`,
     available: version => `${PRODUCT_NAME} ${version} is available.`,
     availableDetail: `This version cannot update itself. Download the new version from its release page, then replace ${PRODUCT_NAME} in Applications.`,
     download: 'Download',
+    rollbackRestore: 'Undo unfinished restore',
     onFailurePage: version => `${PRODUCT_NAME} ${version} is available. After this box, its download page opens.`,
   },
   zh: {
     ready: version => `${PRODUCT_NAME} ${version} 已经下载好。`,
     readyDetail: '现在重启就能更新；不重启的话，下次退出时安装。',
     restart: '立即重启', later: '稍后',
+    installFailed: '更新未能安装。请在「状态与用量」中查看诊断。',
     onFailure: version => `${PRODUCT_NAME} ${version} 下载完会自动安装，然后重新打开。`,
     available: version => `${PRODUCT_NAME} ${version} 已经发布。`,
     availableDetail: `这个版本不能自己更新。请到发布页下载新版，再用它替换「应用程序」里的 ${PRODUCT_NAME}。`,
     download: '下载',
+    rollbackRestore: '撤销未完成的恢复',
     onFailurePage: version => `${PRODUCT_NAME} ${version} 已经发布。关掉这个对话框后，会打开它的下载页面。`,
   },
 }
@@ -79,7 +83,7 @@ function isHttpsPage(page) {
 // The About row shows the checker's phase: checking → current | downloading → downloaded |
 // available | failed. While a check, a download or a ready install is on, a new check must
 // not start, so `check()` is a no-op in those phases.
-const UPDATE_BUSY = new Set(['checking', 'downloading', 'downloaded'])
+const UPDATE_BUSY = new Set(['checking', 'downloading', 'downloaded', 'installing'])
 
 function stateHolder(log) {
   let state = { phase: 'checking' }
@@ -206,13 +210,15 @@ export function watchReleases({ current, arch, fetch = globalThis.fetch, ask, op
 /**
  * @param {{
  *   updater: import('electron-updater').AppUpdater,
- *   beforeInstall: () => Promise<void>,
+ *   beforeInstall: () => Promise<unknown>,
+ *   onInstallFailure?: (failure: { asynchronous: boolean }) => Promise<void>,
+ *   beforeLaunch?: (version: string) => Promise<void>,
  *   ask?: (version: string) => Promise<boolean>,
  *   feed?: string,
  *   timeout?: number,
  *   log?: Pick<Console, 'info' | 'error'>,
  * }} options `ask` answers whether to restart now; without it the update waits for the next
- *   quit. `beforeInstall` stops the Host, which runs from the files the installer replaces.
+ *   quit. The desktop main process owns both paths through `beforeInstall`.
  *   `feed` is a folder URL with a latest.yml, in place of the GitHub releases. A check that
  *   takes longer than `timeout` fails, so that a later check can run.
  * @returns {{
@@ -227,26 +233,52 @@ export function watchReleases({ current, arch, fetch = globalThis.fetch, ask, op
  *   the phase the About row shows; `check` runs the same check the timer does and does
  *   nothing while a check, a download or a ready install is on.
  */
-export function watchUpdates({ updater, beforeInstall, ask, feed, log = console, timeout = CHECK_TIMEOUT_MS }) {
+export function watchUpdates({ updater, beforeInstall, beforeLaunch, onInstallFailure, ask, feed, log = console, timeout = CHECK_TIMEOUT_MS }) {
   updater.autoDownload = true
-  updater.autoInstallOnAppQuit = true
+  updater.autoInstallOnAppQuit = false
   if (feed) updater.setFeedURL({ provider: 'generic', url: feed })
   const holder = stateHolder(log)
   let stopped = false
   let accepting = true
   const runs = new Set()
   let sequence = 0
-  const install = async () => {
-    await beforeInstall()
-    updater.quitAndInstall(true, true)
+  let installing
+  let launching = false
+  let launchFailure
+  const failedInstall = (version, error, asynchronous = false) => {
+    launching = false
+    holder.set({ phase: 'downloaded', version, failure: 'install_failed' })
+    return Promise.resolve().then(() => onInstallFailure?.({ asynchronous })).catch(() => {
+      log.error(`${PRODUCT_NAME}: could not restart the Host after an update error`)
+    }).then(() => { throw error })
+  }
+  const install = () => {
+    if (installing) return installing
+    if (launchFailure) return launchFailure
+    const { phase, version } = holder.state()
+    if (phase !== 'downloaded') return Promise.resolve()
+    installing = (async () => {
+      holder.set({ phase: 'installing', version })
+      try {
+        await beforeInstall()
+        await beforeLaunch?.(version)
+        launching = true
+        updater.quitAndInstall(true, true)
+        if (launchFailure) await launchFailure
+      } catch (error) {
+        if (holder.state().phase === 'installing') await failedInstall(version, error)
+        throw error
+      }
+    })().finally(() => { installing = undefined })
+    return installing
   }
   let asked
-  const report = (next) => { if (!stopped && accepting) holder.set(next) }
+  const report = (next) => { if (!stopped && accepting && holder.state().phase !== 'installing') holder.set(next) }
   updater.on('checking-for-update', () => { report({ phase: 'checking' }) })
   updater.on('update-not-available', () => { report({ phase: 'current' }) })
   updater.on('update-available', (info) => { report({ phase: 'downloading', version: info?.version }) })
   updater.on('update-downloaded', ({ version }) => {
-    if (stopped || !accepting) return
+    if (stopped || !accepting || holder.state().phase === 'installing') return
     log.info(`${PRODUCT_NAME}: update ${version} downloaded`)
     holder.set({ phase: 'downloaded', version })
     if (ask === undefined || asked === version) return
@@ -256,9 +288,17 @@ export function watchUpdates({ updater, beforeInstall, ask, feed, log = console,
   })
   // A downloaded update stays ready: a later failed check does not hide it.
   updater.on('error', (error) => {
-    if (stopped) return
+    if (stopped && !launching) return
     log.error(`${PRODUCT_NAME}: update failed: ${error instanceof Error ? error.message : String(error)}`)
-    if (accepting && holder.state().phase !== 'downloaded') holder.set({ phase: 'failed' })
+    const { phase, version } = holder.state()
+    if (phase === 'installing' && launching) {
+      launchFailure = failedInstall(version, error, installing === undefined)
+      void launchFailure.catch(() => {}).finally(() => { launchFailure = undefined })
+    } else if (phase === 'installing') {
+      return
+    } else if (accepting && phase !== 'downloaded') {
+      holder.set(phase === 'downloading' ? { phase: 'failed', failure: 'download_failed' } : { phase: 'failed' })
+    }
   })
   let latest = Promise.resolve(null)
   // A failed check or download also comes as an 'error' event.
@@ -286,7 +326,10 @@ export function watchUpdates({ updater, beforeInstall, ask, feed, log = console,
       if (!live()) return null
       if (result?.isUpdateAvailable && result.downloadPromise) {
         settled({ phase: 'downloading', version: result.updateInfo.version })
-        return { version: result.updateInfo.version, downloaded: result.downloadPromise.then(() => true, () => false) }
+        return { version: result.updateInfo.version, downloaded: result.downloadPromise.then(() => true, () => {
+          if (live() && holder.state().phase === 'downloading') holder.set({ phase: 'failed', failure: 'download_failed' })
+          return false
+        }) }
       }
       settled({ phase: 'current' })
       return null
