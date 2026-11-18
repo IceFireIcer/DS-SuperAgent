@@ -348,7 +348,7 @@ export class WorkObservations {
       item.workBriefId, item.workItemId ?? '', item.generation ?? '',
     ].join('\n').toLocaleLowerCase().includes(query))
       .sort(comparison)
-      .filter(item => !cursor || item.createdAt < cursor.createdAt || item.createdAt === cursor.createdAt && item.id < cursor.id)
+      .filter(item => !cursor || comparison(item, cursor) > 0)
     const page = matching.slice(0, limit)
     const last = page.at(-1)
     return { items: page, ...(matching.length > limit && last

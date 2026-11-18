@@ -8,6 +8,8 @@ import { SqliteStorage } from '../dist/storage.js'
 import { completedToolCount, lastUserText } from './input-support.mjs'
 import { nativeContext, routerResponse, textResponse, toolResponse } from '../dev/native-mock.mjs'
 
+const githubEffects = { claimUnowned: false, streamOwners: { notice: 'desktop', relay: 'desktop' } }
+
 function* maxTokensResponse(text) {
   yield { type: 'block-start', index: 0, blockType: 'text' }
   yield { type: 'text-delta', index: 0, text }
@@ -61,7 +63,7 @@ test('a new GitHub request enters Main exclusively and later events stay on the 
   github = new core.Engine(storage, 'private', { kind: 'github', sourceInstanceId: 'github:acme/repo', actorId: 'github-receiver',
     allowedActorIds: ['github-receiver'], allowedThreadPrefixes: ['github:acme/repo#'], versionOrder: 'sequence',
     intake: { mode: 'auto', maxBatchSize: 5, maxAttempts: 1, timeoutMs: 5000, allowedRequesterIds: ['alice'], allowedBotActorIds: [], rules: [] } },
-    {}, sessions)
+    githubEffects, sessions)
   await desktop.openMain({ instanceId: 'private' })
   const config = { owner: 'acme', repo: 'repo', mainIntake: true }
   const source = new core.GitHubSource(storage, 'private', github, config)
@@ -196,7 +198,7 @@ test('pending Main handoffs recheck native currentness and authorization before 
   github = new core.Engine(storage, 'private', { kind: 'github', sourceInstanceId: 'github:acme/repo', actorId: 'github-receiver',
     allowedActorIds: ['github-receiver'], allowedThreadPrefixes: ['github:acme/repo#'], versionOrder: 'sequence',
     intake: { mode: 'auto', maxBatchSize: 5, maxAttempts: 1, timeoutMs: 5000, allowedRequesterIds: ['alice'], allowedBotActorIds: [], rules: [] } },
-    {}, sessions)
+    githubEffects, sessions)
   await desktop.openMain({ instanceId: 'private' })
   const source = new core.GitHubSource(storage, 'private', github, { owner: 'acme', repo: 'repo', mainIntake: true })
   await source.receive({ deliveryId: 'stale-created', cursor: '1', repo: 'acme/repo', kind: 'issue', action: 'created', number: 9,
@@ -255,7 +257,7 @@ test('a failed source Main turn recovers with a new stable turn while keeping th
   github = new core.Engine(storage, 'private', { kind: 'github', sourceInstanceId: 'github:acme/repo', actorId: 'github-receiver',
     allowedActorIds: ['github-receiver'], allowedThreadPrefixes: ['github:acme/repo#'], versionOrder: 'sequence',
     intake: { mode: 'auto', maxBatchSize: 5, maxAttempts: 1, timeoutMs: 5000, allowedRequesterIds: ['alice'], allowedBotActorIds: [], rules: [] } },
-    {}, sessions)
+    githubEffects, sessions)
   await desktop.openMain({ instanceId: 'private' })
   const source = new core.GitHubSource(storage, 'private', github, { owner: 'acme', repo: 'repo', mainIntake: true })
   await source.receive({ deliveryId: 'recovery-created', cursor: '1', repo: 'acme/repo', kind: 'issue', action: 'created', number: 11,
@@ -316,7 +318,7 @@ test('a context-full source Main turn rolls over durably and retries the same ha
   github = new core.Engine(storage, 'private', { kind: 'github', sourceInstanceId: 'github:acme/repo', actorId: 'github-receiver',
     allowedActorIds: ['github-receiver'], allowedThreadPrefixes: ['github:acme/repo#'], versionOrder: 'sequence',
     intake: { mode: 'auto', maxBatchSize: 5, maxAttempts: 1, timeoutMs: 5000, allowedRequesterIds: ['alice'], allowedBotActorIds: [], rules: [] } },
-    {}, sessions)
+    githubEffects, sessions)
   const initial = await desktop.openMain({ instanceId: 'private' })
   const source = new core.GitHubSource(storage, 'private', github, { owner: 'acme', repo: 'repo', mainIntake: true })
   await source.receive({ deliveryId: 'rollover-created', cursor: '1', repo: 'acme/repo', kind: 'issue', action: 'created', number: 13,
