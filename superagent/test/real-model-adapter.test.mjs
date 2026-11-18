@@ -67,6 +67,21 @@ test('a real-model response becomes public text, tool-call and usage chunks with
   assert.equal(budget.exceeded, false)
 })
 
+test('a parsed response retains its usage when the Session stops consuming chunks early', async () => {
+  const budget = createModelBudget()
+  const model = adapter(async () => response({ choices: [{ message: { content: 'Ready.' }, finish_reason: 'stop' }],
+    usage: { prompt_tokens: 120, completion_tokens: 30, total_tokens: 150 } }), budget)
+  for await (const chunk of model.stream({ provider: 'pokexiao', model: 'deepseek', messages })) {
+    assert.equal(chunk.type, 'block-start')
+    break
+  }
+  assert.equal(budget.requests, 1)
+  assert.equal(budget.totalTokens, 150)
+  assert.equal(budget.calls[0]?.index, 1)
+  assert.equal(budget.calls[0]?.totalTokens, 150)
+  assert.equal(budget.calls.length, budget.requests)
+})
+
 test('the adapter refuses a call once its request or token budget is exhausted', async () => {
   const budget = createModelBudget({ maxRequests: 1, maxTokens: 1 })
   const model = adapter(async () => response({ choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
@@ -79,8 +94,12 @@ test('the adapter refuses a call once its request or token budget is exhausted',
 })
 
 test('an authentication failure is a typed LlmError without exposing the key', async () => {
-  const model = adapter(async () => response({}, 401))
+  const budget = createModelBudget()
+  const model = adapter(async () => response({}, 401), budget)
   await assert.rejects(async () => {
     for await (const chunk of model.stream({ provider: 'pokexiao', model: 'deepseek', messages })) assert.ok(chunk)
   }, error => error.code === 'AUTH' && !error.message.includes('test-key'))
+  assert.equal(budget.calls.length, budget.requests)
+  assert.equal(budget.calls[0].finish, 'error')
+  assert.equal(budget.calls[0].error, 'AUTH')
 })

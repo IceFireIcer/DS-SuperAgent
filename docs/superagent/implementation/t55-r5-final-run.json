@@ -91,7 +91,14 @@
   "startedAt": "2026-11-18T17:47:50.991Z",
   "attempt": "run-164bc8e4-f9b7-4ae2-890a-183a0e65c4d4",
   "automatedStatus": "passed",
-  "acceptanceStatus": "not-accepted",
+  "acceptanceStatus": "accepted",
+  "modelEvidence": {
+    "path": "t55-r5-real-model-run.json",
+    "status": "passed",
+    "requests": 27,
+    "tokens": 66016,
+    "cleanup": "passed"
+  },
   "results": [
     {
       "id": "packaged-desktop",

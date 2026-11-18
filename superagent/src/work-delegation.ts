@@ -687,13 +687,20 @@ export class WorkDelegation {
 
     const config = await this.options.routerProfile()
     this.options.sessions.routerSessionId = brief.routerSessionId
-    const routerBrief = brief.attachments?.length ? { ...brief, attachments: brief.attachments.map(({ id, asset, image }) => ({
-      id, name: asset.name, kind: image ? 'image' : 'file',
-    })) } : brief
+    const routerBrief = { ...brief,
+      ...(brief.attachments?.length ? { attachments: brief.attachments.map(({ id, asset, image }) => ({
+        id, name: asset.name, kind: image ? 'image' : 'file',
+      })) } : {}),
+      ...(priorSplit ? { requestedItems: priorSplit.items.map(({ goal, constraints, acceptanceCriteria, attachmentIds }) => ({
+        goal, constraints, acceptanceCriteria, ...(attachmentIds === undefined ? {} : { attachmentIds }),
+      })) } : {}),
+    }
+    const planInstruction = priorSplit ? 'Reuse the saved plan in requestedItems exactly to establish only the missing Tickets.'
+      : brief.attachments?.length ? 'Confirm requestedItems and their attachmentIds verbatim. Changing the grant is rejected.'
+        : 'Decide the independent work items for this versioned Main WorkBrief.'
     const tool: NativeTool = {
       name: 'establish_work_plan',
-      description: 'Decide the independent local work items for this one authorized WorkBrief and establish every missing Ticket. Each item gets a durable Engine identity, Mandate, acceptance criteria and delivery. Repeating the exact same plan reuses it; a different plan for this brief is a target conflict.'
-        + (brief.attachments?.length ? ' For an attached request, repeat requestedItems exactly, including every attachmentId: neither rename an item nor move a grant.' : ''),
+      description: 'Establish each missing Ticket for this authorized WorkBrief. Each item gets a durable Engine identity, Mandate, acceptance criteria and delivery. Repeating the same plan reuses it. A different plan for this brief is a target conflict.',
       parameters: {
         items: {
           type: 'array', required: true, items: {
@@ -724,7 +731,7 @@ export class WorkDelegation {
       result = await this.options.sessions.run({ sessionId: brief.routerSessionId, role: 'router', signal,
         stepBudget: routerStepBudget,
         onBeforeModel: async () => { await this.options.recordRouterUse(brief.routerSessionId, config) },
-        profile: structuredClone(config.roles.router), text: `Decide the independent work items for this one versioned Main WorkBrief. Preserve the one original source event. Establish each missing local Ticket and report only durable receipts.${brief.attachments?.length ? ' For this attached request, confirm requestedItems and their attachmentIds verbatim; changing the grant is rejected.' : ''}\n${JSON.stringify(routerBrief)}`,
+        profile: structuredClone(config.roles.router), text: `${planInstruction} Preserve the original source event. Call establish_work_plan once. After receiving its durable receipt, acknowledge it and finish the turn.\n${JSON.stringify(routerBrief)}`,
         tools: [tool] })
       await this.finishRouterTurn(attempt, { ...result, status: 'completed' })
     } catch (error) {
@@ -1085,7 +1092,7 @@ export class WorkDelegation {
       result = await this.options.sessions.run({ role: 'router', sessionId: source.brief.routerSessionId, signal, profile: structuredClone(config.roles.router),
         stepBudget: routerStepBudget,
         onBeforeModel: async () => { await this.options.recordRouterUse(source.brief.routerSessionId, config) },
-        text: `Return this bounded, verified work item state to Main. Keep its source, stable item identity and follow-up delivery facts; no Worker transcript is included.\n${JSON.stringify({
+        text: `Return this bounded, verified work item state to Main. Call record_work_update once now for this notification, then finish the turn. Keep its source, stable item identity and follow-up delivery facts; no Worker transcript is included.\n${JSON.stringify({
           workBriefId: source.brief.id, workItemId: source.item.id, receipt, outcome, followUps,
         })}`,
         tools: [{ name: 'record_work_update', description: 'Record the supplied work status and evidence exactly and notify Main once.', parameters: {},

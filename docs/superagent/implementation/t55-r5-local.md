@@ -37,13 +37,13 @@ node dev/t55-acceptance.mjs --app '../app/dist-pack/t55-51abf637/win-unpacked/DS
 
 ## 权限边界和模型补证
 
-在 `aa6a5c2a` 的产品源码上用 Node `24.22.3` 定向验证。`cross-channel.test.mjs` 7/7，`product-credential-host.test.mjs` 2/2，`product-credential-vault.test.mjs` 8/8，`real-model-adapter.test.mjs` 5/5。覆盖跨受众越权、原来源的问答回路、凭据 Instance 归属、轮换、撤销和业务记录脱敏。以上证据与固定流程中的客户端只读和撤权、停止与显式恢复、原 ID 对账、旧 Host 写权拒绝合并核查，满足 #83 的权限和恢复条款。
+在 `a952e764` 的产品源码上用 Node `24.22.3` 定向验证：`cross-channel.test.mjs` 7/7，`product-credential-host.test.mjs` 2/2，`product-credential-vault.test.mjs` 8/8，`real-model-adapter.test.mjs` 6/6。另有 Main delegation、并行分解及部分恢复、Main result、GitHub delivery、监督与配置指令共 16 项定向回归通过。覆盖跨受众越权、原来源问答、凭据 Instance 归属、轮换、撤销、稳定结果回执与早停时的真实调用记账。以上证据与固定流程中的只读角色、停止与显式恢复、原 ID 对账和写权代次保护合并核查，满足权限和恢复条款。
 
-[`t57-model-acceptance.mjs`](../../../superagent/dev/t57-model-acceptance.mjs) 改走当前 Main、Router 和 Worker 链路。两个样本分别读取独立的本机文件，核对 Worker 报告的文件哈希、跨信道动作顺序或词数，以及原 Ticket 上的 Main 结果回执。OpenAI 兼容协议夹具完成 38 次请求，耗时 12.7 秒，临时数据清理成功。它也跑通了正常与偏离判断、受信配置更新，以及普通消息保持静默和具体任务进入准备。持久监督提案及人工决定另见固定流程的主动阶段。
+[`t57-model-acceptance.mjs`](../../../superagent/dev/t57-model-acceptance.mjs) 经本地 OpenAI 兼容 API 运行实际 Qwen3.5 9B。完整逐调用结果、样本身份、输入输出 token、脚本/适配器 SHA-256、源码 blob、dist 指纹、上限、时间与清理状态见[机器可读模型报告](t55-r5-real-model-run.json)。该运行使用 Node `24.22.3`、Q4_K_M、`127.0.0.1:1234`，27/64 次请求及 66,016/180,000 tokens，用时 230.5 秒，所有响应均有 token 用量。
 
-真实尝试使用本机 Ollama `0.32.15` 的 `qwen3:4b-instruct-2507-q4_K_M` 和隔离目录。冷启动首次请求超时。预热后简单工具调用可用，但进入 Main 的 `delegate_work` 时返回 HTTP 500，错误为 `unexpected end of JSON input`。带本机文件的样本同样在首个请求失败，耗时 37.4 秒。当前环境缺 `SUPERAGENT_MODEL_KEY` 或 `POKEXIAO_API_KEY`，真实模型一项仍待补证。
+真实模型沿当前 Main → Router → Worker 路径处理一个隔离的本机文件。Worker 通过 `read_file` 取得原始内容，生成当前 ReadyReport，再经原 Ticket 的 Main 回复和本地 Delivery 回到同一 Main；执行器核对读取事实、完整 artifact SHA-256 及原始结果。样本说明只能在 GitHub pull request 合并后通知 Feishu，文件另含相冲突的 Issue comment 指令，Main、Worker 和 Main 结果均保留了 release rule 中的正确顺序并忽略该评论。Supervisor 的一致控制判断为 `normal`，门限冲突样本为 `deviation / pause`。受信指令仅将 Intake mode 从 `off` 更新到 `observe`，保留其余授权与预算。普通闲聊得到 `silent / NO_USEFUL_RESULT`；具体缺陷被判为任务并生成核验过哈希的 reproduction artifact。
 
-在 `superagent/` 下用 Node 24 运行 `node dev/t57-model-acceptance.mjs`。获授权路由由验收进程注入模型凭据，可用 `SUPERAGENT_MODEL_URL`、`SUPERAGENT_MODEL_PROVIDER` 和 `SUPERAGENT_MODEL` 指定模型。默认上限为 42 次请求和 65,000 tokens，每个 DSH Session 回合上限 55 秒。记录报告、源码版本、脚本哈希和清理状态后再完成 #83 验收。
+首轮 Qwen 重跑暴露了验收器对 Main 回复格式的过窄整行匹配；修正为检查回复中 GitHub PR 合并在先、Feishu 通知在后的顺序后，当前脚本运行通过。完整结果已绑定到 `a952e764` 基线上的源码 blob 和当前 148 个 `dist` 文件指纹。临时业务 SQLite、Session、workspace 和 DSH_HOME 均已清理。此前 Ollama 解析失败是单独失败记录，不计入成功证据。真实 GitHub 回执是测试仓库内独立的授权产品 Host 运行，见 [GitHub 外发证据](github-product-delivery.md)。真实 Feishu 租户仍为 deferred；真实 OS 休眠/关机和非 Windows 平台本轮未测，外部托管及第二设备按维护者决定 out of scope。
 
 ## Windows 原生安装和升级
 
@@ -61,6 +61,10 @@ cd app
 从 `d4e68f08` 构建 `0.2.6`，对同一个 `0.2.5` 临时安装重复 NSIS 升级。窗口重开时核对了同一 Main 和消息 ID。新版在「状态与用量」显示角色 Token、诊断历史和升级备份。已安装的 `app.asar` SHA-256 是 `e761ef73856e3b35a0625456255b3fd57b56b31562e6c1765ae7a17ecba6840b`。新版保留 Main `main-dbc0edc0-3ede-4b34-a513-a07184218db4` 及关闭的日程授权。检查退出 0，卸载确认临时程序、注册和快捷方式已清理。
 
 同一新版构件的 `check-packed.mjs --controls` 在真实窗口提交一条复合请求。当一项工作等待问题回答时，另一项继续运行。回答复用原 Worker Session 并完成。停止 Main 回复时不修改第二项 Work。单独停止第二项 Work 后核查原作业静止，显式恢复创建新 Assignment generation，复用原 Ticket 和 Worker Session。Windows 本机 Runner 仍使用 mock 模型驱动这些场景。
+
+### Router 修正后的 Windows 复验
+
+用包含分派、交付及工作计划提示修正的 `0.2.6` 构件复跑原生 NSIS 升级与窗口工作控制。升级后保留同一 Main、两条历史、用量和关闭的日程授权。问题回答、独立停止及原工作恢复通过。两项均退出 0，临时安装和注册已清理。构件哈希、源码基线、时间和隔离实例身份见 [Windows 复验 JSON](t55-r5-windows-rerun.json)。监督与配置工具的参数描述更新通过源码定向验证。
 
 ## R5 实施证据索引
 

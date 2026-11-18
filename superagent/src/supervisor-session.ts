@@ -29,12 +29,13 @@ export function createSessionAssessor(sessions: NativeSessions, options: Session
     let result: SupervisorAssessment | undefined
     const tool: NativeTool = {
       name: 'record_supervision',
-      description: 'Record exactly one semantic supervision result. This tool does not act on the Ticket.',
+      description: 'Record one semantic supervision result. This tool does not act on the Ticket. After the result is recorded, finish the turn.',
       parameters: {
-        kind: { type: 'string', required: true },
+        kind: { type: 'string', required: true, enum: ['normal', 'deviation', 'loop', 'no-progress'] },
         reason: { type: 'string', required: true },
         recommendation: { type: 'string', required: true },
-        action: { type: 'string', required: true },
+        action: { type: 'string', required: true, enum: ['', 'correct', 'pause'],
+          description: 'Use the empty string for no intervention. The other values propose a correction or pause for human review.' },
       },
       execute: async (args) => {
         const kind = args.kind

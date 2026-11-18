@@ -33,14 +33,19 @@ export function createModelBudget({ maxRequests = 30, maxTokens = 60_000, timeou
  * whole provider response is translated into the public chunk vocabulary.
  */
 export class OpenAiCompatibleAdapter extends LlmAdapter {
-  constructor({ endpoint, apiKey, model, defaultModelTokens = defaultMaxTokens, budget = createModelBudget(), fetchImpl = fetch, now = Date.now }) {
+  constructor({ endpoint, apiKey, model, reasoningEffort, defaultModelTokens = defaultMaxTokens,
+    budget = createModelBudget(), fetchImpl = fetch, now = Date.now }) {
     super()
     if (typeof apiKey !== 'string' || !apiKey.trim()) throw new Error('The real-model API key is required.')
     if (typeof model !== 'string' || !model.trim()) throw new Error('The real-model id is required.')
     if (!Number.isSafeInteger(defaultModelTokens) || defaultModelTokens < 1) throw new Error('The real-model output budget must be a positive safe integer.')
+    if (reasoningEffort !== undefined && !['none', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(reasoningEffort)) {
+      throw new Error('The real-model reasoning effort is invalid.')
+    }
     this.endpoint = chatCompletionsEndpoint(endpoint)
     this.apiKey = apiKey.trim()
     this.model = model.trim()
+    this.reasoningEffort = reasoningEffort
     this.defaultModelTokens = defaultModelTokens
     this.budget = budget
     this.fetchImpl = fetchImpl
@@ -55,6 +60,10 @@ export class OpenAiCompatibleAdapter extends LlmAdapter {
     }
     const requestIndex = ++this.budget.requests
     const startedAt = this.now()
+    const callRecord = { index: requestIndex, provider: options.provider, model: options.model ?? this.model,
+      purpose: options.purpose, toolCalls: [], finish: 'pending' }
+    this.budget.calls.push(callRecord)
+    const failedCall = code => Object.assign(callRecord, { durationMs: this.now() - startedAt, finish: 'error', error: code })
     let response
     const signal = AbortSignal.any([...(options.signal ? [options.signal] : []), AbortSignal.timeout(this.budget.timeoutMs)])
     try {
@@ -66,62 +75,76 @@ export class OpenAiCompatibleAdapter extends LlmAdapter {
           model: options.model || this.model,
           messages: providerMessages(options),
           ...(options.tools?.length ? { tools: providerTools(options.tools) } : {}),
+          ...(this.reasoningEffort === undefined ? {} : { reasoning_effort: this.reasoningEffort }),
           temperature: options.temperature ?? 0,
           max_tokens: options.maxTokens ?? this.defaultModelTokens,
           stream: false,
         }),
       })
     } catch (error) {
+      failedCall(signal.aborted ? 'MODEL_TIMEOUT' : 'MODEL_TRANSPORT')
       throw new LlmError('The real-model request failed.', signal.aborted ? 'MODEL_TIMEOUT' : 'MODEL_TRANSPORT', { cause: error })
     }
     if (!response.ok) {
       const status = response.status
+      failedCall(status === 401 || status === 403 ? 'AUTH' : 'MODEL_HTTP')
       throw new LlmError(`The real-model endpoint returned HTTP ${status}.`, status === 401 || status === 403 ? 'AUTH' : 'MODEL_HTTP', { status })
     }
     let body
     try { body = await response.json() }
-    catch (error) { throw new LlmError('The real-model endpoint returned invalid JSON.', 'MODEL_INVALID_RESPONSE', { cause: error }) }
+    catch (error) {
+      failedCall('MODEL_INVALID_RESPONSE')
+      throw new LlmError('The real-model endpoint returned invalid JSON.', 'MODEL_INVALID_RESPONSE', { cause: error })
+    }
     const choice = body?.choices?.[0]
-    if (!choice || typeof choice !== 'object') throw new LlmError('The real-model response has no choice.', 'MODEL_INVALID_RESPONSE')
+    if (!choice || typeof choice !== 'object') {
+      failedCall('MODEL_INVALID_RESPONSE')
+      throw new LlmError('The real-model response has no choice.', 'MODEL_INVALID_RESPONSE')
+    }
     const message = choice.message
-    if (!message || typeof message !== 'object') throw new LlmError('The real-model response has no message.', 'MODEL_INVALID_RESPONSE')
+    if (!message || typeof message !== 'object') {
+      failedCall('MODEL_INVALID_RESPONSE')
+      throw new LlmError('The real-model response has no message.', 'MODEL_INVALID_RESPONSE')
+    }
+    const reasoning = typeof message.reasoning_content === 'string' ? message.reasoning_content : ''
+    const text = typeof message.content === 'string' ? message.content : ''
+    const textBlockCount = Number(Boolean(reasoning)) + Number(Boolean(text))
+    const toolCalls = (Array.isArray(message.tool_calls) ? message.tool_calls : []).map((call, index) => {
+      if (!call || typeof call !== 'object' || typeof call.function?.name !== 'string') {
+        failedCall('MODEL_INVALID_RESPONSE')
+        throw new LlmError('The real-model response has a malformed tool call.', 'MODEL_INVALID_RESPONSE')
+      }
+      const id = typeof call.id === 'string' && call.id ? call.id : `call-${textBlockCount + index}-${index}`
+      const args = typeof call.function.arguments === 'string' ? call.function.arguments : JSON.stringify(call.function.arguments ?? {})
+      return { id, name: call.function.name, arguments: args }
+    })
     const usage = modelUsage(body.usage)
+    const finish = finishReason(choice.finish_reason, toolCalls.length)
     this.budget.inputTokens += usage.inputTokens
     this.budget.outputTokens += usage.outputTokens
     this.budget.totalTokens += usage.totalTokens ?? usage.inputTokens + usage.outputTokens
     if (this.budget.totalTokens >= this.budget.maxTokens) this.budget.exceeded = true
+    // A Session can stop consuming chunks before the model's finish event.
+    Object.assign(callRecord, { durationMs: this.now() - startedAt, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens,
+      totalTokens: usage.totalTokens, toolCalls: toolCalls.map(call => call.name), finish: finish.kind })
 
     let index = 0
-    if (typeof message.reasoning_content === 'string' && message.reasoning_content) {
-      yield* block(index++, 'reasoning', [{ type: 'reasoning-delta', text: message.reasoning_content }],
-        { type: 'reasoning', text: message.reasoning_content })
+    if (reasoning) {
+      yield* block(index++, 'reasoning', [{ type: 'reasoning-delta', text: reasoning }], { type: 'reasoning', text: reasoning })
     }
-    if (typeof message.content === 'string' && message.content) {
-      yield* block(index++, 'text', [{ type: 'text-delta', text: message.content }], { type: 'text', text: message.content })
-    }
-    const toolCalls = []
-    for (const call of Array.isArray(message.tool_calls) ? message.tool_calls : []) {
-      if (!call || typeof call !== 'object' || typeof call.function?.name !== 'string') {
-        throw new LlmError('The real-model response has a malformed tool call.', 'MODEL_INVALID_RESPONSE')
-      }
-      const id = typeof call.id === 'string' && call.id ? call.id : `call-${index}-${toolCalls.length}`
-      const args = typeof call.function.arguments === 'string' ? call.function.arguments : JSON.stringify(call.function.arguments ?? {})
-      toolCalls.push({ id, name: call.function.name, arguments: args })
-      yield* block(index++, 'tool-call', [{ type: 'tool-call-delta', id, name: call.function.name, argumentsDelta: args }],
-        { type: 'tool-call', id, name: call.function.name, arguments: args })
+    if (text) yield* block(index++, 'text', [{ type: 'text-delta', text }], { type: 'text', text })
+    for (const { id, name, arguments: args } of toolCalls) {
+      yield* block(index++, 'tool-call', [{ type: 'tool-call-delta', id, name, argumentsDelta: args }],
+        { type: 'tool-call', id, name, arguments: args })
     }
     yield { type: 'usage', usage }
-    const finish = finishReason(choice.finish_reason, toolCalls.length)
-    this.budget.calls.push({ index: requestIndex, provider: options.provider, model: options.model ?? this.model,
-      purpose: options.purpose, durationMs: this.now() - startedAt, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens,
-      totalTokens: usage.totalTokens, toolCalls: toolCalls.map(call => call.name), finish: finish.kind })
     yield { type: 'finish', reason: finish }
   }
 }
 
-export function createRealModelRuntime({ provider = 'pokexiao', endpoint, apiKey, model, budget, fetchImpl, now }) {
+export function createRealModelRuntime({ provider = 'pokexiao', endpoint, apiKey, model, reasoningEffort, budget, fetchImpl, now }) {
   if (typeof provider !== 'string' || !provider.trim()) throw new Error('The real-model provider route is required.')
-  return { provider: provider.trim(), model, adapter: new OpenAiCompatibleAdapter({ endpoint, apiKey, model, budget, fetchImpl, now }) }
+  return { provider: provider.trim(), model, adapter: new OpenAiCompatibleAdapter({ endpoint, apiKey, model, reasoningEffort, budget, fetchImpl, now }) }
 }
 
 export function providerMessages(options) {

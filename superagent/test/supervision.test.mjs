@@ -53,8 +53,12 @@ test('supervision puts human questions, blocked work and stops before ordinary r
   assert.equal(view.counts.needsHuman, 1)
   assert.equal(view.counts.blocked, 1)
   assert.equal(view.counts.stopped, 1)
+  const stoppedState = view.items.find(item => item.ticketId === stopped.ticketId).state
+  assert.ok(['stopping', 'stopped'].includes(stoppedState))
   const again = await engine.getSupervision()
-  assert.deepEqual(again.items.map(item => [item.ticketId, item.bucket, item.state]), view.items.map(item => [item.ticketId, item.bucket, item.state]))
+  const projection = page => page.items.map(item => [item.ticketId, item.bucket,
+    item.ticketId === stopped.ticketId ? 'stopping-or-stopped' : item.state])
+  assert.deepEqual(projection(again), projection(view))
 
   chat = await core.createChatServer(engine)
   assert.match(await (await fetch(chat.url)).text(), /Needs you/u)

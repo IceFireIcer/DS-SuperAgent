@@ -26,7 +26,7 @@
 
 ## 2026-11-19 验收更新
 
-36 张 R5 实施工单均已收口。外部托管和实体第二设备已移出最终验收，T58/#92 按范围取消关闭。T55/#83 已验证原生 Windows 升级、工作控制和权限边界，#129 的真实 GitHub 回执已核对。真实模型待补证。[本轮 T55 记录](implementation/t55-r5-local.md)
+36 张 R5 实施工单均已收口。外部托管和实体第二设备已移出最终验收，T58/#92 按范围取消关闭。T55/#83 的四目标本机验收已完成，分别举证当前 Main/Router/Worker 的真实模型语义、Windows 安装升级与工作控制、恢复权限边界及真实 GitHub Outbox 回执。macOS/Linux、OS 休眠/关机本轮未覆盖，Feishu tenant 仍 deferred。[T55 记录](implementation/t55-r5-local.md) · [真实模型证据](implementation/t55-r5-real-model-run.json)
 
 ## 新票映射
 

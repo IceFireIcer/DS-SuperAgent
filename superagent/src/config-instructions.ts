@@ -129,10 +129,13 @@ export function createSessionConfigInterpreter(sessions: NativeSessions, options
     let change: BehaviorChange | undefined
     const tool: NativeTool = {
       name: 'propose_behavior_change',
-      description: 'Record one constrained prompt or trigger-rule change. It cannot grant tools, permissions, devices or publication rights.',
+      description: 'Record one constrained prompt or trigger-rule change. It cannot grant tools, permissions, devices or publication rights. Finish the turn after the change is recorded.',
       parameters: {
-        target: { type: 'string', required: true }, summary: { type: 'string', required: true },
-        roles: { type: 'string', required: true }, policy: { type: 'string', required: true },
+        target: { type: 'string', required: true, enum: ['roles', 'policy'] },
+        summary: { type: 'string', required: true },
+        roles: { type: 'string', required: true, description: 'Provide the role configuration as a JSON string for target roles. Use an empty string for target policy.' },
+        policy: { type: 'string', required: true,
+          description: 'For target policy, provide a JSON string containing only the mode or rules that change. Do not include other settings. Use an empty string for target roles.' },
       },
       execute: async (args) => {
         const target = args.target
