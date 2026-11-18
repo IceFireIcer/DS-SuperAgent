@@ -33,7 +33,17 @@ node dev/t55-acceptance.mjs --app '../app/dist-pack/t55-51abf637/win-unpacked/DS
 
 - 初次连续阶段 6 通过、5 失败。四项 GitHub 测试缺少产品中 Main notice 和 relay 的 owner 映射。观察列表的排序与游标用两套 ID 比较规则，同时间记录可重复出现在下一页。`160d998b` 修复两处，定向 5/5。随后一次运行的 Windows 备份路径过长，缩短验收临时路径后重新跑通固定流程。[复核](reviews/t55-r5-local.md)
 - 首次运行中，GitHub Outbox 对已经委托并完成的工作返回 `DESTINATION_SOURCE_DISABLED`。#129 修复后，产品 Host 在测试仓库 #21 实际发出结果，回读到原生评论 `6985981343`，核对评论作者、目标、正文匹配及本地回执。此轮模型为 mock。[实施记录](github-product-delivery.md) · [真实 GitHub 回执](https://github.com/IceFireIcer/SuperAgentTest/issues/21#issuecomment-6985981343)
-- 在当前源码试运行 `node dev/t57-model-acceptance.mjs`，因缺 `SUPERAGENT_MODEL_KEY` 或 `POKEXIAO_API_KEY` 退出 2。此项需在获授权模型路由上补证。真实飞书暂缓。真实系统休眠与关机本轮未运行。旧入口拒绝有公开 Profile 与产品协议的定向证据。
+- 真实模型补证结果见下节。真实飞书暂缓。真实系统休眠与关机本轮未运行。旧入口拒绝有公开 Profile 与产品协议的定向证据。
+
+## 权限边界和模型补证
+
+在 `aa6a5c2a` 的产品源码上用 Node `24.22.3` 定向验证。`cross-channel.test.mjs` 7/7，`product-credential-host.test.mjs` 2/2，`product-credential-vault.test.mjs` 8/8，`real-model-adapter.test.mjs` 5/5。覆盖跨受众越权、原来源的问答回路、凭据 Instance 归属、轮换、撤销和业务记录脱敏。以上证据与固定流程中的客户端只读和撤权、停止与显式恢复、原 ID 对账、旧 Host 写权拒绝合并核查，满足 #83 的权限和恢复条款。
+
+[`t57-model-acceptance.mjs`](../../../superagent/dev/t57-model-acceptance.mjs) 改走当前 Main、Router 和 Worker 链路。两个样本分别读取独立的本机文件，核对 Worker 报告的文件哈希、跨信道动作顺序或词数，以及原 Ticket 上的 Main 结果回执。OpenAI 兼容协议夹具完成 38 次请求，耗时 12.7 秒，临时数据清理成功。它也跑通了正常与偏离判断、受信配置更新，以及普通消息保持静默和具体任务进入准备。持久监督提案及人工决定另见固定流程的主动阶段。
+
+真实尝试使用本机 Ollama `0.32.15` 的 `qwen3:4b-instruct-2507-q4_K_M` 和隔离目录。冷启动首次请求超时。预热后简单工具调用可用，但进入 Main 的 `delegate_work` 时返回 HTTP 500，错误为 `unexpected end of JSON input`。带本机文件的样本同样在首个请求失败，耗时 37.4 秒。当前环境缺 `SUPERAGENT_MODEL_KEY` 或 `POKEXIAO_API_KEY`，真实模型一项仍待补证。
+
+在 `superagent/` 下用 Node 24 运行 `node dev/t57-model-acceptance.mjs`。获授权路由由验收进程注入模型凭据，可用 `SUPERAGENT_MODEL_URL`、`SUPERAGENT_MODEL_PROVIDER` 和 `SUPERAGENT_MODEL` 指定模型。默认上限为 42 次请求和 65,000 tokens，每个 DSH Session 回合上限 55 秒。记录报告、源码版本、脚本哈希和清理状态后再完成 #83 验收。
 
 ## Windows 原生安装和升级
 

@@ -53,7 +53,7 @@ export class OpenAiCompatibleAdapter extends LlmAdapter {
       this.budget.exceeded = true
       throw new LlmError(tokensExhausted ? 'The real-model token budget is exhausted.' : 'The real-model request budget is exhausted.', 'MODEL_BUDGET')
     }
-    this.budget.requests += 1
+    const requestIndex = ++this.budget.requests
     const startedAt = this.now()
     let response
     const signal = AbortSignal.any([...(options.signal ? [options.signal] : []), AbortSignal.timeout(this.budget.timeoutMs)])
@@ -112,7 +112,7 @@ export class OpenAiCompatibleAdapter extends LlmAdapter {
     }
     yield { type: 'usage', usage }
     const finish = finishReason(choice.finish_reason, toolCalls.length)
-    this.budget.calls.push({ index: this.budget.requests, provider: options.provider, model: options.model ?? this.model,
+    this.budget.calls.push({ index: requestIndex, provider: options.provider, model: options.model ?? this.model,
       purpose: options.purpose, durationMs: this.now() - startedAt, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens,
       totalTokens: usage.totalTokens, toolCalls: toolCalls.map(call => call.name), finish: finish.kind })
     yield { type: 'finish', reason: finish }

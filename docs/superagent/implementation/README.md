@@ -16,7 +16,7 @@
 
 ## 当前进展
 
-T55/#83 的 R5 本机固定流程 8 个阶段通过，补齐原生 Windows 安装升级、问题卡和停止恢复。T58/#92 因外部服务器到期与无实体第二设备取消，已解除阻塞。#129 修复 GitHub 产品外发并核到真实回执，真实模型仍缺凭据。[本机验收记录](t55-r5-local.md) · [GitHub 外发](github-product-delivery.md)
+T55/#83 的 R5 本机固定流程 8 个阶段及权限复核通过。T58/#92 的跨机和实体设备验收已取消。#129 的真实 GitHub 回执已核对。模型脚本已接通当前三层链路，本机 Ollama 的工具参数解析失败，真实模型待补证。[本机验收记录](t55-r5-local.md) · [GitHub 外发](github-product-delivery.md)
 
 R5-28/#120 的[选择导入凭据引用并重新授权](r5-28.md)已完成代码验收：只读取用户明确选定的 JSON 导出；secret 留在 Electron main process 与 DSH credential record，业务库仅保存稳定来源引用和新授权目标；精确 scope、取消/重放/未知结果恢复均由 Host 和凭据资源管理器处理。[复核记录](reviews/r5-28.md)与定向验证已更新。真实飞书租户、用户 DSH profile、PostgreSQL 运行及全量 CI 未作为本票验收。
 
