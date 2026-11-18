@@ -21,7 +21,9 @@ const onTerminate = () => { interrupted = 'SIGTERM'; if (activeChild) stopTree(a
 const phases = [
   { id: 'packaged-desktop', script: 'app/scripts/check-packed.mjs', timeoutMs: 540_000,
     scope: 'Packaged Main conversation, close and reopen on the same Host, and a cold upgrade when the next build is supplied.' },
-  { id: 'continuous', files: ['main-delegation', 'main-parallel-delegation', 'main-followup', 'main-github-intake', 'work-observations'],
+  { id: 'packaged-controls', script: 'app/scripts/check-packed.mjs', timeoutMs: 540_000,
+    scope: 'Packaged Main delegates two local items, accepts a Worker answer, and stops and resumes the intended work.' },
+  { id: 'continuous', files: ['main-delegation', 'main-parallel-delegation', 'main-followup', 'main-github-intake', 'work-observations', 'product-github-delivery'],
     scope: 'Main delegation, concurrent work, targeted direction, delivery, GitHub fixture and read-only observations.' },
   { id: 'local-control', files: ['main-controls', 'product-views', 'product-shell-stop', 'concurrency'],
     scope: 'Questions, answer authorization, Main and work stop, explicit resume, local jobs and slot budgets.' },
@@ -83,10 +85,11 @@ async function main() {
   const next = args[5] ? resolve(args[5]) : undefined
   const packagedArgs = next ? [app, '--upgrade-to', next] : [app]
   const inputs = await Promise.all([
-    'docs/superagent/issues/T55.md', 'docs/superagent/issues/T58.md', 'superagent/dsh/dev/mock-llm.mjs',
+    'docs/superagent/issues/T55.md', 'docs/superagent/issues/T58.md',
+    'superagent/dsh/dev/mock-llm.mjs', 'superagent/dsh/dev/t55-controls-model.mjs',
     ...phases.flatMap(phase => phase.script ? [phase.script]
       : phase.files.map(name => `${phase.package ?? 'superagent'}/test/${name}.test.mjs`)),
-  ].map(fingerprint))
+  ].filter((path, index, files) => files.indexOf(path) === index).map(fingerprint))
   const packages = await Promise.all([app, ...(next ? [next] : [])].map(async file => ({ name: basename(file),
     sha256: await digest(file), asarSha256: await digest(join(dirname(file), 'resources', 'app.asar')) })))
   const changes = execFileSync('git', ['diff', '--binary', 'HEAD', '--', 'app', 'superagent'], { cwd: repository, maxBuffer: 8 * 1024 * 1024, windowsHide: true })
@@ -104,8 +107,10 @@ async function main() {
   await save()
   for (const phase of build.status === 'passed' ? phases : []) {
     console.log(`Running ${phase.id}: ${phase.scope}`)
+    const scriptArgs = phase.id === 'packaged-desktop' ? packagedArgs
+      : phase.id === 'packaged-controls' ? [next ?? app, '--controls'] : phase.args
     const result = phase.script
-      ? await run(phase.id, ['--expose-internals', join(repository, phase.script), ...(phase.id === 'packaged-desktop' ? packagedArgs : phase.args)],
+      ? await run(phase.id, ['--expose-internals', join(repository, phase.script), ...scriptArgs],
         { cwd: join(repository, 'app'), timeoutMs: phase.timeoutMs })
       : await run(phase.id, ['--test', '--test-reporter=tap', '--test-concurrency=1', ...phase.files.map(name => `test/${name}.test.mjs`)],
         { cwd: join(repository, phase.package ?? 'superagent'), tap: true })

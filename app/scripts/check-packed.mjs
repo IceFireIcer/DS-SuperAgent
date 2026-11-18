@@ -2,7 +2,7 @@
 // send a message, wait for the reply, then close the window the way a user does: the window hides
 // and the app goes on. The window comes back when the app is started again, and the app ends the
 // way the tray's Quit ends it. Fails on a page error or a non-zero exit.
-// Usage: node scripts/check-packed.mjs [app executable] [screenshot.png | --upgrade-to next executable | --upgrade-with NSIS installer]
+// Usage: node scripts/check-packed.mjs [app executable] [screenshot.png | --controls | --upgrade-to next executable | --upgrade-with NSIS installer]
 // The executable defaults to the one that `npm run pack` or `npm run dist` writes into dist-pack/.
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
@@ -15,12 +15,14 @@ import { fileURLToPath } from 'node:url'
 import { hostExecutable } from '../src/host-process.mjs'
 import { PRODUCT_NAME, PRODUCT_SLUG } from '../src/product.mjs'
 import { isNewer } from '../src/updates.mjs'
+import { t55Question, t55Request, t55SlowReply } from '../../superagent/dsh/dev/t55-controls-model.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const [given, option, nextExecutable] = process.argv.slice(2)
 const installUpgrade = option === '--upgrade-with'
 const upgrade = option === '--upgrade-to' || installUpgrade
-const shotFile = upgrade ? undefined : option
+const controls = option === '--controls'
+const shotFile = upgrade || controls ? undefined : option
 const executable = given || packedExecutable()
 
 if (upgrade && (!nextExecutable || !existsSync(nextExecutable))) {
@@ -137,7 +139,8 @@ function checkSharp(app) {
 
 function startMock() {
   const mock = spawn(process.execPath, [join(root, '..', 'superagent', 'dsh', 'dev', 'mock-llm.mjs')], {
-    env: { ...process.env, MOCK_PORT: '0', MOCK_LOG: join(work, 'mock.log') }, stdio: ['ignore', 'pipe', 'inherit'],
+    env: { ...process.env, MOCK_PORT: '0', MOCK_LOG: join(work, 'mock.log'), MOCK_T55_CONTROLS: controls ? '1' : '0' },
+    stdio: ['ignore', 'pipe', 'inherit'],
   })
   children.push(mock)
   return new Promise((done, reject) => {
@@ -354,6 +357,113 @@ async function productFacts(cdp, prepare = false) {
   return result.result.value
 }
 
+async function checkWorkControls(cdp) {
+  const evaluate = async expression => {
+    const result = await cdp.call('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })
+    if (result.exceptionDetails) throw new Error(result.exceptionDetails.text)
+    return result.result.value
+  }
+  const wait = async (check, label) => {
+    const end = Date.now() + 30_000
+    while (Date.now() < end) {
+      const result = await check()
+      if (result) return result
+      await sleep(150)
+    }
+    throw new Error(`timed out waiting for ${label}`)
+  }
+  const read = () => evaluate(`(async () => {
+    const call = async (endpoint, payload = {}) => (await (await fetch('/api/product', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint, payload })
+    })).json()).value;
+    const { instanceId } = await call('open');
+    return call('history', { instanceId });
+  })()`)
+  const card = (history, name) => history.works.find(work => work.brief.goal === `T55 ${name} note`)
+  const click = (selector, label) => evaluate(`(() => {
+    const button = [...document.querySelectorAll(${JSON.stringify(selector)})].find(item => !item.disabled && ${label}.test(item.textContent.trim()));
+    button?.click();
+    return Boolean(button);
+  })()`)
+  const send = async text => {
+    await evaluate("document.querySelector('#main-message').focus()")
+    await cdp.call('Input.insertText', { text })
+    await wait(() => evaluate(`document.querySelector('#main-message').value === ${JSON.stringify(text)}`), 'the typed Main request')
+    await wait(() => click('button[type=submit]', '/^(Send|发送)$/u'), 'the Main Send button')
+  }
+
+  await send(t55Request)
+  const working = await wait(async () => {
+    const history = await read()
+    const alpha = card(history, 'alpha'), beta = card(history, 'beta')
+    return alpha?.control?.attention?.question === t55Question && beta?.control?.assignment?.state === 'running' && history
+  }, 'one question while the other work executes')
+  const firstAlpha = card(working, 'alpha').control.assignment
+  const firstBeta = card(working, 'beta').control.assignment
+  await wait(() => click('.bt-main-work-options button', '/^Yes$/u'), 'the approved answer choice')
+  await wait(() => click('.bt-main-work-answer button[type=submit]', '/^(Send answer|提交回答)$/u'), 'the question send button')
+  const answered = await wait(async () => {
+    const alpha = card(await read(), 'alpha')
+    return alpha?.status === 'success' && alpha
+  }, 'the answered work result')
+  assert.equal(answered.control.attention.sessionId, firstAlpha.sessionId)
+  await send(t55SlowReply)
+  await wait(() => click('button', '/^(Stop reply|停止本轮回复)$/u'), 'the Main stop control')
+  const stoppedReply = await wait(async () => {
+    const history = await read()
+    return history.messages.some(message => message.text === t55SlowReply && message.status === 'stopped') && history
+  }, 'only the Main turn to stop')
+  assert.equal(card(stoppedReply, 'beta').control.assignment.generation, firstBeta.generation)
+  assert.equal(card(stoppedReply, 'beta').control.stop, undefined)
+  const betaId = card(stoppedReply, 'beta').control.ticketId
+  const betaButtons = `.bt-main-work[data-ticket-id="${betaId}"] .bt-main-work-controls button`
+  await wait(() => click(betaButtons, '/^(Stop work|停止工作)$/u'), 'the beta work stop control')
+  await wait(async () => {
+    const beta = card(await read(), 'beta')
+    return beta?.control?.stop?.state === 'stopped' && beta.control.stop.cancellationConfirmedAt !== undefined
+  }, 'the original beta range to stop')
+  await wait(() => click(betaButtons, '/^(Resume work|恢复工作)$/u'), 'the beta resume control')
+  const resumed = await wait(async () => {
+    const beta = card(await read(), 'beta')
+    return beta?.status === 'success' && beta
+  }, 'the resumed beta work result')
+  assert.equal(resumed.control.ticketId, betaId)
+  assert.notEqual(resumed.control.assignment.generation, firstBeta.generation)
+  assert.equal(resumed.control.assignment.sessionId, firstBeta.sessionId)
+  console.log(`check-packed: ${JSON.stringify({ controls: 'passed', alphaTicketId: answered.control.ticketId, betaTicketId: betaId,
+    alphaSessionId: firstAlpha.sessionId, betaSessionId: firstBeta.sessionId })}`)
+}
+
+async function checkOperations(cdp, facts) {
+  const evaluate = async expression => {
+    const result = await cdp.call('Runtime.evaluate', { expression, returnByValue: true })
+    if (result.exceptionDetails) throw new Error(result.exceptionDetails.text)
+    return result.result.value
+  }
+  const end = Date.now() + 15_000
+  while (Date.now() < end) {
+    const ready = await evaluate(`(() => {
+      const page = document.querySelector('.bt-product-operations');
+      if (!page) {
+        const button = [...document.querySelectorAll('button')].find(item => /^(Status and usage|状态与用量)$/u.test(item.textContent.trim()));
+        if (button) button.click();
+        else if (!document.querySelector('.bt-settings-close')) document.querySelector('.bt-main-settings')?.click();
+        return false;
+      }
+      const text = page.textContent;
+      return text.includes(${JSON.stringify(facts.version)}) && text.includes('HOST_READY')
+        && /Token usage by role|各角色 Token 用量/u.test(text)
+        && /Download diagnostic summary|下载诊断摘要/u.test(text);
+    })()`)
+    if (ready) {
+      console.log('check-packed: Windows Status and usage loaded tokens and diagnostics')
+      return
+    }
+    await sleep(150)
+  }
+  throw new Error('Settings did not show product usage and diagnostic history.')
+}
+
 async function checkColdUpgrade(before, env) {
   let packedApp
   if (installUpgrade) {
@@ -380,6 +490,7 @@ async function checkColdUpgrade(before, env) {
     assert.equal(after.mainTokens, before.mainTokens)
     assert.ok(after.events.includes('UPGRADE_BACKUP_CREATED'))
     assert.ok(after.upgradeBackups.some(backup => backup.restorable && backup.business.recordCount > 0 && backup.sessions.sessionCount > 0))
+    await checkOperations(cdp, after)
     console.log(`check-packed: ${JSON.stringify({ coldUpgrade: [before.version, after.version],
       mainId: after.binding.mainId, messages: after.messages.length, mainTokens: after.mainTokens, scheduleEnabled: after.enabled,
       businessRecords: after.upgradeBackups[0].business.recordCount, sessions: after.upgradeBackups[0].sessions.sessionCount })}`)
@@ -439,6 +550,7 @@ try {
     console.log(`check-packed: saved ${resolve(shotFile)}`)
   }
   if (chatError) throw chatError
+  if (controls) await checkWorkControls(cdp)
   const before = upgrade ? await productFacts(cdp, true) : undefined
   if (before) {
     assert.ok(before.mainTokens > 0 && before.messages.length >= 2)
@@ -460,6 +572,11 @@ try {
   if (secondExit === undefined) throw new Error('the second copy of the app did not end')
   if (app.exitCode !== null) throw new Error('the app ended when it was started again')
   if (await windowState('win !== undefined && !win.isDestroyed() && win.isVisible()') !== true) throw new Error('the window did not come back')
+  if (before) {
+    const reopened = await productFacts(cdp)
+    assert.deepEqual(reopened.binding, before.binding)
+    assert.deepEqual(reopened.messages, before.messages)
+  }
   console.log('check-packed: the window came back when the app was started again')
   // The tray's Quit is the way out; the check cannot click the tray, so it asks the browser
   // target to close, which ends the app gracefully.

@@ -3,10 +3,12 @@
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { dirname } from 'node:path'
+import { t55ControlsReply, t55SlowReply } from './t55-controls-model.mjs'
 import { fileURLToPath } from 'node:url'
 
 const port = Number(process.env.MOCK_PORT ?? 8765)
 const logPath = process.env.MOCK_LOG ?? fileURLToPath(new URL('../../.dsh-test/mock.jsonl', import.meta.url))
+const controls = process.env.MOCK_T55_CONTROLS === '1'
 mkdirSync(dirname(logPath), { recursive: true })
 
 const textOf = content => typeof content === 'string' ? content
@@ -54,12 +56,21 @@ const server = createServer(async (request, response) => {
   const user = latestUserText(body)
   const reply = user.startsWith('收到：') ? user : `收到：${user}`
   const id = `mock-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  const block = (controls ? t55ControlsReply(body, user, id) : undefined) ?? { type: 'text', text: reply }
+  const stop_reason = block.type === 'tool_use' ? 'tool_use' : 'end_turn'
+  if (controls && user === t55SlowReply) {
+    await new Promise(done => {
+      const timer = setTimeout(done, 10_000)
+      response.once('close', () => { clearTimeout(timer); done() })
+    })
+    if (response.destroyed) return
+  }
   appendFileSync(logPath, `${JSON.stringify({ at: Date.now(), model: body.model ?? 'mock', user, reply })}\n`)
   if (body.stream !== true) {
     sendJson(response, 200, {
       id, type: 'message', role: 'assistant', model: body.model ?? 'mock',
-      content: [{ type: 'text', text: reply }],
-      stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 },
+      content: [block],
+      stop_reason, usage: { input_tokens: 1, output_tokens: 1 },
     })
     return
   }
@@ -67,10 +78,15 @@ const server = createServer(async (request, response) => {
   const event = value => response.write(`event: ${value.type}\ndata: ${JSON.stringify(value)}\n\n`)
   event({ type: 'message_start', message: { id, type: 'message', role: 'assistant', model: body.model ?? 'mock',
     content: [], usage: { input_tokens: 1, output_tokens: 0 } } })
-  event({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } })
-  event({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: reply } })
+  if (block.type === 'tool_use') {
+    event({ type: 'content_block_start', index: 0, content_block: { ...block, input: {} } })
+    event({ type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: JSON.stringify(block.input) } })
+  } else {
+    event({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } })
+    event({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: block.text } })
+  }
   event({ type: 'content_block_stop', index: 0 })
-  event({ type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 1 } })
+  event({ type: 'message_delta', delta: { stop_reason, stop_sequence: null }, usage: { output_tokens: 1 } })
   event({ type: 'message_stop' })
   response.end()
 })

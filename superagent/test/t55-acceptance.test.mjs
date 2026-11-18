@@ -114,7 +114,8 @@ test('T55 real SIGTERM aborts the report and terminates its build process tree',
   mkdirSync(implementation, { recursive: true })
   for (let number = 1; number <= 36; number++) writeFileSync(join(implementation, `r5-${String(number).padStart(2, '0')}.md`), `Fixture evidence R5-${number}.\n`)
   for (const name of ['README.md', 't55-evidence.md']) writeFileSync(join(implementation, name), 'Fixture evidence index.\n')
-  const inputs = ['docs/superagent/issues/T55.md', 'docs/superagent/issues/T58.md', 'superagent/dsh/dev/mock-llm.mjs',
+  const inputs = ['docs/superagent/issues/T55.md', 'docs/superagent/issues/T58.md',
+    'superagent/dsh/dev/mock-llm.mjs', 'superagent/dsh/dev/t55-controls-model.mjs',
     ...plan.phases.flatMap(phase => phase.script ? [phase.script] : phase.files.map(name => `${phase.package ?? 'superagent'}/test/${name}.test.mjs`))]
   for (const file of inputs) {
     const path = join(directory, file)

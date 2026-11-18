@@ -1,0 +1,514 @@
+{
+  "version": 2,
+  "model": "mock",
+  "phaseTimeoutMs": 300000,
+  "testFileConcurrency": 1,
+  "phases": [
+    {
+      "id": "packaged-desktop",
+      "script": "app/scripts/check-packed.mjs",
+      "timeoutMs": 540000,
+      "scope": "Packaged Main conversation, close and reopen on the same Host, and a cold upgrade when the next build is supplied."
+    },
+    {
+      "id": "packaged-controls",
+      "script": "app/scripts/check-packed.mjs",
+      "timeoutMs": 540000,
+      "scope": "Packaged Main delegates two local items, accepts a Worker answer, and stops and resumes the intended work."
+    },
+    {
+      "id": "continuous",
+      "files": [
+        "main-delegation",
+        "main-parallel-delegation",
+        "main-followup",
+        "main-github-intake",
+        "work-observations",
+        "product-github-delivery"
+      ],
+      "scope": "Main delegation, concurrent work, targeted direction, delivery, GitHub fixture and read-only observations."
+    },
+    {
+      "id": "local-control",
+      "files": [
+        "main-controls",
+        "product-views",
+        "product-shell-stop",
+        "concurrency"
+      ],
+      "scope": "Questions, answer authorization, Main and work stop, explicit resume, local jobs and slot budgets."
+    },
+    {
+      "id": "proactive-supervision",
+      "files": [
+        "product-github-proactive",
+        "product-watchdog",
+        "watchdog-process"
+      ],
+      "scope": "Proactive preparation with synthetic GitHub events, semantic proposals, budget and local Watchdog process recovery."
+    },
+    {
+      "id": "host-client-recovery",
+      "files": [
+        "main-continuity",
+        "host-takeover",
+        "product-client-gateway",
+        "effects"
+      ],
+      "scope": "Durable Main queue, Host epochs, waiting and stopped work, client catch-up and revocation, external effect reconciliation."
+    },
+    {
+      "id": "profile-recovery",
+      "script": "app/scripts/check-superagent-profile.mjs",
+      "args": [
+        "--check-upgrade"
+      ],
+      "scope": "Public DSH product profile, local work and independent SQLite and Session backup/restore."
+    },
+    {
+      "id": "operations",
+      "package": "app",
+      "files": [
+        "product-backups",
+        "main-update",
+        "main-restore",
+        "operations-log"
+      ],
+      "scope": "Update and restore failure paths through the desktop test doubles and real isolated backup stores."
+    }
+  ],
+  "unaccepted": [
+    "Current real model judgment and an authorized live GitHub product scenario",
+    "Native installer replacement and upgrade on a populated isolated Windows profile"
+  ],
+  "deferred": [
+    "Real Feishu tenant"
+  ],
+  "outOfScope": [
+    "Hosted server and cross-machine PostgreSQL/TLS/SSH",
+    "Physical second device and cross-machine handoff"
+  ],
+  "startedAt": "2026-11-18T17:47:50.991Z",
+  "attempt": "run-164bc8e4-f9b7-4ae2-890a-183a0e65c4d4",
+  "automatedStatus": "passed",
+  "acceptanceStatus": "not-accepted",
+  "results": [
+    {
+      "id": "packaged-desktop",
+      "status": "passed",
+      "exitCode": 0,
+      "timedOut": false,
+      "overflow": false,
+      "startFailed": false,
+      "cleaned": true,
+      "durationMs": 64846
+    },
+    {
+      "id": "packaged-controls",
+      "status": "passed",
+      "exitCode": 0,
+      "timedOut": false,
+      "overflow": false,
+      "startFailed": false,
+      "cleaned": true,
+      "durationMs": 38431
+    },
+    {
+      "id": "continuous",
+      "status": "passed",
+      "exitCode": 0,
+      "timedOut": false,
+      "overflow": false,
+      "startFailed": false,
+      "cleaned": true,
+      "durationMs": 78020,
+      "counts": {
+        "tests": 12,
+        "pass": 12,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "id": "local-control",
+      "status": "passed",
+      "exitCode": 0,
+      "timedOut": false,
+      "overflow": false,
+      "startFailed": false,
+      "cleaned": true,
+      "durationMs": 45056,
+      "counts": {
+        "tests": 18,
+        "pass": 18,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "id": "proactive-supervision",
+      "status": "passed",
+      "exitCode": 0,
+      "timedOut": false,
+      "overflow": false,
+      "startFailed": false,
+      "cleaned": true,
+      "durationMs": 54047,
+      "counts": {
+        "tests": 16,
+        "pass": 16,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "id": "host-client-recovery",
+      "status": "passed",
+      "exitCode": 0,
+      "timedOut": false,
+      "overflow": false,
+      "startFailed": false,
+      "cleaned": true,
+      "durationMs": 11088,
+      "counts": {
+        "tests": 35,
+        "pass": 35,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "id": "profile-recovery",
+      "status": "passed",
+      "exitCode": 0,
+      "timedOut": false,
+      "overflow": false,
+      "startFailed": false,
+      "cleaned": true,
+      "durationMs": 24962
+    },
+    {
+      "id": "operations",
+      "status": "passed",
+      "exitCode": 0,
+      "timedOut": false,
+      "overflow": false,
+      "startFailed": false,
+      "cleaned": true,
+      "durationMs": 3233,
+      "counts": {
+        "tests": 10,
+        "pass": 10,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    }
+  ],
+  "gitHead": "d4e68f085af37f36e1e0f269a3c93c423ab4f7e4",
+  "sourceDiffSha256": "9e9cc8bb279b50cc6937c331ffd4f8bdcd7702803bb9a9610916808c93bbd994",
+  "environment": {
+    "platform": "win32",
+    "release": "10.0.26200",
+    "arch": "x64",
+    "node": "v24.22.3",
+    "model": "mock"
+  },
+  "evidenceIndex": {
+    "path": "docs/superagent/implementation/README.md",
+    "sha256": "8635675838f2e77be4ffb7ea7f78c3bffe4ffda68863f15ef8a5ac9b9c22b1e1"
+  },
+  "runnerSha256": "696990cca24f53ba8ae1c63c9c7057f71004cc3bbf0540e9a2fb4f27dfb1bde5",
+  "evidence": [
+    {
+      "path": "docs/superagent/implementation/r5-01.md",
+      "sha256": "554fa02278577b931ca8aad5c04f6d013bd8d47c1a64b26062c9f44ac035296f"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-02.md",
+      "sha256": "00097911e3db1e654ca29993730cbee7625021bb052d4f447958af052d4e57d1"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-03.md",
+      "sha256": "203a9d57950cac7badb4a932831992b627d0a86c1b726760137e261460f26f31"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-04.md",
+      "sha256": "3d3de65b412dc0e7d4053cc42e4fa30cb7ba41383b8092163275fb4e386f7db0"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-05.md",
+      "sha256": "21a7d1b6a838c4223b68bbd1182248f8a3c1082f61f58c6885aa17ded8c02e46"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-06.md",
+      "sha256": "04e84067ae2b290e7d8ff627547b7c8a52659006a1f8eebd5f209fef5a5cdd3b"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-07.md",
+      "sha256": "d4f6b15ee128b89ece4e33e015c2966deaca085a18b15dd8d38ec551ab51bb33"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-08.md",
+      "sha256": "5331c82f70c95c83dfc58ce8d3a1dd7601e10c9ded075bb7bc5546deed488055"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-09.md",
+      "sha256": "ba77fbec8d19d2906e1ad883ad52a15a0ea037619c450825b8e4d502f8b0eb16"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-10.md",
+      "sha256": "53006d70f9ce68618bfd188ab9748ca046dc145e608edbec9974e9e364098a0e"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-11.md",
+      "sha256": "81565379977716e119c20bb5ab6ec1d1d5f72131c0130df45cc43dd122fdb971"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-12.md",
+      "sha256": "2bb0f86994d2f593542a1c5b44dc51c779194df8b0c85f2e69dc53f0ae9ce462"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-13.md",
+      "sha256": "08b6deee397b3074fc489f08d3fc62992a8b737dd12cd30e37cb2feb8fab0006"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-14.md",
+      "sha256": "095872da3d46501de34f4f9f61e850dd276a1ffb56a943a808b4ccfee84bc52d"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-15.md",
+      "sha256": "986c49e6e8f5bab5b92a204e0f91a8e68b6e2a6925c36b47e18f2de57a03c9d1"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-16.md",
+      "sha256": "9a7f08bf244cfefbeef0cf7169695a3c9bc5f90a2d26e7670b4583c63bec5e77"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-17.md",
+      "sha256": "181cc438ec6e32aa5f630fdf98cf260f840ab50f7083e2748988238fc29f97f2"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-18.md",
+      "sha256": "2bd2e338c9c4e38e77ba90a2a0adc398efbaa99c34b2ee28a6ed2b36d7aae7b1"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-19.md",
+      "sha256": "b650803690b1a2e31ca7921507fa330eb6513abf63929111d861767977906140"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-20.md",
+      "sha256": "61b7c006b0af60c25250b78528354139fdac9cbd3075cd1d100574628bfb168e"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-21.md",
+      "sha256": "b01349224d9c71d5922f9aed3433b59094337e5fbd1a1ca99e71470c3d4a3823"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-22.md",
+      "sha256": "ce5a6be6baac4fff4ee2be7f720b1b1d4077091a6dedef223d5af85b8aa3c00a"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-23.md",
+      "sha256": "1a36adca8e1fb1d3358fae5eaaa8616566a947a66a47cd7c0a96d616533cdb46"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-24.md",
+      "sha256": "879ea5ccb761646784f9111647719f40c3e4a9f335100be2e700aba9df77aef4"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-25.md",
+      "sha256": "4ceaec164cb2ca829d449e79b7defae912ba4485cb007bb036adff782ec50a9b"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-26.md",
+      "sha256": "297083d3fec618c0ff31f1c28bb5599fd3dbdbf86f3a59232254fe89685e5a13"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-27.md",
+      "sha256": "3ba076eda841cf2dfd8d6ca42ba1751b310cf7e0e3c630f40531522a2fbe5639"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-28.md",
+      "sha256": "012214ed47fcbef52561740e03cb2fe9de28b8008accf44f16883dc0ad8e5857"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-29.md",
+      "sha256": "d76eacd764de9f2550641c0fcefa1a00986de251d67574f22890ad17ea932281"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-30.md",
+      "sha256": "3d14cec84dda4a90c754dadc4b8cedc208fa56fb4dc21fcccbe992fd7031feaa"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-31.md",
+      "sha256": "289b9676fac747aeb5ead6bd3ba3bb4cad2c380542cff5799162c1bc95a7c3ed"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-32.md",
+      "sha256": "03e00ec95bfbb2958e84f0a8c8a41573e9d1e5658aeff36a89af1fddde7c6db4"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-33.md",
+      "sha256": "60503a0fedb0ec2ef64f601fd97b946abd090c2e84930186d0b1fb08192c0114"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-34.md",
+      "sha256": "ec17b7552ee56749ef79f8a104ae75329d0737672863b08a1621b656795ef54b"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-35.md",
+      "sha256": "0149602d9e5bfce3cd207638868d4d3499a663983becc50dc079a42258eca611"
+    },
+    {
+      "path": "docs/superagent/implementation/r5-36.md",
+      "sha256": "4c0f01ab577cf0f6e28de7d0d62a4aa3a56e239f3e93d874671b02fc604ea6c5"
+    }
+  ],
+  "inputs": [
+    {
+      "path": "docs/superagent/issues/T55.md",
+      "sha256": "468d76029d1edb2228608bf703442076bce0cbde70e2a28f759ab6084344f6d6"
+    },
+    {
+      "path": "docs/superagent/issues/T58.md",
+      "sha256": "9613528936a1fe029f6a74dad0d73f335017b8d1c241a5b49307524d3e478bc9"
+    },
+    {
+      "path": "superagent/dsh/dev/mock-llm.mjs",
+      "sha256": "53c8272bdd1e8a6567eb1f2bd71ada41487f1190f12cff41385516310aa3f1cb"
+    },
+    {
+      "path": "superagent/dsh/dev/t55-controls-model.mjs",
+      "sha256": "1f690fac2565a1a85daa1dcdec2e273877e2731ef67a5c70e1f501cca1c02f69"
+    },
+    {
+      "path": "app/scripts/check-packed.mjs",
+      "sha256": "c53613c1a1dc0bf201fa843dc3ae930697f930cc16566bff1951c7868ed84dd1"
+    },
+    {
+      "path": "superagent/test/main-delegation.test.mjs",
+      "sha256": "12eadb168f2f224ac2e2fba5a7f6112ebe062f06d136dd0e65c1092e9a82952a"
+    },
+    {
+      "path": "superagent/test/main-parallel-delegation.test.mjs",
+      "sha256": "abf24bec2c8c1b6bac62a4861175884c90d89783151df6c5cd6fa49a7b52ddcd"
+    },
+    {
+      "path": "superagent/test/main-followup.test.mjs",
+      "sha256": "c981da9b02be4a58ba2694ded511723f1d5dd28dd3e4eabf090e7030c64fcfec"
+    },
+    {
+      "path": "superagent/test/main-github-intake.test.mjs",
+      "sha256": "258d2266b437cf8b80817add2a412a5a8598313f28781146874d994f3b3350e1"
+    },
+    {
+      "path": "superagent/test/work-observations.test.mjs",
+      "sha256": "f763e58bed683e04d96ca77c9c76d1fbe786258d90f85a2574dc55c1178cbea0"
+    },
+    {
+      "path": "superagent/test/product-github-delivery.test.mjs",
+      "sha256": "5c3aa1503c3b3e7d65ca05ae80963b5c5f0572dfc8f77819676cab9d348e11a7"
+    },
+    {
+      "path": "superagent/test/main-controls.test.mjs",
+      "sha256": "6aba8370522ac90c4d360ece262460a1d590e6808c9cfccbf240556fe25dda06"
+    },
+    {
+      "path": "superagent/test/product-views.test.mjs",
+      "sha256": "33ebf3289eed241cfc1a7cf4e77e607b53f86d38eee5209bcf8821f37132a72f"
+    },
+    {
+      "path": "superagent/test/product-shell-stop.test.mjs",
+      "sha256": "f2afc6b607b9c6e0c7a2a54f32030fef27d5ba1ef4a0c747fcf2f42655f358d9"
+    },
+    {
+      "path": "superagent/test/concurrency.test.mjs",
+      "sha256": "f64876d5291b4622e7c840b4c704c766d533670d662e16e385367ba4366adc4d"
+    },
+    {
+      "path": "superagent/test/product-github-proactive.test.mjs",
+      "sha256": "a4c3da9506131771dbf4d961cf6d1734fc751f99949b2d203cfc8ad45a8cec62"
+    },
+    {
+      "path": "superagent/test/product-watchdog.test.mjs",
+      "sha256": "eb04b271734152c0833d0d33cfebfaaacfe4512ae7e5d711db32769c90c8e580"
+    },
+    {
+      "path": "superagent/test/watchdog-process.test.mjs",
+      "sha256": "896d29932c3ea215165ef9f0be986a818b605757f9d256587aeb7d6767d331bf"
+    },
+    {
+      "path": "superagent/test/main-continuity.test.mjs",
+      "sha256": "634e8070730fd41672267890597253f6664755f40adec7da1a88cd5fb5e2dfdf"
+    },
+    {
+      "path": "superagent/test/host-takeover.test.mjs",
+      "sha256": "7aac070a739d295372c46a8016ffd1473f66cef971ee33f196ce5202195ea310"
+    },
+    {
+      "path": "superagent/test/product-client-gateway.test.mjs",
+      "sha256": "0dcc7fbbb000d283575387d747f4d47f3aa608512b2876c303d753bc37929f13"
+    },
+    {
+      "path": "superagent/test/effects.test.mjs",
+      "sha256": "e1b43be1f2308eee7f1c60e5d71042eeac8f6dc8102dba8c79b269f507f0032d"
+    },
+    {
+      "path": "app/scripts/check-superagent-profile.mjs",
+      "sha256": "e7b0ea5116b168fb6006a18fd48e57bb63bfe4d83ed57580ffd57b1fadf3ba26"
+    },
+    {
+      "path": "app/test/product-backups.test.mjs",
+      "sha256": "9b7d8e982e3edf105ff0be2512441e0c275aff5582a168c1f11bbb5451357f4e"
+    },
+    {
+      "path": "app/test/main-update.test.mjs",
+      "sha256": "c453829392286c36f9d13dea3b1e770a991f66d5b173a2643de57dad3751f3ed"
+    },
+    {
+      "path": "app/test/main-restore.test.mjs",
+      "sha256": "fe76be67578addef24fb82fa8731634868dcd5a8f6128d18129ae5ca58db8013"
+    },
+    {
+      "path": "app/test/operations-log.test.mjs",
+      "sha256": "9d51d4f7bf70831af6ef4dda19aa43b81756e6b1ec9e4c2ec6cd20843c4481a6"
+    }
+  ],
+  "packages": [
+    {
+      "name": "DS SuperAgent.exe",
+      "sha256": "5b6e95aa3baf65c31aa8b33be5d4e332185c15f0d0ca6c666c228284bc8b9913",
+      "asarSha256": "45ca58e6740cd063f6f7a3996f29f1f13d81faab2a7ca9cf6a2c2d7d40206fbb"
+    },
+    {
+      "name": "DS SuperAgent.exe",
+      "sha256": "93ebdcc0f67480780982888774c0ec197cded61757c77360a074e7555ae6ffe3",
+      "asarSha256": "e761ef73856e3b35a0625456255b3fd57b56b31562e6c1765ae7a17ecba6840b"
+    }
+  ],
+  "installer": {
+    "name": "DS-SuperAgent-0.2.6-win-x64.exe",
+    "sha256": "f6dc24a70804c0300e009bb59ff10600545b5d3bc7d6104ec457a34f5fd48499"
+  },
+  "build": {
+    "id": "build",
+    "status": "passed",
+    "exitCode": 0,
+    "timedOut": false,
+    "overflow": false,
+    "startFailed": false,
+    "cleaned": true,
+    "durationMs": 7526
+  },
+  "finishedAt": "2026-11-18T17:53:22.149Z"
+}
