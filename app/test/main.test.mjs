@@ -21,8 +21,8 @@ test('the app starts with a window and a tray', async () => {
   await waitFor(() => state.windows.length > 0, 'open the window')
   await waitFor(() => state.tray !== undefined, 'build the tray')
   assert.equal(hostState.options.env.DSH_HOME, profileHome(home))
-  assert.equal(hostState.options.env.DS_BOT_WORKSPACE, workspace)
-  assert.match(state.tray.tooltip, /^DS Bot — /u, 'the tray says what the Host is doing')
+  assert.equal(hostState.options.env.DS_SUPERAGENT_WORKSPACE, workspace)
+  assert.match(state.tray.tooltip, /^DS SuperAgent — /u, 'the tray says what the Host is doing')
   assert.equal(state.quits, 0, 'the app goes on')
 })
 

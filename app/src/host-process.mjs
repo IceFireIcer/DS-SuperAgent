@@ -53,7 +53,7 @@ export class HostProcess {
     this.#exited = false
     this.#ready ??= new Promise((resolve, reject) => {
       const { entry, cwd, env, pnpm } = this.#options
-      const child = spawn(hostExecutable(env.DS_BOT_RUNTIME_DIR, this.#platform), ['--expose-internals', entry, pnpm], {
+      const child = spawn(hostExecutable(env.DS_SUPERAGENT_RUNTIME_DIR, this.#platform), ['--expose-internals', entry, pnpm], {
         cwd, env: { ...env, ELECTRON_RUN_AS_NODE: '1' }, stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
       })
       this.#child = child

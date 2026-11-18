@@ -25,7 +25,7 @@ test('the Linux Host loads sharp only in its plain Node child', { skip: process.
   const child = new host.HostProcess({
     entry: join(app, 'test', 'fixtures', 'image-host.mjs'),
     cwd: work,
-    env: { ...process.env, DS_BOT_RUNTIME_DIR: work },
+    env: { ...process.env, DS_SUPERAGENT_RUNTIME_DIR: work },
     pnpm: join(app, 'node_modules', 'pnpm', 'bin', 'pnpm.mjs'),
     onFailure: error => failures.push(error),
   }, 'linux')

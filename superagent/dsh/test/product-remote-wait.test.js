@@ -77,7 +77,8 @@ test('Main submits remote-only work and keeps a restarted device stop pending', 
               assignment: { id: 'old-assignment', generation: 'old-generation', sessionId: 'session',
                 state: 'running', environment: { id: 'local-work', kind: 'local', root: '/work' } } } },
           ] }
-          : endpoint === 'directory-options' ? { default: { environmentId: 'local-work', root: '/work' }, directories: [] }
+          : endpoint === 'settings' ? { roles: { main: { model: { provider: 'unconfigured', model: 'unconfigured' } } }, providers: [] }
+            : endpoint === 'directory-options' ? { default: { environmentId: 'local-work', root: '/work' }, directories: [] }
             : endpoint === 'execution-options' ? { policy: { defaultTarget: 'remote-only', requiredPermissions: ['read'] },
               environments: [{ id: 'local-work', kind: 'local', root: '/work' }] }
               : endpoint === 'observe-list' ? { items: [] }
@@ -104,6 +105,7 @@ test('Main submits remote-only work and keeps a restarted device stop pending', 
     root = createRoot(dom.window.document.querySelector('#root'))
     await React.act(async () => { await new Promise(resolve => setTimeout(resolve, 40)); root.render(React.createElement(surface)) })
     const document = dom.window.document
+    assert.match(document.querySelector('[role="alert"]').textContent, /Open Settings to select models/u)
     assert.equal(document.querySelector('select[aria-label="Execution target"]').value, 'remote-only')
     assert.match(document.body.textContent, /This work will wait for an eligible device/u)
     assert.match(document.body.textContent, /Stopping · waiting for device cancellation confirmation\./u)

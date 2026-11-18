@@ -21,7 +21,7 @@ mkdirSync(workspace, { recursive: true })
 writeFileSync(join(shellData, 'tray-close-acknowledged'), '')
 const port = 9600 + Math.floor(Math.random() * 300)
 const { ELECTRON_RUN_AS_NODE: _runAsNode, ...environment } = process.env
-const env = { ...environment, DS_BOT_HOME: home, DS_BOT_SHELL_DATA: shellData, DS_BOT_WORKSPACE: workspace }
+const env = { ...environment, DS_SUPERAGENT_HOME: home, DS_SUPERAGENT_SHELL_DATA: shellData, DS_SUPERAGENT_WORKSPACE: workspace }
 const children = []
 const sockets = []
 

@@ -19,7 +19,8 @@ console.log = (...values) => log(...values.map(value => typeof value === 'string
 
 const home = mkdtempSync(join(tmpdir(), 'ds-superagent-profile-check-'))
 process.env.DSH_HOME = home
-process.env.DS_BOT_WORKSPACE = join(home, 'workspace')
+const workspace = join(home, 'workspace')
+process.env.DS_SUPERAGENT_WORKSPACE = workspace
 mkdirSync(join(home, 'profiles'), { recursive: true })
 const routePatch = join(home, 'profiles', 'superagent-mock-route.patch.yml')
 writeFileSync(routePatch, [
@@ -122,8 +123,8 @@ try {
   assert.equal(new Set(history.works.map(work => work.brief.workItemId)).size, 2)
   assert.equal(new Set(history.works.map(work => work.brief.sourceEventId)).size, 1)
   assert.deepEqual(history.works.map(work => work.outcome.artifacts[0].path).sort(), ['profile-alpha.txt', 'profile-beta.txt'], JSON.stringify({ works: history.works, modelCalls }, null, 2))
-  assert.equal(await readFile(join(process.env.DS_BOT_WORKSPACE, 'profile-alpha.txt'), 'utf8'), 'profile-alpha.txt written and verified\n')
-  assert.equal(await readFile(join(process.env.DS_BOT_WORKSPACE, 'profile-beta.txt'), 'utf8'), 'profile-beta.txt written and verified\n')
+  assert.equal(await readFile(join(workspace, 'profile-alpha.txt'), 'utf8'), 'profile-alpha.txt written and verified\n')
+  assert.equal(await readFile(join(workspace, 'profile-beta.txt'), 'utf8'), 'profile-beta.txt written and verified\n')
   const observations = await ctx.superagentProduct.dispatch('observe-list', { instanceId: binding.instanceId, limit: 10 })
   assert.equal(observations.items.length, 3, JSON.stringify({ observations, modelCalls }, null, 2))
   const workerObservation = observations.items.find(item => item.role === 'worker' && item.title.includes('alpha'))

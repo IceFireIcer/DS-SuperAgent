@@ -5,6 +5,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { profileHome } from '../../src/profile.mjs'
 import { paths, state } from './fake-electron.mjs'
 import { hold } from './fake-host-process.mjs'
 
@@ -36,9 +37,10 @@ export const startApp = async ({ packaged = true } = {}) => {
       }
       try { rmSync(directory, { recursive: true, force: true, maxRetries: 5 }) } catch (error) { failures.push(error) }
     }
-    if (failures.length) console.error(`DS Bot app-test cleanup failed: ${failures.map(error => error instanceof Error ? error.message : String(error)).join('; ')}`)
+    if (failures.length) console.error(`DS SuperAgent app-test cleanup failed: ${failures.map(error => error instanceof Error ? error.message : String(error)).join('; ')}`)
   })
   const workspace = join(home, 'workspace')
+  mkdirSync(profileHome(home), { recursive: true })
   mkdirSync(workspace, { recursive: true })
   mkdirSync(paths.userData, { recursive: true })
   writeFileSync(join(paths.userData, 'locations.json'), JSON.stringify({ dataDir: home, workspace }))
@@ -53,7 +55,7 @@ export const startApp = async ({ packaged = true } = {}) => {
 
 /** A packaged app checks updates before offering a failed Host again; keep that local. */
 export const startEmptyUpdateFeed = async () => {
-  const previous = process.env.DS_BOT_UPDATE_URL
+  const previous = process.env.DS_SUPERAGENT_UPDATE_URL
   let requests = 0
   const server = createServer((_request, response) => {
     requests += 1
@@ -65,13 +67,13 @@ export const startEmptyUpdateFeed = async () => {
     server.listen(0, '127.0.0.1', resolve)
   })
   const address = server.address()
-  process.env.DS_BOT_UPDATE_URL = `http://127.0.0.1:${String(address.port)}/releases`
+  process.env.DS_SUPERAGENT_UPDATE_URL = `http://127.0.0.1:${String(address.port)}/releases`
   return {
     requests: () => requests,
     close: async () => {
       await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
-      if (previous === undefined) delete process.env.DS_BOT_UPDATE_URL
-      else process.env.DS_BOT_UPDATE_URL = previous
+      if (previous === undefined) delete process.env.DS_SUPERAGENT_UPDATE_URL
+      else process.env.DS_SUPERAGENT_UPDATE_URL = previous
     },
   }
 }
@@ -83,5 +85,5 @@ export const window = () => state.windows.at(-1)
 export const trayMenu = () => state.tray.menu.template
 
 /** The tray's entries, by what they do: the status row moved the indices once already. */
-export const trayOpen = () => trayMenu().find(item => item.label === 'Open DS Bot')
-export const trayQuit = () => trayMenu().find(item => item.label === 'Quit DS Bot')
+export const trayOpen = () => trayMenu().find(item => item.label === 'Open DS SuperAgent')
+export const trayQuit = () => trayMenu().find(item => item.label === 'Quit DS SuperAgent')

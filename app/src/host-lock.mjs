@@ -2,6 +2,7 @@
 // while the first Host is still alive, even when its window (and its shell) is gone.
 import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { PRODUCT_NAME } from './product.mjs'
 
 const processAlive = (pid) => {
   if (!Number.isInteger(pid) || pid <= 0) return false
@@ -17,7 +18,7 @@ export function readHostLock(file) {
   } catch { return undefined }
 }
 
-const describe = (record) => `Another DS Bot Host is still running on this data (pid ${String(record.pid)}${record.port === undefined ? '' : `, port ${String(record.port)}`}). Close it, then try again.`
+const describe = (record) => `Another ${PRODUCT_NAME} Host is still running on this data (pid ${String(record.pid)}${record.port === undefined ? '' : `, port ${String(record.port)}`}). Close it, then try again.`
 
 /** Refuse a start while another live process owns this data; a dead record is not a Host. */
 export function assertHostLockFree(file, { alive = processAlive } = {}) {

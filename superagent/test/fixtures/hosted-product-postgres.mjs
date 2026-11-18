@@ -9,7 +9,7 @@ import { completedToolCount, lastUserText } from '../input-support.mjs'
 
 const postgres = JSON.parse(process.env.DS_SUPERAGENT_POSTGRES)
 const home = process.env.DSH_HOME
-const workspace = process.env.DS_BOT_WORKSPACE
+const workspace = process.env.DS_SUPERAGENT_WORKSPACE
 const enroll = process.argv.includes('--enroll')
 const replacement = process.argv.includes('--replacement')
 if (!postgres || !home || !workspace) throw new Error('The hosted product fixture needs its trusted environment.')

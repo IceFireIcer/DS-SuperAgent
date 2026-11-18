@@ -3,6 +3,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { dirname } from 'node:path'
+import { PRODUCT_NAME } from './product.mjs'
 
 const free = port => new Promise((resolve) => {
   const server = createServer()
@@ -30,7 +31,7 @@ const saved = (file) => {
 export async function hostPort(file) {
   const kept = saved(file)
   const port = (kept === undefined ? undefined : await free(kept)) ?? await free(0)
-  if (port === undefined) throw new Error('DS Bot: no free port on 127.0.0.1')
+  if (port === undefined) throw new Error(`${PRODUCT_NAME}: no free port on 127.0.0.1`)
   if (port !== kept) {
     mkdirSync(dirname(file), { recursive: true })
     writeFileSync(file, `${JSON.stringify({ port })}\n`)

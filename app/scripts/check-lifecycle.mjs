@@ -8,6 +8,7 @@ import { mkdirSync, rmSync } from 'node:fs'
 import net from 'node:net'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { PRODUCT_NAME } from '../src/product.mjs'
 
 const require = createRequire(import.meta.url)
 const electron = require('electron')
@@ -61,7 +62,7 @@ try {
   mkdirSync(work, { recursive: true })
   child = spawn(electron, [join(here, '..', 'test', 'electron', 'lifecycle-main.mjs')], {
     cwd: join(here, '..'),
-    env: { ...process.env, DS_BOT_SHELL_DATA: work },
+    env: { ...process.env, DS_SUPERAGENT_SHELL_DATA: work },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   child.stdout.setEncoding('utf8')
@@ -104,7 +105,7 @@ try {
   if (!first.ready) fail('the window did not start')
   if (first.visible !== true) fail('the window is not on the screen')
   if (!first.url?.startsWith('http://127.0.0.1:')) fail(`the window did not reach the Host: ${String(first.url)}`)
-  if (first.title !== 'DS Bot') fail(`the page did not load: ${String(first.title)}`)
+  if (first.title !== PRODUCT_NAME) fail(`the page did not load: ${String(first.title)}`)
   if (first.hasTray !== true) fail('the tray is not there')
   if (first.status !== 'Host running') fail(`the tray does not say that the Host runs: ${String(first.status)}`)
   console.log('check-lifecycle: the window shows the Host and the tray is there')

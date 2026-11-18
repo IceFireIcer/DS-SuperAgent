@@ -7,3 +7,7 @@ export function userDshHome(env = process.env) {
   if (!value) return join(homedir(), '.dsh')
   return resolve(value === '~' ? homedir() : /^~[\\/]/u.test(value) ? join(homedir(), value.slice(2)) : value)
 }
+
+export function userDshHomes(env = process.env) {
+  return [...new Set([join(homedir(), '.dsh'), userDshHome(env)])]
+}

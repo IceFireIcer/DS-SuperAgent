@@ -16,8 +16,8 @@ export type SuperagentProfileConfig = Omit<ProductHostConfig, 'databasePath' | '
 
 /** The app's already-mounted Office payload is the only automatic Office grant. */
 export function officeProfileConfig(env: NodeJS.ProcessEnv = process.env): ProductHostConfig['office'] | undefined {
-  const node = env.DS_BOT_OFFICE_NODE
-  const runtime = env.DS_BOT_RUNTIME_DIR
+  const node = env.DS_SUPERAGENT_OFFICE_NODE
+  const runtime = env.DS_SUPERAGENT_RUNTIME_DIR
   if (!node || !runtime) return undefined
   let cli: string
   try { cli = join(dirname(createRequire(import.meta.url).resolve('ds-superagent/package.json')), 'dsh', 'office.js')
@@ -125,7 +125,7 @@ export async function apply(context: Context, config: SuperagentProfileConfig = 
   const postgres = postgresProfileConfig()
   const hostId = config.hostId ?? process.env.DS_SUPERAGENT_HOST_ID
   const leaseMs = config.leaseMs ?? leaseFromProfile(process.env)
-  const workspaceRoot = config.workspaceRoot ?? process.env.DS_SUPERAGENT_WORKSPACE ?? process.env.DS_BOT_WORKSPACE
+  const workspaceRoot = config.workspaceRoot ?? process.env.DS_SUPERAGENT_WORKSPACE
   if (workspaceRoot) mkdirSync(workspaceRoot, { recursive: true })
   const gatewayPort = process.env.DS_SUPERAGENT_CLIENT_PORT
   const keyPath = process.env.DS_SUPERAGENT_CLIENT_TLS_KEY_PATH

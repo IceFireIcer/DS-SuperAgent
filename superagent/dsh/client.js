@@ -670,7 +670,12 @@ var ZH = {
   "Main running": "Main 处理中",
   "Main degraded": "Main 异常",
   "{count} inputs queued": "{count} 条输入排队中",
-  "Main model failed. Durable work facts remain available.": "Main 模型异常，持久工作事实仍可查看。",
+  "Main model failed. Ask the Host operator to check the model and provider configuration.": "Main 模型调用失败。请联系 Host 管理员检查模型和服务商配置。",
+  "Main model failed. Check the model and provider credentials in Settings.": "Main 模型调用失败。请在设置中检查模型和服务商凭据。",
+  "No models are available. Configure a provider in DSH settings, then reopen this panel to select the role models.": "没有可用模型。请在 DSH 设置中配置服务商，再重新打开此面板为各角色选择模型。",
+  "Models need setup": "需要配置模型",
+  "Open Settings to select models for Main, Router and Worker.": "请打开设置，为 Main、Router 和 Worker 选择模型。",
+  "Select an available model for each role before saving.": "请为每个角色选择可用的模型，再保存。",
   "System work fact": "系统工作事实",
   "System fact": "系统事实",
   "View original request": "查看原始请求",
@@ -12624,6 +12629,10 @@ async function productCall(endpoint, payload = {}) {
   if (!response.ok || !result.ok) throw Object.assign(new Error(t(result.error?.message ?? "Main is unavailable.")), { code: result.error?.code });
   return result.value;
 }
+var rolesNeedingModels = ({ roles: roles2, providers }) => ["main", "router", "worker"].filter((role) => {
+  const model = roles2[role]?.model;
+  return !model || !providers.some((provider) => provider.id === model.provider && provider.models.some((candidate) => candidate.model === model.model));
+});
 function applyProduct(ctx) {
   ctx.effect(() => installLocale(ctx.get("locale")), "superagent: interface copy");
   const view = createSource({
@@ -12632,6 +12641,7 @@ function applyProduct(ctx) {
     works: [],
     activeTurn: null,
     health: null,
+    modelsNeedSetup: null,
     sources: [],
     preparations: [],
     mainEvidence: null,
@@ -12888,6 +12898,12 @@ function applyProduct(ctx) {
       const current = view.getSnapshot();
       const binding = current.binding ?? await productCall("open");
       if (current.route === "main") await refreshMain(binding);
+      if (!connection.connected && !current.binding) {
+        void productCall("settings", { instanceId: binding.instanceId, limit: 1 }).then((snapshot) => {
+          if (!stopped) view.set((state) => ({ ...state, modelsNeedSetup: state.modelsNeedSetup ?? rolesNeedingModels(snapshot).length > 0 }));
+        }).catch(() => {
+        });
+      }
       if (!connection.connected && !view.getSnapshot().directoryOptions) await loadDirectories(binding);
       else if (connection.connected && !view.getSnapshot().directoryOptions?.execution) {
         const execution = await productCall("execution-options", { instanceId: binding.instanceId });
@@ -13933,7 +13949,7 @@ function applyProduct(ctx) {
         (0, import_react26.createElement)(
           "span",
           { className: `bt-main-health bt-main-health-${state.health?.state ?? "ready"}`, role: "status" },
-          mainHealthCopy(state.health)
+          state.modelsNeedSetup && state.health?.state !== "running" ? t("Models need setup") : mainHealthCopy(state.health)
         ),
         state.health?.queuedInputs ? (0, import_react26.createElement)(
           "span",
@@ -13958,10 +13974,14 @@ function applyProduct(ctx) {
           onClick: () => view.set((current) => ({ ...current, settingsOpen: true }))
         }, (0, import_react26.createElement)(SlidersIcon)) : null
       ),
-      state.health?.state === "degraded" ? (0, import_react26.createElement)(
+      state.modelsNeedSetup ? (0, import_react26.createElement)(
         "p",
         { className: "bt-main-health-warning", role: "alert" },
-        t("Main model failed. Durable work facts remain available.")
+        t("Open Settings to select models for Main, Router and Worker.")
+      ) : state.health?.state === "degraded" ? (0, import_react26.createElement)(
+        "p",
+        { className: "bt-main-health-warning", role: "alert" },
+        t(state.connection?.connected ? "Main model failed. Ask the Host operator to check the model and provider configuration." : "Main model failed. Check the model and provider credentials in Settings.")
       ) : null,
       (0, import_react26.createElement)(
         "div",
@@ -14599,6 +14619,7 @@ function applyProduct(ctx) {
     };
     const applySnapshot = (value, preserve = false) => {
       setSnapshot(value);
+      view.set((current) => ({ ...current, modelsNeedSetup: rolesNeedingModels(value).length > 0 }));
       if (!preserve) {
         const nextDraft = clone(value.roles);
         draftRef.current = nextDraft;
@@ -14938,6 +14959,15 @@ function applyProduct(ctx) {
                     disabled: viewState.directoryBusy
                   })
                 )
+              ) : null,
+              models.length === 0 ? (0, import_react26.createElement)(
+                "p",
+                { className: "bt-main-health-warning", role: "alert" },
+                t("No models are available. Configure a provider in DSH settings, then reopen this panel to select the role models.")
+              ) : rolesNeedingModels({ roles: draft, providers: snapshot.providers }).length ? (0, import_react26.createElement)(
+                "p",
+                { className: "bt-main-health-warning", role: "alert" },
+                t("Select an available model for each role before saving.")
               ) : null,
               roleRows.map(([role, label]) => {
                 const profile = draft[role];

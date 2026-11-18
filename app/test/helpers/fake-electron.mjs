@@ -11,9 +11,10 @@ import { join } from 'node:path'
 const root = mkdtempSync(join(tmpdir(), 'ds-bot-fake-user-data-'))
 export const paths = {
   root,
-  userData: join(root, 'userData'),
+  appData: join(root, 'appData'),
+  userData: join(root, 'appData', 'DS SuperAgent'),
   downloads: join(root, 'downloads'),
-  exe: join(root, 'DS Bot.exe'),
+  exe: join(root, 'program', 'DS SuperAgent.exe'),
   // The folder of the app itself: the Host's pnpm lives in it.
   appPath: join(root, 'app'),
 }
@@ -102,7 +103,7 @@ class FakeWebContents extends EventEmitter {
     this.mainFrame = {}
     this.isDestroyed = () => this.win.destroyed
     this.getURL = () => this.win.url
-    this.getTitle = () => 'DS Bot'
+    this.getTitle = () => win.options?.title ?? ''
     this.send = () => {}
     this.setWindowOpenHandler = () => {}
     this.insertCSS = async () => {}
@@ -114,10 +115,10 @@ class FakeWebContents extends EventEmitter {
 class FakeApp extends EventEmitter {
   constructor() {
     super()
-    this.name = 'DS Bot'
+    this.name = 'Electron'
     this.getVersion = () => '0.2.2'
     this.getLocale = () => 'en-US'
-    this.getPath = (name) => paths[name] ?? join(root, String(name))
+    this.getPath = (name) => state.paths[name] ?? paths[name] ?? join(root, String(name))
     this.getAppPath = () => paths.appPath
     this.setPath = (name, value) => { state.paths[name] = value }
     this.setName = (name) => { this.name = name }

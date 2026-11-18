@@ -51,6 +51,12 @@ export async function productCall(endpoint, payload = {}) {
   return result.value
 }
 
+const rolesNeedingModels = ({ roles, providers }) => ['main', 'router', 'worker'].filter(role => {
+  const model = roles[role]?.model
+  return !model || !providers.some(provider => provider.id === model.provider
+    && provider.models.some(candidate => candidate.model === model.model))
+})
+
 export function applyProduct(ctx) {
   ctx.effect(() => installLocale(ctx.get('locale')), 'superagent: interface copy')
   const view = createSource({
@@ -59,6 +65,7 @@ export function applyProduct(ctx) {
     works: [],
     activeTurn: null,
     health: null,
+    modelsNeedSetup: null,
     sources: [],
     preparations: [],
     mainEvidence: null,
@@ -274,6 +281,11 @@ export function applyProduct(ctx) {
       const current = view.getSnapshot()
       const binding = current.binding ?? await productCall('open')
       if (current.route === 'main') await refreshMain(binding)
+      if (!connection.connected && !current.binding) {
+        void productCall('settings', { instanceId: binding.instanceId, limit: 1 }).then(snapshot => {
+          if (!stopped) view.set(state => ({ ...state, modelsNeedSetup: state.modelsNeedSetup ?? (rolesNeedingModels(snapshot).length > 0) }))
+        }).catch(() => {})
+      }
       if (!connection.connected && !view.getSnapshot().directoryOptions) await loadDirectories(binding)
       else if (connection.connected && !view.getSnapshot().directoryOptions?.execution) {
         const execution = await productCall('execution-options', { instanceId: binding.instanceId })
@@ -929,7 +941,7 @@ export function applyProduct(ctx) {
     return h('section', { className: 'bt-main-conversation', 'aria-label': 'Main' },
       h('header', { className: 'bt-main-header' }, h(ProductBrandMark, { size: 28 }), h('span', null, 'Main'),
         h('span', { className: `bt-main-health bt-main-health-${state.health?.state ?? 'ready'}`, role: 'status' },
-          mainHealthCopy(state.health)),
+          state.modelsNeedSetup && state.health?.state !== 'running' ? t('Models need setup') : mainHealthCopy(state.health)),
         state.health?.queuedInputs ? h('span', { className: 'bt-main-health-detail' },
           t('{count} inputs queued', { count: state.health.queuedInputs })) : null,
         state.connection?.connected ? h('span', { className: 'bt-main-remote', title: state.connection.address },
@@ -938,8 +950,11 @@ export function applyProduct(ctx) {
           state.connection?.connected ? t('Connection') : t('Connect to Host')) : null,
         !state.connection?.connected ? h('button', { type: 'button', className: 'bt-icon-btn bt-main-settings', title: t('Settings'),
           'aria-label': t('Settings'), onClick: () => view.set(current => ({ ...current, settingsOpen: true })) }, h(SlidersIcon)) : null),
-      state.health?.state === 'degraded' ? h('p', { className: 'bt-main-health-warning', role: 'alert' },
-        t('Main model failed. Durable work facts remain available.')) : null,
+      state.modelsNeedSetup ? h('p', { className: 'bt-main-health-warning', role: 'alert' },
+        t('Open Settings to select models for Main, Router and Worker.'))
+        : state.health?.state === 'degraded' ? h('p', { className: 'bt-main-health-warning', role: 'alert' },
+        t(state.connection?.connected ? 'Main model failed. Ask the Host operator to check the model and provider configuration.'
+          : 'Main model failed. Check the model and provider credentials in Settings.')) : null,
       h('div', { className: 'bt-main-history', ref: scroll, onScroll: () => { const node = scroll.current; follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80 } },
         h('div', { className: 'bt-main-messages' },
           !state.messagesComplete && state.messageBefore ? h('button', { type: 'button', className: 'bt-soft bt-main-history-more',
@@ -1269,6 +1284,7 @@ export function applyProduct(ctx) {
     }
     const applySnapshot = (value, preserve = false) => {
       setSnapshot(value)
+      view.set(current => ({ ...current, modelsNeedSetup: rolesNeedingModels(value).length > 0 }))
       if (!preserve) {
         const nextDraft = clone(value.roles)
         draftRef.current = nextDraft
@@ -1483,6 +1499,10 @@ export function applyProduct(ctx) {
                   run: promise => void Promise.resolve(promise).catch(failure =>
                     view.set(current => ({ ...current, directoryError: failure.message }))),
                   onPick: chooseDefaultDirectory, disabled: viewState.directoryBusy }))) : null,
+            models.length === 0 ? h('p', { className: 'bt-main-health-warning', role: 'alert' },
+              t('No models are available. Configure a provider in DSH settings, then reopen this panel to select the role models.'))
+              : rolesNeedingModels({ roles: draft, providers: snapshot.providers }).length ? h('p', { className: 'bt-main-health-warning', role: 'alert' },
+                t('Select an available model for each role before saving.')) : null,
             roleRows.map(([role, label]) => {
               const profile = draft[role]
               if (!profile) return null

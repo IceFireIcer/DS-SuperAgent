@@ -41,7 +41,7 @@ export function officeCli(manifest = fileURLToPath(import.meta.resolve('@deepsee
  * @returns {{ patchFiles: string[], node?: string }} the `patchFiles` addition for this
  *   launch and the payload's Node, which the Host exports for the plugin's own use
  */
-export function reconcileOfficeRuntime(profile, runtimeDir = process.env.DS_BOT_RUNTIME_DIR) {
+export function reconcileOfficeRuntime(profile, runtimeDir = process.env.DS_SUPERAGENT_RUNTIME_DIR) {
   const file = join(dirname(profile.dir), OFFICE_PATCH_NAME)
   const runtime = runtimeDir === undefined ? undefined : officeRuntime(runtimeDir)
   if (runtime === undefined) {

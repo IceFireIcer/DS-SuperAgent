@@ -60,7 +60,7 @@ function startHost({ postgres: pg, home, workspace, port, enroll = false, replac
     env: {
       ...process.env,
       DSH_HOME: home,
-      DS_BOT_WORKSPACE: workspace,
+      DS_SUPERAGENT_WORKSPACE: workspace,
       DS_SUPERAGENT_POSTGRES: JSON.stringify(pg),
       DS_SUPERAGENT_HOST_ID: hostId,
       DS_SUPERAGENT_LEASE_MS: String(leaseMs),

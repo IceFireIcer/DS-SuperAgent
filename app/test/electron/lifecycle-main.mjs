@@ -13,7 +13,7 @@ const here = dirname(fileURLToPath(import.meta.url))
 const assets = join(here, '..', '..', 'assets')
 // The data of this run is the folder the check script names, so that the check never writes
 // into the data of the user. The path is set before the app is ready.
-if (process.env.DS_BOT_SHELL_DATA !== undefined) app.setPath('userData', process.env.DS_BOT_SHELL_DATA)
+if (process.env.DS_SUPERAGENT_SHELL_DATA !== undefined) app.setPath('userData', process.env.DS_SUPERAGENT_SHELL_DATA)
 const token = randomBytes(16).toString('hex')
 const cookie = `dsh-auth=${token}`
 let origin
@@ -40,7 +40,7 @@ const host = createServer((request, response) => {
       return
     }
     response.writeHead(200, { 'content-type': 'text/html' })
-    response.end(`<!doctype html><title>DS Bot</title><h1 id="ready">ready</h1><p id="work">0</p>
+    response.end(`<!doctype html><title>DS SuperAgent</title><h1 id="ready">ready</h1><p id="work">0</p>
 <script>
 const read = async () => {
   try {
@@ -61,7 +61,7 @@ const shell = createShell({
   electron: { app, Menu, Tray, powerMonitor },
   platform: process.platform,
   messages: () => ({
-    tooltip: 'DS Bot', open: 'Open DS Bot', quit: 'Quit DS Bot', notice: 'The app goes on.', noticeConfirm: 'OK',
+    tooltip: 'DS SuperAgent', open: 'Open DS SuperAgent', quit: 'Quit DS SuperAgent', notice: 'The app goes on.', noticeConfirm: 'OK',
     running: 'Host running', starting: 'Starting the Host…', stopped: 'Host not running', failed: 'Host could not start',
     suspended: 'Paused while this computer sleeps',
   }),

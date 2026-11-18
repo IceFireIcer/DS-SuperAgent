@@ -1,5 +1,6 @@
 // An update prompt belongs to a window: a hidden window has no box to show it in, so the
 // prompt waits until the window is shown again.
+import { PRODUCT_NAME } from './product.mjs'
 
 /**
  * @param {{
@@ -16,7 +17,7 @@ export function createDeferredPrompt({ ask, shown, onYes, log = console }) {
   const prompt = async (version) => {
     if (!shown()) {
       waiting = version
-      log.info(`DS Bot: the update ${version} waits for the window`)
+      log.info(`${PRODUCT_NAME}: the update ${version} waits for the window`)
       return false
     }
     return ask(version)
@@ -30,7 +31,7 @@ export function createDeferredPrompt({ ask, shown, onYes, log = console }) {
       // to do the work itself.
       if (await ask(version)) await onYes?.(version)
     } catch (error) {
-      log.error(`DS Bot: the update ${version} could not be asked: ${error instanceof Error ? error.message : String(error)}`)
+      log.error(`${PRODUCT_NAME}: the update ${version} could not be asked: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
   return { prompt, flush, waiting: () => waiting }

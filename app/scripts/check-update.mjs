@@ -8,6 +8,7 @@ import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { ARTIFACT_PREFIX, PRODUCT_NAME, REPOSITORY } from '../src/product.mjs'
 
 const [executable, source, mode] = process.argv.slice(2)
 const mac = process.platform === 'darwin'
@@ -18,8 +19,8 @@ const manifest = process.platform === 'linux' ? 'latest-linux.yml' : 'latest.yml
 // The asset the fake release lists: what this install's update check waits for. The deb's file
 // name uses the Debian architecture (x64 → amd64).
 const asset = mac
-  ? version => `DS-Bot-${version}-mac-${process.arch}.zip`
-  : version => `DS-Bot-${version}-linux-${{ x64: 'amd64' }[process.arch] ?? process.arch}.deb`
+  ? version => `${ARTIFACT_PREFIX}-${version}-mac-${process.arch}.zip`
+  : version => `${ARTIFACT_PREFIX}-${version}-linux-${{ x64: 'amd64' }[process.arch] ?? process.arch}.deb`
 if (!executable || !source || !existsSync(executable)
   || (releasePage ? mode !== undefined : !existsSync(join(source, manifest)))) {
   console.error(`check-update: usage: ${releasePage
@@ -39,7 +40,7 @@ const server = createServer((request, response) => {
     served.push(pathname)
     response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify([{
       tag_name: `v${version}`,
-      html_url: `https://github.com/Fei2411/DS-Bot/releases/tag/v${version}`,
+      html_url: `https://github.com/${REPOSITORY}/releases/tag/v${version}`,
       draft: false,
       prerelease: false,
       assets: [{ name: asset(version) }],
@@ -118,7 +119,9 @@ let app
 try {
   // A terminal inside an Electron-based editor may set ELECTRON_RUN_AS_NODE, which turns the app into plain Node.
   const { ELECTRON_RUN_AS_NODE: _runAsNode, ...env } = process.env
-  Object.assign(env, { DS_BOT_HOME: join(work, 'home'), DS_BOT_SHELL_DATA: join(work, 'shell'), DS_BOT_UPDATE_URL: feed })
+  Object.assign(env, { DS_SUPERAGENT_HOME: join(work, 'home'), DS_SUPERAGENT_SHELL_DATA: join(work, 'shell'),
+    DS_SUPERAGENT_WORKSPACE: join(work, 'workspace'),
+    DS_SUPERAGENT_UPDATE_URL: feed, DSH_HOME: join(work, 'personal-dsh') })
   const port = 9300 + Math.floor(Math.random() * 600)
   app = spawn(resolve(executable), [`--remote-debugging-port=${String(port)}`], { env, stdio: ['ignore', 'pipe', 'pipe'] })
   const exited = new Promise((done) => { app.once('exit', (code) => { done(code) }) })
@@ -127,10 +130,10 @@ try {
     stream.setEncoding('utf8')
     stream.on('data', (chunk) => { output += chunk; process.stdout.write(chunk) })
   }
-  const updateLine = `DS Bot: update ${String(version)} ${releasePage ? 'available' : 'downloaded'}`
+  const updateLine = `${PRODUCT_NAME}: update ${String(version)} ${releasePage ? 'available' : 'downloaded'}`
   const end = Date.now() + (releasePage ? 3 : 5) * 60_000
   while (!output.includes(updateLine)) {
-    if (releasePage ? /DS Bot: update check failed/u.test(output) : /DS Bot: update failed/u.test(output)) {
+    if (output.includes(`${PRODUCT_NAME}: update ${releasePage ? 'check failed' : 'failed'}`)) {
       throw new Error('the app reported a failed update')
     }
     if (app.exitCode !== null) {

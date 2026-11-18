@@ -21,13 +21,13 @@ async function main() {
   reportSkippedBundles('dsh', profile)
   const office = reconcileOfficeRuntime(profile)
   const superagent = reconcileSuperagentProfile(profile, true)
-  if (office.node !== undefined) process.env.DS_BOT_OFFICE_NODE = office.node
+  if (office.node !== undefined) process.env.DS_SUPERAGENT_OFFICE_NODE = office.node
   const application = runProfile({
     environment: loadLayeredEnv('dsh'),
     profile: SUPERAGENT_PROFILE,
     resolvedProfile: { profile, installAnchor: INSTALL_ANCHOR },
     patchFiles: [...reconcileSearchSelector(profile), ...office.patchFiles, ...superagent],
-    args: ['--no-open', '--port', process.env.DS_BOT_PORT || '0'],
+    args: ['--no-open', '--port', process.env.DS_SUPERAGENT_PORT || '0'],
     ...(pnpm === undefined ? {} : {
       packageManager: { command: process.execPath, args: ['--expose-internals', pnpm], env: { ELECTRON_RUN_AS_NODE: '1' } },
     }),

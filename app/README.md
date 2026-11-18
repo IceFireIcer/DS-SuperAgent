@@ -8,6 +8,8 @@ surface. The design is in [docs/plans/2026-10-16-desktop-app.md](../docs/plans/2
 ## Run
 
 ```sh
+npm --prefix ../superagent ci
+npm --prefix ../superagent run build
 npm ci
 node node_modules/electron/install.js   # when npm did not download Electron (no node_modules/electron/dist)
 npm start                               # starts the app
@@ -21,13 +23,13 @@ npm installs `ds-superagent` from `../superagent` as a copy of its package files
 
 | Variable | What it sets | Default |
 |---|---|---|
-| `DS_BOT_HOME` | The outer data location; the product profile is under its `superagent` folder. When set, the app asks nothing at its first start | The folder chosen at the first start |
-| `DS_BOT_WORKSPACE` | With `DS_BOT_HOME`: the initial product workspace | `superagent/workspace` in the data location |
-| `DS_BOT_SHELL_DATA` | The app's own data (window, Chromium storage, the Bot browsers' logins, `locations.json`) | Electron's `userData` (Windows: `%APPDATA%\DS Bot`; macOS: `~/Library/Application Support/DS Bot`) |
-| `DS_BOT_UPDATE_URL` | Windows and a Linux AppImage: a folder URL with `latest.yml` / `latest-linux.yml` and the installer. macOS and a Linux deb: a URL returning a JSON list like GitHub's `releases` API; a release counts only when this machine's package is attached. Prereleases count only for prerelease installs (see [Updates](#updates)). With `DS_BOT_HOME`, the app checks only when this is set | The newest GitHub release |
+| `DS_SUPERAGENT_HOME` | The outer data location. Its `superagent` folder holds the product profile. This override skips first run folder selection | The folder chosen at the first start |
+| `DS_SUPERAGENT_WORKSPACE` | With `DS_SUPERAGENT_HOME`, the initial product workspace | `superagent/workspace` in the data location |
+| `DS_SUPERAGENT_SHELL_DATA` | Window settings, Chromium storage, browser logins and `locations.json` | `DS SuperAgent` in Electron's app data folder, or `desktop/` under an explicit `DS_SUPERAGENT_HOME` |
+| `DS_SUPERAGENT_UPDATE_URL` | A test feed that overrides the GitHub release lookup (see [Updates](#updates)) | The newest DS SuperAgent release |
 
-Existing installations keep their shell data, browser logins and saved locations in place. New installations use
-the DS Bot directory. A saved workspace keeps its path; only a new workspace defaults to `~/DS Bot`.
+Windows uses `%APPDATA%\DS SuperAgent` for shell settings. On macOS it is `~/Library/Application Support/DS SuperAgent`.
+The app starts with its own settings and leaves the former product's shell data, browser logins and saved locations in place.
 
 ## Run from source (Windows)
 
@@ -48,23 +50,23 @@ Use `.\start.ps1 -DataRoot <folder>` for a different data root (relative paths a
 
 ## First start
 
-At its first start the app asks, in system dialogs, for the data location (`~/.ds-bot` by default) and workspace
-(`~/DS Bot`), and keeps the answer in `locations.json` in its own data. Neither folder may be inside the other or
-inside the user's DSH data.
+At its first start the app asks for a data location (`~/.ds-superagent` by default) and workspace (`~/DS SuperAgent`).
+It checks that both can be written and offers to change a location if it fails. The choices go into the app's own
+`locations.json`. Keep the folders outside each other, the program folder, personal DSH data and former DS Bot data.
 
 Both change later in DS SuperAgent's Settings > General > Locations. The app names the user's DSH data to the
-product (`DS_BOT_USER_DSH_HOME`), so neither the workspace nor an execution directory can be set there. The data
+product (`DS_SUPERAGENT_USER_DSH_HOME`), so neither the workspace nor an execution directory can be set there. The data
 location moves through the app (`src/move-data.mjs`): the new folder must be empty or new and apart from the old
 data, the workspace, the user's DSH data and the program folder. The app stops the Host, copies the data into a
 staging folder beside the new one, renames it to the new folder once it is whole, writes `locations.json` and starts
 again. A failed or interrupted copy leaves the old location in use and removes the staging folder; the old folder
-always stays. A run on throwaway folders (`DS_BOT_HOME`) keeps its data location.
+always stays. A run on throwaway folders (`DS_SUPERAGENT_HOME`) keeps its data location.
 
 The app does not import or activate the old Bot team runtime. Existing DSH and DS Bot files remain untouched.
 Optional browser, credential and memory import are product actions inside the running SuperAgent profile and use
 their own isolated import contracts.
 
-The Host reads model settings and keys the way DSH does: environment variables such as `DEEPSEEK_API_KEY`, and `.env` and `.credentials.yaml` in the data location. DSH's settings in the window set up model providers and their keys; DSH keeps the providers in the profile's `cordis.patch.yml` and the keys in `.credentials.yaml`.
+The Host reads model settings through DSH. If a model call fails, Main points to Settings so you can check the role model and provider credentials. Settings shows when the provider has no models or a key is missing. Provider and credential files belong to the product's own DSH home.
 
 ## The profile
 
@@ -98,12 +100,12 @@ user data is needed.
 `scripts/shot.mjs` starts the app on throwaway folders, saves a screenshot of its window, prints the page text, closes the window the way a user does (it hides, and the app goes on) and ends the app the way the tray's Quit ends it. Use the package's mock model, `../superagent/dsh/dev/mock-llm.mjs` (`MOCK_PORT=<port> node ../superagent/dsh/dev/mock-llm.mjs`).
 
 ```sh
-DS_BOT_HOME=<tmp>/home DS_BOT_SHELL_DATA=<tmp>/shell \
+DS_SUPERAGENT_HOME=<tmp>/home DS_SUPERAGENT_SHELL_DATA=<tmp>/shell \
 DEEPSEEK_BASE_URL=http://127.0.0.1:<port>/v1 DEEPSEEK_API_KEY=mock-key \
 node scripts/shot.mjs <tmp>/shot.png 20
 ```
 
-Never point `DS_BOT_HOME` at `~/.dsh` or at the data of an app that you use.
+Use throwaway folders for `DS_SUPERAGENT_HOME` in checks.
 
 ## Package
 
@@ -111,19 +113,19 @@ Never point `DS_BOT_HOME` at `~/.dsh` or at the data of an app that you use.
 
 ```sh
 npm run pack           # the app without an installer: dist-pack/win-unpacked/ (Windows), dist-pack/mac*/ (macOS), dist-pack/linux-unpacked/ (Linux)
-npm run dist           # the installer: dist-pack/DS-Bot-<version>-win-x64.exe (Windows), a .zip (macOS), an .AppImage and a .deb (Linux)
+npm run dist           # DS-SuperAgent-<version>-... in dist-pack/ (Windows exe, macOS zip, Linux AppImage and deb)
 npm run check-packed   # starts the packaged app on throwaway folders with the mock model, chats once, closes it
 ```
 
-macOS produces one zip per architecture. Build arm64 on an Apple chip Mac and x64 on an Intel Mac, or under Rosetta with an x64 Node that also ran `npm ci`. Do not cross-build: it packages native modules from `node_modules`; a combined build put 12 arm64-only native modules in its x64 app. `scripts/before-pack.mjs` stops a build whose architecture is not the one of the Node that runs it. The app is ad-hoc signed so downloaded copies are sealed. It ships as a zip, not a dmg: macOS 26 calls a downloaded unsigned dmg damaged and does not open it, and an ad-hoc signature on the dmg does not help (#351). Safari unzips the download; move DS Bot to Applications. On first open, use System Settings → Privacy & Security → Open Anyway. Do not disable Gatekeeper.
+macOS produces one zip per architecture. Build arm64 on an Apple chip Mac and x64 on an Intel Mac, or under Rosetta with an x64 Node that also ran `npm ci`. Do not cross-build: it packages native modules from `node_modules`; a combined build put 12 arm64-only native modules in its x64 app. `scripts/before-pack.mjs` stops a build whose architecture is not the one of the Node that runs it. The app is ad-hoc signed so downloaded copies are sealed. It ships as a zip, not a dmg: macOS 26 calls a downloaded unsigned dmg damaged and does not open it, and an ad-hoc signature on the dmg does not help (#351). Safari unzips the download. Move DS SuperAgent to Applications. On first open, use System Settings → Privacy & Security → Open Anyway. Do not disable Gatekeeper.
 
 `check-packed` takes another executable as its first argument, and a file for a screenshot of the window as its second. It runs an app that lies inside this checkout from a copy in its throwaway folder: from inside the checkout, Node would find a module that the package left out in the checkout's own `node_modules`.
 
 electron-builder packs only the packages that it finds through `dependencies` and `optionalDependencies`. The DSH packages ask for many packages as peers, which npm installs but electron-builder would leave out, so `package.json` lists them as dependencies. `npm test` fails when one is missing and names it.
 
-The Windows installer installs for the current user only, without administrator rights, by default into `%LOCALAPPDATA%\Programs\DS Bot` (`build/installer.nsh` skips the page that asks for all users or only for the current one). The uninstaller removes the program and keeps the data location and the app's own data. CI builds the Windows installer on every pull request, checks the packaged app, then installs it, checks the installed app and uninstalls it. For a change to `app/` or the workflows, it also updates the installed app before the uninstall (see [Updates](#updates)).
+The Windows installer installs for the current user without administrator rights. A fresh install defaults to `%LOCALAPPDATA%\Programs\DS SuperAgent`. The DS SuperAgent installer registers its own product identity. Updates to DS SuperAgent reuse its registered program folder. Uninstall keeps product data and desktop settings. The desktop package check builds the installer, runs the app, checks an update, and uninstalls it.
 
-Linux gets one AppImage for every distribution — it runs on any glibc system, updates itself, and needs no per-distribution packages — and a deb for Debian/Ubuntu, built in the same `npm run dist`. An AppImage mounts through FUSE 2 (`libfuse2t64` on Ubuntu 24.04+/Debian 13+, `libfuse2` on Ubuntu 22.04, `fuse-libs` on Fedora, `fuse2` on Arch; `--appimage-extract-and-run` works without it). Ubuntu 24.04 and later restrict the unprivileged user namespaces that Chromium's sandbox needs, so an AppImage can refuse to start there ("The SUID sandbox helper binary was found, but is not configured correctly"): the deb does not have this problem, since its post-install sets `chrome-sandbox` up (electron-builder 26 also writes an AppArmor profile). The binary and the deb's menu entry are `dsbot` (`executableName`); the deb installs into `/opt/DS Bot`. CI builds the Linux packages on every pull request, checks the AppImage's self-update on a throwaway copy, and installs, checks, update-checks and removes the deb.
+Linux gets an AppImage and a deb for Debian/Ubuntu. An AppImage mounts through FUSE 2 (`libfuse2t64` on Ubuntu 24.04+/Debian 13+, `libfuse2` on Ubuntu 22.04, `fuse-libs` on Fedora, `fuse2` on Arch). `--appimage-extract-and-run` works without FUSE. On Ubuntu 24.04 and later, AppArmor restrictions can prevent the AppImage from starting. The deb sets up `chrome-sandbox` and its AppArmor profile during installation. The deb installs `/opt/DS SuperAgent/ds-superagent` and the `ds-superagent.desktop` launcher. The desktop package check tests AppImage updates on a temporary copy and installs, checks and removes the deb.
 
 ## Updates
 
@@ -133,19 +135,19 @@ The checks start before the Host, so that a version whose Host does not start ca
 fails, the app waits up to 15 seconds for the newest check. When it found a newer version, the error box says so;
 after the box the app waits for the download, then installs it and opens again.
 
-On macOS, the app checks GitHub's releases at start and every 4 hours. It asks once per version, after that release's zip for this Mac is attached. A Linux deb works the same way, except that it waits for the `linux-amd64` deb (Debian's name for x64). Stable installs ignore prereleases; prerelease installs can see them. Download opens the release page; Later closes the dialog. The app does not install the update itself. `DS_BOT_UPDATE_URL` on macOS and for a deb points to a JSON list like the `releases` API response. A release needs `tag_name`, an HTTPS `html_url`, and the machine's package in `assets`.
+On macOS, the app checks GitHub's releases at start and every 4 hours. It asks once per version, after that release's zip for this Mac is attached. A Linux deb waits for the `linux-amd64` deb (Debian's name for x64). Stable installs ignore prereleases. Download opens the release page for manual installation. `DS_SUPERAGENT_UPDATE_URL` on macOS and for a deb points to a JSON list like the `releases` API response. A release needs `tag_name`, an HTTPS `html_url`, and the machine's package in `assets`.
 
 On Windows and for an AppImage, `app-update.yml` tells the app where its releases are; `npm run dist` writes it from `publish` in `electron-builder.yml`, together with `latest.yml` / `latest-linux.yml` beside the installer (`npm run pack` writes neither). Neither command publishes. The release workflow (`.github/workflows/release.yml`) builds the packages when a release is published and attaches the Windows installer with its `.blockmap` and `latest.yml`, the AppImage with its `.blockmap`, the deb and `latest-linux.yml` to the release. The release tag is the version of `ds-superagent`, and `npm test` checks that the app has the same version. The macOS release job builds each zip on a matching-architecture runner and attaches only the zip.
 
-On throwaway folders (`DS_BOT_HOME`) the app checks for updates only from `DS_BOT_UPDATE_URL`, and it never asks: the update waits until the app quits. `scripts/check-update.mjs` checks the update of a packaged app with such a feed:
+On throwaway folders (`DS_SUPERAGENT_HOME`) the app checks for updates only from `DS_SUPERAGENT_UPDATE_URL`. Any downloaded update waits until the app quits. `scripts/check-update.mjs` checks the update of a packaged app with such a feed:
 
 ```sh
 npx electron-builder --publish never -c.extraMetadata.version=<next version> -c.directories.output=dist-next   # the feed
-node scripts/check-update.mjs "dist-pack/win-unpacked/DS Bot.exe" dist-next --kill   # Windows
-node scripts/check-update.mjs ./dsbot.AppImage dist-next --kill                     # a Linux AppImage (latest-linux.yml)
+node scripts/check-update.mjs "dist-pack/win-unpacked/DS SuperAgent.exe" dist-next --kill   # Windows
+node scripts/check-update.mjs ./ds-superagent.AppImage dist-next --kill                    # a Linux AppImage (latest-linux.yml)
 ```
 
-It serves the feed folder, starts the app on throwaway folders and waits until the app has downloaded the update and checked its sha512. Then it ends the app the way the tray's Quit ends it, so that the app installs the update as it quits; with `--kill` it ends the app, so that nothing is installed. On your own machine use `--kill`: the installer would install into `%LOCALAPPDATA%\Programs\DS Bot`, and an AppImage replaces itself. The download stays in `%LOCALAPPDATA%\dsbot-updater` (`~/.cache/dsbot-updater` on Linux). CI runs it without `--kill` on its installed app, then checks that the installed version is the new one and that the updated app passes `check-packed`; for an AppImage it checks that the file is the new one.
+It serves the feed folder, runs the app on throwaway folders and waits for the update download and its SHA-512 check. Use `--kill` to end the check before installation on your machine. The desktop package workflow runs the install step on disposable runners and checks the updated program.
 
 On macOS and for a Linux deb, pass the app executable and a version to mock a newer release:
 
@@ -157,7 +159,7 @@ The script serves a releases list with one release of that version that has this
 
 ## The tray and quitting
 
-The app builds a system tray icon on Windows, macOS and Linux (`src/shell.mjs`, `src/tray.mjs`); the icon is the app's own whale (`assets/tray.*`, drawn by `npm run icon`). The menu says what the Host is doing ("Host running", "Starting the Host…", "Host not running", "Host could not start", or "Paused while this computer sleeps"), then holds "Open DS Bot" and "Quit DS Bot". Whether the icon is visible belongs to the desktop: on Linux, GNOME and KDE draw it only with a tray extension.
+The app builds a system tray icon on Windows, macOS and Linux (`src/shell.mjs`, `src/tray.mjs`). The menu describes the Host's current state and offers “Open DS SuperAgent” and “Quit DS SuperAgent”. Some Linux desktops need a tray extension to display the icon.
 
 Closing the window hides it: Main, Router and Worker go on running, and browser resource tabs stay. Starting the
 app again brings the window back, because the second copy hands itself to the one that runs. When the window is gone

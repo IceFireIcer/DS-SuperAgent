@@ -12,22 +12,24 @@ export const within = (inner, outer) => {
  * Whether two app folders may share the user's DSH data or the program folder, judged through
  * links and junctions rather than by their text.
  * @param {string} dataDir @param {string | undefined} workspace
- * @param {{ dshHome?: string, program?: string, layout?: boolean }} [places] `layout: false`
+ * @param {{ dshHomes?: string[], program?: string, formerData?: string[], layout?: boolean }} [places] `layout: false`
  *   keeps a saved data/workspace arrangement that an earlier version accepted
- * @returns {'dataInWorkspace' | 'workspaceInData' | 'inDsh' | 'inProgram' | undefined}
+ * @returns {'dataInWorkspace' | 'workspaceInData' | 'inDsh' | 'inProgram' | 'inFormerData' | undefined}
  */
-export function isolationProblem(dataDir, workspace, { dshHome, program, layout = true } = {}) {
+export function isolationProblem(dataDir, workspace, { dshHomes = [], program, formerData = [], layout = true } = {}) {
   const data = real(dataDir)
   const space = workspace === undefined ? undefined : real(workspace)
   if (layout) {
     if (space !== undefined && within(data, space)) return 'dataInWorkspace'
     if (space !== undefined && within(space, data)) return 'workspaceInData'
   }
-  const dsh = dshHome === undefined ? undefined : real(dshHome)
+  const dsh = dshHomes.map(real)
   const app = program === undefined ? undefined : real(program)
+  const former = formerData.map(real)
   for (const path of [data, ...(space === undefined ? [] : [space])]) {
-    if (dsh !== undefined && (within(path, dsh) || within(dsh, path))) return 'inDsh'
+    if (dsh.some(root => within(path, root) || within(root, path))) return 'inDsh'
     if (app !== undefined && within(path, app)) return 'inProgram'
+    if (former.some(root => within(path, root) || within(root, path))) return 'inFormerData'
   }
   return undefined
 }

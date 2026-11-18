@@ -6,6 +6,10 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
+      desktop_packages:
+        description: Run the desktop install and update checks on Windows, macOS, and Linux
+        type: boolean
+        default: false
       full:
         description: Run all release checks, including compatibility and install/update matrices
         type: boolean
@@ -20,7 +24,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: test-${{ github.event_name }}-${{ github.ref }}-${{ inputs.full || false }}
+  group: test-${{ github.event_name }}-${{ github.ref }}-${{ inputs.full || false }}-${{ inputs.desktop_packages || false }}
   cancel-in-progress: ${{ github.event_name != 'release' }}
 
 jobs:
@@ -48,6 +52,7 @@ jobs:
         env:
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
           FULL: ${{ inputs.full || (github.event_name == 'pull_request' && github.base_ref == 'main') }}
+          DESKTOP_PACKAGES: ${{ github.event_name == 'workflow_dispatch' && inputs.desktop_packages }}
         run: |
           echo "full=$FULL" >> "$GITHUB_OUTPUT"
           echo "base=$BASE" >> "$GITHUB_OUTPUT"
@@ -59,6 +64,8 @@ jobs:
           fi
           if [ "$FULL" = true ]; then
             exit 0
+          elif [ "$DESKTOP_PACKAGES" = true ]; then
+            printf '%s\n' app_package=true app=false superagent=false mobile=false docker=false >> "$GITHUB_OUTPUT"
           elif [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
             node scripts/change-scope.mjs --all --github-output
           else
@@ -236,26 +243,43 @@ jobs:
       # The runner is a fresh machine, so the installer may run here. It must install for the
       # current user only, the installed app must pass the same check, and the uninstaller must
       # remove it again.
+      - name: Seed product and former user data
+        shell: pwsh
+        run: |
+          $folders = (Join-Path $HOME '.ds-superagent'), (Join-Path $env:APPDATA 'DS SuperAgent'),
+            (Join-Path $HOME '.ds-bot'), (Join-Path $env:APPDATA 'DS Bot'), (Join-Path $env:APPDATA 'DeepSeek Bot')
+          $files = foreach ($folder in $folders) {
+            New-Item -ItemType Directory -Force $folder | Out-Null
+            $file = Join-Path $folder 'kept.txt'
+            Set-Content -LiteralPath $file -Value 'kept'
+            $file
+          }
+          "KEPT_FILES=$($files -join '|')" >> $env:GITHUB_ENV
+
       - name: Install and check
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           function Find-Entry($root) {
             Get-ChildItem "$root\Software\Microsoft\Windows\CurrentVersion\Uninstall" |
-              Where-Object { (Get-ItemProperty $_.PSPath).DisplayName -like 'DS Bot*' }
+              Where-Object { (Get-ItemProperty $_.PSPath).DisplayName -like 'DS SuperAgent*' }
           }
-          $installer = Get-Item dist-pack/DS-Bot-*-win-x64.exe
-          Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait
-          $dir = Join-Path $env:LOCALAPPDATA 'Programs\DS Bot'
-          $exe = Join-Path $dir 'DS Bot.exe'
+          $installer = Get-Item dist-pack/DS-SuperAgent-*-win-x64.exe
+          $installed = Start-Process -FilePath $installer.FullName -ArgumentList '/S' -WindowStyle Hidden -Wait -PassThru
+          if ($installed.ExitCode -ne 0) { throw "The installer exited with $($installed.ExitCode)" }
+          $dir = Join-Path $env:LOCALAPPDATA 'Programs\DS SuperAgent'
+          $exe = Join-Path $dir 'DS SuperAgent.exe'
           if (-not (Test-Path $exe)) { throw "The installer did not put the app in $dir" }
           $entry = Find-Entry 'HKCU:'
           if (-not $entry) { throw 'No uninstall entry for the current user' }
           if (Find-Entry 'HKLM:') { throw 'The installer installed for all users' }
           node scripts/check-packed.mjs $exe
           if ($LASTEXITCODE -ne 0) { throw 'The installed app failed its check' }
+          foreach ($file in ($env:KEPT_FILES -split '\|')) {
+            if ((Get-Content -LiteralPath $file -Raw).Trim() -ne 'kept') { throw "Install changed $file" }
+          }
 
-      # Package jobs run only in full validation. Always exercise the update, including
+      # Package jobs also run for desktop-only validation. Always exercise the update, including
       # release PRs that changed only the core. The next build supplies the update feed.
       - name: Build the next version
         run: |
@@ -266,20 +290,20 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $exe = Join-Path $env:LOCALAPPDATA 'Programs\DS Bot\DS Bot.exe'
+          $exe = Join-Path $env:LOCALAPPDATA 'Programs\DS SuperAgent\DS SuperAgent.exe'
           node scripts/check-update.mjs $exe dist-next
           if ($LASTEXITCODE -ne 0) { throw 'The installed app did not take the update' }
           # The installer goes on after the app has quit.
           function Installed-Version {
             Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' |
               ForEach-Object { Get-ItemProperty $_.PSPath } |
-              Where-Object { $_.DisplayName -like 'DS Bot*' } |
+              Where-Object { $_.DisplayName -like 'DS SuperAgent*' } |
               Select-Object -ExpandProperty DisplayVersion
           }
           $deadline = (Get-Date).AddSeconds(240)
           while ((Installed-Version) -ne $env:NEXT_VERSION -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 3 }
           if ((Installed-Version) -ne $env:NEXT_VERSION) { throw "The installed version is $(Installed-Version), not $env:NEXT_VERSION" }
-          while ((Get-Process | Where-Object { $_.Path -like '*dsbot-updater*' }) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 2 }
+          while ((Get-Process | Where-Object { $_.Path -like '*ds-superagent-desktop-updater*' }) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 2 }
           node scripts/check-packed.mjs $exe
           if ($LASTEXITCODE -ne 0) { throw 'The updated app failed its check' }
 
@@ -289,25 +313,20 @@ jobs:
           $ErrorActionPreference = 'Stop'
           function Find-Entry($root) {
             Get-ChildItem "$root\Software\Microsoft\Windows\CurrentVersion\Uninstall" |
-              Where-Object { (Get-ItemProperty $_.PSPath).DisplayName -like 'DS Bot*' }
+              Where-Object { (Get-ItemProperty $_.PSPath).DisplayName -like 'DS SuperAgent*' }
           }
-          $dir = Join-Path $env:LOCALAPPDATA 'Programs\DS Bot'
-          $exe = Join-Path $dir 'DS Bot.exe'
-          # The uninstaller removes the program only: the data location and the app's own data stay.
-          $kept = foreach ($folder in (Join-Path $HOME '.ds-bot'), (Join-Path $env:APPDATA 'DS Bot')) {
-            New-Item -ItemType Directory -Force $folder | Out-Null
-            $file = Join-Path $folder 'kept.txt'
-            Set-Content $file 'kept'
-            $file
-          }
-          $uninstaller = Join-Path $dir 'Uninstall DS Bot.exe'
-          Start-Process -FilePath $uninstaller -ArgumentList '/currentuser', '/S' -Wait
+          $dir = Join-Path $env:LOCALAPPDATA 'Programs\DS SuperAgent'
+          $exe = Join-Path $dir 'DS SuperAgent.exe'
+          $uninstaller = Join-Path $dir 'Uninstall DS SuperAgent.exe'
+          Start-Process -FilePath $uninstaller -ArgumentList '/currentuser', '/S' -WindowStyle Hidden -Wait
           # The uninstaller goes on from a copy in the temp folder, so wait for its result.
           $deadline = (Get-Date).AddSeconds(120)
           while (((Test-Path $exe) -or (Find-Entry 'HKCU:')) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 2 }
           if (Test-Path $exe) { throw 'The uninstaller left the app in place' }
           if (Find-Entry 'HKCU:') { throw 'The uninstaller left its uninstall entry' }
-          foreach ($file in $kept) { if (-not (Test-Path $file)) { throw "The uninstaller removed $file" } }
+          foreach ($file in ($env:KEPT_FILES -split '\|')) {
+            if ((Get-Content -LiteralPath $file -Raw).Trim() -ne 'kept') { throw "Uninstall changed $file" }
+          }
 
   app-package-macos:
     name: Desktop app package (macOS ${{ matrix.arch }})
@@ -347,16 +366,16 @@ jobs:
           CSC_FOR_PULL_REQUEST: 'true'
       - name: Check the zip
         run: |
-          zip="dist-pack/DS-Bot-$(node -p "require('./package.json').version")-mac-${{ matrix.arch }}.zip"
+          zip="dist-pack/DS-SuperAgent-$(node -p "require('./package.json').version")-mac-${{ matrix.arch }}.zip"
           test -f "$zip"
       - name: Check the packaged app
         run: node scripts/check-packed.mjs
       - name: Install from the zip and check
         run: |
-          zip="dist-pack/DS-Bot-$(node -p "require('./package.json').version")-mac-${{ matrix.arch }}.zip"
+          zip="dist-pack/DS-SuperAgent-$(node -p "require('./package.json').version")-mac-${{ matrix.arch }}.zip"
           ditto -x -k "$zip" /Applications
-          app="/Applications/DS Bot.app"
-          exe="$app/Contents/MacOS/DS Bot"
+          app="/Applications/DS SuperAgent.app"
+          exe="$app/Contents/MacOS/DS SuperAgent"
           codesign --verify --deep --strict "$app"
           file "$exe"
           expected="${{ matrix.arch }}"
@@ -395,8 +414,8 @@ jobs:
       - name: Check the packages
         run: |
           version="$(node -p "require('./package.json').version")"
-          test -f "dist-pack/DS-Bot-$version-linux-x86_64.AppImage"
-          test -f "dist-pack/DS-Bot-$version-linux-amd64.deb"
+          test -f "dist-pack/DS-SuperAgent-$version-linux-x86_64.AppImage"
+          test -f "dist-pack/DS-SuperAgent-$version-linux-amd64.deb"
           test -f dist-pack/latest-linux.yml
       # An AppImage mounts through FUSE 2, and Ubuntu 24.04's AppArmor blocks the unprivileged
       # user namespaces that Chromium's sandbox needs; a throwaway runner may lift that.
@@ -411,13 +430,13 @@ jobs:
       - name: Install the deb and check
         run: |
           version="$(node -p "require('./package.json').version")"
-          sudo apt-get install -y "./dist-pack/DS-Bot-$version-linux-amd64.deb"
-          test -f /usr/share/applications/dsbot.desktop
-          xvfb-run -a node scripts/check-packed.mjs "/opt/DS Bot/dsbot"
+          sudo apt-get install -y "./dist-pack/DS-SuperAgent-$version-linux-amd64.deb"
+          test -f /usr/share/applications/ds-superagent.desktop
+          xvfb-run -a node scripts/check-packed.mjs "/opt/DS SuperAgent/ds-superagent"
       # A deb cannot update itself: it points at the release page, as on macOS.
       - name: The deb's app hears of a new version
-        run: xvfb-run -a node scripts/check-update.mjs "/opt/DS Bot/dsbot" 99.0.0
-      # Full validation must exercise AppImage replacement regardless of changed paths.
+        run: xvfb-run -a node scripts/check-update.mjs "/opt/DS SuperAgent/ds-superagent" 99.0.0
+      # Package validation must exercise AppImage replacement regardless of changed paths.
       - name: Build the next version
         run: |
           next="$(node -p "const [a, b, c] = require('./package.json').version.split(/[.-]/u); [a, b, Number(c) + 1].join('.')")"
@@ -425,16 +444,16 @@ jobs:
       - name: The AppImage takes the update
         run: |
           tmp="$(mktemp -d)"
-          cp dist-pack/DS-Bot-*-linux-x86_64.AppImage "$tmp/dsbot.AppImage"
-          chmod +x "$tmp/dsbot.AppImage"
-          xvfb-run -a node scripts/check-update.mjs "$tmp/dsbot.AppImage" dist-next
-          pkill -f "$tmp/dsbot" || true
-          next="$(ls dist-next/DS-Bot-*-linux-x86_64.AppImage)"
-          test "$(sha512sum "$tmp/dsbot.AppImage" | cut -d' ' -f1)" = "$(sha512sum "$next" | cut -d' ' -f1)"
+          cp dist-pack/DS-SuperAgent-*-linux-x86_64.AppImage "$tmp/ds-superagent.AppImage"
+          chmod +x "$tmp/ds-superagent.AppImage"
+          xvfb-run -a node scripts/check-update.mjs "$tmp/ds-superagent.AppImage" dist-next
+          pkill -f "$tmp/ds-superagent" || true
+          next="$(ls dist-next/DS-SuperAgent-*-linux-x86_64.AppImage)"
+          test "$(sha512sum "$tmp/ds-superagent.AppImage" | cut -d' ' -f1)" = "$(sha512sum "$next" | cut -d' ' -f1)"
       - name: Uninstall
         run: |
-          sudo apt-get remove -y dsbot
-          test ! -e "/opt/DS Bot/dsbot"
+          sudo apt-get remove -y ds-superagent
+          test ! -e "/opt/DS SuperAgent/ds-superagent"
 
   docker:
     name: Docker startup and data migration

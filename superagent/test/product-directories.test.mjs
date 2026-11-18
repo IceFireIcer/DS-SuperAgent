@@ -16,15 +16,15 @@ test('the product directory picker saves a default and a work override across Ho
   const userDsh = join(base, 'user-dsh')
   await Promise.all([mkdir(first), mkdir(second), mkdir(core), mkdir(userDsh)])
   const [firstRoot, secondRoot, userDshRoot] = await Promise.all([realpath(first), realpath(second), realpath(userDsh)])
-  const previousUserDsh = process.env.DS_BOT_USER_DSH_HOME
-  process.env.DS_BOT_USER_DSH_HOME = userDsh
+  const previousUserDsh = process.env.DS_SUPERAGENT_USER_DSH_HOME
+  process.env.DS_SUPERAGENT_USER_DSH_HOME = userDsh
   const native = await nativeContext(join(base, 'sessions'), function* () { yield* textResponse('Main is ready.') })
   native.provide('directoryPicker', { capability: () => ({ kind: 'native', pick: async () => second }) })
   let host
   t.after(async () => {
     await host?.close(); await native.fiber.dispose(); await rm(base, { recursive: true, force: true })
-    if (previousUserDsh === undefined) delete process.env.DS_BOT_USER_DSH_HOME
-    else process.env.DS_BOT_USER_DSH_HOME = previousUserDsh
+    if (previousUserDsh === undefined) delete process.env.DS_SUPERAGENT_USER_DSH_HOME
+    else process.env.DS_SUPERAGENT_USER_DSH_HOME = previousUserDsh
   })
   const config = { databasePath: join(core, 'state.sqlite'), workspaceRoot: first, instanceId: 'personal', actorId: 'alice',
     main: { provider: 'mock', model: 'main' }, router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } }

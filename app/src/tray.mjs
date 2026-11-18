@@ -1,5 +1,6 @@
 // The system tray: what the Host is doing, the way back to a hidden window and the one
 // ordinary way out.
+import { PRODUCT_NAME } from './product.mjs'
 
 /**
  * @param {{
@@ -41,7 +42,7 @@ export function createTray({ Tray, Menu, platform, image, tooltip, status, open,
     dispose() {
       if (disposed) return
       disposed = true
-      try { tray.destroy() } catch (error) { log.warn(`DS Bot: the tray icon did not go away: ${error instanceof Error ? error.message : String(error)}`) }
+      try { tray.destroy() } catch (error) { log.warn(`${PRODUCT_NAME}: the tray icon did not go away: ${error instanceof Error ? error.message : String(error)}`) }
     },
   }
 }

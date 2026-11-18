@@ -42,7 +42,7 @@ test('the package resolves its own nested Office bundle', () => {
       mkdirSync(join(directory, 'office-skills', skill), { recursive: true })
       writeFileSync(join(directory, 'office-skills', skill, 'SKILL.md'), '---\ndescription: fixture\n---\n')
     }
-    const office = officeProfileConfig({ DS_BOT_OFFICE_NODE: process.execPath, DS_BOT_RUNTIME_DIR: directory })
+    const office = officeProfileConfig({ DS_SUPERAGENT_OFFICE_NODE: process.execPath, DS_SUPERAGENT_RUNTIME_DIR: directory })
     assert.equal(office.cli, fileURLToPath(new URL('../dsh/office.js', import.meta.url)))
   } finally {
     rmSync(directory, { recursive: true, force: true })

@@ -1,6 +1,6 @@
 {
-  "name": "dsbot",
-  "productName": "DS Bot",
+  "name": "ds-superagent-desktop",
+  "productName": "DS SuperAgent",
   "version": "0.2.5",
   "engines": {
     "node": ">=24.0.0"
@@ -9,7 +9,7 @@
   "description": "DS SuperAgent desktop app on its own pinned DeepSeek Harness.",
   "author": "Fei2411",
   "homepage": "https://github.com/IceFireIcer/DS-SuperAgent",
-  "desktopName": "dsbot.desktop",
+  "desktopName": "ds-superagent.desktop",
   "license": "Apache-2.0",
   "type": "module",
   "main": "src/main.mjs",

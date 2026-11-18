@@ -170,10 +170,11 @@ export async function createProductHost(context: Context, config: ProductHostCon
   const remoteSecrets = credentialRecords && typeof credentialRecords.readRecord === 'function'
     && typeof credentialRecords.modifyRecord === 'function' && typeof credentialRecords.deleteRecord === 'function'
     ? new RemoteEnvironmentSecrets(credentialRecords) : undefined
-  const browserAdapter = config.browserAdapter ?? (process.env.DS_BOT_APP === '1' && typeof process.send === 'function'
+  const desktopIpc = process.env.DS_SUPERAGENT_APP === '1' && typeof process.send === 'function'
+  const browserAdapter = config.browserAdapter ?? (desktopIpc
     ? new HostBrowserAdapter() : undefined)
   const credentialImportAdapter = config.credentialImportAdapter
-    ?? (process.env.DS_BOT_APP === '1' && typeof process.send === 'function' ? new HostCredentialImportAdapter() : undefined)
+    ?? (desktopIpc ? new HostCredentialImportAdapter() : undefined)
   if (config.office && (![config.office.node, config.office.cli, config.office.skillsPath].every(isAbsolute)
     || ![config.office.node, config.office.cli, join(config.office.skillsPath, 'office', 'SKILL.md'),
       join(config.office.skillsPath, 'office-docx', 'SKILL.md')].every(path => existsSync(path)))) {
@@ -272,13 +273,14 @@ export async function createProductHost(context: Context, config: ProductHostCon
       if (!(await stat(root)).isDirectory()) throw new Error('Not a directory')
     } catch { throw new CoreError('PATH_DENIED', 'The selected working directory does not exist or cannot be read.') }
     const core = await realpath(stateRoot)
-    const configuredUserHome = process.env.DS_BOT_USER_DSH_HOME?.trim()
-    const userHome = await realpath(configuredUserHome || join(homedir(), '.dsh')).catch(() => undefined)
+    const configuredUserHome = process.env.DS_SUPERAGENT_USER_DSH_HOME?.trim()
+    const protectedRoots = await Promise.all([join(homedir(), '.dsh'), join(homedir(), '.ds-bot'), ...(configuredUserHome ? [configuredUserHome] : [])]
+      .map(path => realpath(path).catch(() => path)))
     const overlap = (left: string, right: string) => {
       const path = relative(left, right)
       return path === '' || path !== '..' && !path.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(path)
     }
-    if (overlap(core, root) || overlap(root, core) || userHome && (overlap(userHome, root) || overlap(root, userHome))) {
+    if ([core, ...protectedRoots].some(path => overlap(path, root) || overlap(root, path))) {
       throw new CoreError('PATH_DENIED', 'Choose a directory outside the product state and personal DSH data.')
     }
     return root

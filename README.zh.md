@@ -27,20 +27,22 @@ DS SuperAgent 是面向 [DeepSeek Harness](https://github.com/deepseek-ai/deepse
 
 ## 启动桌面应用
 
-各平台安装包由 [`app/`](app/README.md) 构建。Windows 源码启动：
+[桌面安装包](app/README.md)在 Windows、macOS 和 Linux 上安装 **DS SuperAgent**。Windows 也可以从源码启动：
 
 ```powershell
 .\start.ps1
 ```
 
-首次启动会询问数据目录和工作区，然后打开现有 DSH 界面。发送工作前先在 DSH 设置中配置模型。应用把产品数据
-放在自己的数据目录，不迁移或改写旧 DS Bot、DSH 文件。
+首次启动会询问数据目录和工作区，默认分别为 `~/.ds-superagent` 和 `~/DS SuperAgent`，随后打开 Main。
+发送工作前，在设置中配置服务商凭据，并为 Main、Router 和 Worker 选择模型。旧 DS Bot 和个人 DSH 文件保留在原处。
 
 ## 从当前仓库运行
 
 使用 Node.js 24。应用从本仓库安装唯一的 `ds-superagent` 产品包：
 
 ```powershell
+npm --prefix superagent ci
+npm --prefix superagent run build
 npm --prefix app ci
 npm --prefix app start
 ```

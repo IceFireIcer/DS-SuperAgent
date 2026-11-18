@@ -5,35 +5,36 @@
 // end of the operating system's session all close the window for good. A sleeping computer
 // pauses the work; waking it says so and lets the app reconnect.
 import { BackgroundNotice } from './background-notice.mjs'
+import { PRODUCT_NAME } from './product.mjs'
 import { createTray } from './tray.mjs'
 
 export const SHELL_TEXT = {
   en: {
-    tooltip: 'DS Bot',
-    open: 'Open DS Bot',
-    quit: 'Quit DS Bot',
+    tooltip: PRODUCT_NAME,
+    open: `Open ${PRODUCT_NAME}`,
+    quit: `Quit ${PRODUCT_NAME}`,
     running: 'Host running',
     starting: 'Starting the Host…',
     stopped: 'Host not running',
     failed: 'Host could not start',
     suspended: 'Paused while this computer sleeps',
-    notice: 'DS Bot keeps running in the system tray. Main, Router and Worker continue while the window is closed, as long as this computer is awake.',
+    notice: `${PRODUCT_NAME} keeps running in the system tray. Main, Router and Worker continue while the window is closed, as long as this computer is awake.`,
     noticeConfirm: 'OK',
-    fallback: 'The system tray is not available, so DS Bot cannot stay in the background. Do you want to end it?',
+    fallback: `The system tray is not available, so ${PRODUCT_NAME} cannot stay in the background. Do you want to end it?`,
     cancel: 'Cancel',
   },
   zh: {
-    tooltip: 'DS Bot',
-    open: '打开 DS Bot',
-    quit: '退出 DS Bot',
+    tooltip: PRODUCT_NAME,
+    open: `打开 ${PRODUCT_NAME}`,
+    quit: `退出 ${PRODUCT_NAME}`,
     running: 'Host 正在运行',
     starting: 'Host 正在启动…',
     stopped: 'Host 未运行',
     failed: 'Host 未能启动',
     suspended: '电脑休眠时暂停',
-    notice: 'DS Bot 会留在系统托盘里继续运行。只要电脑没有休眠，关掉窗口时 Main、Router 和 Worker 照常工作。',
+    notice: `${PRODUCT_NAME} 会留在系统托盘里继续运行。只要电脑没有休眠，关掉窗口时 Main、Router 和 Worker 照常工作。`,
     noticeConfirm: '好',
-    fallback: '系统托盘不可用，DS Bot 不能留在后台。要结束它吗？',
+    fallback: `系统托盘不可用，${PRODUCT_NAME} 不能留在后台。要结束它吗？`,
     cancel: '取消',
   },
 }
@@ -88,7 +89,7 @@ export function createShell(options) {
   }
   const refresh = () => {
     try { tray?.relabel() } catch (error) {
-      log.warn(`DS Bot: the tray status could not be refreshed: ${error instanceof Error ? error.message : String(error)}`)
+      log.warn(`${PRODUCT_NAME}: the tray status could not be refreshed: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
@@ -166,7 +167,7 @@ export function createShell(options) {
     } catch (error) {
       // Without a tray the window stays where the user can reach it; the app never vanishes.
       tray = undefined
-      log.warn(`DS Bot: the system tray is not available: ${error instanceof Error ? error.message : String(error)}`)
+      log.warn(`${PRODUCT_NAME}: the system tray is not available: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
@@ -178,12 +179,12 @@ export function createShell(options) {
     const t = text()
     try {
       const { response } = await options.fallback.show({
-        type: 'question', title: 'DS Bot', message: t.fallback,
+        type: 'question', title: PRODUCT_NAME, message: t.fallback,
         buttons: [t.quit, t.cancel], defaultId: 1, cancelId: 1, noLink: true,
       })
       if (response === 0) { quit(); return }
     } catch (error) {
-      log.warn(`DS Bot: the fallback quit could not be asked: ${error instanceof Error ? error.message : String(error)}`)
+      log.warn(`${PRODUCT_NAME}: the fallback quit could not be asked: ${error instanceof Error ? error.message : String(error)}`)
     }
     // The window stays in the task bar, where the user can reach it.
     target.minimize()
@@ -246,7 +247,7 @@ export function createShell(options) {
     if (suspended) return
     suspended = true
     try { options.onSuspend?.() } catch (error) {
-      log.warn(`DS Bot: the sleep could not be handled: ${error instanceof Error ? error.message : String(error)}`)
+      log.warn(`${PRODUCT_NAME}: the sleep could not be handled: ${error instanceof Error ? error.message : String(error)}`)
     }
     refresh()
   }
@@ -260,9 +261,9 @@ export function createShell(options) {
     if (platform !== 'win32') sessionEnding = false
     if (!waking) return
     try { void Promise.resolve(options.onResume?.()).catch((error) => {
-      log.warn(`DS Bot: the wake could not be handled: ${error instanceof Error ? error.message : String(error)}`)
+      log.warn(`${PRODUCT_NAME}: the wake could not be handled: ${error instanceof Error ? error.message : String(error)}`)
     }) } catch (error) {
-      log.warn(`DS Bot: the wake could not be handled: ${error instanceof Error ? error.message : String(error)}`)
+      log.warn(`${PRODUCT_NAME}: the wake could not be handled: ${error instanceof Error ? error.message : String(error)}`)
     }
     refresh()
   }

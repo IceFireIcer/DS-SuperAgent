@@ -49,7 +49,7 @@ function Install-IfChanged {
     [IO.File]::WriteAllText($stamp, $Hash)
 }
 
-$envNames = @('DS_BOT_HOME', 'DS_BOT_WORKSPACE', 'DS_BOT_SHELL_DATA', 'ELECTRON_RUN_AS_NODE')
+$envNames = @('DS_SUPERAGENT_HOME', 'DS_SUPERAGENT_WORKSPACE', 'DS_SUPERAGENT_SHELL_DATA', 'ELECTRON_RUN_AS_NODE')
 $savedEnv = @{}
 foreach ($name in $envNames) { $savedEnv[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 try {
@@ -78,16 +78,13 @@ try {
         if (-not (Test-Path -LiteralPath $electron)) { throw 'Electron executable is still missing.' }
     }
 
-    $env:DS_BOT_HOME = Join-Path $DataRoot 'data'
-    $env:DS_BOT_WORKSPACE = Join-Path $DataRoot 'workspace'
-    $env:DS_BOT_SHELL_DATA = Join-Path $DataRoot 'shell'
+    $env:DS_SUPERAGENT_HOME = Join-Path $DataRoot 'data'
+    $env:DS_SUPERAGENT_WORKSPACE = Join-Path $DataRoot 'workspace'
+    $env:DS_SUPERAGENT_SHELL_DATA = Join-Path $DataRoot 'shell'
     Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
-    foreach ($path in @($env:DS_BOT_HOME, $env:DS_BOT_WORKSPACE, $env:DS_BOT_SHELL_DATA)) {
-        [void][IO.Directory]::CreateDirectory($path)
-    }
     Write-Host "Persistent data: $DataRoot"
-    if ($PrepareOnly) { Write-Host 'Ready. Run start.ps1 to open DS Bot.'; return }
-    Write-Host 'Starting DS Bot. Configure model providers in Settings; close the window to stop.'
+    if ($PrepareOnly) { Write-Host 'Ready. Run start.ps1 to open DS SuperAgent.'; return }
+    Write-Host 'Starting DS SuperAgent. Configure model providers in Settings. To stop the Host, quit from the system tray.'
     Invoke-Npm $appDir @('start')
 } finally {
     foreach ($name in $envNames) {

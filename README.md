@@ -30,21 +30,23 @@ tickets with verified results. The existing DS Bot interface now presents this p
 
 ## Run the desktop app
 
-Windows, macOS and Linux packages are built from [`app/`](app/README.md). The Windows source launcher:
+The [desktop packages](app/README.md) install **DS SuperAgent** on Windows, macOS and Linux. On Windows you can also launch from source:
 
 ```powershell
 .\start.ps1
 ```
 
-The first start asks for a data location and workspace, then opens the existing DSH interface. Configure a model in
-DSH settings before sending work. The app stores product data under its own data location and leaves old DS Bot and
-DSH files untouched.
+The first start asks for a data location and workspace, defaulting to `~/.ds-superagent` and `~/DS SuperAgent`, then
+opens Main. In Settings, configure the provider credentials and select models for Main, Router and Worker before
+sending work. Existing DS Bot and personal DSH files stay in their original locations.
 
 ## Run from this checkout
 
 Use Node.js 24. The app installs the single `ds-superagent` product package from this repository:
 
 ```powershell
+npm --prefix superagent ci
+npm --prefix superagent run build
 npm --prefix app ci
 npm --prefix app start
 ```

@@ -19,11 +19,11 @@ import { userDshHome } from './dsh-home.mjs'
 import { downloadSaver } from './downloads.mjs'
 import { canonicalExecPath } from './canonical-path.mjs'
 import { chooseLocations, localeText, placeProblem, programFolder, saveLocations, text } from './first-run.mjs'
-import { configureIdentity } from './legacy.mjs'
 import { hostPort } from './host-port.mjs'
 import { assertHostLockFree, hostLockPath, releaseHostLock, writeHostLock } from './host-lock.mjs'
 import { HostProcess } from './host-process.mjs'
 import { copyData, moveProblem } from './move-data.mjs'
+import { ARTIFACT_PREFIX, PRODUCT_NAME, configureIdentity } from './product.mjs'
 import { SUPERAGENT_PROFILE, profileHome } from './profile.mjs'
 import { RemoteProductClient } from './remote-product-client.mjs'
 import { createShell, SHELL_TEXT } from './shell.mjs'
@@ -67,7 +67,9 @@ const iconFile = join(assets, process.platform === 'win32' ? 'icon.ico' : 'icon.
 const trayIconFile = () => join(assets, process.platform === 'win32' ? 'tray.ico' : process.platform === 'darwin' ? 'trayTemplate.png' : 'tray.png')
 // Windows 11 draws Mica behind the page; mica.css lets it through the sidebar.
 const mica = micaAvailable(process.platform, release())
-configureIdentity(app)
+let identityError
+try { configureIdentity(app) }
+catch (error) { identityError = error }
 
 let mainWindow
 let host
@@ -154,7 +156,10 @@ app.once('will-quit', () => { shell.dispose(); botViews.dispose(); updates?.stop
 // canonical path: the lock below and every path the Host sees then agree with the long
 // form, and the profile patch layer stops mixing the two.
 const canonical = app.isPackaged ? canonicalExecPath(process.execPath) : undefined
-if (canonical !== undefined) {
+if (identityError !== undefined) {
+  dialog.showErrorBox(PRODUCT_NAME, identityError.message)
+  app.exit(1)
+} else if (canonical !== undefined) {
   app.relaunch({ execPath: canonical, args: process.argv.slice(1) })
   app.exit(0)
 } else if (!app.requestSingleInstanceLock()) {
@@ -310,7 +315,7 @@ async function start() {
   const workspace = where.workspace ?? join(hostHome, 'workspace')
   // A link can be made after the first run's check: the folders the Host will write to are
   // checked again, as the file system has them, before anything starts.
-  for (const path of new Set([hostHome, workspace].filter(Boolean))) {
+  for (const path of new Set([where.dataDir, hostHome, workspace])) {
     const problem = placeProblem(text(), path)
     if (problem !== undefined) throw new Error(problem)
   }
@@ -322,15 +327,17 @@ async function start() {
   const runtimeDir = app.isPackaged ? process.resourcesPath : join(here, '..', 'build', 'runtime')
   const profileDir = join(hostHome, 'profiles', SUPERAGENT_PROFILE)
   hostLock = hostLockPath(hostHome)
-  mkdirSync(profileDir, { recursive: true })
-  const newHost = () => new HostProcess({
-    entry: join(here, 'host.mjs'),
-    cwd: profileDir,
-    env: { ...process.env, DSH_HOME: hostHome, DS_BOT_PORT: String(port), DS_BOT_APP: '1',
-      DS_BOT_RUNTIME_DIR: runtimeDir, DS_BOT_USER_DSH_HOME: userDshHome(), DS_BOT_WORKSPACE: workspace },
-    pnpm,
-    onFailure: hostFailure,
-  })
+  const newHost = () => {
+    mkdirSync(profileDir, { recursive: true })
+    return new HostProcess({
+      entry: join(here, 'host.mjs'),
+      cwd: profileDir,
+      env: { ...process.env, DSH_HOME: hostHome, DS_SUPERAGENT_PORT: String(port), DS_SUPERAGENT_APP: '1',
+        DS_SUPERAGENT_RUNTIME_DIR: runtimeDir, DS_SUPERAGENT_USER_DSH_HOME: userDshHome(), DS_SUPERAGENT_WORKSPACE: workspace },
+      pnpm,
+      onFailure: hostFailure,
+    })
+  }
   // After a failed or interrupted Host the shell starts another one on the same profile and
   // port, rather than sending the user back through the first run.
   hostFactory = newHost
@@ -340,8 +347,8 @@ async function start() {
     return launchHost(newHost())
   })()
   ready.catch(fail)
-  // A throwaway run (DS_BOT_HOME) keeps its folders where it was told.
-  const fixed = Boolean(process.env.DS_BOT_HOME)
+  // A throwaway run (DS_SUPERAGENT_HOME) keeps its folders where it was told.
+  const fixed = Boolean(process.env.DS_SUPERAGENT_HOME)
   ipcMain.handle(IPC.dataLocation, (event) => {
     assertWindow(event)
     return { path: places.dataDir, fixed }
@@ -406,7 +413,7 @@ async function start() {
   ipcMain.handle(IPC.browserImportLive, async (event, sourceId, close) => {
     assertWindow(event)
     const source = (await listSources()).find((item) => item.id === sourceId)
-    if (!source) throw new Error('DS Bot: an unknown browser profile')
+    if (!source) throw new Error(`${PRODUCT_NAME}: an unknown browser profile`)
     let outcome
     try {
       outcome = await importFromBrowser(source, { close: close === true })
@@ -423,9 +430,9 @@ async function start() {
   })
   ipcMain.handle(IPC.browserImportApply, async (event, key, id) => {
     assertWindow(event)
-    if (typeof key !== 'string' || !key.startsWith('bot:')) throw new Error('DS Bot: a Bot storage key is required')
+    if (typeof key !== 'string' || !key.startsWith('bot:')) throw new Error(`${PRODUCT_NAME}: a Bot storage key is required`)
     const pending = cookieImports.take(typeof id === 'string' ? id : '')
-    if (!pending) throw new Error('DS Bot: this import is no longer pending')
+    if (!pending) throw new Error(`${PRODUCT_NAME}: this import is no longer pending`)
     const storage = session.fromPartition(partitionOf(key))
     return applyCookies(storage, pending.cookies)
   })
@@ -525,15 +532,18 @@ async function moveData(workspace) {
   // The workspace can move while a dialog is open; the window tells the latest one.
   const refused = async () => {
     for (const current of new Set([workspace, places.workspace])) {
-      const problem = moveProblem({ from: places.dataDir, to, workspace: current, dshHome, program: app.isPackaged ? programFolder() : undefined })
-      if (problem === undefined) continue
-      await dialog.showMessageBox(owner, { type: 'warning', title: 'DS Bot', message: problem === 'dsh' ? t.inDsh(dshHome) : t[MOVE_PROBLEMS[problem]], buttons: ['OK'] })
+      const isolation = placeProblem(t, to)
+      const problem = isolation === undefined ? moveProblem({ from: places.dataDir, to, workspace: current,
+        dshHome, program: app.isPackaged ? programFolder() : undefined }) : undefined
+      const message = isolation ?? (problem === 'dsh' ? t.inDsh : t[MOVE_PROBLEMS[problem]])
+      if (message === undefined) continue
+      await dialog.showMessageBox(owner, { type: 'warning', title: PRODUCT_NAME, message, buttons: ['OK'] })
       return true
     }
     return false
   }
   if (await refused()) return false
-  const { response } = await dialog.showMessageBox(owner, { type: 'question', title: 'DS Bot', noLink: true, message: t.moveConfirm(to), detail: t.moveDetail(places.dataDir), buttons: [t.move, t.cancel], defaultId: 0, cancelId: 1 })
+  const { response } = await dialog.showMessageBox(owner, { type: 'question', title: PRODUCT_NAME, noLink: true, message: t.moveConfirm(to), detail: t.moveDetail(places.dataDir), buttons: [t.move, t.cancel], defaultId: 0, cancelId: 1 })
   if (response !== 0 || stopping || await refused()) return false
   const signal = copyAbort.signal
   copying = (async () => {
@@ -542,7 +552,7 @@ async function moveData(workspace) {
     try {
       await stopHost()
     } catch (error) {
-      await dialog.showMessageBox({ type: 'warning', title: 'DS Bot', message: t.moveFailed(error instanceof Error ? error.message : String(error)) })
+      await dialog.showMessageBox({ type: 'warning', title: PRODUCT_NAME, message: t.moveFailed(error instanceof Error ? error.message : String(error)) })
       return
     }
     // The app may have heard of a workspace change while the Host stopped.
@@ -563,7 +573,7 @@ async function moveData(workspace) {
     } catch (error) {
       if (signal.aborted) return
       console.error(error)
-      await dialog.showMessageBox({ type: 'warning', title: 'DS Bot', message: t.moveFailed(error instanceof Error ? error.message : String(error)) })
+      await dialog.showMessageBox({ type: 'warning', title: PRODUCT_NAME, message: t.moveFailed(error instanceof Error ? error.message : String(error)) })
     } finally {
       mainWindow?.setProgressBar(-1)
     }
@@ -581,8 +591,8 @@ const notePage = message => `data:text/html;charset=utf-8,${encodeURIComponent(`
 // Windows and a Linux AppImage update themselves; macOS and a Linux deb ask to download the new
 // version. Throwaway runs check only a given feed and never ask.
 function startUpdates() {
-  const feed = process.env.DS_BOT_UPDATE_URL || undefined
-  const throwaway = Boolean(process.env.DS_BOT_HOME)
+  const feed = process.env.DS_SUPERAGENT_UPDATE_URL || undefined
+  const throwaway = Boolean(process.env.DS_SUPERAGENT_HOME)
   if (!app.isPackaged || (throwaway && feed === undefined)) return undefined
   if (process.platform === 'darwin') {
     return watchReleases({
@@ -596,7 +606,7 @@ function startUpdates() {
     const debArch = { x64: 'amd64', arm64: 'arm64' }[process.arch] ?? process.arch
     return watchReleases({
       current: app.getVersion(), arch: process.arch, feed, ask: throwaway ? undefined : (version) => downloadPrompt.prompt(version), open: url => electronShell.openExternal(url),
-      asset: version => `DS-Bot-${version}-linux-${debArch}.deb`,
+      asset: version => `${ARTIFACT_PREFIX}-${version}-linux-${debArch}.deb`,
     })
   }
   if (process.platform === 'win32' || process.platform === 'linux') {
@@ -620,7 +630,7 @@ async function askRestartNow(version) {
   // After a failed start, fail() installs the update itself.
   if (failed) return false
   const t = localeText(UPDATE_TEXT)
-  const options = { type: 'info', title: 'DS Bot', message: t.ready(version), detail: t.readyDetail, buttons: [t.restart, t.later], defaultId: 0, cancelId: 1, noLink: true }
+  const options = { type: 'info', title: PRODUCT_NAME, message: t.ready(version), detail: t.readyDetail, buttons: [t.restart, t.later], defaultId: 0, cancelId: 1, noLink: true }
   const { response } = await (mainWindow ? dialog.showMessageBox(mainWindow, options) : dialog.showMessageBox(options))
   return response === 0
 }
@@ -628,7 +638,7 @@ async function askRestartNow(version) {
 async function askDownloadNow(version) {
   if (failed) return false
   const t = localeText(UPDATE_TEXT)
-  const options = { type: 'info', title: 'DS Bot', message: t.available(version), detail: t.availableDetail, buttons: [t.download, t.later], defaultId: 0, cancelId: 1, noLink: true }
+  const options = { type: 'info', title: PRODUCT_NAME, message: t.available(version), detail: t.availableDetail, buttons: [t.download, t.later], defaultId: 0, cancelId: 1, noLink: true }
   const { response } = await (mainWindow ? dialog.showMessageBox(mainWindow, options) : dialog.showMessageBox(options))
   return response === 0
 }
@@ -659,7 +669,7 @@ function createWindow() {
     // The window never squeezes the chat: RAIL_WIDTH + MIN_CHAT from the product client's
     // src/client/frame-layout.js is the avatar rail plus the smallest chat column.
     width: 1320, height: 860, minWidth: 508, minHeight: 480,
-    title: 'DS Bot', show: false, icon: iconFile,
+    title: PRODUCT_NAME, show: false, icon: iconFile,
     backgroundColor: mica ? '#00000000' : dark ? '#1b1b1c' : '#ffffff',
     // Frameless as in DSH Desktop: the caption buttons overlay the page's band. They keep the
     // sidebar's colors until the page sends the colors of the surface under them.
@@ -831,7 +841,7 @@ function setMenu() {
 function assertWindow(event) {
   const contents = mainWindow?.webContents
   if (contents === undefined || event.sender !== contents || event.senderFrame !== contents.mainFrame
-    || !event.senderFrame.url.startsWith(`${origin}/`)) throw new Error('DS Bot: rejected IPC from an unknown page')
+    || !event.senderFrame.url.startsWith(`${origin}/`)) throw new Error(`${PRODUCT_NAME}: rejected IPC from an unknown page`)
 }
 
 function fromWindow(event) {
@@ -869,7 +879,7 @@ async function resumeHost() {
 // never overlap the new one; the old launch URL goes with it.
 async function relaunchHost(cause) {
   if (stopping || hostFactory === undefined) return
-  if (cause !== undefined) console.warn(`DS Bot: replacing the Host: ${cause instanceof Error ? cause.message : String(cause)}`)
+  if (cause !== undefined) console.warn(`${PRODUCT_NAME}: replacing the Host: ${cause instanceof Error ? cause.message : String(cause)}`)
   let confirmed = true
   await host?.stop().catch((error) => {
     console.error(error)
@@ -909,7 +919,7 @@ async function relaunchHost(cause) {
 async function askTryAgain(error, next) {
   const t = text()
   const { response } = await dialog.showMessageBox({
-    type: 'error', title: 'DS Bot', noLink: true,
+    type: 'error', title: PRODUCT_NAME, noLink: true,
     message: t.notStarted,
     detail: `${error instanceof Error ? error.message : String(error)}${next}`,
     buttons: hostFactory === undefined ? [t.quit] : [t.tryAgain, t.quit],
@@ -925,17 +935,17 @@ async function fail(error) {
   hostState = HOST_STATE.failed
   shell.refresh()
   const found = await Promise.race([updates?.latest() ?? null, sleep(UPDATE_CHECK_WAIT_MS).then(() => null)])
-  const throwaway = Boolean(process.env.DS_BOT_HOME)
+  const throwaway = Boolean(process.env.DS_SUPERAGENT_HOME)
   const t = localeText(UPDATE_TEXT)
   const next = found ? `\n\n${found.page ? t.onFailurePage(found.version) : t.onFailure(found.version)}` : ''
   if (found?.page) {
-    dialog.showErrorBox('DS Bot', `${text().notStarted}\n\n${error instanceof Error ? error.message : String(error)}${next}`)
+    dialog.showErrorBox(PRODUCT_NAME, `${text().notStarted}\n\n${error instanceof Error ? error.message : String(error)}${next}`)
     if (!throwaway) await electronShell.openExternal(found.page)
     app.quit()
     return
   }
   if (found) {
-    dialog.showErrorBox('DS Bot', `${text().notStarted}\n\n${error instanceof Error ? error.message : String(error)}${next}`)
+    dialog.showErrorBox(PRODUCT_NAME, `${text().notStarted}\n\n${error instanceof Error ? error.message : String(error)}${next}`)
     mainWindow?.hide()
     if (await Promise.race([found.downloaded, sleep(UPDATE_DOWNLOAD_WAIT_MS).then(() => false)])) {
       await updates.install()

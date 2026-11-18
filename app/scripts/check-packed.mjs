@@ -12,6 +12,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { hostExecutable } from '../src/host-process.mjs'
+import { PRODUCT_NAME, PRODUCT_SLUG } from '../src/product.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const [given, shotFile] = process.argv.slice(2)
@@ -19,11 +20,11 @@ const executable = given || packedExecutable()
 
 function packedExecutable() {
   const out = join(root, 'dist-pack')
-  if (process.platform === 'win32') return join(out, 'win-unpacked', 'DS Bot.exe')
+  if (process.platform === 'win32') return join(out, 'win-unpacked', `${PRODUCT_NAME}.exe`)
   // executableName in electron-builder.yml.
-  if (process.platform === 'linux') return join(out, 'linux-unpacked', 'dsbot')
+  if (process.platform === 'linux') return join(out, 'linux-unpacked', PRODUCT_SLUG)
   const dir = ['mac-arm64', 'mac'].find(name => existsSync(join(out, name))) ?? 'mac'
-  return join(out, dir, 'DS Bot.app', 'Contents', 'MacOS', 'DS Bot')
+  return join(out, dir, `${PRODUCT_NAME}.app`, 'Contents', 'MacOS', PRODUCT_NAME)
 }
 
 if (!existsSync(executable)) {
@@ -331,7 +332,9 @@ try {
   // A terminal inside an Electron-based editor may set ELECTRON_RUN_AS_NODE, which turns the app into plain Node.
   const { ELECTRON_RUN_AS_NODE: _runAsNode, ...env } = process.env
   Object.assign(env, {
-    DS_BOT_HOME: join(work, 'home'), DS_BOT_SHELL_DATA: join(work, 'shell'),
+    DS_SUPERAGENT_HOME: join(work, 'home'), DS_SUPERAGENT_SHELL_DATA: join(work, 'shell'),
+    DS_SUPERAGENT_WORKSPACE: join(work, 'workspace'),
+    DSH_HOME: join(work, 'personal-dsh'),
     DEEPSEEK_BASE_URL: modelUrl, DEEPSEEK_API_KEY: 'mock-key',
   })
   const app = spawn(packedApp, [`--remote-debugging-port=${String(port)}`, `--inspect=127.0.0.1:${String(mainPort)}`], { stdio: 'inherit', env })
@@ -349,6 +352,9 @@ try {
     if (answer.exceptionDetails) throw new Error(answer.exceptionDetails.exception?.description ?? answer.exceptionDetails.text)
     return answer.result?.value
   }
+  if (await windowState('win.getTitle()') !== PRODUCT_NAME) throw new Error('the window has the wrong product name')
+  if (!existsSync(join(work, 'home', 'superagent', 'core', 'state.sqlite'))) throw new Error('the product database did not open')
+  if (existsSync(join(work, 'personal-dsh'))) throw new Error('the app wrote outside its own DSH home')
   const chatError = await chat(cdp).then(() => undefined, error => error)
   if (shotFile) {
     const { data } = await cdp.call('Page.captureScreenshot', { format: 'png' })
