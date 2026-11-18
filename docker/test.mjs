@@ -115,7 +115,7 @@ try {
   const server = `${name}-web`
   containers.add(server)
   docker([
-    'run', '--detach', '--rm', '--name', server, '--network', 'none', ...mounts(),
+    'run', '--detach', '--name', server, '--network', 'none', ...mounts(),
     '-e', 'PUID=1234', '-e', 'PGID=1235', '-e', 'DSH_TELEMETRY_DISABLED=1', image,
   ])
   const probe = `
