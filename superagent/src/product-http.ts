@@ -65,7 +65,7 @@ export const inject = ['connection', 'superagentProduct']
 /** Register the existing client's product protocol beside the production Engine host. */
 export function apply(context: Context) {
   const ctx = context as unknown as ProductScope
-  return ctx.inject(['superagentProduct'], scope => {
+  return ctx.inject(['connection', 'superagentProduct'], scope => {
     const productScope = scope as unknown as ProductScope
     productScope.effect(() => productScope.on('connection/request', async (request, response, next) => {
       const path = new URL(request.url ?? '/', 'http://localhost').pathname

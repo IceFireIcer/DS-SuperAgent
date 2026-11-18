@@ -22,6 +22,12 @@ COPY superagent/ /src/superagent/
 RUN cd /src/superagent \
     && npm ci --ignore-scripts --no-fund --no-audit \
     && npm run build
+
+# pnpm 11 refuses lifecycle scripts until the exact dependency identities are
+# allowed. These are the native runtime dependencies required by the package.
+RUN DSH_HOME=/opt/dsh-template dsh plugin --profile web list \
+    && printf '\nallowBuilds:\n  "@deepseek-ai/dsh-subprocess-local@%s": true\n  "koffi@3.1.1": true\n  "node-pty@1.2.0-beta.15": true\n' "$DSH_VERSION" \
+        >> /opt/dsh-template/profiles/web/pnpm-workspace.yaml
 RUN cd /src/superagent \
     && npm pack --pack-destination /tmp \
     && mv /tmp/ds-superagent-*.tgz /tmp/ds-superagent.tgz \
