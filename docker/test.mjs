@@ -39,8 +39,34 @@ function shell(script) {
   return run(['--entrypoint', '/bin/sh', image, '-eu', '-c', script])
 }
 
-function startHelp(uid, gid) {
-  run(['-e', `PUID=${uid}`, '-e', `PGID=${gid}`, image, '--help'])
+async function startWeb(uid, gid) {
+  const server = `${name}-web`
+  containers.add(server)
+  docker([
+    'run', '--detach', '--name', server, '--network', 'none', ...mounts(),
+    '-e', `PUID=${uid}`, '-e', `PGID=${gid}`, '-e', 'DSH_TELEMETRY_DISABLED=1', image,
+  ])
+  const probe = `
+    const response = await fetch('http://127.0.0.1:3080/', { signal: AbortSignal.timeout(2000) });
+    if (![200, 401].includes(response.status)) throw new Error('Unexpected HTTP status: ' + response.status);
+  `
+  const deadline = Date.now() + 45_000
+  while (Date.now() < deadline) {
+    if (docker(['exec', server, 'node', '--input-type=module', '-e', probe], { allowFailure: true }).status === 0) return server
+    await setTimeout(300)
+  }
+  const logs = docker(['logs', server], { allowFailure: true })
+  const state = docker(['inspect', '--format', '{{json .State}}', server], { allowFailure: true })
+  console.error(`web container state:\n${state.stdout}${state.stderr}`)
+  console.error(`web container logs:\n${`${logs.stdout}${logs.stderr}`.replace(/([?&]token=)[^\s]+/gu, '$1[redacted]')}`)
+  throw new Error(`Web server did not answer HTTP after startup as ${uid}:${gid}.`)
+}
+
+async function checkWebBoot(uid, gid) {
+  const server = await startWeb(uid, gid)
+  docker(['stop', '--time', '10', server])
+  docker(['rm', server])
+  containers.delete(server)
 }
 
 function checkDataOwner(uid, gid) {
@@ -64,7 +90,7 @@ try {
     test "$(stat -c %a /usr/local/bin/entrypoint.sh)" = 755
     /bin/sh -n /usr/local/bin/entrypoint.sh
   `)
-  startHelp(1000, 1000)
+  await checkWebBoot(1000, 1000)
   shell(`
     test "$(stat -c %u:%g /data/profiles/web/package.json)" = 1000:1000
     printf preserved > /data/review-state.txt
@@ -95,11 +121,11 @@ try {
   assert.match(legacy.stderr, /predates the R5 product/u)
   console.log('PASS: pre-R5 data fails closed without importing the old team')
 
-  startHelp(1234, 1234)
+  await checkWebBoot(1234, 1234)
   checkDataOwner(1234, 1234)
   console.log('PASS: UID/GID migration preserves data and workspace link targets')
 
-  startHelp(1234, 1235)
+  await checkWebBoot(1234, 1235)
   checkDataOwner(1234, 1235)
   shell(`
     mkdir -p /data/restored
@@ -108,36 +134,11 @@ try {
     chmod 600 /data/restored/private.txt
     chown -R 3456:3457 /data/restored
   `)
-  startHelp(1234, 1235)
+  await checkWebBoot(1234, 1235)
   checkDataOwner(1234, 1235)
   console.log('PASS: group-only migration and restored files with mixed ownership')
 
-  const server = `${name}-web`
-  containers.add(server)
-  docker([
-    'run', '--detach', '--name', server, '--network', 'none', ...mounts(),
-    '-e', 'PUID=1234', '-e', 'PGID=1235', '-e', 'DSH_TELEMETRY_DISABLED=1', image,
-  ])
-  const probe = `
-    const response = await fetch('http://127.0.0.1:3080/');
-    if (![200, 401].includes(response.status)) throw new Error('Unexpected HTTP status: ' + response.status);
-  `
-  const deadline = Date.now() + 45_000
-  let ready = false
-  while (Date.now() < deadline) {
-    if (docker(['exec', server, 'node', '--input-type=module', '-e', probe], { allowFailure: true }).status === 0) {
-      ready = true
-      break
-    }
-    await setTimeout(300)
-  }
-  if (!ready) {
-    const logs = docker(['logs', server], { allowFailure: true })
-    const state = docker(['inspect', '--format', '{{json .State}}', server], { allowFailure: true })
-    console.error(`web container state:\n${state.stdout}${state.stderr}`)
-    console.error(`web container logs:\n${logs.stdout}${logs.stderr}`)
-  }
-  assert.ok(ready, 'web server must answer HTTP after ownership migration')
+  const server = await startWeb(1234, 1235)
   const processOwner = docker(['exec', server, 'stat', '-c', '%u:%g', '/proc/1']).stdout.trim()
   assert.equal(processOwner, '1234:1235', 'web process must run under the new identity')
   const identity = docker(['exec', server, 'gosu', 'node', 'id']).stdout
