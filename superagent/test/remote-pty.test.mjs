@@ -38,7 +38,7 @@ async function until(check, label, timeout = 15000) {
 }
 
 async function fixture(context) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-remote-pty-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-remote-pty-'))
   const root = join(directory, 'device-work')
   await mkdir(root)
   let device, environment

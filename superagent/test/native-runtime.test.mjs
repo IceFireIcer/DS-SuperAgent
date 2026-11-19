@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
 import { SessionStore } from '@deepseek-ai/dsh-session'
+import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
 import * as core from '../dist/index.js'
 import { Engine } from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
@@ -12,7 +13,7 @@ import * as SqlitePersistence from '../dist/session-persistence.js'
 import { nativeContext, textResponse, toolResponse } from '../dev/native-mock.mjs'
 
 test('the native Session adapter preserves original input and an idle turn is not a ready report', { timeout: 10000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-native-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-native-'))
   let runtime
   let native
   context.after(async () => { await runtime?.close(); await native?.fiber.dispose(); await rm(directory, { recursive: true, force: true }) })
@@ -44,8 +45,41 @@ test('the native Session adapter preserves original input and an idle turn is no
   assert.ok(resumed.events.length > outcome.events.length)
 })
 
+test('the native Session adapter attributes provider token usage to one durable Session', { timeout: 10000 }, async context => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-native-usage-'))
+  let runtime
+  let native
+  let turn = 0
+  context.after(async () => { await runtime?.close(); await native?.fiber.dispose(); await rm(directory, { recursive: true, force: true }) })
+  native = await nativeContext(directory, () => ++turn === 1
+    ? textResponse('First turn.', { inputTokens: 100, outputTokens: 20, cacheReadTokens: 30,
+      cacheWriteTokens: 10, totalTokens: 160, reasoningTokens: 5 })
+    : textResponse('Second turn.', { inputTokens: 50, outputTokens: 10, totalTokens: 60 }))
+  runtime = new core.NativeSessions(native, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  await runtime.run({ sessionId: 'worker-with-usage', role: 'worker', text: 'First request.', tools: [] })
+  await runtime.run({ sessionId: 'worker-with-usage', role: 'worker', text: 'Second request.', tools: [] })
+  assert.deepEqual(await runtime.readUsage('worker-with-usage'), {
+    calls: 2, reportedCalls: 2, inputTokens: 150, outputTokens: 30,
+    cacheReadTokens: 30, cacheWriteTokens: 10, reasoningTokens: 5, totalTokens: 220,
+  })
+})
+
+test('an admitted file remains a native content block in the durable Session', { timeout: 10000 }, async context => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-native-file-'))
+  let native, runtime
+  context.after(async () => { await runtime?.close(); await native?.fiber.dispose(); await rm(directory, { recursive: true, force: true }) })
+  native = await nativeContext(directory, () => textResponse('I received the file reference.'))
+  await native.plugin(LocalAttachmentStore, { dshHome: join(directory, 'dsh') })
+  const attachment = await native.attachments.admitEncodedFile({ data: Buffer.from('original bytes\n').toString('base64'), name: 'note.txt' })
+  runtime = new core.NativeSessions(native, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  const content = [{ type: 'text', text: 'Inspect the attached note.' }, { type: 'file', attachment }]
+  const result = await runtime.run({ sessionId: 'worker-with-file', role: 'worker', text: 'Inspect the attached note.', content, tools: [] })
+  const user = result.events.find(event => event.type === 'user/message' && event.data?.content?.some(block => block.type === 'file'))
+  assert.deepEqual(user?.data.content, content)
+})
+
 test('an unpersisted native Session cannot authorize a completed turn or ready delivery', async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-no-session-store-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-no-session-store-'))
   let native
   let runtime
   let calls = 0
@@ -57,7 +91,7 @@ test('an unpersisted native Session cannot authorize a completed turn or ready d
 })
 
 test('an inferred source batch is evaluated by one native DSH Router Session', { timeout: 15000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-native-intake-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-native-intake-'))
   let native, runtime, storage
   context.after(async () => { await runtime?.close(); await native?.fiber.dispose(); await storage?.close(); await rm(directory, { recursive: true, force: true }) })
   const routerRequests = []
@@ -91,7 +125,7 @@ test('an inferred source batch is evaluated by one native DSH Router Session', {
 })
 
 test('busy Router notifications coalesce into one subsequent Session turn', { timeout: 15000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-router-burst-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-router-burst-'))
   let native, runtime, releaseBlocker, blockerStarted
   const blockerGate = new Promise(resolve => { releaseBlocker = resolve })
   const started = new Promise(resolve => { blockerStarted = resolve })
@@ -129,7 +163,7 @@ test('busy Router notifications coalesce into one subsequent Session turn', { ti
 })
 
 test('a coalesced notice is retriable when its tool was not invoked', { timeout: 15000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-router-unhandled-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-router-unhandled-'))
   let native, runtime
   context.after(async () => { await runtime?.close(); await native?.fiber.dispose(); await rm(directory, { recursive: true, force: true }) })
   native = await nativeContext(directory, () => textResponse('I did not handle the notice.'))
@@ -138,7 +172,7 @@ test('a coalesced notice is retriable when its tool was not invoked', { timeout:
 })
 
 test('a SQLite-persisted Worker Session resumes its construction and live history after the adapter is replaced', { timeout: 20000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-native-sqlite-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-native-sqlite-'))
   const sessionDatabase = join(directory, 'sessions.sqlite')
   let native
   let first
@@ -168,7 +202,7 @@ test('a SQLite-persisted Worker Session resumes its construction and live histor
 })
 
 test('a cancelled SQLite Session keeps a resumable interrupted history', { timeout: 20000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-native-cancel-sqlite-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-native-cancel-sqlite-'))
   const sessionDatabase = join(directory, 'sessions.sqlite')
   let native
   let first
@@ -211,7 +245,7 @@ test('a cancelled SQLite Session keeps a resumable interrupted history', { timeo
 })
 
 test('a Session whose stored log ends with an open turn gets durable recovery closers on resume', { timeout: 20000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-native-closers-sqlite-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-native-closers-sqlite-'))
   const sessionDatabase = join(directory, 'sessions.sqlite')
   let native
   let runtime
@@ -236,7 +270,7 @@ test('a Session whose stored log ends with an open turn gets durable recovery cl
 })
 
 test('a setup failure before publication leaves no stored Session and announces nothing', { timeout: 20000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-native-rollback-sqlite-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-native-rollback-sqlite-'))
   const sessionDatabase = join(directory, 'sessions.sqlite')
   let native
   context.after(async () => { await native?.fiber.dispose(); await rm(directory, { recursive: true, force: true }) })
@@ -258,7 +292,7 @@ test('a setup failure before publication leaves no stored Session and announces 
 })
 
 test('a durability-barrier failure while storing the pre-publication suffix prevents session/created', { timeout: 20000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-native-announce-failure-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-native-announce-failure-'))
   const sessionDatabase = join(directory, 'sessions.sqlite')
   let native
   context.after(async () => { await native?.fiber.dispose(); await rm(directory, { recursive: true, force: true }) })
@@ -287,7 +321,7 @@ test('a durability-barrier failure while storing the pre-publication suffix prev
 })
 
 test('a native DSH fork persists its inherited prefix and parent lineage through SQLite', { timeout: 20000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-native-fork-sqlite-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-native-fork-sqlite-'))
   const sessionDatabase = join(directory, 'sessions.sqlite')
   let native
   context.after(async () => { await native?.fiber.dispose(); await rm(directory, { recursive: true, force: true }) })
@@ -319,7 +353,7 @@ test('a native DSH fork persists its inherited prefix and parent lineage through
 })
 
 test('a seeded Session stores its construction records before session/created is announced', { timeout: 20000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-native-announce-sqlite-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-native-announce-sqlite-'))
   const sessionDatabase = join(directory, 'sessions.sqlite')
   let native
   context.after(async () => { await native?.fiber.dispose(); await rm(directory, { recursive: true, force: true }) })

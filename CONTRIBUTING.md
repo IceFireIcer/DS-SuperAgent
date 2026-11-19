@@ -1,24 +1,24 @@
-# Contributing to DS Bot
+# Contributing to DS SuperAgent
 
 English | [中文](CONTRIBUTING.zh.md)
 
-Thank you for helping. This file explains how the team works, how to set up the plugin, how to test a change and which rules a change must follow. For what the plugin does and how users install it, see [README.md](README.md).
+Thank you for helping. This file explains how the team works, how to set up the product, how to test a change and which rules a change must follow. For product behavior and installation, see [README.md](README.md).
 
 ## Who can open pull requests
 
-Collaborators of this repository push branches here and open pull requests into `dev` (see [How we work](#how-we-work)). For now, only collaborators can open pull requests. If you are not a collaborator, please open an issue for a bug (see [Report a problem](#report-a-problem)) or use [Discussions](https://github.com/Fei2411/DS-Bot/discussions) for a question or an idea.
+Collaborators of this repository push branches here and open pull requests into `dev` (see [How we work](#how-we-work)). For now, only collaborators can open pull requests. If you are not a collaborator, please open an issue for a bug (see [Report a problem](#report-a-problem)) or use [Discussions](https://github.com/IceFireIcer/DS-SuperAgent/discussions) for a question or an idea.
 
 ## The rules that matter most
 
-1. **Build on DSH; never patch it.** The Bot features are a DSH plugin: use the plugin APIs that DSH documents (Cordis services, the plugin client entry, profile patches). The desktop app starts DSH only through the entry points that DSH documents (`@deepseek-ai/dsh/profile-boot`, the `dsh` command). Do not patch DeepSeek Harness, and do not depend on files inside a DSH install. When a feature needs something that DSH does not offer, open an issue here first; the fix can belong in DSH.
-2. **Bots run in DSH Sessions.** A Bot keeps its identity while its work runs in DSH Sessions: one for its own chat, one for each group, a fresh one when the context fills up. Every turn goes through the normal DSH agent loop, tools and model routes. Do not add a second agent runtime.
+1. **Build on DSH; never patch it.** Use documented plugin APIs (Cordis services, the client entry and profile patches). The desktop app starts DSH only through documented entry points (`@deepseek-ai/dsh/profile-boot`, the `dsh` command). Do not depend on private files inside a DSH install. If DSH lacks a needed API, record the gap and stop at that boundary.
+2. **Main, Router and Worker use DSH Agent Sessions.** Main owns the conversation; Router creates durable work tickets; independent Workers execute assigned work. Product state and authority belong to the Engine, not to a second agent runtime or an alternate Session write path.
 3. **No real secrets anywhere.** Do not commit API keys, tokens, cookies, `DSH_HOME` folders, logs or screenshots with personal data. The tests and the test bench use a scripted mock model and need no key.
 4. **Only original material.** Do not copy code, text, icons, logos or other graphics from other products or websites. Code under a license compatible with Apache 2.0 is the only exception: say where it comes from and add its notice to a `NOTICE` file.
 5. **Every change is tested.** Run the unit tests and the client check for every change (see [Test a change](#test-a-change)).
 
 ## How we work
 
-Anyone on the team can do any kind of work: triage, bug fixes, features, the interface, docs. Only some decisions belong to the maintainer: the direction of the product, changes to a design that is already decided, these rules, releases and the architecture. Issues and pull requests that need such a decision carry the `maintainer` label; wait for the maintainer's answer before you start on them. What DS Bot is meant to be is in [docs/vision.md](docs/vision.md); the decided designs are in [docs/plans/](docs/plans/) and the UI standard is in [docs/design/ui-standard.md](docs/design/ui-standard.md) (in Chinese). When you are not sure whether something is a bug or works as designed, read them first, then ask in the issue.
+Anyone on the team can do any kind of work: triage, bug fixes, features, the interface, docs. Only some decisions belong to the maintainer: the direction of the product, changes to a design that is already decided, these rules, releases and the architecture. Issues and pull requests that need such a decision carry the `maintainer` label; wait for the maintainer's answer before you start on them. See the [product vision](docs/vision.md), [R5 specification](docs/superagent/spec-r5.md), [design notes](docs/plans/) and [UI standard](docs/design/ui-standard.md) (in Chinese). When you are not sure whether something is a bug or works as designed, read them first, then ask in the issue.
 
 ### Branches
 
@@ -50,7 +50,7 @@ Anyone on the team can do any kind of work: triage, bug fixes, features, the int
 |---|---|
 | Type | `bug` · `enhancement` · `documentation` |
 | Priority | `P0` crash, data loss or cannot use · `P1` hurts daily use · `P2` ordinary bug or feature · `P3` suggestion or narrow case |
-| Area | `area/host` server side (`index.js`, `src/host/`) · `area/client` interface (`src/client/`) · `area/group` group chats, mentions, Bot-to-Bot messages · `area/memory` memory, conversation parts, context · `area/browser` Bot browser, page reading, web search · `area/build` CI, release, scripts, test bench · `area/docs` |
+| Area | `area/host` product Host and Engine · `area/client` existing UI · `area/memory` memory and context · `area/browser` browser resources and web search · `area/build` CI, release and scripts · `area/docs` |
 | Flow | `maintainer` waits for the maintainer · `needs-info` waits for the reporter · `upstream` the cause is in DSH or another plugin · `duplicate` · `auto-found` found by automated testing |
 
 An issue that spans several areas, or none, gets no area label.
@@ -66,12 +66,12 @@ Keep one pull request to one issue. Split a large change into several pull reque
 
 ### Merge conflicts
 
-- **`ds-bot/client.js`**: never resolve it by hand. Resolve the conflicts in `ds-bot/src/client/`, run `npm run build` in `ds-bot/` and commit the new `client.js`.
+- **`superagent/dsh/client.js`**: never resolve it by hand. Resolve the conflicts in `superagent/dsh/src/client/`, run `npm run build` in `superagent/` and commit the new `client.js`.
 - **`CHANGELOG.md`**: pull requests do not change it, so it should not conflict. If it does, keep both sides.
 
 ### Releases (maintainer)
 
-1. In a pull request into `dev`, set the version in `ds-bot/package.json` and write the `CHANGELOG.md` section from the Changelog sentences of the merged pull requests.
+1. In a pull request into `dev`, set the version in `superagent/package.json` and write the `CHANGELOG.md` section from the Changelog sentences of the merged pull requests.
 2. Open a pull request from `dev` into `main` titled `release: vX.Y.Z`. List every `Fixes #<number>` of the release in its description, so that these issues close when it is merged.
 3. Before you merge it, run the [release checklist](docs/dev/release-checklist.md) (in Chinese) on a real Windows machine, and on macOS when the change touches it, and post the result in the pull request. Merge it with a merge commit and publish a GitHub release `vX.Y.Z` on `main`. The Release workflow checks that the tag matches the version and is on `main`, runs the checks and publishes the package to npm (a pre-release version under the npm tag `next`). Do not run `npm publish` by hand.
 4. For a hotfix, start `fix/hot-<name>` from `main`, open the pull request into `main`, release a patch version, then merge `main` into `dev`.
@@ -80,83 +80,84 @@ Keep one pull request to one issue. Split a large change into several pull reque
 
 You need:
 
-- Node.js `22.19` or later (or `24` and later).
+- Node.js `24` or later.
 - Git.
-- For the test bench only: pnpm `11` and a checkout of DeepSeek Harness at the DSH version that the plugin is tested with.
+- For the product profile check only: pnpm `11` and a checkout of DeepSeek Harness at the tested version.
 
 ```sh
-git clone https://github.com/Fei2411/DS-Bot.git ds-bot-repo
-cd ds-bot-repo/ds-bot
+git clone https://github.com/IceFireIcer/DS-SuperAgent.git ds-superagent
+cd ds-superagent/superagent
 
-# The plugin's own build tool (esbuild only).
+# The package's build and test dependencies.
 npm ci
-
-# The DSH packages that the unit tests and the linter load, from npm, into dev/harness/.
-npm run harness
 ```
 
-For the test bench, add the DeepSeek Harness checkout next to the plugin folder (this folder is ignored by Git):
+For the product profile check, add the DeepSeek Harness checkout next to `superagent/` (this folder is ignored by
+Git):
 
 ```sh
 cd ..
 git clone https://github.com/deepseek-ai/deepseek-harness.git
-git -C deepseek-harness checkout dsh-v0.2.1-rc.3
+git -C deepseek-harness checkout dsh-v0.2.1-rc.4
 (cd deepseek-harness && pnpm install)
 ```
 
-If your DeepSeek Harness checkout is somewhere else, set `DSH_HARNESS` to its path. `DSH_HARNESS` also takes the place of `dev/harness/` for the unit tests and the linter.
-
-The `@deepseek-ai/*` packages are peer dependencies: in a real install, the DSH profile supplies them. `ds-bot/.npmrc` keeps npm from installing them into the plugin folder.
+If your DeepSeek Harness checkout is somewhere else, set `DSH_HARNESS` to its path for tests that resolve its packages from source.
 
 ## Layout
 
 | Path | What it is |
 |---|---|
-| `ds-bot/index.js`, `ds-bot/src/host/` | The server side: Bot roster and store, tools, turns and delivery, group chats, conversation parts and the search index, images, the Bot browser bridge, the `api/bot` channel |
-| `ds-bot/src/client/` | The browser side: sidebar, chat, panels and dialogs, themes, characters, the Bot browser panel |
-| `ds-bot/client.js` | Generated from `src/client/` by `scripts/build-client.mjs`. It is committed, so that Git installs need no build step |
-| `ds-bot/web-search.js` | The `auto` web-search provider. It does not depend on the Bot team code |
-| `ds-bot/cordis.patch.yml` | The profile patch that the plugin brings |
-| `ds-bot/test/` | Unit tests and fixtures |
-| `ds-bot/dev/` | The DSH packages for the unit tests (`harness/`), the mock model, the test bench, the smoke test, the character generator, the Desktop scripts for Linux, and two tools for real models: the steward evaluation and a logging pass-through |
+| `superagent/src/` | Engine, Host, storage, execution and retained capability adapters |
+| `superagent/dsh/src/client/` | The existing Main conversation, work cards and product settings |
+| `superagent/dsh/client.js` | Generated from `dsh/src/client/` by `dsh/scripts/build-client.mjs`. It is committed, so Git installs need no build step |
+| `superagent/dsh/web-search.js` | The `auto` web-search provider |
+| `superagent/cordis.patch.yml` | The single package's DSH bundle patch |
+| `superagent/test/` and `superagent/dsh/test/` | Engine and product-client tests |
+| `superagent/dev/` and `superagent/dsh/dev/` | Isolated development fixtures and the minimal mock model |
+| `app/` | The single-product profile, Electron shell, data isolation, lifecycle and packaging |
 
 ## Test a change
 
-Run these in `ds-bot/`:
+Run these in `superagent/`:
 
 ```sh
-npm run build                          # src/client → client.js
-npm test                               # unit tests; they also fail if client.js is stale
-node scripts/build-client.mjs --check  # client.js matches src/client
+npm run build                          # TypeScript + client.js + office.js
+npm test                               # Server and client tests
+node dsh/scripts/build-client.mjs --check
 npm run lint                           # oxlint
 ```
 
-CI runs the same three checks on every pull request, on Linux and Windows. It also scans the tracked files for keys, tokens, personal paths and e-mail addresses, and for material that must stay local. To run the scan yourself, from the repository root:
+CI runs these checks for changes under `superagent/`. Other jobs run only when their paths change; the single check **Test result** evaluates the jobs that the change requires and fails if one of them was skipped or did not pass. CI also scans the tracked files for keys, tokens, personal paths and e-mail addresses, and for material that must stay local. To run the scan yourself, from the repository root:
 
 ```sh
-mkdir -p /tmp/ds-bot-tree && git archive HEAD | tar -x -C /tmp/ds-bot-tree && node scripts/scan.mjs /tmp/ds-bot-tree
+mkdir -p /tmp/ds-superagent-tree && git archive HEAD | tar -x -C /tmp/ds-superagent-tree && node scripts/scan.mjs /tmp/ds-superagent-tree
 ```
 
 A "must fix" finding fails CI; "can stay" findings are for reading. The branch rules require the single check **Test result**, which passes only when all the checks pass.
 
-For a change to the server side (`index.js`, `src/host/`), also run the smoke test. It starts the mock model and a DSH Web with the plugin linked from your checkout, and walks through the main flows (Bots, group chats, conversation parts, condensing, settings). `CONTEXT_WINDOW` and `CHECK_RATIO` give the mock models a small window, so a few long replies reach the check line:
+Before committing, run the UI boundary check from the repository root:
 
 ```sh
-CONTEXT_WINDOW=100000 CHECK_RATIO=0.45 dev/bench.sh smoke 3096 8796 reset && node dev/smoke.mjs smoke 3096
-dev/bench.sh smoke 3096 8796 stop
+node scripts/check-ui-boundary.mjs --base origin/dev
 ```
 
-To try the plugin by hand, start a bench and open the address that it prints:
+It lists changes under `superagent/dsh/src/client/` and `superagent/dsh/client.js`. Those files need an explicit request for the UI
+change; only then run the check again with `DS_SUPERAGENT_UI_CHANGE_APPROVED=1`. The check compares the working tree and
+untracked files with the base, so it also catches an edit that has not been staged yet.
+
+For Engine or Host changes, also run in `superagent/`:
 
 ```sh
-dev/bench.sh dev 3081 8771 reset    # mock model + DSH Web; data in ../.dsh-test-dev
+npm run typecheck
+npm run build
+npm run lint
 ```
 
-The mock model answers a fixed set of commands, so a bench costs no tokens. The commands are listed at the top of `dev/mock-llm.mjs`. Bench data stays in `.dsh-test-<name>/` next to the plugin folder and never touches your own `~/.dsh`.
-
-For a change to the context steward or its prompts (`src/host/steward.js`), also check it on a real model. `dev/steward-eval.mjs` runs its decisions on fixed conversation endings, and `dev/llm-tap.mjs` logs every call a real bench makes. Both cost tokens and explain their use at the top.
-
-For a change to the Bot browser, check it in DSH Desktop. On Linux, the scripts in `dev/desktop-linux/` run DSH Desktop under Xvfb; each script explains its use at the top.
+For the assembled product profile, run `node app/scripts/check-superagent-profile.mjs` on throwaway data. For product
+UI changes, run `npm test` in `app/`, the generated client check and the UI boundary check. Use the minimal
+`superagent/dsh/dev/mock-llm.mjs` when a packaged-app smoke needs a model; real model checks cost tokens and must use explicit
+temporary configuration.
 
 ## Write a change
 
@@ -170,22 +171,22 @@ For a change to the Bot browser, check it in DSH Desktop. On Linux, the scripts 
 
 ## Report a problem
 
-The easiest way is from DS Bot itself: open **Settings → Feedback**, write what happened and select **Report on GitHub**. It opens a new issue with the DS Bot and DSH versions, your system, the models and the recent errors already filled in. **Copy** puts the same text on the clipboard, and **Download** saves the full error log (`<DSH_HOME>/bot/logs/diagnostics.jsonl`).
+The easiest way is from DS SuperAgent: open **Settings → Feedback**, write what happened and select **Report on GitHub**. It opens a new issue with the product and DSH versions, your system, the models and recent errors already filled in. **Copy** puts the same text on the clipboard, and **Download** saves the diagnostics log.
 
 If you open an issue by hand, include:
 
 - The DSH version (DSH Desktop or `@deepseek-ai/dsh`), your operating system, and whether you use DSH Desktop or DSH Web.
-- How you installed DS Bot (npm, release file, Git address or command line) and its version.
+- How you installed DS SuperAgent (release package or source checkout) and its version.
 - What you did, what you expected and what happened, with the exact error text.
 - A screenshot of the whole window, with the chat and the error.
 - The steps that make it happen again.
 
-DS Bot removes API keys, tokens, saved secrets and your home folder from its diagnostics. Read the text before you post it, and remove personal data from screenshots.
+DS SuperAgent removes API keys, tokens, saved secrets and your home folder from its diagnostics. Read the text before you post it, and remove personal data from screenshots.
 
 For a security problem, do not open a public issue. Use **Report a vulnerability** on the repository's **Security** tab.
 
-Issues are for bug reports. Questions, ideas and feature requests belong in [Discussions](https://github.com/Fei2411/DS-Bot/discussions). An idea that the maintainer accepts becomes an issue.
+Issues are for bug reports. Questions, ideas and feature requests belong in [Discussions](https://github.com/IceFireIcer/DS-SuperAgent/discussions). An idea that the maintainer accepts becomes an issue.
 
 ## License
 
-DS Bot is licensed under the [Apache License 2.0](LICENSE). When you submit a contribution, you agree that it is licensed under the same license, as section 5 of the license says.
+DS SuperAgent is licensed under the [Apache License 2.0](LICENSE). When you submit a contribution, you agree that it is licensed under the same license, as section 5 of the license says.

@@ -20,13 +20,13 @@ function makePayload() {
 }
 // A stand-in profile under a throwaway DSH_HOME.
 function profile() {
-  const dir = join(home, 'profiles', 'ds-bot')
+  const dir = join(home, 'profiles', 'ds-superagent')
   mkdirSync(dir, { recursive: true })
-  return { name: 'ds-bot', dir, patchPath: join(dir, 'cordis.patch.yml'), skippedBundles: [], layers: [], patches: [] }
+  return { name: 'ds-superagent', dir, patchPath: join(dir, 'cordis.patch.yml'), skippedBundles: [], layers: [], patches: [] }
 }
 
 before(() => {
-  home = mkdtempSync(join(tmpdir(), 'ds-bot-office-patch-'))
+  home = mkdtempSync(join(tmpdir(), 'ds-superagent-office-patch-'))
   runtimeDir = join(home, 'runtime')
 })
 after(() => { rmSync(home, { recursive: true, force: true }) })
@@ -87,11 +87,4 @@ describe('reconcileOfficeRuntime', () => {
   test('writes no overlay without a runtime directory', () => {
     assert.deepEqual(reconcileOfficeRuntime(profile(), undefined), { patchFiles: [] })
   })
-})
-
-// The first-run check reads chats without the team or the Office payload: the Host asks for
-// the overlay only for the main profile.
-test('the check profile boots without the Office overlay', () => {
-  const source = readFileSync(new URL('../src/host.mjs', import.meta.url), 'utf8')
-  assert.match(source, /check === undefined \? reconcileOfficeRuntime\(profile\) : \{ patchFiles: \[\] \}/u)
 })

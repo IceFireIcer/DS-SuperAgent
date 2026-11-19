@@ -42,10 +42,10 @@ const release = (version, options = {}) => {
   const arch = options.arch ?? 'arm64'
   return {
     tag_name: `v${version}`,
-    html_url: options.page ?? `https://github.com/Fei2411/DS-Bot/releases/tag/v${version}`,
+    html_url: options.page ?? `https://github.com/IceFireIcer/DS-SuperAgent/releases/tag/v${version}`,
     draft: options.draft ?? false,
     prerelease: options.prerelease ?? false,
-    assets: options.assets ?? [{ name: `DS-Bot-${version}-mac-${arch}.zip` }],
+    assets: options.assets ?? [{ name: `DS-SuperAgent-${version}-mac-${arch}.zip` }],
   }
 }
 
@@ -83,10 +83,9 @@ describe('watchReleases', () => {
     const updates = watchReleases({ current: '0.1.7', arch: 'arm64', fetch, log: quietLog() })
     t.after(updates.stop)
     assert.equal(await updates.latest(), null)
-    assert.deepEqual(calls[0], {
-      url: RELEASES_URL,
-      options: { headers: { accept: 'application/vnd.github+json', 'user-agent': 'DS-Bot/0.1.7' } },
-    })
+    assert.equal(calls[0].url, RELEASES_URL)
+    assert.deepEqual(calls[0].options.headers, { accept: 'application/vnd.github+json', 'user-agent': 'ds-superagent/0.1.7' })
+    assert.equal(calls[0].options.signal instanceof AbortSignal, true)
 
     const feed = 'http://127.0.0.1:8080/'
     const custom = watchReleases({ current: '0.1.7', arch: 'arm64', fetch, feed, log: quietLog() })
@@ -96,7 +95,7 @@ describe('watchReleases', () => {
   })
 
   test('reports a newer release and opens its page only when accepted', async (t) => {
-    const page = 'https://github.com/Fei2411/DS-Bot/releases/tag/v0.1.9'
+    const page = 'https://github.com/IceFireIcer/DS-SuperAgent/releases/tag/v0.1.9'
     for (const accepted of [true, false]) {
       const asked = []
       const opened = []
@@ -168,10 +167,10 @@ describe('watchReleases', () => {
 
   test('logs failed requests, invalid JSON, and non-HTTPS release pages without throwing', async (t) => {
     const cases = [
-      [async () => releaseResponse({}, 403), 'DS Bot: update check failed: HTTP 403'],
-      [async () => { throw new Error('offline') }, 'DS Bot: update check failed: offline'],
-      [async () => ({ ok: true, status: 200, json: async () => { throw new Error('bad JSON') } }), 'DS Bot: update check failed: bad JSON'],
-      [async () => releaseResponse([release('0.1.9', { page: 'http://github.com/Fei2411/DS-Bot' })]), 'DS Bot: update check failed: release page URL is not HTTPS'],
+      [async () => releaseResponse({}, 403), 'DS SuperAgent: update check failed: HTTP 403'],
+      [async () => { throw new Error('offline') }, 'DS SuperAgent: update check failed: offline'],
+      [async () => ({ ok: true, status: 200, json: async () => { throw new Error('bad JSON') } }), 'DS SuperAgent: update check failed: bad JSON'],
+      [async () => releaseResponse([release('0.1.9', { page: 'http://github.com/IceFireIcer/DS-SuperAgent' })]), 'DS SuperAgent: update check failed: release page URL is not HTTPS'],
     ]
     for (const [fetch, message] of cases) {
       const log = quietLog()
@@ -189,7 +188,7 @@ describe('watchReleases', () => {
     })
     t.after(updates.stop)
     assert.equal(await updates.latest(), null)
-    assert.deepEqual(log.lines, ['DS Bot: update check failed: releases response is not an array'])
+    assert.deepEqual(log.lines, ['DS SuperAgent: update check failed: releases response is not an array'])
   })
 
   test('waits for the matching-architecture zip before asking', async (t) => {
@@ -212,16 +211,16 @@ describe('watchReleases', () => {
     attached = true
     t.mock.timers.tick(4 * 60 * 60_000)
     assert.deepEqual(await updates.latest(), {
-      version: '0.1.9', page: 'https://github.com/Fei2411/DS-Bot/releases/tag/v0.1.9',
+      version: '0.1.9', page: 'https://github.com/IceFireIcer/DS-SuperAgent/releases/tag/v0.1.9',
     })
     await sleep(0)
     assert.deepEqual(asked, ['0.1.9'])
   })
 
   test('a given asset replaces the mac zip: the deb of a Linux install', async (t) => {
-    const page = 'https://github.com/Fei2411/DS-Bot/releases/tag/v0.1.9'
+    const page = 'https://github.com/IceFireIcer/DS-SuperAgent/releases/tag/v0.1.9'
     // The deb's file name uses the Debian architecture (x64 → amd64).
-    const deb = version => `DS-Bot-${version}-linux-amd64.deb`
+    const deb = version => `DS-SuperAgent-${version}-linux-amd64.deb`
     // A release with only the mac zip does not count for a deb install.
     const misses = watchReleases({
       current: '0.1.7', arch: 'x64', asset: deb,
@@ -232,7 +231,7 @@ describe('watchReleases', () => {
 
     const hits = watchReleases({
       current: '0.1.7', arch: 'x64', asset: deb,
-      fetch: async () => releaseResponse([release('0.1.9', { page, assets: [{ name: 'DS-Bot-0.1.9-linux-amd64.deb' }] })]),
+      fetch: async () => releaseResponse([release('0.1.9', { page, assets: [{ name: 'DS-SuperAgent-0.1.9-linux-amd64.deb' }] })]),
       log: quietLog(),
     })
     t.after(hits.stop)
@@ -257,7 +256,7 @@ describe('watchReleases', () => {
     })
     t.after(updates.stop)
     assert.deepEqual(await updates.latest(), {
-      version: '0.2.0-rc.2', page: 'https://github.com/Fei2411/DS-Bot/releases/tag/v0.2.0-rc.2',
+      version: '0.2.0-rc.2', page: 'https://github.com/IceFireIcer/DS-SuperAgent/releases/tag/v0.2.0-rc.2',
     })
   })
 
@@ -279,7 +278,7 @@ describe('watchReleases', () => {
     })
     t.after(updates.stop)
     assert.deepEqual(await updates.latest(), {
-      version: '0.1.10', page: 'https://github.com/Fei2411/DS-Bot/releases/tag/v0.1.10',
+      version: '0.1.10', page: 'https://github.com/IceFireIcer/DS-SuperAgent/releases/tag/v0.1.10',
     })
   })
 
@@ -296,7 +295,7 @@ describe('watchReleases', () => {
     t.after(updates.stop)
     await updates.latest()
     await sleep(20)
-    assert.deepEqual(log.lines, ['DS Bot: update 0.1.9 available', 'DS Bot: update 0.1.9 not opened: dialog failed'])
+    assert.deepEqual(log.lines, ['DS SuperAgent: update 0.1.9 available', 'DS SuperAgent: update 0.1.9 not opened: dialog failed'])
     assert.deepEqual(unhandled, [])
   })
 
@@ -322,7 +321,7 @@ describe('watchReleases', () => {
     assert.equal(await none.latest(), null)
     assert.deepEqual(none.state(), { phase: 'current' })
 
-    const page = 'https://github.com/Fei2411/DS-Bot/releases/tag/v0.1.9'
+    const page = 'https://github.com/IceFireIcer/DS-SuperAgent/releases/tag/v0.1.9'
     const found = watchReleases({
       current: '0.1.7', arch: 'arm64', fetch: async () => releaseResponse([release('0.1.9', { page })]), log: quietLog(),
     })
@@ -369,6 +368,46 @@ describe('watchReleases', () => {
     assert.deepEqual(updates.state(), { phase: 'current' })
   })
 
+  test('a check that never answers times out and lets a later check run', async (t) => {
+    let calls = 0
+    const updates = watchReleases({
+      current: '0.1.7', arch: 'arm64', timeout: 10, log: quietLog(),
+      fetch: (_url, { signal }) => {
+        calls += 1
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+        })
+      },
+    })
+    t.after(updates.stop)
+    assert.equal(await updates.latest(), null)
+    assert.deepEqual(updates.state(), { phase: 'failed' })
+    updates.check()
+    assert.equal(calls, 2)
+    assert.equal(await updates.latest(), null)
+  })
+
+  test('stop cancels a check in flight and leaves its late answer out', async (t) => {
+    let signal
+    const log = quietLog()
+    const updates = watchReleases({
+      current: '0.1.7', arch: 'arm64', log,
+      fetch: (_url, options) => {
+        signal = options.signal
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+        })
+      },
+    })
+    const latest = updates.latest()
+    await sleep(0)
+    updates.stop()
+    assert.equal(await latest, null)
+    assert.equal(signal.aborted, true)
+    assert.deepEqual(updates.state(), { phase: 'checking' })
+    assert.deepEqual(log.lines, [])
+  })
+
   test('listeners hear every state change until they unsubscribe', async (t) => {
     const updates = watchReleases({
       current: '0.1.7', arch: 'arm64', fetch: async () => releaseResponse([release('0.1.7')]), log: quietLog(),
@@ -391,11 +430,11 @@ describe('watchReleases', () => {
 })
 
 describe('watchUpdates', () => {
-  test('downloads in the background, installs at the quit, and checks at once', (t) => {
+  test('downloads in the background and leaves installation to the app backup gate', (t) => {
     const updater = new FakeUpdater()
     t.after(watchUpdates({ updater, beforeInstall: async () => {}, log: quietLog() }).stop)
     assert.equal(updater.autoDownload, true)
-    assert.equal(updater.autoInstallOnAppQuit, true)
+    assert.equal(updater.autoInstallOnAppQuit, false)
     assert.equal(updater.checks, 1)
     assert.deepEqual(updater.feeds, [])
   })
@@ -433,7 +472,7 @@ describe('watchUpdates', () => {
       await sleep(20)
       assert.deepEqual(updater.installs, [])
       assert.equal(stopped, false)
-      assert.deepEqual(log.lines, ['DS Bot: update 0.1.9 downloaded'])
+      assert.deepEqual(log.lines, ['DS SuperAgent: update 0.1.9 downloaded'])
     }
   })
 
@@ -444,7 +483,7 @@ describe('watchUpdates', () => {
     const updates = watchUpdates({ updater, beforeInstall: async () => {}, log })
     t.after(updates.stop)
     assert.equal(await updates.latest(), null)
-    assert.deepEqual(log.lines, ['DS Bot: update failed: offline'])
+    assert.deepEqual(log.lines, ['DS SuperAgent: update failed: offline'])
   })
 
   test('tells what the newest check found and whether its download finished', async (t) => {
@@ -485,8 +524,28 @@ describe('watchUpdates', () => {
     const updates = watchUpdates({ updater, beforeInstall: async () => { steps.push('host stopped') }, log: quietLog() })
     t.after(updates.stop)
     updater.quitAndInstall = (...args) => { steps.push(['install', ...args]) }
+    updater.emit('update-downloaded', { version: '0.1.9' })
     await updates.install()
     assert.deepEqual(steps, ['host stopped', ['install', true, true]])
+  })
+
+  test('catches a delayed installer spawn error after the application begins quitting', async (t) => {
+    const updater = new FakeUpdater()
+    const failures = []
+    let failed
+    const failureReported = new Promise(resolve => { failed = resolve })
+    const updates = watchUpdates({ updater, beforeInstall: async () => {},
+      onInstallFailure: async failure => { failures.push(failure); failed() }, log: quietLog() })
+    t.after(updates.stop)
+    updater.quitAndInstall = () => setImmediate(() => updater.emit('error', new Error('installer spawn failed')))
+    updater.emit('update-downloaded', { version: '0.1.9' })
+    const install = updates.install()
+    updater.emit('before-quit-for-update')
+    updates.stop()
+    await install
+    await failureReported
+    assert.deepEqual(failures, [{ asynchronous: true }])
+    assert.deepEqual(updates.state(), { phase: 'downloaded', version: '0.1.9', failure: 'install_failed' })
   })
 
   test('checks again every few hours until stopped', (t) => {
@@ -522,7 +581,7 @@ describe('watchUpdates', () => {
     assert.deepEqual(updates.state(), { phase: 'failed' })
     updater.emit('update-available', { version: '0.1.9' })
     updater.emit('error', new Error('sha512 checksum mismatch'))
-    assert.deepEqual(updates.state(), { phase: 'failed' })
+    assert.deepEqual(updates.state(), { phase: 'failed', failure: 'download_failed' })
     updater.emit('update-downloaded', { version: '0.1.9' })
     updater.emit('error', new Error('offline'))
     assert.deepEqual(updates.state(), { phase: 'downloaded', version: '0.1.9' })
@@ -547,6 +606,20 @@ describe('watchUpdates', () => {
     updater.emit('update-downloaded', { version: '0.1.9' })
     updates.check()
     assert.equal(updater.checks, 2)
+  })
+
+  test('a check that never answers times out and lets a later check run', async (t) => {
+    const updater = new FakeUpdater()
+    updater.wait = true
+    const updates = watchUpdates({ updater, beforeInstall: async () => {}, timeout: 10, log: quietLog() })
+    t.after(updates.stop)
+    assert.equal(await updates.latest(), null)
+    assert.deepEqual(updates.state(), { phase: 'failed' })
+    updater.wait = false
+    updates.check()
+    assert.equal(updater.checks, 2)
+    await updates.latest()
+    assert.deepEqual(updates.state(), { phase: 'current' })
   })
 
   test('listeners hear every state change until they unsubscribe', (t) => {

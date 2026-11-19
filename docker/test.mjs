@@ -3,8 +3,8 @@ import { randomUUID } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { setTimeout } from 'node:timers/promises'
 
-const image = process.argv[2] ?? 'ds-bot:local'
-const name = `ds-bot-test-${randomUUID()}`
+const image = process.argv[2] ?? 'ds-superagent:local'
+const name = `ds-superagent-test-${randomUUID()}`
 const data = `${name}-data`
 const workspace = `${name}-workspace`
 const containers = new Set()
@@ -78,6 +78,23 @@ try {
   `)
   console.log('PASS: executable entrypoint and first start')
 
+  const legacyData = `${name}-legacy-data`
+  docker(['volume', 'create', legacyData])
+  volumes.push(legacyData)
+  docker([
+    'run', '--rm', '--network', 'none',
+    '--mount', `type=volume,src=${legacyData},dst=/data`,
+    '--entrypoint', '/bin/sh', image, '-eu', '-c',
+    'mkdir -p /data/profiles/web && printf "{\\"name\\":\\"web\\",\\"dependencies\\":{\\"removed-plugin\\":\\"0.2.5\\"}}" > /data/profiles/web/package.json',
+  ])
+  const legacy = docker([
+    'run', '--rm', '--network', 'none',
+    '--mount', `type=volume,src=${legacyData},dst=/data`, image, '--help',
+  ], { allowFailure: true })
+  assert.notEqual(legacy.status, 0, 'a pre-R5 profile must fail closed')
+  assert.match(legacy.stderr, /predates the R5 product/u)
+  console.log('PASS: pre-R5 data fails closed without importing the old team')
+
   startHelp(1234, 1234)
   checkDataOwner(1234, 1234)
   console.log('PASS: UID/GID migration preserves data and workspace link targets')
@@ -98,7 +115,7 @@ try {
   const server = `${name}-web`
   containers.add(server)
   docker([
-    'run', '--detach', '--rm', '--name', server, '--network', 'none', ...mounts(),
+    'run', '--detach', '--name', server, '--network', 'none', ...mounts(),
     '-e', 'PUID=1234', '-e', 'PGID=1235', '-e', 'DSH_TELEMETRY_DISABLED=1', image,
   ])
   const probe = `
@@ -113,6 +130,12 @@ try {
       break
     }
     await setTimeout(300)
+  }
+  if (!ready) {
+    const logs = docker(['logs', server], { allowFailure: true })
+    const state = docker(['inspect', '--format', '{{json .State}}', server], { allowFailure: true })
+    console.error(`web container state:\n${state.stdout}${state.stderr}`)
+    console.error(`web container logs:\n${logs.stdout}${logs.stderr}`)
   }
   assert.ok(ready, 'web server must answer HTTP after ownership migration')
   const processOwner = docker(['exec', server, 'stat', '-c', '%u:%g', '/proc/1']).stdout.trim()

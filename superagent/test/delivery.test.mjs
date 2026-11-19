@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,16 +8,96 @@ import * as core from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, textResponse, toolResponse } from '../dev/native-mock.mjs'
 
-async function fixture(t, channel, effects = {}, versioned = false) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-delivery-'))
+async function fixture(t, channel, effects = {}, versioned = false, sourceInstanceId = 'desktop') {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-delivery-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const engine = new core.Engine(storage, 'private', {
-    sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'],
+    sourceInstanceId, actorId: 'user', allowedActorIds: ['user'],
     ...(versioned ? { allowedThreadIds: ['room'], versionOrder: 'sequence' } : {}),
   }, effects, undefined, [], {}, {}, {}, { channel })
   return { engine, storage, directory }
 }
+
+test('a product work result cannot be reconstructed from its Worker report when the Delivery is missing', async t => {
+  const sent = []
+  const { engine, storage } = await fixture(t, {
+    deliver: async delivery => { sent.push(delivery); return { type: 'success' } },
+  })
+  const accepted = await engine.submit({ commandId: 'product-result', eventId: 'product-input', text: 'Do the work.' })
+  const effect = await storage.transaction('private', async tx => {
+    await tx.insert('work-ticket', accepted.ticketId, { workBriefId: 'brief', workItemId: 'item', ticketId: accepted.ticketId })
+    await tx.insert('report', accepted.ticketId, { id: 'ready-report', ticketId: accepted.ticketId,
+      assignmentId: 'assignment', directionVersion: 1, result: 'Worker-only text' })
+    return engine.effects.enqueue(tx, { key: 'missing-delivery', stream: 'outbox', scope: accepted.ticketId,
+      payload: { purpose: 'result', ticketId: accepted.ticketId } })
+  })
+  await engine.effects.drain()
+  assert.equal(sent.some(delivery => delivery.purpose === 'result'), false)
+  assert.equal((await engine.effects.receipt(effect.id, effect.generation)).delivery, 'dropped')
+})
+
+test('a direct product Ticket cannot reconstruct a Worker result without Main ownership', async t => {
+  const sent = []
+  const { engine, storage } = await fixture(t, {
+    deliver: async delivery => { sent.push(delivery); return { type: 'success' } },
+  }, {}, false, 'product-desktop')
+  const accepted = await engine.submit({ commandId: 'direct-product', eventId: 'direct-input', text: 'Do the work.' })
+  const effect = await storage.transaction('private', async tx => {
+    await tx.insert('report', accepted.ticketId, { id: 'direct-report', ticketId: accepted.ticketId,
+      assignmentId: 'direct-assignment', directionVersion: 1, result: 'Worker-only text' })
+    return engine.effects.enqueue(tx, { key: 'direct-result', stream: 'outbox', scope: accepted.ticketId,
+      payload: { purpose: 'result', ticketId: accepted.ticketId } })
+  })
+  await engine.effects.drain()
+  assert.equal(sent.some(delivery => delivery.purpose === 'result'), false)
+  assert.equal((await engine.effects.receipt(effect.id, effect.generation)).delivery, 'dropped')
+})
+
+test('a persisted product result with Worker text cannot bypass the current Main reply', async t => {
+  const sent = []
+  const { engine, storage } = await fixture(t, {
+    deliver: async delivery => { sent.push(delivery); return { type: 'success' } },
+  }, {}, false, 'product-desktop')
+  const accepted = await engine.submit({ commandId: 'persisted-worker-result', eventId: 'original-input', text: 'Do the work.' })
+  const effect = await storage.transaction('private', async tx => {
+    await tx.insert('work-ticket', accepted.ticketId, { workBriefId: 'brief', workItemId: 'item', ticketId: accepted.ticketId })
+    const intent = await tx.get('intent', accepted.ticketId)
+    await tx.replace('intent', accepted.ticketId, { ...intent, state: 'ready', reason: 'ready-report' })
+    await tx.insert('assignment', accepted.ticketId, { id: 'current-assignment', sessionId: 'worker-session', state: 'running' })
+    await tx.insert('report', accepted.ticketId, { id: 'current-report', ticketId: accepted.ticketId,
+      assignmentId: 'current-assignment', directionVersion: 1, result: 'Worker-only text' })
+    const queued = await engine.effects.enqueue(tx, { key: 'persisted-result', stream: 'outbox', scope: accepted.ticketId,
+      payload: { purpose: 'result', ticketId: accepted.ticketId, deliveryId: 'persisted-result' } })
+    await tx.insert('delivery', 'persisted-result', { id: 'persisted-result', instanceId: 'private', ticketId: accepted.ticketId,
+      purpose: 'result', text: 'Worker-only text',
+      destination: { sourceInstanceId: 'product-desktop', actorId: 'user', eventId: 'original-input' },
+      basis: { kind: 'ready-report', reportId: 'current-report', directionVersion: 1 },
+      effectId: queued.id, effectGeneration: queued.generation, sequence: 2, createdAt: Date.now() })
+    return queued
+  })
+  await engine.effects.drain()
+  assert.equal(sent.some(delivery => delivery.purpose === 'result'), false)
+  assert.equal((await engine.effects.receipt(effect.id, effect.generation)).delivery, 'dropped')
+})
+
+test('a legacy direct result Effect cannot reconstruct a Worker report without its Delivery', async t => {
+  const sent = []
+  const { engine, storage } = await fixture(t, {
+    deliver: async delivery => { sent.push(delivery); return { type: 'success' } },
+  })
+  const accepted = await engine.submit({ commandId: 'legacy-direct', eventId: 'legacy-input', text: 'Do the work.' })
+  const effect = await storage.transaction('private', async tx => {
+    await tx.insert('assignment', accepted.ticketId, { id: 'legacy-assignment', sessionId: 'legacy-session', state: 'running' })
+    await tx.insert('report', accepted.ticketId, { id: 'legacy-report', ticketId: accepted.ticketId,
+      assignmentId: 'legacy-assignment', directionVersion: 1, result: 'Worker-only text' })
+    return engine.effects.enqueue(tx, { key: 'legacy-result', stream: 'outbox', scope: accepted.ticketId,
+      payload: { purpose: 'result', ticketId: accepted.ticketId } })
+  })
+  await engine.effects.drain()
+  assert.equal(sent.some(delivery => delivery.purpose === 'result'), false)
+  assert.equal((await engine.effects.receipt(effect.id, effect.generation)).delivery, 'dropped')
+})
 
 test('acknowledgement is queryable before delivery and retries reuse one channel message', async t => {
   const calls = []
@@ -86,6 +167,116 @@ test('an exhausted transient delivery stays pending instead of being dropped', a
   assert.equal(delivery.attempts, 2)
 })
 
+test('delivery history keeps reading past the second page instead of stopping at the first cursor', async t => {
+  const { engine, storage } = await fixture(t, { deliver: async () => ({ type: 'success' }) })
+  const receipt = await engine.submit({ commandId: 'long-history', eventId: 'long-history-message', text: 'Keep the history.' })
+  const prefix = JSON.stringify(['delivery-history', receipt.ticketId])
+  await storage.transaction('private', async transaction => {
+    for (let index = 0; index < 205; index++) {
+      const id = `history-${index}`
+      const record = { id, instanceId: 'private', ticketId: receipt.ticketId, purpose: 'result', text: `History ${index}.`,
+        destination: { sourceInstanceId: 'desktop', actorId: 'user', eventId: `event-${index}` },
+        basis: { kind: 'policy-update', revision: index }, effectId: `effect-${index}`, effectGeneration: 'generation-1',
+        sequence: 1000 + index, createdAt: index }
+      await transaction.insert('delivery-history', `${prefix}:${createHash('sha256').update(id).digest('hex')}:${String(record.sequence).padStart(16, '0')}`, record)
+    }
+  })
+  const deliveries = await engine.getTicketDeliveries(receipt.ticketId)
+  assert.equal(deliveries.length, 206)
+  assert.equal(deliveries.at(-1).sequence, 1204)
+})
+
+test('an unknown platform outcome is visible and reconciles under the original delivery idempotency key', async t => {
+  const sentKeys = []
+  const reconcileKeys = []
+  let reconcileAttempt = 0
+  const { engine } = await fixture(t, {
+    deliver: async (_delivery, context) => {
+      sentKeys.push(context.idempotencyKey)
+      return { type: 'unknown', reason: 'PLATFORM_ACCEPTED_RESPONSE_LOST' }
+    },
+    reconcile: async (_delivery, context) => {
+      reconcileKeys.push(context.idempotencyKey)
+      reconcileAttempt++
+      return reconcileAttempt === 1 ? { type: 'transient', reason: 'RECONCILE_TEMPORARILY_UNAVAILABLE' } : { type: 'success' }
+    },
+  }, { maxAttempts: 2 })
+  const receipt = await engine.submit({ commandId: 'unknown-request', eventId: 'unknown-message', text: 'Deliver once.' })
+  await engine.effects.drain()
+  const [unknown] = await engine.getTicketDeliveries(receipt.ticketId)
+  assert.deepEqual({ state: unknown.state, reconcileRequired: unknown.reconcileRequired, attempts: unknown.attempts },
+    { state: 'unknown', reconcileRequired: true, attempts: 1 })
+  assert.equal(unknown.reason, 'PLATFORM_ACCEPTED_RESPONSE_LOST')
+
+  const command = { commandId: 'reconcile-unknown', ticketId: receipt.ticketId, deliveryId: unknown.id }
+  const retryable = await engine.reconcileDelivery(command)
+  assert.deepEqual([retryable.state, retryable.reconcileRequired, retryable.reason],
+    ['unknown', true, 'RECONCILE_TEMPORARILY_UNAVAILABLE'])
+  const reconciled = await engine.reconcileDelivery(command)
+  assert.deepEqual({ state: reconciled.state, reconcileRequired: reconciled.reconcileRequired, attempts: reconciled.attempts },
+    { state: 'sent', reconcileRequired: false, attempts: 3 })
+  assert.equal(reconcileKeys.every(key => key === sentKeys[0]), true)
+  assert.equal(sentKeys.length, 1)
+  assert.deepEqual(await engine.reconcileDelivery(command), reconciled)
+  assert.equal(sentKeys.length, 1)
+  assert.equal(reconcileKeys.length, 2)
+})
+
+test('reconciliation uses immutable delivery identity after the live answer basis changes', async t => {
+  const sentKeys = []
+  const reconcileKeys = []
+  const { engine } = await fixture(t, {
+    deliver: async (delivery, context) => {
+      if (delivery.purpose !== 'answer') return { type: 'success' }
+      sentKeys.push(context.idempotencyKey)
+      return { type: 'unknown', reason: 'ANSWER_RESPONSE_LOST' }
+    },
+    reconcile: async (_delivery, context) => {
+      reconcileKeys.push(context.idempotencyKey)
+      return { type: 'success' }
+    },
+  }, {}, true)
+  const question = await engine.receiveSource({ commandId: 'reconcile-question', threadId: 'room', objectId: 'question-reconcile',
+    type: 'created', version: '1', text: 'What changed?', authorId: 'alice', authorKind: 'human', addressing: 'direct' })
+  const receipt = await engine.acceptSource({ commandId: 'accept-reconcile', threadId: 'room', objectId: 'question-reconcile', expectedEventId: question.eventId })
+  await engine.queueAnswer({ commandId: 'answer-reconcile', ticketId: receipt.ticketId, questionEventId: question.eventId,
+    text: 'The original answer.', fact: 'The answer was verified before the question changed.' })
+  await engine.effects.drain()
+  const answer = (await engine.getTicketDeliveries(receipt.ticketId)).find(delivery => delivery.purpose === 'answer')
+  assert.equal(answer.state, 'unknown')
+  await engine.receiveSource({ commandId: 'delete-reconcile-question', threadId: 'room', objectId: 'question-reconcile',
+    type: 'deleted', version: '2', deletionEvidence: 'The question was deleted after the uncertain answer send.' })
+  const reconciled = await engine.reconcileDelivery({ commandId: 'reconcile-answer-after-delete', ticketId: receipt.ticketId, deliveryId: answer.id })
+  assert.equal(reconciled.state, 'sent')
+  assert.deepEqual(reconcileKeys, sentKeys)
+})
+
+test('a not-applied reconciliation remains retryable with the same stable command', async t => {
+  let delivered = 0
+  const reconcileKeys = []
+  const { engine } = await fixture(t, {
+    deliver: async () => {
+      delivered++
+      return delivered === 1 ? { type: 'unknown', reason: 'FIRST_RESPONSE_LOST' } : { type: 'success' }
+    },
+    reconcile: async (_delivery, context) => {
+      reconcileKeys.push(context.idempotencyKey)
+      return { type: 'not-applied', reason: 'PLATFORM_CONFIRMED_NOT_APPLIED' }
+    },
+  })
+  const receipt = await engine.submit({ commandId: 'not-applied-request', eventId: 'not-applied-message', text: 'Retry safely.' })
+  await engine.effects.drain()
+  const unknown = (await engine.getTicketDeliveries(receipt.ticketId))[0]
+  assert.equal(unknown.state, 'unknown')
+  const command = { commandId: 'not-applied-reconcile', ticketId: receipt.ticketId, deliveryId: unknown.id }
+  const pending = await engine.reconcileDelivery(command)
+  assert.equal(pending.state, 'pending')
+  const sent = await engine.reconcileDelivery(command)
+  assert.equal(sent.state, 'sent')
+  assert.equal(delivered, 2)
+  assert.equal(reconcileKeys.length, 1)
+})
+
 test('an answer requires a current human question and returns to that exact message', async t => {
   const calls = []
   const { engine } = await fixture(t, {
@@ -111,8 +302,8 @@ test('an answer requires a current human question and returns to that exact mess
     text: 'Too late.', fact: 'The question was deleted.' }), { code: 'SOURCE_NOT_CURRENT' })
 })
 
-test('a native result is delivered after its acknowledgement with a current-report receipt', { timeout: 15000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-delivery-runtime-'))
+test('a ready report without a Main-owned work link never becomes a user result', { timeout: 15000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-delivery-runtime-'))
   let native, storage, sessions, engine
   t.after(async () => {
     await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
@@ -141,10 +332,12 @@ test('a native result is delivered after its acknowledgement with a current-repo
     sessions, [], {}, {}, {}, { channel: { deliver: async delivery => { calls.push(delivery); return { type: 'success' } } } })
   const receipt = await engine.submit({ commandId: 'runtime', eventId: 'runtime-message', text: 'What is 2 + 2?' })
   for (let index = 0; index < 6; index++) await engine.effects.drain()
-  assert.deepEqual(calls.map(delivery => delivery.purpose), ['acknowledgement', 'result'])
+  assert.deepEqual(calls.map(delivery => delivery.purpose), ['acknowledgement'])
   const deliveries = await engine.getTicketDeliveries(receipt.ticketId)
-  assert.deepEqual(deliveries.map(delivery => [delivery.purpose, delivery.state]), [['acknowledgement', 'sent'], ['result', 'sent']])
-  const result = deliveries.find(delivery => delivery.purpose === 'result')
-  assert.equal(result.reportId, (await engine.conversation(receipt.ticketId)).reports[0].id)
-  assert.equal(result.text, 'The answer is 4.')
+  assert.deepEqual(deliveries.map(delivery => [delivery.purpose, delivery.state]), [['acknowledgement', 'sent']])
+  const conversation = await engine.conversation(receipt.ticketId)
+  assert.equal(conversation.status, 'ready')
+  assert.equal(conversation.lifecycle, 'open')
+  assert.equal(conversation.reports[0].result, 'The answer is 4.')
+  assert.equal(conversation.messages.some(message => message.purpose === 'result'), false)
 })

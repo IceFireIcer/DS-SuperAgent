@@ -1,14 +1,16 @@
-# DS Bot Super-agent core
+# DS SuperAgent package
 
-This private ESM package hosts the independent TypeScript core. Its public Cordis plugin exposes only the instance-bound Engine; the existing DS Bot entry point does not feed it requests.
+This ESM package is the product's one DSH package. Its root exports the production profile and Host, `./client`
+provides the existing browser UI, and `./web-search` provides the `auto` search provider. The TypeScript Engine,
+`createProductHost`, Office tools and direct Cordis/CLI entry points ship in the same package.
 
 ## Requirements
 
-- Node.js 22.19 or newer.
+- Node.js 24 or newer.
 - An explicitly configured, absolute, writable SQLite database path isolated for this instance.
 - An explicit instance ID and trusted desktop source configuration. `allowedActorIds` is a deployment-owned allowlist, not data from the submitted request.
 
-The core does not read `DSH_HOME`, migrate or inspect a user's DSH data. It runs on an explicitly configured local Environment or a separately paired remote fs/search/command Environment; the two never substitute for each other silently. Without a configured native Session adapter, accepted work remains pending with `worker-not-enabled`. T02 adds the optional Router/Worker execution path below.
+The runtime core does not read `DSH_HOME` or use a user's DSH data as its working store. The core runs on an explicitly configured local Environment or a separately paired remote fs/search/command Environment; the two never substitute for each other silently. Without a configured native Session adapter, accepted work remains pending with `worker-not-enabled`. T02 adds the optional Router/Worker execution path below.
 
 ## Use from Cordis
 
@@ -17,7 +19,7 @@ import { Context } from '@deepseek-ai/cordis'
 import * as Superagent from 'ds-superagent'
 
 const ctx = new Context()
-await ctx.plugin(Superagent, {
+await ctx.plugin(Superagent.enginePlugin, {
   databasePath: '/var/lib/ds-superagent/private.sqlite',
   instanceId: 'private',
   source: {
@@ -33,6 +35,35 @@ await ctx.fiber.dispose()
 ```
 
 The receiving desktop adapter binds `sourceInstanceId` and `actorId` in plugin configuration. Request fields cannot replace identity, policy or mandate scope. Reuse the stable `commandId` for transport retries. A reused command or event ID with different content is an `IDENTITY_CONFLICT`. The returned work keeps the original text and records an immutable explicit Mandate and pending local intent.
+
+## The product Host and DSH profile
+
+`createProductHost(context, config)` opens the business store, acquires the Host lease, reconciles a previous Host,
+restores local or remote Environments and publishes `superagentProduct`. It accepts either SQLite `databasePath` or
+shared PostgreSQL `postgres` configuration, plus the trusted Instance, actor, role routes and local `stateRoot`.
+
+The package root reads `DSH_HOME`, creates the local SQLite store at `<DSH_HOME>/core/state.sqlite`, publishes
+`superagentProduct`, and registers `POST /api/product`. When `DS_SUPERAGENT_POSTGRES` is present, the profile uses the
+PostgreSQL business store and Session provider instead; credentials remain in the Host environment.
+
+The app has one `ds-superagent` profile. Its bundles are `@deepseek-ai/dsh-base`,
+`@deepseek-ai/dsh-web-app`, the voice-input bundle and `ds-superagent`. The app's DSH home is
+`<app data>/superagent`. The profile fails closed when `superagentProduct`, `workspaceRegistry`, a role route or the
+selected database is missing. There is no second plugin row, old/new profile switch, activation gate or
+`botExecutionAdapter` fallback.
+
+The package manifest supplies both DSH bundle and client metadata:
+
+```yaml
+- insert:
+    - id: superagent
+      name: ds-superagent
+    - id: web-search-auto
+      name: ds-superagent/web-search
+```
+
+`dsh/client.js` and `dsh/office.js` are generated assets. `client.js` registers the existing UI as the
+`ds-superagent` module and uses the same namespace for style ownership and translations.
 
 ## Command-line entry
 
@@ -54,17 +85,20 @@ The CLI emits one JSON result on stdout. Keep the database in an isolated projec
 
 ```sh
 npm ci
+npm run build
 npm run typecheck
 npm test
 npm run lint
 npm run mock
 ```
 
-`npm test` rebuilds before running tests and stops if the build fails. Use the same entry for a file or a named regression:
+`npm test` builds the TypeScript, generated client and Office assets, then runs the Server and browser-side suites.
+For a targeted Server test:
 
 ```sh
-npm test -- test/execution.test.mjs
-npm test -- --test-name-pattern="Engine notices" test/execution.test.mjs
+npm run test:server -- test/execution.test.mjs
+npm run test:server -- --test-name-pattern="Engine notices" test/execution.test.mjs
+npm run test:client
 ```
 
 Native model fixtures in `dev/native-mock.mjs` accept a responder returning a synchronous or asynchronous iterable of provider chunks. Use `async function*` for asynchronous responses; a Promise-returning async function is rejected before Session startup. `routerResponse` handles the supplied notification tools, including coalesced turns.
@@ -72,6 +106,26 @@ Native model fixtures in `dev/native-mock.mjs` accept a responder returning a sy
 The mock uses deterministic explicit requests rather than a model and places its temporary SQLite database in the OS temp directory, deleting it and closing its Cordis fiber on exit. `npm run mock` reports elapsed single-request p50/p95/max for 50 SQLite commits, 20 parallel deliveries for one event, and the re-opened CLI receipt; no worker or model is started. On Windows x64 with local Node 25.4.0, the 2026-11-04 recheck measured p50 0.76 ms, p95 1.24 ms, max 1.88 ms per serial submit; the twenty retries returned one Ticket. This small disk-backed local-path sample is a development baseline, not a production storage benchmark or SLA.
 
 SQLite schema version 2 accepts empty databases and upgrades version 1 atomically. A version-1 upgrade first creates a verified, consistent SQLite backup beside the database (`<database>.before-v2-<unique-id>.sqlite`). Retain that backup for recovery. Unsupported versions, unexpected versioned table layouts and nonempty unversioned databases are rejected before schema mutation. Same-process transactions are serialized on one worker-backed `DatabaseSync` connection with a 128-command admission limit; SQLite's default cross-process lock wait is 250 ms. The callback transaction capability expires before commit. An unknown COMMIT is reconciled with the original command ID and fingerprint on a fresh connection under `BEGIN IMMEDIATE`; unavailable reconciliation remains `COMMIT_UNKNOWN`. Rollback-confirmed deadlock/serialization failures retry the whole database-only command, at most three attempts.
+
+## PostgreSQL business storage
+
+`ds-superagent/postgres-storage` exports `PostgresStorage.open(options)`, which implements the same `Storage`/`AsyncTx` contract as SQLite, so `Engine` commands and queries run unchanged on PostgreSQL. Pass either an explicit `connectionString`, or `host`, `port`, `user`, `password`, `database` and `ssl`. `maxConnections` defaults to 8 (1–64), `lockTimeoutMs` to 1500 (1–60000) and `statementTimeoutMs` to 4000 (1–60000). Transactions use `READ COMMITTED`.
+
+```js
+import { Engine } from 'ds-superagent'
+import { PostgresStorage } from 'ds-superagent/postgres-storage'
+
+const storage = await PostgresStorage.open({ connectionString: process.env.SUPERAGENT_DATABASE_URL })
+const engine = new Engine(storage, 'private', { sourceInstanceId: 'desktop-one', actorId: 'local-user', allowedActorIds: ['local-user'] })
+```
+
+Each transaction applies connection budgets, ensures its Instance coordinator row, then opens a `READ COMMITTED` transaction and takes `SELECT … FOR UPDATE` on that row before reading receipts/state or writing records. This is the fixed lock order: one Instance serializes, different Instances proceed independently. Explicit connection setup enforces the search path and budgets even when the connection string contains its own `options`. A `55P03` lock timeout is never reported as an accepted command, and command transactions contain no external side effects.
+
+Errors are mapped as `40001 → SERIALIZATION_FAILURE`, `40P01 → DEADLOCK`, `55P03 → LOCK_TIMEOUT`, `57014 → STATEMENT_TIMEOUT`, `23505 → RECORD_EXISTS`, including server-confirmed failures at COMMIT. Errors thrown by the transaction callback itself are not server errors: `CoreError` and domain errors pass through unchanged, so a Session ownership or format error keeps its type. A lost COMMIT acknowledgement becomes `COMMIT_UNKNOWN`; command processing reconnects and looks up the original `commandId` under the same Instance lock. The whole database-only command retries serialization failures and deadlocks at most three attempts. Connection acquisition is bounded at 5000 ms; lock/statement budgets also cover initialization and the coordinator insert. The attempt limit is a count, not an elapsed-time deadline for arbitrary callback code. Transaction capabilities expire before COMMIT/ROLLBACK and cannot be used after the callback returns.
+
+Schema version 1 consists of `ds_superagent_meta`, `ds_superagent_instances` and `ds_superagent_records` (`body jsonb`, with an identity `seq` for insertion order; `list` follows it, `scan` orders by `id` with byte collation). Versioned layouts, column types, nullability, identity and primary keys are checked on open. Unsupported or orphaned schemas are rejected with `UNSUPPORTED_SCHEMA`. A legacy `records(instance_id, kind, id, body text)` table upgrades only with an absolute `backupDirectory`: under an exclusive legacy-table lock, a logical backup is written, synced and compared in full, then the new tables, copy, old-table rename and version row commit together. Any failure rolls back and keeps the old table. To restore the backup into an empty isolated database, create the four legacy text NOT NULL columns, insert each backup record's `instance_id`, `kind`, `id`, and text `body`, then reopen with a backup directory to upgrade. This restores business records; it does not restore database permissions or external state.
+
+The test suite runs a real embedded PostgreSQL 17 instance on loopback with `fsync=on` and `synchronous_commit=on`; that is an isolated contract harness, not a production deployment. Replication, failover, power-loss durability, TLS and connection-pool tuning are not covered. The same schema can also hold Session records under the separate `session-store` Instance namespace; Session persistence and business facts are still reported separately, and restoring the business database does not roll back Sessions or external side effects.
 
 ## Durable effects
 
@@ -101,7 +155,133 @@ A retry is refused while this runtime still has a live turn, while the Ticket is
 
 T20 wraps every business transaction in a durable instance lease. A Host acquires a monotonically increasing epoch with a non-reusable token, renews it on each guarded transaction, and releases it on `shutdown()`. An unexpired lease held by another Host rejects reads, writes, stop commands and Outbox settlement with `HOST_LEASED`. An expired lease still requires an explicit `engine.acquireHost()` before a new Host gets the next epoch; merely losing contact never grants write authority.
 
-The default Host identity is stable per machine so CLI invocations and same-machine crash recovery continue the same instance. Deployments that run two independent Hosts must configure distinct `host.hostId` values. `engine.getHostLease()` exposes the epoch, token, acquisition/renewal and expiry facts. Session persistence keeps its own writer epoch, and assignment callbacks still verify Assignment ID and generation; the business database lock is never treated as proof that a device process has stopped.
+The default Host identity is stable per machine, but the lease is owned by a process: another process, even on the same machine and with the same `hostId`, never renews a live lease and gets `HOST_LEASED` until that lease expires or is released. Deployments that run two independent Hosts should still configure distinct `host.hostId` values. `engine.getHostLease()` exposes the epoch, token, acquisition/renewal and expiry facts. Session persistence keeps its own writer epoch, and assignment callbacks still verify Assignment ID and generation; the business database lock is never treated as proof that a device process has stopped.
+
+`apply()` acquires the lease at startup, so the plugin, the CLI and the app boot as a Host instead of borrowing authority. `engine.acquireHost()` also takes over the work left by the Host it replaced. The new epoch and a pending `host-takeover` record commit together; until every Ticket is reconciled, new submissions, accepted source work, Attention answers, resumes and retries fail with `HOST_TAKEOVER_PENDING`. A lease released by a clean stop resumes the next epoch without a takeover; a lapsed, unreleased lease is treated as a possibly live replacement and is reconciled. The old Host, including a resurrected process, stays fenced by its lease token. Reconciliation inspects device ranges and remote jobs by their original IDs, preserves stops, human questions and revoked authority, adopts a live device range by its stable job ID, and ends the old Assignment before creating a successor with a recovery note. Unprovable external work becomes a waiting-human question instead of a successor. `engine.getHostTakeover()` returns the per-Ticket outcome and blocker evidence for the current epoch.
+
+## Authenticated client access
+
+T45 adds a dedicated authenticated entry for a desktop client. `engine.createClientAccess()` creates the store on this Engine's Host-fenced storage. `ClientAccess.enroll({ commandId, label, grants })` returns a `sc1.<clientId>.<secret>` credential once; only its SHA-256 is persisted. A grant names the serving Instance and explicit `read` and/or `command` capabilities; another Instance is rejected instead of creating an inert grant. Replaying the enrollment command returns the same client without the secret, while a revocation is visible to the next request without a reconnect.
+
+`createClientGateway(engine, access, { host, port, tls })` serves `/instances/<instanceId>/state`, `events`, `tickets/:id`, `conversations/:id` and `receipts/:id` to `read` clients, and `commands/{submit,answer,stop,resume,retry,status}` to `command` clients. A loopback listener may use HTTP; any non-loopback bind requires TLS key and certificate or fails with `TRANSPORT_INSECURE`. There are no device, background-job, preview, subagent or Worker-tool routes, so a client grant does not widen execution authority.
+
+The event journal stores each state snapshot, Attention transition and result under a stable content key. Attention and result events are projected from the durable histories, so a client that was offline through more than one result still receives every missed result. `events?after=<cursor>&limit=<1-500>` returns an exclusive-cursor page, so a disconnected client catches up once without re-running a command; a successfully committed command records one receipt even when its HTTP response was lost. The loopback chat server may be given `{ clients }` to expose the trusted local `GET /clients`, `POST /clients` and `POST /clients/revoke` administration routes. Those routes are not the public client API. The current protocol is polling-based; journal keys have no reclamation policy yet, and the real desktop-to-isolated-Host combination remains part of T55.
+
+## Independent Watchdog
+
+T47 adds an operational loop outside the Host: `Watchdog` (`ds-superagent/watchdog`) takes a `WatchdogHost` adapter, probes the service, classifies what it sees, and records every inspection in the durable `watchdog-state` record. The default interval is one hour; each inspection makes at most one restart attempt.
+
+```js
+import { Watchdog } from 'ds-superagent/watchdog'
+
+const watchdog = new Watchdog({
+  instanceId, storage, host, intervalMs: 3_600_000, graceMs: 300_000,
+  notify: notification => deliverToOperator(notification),
+})
+watchdog.start()
+```
+
+The classification is deliberately narrow:
+
+| Observation | Action |
+| --- | --- |
+| The service is healthy, paused, reconciling a takeover, or has Tickets waiting for a person/device/external condition | None; normal waiting is not a failure. |
+| A source is `failed`, an unknown external effect exists, or setup is missing/failed | No restart. Notify once per unchanged error and record the component/setup facts. |
+| The service itself is unreachable or its process is gone | Stop the Host gracefully, wait up to the grace period (default five minutes), start a replacement, and probe again. A successful recovery is silent. |
+| The Host did not stop in time, did not start, or is still unhealthy | Do not force-kill and do not loop. Escalate to a person with the action and result recorded. |
+| More than `maxRestarts` (default 3) in `restartWindowMs` (default 6 h) | Stop restarting and escalate once; the budget is part of every inspection record. |
+
+`WatchdogHost.start()` is required to acquire the Host lease and finish the replacement takeover before it resolves, so the Watchdog never resumes stopped work, a pause, a revocation, or an unknown effect itself: the Host's fencing/takeover path (T44) owns that reconciliation. The Watchdog only asks, waits, and records. Notifications are deduplicated by the unchanged error fingerprint and cleared after health, a normal wait, or a successful recovery; health and recovery therefore stay quiet.
+
+`ProcessWatchdogHost` (`ds-superagent/watchdog-process`) supervises a real child process. The child writes an atomic status file (PID, timestamp, epoch, sources, setups, normal waits, takeover/pause facts) and listens for one IPC `shutdown` message. A status older than `staleMs` or a dead PID is a service failure. The adapter never sends a force kill: if the child does not exit within the grace period, `stop()` returns `timeout` and the Watchdog escalates. `dispose()` exists only for test/rehearsal cleanup.
+
+The CLI entry is `ds-superagent-watchdog` (`node dist/watchdog-cli.js`):
+
+```sh
+node dist/watchdog-cli.js \
+  --database /absolute/path/state.sqlite --instance private \
+  --status /absolute/path/host-status.json \
+  --host-command node --host-arg /absolute/path/host.mjs \
+  --host-arg --status --host-arg /absolute/path/host-status.json
+```
+
+The R5 product profile accepts `DS_SUPERAGENT_WATCHDOG_STATUS_PATH` from its trusted Host environment. Set it to an absolute path beside its isolated business store, and launch the independent Watchdog CLI with that same status path, Instance and database. The product Host writes a bounded atomic health snapshot after acquiring its lease and refreshes it every ten seconds; the CLI owns the only restart budget and persists inspections to the same business store. The Supervisor runs in a separate native Session inside the product Host; local product settings show its proposals and inspection history. The CLI must start and own the production Host child process to perform graceful replacement. A Host already owned by the desktop shell is only observed: the process adapter cannot stop a foreign live process. A stale SQLite `state.sqlite.watchdog-<instance-hash>.lock` after an abnormal Watchdog exit requires an operator to verify the old process is gone before clearing it. See [R5-24 implementation](../docs/superagent/implementation/r5-24.md) for the product-specific scope and remaining deployment evidence.
+
+It runs the loop at the declared interval (default one hour); `--once` is a diagnostic inspection that stops the Host it started after a recovery. The Host entry is deployment-specific: it must mount the public Engine, write the status file and listen for the IPC `shutdown` message, as `dev/t47-host.mjs` does.
+
+`node dev/t47-acceptance.mjs` runs the Windows native rehearsal twice: a local SQLite Host and a hosted PostgreSQL Host (embedded PostgreSQL, shared business backend). Each Host is killed, the Watchdog records a healthy inspection, restarts the Host through the lease/takeover path, and the new epoch reconciles the seeded running Assignment through the native `Execution` takeover. The 2026-11-11 Windows 11 / Node 24.22.2 run recorded for both recipes: epoch 1 → 2, `takeover.state: completed`, one Ticket with `resumed` outcome, budget `1/2`, and no notification because the recovery was clean.
+
+The Watchdog is not the semantic supervisor of T48: it does not judge whether the work is making progress or propose changing a goal. Those proposals need their own evidence and human approval. A Host that the Watchdog did not start needs a deployment-specific `WatchdogHost` control adapter; `ProcessWatchdogHost` deliberately reports `timeout` rather than signalling a process it cannot ask gracefully.
+
+## Semantic supervision
+
+T48 adds `engine.createSupervisor()` (`ds-superagent/supervisor`). One inspection compares the Ticket's request, Mandate, reports, tool facts, delivery state, direction version and job/subagent facts; it does not judge a process by liveness or elapsed time alone. The `SupervisorSnapshot` and every proposal keep the full observation, recommendation, impact and version.
+
+```js
+import { createSessionAssessor } from 'ds-superagent/supervisor-session'
+
+const supervisor = engine.createSupervisor({
+  assess: createSessionAssessor(sessions, { sessionId: 'supervisor-private', version: 'prompt-v1' }),
+  stallMs: 30 * 60_000, stallObservations: 3, version: 'supervisor-r1',
+})
+const report = await supervisor.inspect()
+```
+
+The deterministic findings are:
+
+| Observation | Finding |
+| --- | --- |
+| attention waiting, device/external wait, stop, paused, ready or ended | `normal-wait`/`ready`/`ended`; no assessment and no proposal |
+| unknown effects/jobs | `unknown`; call the existing `reconcileRemoteWork` (or `reconcileStop` while stopping) first |
+| the same progress fingerprint for the configured observations/time | `no-progress` |
+| the same tool-fact fingerprint repeating | `loop` |
+| the independent Session judges the work has drifted | `deviation` |
+
+`createSessionAssessor` uses a stable Session id separate from the Router and every Worker, the public DSH Agent loop, one `record_supervision` tool, and no work, Router, delivery, approval, device or configuration tools. The assessment records its model route and prompt/config version. A real model endpoint is deployment configuration; the tests use the mock model and do not claim real-model judgment quality.
+
+Proposals are durable `supervisor-proposal` facts and are shown as `supervisorProposals` on each `getSupervision()` item while proposed. One proposal is open per Ticket, unchanged evidence is deduplicated, and the default budget is two proposals per six hours. `supervisor.inspect()` never pauses, stops, edits or retries anything. `supervisor.decide({ commandId, proposalId, decision, reason })` claims the proposal atomically, then:
+
+- an approved `pause` calls the existing `engine.stopTicket`; this is a stop, not a reversible pause, and the impact says an explicit resume is required;
+- an approved `correct` calls `engine.correctTicket`, which adds one authorized direction input (`supervisor-correction`) for the Worker; the Supervisor executes no tool and does not change the Mandate;
+- a rejection records the decision and reason and executes nothing.
+
+The decision command has a stable fingerprint and a `deciding` claim, so a reused command ID across proposals is rejected and concurrent approvals execute one action. The action's result or error is stored on the proposal; replaying the same command ID returns the original decision.
+
+The Supervisor does not change roles, prompts, models, policies or permissions. Those versioned configuration changes belong to T49. The default tests cover deterministic normal-wait/loop/no-progress/deviation, budgets, dedupe, unknown reconciliation, the real direction input, and approval/rejection; `test/supervisor-session.test.mjs` runs the independent Session through the real DSH Agent loop with the mock model.
+
+## Trusted behavior configuration
+
+T49 lets an explicitly authorized maintainer change versioned prompts and trigger rules through `engine.updateBehaviorFromInstruction({ commandId, instruction, expectedRoleRevision?, expectedPolicyRevision?, signal? }, interpreter)`. The authoring permission is `DesktopSource.authoringActorIds`, a subset of `allowedActorIds`. When it is configured, the direct `updateRoleConfig` and `updateIntakePolicy` settings paths require the same actor too; `origin: 'sync'` is the system-sync exception. Source text has no path into this command.
+
+The interpreter is constrained before the Engine applies anything:
+
+| Target | Allowed | Fixed |
+| --- | --- | --- |
+| Roles | prompt instructions and skills | role names, provider/model routes, tools and permissions |
+| Policy | intake `mode` and trigger `rules` | budgets, requester/bot allowlists, self actor ids and the assessor |
+
+Router prompts must keep `{{goal}}`; Worker prompts must keep `{{goal}}` and `{{constraints}}`; the complete roles JSON is at most 64 KiB and individual names/instructions/skills reuse the `validateRoleConfig` limits. Policy changes are merged into the current policy and validated with `validateIntakePolicy`. Unknown fields, tools, allowlists, budgets, devices, publication rights, stop/pause/resume and config-write keys are rejected.
+
+`createSessionConfigInterpreter(sessions, { sessionId, version })` runs an independent Session through the public DSH Agent loop with one `propose_behavior_change` tool; it records at most one change per instruction, records the current route from `sessions.getRoutes().router`, and has no work, Router, approval, device or config-write tools.
+
+Each instruction is a durable `behavior-instruction` record with the original request, fingerprint, expected revisions, complete change, summary, interpreter version/model, effective role/policy revision and status. The lifecycle is `interpreting` → `applying` → `applied`/`conflict`/`failed`; a crash after interpretation resumes the stored change instead of re-interpreting, and action command IDs are idempotent. The settings CAS is rechecked inside the commit transaction; role changes use the T23 request boundary and `role-config-use` records, while policy changes use the T25 in-flight Eval invalidation and live Ticket notices.
+
+A revision conflict stores one `config-draft` per instruction with the pending change and current revisions; it never overwrites the newer configuration, and replaying the same instruction does not duplicate the draft. Drafts are queried with `getConfigDraft`/`listConfigDrafts`; reapplying is an explicit new revision, not an automatic replay.
+
+The config command never cancels a human stop, grants a device or publication permission, or gives the Watchdog/Supervisor a write path. There is no chat/settings UI or remote authoring route in this ticket; the public Engine command is the entry point. The tests use deterministic/injected interpreters and the mock Session; no real-model endpoint sample was run.
+
+## Removed old-runtime migration
+
+R5-34 removes the old team runtime and its cutover products. The former archive, switchover, activation and reversal
+packages are no longer built or exported. Existing user files are left on disk; the product starts one
+`ds-superagent` profile and does not reconstruct, resume or expose the old roster, round, group, Bot-to-Bot or native
+Session history paths.
+
+## Collaboration load comparison
+
+T54 adds `dev/collaboration-bench.mjs`, a fixed mock workload (`seed=20261111`, 6 initial requests, 6 same-thread follow-ups, 20 ms Worker turns, Router batch limit 20, 2 normal + 1 priority slot) that runs the same stream as one Native Session, as independent Router/Worker tickets, and as a subscribed Ticket with direct follow-ups. It reports acceptance/response p50/p95, Router calls and batches, Worker calls, direct-follow-up ratio, notifications, duplicate replay, and state reopen in JSON. The captured result is `docs/superagent/implementation/t54-bench.json`; it is a development measurement, not a product SLA.
+
+The mock reports no token usage; the run records that explicitly instead of inventing tokens. The budget table in `docs/superagent/implementation/t54.md` compares the declared Effects/slots/jobs/subagents/Input/Host/Watchdog/Supervisor/PostgreSQL/SQLite budgets with historical evidence. Real-model token/latency, remote and managed Hosts, proactive/supervisor reruns, unknown outcomes and crash recovery remain explicitly unverified in this ticket.
 
 ## Context cards and bounded reads
 
@@ -145,6 +325,8 @@ A poll separates malformed/out-of-scope items (counted as `malformed` and skippe
 
 GitHub's isolated repository acceptance (T25–T27), a real isolated scheduled run (T28), a real-model proactive sample (T29), the Feishu OpenAPI transport with protocol fixtures (T30) and the in-place Feishu answer flow with protocol/end-to-end fixtures (T31) are recorded. A real Feishu tenant/group run remains outstanding and was deferred by the maintainer.
 
+T57 adds `dev/t57-env-check.mjs`, `dev/t57-model-acceptance.mjs` and a real-model mode for `dev/github-acceptance.mjs`. The environment check verifies a real model request, the test repository's write permission and the configured Feishu tenant/chats without printing credentials; missing Feishu settings are `unverified`, not passed. The model sample drives the real public DSH loop through a bounded OpenAI-compatible `LlmAdapter` and covers cross-channel intent, scope/injection resistance, a Supervisor semantic probe and a trusted configuration instruction. The GitHub run uses the real model for Router/Worker, a real check run and the existing real GitHub delivery channel with a read-back native receipt. The 2026-11-12 run passed model and GitHub; Feishu remains unverified because no tenant/chat credentials were configured.
+
 ## P/R delivery conditions and destination changes
 
 `bindDeliveryCondition` ties one or more P/R conditions to a Ticket. A ready result can be delivered, but while any condition is `open` or `draft` the Ticket stays open and `conversation.deliveryPending` is true. `reconcileDeliveryCondition` advances the condition from received source text (`merged`/`closed`/`open`) and retains its result and evidence. Multiple P/Rs are independent; a pending follow-up Input also delays final completion.
@@ -159,6 +341,10 @@ These are core behaviors only: the isolated real-repository create/review/merge 
 ## Proactive rules
 
 `updateProactiveRules` stores revisioned observe/auto rules with actor/addressing/text matching, communication mode, an optional scope and a per-window run budget. Observe records `proactive-run` only. Auto acts only on the current recorded source event, suppresses repeated bot/CI text and ambient noise, reserves budget in a transaction, and prepares in an isolated directory outside that transaction through an injected callback; authorized system schedule occurrences can prepare. A useful summary is `prepared` with artifacts verified for containment, size, SHA-256 and a byte budget inside the isolated directory; no useful result is `silent`; errors/timeouts are `failed`; exhausted budget is visible and does not widen authority. Preparation never creates an Outbox, PR, message or merge permission. Pausing global processing skips evaluation.
+
+Set `DS_SUPERAGENT_GITHUB_OWNER`, `DS_SUPERAGENT_GITHUB_REPO` and `DS_SUPERAGENT_GITHUB_ALLOWED_REQUESTER_IDS` to configure one repository and the comma-separated list of people whose requests can enter Main. An empty list allows observation only. Use `DS_SUPERAGENT_GITHUB_SELF_ACTOR_IDS` for bot accounts to ignore. In Settings, select a managed credential for the configured GitHub source and grant Main the `source` purpose for `github:owner/repo`. The Host uses `gh api` to read changes with the selected credential. Product preparation settings allow observe and auto rules for bot and CI events in that repository.
+
+To deliver to GitHub, set `DS_SUPERAGENT_GITHUB_POSTING_ACTOR_ID` to the credential account's exact GitHub login and grant Router the `outbound` purpose for the same source. Give the credential permission to comment on the test repository or the approved deployment repository. GitHub delivery history includes the verified comment ID and URL. If GitHub may have accepted a comment before a failure, the Outbox looks for that comment using the original delivery identity. A confirmed grant denial or unavailable destination appears in delivery history.
 
 Real-model intent/scope quality, false-trigger and effective-delivery samples remain outstanding.
 
@@ -259,6 +445,16 @@ T37 keeps attachments, artifacts, long output and skills inside the bound execut
 
 `PreparedEnvironment.artifact()` now carries an environment-bound `reference`. `saveAttachment()` writes exact bytes (at most 65536), `readAsset()` pages attachments, artifacts, spills and skills by byte offset with digest verification, and `spillReference(jobId, stream)` exposes the complete durable output of a background job (up to 1 MiB). A spill or file whose bytes no longer match the reference returns `REFERENCE_STALE`; an unavailable combination returns `ENVIRONMENT_UNSUPPORTED` with named gaps. `Engine.getEnvironmentCapabilities(environmentId)` reports attachment, spill and skill support and gaps; `Engine.saveEnvironmentAttachment({ commandId, environmentId, name, data, encoding?, mediaType? })` is idempotent by command ID; `Engine.readEnvironmentAsset({ environmentId, reference, offset?, maxBytes? })` re-prepares and verifies the original Environment before reading, so a reconnected device resumes the same reference. Workers get `save_attachment`, `read_asset` and `list_skills` only when the bound Environment supports them; `read_job_output` is a parent-only job tool. Delegated children inherit the same bound asset tools and directory.
 
+T38 declares where browser, MCP and Office product capabilities execute. The desktop source may set `hostCapabilities: { browser: true, mcp: true }`; these are Host-only declarations and are never copied into a Ticket or a remote Environment. `submit` and `acceptSource` accept `capabilities: ['browser', 'mcp', 'office']`, stored on the Trigger and Mandate. `Engine.getCapabilityLocations()` returns the Instance's catalog: browser and MCP are `host` capabilities with Host credentials and privacy; Office is an `environment` capability that requires a skills provider, a configured `office` command, and the `read` plus `command` permissions. Every remote capability entry carries an explicit `remote-*-contract-unverified` gap, so a `remote-only` Ticket that asks for any of them stays `environment-waiting` without an Assignment. `conversation(ticketId).capabilityPlan` and `Engine.getCapabilityPlan(ticketId)` show the required locations, availability, blockers, credential scope and privacy scope. Resolution is read-only: it never adds a permission, device grant, Host path or publication right. The local chat preview exposes `GET /capabilities`, capability checkboxes, per-Ticket locations and a global catalog.
+
+T39 adds a read-only preflight for a handoffable Git work copy. `Engine.prepareHandoffCopy({ commandId, ticketId, targetEnvironmentId })` inspects the fixed source Assignment and the requested target Environment, records their locations, the base commit, every modified/added/deleted/untracked path with byte count and SHA-256, the bounded binary patch hash and the total transfer bytes. `Engine.verifyHandoffCopy({ commandId, ticketId })` re-reads both sides and requires the target commit and hashes to match; `Engine.getHandoffCopy(ticketId)` returns the latest prepared/verified/`handoff-blocked` record. Unknown target changes, a different target commit, a source change after preparation, symbolic links, renames, missing Git, and scan/change/patch budgets are explicit blockers. Preflight never changes the Assignment, starts an execution, writes a target file or substitutes a Host path. `PreparedEnvironment.inspectWorkCopy()` is shared by local and paired-device Environments, and the device serves the bounded `workcopy.inspect` operation. The explicit sync itself remains outside T39; T40 consumes this manifest for the actual handoff.
+
+T40 moves a Ticket's execution between Environments at a safe boundary. `Engine.requestHandoff({ commandId, ticketId, targetEnvironmentId, reason })` first re-resolves the target with the same explicit-target rules as T36/T38 (Ticket target kind, actor allowlist, probe online/directory/version/fingerprint, Instance permissions, required capabilities, capacity), so a target the Ticket excludes becomes `target-ineligible` instead of being used. It then records `handoff-requested` before it touches any execution range, and blocks with a named reason when the Ticket is ended, constrained, stopping, already has a ready report, failed setup, or still has an active Worker turn, background job, child Agent or preview. Any `starting`, `running`, `cancelling` or `unknown` range stops the handoff; settled jobs are recorded as `jobs-reconciled` evidence, and a remote job also needs `rangeSettled`. The prepared copy must be `verified` and still belong to this Assignment, source and target.
+
+With the boundary clear, the source Session is flushed through the public Session contract (a live Agent flushes; otherwise a persisted Session must exist), then the target and copy are revalidated, and the switch commits in one transaction: the old Assignment ends, a new Assignment with the same `sessionId` and a fresh generation binds the target Environment, the old slot is released, the intent becomes `handoff-pending`, the relay is enqueued, and the completed record is written together with the `commandId` receipt. A reused command ID replays that record; an unfinished `requested`, `flushing` or `switching` record fails a new request with `HANDOFF_IN_PROGRESS` rather than overwriting progress (restart reconciliation is T41). The new generation may only start through that handoff relay, which records `promptStartedAt` in the same transaction that admits its slot, so other follow-ups wait; the turn receives an explicit handoff prompt naming the source and target roots and the verified copy instead of re-adding the original request. If that turn fails during setup, the marker is cleared in the same transaction and `retrySetup` requeues the same relay, so unconsumed work continues. Old-generation jobs, children, inputs and callbacks stay isolated by Assignment ID and generation; the Ticket, Mandate, Session history and both stores do not move.
+
+T41 guards interruption and precedence around that switch. On startup the Host scans unfinished `handoff-state` records (`requested`, `flushing`, `switching`), reconciles each against current facts (Ticket constraint/stop/waiting-human, ready report, setup, unknown relay Effects, source Assignment id/generation/state, active turn/job/child/preview, source and target identity and authorization, re-verified work copy and target eligibility), then continues the same record instead of creating a new handoff. At most 25 are reconciled per start; a failing record becomes `handoff-recovery-failed` without stopping the others. Stop wins: `stopTicket` writes an unfinished handoff as `blocked` in the same transaction that records the stop, and `resumeTicket` only creates a new source Assignment. Pause rejects a new handoff and defers startup recovery; unknown relay outcomes block with `unknown-effect` while unknown outbox acknowledgements do not. Every blocker carries `nextOwner` (`operator`, `human` or `host`), and the local chat shows an `Execution handoff` panel with the state, source and target, last step and each blocker owner. A target that is offline or no longer authorized stays blocked; the handoff never falls back to the Host-local world.
+
 `RemoteEnvironment.revoke()` asks the device to persist the revocation and then stops the host from using it. The device operator can also inspect pairings with `RemoteDevice.listPairings()` and revoke one locally with `revokePairing()`. `snapshot()` and `RemoteEnvironment.restore()` allow an explicit host restart path; the snapshot contains the host exchange private key and must be stored as a protected credential. A revoked or closed environment cannot export a new snapshot.
 
 For a real device, write `{ "deviceId": "...", "root": "...", "grants": [...], "commands": {...}, "jobsPath": "...", "statePath": "...", "assetsPath": "...", "skillsPath": "..." }` to a protected config file. `assetsPath` and `skillsPath` are optional deployment roots; set them to serve attachments, spill and skills. Set `listenHost` to the interface to bind; a wildcard listener also needs a reachable `advertiseHost`. Then run:
@@ -314,6 +510,16 @@ T15 mounts the public DSH `SessionPersistence` service on the same SQLite transa
 `open(id, 'write')` succeeds only when no live writer row is active, so one Session has one writer; a second attempt raises `SessionAlreadyOwnedError`. The active row carries the owner PID: a crashed holder (dead PID) is taken over with a new epoch like the JSONL backend's kernel lock, while a live process or a second in-process instance is refused. Each `append`, `flush` and `close` re-reads the writer row in the same transaction and compares its `epoch` and activity flag, so a handle left behind by a replaced backend or a crash cannot silently write again: it raises `SessionOwnershipLostError` instead. `append` commits on every call, which is why the Agent loop's pre-publication seed (`appendUnstoredSuffix`) is already durable. A failed `flush` or `close` keeps write ownership: the handle stays open and can still append or flush, and it never reports success it did not observe. A created Session that is never materialized (no append or explicit flush) removes its own meta and writer rows on close, so a failure before publication leaves nothing behind for a later `stat()` to mistake for a resumable Session; a flushed empty Session survives. An append writes its events and the header cursor in one transaction, so a mid-batch failure leaves no partial log and can be retried; a failed live append stops the handle and surfaces the original error at `flush`/`close` instead of dropping later events. A service-wide `flush()` drains every open write handle and aggregates any failure without releasing a single owner.
 
 The plugin routes `session/event` into the live append chain of the active handle, maps `session/flush` to `handle.flush()`, and drains plus releases on `session/disposed`. Because DSH stores the unpublished suffix before `prepared.publish()`, construction and resume records such as `session/end-seed` and interrupted-turn closers are readable when `session/created` is announced, not only after later live events. `NativeSessions` no longer keeps an in-process completion set; it asks the public `stat()` whether a Session is persisted and chooses `resume()` or `create()`, so a replaced adapter or a restart continues the same log. `node --test test/session-persistence.test.mjs test/native-runtime.test.mjs` covers the handle contract, writer fencing, crash takeover, service flush, interleaved Sessions, fork lineage, backend replacement, resume after replacement, cancellation, real DSH fork and pre-announce durability. This stores Session history; business facts keep their own records, and the two are reported separately.
+
+## PostgreSQL Session persistence
+
+T43 mounts the same public `SessionPersistence` contract on a shared PostgreSQL backend. `session-persistence-postgres` (`ds-superagent/session-persistence-postgres`) takes the same explicit options as `PostgresStorage`: either a `connectionString`, or `host`, `port`, `user`, `password`, `database` and `ssl`. It writes to the `session-store` Instance namespace, so its transactions are independent of business commands even when both use the same database and schema.
+
+Writer ownership is a PostgreSQL session-level advisory lock on a dedicated pooled connection instead of a local PID check. Another process, or a second provider in the same process, receives `SessionAlreadyOwnedError`; `create` for an existing or actively created identity receives `SessionAlreadyExistsError`. PostgreSQL releases the lock when the holder closes the handle or its connection dies, so a crashed holder does not block a later writer, and a takeover still advances the durable writer epoch. Every `append`, `flush` and `close` re-reads the writer row and compares that epoch, and a handle whose lease connection was terminated raises `SessionOwnershipLostError` before mutating the log. Read handles take no lease, so another process can read the same history while a writer is active.
+
+Each active write handle holds one lease connection; that pool uses the same `maxConnections` and timeout budgets as the main pool, so a deployment must size connections for its concurrent writers. Closing `PostgresStorage` releases leases that a failed final transaction could not release, so shutdown does not wait forever on a broken handle. The provider persists every `append` before returning, so DSH's pre-publication suffix is durable before `session/created` is announced; provider replacement or restart reads the complete history and never gives the old handle write access again.
+
+`node --test test/session-persistence-postgres.test.mjs` runs twelve tests against the real embedded PostgreSQL 17.11 instance: the public handle contract and contiguous log, fork lineage, two operating-system processes contending and recovering a crashed holder, a terminated lease and a moved epoch, real server-side flush/close failures, a lost COMMIT acknowledgement, business-transaction independence, provider replacement, the DSH announcement barrier with its failure path, and Worker resume after the adapter is replaced. These use a loopback test cluster and the mock model, not a production database, replication or a real model. Connection credentials are generated per test run and never printed.
 
 ## Input recovery after restart
 

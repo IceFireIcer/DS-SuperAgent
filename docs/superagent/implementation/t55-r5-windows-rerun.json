@@ -1,0 +1,59 @@
+{
+  "status": "passed",
+  "sourceBase": "a952e764e543161d70c09037a4757f1f1c779177",
+  "sourceChanges": [
+    {
+      "path": "superagent/src/execution.ts",
+      "gitBlob": "60e5c2fb6cdb564c7b65ef819954c93d0eec839b"
+    },
+    {
+      "path": "superagent/src/work-delegation.ts",
+      "gitBlob": "c0efd81b546ce94fdf5876f2b4834d8c8fdff1f1"
+    }
+  ],
+  "platform": "Windows 11 x64 10.0.26200",
+  "electron": "44.7.0",
+  "harness": "0.2.1-rc.4",
+  "node": "v24.22.3",
+  "startedAt": "2026-11-19T04:06:18.8398504+08:00",
+  "finishedAt": "2026-11-19T04:15:53.7457038+08:00",
+  "model": "mock",
+  "artifacts": {
+    "appAsarSha256": "e131613f4787fab78db5355db62e761c67eca595660ac609cb45206b92bcee29",
+    "executableSha256": "977f59373c14bc8945b07b9ba081118aec27c672131ad6b5629b55c16258f400",
+    "installerSha256": "9f0df9a896239a8365f389ac5aee335efc5ccb027572e1f7b80552b9b2b0b205",
+    "previousInstallerSha256": "4df3023f9dbdca13b745fd27db4601bc233f8dd8e954e62c8248e4b03c1feca7"
+  },
+  "phases": [
+    {
+      "id": "nsis-upgrade",
+      "exitCode": 0,
+      "elapsedMs": 487460,
+      "installerAndRegistrationCleanup": true,
+      "result": {
+        "coldUpgrade": [
+          "0.2.5",
+          "0.2.6"
+        ],
+        "mainId": "main-26002ac8-aa41-43fa-9139-7c8b8409be45",
+        "messages": 2,
+        "mainTokens": 2,
+        "scheduleEnabled": false,
+        "businessRecords": 16,
+        "sessions": 1
+      }
+    },
+    {
+      "id": "native-work-controls",
+      "exitCode": 0,
+      "elapsedMs": 83186,
+      "result": {
+        "controls": "passed",
+        "alphaTicketId": "acaf6fe5-48ea-4d07-9bfe-e2938389d1c2",
+        "betaTicketId": "04f4fcde-7489-4f1c-bc04-fcc5cc25bf7a",
+        "alphaSessionId": "worker-2001a87e-2123-4f3a-9ae6-7363867de8a3",
+        "betaSessionId": "worker-123b889b-16a5-4306-9d5a-1f41112abed2"
+      }
+    }
+  ]
+}

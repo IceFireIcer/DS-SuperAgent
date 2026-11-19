@@ -1,0 +1,123 @@
+import type { Context } from '@deepseek-ai/cordis'
+import type { ProductHost } from './product-host.js'
+
+interface NativeRequest {
+  url?: string
+  [Symbol.asyncIterator](): AsyncIterator<Uint8Array | string>
+}
+
+interface NativeResponse {
+  statusCode: number
+  setHeader(name: string, value: string): void
+  end(body?: string): void
+}
+
+interface ProductScope {
+  superagentProduct: ProductHost
+  connection: {
+    fetch: {
+      register(route: {
+        path: string
+        methods: string[]
+        requestBody: 'buffered'
+        fetch(request: Request): Promise<Response>
+      }): () => unknown
+    }
+  }
+  inject(dependencies: string[], callback: (scope: Context) => unknown): unknown
+  effect(execute: () => () => unknown, label?: string): unknown
+  on(name: 'connection/request', listener: (request: NativeRequest, response: NativeResponse,
+    next: () => unknown) => Promise<unknown>): () => unknown
+}
+
+const errorResponses: Record<string, { status: number; message?: string; detail?: boolean }> = {
+  SOURCE_NOT_AUTHORIZED: { status: 403, message: 'This conversation is outside the authorized workspace.' },
+  MEMORY_DENIED: { status: 403, detail: true },
+  NOT_FOUND: { status: 404, message: 'The requested work activity is unavailable.' },
+  RUNTIME_CLOSED: { status: 503, message: 'The product Host is closed.' },
+  COMMIT_UNKNOWN: { status: 503, detail: true },
+  IDENTITY_CONFLICT: { status: 409, message: 'This message identity was already used for different text.' },
+  CONFIG_REVISION_CONFLICT: { status: 409, message: 'The configuration changed elsewhere. Your draft is still here.' },
+  INVALID_CONFIG: { status: 400, message: 'Check the role configuration.', detail: true },
+  INVALID_INPUT: { status: 400, message: 'Check the request fields.', detail: true },
+  UNAVAILABLE: { status: 400, message: 'This product capability is not connected yet.' },
+}
+
+function productError(endpoint: unknown, error: unknown) {
+  const value = error as { code?: unknown; message?: unknown }
+  const code = typeof value?.code === 'string' ? value.code : 'PRODUCT_UNAVAILABLE'
+  const endpointName = typeof endpoint === 'string' ? endpoint : ''
+  const preset = endpointName.startsWith('preset-') && (code.startsWith('PRESET_') || code.startsWith('INVALID_PRESET')
+    || code === 'IDENTITY_CONFLICT' || code === 'COMMIT_UNKNOWN')
+  const memory = endpointName.startsWith('memory-') && code.startsWith('MEMORY_')
+  const response = errorResponses[code]
+  const message = preset ? String(value?.message ?? 'Check the preset request.')
+    : memory ? String(value?.message ?? 'Review the current memory scope.')
+      : response?.detail ? String(value?.message ?? response.message)
+        : response?.message ?? 'Main is unavailable. Your accepted messages remain in the conversation.'
+  const status = response?.status ?? (code.startsWith('PRESET_') || code === 'MEMORY_STALE'
+    || code === 'MEMORY_CURSOR_STALE' ? 409 : 400)
+  return { code, message, status }
+}
+
+export const inject = ['connection', 'superagentProduct']
+
+/** Register the existing client's product protocol beside the production Engine host. */
+export function apply(context: Context) {
+  const ctx = context as unknown as ProductScope
+  return ctx.inject(['connection', 'superagentProduct'], scope => {
+    const productScope = scope as unknown as ProductScope
+    productScope.effect(() => productScope.on('connection/request', async (request, response, next) => {
+      const path = new URL(request.url ?? '/', 'http://localhost').pathname
+      if (!path.startsWith('/api/session/') && path !== '/api/session.export') return next()
+      if (path === '/api/session/list') {
+        let text = ''
+        for await (const chunk of request) {
+          text += chunk.toString()
+          if (Buffer.byteLength(text) > 4096) {
+            response.statusCode = 413
+            response.end()
+            return
+          }
+        }
+        let rpcId: unknown
+        try { rpcId = JSON.parse(text)?.rpcId } catch { /* Invalid envelopes receive the same bounded refusal. */ }
+        response.setHeader('content-type', 'application/json')
+        response.end(JSON.stringify({ type: 'server-response', rpcId, result: { ok: true, value: { items: [] } } }))
+        return
+      }
+      response.statusCode = 403
+      response.setHeader('content-type', 'application/json')
+      response.end(JSON.stringify({ type: 'server-response', result: { ok: false, error: {
+        code: 'product/session-forbidden',
+        message: 'Use the authorized Main conversation. Native Session access is unavailable.',
+        details: {},
+      } } }))
+    }), 'superagent: close native Session access')
+    productScope.effect(() => productScope.connection.fetch.register({
+      path: '/api/product',
+      methods: ['POST'],
+      requestBody: 'buffered',
+      async fetch(request: Request) {
+        let body: { endpoint?: unknown; payload?: Record<string, unknown> } | undefined
+        try { body = await request.json() as typeof body }
+        catch {
+          return Response.json({ ok: false, error: {
+            code: 'INVALID_INPUT',
+            message: 'Send a JSON product request.',
+          } }, { status: 400 })
+        }
+        try {
+          const value = await (productScope.superagentProduct as ProductHost)
+            .dispatch(String(body?.endpoint ?? ''), body?.payload ?? {})
+          return Response.json({ ok: true, value })
+        } catch (error) {
+          const { code, message, status } = productError(body?.endpoint, error)
+          return Response.json({ ok: false, error: { code, message } }, { status })
+        }
+      },
+    }), 'superagent: product commands and queries')
+  })
+}
+
+export const productHttpPlugin = { name: 'ds-superagent-product-http', inject, apply }

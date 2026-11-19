@@ -42,10 +42,11 @@ export function* toolResponse(name, args, id = 'call-1') {
   yield { type: 'finish', reason: { kind: 'tool-calls' } }
 }
 
-export function* textResponse(text) {
+export function* textResponse(text, usage) {
   yield { type: 'block-start', index: 0, blockType: 'text' }
   yield { type: 'text-delta', index: 0, text }
   yield { type: 'block-end', index: 0, block: { type: 'text', text } }
+  if (usage) yield { type: 'usage', usage }
   yield { type: 'finish', reason: { kind: 'stop' } }
 }
 
@@ -60,6 +61,10 @@ export function* routerResponse(options) {
   if (tool.name.startsWith('deliver_result')) {
     const report = JSON.parse(item.slice('Ready report:'.length))
     yield* toolResponse(tool.name, { reportId: report.id }, `router-${completed}`)
+  } else if (tool.name === 'establish_work_plan') {
+    const brief = JSON.parse(item.slice(item.indexOf('{')).trim())
+    const items = brief.requestedItems ?? [{ goal: brief.goal, constraints: brief.constraints, acceptanceCriteria: brief.acceptanceCriteria }]
+    yield* toolResponse(tool.name, { items }, `router-${completed}`)
   } else yield* toolResponse(tool.name, {}, `router-${completed}`)
 }
 

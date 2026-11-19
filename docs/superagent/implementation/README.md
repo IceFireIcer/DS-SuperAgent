@@ -2,7 +2,12 @@
 
 本记录对应用户在 2026-11-03 明确调用的 `implement-spec` 工作流。
 
-- 规格：[v2.1](../spec.md)，总体 Issue #1；实施图：[T01—T55](../tickets.md)。
+2026-11-18 完成一轮产品身份清理：当前面向用户的说明、愿景、反馈模板、UI 文案、安装元数据、移动端占位身份和临时测试目录统一使用 DS SuperAgent / `ds-superagent`。旧产品目录、安装 ID、profile bundle、迁移标记、浏览器持久分区与 v1 记忆导出 schema 保留为数据隔离或读取契约；早期 T/R5 记录中的路径与数字仍按当时证据解释。`CHANGELOG.md` 是受保护的历史发布记录，不在本轮修改范围内。
+
+身份收口提交 [`a196ccd2`](https://github.com/IceFireIcer/DS-SuperAgent/commit/a196ccd282848c024c5a859b6bf1f639ad9733f2) 的 Node 24 定向验证：桌面身份、首次运行、运行时和浏览器测试 **22/22**；仓库脚本 **16/16**；客户端生成一致性、UI 边界及实施记录检查通过。Windows、macOS arm64/x64、Linux deb/AppImage 安装包矩阵及 `Test result` 在[运行 44270836984](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/44270836984) 全部通过。未运行全量 CI。
+
+- 历史实施批次： [v2.1](../spec.md)、总体 Issue #1 的 T01—T60，保留当时实施记录。
+- 当前规格：[R5](../spec-r5.md)，总体 Issue #1 的 R5-01—R5-36，以当前 R5 实施记录和代码为验收依据。
 - 集成基线：`dev` 的 `14a692d`；集成分支：`feat/1-superagent-integration`。
 - 逐票使用独立分支和工作树，以已确认的公开 Engine 命令/查询及适配器契约执行 TDD，再合入集成分支。
 - 本次实施 frontier 以具体前置的实现已合入、必要验证通过且证据可查为依据。GitHub Issue 的 OPEN/CLOSED 仍表示仓库规定的发布状态；保留原生依赖，不将未发布误报为已关闭，也不因完成代码而创建发布。
@@ -10,6 +15,43 @@
 - 只有已完成范围有对应证据时才记录为完成；总体规格尚未实现。
 
 ## 当前进展
+
+T55/#83 的 R5 本机四目标验收门槛已完成，包含权限/恢复、真实本机 Qwen3.5 9B 语义验收、真实 GitHub 回执及最新 Windows 原生升级与工作控制。T58/#92 的跨机和实体设备验收按维护者决定取消；真实飞书租户 deferred。[验收记录](t55-r5-local.md) · [真实模型报告](t55-r5-real-model-run.json) · [GitHub 外发](github-product-delivery.md)
+
+R5-28/#120 的[选择导入凭据引用并重新授权](r5-28.md)已完成代码验收：只读取用户明确选定的 JSON 导出；secret 留在 Electron main process 与 DSH credential record，业务库仅保存稳定来源引用和新授权目标；精确 scope、取消/重放/未知结果恢复均由 Host 和凭据资源管理器处理。[复核记录](reviews/r5-28.md)与定向验证已更新。真实飞书租户、用户 DSH profile、PostgreSQL 运行及全量 CI 未作为本票验收。
+
+R5-12/#105 的飞书原生讨论/问题答复及无工作 Main 原回复有[定向实施记录](r5-12.md)和[双轴复核](reviews/r5-12.md)，真实租户验收按维护者决定暂缓；四项票据行为已完成。R5-17/#109 的本地目录选择、后台命令、PTY 与子代理有[定向实施记录](r5-17.md)及[双轴自检](reviews/r5-17.md)；停止竞态补正已合入 R5 集成分支，Windows DSH PTY 的进程自然退出限制见记录。
+
+R5-22/#114 的授权日程 occurrence 投递和逐次历史/工作回执查看见[定向实施记录](r5-22.md)及[双轴复核](reviews/r5-22.md)；定向 UI 行为已补齐并收口。R5-32/#124 已在集成分支接通，生产 TLS 与跨机 SSH 隧道的三层产品证据仍待补齐，见[实施记录](r5-32.md)。
+
+R5-23/#115 的飞书 app 与 GitHub/CI 来源 observe/auto 隔离准备已接产品规则设置、持久运行索引、主对话审阅摘要、正式 Router Ticket/Mandate/Assignment 工作链及现有设置页工作控制卡。准备/Router/Worker 的 provider token 用量按持久 DSH Session 分别归因；没有模型价格目录时费用明确显示不可用。受权仓库复现与真实模型/价格/GitHub/Feishu/托管组合仍作为环境证据分层收集，见[实施记录](r5-23.md)及[双轴自检](reviews/r5-23.md)。
+
+R5-29/#121 的本地/授权远端执行选择、设备配对与撤销、Execution Policy、Main target、固定 Assignment 和工作卡设备/目录/选择依据已接现有设置与主对话，见[实施记录](r5-29.md)及[双轴自检](reviews/r5-29.md)。真实第二设备、TLS/SSH、真实模型与远端能力组合仍作为 T55/T58 环境证据。
+
+R5-19/#111 的浏览器人工接管、Host fencing、手动操作和显式归还见[实施记录](r5-19.md)及[双轴复核](reviews/r5-19.md)；核心、产品 Host、设置页与 App BotViews 定向测试通过，真实 Electron/CDP 留待环境验收。
+
+R5-30/#122 的 Main 工作卡受权远端停止对账已按原作业身份接通；[实施记录](r5-30.md)和[收口复核](reviews/r5-30.md)补充了 Host 替换 pending 文案修复、真实 RemoteDevice 断连/Host 重建/回连确认、无关 local-only 工作隔离和 stop/resume 核心证据，代码验收完成。
+
+R5-31/#123 的[安全边界双向工作交接](r5-31.md)已接现有 Main 工作卡与 T39/T40/T41 核心：用户选择目标 Environment，准备并核验未提交/未跟踪工作副本后，由受信 Host 安全结束旧代并在新代继续同一 Ticket/Session。工作卡显示持久状态、责任方、下一步、候选阻塞和往返历史；中断恢复仍沿用原交接记录与 command 回执。真实第二设备轨迹归 T58。
+
+R5-33/#125 的[托管替换后恢复三层会话与工作权威](r5-33.md)现已支持 SQLite 或共享 PostgreSQL 业务库、托管 PostgreSQL Session provider、稳定 Host ID/lease 和本地 state root。真实两进程产品测试强杀旧 Host，在 lease 过期后按新 epoch 接管 waiting-human 工作，保留同一 Main/Router/Worker Session，并由断连客户端重连、回答和取得同一 Main 结果。停止、unknown、设备作业、客户端游标和 Session writer epoch 使用既有窄测分层核验；真实服务器、第二设备与持续四目标仍归 T58/T55。
+
+R5-34/#126 的[移除旧 Bot 运行架构及兼容入口](r5-34.md)已完成代码验收：原 `ds-bot` 目录已收进唯一
+`ds-superagent` 包的 `dsh/`，包根同时发布 Engine/Host，manifest 提供 client 与 web-search；应用只启动一个
+`ds-superagent` profile。旧 roster/group/round/tools/channel/API、原生历史入口、activation/reversal、双
+profile、第二 package/loader 和未接线独立 UI/engine 已删除。当前浏览器、Office、记忆、MCP、日程、附件、资源、
+远端执行与监督均由 R5 消费者保留；85 项旧操作和 API 外 hooks/tools 的逐组处置及
+[双轴复核](reviews/r5-34.md)见记录。真实飞书、第二设备、托管组合和全量 CI 仍按 T58/T55 分层验收。
+
+R5-35/#127 的[独立安装包与冷启动](r5-35.md)使用 DS SuperAgent 桌面身份、自有状态目录与唯一产品 profile。目录和模型通过现有设置修复，平台安装证据与[复核](reviews/r5-35.md)见记录。
+
+R5-36/#128 的[升级、备份与产品状态观测](r5-36.md)接通现有状态/用量页和 Electron 更新器：安装前必须有经公开 DSH JSONL provider 校验且可恢复的业务库与 Session 备份；恢复保留 stop、授权、外部副作用和 Host fencing，失败启动能在数据锁下重试或撤销未提交恢复。双轴复核及隔离 `profile-boot` smoke 通过。真实安装包升级、托管 PostgreSQL、外部模型/信道、真实系统断电和 T55 四目标验收仍未完成。
+
+R5-24/#116 的产品健康快照、独立 Watchdog CLI 和受信语义监督入口见[实施记录](r5-24.md)及[双轴自检](reviews/r5-24.md)；语义巡检已接超单轮上限的持久续查、覆盖核对和受信重启入口，默认桌面 Host 自动替换与真实服务器仍缺验收，工单保持开放。
+
+R5-13/#103 的 [Main 结果回复与 Outbox 校验](r5-13.md)已完成代码验收：通用直接 `submit`、缺 Delivery 的历史 Effect 和旧聊天 fallback 都不能把 Worker 原文变成用户结果；只有当前 completed Main 回复可以生成并展示 result Delivery。真实租户、真实模型、PostgreSQL 与完整发布组合另行验证。R5-14/#106 的本地文件、图像、语音录入及产物链路已完成代码验收，见[实施记录](r5-14.md)；逐工作项授权和飞书原生文件/图片二进制准入已接入，GitHub 附件与真实环境另行验收。R5-15/#107 的[凭据管理代码验收](r5-15.md)已完成并关闭；受管 Feishu 来源/外发、GitHub 来源和 Worker 工具逐次消费 grant，真实平台、PostgreSQL 与多进程环境证据另行验证。[MCP 未知结果记录](r5-15-mcp-unknown.md)保留原请求 ID 的人工对账边界。R5-16/#108 的[单工具 MCP 资源选择、审批、连接和未派发记录](r5-16.md)已完成代码验收；断开、撤权、停止、确认失败和 unknown 均可在工作卡核查，未发出的请求不会生成虚假 request ID。真实 MCP、多工具发现、远端组合、PostgreSQL 与实机 UI 证据另行验证。R5-18/#110 的[本地浏览器资源与租约](r5-18.md)已完成代码验收；设置页按资源/workItem 创建、授权、撤权并核查 unknown，Worker 只获得授权导航和只读快照。人工接管/归还与写操作属于后续票；真实 CDP、登录站点、PostgreSQL 与多进程证据另行验证。R5-27/#119 的[预览并选择导入浏览器资源](r5-27.md)及[双轴复核](reviews/r5-27.md)复用 App cookie 文件/profile 解析，在受控 main process 保留 cookie values，Engine 先持久无值 preview 与 `importing` 资源，App 回执后才激活新随机 profile；App 重启后的重新选择可通过 `sourceRef` 接回未完成批次，取消、unknown、重试、目标冲突和既有 grant/lease 链路已接。真实 Electron cookie store、真实浏览器 profile 与 PostgreSQL 运行另列环境证据。R5-20/#112 的[本地 Office 交付与结构化视图](r5-20.md)已接真实 `.docx` 修改、检查、产物下载、只读 WorkOutcome 视图和受权 `work-answer-view`；真实 Electron 视觉、真实模型和多格式渲染作为环境验收。R5-21/#113 的[有归属记忆与审批学习](r5-21.md)已完成代码验收并关闭；现有设置页、角色查询、side query、学习审批及撤权均按 scope 执行。R5-26/#118 的[预览并选择导入记忆](r5-26.md)及[双轴复核](reviews/r5-26.md)已接可移植 JSON 副本、逐项目标、持久批次重开、目标/来源冲突、取消/重试/部分导入、原始 bytes 哈希和导入 provenance；导入项继续使用普通记忆查询、分享、授权/撤权和遗忘。跨月召回质量、真实旧用户资料、桌面文件选择、生产 PostgreSQL 与真实模型/信道证据另行分层。R5-25/#117 的[预设形象应用、持久记录与设置页](r5-25.md)已补齐 appearance 的角色 revision 写入和版本分块；PostgreSQL 与真实窗口只列为未运行的环境证据。其余部分票见各自记录；代码实现状态与环境验收分别陈述。
+
+R5 新产品入口：[R5-01 / #93 连续 Main 主对话](r5-01.md)；[R5-02 / #94 Main 委托一项本地工作](r5-02.md)；[R5-03 / #95 复合请求分解与并行工作](r5-03.md)；[R5-04 / #96 跟进原工作与越界交回](r5-04.md)；[R5-05 / #97 自动展示只读 Router、Worker 和新工作历史](r5-05.md)；[R5-06 / #98 分开停止 Main 回复与持久停止工作](r5-06.md)；[R5-07 / #99 在主对话直接回答当前问题卡](r5-07.md)；[R5-08 / #100 Main 故障期间持久排队与独立健康](r5-08.md)；[R5-09 / #101 换代 Main 上下文并按需核查证据](r5-09.md)；[R5-10 / #102 三层模型与指令设置](r5-10.md)；[R5-11 / #104 GitHub 请求进入 Main 并直通已有工作](r5-11.md)；[R5-13 / #103 可靠交付三层消息并限制跨受众发布](r5-13.md)；[R5-16 / #108 授权工作中的 MCP 配置](r5-16.md)；[R5-32 / #124 认证客户端连接远程 Main](r5-32.md)；[R5-33 / #125 托管替换与三层恢复](r5-33.md)。双轴审查：[R5-01](reviews/r5-01.md)、[R5-02](reviews/r5-02.md)、[R5-03](reviews/r5-03.md)、[R5-04](reviews/r5-04.md)、[R5-05](reviews/r5-05.md)、[R5-06](reviews/r5-06.md)、[R5-07](reviews/r5-07.md)、[R5-08](reviews/r5-08.md)、[R5-09](reviews/r5-09.md)、[R5-10](reviews/r5-10.md)、[R5-11](reviews/r5-11.md)、[R5-13](reviews/r5-13.md)、[R5-16](reviews/r5-16.md)、[R5-32](reviews/r5-32.md)、[R5-33](reviews/r5-33.md)。以下 T 系列继续保留历史证据，不作为 R5 的全部验收。
 
 | 实施票 | 实现状态 | 证据与边界 |
 | --- | --- | --- |
@@ -39,10 +81,10 @@
 | T24 / #52 | 已实现；未发布 | [验收记录](t24.md)：公开监督读模型、需要人处理优先排序、分项 health、回答/停止/恢复/setup/重试入口、同源刷新 |
 | T25 / #53 | 已实现；真实信道验收完成；未发布 | [记录](t25.md)：真实 `gh api` 传输、Issue/PR/评审/CI 事件、404 与删除依据、复合 cursor 派生版本；隔离仓库 `SuperAgentTest` 的 Issue #13 / PR #14 / review / check run 实测，持久轮询 start→pass→stop |
 | T28 / #56 | 已实现；真实隔离运行完成；未发布 | [记录](t28.md)：时区与 DST 边界、revisioned rule 与 occurrence 证据、持久游标、补发策略、暂停保留、Gate 接入；真实 3.4 s 计划运行 4 个连续 occurrence，重启 0 重复 |
-| T30 / #58 | 适配器已实现；协议夹具验收完成；真实信道未验收 | [记录](t30.md)：飞书 OpenAPI token/消息/群信息/成员分页、p2p/mention/ambient、事件身份与可靠版本、撤回、创建时间游标与回看、畸形计数、成员同步 revision；真实群与真实名单未运行 |
-| T31 / #59 | 已实现；协议与端到端夹具验收完成；真实信道未验收 | [记录](t31.md)：官方 reply 就地回复、uuid 幂等、transient/permanent/已删除映射、问题→授权回答→结果链路；真实群未运行 |
+| T30 / #58 | 代码完成；既有协议回归通过；真实信道未验收 | [记录](t30.md)、[审查](reviews/t30.md)：FeishuRuntime 组合 OpenAPI/poller/成员同步/Engine、精确 app+tenant+chat 来源、持久后确认分页、话题补读、未知版本原子转 unknown 并按原回执去重、成员 revision 冲突；真实群与权限未运行 |
+| T31 / #59 | 代码完成；既有协议回归通过；真实信道未验收 | [记录](t31.md)、[审查](reviews/t31.md)：官方 reply 默认原位/话题语义、持久原生回执、uuid 重试、55 分钟安全窗口、transient/permanent/删除/未知分类、范围查询、问题→授权回答→结果链路；真实群未运行 |
 | T26 / #54 | 已实现；真实仓库验收完成；未发布 | [记录](t26.md)：真实 PR #14 创建、评审、CI 完成、ready 保持 open、结果送达后合并结束；多 PR、draft 与承接延迟由单测覆盖 |
-| T27 / #55 | 已实现；真实桌面→GitHub 验收完成；未发布 | [记录](t27.md)：真实合并 PR 作为证据事件，结果经 Outbox 重定向到 `pr:10`；跨实例拒绝与不可达不改投由单测覆盖 |
+| T27 / #55 | 已实现；真实 owner 授权→GitHub 方向与 outbound 验收完成；未发布 | [记录](t27.md)、[审查](reviews/t27.md)：隔离 PR #14 的三类原生负例、合法 A→B、原 Ticket/Assignment/Session/Mandate 保留、方向版本 2、真实 GitHub POST/读回/回执对账；mock 模型，桌面 UI 与完整产品链仍由 T55 验收 |
 | T29 / #57 | 已实现；真实模型样本完成；未发布 | [记录](t29.md)：版本化规则、当前来源事件证据、observe/auto、重复 bot/CI 回声抑制、slug 隔离目录、run/产物字节预算、SHA-256 核验；真实模型 4 次请求 + 真实调度组合，0 副作用 |
 | T32 / #60 | 已实现；真实第二设备验收完成；未发布 | [记录](t32.md)：配对 pin、AEAD 加密 RPC、Instance/Environment/Actor 授权与撤销、设备侧 fs/search、相对结果、远端 Assignment 位置、无本地回退；Windows→Linux 云服务器真实跨机验收，Node 22/24 各 269/269 |
 | T33 / #61 | 已实现；真实第二设备验收完成；未发布 | [记录](t33.md)：设备解析 executable、固定命名命令、稳定 Instance/Environment/incarnation 作业 ID、同 ID 异参拒绝、启动响应丢失按原 ID 对账、非消费字节偏移与 UTF-8 边界、同步公开 handle、断连续读、作业持久记录与 daemon 重启 unknown、取消重试确认；最终代码真实 Windows→Linux 设备 9/9（初验 10/10 另覆盖 quick 与两作业隔离），Windows 全量 283/283 |
@@ -50,10 +92,33 @@
 | T35 / #63 | 已实现；真实第二设备 daemon 重启验收完成；未发布 | [记录](t35.md)：v2 设备作业记录保存 owner/incarnation/进程身份/deadline/输出/恢复证据；live-process、log-only、identity-changed、unverifiable 分类；Host 按稳定 ID 接管或提问；starting intent 覆盖后台与前台命令；离线 stop 的日志恢复确认；协议 v2；Windows 全量 295/296（1 项 POSIX-only skip），Ubuntu 恢复测试 8/8 + 1 skip，Windows→Ubuntu 跨机 26/26 |
 | T36 / #64 | 已实现；实际本地+远端双模式闭环完成；未发布 | [记录](t36.md)：revisioned Instance execution policy、Ticket local-only/remote-only/auto、Assignment 一次固定、auto allowlist/online/能力/目录/version/fingerprint/capacity 证据、等待与幂等 retry、follow-up/retry 不绕过、fingerprint 重验、协议 v3；Windows 全量 302/303（1 项既有 skip），Ubuntu T36 7/7 |
 | T37 / #65 | 已实现；真实第二设备附件/spill/技能验收完成；未发布 | [记录](t37.md)：环境绑定附件/artifact/spill/技能引用、按 Instance+Environment 命名空间的内容寻址存储、1 MiB 完整输出与字节分页、公开 `dsh-skill` provider 的本地/设备技能目录、Engine 能力查询与断连续查、未支持组合缺口；Windows 全量 311/312（1 项既有 skip），Ubuntu T37 9/9，Windows→Ubuntu 10/10 |
+| T38 / #66 | 已实现；Windows 本地/远端位置界面证据完成；未发布 | [记录](t38.md)：Instance 能力目录、Host 浏览器/MCP 声明、Office 的 skills+命令条件、Ticket/intake 能力要求、selection 阻止远程未验证能力、Engine 与 chat 能力位置查询；Windows 全量 322/323（1 项既有 skip），Node 24 CI 绿 |
+| T39 / #67 | 已实现；真实 Linux 第二设备验收完成；未发布 | [记录](t39.md)、[审查](reviews/t39.md)：Git worktree 预检、base commit + modified/untracked + patch 哈希、目标冲突/commit/预算 blocker、prepare/verify/get 公开查询、设备 `workcopy.inspect`；Windows Host → Ubuntu device 4/4，10.5 s；Windows 全量 331/332（1 项既有 skip） |
+| T40 / #68 | 已实现；真实第二设备双向验收完成；未发布 | [记录](t40.md)、[审查](reviews/t40.md)：持久 handoff-requested/blocked/flushing/switching/completed、目标与副本复核、安全边界与 relay gate、Session flush、旧代结束和新代绑定、交接提示、旧回调隔离；Windows Host → Ubuntu device 2/2，11.6 s；Windows 全量 336/337（1 项既有 skip） |
+| T41 / #69 | 已实现；中断交接恢复与 stop 优先验证完成；未发布 | [记录](t41.md)、[审查](reviews/t41.md)：requested/flushing/switching 重启先对账再继续、单条失败不阻塞其余、stop/暂停/waiting-human/unknown relay 优先、目标离线保持 blocked、blocker nextOwner 与聊天交接面板；Windows 全量 342/343（1 项既有 skip，--test-concurrency=2） |
+| T42 / #70 | 已实现；真实隔离 PostgreSQL 契约与提交对账验证完成；未发布 | [记录](t42.md)、[审查](reviews/t42.md)：PostgreSQL 业务库、Instance 固定锁序、READ COMMITTED、有界重试、COMMIT 丢应答对账、锁内备份/升级/恢复、公开 Engine/Effects；Node 24 PostgreSQL 专项 22/22；全量对照 362 pass/1 fail/1 skip（ConPTY 就绪超时，未全绿） |
+| T43 / #71 | 已实现；真实隔离 PostgreSQL 共享 Session 与公开 DSH loop 验证完成；未发布 | [记录](t43.md)、[审查](reviews/t43.md)：Storage 上的共享 Session provider、PostgreSQL advisory-lock writer 租约与 durable epoch、跨进程争用/崩溃接管、租约断开与旧 epoch 拒绝、真实服务器故障与 COMMIT 丢应答、provider 替换与构造记录 announce 屏障；Node 24.22.2 / Node 25.4.0 全量均 376 pass/0 fail/1 skip（既有 skip），T43 定向 12/12 |
+| T44 / #72 | 已实现；真实两进程共享 PostgreSQL 的替换/复活校验完成；未发布 | [记录](t44.md)、[审查](reviews/t44.md)：epoch + 进程身份 fencing、pending takeover 与准入、旧 Assignment/Session/Environment 承接、live 设备作业按稳定 ID 改绑、stop/waiting/撤权优先、未知副作用转为人工问题；Node 24.22.2 全量 388 项 387 pass/0 fail/1 skip，接管定向 10/10 + 真实两进程 1/1 + 交接恢复 6/6 |
+| T45 / #73 | 已实现；独立进程断连/补读与撤销验收完成；未发布 | [记录](t45.md)、[审查](reviews/t45.md)：一次性客户端凭据、按 Instance 的 read/command 授权、即时撤销、TLS 专用入口、持久事件游标与去重回执、Attention/result 历史补读、loopback 管理面；Node 24.22.2 全量 397 项 396 pass/0 fail/1 skip，T45 定向 9/9；真实桌面到隔离 Host 组合留待 T55 |
+| T46 / #74 | 已实现；Windows 真实 App + 真实 DSH 常驻、关窗/二次启动/退出/强杀恢复验收完成；未发布 | [记录](t46.md)、[审查](reviews/t46.md)：托盘 Host 状态与关闭/退出区分、休眠/唤醒重连或替换、启动失败重试、Host 数据锁、升级保留 preset/用户配置且不改业务/Session；Windows 11 / Node 24.22.2 app 全量 244 项 243 pass/0 fail/1 skip，check-lifecycle 6/6，check-resident 5/5；真实 OS 休眠未运行 |
+| T47 / #75 | 已实现；Windows 本机 + 共享 PostgreSQL Watchdog 恢复演练完成；未发布 | [记录](t47.md)、[审查](reviews/t47.md)：独立 Watchdog CLI/进程适配器、小时巡检、服务/组件/setup 分类、五分钟优雅停止、租约/接管恢复、观察/动作/结果/版本/预算与去重、通知失败重试；全量 418 项 417 pass/0 fail/1 skip，watchdog 16/16，process 3/3，CLI 2/2，两配方 epoch 1→2、takeover resumed；远程托管/真实设备/睡眠未运行 |
+| T48 / #76 | 已实现；确定性正常等待/循环/偏离与独立 Session（mock 模型）验收完成；未发布 | [记录](t48.md)、[审查](reviews/t48.md)：目标/Mandate/报告/工具/交付进度、独立 Semantic Session、持久提案/证据/版本/预算/去重、unknown 先对账、原子批准/拒绝、pause→stop、correct→direction input、supervision 可见；串行全量 436 项 435 pass/0 fail/1 skip，supervisor 14/14、engine 2/2、session 2/2；真实模型/聊天 UI 未运行 |
+| T49 / #77 | 已实现；受信指令、约束校验、revision/草稿/版本与独立 Session（mock 模型）验收完成；未发布 | [记录](t49.md)、[审查](reviews/t49.md)：authoringActorIds、提示词/skills 与 mode/rules 变更、模型/预算/allowlists/tools 固定、必需 placeholder/大小、instruction applying/幂等、config-draft、直接 settings 权限、Supervisor 无写入口；config 17/17、session 4/4，串行全量 457 项 456 pass/0 fail/1 skip；真实模型/UI 未运行 |
+| T50 / #78 | 已实现；只读 archive staging/verify/publish、zstd Session、原引用读取与真实 app importer 演练完成；未发布 | [记录](t50.md)、[审查](reviews/t50.md)：source identity/profile、prepared staging、batch 幂等/冲突、Session 格式/缺失/副本校验、roles/sharedMemory 映射、review 项、无 old loop/Main Bot 权限；legacy-archive 9/9 + app importer 1/1，串行全量 467 项 466 pass/0 fail/1 skip；Engine 接入/切换/UI 未运行 |
+| T51 / #79 | 已实现；持久 quiescing/quiesced、旧消费/重启入口停用、真实端口隔离、空窗输入缓冲与旧回执/游标对账、真实双进程演练完成；未发布 | [记录](t51.md)、[审查](reviews/t51.md)：Host lease epoch 复核、旧 home 锁只作证据、turns/jobs/outbound/cursor/receipt 两次 snapshot、实际 launcher 重命名与 loopback bind、gap 稳定 ID 的 held/legacy-accepted/quarantine、中断后恢复、无 Ticket/Effect/旧 accepted 重派；switchover 4/4 + process drill 1/1，串行全量 472 项 471 pass/0 fail/1 skip；激活/真实旧核心适配/UI 未运行 |
+| T52 / #80 | 已实现；原子 activation manifest、当前入口 gate、gap 按原 ID 释放、真实退出/丢应答对账、隔离目录新 Session/stop/旧 review 验收完成；未发布 | [记录](t52.md)、[审查](reviews/t52.md)：quiesced 最终复核、Host lease owner/epoch、activation/command/history/gap ledger 同事务、`CORE_NOT_ACTIVE` gate 覆盖 receive/accept/Effect、held release + legacy/quarantine skipped、插件 gate 配置、真实旧 launcher/activation 子进程退出与 owner 拒绝、mock 新 Session 与人工 stop；activation 6/6 + process 1/1，串行全量 479 项 478 pass/0 fail/1 skip；跨进程 holder/真实 Electron/用户数据迁移未运行 |
+| T53 / #81 | 已实现；激活前 abandon、激活后 reverse handoff、旧入口重启与真实中断/新 epoch 恢复、旧队列不重放完成；未发布 | [记录](t53.md)、[审查](reviews/t53.md)：held/quarantine 阻塞 abandon、batch-2 archive 保留、activation stopping gate、turns/jobs/outbound/unknown/receipt/compatibility blocker、final compatibility 复查、switchover 完成时 abandoned、真实 held gap 释放与旧 receipts 为空、新 Host epoch 恢复同一 reverse；reversal 8/8 + process 1/1，串行全量 488 项 487 pass/0 fail/1 skip；宿主 stop 适配器/真实 Electron/用户数据迁移未运行 |
+| T54 / #82 | 已交付等负载 mock 比较与预算记录；真实部署对照未验收；未发布 | [记录](t54.md)、[审查](reviews/t54.md)、[结果](t54-bench.json)：三模式均处理 6 个初始 + 6 个跟进事件，全部 Worker turn 收敛后才计时；single 799.15 ms、Router/Worker 1727.01 ms、subscription direct 1622.33 ms，并记录 digest、outcome、持久序列、重复检查和 delivery ledger；真实模型 token、远端/托管 Host、unknown/proactive/supervisor 重跑和崩溃恢复未验证 |
+| T55 / #83 | 已汇合证据与固定场景验证；完整产品未验收；未发布 | [记录](t55.md)、[审查](reviews/t55.md)、[54 票证据核验](t55-evidence.md)、[环境及缺口归属](t55-environments.md)、[第二设备](t55-second-device.md)、[既有回归](t55-regressions.md)：T27 真实 GitHub、T54 等负载、原 UI 后端 seam 和 Windows 回归已更新；生产 factory、产品 profile、真实模型/信道、托管 Host/第二设备组合由 T56–T60 承接，T55 只做最终汇合 |
+| T56 / #90 | 已实现；未发布 | [记录](t56.md)、[审查](reviews/t56.md)：production factory、`botExecutionAdapter` 服务、`resolveAgent` facade、close 生命周期；真实子进程通过 `ds-bot` `install()/executionDispatch()` 完成 prompt/deliver/stop/resolveAgent，重启重放同一 Ticket 且不重复；UI 零 diff。真实模型/信道和 app 打包/托管组合仍归 T57/T58 |
+| T57 / #91 | 已收口；真实模型、主动准备与 GitHub 通过；飞书由维护者暂缓 | [记录](t57.md)、[证据](t57-evidence.json)、[审查](reviews/t57.md)：公开 `LlmAdapter`、凭据安全环境检查、真实 Worker/Supervisor/配置解释器样本、真实 GitHub Issue/PR/review/check 与原生外发回执；飞书 tenant/群缺失，环境检查明确 `unverified`，维护者于 2026-11-13 明确暂缓并收口 |
+| T58 / #92 | 部分验收；真实托管 Host/PostgreSQL/客户端/设备/Watchdog 已完成 | [记录](t58.md)、[证据](t58-evidence.json)、[审查](reviews/t58.md)：Ubuntu 真实 Host、PostgreSQL 业务与 Session、真实模型、SSH 隧道客户端、断连补读/即时撤销、Ubuntu 设备文件与命令、daemon 重启后重连、Watchdog epoch 4→5；T56 factory/T59/T60 远程 UI、离线 stop/resume、双向交接和飞书仍未完成 |
+| T59 | 已实现；未发布 | [记录](t59.md)、[审查](reviews/t59.md)：独立 `ds-superagent` profile、`DSH_HOME` 隔离、`botExecutionAdapter` 服务、`executionAdapterRequired` fail-closed、stop/resume；真实 `runProfile` 启动与 profile 进程测试通过；不复制前端 |
+| T60 | 已废止并删除 | [记录](t60.md)、[审查](reviews/t60.md)：独立 `ds-superagent-ui` 与窄 UI host 已移除；产品改为直接使用并修改 `ds-bot` UI，通过 `botExecutionAdapter` 接 Engine |
 
 上述已实现票的前置实现为 T01；实施状态与 GitHub 发布状态分别记录。2026-11-05 回查发现原 T02/T04/T17 工作树注册指向不存在的目录，不能用旧“实施中”记录证明实现进展。本轮 T17 交付共用的事务更新、删除、有界扫描与新连接契约；T04 已在该公开契约上恢复并完成。
 
-集成 PR：[#86](https://github.com/IceFireIcer/DS-SuperAgent/pull/86) 已合并到 `dev`（merge commit `f512c3e`，2026-11-08），尚未发布。T01–T24 已实现；T25–T27 已完成隔离真实 GitHub 仓库的接收、交付条件与交付目标验收（模型仍为 mock）；T28 已完成真实隔离计划运行；T29 已完成真实模型小样本与调度组合验收；T30 已交付飞书 OpenAPI 传输与归属语义；T31 已交付飞书就地回答与可靠交付（T30/T31 的真实群运行由维护者暂缓）；T32 已交付远端设备配对、加密 fs/search，并在 Windows→Linux 临时云服务器上完成真实第二设备验收，Node 22/24 各 269/269；T33 已交付远端稳定身份命令、非消费输出续读、断连恢复和真实第二设备验收；T34 已交付远端 PTY/进程组停止、pending-device-confirmation 和原范围查询；T35 已交付 daemon 重启的 live/log-only 分类、原 ID 接管、starting intent 和一次带证据的问题，并完成 Windows→Ubuntu 跨机 26/26；T36 已交付 Instance/Ticket 目标策略、auto 证据、Assignment 固定和 v3 status，并完成实际 Local+Remote 双模式闭环；T37 已交付环境绑定附件/spill/技能引用、命名空间资产库和公开技能 provider，并完成 Windows→Ubuntu 跨机 10/10；T38–T55 未实现。增量双轴审查见 [T01](reviews/t01.md)、[T17](reviews/t17.md)、[T02](reviews/t02.md)、[T03](reviews/t03.md)、[T04](reviews/t04.md)、[T05](reviews/t05.md)、[T06](reviews/t06.md)、[T07](reviews/t07.md)、[T08](reviews/t08.md)、[T09](reviews/t09.md)、[T10](reviews/t10.md)、[T34](reviews/t34.md)、[T35](reviews/t35.md)、[T36](reviews/t36.md)、[T37](reviews/t37.md)；这不是全部规格的最终审查。远程 CI 证据需以当前推送头为准。
+集成 PR：[#86](https://github.com/IceFireIcer/DS-SuperAgent/pull/86) 已合并到 `dev`（merge commit `f512c3e`，2026-11-08），尚未发布。T01–T24 已实现；T25–T27 已完成隔离真实 GitHub 仓库的接收、交付条件与交付目标验收（模型仍为 mock）；T28 已完成真实隔离计划运行；T29 已完成真实模型小样本与调度组合验收；T30 已交付飞书 OpenAPI 传输与归属语义；T31 已交付飞书就地回答与可靠交付（T30/T31 的真实群运行由维护者暂缓）；T32 已交付远端设备配对、加密 fs/search，并在 Windows→Linux 临时云服务器上完成真实第二设备验收，Node 22/24 各 269/269；T33 已交付远端稳定身份命令、非消费输出续读、断连恢复和真实第二设备验收；T34 已交付远端 PTY/进程组停止、pending-device-confirmation 和原范围查询；T35 已交付 daemon 重启的 live/log-only 分类、原 ID 接管、starting intent 和一次带证据的问题，并完成 Windows→Ubuntu 跨机 26/26；T36 已交付 Instance/Ticket 目标策略、auto 证据、Assignment 固定和 v3 status，并完成实际 Local+Remote 双模式闭环；T37 已交付环境绑定附件/spill/技能引用、命名空间资产库和公开技能 provider，并完成 Windows→Ubuntu 跨机 10/10；T38 已交付能力位置目录、Ticket 能力要求和本地/远端阻止证据；T39 已交付 Git 工作副本预检/核验、配对设备 `workcopy.inspect` 和 Windows→Ubuntu 4/4；T40 已交付安全边界双向执行环境交接、目标与副本复核、旧代结束和新代绑定，并完成 Windows→Ubuntu 2/2；T41 已交付中断交接的重启对账、stop/暂停/unknown 优先、离线阻断和 blocker 责任人投影；T42 已交付 PostgreSQL 业务库后端、Instance 锁序、提交对账与版本化 schema 升级；T43 已交付共享 PostgreSQL Session provider、advisory-lock writer 租约、跨进程恢复与旧 epoch 拒绝；T44 已交付服务器 Host 的合法替换、对账与旧进程 fencing；T45 已交付认证客户端入口、断连游标补读、即时撤销与 loopback 管理面，真实桌面到隔离 Host 组合留待 T55；T46 已交付 Windows 常驻 Host 的窗口/服务状态、休眠恢复、启动重试与 Host 数据锁，并完成真实 App + 真实 DSH 常驻验收；T47 已交付独立 Watchdog CLI/进程适配器、分类恢复、预算/去重与 Windows 本机 + 共享 PostgreSQL 演练；T48 已交付语义 Supervisor、独立 Session、持久提案/预算/去重、unknown 先对账、原子批准与真实 direction input；T49 已交付受信行为配置指令、authoring 权限、prompt/trigger 约束、revision/草稿/版本、独立 Session interpreter 与硬限制；T50 已交付只读历史档案的 prepared staging、校验/发布、原引用读取、角色/共享记忆映射与真实 app importer 演练；T51 已交付 quiescing/quiesced 持久状态、Host epoch 复核、旧 launcher/重启入口停用、真实 loopback 入口隔离、空窗输入 held/legacy-accepted/quarantine 与旧回执/游标对账，并完成真实旧/新双进程演练；T52 已交付原子 activation manifest/当前入口 gate、held gap 按原 ID 释放、旧 accepted/quarantine 不重派、真实 activation 子进程退出与 owner 拒绝，并完成隔离目录 mock 新 Session/人工 stop/旧 review 验收；T53 已交付激活前 abandon、激活后 reverse handoff、旧入口重启、final compatibility 复查、真实中断/新 epoch 恢复与旧队列不重放；T54 已交付固定 mock 事件流三模式对照、p50/p95、Router/直通、重复/状态重开、预算表和未验证项；T55 已开始汇合证据与固定场景验证，完整产品仍未验收；当前真实 OS 休眠、远程托管、真实设备/真实模型与真实应用切换/UI 的缺项见 [T55](t55.md)。增量双轴审查见 [T01](reviews/t01.md)、[T17](reviews/t17.md)、[T02](reviews/t02.md)、[T03](reviews/t03.md)、[T04](reviews/t04.md)、[T05](reviews/t05.md)、[T06](reviews/t06.md)、[T07](reviews/t07.md)、[T08](reviews/t08.md)、[T09](reviews/t09.md)、[T10](reviews/t10.md)、[T34](reviews/t34.md)、[T35](reviews/t35.md)、[T36](reviews/t36.md)、[T37](reviews/t37.md)、[T38](reviews/t38.md)、[T39](reviews/t39.md)、[T40](reviews/t40.md)、[T41](reviews/t41.md)、[T42](reviews/t42.md)、[T43](reviews/t43.md)、[T44](reviews/t44.md)、[T45](reviews/t45.md)、[T46](reviews/t46.md)、[T47](reviews/t47.md)、[T48](reviews/t48.md)、[T49](reviews/t49.md)、[T50](reviews/t50.md)、[T51](reviews/t51.md)、[T52](reviews/t52.md)、[T53](reviews/t53.md)、[T54](reviews/t54.md)；这不是全部规格的最终审查。远程 CI 证据需以当前推送头为准。
 
 Linux 实机复核覆盖 T01–T36 的平台差异、负载脚本、调度、T32 设备重启/授权变更、T33 远端命令/作业、T34 PTY/进程组、T35 daemon 恢复和 T36 目标选择，见 [Linux 实机验收审计](linux-acceptance.md)。
 
@@ -76,6 +141,10 @@ node scripts/branch-status.mjs --base dev
 
 2026-11-05 清理已完成：逐一确认 T01/T02/T04/T17 的旧分支均为当前集成提交的祖先，且四个原工作树目录不存在后，使用 `git worktree prune` 清除失效注册，再用 `git branch -d` 删除这四个本地分支。保留 main、dev 和当前集成分支；未删除远程分支或实际工作目录。后续票从最新集成提交创建实际需要的工作分支。
 
-测试入口为 `node --test scripts/*.test.mjs`，与扫描器既有回归测试一起进入 CI 的 scan job。新核心 CI 同时验证 Windows Node 22.19.0 和 Node 24，仍纳入必需的 Test result 汇总门禁。
+测试入口为 `node --test scripts/*.test.mjs`，与扫描器既有回归测试一起进入 CI 的 scan job。CI 的 `changes` job 用 `scripts/change-scope.mjs` 按改动路径选择作业，`scripts/check-ci-result.mjs` 汇总必需的 Test result：本次改动需要的作业被跳过或未通过都会失败。新核心 CI 只验证 Windows Node 24。
 
-维护实施或审查记录时，运行 `node scripts/check-implementation-records.mjs --check-refs` 校验提交占位与本地 commit 引用。CI 使用不要求完整 Git 历史的占位检查。每轮审查标明实际目标版本；后续修复单独记录测试和复审结果，远端 CI 只为对应的推送 SHA 提供证据。跨模块验收应从实际调用入口覆盖相关模块；适配器测试只能证明该适配器的契约。
+需要复现并发竞态时，用 `npm run test:stress -- test/<file>.test.mjs --runs 80 --concurrency 8`。脚本只构建一次，为每次运行保留独立日志，并汇总失败率、失败测试、最后完成的测试节点和可选的 trace 行。日志写入 `.dsh-test-stress/`，不进入仓库。
+
+等待 CI 时，用 `node scripts/ci-watch.mjs <run-id>`（可加 `--jobs test,scan`、`--timeout`、`--json`）。它拒绝 head 与当前 `HEAD` 不一致的 run，只在作业状态变化时输出；失败时列出失败步骤并抓取精简日志。令牌只从 `gh` 的环境读取，不写入仓库。
+
+维护实施或审查记录时，运行 `node scripts/check-implementation-records.mjs --check-refs`。它校验提交占位、Markdown 相对链接、T01–T60 的票/实施/审查覆盖，并只把带十六进制字母的 7–40 位引用当作 commit；CI run ID 和普通数字不再误报。T57/T58 当前是计划中票，暂不要求实施/审查记录；T60 已有部分实现记录但尚未通过验收。历史审查与链接缺口在脚本的 `reviewDebt`/`linkDebt` 中显式列出，新增缺口直接失败。CI 使用不要求完整 Git 历史的检查。每轮审查标明实际目标版本；后续修复单独记录测试和复审结果，远端 CI 只为对应的推送 SHA 提供证据。跨模块验收应从实际调用入口覆盖相关模块；适配器测试只能证明该适配器的契约。

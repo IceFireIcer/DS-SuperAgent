@@ -1,13 +1,13 @@
 #Requires -Version 5.1
 [CmdletBinding()]
 param(
-    [string]$DataRoot = (Join-Path $PSScriptRoot '.ds-bot-local'),
+    [string]$DataRoot = (Join-Path $PSScriptRoot '.ds-superagent-local'),
     [switch]$PrepareOnly
 )
 
 $ErrorActionPreference = 'Stop'
 $repo = [IO.Path]::GetFullPath($PSScriptRoot)
-$plugin = Join-Path $repo 'ds-bot'
+$plugin = Join-Path $repo 'superagent'
 $appDir = Join-Path $repo 'app'
 if (-not [IO.Path]::IsPathRooted($DataRoot)) { $DataRoot = Join-Path $repo $DataRoot }
 $DataRoot = [IO.Path]::GetFullPath($DataRoot)
@@ -49,18 +49,18 @@ function Install-IfChanged {
     [IO.File]::WriteAllText($stamp, $Hash)
 }
 
-$envNames = @('DS_BOT_HOME', 'DS_BOT_WORKSPACE', 'DS_BOT_SHELL_DATA', 'ELECTRON_RUN_AS_NODE')
+$envNames = @('DS_SUPERAGENT_HOME', 'DS_SUPERAGENT_WORKSPACE', 'DS_SUPERAGENT_SHELL_DATA', 'ELECTRON_RUN_AS_NODE')
 $savedEnv = @{}
 foreach ($name in $envNames) { $savedEnv[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 try {
     & $node --version
     if ($LASTEXITCODE -ne 0) { throw 'Node.js could not start.' }
-    $pluginHash = Get-SourceHash @((Join-Path $plugin 'package.json'), (Join-Path $plugin 'package-lock.json'), (Join-Path $plugin '.npmrc'))
+    $pluginHash = Get-SourceHash @((Join-Path $plugin 'package.json'), (Join-Path $plugin 'package-lock.json'))
     Install-IfChanged $plugin $pluginHash (Join-Path $plugin 'node_modules/esbuild/package.json')
-    Write-Host 'Building the plugin from this checkout...'
+    Write-Host 'Building the Super-agent package from this checkout...'
     Invoke-Npm $plugin @('run', 'build')
 
-    # The desktop app installs a copy of the plugin. Hash npm's package file list so new
+    # The desktop app installs a copy of the package. Hash npm's package file list so new
     # or removed source files also refresh that copy, even when its version is unchanged.
     $packJson = Invoke-Npm $plugin @('pack', '--dry-run', '--json', '--ignore-scripts')
     $package = @((($packJson -join "`n") | ConvertFrom-Json))[0]
@@ -78,16 +78,13 @@ try {
         if (-not (Test-Path -LiteralPath $electron)) { throw 'Electron executable is still missing.' }
     }
 
-    $env:DS_BOT_HOME = Join-Path $DataRoot 'data'
-    $env:DS_BOT_WORKSPACE = Join-Path $DataRoot 'workspace'
-    $env:DS_BOT_SHELL_DATA = Join-Path $DataRoot 'shell'
+    $env:DS_SUPERAGENT_HOME = Join-Path $DataRoot 'data'
+    $env:DS_SUPERAGENT_WORKSPACE = Join-Path $DataRoot 'workspace'
+    $env:DS_SUPERAGENT_SHELL_DATA = Join-Path $DataRoot 'shell'
     Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
-    foreach ($path in @($env:DS_BOT_HOME, $env:DS_BOT_WORKSPACE, $env:DS_BOT_SHELL_DATA)) {
-        [void][IO.Directory]::CreateDirectory($path)
-    }
     Write-Host "Persistent data: $DataRoot"
-    if ($PrepareOnly) { Write-Host 'Ready. Run start.ps1 to open DS Bot.'; return }
-    Write-Host 'Starting DS Bot. Configure model providers in Settings; close the window to stop.'
+    if ($PrepareOnly) { Write-Host 'Ready. Run start.ps1 to open DS SuperAgent.'; return }
+    Write-Host 'Starting DS SuperAgent. Configure model providers in Settings. To stop the Host, quit from the system tray.'
     Invoke-Npm $appDir @('start')
 } finally {
     foreach ($name in $envNames) {

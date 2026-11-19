@@ -11,13 +11,15 @@ import { nativeContext, routerResponse, textResponse, toolResponse } from './nat
 const workload = { subtasks: 4, childSteps: 3, childStepDelayMs: 100, scanIntervalMs: 50, maxPerTicket: 4 }
 const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
 
-const directory = await mkdtemp(join(tmpdir(), 'ds-bot-subagent-load-'))
+const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-subagent-load-'))
 const root = join(directory, 'work')
 await mkdir(root)
-let context, storage, sessions, engine
+let context, storage, sessions, environment, engine
 const childToolScope = new Map()
 const inFlight = new Set()
 let peak = 0
+let failure
+const failures = []
 try {
   context = await nativeContext(join(directory, 'sessions'), async function* (options) {
     if (options.model === 'router') { yield* routerResponse(options); return }
@@ -41,7 +43,7 @@ try {
   })
   storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   sessions = new NativeSessions(context, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
-  const environment = await LocalEnvironment.open({ id: 'project', instanceId: 'subagent-load', root, allowedActorIds: ['user'],
+  environment = await LocalEnvironment.open({ id: 'project', instanceId: 'subagent-load', root, allowedActorIds: ['user'],
     permissions: ['read', 'write', 'search', 'command'], commands: {} })
   engine = new Engine(storage, 'subagent-load', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'], allowedThreadIds: ['room'], versionOrder: 'sequence' },
     { retryDelayMs: 10, scanIntervalMs: workload.scanIntervalMs }, sessions, [environment], {}, {}, { maxPerTicket: workload.maxPerTicket, deadlineMs: 120000 })
@@ -85,10 +87,24 @@ try {
       filesWrittenByChildren: childToolScope.size * workload.childSteps,
     },
   }, null, 2))
+} catch (error) {
+  failure = error
 } finally {
-  engine?.shutdown(); await engine?.effects.stop(); await sessions?.close(); await context?.fiber.dispose(); await storage?.close()
-  await rm(directory, { recursive: true, force: true })
+  for (const release of [
+    () => engine?.effects.stop(),
+    () => engine?.shutdown(),
+    () => sessions?.close(),
+    () => context?.fiber.dispose(),
+    () => environment?.close(),
+    () => storage?.close(),
+    () => rm(directory, { recursive: true, force: true }),
+  ]) {
+    try { await release() } catch (error) { failures.push(error) }
+  }
 }
+if (failures.length) console.error(failures.map(error => `cleanup: ${error instanceof Error ? error.message : String(error)}`).join('\n'))
+if (failure) throw failure
+if (failures.length) throw new AggregateError(failures, 'The subagent load run did not clean up.')
 
 function promptOf(options) {
   const user = options.messages.filter(message => message.role === 'user')

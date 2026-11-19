@@ -7,18 +7,33 @@ import * as core from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, textResponse, toolResponse } from '../dev/native-mock.mjs'
 
-async function runtimeFixture(t, source, versioned = false, deliveryOptions = {}) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-delivery-condition-'))
+async function disposeAll(disposers, message) {
+  const errors = []
+  for (const dispose of disposers) {
+    try { await dispose() } catch (error) { errors.push(error) }
+  }
+  if (errors.length) throw new AggregateError(errors, message)
+}
+
+async function runtimeFixture(t, source, versioned = false, deliveryOptions = {}, workerGate) {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-delivery-condition-'))
   let native, storage, sessions, engine
-  t.after(async () => {
-    await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
-    await rm(directory, { recursive: true, force: true })
-  })
+  t.after(() => disposeAll([
+    () => engine?.effects.stop(),
+    () => sessions?.close(),
+    () => native?.fiber.dispose(),
+    () => storage?.close(),
+    async () => {
+      assert.ok(directory.startsWith(join(tmpdir(), 'ds-superagent-delivery-condition-')))
+      await rm(directory, { recursive: true, force: true })
+    },
+  ], 'Delivery-condition fixture cleanup failed.'))
   native = await nativeContext(directory, async function* (options) {
     const user = options.messages.filter(message => message.role === 'user').at(-1)
     const text = user.content.filter(block => block.type === 'text').map(block => block.text).join('')
     const completed = options.messages.slice(options.messages.lastIndexOf(user) + 1).filter(message => message.role === 'tool').length
     if (options.model === 'worker') {
+      if (!completed && workerGate?.beforeReport) await workerGate.beforeReport(text)
       if (!completed) yield* toolResponse('report_ready', { result: `Handled: ${text}`, evidence: `Verified ${text}` })
       else yield* textResponse('Recorded.')
       return
@@ -37,7 +52,7 @@ async function runtimeFixture(t, source, versioned = false, deliveryOptions = {}
   return { engine, storage, drain, versioned }
 }
 
-test('an outstanding P/R condition keeps a ready Ticket open until the condition is merged', { timeout: 20000 }, async t => {
+test('an outstanding P/R condition keeps an unowned ready Ticket open without sending Worker text', { timeout: 20000 }, async t => {
   const { engine, drain } = await runtimeFixture(t, { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] })
   const receipt = await engine.submit({ commandId: 'condition', eventId: 'condition-message', text: 'Prepare a change.' })
   const condition = await engine.bindDeliveryCondition({ commandId: 'bind-pr', ticketId: receipt.ticketId, kind: 'pr', sourceInstanceId: 'github:acme/repo',
@@ -49,14 +64,49 @@ test('an outstanding P/R condition keeps a ready Ticket open until the condition
   assert.equal(conversation.lifecycle, 'open')
   assert.equal(conversation.deliveryPending, true)
   assert.equal(conversation.deliveryConditions[0].state, 'open')
-  assert.ok(conversation.messages.some(message => message.purpose === 'result'), 'the result is still delivered while the P/R remains open')
+  assert.equal(conversation.messages.some(message => message.purpose === 'result'), false,
+    'a direct Ticket without Main ownership keeps its report but sends no result')
   const reconciled = await engine.reconcileDeliveryCondition({ commandId: 'merge-pr', ticketId: receipt.ticketId,
-    sourceInstanceId: 'github:acme/repo', text: 'Pull request #12 was merged.' })
+    sourceInstanceId: 'github:acme/repo', text: 'Pull request #12 created (merged).\n\nMerged after review.' })
   assert.equal(reconciled[0].state, 'merged')
   assert.equal(reconciled[0].result, 'merged')
   conversation = await engine.conversation(receipt.ticketId)
-  assert.equal(conversation.lifecycle, 'ended')
+  assert.equal(conversation.lifecycle, 'open')
   assert.equal(conversation.deliveryPending, false)
+  assert.equal(conversation.messages.some(message => message.purpose === 'result'), false)
+})
+
+test('only an authoritative P/R header changes a condition, not merged text in its details or reviews', { timeout: 20000 }, async t => {
+  const { engine } = await runtimeFixture(t, { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] })
+  const receipt = await engine.submit({ commandId: 'authoritative-condition', eventId: 'authoritative-condition-message', text: 'Prepare a change.' })
+  await engine.bindDeliveryCondition({ commandId: 'authoritative-bind', ticketId: receipt.ticketId, kind: 'pr', sourceInstanceId: 'github:acme/repo',
+    repo: 'acme/repo', number: 12, basis: 'Worker created pull request 12.' })
+  const bodyMention = await engine.reconcileDeliveryCondition({ commandId: 'authoritative-body', ticketId: receipt.ticketId,
+    sourceInstanceId: 'github:acme/repo', text: 'Pull request #12 created (open).\n\nThis must be merged after CI.' })
+  assert.equal(bodyMention[0].state, 'open')
+  const reviewMention = await engine.reconcileDeliveryCondition({ commandId: 'authoritative-review', ticketId: receipt.ticketId,
+    sourceInstanceId: 'github:acme/repo', text: 'Pull request #12 review.\n\nLooks merged to me.' })
+  assert.equal(reviewMention, undefined)
+  assert.equal((await engine.getDeliveryConditions(receipt.ticketId))[0].state, 'open')
+  const merged = await engine.reconcileDeliveryCondition({ commandId: 'authoritative-merge', ticketId: receipt.ticketId,
+    sourceInstanceId: 'github:acme/repo', text: 'Pull request #12 created (merged).\n\nMerged after CI.' })
+  assert.equal(merged[0].state, 'merged')
+  assert.equal(merged[0].result, 'merged')
+})
+
+test('reopening a P/R condition clears its old merged or dropped conclusion', { timeout: 20000 }, async t => {
+  const { engine } = await runtimeFixture(t, { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] })
+  const receipt = await engine.submit({ commandId: 'reopen-condition', eventId: 'reopen-condition-message', text: 'Prepare a change.' })
+  await engine.bindDeliveryCondition({ commandId: 'reopen-bind', ticketId: receipt.ticketId, kind: 'pr', sourceInstanceId: 'github:acme/repo',
+    repo: 'acme/repo', number: 13, basis: 'Worker created pull request 13.' })
+  const merged = await engine.reconcileDeliveryCondition({ commandId: 'reopen-merge', ticketId: receipt.ticketId,
+    sourceInstanceId: 'github:acme/repo', text: 'Pull request #13 created (merged).' })
+  assert.equal(merged[0].result, 'merged')
+  const reopened = await engine.reconcileDeliveryCondition({ commandId: 'reopen-open', ticketId: receipt.ticketId,
+    sourceInstanceId: 'github:acme/repo', text: 'Pull request #13 created (open).' })
+  assert.equal(reopened[0].state, 'open')
+  assert.equal('result' in reopened[0], false)
+  assert.equal('reason' in reopened[0], false)
 })
 
 test('a draft P/R condition is tracked and keeps the Ticket open', { timeout: 20000 }, async t => {
@@ -72,7 +122,7 @@ test('a draft P/R condition is tracked and keeps the Ticket open', { timeout: 20
   assert.equal(conversation.lifecycle, 'open')
 })
 
-test('a resolved condition does not end a Ticket before its result reaches the channel', { timeout: 20000 }, async t => {
+test('a resolved condition never turns an unowned Worker report into a user result', { timeout: 20000 }, async t => {
   const { engine, drain } = await runtimeFixture(t, { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] }, false,
     { channel: { deliver: async () => ({ type: 'permanent', reason: 'The test channel refuses the result.' }) } })
   const receipt = await engine.submit({ commandId: 'dropped-result', eventId: 'dropped-result-message', text: 'Prepare a change.' })
@@ -83,13 +133,13 @@ test('a resolved condition does not end a Ticket before its result reaches the c
   assert.equal(before.status, 'ready')
   assert.equal(before.messages.some(message => message.purpose === 'result'), false, 'the refused result is not reported as sent')
   await engine.reconcileDeliveryCondition({ commandId: 'dropped-merge', ticketId: receipt.ticketId,
-    sourceInstanceId: 'github:acme/repo', text: 'Pull request #31 merged.' })
+    sourceInstanceId: 'github:acme/repo', text: 'Pull request #31 created (merged).' })
   const after = await engine.conversation(receipt.ticketId)
   assert.equal(after.lifecycle, 'open', 'an undelivered result must not count as delivered')
   assert.equal(after.deliveryPending, false)
 })
 
-test('two P/R conditions are checked separately and a pending follow-up delays final completion', { timeout: 25000 }, async t => {
+test('two P/R conditions are checked separately while a pending follow-up keeps ownership open', { timeout: 25000 }, async t => {
   const source = { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'], allowedThreadIds: ['room'], versionOrder: 'sequence' }
   const { engine, drain } = await runtimeFixture(t, source, true)
   const received = await engine.receiveSource({ commandId: 'multi-initial', threadId: 'room', objectId: 'multi-1', type: 'created', version: '1',
@@ -102,42 +152,122 @@ test('two P/R conditions are checked separately and a pending follow-up delays f
   let conversation = await engine.conversation(ticketId)
   assert.equal(conversation.lifecycle, 'open')
   assert.equal(conversation.deliveryConditions.length, 2)
-  await engine.reconcileDeliveryCondition({ commandId: 'merge-12', ticketId, sourceInstanceId: 'github:acme/repo', text: 'Pull request #12 merged.' })
+  await engine.reconcileDeliveryCondition({ commandId: 'merge-12', ticketId, sourceInstanceId: 'github:acme/repo', text: 'Pull request #12 created (merged).' })
   conversation = await engine.conversation(ticketId)
   assert.equal(conversation.lifecycle, 'open')
   assert.equal(conversation.deliveryConditions.find(condition => condition.number === 13).state, 'open')
   await engine.receiveSource({ commandId: 'multi-followup', threadId: 'room', objectId: 'multi-2', type: 'created', version: '1',
     text: 'Follow up before closing.', authorId: 'user', authorKind: 'human', addressing: 'direct' })
   const followupEvent = await engine.getSourceObject({ threadId: 'room', objectId: 'multi-2' })
-  const target = await engine.setDeliveryTarget({ commandId: 'multi-target', ticketId, purpose: 'result', sourceInstanceId: 'desktop',
+  const target = await engine.setDeliveryTarget({ commandId: 'multi-target', ticketId, purpose: 'result', sourceInstanceId: 'desktop', actorId: 'user',
     threadId: 'room', objectId: 'multi-2', evidence: 'The target is the verified follow-up event.', evidenceEventId: followupEvent.eventId })
   assert.equal(target.evidenceEventId, followupEvent.eventId)
   const pendingDirection = await engine.getTicketDirection(ticketId)
   assert.equal(pendingDirection.inputs.filter(input => input.state === 'pending').length, 1, JSON.stringify(pendingDirection))
-  await engine.reconcileDeliveryCondition({ commandId: 'close-13', ticketId, sourceInstanceId: 'github:acme/repo', text: 'Pull request #13 was closed.' })
+  await engine.reconcileDeliveryCondition({ commandId: 'close-13', ticketId, sourceInstanceId: 'github:acme/repo', text: 'Pull request #13 closed (closed).' })
   conversation = await engine.conversation(ticketId)
   assert.equal(conversation.lifecycle, 'open', 'a pending follow-up delays final completion')
   await drain(10)
   conversation = await engine.conversation(ticketId)
-  assert.equal(conversation.lifecycle, 'ended')
+  assert.equal(conversation.lifecycle, 'open')
+  assert.equal(conversation.messages.some(message => message.purpose === 'result'), false)
 })
 
-test('an authorized delivery-target change redirects the result and is rejected across source instances', { timeout: 20000 }, async t => {
+test('a pending follow-up keeps the earlier report from ending its Ticket', { timeout: 20000 }, async t => {
+  let releaseInitial
+  let releaseFollowup
+  let enteredInitialWorker
+  let enteredFollowupWorker
+  const enteredInitial = new Promise(resolve => { enteredInitialWorker = resolve })
+  const enteredFollowup = new Promise(resolve => { enteredFollowupWorker = resolve })
+  const workerGate = {
+    beforeReport: async text => {
+      if (text === 'Prepare the first result.') {
+        enteredInitialWorker()
+        await new Promise(resolve => { releaseInitial = resolve })
+      }
+      if (text === 'Follow up before closing.') {
+        enteredFollowupWorker()
+        await new Promise(resolve => { releaseFollowup = resolve })
+      }
+    },
+  }
+  t.after(() => { releaseInitial?.(); releaseFollowup?.() })
+  const { engine, drain } = await runtimeFixture(t,
+    { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'], allowedThreadIds: ['room'], versionOrder: 'sequence',
+      intake: { mode: 'auto', maxBatchSize: 5, maxAttempts: 1, timeoutMs: 500, allowedRequesterIds: ['user'], allowedBotActorIds: [],
+        rules: [{ id: 'human-direct', actorKinds: ['human'], addressing: ['direct'], mode: 'explicit' }] } },
+    false, {}, workerGate)
+  engine.effects.setPaused(true)
+  const initial = await engine.receiveSource({ commandId: 'race-initial', threadId: 'room', objectId: 'race-1', type: 'created', version: '1',
+    text: 'Prepare the first result.', authorId: 'user', authorKind: 'human', addressing: 'direct' })
+  const accepted = await engine.assessSourceBatch({ commandId: 'race-accept', threadId: 'room', eventIds: [initial.eventId] })
+  const ticketId = accepted.receipts[0].ticketId
+  engine.effects.start()
+  engine.effects.setPaused(false)
+  await enteredInitial
+  await engine.receiveSource({ commandId: 'race-followup', threadId: 'room', objectId: 'race-2', type: 'created', version: '1',
+    text: 'Follow up before closing.', authorId: 'user', authorKind: 'human', addressing: 'direct' })
+  const queued = await engine.getTicketDirection(ticketId)
+  assert.equal(queued.inputs.filter(input => input.state === 'pending').length, 1)
+  releaseInitial()
+  await enteredFollowup
+  engine.effects.wake()
+  let conversation
+  for (let attempt = 0; attempt < 500; attempt++) {
+    conversation = await engine.conversation(ticketId)
+    if (conversation.reportHistory.length > 0) break
+    await new Promise(resolve => setTimeout(resolve, 10))
+  }
+  assert.equal(conversation.reportHistory.length, 1, 'the first report remains queryable without a direct user result')
+  assert.equal(conversation.messages.some(message => message.purpose === 'result'), false)
+  const during = await engine.getTicketDirection(ticketId)
+  assert.equal(during.state, 'open', 'the queued follow-up still owns the next direction')
+  assert.equal(during.inputs.filter(input => input.state === 'pending').length, 1)
+  releaseFollowup()
+  await drain(20)
+  const final = await engine.conversation(ticketId)
+  assert.equal(final.lifecycle, 'open')
+  assert.equal(final.messages.some(message => message.purpose === 'result'), false)
+  assert.deepEqual(final.reportHistory.map(report => report.result), ['Handled: Prepare the first result.', 'Handled: Follow up before closing.'])
+})
+
+test('an authorized delivery-target change persists without sending an unowned Worker result', { timeout: 20000 }, async t => {
   const { engine, storage, drain } = await runtimeFixture(t, { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] })
   const receipt = await engine.submit({ commandId: 'retarget', eventId: 'retarget-message', text: 'Deliver this to GitHub.' })
-  const target = await engine.setDeliveryTarget({ commandId: 'set-target', ticketId: receipt.ticketId, purpose: 'result', sourceInstanceId: 'github:acme/repo',
-    threadId: 'github:acme/repo#12', objectId: 'pull-request-12', evidence: 'Authorized follow-up in the linked pull request.' })
-  assert.equal(target.destination.objectId, 'pull-request-12')
+  const other = new core.Engine(storage, 'private', { kind: 'github', sourceInstanceId: 'github:acme/repo', actorId: 'user', allowedActorIds: ['user'],
+    allowedThreadPrefixes: ['github:acme/repo#'], versionOrder: 'sequence' })
+  const bobReceiver = new core.Engine(storage, 'private', { kind: 'github', sourceInstanceId: 'github:acme/repo', actorId: 'bob',
+    allowedActorIds: ['user', 'bob'], allowedThreadPrefixes: ['github:acme/repo#'], versionOrder: 'sequence' })
+  t.after(() => disposeAll([() => other.effects.stop(), () => other.shutdown(), () => bobReceiver.effects.stop(), () => bobReceiver.shutdown()],
+    'Retarget Engine cleanup failed.'))
+  const reference = await engine.getTicketReference(receipt.ticketId)
+  const event = await other.receiveSource({ commandId: 'retarget-pr', threadId: 'github:acme/repo#12', objectId: 'pr:12', type: 'created', version: '1',
+    text: `${reference}\nDeliver the prepared result here.`, authorId: 'user', authorKind: 'human', addressing: 'direct' })
+  await assert.rejects(engine.setDeliveryTarget({ commandId: 'unassociated-target', ticketId: receipt.ticketId, purpose: 'result', sourceInstanceId: 'github:acme/repo', actorId: 'user',
+    threadId: 'github:acme/repo#12', objectId: 'pr:12', evidence: 'A reference alone cannot authorize a destination.', evidenceEventId: event.eventId }), { code: 'ASSOCIATION_REQUIRED' })
+  await assert.rejects(engine.setDeliveryTarget({ commandId: 'unverified-target', ticketId: receipt.ticketId, purpose: 'result', sourceInstanceId: 'github:acme/repo', actorId: 'user',
+    threadId: 'github:acme/repo#12', objectId: 'pr:12', evidence: 'An unverified destination is not enough.' }), { code: 'ASSOCIATION_REQUIRED' })
+  await engine.associateSourceEvent({ commandId: 'link-target', ticketId: receipt.ticketId, eventId: event.eventId, reference, reason: 'Owner-approved native follow-up.' }, other)
+  const target = await engine.setDeliveryTarget({ commandId: 'set-target', ticketId: receipt.ticketId, purpose: 'result', sourceInstanceId: 'github:acme/repo', actorId: 'user',
+    threadId: 'github:acme/repo#12', objectId: 'pr:12', evidence: 'Authorized follow-up in the linked pull request.', evidenceEventId: event.eventId })
+  assert.equal(target.destination.objectId, 'pr:12')
   await drain()
   const conversation = await engine.conversation(receipt.ticketId)
-  const result = conversation.messages.find(message => message.purpose === 'result')
-  assert.deepEqual({ sourceInstanceId: result.destination.sourceInstanceId, eventId: result.destination.eventId, threadId: result.destination.threadId },
-    { sourceInstanceId: 'github:acme/repo', eventId: 'pull-request-12', threadId: 'github:acme/repo#12' })
-  const other = new core.Engine(storage, 'private', { sourceInstanceId: 'github:acme/repo', actorId: 'user', allowedActorIds: ['user'],
-    allowedThreadPrefixes: ['github:acme/repo#'], versionOrder: 'sequence' })
-  await assert.rejects(other.setDeliveryTarget({ commandId: 'foreign-target', ticketId: receipt.ticketId, purpose: 'result', sourceInstanceId: 'github:acme/repo',
+  assert.equal(conversation.messages.some(message => message.purpose === 'result'), false)
+  assert.deepEqual({ sourceInstanceId: target.destination.sourceInstanceId, actorId: target.destination.actorId,
+    objectId: target.destination.objectId, threadId: target.destination.threadId },
+  { sourceInstanceId: 'github:acme/repo', actorId: 'user', objectId: 'pr:12', threadId: 'github:acme/repo#12' })
+  await assert.rejects(other.setDeliveryTarget({ commandId: 'foreign-target', ticketId: receipt.ticketId, purpose: 'result', sourceInstanceId: 'github:acme/repo', actorId: 'user',
     threadId: 'github:acme/repo#12', objectId: 'foreign', evidence: 'No right to retarget.' }), { code: 'SOURCE_NOT_AUTHORIZED' })
-  await assert.rejects(engine.setDeliveryTarget({ commandId: 'bad-evidence', ticketId: receipt.ticketId, purpose: 'result',
+  const bobEvent = await bobReceiver.receiveSource({ commandId: 'bob-retarget', threadId: 'github:acme/repo#12', objectId: 'pr:12:comment:bob',
+    type: 'created', version: '1', text: `${reference}\nUse the follow-up from Bob.`, authorId: 'bob', authorKind: 'human', addressing: 'direct' })
+  await engine.associateSourceEvent({ commandId: 'link-bob', ticketId: receipt.ticketId, eventId: bobEvent.eventId, reference,
+    reason: 'Owner-approved Bob follow-up.' }, bobReceiver)
+  await assert.rejects(engine.setDeliveryTarget({ commandId: 'wrong-target-actor', ticketId: receipt.ticketId, purpose: 'result',
+    sourceInstanceId: 'github:acme/repo', actorId: 'user', threadId: 'github:acme/repo#12', objectId: 'pr:12:comment:bob',
+    evidence: 'The target actor must match the evidence author.', evidenceEventId: bobEvent.eventId }), { code: 'ACTOR_MISMATCH' })
+  await assert.rejects(engine.setDeliveryTarget({ commandId: 'bad-evidence', ticketId: receipt.ticketId, purpose: 'result', actorId: 'user',
     sourceInstanceId: 'github:acme/repo', threadId: 'github:acme/repo#12', objectId: 'pull-request-12', evidence: 'Missing evidence.',
     evidenceEventId: 'missing-event' }), { code: 'INVALID_INPUT' })
 })

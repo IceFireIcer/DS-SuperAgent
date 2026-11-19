@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import * as core from '../dist/index.js'
 
 async function fixture(context, extra = {}) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-local-tools-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-local-tools-'))
   const root = join(directory, 'work')
   await mkdir(root)
   let environment

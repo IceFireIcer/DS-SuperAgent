@@ -16,7 +16,7 @@ function policy(overrides = {}) {
 }
 
 async function fixture(t, overrides) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-policy-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-policy-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'],
@@ -38,6 +38,23 @@ test('Policy updates are revisioned, reject stale writes and survive restart', a
   assert.equal(resumed.revision, 5)
 })
 
+test('restarting with the same bootstrap intake keeps its revision and snapshot', async t => {
+  const { engine, storage } = await fixture(t, { mode: 'observe' })
+  const first = await engine.getIntakePolicy()
+  assert.equal(first.revision, 2)
+  assert.equal(first.policy.mode, 'observe')
+  const reopened = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'],
+    allowedThreadIds: ['room'], versionOrder: 'sequence', intake: policy({ mode: 'observe' }) })
+  const resumed = await reopened.getIntakePolicy()
+  assert.equal(resumed.revision, 2)
+  assert.equal(resumed.policy.mode, 'observe')
+  const changed = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'],
+    allowedThreadIds: ['room'], versionOrder: 'sequence', intake: policy({ mode: 'off' }) })
+  const updated = await changed.getIntakePolicy()
+  assert.equal(updated.revision, 3)
+  assert.equal(updated.policy.mode, 'off')
+})
+
 test('replayed Policy and pause commands return the current result without rewinding runtime state', async t => {
   const { engine } = await fixture(t)
   const firstPolicy = await engine.updateIntakePolicy({ commandId: 'policy-replay', expectedRevision: 2, policy: policy({ mode: 'observe' }) })
@@ -52,7 +69,7 @@ test('replayed Policy and pause commands return the current result without rewin
 })
 
 test('pausing records source events without dispatching and resumes queued work without aborting an active turn', { timeout: 15000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-policy-pause-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-policy-pause-'))
   let native, storage, sessions, engine, release, entered
   const started = new Promise(resolve => { entered = resolve })
   const gate = new Promise(resolve => { release = resolve })
@@ -123,7 +140,7 @@ test('Policy and pause controls preserve waiting-human and stopped Ticket constr
 })
 
 test('a Policy change interrupts an in-flight Eval, requeues it under the new revision, and leaves another source instance alone', { timeout: 30000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-policy-requeue-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-policy-requeue-'))
   let storage, first, second
   let release, entered
   const started = new Promise(resolve => { entered = resolve })
@@ -173,7 +190,7 @@ test('a Policy change interrupts an in-flight Eval, requeues it under the new re
 })
 
 test('pausing after an Eval reaches its assessor survives the old deadline and records the paused Eval', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-policy-eval-pause-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-policy-eval-pause-'))
   let engine, release, entered
   const started = new Promise(resolve => { entered = resolve })
   const gate = new Promise(resolve => { release = resolve })
@@ -209,4 +226,23 @@ test('pausing after an Eval reaches its assessor survives the old deadline and r
   await engine.setProcessingPaused({ commandId: 'resume-eval', paused: false })
   listed = await engine.listEvaluations('room')
   assert.equal(listed.items.find(item => item.commandId === 'paused-eval')?.state, 'unavailable')
+})
+
+test('a Policy reevaluation drain leaves another source instance’s notices alone', async t => {
+  const { engine, storage } = await fixture(t)
+  const own = `${JSON.stringify(['policy-reevaluation', 'desktop'])}:eval-own`
+  const foreign = `${JSON.stringify(['policy-reevaluation', 'desktop-b'])}:eval-foreign`
+  await storage.transaction('private', async tx => {
+    await tx.insert('policy-reevaluation', own, { key: own, ticketId: 'eval-own', revision: 1, reason: 'POLICY_CHANGED' })
+    await tx.insert('policy-reevaluation', foreign, { key: foreign, ticketId: 'eval-foreign', revision: 1, reason: 'POLICY_CHANGED' })
+  })
+  await engine.updateIntakePolicy({ commandId: 'drain-own', expectedRevision: 2, policy: policy({ mode: 'off' }) })
+  let remainingOwn
+  for (let attempt = 0; attempt < 50; attempt++) {
+    remainingOwn = await storage.transaction('private', tx => tx.get('policy-reevaluation', own))
+    if (!remainingOwn) break
+    await new Promise(resolve => setTimeout(resolve, 10))
+  }
+  assert.equal(remainingOwn, undefined)
+  assert.ok(await storage.transaction('private', tx => tx.get('policy-reevaluation', foreign)))
 })

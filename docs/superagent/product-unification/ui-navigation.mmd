@@ -1,0 +1,28 @@
+flowchart TB
+  user["用户"] --> mainView["主 Agent 主对话<br/>默认显示 · 可交互<br/>Main 独立模型 / Session / 上下文"]
+  mainView --> command["WorkBrief / WorkFollowUp / WorkControl / AttentionAnswer<br/>明确用户依据、工作目标和授权"]
+  mainView --> explicitStop["明确停止 / 有效问题卡答复<br/>直接调用受信核心，不等待 Main/Router 推理"]
+  mainView --> stopReply["输入框停止生成：只停 Main 回复<br/>已派出的后台工作继续"]
+  command --> engine["Domain Engine<br/>持久输入 / Ticket / Assignment / Effects"]
+  explicitStop --> engine
+  engine -->|"Main 暂不可用仍展示持久状态、结果和问题卡<br/>新自然语言输入排队；系统卡不冒充模型回复"| mainView
+  engine --> main["Main Agent<br/>有界回执与关键通知<br/>可查询状态、按需读有界证据"]
+  main -->|"自然语言回复、问题、结果说明"| mainView
+  engine --> router["Router<br/>分解、关联、派工、汇总"]
+  router --> workers["Worker Sessions"]
+  workers -->|"Report / Attention"| router
+  router -->|"有界 WorkReceipt / WorkUpdate / WorkOutcome"| main
+  engine --> read["角色感知只读投影<br/>按 Instance + Ticket + 角色授权"]
+  read --> routerView["Router 过程视图<br/>只读：委托、分解、关联、状态"]
+  read --> workerList["Worker 执行列表<br/>准备/启动后自动出现，不抢焦点"]
+  workerList --> workerView["Worker 执行视图<br/>只读：步骤、工具事实、输出、设备、证据"]
+  routerView -->|"需要改变工作：只导航返回"| mainView
+  workerView -->|"需要补充/回答/停止：回主对话或产品控制卡"| mainView
+  workerView --> history["新产品的工作与执行历史<br/>不把原始日志写入主上下文"]
+  legacy["旧 Bot 架构 / 旧历史入口 / 旧兼容层"] --> retirement["从独立产品移除<br/>仅保留可选、经审阅的配置/资源导入"]
+  classDef main fill:#e6f2ed,stroke:#37745d,color:#163c2e
+  classDef readonly fill:#eaf0fa,stroke:#536f9a,color:#233e62
+  classDef transition fill:#fff3df,stroke:#a58145,color:#60451e
+  class mainView,command,engine,main,router,workers main
+  class read,routerView,workerList,workerView,history,stopReply readonly
+  class legacy,retirement transition

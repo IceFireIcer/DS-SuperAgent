@@ -1,0 +1,65 @@
+import { CoreError } from './model.js'
+import type { AsyncTx } from './storage.js'
+
+export type HostTakeoverOutcome = 'resumed' | 'waiting-job' | 'waiting-human' | 'stopped' | 'blocked'
+  | 'idle' | 'ended' | 'revoked' | 'input-pending' | 'handoff-pending'
+
+export type HostTakeoverBlockerCode = 'device-unconfirmed' | 'waiting-human' | 'authority-revoked'
+  | 'handoff-pending' | 'unknown-effect' | 'unknown-mcp' | 'unknown-job' | 'unknown-subagent' | 'unconfirmed-subagent'
+  | 'preview-pending' | 'takeover-failed'
+  | 'unknown-browser'
+
+export interface HostTakeoverBlocker {
+  code: HostTakeoverBlockerCode
+  message: string
+  jobId?: string
+  subagentId?: string
+  operationId?: string
+}
+
+/** The decision one Ticket received while a new Host epoch was being made current. */
+export interface HostTakeoverTicket {
+  ticketId: string
+  outcome: HostTakeoverOutcome
+  previousAssignmentId?: string
+  previousGeneration?: string
+  assignmentId?: string
+  sessionId?: string
+  blockers: HostTakeoverBlocker[]
+}
+
+/**
+ * One durable Host replacement. `pending` is written in the same transaction that advances the epoch, so a
+ * crash during reconciliation leaves new input and new Assignments blocked until a later explicit acquisition
+ * finishes the same record.
+ */
+export interface HostTakeoverRecord {
+  id: string
+  instanceId: string
+  epoch: number
+  previousHostId?: string
+  previousEpoch?: number
+  previousToken?: string
+  state: 'pending' | 'completed'
+  startedAt: number
+  completedAt?: number
+  tickets: HostTakeoverTicket[]
+}
+
+export function hostTakeoverKey(instanceId: string, epoch: number) {
+  return JSON.stringify(['host-takeover', instanceId, epoch])
+}
+
+export async function loadHostTakeover(transaction: AsyncTx, instanceId: string, epoch: number) {
+  return transaction.get<HostTakeoverRecord>('host-takeover', hostTakeoverKey(instanceId, epoch))
+}
+
+export async function isHostTakeoverPending(transaction: AsyncTx, instanceId: string, epoch: number | undefined) {
+  return epoch ? (await loadHostTakeover(transaction, instanceId, epoch))?.state === 'pending' : false
+}
+
+/** New work waits while the current epoch is still reconciling the Host it replaced. */
+export async function assertHostTakeoverSettled(transaction: AsyncTx, instanceId: string, epoch: number | undefined) {
+  if (!await isHostTakeoverPending(transaction, instanceId, epoch)) return
+  throw new CoreError('HOST_TAKEOVER_PENDING', 'The new Host is still reconciling the previous Host; new work is not accepted yet.')
+}

@@ -46,7 +46,7 @@ function scripted(plan) {
 }
 
 async function fixture(t, { commands, plan, respond, source = {}, jobs = {}, subagents = {}, extraEnvironments = [], environmentByThread = {} }) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-subagents-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-subagents-'))
   const root = join(directory, 'work')
   await mkdir(root)
   const environments = []
@@ -97,6 +97,64 @@ test('a child turn that ends in error is recorded as failed, not as a successful
   assert.equal(child.state, 'failed')
   assert.equal(child.succeeded, false)
   assert.deepEqual((await engine.conversation(ticketId)).reports, [])
+})
+
+test('a Worker and its child keep the role snapshot captured when the parent request starts', { timeout: 60000 }, async t => {
+  let releaseParent, parentEntered
+  const parentGate = new Promise(resolve => { releaseParent = resolve })
+  const parentStarted = new Promise(resolve => { parentEntered = resolve })
+  let releaseChild, childEntered
+  const childGate = new Promise(resolve => { releaseChild = resolve })
+  const childStarted = new Promise(resolve => { childEntered = resolve })
+  t.after(() => { releaseParent(); releaseChild() })
+  const parentModels = []
+  const childModels = []
+  const { engine, accept } = await fixture(t, {
+    commands: {},
+    source: { allowedThreadIds: ['room'], versionOrder: 'sequence' },
+    respond: async function* (options) {
+      if (options.model === 'router') { yield* routerResponse(options); return }
+      const text = promptOf(options)
+      if (options.sessionId.startsWith('subagent-')) {
+        childModels.push(options.model)
+        childEntered()
+        await childGate
+        yield* textResponse('Child used its captured route.')
+        return
+      }
+      parentModels.push(options.model)
+      if (toolCount(options) === 0 && text.includes('Capture the child route.')) {
+        parentEntered()
+        await parentGate
+        yield* toolResponse('delegate_subagent', { task: 'Inspect with the captured child route.' })
+      } else if (text.startsWith('Subagent ')) {
+        yield* textResponse('The child result returned.')
+      } else yield* textResponse('Delegated.')
+    },
+  })
+  const initial = await engine.getRoleConfig()
+  await engine.updateRoleConfig({ commandId: 'capture-worker-v2', expectedRevision: initial.revision,
+    roles: { ...initial.roles, worker: { ...initial.roles.worker, model: { provider: 'mock', model: 'worker-captured' } } } })
+  const ticketId = await accept('room', 'capture-child-route', 'Capture the child route.')
+  await parentStarted
+  const newer = await engine.getRoleConfig()
+  await engine.updateRoleConfig({ commandId: 'replace-worker-v3', expectedRevision: newer.revision,
+    roles: { ...newer.roles, worker: { ...newer.roles.worker, model: { provider: 'mock', model: 'worker-next' } } } })
+  releaseParent()
+  await childStarted
+  assert.deepEqual(parentModels.slice(0, 2), ['worker-captured', 'worker-captured'])
+  assert.deepEqual(childModels, ['worker-captured'])
+  await until(async () => (await engine.conversation(ticketId)).reason === 'worker-background', 'the captured Worker request to settle')
+  const conversation = await engine.conversation(ticketId)
+  assert.equal(conversation.assignments[0].configurationRevision, 2)
+  const uses = await engine.getRoleConfigUses(conversation.assignments[0].sessionId)
+  assert.equal(uses.some(use => use.role === 'worker' && use.revision === 2 && use.worker.model === 'worker-captured'), true)
+  const [subagent] = await engine.listSubagents(ticketId)
+  assert.equal(subagent.configurationRevision, 2)
+  const childUses = await engine.getRoleConfigUses(subagent.sessionId)
+  assert.equal(childUses.some(use => use.role === 'worker' && use.revision === 2 && use.worker.model === 'worker-captured'), true)
+  releaseChild()
+  await sleep(100)
 })
 
 test('cancelling a child by command records cancelled and does not wake the Worker', { timeout: 60000 }, async t => {
@@ -455,4 +513,39 @@ test('a stop that cannot confirm the child stays stopping instead of claiming th
     release()
     await sleep(300)
   }
+})
+
+test('closing a stopped child keeps its claim until the cancellation fact commits', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-subagents-stop-claim-'))
+  let storage
+  t.after(async () => { await storage?.close(); await rm(directory, { recursive: true, force: true }) })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  const subagents = new core.Subagents({}, storage, 'private', 'this-runtime')
+  await subagents.stopChildren(['child'])
+  await subagents.close('child', true)
+  assert.equal(subagents.claimed.has('child'), true)
+  await subagents.finishStopped(['child'])
+  assert.equal(subagents.claimed.has('child'), false)
+})
+
+test('subagent history returns the actual newest records after the thousandth key', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-subagents-history-'))
+  let storage
+  t.after(async () => { await storage?.close(); await rm(directory, { recursive: true, force: true }) })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  const subagents = new core.Subagents({}, storage, 'private', 'this-runtime')
+  const ticketId = 'ticket'
+  const prefix = JSON.stringify(['subagent', ticketId])
+  await storage.transaction('private', async transaction => {
+    for (let index = 0; index <= 1000; index++) {
+      const id = `history-${String(index).padStart(4, '0')}`
+      await transaction.insert('subagent', `${prefix}:${id}`, { id, ticketId, assignmentId: 'assignment', generation: 'generation',
+        mandateId: 'mandate', environmentId: 'project', sessionId: `session-${id}`, task: 'work', state: 'completed',
+        startedAt: index, runtimeToken: 'earlier-runtime' })
+    }
+  })
+  const listed = await storage.transaction('private', transaction => subagents.listIn(transaction, ticketId))
+  assert.equal(listed.length, 100)
+  assert.equal(listed.at(-1).id, 'history-1000')
+  assert.equal(listed[0].id, 'history-0901')
 })

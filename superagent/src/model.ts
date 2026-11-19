@@ -1,3 +1,5 @@
+import type { CapabilityId, HostCapabilities } from './capability-locations.js'
+
 export class CoreError extends Error {
   constructor(public readonly code: string, message: string) { super(message); this.name = 'CoreError' }
 }
@@ -14,6 +16,10 @@ export interface DesktopSource {
   sourceInstanceId: string
   actorId: string
   allowedActorIds: string[]
+  /** Actors allowed to submit trusted behavior-configuration instructions; never inferred from source text. */
+  authoringActorIds?: string[]
+  /** Product capabilities provided by this Host, never by a remote Environment. */
+  hostCapabilities?: HostCapabilities
   allowedThreadIds?: string[]
   allowedThreadPrefixes?: string[]
   versionOrder?: 'sequence' | 'opaque'
@@ -23,7 +29,7 @@ export interface DesktopSource {
 export type IntakeActorKind = 'human' | 'bot' | 'ci' | 'system'
 export type IntakeAddressing = 'direct' | 'mention' | 'ambient'
 export interface IntakeRule { id: string; actorKinds: IntakeActorKind[]; addressing: IntakeAddressing[]; mode: 'explicit' | 'inferred' }
-export interface IntakeAssessment { eventId: string; outcome: 'accept' | 'reject'; reason: string; evidence?: string }
+export interface IntakeAssessment { eventId: string; outcome: 'accept' | 'reject'; reason: string; evidence?: string; capabilities?: CapabilityId[] }
 export interface IntakePolicy {
   mode?: 'off' | 'observe' | 'auto'
   maxBatchSize: number
@@ -45,6 +51,7 @@ export interface SubmitRequest {
   execution?: 'local'
   environmentId?: string
   target?: 'local-only' | 'remote-only' | 'auto'
+  capabilities?: CapabilityId[]
 }
 
 export interface Receipt {
@@ -56,17 +63,45 @@ export interface Receipt {
 }
 
 export interface Work {
-  trigger: { id: string; instanceId: string; source: Source; eventId: string; text: string; environmentId?: string; target?: 'local-only' | 'remote-only' | 'auto'; targetSource?: 'default' | 'ticket' | 'explicit'; threadId?: string; nativeVersion?: { order: 'sequence' | 'opaque'; value: string } }
+  trigger: { id: string; instanceId: string; source: Source; eventId: string; text: string; environmentId?: string; target?: 'local-only' | 'remote-only' | 'auto'; targetSource?: 'default' | 'ticket' | 'explicit'; capabilities?: CapabilityId[]; threadId?: string; nativeVersion?: { order: 'sequence' | 'opaque'; value: string }; nativeImages?: import('@deepseek-ai/dsh-attachment').ImageAttachmentRef[];
+    proactive?: { runId: string; sourceInstanceId: string; sourceEventId: string; ruleRevision: number; maxArtifactBytes: number };
+    deliveryOrigin?: { sourceEventId: string; source: Source; authorId: string; eventId: string; threadId?: string; nativeVersion: { order: 'sequence' | 'opaque'; value: string }; reference: string } }
   decision: { id: string; instanceId: string; triggerId: string; outcome: 'accept'; policyVersion: string }
-  mandate: { id: string; instanceId: string; decisionId: string; scope: string; strength: 'explicit' | 'inferred'; environment: 'local' | 'remote' | 'auto' }
+  mandate: { id: string; instanceId: string; decisionId: string; scope: string; strength: 'explicit' | 'inferred'; environment: 'local' | 'remote' | 'auto'; capabilities?: CapabilityId[] }
   ticket: { id: string; instanceId: string; mandateId: string; triggerId: string; state: 'open' | 'ended'; directionVersion?: number; constraint?: { kind: 'stopped' | 'waiting-human'; attentionId?: string; stopId?: string; reason?: string } }
-  intent: { id: string; instanceId: string; ticketId: string; state: 'pending' | 'running' | 'ready'; reason: 'worker-not-enabled' | 'router-pending' | 'worker-running' | 'worker-idle' | 'worker-background' | 'ready-report' | 'setup-failed' | 'setup-pending' | 'followup-pending' | 'waiting-human' | 'stopping' | 'stopped' | 'slot-queued' | 'slot-priority-waiting' | 'environment-waiting' | 'recovery-exhausted' | 'recovery-pending' | 'recovery-blocked' | 'context-rollover'; environment: 'local' | 'remote' | 'auto' }
+  intent: { id: string; instanceId: string; ticketId: string; state: 'pending' | 'running' | 'ready'; reason: 'worker-not-enabled' | 'router-pending' | 'worker-running' | 'worker-idle' | 'worker-background' | 'ready-report' | 'setup-failed' | 'setup-pending' | 'followup-pending' | 'waiting-human' | 'stopping' | 'stopped' | 'slot-queued' | 'slot-priority-waiting' | 'environment-waiting' | 'recovery-exhausted' | 'recovery-pending' | 'recovery-blocked' | 'context-rollover' | 'handoff-pending'; environment: 'local' | 'remote' | 'auto' }
+}
+
+/** The verified original audience, independent of the source that executes the Ticket. */
+export function triggerDeliveryTarget(trigger: Work['trigger']) {
+  const origin = trigger.deliveryOrigin
+  return origin ? { source: { ...origin.source, actorId: origin.authorId }, eventId: origin.eventId, ...(origin.threadId ? { threadId: origin.threadId } : {}) }
+    : { source: trigger.source, eventId: trigger.eventId, ...(trigger.threadId ? { threadId: trigger.threadId } : {}) }
 }
 
 export interface CommandRecord { fingerprint: string; receipt: Receipt }
 export interface EventRecord { fingerprint: string; receipt: Receipt }
 
-export const recordKinds = ['trigger', 'decision', 'mandate', 'ticket', 'intent', 'command', 'event', 'effect', 'effect-key', 'effect-meta', 'effect-receipt', 'assignment', 'assignment-history', 'report', 'report-history', 'session', 'delivery', 'delivery-history', 'delivery-meta', 'setup', 'setup-retry', 'source-event', 'source-object', 'source-command', 'source-mode', 'source-members', 'source-members-history', 'eval', 'eval-command', 'eval-dismissal', 'policy-reevaluation', 'thread-subscription', 'ticket-thread-subscription', 'work-input', 'pending-input', 'work-fanout', 'work-fanout-target', 'work-ownership', 'event-work-ownership', 'work-note', 'work-note-meta', 'work-command', 'work-requeue', 'subscription-decision', 'recovery-decision', 'retry-decision', 'session-rollover', 'role-config', 'role-config-history', 'role-config-use', 'execution-policy', 'execution-policy-history', 'execution-selection', 'channel-cursor', 'schedule-state', 'schedule-rule', 'schedule-rule-history', 'schedule-occurrence', 'delivery-target', 'delivery-target-decision', 'delivery-condition', 'delivery-condition-history', 'proactive-rule', 'proactive-rule-history', 'proactive-run', 'attention', 'attention-head', 'attention-meta', 'stop-state', 'stop-head', 'stop-history', 'resume-decision', 'policy-state', 'policy-history', 'processing-state', 'execution-slot', 'execution-slot-meta', 'status-report', 'status-history', 'job', 'remote-job', 'job-command', 'job-active', 'preview', 'preview-command', 'preview-history', 'subagent', 'subagent-command', 'background', 'session-meta', 'session-event', 'session-writer', 'host-lease'] as const
+const coreRecordKinds = ['trigger', 'decision', 'mandate', 'ticket', 'intent', 'command', 'event', 'effect', 'effect-key', 'effect-meta', 'effect-receipt', 'assignment', 'assignment-history', 'report', 'report-history', 'session', 'delivery', 'delivery-history', 'delivery-meta', 'setup', 'setup-retry', 'source-event', 'source-object', 'source-command', 'source-mode', 'source-members', 'source-members-history', 'eval', 'eval-command', 'eval-dismissal', 'policy-reevaluation', 'thread-subscription', 'ticket-thread-subscription', 'work-input', 'pending-input', 'work-fanout', 'work-fanout-target', 'work-ownership', 'event-work-ownership', 'work-note', 'work-note-meta', 'work-command', 'work-requeue', 'subscription-decision', 'recovery-decision', 'retry-decision', 'session-rollover', 'role-config', 'role-config-history', 'role-config-use', 'role-config-use-recent', 'role-config-use-meta', 'execution-policy', 'execution-policy-history', 'execution-selection', 'handoff-copy', 'handoff-copy-history', 'handoff-state', 'handoff-history', 'channel-cursor', 'schedule-state', 'schedule-rule', 'schedule-rule-history', 'schedule-occurrence', 'delivery-target', 'delivery-target-decision', 'delivery-condition', 'delivery-condition-history', 'proactive-rule', 'proactive-rule-history', 'proactive-run', 'attention', 'attention-head', 'attention-meta', 'stop-state', 'stop-head', 'stop-history', 'resume-decision', 'policy-state', 'policy-history', 'processing-state', 'execution-slot', 'execution-slot-meta', 'status-report', 'status-history', 'job', 'remote-job', 'job-command', 'job-active', 'preview', 'preview-command', 'preview-history', 'subagent', 'subagent-command', 'background', 'session-meta', 'session-event', 'session-writer', 'host-lease', 'host-takeover', 'client', 'client-command', 'client-event', 'client-event-key', 'client-journal', 'watchdog-state', 'supervisor-observation', 'supervisor-proposal', 'behavior-instruction', 'config-draft'] as const
+export const recordKinds = [...coreRecordKinds, 'main-state', 'main-message', 'main-command', 'main-message-command',
+  'product-schedule', 'product-schedule-command', 'product-schedule-occurrence', 'product-schedule-source', 'proactive-control', 'proactive-notice', 'proactive-candidate', 'proactive-work', 'proactive-work-source',
+  'main-turn-stop', 'main-turn-stop-command', 'main-update-command', 'main-active-command', 'main-reconcile-command',
+  'main-health', 'main-source-handoff', 'main-source-command', 'main-source-reply', 'main-source-rollover', 'main-session-rollover',
+  'work-brief', 'work-brief-command',
+  'work-split', 'work-plan-conflict', 'work-plan-conflict-head', 'work-item', 'work-item-ticket', 'work-receipt',
+  'work-ticket', 'work-router-turn', 'work-follow-up', 'work-follow-up-command', 'work-update', 'work-update-head',
+  'work-attention-answer', 'work-outcome', 'instance-directory', 'instance-directory-command', 'product-directory',
+  'product-remote-environment', 'product-remote-environment-command',
+  'resource-credential', 'resource-command', 'resource-request', 'resource-vault-intent', 'resource-rotation-intent', 'product-attachment',
+    'browser-resource', 'browser-command', 'browser-grant', 'browser-lease', 'browser-operation', 'browser-control',
+    'browser-import', 'browser-import-command', 'browser-import-source',
+  'product-feishu-credential', 'product-feishu-credential-command', 'product-github-credential', 'product-github-credential-command',
+  'product-mcp-selection', 'product-mcp-command', 'worker-mcp-call', 'worker-mcp-block', 'worker-mcp-denial',
+  'role-preset', 'role-preset-version', 'role-preset-image', 'role-preset-command', 'role-preset-preview',
+  'role-preset-import', 'role-preset-review', 'role-preset-source', 'role-preset-application', 'supervisor-run', 'supervisor-cursor-key',
+  'product-memory', 'product-memory-command', 'product-memory-access', 'product-memory-proposal',
+  'product-memory-import', 'product-memory-import-item', 'product-memory-import-source', 'product-credential-import',
+  'product-credential-import-command'] as const
 export type RecordKind = typeof recordKinds[number]
 
 export function identifier(value: unknown, label: string): asserts value is string {

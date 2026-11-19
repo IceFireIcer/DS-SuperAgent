@@ -2,8 +2,8 @@
 // then close the window the way a user does (it hides, and the app goes on) and end the app the way the
 // tray's Quit ends it.
 // Usage: node scripts/shot.mjs <out.png> [seconds to wait before the screenshot]
-// Set DS_BOT_HOME and DS_BOT_SHELL_DATA to throwaway folders, plus the model variables for the Host
-// (for the ds-bot mock model: DEEPSEEK_BASE_URL=http://127.0.0.1:<port>/v1 and DEEPSEEK_API_KEY=mock-key).
+// Set DS_SUPERAGENT_HOME and DS_SUPERAGENT_SHELL_DATA to throwaway folders, plus the model variables for the Host
+// (for the packaged mock model: DEEPSEEK_BASE_URL=http://127.0.0.1:<port>/v1 and DEEPSEEK_API_KEY=mock-key).
 import { spawn } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -12,8 +12,8 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 
 const [out = 'shot.png', wait = '20'] = process.argv.slice(2)
-if (!process.env.DS_BOT_HOME || !process.env.DS_BOT_SHELL_DATA) {
-  console.error('shot: set DS_BOT_HOME and DS_BOT_SHELL_DATA to throwaway folders')
+if (!process.env.DS_SUPERAGENT_HOME || !process.env.DS_SUPERAGENT_SHELL_DATA) {
+  console.error('shot: set DS_SUPERAGENT_HOME and DS_SUPERAGENT_SHELL_DATA to throwaway folders')
   process.exit(2)
 }
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')

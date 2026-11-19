@@ -7,7 +7,7 @@ import { Engine, NativeSessions } from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, toolResponse, textResponse, routerResponse } from './native-mock.mjs'
 
-const directory = await mkdtemp(join(tmpdir(), 'ds-bot-native-load-'))
+const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-native-load-'))
 let context
 let storage
 let sessions

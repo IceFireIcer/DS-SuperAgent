@@ -51,7 +51,7 @@ async function askModel(text) {
   throw new Error(`The model did not return complete JSON twice: ${lastContent.slice(0, 200)}`)
 }
 
-const directory = await mkdtemp(join(tmpdir(), 'ds-bot-proactive-model-'))
+const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-proactive-model-'))
 const root = join(directory, 'proactive-root')
 let storage
 try {

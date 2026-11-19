@@ -1,9 +1,10 @@
 import type { Context } from '@deepseek-ai/cordis'
+import type { AdmittedPromptContentPart } from '@deepseek-ai/dsh-attachment'
 import { randomUUID } from 'node:crypto'
 import type { Agent, AgentHandle, AgentOptions } from '@deepseek-ai/dsh-agent'
-import { MessageId } from '@deepseek-ai/dsh-llm'
+import { MessageId, ReasoningEffortId, type TokenUsage } from '@deepseek-ai/dsh-llm'
 import { buildForkSeed, SessionId, SessionLogOffset, type SessionEvent } from '@deepseek-ai/dsh-session'
-import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
+import { defineTool, type ParameterSchemaSpec, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { CoreError, type IntakeAssessment } from './model.js'
 import type { RoleModel } from './config.js'
 import type { RoleProfile } from './config.js'
@@ -11,31 +12,89 @@ import type { RoleProfile } from './config.js'
 export interface NativeTool {
   name: string
   description: string
-  parameters: Record<string, { type: 'string'; required: true }>
+  parameters: ParameterSchemaSpec
   /** `agent` is the exact caller DSH reports for this call, used to parent a delegated child Agent. */
-  execute(args: Record<string, string>, signal: AbortSignal, agent?: Agent): Promise<string>
+  execute(args: Record<string, any>, signal: AbortSignal, agent?: Agent): Promise<string>
 }
-export interface NativeSessionRequest { sessionId: string; role: 'router' | 'worker'; text: string; tools: NativeTool[]; cwd?: string; signal?: AbortSignal; onDelivered?: () => Promise<void>; coalesce?: boolean; messageId?: string; onMessagePersisted?: (seq: number) => Promise<void>; instructions?: string; skills?: string[] }
-export interface NativeSessionsOptions { router: AgentOptions; worker: AgentOptions; timeoutMs?: number }
-interface NativeSessionResult { sessionId: string; status: string; events: readonly unknown[]; forkedSessionId?: string }
+export interface NativeSessionRequest { sessionId: string; role: 'main' | 'router' | 'worker'; text: string; content?: AdmittedPromptContentPart[]; tools: NativeTool[]; cwd?: string; signal?: AbortSignal; onBeforeModel?: () => Promise<void>; onDelivered?: () => Promise<void>; coalesce?: boolean; messageId?: string; onMessagePersisted?: (seq: number) => Promise<void>; onForkPrepared?: (sessionId: string) => Promise<void>; instructions?: string; skills?: string[]; profile?: RoleProfile; stepBudget?: number }
+export interface NativeSessionsOptions { main?: AgentOptions; router: AgentOptions; worker: AgentOptions; timeoutMs?: number }
+interface NativeSessionResult { sessionId: string; status: string; events: readonly unknown[]; forkedSessionId?: string
+  turnStartSeq?: number; turnEndSeq?: number; stepCount: number }
+export interface SessionTokenUsage {
+  calls: number
+  reportedCalls: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+  reasoningTokens: number
+  totalTokens: number
+}
+export interface SessionUsageRange {
+  id: string
+  startSeq: number
+  endSeq: number
+}
+export interface SessionUsageSnapshot {
+  status: 'available' | 'missing' | 'over-budget'
+  eventCount: number
+  usage: SessionTokenUsage
+  ranges: { id: string; usage: SessionTokenUsage }[]
+}
 interface RouterTask { request: NativeSessionRequest; resolve: (value: NativeSessionResult) => void; reject: (error: unknown) => void }
 const maxCoalescedRouterTools = 7
 const maxCoalescedRouterBytes = 100000
 
+function tokenCount(value: unknown) {
+  return Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : 0
+}
+
+function sessionUsage(events: readonly unknown[]): SessionTokenUsage {
+  const total = emptySessionUsage()
+  for (const event of events) {
+    const entry = event as { type?: unknown; data?: { usage?: TokenUsage } }
+    if (entry.type === 'assistant/message') addSessionUsage(total, entry.data?.usage)
+  }
+  return total
+}
+
+function emptySessionUsage(): SessionTokenUsage {
+  return { calls: 0, reportedCalls: 0, inputTokens: 0, outputTokens: 0,
+    cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0, totalTokens: 0 }
+}
+
+function addSessionUsage(target: SessionTokenUsage, usage: TokenUsage | undefined) {
+  target.calls++
+  if (!usage) return
+  target.reportedCalls++
+  const inputTokens = tokenCount(usage.inputTokens)
+  const outputTokens = tokenCount(usage.outputTokens)
+  const cacheReadTokens = tokenCount(usage.cacheReadTokens)
+  const cacheWriteTokens = tokenCount(usage.cacheWriteTokens)
+  target.inputTokens += inputTokens
+  target.outputTokens += outputTokens
+  target.cacheReadTokens += cacheReadTokens
+  target.cacheWriteTokens += cacheWriteTokens
+  target.reasoningTokens += tokenCount(usage.reasoningTokens)
+  target.totalTokens += usage.totalTokens === undefined
+    ? inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens
+    : tokenCount(usage.totalTokens)
+}
+
 export class NativeSessions {
   readonly timeoutMs: number
-  readonly routerSessionId = `router-${randomUUID()}`
+  routerSessionId = `router-${randomUUID()}`
   /** The Worker route a delegated child inherits; a child never gets the Router's model or tools. */
   readonly workerRoute: { provider: string; model: string }
   readonly routerRoute: { provider: string; model: string }
-  private readonly routes: { router: RoleModel; worker: RoleModel }
-  private roleInstructions: { router: Pick<RoleProfile, 'instructions' | 'skills'>; worker: Pick<RoleProfile, 'instructions' | 'skills'> } = {
-    router: { instructions: '', skills: [] }, worker: { instructions: '', skills: [] },
+  readonly mainRoute: RoleModel | undefined
+  private readonly routes: { main?: RoleModel; router: RoleModel; worker: RoleModel }
+  private roleInstructions: Record<NativeSessionRequest['role'], Pick<RoleProfile, 'instructions' | 'skills'>> = {
+    main: { instructions: '', skills: [] }, router: { instructions: '', skills: [] }, worker: { instructions: '', skills: [] },
   }
   private readonly handles = new Set<AgentHandle>()
   private readonly agents = new Map<string, Agent>()
   private readonly routerQueue: RouterTask[] = []
-  private readonly pendingSeeds = new Map<string, { seed: readonly SessionEvent[]; parentSession: string; inheritedEventCount: number; cwd?: string }>()
   private routerDraining = false
   private closed = false
   constructor(readonly context: Context, private readonly options: NativeSessionsOptions) {
@@ -44,9 +103,11 @@ export class NativeSessions {
     for (const route of [options.router, options.worker]) if (!route.provider || !route.model) throw new CoreError('INVALID_CONFIG', 'Both roles require an explicit provider and model route.')
     this.options = structuredClone(options)
     this.timeoutMs = timeout
-    this.workerRoute = { provider: options.worker.provider!, model: options.worker.model! }
-    this.routerRoute = { provider: options.router.provider!, model: options.router.model! }
-    this.routes = { router: { ...this.routerRoute }, worker: { ...this.workerRoute } }
+    this.workerRoute = { provider: options.worker.provider!, model: options.worker.model!, ...(options.worker.reasoningEffort ? { effort: String(options.worker.reasoningEffort) } : {}) }
+    this.routerRoute = { provider: options.router.provider!, model: options.router.model!, ...(options.router.reasoningEffort ? { effort: String(options.router.reasoningEffort) } : {}) }
+    if (options.main && (!options.main.provider || !options.main.model)) throw new CoreError('INVALID_CONFIG', 'Main requires an explicit provider and model route.')
+    this.mainRoute = options.main ? { provider: options.main.provider!, model: options.main.model!, ...(options.main.reasoningEffort ? { effort: String(options.main.reasoningEffort) } : {}) } : undefined
+    this.routes = { ...(this.mainRoute ? { main: { ...this.mainRoute } } : {}), router: { ...this.routerRoute }, worker: { ...this.workerRoute } }
   }
 
   /** Apply a new versioned route to subsequent requests only; an in-flight Agent keeps its own options. */
@@ -55,14 +116,24 @@ export class NativeSessions {
       if (!route?.provider || !route?.model) throw new CoreError('INVALID_CONFIG', `${label} route needs provider and model.`)
     }
     this.routes.router = { ...router }; this.routes.worker = { ...worker }
-    this.options.router = { ...this.options.router, provider: router.provider, model: router.model }
-    this.options.worker = { ...this.options.worker, provider: worker.provider, model: worker.model }
+    const { reasoningEffort: _routerEffort, ...routerOptions } = this.options.router
+    const { reasoningEffort: _workerEffort, ...workerOptions } = this.options.worker
+    this.options.router = { ...routerOptions, provider: router.provider, model: router.model,
+      ...(router.effort ? { reasoningEffort: ReasoningEffortId(router.effort) } : {}) }
+    this.options.worker = { ...workerOptions, provider: worker.provider, model: worker.model,
+      ...(worker.effort ? { reasoningEffort: ReasoningEffortId(worker.effort) } : {}) }
   }
 
   getRoutes() { return structuredClone(this.routes) }
 
+  setMainProfile(profile: RoleProfile) {
+    if (!profile.model.provider || !profile.model.model) throw new CoreError('INVALID_CONFIG', 'Main needs an explicit model route.')
+    this.routes.main = { ...profile.model }
+    this.roleInstructions.main = { instructions: profile.instructions, skills: [...profile.skills] }
+  }
+
   setRoleInstructions(router: Pick<RoleProfile, 'instructions' | 'skills'>, worker: Pick<RoleProfile, 'instructions' | 'skills'>) {
-    this.roleInstructions = { router: { instructions: router.instructions, skills: [...router.skills] },
+    this.roleInstructions = { main: this.roleInstructions.main, router: { instructions: router.instructions, skills: [...router.skills] },
       worker: { instructions: worker.instructions, skills: [...worker.skills] } }
   }
 
@@ -106,6 +177,7 @@ export class NativeSessions {
           text: batch.length === 1 ? first.text : `Process these queued Router notifications together. Handle each item using its matching tools.\n${batch.map((task, index) => `Notification ${index + 1}:\n${task.request.text}`).join('\n')}`,
           tools: batch.flatMap((task, index) => task.request.tools.map(tool => ({ ...tool, ...(batch.length === 1 ? {} : { name: (toolNameCounts.get(tool.name) ?? 0) > 1 ? `${tool.name}_${index + 1}` : tool.name, description: `${tool.description} Handle notification ${index + 1} only.` }),
             execute: async (args: Record<string, string>, signal: AbortSignal) => { const result = await tool.execute(args, signal); handled[index] = true; return result } }))),
+          onBeforeModel: async () => { for (const task of batch) await task.request.onBeforeModel?.() },
           onDelivered: async () => { for (const task of batch) await task.request.onDelivered?.() },
         }
         try {
@@ -127,22 +199,39 @@ export class NativeSessions {
   private async execute(request: NativeSessionRequest) {
     if (this.closed) throw new CoreError('RUNTIME_CLOSED', 'The native Session adapter is closed.')
     if (!this.context.get('sessionPersistence')) throw new CoreError('PERSISTENCE_REQUIRED', 'A native Session persistence provider is required before execution.')
+    if (request.stepBudget !== undefined && (!Number.isInteger(request.stepBudget) || request.stepBudget < 1 || request.stepBudget > 100)) {
+      throw new CoreError('INVALID_INPUT', 'A Session step budget must be an integer between 1 and 100.')
+    }
+    const configured = structuredClone(request.profile ?? { model: this.routes[request.role], ...this.roleInstructions[request.role] })
+    const route = configured.model
+    if (!route) throw new CoreError('ROLE_NOT_CONFIGURED', 'The requested role has no model route.')
     let steps = 0
+    let stepBudgetExceeded = false
+    const baseOptions = this.options[request.role]
+    if (!baseOptions) throw new CoreError('ROLE_NOT_CONFIGURED', `The ${request.role} role has no Session options.`)
+    const { reasoningEffort: _existingEffort, ...agentOptions } = baseOptions
     const creation = {
-      sessionId: SessionId(request.sessionId), agentOptions: { ...this.options[request.role], provider: this.routes[request.role].provider, model: this.routes[request.role].model },
+      sessionId: SessionId(request.sessionId), agentOptions: { ...agentOptions, provider: route.provider, model: route.model,
+        ...(route.effort ? { reasoningEffort: ReasoningEffortId(route.effort) } : {}) },
       ...(request.cwd ? { meta: { cwd: request.cwd } } : {}),
       setup: ((scoped, agent) => {
         scoped.on('agent/request', async (_payload, next) => {
-          if (++steps > 8) { agent.cancel({ kind: 'hook', reason: 'Super-agent step budget exhausted.' }); throw new CoreError('STEP_BUDGET', 'The Session step budget was exhausted.') }
+          steps++
+          if (request.stepBudget !== undefined && steps > request.stepBudget) {
+            stepBudgetExceeded = true
+            agent.cancel({ kind: 'hook', reason: 'Super-agent step budget exhausted.' })
+            throw new CoreError('STEP_BUDGET', 'The Session step budget was exhausted.')
+          }
           return next()
         })
         scoped.tools.restrict({ allow: [] })
-        const configured = this.roleInstructions[request.role]
         const instructions = request.instructions ?? configured.instructions
         const skills = request.skills ?? configured.skills
         const renderedInstructions = instructions.replace(/\{\{(goal|constraints|evidence)\}\}/gu, (_match, key: string) =>
           key === 'goal' ? request.text : key === 'constraints' ? 'current Ticket constraints' : 'the supplied evidence cards')
-        scoped.systemPrompt.section({ name: 'superagent-role', order: 0, text: (request.role === 'router'
+        scoped.systemPrompt.section({ name: 'superagent-role', order: 0, text: (request.role === 'main'
+          ? 'You are Main, the user-facing collaborator. Answer and clarify in this continuous conversation. Use only the declared product delegation and query tools. Never claim work was delegated or completed without a durable receipt. Unavailable delegation means no work was started. You cannot edit files, run commands, operate browsers, or manage a Bot team.'
+          : request.role === 'router'
           ? 'You are the Router. Use only the supplied routing and delivery tools. Preserve the original request and require current ready evidence before delivering a result.'
           : 'You are the Worker. Read the original request. Use report_ready only after completing it and supplying verification evidence. Ordinary text or becoming idle does not complete work.')
           + (renderedInstructions.trim() ? `\n\nConfigured role instructions:\n${renderedInstructions}` : '')
@@ -154,17 +243,10 @@ export class NativeSessions {
         }) satisfies ToolDefinition)
       }) satisfies NonNullable<Parameters<Context['agents']['create']>[0]['setup']>,
     }
-    const pending = this.pendingSeeds.get(request.sessionId)
-    const persisted = pending ? undefined : await this.context.sessionPersistence!.stat(SessionId(request.sessionId))
-    const handle = pending
-      ? await this.context.agents.create({ sessionId: creation.sessionId, agentOptions: creation.agentOptions,
-          seed: pending.seed, inheritedEventCount: SessionLogOffset(pending.inheritedEventCount),
-          meta: { ...(pending.cwd ?? request.cwd ? { cwd: pending.cwd ?? request.cwd! } : {}), parentSession: SessionId(pending.parentSession), isSeeded: true },
-          setup: creation.setup })
-      : persisted
-        ? await this.context.agents.resume({ resumeSessionId: creation.sessionId, agentOptions: creation.agentOptions, setup: creation.setup })
-        : await this.context.agents.create(creation)
-    if (pending) this.pendingSeeds.delete(request.sessionId)
+    const persisted = await this.context.sessionPersistence!.stat(SessionId(request.sessionId))
+    const handle = persisted
+      ? await this.context.agents.resume({ resumeSessionId: creation.sessionId, agentOptions: creation.agentOptions, setup: creation.setup })
+      : await this.context.agents.create(creation)
     if (this.closed) { await handle.dispose(); throw new CoreError('RUNTIME_CLOSED', 'The native Session adapter closed during creation.') }
     this.handles.add(handle)
     this.agents.set(request.sessionId, handle.agent)
@@ -189,39 +271,57 @@ export class NativeSessions {
       if ((event.data as { id?: string }).id !== messageId) return
       resolveAppended(Number(event.seq))
     }) : () => {}
+    const previousLastSeq = handle.agent.session.snapshotEvents()
+      .reduce((last, event) => Math.max(last, Number.isSafeInteger((event as { seq?: unknown }).seq) ? Number((event as { seq?: unknown }).seq) : -1), -1)
     try {
       request.signal?.throwIfAborted()
+      await request.onBeforeModel?.()
       await request.onDelivered?.()
-      handle.agent.followup({ id: MessageId(messageId), role: 'user', content: [{ type: 'text', text: request.text }], source: { kind: 'user' } })
-      if (receipt) {
-        appendedSeq = await Promise.race([appended, deadline])
-        if (appendedSeq !== undefined) {
-          if (!await this.context.sessions.flush(handle.agent.session)) throw new CoreError('PERSISTENCE_REQUIRED', 'No persistence provider confirmed this Session flush.')
-          await request.onMessagePersisted?.(appendedSeq)
-        }
-      }
+      handle.agent.followup({ id: MessageId(messageId), role: 'user', content: request.content ?? [{ type: 'text', text: request.text }], source: { kind: 'user' } })
       await handle.agent.whenIdle()
       if (!await this.context.sessions.flush(handle.agent.session)) throw new CoreError('PERSISTENCE_REQUIRED', 'No persistence provider confirmed this Session flush.')
-      if (receipt && appendedSeq === undefined) {
+      if (stepBudgetExceeded) throw new CoreError('STEP_BUDGET', 'The Session step budget was exhausted.')
+      if (receipt) {
         const stored = handle.agent.session.snapshotEvents().find(event => event.type === 'user/message' && (event.data as { id?: string }).id === messageId)
-        if (stored) {
-          appendedSeq = Number(stored.seq)
-          await request.onMessagePersisted?.(appendedSeq)
-        }
+        appendedSeq = stored ? Number(stored.seq) : await Promise.race([appended, deadline])
+        if (appendedSeq === undefined) throw new CoreError('PERSISTENCE_REQUIRED', 'The turn did not confirm its user message identity.')
+        await request.onMessagePersisted?.(appendedSeq)
       }
       const events = handle.agent.session.snapshotEvents()
+      const turnEvents = events.filter(event => Number((event as { seq?: unknown }).seq) > previousLastSeq)
+      const turnStartSeq = turnEvents.length ? Number((turnEvents[0] as { seq?: unknown }).seq) : undefined
+      const turnEndSeq = turnEvents.length ? Number((turnEvents.at(-1) as { seq?: unknown }).seq) : undefined
       const turnEnd = events.findLast(event => (event as { type?: string }).type === 'turn/end') as { data?: { reason?: { kind?: string } } } | undefined
       let forkedSessionId: string | undefined
-      if (request.role === 'worker' && turnEnd?.data?.reason?.kind === 'max-tokens') {
-        const childSessionId = `worker-${randomUUID()}`
+      if ((request.role === 'worker' || request.role === 'main') && turnEnd?.data?.reason?.kind === 'max-tokens') {
+        const childSessionId = request.role === 'main' ? `main-session-${randomUUID()}` : `worker-${randomUUID()}`
         const last = events.at(-1)
         if (last) {
-          this.pendingSeeds.set(childSessionId, { seed: buildForkSeed(events, last.seq), parentSession: request.sessionId,
-            inheritedEventCount: Number(last.seq) + 1, ...(request.cwd ? { cwd: request.cwd } : {}) })
+          const child = await this.context.agents.create({ sessionId: SessionId(childSessionId), agentOptions: creation.agentOptions,
+            seed: buildForkSeed(events, last.seq), inheritedEventCount: SessionLogOffset(Number(last.seq) + 1),
+            meta: { ...(request.cwd ? { cwd: request.cwd } : {}), parentSession: SessionId(request.sessionId), isSeeded: true },
+            setup: creation.setup })
+          try {
+            if (!await this.context.sessions.flush(child.agent.session)) {
+              throw new CoreError('PERSISTENCE_REQUIRED', 'No persistence provider confirmed the forked Session seed.')
+            }
+          } finally { await child.dispose() }
           forkedSessionId = childSessionId
+          await request.onForkPrepared?.(childSessionId)
         }
       }
-      return { sessionId: request.sessionId, status: handle.agent.status, events: structuredClone(events), ...(forkedSessionId ? { forkedSessionId } : {}) }
+      return { sessionId: request.sessionId, status: handle.agent.status, events: structuredClone(events),
+        ...(forkedSessionId ? { forkedSessionId } : {}),
+        ...(turnStartSeq === undefined ? {} : { turnStartSeq }), ...(turnEndSeq === undefined ? {} : { turnEndSeq }), stepCount: steps }
+    } catch (error) {
+      const events = handle.agent.session.snapshotEvents()
+      const turnEvents = events.filter(event => Number((event as { seq?: unknown }).seq) > previousLastSeq)
+      const turnStartSeq = turnEvents.length ? Number((turnEvents[0] as { seq?: unknown }).seq) : undefined
+      const turnEndSeq = turnEvents.length ? Number((turnEvents.at(-1) as { seq?: unknown }).seq) : undefined
+      if (error instanceof CoreError) Object.assign(error, {
+        ...(turnStartSeq === undefined ? {} : { turnStartSeq }), ...(turnEndSeq === undefined ? {} : { turnEndSeq }), stepCount: steps,
+      })
+      throw error
     } finally {
       off(); clearTimeout(timer); request.signal?.removeEventListener('abort', abort)
       await handle.dispose(); this.handles.delete(handle); this.agents.delete(request.sessionId)
@@ -253,6 +353,65 @@ export class NativeSessions {
     } finally { await handle.close() }
   }
 
+  /** Token accounting is summed from provider-reported assistant-message usage, never estimated here. */
+  async readUsage(sessionId: string): Promise<SessionTokenUsage | undefined> {
+    const persistence = this.context.get('sessionPersistence')
+    if (!persistence || !await persistence.stat(SessionId(sessionId))) return undefined
+    const handle = await persistence.open(SessionId(sessionId), 'read')
+    try {
+      return sessionUsage((await handle.read()).events)
+    } finally { await handle.close() }
+  }
+
+  async readUsageSnapshot(sessionId: string, options: { maxEvents?: number; ranges?: SessionUsageRange[] } = {}): Promise<SessionUsageSnapshot> {
+    const persistence = this.context.get('sessionPersistence')
+    const ranges = options.ranges ?? []
+    const maxEvents = options.maxEvents ?? 20_000
+    if (!Number.isSafeInteger(maxEvents) || maxEvents < 1 || maxEvents > 100_000) {
+      throw new CoreError('INVALID_INPUT', 'A usage Session event budget must be from 1 to 100000.')
+    }
+    if (ranges.length > 1000 || ranges.some(range => !range || typeof range.id !== 'string' || !range.id
+      || !Number.isSafeInteger(range.startSeq) || range.startSeq < 0
+      || !Number.isSafeInteger(range.endSeq) || range.endSeq < range.startSeq)
+      || new Set(ranges.map(range => range.id)).size !== ranges.length) {
+      throw new CoreError('INVALID_INPUT', 'Usage attribution ranges must be distinct, ordered and bounded.')
+    }
+    const absent = (status: 'missing' | 'over-budget', eventCount = 0): SessionUsageSnapshot =>
+      ({ status, eventCount, usage: emptySessionUsage(), ranges: [] })
+    if (!persistence) return absent('missing')
+    const id = SessionId(sessionId)
+    const metadata = await persistence.stat(id)
+    if (!metadata) return absent('missing')
+    if (metadata.sizeBytes !== undefined && metadata.sizeBytes > 32 * 1024 * 1024
+      || metadata.eventCount !== undefined && metadata.eventCount > maxEvents) return absent('over-budget', metadata.eventCount)
+
+    const handle = await persistence.open(id, 'read')
+    try {
+      // A fork copies the prefix. Accounting starts where the new Session starts producing events.
+      const first = Number(handle.inheritedEventCount)
+      const events = (await handle.read(first, maxEvents + 1)).events
+      if (events.length > maxEvents) return absent('over-budget', first + events.length)
+      const starts = [...ranges].sort((left, right) => left.startSeq - right.startSeq)
+      const ends = [...ranges].sort((left, right) => left.endSeq - right.endSeq)
+      const rangeTotals = new Map(ranges.map(range => [range.id, emptySessionUsage()]))
+      const total = emptySessionUsage()
+      const active = new Set<string>()
+      let start = 0, end = 0
+      for (const raw of events) {
+        const event = raw as { type?: unknown; seq?: unknown; data?: { usage?: TokenUsage } }
+        if (event.type !== 'assistant/message') continue
+        addSessionUsage(total, event.data?.usage)
+        if (!Number.isSafeInteger(event.seq)) continue
+        const sequence = Number(event.seq)
+        while (starts[start] && starts[start]!.startSeq <= sequence) active.add(starts[start++]!.id)
+        while (ends[end] && ends[end]!.endSeq < sequence) active.delete(ends[end++]!.id)
+        if (active.size === 1) addSessionUsage(rangeTotals.get(active.values().next().value!)!, event.data?.usage)
+      }
+      return { status: 'available', eventCount: first + events.length, usage: total,
+        ranges: Array.from(rangeTotals, ([id, usage]) => ({ id, usage })) }
+    } finally { await handle.close() }
+  }
+
   async assessSourceBatch(events: Record<string, unknown>[], signal: AbortSignal, onDelivered: () => Promise<void>): Promise<IntakeAssessment[]> {
     let results: IntakeAssessment[] | undefined
     const payload = JSON.stringify(events)
@@ -278,5 +437,12 @@ export class NativeSessions {
   async close() {
     this.closed = true
     await Promise.all([...this.handles].map(handle => handle.dispose()))
+  }
+
+  async flush(sessionId: string) {
+    const agent = this.agents.get(sessionId)
+    if (agent) return Boolean(await this.context.sessions.flush(agent.session))
+    const persistence = this.context.get('sessionPersistence')
+    return Boolean(persistence && await persistence.stat(SessionId(sessionId)))
   }
 }

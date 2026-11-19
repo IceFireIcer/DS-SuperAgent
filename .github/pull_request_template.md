@@ -19,10 +19,11 @@ Fixes #
 
 ## How I checked it / 怎么验证的
 
-- [ ] `npm test` (in `ds-bot/`)
-- [ ] `node scripts/build-client.mjs --check`
+- [ ] `npm test` (in `superagent/`)
+- [ ] `node dsh/scripts/build-client.mjs --check` (in `superagent/`)
 - [ ] `npm run lint`
-- [ ] Smoke test, for changes to `index.js` or `src/host/` / 改了 `index.js` 或 `src/host/` 时跑冒烟测试
+- [ ] `npm run typecheck` and `npm run build` in `superagent/`, for Engine/Host changes / 改 Engine 或 Host 时运行
+- [ ] `node app/scripts/check-superagent-profile.mjs`, for profile or product assembly changes / 改 profile 或产品装配时运行
 - [ ] Screenshot attached, for interface changes / 界面改动已附截图
 
 ## Checklist / 检查

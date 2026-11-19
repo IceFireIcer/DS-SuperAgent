@@ -7,8 +7,8 @@ import * as core from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, textResponse, toolResponse } from '../dev/native-mock.mjs'
 
-for (const sourceMode of [false, true]) test(`a native Router delivers ready evidence to the original ${sourceMode ? 'versioned source thread' : 'desktop message'}`, { timeout: 15000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-native-loop-'))
+for (const sourceMode of [false, true]) test(`a native Router keeps unowned ready evidence from becoming a ${sourceMode ? 'versioned source result' : 'desktop result'}`, { timeout: 15000 }, async context => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-native-loop-'))
   let native
   let storage
   let sessions
@@ -60,27 +60,41 @@ for (const sourceMode of [false, true]) test(`a native Router delivers ready evi
   for (let index = 0; index < 5; index++) await engine.effects.drain()
   const conversation = await engine.conversation(receipt.ticketId)
   assert.equal(conversation.status, 'ready')
+  assert.equal(conversation.lifecycle, 'open')
   assert.equal(conversation.assignments.length, 1)
   assert.equal(conversation.reports.length, 1)
   assert.equal(conversation.reports[0].kind, 'ready')
-  assert.equal(conversation.messages.length, 2)
-  assert.deepEqual(conversation.messages.map(message => message.purpose), ['acknowledgement', 'result'])
+  assert.deepEqual(conversation.messages.map(message => message.purpose), ['acknowledgement'])
   assert.ok(conversation.messages.every(message => message.destination.eventId === 'original-message'))
   if (sourceMode) assert.ok(conversation.messages.every(message => message.destination.threadId === 'room'))
-  assert.equal(conversation.messages[1].text, 'The answer is 4.')
-  assert.equal(conversation.messages[1].reportId, conversation.reports[0].id)
+  assert.equal(requests.some(request => request.model === 'router'
+    && JSON.stringify(request.messages).includes('Ready report:')), false,
+  'a Ticket without a Main-owned work link cannot start a result Router turn')
+  const readyNotice = await storage.transaction('private', async transaction => {
+    let after
+    for (let index = 0; index < 10; index++) {
+      const page = await transaction.scan('effect-key', { limit: 100, ...(after ? { after } : {}) })
+      const found = page.items.map(item => item.value.completed).find(effect =>
+        effect?.payload.type === 'report-ready' && effect.payload.ticketId === receipt.ticketId)
+      if (found || !page.cursor) return found
+      after = page.cursor
+    }
+  })
+  assert.ok(readyNotice)
+  assert.equal((await engine.effects.receipt(readyNotice.id, readyNotice.generation))?.state, 'done',
+    'the no-op ready notice completes instead of retrying as unknown')
   const worker = requests.filter(request => request.model === 'worker')
   assert.ok(worker[0].messages.some(message => message.role === 'user' && message.content.some(block => block.text === command.text)))
   assert.deepEqual(worker[0].tools.map(tool => tool.name), ['add_thread_subscription', 'ask_human', 'read_context', 'remove_thread_subscription', 'report_ready'])
   if (sourceMode) await engine.acceptSource({ ...sourceRequest, commandId: 'transport-retry' })
   else await engine.submit({ ...command, commandId: 'transport-retry' })
   for (let index = 0; index < 3; index++) await engine.effects.drain()
-  assert.equal((await engine.conversation(receipt.ticketId)).messages.length, 2)
+  assert.equal((await engine.conversation(receipt.ticketId)).messages.length, 1)
   assert.equal((await engine.conversation(receipt.ticketId)).assignments.length, 1)
 })
 
 test('idle Worker text never becomes a result and cannot invoke Router-only delivery tools', { timeout: 15000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-idle-worker-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-idle-worker-'))
   let native
   let storage
   let sessions
@@ -111,8 +125,124 @@ test('idle Worker text never becomes a result and cannot invoke Router-only deli
   assert.equal(visible.some(name => name === 'assign_worker' || name === 'deliver_result'), false)
 })
 
+test('a failed Worker model attempt still records its configuration revision', { timeout: 15000 }, async context => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-failed-worker-config-'))
+  let native, storage, sessions, engine
+  context.after(async () => {
+    await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+  native = await nativeContext(join(directory, 'sessions'), options => {
+    if (options.model === 'worker') throw new Error('The Worker model failed.')
+    return options.messages.some(message => message.role === 'tool') ? textResponse('Assigned.') : toolResponse('assign_worker', {})
+  })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  sessions = new core.NativeSessions(native, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] }, { retryDelayMs: 1 }, sessions)
+  const receipt = await engine.submit({ commandId: 'failed-worker', eventId: 'failed-worker', text: 'Fail the Worker model.' })
+  for (let index = 0; index < 6; index++) await engine.effects.drain()
+  const assignment = (await engine.conversation(receipt.ticketId)).assignments[0]
+  assert.ok(assignment)
+  const uses = await engine.getRoleConfigUses(assignment.sessionId)
+  assert.equal(uses.some(use => use.role === 'worker' && use.revision === 1 && use.worker.model === 'worker'), true)
+})
+
+test('a Router batch keeps the configuration captured at its request boundary', { timeout: 20000 }, async context => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-router-config-snapshot-'))
+  let native, storage, sessions, engine, release, entered
+  const gate = new Promise(resolve => { release = resolve })
+  const started = new Promise(resolve => { entered = resolve })
+  const routerModels = []
+  context.after(async () => {
+    release()
+    await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+  native = await nativeContext(join(directory, 'sessions'), async function* (options) {
+    if (options.model === 'worker') { yield* textResponse('Worker is not complete.'); return }
+    routerModels.push(options.model)
+    const user = options.messages.filter(message => message.role === 'user').at(-1)
+    const text = user.content.map(block => block.text ?? '').join('')
+    const results = options.messages.slice(options.messages.lastIndexOf(user) + 1).filter(message => message.role === 'tool')
+    if (!results.length && text.includes('Snapshot alpha.') && text.includes('Snapshot beta.')) {
+      entered()
+      await gate
+    }
+    const tool = options.tools[results.length]
+    if (tool) yield* toolResponse(tool.name, {}, `snapshot-${results.length}`)
+    else yield* textResponse('Assigned.')
+  })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  sessions = new core.NativeSessions(native, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] }, { retryDelayMs: 1 }, sessions)
+  const alpha = await engine.submit({ commandId: 'snapshot-alpha', eventId: 'snapshot-alpha', text: 'Snapshot alpha.' })
+  const beta = await engine.submit({ commandId: 'snapshot-beta', eventId: 'snapshot-beta', text: 'Snapshot beta.' })
+  const running = engine.effects.drain()
+  await started
+  const current = await engine.getRoleConfig()
+  await engine.updateRoleConfig({ commandId: 'snapshot-next', expectedRevision: current.revision,
+    roles: { ...current.roles, router: { ...current.roles.router, model: { provider: 'mock', model: 'router-next' } } } })
+  release()
+  await running
+  assert.equal(routerModels.length > 0, true)
+  assert.deepEqual(new Set(routerModels), new Set(['router']))
+  const uses = await engine.getRoleConfigUses(sessions.routerSessionId)
+  assert.equal(uses.some(use => use.role === 'router' && use.revision === 1 && use.router.model === 'router'), true)
+  assert.ok([alpha.ticketId, beta.ticketId].every(Boolean))
+})
+
+test('a batched Router notice applies the current role configuration and records its use', { timeout: 10000 }, async context => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-engine-batch-config-'))
+  let native, storage, sessions, engine, release, entered
+  const gate = new Promise(resolve => { release = resolve })
+  const started = new Promise(resolve => { entered = resolve })
+  context.after(async () => {
+    release()
+    await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+  const routerTurns = []
+  native = await nativeContext(join(directory, 'sessions'), async function* (options) {
+    if (options.model === 'worker') { yield* textResponse('No completed result.'); return }
+    const user = options.messages.filter(message => message.role === 'user').at(-1)
+    const text = user.content.map(block => block.text ?? '').join('')
+    const results = options.messages.slice(options.messages.lastIndexOf(user) + 1).filter(message => message.role === 'tool')
+    if (!results.length) {
+      routerTurns.push({ model: options.model, sessionId: options.sessionId, text })
+      if (text.includes('Hold the Router.')) { entered(); await gate }
+    }
+    const tool = options.tools[results.length]
+    if (tool) yield* toolResponse(tool.name, {}, `call-${results.length}`)
+    else yield* textResponse('Assigned.')
+  })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  sessions = new core.NativeSessions(native, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] },
+    { retryDelayMs: 1 }, sessions)
+  await engine.submit({ commandId: 'hold-config', eventId: 'hold-config', text: 'Hold the Router.' })
+  const running = engine.effects.drain()
+  await started
+  const before = await engine.getRoleConfig()
+  const changed = await engine.updateRoleConfig({ commandId: 'batch-roles', expectedRevision: before.revision,
+    roles: { ...before.roles, router: { ...before.roles.router, model: { provider: 'mock', model: 'router-custom' },
+      instructions: 'Use the current batch role. {{goal}}' } } })
+  assert.equal(changed.revision, before.revision + 1)
+  const alpha = await engine.submit({ commandId: 'batch-alpha', eventId: 'batch-alpha', text: 'Request alpha.' })
+  const beta = await engine.submit({ commandId: 'batch-beta', eventId: 'batch-beta', text: 'Request beta.' })
+  release()
+  await running
+  for (let index = 0; index < 5; index++) await engine.effects.drain()
+  const batchTurns = routerTurns.filter(turn => !turn.text.includes('Hold the Router.'))
+  assert.ok(batchTurns.length >= 1, JSON.stringify(routerTurns))
+  assert.equal(batchTurns.every(turn => turn.model === 'router-custom'), true, JSON.stringify(routerTurns))
+  const uses = await engine.getRoleConfigUses(batchTurns[0].sessionId)
+  assert.equal(uses.some(use => use.role === 'router' && use.revision === changed.revision && use.router.model === 'router-custom'), true,
+    JSON.stringify(uses))
+  for (const receipt of [alpha, beta]) assert.equal((await engine.conversation(receipt.ticketId)).assignments.length, 1)
+})
+
 for (const partial of [false, true]) test(`Engine notices share the next busy Router turn and ${partial ? 'retry an unhandled item' : 'keep individual receipts'}`, { timeout: 10000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-engine-burst-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-engine-burst-'))
   let native, storage, sessions, engine, release, entered
   const gate = new Promise(resolve => { release = resolve })
   const started = new Promise(resolve => { entered = resolve })

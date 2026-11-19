@@ -319,15 +319,22 @@ function pipeConnection(child) {
 }
 
 /** Harvest a Chromium clone: the source's own exe decrypts its cookies for us. */
+export function chromiumArgs(source, workDir) {
+  return [
+    '--remote-debugging-pipe', `--user-data-dir=${workDir}`, `--profile-directory=${basename(source.profilePath)}`,
+    ...QUIET_ARGS, 'about:blank',
+  ]
+}
+
 async function harvestChromium(source, workDir) {
-  const child = spawn(source.exe, ['--remote-debugging-pipe', `--user-data-dir=${workDir}`, ...QUIET_ARGS, 'about:blank'],
+  const child = spawn(source.exe, chromiumArgs(source, workDir),
     { stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'], windowsHide: true })
   await new Promise((resolve, reject) => { child.once('spawn', resolve); child.once('error', reject) })
   const browser = pipeConnection(child)
   const exited = new Promise((resolve) => child.once('exit', resolve))
   try {
     const { cookies } = await withTimeout(browser.send('Storage.getCookies'), 20_000, 'Storage.getCookies')
-    return cookies.map(cdpCookie)
+    return cdpCookies(cookies)
   } finally {
     browser.send('Browser.close').catch(() => {})
     const done = await Promise.race([exited, sleepMs(3000).then(() => 'timeout')])
@@ -346,6 +353,24 @@ function cdpCookie(c) {
     cookie.partitionKey = { topLevelSite: c.partitionKey.topLevelSite, hasCrossSiteAncestor: Boolean(c.partitionKey.hasCrossSiteAncestor) }
   }
   return cookie
+}
+
+/** CDP cookies in the importer's shape; a partitioned cookie is refused, never flattened. */
+export function cdpCookies(cookies) {
+  const kept = []
+  const skipped = []
+  cookies.forEach((c, index) => {
+    const cookie = cdpCookie(c)
+    if (cookie.partitionKey) {
+      skipped.push({
+        where: `entry ${index + 1}`, name: cookie.name, domain: cookie.domain,
+        code: 'partitioned-unsupported', reason: 'a partitioned cookie cannot be stored without its top-level site',
+      })
+      return
+    }
+    kept.push(cookie)
+  })
+  return { cookies: kept, skipped }
 }
 
 /** Firefox: cookies.sqlite is plain — read the copied db directly. */
@@ -410,7 +435,8 @@ export async function harvestCookies(source, workDir) {
     error.code = 'app-bound'
     throw error
   }
-  return { cookies: await harvestChromium(source, workDir), skipped: census?.locked ?? [] }
+  const harvested = await harvestChromium(source, workDir)
+  return { cookies: harvested.cookies, skipped: [...(census?.locked ?? []), ...harvested.skipped] }
 }
 
 /**

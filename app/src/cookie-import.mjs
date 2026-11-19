@@ -2,16 +2,21 @@
 // parsed first and held in memory under a pending id (cookie values never leave the main
 // process); the page sees a value-free preview, and applying writes the cookies into the
 // partition's session and verifies what the store actually kept.
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { describeCookie, summarizeBySite } from './cookie-parse.mjs'
 
 const PENDING_TTL_MS = 10 * 60_000
 const PENDING_MAX = 16
+const BROWSER_IMPORT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu
+export const isProductBrowserImportId = value => typeof value === 'string' && BROWSER_IMPORT_ID.test(value)
 
 const SAME_SITE = { Strict: 'strict', Lax: 'lax', None: 'no_restriction' }
 
 /** A normalized cookie → Electron's CookiesSetDetails. */
 export function toSetDetails(cookie) {
+  // Electron 44 has no partitionKey in CookiesSetDetails: writing this cookie anyway would
+  // widen it from its top-level site into the default context.
+  if (cookie.partitionKey !== undefined) throw new Error('a partitioned cookie cannot be stored without its top-level site')
   const host = String(cookie.domain ?? '').replace(/^\.+/, '')
   const details = {
     url: `${cookie.secure ? 'https' : 'http'}://${host}${cookie.path || '/'}`,
@@ -30,7 +35,29 @@ export function toSetDetails(cookie) {
   return details
 }
 
-const keyOf = (c) => `${c.name}${String(c.domain ?? '').replace(/^\.+/, '')}${c.path ?? '/'}`
+const identityOf = (c) => {
+  const partition = c.partitionKey
+  return [
+    c.name,
+    String(c.domain ?? '').replace(/^\.+/, '').toLowerCase(),
+    c.path ?? '/',
+    typeof c.hostOnly === 'boolean' ? c.hostOnly : !String(c.domain ?? '').startsWith('.'),
+    partition ? `${partition.topLevelSite}\u0000${partition.hasCrossSiteAncestor === true}` : '',
+  ].join('\u0000')
+}
+
+const sameSiteOf = (c) => (c.sameSite ? SAME_SITE[c.sameSite] : 'unspecified')
+
+function sameStored(stored, cookie) {
+  if (stored.value !== cookie.value) return false
+  if (Boolean(stored.secure) !== Boolean(cookie.secure)) return false
+  if (Boolean(stored.httpOnly) !== Boolean(cookie.httpOnly)) return false
+  if ((stored.sameSite ?? 'unspecified') !== sameSiteOf(cookie)) return false
+  if (typeof cookie.expires === 'number') {
+    if (typeof stored.expirationDate !== 'number' || Math.abs(stored.expirationDate - cookie.expires) > 1) return false
+  } else if (stored.expirationDate !== undefined) return false
+  return true
+}
 
 /**
  * Write cookies into an Electron session: one `cookies.set` each so a rejected cookie cannot
@@ -40,21 +67,35 @@ const keyOf = (c) => `${c.name}${String(c.domain ?? '').replace(/^\.+/, '')}${c.
  */
 export async function applyCookies(storage, cookies) {
   const failed = []
+  const failedIds = new Set()
   for (const cookie of cookies) {
     try {
       await storage.cookies.set(toSetDetails(cookie))
-    } catch (error) {
-      failed.push({ ...describeCookie(cookie), reason: error?.message ?? String(error) })
+    } catch {
+      failed.push({ ...describeCookie(cookie), reason: 'the browser rejected this cookie' })
+      failedIds.add(identityOf(cookie))
     }
   }
   const kept = new Map()
-  for (const stored of await storage.cookies.get({})) kept.set(keyOf(stored), stored)
+  for (const stored of await storage.cookies.get({})) {
+    const id = identityOf(stored)
+    const rows = kept.get(id)
+    if (rows) rows.push(stored)
+    else kept.set(id, [stored])
+  }
   const dropped = []
   let storedCount = 0
   for (const cookie of cookies) {
-    if (failed.some((item) => keyOf(item) === keyOf(cookie))) continue
-    if (kept.has(keyOf(cookie))) storedCount += 1
-    else dropped.push({ ...describeCookie(cookie), reason: 'the browser did not store it' })
+    const id = identityOf(cookie)
+    if (failedIds.has(id)) continue
+    const rows = kept.get(id) ?? []
+    if (rows.some((stored) => sameStored(stored, cookie))) storedCount += 1
+    else {
+      dropped.push({
+        ...describeCookie(cookie),
+        reason: rows.length === 0 ? 'the browser did not store it' : 'the browser kept a different cookie with the same name and domain',
+      })
+    }
   }
   let flushed = false
   try { await storage.cookies.flushStore(); flushed = true } catch { /* the store flushes itself within 30 s */ }
@@ -103,7 +144,12 @@ export class CookieImports {
     while (this.#pending.size >= PENDING_MAX) this.#pending.delete(this.#pending.keys().next().value)
     const id = randomUUID()
     this.#pending.set(id, { cookies: result.cookies, expiresAt: Date.now() + PENDING_TTL_MS })
-    return { id, preview: previewOf(result, source) }
+    const digestInput = result.cookies.map(cookie => [
+      cookie.name, cookie.value, cookie.domain ?? '', cookie.path ?? '/', Boolean(cookie.secure), Boolean(cookie.httpOnly),
+      cookie.sameSite ?? '', cookie.expires ?? null,
+    ]).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)))
+    const sourceDigest = createHash('sha256').update(JSON.stringify(digestInput)).digest('hex')
+    return { id, preview: { ...previewOf(result, source), sourceDigest } }
   }
 
   /** The pending import, or null when it is gone or expired. Taking it leaves it for apply/drop. */
@@ -126,5 +172,65 @@ export class CookieImports {
   sweep() {
     const now = Date.now()
     for (const [id, entry] of this.#pending) if (entry.expiresAt < now) this.#pending.delete(id)
+  }
+}
+
+/** Idempotent Host-to-App apply for product browser imports. Cookie values stay in this process. */
+export class ProductCookieImports {
+  #receipts = new Map()
+  #flights = new Map()
+
+  async apply(storage, pendingImportId, importId, profileKey, imports) {
+    if (!isProductBrowserImportId(pendingImportId) || !isProductBrowserImportId(importId)) {
+      const error = new Error('This browser import identity is invalid.')
+      error.code = 'BROWSER_IMPORT_NOT_FOUND'
+      throw error
+    }
+    this.sweep()
+    const previous = this.#receipts.get(importId)
+    if (previous) {
+      if (previous.profileKey !== profileKey) {
+        const error = new Error('This browser import already belongs to another isolated profile.')
+        error.code = 'BROWSER_IMPORT_CONFLICT'
+        throw error
+      }
+      return structuredClone(previous.report)
+    }
+    const flight = this.#flights.get(importId)
+    if (flight) {
+      if (flight.profileKey !== profileKey) {
+        const error = new Error('This browser import already belongs to another isolated profile.')
+        error.code = 'BROWSER_IMPORT_CONFLICT'
+        throw error
+      }
+      return flight.promise
+    }
+    const promise = this.#apply(storage, pendingImportId, importId, profileKey, imports)
+    this.#flights.set(importId, { profileKey, promise })
+    try { return await promise }
+    finally { if (this.#flights.get(importId)?.promise === promise) this.#flights.delete(importId) }
+  }
+
+  async #apply(storage, pendingImportId, importId, profileKey, imports) {
+    const pending = imports.peek(pendingImportId)
+    if (!pending) {
+      const error = new Error('This browser import preview is no longer pending.')
+      error.code = 'BROWSER_IMPORT_NOT_FOUND'
+      throw error
+    }
+    const report = await applyCookies(storage, pending.cookies)
+    imports.drop(pendingImportId)
+    this.#receipts.set(importId, { profileKey, report, expiresAt: Date.now() + PENDING_TTL_MS })
+    while (this.#receipts.size > PENDING_MAX) this.#receipts.delete(this.#receipts.keys().next().value)
+    return structuredClone(report)
+  }
+
+  cancel(imports, pendingImportId) {
+    imports.drop(pendingImportId)
+  }
+
+  sweep() {
+    const now = Date.now()
+    for (const [id, receipt] of this.#receipts) if (receipt.expiresAt < now) this.#receipts.delete(id)
   }
 }

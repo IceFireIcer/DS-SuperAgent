@@ -1,0 +1,30 @@
+# The production Super-agent host for the existing chat UI. The browser bundle
+# is discovered from this package's dsh.client manifest and ./client export.
+- insert:
+    - id: superagent
+      name: ds-superagent
+    # Web search with the current conversation route's own key, else a keyless
+    # results-page fallback.
+    - id: web-search-auto
+      name: ds-superagent/web-search
+    # The managed profile uses the same PostgreSQL store family for the native
+    # Session log. Connection settings remain in the trusted Host environment.
+    - id: session-persistence-postgres
+      name: ds-superagent/session-persistence-postgres
+      disabled: !!js "!process.env.DS_SUPERAGENT_POSTGRES?.trim()"
+      config: !!js "process.env.DS_SUPERAGENT_POSTGRES?.trim() ? JSON.parse(process.env.DS_SUPERAGENT_POSTGRES) : {}"
+
+- id: session-persistence-jsonl
+  disabled: !!js "Boolean(process.env.DS_SUPERAGENT_POSTGRES?.trim())"
+
+# A config override replaces the whole entry config, so fetchProvider is restated.
+- id: web
+  config:
+    searchProvider: auto
+    fetchProvider: http
+
+# Keep the public client module available while removing the native Session
+# controller from the Gateway's product scope, including its WebSocket carrier.
+- id: session-controller
+  isolate:
+    sessionController: product-native-session

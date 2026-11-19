@@ -8,15 +8,17 @@ import { spawnSync } from 'node:child_process'
 
 const scanner = fileURLToPath(new URL('./scan.mjs', import.meta.url))
 const scan = (text) => {
-  const dir = mkdtempSync(join(tmpdir(), 'dsbot-scan-'))
+  const dir = mkdtempSync(join(tmpdir(), 'ds-superagent-scan-'))
   try {
     for (const file of ['LICENSE', 'README.md', 'README.zh.md', 'CONTRIBUTING.md', 'CHANGELOG.md', 'AGENTS.md', '.gitignore']) {
       writeFileSync(join(dir, file), '')
     }
-    mkdirSync(join(dir, 'ds-bot'))
-    writeFileSync(join(dir, 'ds-bot', 'LICENSE'), '')
-    writeFileSync(join(dir, 'ds-bot', 'package.json'), JSON.stringify({
-      name: 'ds-bot', files: ['LICENSE'], repository: 'fixture', homepage: 'fixture', bugs: 'fixture',
+    mkdirSync(join(dir, 'superagent', 'dsh'), { recursive: true })
+    writeFileSync(join(dir, 'superagent', 'LICENSE'), '')
+    writeFileSync(join(dir, 'superagent', 'package.json'), JSON.stringify({
+      name: 'ds-superagent', files: ['LICENSE'], repository: 'fixture', homepage: 'fixture', bugs: 'fixture',
+      exports: { './client': './dsh/client.js', './web-search': './dsh/web-search.js' },
+      dsh: { client: { platform: 'web' }, bundle: { patch: './cordis.patch.yml' } },
     }))
     writeFileSync(join(dir, 'requirements.md'), text)
     const result = spawnSync(process.execPath, [scanner, dir], { encoding: 'utf8' })

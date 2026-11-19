@@ -1,6 +1,6 @@
 # Image-owned overlay: the container is the sandbox boundary, so only full
-# access is offered, and the Bots' working folder is /workspace. The webserver
-# bind host/port come from a second overlay the entrypoint writes per start.
+# access is offered. DS_SUPERAGENT_WORKSPACE supplies the product workspace. The
+# webserver bind host/port come from a second overlay the entrypoint writes.
 - id: permission
   config:
     presets:
@@ -8,8 +8,5 @@
         sandbox: danger-full-access
         approval: never
         name: Full access
-        description: The container is the boundary. Bots can change every file it can see.
+        description: The container is the boundary. Agents can change every file it can see.
     defaultPreset: danger-full-access
-- id: bot
-  config:
-    workspace: /workspace

@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { createServer, request as httpRequest } from 'node:http'
 import { mkdtemp, mkdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,6 +6,7 @@ import { test } from 'node:test'
 import * as core from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, textResponse, toolResponse } from '../dev/native-mock.mjs'
+import { breakableProxy } from './fixtures/breakable-proxy.mjs'
 
 const grant = {
   instanceId: 'private',
@@ -16,41 +16,15 @@ const grant = {
 }
 
 const commands = {
-  long: { argv: ['node', '-e', "console.log('stop-range');setInterval(()=>{},1000)"], timeoutMs: 5000, backgroundTimeoutMs: 120000 },
+  long: { argv: [process.execPath, '-e', "console.log('stop-range');setInterval(()=>{},1000)"], timeoutMs: 5000, backgroundTimeoutMs: 120000 },
 }
 
 function sleep(milliseconds) {
   return new Promise(resolve => setTimeout(resolve, milliseconds))
 }
 
-async function proxyFixture(endpoint) {
-  const state = { blocked: false }
-  const server = createServer((request, response) => {
-    if (state.blocked) { request.destroy(); response.destroy(); return }
-    const chunks = []
-    request.on('data', chunk => chunks.push(chunk))
-    request.on('end', () => {
-      const upstream = httpRequest(new URL(request.url, endpoint), { method: request.method, headers: request.headers }, result => {
-        const answer = []
-        result.on('data', chunk => answer.push(chunk))
-        result.on('end', () => {
-          const body = Buffer.concat(answer)
-          const headers = { ...result.headers }
-          delete headers['transfer-encoding']
-          response.writeHead(result.statusCode ?? 500, { ...headers, 'content-length': String(body.length) }).end(body)
-        })
-      })
-      upstream.on('error', error => response.writeHead(502).end(error.message))
-      upstream.end(Buffer.concat(chunks))
-    })
-  })
-  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve) })
-  const address = server.address()
-  return { endpoint: `http://127.0.0.1:${address.port}`, state, close: () => new Promise(resolve => { server.closeAllConnections(); server.close(resolve) }) }
-}
-
-test('an offline remote stop stays pending instead of claiming the device range is cancelled', { timeout: 30000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-remote-stop-'))
+test('an offline remote stop stays pending instead of claiming the device range is cancelled', { timeout: 90000 }, async context => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-remote-stop-'))
   const root = join(directory, 'device-work')
   await mkdir(root)
   let device, proxy, environment, native, storage, sessions, engine
@@ -68,7 +42,7 @@ test('an offline remote stop stays pending instead of claiming the device range 
   device = await core.RemoteDevice.open({ deviceId: 'second-device', root, jobsPath: join(directory, 'device-jobs'),
     commands, grants: [grant], statePath: join(directory, 'device-state.json') })
   const endpoint = await device.start()
-  proxy = await proxyFixture(endpoint)
+  proxy = await breakableProxy(endpoint)
   environment = await core.RemoteEnvironment.pair({ id: 'remote-project', instanceId: 'private', allowedActorIds: ['user'],
     permissions: ['read', 'write', 'search', 'command'], endpoint: proxy.endpoint, pairingCode: device.pairingCode,
     expectedDeviceId: 'second-device', expectedDeviceKey: device.deviceKeyFingerprint })
@@ -103,4 +77,30 @@ test('an offline remote stop stays pending instead of claiming the device range 
   assert.equal(conversation.jobs[0].state, 'unknown')
   await assert.rejects(engine.resumeTicket({ commandId: 'resume-too-early', ticketId: receipt.ticketId }), { code: 'STOPPING' })
 
+  let inspectedWrongDevice = false
+  const replacement = {
+    kind: 'remote',
+    config: { ...environment.config, root: join(directory, 'replacement-work') },
+    deviceId: 'replacement-device',
+    deviceIncarnation: 'replacement-incarnation',
+    online: true,
+    authorize() {},
+    prepare: async () => {
+      inspectedWrongDevice = true
+      throw new Error('The replacement device must not inspect the original range.')
+    },
+    close: async () => {},
+  }
+  const replacementEngine = new core.Engine(storage, 'private',
+    { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] }, {}, sessions,
+    [replacement], {}, { waitMs: 60000 })
+  try {
+    const stillPending = await replacementEngine.reconcileStop({ commandId: 'reconcile-on-wrong-device',
+      ticketId: receipt.ticketId })
+    assert.equal(inspectedWrongDevice, false)
+    assert.equal(stillPending.stop.pendingDeviceConfirmation, true)
+  } finally {
+    await replacementEngine.shutdown()
+    await replacementEngine.effects.stop()
+  }
 })

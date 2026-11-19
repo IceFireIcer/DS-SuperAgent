@@ -6,6 +6,8 @@ import { join } from 'node:path'
 import * as core from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, routerResponse, textResponse, toolResponse } from '../dev/native-mock.mjs'
+import { createModelBudget, createRealModelRuntime } from './real-model-adapter.mjs'
+import { readEnvironment } from './t57-env-check.mjs'
 
 const exec = promisify(execFile)
 const repoPath = process.env.SUPERAGENT_TEST_REPO ?? 'E:/FolderForVibeCoding/Multi-Agent-DevelopProj/SuperAgentTest'
@@ -24,7 +26,16 @@ let native, sessions, storage, desktop, github, poller, directory
 const existingIssue = process.env.SUPERAGENT_EXISTING_ISSUE
 const existingPr = process.env.SUPERAGENT_EXISTING_PR
 const existingBranch = process.env.SUPERAGENT_EXISTING_BRANCH
+const realModel = process.env.SUPERAGENT_ACCEPTANCE_MODEL === 'real'
+const modelConfig = readEnvironment().model
+const modelEndpoint = modelConfig.url
+const modelId = modelConfig.id
+const modelProvider = modelConfig.provider
+const modelKey = modelConfig.key
+let modelBudget, modelRegistration
 
+if (process.argv.includes('--t27')) await t27Scenario()
+else {
 try {
   await run('git', ['checkout', 'main'])
   await run('git', ['pull', '--ff-only'])
@@ -66,9 +77,18 @@ try {
   }
   const checks = await waitForChecks()
 
-  directory = await mkdtemp(join(tmpdir(), 'ds-bot-github-acceptance-'))
+  directory = await mkdtemp(join(tmpdir(), 'ds-superagent-github-acceptance-'))
   storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
-  native = await nativeContext(join(directory, 'sessions'), async function* (options) {
+  if (realModel) {
+    if (!modelKey) throw new Error('Set SUPERAGENT_MODEL_KEY or POKEXIAO_API_KEY for a real-model acceptance run.')
+    modelBudget = createModelBudget({ maxRequests: Number(process.env.SUPERAGENT_MODEL_MAX_REQUESTS ?? 16),
+      maxTokens: Number(process.env.SUPERAGENT_MODEL_MAX_TOKENS ?? 40_000) })
+    const runtime = createRealModelRuntime({ provider: modelProvider, endpoint: modelEndpoint, apiKey: modelKey, model: modelId, budget: modelBudget })
+    native = await nativeContext(join(directory, 'sessions'), () => { throw new Error('The real-model acceptance must not call the mock responder.') })
+    modelRegistration = native.llm.registerAdapter([runtime.provider], runtime.adapter)
+    sessions = new core.NativeSessions(native, { router: { provider: runtime.provider, model: runtime.model },
+      worker: { provider: runtime.provider, model: runtime.model }, timeoutMs: 55_000 })
+  } else native = await nativeContext(join(directory, 'sessions'), async function* (options) {
     const user = options.messages.filter(message => message.role === 'user').at(-1)
     const text = user.content.filter(block => block.type === 'text').map(block => block.text).join('')
     const completed = options.messages.slice(options.messages.lastIndexOf(user) + 1).filter(message => message.role === 'tool').length
@@ -79,30 +99,31 @@ try {
     }
     yield* routerResponse(options)
   })
-  sessions = new core.NativeSessions(native, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  if (!realModel) sessions = new core.NativeSessions(native, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
   const hostOptions = { hostId: 'acceptance-host', leaseMs: 60000 }
+  const effectsOptions = realModel ? { operationTimeoutMs: 60_000 } : {}
   desktop = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] },
-    {}, sessions, [], {}, {}, {}, {}, hostOptions)
+    effectsOptions, sessions, [], {}, {}, {}, {}, hostOptions)
   github = new core.Engine(storage, 'private', { kind: 'github', sourceInstanceId: `github:${repo}`, actorId: 'acceptance',
-    allowedActorIds: ['acceptance'], allowedThreadPrefixes: [`github:${repo}#`], versionOrder: 'sequence' }, {}, undefined, [], {}, {}, {}, {}, hostOptions)
+    allowedActorIds: ['acceptance'], allowedThreadPrefixes: [`github:${repo}#`], versionOrder: 'sequence' }, effectsOptions, undefined, [], {}, {}, {}, {}, hostOptions)
   const source = new core.GitHubSource(storage, 'private', github, { owner: ownerName, repo: repoName })
-  poller = new core.GitHubPoller(source, new core.GitHubCliTransport(), ownerName, repoName, { intervalMs: 1000, setup: async () => { await gh('api', `repos/${repo}`) } })
-  const untilReady = async ticketId => {
-    for (let index = 0; index < 30; index++) {
+  poller = new core.GitHubPoller(source, new core.GitHubCliTransport(), ownerName, repoName, {
+    intervalMs: 1000, pollTimeoutMs: Number(process.env.SUPERAGENT_GITHUB_POLL_TIMEOUT_MS ?? 60_000),
+    setup: async () => { await gh('api', `repos/${repo}`) },
+  })
+  const waitForConversation = async (ticketId, predicate) => {
+    const deadline = Date.now() + 180_000
+    while (Date.now() < deadline) {
       await desktop.effects.drain()
       const conversation = await desktop.conversation(ticketId)
-      if (conversation.status === 'ready' || conversation.status === 'waiting-human') return conversation
+      if (predicate(conversation)) return conversation
+      await new Promise(resolve => setTimeout(resolve, 100))
     }
     return desktop.conversation(ticketId)
   }
-  const untilResult = async ticketId => {
-    for (let index = 0; index < 30; index++) {
-      await desktop.effects.drain()
-      const conversation = await desktop.conversation(ticketId)
-      if (conversation.messages.some(message => message.purpose === 'result')) return conversation
-    }
-    return desktop.conversation(ticketId)
-  }
+  const untilReady = ticketId => waitForConversation(ticketId, conversation => conversation.status === 'ready')
+  const untilResult = ticketId => waitForConversation(ticketId,
+    conversation => conversation.messages.some(message => message.purpose === 'result' && message.state === 'sent'))
   const firstPoll = await poller.pollOnce()
   const issue = await github.getSourceObject({ threadId: `github:${repo}#${issueNumber}`, objectId: `issue:${issueNumber}` })
   const pull = await github.getSourceObject({ threadId: `github:${repo}#${prNumber}`, objectId: `pr:${prNumber}` })
@@ -111,7 +132,8 @@ try {
   const checkObject = await github.getSourceObject({ threadId: `github:${repo}#${prNumber}`, objectId: `pr:${prNumber}:ci:${checks[0].id}` })
   if (!checkObject) throw new Error('The real GitHub check-run event was not recorded.')
 
-  const t26 = await desktop.submit({ commandId: `t26-request-${stamp}`, eventId: `t26-message-${stamp}`, text: 'Prepare the greeting change.' })
+  const t26 = await desktop.submit({ commandId: `t26-request-${stamp}`, eventId: `t26-message-${stamp}`,
+    text: 'Prepare a greeting change in the isolated acceptance project. Report a short confirmation and cite the isolated acceptance request as evidence. Do not ask for clarification and do not change files.' })
   await desktop.bindDeliveryCondition({ commandId: `t26-bind-${stamp}`, ticketId: t26.ticketId, kind: 'pr', sourceInstanceId: `github:${repo}`,
     repo, number: prNumber, basis: `Real pull request #${prNumber} created by the isolated acceptance worker.` })
   const beforeMerge = await untilReady(t26.ticketId)
@@ -136,44 +158,169 @@ try {
       effects: (await desktop.effects.list()).items.map(effect => ({ key: effect.key, stream: effect.stream, scope: effect.scope, state: effect.state, reason: effect.reason, attempts: effect.attempts })) })}`)
   }
 
-  const t27 = await desktop.submit({ commandId: `t27-request-${stamp}`, eventId: `t27-message-${stamp}`, text: 'Deliver the result to the linked pull request.' })
-  const target = await desktop.setDeliveryTarget({ commandId: `t27-target-${stamp}`, ticketId: t27.ticketId, purpose: 'result',
-    sourceInstanceId: `github:${repo}`, threadId: `github:${repo}#${prNumber}`, objectId: `pr:${prNumber}`,
-    evidence: 'The real merged pull request is the authorized follow-up destination.', evidenceEventId: mergedPull.eventId })
-  const t27Conversation = await untilResult(t27.ticketId)
-  const result = t27Conversation.messages.find(message => message.purpose === 'result')
-  if (!result || result.destination.sourceInstanceId !== `github:${repo}` || result.destination.eventId !== `pr:${prNumber}`) {
-    throw new Error(`The real GitHub delivery target did not redirect the result: ${JSON.stringify({ target,
-      status: t27Conversation.status, messages: t27Conversation.messages,
-      storedTarget: await desktop.getDeliveryTarget(t27.ticketId, 'result'),
-      effects: (await desktop.effects.list()).items.map(effect => ({ key: effect.key, stream: effect.stream, scope: effect.scope, state: effect.state, reason: effect.reason })) })}`)
-  }
+  await t27Scenario(prNumber)
 
   await poller.start()
   const loopStart = Date.now()
-  while (poller.health().passes < 1 && Date.now() - loopStart < 30000) await new Promise(resolve => setTimeout(resolve, 200))
+  while (poller.health().passes < 1 && Date.now() - loopStart < 150_000) await new Promise(resolve => setTimeout(resolve, 200))
   await poller.stop()
   const loopHealth = poller.health()
   if (loopHealth.passes < 1 || loopHealth.state !== 'stopped') throw new Error(`The real polling loop did not complete a pass and stop: ${JSON.stringify(loopHealth)}`)
 
-  console.log(JSON.stringify({ repo, issueNumber, prNumber, reviewId: review.id, branch: existingBranch ?? branch,
+  if (realModel && modelBudget.exceeded) throw new Error('The real-model GitHub acceptance exceeded its declared budget.')
+  console.log(JSON.stringify({ repo, issueNumber, prNumber, reviewId: review.id, branch: existingBranch ?? (existingPr ? undefined : branch),
+    model: realModel ? { provider: modelProvider, id: modelId, endpoint: new URL(modelEndpoint).host, budget: modelBudget } : 'mock',
     firstPoll, secondPoll, ci: { id: checks[0].id, name: checks[0].name, conclusion: checks[0].conclusion }, pollingLoop: loopHealth,
     beforeMerge: { lifecycle: beforeMerge.lifecycle, deliveryPending: beforeMerge.deliveryPending },
     afterMerge: { lifecycle: afterMerge.lifecycle, condition: afterMerge.deliveryConditions[0] },
-    deliveryTarget: target, resultDestination: result.destination }, null, 2))
+    t27: 'The dedicated T27 scenario above records the real association, negative references and native outbound receipt.' }, null, 2))
 } catch (error) {
   console.error(JSON.stringify({ error: error instanceof Error ? error.message : String(error), issue: undefined }))
   process.exitCode = 1
 } finally {
-  await desktop?.effects.stop().catch(() => {})
-  await github?.effects.stop().catch(() => {})
-  await sessions?.close().catch(() => {})
-  await native?.fiber.dispose().catch(() => {})
-  await storage?.close().catch(() => {})
-  if (directory) await rm(directory, { recursive: true, force: true }).catch(() => {})
-  if (branchCreated) {
-    await gh('api', '-X', 'DELETE', `repos/${repo}/git/refs/heads/${branch}`).catch(() => {})
-    await run('git', ['checkout', 'main']).catch(() => {})
-    await run('git', ['branch', '-D', branch]).catch(() => {})
+  const failures = []
+  for (const dispose of [
+    () => poller?.stop(),
+    () => desktop?.effects.stop(),
+    () => github?.effects.stop(),
+    () => desktop?.shutdown(),
+    () => github?.shutdown(),
+    () => sessions?.close(),
+    () => modelRegistration?.(),
+    () => native?.fiber.dispose(),
+    () => storage?.close(),
+    async () => {
+      if (!directory) return
+      if (!directory.startsWith(join(tmpdir(), 'ds-superagent-github-acceptance-'))) throw new Error('Unexpected GitHub acceptance cleanup directory.')
+      await rm(directory, { recursive: true, force: true })
+    },
+  ]) {
+    try { await dispose() } catch (error) { failures.push(error) }
   }
+  if (branchCreated) {
+    for (const dispose of [
+      async () => {
+        try { await gh('api', '-X', 'DELETE', `repos/${repo}/git/refs/heads/${branch}`) }
+        catch (error) { if (!/Reference does not exist|HTTP 422/u.test(error instanceof Error ? error.message : String(error))) throw error }
+      },
+      () => run('git', ['checkout', 'main']),
+      () => run('git', ['branch', '-D', branch]),
+    ]) {
+      try { await dispose() } catch (error) { failures.push(error) }
+    }
+  }
+  if (failures.length) {
+    console.error(JSON.stringify({ cleanupErrors: failures.map(error => error instanceof Error ? error.message : String(error)) }))
+    process.exitCode = 1
+  }
+}
+}
+
+/** Explicit live-write mode: three synthetic corrections and one result comment in an existing isolated PR discussion, including closed PRs. */
+async function t27Scenario(pr = Number(existingPr)) {
+  if (!Number.isSafeInteger(pr) || pr < 1) throw new Error('--t27 requires SUPERAGENT_EXISTING_PR in IceFireIcer/SuperAgentTest.')
+  const work = await mkdtemp(join(tmpdir(), 'ds-superagent-t27-live-'))
+  let db, context, runtime, owner, receiver, denied
+  const failures = []
+  const http = async (path, body) => {
+    const args = ['api', path]
+    if (body) {
+      const input = join(work, 'request.json')
+      await writeFile(input, JSON.stringify(body))
+      args.push('--method', 'POST', '--input', input)
+    }
+    const { stdout } = await exec('gh', args, { cwd: work, maxBuffer: 4 * 1024 * 1024, timeout: 30000, windowsHide: true })
+    return JSON.parse(stdout)
+  }
+  try {
+    const user = await http('user')
+    const pull = await http(`repos/${repo}/pulls/${pr}`)
+    if (typeof user.login !== 'string' || pull.base?.repo?.full_name !== repo) throw new Error('The configured PR or authenticated GitHub actor could not be verified.')
+    db = await SqliteStorage.open(join(work, 'state.sqlite'))
+    context = await nativeContext(join(work, 'sessions'), function* (options) {
+      if (options.model === 'router') { yield* routerResponse(options); return }
+      const message = options.messages.filter(item => item.role === 'user').at(-1)
+      const text = message.content.filter(item => item.type === 'text').map(item => item.text).join('')
+      const done = options.messages.slice(options.messages.lastIndexOf(message) + 1).some(item => item.role === 'tool')
+      if (text.includes('Use revision B.') && !done) yield* toolResponse('report_ready', {
+        result: `T27 ${stamp}: revision B prepared.`, evidence: 'The retained native DSH Session processed the owner-authorized real PR correction.',
+      })
+      else yield* textResponse('Revision A remains a draft until a verified correction arrives.')
+    })
+    runtime = new core.NativeSessions(context, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+    const channel = new core.GitHubDeliveryChannel(new core.GitHubCliReplyTransport(), { storage: db, instanceId: 't27-live', sources: [
+      { sourceInstanceId: `github:${repo}`, host: 'github.com', owner: ownerName, repo: repoName, actorId: user.login },
+    ] })
+    const delivery = {
+      deliver: (item, receipt) => item.destination.sourceInstanceId === 'desktop' ? core.localDeliveryChannel.deliver(item, receipt) : channel.deliver(item, receipt),
+      reconcile: (item, receipt) => item.destination.sourceInstanceId === 'desktop' ? core.localDeliveryChannel.deliver(item, receipt) : channel.reconcile(item, receipt),
+    }
+    owner = new core.Engine(db, 't27-live', { sourceInstanceId: 'desktop', actorId: 'owner', allowedActorIds: ['owner'] }, {}, runtime, [], {}, {}, {}, { channel: delivery })
+    const binding = { kind: 'github', sourceInstanceId: `github:${repo}`, actorId: 'github-receiver', allowedActorIds: ['github-receiver'],
+      allowedThreadIds: [`github:${repo}#${pr}`], versionOrder: 'sequence',
+      intake: { mode: 'auto', maxBatchSize: 5, maxAttempts: 1, timeoutMs: 5000, allowedRequesterIds: [user.login], allowedBotActorIds: [], rules: [] } }
+    receiver = new core.Engine(db, 't27-live', binding)
+    denied = new core.Engine(db, 't27-live', { ...binding, intake: { ...binding.intake, allowedRequesterIds: [] } })
+    const source = new core.GitHubSource(db, 't27-live', receiver, { owner: ownerName, repo: repoName })
+    const first = await owner.submit({ commandId: 'start-A', eventId: `start-${stamp}`, text: 'Prepare revision A within the isolated acceptance task.' })
+    const unrelated = await owner.submit({ commandId: 'unrelated', eventId: `unrelated-${stamp}`, text: 'An unrelated private acceptance task.' })
+    for (let index = 0; index < 8; index++) await owner.effects.drain()
+    const before = await owner.conversation(first.ticketId)
+    const original = await owner.getTicket(first.ticketId)
+    const reference = await owner.getTicketReference(first.ticketId)
+    const other = await owner.getTicketReference(unrelated.ticketId)
+    const negative = []
+    let selected
+    for (const [name, body] of [['wrong', `${other}\nT27 ${stamp}: Use revision B.`], ['ambiguous', `${reference}\n${other}\nT27 ${stamp}: Use revision B.`],
+      ['correct', `${reference}\nT27 ${stamp}: Use revision B.`]]) {
+      const comment = await http(`repos/${repo}/issues/${pr}/comments`, { body })
+      const verified = await http(`repos/${repo}/issues/comments/${comment.id}`)
+      if (verified.body !== body || verified.user?.login !== user.login || verified.id !== comment.id) throw new Error('The native comment identity, author or content did not match the request.')
+      const received = await source.receive({ repo, number: pr, kind: 'comment', action: 'created', deliveryId: `t27-${comment.id}`, cursor: String(comment.id),
+        id: String(comment.id), authorId: verified.user.login, authorKind: 'human', body: verified.body, updatedAt: verified.updated_at })
+      const command = { commandId: `link-${name}`, ticketId: first.ticketId, eventId: received.eventId, reference, reason: 'The desktop owner authorized the exact native PR discussion comment.', retargetResult: true }
+      if (name !== 'correct') {
+        try { await owner.associateSourceEvent(command, receiver); throw new Error(`The ${name} reference was unexpectedly accepted.`) }
+        catch (error) { if (error.code !== 'ASSOCIATION_REFERENCE_INVALID') throw error; negative.push({ commentId: comment.id, kind: name, code: error.code }) }
+      } else {
+        try { await owner.associateSourceEvent({ ...command, commandId: 'denied-actor' }, denied); throw new Error('An unlisted native human was unexpectedly accepted.') }
+        catch (error) { if (error.code !== 'ACTOR_NOT_ALLOWED') throw error; negative.push({ commentId: comment.id, kind: 'unauthorized', code: error.code }) }
+        const revoked = await receiver.getIntakePolicy()
+        await receiver.updateIntakePolicy({ commandId: 'restore-native-actor', expectedRevision: revoked.revision, policy: binding.intake })
+        selected = { commentId: comment.id, url: verified.html_url, association: await owner.associateSourceEvent(command, receiver) }
+      }
+    }
+    for (let index = 0; index < 16; index++) await owner.effects.drain()
+    const after = await owner.conversation(first.ticketId)
+    const result = after.messages.find(item => item.purpose === 'result')
+    if (after.status !== 'ready' || !result || result.state !== 'sent' || after.assignments[0].id !== before.assignments[0].id
+      || after.assignments[0].sessionId !== before.assignments[0].sessionId || JSON.stringify((await owner.getTicket(first.ticketId)).mandate) !== JSON.stringify(original.mandate)
+      || (await owner.getTicketDirection(first.ticketId)).directionVersion !== 2) throw new Error('The real A-to-B association did not retain Ticket, Assignment, Session and Mandate with one direction increment.')
+    const idempotencyKey = JSON.stringify([result.effectId, result.effectGeneration])
+    const platform = await channel.getReceipt(idempotencyKey)
+    if (!platform) throw new Error('The Outbox has no durable native GitHub receipt.')
+    const posted = await http(`repos/${repo}/issues/comments/${platform.messageId}`)
+    if (posted.user?.login !== user.login || posted.html_url !== platform.url || !posted.body.includes(platform.marker)
+      || !posted.body.includes(`T27 ${stamp}: revision B prepared.`) || posted.body.includes(original.trigger.text)) throw new Error('The actual GitHub result or privacy check failed.')
+    const reconciliation = await channel.reconcile(result, { idempotencyKey, signal: new AbortController().signal })
+    if (reconciliation.type !== 'success') {
+      const reason = 'reason' in reconciliation ? reconciliation.reason.match(/^[A-Z][A-Z0-9_]{0,79}/u)?.[0] ?? 'UNCLASSIFIED' : 'UNCLASSIFIED'
+      console.error(JSON.stringify({ stage: 'native-result-reconciliation', type: reconciliation.type, reason,
+        sourceInstanceId: result.destination.sourceInstanceId, platformMessageId: platform.messageId }))
+      throw new Error(`Native result reconciliation failed: ${reconciliation.type}/${reason}.`)
+    }
+    console.log(JSON.stringify({ model: 'mock', repo, pr, ticketId: first.ticketId, directionVersion: 2, assignmentId: after.assignments[0].id,
+      sessionId: after.assignments[0].sessionId, correction: selected, negative, platform, realOutboundVerified: true,
+      limits: ['No real-model semantic judgement', 'No second device or desktop UI binding'] }, null, 2))
+  } catch (error) {
+    failures.push(error)
+  } finally {
+    const cleanups = [owner, receiver, denied].flatMap(engine => [() => engine?.effects.stop(), () => engine?.shutdown()])
+    cleanups.push(() => runtime?.close(), () => context?.fiber.dispose(), () => db?.close(), () => {
+      if (!work.startsWith(join(tmpdir(), 'ds-superagent-t27-live-'))) throw new Error('Unexpected T27 cleanup directory.')
+      return rm(work, { recursive: true, force: true })
+    })
+    for (const cleanup of cleanups) { try { await cleanup() } catch (error) { failures.push(error) } }
+  }
+  if (failures.length) throw new AggregateError(failures, 'T27 acceptance or cleanup failed.')
 }

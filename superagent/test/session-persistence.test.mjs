@@ -20,7 +20,7 @@ import {
 import * as SqliteSessionPersistence from '../dist/session-persistence.js'
 
 async function runtime(t) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-session-sqlite-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-session-sqlite-'))
   const context = new Context()
   await context.plugin(SqliteSessionPersistence, { databasePath: join(directory, 'sessions.sqlite') })
   const persistence = context.get('sessionPersistence')
@@ -79,7 +79,7 @@ test('the SQLite Session provider stores one contiguous durable writer log and e
 })
 
 test('a failed flush or close retains write ownership instead of pretending the handle is gone', async t => {
-  const { persistence, state } = await runtimeWithFailureInjection(t, 'ds-bot-session-failure-')
+  const { persistence, state } = await runtimeWithFailureInjection(t, 'ds-superagent-session-failure-')
   const handle = await persistence.create(header('failure-session'))
   const first = { type: 'session/end-seed', seq: 0, time: Date.now(), data: {} }
   await handle.append([first])
@@ -93,7 +93,7 @@ test('a failed flush or close retains write ownership instead of pretending the 
 })
 
 test('a replacement backend honors the durable writer epoch and cannot silently take an active session', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-session-replacement-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-session-replacement-'))
   const databasePath = join(directory, 'sessions.sqlite')
   const firstContext = new Context()
   const secondContext = new Context()
@@ -153,7 +153,7 @@ test('interleaved writers on different Sessions keep their own contiguous sequen
 })
 
 test('the service flush drains every open write handle and reports a failed drain without releasing ownership', async t => {
-  const { persistence, state } = await runtimeWithFailureInjection(t, 'ds-bot-session-service-flush-')
+  const { persistence, state } = await runtimeWithFailureInjection(t, 'ds-superagent-session-service-flush-')
   const first = await persistence.create(header('flush-one'))
   const second = await persistence.create(header('flush-two'))
   const revisions = async () => [(await persistence.stat('flush-one')).revision, (await persistence.stat('flush-two')).revision]
@@ -172,7 +172,7 @@ test('the service flush drains every open write handle and reports a failed drai
 })
 
 test('a handle whose durable epoch moved on refuses to append or flush instead of silently taking the session back', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-session-epoch-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-session-epoch-'))
   const context = new Context()
   const base = await SqliteStorage.open(join(directory, 'sessions.sqlite'))
   t.after(async () => { await context.fiber.dispose(); await base.close(); await rm(directory, { recursive: true, force: true }) })
@@ -216,7 +216,7 @@ test('an explicitly flushed empty Session survives close', async t => {
 })
 
 test('a corrupt stored log is refused before write ownership is granted', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-session-corrupt-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-session-corrupt-'))
   const context = new Context()
   const base = await SqliteStorage.open(join(directory, 'sessions.sqlite'))
   t.after(async () => { await context.fiber.dispose(); await base.close(); await rm(directory, { recursive: true, force: true }) })
@@ -237,7 +237,7 @@ test('a corrupt stored log is refused before write ownership is granted', async 
 })
 
 test('a stored log with a sequence gap is refused before write ownership is granted', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-session-gap-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-session-gap-'))
   const context = new Context()
   const base = await SqliteStorage.open(join(directory, 'sessions.sqlite'))
   t.after(async () => { await context.fiber.dispose(); await base.close(); await rm(directory, { recursive: true, force: true }) })
@@ -257,7 +257,7 @@ test('a stored log with a sequence gap is refused before write ownership is gran
 })
 
 test('a failed live append stops the handle and reports the original error instead of dropping later events', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-session-live-failure-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-session-live-failure-'))
   const context = new Context()
   const base = await SqliteStorage.open(join(directory, 'sessions.sqlite'))
   t.after(async () => { await context.fiber.dispose().catch(() => {}); await base.close(); await rm(directory, { recursive: true, force: true }) })
@@ -273,7 +273,7 @@ test('a failed live append stops the handle and reports the original error inste
 })
 
 test('an append that fails midway leaves no partial events and can be retried as one batch', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-session-atomic-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-session-atomic-'))
   const context = new Context()
   const base = await SqliteStorage.open(join(directory, 'sessions.sqlite'))
   let failInsertAt = 0
@@ -323,7 +323,7 @@ test('concurrent close calls settle once without a second ownership failure', as
 })
 
 test('a Session abandoned by a crashed process can be recovered without a graceful close', { timeout: 30000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-session-crash-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-session-crash-'))
   const databasePath = join(directory, 'sessions.sqlite')
   const storageModule = pathToFileURL(join(process.cwd(), 'dist', 'storage.js')).href
   const persistenceModule = pathToFileURL(join(process.cwd(), 'dist', 'session-persistence.js')).href

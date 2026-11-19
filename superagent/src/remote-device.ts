@@ -2,7 +2,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { createHash, randomInt, randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { appendFile, lstat, mkdir, open, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { delimiter, extname, isAbsolute, join, relative, resolve, matchesGlob, sep } from 'node:path'
+import { delimiter, dirname, extname, isAbsolute, join, relative, resolve, matchesGlob, sep } from 'node:path'
 import { spawn as spawnPty, type IPty } from 'node-pty'
 import { Context } from '@deepseek-ai/cordis'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
@@ -20,6 +20,7 @@ import { deriveSharedKey, exchangeKeyPair, exportPrivateKey, exportPublicKey, im
   type RemoteJobRecovery, type RemoteOperation, type RemotePermission, type RemoteRequest } from './remote-protocol.js'
 import { protectedPath } from './path-safety.js'
 import { sanitizeSecrets } from './sanitize.js'
+import { inspectWorkCopy } from './work-copy.js'
 
 export type { RemotePermission } from './remote-protocol.js'
 
@@ -99,6 +100,7 @@ const permissions = new Set<RemotePermission>(['read', 'write', 'search', 'comma
 const operationPermissions: Record<Exclude<RemoteOperation, 'status' | 'revoke'>, RemotePermission[]> = {
   'file.read': ['read'],
   'file.write': ['write'],
+  'workcopy.inspect': ['read'],
   'file.glob': ['search'],
   'file.grep': ['read', 'search'],
   'file.artifact': ['read'],
@@ -119,6 +121,12 @@ const operationPermissions: Record<Exclude<RemoteOperation, 'status' | 'revoke'>
 
 type DeviceJobState = 'running' | 'stopping' | 'exited' | 'cancelled' | 'unknown'
 const maxJobs = 64
+
+interface WindowsProcess {
+  pid: number
+  parent: number
+  startedAt: string
+}
 
 interface DeviceProcessIdentity {
   kind: 'posix-proc' | 'pid'
@@ -155,6 +163,7 @@ interface DeviceJob {
   stderr: BoundedOutput
   stdoutSpillDropped: boolean
   stderrSpillDropped: boolean
+  descendants: Map<number, string>
   child?: ChildProcess
   timer?: ReturnType<typeof setTimeout> | undefined
   killTimer?: ReturnType<typeof setTimeout> | undefined
@@ -272,11 +281,11 @@ async function readBody(request: IncomingMessage, limit: number) {
   catch { throw new CoreError('INVALID_INPUT', 'The device request must be JSON.') }
 }
 
-async function readPrefix(path: string, limit: number) {
+async function readPrefix(path: string, limit: number, detectOverflow = false) {
   const handle = await open(path, 'r')
   try {
     const observed = await handle.stat()
-    const length = Math.min(observed.size, limit)
+    const length = detectOverflow ? limit + 1 : Math.min(observed.size, limit)
     const buffer = Buffer.alloc(length)
     let offset = 0
     while (offset < length) {
@@ -366,6 +375,49 @@ function groupAlive(pid: number) {
   }
 }
 
+function windowsProcesses(): Map<number, WindowsProcess> | undefined {
+  const script = "[string]::Join(' ', @($_.ProcessId, $_.ParentProcessId, $_.CreationDate.ToFileTimeUtc()))"
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+    `Get-CimInstance Win32_Process | ForEach-Object { ${script} }`],
+    { encoding: 'utf8', windowsHide: true, timeout: 5000, maxBuffer: 4 * 1024 * 1024 })
+  if (result.error || result.status !== 0 || typeof result.stdout !== 'string') return undefined
+  const table = new Map<number, WindowsProcess>()
+  for (const line of result.stdout.split(/\r?\n/u)) {
+    const match = /^(\d+)\s+(\d+)\s+(\d+)$/u.exec(line.trim())
+    if (!match) continue
+    const pid = Number(match[1])
+    const parent = Number(match[2])
+    if (!Number.isSafeInteger(pid) || !Number.isSafeInteger(parent)) continue
+    table.set(pid, { pid, parent, startedAt: match[3]! })
+  }
+  return table.size ? table : undefined
+}
+
+function windowsDescendants(root: number, table: Map<number, WindowsProcess>) {
+  const children = new Map<number, WindowsProcess[]>()
+  for (const entry of table.values()) {
+    const siblings = children.get(entry.parent)
+    if (siblings) siblings.push(entry)
+    else children.set(entry.parent, [entry])
+  }
+  const found = new Map<number, WindowsProcess>()
+  const pending = [root]
+  while (pending.length) {
+    for (const child of children.get(pending.shift()!) ?? []) {
+      if (child.pid === root || found.has(child.pid)) continue
+      found.set(child.pid, child)
+      pending.push(child.pid)
+    }
+  }
+  return found
+}
+
+function windowsPidAlive(pid: number) {
+  const result = spawnSync('tasklist', ['/FI', `PID eq ${pid}`, '/NH', '/FO', 'CSV'], { encoding: 'utf8', windowsHide: true })
+  if (result.error || typeof result.stdout !== 'string') return undefined
+  return result.stdout.split(/\r?\n/u).some(line => line.match(/^\s*"[^"]*","([^"]*)"/u)?.[1] === String(pid))
+}
+
 function isRecovery(value: unknown): value is RemoteJobRecovery {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
     && typeof (value as RemoteJobRecovery).observedAt === 'number'
@@ -402,6 +454,7 @@ export class RemoteDevice {
   private readonly pairingAttempts: number[] = []
   private readonly seenRequests = new Map<string, number>()
   private readonly jobs = new Map<string, DeviceJob>()
+  private readonly startingJobs = new Map<string, { ownerId: string; fingerprint: string; jobCreated: boolean; promise: Promise<unknown> }>()
   private rootIdentity = ''
 
   private constructor(config: Required<Pick<RemoteDeviceConfig, 'deviceId' | 'root' | 'grants'>> & RemoteDeviceConfig,
@@ -629,6 +682,7 @@ export class RemoteDevice {
         stderr: BoundedOutput.load(stderr.buffer, Math.max(stderr.size, record.stderrTotal ?? 0)),
         stdoutSpillDropped: record.stdoutSpillDropped === true,
         stderrSpillDropped: record.stderrSpillDropped === true,
+        descendants: new Map(),
         writes: Promise.resolve(), persisting: Promise.resolve() }
       this.jobs.set(job.id, job)
       if (restarted) {
@@ -641,7 +695,7 @@ export class RemoteDevice {
   }
 
   private async pruneJobs() {
-    if (this.jobs.size < maxJobs) return
+    if (this.jobs.size + this.pendingStartCount() <= maxJobs) return
     for (const [id, job] of this.jobs) {
       if (!job.settled) continue
       this.jobs.delete(id)
@@ -649,9 +703,21 @@ export class RemoteDevice {
         const file = this.jobFile(id, extension)
         if (file) await rm(file, { force: true })
       }
-      if (this.jobs.size < maxJobs) return
+      for (const stream of ['stdout', 'stderr'] as const) {
+        const file = this.spillSanitizedFile(job.instanceId, job.environmentId, id, stream)
+        if (file) await rm(file, { force: true })
+      }
+      if (this.jobs.size + this.pendingStartCount() <= maxJobs) return
     }
-    if (this.jobs.size >= maxJobs) throw new CoreError('JOB_BUDGET', 'The device already retains its declared number of jobs.')
+    if (this.jobs.size + this.pendingStartCount() > maxJobs) {
+      throw new CoreError('JOB_BUDGET', 'The device already retains its declared number of jobs.')
+    }
+  }
+
+  private pendingStartCount() {
+    let count = 0
+    for (const reservation of this.startingJobs.values()) if (!reservation.jobCreated) count++
+    return count
   }
 
   private async processIdentityFor(pid: number): Promise<DeviceProcessIdentity> {
@@ -871,10 +937,6 @@ export class RemoteDevice {
     const envelope = body as unknown as RpcEnvelope
     const now = Date.now()
     if (Math.abs(now - envelope.at) > 60_000) throw new CoreError('DEVICE_AUTH_FAILED', 'The protected request has expired.')
-    for (const [id, seenAt] of this.seenRequests) if (seenAt < now - 120_000) this.seenRequests.delete(id)
-    if (this.seenRequests.has(envelope.requestId)) throw new CoreError('DEVICE_AUTH_FAILED', 'The protected request was already used.')
-    this.seenRequests.set(envelope.requestId, now)
-    if (this.seenRequests.size > 2048) this.seenRequests.delete(this.seenRequests.keys().next().value!)
     const pairing = this.pairings.get(envelope.pairingId)
     if (!pairing || pairing.revokedAt) throw new CoreError('DEVICE_REVOKED', 'This host connection is not active.')
     const requestKey = this.requestKey(pairing)
@@ -894,6 +956,7 @@ export class RemoteDevice {
     if (command.operation !== 'revoke' && (!grant || !grant.allowedActorIds.includes(command.actorId))) {
       throw new CoreError('GRANT_DENIED', 'The device no longer grants this Instance, Environment and actor.')
     }
+    this.recordRequest(pairing.pairingId, envelope.requestId, now)
     let result: unknown
     try {
       result = await this.execute(pairing, grant, command)
@@ -917,6 +980,16 @@ export class RemoteDevice {
 
   private requestKey(pairing: PairingRecord) {
     return deriveSharedKey(this.identity.privateKey, importPublicKey(pairing.hostExchangeKey), this.transcript(pairing))
+  }
+
+  private recordRequest(pairingId: string, requestId: string, now: number) {
+    for (const [id, seenAt] of this.seenRequests) if (seenAt < now - 120_000) this.seenRequests.delete(id)
+    const key = `${pairingId}\0${requestId}`
+    if (this.seenRequests.has(key)) throw new CoreError('DEVICE_AUTH_FAILED', 'The protected request was already used.')
+    if (this.seenRequests.size >= 2048) {
+      throw new CoreError('DEVICE_BUSY', 'The device replay window is full; retry after it advances.')
+    }
+    this.seenRequests.set(key, now)
   }
 
   private transcript(pairing: PairingRecord): PairingTranscript {
@@ -946,7 +1019,7 @@ export class RemoteDevice {
     if (request.operation.startsWith('command.') || request.operation.startsWith('terminal.')) return this.commandOperation(pairing, request)
     if (request.operation === 'file.read') {
       const target = await this.target(request.args.path!)
-      const bytes = await readPrefix(target, 65536)
+      const bytes = await readPrefix(target, 65536, true)
       if (bytes.length > 65536) throw new CoreError('FILE_TOO_LARGE', 'The file exceeds the 65536-byte read budget.')
       try { return { text: this.sanitize(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) } }
       catch { throw new CoreError('INVALID_FILE', 'The file is not valid UTF-8 text.') }
@@ -959,9 +1032,10 @@ export class RemoteDevice {
       await writeFile(target, request.args.text)
       return { path: request.args.path!, bytes: Buffer.byteLength(request.args.text) }
     }
+    if (request.operation === 'workcopy.inspect') return inspectWorkCopy(this.root)
     if (request.operation === 'file.artifact') {
       const target = await this.target(request.args.path!)
-      const bytes = await readPrefix(target, 65536)
+      const bytes = await readPrefix(target, 65536, true)
       if (bytes.length > 65536) throw new CoreError('FILE_TOO_LARGE', 'The artifact exceeds the 65536-byte read budget.')
       return { path: relative(this.root, target).split(sep).join('/'), bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }
     }
@@ -1094,9 +1168,8 @@ export class RemoteDevice {
     if (!file || !observed?.isFile()) {
       throw new UnsupportedEnvironmentCombination('This job retained no complete ' + stream + ' stream.', [environmentAssetGaps.spillUnavailable])
     }
-    const bytes = await readPrefix(file, Math.min(observed.size, maxSpillBytes))
-    if (bytes.length !== observed.size) throw new UnsupportedEnvironmentCombination('The complete output exceeded the device spill budget.', [environmentAssetGaps.spillUnavailable])
-    return { jobId, stream, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }
+    const sanitized = await this.writeSanitizedSpill(pairing, jobId, stream, file)
+    return { jobId, stream, bytes: sanitized.bytes, sha256: sanitized.sha256 }
   }
 
   private async readSpill(pairing: PairingRecord, jobId: string, args: Record<string, string>) {
@@ -1112,10 +1185,10 @@ export class RemoteDevice {
     if (!this.jobs.has(jobId)) throw new CoreError('NOT_FOUND', 'The device no longer knows this job.')
     const file = this.jobFile(jobId, stream === 'stdout' ? '.out' : '.err')
     const observed = file ? await stat(file).catch(() => undefined) : undefined
-    if (!file || !observed?.isFile() || observed.size < expectedBytes) {
+    if (!file || !observed?.isFile()) {
       throw new CoreError('REFERENCE_STALE', 'The spill object no longer exists at the referenced length.')
     }
-    const prefix = await readPrefix(file, expectedBytes)
+    const prefix = await this.readSanitizedSpill(pairing, jobId, stream, file, expectedBytes, args.expectedSha256)
     if (prefix.length !== expectedBytes || createHash('sha256').update(prefix).digest('hex') !== args.expectedSha256) {
       throw new CoreError('REFERENCE_STALE', 'The spill content no longer matches its reference.')
     }
@@ -1123,6 +1196,48 @@ export class RemoteDevice {
     const window = prefix.subarray(offset, Math.min(expectedBytes, offset + maxBytes))
     return { jobId, stream, bytes: expectedBytes, sha256: args.expectedSha256, offset, nextOffset: offset + window.length,
       data: window.toString('base64') }
+  }
+
+  private spillSanitizedFile(instanceId: string, environmentId: string, jobId: string, stream: 'stdout' | 'stderr') {
+    if (!this.assetsPath) return undefined
+    const namespace = assetNamespace(instanceId, environmentId)
+    const name = createHash('sha256').update(`${jobId}\0${stream}`).digest('hex')
+    return join(this.assetsPath, 'sanitized-spills', namespace, `${name}.${stream}`)
+  }
+
+  private async writeSanitizedSpill(pairing: PairingRecord, jobId: string, stream: 'stdout' | 'stderr', raw: string) {
+    const bytes = await readPrefix(raw, maxSpillBytes, true)
+    if (bytes.length > maxSpillBytes) {
+      throw new UnsupportedEnvironmentCombination('The complete output exceeded the device spill budget.', [environmentAssetGaps.spillUnavailable])
+    }
+    let text: string
+    try {
+      text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+      if (text.includes('\0')) throw new Error('Binary output.')
+    } catch {
+      throw new UnsupportedEnvironmentCombination('Only complete UTF-8 output can be exposed as a spill.', [environmentAssetGaps.spillUnavailable])
+    }
+    const sanitized = Buffer.from(this.sanitize(text), 'utf8')
+    const target = this.spillSanitizedFile(pairing.instanceId, pairing.environmentId, jobId, stream)
+    if (!target) throw new UnsupportedEnvironmentCombination('This device has no deployment-owned spill store.', [environmentAssetGaps.spillUnavailable])
+    await mkdir(dirname(target), { recursive: true, mode: 0o700 })
+    const temporary = `${target}.${randomUUID()}.tmp`
+    await writeFile(temporary, sanitized, { mode: 0o600 })
+    await rename(temporary, target)
+    return { bytes: sanitized.length, sha256: createHash('sha256').update(sanitized).digest('hex') }
+  }
+
+  private async readSanitizedSpill(pairing: PairingRecord, jobId: string, stream: 'stdout' | 'stderr', raw: string,
+    expectedBytes: number, expectedSha256: string) {
+    const target = this.spillSanitizedFile(pairing.instanceId, pairing.environmentId, jobId, stream)
+    if (!target) throw new UnsupportedEnvironmentCombination('This device has no deployment-owned spill store.', [environmentAssetGaps.spillUnavailable])
+    const retained = await readPrefix(target, expectedBytes).catch(() => Buffer.alloc(0))
+    if (retained.length === expectedBytes && createHash('sha256').update(retained).digest('hex') === expectedSha256) return retained
+    const generated = await this.writeSanitizedSpill(pairing, jobId, stream, raw)
+    if (generated.bytes !== expectedBytes || generated.sha256 !== expectedSha256) {
+      throw new CoreError('REFERENCE_STALE', 'The spill content no longer matches its reference.')
+    }
+    return readPrefix(target, expectedBytes)
   }
 
   private jobIdFor(pairing: PairingRecord, jobId: string | undefined) {
@@ -1145,19 +1260,43 @@ export class RemoteDevice {
     const rows = mode === 'terminal' ? parseDimension(args.rows, 'rows') : undefined
     const cols = mode === 'terminal' ? parseDimension(args.cols, 'cols') : undefined
     const terminalType = mode === 'terminal' ? parseTerminalType(args.terminalType) : undefined
-    const existing = this.jobs.get(jobId)
     const deadlineMs = mode === 'foreground' ? command.timeoutMs : command.backgroundTimeoutMs ?? command.timeoutMs
     const fingerprint = canonicalJson([name, command.argv, command.env ?? {}, this.root, mode, deadlineMs, ownerId,
       rows ?? null, cols ?? null, terminalType ?? null])
+    const pending = this.startingJobs.get(jobId)
+    if (pending) {
+      if (pending.ownerId !== ownerId) throw new CoreError('JOB_OWNER_MISMATCH', 'This job ID was already started by a different actor.')
+      if (pending.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'This job ID was already used with different command parameters.')
+      return pending.promise
+    }
+    const existing = this.jobs.get(jobId)
     if (existing) {
-      if (existing.ownerId !== undefined && existing.ownerId !== ownerId) {
-        throw new CoreError('JOB_OWNER_MISMATCH', 'This job ID was already started by a different actor.')
-      }
-      if (existing.fingerprint !== fingerprint) {
-        throw new CoreError('IDENTITY_CONFLICT', 'This job ID was already used with different command parameters.')
-      }
+      this.verifyStartIdentity(existing, ownerId, fingerprint)
       return this.snapshot(existing, 0, 0)
     }
+    const reservation = { ownerId, fingerprint, jobCreated: false, promise: Promise.resolve() as Promise<unknown> }
+    this.startingJobs.set(jobId, reservation)
+    reservation.promise = this.startJobOnce(pairing, jobId, ownerId, name, mode, command, deadlineMs, fingerprint,
+      () => { reservation.jobCreated = true }, rows, cols, terminalType)
+    try {
+      return await reservation.promise
+    } finally {
+      if (this.startingJobs.get(jobId) === reservation) this.startingJobs.delete(jobId)
+    }
+  }
+
+  private verifyStartIdentity(existing: DeviceJob, ownerId: string, fingerprint: string) {
+    if (existing.ownerId !== undefined && existing.ownerId !== ownerId) {
+      throw new CoreError('JOB_OWNER_MISMATCH', 'This job ID was already started by a different actor.')
+    }
+    if (existing.fingerprint !== fingerprint) {
+      throw new CoreError('IDENTITY_CONFLICT', 'This job ID was already used with different command parameters.')
+    }
+  }
+
+  private async startJobOnce(pairing: PairingRecord, jobId: string, ownerId: string, name: string, mode: string,
+    command: RemoteDeviceCommand, deadlineMs: number, fingerprint: string, onCreated: () => void,
+    rows?: number, cols?: number, terminalType?: string) {
     await this.pruneJobs()
     await this.verifyRoot()
     const executable = await this.resolveExecutable(command)
@@ -1166,9 +1305,10 @@ export class RemoteDevice {
       kind: mode === 'terminal' ? 'terminal' : 'command', state: 'running', startedAt: Date.now(),
       deadlineAt: Date.now() + deadlineMs, settled: false, cancelled: false, stdout: new BoundedOutput(),
       stderr: new BoundedOutput(), signalable: true, recoveries: [], rootExited: false,
-      stdoutSpillDropped: false, stderrSpillDropped: false,
+      stdoutSpillDropped: false, stderrSpillDropped: false, descendants: new Map(),
       writes: Promise.resolve(), persisting: Promise.resolve() }
     this.jobs.set(jobId, job)
+    onCreated()
     try {
       await this.ensureJobFiles(job)
       await this.persistJob(job)
@@ -1251,18 +1391,46 @@ export class RemoteDevice {
       }
       await new Promise(resolve => setTimeout(resolve, 50))
     }
-    job.settled = true
     job.state = 'unknown'
     job.reason = 'range-unconfirmed'
-    await this.finishJob(job)
+    this.watchRange(job)
+  }
+
+  private watchRange(job: DeviceJob) {
+    if (job.settled) return
+    job.monitorTimer = setTimeout(() => { void this.monitorRootExitedRange(job) }, 250)
+    job.monitorTimer.unref()
+  }
+
+  private async monitorRootExitedRange(job: DeviceJob) {
+    if (job.settled) return
+    if (await this.rangeEmpty(job)) {
+      job.settled = true
+      job.state = job.cancelled ? 'cancelled' : 'exited'
+      await this.finishJob(job)
+      return
+    }
+    if (job.cancelled || job.state === 'stopping') this.requestStop(job, job.reason ?? 'range-unconfirmed')
+    else if (Date.now() >= job.deadlineAt) this.requestStop(job, 'deadline')
+    if (job.settled) return
+    job.monitorTimer = setTimeout(() => { void this.monitorRootExitedRange(job) }, 1000)
+    job.monitorTimer.unref()
   }
 
   private async rangeEmpty(job: DeviceJob) {
     if (!job.pid) return true
     if (process.platform === 'win32') {
-      const result = spawnSync('tasklist', ['/FI', `PID eq ${job.pid}`, '/NH', '/FO', 'CSV'], { encoding: 'utf8', windowsHide: true })
-      const ids = result.stdout.split(/\r?\n/u).map(line => line.match(/^\s*"[^"]*","([^"]*)"/u)?.[1]).filter(Boolean)
-      return !ids.includes(String(job.pid))
+      if (!job.rootExited) {
+        const alive = windowsPidAlive(job.pid)
+        if (alive !== false) return false
+      }
+      const table = windowsProcesses()
+      if (!table) return false
+      this.rememberWindowsDescendants(job, table)
+      for (const [pid, startedAt] of job.descendants) {
+        if (table.get(pid)?.startedAt === startedAt) return false
+      }
+      return true
     }
     if (job.process?.kind === 'posix-proc') {
       const current = await procIdentity(job.pid)
@@ -1270,6 +1438,10 @@ export class RemoteDevice {
       if (current !== 'gone' && (current.startTime !== job.process.startTime || current.pgrp !== job.process.pgrp)) return false
     }
     return !groupAlive(job.pid)
+  }
+
+  private rememberWindowsDescendants(job: DeviceJob, table: Map<number, WindowsProcess>) {
+    for (const entry of windowsDescendants(job.pid!, table).values()) job.descendants.set(entry.pid, entry.startedAt)
   }
 
   private async killRange(job: DeviceJob, signal: NodeJS.Signals = 'SIGTERM') {
@@ -1282,7 +1454,21 @@ export class RemoteDevice {
       return
     }
     if (process.platform === 'win32') {
-      spawnSync('taskkill', ['/PID', String(job.pid), '/T', '/F'], { windowsHide: true })
+      if (!job.rootExited) {
+        const rootAlive = windowsPidAlive(job.pid)
+        if (rootAlive !== false) {
+          spawnSync('taskkill', ['/PID', String(job.pid), '/T', '/F'], { windowsHide: true })
+          return
+        }
+      }
+      const table = windowsProcesses()
+      if (!table) return
+      this.rememberWindowsDescendants(job, table)
+      for (const pid of job.descendants.keys()) {
+        if (table.get(pid)?.startedAt === job.descendants.get(pid)) {
+          spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true })
+        }
+      }
       return
     }
     if (job.process?.kind === 'posix-proc') {

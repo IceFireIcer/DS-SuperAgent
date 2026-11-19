@@ -1,11 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { copyFile, mkdir, open, readFile, rename, stat, writeFile } from 'node:fs/promises'
+import { mkdir, open, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { CoreError } from './model.js'
 import { completeUtf8Length } from './remote-output.js'
+import { sanitizeSecrets } from './sanitize.js'
 import type { EnvironmentKind } from './environment.js'
 
 export const maxAssetBytes = 65536
+export const maxProductAttachmentBytes = 8 * 1024 * 1024
 export const maxAssetPageBytes = 65536
 export const maxSpillBytes = 1_048_576
 export const defaultAssetPageBytes = 8192
@@ -259,6 +261,18 @@ function digest(bytes: Uint8Array) {
 }
 
 /**
+ * Redacts a complete spill stream once, before it is retained. Paging slices this
+ * projection, so a credential value stays redacted even when a page starts inside it.
+ */
+function redactSpill(bytes: Uint8Array) {
+  let text: string
+  try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes) }
+  catch { return Buffer.from(bytes) }
+  if (text.includes('\0')) return Buffer.from(bytes)
+  return Buffer.from(sanitizeSecrets(text), 'utf8')
+}
+
+/**
  * Content-addressed verbatim file storage owned by one execution world. Local environments
  * and the device daemon each keep their own store, so a Host file of the same name can never
  * satisfy a reference.
@@ -279,9 +293,10 @@ export class FileAssetStore {
     return join(this.root, 'spill', this.namespace, `${createHash('sha256').update(key).digest('hex')}.${stream}`)
   }
 
-  async save(input: { name: string; data: Uint8Array; mediaType?: string }) {
+  async save(input: { name: string; data: Uint8Array; mediaType?: string }, maxBytes = maxAssetBytes) {
     if (!(input.data instanceof Uint8Array)) throw new CoreError('INVALID_INPUT', 'An attachment needs exact bytes.')
-    if (input.data.length > maxAssetBytes) throw new CoreError('INVALID_INPUT', `Attachments are limited to ${maxAssetBytes} bytes.`)
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > maxProductAttachmentBytes
+      || input.data.length > maxBytes) throw new CoreError('INVALID_INPUT', `Attachments are limited to ${maxBytes} bytes.`)
     const name = sanitizedName(input.name)
     const sha256 = digest(input.data)
     const file = this.filePath(sha256)
@@ -327,10 +342,21 @@ export class FileAssetStore {
     const observed = await stat(sourcePath).catch(() => undefined)
     if (!observed?.isFile()) throw new CoreError('SPILL_UNAVAILABLE', 'The provider did not retain this output stream.')
     if (observed.size > maxSpillBytes) throw new CoreError('SPILL_UNAVAILABLE', 'The complete output exceeded the spill budget.')
-    await copyFile(sourcePath, target)
-    const bytes = await readFileBytes(target, 0, observed.size)
+    // The projection is redacted as one stream: a credential label on one page cannot
+    // protect a value that a later page starts in the middle of.
+    const bytes = redactSpill(await readFileBytes(sourcePath, 0, observed.size))
+    if (bytes.length > maxSpillBytes) throw new CoreError('SPILL_UNAVAILABLE', 'The complete output exceeded the spill budget.')
+    await writeFile(target, bytes, { mode: 0o600 })
     const sha256 = digest(bytes)
     return { id: spillAssetId(key, stream), bytes: bytes.length, sha256 }
+  }
+
+  async storeSpillBytes(key: string, stream: SpillStream, data: Uint8Array) {
+    if (data.length > maxSpillBytes) throw new CoreError('SPILL_UNAVAILABLE', 'The complete output exceeded the spill budget.')
+    const bytes = redactSpill(data)
+    if (bytes.length > maxSpillBytes) throw new CoreError('SPILL_UNAVAILABLE', 'The complete output exceeded the spill budget.')
+    await writeFile(this.spillPath(key, stream), bytes, { mode: 0o600 })
+    return { id: spillAssetId(key, stream), bytes: bytes.length, sha256: digest(bytes) }
   }
 
   async spillInfo(key: string, stream: SpillStream) {

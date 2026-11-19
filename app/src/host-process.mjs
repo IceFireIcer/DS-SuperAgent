@@ -26,6 +26,8 @@ const settlesWithin = (promise, ms) => new Promise((resolve) => {
   const timer = setTimeout(() => { resolve(false) }, ms)
   void promise.then(() => { clearTimeout(timer); resolve(true) })
 })
+const validCheckpoint = value => value && Number.isSafeInteger(value.count) && value.count >= 0
+  && Number.isSafeInteger(value.events) && value.events >= 0 && /^[a-f0-9]{64}$/u.test(value.digest)
 
 export class HostProcess {
   #options
@@ -36,6 +38,9 @@ export class HostProcess {
   #stderr = ''
   #stopping = false
   #failed = false
+  #exited = false
+  #shutdownCheckpoint
+  #exitCode
   #messageListeners = new Set()
 
   /**
@@ -49,9 +54,10 @@ export class HostProcess {
    *   and index injections; for the first-run check, the Sessions it cannot read
    */
   start() {
+    this.#exited = false
     this.#ready ??= new Promise((resolve, reject) => {
       const { entry, cwd, env, pnpm } = this.#options
-      const child = spawn(hostExecutable(env.DS_BOT_RUNTIME_DIR, this.#platform), ['--expose-internals', entry, pnpm], {
+      const child = spawn(hostExecutable(env.DS_SUPERAGENT_RUNTIME_DIR, this.#platform), ['--expose-internals', entry, pnpm], {
         cwd, env: { ...env, ELECTRON_RUN_AS_NODE: '1' }, stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
       })
       this.#child = child
@@ -67,10 +73,13 @@ export class HostProcess {
         if (message?.type === 'ready') resolve({ url: message.url, injections: message.injections })
         else if (message?.type === 'checked') resolve({ unreadable: message.unreadable })
         else if (message?.type === 'fatal') this.#fail(new Error(withLogTail(message.message, this.#stderr)), reject)
+        else if (message?.type === 'shutdown-complete' && this.#stopping) this.#shutdownCheckpoint = message.checkpoint
       })
       child.once('error', (error) => { this.#fail(error, reject) })
       this.#exit = new Promise((done) => {
         child.once('close', (code) => {
+          this.#exited = true
+          this.#exitCode = code
           this.#fail(new Error(withLogTail(`The DSH Host stopped (exit ${String(code)})`, this.#stderr)), reject)
           done()
         })
@@ -78,6 +87,12 @@ export class HostProcess {
     })
     return this.#ready
   }
+
+  /** Whether the Host process is still there: a shell that wakes from sleep checks this. */
+  isRunning() { return this.#child !== undefined && !this.#exited }
+
+  /** The Host process, for the lock that keeps a second Router off the same data. */
+  pid() { return this.#child?.pid }
 
   onMessage(listener) { this.#messageListeners.add(listener); return () => this.#messageListeners.delete(listener) }
 
@@ -87,14 +102,30 @@ export class HostProcess {
   }
 
   /** Ask the Host to shut down, then end it if it does not exit in time. */
-  async stop() {
+  async stop({ forBackup = false } = {}) {
     const child = this.#child
     if (child === undefined) return
     this.#stopping = true
-    if (child.connected) child.send({ type: 'shutdown' }, (error) => { if (error) console.error(error) })
-    if (!await settlesWithin(this.#exit, 10_000)) child.kill()
+    if (child.connected) child.send({ type: 'shutdown', forBackup }, (error) => { if (error) console.error(error) })
+    if (!await settlesWithin(this.#exit, forBackup ? 45_000 : 10_000)) child.kill()
     if (!await settlesWithin(this.#exit, 5_000)) child.kill('SIGKILL')
+    // SIGKILL is not an exit: wait for close, so that the lock is not released while the
+    // old Host may still be writing.
+    if (!await settlesWithin(this.#exit, 5_000)) {
+      const error = new Error('The DSH Host did not confirm that it stopped; its data stays locked.')
+      error.code = 'STOP_UNKNOWN'
+      throw error
+    }
+    this.#exited = true
     this.#child = undefined
+    if (forBackup) {
+      if (this.#exitCode !== 0 || !validCheckpoint(this.#shutdownCheckpoint)) {
+        const error = new Error('The Host did not verify that its Sessions were saved. Try the backup again after checking the Host.')
+        error.code = 'BACKUP_SHUTDOWN_UNVERIFIED'
+        throw error
+      }
+      return this.#shutdownCheckpoint
+    }
   }
 
   #fail(error, reject) {

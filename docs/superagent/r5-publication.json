@@ -1,0 +1,1246 @@
+{
+  "version": "R5",
+  "repository": "IceFireIcer/DS-SuperAgent",
+  "spec_number": 1,
+  "approved_at": "2026-11-14",
+  "approval": "User approved the 36-ticket breakdown and authorized closing superseded GitHub issues before publication.",
+  "issues": {
+    "R5-01": {
+      "number": 93,
+      "id": 6388055633,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/93",
+      "title": "[R5-01] 在现有主对话与独立 Main 持续交流",
+      "body_sha256": "f3aad6aafcb0ba45243e7ed5b46496cf9f128fc0426a63d2004bc2a22b230eee",
+      "blockers": []
+    },
+    "R5-02": {
+      "number": 94,
+      "id": 6388056440,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/94",
+      "title": "[R5-02] 从 Main 委托一项本地工作并收到有界结果",
+      "body_sha256": "e92c1c71802a5aec4a81f8bd9548d0ad162f0a66dd167ac70405f998cb73b39e",
+      "blockers": [
+        "R5-01"
+      ]
+    },
+    "R5-03": {
+      "number": 95,
+      "id": 6388057532,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/95",
+      "title": "[R5-03] 将一条复合请求可靠分解为并行工作",
+      "body_sha256": "284e097a0229d1161142a5ccff0a3e955f3a1910620a14da1bc68ee4c785caec",
+      "blockers": [
+        "R5-02"
+      ]
+    },
+    "R5-04": {
+      "number": 96,
+      "id": 6388058574,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/96",
+      "title": "[R5-04] 把跟进交给原工作并处理越界交回",
+      "body_sha256": "e4f94e3d448d9b1f6c3264f533afbb55e738a5de07bcc70117e9168cb9a4f2e0",
+      "blockers": [
+        "R5-03"
+      ]
+    },
+    "R5-05": {
+      "number": 97,
+      "id": 6388059461,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/97",
+      "title": "[R5-05] 自动展示只读 Router、Worker 和新工作历史",
+      "body_sha256": "5542b5be38ca065ef2186f6355d1251b414e40015642007f459132f79d74fc02",
+      "blockers": [
+        "R5-02"
+      ]
+    },
+    "R5-06": {
+      "number": 98,
+      "id": 6388060248,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/98",
+      "title": "[R5-06] 分开停止 Main 回复与持久停止工作",
+      "body_sha256": "30236d49c9d8241cb41e61f29ea158a4a17dfc303e17b5f2e3c0b38934c28764",
+      "blockers": [
+        "R5-02"
+      ]
+    },
+    "R5-07": {
+      "number": 99,
+      "id": 6388061164,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/99",
+      "title": "[R5-07] 在主对话直接回答当前问题卡",
+      "body_sha256": "a8abb04e544c32c8d5eb26d42bb59f9791123e4f6b0129260acc5f986fcbf1f1",
+      "blockers": [
+        "R5-02"
+      ]
+    },
+    "R5-08": {
+      "number": 100,
+      "id": 6388062091,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/100",
+      "title": "[R5-08] Main 故障时继续工作并可靠补读",
+      "body_sha256": "a34f57a0dbd90f200526dc3212bddc9e524d085607eb8924331374d5d1b081e2",
+      "blockers": [
+        "R5-06",
+        "R5-07"
+      ]
+    },
+    "R5-09": {
+      "number": 101,
+      "id": 6388063276,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/101",
+      "title": "[R5-09] 换代 Main 上下文并按需核查证据",
+      "body_sha256": "797616b45c51ae8ca0039686090a8b4ba4ff542559972c590293329026115f4f",
+      "blockers": [
+        "R5-05",
+        "R5-08"
+      ]
+    },
+    "R5-10": {
+      "number": 102,
+      "id": 6388064314,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/102",
+      "title": "[R5-10] 在现有设置独立配置三层模型与指令",
+      "body_sha256": "be076593f2a3046f776a9f878c8a7412647d732f2d9527206ced7f2837063b57",
+      "blockers": [
+        "R5-05"
+      ]
+    },
+    "R5-13": {
+      "number": 103,
+      "id": 6388065122,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/103",
+      "title": "[R5-13] 可靠交付三层消息并限制跨受众发布",
+      "body_sha256": "8bc41c1419ad816f1006dc2c24d5201516bf66b623341e13ed4fdb19d856f55b",
+      "blockers": [
+        "R5-02"
+      ]
+    },
+    "R5-11": {
+      "number": 104,
+      "id": 6388066013,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/104",
+      "title": "[R5-11] 在 GitHub 进入 Main 并直通已有工作",
+      "body_sha256": "3f6db89fbccefccd9a4fb581463611fd9a768581ea8b85405cc2fe1e7d3f9f70",
+      "blockers": [
+        "R5-04",
+        "R5-13"
+      ]
+    },
+    "R5-12": {
+      "number": 105,
+      "id": 6388069154,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/105",
+      "title": "[R5-12] 在飞书按三层角色处理讨论与答复",
+      "body_sha256": "4149c54ea3443072b4620a8f0a61544296a8a63aa1b827d25da5a3d58838727a",
+      "blockers": [
+        "R5-04",
+        "R5-13"
+      ]
+    },
+    "R5-14": {
+      "number": 106,
+      "id": 6388070236,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/106",
+      "title": "[R5-14] 用附件、图像与语音发起和核查工作",
+      "body_sha256": "226a26a60f5ed77f25aa4ef77591932eef6b10ebb57a6ef9587c0c2c78de86dc",
+      "blockers": [
+        "R5-02",
+        "R5-05"
+      ]
+    },
+    "R5-15": {
+      "number": 107,
+      "id": 6388071405,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/107",
+      "title": "[R5-15] 管理新资源的凭据与授权",
+      "body_sha256": "768ca5c04cf12c90c38f7bde66a73c16c2f0f085953c890938c9c54d02258b1b",
+      "blockers": [
+        "R5-01"
+      ]
+    },
+    "R5-16": {
+      "number": 108,
+      "id": 6388072462,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/108",
+      "title": "[R5-16] 在授权工作中使用 MCP 与能力配置",
+      "body_sha256": "267cd3eb86de0539a7234de8ccbed8d41d6d1da1ce978f184c60ed7613d77ed2",
+      "blockers": [
+        "R5-02",
+        "R5-15"
+      ]
+    },
+    "R5-17": {
+      "number": 109,
+      "id": 6388073662,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/109",
+      "title": "[R5-17] 选择工作目录并推进异步命令与子代理",
+      "body_sha256": "196fbf3a31660a08cf078c60abbbe0c50b75301e557374bae911b7b4d64006d7",
+      "blockers": [
+        "R5-02",
+        "R5-06"
+      ]
+    },
+    "R5-18": {
+      "number": 110,
+      "id": 6388074654,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/110",
+      "title": "[R5-18] 使用有隔离与租约的浏览器资源",
+      "body_sha256": "ec7d83e93cb39e44e66ed82906fc7de5cb23ef982a5fd958eafe3401a2b89075",
+      "blockers": [
+        "R5-15",
+        "R5-17"
+      ]
+    },
+    "R5-19": {
+      "number": 111,
+      "id": 6388076005,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/111",
+      "title": "[R5-19] 人工接管浏览器并安全归还工作",
+      "body_sha256": "bb7e5b018fd253f588262634a378e9fcac41a0bb5c110f624ddab6473cedca38",
+      "blockers": [
+        "R5-07",
+        "R5-18"
+      ]
+    },
+    "R5-20": {
+      "number": 112,
+      "id": 6388077173,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/112",
+      "title": "[R5-20] 在工作中生成 Office 交付与结构化视图",
+      "body_sha256": "b8655432683936b9f2214d1ea42c7239e1ca81b966c890a9a00781c0ac54115d",
+      "blockers": [
+        "R5-14",
+        "R5-17"
+      ]
+    },
+    "R5-21": {
+      "number": 113,
+      "id": 6388080266,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/113",
+      "title": "[R5-21] 使用、学习与撤销有归属的记忆",
+      "body_sha256": "b8b6e96387ae48ebe5196961955c47d04b6b7a82ed24205b51c0715f8365320b",
+      "blockers": [
+        "R5-09",
+        "R5-15"
+      ]
+    },
+    "R5-22": {
+      "number": 114,
+      "id": 6388081621,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/114",
+      "title": "[R5-22] 将日程 occurrence 投递给授权工作",
+      "body_sha256": "8a5b9eb1c1860227d7ba0081aa2057966a06207857e3980856fdb0bcc1120c0d",
+      "blockers": [
+        "R5-04",
+        "R5-06"
+      ]
+    },
+    "R5-23": {
+      "number": 115,
+      "id": 6388082843,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/115",
+      "title": "[R5-23] 在规则预算内主动准备可审阅结果",
+      "body_sha256": "79360e5199c7efdfcac7f88458dde1b334a40550744ff61efa03e0d01b20b985",
+      "blockers": [
+        "R5-04",
+        "R5-13",
+        "R5-17"
+      ]
+    },
+    "R5-24": {
+      "number": 116,
+      "id": 6388085974,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/116",
+      "title": "[R5-24] 在三层工作上运行 Watchdog 与语义监督",
+      "body_sha256": "c51cda2e2323747efb677eeb871e70c28ed04d0c9fecfc8bd3d6fb247e87e7a6",
+      "blockers": [
+        "R5-08",
+        "R5-17"
+      ]
+    },
+    "R5-25": {
+      "number": 117,
+      "id": 6388087076,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/117",
+      "title": "[R5-25] 审阅旧配置并应用为角色预设",
+      "body_sha256": "7a0998f9966c74564fb962bfc84588bceb4f5e98ac87230fe73e95da1a50f0f5",
+      "blockers": [
+        "R5-10"
+      ]
+    },
+    "R5-26": {
+      "number": 118,
+      "id": 6388088001,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/118",
+      "title": "[R5-26] 预览并选择导入记忆资源",
+      "body_sha256": "1e25027a1783b8a3ad40d8236b70f6196b696a264f317ad300f63cf127e0f5f0",
+      "blockers": [
+        "R5-21"
+      ]
+    },
+    "R5-27": {
+      "number": 119,
+      "id": 6388088835,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/119",
+      "title": "[R5-27] 预览并选择导入浏览器资源",
+      "body_sha256": "7b6d333f820040b981dbd4f0d57b8417b8a5a2337133105131cfde686ec7f62d",
+      "blockers": [
+        "R5-18"
+      ]
+    },
+    "R5-28": {
+      "number": 120,
+      "id": 6388089711,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/120",
+      "title": "[R5-28] 选择导入凭据引用并重新授权",
+      "body_sha256": "2ed2f409487c8927279061aa16882d352aa6ced9a882161863294241c7110ac7",
+      "blockers": [
+        "R5-15"
+      ]
+    },
+    "R5-29": {
+      "number": 121,
+      "id": 6388090674,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/121",
+      "title": "[R5-29] 在主对话选择本地或授权远端执行",
+      "body_sha256": "e8a6ef072228aab3eb13c4bd90b14b4d17d6536157687d03339dd60213a83179",
+      "blockers": [
+        "R5-14",
+        "R5-15",
+        "R5-17"
+      ]
+    },
+    "R5-30": {
+      "number": 122,
+      "id": 6388091880,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/122",
+      "title": "[R5-30] 离线停止并对账远端未知结果",
+      "body_sha256": "ae53f3b07d9f8bbeb78b5d6f744f925f17ac2a13044b6fa59c69e126e41465f3",
+      "blockers": [
+        "R5-29"
+      ]
+    },
+    "R5-31": {
+      "number": 123,
+      "id": 6388092799,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/123",
+      "title": "[R5-31] 在安全边界双向交接同一工作",
+      "body_sha256": "d63088e9db11189200b93cf8340492046432f8780871bedda4e995e2d3ca0df2",
+      "blockers": [
+        "R5-30"
+      ]
+    },
+    "R5-32": {
+      "number": 124,
+      "id": 6388093743,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/124",
+      "title": "[R5-32] 通过认证客户端连接同一远程主对话",
+      "body_sha256": "370c72b99f113e8d3855a059e29b27ad1dfdbc677bd915aae0e7e9b05ed4edda",
+      "blockers": [
+        "R5-05",
+        "R5-08",
+        "R5-13"
+      ]
+    },
+    "R5-33": {
+      "number": 125,
+      "id": 6388095160,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/125",
+      "title": "[R5-33] 托管替换后恢复三层会话与工作权威",
+      "body_sha256": "3efd71a7627c2e8a32bce7cf0c46814c10d701bfddc72ec932168bffc728086c",
+      "blockers": [
+        "R5-09",
+        "R5-10",
+        "R5-24",
+        "R5-30",
+        "R5-32"
+      ]
+    },
+    "R5-34": {
+      "number": 126,
+      "id": 6388099361,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/126",
+      "title": "[R5-34] 移除旧 Bot 运行架构及兼容入口",
+      "body_sha256": "2e474370ae99a597a41ba8da5b397a5835846c0a72018b951f01546dc7a9c87c",
+      "blockers": [
+        "R5-11",
+        "R5-12",
+        "R5-16",
+        "R5-19",
+        "R5-20",
+        "R5-21",
+        "R5-22",
+        "R5-23",
+        "R5-25",
+        "R5-31",
+        "R5-33"
+      ]
+    },
+    "R5-35": {
+      "number": 127,
+      "id": 6388103084,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/127",
+      "title": "[R5-35] 从独立安装包启动同一三层产品",
+      "body_sha256": "e2098521bb7577f57b853fd05f24a63379615f4ec99ad6e8386272f2dfce8a8c",
+      "blockers": [
+        "R5-34"
+      ]
+    },
+    "R5-36": {
+      "number": 128,
+      "id": 6388104114,
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/128",
+      "title": "[R5-36] 升级、备份并观测新产品自身状态",
+      "body_sha256": "77e1f4141d819f69b0bf0ad54a80dbaddccc4523442eb1905bdbd10d4579aa6f",
+      "blockers": [
+        "R5-35"
+      ]
+    }
+  },
+  "closures": {
+    "15": {
+      "number": 15,
+      "title": "[Feature G01] 本地接单与执行闭环",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/15",
+      "reason": "superseded_by_r5",
+      "state_reason": "not_planned",
+      "previous_body_sha256": "4d9f9d1cac5c785a88daac512909dcab709c93dc1ef93a9eed80de2f75d38832",
+      "historical_children": [
+        29,
+        30,
+        31,
+        32,
+        33
+      ],
+      "replacement_keys": [
+        "R5-01",
+        "R5-02",
+        "R5-03"
+      ],
+      "comment_id": 6875099854,
+      "comment_url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/15#issuecomment-6875099854",
+      "comment_sha256": "092aa2bf79b519e670c05e103e06c392e376ae087ca97fbc0ac94b96d65b4feb"
+    },
+    "16": {
+      "number": 16,
+      "title": "[Feature G02] 持续协作与人工控制",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/16",
+      "reason": "superseded_by_r5",
+      "state_reason": "not_planned",
+      "previous_body_sha256": "bc52b55dc61afffd5a6b9353d58d82559d275a0551eca01c6bf8a19309696514",
+      "historical_children": [
+        34,
+        35,
+        36,
+        37,
+        38
+      ],
+      "replacement_keys": [
+        "R5-04",
+        "R5-06",
+        "R5-07",
+        "R5-08"
+      ],
+      "comment_id": 6875100993,
+      "comment_url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/16#issuecomment-6875100993",
+      "comment_sha256": "b4c1a257839ea685153b0a18a3e54b83cb23b3a44e41c2d11c17b518aa1090a4"
+    },
+    "17": {
+      "number": 17,
+      "title": "[Feature G03] 并发与异步执行",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/17",
+      "reason": "superseded_by_r5",
+      "state_reason": "not_planned",
+      "previous_body_sha256": "7196ca3de3676b6ae9330aef60b4af8ef1e8dcad07a11a8aed4d90ec7005a75d",
+      "historical_children": [
+        39,
+        40,
+        41,
+        42
+      ],
+      "replacement_keys": [
+        "R5-03",
+        "R5-17"
+      ],
+      "comment_id": 6875102155,
+      "comment_url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/17#issuecomment-6875102155",
+      "comment_sha256": "ff71ceb776091d33c115868b77f3b316ff28dbb4509df66401bc5526a0620525"
+    },
+    "18": {
+      "number": 18,
+      "title": "[Feature G04] 持久化与故障恢复",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/18",
+      "reason": "superseded_by_r5",
+      "state_reason": "not_planned",
+      "previous_body_sha256": "ec7d1351a9657f06c991b508909a5439d98ae2a877857b77be3555d4592de635",
+      "historical_children": [
+        43,
+        44,
+        45,
+        46,
+        47,
+        48
+      ],
+      "replacement_keys": [
+        "R5-08",
+        "R5-09",
+        "R5-13",
+        "R5-33"
+      ],
+      "comment_id": 6875103401,
+      "comment_url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/18#issuecomment-6875103401",
+      "comment_sha256": "ee096498325578b6191ffce6c669b514b0afeab0f2d966c79f86a4e52954291d"
+    },
+    "19": {
+      "number": 19,
+      "title": "[Feature G05] 上下文读取与会话换代",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/19",
+      "reason": "superseded_by_r5",
+      "state_reason": "not_planned",
+      "previous_body_sha256": "a84246afafe5b8d2eddd44a31311d02e9884adfe635ad05d0cba81b06e3619b1",
+      "historical_children": [
+        49,
+        50
+      ],
+      "replacement_keys": [
+        "R5-05",
+        "R5-09",
+        "R5-21"
+      ],
+      "comment_id": 6875104555,
+      "comment_url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/19#issuecomment-6875104555",
+      "comment_sha256": "36ece6eaf0c5d2d703896e0a6c1a58e464fde91dc14915685da355ef6a15b9df"
+    },
+    "20": {
+      "number": 20,
+      "title": "[Feature G06] 配置与监督界面",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/20",
+      "reason": "superseded_by_r5",
+      "state_reason": "not_planned",
+      "previous_body_sha256": "a4d6d12e5ce1f98ea63a8a90a95a4f0513bfd97af9385dc100642293ec4a0629",
+      "historical_children": [
+        51,
+        52,
+        77
+      ],
+      "replacement_keys": [
+        "R5-05",
+        "R5-10",
+        "R5-15",
+        "R5-16"
+      ],
+      "comment_id": 6875105758,
+      "comment_url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/20#issuecomment-6875105758",
+      "comment_sha256": "07ab1174e9fe6c146594f35ea8aed80890281edf48c964ca6c0462ef6d1e527a"
+    },
+    "21": {
+      "number": 21,
+      "title": "[Feature G07] GitHub 跨信道协作",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/21",
+      "reason": "superseded_by_r5",
+      "state_reason": "not_planned",
+      "previous_body_sha256": "ed570818b0e36b2cbebedc1e7b159cbd51ee887c1f05f8aeaf8574c88cc833ff",
+      "historical_children": [
+        53,
+        54,
+        55
+      ],
+      "replacement_keys": [
+        "R5-11",
+        "R5-13"
+      ],
+      "comment_id": 6875107098,
+      "comment_url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/21#issuecomment-6875107098",
+      "comment_sha256": "038550e2d127dd2b883f83e89bceedf337cef13450dca75e84ff83b7ffc5a016"
+    },
+    "22": {
+      "number": 22,
+      "title": "[Feature G08] 定时与主动准备",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/22",
+      "reason": "superseded_by_r5",
+      "state_reason": "not_planned",
+      "previous_body_sha256": "99bbfd0958b5d2e4ca2e1c550a85cc03a5c4e6732e33e4bcf0912af0b622ba75",
+      "historical_children": [
+        56,
+        57
+      ],
+      "replacement_keys": [
+        "R5-22",
+        "R5-23"
+      ],
+      "comment_id": 6875108314,
+      "comment_url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/22#issuecomment-6875108314",
+      "comment_sha256": "d34919db42b01795d4f0c4bfa9c3892af020521050768123a9952dfd0fced5c6"
+    },
+    "23": {
+      "number": 23,
+      "title": "[Feature G09] 飞书协作",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/23",
+      "reason": "superseded_by_r5",
+      "state_reason": "not_planned",
+      "previous_body_sha256": "70b4925c2ecd1fdaa118a8e0786c6bd4205394b647e4382d7120eb4ffea2a6e9",
+      "historical_children": [
+        58,
+        59
+      ],
+      "replacement_keys": [
+        "R5-12",
+        "R5-13"
+      ],
+      "comment_id": 6875109558,
+      "comment_url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/23#issuecomment-6875109558",
+      "comment_sha256": "dbd7afc3cd6cbc82d5fa5d8554f68713bb8306dc4aee2157eae51d143a26db8c"
+    },
+    "24": {
+      "number": 24,
+      "title": "[Feature G10] 远端设备执行",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/24",
+      "reason": "superseded_by_r5",
+      "state_reason": "not_planned",
+      "previous_body_sha256": "66c9697e6fe7993e5e009a9e477755bea94ca1b9445e2bf051f5a37f5faa451d",
+      "historical_children": [
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66
+      ],
+      "replacement_keys": [
+        "R5-17",
+        "R5-29",
+        "R5-30"
+      ],
+      "comment_id": 6875110820,
+      "comment_url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/24#issuecomment-6875110820",
+      "comment_sha256": "d14abc152f3157d796b2f685cb8d3dded906125a74089251b33512cbe46fdc2e"
+    },
+    "25": {
+      "number": 25,
+      "title": "[Feature G11] 本地与远端执行交接",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/25",
+      "reason": "superseded_by_r5",
+      "state_reason": "not_planned",
+      "previous_body_sha256": "e04c17c389e437519aa21a1525a6303fb5b167ef9ea636d6180406e5909f5bee",
+      "historical_children": [
+        67,
+        68,
+        69
+      ],
+      "replacement_keys": [
+        "R5-29",
+        "R5-30",
+        "R5-31"
+      ],
+      "comment_id": 6875111932,
+      "comment_url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/25#issuecomment-6875111932",
+      "comment_sha256": "3f43ce33a002aea9aa8e44739b47bacd780fe02bb67aa782d802b8b5e036b2ec"
+    },
+    "26": {
+      "number": 26,
+      "title": "[Feature G12] 托管与客户端常驻",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/26",
+      "reason": "superseded_by_r5",
+      "state_reason": "not_planned",
+      "previous_body_sha256": "7e94d9b3676c4747981e76fa59df99ed086cac13f3bbb3511de56dc4425a3a59",
+      "historical_children": [
+        70,
+        71,
+        72,
+        73,
+        74
+      ],
+      "replacement_keys": [
+        "R5-32",
+        "R5-33",
+        "R5-35"
+      ],
+      "comment_id": 6875113087,
+      "comment_url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/26#issuecomment-6875113087",
+      "comment_sha256": "c0b6335b35afbabb62fb283976d2864ec7633a67bd7515e115068a76e6b46636"
+    },
+    "27": {
+      "number": 27,
+      "title": "[Feature G13] Watchdog 运维与语义监督",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/27",
+      "reason": "superseded_by_r5",
+      "state_reason": "not_planned",
+      "previous_body_sha256": "2becf8081f384b1f2404786ebecd4e5da993725f25b78b1cd74278a13a58ba13",
+      "historical_children": [
+        75,
+        76
+      ],
+      "replacement_keys": [
+        "R5-24",
+        "R5-33",
+        "R5-36"
+      ],
+      "comment_id": 6875114247,
+      "comment_url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/27#issuecomment-6875114247",
+      "comment_sha256": "c821fe963e7b77bd36385cc1fea1a9f1de1fd88743830962af9613705b2b6966"
+    },
+    "28": {
+      "number": 28,
+      "title": "[Feature G14] 旧核心迁移与切换",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/28",
+      "reason": "superseded_by_r5",
+      "state_reason": "not_planned",
+      "previous_body_sha256": "9a6907960d758a07434cb1fbc97e7a34c561c473b88d0aa6cc830c858a8e16d2",
+      "historical_children": [
+        78,
+        79,
+        80,
+        81
+      ],
+      "replacement_keys": [
+        "R5-25",
+        "R5-26",
+        "R5-27",
+        "R5-28",
+        "R5-34",
+        "R5-35",
+        "R5-36"
+      ],
+      "comment_id": 6875115213,
+      "comment_url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/28#issuecomment-6875115213",
+      "comment_sha256": "fed95aa9bacf8fdb8f079076258dff8f67e3fbc5c6c36fd3646d8df2f3819004"
+    },
+    "90": {
+      "number": 90,
+      "title": "[T56] 将生产 Engine factory 注入现有 ds-bot Host",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/90",
+      "reason": "superseded_by_r5",
+      "state_reason": "not_planned",
+      "previous_body_sha256": "1ac971e992bca00f86f60c512351c5c96591d813a9e453c7c3c48255a965c115",
+      "historical_children": [],
+      "replacement_keys": [
+        "R5-01",
+        "R5-02"
+      ],
+      "comment_id": 6875116148,
+      "comment_url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/90#issuecomment-6875116148",
+      "comment_sha256": "cdfcd99997c11088f1bde8c59daec8018e2edfe1e763865dfb87d3e06c7fcb47"
+    }
+  },
+  "hierarchy": [
+    [
+      1,
+      93
+    ],
+    [
+      1,
+      94
+    ],
+    [
+      1,
+      95
+    ],
+    [
+      1,
+      96
+    ],
+    [
+      1,
+      97
+    ],
+    [
+      1,
+      98
+    ],
+    [
+      1,
+      99
+    ],
+    [
+      1,
+      100
+    ],
+    [
+      1,
+      101
+    ],
+    [
+      1,
+      102
+    ],
+    [
+      1,
+      103
+    ],
+    [
+      1,
+      104
+    ],
+    [
+      1,
+      105
+    ],
+    [
+      1,
+      106
+    ],
+    [
+      1,
+      107
+    ],
+    [
+      1,
+      108
+    ],
+    [
+      1,
+      109
+    ],
+    [
+      1,
+      110
+    ],
+    [
+      1,
+      111
+    ],
+    [
+      1,
+      112
+    ],
+    [
+      1,
+      113
+    ],
+    [
+      1,
+      114
+    ],
+    [
+      1,
+      115
+    ],
+    [
+      1,
+      116
+    ],
+    [
+      1,
+      117
+    ],
+    [
+      1,
+      118
+    ],
+    [
+      1,
+      119
+    ],
+    [
+      1,
+      120
+    ],
+    [
+      1,
+      121
+    ],
+    [
+      1,
+      122
+    ],
+    [
+      1,
+      123
+    ],
+    [
+      1,
+      124
+    ],
+    [
+      1,
+      125
+    ],
+    [
+      1,
+      126
+    ],
+    [
+      1,
+      127
+    ],
+    [
+      1,
+      128
+    ]
+  ],
+  "dependencies": [
+    [
+      94,
+      93
+    ],
+    [
+      95,
+      94
+    ],
+    [
+      96,
+      95
+    ],
+    [
+      97,
+      94
+    ],
+    [
+      98,
+      94
+    ],
+    [
+      99,
+      94
+    ],
+    [
+      100,
+      98
+    ],
+    [
+      100,
+      99
+    ],
+    [
+      101,
+      97
+    ],
+    [
+      101,
+      100
+    ],
+    [
+      102,
+      97
+    ],
+    [
+      103,
+      94
+    ],
+    [
+      104,
+      96
+    ],
+    [
+      104,
+      103
+    ],
+    [
+      105,
+      96
+    ],
+    [
+      105,
+      103
+    ],
+    [
+      106,
+      94
+    ],
+    [
+      106,
+      97
+    ],
+    [
+      107,
+      93
+    ],
+    [
+      108,
+      94
+    ],
+    [
+      108,
+      107
+    ],
+    [
+      109,
+      94
+    ],
+    [
+      109,
+      98
+    ],
+    [
+      110,
+      107
+    ],
+    [
+      110,
+      109
+    ],
+    [
+      111,
+      99
+    ],
+    [
+      111,
+      110
+    ],
+    [
+      112,
+      106
+    ],
+    [
+      112,
+      109
+    ],
+    [
+      113,
+      101
+    ],
+    [
+      113,
+      107
+    ],
+    [
+      114,
+      96
+    ],
+    [
+      114,
+      98
+    ],
+    [
+      115,
+      96
+    ],
+    [
+      115,
+      103
+    ],
+    [
+      115,
+      109
+    ],
+    [
+      116,
+      100
+    ],
+    [
+      116,
+      109
+    ],
+    [
+      117,
+      102
+    ],
+    [
+      118,
+      113
+    ],
+    [
+      119,
+      110
+    ],
+    [
+      120,
+      107
+    ],
+    [
+      121,
+      106
+    ],
+    [
+      121,
+      107
+    ],
+    [
+      121,
+      109
+    ],
+    [
+      122,
+      121
+    ],
+    [
+      123,
+      122
+    ],
+    [
+      124,
+      97
+    ],
+    [
+      124,
+      100
+    ],
+    [
+      124,
+      103
+    ],
+    [
+      125,
+      101
+    ],
+    [
+      125,
+      102
+    ],
+    [
+      125,
+      116
+    ],
+    [
+      125,
+      122
+    ],
+    [
+      125,
+      124
+    ],
+    [
+      126,
+      104
+    ],
+    [
+      126,
+      105
+    ],
+    [
+      126,
+      108
+    ],
+    [
+      126,
+      111
+    ],
+    [
+      126,
+      112
+    ],
+    [
+      126,
+      113
+    ],
+    [
+      126,
+      114
+    ],
+    [
+      126,
+      115
+    ],
+    [
+      126,
+      117
+    ],
+    [
+      126,
+      123
+    ],
+    [
+      126,
+      125
+    ],
+    [
+      127,
+      126
+    ],
+    [
+      128,
+      127
+    ]
+  ],
+  "preserved": {
+    "1": {
+      "body_sha256": "ce2b9d7cbc137ccd02e1aee17efbd6ca99695ad5efee7b825a6ce2432c7aea0f",
+      "title": "Spec: Rebuild DS Bot around the Super-agent architecture",
+      "state": "open",
+      "labels": [
+        "enhancement",
+        "ready-for-agent"
+      ],
+      "assignees": [],
+      "blocker_numbers": [],
+      "child_numbers": [
+        2,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        82,
+        83
+      ]
+    },
+    "83": {
+      "body_sha256": "478b13dbba936b13426f7dd41086b2e45faadd9d799099b90a1827adc28b6213",
+      "title": "[T55] 验收四目标的完整产品协作场景",
+      "state": "open",
+      "labels": [
+        "enhancement",
+        "ready-for-agent"
+      ],
+      "assignees": [],
+      "blocker_numbers": [
+        54,
+        65,
+        66,
+        77,
+        81,
+        82,
+        90,
+        91,
+        92
+      ],
+      "child_numbers": [
+        90,
+        91,
+        92
+      ]
+    },
+    "92": {
+      "body_sha256": "058f909eabfdf4d3d5c011e746c5be908d5841c2cfa24f3f4355c1eb3f8d1b23",
+      "title": "[T58] 组合托管 Host、断连撤销、接管与第二设备",
+      "state": "open",
+      "labels": [
+        "enhancement",
+        "ready-for-agent"
+      ],
+      "assignees": [],
+      "blocker_numbers": [
+        63,
+        65,
+        68,
+        69,
+        72,
+        73,
+        74,
+        75,
+        90,
+        91
+      ],
+      "child_numbers": []
+    }
+  },
+  "verified": true,
+  "updated_at": "2026-11-14T09:29:45.897Z",
+  "verification": {
+    "verified_at": "2026-11-14T09:29:45.892Z",
+    "ticket_count": 36,
+    "hierarchy_edges": 36,
+    "dependency_edges": 68,
+    "retired_issues": 15,
+    "preserved_open": [
+      1,
+      83,
+      92
+    ],
+    "open_issue_count": 39,
+    "initial_r5_frontier": [
+      "R5-01"
+    ],
+    "scope": "Remote issue bodies, labels, native parent and blocking edges, closure reasons and evidence comments; no product tests or implementation."
+  }
+}

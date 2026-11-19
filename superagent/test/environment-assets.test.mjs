@@ -37,7 +37,7 @@ async function readAll(bound, reference, pageBytes = 4096) {
 }
 
 async function localFixture(context, { assets = true, skills = false, commands = big } = {}) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-local-assets-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-local-assets-'))
   const root = join(directory, 'work')
   await mkdir(root)
   const assetsPath = join(directory, 'assets')
@@ -55,7 +55,7 @@ async function localFixture(context, { assets = true, skills = false, commands =
 }
 
 async function remoteFixture(context, { assets = true, skills = false, commands = big, deviceId = 'asset-device' } = {}) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-remote-assets-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-remote-assets-'))
   const root = join(directory, 'device-work')
   const hostRoot = join(directory, 'host-work')
   await mkdir(root)
@@ -128,7 +128,7 @@ test('a local Environment without a configured skill root lists the explicit gap
 })
 
 test('asset stores in one deployment are namespaced per Environment', { timeout: 20000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-asset-namespace-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-asset-namespace-'))
   context.after(() => rm(directory, { recursive: true, force: true }))
   const first = await core.FileAssetStore.open(directory, core.assetNamespace('private', 'first'))
   const second = await core.FileAssetStore.open(directory, core.assetNamespace('private', 'second'))
@@ -156,8 +156,31 @@ test('local long output pages the complete spill instead of the bounded tail', {
   assert.equal(last.truncated, false)
 })
 
+test('a spill redacts credentials as one stream so no page can start inside a value', { timeout: 30000 }, async context => {
+  const secret = 'Zm9vYmFy'.repeat(2000)
+  const keyBody = 'QUJDREVG'.repeat(2000)
+  const commands = { leaked: { argv: [process.execPath, '-e',
+    "process.stdout.write('header\\npassword=' + 'Zm9vYmFy'.repeat(2000) + '\\n-----BEGIN ' + 'PRIVATE KEY-----\\n' + 'QUJDREVG'.repeat(2000) + '\\n-----END PRIVATE KEY-----\\ntail\\n')"],
+    timeoutMs: 10000 } }
+  const { bound } = await localFixture(context, { commands })
+  const result = await bound.invoke('run_command', { name: 'leaked' })
+  assert.equal(result.exitCode, 0)
+  assert.equal(result.truncated, true)
+  const reference = result.spills.stdout
+  assert.ok(reference)
+  assert.ok(reference.bytes < secret.length)
+  const complete = await readAll(bound, reference, 4096)
+  assert.equal(complete.includes(secret.slice(0, 64)), false)
+  assert.equal(complete.includes(keyBody.slice(0, 64)), false)
+  assert.match(complete, /^header\npassword=\[redacted\]\n/u)
+  assert.match(complete, /\ntail\n$/u)
+  const inside = await bound.readAsset(reference, { offset: 12, maxBytes: 4096 })
+  assert.equal(inside.encoding, 'utf8')
+  assert.equal(inside.text.includes(secret.slice(0, 64)), false)
+})
+
 test('remote attachments stay on the device and a same-named Host file cannot substitute', { timeout: 30000 }, async context => {
-  const { bound, environment, root, hostRoot, assetsPath } = await remoteFixture(context, { skills: true })
+  const { bound, environment, root, resolvedRoot, hostRoot, assetsPath } = await remoteFixture(context, { skills: true })
   const content = Buffer.from('device attachment content\n')
   const reference = await bound.saveAttachment({ name: 'evidence.txt', data: content })
   assert.equal(reference.environmentKind, 'remote')
@@ -169,10 +192,11 @@ test('remote attachments stay on the device and a same-named Host file cannot su
   await writeFile(join(hostRoot, 'evidence.txt'), 'same-named host work file\n')
   assert.equal(await readAll(bound, reference, 7), content.toString('utf8'))
 
-  await writeFile(join(root, 'artifact.txt'), 'artifact bytes\n')
+  await writeFile(join(root, 'artifact.txt'), `artifact bytes ${resolvedRoot}\n`)
   const artifact = await bound.artifact('artifact.txt')
   assert.equal(artifact.reference.kind, 'artifact')
-  assert.equal(await readAll(bound, artifact.reference), 'artifact bytes\n')
+  assert.equal(await readAll(bound, artifact.reference), 'artifact bytes <device-workdir>\n')
+  assert.equal((await bound.readProductAsset(artifact.reference)).text, `artifact bytes ${resolvedRoot}\n`)
   await writeFile(join(root, 'artifact.txt'), 'replacement bytes\n')
   await assert.rejects(bound.readAsset(artifact.reference), { code: 'REFERENCE_STALE' })
 
@@ -237,7 +261,7 @@ test('a device without an asset store explicitly rejects attachments and spill w
 
 test('the public Engine can save and re-read an attachment through the Environment after a transport outage', { timeout: 30000 }, async context => {
   const { environment, device, config, endpoint } = await remoteFixture(context)
-  const stateDirectory = await mkdtemp(join(tmpdir(), 'ds-bot-asset-engine-'))
+  const stateDirectory = await mkdtemp(join(tmpdir(), 'ds-superagent-asset-engine-'))
   const storage = await SqliteStorage.open(join(stateDirectory, 'engine.sqlite'))
   const engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] },
     {}, undefined, [environment])
@@ -267,7 +291,7 @@ test('the public Engine can save and re-read an attachment through the Environme
 
 test('a delegated child inherits the same remote asset tools and reads its parent attachment', { timeout: 40000 }, async context => {
   const { environment, hostRoot } = await remoteFixture(context)
-  const stateDirectory = await mkdtemp(join(tmpdir(), 'ds-bot-asset-subagent-'))
+  const stateDirectory = await mkdtemp(join(tmpdir(), 'ds-superagent-asset-subagent-'))
   await writeFile(join(hostRoot, 'child-evidence.txt'), 'host substitute\n')
   const content = Buffer.from('remote-child-evidence\n')
   const sha256 = digest(content)

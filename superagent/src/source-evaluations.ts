@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { canonicalJson, commandTransaction } from './commands.js'
 import type { SourceEvents, SourceEvent } from './source-events.js'
 import { CoreError, identifier, type IntakePolicy, type IntakeAssessment, type Receipt } from './model.js'
+import { validateRequiredCapabilities, type CapabilityId } from './capability-locations.js'
 import type { AsyncTx, Storage } from './storage.js'
 
 export interface EvaluationItem {
@@ -70,7 +71,8 @@ export class SourceEvaluations {
     private readonly instanceId: string,
     policy: IntakePolicy,
     private readonly sources: SourceEvents,
-    private readonly accept: (tx: AsyncTx, event: SourceEvent, strength: 'explicit' | 'inferred', commandId: string, policyVersion: string, newDecision: boolean) => Promise<Receipt>,
+    private readonly accept: (tx: AsyncTx, event: SourceEvent, strength: 'explicit' | 'inferred', commandId: string, policyVersion: string, newDecision: boolean,
+      capabilities?: CapabilityId[]) => Promise<Receipt>,
     private readonly now: () => number = Date.now,
     assessor: IntakePolicy['assess'] | undefined = policy.assess,
     private readonly owns: (tx: AsyncTx, event: SourceEvent) => Promise<boolean> = async () => false,
@@ -331,6 +333,8 @@ export class SourceEvaluations {
       if (!result || !expected.has(result.eventId) || seen.has(result.eventId) || !['accept', 'reject'].includes(result.outcome)
         || typeof result.reason !== 'string' || !result.reason.trim() || Buffer.byteLength(result.reason) > 512
         || result.evidence !== undefined && (typeof result.evidence !== 'string' || Buffer.byteLength(result.evidence) > 4096)) continue
+      try { validateRequiredCapabilities(result.capabilities) }
+      catch { continue }
       seen.add(result.eventId)
       valid.push(result)
     }
@@ -479,7 +483,8 @@ export class SourceEvaluations {
           const previous = await tx.get<PriorDecision>('eval-command', `decision:${event.id}`)
           if (previous?.evaluationId === evaluation.id && previous.item.receipt) return previous.item.receipt
           const key = `eval:${createHash('sha256').update(`${evaluation.id}:${event.id}`).digest('hex')}`
-          const receipt = await this.accept(tx, event, strength, key, `intake:r${this.policyRevision}:${this.policyHash}`, item.reevaluation ?? false)
+          const receipt = await this.accept(tx, event, strength, key, `intake:r${this.policyRevision}:${this.policyHash}`, item.reevaluation ?? false,
+            assessment?.capabilities)
           const itemResult: EvaluationItem = { ...item, outcome: 'accepted', strength, reason: assessment?.reason ?? item.reason,
             ...(assessment?.evidence === undefined ? {} : { evidence: assessment.evidence }), receipt }
           await tx.replace('eval-command', `decision:${event.id}`, { evaluationId: evaluation.id, policyHash: this.policyHash, item: itemResult } satisfies PriorDecision)
@@ -539,16 +544,15 @@ export class SourceEvaluations {
     const threads = new Set<string>()
     const prefix = this.sourceEvalPrefix()
     let cursor = prefix
-    for (let pageCount = 0; pageCount < 10; pageCount++) {
+    for (;;) {
       const page = await this.storage.transaction(this.instanceId, tx => tx.scan<SourceEvaluation>('eval', { limit: 100, after: cursor }))
-      for (const item of page.items) if (item.id.startsWith(prefix) && item.value.state === 'queued') threads.add(item.value.threadId)
-      if (!page.cursor || !page.cursor.startsWith(prefix)) break
-      cursor = page.cursor
-      if (pageCount === 9) {
-        const confirmation = await this.storage.transaction(this.instanceId, tx => tx.scan<SourceEvaluation>('eval', { limit: 1, after: cursor }))
-        if (!confirmation.items[0]?.id.startsWith(prefix)) break
-        throw new CoreError('EVAL_BUDGET', 'The paused Eval scan exceeded its 1000-record budget.')
+      let reachedEnd = false
+      for (const item of page.items) {
+        if (!item.id.startsWith(prefix)) { reachedEnd = true; break }
+        if (item.value.state === 'queued') threads.add(item.value.threadId)
       }
+      if (reachedEnd || !page.cursor || !page.cursor.startsWith(prefix)) break
+      cursor = page.cursor
     }
     for (const threadId of threads) await this.runNext(threadId)
   }
@@ -588,27 +592,36 @@ export class SourceEvaluations {
         const headKey = `head:${this.threadKey(threadId)}`
         if (await tx.get<EvalHead>('eval', headKey)) return undefined
         const prefix = this.evalPrefix(threadId)
-        let cursor = prefix
-        for (let pageCount = 0; pageCount < 10; pageCount++) {
+        const cursorKey = `scan:${this.threadKey(threadId)}`
+        let cursor = await tx.get<string>('eval', cursorKey) ?? prefix
+        if (!cursor.startsWith(prefix)) cursor = prefix
+        let queued: SourceEvaluation | undefined
+        for (;;) {
           const page = await tx.scan<SourceEvaluation>('eval', { limit: 100, after: cursor })
-          const queued = page.items.find(entry => entry.id.startsWith(prefix) && entry.value.state === 'queued')?.value
-          if (queued) {
-            const events: SourceEvent[] = []
-            for (const item of queued.items) if (item.outcome === 'pending' || item.outcome === 'accepted' && item.strength === 'explicit') {
-              const event = await tx.get<SourceEvent>('source-event', item.eventId)
-              const current = event && await this.sources.candidate(tx, { threadId: event.threadId, objectId: event.objectId })
-              if (event && current?.id === event.id) events.push(event)
-              else { item.outcome = 'rejected'; item.reason = 'SOURCE_EVENT_NOT_CURRENT' }
-            }
-            const needsRun = events.length > 0 || queued.items.some(item => item.outcome === 'accepted' && item.strength === 'explicit')
-            queued.state = needsRun ? 'running' : 'completed'; queued.status = queued.state
-            if (!needsRun) queued.completedAt = this.now()
-            await tx.replace('eval', queued.id, queued)
-            if (needsRun) await tx.insert('eval', headKey, { evaluationId: queued.id })
-            return needsRun ? { evaluation: queued, events } : { discarded: true }
+          let reachedEnd = false
+          for (const entry of page.items) {
+            if (!entry.id.startsWith(prefix)) { reachedEnd = true; break }
+            cursor = entry.id
+            if (entry.value.state === 'queued') { queued = entry.value; break }
           }
-          if (!page.cursor || !page.cursor.startsWith(prefix)) break
+          if (queued || reachedEnd || !page.cursor || !page.cursor.startsWith(prefix)) break
           cursor = page.cursor
+        }
+        if (!await tx.replace('eval', cursorKey, cursor)) await tx.insert('eval', cursorKey, cursor)
+        if (queued) {
+          const events: SourceEvent[] = []
+          for (const item of queued.items) if (item.outcome === 'pending' || item.outcome === 'accepted' && item.strength === 'explicit') {
+            const event = await tx.get<SourceEvent>('source-event', item.eventId)
+            const current = event && await this.sources.candidate(tx, { threadId: event.threadId, objectId: event.objectId })
+            if (event && current?.id === event.id) events.push(event)
+            else { item.outcome = 'rejected'; item.reason = 'SOURCE_EVENT_NOT_CURRENT' }
+          }
+          const needsRun = events.length > 0 || queued.items.some(item => item.outcome === 'accepted' && item.strength === 'explicit')
+          queued.state = needsRun ? 'running' : 'completed'; queued.status = queued.state
+          if (!needsRun) queued.completedAt = this.now()
+          await tx.replace('eval', queued.id, queued)
+          if (needsRun) await tx.insert('eval', headKey, { evaluationId: queued.id })
+          return needsRun ? { evaluation: queued, events } : { discarded: true }
         }
         return undefined
       })

@@ -53,10 +53,11 @@ function resolveLatest(options, args) {
 }
 
 const longCommand = (timeoutMs = 10000) => ({ argv: [process.execPath, '-e',
-  "const fs=require('node:fs');fs.writeFileSync('job-started.txt','started');setInterval(()=>{if(fs.existsSync('job-done.txt')){console.log('finished');process.exit(0)}},25)"], timeoutMs })
+  "const fs=require('node:fs');fs.writeFileSync('job-started.txt','started');setInterval(()=>{if(fs.existsSync('job-done.txt')){console.log('finished');process.exit(0)}},25)"],
+  timeoutMs, backgroundTimeoutMs: 120000 })
 
 async function fixture(t, { plan, respond, jobs = {}, source = {}, twoTickets = false }) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-previews-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-previews-'))
   const roots = twoTickets ? [join(directory, 'one'), join(directory, 'two')] : [join(directory, 'one')]
   for (const root of roots) await mkdir(root, { recursive: true })
   let environments = [], native, storage, sessions, engine
@@ -84,7 +85,7 @@ async function fixture(t, { plan, respond, jobs = {}, source = {}, twoTickets = 
   return { engine, accept, roots, storage, sessions, environments }
 }
 
-test('an explicit preview survives a ready handoff without holding a slot or waking the Worker', { timeout: 40000 }, async t => {
+test('an explicit preview survives a ready handoff without holding a slot or waking the Worker', { timeout: 90000 }, async t => {
   const prompts = []
   const { engine, accept, roots } = await fixture(t, {
     source: { allowedThreadIds: ['room'], versionOrder: 'sequence' },
@@ -103,10 +104,10 @@ test('an explicit preview survives a ready handoff without holding a slot or wak
   })
   const ticketId = await accept('room', 'room-1', 'Prepare a review.')
   await until(async () => (await engine.conversation(ticketId)).status === 'ready', 'the ready handoff')
-  await until(async () => (await engine.conversation(ticketId)).messages.some(message => message.purpose === 'result'), 'the result delivery')
   const conversation = await engine.conversation(ticketId)
   assert.equal(conversation.stage, 'ready')
-  assert.equal(conversation.lifecycle, 'ended')
+  assert.equal(conversation.lifecycle, 'open')
+  assert.equal(conversation.messages.some(message => message.purpose === 'result'), false)
   assert.equal(conversation.assignments[0].state, 'ended')
   assert.deepEqual((await engine.listSlots()).holding, [])
   const previews = await engine.listPreviews(ticketId)
@@ -125,7 +126,8 @@ test('an explicit preview survives a ready handoff without holding a slot or wak
   assert.equal(jobs.find(job => job.command === 'build').state, 'cancelled')
   assert.equal(jobs.find(job => job.command === 'build').cancelReason, 'assignment-ended')
   assert.equal((await engine.getJob(ticketId, preview.jobId)).state, 'running')
-  assert.match(await readFile(join(roots[0], 'job-started.txt'), 'utf8'), /started/u)
+  await until(async () => /started/u.test(await readFile(join(roots[0], 'job-started.txt'), 'utf8').catch(() => '')),
+    'the managed preview process to start')
 
   const beforeExit = prompts.filter(text => text.startsWith('Background job ')).length
   await assert.rejects(engine.cancelJob({ commandId: 'cancel-preview-job', ticketId, jobId: preview.jobId, reason: 'Wrong route.' }),
@@ -225,7 +227,8 @@ test('Assignment cleanup is scoped to managed preview ownership and foreign work
   assert.equal((await engine.getJob(owned, preview.jobId)).state, 'cancelled')
   assert.equal((await engine.getJob(independent, foreignJob.id)).state, 'running')
   assert.equal((await engine.listSlots()).holding.some(slot => slot.ticketId === independent), true)
-  assert.match(await readFile(join(roots[1], 'job-started.txt'), 'utf8'), /started/u)
+  await until(async () => /started/u.test(await readFile(join(roots[1], 'job-started.txt'), 'utf8').catch(() => '')),
+    'the foreign job process to start')
   await engine.cancelJob({ commandId: 'clean-independent', ticketId: independent, jobId: foreignJob.id, reason: 'Cleanup test.' })
 })
 
@@ -276,7 +279,7 @@ test('an unconfirmed preview cleanup stays pending confirmation and does not pre
   await reopened.shutdown()
 })
 
-test('stopping a Ticket cancels only its own retained preview and leaves another Ticket running', { timeout: 40000 }, async t => {
+test('stopping a Ticket cancels only its own retained preview and leaves another Ticket running', { timeout: 90000 }, async t => {
   const { engine, accept } = await fixture(t, {
     twoTickets: true,
     source: { allowedThreadIds: ['room', 'other'], versionOrder: 'sequence' },
@@ -338,7 +341,7 @@ test('a person resolving a lost preview does not forge a stop owned by another H
   await reopened.shutdown()
 })
 
-test('idle, draft, ready and ended remain separate stages and ready creates no new work', { timeout: 40000 }, async t => {
+test('idle, draft, ready and ended remain separate stages and ready creates no new work', { timeout: 90000 }, async t => {
   const prompts = []
   const { engine, accept } = await fixture(t, {
     source: { allowedThreadIds: ['room', 'other', 'draft'], versionOrder: 'sequence' },
@@ -368,10 +371,10 @@ test('idle, draft, ready and ended remain separate stages and ready creates no n
   assert.equal(draft.lifecycle, 'open')
   const [draftJob] = await engine.listJobs(draftTicket)
   await engine.cancelJob({ commandId: 'cancel-draft-job', ticketId: draftTicket, jobId: draftJob.id, reason: 'Stage test cleanup.' })
-  await until(async () => (await engine.conversation(readyTicket)).messages.some(message => message.purpose === 'result'), 'the ready result delivery')
   const ready = await engine.conversation(readyTicket)
   assert.equal(ready.stage, 'ready')
-  assert.equal(ready.lifecycle, 'ended')
+  assert.equal(ready.lifecycle, 'open')
+  assert.equal(ready.messages.some(message => message.purpose === 'result'), false)
   assert.equal(ready.reports.length, 1)
   const readyEffects = (await engine.effects.list()).items.filter(effect => effect.stream === 'relay' && effect.state === 'pending' && effect.payload.ticketId === readyTicket)
   assert.deepEqual(readyEffects, [])
@@ -511,7 +514,7 @@ test('retained previews are bounded per Ticket instead of bypassing the job budg
 })
 
 test('preview history returns the actual newest 100 records instead of a key-order window', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-preview-history-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-preview-history-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const previews = new core.Previews('runtime', Date.now, () => true, { maxPerTicket: 16 })

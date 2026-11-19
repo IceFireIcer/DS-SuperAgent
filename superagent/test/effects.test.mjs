@@ -20,6 +20,33 @@ async function setup(context, options = {}) {
   return { storage, effects, enqueue, directory }
 }
 
+test('dispatchers sharing an Instance only claim their own effects and leave legacy effects for the primary owner', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-effect-owners-'))
+  const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  const primaryCalls = []
+  const sourceCalls = []
+  const primary = new core.Effects(storage, 'private', { owner: 'product-desktop', handlers: {
+    outbox: { execute: async effect => { primaryCalls.push(effect.key); return { type: 'success' } } },
+  } })
+  const source = new core.Effects(storage, 'private', { owner: 'feishu:tenant:group', claimUnowned: false, handlers: {
+    outbox: { execute: async effect => { sourceCalls.push(effect.key); return { type: 'success' } } },
+  } })
+  t.after(async () => { await primary.stop(); await source.stop(); await storage.close(); await rm(directory, { recursive: true, force: true }) })
+  await storage.transaction('private', async tx => {
+    await primary.enqueue(tx, { key: 'desktop', stream: 'outbox', scope: 'desktop', payload: {} })
+    await source.enqueue(tx, { key: 'feishu', stream: 'outbox', scope: 'feishu', payload: {} })
+    await tx.insert('effect', '0000000000000003', { id: 'old-effect', generation: 'old-generation', key: 'legacy',
+      queueKey: '0000000000000003', stream: 'outbox', scope: 'legacy', payload: {}, state: 'pending', attempts: 0, availableAt: 0 })
+    await tx.replace('effect-meta', 'count', 3)
+    await tx.replace('effect-meta', 'sequence', 3)
+  })
+  await source.drain()
+  assert.deepEqual(sourceCalls, ['feishu'])
+  await primary.drain()
+  assert.deepEqual(primaryCalls.sort(), ['desktop', 'legacy'])
+  assert.deepEqual(sourceCalls, ['feishu'])
+})
+
 test('effects only dispatch committed intents and a scan recovers a lost wake', async context => {
   const delivered = []
   const { storage, effects, enqueue } = await setup(context, {
@@ -141,6 +168,33 @@ test('JSON object key order does not create a new generation and payload mutatio
   assert.equal((await effects.list()).items.length, 1)
 })
 
+test('a stored payload read back with JSONB key order is still the same Effect', async context => {
+  const { effects, enqueue, storage } = await setup(context, { handlers: { relay: { execute: async () => ({ type: 'success' }) } } })
+  const request = { key: 'jsonb', stream: 'relay', scope: 'worker', payload: { aa: 1, b: 2 } }
+  // PostgreSQL JSONB orders object keys by length and then by bytes, so it reads the payload back as { b: 2, aa: 1 }.
+  const reorderStored = payload => storage.transaction('private', async transaction => {
+    const id = JSON.stringify([request.stream, request.scope, request.key])
+    const entry = await transaction.get('effect-key', id)
+    assert.ok(entry)
+    const effect = await transaction.get('effect', entry.queueKey)
+    if (effect) await transaction.replace('effect', entry.queueKey, { ...effect, payload })
+    await transaction.replace('effect-key', id, { ...entry,
+      ...(entry.completed ? { completed: { ...entry.completed, payload } } : {}) })
+  })
+  const original = await enqueue(request)
+  await reorderStored({ b: 2, aa: 1 })
+  const duplicate = await enqueue(request)
+  assert.equal(duplicate.generation, original.generation)
+  assert.equal((await effects.list()).items.length, 1)
+
+  await effects.drain()
+  assert.equal((await effects.receipt(original.id, original.generation)).state, 'done')
+  assert.equal((await effects.list()).items.length, 0)
+  await reorderStored({ b: 2, aa: 1 })
+  const completed = await enqueue(request)
+  assert.equal(completed.generation, original.generation)
+})
+
 test('accepted work exposes its notice, acknowledgement and command receipt atomically through Engine', async context => {
   const { storage } = await setup(context)
   const source = { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] }
@@ -191,7 +245,7 @@ test('adapter deadlines keep unknown receipts and do not block unrelated scopes 
   await effects.drain()
   assert.deepEqual(delivered, ['other'])
   assert.equal((await effects.receipt(slow.id, slow.generation)).state, 'unknown')
-  assert.equal((await effects.receipt(slow.id, slow.generation)).delivery, 'pending')
+    assert.equal((await effects.receipt(slow.id, slow.generation)).delivery, 'unknown')
   assert.equal((await effects.receipt(other.id, other.generation)).delivery, 'sent')
 })
 

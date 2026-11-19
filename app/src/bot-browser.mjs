@@ -1,15 +1,17 @@
-// The Bot browsers' webviews in the app window, adapted from DeepSeek Harness
-// apps/desktop/src/browser-guests.ts (see NOTICE). ds-bot asks for a lease on a storage key
+// Product browser resource webviews in the app window, adapted from DeepSeek Harness
+// apps/desktop/src/browser-guests.ts (see NOTICE). The product asks for a lease on a storage key
 // (`bot:<id>`) and creates a webview that carries the lease; only such a webview attaches, and it
-// gets fixed preferences. Unlike DSH Desktop's, a key's storage is kept on disk: a Bot stays signed
-// in after a restart until ds-bot forgets the key.
+// gets fixed preferences. A resource key's storage is kept on disk after restart until the product
+// explicitly forgets that resource.
 import { createHash, randomUUID } from 'node:crypto'
+import { PRODUCT_NAME } from './product.mjs'
 
 const KEY_MAX = 4096
 const BLANK = 'about:blank#'
 const LOOPBACK = new Set(['localhost', '0.0.0.0', '[::1]', '[::]', '[::ffff:7f00:1]'])
 
 /** The persistent partition of a storage key: the same key keeps the same storage across restarts. */
+// Keep this identifier stable so existing browser sessions remain available after app updates.
 export const partitionOf = key => `persist:ds-bot-browser-${createHash('sha256').update(key).digest('hex').slice(0, 32)}`
 
 /** Whether a URL reaches the app's own Host: its port answers under every loopback name. */
@@ -39,7 +41,7 @@ export function requestAllowed(value, origin) {
 }
 
 const keyOf = (key) => {
-  if (typeof key !== 'string' || key.length === 0 || key.length > KEY_MAX) throw new Error('DS Bot: a browser storage key is required')
+  if (typeof key !== 'string' || key.length === 0 || key.length > KEY_MAX) throw new Error(`${PRODUCT_NAME}: a browser storage key is required`)
   return key
 }
 
@@ -85,10 +87,10 @@ export class BotBrowserGuests {
 
   /** Close a lease's guest; its partition's storage stays. */
   async release(owner, id) {
-    if (typeof id !== 'string') throw new Error('DS Bot: invalid browser lease')
+    if (typeof id !== 'string') throw new Error(`${PRODUCT_NAME}: invalid browser lease`)
     const lease = this.#leases.get(id)
     if (lease === undefined) return
-    if (lease.owner !== owner) throw new Error('DS Bot: the browser lease belongs to another window')
+    if (lease.owner !== owner) throw new Error(`${PRODUCT_NAME}: the browser lease belongs to another window`)
     this.#leases.delete(id)
     const guest = lease.guest
     if (guest !== undefined && !guest.isDestroyed()) {
@@ -148,11 +150,11 @@ export class BotBrowserGuests {
         attached = id
         guest.once('destroyed', () => { this.#leases.delete(id) })
       })
-      // A page's new window becomes a new tab of the same Bot, which ds-bot opens on this request.
+      // A page's new window becomes a new tab of the same resource, which the product opens on this request.
       guest.setWindowOpenHandler(({ url, postBody }) => {
         const lease = attached === undefined ? undefined : this.#leases.get(attached)
         if (lease?.guest === guest && !owner.isDestroyed() && postBody === undefined && allowedNavigation(url, this.origin())) {
-          owner.send('ds-bot:browser-open-requested', { lease: attached, url: new URL(url).href })
+          owner.send('ds-superagent:browser-open-requested', { lease: attached, url: new URL(url).href })
         }
         return { action: 'deny' }
       })

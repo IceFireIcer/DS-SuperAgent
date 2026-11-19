@@ -81,15 +81,34 @@
 | [T52 原子激活新核心并恢复唯一消费](https://github.com/IceFireIcer/DS-SuperAgent/issues/80) | [G14](https://github.com/IceFireIcer/DS-SuperAgent/issues/28) | [T51](https://github.com/IceFireIcer/DS-SuperAgent/issues/79) |
 | [T53 激活前放弃或激活后逆向交接旧核心](https://github.com/IceFireIcer/DS-SuperAgent/issues/81) | [G14](https://github.com/IceFireIcer/DS-SuperAgent/issues/28) | [T52](https://github.com/IceFireIcer/DS-SuperAgent/issues/80) |
 | [T54 比较协作负载并确认已声明的资源预算](https://github.com/IceFireIcer/DS-SuperAgent/issues/82) | [总规格](https://github.com/IceFireIcer/DS-SuperAgent/issues/1) | [T22](https://github.com/IceFireIcer/DS-SuperAgent/issues/50)、[T27](https://github.com/IceFireIcer/DS-SuperAgent/issues/55)、[T29](https://github.com/IceFireIcer/DS-SuperAgent/issues/57)、[T31](https://github.com/IceFireIcer/DS-SuperAgent/issues/59)、[T41](https://github.com/IceFireIcer/DS-SuperAgent/issues/69)、[T47](https://github.com/IceFireIcer/DS-SuperAgent/issues/75)、[T48](https://github.com/IceFireIcer/DS-SuperAgent/issues/76) |
-| [T55 验收四目标的完整产品协作场景](https://github.com/IceFireIcer/DS-SuperAgent/issues/83) | [总规格](https://github.com/IceFireIcer/DS-SuperAgent/issues/1) | [T26](https://github.com/IceFireIcer/DS-SuperAgent/issues/54)、[T37](https://github.com/IceFireIcer/DS-SuperAgent/issues/65)、[T38](https://github.com/IceFireIcer/DS-SuperAgent/issues/66)、[T49](https://github.com/IceFireIcer/DS-SuperAgent/issues/77)、[T53](https://github.com/IceFireIcer/DS-SuperAgent/issues/81)、[T54](https://github.com/IceFireIcer/DS-SuperAgent/issues/82) |
+| [T55 验收四目标的完整产品协作场景](https://github.com/IceFireIcer/DS-SuperAgent/issues/83) | [总规格](https://github.com/IceFireIcer/DS-SuperAgent/issues/1) | [T26](https://github.com/IceFireIcer/DS-SuperAgent/issues/54)、[T37](https://github.com/IceFireIcer/DS-SuperAgent/issues/65)、[T38](https://github.com/IceFireIcer/DS-SuperAgent/issues/66)、[T49](https://github.com/IceFireIcer/DS-SuperAgent/issues/77)、[T53](https://github.com/IceFireIcer/DS-SuperAgent/issues/81)、[T54](https://github.com/IceFireIcer/DS-SuperAgent/issues/82)、[T56](https://github.com/IceFireIcer/DS-SuperAgent/issues/90)、[T57](https://github.com/IceFireIcer/DS-SuperAgent/issues/91)、[T58](https://github.com/IceFireIcer/DS-SuperAgent/issues/92)、[T59](issues/T59.md)、[T60](issues/T60.md) |
+
+## T55 验收前置子票（2026-11-12 派生）
+
+2026-11-19 更新。以下 v2.1 表格与发布回读保留历史关系。T58/#92 的阻塞已解除。T55 的直接依赖为已关闭的 #128 和本轮发现的 GitHub 出站缺陷 #129。[T55 本机验收](issues/T55.md) · [T58 范围取消](issues/T58.md)
+
+T56–T60 是 T55 的子票，也是 T55 的直接阻塞；T59/T60 的 GitHub 原生关系待发布后建立。T55 本身仍是最终验收票，不承担 production factory、产品 profile、前端分叉、真实环境接入或托管部署的实施。
+
+| 子票 | 父票 | 直接阻塞 |
+| --- | --- | --- |
+| [T56 将生产 Engine factory 注入现有 ds-bot Host](https://github.com/IceFireIcer/DS-SuperAgent/issues/90) | [T55](https://github.com/IceFireIcer/DS-SuperAgent/issues/83) | T02、T15、T18、T23、T24、T45、T46 |
+| [T57 接入真实模型与 GitHub/飞书测试环境](https://github.com/IceFireIcer/DS-SuperAgent/issues/91) | [T55](https://github.com/IceFireIcer/DS-SuperAgent/issues/83) | T23、T25、T26、T27、T29、T30、T31、T48、T49 |
+| [T58 组合托管 Host、断连撤销、接管与第二设备](https://github.com/IceFireIcer/DS-SuperAgent/issues/92) | [T55](https://github.com/IceFireIcer/DS-SuperAgent/issues/83) | T35、T37、T40、T41、T44、T45、T46、T47、T56、T57、T59、T60 |
+| [T59 新增 ds-superagent profile 并接通现有聊天界面](issues/T59.md) | [T55](https://github.com/IceFireIcer/DS-SuperAgent/issues/83) | T56、T45、T46 |
+| [T60 复制聊天界面为 ds-superagent-ui 并实现最小新核心接口](issues/T60.md) | [T55](https://github.com/IceFireIcer/DS-SuperAgent/issues/83) | T59、T24、T21、T18 |
+
+T59 在 T56 代码合入并通过发布核对后可开始；T60 阻塞于 T59。T57 可与 T59 并行，但受真实账号、模型和测试群配置约束；T58 阻塞于 T56/T57/T59/T60 及设备、交接、托管、客户端和 Watchdog 具体票。T55 阻塞于上述各项完成后的最终汇合。
+
+2026-11-12：T56、T59 已实现并通过双轴审查，证据见 [T56 实施记录](implementation/t56.md)、[T56 审查](implementation/reviews/t56.md)、[T59 实施记录](implementation/t59.md) 和 [T59 审查](implementation/reviews/t59.md)。T59/T60 目前只有本地票，尚未发布到 GitHub；T60 已复制独立聊天界面并接通新核心，证据见 [T60 记录](implementation/t60.md) 和 [T60 审查](implementation/reviews/t60.md)。T57 已完成真实模型、主动准备和真实 GitHub 输入/外发验收；真实飞书 tenant/群未配置并被维护者明确暂缓，环境检查保持 `unverified`，T57 于 2026-11-13 收口，证据见 [T57 记录](implementation/t57.md) 和 [T57 证据](implementation/t57-evidence.json)。T58 已在 Ubuntu 完成真实托管 Host、PostgreSQL、客户端断连/撤销、Ubuntu 设备执行和 Watchdog 替换，但 T56 factory/T59/T60 远程 UI、离线 stop/resume 和双向交接仍未完成；证据见 [T58 记录](implementation/t58.md) 和 [T58 证据](implementation/t58-evidence.json)。
 
 ## 资料与验证
 
 - [规格正文](spec.md)
 - [逐票验收条件及 D/A 映射](tickets-draft.md)
-- [机器可读计划](tickets-draft.json)
+- [机器可读计划](tickets-draft.json)（原始 55 票；T56–T60 为后续派生票，记录在本文件与 `issues/`）
 - [审计处置](audit-disposition.md)
 - [GitHub 发布及原生关系核查](publication.json)
+- [T55 前置子票发布及原生关系核查](t55-followups-publication.json)
 - [可恢复发布工具](publish-tickets.py)
 
 只有 publication.json 的 verified 为 true 才表示发布关系已经回读核验。规划发布不表示产品实现或真实环境验收。
@@ -97,3 +116,13 @@
 ## 本轮回读结果
 
 69 张新 Issue 的正文、状态、标签与计划一致；69 条父子关系和 102 条原生阻塞关系准确，无重复父归属。总规格仍 open，原有标签保留。当前可开始的实施集合为 [T01：建立隔离实例的持久接单与查询闭环](https://github.com/IceFireIcer/DS-SuperAgent/issues/29)，属于 [G01：本地接单与执行闭环](https://github.com/IceFireIcer/DS-SuperAgent/issues/15)。该集合会随实际实施状态变化，开工前重新核对。
+
+## T55 前置子票回读结果（2026-11-12）
+
+T56/T57/T58 已创建并回读：3 条 T55 原生父子关系、T55 的 9 条直接阻塞（含原有 6 条）以及三张子票的 26 条直接阻塞均与计划一致。三张新票均为 open、无 assignee、带 `ready-for-agent` 和 `enhancement`；T55 保持 open，作为最终验收票。
+
+当前可开始集合是 [T56](https://github.com/IceFireIcer/DS-SuperAgent/issues/90) 与 [T57](https://github.com/IceFireIcer/DS-SuperAgent/issues/91)；[T58](https://github.com/IceFireIcer/DS-SuperAgent/issues/92) 阻塞于 T56/T57，T55 阻塞于 T56/T57/T58。完整机器回读见 [t55-followups-publication.json](t55-followups-publication.json)。
+
+## T59/T60 本地票（2026-11-12）
+
+T59/T60 已写入本地票与规格 D20，尚未发布到 GitHub；因此 `publication.json` 和 `t55-followups-publication.json` 不包含它们。发布后需要新增回读记录，并更新 T55/T58 的原生父子关系和 blocked-by 关系；发布时还要把票内的本地 `T59.md`/`T60.md` 链接替换成 GitHub issue URL。T56/T58 的本地正文也随 D20 更新，需要一并回读。T59 在 T56 发布关闭后可开始；T60 阻塞于 T59。

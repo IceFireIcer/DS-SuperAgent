@@ -6,7 +6,7 @@ import { Engine, NativeSessions, createChatServer } from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, demonstrationResponse } from './native-mock.mjs'
 
-const directory = await mkdtemp(join(tmpdir(), 'ds-bot-native-chat-'))
+const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-native-chat-'))
 let context
 let sessions
 let storage

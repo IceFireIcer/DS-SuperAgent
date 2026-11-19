@@ -2,9 +2,9 @@
 
 ## 总体方案
 
-[DS Bot Super-agent 总体实现方案 v1](../docs/plans/2026-11-02-superagent-overall-plan.md) 说明目标架构、实施顺序、依赖和验收标准。
+[早期 Super-agent 总体方案 v1](../docs/plans/2026-11-02-superagent-overall-plan.md) 是历史设计材料；当前行为以 R5 正式规格和实施记录为准。
 
-[Super-agent 架构重建规格 v2.1](../docs/superagent/spec.md) 将已定方案展开为用户故事、行为契约、测试接口和验收场景，用于后续实施票拆分。
+[早期 Super-agent 架构重建规格 v2.1](../docs/superagent/spec.md) 记录了 R5 之前的用户故事、行为契约、测试接口和验收场景，已被当前 R5 规格取代。
 
 规格已发布为 [GitHub 总体规格](https://github.com/IceFireIcer/DS-SuperAgent/issues/1)，实施文档入口见 [docs/superagent](../docs/superagent/README.md)。
 

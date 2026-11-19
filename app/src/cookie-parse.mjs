@@ -11,7 +11,8 @@
 //   { ok, format, flavor, error, encoding, bom, lineEndings, entries, cookies: CookieParam[], skipped, warnings, info }
 //
 // CookieParam = { name, value, domain, path, secure, httpOnly, sameSite?: 'Strict'|'Lax'|'None', expires?: seconds,
-//                 partitionKey?: { topLevelSite, hasCrossSiteAncestor } }
+//                 partitionKey?: { topLevelSite, hasCrossSiteAncestor } } — a partitioned
+//                   cookie is refused, never flattened into the default context
 //   - domain: host without a dot = host-only cookie; '.host' = domain cookie (also sent to subdomains).
 //   - expires is omitted for session cookies (CDP treats expires 0 as 1970-01-01, i.e. already expired).
 // `skipped` / `warnings` entries carry { where, name, domain, path, code, reason|message } only — never cookie values.
@@ -268,7 +269,8 @@ function finish(ctx, error = null) {
   const byKey = new Map();
   ctx.items.forEach((it, idx) => {
     it.idx = idx;
-    const k = `${it.cookie.name}\u0000${it.cookie.domain}\u0000${it.cookie.path}`;
+    const partition = it.cookie.partitionKey;
+    const k = `${it.cookie.name}\u0000${it.cookie.domain}\u0000${it.cookie.path}\u0000${partition?.topLevelSite ?? ''}\u0000${partition?.hasCrossSiteAncestor === true}`;
     if (byKey.has(k)) {
       warn(ctx, it.where, it.cookie, 'duplicate', `same name/domain/path as ${byKey.get(k).where}; the later entry is used`);
     }
@@ -395,21 +397,21 @@ function normalizeCookie(raw, ctx, where) {
   if (!ex.session && ex.expires > ctx.now + CHROME_MAX_AGE_DAYS * DAY) W('over-400-days', `expires ${isoDay(ex.expires)}; Chrome keeps at most 400 days`);
 
   // --- partition key (CHIPS)
-  let partitionKey;
   if (raw.partitionKey !== undefined && raw.partitionKey !== null && raw.partitionKey !== '') {
     const pk = raw.partitionKey;
+    let partitionKey;
     if (pk && typeof pk === 'object' && typeof pk.topLevelSite === 'string' && pk.topLevelSite) {
       partitionKey = { topLevelSite: pk.topLevelSite, hasCrossSiteAncestor: !!pk.hasCrossSiteAncestor };
     } else if (typeof pk === 'string') {
       partitionKey = { topLevelSite: pk, hasCrossSiteAncestor: true };
-    } else W('bad-partition-key', 'partitionKey not understood; imported unpartitioned');
+    } else return { skip: ['bad-partition-key', 'partitionKey not understood; the cookie was not imported'] };
     if (partitionKey && !secure) return { skip: ['partitioned-insecure', 'partitioned cookie without Secure'] };
+    return { skip: ['partitioned-unsupported', 'partitioned (CHIPS) cookies cannot be stored without their top-level site'] };
   }
 
   const cookie = { name, value, domain, path, secure, httpOnly };
   if (sameSite) cookie.sameSite = sameSite;
   if (!ex.session) cookie.expires = ex.expires;
-  if (partitionKey) cookie.partitionKey = partitionKey;
   return { cookie };
 }
 

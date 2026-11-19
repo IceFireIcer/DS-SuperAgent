@@ -7,7 +7,7 @@ import * as core from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 
 async function githubFixture(t, suffix = 'acme/repo') {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-github-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-github-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const [owner, repo] = suffix.split('/')
@@ -57,6 +57,19 @@ test('GitHub source derives a canonical sequence from composite API cursors and 
   assert.equal(replay.processed, 0)
 })
 
+test('GitHub source compares numeric cursors numerically across digit changes and never rewinds', async t => {
+  const { source } = await githubFixture(t)
+  const event = (deliveryId, cursor, overrides = {}) => ({ deliveryId, cursor, repo: 'acme/repo', kind: 'issue', action: 'created', number: 1,
+    id: 'issue-1', authorId: 'alice', title: 'Fix the bug', body: `Details for ${deliveryId}.`, updatedAt: '2026-01-01T00:00:00Z', ...overrides })
+  await source.receive(event('nine', '9'))
+  assert.equal(await source.cursor(), '9')
+  const next = await source.poll([event('ten', '10', { action: 'edited' })])
+  assert.equal(next.processed, 1)
+  assert.equal(await source.cursor(), '10')
+  await source.receive(event('late', '8', { action: 'edited' }))
+  assert.equal(await source.cursor(), '10')
+})
+
 test('GitHub source keeps draft and edited native facts in the recorded text', async t => {
   const { engine, source } = await githubFixture(t)
   await source.receive({ deliveryId: 'draft-1', cursor: '2026-01-01T00:00:00Z#pr#000000000002', repo: 'acme/repo', kind: 'pull_request',
@@ -71,7 +84,7 @@ test('GitHub source keeps draft and edited native facts in the recorded text', a
 })
 
 test('Feishu source reception keeps tenant, chat and sender identities separate', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-feishu-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-feishu-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const engine = new core.Engine(storage, 'private', { kind: 'feishu', sourceInstanceId: 'feishu:tenant:chat-a,chat-b', actorId: 'bot',
@@ -94,7 +107,7 @@ test('Feishu source reception keeps tenant, chat and sender identities separate'
 })
 
 test('schedule occurrences are stable, catch up within a declared bound and survive pause', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-schedule-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-schedule-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const engine = new core.Engine(storage, 'private', { kind: 'schedule', sourceInstanceId: 'schedule:nightly', actorId: 'schedule',
@@ -122,7 +135,7 @@ test('schedule occurrences are stable, catch up within a declared bound and surv
 })
 
 async function scheduleFixture(t, config, intake) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-schedule-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-schedule-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const engine = new core.Engine(storage, 'private', { kind: 'schedule', sourceInstanceId: `schedule:${config.ruleId}`, actorId: 'schedule',
@@ -231,7 +244,7 @@ test('a legacy schedule rule without a revision is normalized before use', async
 })
 
 test('Feishu addressing follows p2p, mentions and group discussion', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-feishu-addressing-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-feishu-addressing-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const engine = new core.Engine(storage, 'private', { kind: 'feishu', sourceInstanceId: 'feishu:tenant:chat-a', actorId: 'bot',
@@ -248,7 +261,7 @@ test('Feishu addressing follows p2p, mentions and group discussion', async t => 
 })
 
 test('a reliable Feishu update time advances an edited message and an older one is ignored', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-feishu-edit-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-feishu-edit-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const engine = new core.Engine(storage, 'private', { kind: 'feishu', sourceInstanceId: 'feishu:tenant:chat-a', actorId: 'bot',
@@ -266,7 +279,7 @@ test('a reliable Feishu update time advances an edited message and an older one 
 })
 
 test('a Feishu edit without a native update time stays a conflict', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-feishu-conflict-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-feishu-conflict-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const engine = new core.Engine(storage, 'private', { kind: 'feishu', sourceInstanceId: 'feishu:tenant:chat-a', actorId: 'bot',
@@ -282,7 +295,7 @@ test('a Feishu edit without a native update time stays a conflict', async t => {
 })
 
 test('a Feishu replay and an out-of-order page do not duplicate work', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-feishu-replay-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-feishu-replay-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const engine = new core.Engine(storage, 'private', { kind: 'feishu', sourceInstanceId: 'feishu:tenant:chat-a', actorId: 'bot',

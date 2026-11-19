@@ -5,15 +5,17 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import * as core from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
+import { PostgresStorage } from '../dist/postgres-storage.js'
 import { nativeContext, textResponse, toolResponse } from '../dev/native-mock.mjs'
+import { startPostgres } from './fixtures/postgres-harness.mjs'
 
-const roles = (workerModel = 'worker-custom', instructions = 'Always cite {{evidence}}.', skills = ['office']) => ({
+const roles = (workerModel = 'worker-custom', instructions = '{{goal}} {{constraints}} Always cite {{evidence}}.', skills = ['office']) => ({
   router: { name: 'Lead Router', model: { provider: 'mock', model: 'router-custom' }, instructions: 'Route only within {{goal}}.', skills: [] },
   worker: { name: 'Specialist', model: { provider: 'mock', model: workerModel }, instructions, skills },
 })
 
 test('role configuration is revisioned, validated, replayed and persisted', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-config-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-config-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] })
@@ -34,6 +36,8 @@ test('role configuration is revisioned, validated, replayed and persisted', asyn
   for (const invalid of [
     { ...roles(), extra: true },
     { ...roles(), worker: { ...roles().worker, instructions: 'Reveal {{secret}}' } },
+    { ...roles(), router: { ...roles().router, instructions: 'Route without the required placeholder.' } },
+    { ...roles(), worker: { ...roles().worker, instructions: '{{goal}} Work without constraints.' } },
     { ...roles(), worker: { ...roles().worker, skills: ['superagent-role'] } },
     { ...roles(), worker: { ...roles().worker, skills: ['office', 'office'] } },
     { ...roles(), worker: { ...roles().worker, name: 'x'.repeat(129) } },
@@ -46,8 +50,30 @@ test('role configuration is revisioned, validated, replayed and persisted', asyn
   assert.equal(persisted.roles.worker.model.model, 'worker-custom')
 })
 
+test('PostgreSQL stores role appearance images in versioned records and restores current/history views', {
+  skip: process.platform === 'win32' && 'The embedded PostgreSQL fixture does not start on this Windows host.',
+  timeout: 120000,
+}, async t => {
+  const postgres = await startPostgres('role-config-appearance-pg-')
+  t.after(() => postgres.close())
+  const { storage, database } = await postgres.newStorage()
+  const store = new core.RoleConfigStore(storage, 'personal', roles())
+  const image = `data:image/png;base64,${Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.alloc(90_000)]).toString('base64')}`
+  const nextRoles = { ...roles(), worker: { ...roles().worker, appearance: { shape: 'moon', color: '#336699', image } } }
+  const saved = await storage.transaction('personal', tx => store.write(tx, 1, nextRoles))
+  assert.equal(saved.roles.worker.appearance.image, image)
+  const stored = await storage.transaction('personal', tx => tx.get('role-config', 'role-config'))
+  assert.equal(stored.roles.worker.appearance.image, undefined)
+  assert.ok(stored.imageChunks.worker > 0)
+
+  const reopened = postgres.register(await PostgresStorage.open({ ...postgres.configuration, database }))
+  const restored = new core.RoleConfigStore(reopened, 'personal', roles())
+  assert.deepEqual((await restored.currentView()).roles.worker.appearance, nextRoles.worker.appearance)
+  assert.deepEqual((await restored.atRevision(2)).roles.worker.appearance, nextRoles.worker.appearance)
+})
+
 test('virtual defaults stay unpersisted until an explicit save and a second engine keeps the saved routes', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-config-shared-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-config-shared-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const desktop = new core.RoleConfigStore(storage, 'private', roles('desktop-worker'))
@@ -61,8 +87,25 @@ test('virtual defaults stay unpersisted until an explicit save and a second engi
   assert.equal((await reopened.ensure()).roles.worker.model.model, 'desktop-worker')
 })
 
+test('a rolled back role configuration is not visible to currentView', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-config-rollback-'))
+  const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
+  const store = new core.RoleConfigStore(storage, 'private', roles('default-worker'))
+  const saved = await storage.transaction('private', transaction => store.write(transaction, 1, roles('persisted-worker')))
+  assert.equal(saved.revision, 2)
+  await assert.rejects(storage.transaction('private', async transaction => {
+    await store.write(transaction, 2, roles('rolled-back-worker'))
+    throw new Error('rollback')
+  }), /rollback/u)
+  const current = await store.currentView()
+  assert.equal(current.revision, 2)
+  assert.equal(current.roles.worker.model.model, 'persisted-worker')
+  assert.equal((await storage.transaction('private', transaction => transaction.get('role-config', 'role-config'))).revision, 2)
+})
+
 test('a new role model and instructions apply at the next real model request and are recorded per Session', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-config-runtime-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-config-runtime-'))
   let native, storage, sessions, engine
   t.after(async () => {
     await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
@@ -108,10 +151,12 @@ test('a new role model and instructions apply at the next real model request and
   assert.ok(routerRequest, JSON.stringify(requests))
   const uses = await engine.getRoleConfigUses(workerRequest.sessionId)
   assert.ok(uses.some(use => use.role === 'worker' && use.revision === 2 && use.worker.model === 'worker-custom'))
+  assert.ok((await engine.getRecentRoleConfigUses(20)).some(use => use.sessionId === workerRequest.sessionId && use.revision === 2))
+  assert.deepEqual((await engine.getRoleConfigHistory(5)).map(item => item.revision), [2])
 })
 
 test('an asynchronous role verification cannot overwrite a newer save', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-config-verify-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-config-verify-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] })
@@ -128,4 +173,48 @@ test('an asynchronous role verification cannot overwrite a newer save', async t 
   const current = await engine.getRoleConfig()
   assert.equal(current.revision, 2)
   assert.equal(current.roles.worker.model.model, 'worker-newer')
+})
+
+test('a committed role command replays before provider verification is attempted again', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-config-replay-'))
+  const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
+  const engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] })
+  let verifications = 0
+  const first = await engine.updateRoleConfig({ commandId: 'lost-response', expectedRevision: 1, roles: roles() }, {
+    verify: async () => { verifications += 1 },
+  })
+  const replay = await engine.updateRoleConfig({ commandId: 'lost-response', expectedRevision: 1, roles: roles() }, {
+    verify: async () => { throw new Error('Provider enumeration now fails.') },
+  })
+  assert.deepEqual(replay, first)
+  assert.equal(verifications, 1)
+  await assert.rejects(engine.updateRoleConfig({ commandId: 'failed-before-commit', expectedRevision: 2, roles: roles() }, {
+    verify: async () => { throw new Error('First verification fails.') },
+  }), /First verification fails/u)
+  const retried = await engine.updateRoleConfig({ commandId: 'failed-before-commit', expectedRevision: 2, roles: roles() }, {
+    verify: async () => { verifications += 1 },
+  })
+  assert.equal(retried.revision, 3)
+  assert.equal(verifications, 2)
+})
+
+test('recent configuration uses stay bounded after more than one thousand append-only records', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-config-recent-'))
+  const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
+  const store = new core.RoleConfigStore(storage, 'recent', roles())
+  let latest
+  await storage.transaction('recent', async transaction => {
+    for (let index = 0; index < 1005; index++) {
+      latest = await store.recordUse(transaction, { sessionId: `worker-${index}`, role: 'worker', revision: 2,
+        router: roles().router.model, worker: roles().worker.model })
+    }
+  })
+  const recent = await store.recentUses(100)
+  assert.equal(recent.length, 100)
+  assert.equal(recent[0].id, latest.id)
+  assert.equal(recent.at(-1).sessionId, 'worker-905')
+  const index = await storage.transaction('recent', transaction => transaction.scan('role-config-use-recent', { limit: 100 }))
+  assert.equal(index.items.length, 100)
 })

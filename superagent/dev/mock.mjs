@@ -16,7 +16,7 @@ const source = { sourceInstanceId: 'desktop-demo', actorId: 'local-user', allowe
 const context = new Context()
 
 try {
-  await context.plugin(plugin, { databasePath, instanceId: 'demo', source })
+  await context.plugin(plugin.enginePlugin, { databasePath, instanceId: 'demo', source })
   const engine = context.get('superagent')
   const samples = []
   for (let index = 0; index < 50; index++) {

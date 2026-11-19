@@ -1,0 +1,15782 @@
+// Generated from src/client by `npm run build` (scripts/build-client.mjs). Do not edit by hand.
+window.__ModuleLoader__.load({
+  id: 'ds-superagent',
+  factory: (require) => {
+const module = { exports: {} }
+"use strict";
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/client/index.js
+var index_exports = {};
+__export(index_exports, {
+  apply: () => apply,
+  inject: () => inject
+});
+module.exports = __toCommonJS(index_exports);
+
+// src/client/dsh-primitives.js
+var import_dsh_client_ui_primitives = require("@deepseek-ai/dsh-client-ui-primitives");
+
+// src/client/i18n.js
+var NAMESPACE = "ds-superagent";
+var ZH = {
+  "Proactive preparation": "主动准备",
+  "Pause proactive preparation": "暂停主动准备",
+  "Paused preparations cannot submit a result. Existing work continues.": "暂停后准备结果无法提交，已有工作继续。",
+  "Rules use an authenticated source event. Preparation cannot send messages, create PRs or merge changes.": "规则依据已验证的来源事件；准备过程不能发信、创建 PR 或合并。",
+  "Configure a source to enable preparation rules.": "配置来源后才能启用准备规则。",
+  "Event actors": "事件发送者",
+  "CI events": "CI 事件",
+  "Actor events": "执行者事件",
+  "New rule": "新建规则",
+  "Edit rule": "编辑规则",
+  "Disable rule": "停用规则",
+  "Enable rule": "启用规则",
+  "Delete rule": "删除规则",
+  "Confirm delete rule": "再次点击删除规则",
+  "Save rule": "保存规则",
+  "Rules changed elsewhere. Review the latest version and save again.": "规则已在别处修改，请核对最新版本后重新保存。",
+  "Preparation history": "准备记录",
+  "No preparations yet.": "暂无准备记录。",
+  "Load earlier preparations": "加载更早的准备记录",
+  "Preparation review": "准备结果审阅",
+  "Prepared review": "待审阅的准备结果",
+  Preparing: "准备中",
+  "Would prepare": "仅观察：会准备",
+  "Ready for review": "待审阅",
+  "Ended quietly": "静默结束",
+  "No longer current": "已失效",
+  "Budget exhausted": "预算用尽",
+  "Preparation failed": "准备失败",
+  "Rule version": "规则版本",
+  "Model steps": "模型步数",
+  Event: "事件",
+  "Preparation directory": "隔离目录",
+  "Verified files": "已核验文件",
+  "Read file": "读取文件",
+  "Stop preparation": "停止准备",
+  "Hide review": "收起审阅",
+  Review: "审阅",
+  "Run budget": "运行预算",
+  Observe: "观察",
+  Auto: "自动",
+  Off: "关闭",
+  Source: "来源",
+  "Text contains": "文本包含",
+  "Preparation scope": "准备范围",
+  "Notify Main for useful results": "有用结果通知 Main",
+  "Runs per hour": "每小时运行次数",
+  "Max file bytes": "文件字节上限",
+  Unavailable: "不可用",
+  "Work control": "工作控制",
+  State: "状态",
+  Stage: "阶段",
+  Assignment: "执行安排",
+  "No Worker assignment yet.": "尚未安排 Worker。",
+  "Step budgets": "步数预算",
+  Preparation: "准备",
+  "Worker turn": "Worker 当前回合",
+  Total: "合计",
+  "Rule run budget": "规则运行预算",
+  "Artifact byte budget": "文件字节预算",
+  "Worker assignments included": "已纳入的 Worker 执行安排",
+  Unknown: "未知",
+  "A newer Worker assignment makes the previous report stale.": "新的 Worker 执行安排使旧报告失效。",
+  "Pending start": "等待开始",
+  "Worker running": "Worker 执行中",
+  "Worker idle": "Worker 空闲",
+  Ended: "已结束",
+  "Waiting for human": "等待人工",
+  "Worker ended without a verified report": "Worker 已结束，但没有核验报告",
+  "Worker is executing": "Worker 正在执行",
+  "Waiting for background work": "等待后台工作",
+  "Verified report recorded": "已记录核验报告",
+  "Waiting for a human answer": "等待人工回答",
+  Stopping: "正在停止",
+  "Waiting for an execution environment": "等待执行环境",
+  "Environment setup failed": "环境设置失败",
+  "Pending execution": "等待执行",
+  Running: "运行中",
+  "Inferred mandate": "推断授权",
+  "Explicit mandate": "明确授权",
+  Local: "本机",
+  Remote: "远端",
+  "Token usage by role": "各角色 Token 用量",
+  "Provider usage was not reported.": "模型服务未报告用量。",
+  "Status and usage": "状态与用量",
+  "Product health": "产品健康状态",
+  "Usage coverage": "用量覆盖",
+  "Totals cover recent Main, Router and Worker Sessions. Supervisor, subagent and preparation calls outside those Sessions are excluded.": "仅统计近期 Main、Router、Worker 会话。会话外的监督、子代理和准备调用未计入。",
+  "Refresh status and usage": "刷新状态与用量",
+  "Working…": "处理中…",
+  "Last checked {time}": "最近检查：{time}",
+  Processing: "处理状态",
+  "No inspection recorded": "暂无检查记录",
+  "Status unavailable": "状态不可用",
+  "Not configured": "未配置",
+  "Open supervision": "打开监督",
+  "Open role settings": "打开角色设置",
+  "Usage unavailable.": "用量不可用。",
+  "No attributed work usage.": "没有归属到工作的用量。",
+  "{tokens} tokens · {reported} of {calls} calls reported": "{tokens} tokens · {reported}/{calls} 次调用有报告",
+  "Work usage": "工作用量",
+  "Planning usage": "规划用量",
+  Coverage: "覆盖情况",
+  "Sessions included": "纳入的 Session",
+  "{included} of {known}": "{included}/{known}",
+  Omitted: "未纳入",
+  "{uses} role uses · {sessions} Sessions · at least {events} events": "{uses} 条角色使用 · {sessions} 个 Session · 至少 {events} 个事件",
+  "Unattributed usage": "未归属用量",
+  "No model price catalog is configured.": "未配置模型价格目录。",
+  "Included Sessions read": "已读取纳入的 Session",
+  "Partial usage": "部分用量",
+  "Unreadable Sessions": "无法读取的 Session",
+  "Sessions over the read limit": "超出读取上限的 Session",
+  "Sessions with conflicting roles": "角色归属冲突的 Session",
+  "Some work records were outside the attribution limits.": "部分工作记录超出归属统计范围。",
+  "Limits: {roles} role uses · {sessions} Sessions · {events} events per Session": "上限：{roles} 条角色使用 · {sessions} 个 Session · 每个 Session {events} 个事件",
+  "Checking for updates": "正在检查更新",
+  "Update available": "有可用更新",
+  "Downloading update": "正在下载更新",
+  "Update ready": "更新已就绪",
+  "Update check failed": "更新检查失败",
+  "Update status unavailable": "更新状态不可用",
+  "Installed version": "已安装版本",
+  "Install and restart": "安装并重启",
+  "Preparing to install update": "正在备份并准备安装更新",
+  "Open download page": "打开下载页",
+  "Update installation failed": "更新安装失败",
+  "Update download failed": "更新下载失败",
+  Backups: "备份",
+  "Business state and DSH Sessions are backed up separately. Restores refuse changed authority or unresolved external effects.": "业务状态与 DSH Sessions 分开备份；授权事实变化或外部副作用未对账时拒绝恢复。",
+  "Create backup": "创建备份",
+  "Restore": "恢复",
+  "Restore this backup": "恢复此备份",
+  "Unresolved external effects prevent restoring this backup.": "尚未对账的外部副作用阻止恢复此备份。",
+  "Restore the business and Session snapshot from {time}? The Host will restart.": "恢复 {time} 的业务与 Session 快照？Host 将重新启动。",
+  "Confirm restore": "确认恢复",
+  "Backups could not be listed.": "无法列出备份。",
+  "Diagnostics could not be loaded.": "无法读取诊断。",
+  "{records} records · {sessions} Sessions · {size}": "{records} 条记录 · {sessions} 个 Session · {size}",
+  "No backups yet.": "还没有备份。",
+  "Recent operational events": "近期运行事件",
+  "Download diagnostic summary": "下载诊断摘要",
+  "No model calls.": "没有模型调用。",
+  "{tokens} tok · {reported} of {calls} calls reported": "{tokens} tok · {reported}/{calls} 次调用有报告",
+  "{count} Session reads unavailable": "{count} 个 Session 读取不可用",
+  Cost: "费用",
+  "Cost unavailable": "费用不可用",
+  "No model price catalog is configured for this work.": "当前工作没有可用的模型价格目录。",
+  "Worker report": "Worker 报告",
+  "No ready report yet.": "尚无就绪报告。",
+  "Read verified file": "读取核验文件",
+  Execution: "执行",
+  "Execution targets": "执行目标",
+  "Execution policy": "执行策略",
+  "This policy chooses a target for new work. Active assignments keep their original Environment.": "此策略决定新工作的目标；进行中的 Assignment 保留原执行环境。",
+  "Default target": "默认目标",
+  "Preferred Environment": "首选执行环境",
+  "No preference": "不设首选",
+  "Required capabilities": "所需能力",
+  "Save execution policy": "保存执行策略",
+  "Execution policy saved.": "执行策略已保存。",
+  "Devices and Environments": "设备与执行环境",
+  Offline: "离线",
+  Configured: "已配置",
+  "Capabilities unavailable": "能力信息不可用",
+  Attachments: "附件",
+  Status: "状态",
+  "This Host": "此 Host",
+  "Confirm revoke device": "再次点击撤销设备",
+  "Revoke device": "撤销设备",
+  "Device name": "设备名称",
+  "Device endpoint": "设备端点",
+  "Device ID": "设备 ID",
+  "Device key fingerprint": "设备密钥指纹",
+  "Pairing code": "配对码",
+  "Device permissions": "设备权限",
+  "Pair device": "配对该设备",
+  "Pair a device": "配对设备",
+  "Device paired.": "设备已配对。",
+  "Device revoked.": "设备已撤销。",
+  "Host revoked this device; confirmation was unavailable.": "Host 已撤销该设备，但设备确认不可用。",
+  "Device revoked; credential cleanup is pending.": "设备已撤销；凭据清理尚未完成。",
+  "Remote device pairing requires the DSH credential record service.": "远端设备配对需要 DSH 凭据记录服务。",
+  "Remote device revocation requires the DSH credential record service.": "远端设备撤销需要 DSH 凭据记录服务。",
+  "The remote Environment credential record is unavailable.": "远端执行环境的凭据记录不可用。",
+  "The device pairing command is still running.": "设备配对命令仍在运行。",
+  "The device revocation command is still running.": "设备撤销命令仍在运行。",
+  "The device pairing result is unknown. Inspect the device before issuing a new pairing.": "设备配对结果未知。请先检查该设备，再发起新的配对。",
+  "This pairing command was already applied and the device was removed.": "该配对命令已经生效，但设备随后已被移除。",
+  "This pairing command was abandoned.": "该配对命令已放弃。",
+  "A completed pairing cannot be abandoned here.": "已完成的配对不能在这里放弃。",
+  "A saved device exists for this pairing command. Restart the Host before changing it.": "该配对命令已有保存的设备；更改前请重启 Host。",
+  "This command belongs to another device operation.": "该命令属于另一种设备操作。",
+  "The device revocation result is pending. Replay the same command to reconcile it.": "设备撤销结果尚未确认。请重放同一命令进行核对。",
+  "Pairing status": "配对状态",
+  "Pairing running": "配对运行中",
+  "Pairing unknown": "配对结果待确认",
+  "Pairing completed": "配对已完成",
+  "Pairing abandoned": "配对已放弃",
+  "Command running": "命令运行中",
+  "Saved device can be restored after Host restart": "重启 Host 后可恢复已保存设备",
+  "Check pairing status": "检查配对状态",
+  "Abandon uncertain pairing": "放弃结果未知的配对",
+  "Confirm abandon pairing": "确认放弃该配对",
+  "Pairing state abandoned. Check the device before pairing again.": "配对状态已放弃；再次配对前请检查设备。",
+  "Pairing state abandoned; credential cleanup is pending.": "配对状态已放弃；凭据清理尚未完成。",
+  "Credential cleanup is pending for a device operation.": "设备操作仍有凭据清理待完成。",
+  "Retry credential cleanup": "重试凭据清理",
+  "Credential cleanup is still pending. Retry after the credential service recovers.": "凭据清理仍未完成；凭据服务恢复后再重试。",
+  "Credential cleanup completed.": "凭据清理已完成。",
+  "Unavailable remote devices": "不可用的远端设备",
+  "This Environment is not authorized for the current Instance.": "此执行环境未获当前 Instance 授权。",
+  "Capabilities could not be read. Check this Environment before assigning work.": "无法读取能力信息；分配工作前请检查此执行环境。",
+  "Execution target": "执行目标",
+  "Remote only": "仅远端",
+  "Remote Environment": "远端执行环境",
+  "Choose an authorized remote Environment": "选择已授权的远端执行环境",
+  "Local Environment": "本机执行环境",
+  "Choose an authorized local Environment": "选择已授权的本机执行环境",
+  "Choose Local or Remote only before adding files.": "添加文件前请选择本机或仅远端。",
+  "Choose an authorized Environment for this execution target.": "请为该执行目标选择已授权的执行环境。",
+  "Remove attached files before using automatic target selection.": "使用自动选择目标前请移除附件。",
+  "Remove attached files before changing execution targets.": "更改执行目标前请移除附件。",
+  "Remove attached files before changing Environments.": "更改执行环境前请移除附件。",
+  "This work chooses an eligible Environment when its Ticket starts. Attachments need an exact target.": "工作开始时才会选择合格执行环境；附件需要明确目标。",
+  "New work uses this Environment. Active work keeps its original binding.": "新工作使用此执行环境；已有工作保留原绑定。",
+  "No remote Environment is available. This work will wait for an eligible device.": "当前没有远端执行环境；这项工作会等待符合条件的设备。",
+  "Selection source": "选择来源",
+  "Selection status": "选择状态",
+  "Selection reason": "选择原因",
+  "Execution candidate": "执行候选",
+  "Execution Environment handoff": "执行环境交接",
+  "Handoff status": "交接状态",
+  "Handoff requested": "已请求交接",
+  "Handoff blocked": "交接受阻",
+  "Handoff prepared": "交接副本已准备",
+  "Handoff copy verified": "交接副本已核验",
+  "Flushing source Session": "正在刷新源 Session",
+  "Switching execution Environment": "正在切换执行环境",
+  "Handoff completed": "交接已完成",
+  "Handoff available": "可准备交接",
+  Responsible: "责任方",
+  Worker: "Worker",
+  Operator: "操作者",
+  Host: "Host",
+  "Handoff target": "交接目标",
+  "Prepare handoff": "准备交接",
+  "Preparing handoff…": "正在准备交接…",
+  "Verify handoff copy": "核验交接副本",
+  "Verifying handoff copy…": "正在核验交接副本…",
+  "Hand off work": "交接工作",
+  "Handing off…": "正在交接…",
+  Target: "目标",
+  "Base version": "基线版本",
+  "Changed files": "变更文件",
+  "Prepared work-copy files": "已准备工作副本文件",
+  tracked: "已跟踪",
+  modified: "已修改",
+  added: "已新增",
+  deleted: "已删除",
+  untracked: "未跟踪",
+  "No other Environment is available for handoff.": "没有其他可用于交接的执行环境。",
+  "The Host is reconciling the original execution before switching generations.": "Host 正在对账原执行范围，之后再切换执行代次。",
+  "Continue in the new execution Environment.": "在新的执行环境中继续这项工作。",
+  "The copied work is verified. Hand off the same work when ready.": "工作副本已核验；准备好后交接同一项工作。",
+  "Verify the prepared work copy before handing off.": "交接前请先核验已准备的工作副本。",
+  "Synchronize the prepared changes to the target, then verify the copy.": "请将已准备变更同步到目标，然后核验副本。",
+  "Choose a target Environment and prepare the work copy.": "请选择目标执行环境并准备工作副本。",
+  "Resolve the current handoff blocker.": "请先解决当前交接阻塞项。",
+  "Review the handoff state.": "请检查交接状态。",
+  "This handoff step is blocked.": "此交接步骤受阻。",
+  "The {kind} Environment is excluded by the Ticket execution target {target}.": "{target} 工作目标排除了{kind}执行环境。",
+  "The target Environment is not eligible for this handoff.": "目标执行环境不符合交接条件。",
+  "The source Environment changed after the work copy was prepared.": "准备工作副本后，源执行环境发生变化。",
+  "The target Environment changed after the work copy was prepared.": "准备工作副本后，目标执行环境发生变化。",
+  "Prepare and verify a work copy before handing off.": "交接前请准备并核验工作副本。",
+  "The work copy has not been verified.": "工作副本尚未核验。",
+  "The work copy belongs to another execution generation or Environment.": "工作副本属于其他执行代次或执行环境。",
+  "The work Assignment changed during the handoff.": "交接期间工作分配发生变化。",
+  "The source work copy changed after preparation.": "准备工作副本后，源内容发生变化。",
+  "The target repository version differs from the source.": "目标仓库版本与源版本不同。",
+  "The target is missing a prepared work-copy file.": "目标缺少一个已准备的工作副本文件。",
+  "A prepared work-copy file conflicts with the target.": "已准备的工作副本文件与目标内容冲突。",
+  "The target has an unlisted change at {path}; it will not be overwritten.": "目标在 {path} 有未列入清单的变更，系统不会覆盖。",
+  "The target already has a different change at {path}.": "目标在 {path} 已有不同变更。",
+  "The target content at {path} does not match the prepared copy.": "目标在 {path} 的内容与已准备副本不符。",
+  "The work has ended.": "工作已结束。",
+  "The work is stopped or waiting for a person.": "工作已停止或正在等待人工处理。",
+  "The work has an active stop request.": "工作存在有效的停止请求。",
+  "Answer the current work question before handing off.": "交接前请先回答当前工作问题。",
+  "Reconcile an external result before handing off.": "交接前请先对账外部结果。",
+  "The source Assignment was replaced before recovery.": "恢复前源工作分配已被替换。",
+  "The source Session could not be flushed.": "无法刷新源 Session。",
+  "The interrupted handoff could not be reconciled.": "无法对账被中断的交接。",
+  "Wait for the Worker turn to reach a safe boundary.": "请等待 Worker 回合到达安全边界。",
+  "Wait for the background job to settle.": "请等待后台作业静止。",
+  "Wait for the child Agent to settle.": "请等待子 Agent 静止。",
+  "Close the retained preview before handing off.": "交接前请关闭保留的预览。",
+  "The work generation changed during the handoff.": "交接期间工作执行代次发生变化。",
+  "The target or work copy could not be revalidated after flush.": "刷新后无法重新核验目标或工作副本。",
+  "Choose a different target Environment.": "请选择其他目标执行环境。",
+  "The work has no active Assignment.": "工作没有有效分配。",
+  "The source Assignment is not running.": "源工作分配未在运行。",
+  "A verified result already ended this Assignment.": "已核验结果已经结束此工作分配。",
+  "The source workspace setup failed.": "源工作区初始化失败。",
+  "Processing is paused, so a handoff cannot start.": "处理已暂停，无法开始交接。",
+  "The work copy uses a format or size outside the safe handoff limits.": "工作副本的格式或大小超出安全交接限制。",
+  "The work copy could not be inspected safely.": "无法安全检查工作副本。",
+  "Hand off from the Main work card.": "从 Main 工作卡交接。",
+  "Check device stop": "核查设备停止状态",
+  "Checking device stop…": "正在核查设备停止状态…",
+  "Bound Environment": "绑定执行环境",
+  Version: "版本",
+  "Selection basis": "选择依据",
+  Eligible: "符合条件",
+  "Not eligible": "不符合条件",
+  "Selection issues": "选择问题",
+  "Policy default": "策略默认值",
+  "Main request": "主对话请求",
+  "Exact Environment": "指定执行环境",
+  "Waiting for an eligible Environment": "等待符合条件的执行环境",
+  "target {target} excludes {kind} Environments": "{target} 目标排除了{kind}执行环境",
+  "Environment is offline": "执行环境离线",
+  "Environment is offline: {reason}": "执行环境离线：{reason}",
+  "Environment version is unverified": "执行环境版本尚未核验",
+  "Environment fingerprint is unverified": "执行环境指纹尚未核验",
+  "Environment capacity is unknown": "执行环境容量未知",
+  "Missing capability: {capability}": "缺少能力：{capability}",
+  "Missing capability: {capability} ({detail})": "缺少能力：{capability}（{detail}）",
+  "Execution capacity is full ({count}).": "执行容量已满（{count}）。",
+  "Read access": "读取权限",
+  "Write access": "写入权限",
+  "Search access": "搜索权限",
+  "Command access": "命令权限",
+  Office: "Office",
+  MCP: "MCP",
+  "Message Main": "与 Main 对话",
+  "Attached files": "已附文件",
+  "Credential resources": "凭据资源",
+  "Managed Feishu and GitHub source credentials use separate grants. Feishu delivery and Worker MCP tools need their own grants.": "受管飞书和 GitHub 来源分别授权；飞书外发与 Worker MCP 工具各需单独授权。",
+  "Import credential resources": "导入凭据资源",
+  "Import accepts a controlled ds-superagent-credential-export version 1 JSON file. DSH does not provide a safe way to browse old vault records; if you do not have an export, create a new resource manually. Old grants are never copied.": "导入仅接受受控的 ds-superagent-credential-export v1 JSON。DSH 没有安全浏览旧凭据库记录的公开接口；如果没有此类导出，请手动新建资源。不会复制旧授权。",
+  "Choose credential export": "选择凭据导出文件",
+  "Reading export…": "正在读取导出文件…",
+  "Credential export import is available only in the desktop app.": "凭据导入仅在桌面应用中可用。",
+  "Credential export must be at most 1 MiB.": "凭据导出文件不能超过 1 MiB。",
+  "The credential export could not be read.": "无法读取凭据导出文件。",
+  "Credential type": "凭据类型",
+  "Imported resource": "导入后的资源",
+  "Import cleanup pending.": "导入资源清理尚未完成。",
+  "New authorization role": "新授权角色",
+  "New authorization purpose": "新授权用途",
+  "Target work item ID": "目标工作项 ID",
+  "Target Environment ID": "目标执行环境 ID",
+  "Target source Instance ID": "目标来源 Instance ID",
+  "Choose target role": "选择目标角色",
+  "Choose purpose": "选择用途",
+  "Create resource and grant": "创建资源并授权",
+  "Credential imported with a new authorization.": "凭据已导入并使用新授权。",
+  "Choose a new resource name, role, purpose, and exact scope before importing.": "导入前请明确选择新资源名称、角色、用途和精确范围。",
+  "Choose a work item or Environment for a tool grant.": "工具授权必须选择工作项或执行环境。",
+  "Choose the exact source Instance for this authorization.": "来源或外发授权必须选择精确来源 Instance。",
+  "Credential import pending": "待处理",
+  "Credential import in progress": "正在导入",
+  "Credential import result unknown": "结果待确认",
+  "Credential import completed": "已导入",
+  "Credential import conflict": "冲突",
+  "Credential import cancelled": "已取消",
+  "Credential import status unavailable": "导入状态不可用",
+  "New authorization": "新授权",
+  source: "来源",
+  tool: "工具",
+  outbound: "外发",
+  "Not selected": "未选择",
+  "Clear credential preview": "清除凭据预览",
+  "MCP tools": "MCP 工具",
+  "No trusted Host MCP tool is configured.": "Host 尚未配置受信 MCP 工具。",
+  "Host only; remote execution unsupported.": "仅在 Host 本地运行；暂不支持远端执行。",
+  "Grant Worker/tool for the intended work item or Environment in Credential resources. The MCP endpoint is checked when work calls it.": "请在凭据资源中为目标工作项或执行环境授权 Worker/tool。工作调用工具时才检查 MCP 服务。",
+  "MCP state": "MCP 状态",
+  "MCP credential resource": "MCP 凭据资源",
+  "Choose a resource": "选择资源",
+  "Save MCP resource": "保存 MCP 资源",
+  "Approve tool": "批准工具",
+  "Revoke tool approval": "撤销工具审批",
+  "MCP setting saved.": "MCP 设置已保存。",
+  "MCP change pending confirmation. Retry the same command.": "MCP 设置结果待确认，请用同一命令重试。",
+  "Retry pending change": "重试待确认的更改",
+  "Browser resources": "浏览器资源",
+  "View version": "视图版本",
+  "Answer this view to continue the same work.": "请答复此视图以继续同一工作。",
+  "This view is no longer active.": "此视图已不再有效。",
+  "The local Host has no CDP browser bridge. Browser work remains unavailable.": "本地 Host 没有 CDP 浏览器桥；浏览器工作当前不可用。",
+  "Each browser keeps an isolated profile. A local Worker needs an exact work-item grant before navigation or a read-only snapshot.": "每个浏览器使用独立 profile；本地 Worker 必须获得精确工作项授权，才能导航或读取只读快照。",
+  "Import browser data": "导入浏览器数据",
+  "Preview a cookie export or installed browser profile before creating a new isolated browser.": "创建新的隔离浏览器前，先预览 cookie 导出或本机浏览器资料。",
+  "Choose cookie export": "选择 cookie 导出文件",
+  "Installed browser profile": "本机浏览器资料",
+  "Preview installed profile": "预览本机资料",
+  "The browser preview is unavailable.": "浏览器预览不可用。",
+  "Browser data previewed. Review the source and target before importing.": "浏览器数据已预览。导入前请核对来源和目标。",
+  "Source ownership": "来源归属",
+  "Privacy scope": "隐私范围",
+  "Isolated browser profile": "隔离浏览器 profile",
+  "Local browser": "本地浏览器",
+  "Choose Environment": "选择执行环境",
+  "Use preview to retry": "用当前预览重试",
+  "The new browser starts with no work grants.": "新浏览器初始不授予任何工作访问权。",
+  "The browser export could not be read.": "无法读取该浏览器导出文件。",
+  "Close the selected browser briefly to copy its cookies, then reopen it with your tabs?": "需要短暂关闭所选浏览器以复制 cookie，之后重新打开并恢复标签页吗？",
+  "The selected browser profile could not be copied.": "无法复制所选浏览器资料。",
+  "Browser import preview cancelled.": "浏览器数据导入预览已取消。",
+  "Browser data imported into a new isolated resource.": "浏览器数据已导入新的隔离资源。",
+  "Browser import needs another retry.": "浏览器数据导入需要再次重试。",
+  "Browser import cancelled.": "浏览器数据导入已取消。",
+  "Browser import is already complete.": "浏览器数据导入已经完成。",
+  "Import into new browser": "导入为新浏览器",
+  "Cancel preview": "取消预览",
+  "Recent browser imports": "最近的浏览器导入",
+  "Stored cookies": "已存储 cookie",
+  Dropped: "已丢弃",
+  Failed: "失败",
+  "Cancel browser import": "取消浏览器导入",
+  "Import pending": "导入待确认",
+  "Import needs retry": "导入需要重试",
+  "Import applied": "导入已完成",
+  "Refresh browser resources": "刷新浏览器资源",
+  Available: "可用",
+  "In use": "使用中",
+  "Human control": "人工控制中",
+  "Outcome unknown": "结果未确认",
+  Importing: "导入中",
+  Pending: "等待确认",
+  Succeeded: "已成功",
+  Checked: "已核查",
+  Allowed: "已允许",
+  "No browser resources yet.": "暂无浏览器资源。",
+  "Browser change pending confirmation. Retry the same command.": "浏览器设置结果待确认，请用同一命令重试。",
+  "pending confirmation. Retry the same command.": "待确认，请用同一命令重试。",
+  "Retry {action}": "重试：{action}",
+  "Retry pending browser change": "重试待确认的浏览器更改",
+  "Create browser in {environment}": "在 {environment} 中创建浏览器",
+  "Change browser grant for {workItemId}": "更改工作 {workItemId} 的浏览器授权",
+  "Revoke browser {resourceId}": "撤销浏览器 {resourceId}",
+  "Check browser operation {operationId}": "核查浏览器操作 {operationId}",
+  "Browser name": "浏览器名称",
+  "Research browser": "调研浏览器",
+  "Browser Environment": "执行环境",
+  "No local Environment": "没有可用的本地执行环境",
+  "Create browser resource": "创建浏览器资源",
+  "Browser resource created.": "浏览器资源已创建。",
+  "Browser work access": "浏览器工作授权",
+  "Browser owner": "浏览器当前占用",
+  "A person controls this browser. Worker browser calls wait for explicit return.": "当前由人工控制浏览器；Worker 的浏览器调用会等待明确归还。",
+  "Take over browser": "接管浏览器",
+  "Give browser back": "归还浏览器",
+  "Reconnect browser control": "重连浏览器控制",
+  "Stop browser work": "停止浏览器工作",
+  "Work stop requested.": "已请求停止工作。",
+  "Browser control taken.": "已接管浏览器。",
+  "Browser control returned.": "已归还浏览器。",
+  "Manual browser control: {label}": "人工控制浏览器：{label}",
+  "Browser address": "浏览器地址",
+  "Manual browser": "人工浏览器",
+  "Enter an HTTP or HTTPS address.": "请输入 HTTP 或 HTTPS 地址。",
+  "No accepted work item is available in this Environment.": "该执行环境没有可授权的已接收工作。",
+  "Browser work item": "工作项",
+  "Revoke browser from this work": "撤销此工作的浏览器权限",
+  "Grant browser to this work": "授权此工作使用浏览器",
+  "Revoke browser resource": "撤销整个浏览器资源",
+  "Revoke this browser resource and all of its work grants?": "撤销整个浏览器资源及全部工作授权？",
+  "Browser access granted.": "已授权浏览器访问。",
+  "Browser access revoked.": "已撤销此工作的浏览器访问。",
+  "Browser resource revoked.": "浏览器资源已撤销。",
+  "Recent browser operations": "最近浏览器操作",
+  "Observed browser state": "实际观察到的浏览器状态",
+  "Choose the observed browser state": "选择实际观察到的浏览器状态",
+  "Page stayed on the original view": "页面停留在原视图",
+  "Page visibly changed": "页面已经明显变化",
+  "Browser page was closed": "浏览器页面已关闭",
+  "I inspected the page without recording its contents": "已人工检查页面，但没有记录页面内容",
+  "What did you observe before reconciling this operation?": "核查此操作前，你实际看到了什么？",
+  "Record browser check": "记录浏览器核查",
+  "Browser operation checked.": "浏览器操作已核查。",
+  "Browser operation checked": "浏览器操作已核查",
+  "No browser operations yet.": "暂无浏览器操作。",
+  "Browser change confirmed.": "浏览器更改已确认。",
+  "This resource has more than 100 grants. No new grant can be added until stored grants are cleaned up.": "此资源已有超过 100 条授权；清理已存授权前不能新增授权。",
+  "off": "已断开",
+  "needs-approval": "待审批",
+  "needs-grant": "缺少授权",
+  "ready": "已启用",
+  "Feishu source Instance": "飞书来源 Instance",
+  "Grant Main/source and Router/outbound for this exact source Instance, then reconnect.": "请为该精确来源 Instance 分别授权 Main/source 与 Router/outbound，然后重新连接。",
+  "Selected Feishu resource": "已选飞书资源",
+  "No Feishu resource selected": "尚未选择飞书资源",
+  "Unavailable resource": "资源不可用",
+  "Clear Feishu selection": "清除飞书资源选择",
+  "Feishu credential selection saved.": "飞书资源选择已保存。",
+  "GitHub credential selection saved.": "GitHub 资源选择已保存。",
+  "GitHub source Instance": "GitHub 来源 Instance",
+  "Grant Main/source for this exact GitHub source Instance, then reconnect.": "请为该 GitHub 来源 Instance 授予 Main/source 权限，然后重新连接。",
+  "Selected GitHub resource": "已选 GitHub 资源",
+  "No GitHub resource selected": "尚未选择 GitHub 资源",
+  "Clear GitHub selection": "清除 GitHub 资源选择",
+  "Reconnect GitHub with this resource": "用此资源重连 GitHub",
+  "Use for GitHub": "用于 GitHub",
+  "Feishu uses an explicit legacy Host secret. Remove it and restart the Host to select a managed resource.": "飞书目前使用 Host 显式配置的旧密钥。移除该配置并重启 Host 后可选择受管资源。",
+  "Reconnect Feishu with this resource": "使用此资源重连飞书",
+  "Use for Feishu": "用于飞书",
+  "Resource name": "资源名称",
+  "Credential value": "凭据内容",
+  "Credential resource saved.": "凭据资源已保存。",
+  "New credential value": "新的凭据值",
+  "Rotate credential": "轮换凭据",
+  "Retry rotation": "重试轮换",
+  "Check rotation": "核查轮换",
+  "Credential rotated.": "凭据已轮换。",
+  "Credential rotated; old record cleanup pending.": "凭据已轮换，旧记录等待清理。",
+  "Rotation pending. Retry with the same value or check its status.": "轮换待确认。请用相同值重试或核查状态。",
+  "Rotation command saved. Check its status before starting another rotation.": "轮换命令已保留。开始新轮换前请先核查。",
+  "Rotation is pending. Retry with the same value and command, or check its status.": "轮换尚未确认。请用相同值和命令重试，或核查状态。",
+  "Rotation result is unknown. Keep this command and check again.": "轮换结果未知。请保留当前命令并再次核查。",
+  "Rotation was not applied. Refresh the resource before starting another rotation.": "轮换未生效。刷新资源后可重新发起。",
+  "Authorization recorded.": "授权记录已保存。",
+  "Request authorization": "申请授权",
+  "Approve request": "批准请求",
+  "Cancel request": "取消请求",
+  "Pending authorization request": "待处理授权请求",
+  "Cancelled authorization request": "已取消授权请求",
+  "Granted authorization request": "已批准授权请求",
+  "Current access revoked": "当前授权已撤销",
+  "Retry request list": "重新加载请求列表",
+  "Load more requests": "加载更多请求",
+  "Authorization request recorded.": "授权请求已记录。",
+  "Authorization request cancelled.": "授权请求已取消。",
+  "The authorization request was not confirmed.": "授权请求尚未确认。",
+  "The authorization decision was not confirmed.": "授权决定尚未确认。",
+  "The credential request list exceeds its bounded limit.": "凭据请求数量超过本页可读取的上限。",
+  "Resource deletion recorded.": "资源删除已记录。",
+  "Delete this credential resource and all its grants?": "删除此凭据资源及全部授权？",
+  "Save resource": "保存资源",
+  "No credential resources yet.": "暂无凭据资源。",
+  "The credential resource list exceeds its bounded limit.": "凭据资源数量超过本页可读取的上限。",
+  "Vault cleanup pending.": "凭据库清理尚未完成。",
+  "Retry cleanup": "重试清理",
+  "Delete resource": "删除资源",
+  "New resource name": "新的资源名称",
+  "Rename resource": "重命名资源",
+  "Resource name changed.": "资源名称已更新。",
+  Role: "角色",
+  Purpose: "用途",
+  "Work item ID": "工作项 ID",
+  "Environment ID": "执行环境 ID",
+  "Source Instance ID": "来源 Instance ID",
+  "Record authorization": "记录授权",
+  "Revoke authorization": "撤销授权",
+  "Authorization revoked.": "授权已撤销。",
+  "Role presets": "角色预设",
+  Supervision: "监督",
+  "Inspect now": "立即巡检",
+  Watchdog: "看护进程",
+  "Watchdog has not inspected yet.": "看护进程尚未完成巡检。",
+  "Independent Watchdog is not configured for this Host.": "此 Host 尚未配置独立看护进程。",
+  "Semantic inspection": "语义巡检",
+  "Partial inspection": "部分巡检",
+  "Restart inspection": "重新巡检",
+  "Tickets inspected": "已巡检工作数",
+  "Inspection budget": "巡检预算",
+  "Inspection budget exhausted": "巡检预算已耗尽",
+  "Inspection failed": "巡检失败",
+  "Inspection complete": "巡检完成",
+  "Pause work": "暂停工作",
+  "Correct direction": "纠正方向",
+  "View history": "查看历史",
+  Work: "工作",
+  Recommendation: "建议",
+  Impact: "影响",
+  Action: "动作",
+  "No supervision proposals.": "没有监督提案。",
+  "Watchdog history": "看护进程历史",
+  "Role presets are unavailable.": "角色预设暂不可用。",
+  "New preset": "新建预设",
+  "Preset": "预设",
+  "Preset profile": "预设配置",
+  "Preset appearance": "预设外观",
+  "Preset created.": "预设已创建。",
+  "Create preset": "创建预设",
+  "Apply preset": "应用预设",
+  "Apply to": "应用到",
+  "Select preset": "选择预设",
+  "No role presets yet.": "暂无角色预设。",
+  "Review old configuration": "审阅旧配置",
+  "Review source and target": "核对来源与目标",
+  "Review again": "重新审阅",
+  "Skip import": "跳过导入",
+  "Legacy role configuration": "旧角色配置",
+  "Legacy role ID": "旧角色 ID",
+  "Copy identity": "副本标识",
+  "Target role": "目标角色",
+  "Source digest": "来源摘要",
+  "Ignored fields": "已忽略的字段",
+  "From": "来源",
+  "Preview": "预览",
+  "Retry": "重试",
+  "Load more": "加载更多",
+  "Choose character": "选择形象",
+  "Upload image": "上传图片",
+  "Comma-separated skill names": "用逗号分隔技能名称",
+  "A name for the explicit copy you provide.": "为你明确提供的副本命名。",
+  "Paste a legacy role profile copy. Only the selected configuration fields are reviewed.": "粘贴旧角色配置副本；仅审阅选定的配置字段。",
+  "The appearance stays with the preset, not role permissions.": "形象属于预设，不带入角色权限。",
+  "The copy has no selected role configuration.": "副本中没有选定的角色配置。",
+  "Open role settings to load its current revision.": "打开角色设置以读取当前修订版本。",
+  "Role settings changed. Reload settings before applying a preset.": "角色设置已变化，请重新读取后再应用预设。",
+  "Configuration v{revision} is active for new turns.": "配置 v{revision} 对后续回合生效。",
+  "Could not refresh role settings.": "无法刷新角色设置。",
+  "The preset operation failed.": "预设操作未完成。",
+  "The preset was not confirmed.": "预设尚未确认。",
+  "The preview was not confirmed.": "预览尚未确认。",
+  "The import decision was not confirmed.": "导入决定尚未确认。",
+  "The selected preset was not confirmed.": "选定的预设尚未确认。",
+  "The created preset does not match your draft.": "创建的预设与草稿不一致。",
+  "The preview does not match the selected source and target.": "预览与所选来源或目标不一致。",
+  "The import decision does not match this review.": "导入决定与本次审阅不一致。",
+  "The import decision does not match your choice.": "导入决定与你的选择不一致。",
+  "The selected preset does not match your review.": "选定的预设与审阅结果不一致。",
+  "The role configuration revision was not confirmed.": "角色配置修订版本尚未确认。",
+  "Import conflict: {reason}. Review the source and preset again.": "导入冲突：{reason}。请重新核对来源与预设。",
+  "Uploading…": "上传中…",
+  "Choose a work directory before adding files.": "添加文件前请先选择工作目录。",
+  "Attach at most ten files.": "最多添加十个文件。",
+  "Remove attached files before changing directories.": "切换工作目录前请先移除已附文件。",
+  "Choose a nonempty file smaller than 8 MB.": "请选择小于 8 MB 的非空文件。",
+  "Start dictation": "开始听写",
+  "The recording is too long.": "录音过长。",
+  "The speech provider is not ready.": "语音服务尚未就绪。",
+  "Read aloud": "朗读",
+  "Stop reading": "停止朗读",
+  "Read-only connection": "只读连接",
+  "The remote Host connection is unavailable.": "远程 Host 连接不可用。",
+  "Remote Host": "远程 Host",
+  "Connect to Host": "连接 Host",
+  "Host connection": "Host 连接",
+  "Host address": "Host 地址",
+  Instance: "工作空间",
+  Client: "客户端",
+  "Client credential": "客户端凭据",
+  "Read and command": "可读取和操作",
+  "Use HTTPS or an authorized local SSH tunnel. The credential stays in this app process until disconnect or quit.": "请使用 HTTPS 或已授权的本地 SSH 隧道。凭据仅保留在本应用进程中，断开或退出时清除。",
+  "Close connection": "关闭连接窗口",
+  "Authorized clients": "已授权客户端",
+  "Client name": "客户端名称",
+  "Client access": "客户端权限",
+  "Issue credential": "签发凭据",
+  "Issued client credential": "已签发的客户端凭据",
+  "This credential is shown once. Transfer it to the desktop client securely.": "凭据仅显示一次，请安全传给桌面客户端。",
+  "This enrollment already completed. Its credential cannot be shown again; revoke it and create a new client.": "此签发已完成，凭据不能再次显示；请撤销并新建客户端。",
+  "Could not copy the credential.": "无法复制凭据。",
+  "Copy credential": "复制凭据",
+  "Revoke this client’s access now?": "现在撤销此客户端的访问权？",
+  Revoked: "已撤销",
+  Revoke: "撤销",
+  "Sending…": "正在发送…",
+  "Stop reply": "停止本轮回复",
+  "Stopping…": "正在停止…",
+  "Resuming…": "正在恢复…",
+  "Retrying…": "正在重试…",
+  "Stopping this Main reply…": "正在停止本轮 Main 回复…",
+  "Execution version": "执行版本",
+  "Ticket version": "工作项版本",
+  "Stop work": "停止工作",
+  "Resume work": "恢复工作",
+  "Retry work": "重试工作",
+  "Stopped from the Main work card.": "从 Main 工作卡停止。",
+  "Retry requested from the Main work card.": "从 Main 工作卡请求重试。",
+  "Stopping · waiting for device cancellation confirmation.": "正在停止 · 等待设备确认取消。",
+  "Stopping · waiting for the current execution to become quiet.": "正在停止 · 等待当前执行静止。",
+  "Stopped · execution cancellation confirmed.": "已停止 · 已确认执行取消。",
+  "Stopped · cancellation confirmation is unavailable.": "已停止 · 无法确认取消范围已静止。",
+  "Question version": "问题版本",
+  "Answer this work question": "回答这个工作问题",
+  "Type an answer…": "输入回答…",
+  "Sending answer…": "正在提交回答…",
+  "Send answer": "提交回答",
+  "Answered by": "回答者",
+  "This question is no longer active.": "这个问题已不再有效。",
+  "What would you like to discuss?": "想聊些什么？",
+  "Main is replying…": "Main 正在回复…",
+  "Main ready": "Main 就绪",
+  "Main running": "Main 处理中",
+  "Main degraded": "Main 异常",
+  "{count} inputs queued": "{count} 条输入排队中",
+  "Main model failed. Ask the Host operator to check the model and provider configuration.": "Main 模型调用失败。请联系 Host 管理员检查模型和服务商配置。",
+  "Main model failed. Check the model and provider credentials in Settings.": "Main 模型调用失败。请在设置中检查模型和服务商凭据。",
+  "No models are available. Configure a provider in DSH settings, then reopen this panel to select the role models.": "没有可用模型。请在 DSH 设置中配置服务商，再重新打开此面板为各角色选择模型。",
+  "Models need setup": "需要配置模型",
+  "Open Settings to select models for Main, Router and Worker.": "请打开设置，为 Main、Router 和 Worker 选择模型。",
+  "Select an available model for each role before saving.": "请为每个角色选择可用的模型，再保存。",
+  "System work fact": "系统工作事实",
+  "System fact": "系统事实",
+  "View original request": "查看原始请求",
+  "Original request evidence": "原始请求证据",
+  "Partial evidence": "部分证据",
+  "Complete evidence": "完整证据",
+  "Load more evidence": "加载更多证据",
+  "Main is unavailable.": "Main 暂不可用。",
+  "Send a JSON product request.": "请发送 JSON 产品请求。",
+  "Use the authorized Main conversation. Native Session access is unavailable.": "请使用已授权的 Main 对话；原生 Session 入口不可用。",
+  "This conversation is outside the authorized workspace.": "这个对话不在已授权的工作区内。",
+  "This message identity was already used for different text.": "这条消息身份已经用于不同内容。",
+  "The configuration changed elsewhere. Your draft is still here.": "配置已在别处更新，你的草稿仍保留。",
+  "Check the role configuration.": "检查角色配置。",
+  "Check the request fields.": "检查请求字段。",
+  "The requested work activity is unavailable.": "请求的工作活动不可用。",
+  "This product capability is not connected yet.": "这个产品能力还没有接通。",
+  "The product Host is closed.": "产品 Host 已关闭。",
+  "Main is unavailable. Your accepted messages remain in the conversation.": "Main 暂不可用；已接受的消息仍保留在对话中。",
+  "Check the preset request.": "检查预设请求。",
+  "Review the current memory scope.": "检查当前记忆范围。",
+  "Main could not finish this reply. Your message is saved.": "Main 未能完成回复，你的消息已保存。",
+  "Could not reach Main. Check that the app is running.": "无法连接 Main，请检查应用是否仍在运行。",
+  "Work item: {goal}": "工作：{goal}",
+  "Routing work": "协调中",
+  "Pending work": "等待执行",
+  "Running work": "执行中",
+  "Waiting for an answer": "等待回答",
+  "Blocked work": "受阻",
+  "Stopped work": "已停止",
+  "Work complete": "已验证完成",
+  "Work failed": "失败",
+  "Work result unknown": "结果待确认",
+  "Work declined": "未接单",
+  "Work brief": "委托",
+  Receipt: "路由回执",
+  "Router is routing": "Router 正在协调",
+  "Accepted by Router": "Router 已接收",
+  "Not accepted": "Router 未接收",
+  "Waiting for Main": "等待 Main",
+  "Reviewed by Main": "Main 已查看",
+  "Delegated by Main": "Main 已委托",
+  "Dismissed by Main": "Main 已忽略",
+  "Delivery pending": "投递等待中",
+  "Delivery sent": "已投递",
+  "Delivery dropped": "投递已丢弃",
+  "Delivery needs reconciliation": "投递结果待核查",
+  Acknowledgement: "确认",
+  Answer: "回答",
+  Question: "问题",
+  "Policy update": "策略更新",
+  "GitHub source request": "GitHub 来源请求",
+  "GitHub request": "GitHub 请求",
+  "Feishu source request": "飞书来源请求",
+  "Feishu request": "飞书请求",
+  Feishu: "飞书",
+  "Feishu connection": "飞书连接",
+  "Feishu connecting": "飞书连接中",
+  "Feishu receiving": "飞书接收中",
+  "Feishu unavailable": "飞书不可用",
+  "Feishu stopped": "飞书已停止",
+  "Stop Feishu": "停止飞书来源",
+  "Reconnect Feishu": "重连飞书来源",
+  "Source cursor": "来源游标",
+  "Check the Feishu connection settings.": "检查飞书连接设置。",
+  "The Feishu account cannot access the configured tenant or chat.": "飞书账户无法访问配置的租户或会话。",
+  "Feishu did not respond. Check the connection and reconnect.": "飞书没有响应，请检查连接后重连。",
+  "Feishu setup failed. Check the connection settings and reconnect.": "飞书连接初始化失败，请检查设置后重连。",
+  "Feishu needs attention. Check the connection settings and reconnect.": "飞书连接需要处理，请检查设置后重连。",
+  "Could not read Feishu status. Check the app connection.": "无法读取飞书状态，请检查应用连接。",
+  "This task was cancelled.": "此定时任务已取消。",
+  "The schedule source is paused. Resume it to continue.": "日程来源已暂停，恢复后才能继续。",
+  "This work is stopped. Resume it before scheduling more work.": "工作已停止，请先明确恢复再安排后续工作。",
+  "This schedule no longer has access to the work.": "此日程已无权访问该工作。",
+  "The source request is no longer current.": "来源请求已不再有效。",
+  "This scheduled delivery could not complete. Check the work status.": "定时投递未完成，请检查工作状态。",
+  "Main source failed": "Main 来源处理失败",
+  GitHub: "GitHub",
+  "Delivery receipts": "投递回执",
+  "Reconcile delivery": "核查投递结果",
+  "Reconciling…": "正在核查…",
+  "Load earlier receipts": "加载更早回执",
+  "Pull request conditions": "Pull Request 条件",
+  "Pull request open": "Pull Request 打开",
+  "Pull request draft": "Pull Request 草稿",
+  "Pull request merged": "Pull Request 已合并",
+  "Pull request closed": "Pull Request 已关闭",
+  "Next step": "下一步",
+  Ticket: "工作项",
+  "Work receipt": "接单回执",
+  Constraints: "约束",
+  "Acceptance criteria": "验收标准",
+  Verification: "验证证据",
+  "Follow-up history": "跟进记录",
+  "Follow-up queued": "跟进已排队",
+  "Follow-up delivery started": "跟进开始投递",
+  "Follow-up persisted": "跟进已持久写入",
+  "Direction completed": "方向变更已完成",
+  "Direction waiting": "方向变更等待中",
+  "Direction handed back": "方向变更已交回",
+  "Direction blocked by stop": "方向变更被停止约束阻止",
+  "Follow-up delivery expired": "跟进投递已过期",
+  "Direction v{version}": "方向 v{version}",
+  "Input persisted": "输入已持久写入",
+  "Input not yet persisted": "输入尚未持久写入",
+  "Direction adopted by Worker": "Worker 已采用方向",
+  "Direction not yet adopted": "Worker 尚未采用方向",
+  Reason: "原因",
+  bytes: "字节",
+  "Work navigation": "工作导航",
+  "Work activity": "工作活动",
+  "Read-only": "只读",
+  "Back to Main": "返回 Main",
+  "Find activity": "查找活动",
+  "Search Router and Worker history": "搜索 Router 与 Worker 历史",
+  "No Router or Worker activity yet.": "还没有 Router 或 Worker 活动。",
+  "Load more activity": "加载更多活动",
+  "Read-only work activity": "只读工作活动",
+  "Loading history…": "正在加载历史…",
+  "Historical generation": "历史代次",
+  "Current generation": "当前代次",
+  "Generation ended": "代次已结束",
+  "Copy details": "复制详情",
+  "Copy failed": "复制失败",
+  "Copy loaded detail": "复制已加载详情",
+  "View full detail": "查看完整详情",
+  "Load more detail": "加载更多详情",
+  "Full detail": "完整详情",
+  "Tool output": "工具输出",
+  "Tool fact: {tool}": "工具事实：{tool}",
+  "The Session history is missing. Durable work facts remain available.": "Session 历史缺失，持久工作事实仍可查看。",
+  "The assigned Session has not started.": "分配的执行 Session 尚未开始。",
+  Session: "会话",
+  Generation: "代次",
+  Mandate: "授权",
+  Goal: "目标",
+  "Router turns": "Router 回合",
+  "Assignment generations": "Assignment 代次",
+  "Observation history": "观察历史",
+  Response: "回复",
+  "Tool call": "工具调用",
+  "Tool result": "工具结果",
+  Turn: "回合",
+  Arguments: "参数",
+  "No execution history has been recorded yet.": "还没有记录执行历史。",
+  "Load more history": "加载更多历史",
+  "Load earlier messages": "加载更早消息",
+  "Router is coordinating the durable work plan.": "Router 正在协调持久工作计划。",
+  "Router is deciding the work plan.": "Router 正在决定工作计划。",
+  "Router has not established a durable work plan.": "Router 尚未建立持久工作计划。",
+  "This Assignment generation is retained in history.": "这个 Assignment 代次已保留在历史中。",
+  "Return to the current generation for the next executable step.": "返回当前代次查看下一步可执行操作。",
+  "Review the independent Worker activity.": "查看各个 Worker 的独立活动。",
+  "Answer the current work question.": "回答当前工作问题。",
+  "Review the stop before resuming.": "恢复前先核查停止状态。",
+  "Resolve the execution blocker.": "解决执行阻塞。",
+  "Reconcile the original work before retrying.": "重试前先核对原工作状态。",
+  "Review the failure before deciding whether to retry.": "决定是否重试前先检查失败原因。",
+  "Inspect the execution history or wait for the next update.": "查看执行历史，或等待下一次更新。",
+  "Wait for the next durable work update.": "等待下一次持久工作更新。",
+  "Review the verified result and evidence.": "查看已验证结果和证据。",
+  "Review the verified result and artifact references.": "查看已验证结果和产物引用。",
+  "Wait for Router to establish the remaining durable work.": "等待 Router 建立剩余持久工作。",
+  "Wait for Router to establish the durable work plan.": "等待 Router 建立持久工作计划。",
+  "The Ticket is stopped.": "该 Ticket 已停止。",
+  "The Worker is waiting for an answer.": "Worker 正在等待回答。",
+  "The Worker recorded a verified result.": "Worker 已记录验证结果。",
+  "The Worker ended without a verified result.": "Worker 已结束，但没有验证结果。",
+  "The execution environment is not ready.": "执行环境尚未就绪。",
+  "The Worker is executing this Ticket.": "Worker 正在执行该 Ticket。",
+  "The Ticket is waiting for Worker execution.": "该 Ticket 正在等待 Worker 执行。",
+  "Called {tool}.": "调用了 {tool}。",
+  "Tool call failed.": "工具调用失败。",
+  "Tool call completed.": "工具调用完成。",
+  "Turn ended: {reason}.": "回合结束：{reason}。",
+  Decomposition: "分解",
+  Conflict: "冲突",
+  Device: "设备",
+  Directory: "目录",
+  Result: "结果",
+  Evidence: "证据",
+  Artifacts: "产物",
+  "Tool facts": "工具事实",
+  Current: "当前",
+  Historical: "历史",
+  routing: "协调中",
+  accepted: "已接收",
+  rejected: "未接单",
+  running: "执行中",
+  pending: "等待执行",
+  stopped: "已停止",
+  success: "已完成",
+  failed: "失败",
+  unknown: "待确认",
+  ended: "已结束",
+  "Wait for the assigned Worker to start.": "等待分配的 Worker 开始执行。",
+  // Shared
+  "Main Bot": "主 Bot",
+  Working: "工作中",
+  "Waiting for your answer": "等你回答",
+  "Waiting for {names}": "等 {names} 交回",
+  "Unread activity": "有未读",
+  "Not read yet": "未读",
+  Search: "搜索",
+  "New chat": "新对话",
+  "Back to chat": "返回对话",
+  "New…": "新建",
+  "Collapse sidebar": "收起侧边栏",
+  "Expand sidebar": "展开侧边栏",
+  "Resize sidebar": "调整侧边栏宽度",
+  "Animation": "动画",
+  "Bot animation": "Bot 动画",
+  "Quiet": "安静",
+  "Normal": "正常",
+  "Lively": "活泼",
+  Settings: "设置",
+  Usage: "用量",
+  Account: "账户",
+  Cancel: "取消",
+  Delete: "删除",
+  Duplicate: "复制一份",
+  Hidden: "已隐藏",
+  Admin: "管理员",
+  Add: "添加",
+  Close: "关闭",
+  Copy: "复制",
+  Copied: "已复制",
+  Content: "内容",
+  "Referenced {labels}": "引用了 {labels}",
+  ", ": "、",
+  You: "你",
+  you: "你",
+  Bot: "Bot",
+  "a Bot": "一个 Bot",
+  "a group chat": "一个群聊",
+  " and ": "、",
+  and: "和",
+  "{count} members": "{count} 位成员",
+  "Loading…": "加载中…",
+  "Edit Bot": "编辑 Bot",
+  "Make Main Bot": "设为主 Bot",
+  "Remove Main Bot role": "取消主 Bot",
+  "Bot settings": "Bot 设置",
+  "Create group chat": "新建群聊",
+  "Delete group": "删除群聊",
+  "Open {name}'s chat": "打开 {name} 的对话",
+  "New Bot": "新 Bot",
+  // Sidebar and account menu
+  "Bot list": "Bot 列表",
+  "Setting up your Main Bot…": "正在设置你的主 Bot…",
+  "The Bot team could not start. The engine’s startup output — its console, or the app’s startup error box — has the cause.": "Bot 团队启动失败。原因在引擎的启动输出里——它的控制台，或应用的启动错误框。",
+  "The Bot team could not start. {error}. The engine’s startup output — its console, or the app’s startup error box — has the cause.": "Bot 团队启动失败。{error}。原因在引擎的启动输出里——它的控制台，或应用的启动错误框。",
+  "Automation tasks": "自动化任务",
+  Connectors: "连接器",
+  "Search connectors": "搜索连接器",
+  "No connectors": "暂无连接器",
+  Capabilities: "能力",
+  "Shared capabilities": "共享能力",
+  "Add capability": "添加能力",
+  "No capabilities saved": "还没有保存能力",
+  Type: "类型",
+  "MCP server": "MCP 服务",
+  Skill: "技能",
+  Pack: "能力包",
+  Connection: "连接方式",
+  "Local command": "本地命令",
+  "HTTP server": "HTTP 服务",
+  Command: "命令",
+  "Arguments (one per line)": "参数（每行一个）",
+  "Environment (JSON)": "环境变量（JSON）",
+  '{"API_KEY": "$DSH_SECRET_MY_KEY"}': '{"API_KEY": "$DSH_SECRET_MY_KEY"}',
+  URL: "URL",
+  "Headers (JSON)": "请求头（JSON）",
+  "Skill instructions": "技能说明",
+  "New skill": "新技能",
+  "Awaiting approval": "等待批准",
+  Added: "新增",
+  Modified: "已修改",
+  "Show all {count} lines": "展开全部 {count} 行",
+  "Skill update": "技能更新",
+  "AGENTS.md update": "AGENTS.md 更新",
+  Approve: "批准",
+  Decline: "拒绝",
+  "Save changes": "保存更改",
+  Edit: "编辑",
+  "Click again to delete.": "再点一次删除。",
+  Ready: "就绪",
+  "Needs approval": "需要批准",
+  "No items": "没有项目",
+  "Save an MCP server or skill first.": "请先保存 MCP 服务或技能。",
+  Environment: "环境变量",
+  Headers: "请求头",
+  "{label} must be valid JSON.": "{label}必须是有效的 JSON。",
+  "{label} must be a JSON object.": "{label}必须是 JSON 对象。",
+  "Repositories, issues, and pull requests": "仓库、issue 和 PR",
+  "Connecting…": "正在连接…",
+  "Could not connect: {error}": "连接失败：{error}",
+  "Bot mode could not be set up here: {error}": "这里无法启用 Bot 模式：{error}",
+  "Connected as {account}": "已连接：{account}",
+  Connected: "已连接",
+  Disconnect: "断开",
+  Connect: "连接",
+  "GitHub token": "GitHub token",
+  "Create a token on GitHub": "去 GitHub 生成 token",
+  "Could not reach GitHub": "连不上 GitHub",
+  "GitHub did not accept this token": "GitHub 不接受这个 token",
+  "GitHub did not say who this token belongs to": "GitHub 没有返回这个 token 的账号",
+  "Paste a token first": "请先粘贴 token",
+  "GitHub addresses must start with https://": "GitHub 地址必须以 https:// 开头",
+  "This DSH cannot load connectors": "这个 DSH 不能加载连接器",
+  "No such connector": "没有这个连接器",
+  "Classic Agent mode": "经典 Agent 模式",
+  "Switch": "切换",
+  "Switch to classic Agent mode": "切换经典 Agent 模式",
+  "{model} is not available anymore. Pick another model for me.": "{model} 已经不可用了。给我换一个模型吧。",
+  "Hi, I'm {name}. I don't have a model yet. How do you want to set one up?": "你好，我是 {name}。我还没有可用的模型。你想怎么配置？",
+  "Hi, I'm {name}. Pick a model for me first. You can change it later in my details.": "你好，我是 {name}。先给我选一个模型吧，以后可以在我的详情里换。",
+  "Hi, I'm {name}. I need a {provider} API key before I can start.": "你好，我是 {name}。开始之前，我需要一个 {provider} API key。",
+  "{provider} API key": "{provider} API key",
+  "Enter the API key": "请填入 API key",
+  "Paste only the key, not a NAME=value line": "只粘贴 key 本身，不要带「名字=」",
+  "Paste the key without quotes": "粘贴时不要带引号",
+  "An API key has no spaces or special characters": "API key 里不能有空格或特殊字符",
+  "Another provider": "其他服务商",
+  // Models page
+  "This DSH cannot set up model providers.": "这个 DSH 不能设置模型服务商。",
+  "This DSH cannot set up model providers": "这个 DSH 不能设置模型服务商",
+  "Model providers · {count}": "模型服务商 · {count}",
+  "Add a provider": "添加服务商",
+  "Needs an API key": "需要 API key",
+  "Key set": "已设置 key",
+  "Key set outside DS SuperAgent": "key 在 DS SuperAgent 之外设置",
+  "No models": "没有模型",
+  "{count} models": "{count} 个模型",
+  "This key comes from outside DS SuperAgent, such as an environment variable, and cannot be changed here.": "这个 key 来自 DS SuperAgent 之外（例如环境变量），这里改不了。",
+  "and {count} more": "还有 {count} 个",
+  "Remove {name}? Bots on its models need another model.": "删除 {name}？用它的模型的 Bot 要换一个模型。",
+  "Remove provider": "删除服务商",
+  "Replace the API key": "更换 API key",
+  "API key": "API key",
+  "Remove key": "删除 key",
+  "Saved.": "已保存。",
+  "Kind of provider": "服务商类型",
+  "Known provider": "常用服务商",
+  "Custom API": "自定义接口",
+  Provider: "服务商",
+  "Choose a provider": "选择服务商",
+  "Provider ID": "服务商 ID",
+  "Provider ID, e.g. my-gateway": "服务商 ID，例如 my-gateway",
+  "Name (optional)": "名称（可选）",
+  Endpoint: "接口地址",
+  Protocol: "协议",
+  "Asking…": "获取中…",
+  "Fetch models": "获取模型列表",
+  "The endpoint lists no models. Enter their ids below.": "这个接口没有列出模型，请在下面填写模型 ID。",
+  "Model ids": "模型 ID",
+  "Model ids, separated by commas": "模型 ID，用逗号分隔",
+  "Enter the endpoint as an http or https address": "接口地址要以 http 或 https 开头",
+  "Every model needs an id": "每个模型都要有 ID",
+  "A provider id is lowercase letters, digits and dashes, starting with a letter": "服务商 ID 只能用小写字母、数字和短横线，并以字母开头",
+  "Add at least one model": "至少添加一个模型",
+  "Two models have the same id": "有两个模型的 ID 相同",
+  "Mode": "模式",
+  "Sign in to DeepSeek": "登录 DeepSeek 账号",
+  "Enter a DeepSeek API key": "填入 DeepSeek API key",
+  "Open settings to set up a custom model": "打开设置配置自定义模型",
+  "DS SuperAgent": "DS SuperAgent",
+  // Header
+  "Message {name}": "给 {name} 发消息",
+  Message: "发消息",
+  "View conversation details": "查看对话详情",
+  "1 new message": "1 条新消息",
+  "{count} new messages": "{count} 条新消息",
+  "New messages": "新消息",
+  "Dismiss new messages": "关闭新消息提示",
+  New: "新",
+  // New chat
+  "Create new Bot": "新建 Bot",
+  "Create new Bot “{name}”": "新建 Bot「{name}」",
+  "Add to group chat": "加入群聊",
+  "Message Bot": "给 Bot 发消息",
+  "To:": "发给：",
+  "Remove {name}": "移除 {name}",
+  Recipient: "收件人",
+  Recipients: "收件人",
+  "Search Bots…": "搜索 Bot…",
+  "Start a chat with…": "和谁聊…",
+  "Close new chat": "关闭新对话",
+  "No Bots match": "没有匹配的 Bot",
+  "Type a name to create a Bot": "输入名字来新建 Bot",
+  "Send message": "发送",
+  // Details drawer
+  Details: "详情",
+  Browser: "浏览器",
+  "Browser access": "浏览器权限",
+  "Bots browse, click and fill in forms freely. Posting, uploading, downloading and deleting ask you first unless you allow them here. Payments are always yours: the Bot hands the page to you.": "Bot 可以自由浏览、点击和填写表单。发布、上传、下载和删除会先征求你的同意，除非你在这里预先允许。付款始终由你自己完成：Bot 会把页面交给你。",
+  "Allowed actions": "已允许的操作",
+  "Nothing allowed yet.": "还没有允许的操作。",
+  "All sites": "所有网站",
+  "All four": "全部四项",
+  Permanent: "永久",
+  "Until {time}": "截至 {time}",
+  Expired: "已过期",
+  "Remove grant": "移除授权",
+  "Allow an action": "允许操作",
+  Site: "网站",
+  Actions: "操作",
+  Post: "发布",
+  Duration: "时限",
+  "1 hour": "1 小时",
+  Today: "今天",
+  "example.com — leave empty for all sites": "example.com — 留空表示所有网站",
+  About: "简介",
+  "Show less": "收起",
+  "Show more": "展开",
+  "Admin leads": "管理员主持",
+  "Plain messages go to the admin, who calls others with @Name.": "普通消息先给管理员，由管理员用 @名字 点名其他成员。",
+  Everyone: "所有人",
+  "Every member answers in turn, admin first.": "每位成员轮流回答，管理员先说。",
+  "Members · {count}": "成员 · {count}",
+  "Leave the group without an admin": "让群聊不设管理员",
+  Unset: "取消",
+  "Make admin": "设为管理员",
+  "Remove {name} from the group": "把 {name} 移出群聊",
+  "Remove from group": "移出群聊",
+  "Add member": "添加成员",
+  "{name} leads this group: it can call members with @Name, change the group, and post here.": "{name} 主持这个群：可以用 @名字 点名成员、修改群设置、在群里发言。",
+  "No admin yet. An admin can call members with @Name, change the group, and post here.": "还没有管理员。管理员可以用 @名字 点名成员、修改群设置、在群里发言。",
+  "Who answers": "谁来回答",
+  "Choose an admin first": "先选一个管理员",
+  "@mentions always pick who answers.": "@提及总是指定由谁回答。",
+  Notice: "群公告",
+  "Shared instructions every member reads before speaking…": "每位成员发言前都会读到的共同说明…",
+  "Group notice": "群公告",
+  "Back to details": "返回详情",
+  "Close details": "关闭详情",
+  "Copied conversation": "已复制对话",
+  "Share conversation": "分享对话",
+  "Copy conversation as Markdown": "把对话复制为 Markdown",
+  "This conversation is not part of your Bot team.": "这个对话不属于你的 Bot 团队。",
+  "Admin {name}": "管理员 {name}",
+  "No admin": "无管理员",
+  "Bot name": "Bot 名字",
+  "Group name": "群名",
+  "Name after members": "按成员命名",
+  "Rename {name}": "重命名 {name}",
+  Rename: "重命名",
+  "Add instructions in Bot settings": "在 Bot 设置里添加说明",
+  "No scheduled tasks yet. To add one, tell the Bot in its chat what to do and when.": "还没有定时任务。要添加，在对话里告诉 Bot 做什么、什么时候做。",
+  "The browser is in DSH Desktop and the DS SuperAgent app.": "浏览器在 DSH 桌面版和 DS SuperAgent 应用里。",
+  "New tab": "新标签页",
+  "Close tab": "关闭标签页",
+  "Open {title}": "打开 {title}",
+  "Conversation details": "对话详情",
+  "Panel tabs": "面板标签页",
+  "Close panel": "关闭面板",
+  // Cookie imports
+  "Import cookies": "导入 cookie",
+  "From a file…": "从文件导入…",
+  "cookies.txt, JSON, storageState": "cookies.txt、JSON、storageState",
+  "Copy of its cookies": "复制它的 cookie",
+  "No browsers found": "没有找到浏览器",
+  "The Bot controls this browser": "Bot 正在控制此浏览器",
+  "The Bot is waiting for you": "Bot 正在等待你",
+  "You control this browser": "你正在控制此浏览器",
+  "The Bot handed this browser to you: {reason}": "Bot 已将此浏览器交给你：{reason}",
+  "Take over": "接管",
+  "Give back": "交还",
+  "Sign-in needed": "需要登录",
+  "Payment needed": "需要付款",
+  "Verification needed": "需要验证",
+  "Help needed in the browser": "需要你在浏览器里帮忙",
+  Skipped: "已跳过",
+  Returned: "已交还",
+  "I'm done": "我完成了",
+  "{name} is running": "{name} 正在运行",
+  "It must close for a moment so its cookies can be copied. It will reopen with your tabs.": "需要先把它关掉一下才能复制 cookie，之后会自动重新打开并恢复你的标签页。",
+  "Close {name} and import": "关闭 {name} 并导入",
+  "Closing…": "正在关闭…",
+  "Import {count} cookies": "导入 {count} 个 cookie",
+  "the browser was restarted": "浏览器已重新打开",
+  "{count} skipped": "跳过 {count} 个",
+  "{count} session": "{count} 个会话",
+  "{count} adjusted": "调整了 {count} 个",
+  "Cookies without an expiry stay until the app closes.": "没有过期时间的 cookie 会保留到应用关闭。",
+  "Some sites also keep sign-in outside cookies; you may need to sign in again there.": "有些网站还把登录信息存在 cookie 之外，这些网站可能要重新登录。",
+  "Importing…": "正在导入…",
+  "Import": "导入",
+  "Imported {count} cookies": "已导入 {count} 个 cookie",
+  "No cookies were stored": "没有 cookie 被写入",
+  "Reload the page": "刷新页面",
+  "Import failed": "导入失败",
+  "That file is too large to be a cookie export.": "这个文件太大了，不像是 cookie 导出文件。",
+  "That file could not be read.": "这个文件读不了。",
+  "This browser encrypts its cookies so only it can read them. Export them to a file first, then import that file.": "这个浏览器把 cookie 加密了，只有它自己能读。先把 cookie 导出成文件，再导入那个文件。",
+  "{count}": "{count} 个",
+  // Bot settings
+  "Choose a PNG, JPEG, WebP, or GIF image": "请选择 PNG、JPEG、WebP 或 GIF 图片",
+  "Choose an image smaller than 25 MB": "请选择小于 25 MB 的图片",
+  "That image is too large": "图片太大了",
+  Model: "模型",
+  "Avatar editor": "形象编辑",
+  "Avatar source": "形象来源",
+  Upload: "上传",
+  "Reset character to default": "恢复默认形象",
+  Reset: "恢复默认",
+  "Character shape": "形状",
+  "Character color": "颜色",
+  "Drag, drop, or paste an image": "拖入或粘贴一张图片",
+  Replace: "替换",
+  "Browse files": "选择文件",
+  "Remove photo": "移除照片",
+  "Edit Bot avatar": "编辑 Bot 形象",
+  Name: "名字",
+  Instructions: "说明",
+  "What this Bot is responsible for…": "这个 Bot 负责什么…",
+  "Pick the model this Bot runs on.": "选择这个 Bot 使用的模型。",
+  "This model is not available now. Pick another one.": "这个模型现在不可用，请换一个。",
+  "Every message of this Bot runs on it.": "这个 Bot 的每条消息都用它。",
+  "Applies from the next message.": "从下一条消息开始生效。",
+  Profile: "资料",
+  Label: "标签",
+  "Optional. Shown under the name.": "可选，显示在名字下方。",
+  "Research, admin…": "研究、行政…",
+  "What this Bot does": "这个 Bot 做什么",
+  "Its job on the team. Part of the Bot's system prompt.": "它在团队里的分工，会写进 Bot 的系统提示词。",
+  "A copy with the same job and model, and fresh memory.": "复制分工和模型，记忆从零开始。",
+  "Delete {name}?": "删除 {name}？",
+  "Delete Bot": "删除 Bot",
+  "Click again to delete. Its chats are archived.": "再点一次删除，它的对话会归档。",
+  "Removes the Bot from the team.": "把这个 Bot 从团队里移除。",
+  "Pick a model and {name} can start.": "选好模型，{name} 就能开始工作。",
+  "Permissions": "权限",
+  "Read only": "仅可查看",
+  "Workspace": "工作区内修改",
+  "Full access": "完全权限",
+  "Same for every member": "全员统一",
+  "Replaces each member's own permissions in this group.": "在这个群里代替各成员自己的权限。",
+  "The only Main Bot. To hand the role to another Bot, use Main Bot on the Bots page.": "这是唯一的主 Bot。要把主 Bot 交给别的 Bot，请到「Bot」页的主 Bot 里换。",
+  Change: "更换",
+  "Can create and change Bots, and runs every group chat.": "可以创建和修改 Bot，并管理所有群聊。",
+  Sidebar: "侧栏",
+  "Kept above the other chats.": "排在其他对话上面。",
+  "Search still finds it.": "仍然可以搜索到。",
+  Manage: "管理",
+  // Avatar library
+  Library: "头像库",
+  "Import photos": "导入照片",
+  "Importing photos…": "正在导入照片…",
+  "No photos in the library yet.": "头像库还是空的。",
+  "Use this photo": "用这张照片",
+  "Remove photo from the library": "从头像库移除这张照片",
+  "1 photo imported": "已导入 1 张照片",
+  "{count} photos imported": "已导入 {count} 张照片",
+  "1 photo was already in the library": "有 1 张照片已经在头像库里",
+  "{count} photos were already in the library": "有 {count} 张照片已经在头像库里",
+  "{name}: {reason}": "{name}：{reason}",
+  photo: "照片",
+  "Show more photos": "显示更多照片",
+  "Showing {shown} of {total} photos": "显示 {shown} / {total} 张照片",
+  // Group chat settings
+  "Leave it empty to name the group after its members.": "留空就按成员命名。",
+  "Every member reads it before speaking in this group.": "每位成员在这个群里发言前都会读到。",
+  "Add a Bot first: a group chat needs at least two.": "请先添加一个 Bot：群聊至少要两个。",
+  "Click again to delete. Its history is archived.": "再点一次删除，聊天记录会归档。",
+  "Removes the group chat. Its members stay on the team.": "删除这个群聊，成员仍留在团队里。",
+  "Add a notice in group settings": "在群设置里添加群公告",
+  // Create Bot
+  "Create Bot": "创建 Bot",
+  "Back to new chat": "返回新对话",
+  Look: "形象",
+  Shuffle: "随机",
+  "Replace photo": "更换照片",
+  "Upload photo": "上传照片",
+  "A Bot named {name} already exists": "已经有叫 {name} 的 Bot 了",
+  "The Bot runs on this model. You can change it later in its details.": "Bot 会使用这个模型。以后可以在详情里修改。",
+  "Add a provider and a model in DeepSeek Harness first, or pick one in the Bot's chat later.": "请先在 DeepSeek Harness 里添加服务商和模型，或者稍后在 Bot 的对话里选择。",
+  "Creating…": "创建中…",
+  Create: "创建",
+  // Model menu
+  Default: "默认",
+  "Thinking level": "思考强度",
+  "Model: {model}": "模型：{model}",
+  none: "无",
+  "Choose a model": "选择模型",
+  "{provider} · not available": "{provider} · 不可用",
+  "Model for {name}": "{name} 的模型",
+  "No models are set up in DeepSeek Harness yet.": "DeepSeek Harness 里还没有设置模型。",
+  "Models and providers…": "模型和服务商…",
+  Models: "模型",
+  "Harness default": "Harness 默认",
+  Saving: "保存中",
+  "Manage models": "管理模型",
+  // Shapes
+  Whale: "鲸鱼",
+  Star: "星星",
+  Moon: "月亮",
+  Wave: "声波",
+  Squircle: "圆角方",
+  Bull: "牛角",
+  Blossom: "花朵",
+  Gumdrop: "软糖",
+  Peanut: "花生",
+  Bubbles: "泡泡",
+  Saucer: "飞碟",
+  Sprout: "嫩芽",
+  Bunny: "兔子",
+  Kitty: "小猫",
+  Beacon: "灯塔",
+  Plus: "加号",
+  Magnet: "磁铁",
+  Acorn: "橡果",
+  Pebbles: "石子",
+  Cushion: "靠垫",
+  Ring: "圆环",
+  Gem: "宝石",
+  // Colors
+  Black: "黑",
+  Brown: "棕",
+  Red: "红",
+  Orange: "橙",
+  Yellow: "黄",
+  Green: "绿",
+  Cyan: "青",
+  Blue: "蓝",
+  Violet: "紫",
+  Magenta: "品红",
+  Gray: "灰",
+  Aurora: "极光",
+  Deepseek: "DeepSeek 蓝",
+  Charcoal: "炭黑",
+  Graphite: "石墨",
+  Rose: "玫瑰",
+  Sky: "天蓝",
+  Tangerine: "橘",
+  Cobalt: "钴蓝",
+  // Themes
+  DeepSeek: "DeepSeek",
+  Mono: "黑白",
+  Paper: "纸张",
+  Moonlight: "月光",
+  // Settings dialog
+  General: "通用",
+  Bots: "Bot",
+  "Group chats": "群聊",
+  Secrets: "密钥",
+  Appearance: "外观",
+  Theme: "主题",
+  "Colors for the whole team, on every device.": "整个团队的配色，所有设备同步。",
+  Accent: "强调色",
+  "Unread marks, badges, and the brand mark.": "未读标记、徽标和品牌标志。",
+  "Theme accent": "主题强调色",
+  "Custom accent": "自定义强调色",
+  "Message layout": "消息布局",
+  Bubble: "气泡",
+  Flat: "平铺",
+  "Bubble width": "气泡宽度",
+  "Text width": "正文宽度",
+  "Show thinking": "显示思考过程",
+  "Bots · {count}": "Bot · {count}",
+  "First in the sidebar. Pick another Bot to hand it the role; {name} then stops being a Main Bot.": "排在侧栏最上面。选另一个 Bot 就会把主 Bot 交给它，{name} 随之不再是主 Bot。",
+  "Choose a Bot…": "选择一个 Bot…",
+  "Also a Main Bot.": "也是主 Bot。",
+  "Move to first": "移到最前",
+  "Add a Main Bot": "添加主 Bot",
+  "Main Bots can create and change Bots, and run every group chat.": "主 Bot 可以创建和修改 Bot，并管理所有群聊。",
+  "Group chats · {count}": "群聊 · {count}",
+  "No group chats yet.": "还没有群聊。",
+  "A group chat lets several Bots work on one thing with you.": "在群聊里，几个 Bot 和你一起做一件事。",
+  "Back to group chats": "返回群聊列表",
+  "DS SuperAgent settings": "DS SuperAgent 设置",
+  "Settings pages": "设置页面",
+  "Models, providers, and the rest of DeepSeek Harness": "模型、服务商和 DeepSeek Harness 的其他设置",
+  "Harness settings": "Harness 设置",
+  "Back to Bots": "返回 Bot 列表",
+  "Close settings": "关闭设置",
+  // Context menu
+  Unpin: "取消置顶",
+  Pin: "置顶",
+  Pinned: "已置顶",
+  "Mark as Unread": "标为未读",
+  "Rename Bot": "重命名 Bot",
+  "Group settings": "群设置",
+  "Rename group": "重命名群聊",
+  "Copy conversation ID": "复制对话 ID",
+  "Hide from sidebar": "从侧栏隐藏",
+  "{name} actions": "{name} 的操作",
+  // The DSH Agent's own row and Session list. "DSH Agent" is a product name and
+  // stays in English.
+  "Add DSH Agent": "添加 DSH Agent",
+  "Remove DSH Agent": "移除 DSH Agent",
+  "New session": "新会话",
+  Archive: "归档",
+  "Session actions": "会话操作",
+  "Plain dsh session": "原生 dsh 会话",
+  "just now": "刚刚",
+  "{n} min": "{n} 分钟",
+  "{n} h": "{n} 小时",
+  "{n} d": "{n} 天",
+  // Plugin updates
+  "DS SuperAgent {version} is available": "DS SuperAgent {version} 可以更新",
+  "Updating DS SuperAgent…": "正在更新 DS SuperAgent…",
+  "DS SuperAgent {version} is installed. Restart DSH to use it.": "DS SuperAgent {version} 已安装，重启 DSH 后生效",
+  "DS SuperAgent {version} is installed.": "DS SuperAgent {version} 已安装。",
+  "DS SuperAgent update": "DS SuperAgent 更新",
+  "DS SuperAgent {version}": "DS SuperAgent {version}",
+  "Update installed": "更新已安装",
+  "Restart DSH to start using DS SuperAgent {version}.": "重启 DSH 后开始使用 DS SuperAgent {version}。",
+  "You have {version}.": "当前版本 {version}。",
+  "The update did not finish: {reason}": "更新没有完成：{reason}",
+  "What's new": "更新说明",
+  "Updating…": "正在更新…",
+  "DSH {version} is available": "DSH {version} 可以更新",
+  "Updating DSH…": "正在更新 DSH…",
+  "DSH update": "DSH 更新",
+  "DSH {version}": "DSH {version}",
+  "Restart DSH to start using DSH {version}.": "重启 DSH 后开始使用 DSH {version}。",
+  "Update DS SuperAgent {version} first.": "先更新 DS SuperAgent {version}。",
+  "Open updates": "打开更新",
+  // Command palette
+  Messages: "消息",
+  Commands: "命令",
+  "Search Bots, chats and messages": "搜索 Bot、对话和消息",
+  "Clear search": "清除搜索",
+  Results: "结果",
+  "No results": "没有结果",
+  "Try a Bot name or words from a message": "试试 Bot 名字或消息里的词",
+  // Bot exchange
+  "Bot exchange": "Bot 间对话",
+  "Bot exchange transcript": "Bot 间对话记录",
+  "No messages yet": "还没有消息",
+  "Close Chat": "关闭",
+  "Show all · {count} characters": "显示全部 · {count} 字",
+  "Showing the first {count} characters": "只显示前 {count} 字",
+  "Only the start of this message is kept here": "这里只保留了这条消息的开头",
+  // Time and usage
+  "Today {time}": "今天 {time}",
+  "Yesterday {time}": "昨天 {time}",
+  "Ran for {duration}": "本次用时 {duration}",
+  "{tokens} tok · Cache hit {hit}%": "{tokens} tok · 缓存命中 {hit}%",
+  "1 turn": "1 轮",
+  "{count} turns": "{count} 轮",
+  "{speed} tok/s": "{speed} tok/s",
+  "Cache hit {hit}%": "缓存命中 {hit}%",
+  "Context {percent}%": "上下文 {percent}%",
+  "{used} of {total} tokens of context in use": "上下文已用 {used} / {total} tokens",
+  // Transcript
+  Footnotes: "脚注",
+  "Remove reaction {emoji}": "移除表情 {emoji}",
+  "Add reaction": "添加表情",
+  Reply: "回复",
+  "More message actions": "更多操作",
+  More: "更多",
+  Reactions: "表情",
+  "Message actions": "消息操作",
+  Download: "下载",
+  "Thought it through": "思考过程",
+  "Earlier messages": "更早的消息",
+  "Loading earlier messages…": "正在加载更早的消息…",
+  "Couldn’t load earlier messages · Retry": "更早的消息没加载出来 · 重试",
+  "Load earlier": "加载更早的消息",
+  "1 image": "1 张图片",
+  "{count} images": "{count} 张图片",
+  "Replies from": "群聊回复：",
+  "Reply from": "收到回复：",
+  "Message from": "收到消息：",
+  "Stopped by": "叫停者：",
+  "{count} messages with": "{count} 条消息，来自",
+  "Routine started": "例行任务开始",
+  Update: "更新",
+  "Thinking about it": "想一想",
+  "Weighing the options": "权衡一下",
+  "Working out a plan": "理一下思路",
+  "Sorting out the details": "梳理细节",
+  "On it": "在做了",
+  "Busy with it": "正在处理",
+  "Moving ahead": "推进中",
+  "Taking care of it": "处理中",
+  "Making headway": "有进展了",
+  "Moving to a fresh conversation": "整理记忆，换到新对话",
+  "Switching working folder": "正在切换工作文件夹",
+  "Searching online": "上网搜索",
+  "Reading a page": "阅读网页",
+  "Running shell commands": "运行命令",
+  "Opening a file": "打开文件",
+  "Looking through files": "查找文件",
+  "Writing changes": "写入修改",
+  "Working on an image": "处理图片",
+  "Creating a group": "创建群聊",
+  "Updating the group": "更新群聊",
+  "Deleting the group": "删除群聊",
+  "Posting in the group": "在群里发言",
+  "Checking the keys": "查看密钥",
+  "Asking {name}": "询问 {name}",
+  "Asking another Bot": "询问其他 Bot",
+  "Stopping {name}": "叫停 {name}",
+  "Stopping another Bot": "叫停其他 Bot",
+  "Creating {name}": "创建 {name}",
+  "Updating {name}": "更新 {name}",
+  "Checking the team": "查看团队",
+  "Reading {name}": "阅读 {name}",
+  "Looking back through the chat": "翻看聊天记录",
+  "{name} looked up its own chat": "{name} 查看了自己的对话",
+  "{name} looked up its own chat for “{text}”": "{name} 在自己的对话里查找「{text}」",
+  "{name} is typing…": "{name} 正在输入…",
+  "{name} didn't answer in time": "{name} 没有及时回应",
+  "{name} did not answer or call anyone; call a member with @Name": "{name} 没有回答，也没有叫谁；用 @名字 叫一个成员来回答",
+  "The group replies could not be shown": "群里的回复显示不出来",
+  "Paused after {count} Bot relays. Waiting: {names}": "Bot 之间已接力 {count} 次，先停下了。还在等：{names}",
+  "{name} paused for your approval": "{name} 停下来等你批准",
+  "{name} started on it": "{name} 开始做了",
+  "You stopped {name}'s work": "你停下了 {name} 的工作",
+  "{name} finished its work": "{name} 做完了",
+  "{name} was cut off by a restart and picked its work back up": "{name} 的工作被重启打断，已经接着做",
+  "{name} was cut off by a restart again and stopped": "{name} 的工作又被重启打断，已停下",
+  "Picked up its work after a restart": "重启后接着做之前的工作",
+  "Profile updated": "资料已更新",
+  "Asked to make the tool call it wrote as text": "工具调用被写成了文字，已让它重新调用",
+  "A Bot": "一个 Bot",
+  "{name} is waiting for your approval": "{name} 等你批准",
+  "{first} and {second} are waiting for your approval": "{first}、{second} 等你批准",
+  "{first}, {second} and {count} more are waiting for your approval": "{first}、{second} 等 {total} 个等你批准",
+  "Waiting for your approval": "等你批准",
+  "in its own chat": "在自己的对话里",
+  "Stop all work in this group": "停止本群的所有工作",
+  "Stop all": "全部停止",
+  Reject: "拒绝",
+  "Allow once": "允许一次",
+  "Couldn't message {name}": "没能给 {name} 发消息",
+  Messaged: "已发消息给",
+  "Couldn't stop {name}": "没能叫停 {name}",
+  Stopped: "已叫停",
+  Created: "已创建",
+  Updated: "已更新",
+  "Created group": "已创建群聊",
+  "Couldn't create the group": "没能创建群聊",
+  "Updated group": "已更新群聊",
+  "Couldn't update the group": "没能更新群聊",
+  "Deleted group": "已删除群聊",
+  "Couldn't delete the group": "没能删除群聊",
+  "Posted in": "已发到",
+  "Couldn't post in the group": "没能在群里发言",
+  Read: "已读取",
+  // Questions
+  "Your own answer": "你自己的回答",
+  "Type your own answer": "输入你自己的回答",
+  Selected: "已选",
+  Skip: "跳过",
+  Submit: "提交",
+  "Choose all that apply": "可多选",
+  "Dismiss question": "关闭问题",
+  Dismiss: "关闭",
+  Dismissed: "已关闭",
+  "Your answer": "你的回答",
+  // Views
+  View: "视图",
+  Confirm: "确认",
+  Progress: "进度",
+  "Dismiss view": "关闭视图",
+  Sources: "来源",
+  Chart: "图表",
+  "Chart {n}": "图表 {n}",
+  Series: "系列",
+  "Chart options": "图表选项",
+  "View as table": "以表格查看",
+  "View as chart": "以图表查看",
+  "Copy data": "复制数据",
+  "Download image": "下载图片",
+  "This view tried to open a page and was stopped.": "这个视图想打开一个网页，已被拦下。",
+  "Send to Main": "发给 Main",
+  // Secrets
+  "All Bots": "所有 Bot",
+  "No Bot": "没有 Bot",
+  "Paste or type the key": "粘贴或输入密钥",
+  "Only {name}": "只给 {name}",
+  "Who may use it": "谁可以用",
+  "Cancel the request": "取消请求",
+  "This page is not on HTTPS: the key crosses the network unencrypted.": "这个页面不是 HTTPS：密钥会以明文经过网络。",
+  "Let {bot} use {name}?": "允许 {bot} 使用 {name}？",
+  "{name} needs a key": "{name} 需要一个密钥",
+  "Saved for {scope}": "已保存，可用范围：{scope}",
+  "Value of {name}": "{name} 的值",
+  "{bot} never sees the value. It reaches {bot}'s shell as ": "{bot} 永远看不到这个值。它会作为下面的环境变量进入 {bot} 的 shell：",
+  " At least {count} characters.": " 至少 {count} 个字符。",
+  "At least {count} characters.": "至少 {count} 个字符。",
+  "Replace value": "替换值",
+  "Saving…": "保存中…",
+  Save: "保存",
+  "Allowing…": "允许中…",
+  Allow: "允许",
+  "{bot} asked for {name}": "{bot} 请求了 {name}",
+  "Allowed {bot} to use {name}": "已允许 {bot} 使用 {name}",
+  "Saved {name}": "已保存 {name}",
+  Canceled: "已取消",
+  Done: "完成",
+  "{bot} is using {name}": "{bot} 正在使用 {name}",
+  "{bot} could not ask for a key: this window can only view the team": "{bot} 没能要密钥：这个窗口只能查看团队",
+  "a saved key": "一个已保存的密钥",
+  "Chosen Bots": "指定的 Bot",
+  "Who may use {name}": "谁可以用 {name}",
+  "Save access": "保存权限",
+  "Replace the value": "替换值",
+  "New value of {name}": "{name} 的新值",
+  "Replaced. Bots get the new value from their next command.": "已替换。Bot 从下一条命令开始拿到新值。",
+  "a deleted Bot": "一个已删除的 Bot",
+  "Asked by {name}": "由 {name} 请求",
+  "added {time}": "添加于 {time}",
+  "last used {time}": "上次使用 {time}",
+  "not used yet": "还没用过",
+  "Delete {name}? Bots lose it at once.": "删除 {name}？Bot 会立刻失去它。",
+  Keep: "保留",
+  "Key name": "密钥名",
+  "NAME, e.g. GITHUB_TOKEN": "名字，例如 GITHUB_TOKEN",
+  "What it is for": "用途",
+  Value: "值",
+  "New keys are for all Bots; narrow it down afterwards.": "新密钥默认所有 Bot 可用，之后可以收窄。",
+  "Save key": "保存密钥",
+  "Keys your Bots asked for. Bots never see the values: they use them as ": "你的 Bot 请求过的密钥。Bot 永远看不到值：它们在 shell 里通过 ",
+  " in their shell, and every value is replaced by ": " 使用，而且发给模型之前，每个值都会被替换成 ",
+  " before anything goes to a model.": "。",
+  "Secrets · {count}": "密钥 · {count}",
+  "No keys yet. When a Bot needs one, it shows a card in its chat.": "还没有密钥。Bot 需要时，会在对话里弹出一张卡片。",
+  "Add a key": "添加密钥",
+  // Memory
+  Memory: "记忆",
+  "Saved memory": "已保存的记忆",
+  "Save memory": "保存记忆",
+  "Search memory": "搜索记忆",
+  "Memory text": "记忆内容",
+  Owner: "归属",
+  "One lasting fact": "一条长期有效的事实",
+  "Work private": "工作私有",
+  "Explicitly shared": "明确共享",
+  "Unknown original scope": "原归属未知",
+  "No readers": "暂无读取者",
+  "Choose work": "选择工作",
+  "Side query": "侧边查询",
+  "Reader": "读取角色",
+  "Ask about saved memory": "查询已保存的记忆",
+  "View tool facts": "查看工具事实",
+  "Worker activity is unavailable.": "Worker 活动暂时不可用。",
+  "Work memory access": "工作记忆授权",
+  "Grant Worker access": "授权 Worker 读取",
+  "Revoke Worker access": "撤销 Worker 读取权",
+  "Update sharing": "更新共享范围",
+  "Learning proposals": "学习提案",
+  "Learning proposal": "学习提案",
+  Expires: "过期时间",
+  "Main, work private, and explicitly shared memories have separate readers. Searching does not save new memory.": "Main、工作私有与明确共享记忆各有读取范围；搜索不会自动保存新记忆。",
+  "Worker memory access is off until you grant it for this work. Revoking blocks later reads and proposals.": "你为当前工作授权后，Worker 才能读取记忆。撤权会阻止后续读取和提案。",
+  "No learning proposals are waiting for review.": "暂无待审阅的学习提案。",
+  "Memory saved.": "记忆已保存。",
+  "Memory forgotten.": "记忆已遗忘。",
+  "Memory was already forgotten.": "该记忆已遗忘。",
+  "Memory sharing updated.": "记忆共享范围已更新。",
+  "Work memory access granted.": "工作记忆读取权已授权。",
+  "Work memory access revoked.": "工作记忆读取权已撤销。",
+  "Learning proposal expired or lost authorization.": "学习提案已过期或失去授权。",
+  "Learning approved and saved.": "学习已批准并保存。",
+  "Learning declined.": "学习提案已拒绝。",
+  "Nothing saved yet": "还没有保存内容",
+  "Import memory": "导入记忆",
+  "Preview a portable JSON memory copy before importing selected items.": "导入选中项前，先预览可移植的 JSON 记忆副本。",
+  "Choose memory export": "选择记忆导出文件",
+  "Saved memory imports": "已保存的记忆导入",
+  "Choose saved import": "选择已保存的导入",
+  "Open import": "打开导入",
+  "Saved memory import opened.": "已打开保存的记忆导入。",
+  "Memory import preview": "记忆导入预览",
+  "Original owner": "原归属者",
+  "Original instance": "原 Instance",
+  "Original hash": "原件哈希",
+  "Target instance": "目标 Instance",
+  "Import status": "导入状态",
+  "Import item": "导入项",
+  "Original scope": "原归属范围",
+  "Choose target": "选择目标",
+  "Target work": "目标工作",
+  "Import selected": "导入选中项",
+  "Cancel import": "取消导入",
+  "Retry import": "重试导入",
+  "Memory export previewed. Choose each item and target explicitly.": "记忆导出文件已预览。请逐项选择目标和内容。",
+  "Memory export must be at most 512 KiB.": "记忆导出文件不能超过 512 KiB。",
+  "Choose a target for every selected item.": "请为每个选中项选择目标。",
+  "Choose shared recipients": "选择共享范围",
+  "Share with Main": "共享给 Main",
+  "Share with work": "共享给工作",
+  "Select at least one memory item.": "请至少选择一个记忆项。",
+  "Memory import completed.": "记忆导入已完成。",
+  "Memory import saved. Review remaining or conflicting items.": "记忆已导入。请检查剩余项或冲突项。",
+  "Memory import is ready to continue.": "记忆导入已恢复，可以继续。",
+  "Memory import cancelled.": "记忆导入已取消。",
+  "Rejected item content is not retained.": "被拒绝项的内容未保留。",
+  "Imported to": "已导入至",
+  "Conflicts with": "冲突于",
+  "Earlier import": "较早的导入",
+  "Imported from": "导入自",
+  "Ready to import": "待处理",
+  "Partially imported": "部分完成",
+  "Import completed": "已完成",
+  "Import cancelled": "已取消",
+  "Import item rejected": "已拒绝",
+  "Import item completed": "已导入",
+  "Import conflict": "冲突",
+  MEMORY_SENSITIVE: "包含凭据或敏感值",
+  DUPLICATE_MEMORY: "目标范围内已有相同记忆",
+  SOURCE_CONTENT_CONFLICT: "同一来源项的内容与较早预览不同",
+  "1 entry": "1 条",
+  "{count} entries": "{count} 条",
+  "Manage {name}'s memory": "管理 {name} 的记忆",
+  "{name}'s memory": "{name} 的记忆",
+  "Memory summary": "记忆摘要",
+  "All entries": "全部记忆",
+  "Memory options": "记忆选项",
+  "Close memory": "关闭记忆",
+  "Back to the summary": "返回摘要",
+  "Regenerate summary": "重新生成摘要",
+  "Updated {time}": "更新于 {time}",
+  "Updated just now": "刚刚更新",
+  "Writing the summary…": "正在生成摘要…",
+  "The summary is out of date: {reason}": "摘要不是最新的：{reason}",
+  "The summary could not be written: {reason}": "摘要没能生成：{reason}",
+  "{name} has not saved anything yet": "{name} 还没有记住任何内容",
+  "Bots keep lasting preferences, decisions, and what you ask them to remember. Tell {name} below, or in its chat.": "Bot 会记住长期的偏好、做过的决定，以及你让它记住的事。可以在下面告诉 {name}，也可以在对话里说。",
+  "Nothing is saved for this group yet": "这个群还没有记住任何内容",
+  "A group keeps the decisions, rules, and facts its work needs, for its members to read here. Tell it below, or in the group.": "群会记住工作需要的决定、规则和事实，只有群成员在这个群里会读。可以在下面告诉它，也可以在群里说。",
+  "Team memory": "团队记忆",
+  "Every Bot reads it": "所有 Bot 都会读",
+  "Group memory": "群记忆",
+  "Only its members read it": "只有群成员会读",
+  "MEMORY.md, which every conversation reads": "MEMORY.md，每次对话都会读",
+  "{used} of {limit} characters": "{used} / {limit} 字符",
+  "by you": "由你添加",
+  "by {name}": "由 {name} 添加",
+  "Remove from memory": "从记忆中删除",
+  "Click again to remove": "再点一次删除",
+  Remove: "删除",
+  "Ask or update": "询问或更新",
+  "Ask about or update {name}'s memory": "询问或更新 {name} 的记忆",
+  Send: "发送",
+  "Added: {text}": "已添加：{text}",
+  "Added to team memory: {text}": "已加入团队记忆：{text}",
+  "Updated: {text}": "已更新：{text}",
+  "Removed: {text}": "已删除：{text}",
+  "Removed from team memory: {text}": "已从团队记忆删除：{text}",
+  "Not changed: {text} ({reason})": "没有改动：{text}（{reason}）",
+  "Saving to memory": "正在记下",
+  "Updating memory": "正在更新记忆",
+  "Checking memory": "正在查看记忆",
+  "Memory updated": "记忆已更新",
+  "Already saved": "已经保存过了",
+  "Couldn't save to memory": "没能保存到记忆",
+  "Couldn't remove from memory": "没能从记忆里删除",
+  "Memory not changed": "记忆没有变化",
+  "Write something to save": "请写下要保存的内容",
+  "No saved entry matched": "没有匹配的记忆条目",
+  "The memory refused this change": "记忆没有接受这次改动",
+  "The memory could not be changed": "记忆没能改动",
+  "Team memory updated": "团队记忆已更新",
+  "Updated {name}'s memory": "已更新 {name} 的记忆",
+  "Memory updated. Open {name}'s memory": "记忆已更新，打开 {name} 的记忆",
+  // Browser
+  "Close browser": "关闭浏览器",
+  "Open browser": "打开浏览器",
+  "{name}'s browser": "{name} 的浏览器",
+  "Resize panel": "调整面板宽度",
+  "{name} read this page": "{name} 读了这个页面",
+  "{name}'s browser. {name} can read the page shown here.": "{name} 的浏览器。{name} 能读取这里显示的页面。",
+  Back: "后退",
+  Forward: "前进",
+  Stop: "停止",
+  Reload: "刷新",
+  Address: "地址",
+  "Search or enter address": "搜索或输入网址",
+  "This page didn’t load": "页面没有加载出来",
+  "Try again": "重试",
+  "Open a page here and {name} can read it with you. Logins and cookies stay with {name}; other Bots never see them.": "在这里打开网页，{name} 就能和你一起读。登录状态和 cookie 只属于 {name}，其他 Bot 看不到。",
+  "Only http and https addresses open here.": "这里只能打开 http 和 https 地址。",
+  "The page crashed.": "页面崩溃了。",
+  "The browser blocked the new window.": "浏览器拦截了新窗口。",
+  "Open the issue": "打开问题页面",
+  "Cloud metadata addresses do not open here.": "这里不能打开云元数据地址。",
+  // Voice
+  "Dictation is not available in this browser": "这个浏览器不支持听写",
+  "Microphone access is blocked": "麦克风权限被阻止了",
+  "Couldn't hear that": "没听清",
+  "Couldn't start dictation": "无法开始听写",
+  "Stop dictation": "停止听写",
+  Dictate: "听写",
+  "Start voice chat": "开始语音对话",
+  "Voice chat": "语音对话",
+  Listening: "在听",
+  Thinking: "思考中",
+  "Thinking…": "思考中…",
+  Speaking: "在说",
+  Paused: "已暂停",
+  "Voice chat is not available in this browser": "这个浏览器不支持语音对话",
+  "Voice chat with {name}": "和 {name} 语音对话",
+  "Resume listening": "继续听",
+  Pause: "暂停",
+  "End voice chat": "结束语音对话",
+  "Recognizing…": "识别中…",
+  "Voice input needs its speech model": "语音输入还没有语音模型",
+  "Set up voice input": "设置语音输入",
+  "Preparing voice input…": "正在准备语音输入…",
+  "Downloading the speech model… {pct}%": "正在下载语音模型… {pct}%",
+  "Couldn't prepare voice input": "语音输入准备失败",
+  "That was too long to recognize": "这段太长了，识别不了",
+  // Usage page
+  "24 hours": "24 小时",
+  "7 days": "7 天",
+  "30 days": "30 天",
+  "12 weeks": "12 周",
+  "12 months": "12 个月",
+  "Per hour": "按小时",
+  "Per day": "按天",
+  "Per week": "按周",
+  "Per month": "按月",
+  Output: "输出",
+  Input: "输入",
+  "Cache hit": "缓存命中",
+  "Deleted Bot": "已删除的 Bot",
+  Deleted: "已删除",
+  "Deleted group chat": "已删除的群聊",
+  "Group chat": "群聊",
+  "Own chat": "单聊",
+  "Side chat": "侧边对话",
+  "New browser tab": "新建浏览器页",
+  Terminal: "终端",
+  Files: "文件树",
+  "Close side chat": "关闭侧边对话",
+  "Delete side chat": "删除侧边对话",
+  "Ask without interrupting": "不打断当前工作，顺便问一句",
+  "Ask about the work so far": "问问目前做到哪了",
+  "Answering…": "正在回答…",
+  Cancelled: "已取消",
+  "Answered from progress so far; nothing was run": "基于目前已有进展的回答，没有执行任何操作",
+  "Could not answer.": "没能答上。",
+  "Cancel this side question": "取消这次旁路提问",
+  Conversations: "对话",
+  "Compaction and handoff": "压缩与交接",
+  "Image reading": "识图",
+  Titles: "标题",
+  Other: "其他",
+  "Last {range}": "最近 {range}",
+  tokens: "Token",
+  "Compared with the {range} before": "与再往前 {range} 相比",
+  "{share}% of all usage in the last {range}": "占最近 {range}全部用量的 {share}%",
+  Calls: "调用次数",
+  "Cache hit rate": "缓存命中率",
+  "Tokens over time": "Token 走势",
+  "{count} tokens": "{count} Token",
+  "{tokens} tokens · {calls} calls": "{tokens} Token · {calls} 次调用",
+  "Active on 1 day in the last year": "近一年有 1 天在用",
+  "Active on {count} days in the last year": "近一年有 {count} 天在用",
+  Light: "少",
+  Heavy: "多",
+  "Unknown model": "未知模型",
+  "More Bots": "其余 Bot",
+  "More models": "其余模型",
+  "Reading your chats…": "正在读取聊天记录…",
+  "No usage yet.": "还没有用量。",
+  "Token usage shows up here after a model is called.": "调用模型之后，这里会显示 Token 用量。",
+  "Nothing in this range.": "这段时间没有用量。",
+  "Who used it": "谁在用",
+  "What for": "用途",
+  Activity: "活跃度",
+  "Time range": "时间范围",
+  "All usage": "全部用量",
+  "Group usage by": "用量分组",
+  "By Bot": "按 Bot",
+  "By model": "按模型",
+  "Still reading older chats; totals may grow.": "还在读取较早的聊天记录，数字可能还会变大。",
+  Custom: "自定义",
+  "Custom range": "自定义时间范围",
+  "This month": "本月",
+  "Last month": "上个月",
+  "This year": "今年",
+  "Previous month": "往前一个月",
+  "Next month": "往后一个月",
+  "Pick the first day": "选择开始日期",
+  "Pick the last day": "选择结束日期",
+  "1 day": "1 天",
+  "{count} days": "{count} 天",
+  "Compared with the day before": "与前一天相比",
+  "Compared with the {count} days before": "与再往前 {count} 天相比",
+  "{share}% of all usage from {span}": "占 {span} 全部用量的 {share}%",
+  // About
+  "About DS SuperAgent": "关于 DS SuperAgent",
+  "Version {version}": "版本 {version}",
+  "Star DS SuperAgent on GitHub": "在 GitHub 上给 DS SuperAgent 点 Star",
+  "{count} stars": "{count} 个 Star",
+  "If DS SuperAgent helps you, a star on GitHub helps more people find it.": "如果 DS SuperAgent 对你有用，欢迎在 GitHub 上点个 Star，让更多人看到它。",
+  Updates: "更新",
+  "Check for updates": "检查更新",
+  "Checking…": "正在检查…",
+  "Up to date": "已是最新版本",
+  "Checked {time}": "检查于 {time}",
+  "Could not check for updates.": "没能检查更新。",
+  "Update checks are off.": "已关闭更新检查。",
+  "Checking for updates…": "正在检查更新…",
+  "Downloading {version}…": "正在下载 {version}…",
+  "{version} is ready; it installs when you restart": "{version} 已下载好，重启后安装",
+  "Restart to update": "重启更新",
+  "{version} is available": "{version} 已发布",
+  "Installed from a local folder; update it there.": "从本地文件夹安装，请在那里更新。",
+  "Updates are not offered for this install.": "这种安装方式不提供更新。",
+  "Updates come with the DS SuperAgent app.": "随 DS SuperAgent 应用一起更新。",
+  Links: "链接",
+  "Source code": "源代码",
+  "Release notes": "发布说明",
+  Open: "打开",
+  // Feedback and errors
+  Feedback: "反馈",
+  "Report a problem": "报告问题",
+  "What happened?": "发生了什么？",
+  "What you did, what you expected, and what happened instead. It goes into the issue.": "你做了什么、期望什么、实际发生了什么。会写进 issue。",
+  "For example: I asked Writer in the group chat and it showed an error.": "例如：我在群聊里问 Writer，它显示出错了。",
+  Diagnostics: "诊断信息",
+  "Versions, system, models, and the latest errors. Saved keys, tokens, and your home folder are hidden.": "版本、系统、模型和最近的错误。已保存的密钥、令牌和你的用户目录都已隐藏。",
+  Show: "查看",
+  Hide: "收起",
+  "GitHub issue": "GitHub issue",
+  "Opens a new issue in the DS SuperAgent repository with all of this filled in. Nothing is sent until you submit it there.": "在 DS SuperAgent 仓库新建一个 issue，并填好以上内容。你在 GitHub 上提交之前，什么都不会发出。",
+  "Report on GitHub": "在 GitHub 上报告",
+  "Copied the diagnostics.": "已复制诊断信息。",
+  "Could not copy. Select the text below and copy it.": "无法复制。请选中下面的文字手动复制。",
+  "Opened a new GitHub issue with the diagnostics filled in. Check it before you submit.": "已打开新的 GitHub issue，诊断信息已填好。提交前请检查一遍。",
+  "Opened a new GitHub issue. The diagnostics are long, so they are on the clipboard: paste them into the issue.": "已打开新的 GitHub issue。诊断信息太长，已复制到剪贴板，请粘贴到 issue 里。",
+  "Opened a new GitHub issue. Copy the diagnostics below into it.": "已打开新的 GitHub issue。请把下面的诊断信息复制进去。",
+  "Downloaded the log. Keys, tokens, and your home folder are hidden in it.": "已下载日志。里面的密钥、令牌和用户目录都已隐藏。",
+  "Cleared the error log.": "已清空错误日志。",
+  "Recent errors": "最近的错误",
+  "Recent errors · {count}": "最近的错误 · {count}",
+  "No errors recorded.": "没有错误记录。",
+  "Failed model calls and DS SuperAgent problems show here, newest first.": "模型调用失败和 DS SuperAgent 的问题会显示在这里，最新的在前。",
+  "Model call": "模型调用",
+  "This window": "这个窗口",
+  "Error log": "错误日志",
+  "Kept on this computer across restarts, up to about 1 MB.": "保存在这台电脑上，重启后仍在，最多约 1 MB。",
+  Clear: "清空",
+  "Settings → Feedback has the details.": "详情见 设置 → 反馈。",
+  "Could not reach DSH. Check that it is still running.": "连不上 DSH，请确认它还在运行。",
+  "{name} could not answer: {reason}": "{name} 没能回答：{reason}",
+  "Unknown error": "未知错误",
+  "The API key was rejected": "API 密钥无效",
+  "The account is out of quota": "账户额度已用尽",
+  "Too many requests to the model": "模型请求太频繁",
+  "The conversation is too long for the model": "对话太长，超出模型上限",
+  "The model service refused the request": "模型服务拒绝了请求",
+  "The model service failed": "模型服务出错",
+  "The model took too long to answer": "模型响应超时",
+  "Could not reach the model service": "连不上模型服务",
+  "Its group conversation could not open": "它的群聊会话打不开",
+  "Its group conversation could not open, so it starts a new one next time": "它的群聊会话打不开，下次会换一个新的",
+  // The composer's +
+  "Add files": "添加文件",
+  "Reference a chat": "引用对话",
+  "Chat with {name}": "与 {name} 的对话",
+  "Scheduled task": "定时任务",
+  "Send to": "发给",
+  "Scheduled task: {text}": "定时任务：{text}",
+  // New group chats
+  "Choose the group admin": "选择群管理员",
+  "Group admin": "群管理员",
+  "Who to chat with…": "想和谁聊…",
+  "Add at least one more Bot": "再至少添加一个 Bot",
+  Members: "成员",
+  // Connectors and scheduled tasks
+  "Scheduled tasks": "定时任务",
+  "Scheduled occurrence": "日程发生点",
+  "Occurrence history ({count})": "发生记录（{count}）",
+  "No occurrences yet.": "尚无发生记录。",
+  "Load earlier occurrences": "加载更早发生记录",
+  "Work brief {id}": "委托 {id}",
+  "Ticket {id}": "工作项 {id}",
+  "View work for Ticket {id}": "查看工作项 {id}",
+  "View work brief {id}": "查看委托 {id}",
+  "Delegated to Main": "已交给 Main",
+  "Accepted by work": "已进入原工作",
+  "Pending delivery": "等待投递",
+  Blocked: "受阻",
+  Missed: "已错过",
+  "Delivery failed": "投递失败",
+  "Choose an authorized work item.": "请选择已授权的工作项。",
+  "Time zone": "时区",
+  Minutes: "分钟",
+  "View work": "查看工作",
+  "Schedule source": "日程来源",
+  "Scheduled tasks are paused; existing work continues.": "定时任务已暂停，现有工作继续运行。",
+  "Every day": "每天",
+  "Every {count} days": "每 {count} 天",
+  "Every hour": "每小时",
+  "Every {count} hours": "每 {count} 小时",
+  "Every {count} minutes": "每 {count} 分钟",
+  "Once, {time}": "一次，{time}",
+  "Every day at {time}": "每天 {time}",
+  "Every {days} at {time}": "每{days} {time}",
+  "Every weekday at {time}": "每个工作日 {time}",
+  "Every weekend at {time}": "每个周末 {time}",
+  "On the schedule {expression}": "按计划 {expression}",
+  "Next: {time}": "下次 {time}",
+  Finished: "已结束",
+  "in {name}": "在 {name}",
+  "Click again to delete": "再点一次删除",
+  "Delete task": "删除任务",
+  Once: "一次",
+  "Every week": "每周",
+  Repeat: "重复",
+  minutes: "分钟",
+  hours: "小时",
+  days: "天",
+  "Morning briefing": "早间简报",
+  "What to do": "要做什么",
+  "Sum up what changed since yesterday and what needs me today.": "总结一下昨天以来的变化，以及今天需要我处理的事。",
+  When: "什么时候",
+  "Date and time": "日期和时间",
+  Days: "星期",
+  Time: "时间",
+  Every: "每",
+  "How many": "数量",
+  Unit: "单位",
+  "Create task": "创建任务",
+  "Turn on Automation tasks in DSH": "在 DSH 里打开「自动化任务」",
+  "Switch on Automation tasks on the Plugins page in Harness settings.": "在 Harness 设置的插件页启用「自动化任务」。",
+  "Open Harness settings": "打开 Harness 设置",
+  "New task": "新建任务",
+  "No scheduled tasks yet.": "还没有定时任务。",
+  "No scheduled tasks yet. Add one": "还没有定时任务，去添加",
+  "Automation tasks are off in DSH": "DSH 的「自动化任务」没有打开",
+  "No such Bot": "没有这个 Bot",
+  "No such Bot or group chat": "没有这个 Bot 或群聊",
+  "Give the task a name": "给任务起个名字",
+  "Say what the Bot should do": "写下 Bot 要做什么",
+  "Pick a date and time": "选一个日期和时间",
+  "Pick a time in the future": "选一个将来的时间",
+  "Pick a time of day": "选一个时间",
+  "Pick at least one day": "至少选一天",
+  "Repeat every 1 minute to 7 days": "重复间隔要在 1 分钟到 7 天之间",
+  "Pick when it runs": "选择什么时候运行",
+  "No such task": "没有这个任务",
+  "Working folder": "工作文件夹",
+  "Work directory": "工作目录",
+  "Work directories": "工作目录",
+  "Instance default": "实例默认目录",
+  "Instance default directory": "实例默认工作目录",
+  "New work starts here unless you choose a work directory in Main.": "新工作默认从这里开始，也可在 Main 中为本次工作选择目录。",
+  "New work uses this directory. Active work keeps its own directory.": "新工作使用此目录，在途工作继续使用各自的目录。",
+  "Working folder: {folder}": "工作文件夹：{folder}",
+  Folder: "文件夹",
+  Folders: "文件夹",
+  Privacy: "隐私",
+  Private: "隐私",
+  "Other Bots cannot read its folder, memory or chats, and you approve what it shares with them.": "其他 Bot 不能读取它的文件夹、记忆或对话；它分享给其他 Bot 的内容需要你批准。",
+  "A Main Bot cannot be private.": "主 Bot 不能设为隐私 Bot。",
+  "Leave its group chats before making it private.": "先退出所有群聊，才能设为隐私 Bot。",
+  "Choose a working folder of its own first.": "先选择一个独立的工作文件夹。",
+  "A private Bot cannot be a Main Bot.": "隐私 Bot 不能设为主 Bot。",
+  "Closed after deletion · {count}": "删除后仍受保护 · {count}",
+  "Remove protection": "解除保护",
+  "Click again to remove. Other Bots can then read its folder, memory and chats.": "再点一次解除。其他 Bot 之后可以读取它的文件夹、记忆和对话。",
+  "Nothing kept closed for this Bot": "这个 Bot 没有保留的保护",
+  "Team workspace": "总工作区",
+  "Team workspace: {folder}": "总工作区：{folder}",
+  "Where Bots without a folder of their own work.": "没有单独设置文件夹的 Bot 在这里工作。",
+  Locations: "位置",
+  "Data location": "数据位置",
+  "Change…": "更改…",
+  "Each Bot's own folder": "各 Bot 自己的文件夹",
+  "Choose a folder…": "选择文件夹…",
+  "Browse folders…": "浏览文件夹…",
+  "Enter a path…": "输入路径…",
+  "Folder path": "文件夹路径",
+  "Full path of a folder": "文件夹的完整路径",
+  "Use this folder": "使用这个文件夹",
+  "Up one level": "上一级",
+  "No folders inside.": "里面没有文件夹。",
+  "Some folders are not shown.": "还有一些文件夹没有显示。"
+};
+var HOST_ERRORS = [
+  [/^Model (.+) is not available\. Available: (.*)$/, "模型 $1 不可用。可用的：$2"],
+  [/^The API key for (.+) is set outside DS SuperAgent and cannot be changed here$/, "$1 的 API key 是在 DS SuperAgent 之外设置的，这里改不了"],
+  [/^(.+) takes no API key here$/, "$1 不能在这里填 API key"],
+  [/^(.+) is already set up$/, "$1 已经设置过了"],
+  [/^DSH offers no provider (.+)$/, "DSH 没有服务商 $1"],
+  [/^DSH already offers (.+); add it from its list$/, "DSH 已经提供 $1，请在常用服务商里添加"],
+  [/^The protocol must be one of (.+)$/, "协议只能是 $1"],
+  [/^(.+) is not set up$/, "$1 还没有设置"],
+  [/^(.+) comes with this setup and cannot be removed$/, "$1 是这个配置自带的，不能删除"],
+  [/^A Bot named (.+) already exists$/, "已经有叫 $1 的 Bot 了"],
+  [/^Name (.*) is not available$/, "名字 $1 不可用"],
+  [/^"(.+)" calls everyone in a group, so it cannot be a Bot name$/, "「$1」在群里表示所有人，不能用作 Bot 名字"],
+  [/^"(.+)" stands for the user in a chat, so it cannot be a Bot name$/, "「$1」在对话里表示用户本人，不能用作 Bot 名字"],
+  [/^Another group chat is already called "(.+)"$/, "已经有叫「$1」的群聊了"],
+  [/^A group chat holds at most (\d+) Bots$/, "一个群聊最多 $1 个 Bot"],
+  [/^Reply mode must be one of (.+)$/, "回复模式只能是 $1"],
+  [/^Only the user, a Main Bot, or the admin of "(.+)" can change it$/, "只有你、主 Bot 或「$1」的管理员可以修改"],
+  [/^A key must have at least (\d+) characters$/, "密钥至少 $1 个字符"],
+  [/^A key can have at most (\d+) characters$/, "密钥最多 $1 个字符"],
+  [/^(.+) is not saved yet$/, "$1 还没有保存"],
+  [/^The Bot team in (.+) is open in another dsh \((.+)\)\. This window shows the team but cannot change it; close the other one and reload\.$/, "$1 里的 Bot 团队已在另一个 dsh 中打开（$2）。这个窗口只能查看，不能修改；关掉另一个后刷新。"],
+  [/^HTTP (\d+)$/, "请求失败（HTTP $1）"],
+  [/^GitHub answered (\d+)$/, "GitHub 返回了 $1"],
+  [/^Keep the name under (\d+) characters$/, "名字不能超过 $1 个字"],
+  [/^Give the full path of the folder, not (.+)$/, "请填写文件夹的完整路径，而不是 $1"],
+  [/^The avatar library holds at most (\d+) photos\.$/, "头像库最多放 $1 张照片"],
+  [/^The avatar must be a PNG, JPEG, WebP, or GIF image\. Use a square image; 256x256 is recommended\.$/, "头像必须是 PNG、JPEG、WebP 或 GIF 图片。建议用正方形图片，256x256。"],
+  [/^The avatar image is too large: .+$/, "头像图片太大了"],
+  [/^There is no folder at (.+)$/, "找不到文件夹 $1"],
+  [/^(.+) is a file, not a folder$/, "$1 是文件，不是文件夹"],
+  [/^(.+) holds DeepSeek Harness data, so Bots cannot work there$/, "$1 里有 DeepSeek Harness 的数据，Bot 不能在这里工作"],
+  [/^(.+) needs a folder of its own to be private$/, "$1 需要有自己的工作文件夹，才能设为隐私 Bot"],
+  [/^(.+) is a Main Bot, so it cannot be private$/, "$1 是主 Bot，不能设为隐私 Bot"],
+  [/^(.+) is in a group chat, where every member reads what is said\. Remove it from its groups first$/, "$1 还在群聊里，群成员都能看到群里的内容。请先把它移出群聊"],
+  [/^(.+) is private, so it cannot be a Main Bot$/, "$1 是隐私 Bot，不能设为主 Bot"],
+  [/^(.+) is private, so it cannot be copied$/, "$1 是隐私 Bot，不能复制"],
+  [/^(.+) is a private Bot and cannot be in a group chat: what is said in a group is read by every member$/, "$1 是隐私 Bot，不能加入群聊：群成员都能看到群里的内容"],
+  [/^(.+) is in or around the team workspace, so (.+) cannot be private there\. Give it a folder of its own$/, "$1 与总工作区重叠，$2 不能在这里设为隐私 Bot。请给它一个独立文件夹"],
+  [/^(.+) is in or around the folder of (.+), so (.+) cannot be private there\. Give it a folder of its own$/, "$1 与「$2」的文件夹重叠，$3 不能在这里设为隐私 Bot。请给它一个独立文件夹"],
+  [/^(.+) is in or around the folder of (.+), a private Bot, so (.+) cannot work there$/, "$1 在隐私 Bot「$2」的文件夹内或外层，$3 不能在这里工作"],
+  [/^(.+) is in or around the folder of (.+), a private Bot, so a group cannot work there$/, "$1 在隐私 Bot「$2」的文件夹内或外层，群聊不能在这里工作"],
+  [/^(.+) is in or around the folder of (.+), a private Bot, so it cannot be the team workspace$/, "$1 在隐私 Bot「$2」的文件夹内或外层，不能作为总工作区"],
+  // Memory changes the memory panel asked for; the whole message is matched.
+  [/^This looks like a key, token, or password[\s\S]*$/, "看起来像密钥、令牌或密码，记忆不会保存这类内容"],
+  [/^An entry holds at most (\d+) characters; this one has (\d+)\.[\s\S]*$/, "一条记忆最多 $1 个字符，这条有 $2 个"],
+  [/^[\s\S]*'s MEMORY\.md would have (\d+) of its (\d+) characters\.[\s\S]*$/, "主记忆会超过 $2 个字符的上限，请先删掉一些"],
+  [/^The topic \[\[(.+?)\]\] in [\s\S]* would have (\d+) of its (\d+) characters\.[\s\S]*$/, "主题 $1 会超过 $3 个字符的上限"],
+  [/^[\s\S]* already has (\d+) topics, the most it holds\.[\s\S]*$/, "主题已经有 $1 个，不能再加新主题"],
+  [/^There is no entry (.+)\.$/, "没有第 $1 条"],
+  [/^No entry in [\s\S]* matches "([\s\S]*)"\.[\s\S]*$/, "找不到「$1」这条记忆"],
+  [/^"([\s\S]*)" matches (\d+) entries in [\s\S]*$/, "「$1」对应了 $2 条记忆，请说得更具体"],
+  [/^Memory cannot change now: [\s\S]*$/, "现在不能修改记忆：另一个 dsh 正在使用这个 Bot 团队"]
+];
+var HOST_ZH = {
+  "Request failed": "请求失败",
+  "Permissions are not available in this DeepSeek Harness": "这个 DeepSeek Harness 不支持权限设置",
+  "Avatar images must be PNG, JPEG, WebP, or GIF": "头像图片必须是 PNG、JPEG、WebP 或 GIF",
+  "Avatar image is too large": "头像图片太大了",
+  "A Bot needs a name": "Bot 需要一个名字",
+  "A Bot name cannot contain @, ` or a line break": "Bot 名字里不能有 @、` 或换行",
+  "Unknown Bot": "找不到这个 Bot",
+  "Unknown conversation": "找不到这个对话",
+  "A group chat needs at least two Bots": "群聊至少要两个 Bot",
+  "The admin must be a member of the group": "管理员必须是群成员",
+  "Unknown group chat": "找不到这个群聊",
+  "No Bot is left in this group chat": "这个群聊里已经没有 Bot 了",
+  "That group chat has been deleted": "这个群聊已经删除了",
+  "Hand the admin role to another member instead of leaving the group without one": "请把管理员交给其他成员，不要让群聊没有管理员",
+  "Hand the admin role to another member before leaving the group": "离开群聊前，请先把管理员交给其他成员",
+  "The team needs at least one Main Bot": "团队至少要有一个主 Bot",
+  "Only a Main Bot can be replaced": "只能替换主 Bot",
+  "A Main Bot cannot be deleted; remove its Main Bot role first": "主 Bot 不能删除，请先取消它的主 Bot 身份",
+  "Unknown theme": "未知主题",
+  "Accent must be a #rrggbb color": "强调色必须是 #rrggbb 格式",
+  "Type the key first": "请先输入密钥",
+  "Choose every Bot or a list of Bots": "请选择所有 Bot 或指定的 Bot",
+  "This request is gone": "这个请求已经不存在了",
+  "This request was already answered": "这个请求已经处理过了",
+  "A name uses capitals, digits, and underscores, and starts with a letter": "名字只能用大写字母、数字和下划线，并以字母开头",
+  "No such key": "没有这个密钥",
+  "Type a question or a change first": "请先输入问题或要改的内容",
+  "No model is available. Add one in Harness settings.": "没有可用的模型，请先在 Harness 设置里添加模型。",
+  "Memory is turned off on this host": "这台主机关闭了记忆功能",
+  "The model wrote nothing": "模型没有输出内容",
+  "Write the entry to save.": "请写下要保存的内容。",
+  "This DeepSeek Harness has no folder chooser": "这个 DeepSeek Harness 没有文件夹选择窗口",
+  "This DeepSeek Harness cannot list folders": "这个 DeepSeek Harness 不能列出文件夹",
+  "Side chat is only available in a Bot's private chat.": "侧边对话只在 Bot 的私聊里可用。",
+  "Write a question.": "写上问题。",
+  "Write a question after /side.": "在 /side 后面写上问题。",
+  "/side does not take attachments.": "/side 不能带附件。",
+  "Wait for the answer, or cancel it.": "等它答完，或者先取消。",
+  "This side chat is no longer here.": "这个侧边对话已经不在了。",
+  "This side question is no longer here.": "这个侧边提问已经不在了。",
+  "This Bot has not called a model yet. Send a normal message first.": "这个 Bot 还没有调用过模型，请先正常发一条消息。",
+  "DS SuperAgent restarted before this answer finished.": "DS SuperAgent 在回答完成前重启了。",
+  "The model called a tool again after being told not to, so this aside was not answered.": "模型在被要求不要调用工具之后又调用了工具，所以这次没有回答。",
+  "The model wrote nothing.": "模型没有写任何内容。",
+  "Nothing to ask": "没有要问的内容",
+  "Nothing to open": "没有要打开的内容",
+  "Nothing to cancel": "没有要取消的内容",
+  "Nothing to close": "没有要关闭的内容",
+  "DS SuperAgent is still loading this chat.": "DS SuperAgent 还在加载这个对话。",
+  "Configuration version": "配置版本",
+  "Settings": "设置",
+  "Super-agent settings": "Super-agent 设置",
+  "Loading configuration…": "正在加载配置…",
+  "Configuration is unavailable.": "配置当前不可用。",
+  "Roles and providers": "角色与服务商",
+  "Configuration": "配置",
+  "Model": "模型",
+  "The provider and model this role uses. New turns use the saved version.": "这个角色使用的服务商和模型。新回合使用已保存的版本。",
+  "Thinking effort": "思考强度",
+  "Kept with the model route and recorded in configuration uses.": "随模型路由保存，并记录在配置使用历史中。",
+  "Provider default": "服务商默认",
+  "Instructions": "指令",
+  "Role prompts are versioned. Router keeps {{goal}}; Worker keeps {{goal}} and {{constraints}}.": "角色提示词会版本化。Router 保留 {{goal}}；Worker 保留 {{goal}} 和 {{constraints}}。",
+  "Profile": "配置档",
+  "No reserved skills": "没有保留技能",
+  "Skills: {skills}": "技能：{skills}",
+  "Save configuration": "保存配置",
+  "Saving…": "正在保存…",
+  "Newer settings exist. Rebase only your changed fields, then review and save.": "已有更新的设置。请只把你的修改重接到新版本上，检查后再保存。",
+  "Rebase my edits": "重接我的修改",
+  "Configuration v{revision} is active for new turns.": "配置 v{revision} 已对新回合生效。",
+  "The configuration changed elsewhere. Your edits are still here.": "配置已在别处更新。你的修改仍保留在这里。",
+  "Your changed fields were applied over configuration v{revision}. Review and save.": "你的改动已重接到配置 v{revision} 上，请检查后保存。",
+  "Providers": "服务商",
+  "{count} models": "{count} 个模型",
+  "API key configured": "API key 已配置",
+  "API key missing": "缺少 API key",
+  "{provider} API key": "{provider} API key",
+  "Paste a new key": "粘贴新的密钥",
+  "Save key": "保存密钥",
+  "Remove key": "移除密钥",
+  "Set outside this product": "在此产品之外设置",
+  "No provider catalog is available. Configure providers in DSH settings.": "没有可用的服务商目录。请在 DSH 设置中配置服务商。",
+  "Recent configuration uses": "最近的配置使用",
+  "No role turn has recorded a configuration version yet.": "还没有角色回合记录配置版本。",
+  "Configuration versions apply at request boundaries. A turn already running keeps the version it started with.": "配置版本在模型请求边界生效。已经开始的回合继续使用它启动时的版本。",
+  "Provider key saved.": "服务商密钥已保存。",
+  "Provider key removed.": "服务商密钥已移除。",
+  "{role} model": "{role} 模型",
+  "{role} thinking effort": "{role} 思考强度",
+  "{role} instructions": "{role} 指令",
+  "Role presets": "角色预设",
+  Main: "主角色",
+  Router: "路由角色",
+  Worker: "执行角色",
+  Skills: "技能",
+  Preview: "预览",
+  Retry: "重试",
+  "Load more": "加载更多",
+  "Role presets are unavailable.": "角色预设暂不可用。",
+  "No role presets yet.": "还没有角色预设。",
+  "New preset": "新建预设",
+  "Preset": "预设",
+  "Preset profile": "预设配置",
+  "Preset ID": "预设 ID",
+  "Model provider": "模型服务商",
+  "Model ID": "模型 ID",
+  "Comma-separated skill names": "用逗号分隔技能名称",
+  "Appearance": "形象",
+  "The appearance stays with the preset, not role permissions.": "形象仅保存在预设中，不改变角色权限。",
+  "Preset appearance": "预设形象",
+  "Choose character": "选择形象",
+  "Upload image": "上传图片",
+  "Remove photo": "移除图片",
+  "Create preset": "创建预设",
+  "Preset created.": "预设已创建。",
+  "The created preset does not match your draft.": "创建结果与草稿不一致。",
+  "The preset was not confirmed.": "无法确认预设已保存。",
+  "The preset operation failed.": "预设操作失败，请重试。",
+  "Review old configuration": "审阅旧配置",
+  "Copy identity": "副本标识",
+  "A name for the explicit copy you provide.": "为你提供的副本指定一个标识。",
+  "Legacy role ID": "旧角色 ID",
+  "Legacy role configuration": "旧角色配置",
+  "Paste a legacy role profile copy. Only the selected configuration fields are reviewed.": "粘贴旧角色配置副本；仅审阅选定的配置字段。",
+  "Target role": "目标角色",
+  "Review source and target": "核对来源与目标",
+  "Source digest": "来源摘要",
+  "Ignored fields": "忽略的字段",
+  "The copy has no selected role configuration.": "副本中没有选定的角色配置。",
+  "The preview was not confirmed.": "无法确认预览结果。",
+  "The preview does not match the selected source and target.": "预览的来源或目标与选择不一致。",
+  "Skip import": "跳过导入",
+  "Review again": "重新审阅",
+  "Select preset": "选用预设",
+  "The import decision was not confirmed.": "无法确认导入决定。",
+  "The selected preset was not confirmed.": "无法确认已选预设。",
+  "The selected preset does not match your review.": "已选预设与审阅内容不一致。",
+  "The import decision does not match this review.": "导入决定与本次审阅不一致。",
+  "The import decision does not match your choice.": "导入决定与所选操作不一致。",
+  "Import conflict: {reason}. Review the source and preset again.": "导入冲突：{reason}。请重新审阅来源与预设。",
+  "This import decision was already recorded.": "这项导入决定已记录。",
+  "Import skipped.": "已跳过导入。",
+  "Preset selected from the reviewed copy.": "已从审阅的副本选用预设。",
+  "Replace source binding": "替换此来源绑定",
+  "Replace only this source binding; the earlier preset stays available.": "只替换此来源绑定；先前的预设仍可使用。",
+  "Source binding replaced; the earlier preset remains available.": "来源绑定已替换，先前的预设仍可使用。",
+  "Apply to": "应用到",
+  "Apply preset": "应用预设",
+  "Open role settings to load its current revision.": "请打开角色设置以加载当前版本。",
+  "Role settings changed. Reload settings before applying a preset.": "角色设置已变化，请重新加载后再应用预设。",
+  "Reload settings": "重新加载设置",
+  "The role configuration revision was not confirmed.": "无法确认角色配置版本。",
+  "Could not refresh role settings.": "无法刷新角色设置。",
+  "From": "来源",
+  "Preset activity": "预设记录",
+  "Preset activity is unavailable.": "预设记录暂不可用。",
+  "No preset activity yet.": "还没有预设记录。",
+  selected: "已选用",
+  replaced: "已替换来源绑定",
+  skipped: "已跳过",
+  duplicate: "已记录的重复操作",
+  conflict: "冲突",
+  PRESET_SOURCE_CONFLICT: "来源内容已变化",
+  PRESET_CONTENT_CONFLICT: "预设内容已变化",
+  PRESET_REVIEW_CONFLICT: "审阅决定冲突",
+  PRESET_ID_CONFLICT: "预设 ID 已被占用",
+  "The old name is missing or invalid; review the fallback.": "旧名称无效，请检查建议名称。",
+  "Choose a provider/model route before creating this preset.": "创建预设前请选择服务商和模型。",
+  "The old instructions exceed the supported format or budget.": "旧指令不符合格式或长度限制。",
+  "Review the old skill names; none were selected.": "请检查旧技能名称；当前未选用技能。",
+  "The old image is invalid; choose a new one.": "旧图片无效，请重新选择。",
+  "The old shape is invalid; choose a new one.": "旧形状无效，请重新选择。",
+  "The old color is invalid; choose a new one.": "旧颜色无效，请重新选择。",
+  "The old appearance is invalid; choose a new one.": "旧形象无效，请重新选择。",
+  "Review the prompt requirements for the selected role.": "请检查目标角色的指令要求。"
+};
+Object.assign(ZH, HOST_ZH);
+var fill = (text, params) => params ? text.replace(/\{(\w+)\}/g, (match, name) => name in params ? String(params[name]) : match) : text;
+var service = null;
+var bound = null;
+function installLocale(locale) {
+  if (!locale || typeof locale.register !== "function" || typeof locale.bind !== "function") return () => {
+  };
+  service = locale;
+  bound = locale.bind(NAMESPACE);
+  const off = locale.register(NAMESPACE, "zh", ZH);
+  return () => {
+    if (service === locale) {
+      service = null;
+      bound = null;
+    }
+    if (typeof off === "function") off();
+  };
+}
+function t(key, params) {
+  return bound ? bound(key, params) : fill(key, params);
+}
+function hostText(message) {
+  if (!language().startsWith("zh")) return message;
+  if (Object.hasOwn(ZH, message)) return t(message);
+  for (const [pattern, template] of HOST_ERRORS) {
+    if (pattern.test(message)) return message.replace(pattern, template);
+  }
+  return message;
+}
+function language() {
+  const active = service?.getLocale?.().active;
+  return typeof active === "string" ? active : "en";
+}
+var dateLocale = () => language().startsWith("zh") ? "zh-CN" : "en-US";
+var DICTIONARY = { zh: ZH };
+
+// src/client/product-chat.js
+var import_react = require("react");
+function ProductChatRow({ kind, text }) {
+  return (0, import_react.createElement)(
+    "div",
+    { className: `bt-product-message bt-product-message-${kind}` },
+    (0, import_react.createElement)("div", { className: "bt-bubble" }, (0, import_react.createElement)(import_dsh_client_ui_primitives.MarkdownText, {
+      text,
+      labels: { code: { copyLabel: t("Copy"), copiedLabel: t("Copied") }, footnotes: t("Footnotes") },
+      variant: "compact"
+    }))
+  );
+}
+
+// src/client/icons.js
+var import_react2 = require("react");
+function PlusIcon() {
+  return (0, import_react2.createElement)("svg", { width: 18, height: 18, viewBox: "0 0 20 20", "aria-hidden": true }, (0, import_react2.createElement)("path", { d: "M10 3.5v13M3.5 10h13", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" }));
+}
+function SearchIcon() {
+  return (0, import_react2.createElement)("svg", { width: 16, height: 16, viewBox: "0 0 20 20", "aria-hidden": true }, (0, import_react2.createElement)("circle", { cx: 8.5, cy: 8.5, r: 5.5, stroke: "currentColor", strokeWidth: 1.6, fill: "none" }), (0, import_react2.createElement)("path", { d: "M13 13l4 4", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" }));
+}
+function SidebarIcon() {
+  return (0, import_react2.createElement)(
+    "svg",
+    { width: 16, height: 16, viewBox: "0 0 20 20", fill: "none", stroke: "currentColor", strokeWidth: 1.6, "aria-hidden": true },
+    (0, import_react2.createElement)("rect", { x: 3, y: 4, width: 14, height: 12, rx: 2.5 }),
+    (0, import_react2.createElement)("path", { d: "M8 4v12" })
+  );
+}
+function PeopleIcon() {
+  return (0, import_react2.createElement)(
+    "svg",
+    { width: 14, height: 14, viewBox: "0 0 20 20", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", "aria-hidden": true },
+    (0, import_react2.createElement)("circle", { cx: 7.5, cy: 7, r: 3 }),
+    (0, import_react2.createElement)("path", { d: "M2 16.5c.6-2.8 2.8-4.5 5.5-4.5s4.9 1.7 5.5 4.5" }),
+    (0, import_react2.createElement)("path", { d: "M13 4.3a3 3 0 0 1 0 5.4M15 12.4c1.6.6 2.6 2 3 4.1" })
+  );
+}
+function ArrowUpIcon() {
+  return (0, import_react2.createElement)("svg", { width: 16, height: 16, viewBox: "0 0 20 20", "aria-hidden": true }, (0, import_react2.createElement)("path", { d: "M10 16V4M5 9l5-5 5 5", stroke: "currentColor", strokeWidth: 1.8, fill: "none", strokeLinecap: "round", strokeLinejoin: "round" }));
+}
+function MicIcon({ size = 16 }) {
+  return (0, import_react2.createElement)(
+    "svg",
+    { width: size, height: size, viewBox: "0 0 20 20", fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round", "aria-hidden": true },
+    (0, import_react2.createElement)("rect", { x: 7, y: 2.5, width: 6, height: 10, rx: 3, fill: "currentColor", stroke: "none" }),
+    (0, import_react2.createElement)("path", { d: "M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5" })
+  );
+}
+function WaveIcon({ size = 16 }) {
+  return (0, import_react2.createElement)(
+    "svg",
+    { width: size, height: size, viewBox: "0 0 20 20", fill: "currentColor", "aria-hidden": true },
+    [[3, 7.5, 5], [6.5, 4.5, 11], [10, 2.5, 15], [13.5, 5.5, 9], [17, 8, 4]].map(([x, y, height]) => (0, import_react2.createElement)("rect", { key: x, x: x - 1, y, width: 2, height, rx: 1 }))
+  );
+}
+function ShareIcon() {
+  return (0, import_react2.createElement)(
+    "svg",
+    { width: 16, height: 16, viewBox: "0 0 20 20", fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true },
+    (0, import_react2.createElement)("path", { d: "M10 12.5V3M6.5 6.5L10 3l3.5 3.5M4 11v4.5A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5V11" })
+  );
+}
+function CloseIcon() {
+  return (0, import_react2.createElement)("svg", { width: 16, height: 16, viewBox: "0 0 20 20", "aria-hidden": true }, (0, import_react2.createElement)("path", { d: "M5 5l10 10M15 5L5 15", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" }));
+}
+var ChevronLeftIcon = () => (0, import_react2.createElement)("svg", { width: 16, height: 16, viewBox: "0 0 20 20", fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true }, (0, import_react2.createElement)("path", { d: "M12.5 4.5L7 10l5.5 5.5" }));
+var ChevronRightIcon = () => (0, import_react2.createElement)("svg", { width: 14, height: 14, viewBox: "0 0 20 20", fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true }, (0, import_react2.createElement)("path", { d: "M7.5 4.5L13 10l-5.5 5.5" }));
+var lineIcon = (paths) => function LineIcon() {
+  return (0, import_react2.createElement)(
+    "svg",
+    { width: 15, height: 15, viewBox: "0 0 20 20", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true },
+    paths.map((d, index) => (0, import_react2.createElement)("path", { key: index, d }))
+  );
+};
+var CLOUD = "M6.5 15.25H5.75a3.25 3.25 0 0 1-.55-6.45 4.75 4.75 0 0 1 9.2-1.1 3.75 3.75 0 0 1 .1 7.55H13.5";
+function CloudDownloadIcon({ done = false }) {
+  return (0, import_react2.createElement)(
+    "svg",
+    { width: 16, height: 16, viewBox: "0 0 20 20", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true },
+    (0, import_react2.createElement)("path", { d: CLOUD }),
+    done ? (0, import_react2.createElement)("path", { d: "M7.75 13.25l1.75 1.75 3-3.25" }) : (0, import_react2.createElement)("g", { className: "bt-cloud-arrow" }, (0, import_react2.createElement)("path", { d: "M10 9.75v7" }), (0, import_react2.createElement)("path", { d: "M7.75 14.5L10 16.75l2.25-2.25" }))
+  );
+}
+var SmileIcon = lineIcon(["M10 3.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13z", "M7.3 11.6a3.4 3.4 0 0 0 5.4 0", "M7.75 8.25h.01M12.25 8.25h.01"]);
+var ReplyIcon = lineIcon(["M8 5L4 9l4 4", "M4 9h7.5a4.5 4.5 0 0 1 4.5 4.5V15"]);
+var DotsIcon = lineIcon(["M5 10h.01M10 10h.01M15 10h.01"]);
+var CheckIcon = lineIcon(["M4.5 10.5l3.5 3.5 7.5-8"]);
+var GlobeIcon = lineIcon(["M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14z", "M3 10h14", "M10 3c2 2.2 2.9 4.5 2.9 7S12 14.8 10 17c-2-2.2-2.9-4.5-2.9-7S8 5.2 10 3z"]);
+var ArrowDownIcon = lineIcon(["M10 4v12", "M5 11l5 5 5-5"]);
+var DownloadIcon = lineIcon(["M10 3.5v9", "M6.5 9.5L10 13l3.5-3.5", "M4 16h12"]);
+var GaugeIcon = lineIcon(["M3.5 13.5a6.5 6.5 0 1 1 13 0", "M10 13.5l3-4", "M10 13.5h.01"]);
+var PlugIcon = lineIcon(["M7 3v4M13 3v4", "M5 7h10v2.5a5 5 0 0 1-10 0z", "M10 14.5V17"]);
+var CalendarIcon = lineIcon(["M5.5 5h9A1.5 1.5 0 0 1 16 6.5v8a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 4 14.5v-8A1.5 1.5 0 0 1 5.5 5z", "M4 8.75h12", "M7.25 3.5v3M12.75 3.5v3"]);
+var ConnectorIcon = lineIcon(["M7 10a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z", "M18 10a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z", "M7 10h6"]);
+var SwitchIcon = lineIcon(["M4 7h9.5M10.5 3.5L14 7l-3.5 3.5", "M16 13H6.5M9.5 9.5L6 13l3.5 3.5"]);
+var SignOutIcon = lineIcon(["M8.5 17H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h2.5", "M10 10h6.5", "M13.5 7l3 3-3 3"]);
+var PaperclipIcon = lineIcon(["M15.5 9.5l-5.6 5.6a3.4 3.4 0 0 1-4.8-4.8l6.1-6.1a2.25 2.25 0 0 1 3.2 3.2l-6 6a1.1 1.1 0 0 1-1.6-1.6l5.5-5.5"]);
+var ClockIcon = lineIcon(["M10 3.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13z", "M10 6.5V10l2.5 1.5"]);
+var GearIcon = lineIcon(["M10 7.4a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2z", "M7.85 4.4l.29-1.87a7.7 7.7 0 0 1 3.72 0l.29 1.87a6 6 0 0 1 1.63.94l1.76-.69a7.7 7.7 0 0 1 1.86 3.23l-1.47 1.18a6 6 0 0 1 0 1.88l1.47 1.18a7.7 7.7 0 0 1-1.86 3.23l-1.76-.69a6 6 0 0 1-1.63.94l-.29 1.87a7.7 7.7 0 0 1-3.72 0l-.29-1.87a6 6 0 0 1-1.63-.94l-1.76.69a7.7 7.7 0 0 1-1.86-3.23l1.47-1.18a6 6 0 0 1 0-1.88L2.6 7.88a7.7 7.7 0 0 1 1.86-3.23l1.76.69a6 6 0 0 1 1.63-.94z"]);
+var PinIcon = lineIcon(["M12.5 3l4.5 4.5-3 1.5-2.5 2.5.5 3.5-1.5 1.5L7 13 3.5 16.5", "M7 13l-3.5-3.5L5 8l3.5.5L11 6l1.5-3"]);
+function PinMarkIcon() {
+  return (0, import_react2.createElement)(
+    "svg",
+    { width: 12, height: 12, viewBox: "0 0 20 20", fill: "currentColor", "aria-hidden": true },
+    (0, import_react2.createElement)(
+      "g",
+      { transform: "rotate(45 10 10)" },
+      (0, import_react2.createElement)("path", { d: "M8 2.5h4a.9.9 0 0 1 0 1.8h-.4v4.1c0 1.4 1.1 2.6 2.6 3.1l.7.3v1.5H5.1v-1.5l.7-.3c1.5-.5 2.6-1.7 2.6-3.1V4.3H8a.9.9 0 0 1 0-1.8z" }),
+      (0, import_react2.createElement)("path", { d: "M9.35 13.3h1.3v3.6L10 18l-.65-1.1z" })
+    )
+  );
+}
+var UnreadIcon = lineIcon(["M10 3.5a4.5 4.5 0 0 0-4.5 4.5v3L4 13.5h12L14.5 11V8", "M8.3 16a1.8 1.8 0 0 0 3.4 0", "M15.5 3.2a1.6 1.6 0 1 1 0 3.2 1.6 1.6 0 0 1 0-3.2z"]);
+var PencilIcon = lineIcon(["M9 4H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-3", "M14.3 3.7a1.6 1.6 0 0 1 2.3 2.3L10.5 12l-3 .8.8-3z"]);
+var InfoIcon = lineIcon(["M10 3.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13z", "M10 9.25v4", "M10 6.6h.01"]);
+var StarLineIcon = lineIcon(["M10 3l2.1 4.3 4.7.7-3.4 3.3.8 4.7L10 13.8 5.8 16l.8-4.7L3.2 8l4.7-.7z"]);
+var CopyIcon = lineIcon(["M8.5 7h6A1.5 1.5 0 0 1 16 8.5v6a1.5 1.5 0 0 1-1.5 1.5h-6A1.5 1.5 0 0 1 7 14.5v-6A1.5 1.5 0 0 1 8.5 7z", "M4 12.5V5.5A1.5 1.5 0 0 1 5.5 4H13"]);
+var HideIcon = lineIcon(["M3 3l14 14", "M8.6 5.2A7.6 7.6 0 0 1 10 5c4.5 0 7 5 7 5a12.6 12.6 0 0 1-2 2.6M12.2 14.5A6.8 6.8 0 0 1 10 15c-4.5 0-7-5-7-5a12.4 12.4 0 0 1 3-3.4", "M8.5 8.5a2 2 0 0 0 3 3"]);
+var TrashIcon = lineIcon(["M3.5 5.5h13", "M8 5.5V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5", "M5 5.5l.7 10A1.5 1.5 0 0 0 7.2 17h5.6a1.5 1.5 0 0 0 1.5-1.5l.7-10", "M8.5 9v4.5M11.5 9v4.5"]);
+var DuplicateIcon = lineIcon(["M7 7h8.5v9.5H7z", "M4.5 13V3.5H13", "M11.25 9.5v4.5M9 11.75h4.5"]);
+var SlidersIcon = lineIcon(["M4 6.5h5M12.5 6.5H16M4 13.5h4M11.5 13.5H16", "M10.5 4.5v4M9.5 11.5v4"]);
+var MemoryIcon = lineIcon(["M5.5 3.5h8A1.5 1.5 0 0 1 15 5v10a1.5 1.5 0 0 1-1.5 1.5h-8z", "M5.5 3.5v13", "M8.5 7.5h3.5M8.5 10.5h2.5", "M12 3.5v4l1-.8 1 .8"]);
+var TerminalIcon = lineIcon(["M4.5 4h11A1.5 1.5 0 0 1 17 5.5v9a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 14.5v-9A1.5 1.5 0 0 1 4.5 4z", "M6.5 8l2.5 2.5L6.5 13", "M11 13h3.5"]);
+var FolderIcon = lineIcon(["M3 6A1.5 1.5 0 0 1 4.5 4.5h3.2l1.8 2h6A1.5 1.5 0 0 1 17 8v6.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 14.5z"]);
+var SideIcon = lineIcon(["M4.5 4h11A1.5 1.5 0 0 1 17 5.5v6a1.5 1.5 0 0 1-1.5 1.5H9L5.5 16v-3h-1A1.5 1.5 0 0 1 3 11.5v-6A1.5 1.5 0 0 1 4.5 4z", "M6.5 7h7", "M6.5 10h4.5"]);
+var ChatsIcon = lineIcon(["M3.5 5.5A1.5 1.5 0 0 1 5 4h7a1.5 1.5 0 0 1 1.5 1.5V10A1.5 1.5 0 0 1 12 11.5H8L5 14v-2.5A1.5 1.5 0 0 1 3.5 10z", "M13.5 7.5H15A1.5 1.5 0 0 1 16.5 9v4.5A1.5 1.5 0 0 1 15 15v2l-2.5-2h-3A1.5 1.5 0 0 1 8 13.5V13"]);
+var SETTINGS_ICONS = { general: GearIcon, bots: PeopleIcon, groups: ChatsIcon, usage: GaugeIcon };
+
+// src/client/speech.js
+var VOICE_BUNDLE = "@deepseek-ai/dsh-experimental-voice-input-bundle";
+var USABLE = /* @__PURE__ */ new Set(["ready", "standby", "waking"]);
+async function speechCatalog(speech) {
+  const result = await speech.catalog();
+  if (!result?.ok) throw new Error(result?.error?.message ?? "Speech catalog failed");
+  const catalog = result.value;
+  const provider = catalog.providers.find((item) => item.id === catalog.selection.providerId);
+  return { catalog, usable: USABLE.has(provider?.preparation?.phase) };
+}
+async function requestPreparation(speech, providerId) {
+  try {
+    const result = await speech.prepare(providerId);
+    return result?.ok !== false;
+  } catch {
+    return false;
+  }
+}
+function preparationStep(catalog) {
+  const preparation = catalog.providers.find((item) => item.id === catalog.selection.providerId)?.preparation;
+  if (preparation === void 0) return { state: "done", failed: false };
+  if (USABLE.has(preparation.phase)) return { state: "usable" };
+  if (preparation.phase === "failed" || preparation.phase === "cancelled" || preparation.phase === "unprepared") {
+    return { state: "done", failed: preparation.phase === "failed" };
+  }
+  const pct = preparation.phase === "downloading" && preparation.totalBytes ? Math.floor(preparation.completedBytes / preparation.totalBytes * 100) : void 0;
+  return { state: "waiting", pct };
+}
+function waveBytes(samples, rate = 16e3) {
+  const bytes = new Uint8Array(44 + samples.length * 2);
+  const view = new DataView(bytes.buffer);
+  const ascii = (at, text) => {
+    for (let index = 0; index < text.length; index += 1) bytes[at + index] = text.charCodeAt(index);
+  };
+  ascii(0, "RIFF");
+  view.setUint32(4, 36 + samples.length * 2, true);
+  ascii(8, "WAVEfmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true);
+  view.setUint32(28, rate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  ascii(36, "data");
+  view.setUint32(40, samples.length * 2, true);
+  samples.forEach((sample, index) => {
+    const value = Math.max(-1, Math.min(1, sample));
+    view.setInt16(44 + index * 2, value < 0 ? Math.round(value * 32768) : Math.round(value * 32767), true);
+  });
+  return bytes;
+}
+function base64Of(bytes) {
+  let text = "";
+  for (let index = 0; index < bytes.length; index += 32768) text += String.fromCharCode(...bytes.subarray(index, index + 32768));
+  return btoa(text);
+}
+var captureError = (kind, cause) => Object.assign(new Error(kind), { kind, cause });
+async function openCapture() {
+  const devices = navigator.mediaDevices;
+  if (!devices?.getUserMedia || typeof MediaRecorder === "undefined") throw captureError("unavailable");
+  let stream;
+  try {
+    stream = await devices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
+  } catch (error) {
+    throw captureError(error?.name === "NotAllowedError" ? "blocked" : "failed", error);
+  }
+  let audio;
+  let recorder;
+  try {
+    audio = new AudioContext();
+    const analyser = audio.createAnalyser();
+    analyser.fftSize = 512;
+    audio.createMediaStreamSource(stream).connect(analyser);
+    const frame = new Float32Array(analyser.fftSize);
+    recorder = new MediaRecorder(stream);
+    const chunks = [];
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) chunks.push(event.data);
+    };
+    recorder.start();
+    return captureHandle(stream, audio, analyser, frame, recorder, chunks);
+  } catch (error) {
+    try {
+      if (recorder && recorder.state !== "inactive") recorder.stop();
+    } catch {
+    }
+    stream.getTracks().forEach((track) => track.stop());
+    try {
+      void audio?.close().catch(() => {
+      });
+    } catch {
+    }
+    throw captureError("failed", error);
+  }
+}
+function captureHandle(stream, audio, analyser, frame, recorder, chunks) {
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    if (recorder.state !== "inactive") recorder.stop();
+    stream.getTracks().forEach((track) => track.stop());
+    void audio.close().catch(() => {
+    });
+  };
+  return {
+    level() {
+      if (closed) return 0;
+      analyser.getFloatTimeDomainData(frame);
+      let sum = 0;
+      for (const sample of frame) sum += sample * sample;
+      return Math.min(1, Math.sqrt(sum / frame.length) * 4);
+    },
+    cancel: close,
+    async finish(maxSeconds) {
+      if (closed || recorder.state === "inactive") {
+        close();
+        return null;
+      }
+      try {
+        await new Promise((resolve2) => {
+          recorder.onstop = resolve2;
+          recorder.stop();
+        });
+        stream.getTracks().forEach((track) => track.stop());
+        const blob = new Blob(chunks, { type: recorder.mimeType });
+        if (blob.size === 0) return null;
+        const decoded = await audio.decodeAudioData(await blob.arrayBuffer());
+        const length = Math.max(1, Math.floor(Math.min(decoded.duration, maxSeconds) * 16e3));
+        const offline = new OfflineAudioContext(1, length, 16e3);
+        const source = offline.createBufferSource();
+        source.buffer = decoded;
+        source.connect(offline.destination);
+        source.start();
+        return waveBytes((await offline.startRendering()).getChannelData(0));
+      } finally {
+        close();
+      }
+    }
+  };
+}
+async function transcribeWave(speech, catalog, wave, signal) {
+  if (wave.byteLength > catalog.maxAudioBytes) throw captureError("too-long");
+  const result = await speech.transcribe({ audioBase64: base64Of(wave), ...catalog.selection }, signal);
+  if (!result?.ok) throw Object.assign(new Error(result?.error?.message ?? "Transcription failed"), { kind: "service" });
+  return String(result.value?.text ?? "").trim();
+}
+function closingReplyText(chat, turn) {
+  const location2 = chat?.timeline?.turns?.get(turn);
+  if (location2 === void 0) return void 0;
+  const closing = location2.data?.get("turn-tail")?.closing;
+  if (closing === void 0) return void 0;
+  if (closing === null) return "";
+  return (closing.blocks ?? []).filter((block) => block.kind === "text" && block.text.trim() !== "").map((block) => block.text).join("\n\n");
+}
+function turnDetector({ loud = 0.12, quiet = 0.06, quietMs = 1200 } = {}) {
+  let spokeAt = 0;
+  let quietSince = 0;
+  return (level, now) => {
+    if (level >= loud) {
+      spokeAt ||= now;
+      quietSince = 0;
+      return "speech";
+    }
+    if (!spokeAt) return "waiting";
+    if (level < quiet) quietSince ||= now;
+    return quietSince && now - quietSince >= quietMs ? "done" : "speech";
+  };
+}
+
+// src/client/composer.js
+var import_react3 = require("react");
+function MainComposer({
+  onSend,
+  onStop,
+  busy,
+  stopping,
+  readOnly = false,
+  error,
+  value,
+  onValueChange,
+  directoryControl,
+  attachments = [],
+  onFiles,
+  onRemoveAttachment,
+  uploading = false,
+  speechRemote
+}) {
+  const [draft, setDraft] = (0, import_react3.useState)("");
+  const [voiceState, setVoiceState] = (0, import_react3.useState)("idle");
+  const [voiceError, setVoiceError] = (0, import_react3.useState)(null);
+  const fileInput = (0, import_react3.useRef)(null);
+  const capture = (0, import_react3.useRef)(null);
+  const voiceGeneration = (0, import_react3.useRef)(0);
+  const text = value ?? draft;
+  const setText = (next) => onValueChange ? onValueChange(next) : setDraft(next);
+  const latestText = (0, import_react3.useRef)(text);
+  latestText.current = text;
+  const insertTranscript = (words) => {
+    const current = latestText.current;
+    const next = `${current}${current && !/\s$/u.test(current) ? " " : ""}${words}`;
+    latestText.current = next;
+    setText(next);
+  };
+  const dictation = useDictation((words, final) => {
+    if (final) insertTranscript(words.trim());
+  });
+  (0, import_react3.useEffect)(() => () => {
+    voiceGeneration.current += 1;
+    if (capture.current?.timer) clearTimeout(capture.current.timer);
+    capture.current?.controller.abort();
+    capture.current?.handle.cancel();
+  }, []);
+  const finishCapture = async () => {
+    const active = capture.current;
+    if (!active) return;
+    capture.current = null;
+    clearTimeout(active.timer);
+    setVoiceState("transcribing");
+    try {
+      const wave = await active.handle.finish(active.catalog.maxDurationSeconds);
+      const words = wave ? await transcribeWave(active.speech, active.catalog, wave, active.controller.signal) : "";
+      if (voiceGeneration.current === active.generation && words.trim()) insertTranscript(words.trim());
+    } catch (reason) {
+      if (voiceGeneration.current === active.generation) setVoiceError(t(reason?.kind === "too-long" ? "The recording is too long." : "Couldn't hear that"));
+    } finally {
+      if (voiceGeneration.current === active.generation) setVoiceState("idle");
+    }
+  };
+  const toggleVoice = async () => {
+    if (voiceState === "preparing" || voiceState === "transcribing") return;
+    if (capture.current) {
+      await finishCapture();
+      return;
+    }
+    const speech = speechRemote?.();
+    if (!speech) {
+      if (dictation.listening) dictation.stop();
+      else dictation.start();
+      return;
+    }
+    setVoiceError(null);
+    setVoiceState("preparing");
+    const generation = ++voiceGeneration.current;
+    try {
+      const { catalog, usable } = await speechCatalog(speech);
+      if (voiceGeneration.current !== generation) return;
+      if (!usable) {
+        setVoiceError(t("The speech provider is not ready."));
+        setVoiceState("idle");
+        return;
+      }
+      const handle = await openCapture();
+      if (voiceGeneration.current !== generation) {
+        handle.cancel();
+        return;
+      }
+      const timer = setTimeout(() => {
+        void finishCapture();
+      }, catalog.maxDurationSeconds * 1e3);
+      capture.current = { handle, catalog, speech, generation, controller: new AbortController(), timer };
+      setVoiceState("recording");
+    } catch (reason) {
+      if (voiceGeneration.current === generation) {
+        setVoiceError(t(reason?.kind === "blocked" ? "Microphone access is blocked" : "Couldn't start dictation"));
+        setVoiceState("idle");
+      }
+    }
+  };
+  const hasContent = Boolean(text.trim() || attachments.length);
+  const submit = async (event) => {
+    event.preventDefault();
+    if (busy || uploading || voiceState !== "idle" || dictation.listening || readOnly || !hasContent) return;
+    if (await onSend(text)) setText("");
+  };
+  return (0, import_react3.createElement)(
+    "form",
+    { className: "bt-main-composer", onSubmit: submit },
+    error ? (0, import_react3.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+    voiceError || dictation.note ? (0, import_react3.createElement)("p", { className: "bt-main-error", role: "status" }, voiceError ?? dictation.note) : null,
+    (0, import_react3.createElement)("label", { className: "bt-main-label", htmlFor: "main-message" }, t("Message Main")),
+    (0, import_react3.createElement)("textarea", {
+      id: "main-message",
+      value: text,
+      rows: 2,
+      maxLength: 32768,
+      placeholder: readOnly ? t("Read-only connection") : t("Message Main"),
+      disabled: readOnly,
+      onChange: (event) => setText(event.target.value),
+      onKeyDown: (event) => {
+        if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+          event.preventDefault();
+          void submit(event);
+        }
+      }
+    }),
+    directoryControl,
+    attachments.length ? (0, import_react3.createElement)(
+      "div",
+      { className: "bt-main-attachments", "aria-label": t("Attached files") },
+      attachments.map((attachment) => (0, import_react3.createElement)(
+        "span",
+        { className: "bt-main-attachment", key: attachment.id },
+        `${attachment.name} · ${attachment.bytes} ${t("bytes")}`,
+        onRemoveAttachment ? (0, import_react3.createElement)("button", {
+          type: "button",
+          disabled: busy || uploading,
+          "aria-label": t("Remove {name}", { name: attachment.name }),
+          onClick: () => onRemoveAttachment(attachment)
+        }, "×") : null
+      ))
+    ) : null,
+    (0, import_react3.createElement)(
+      "div",
+      { className: "bt-main-send" },
+      !readOnly ? (0, import_react3.createElement)("button", {
+        type: "button",
+        className: "bt-soft",
+        disabled: busy || uploading || voiceState === "preparing" || voiceState === "transcribing",
+        "aria-pressed": voiceState === "recording" || dictation.listening,
+        "aria-label": t(voiceState === "recording" || dictation.listening ? "Stop dictation" : "Start dictation"),
+        title: t(voiceState === "recording" ? "Stop dictation" : "Start dictation"),
+        onClick: () => void toggleVoice()
+      }, (0, import_react3.createElement)(MicIcon)) : null,
+      onFiles && !readOnly ? (0, import_react3.createElement)(
+        "span",
+        null,
+        (0, import_react3.createElement)("input", {
+          type: "file",
+          ref: fileInput,
+          multiple: true,
+          hidden: true,
+          onChange: (event) => {
+            const files = [...event.target.files ?? []];
+            event.target.value = "";
+            if (files.length) onFiles(files);
+          }
+        }),
+        (0, import_react3.createElement)("button", {
+          type: "button",
+          className: "bt-soft",
+          disabled: busy || uploading,
+          "aria-label": t("Add files"),
+          title: t("Add files"),
+          onClick: () => fileInput.current?.click()
+        }, (0, import_react3.createElement)(PaperclipIcon))
+      ) : null,
+      busy && onStop && !readOnly ? (0, import_react3.createElement)(
+        "button",
+        { className: "bt-soft", type: "button", disabled: stopping, onClick: onStop },
+        stopping ? t("Stopping…") : t("Stop reply")
+      ) : null,
+      (0, import_react3.createElement)(
+        "button",
+        { className: "bt-soft", type: "submit", disabled: busy || uploading || voiceState !== "idle" || dictation.listening || readOnly || !hasContent },
+        readOnly ? t("Read-only") : uploading ? t("Uploading…") : busy ? t("Sending…") : t("Send")
+      )
+    )
+  );
+}
+var speechApi = () => window.SpeechRecognition ?? window.webkitSpeechRecognition;
+function useDictation(onText) {
+  const [listening, setListening] = (0, import_react3.useState)(false);
+  const [note, setNote] = (0, import_react3.useState)("");
+  const recognition = (0, import_react3.useRef)(null);
+  const generation = (0, import_react3.useRef)(0);
+  const latest = (0, import_react3.useRef)(onText);
+  latest.current = onText;
+  (0, import_react3.useEffect)(() => () => {
+    generation.current += 1;
+    recognition.current?.abort();
+  }, []);
+  (0, import_react3.useEffect)(() => {
+    if (!note) return void 0;
+    const timer = setTimeout(() => setNote(""), 2600);
+    return () => clearTimeout(timer);
+  }, [note]);
+  const start = ({ continuous = true, onEnd } = {}) => {
+    const Api = speechApi();
+    if (!Api) {
+      setNote(t("Dictation is not available in this browser"));
+      return false;
+    }
+    const engine = new Api();
+    const own = ++generation.current;
+    engine.lang = navigator.language || "zh-CN";
+    engine.interimResults = true;
+    engine.continuous = continuous;
+    engine.onresult = (event) => {
+      if (generation.current !== own) return;
+      let interim = "";
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        const text = result[0]?.transcript ?? "";
+        if (result.isFinal) {
+          if (text.trim()) latest.current(text, true);
+        } else interim += text;
+      }
+      if (interim) latest.current(interim, false);
+    };
+    engine.onerror = (event) => {
+      if (generation.current !== own) return;
+      if (event.error === "aborted" || event.error === "no-speech") return;
+      setNote(event.error === "not-allowed" || event.error === "service-not-allowed" ? t("Microphone access is blocked") : t("Couldn't hear that"));
+    };
+    engine.onend = () => {
+      if (generation.current === own) {
+        setListening(false);
+        recognition.current = null;
+      }
+      onEnd?.();
+    };
+    recognition.current = engine;
+    try {
+      engine.start();
+      setListening(true);
+      return true;
+    } catch {
+      setNote(t("Couldn't start dictation"));
+      return false;
+    }
+  };
+  const stop = () => recognition.current?.stop();
+  const discard = () => {
+    generation.current += 1;
+    const engine = recognition.current;
+    recognition.current = null;
+    setListening(false);
+    try {
+      engine?.abort();
+    } catch {
+    }
+  };
+  return { listening, note, start, stop, discard };
+}
+
+// src/client/text.js
+var HEADER = /^\[(Message from|Reply from|Group chat|Group post from|Bot team setup|Handoff · part|Secret card)(?:[^\r\n]*\]\r?\n|[^\]\r\n]*\])/;
+var stripHeader = (text) => text.replace(HEADER, "");
+
+// src/client/product-speech.js
+var plainSpeech = (text) => stripHeader(text).replace(/```[\s\S]*?```/g, " ").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[*_`#>|~-]+/g, " ").replace(/\s+/g, " ").trim();
+
+// src/client/product-attachments.js
+var MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+var IMAGE_TYPES = /* @__PURE__ */ new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+var pendingUploads = /* @__PURE__ */ new Map();
+async function uploadPayload(file) {
+  if (!file || file.size < 1 || file.size > MAX_UPLOAD_BYTES) throw new Error("Choose a nonempty file smaller than 8 MB.");
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary2 = "";
+  for (let offset = 0; offset < bytes.length; offset += 32768) binary2 += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
+  return {
+    kind: IMAGE_TYPES.has(file.type) ? "image" : "file",
+    name: file.name,
+    ...file.type ? { mediaType: file.type } : {},
+    data: btoa(binary2)
+  };
+}
+async function uploadFingerprint(payload, environmentId) {
+  const bytes = new TextEncoder().encode(JSON.stringify([environmentId, payload.kind, payload.name, payload.mediaType ?? "", payload.data]));
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+async function uploadWithRetry(call, store, instanceId, environmentId, payload) {
+  const fingerprint = await uploadFingerprint(payload, environmentId);
+  const key = `superagent:pending-upload:${instanceId}:${fingerprint}`;
+  let commandId = pendingUploads.get(key);
+  if (!commandId) {
+    try {
+      commandId = store.getItem(key);
+    } catch {
+    }
+    commandId ||= crypto.randomUUID();
+    pendingUploads.set(key, commandId);
+    try {
+      store.setItem(key, commandId);
+    } catch {
+    }
+  }
+  const result = await call("attachment-upload", { instanceId, commandId, environmentId, ...payload });
+  pendingUploads.delete(key);
+  try {
+    store.removeItem(key);
+  } catch {
+  }
+  return result;
+}
+async function readPages(call, endpoint, request) {
+  const chunks = [];
+  let offset = 0;
+  for (let pageCount = 0; pageCount < 2048; pageCount++) {
+    const page = await call(endpoint, { ...request, offset, maxBytes: 8192 });
+    if (page.encoding !== "utf8" && page.encoding !== "base64") throw new Error("The attachment page encoding is unavailable.");
+    const bytes = page.encoding === "base64" ? Uint8Array.from(atob(page.text), (character) => character.charCodeAt(0)) : new TextEncoder().encode(page.text);
+    if (page.offset !== offset || page.nextOffset !== offset + bytes.length || page.totalBytes > MAX_UPLOAD_BYTES) {
+      throw new Error("The attachment page does not match the expected bytes.");
+    }
+    chunks.push(bytes);
+    if (page.nextOffset === page.totalBytes) return new Blob(chunks);
+    if (page.nextOffset <= offset) throw new Error("The attachment page did not advance.");
+    offset = page.nextOffset;
+  }
+  throw new Error("The attachment exceeded the bounded page limit.");
+}
+var readProductAttachment = (call, instanceId, id) => readPages(call, "attachment-read", { instanceId, id });
+var readProductArtifact = (call, instanceId, workItemId, path) => readPages(call, "artifact-read", { instanceId, workItemId, path });
+
+// src/client/product-feishu.js
+var import_react4 = require("react");
+var sourceState = (state) => ({
+  setup: "Feishu connecting",
+  polling: "Feishu receiving",
+  failed: "Feishu unavailable",
+  stopped: "Feishu stopped"
+})[state] ?? "Feishu unavailable";
+var failureText = (code) => ({
+  INVALID_CONFIG: "Check the Feishu connection settings.",
+  SOURCE_SCOPE_DENIED: "The Feishu account cannot access the configured tenant or chat.",
+  SOURCE_TIMEOUT: "Feishu did not respond. Check the connection and reconnect.",
+  FEISHU_SETUP_FAILED: "Feishu setup failed. Check the connection settings and reconnect."
+})[code] ?? "Feishu needs attention. Check the connection settings and reconnect.";
+function FeishuSourceStatus({ instanceId, call }) {
+  const [status, setStatus] = (0, import_react4.useState)(null);
+  const [busy, setBusy] = (0, import_react4.useState)(false);
+  const [error, setError] = (0, import_react4.useState)(null);
+  (0, import_react4.useEffect)(() => {
+    if (!instanceId) return void 0;
+    let active = true;
+    const refresh = () => call("feishu-status", { instanceId }).then((result) => {
+      if (active) setStatus(result);
+    }).catch(() => {
+      if (active) setStatus({ configured: false, state: "unavailable", readFailed: true });
+    });
+    void refresh();
+    const timer = setInterval(() => {
+      void refresh();
+    }, 5e3);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [instanceId, call]);
+  if (!status?.configured && status?.state !== "failed" && !status?.readFailed) return null;
+  const running = status.state === "polling" || status.state === "setup";
+  const control = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setStatus(await call(running ? "feishu-stop" : "feishu-start", { instanceId }));
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (0, import_react4.createElement)(
+    "section",
+    { className: "bt-main-source", "aria-label": t("Feishu connection") },
+    (0, import_react4.createElement)(
+      "div",
+      { className: "bt-main-work-head" },
+      (0, import_react4.createElement)("strong", null, t("Feishu connection")),
+      (0, import_react4.createElement)("span", { className: "bt-main-work-status", role: "status" }, t(sourceState(status.state)))
+    ),
+    status.cursor ? (0, import_react4.createElement)("p", { className: "bt-main-work-detail" }, `${t("Source cursor")}: ${status.cursor}`) : null,
+    status.readFailed ? (0, import_react4.createElement)("p", { className: "bt-main-error", role: "alert" }, t("Could not read Feishu status. Check the app connection.")) : null,
+    status.lastError ? (0, import_react4.createElement)("p", { className: "bt-main-error", role: "alert" }, t(failureText(status.lastError))) : null,
+    error ? (0, import_react4.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+    (0, import_react4.createElement)(
+      "button",
+      { type: "button", className: "bt-soft", disabled: busy || !status.configured, onClick: () => void control() },
+      t(running ? "Stop Feishu" : "Reconnect Feishu")
+    )
+  );
+}
+
+// src/client/inks.js
+var INKS = {
+  deepseek: ["#4D6BFE", "#6A84FF"],
+  charcoal: ["#141416", "#F1F2F4"],
+  graphite: ["#2D2D2D", "#D6D6DA"],
+  rose: ["#EC2F6B", "#FF5A7A"],
+  sky: ["#0AA8D6", "#2EE6E0"],
+  tangerine: ["#FF6900", "#FF8A2E"],
+  cobalt: ["#082DFF", "#5C78FF"],
+  black: ["#000000", "#FFFFFF"],
+  brown: ["#A27952", "#855C36"],
+  red: ["#FF3E51", "#E02135"],
+  orange: ["#FF781C", "#FF6700"],
+  yellow: ["#FFAF38", "#FF9800"],
+  green: ["#00C972", "#009957"],
+  cyan: ["#1CC3B0", "#00A592"],
+  blue: ["#2A92FE", "#0E74E0"],
+  violet: ["#A97EFE", "#804EE0"],
+  magenta: ["#FF5EB1", "#E02A88"],
+  gray: ["#959595", "#777777"],
+  aurora: ["#00B8D4", "#2EE6E0"]
+};
+var GRADIENTS = { aurora: [[0, "#A4FFB0"], [0.42, "#00F0E4"], [1, "#2E9EF7"]] };
+var ACCENT_INKS = ["deepseek", "charcoal", "graphite", "rose", "sky", "tangerine", "cobalt"];
+var LEGACY_INKS = { kimi: "charcoal", zai: "graphite", minimax: "rose", stepfun: "sky", mimo: "tangerine", qwen: "cobalt" };
+var isHex = (color) => typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color);
+var luminance = (hex) => [1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16) / 255).map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4).reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0);
+var inkName = (color) => INKS[color] ? color : INKS[LEGACY_INKS[color]] ? LEGACY_INKS[color] : "gray";
+var inkFill = (color) => isHex(color) ? color : `var(--bt-ink-${inkName(color)})`;
+var inkText = (color) => color === "black" ? "var(--bt-ink-gray)" : inkFill(color);
+var paintCss = (color) => GRADIENTS[color] ? `linear-gradient(135deg,${GRADIENTS[color].map(([offset, value]) => `${value} ${offset * 100}%`).join(",")})` : inkFill(color);
+
+// src/client/characters.js
+var CHARACTERS = {
+  whale: { label: "Whale", body: "M65.3 20.9l5.1 .1 4.8 .9 4.8 1.7 4.3 2.3 3.8 3.1 3 3.4 2.3 3.8 1.6 4.3 .9 4.3 0 4.8-.8 4.8-1.4 4.3-2.3 4.3-3.2 4.3-3.4 3.3-4.3 3.1-7.2 3.5-7.6 1.7-7.2 .1-9.6-1.6-3.3-1-2.9-1.7-8.8-8.9-6-4.7-3.3-.5-7.7 1.1-4.8-.1-4.7-1.2-1.9-1.2-1-1-.5-1.5 .4-1.4 1.1-1.3 1.9-1.3 4.7-1.5 7.7-.6 1.1-.5 .7-1 0-1.4-2.8-7.2-1.2-5.3-.1-4.3 .4-1.4 .9-1.2 1.9-.2 2 1 2.2 2.3 2.2 3.4 3.2 7.6 1.9 9.7 .5-.1 1.1-7.2 1.8-4.8 3.2-5.2 3.9-4.3 4.9-3.9 5.6-2.9 5.8-1.9z", paints: [["M93.3 55.8l1-.3 .1 1.2-2.4 5.3-3.4 4.8-3.8 3.8-4.8 3.4-5.7 2.8-4.8 1.5-4.8 .4 20.1-17.4 5.2-3.7z", "#fff", 1]], shade: "M88.6 29.5l2.4 2.9 1.9 2.8 2.4 6.3 .5 3.3 .1 5.3-1.5 6.6-1.9 4.3-2 3.3-4.8 5.4-5.7 4.3-7.2 3.3-6.2 1.5-6.7 .1-3.3-.2-9.6-1.8-3.3-1.5-2.4-1.9-8.6-8.9-5.3-3.9-3.3-.1-2.9 .2-3.3 .8-5.8 0-4.3-1-2.9-1.9 .6-.6 3.8-1.3 10.5-2.5 4.3 .9 1.4-.1 2.2-1.7 .5-1.4-.3-1.5-1.2-1.4-2.2-1.4-1.2-1.9-.6-12 .4-3.3 .5-.5 2.9 3.8 2.4 4.8 1.9 5.7 .7 5.8 .7 2.8 2.1 2.4 2.7 5.5 3.8 4.3 2.9 2.2 3.3 1 3.4-.4 6.2-3 7.1-4.5 7.3-5.6 6.6-5.9 5.9-6.5 3.7-5.3 1.7-4.2 .1-2.9z", light: "M55.6 22.8l1.9-.3 1.5 .3 .6 1 .1 .9-2 4.3-3.8 5.3-5.8 6.2-5.4 4.4-4.8 2.3-1.4 0-1.2-.5-.8-1.9 .5-3.3 2.5-4.8 3.3-4.3 2.4-2.4 5.3-3.9zM19.3 28.1l-1.4 2 .3-1.1zM21.7 49.1l.6 .5-.3 .5-.8 0zM35.8 52l1.2-.4 .9 .7 .7 1.6-.4 .9-1.2 .1-2.6-.5zM7.2 52.9l-2.9 2.9 1.2-1.6z", eyes: [[72.5, 48.4, 9.3, 23, -15.8], [85.6, 43.4, 7, 22.9, -21.2]] },
+  star: { label: "Star", body: "M40.1 4.4l1.5-.4 1.9 .1 5.2 1.1 1.9 .9 13.2 14.9 17.1-.8 5.2 1.1 1.8 .9 1.7 1.6 .7 2.4-.4 1.9-9.7 23.6 5.6 23.7 .1 1.9-.6 1.4-2.1 1.8-2.3 .5-19.9-1.8-16.6 15.5-1.9 1-1.9 .3-7-1.5-2.6-2.1-.9-2.4-2.8-24.1-16-13.6-1.1-1.5-.5-1.9 .4-1.9 1.2-1.5 18.9-13.6 7.1-24.6 1-1.7z", shade: "M52 7.7l14.3 16.1 1 2.9 .3 3.1 19.4-1.3 2-1.4 .7-2.3-.4-1 .5 .5 .5 1.9-.4 1.9-9.8 23.2 5.5 23.1 .1 3.4-2 2.4-2.8 .8-19.4-2.1-1.9 1.4-14.7 14-2.4 1.4-3.3 .1-4.7-1-2-1 .6-.2 3.3 .8 2.8 .1 5.1-2.1 .7-.9 .4-2.4-2.6-22.7-.3-.3-1.4 .2-1.4 .7-5.7 .7-5.6-1.2-16.7-13.8 1-.1 5.2 1 3.8-1.1 1-.7 1.9-.4 .4-.4 1.5 .3 .4-.4 1 .2 18-12.8 6.7-23.5 0-1.8-.4-.5-.3-1.9 .4-2.4z", light: "M40.1 4.4l2-.1 4.7 1 .7 1-.5 1.4-2.8 1.5-6.6 23.1 .7 1.2 .6 .3-18.1 12.5-1.8 2.1-3.4 .7-5.2-1.2-.3-.4 .3-.9 1.4-1.4 18.3-12.9 .9-2.3 6.4-22.7 .8-1.4z", eyes: [[53.9, 53.4, 7.2, 18.8, -10], [65.1, 49.2, 7.2, 18.8, -10]] },
+  moon: { label: "Moon", body: "M45.8 4.2l4.7-.2 4.2 .4 10.2 2.4 3.7 1.6 3.6 2.1 3.3 2.5 3 3.1 4.6 6.7 3.4 8.3 1.5 8.8 .1 4.6-.8 7.8-2.6 8.8-3.9 7.7-5.1 6.7-6.1 5.3-4.1 2.6-3.6 1.6-27.2 10.2-2.8 .7-2.6 0-5.7-1.3-2-.8-1.9-1.7-1.1-2.6-6.5-37.7-.2-5.2 .8-7.7 1.3-5.2 3.1-7.8 4.2-6.7 3-3.6 3.9-3.6 6.3-4.2 4.1-1.8z", paints: [["M57.6 9.9l.2-.3 .2 .3 2 4.7 1.9 1.9 2.6 .5 1.5-.7 1.1-1.1 .4 .4-.1 1.6-.7 1.5-2.2 2.5-1.6 .7-2 0-1.6-.8-1.3-1.4-.8-2-.4-2.6 .1-3.1z", "#1783FF", 1]], shade: "M74.3 13.5l2.1 1.5 .3-.4-.3-.6 2.1 2.1 4.6 6.7 3.1 7.4 1.5 7.6 .1 10.4-.6 4.6-2.5 8.3-4.2 8.2-3.1 4.2-5.7 5.7-6.2 4.2-4.6 2-28 10.3-4.1 0-5.2-1.1-2-.9-.5-.7 .5 .5 1.5 0 3.6 1 2.6-.3 5.7-2.1 2.1-2.1-5.4-31.5-.2-4.1 .4-1.1-.1-2.6 .5-3.6 1.8-7.7 2.8-6.7 1.9-3.1 3.9-5.2 3.2-3.1 2.5-2 5.2-2.9 3.1-1.1 3.1-.8 2.1 0 .5-.4 2.6 .2 1-.3 1.6 .4 1-.5 2.1 .8 1-.8 2.1 1.2z", light: "M38 6.3l1.7-.3 2.5 .2 .6 .4 1.5 0 .5 .5 1.6 .3-3.1 1.3 .4 .7-2.5 1.6-.5 1-2.5 2.1-2.7 2.9-6.2 7.9-1.5 2.7-1 .9-1.2 2.6-1.4 1-1.3 3.7-1.3 .3-6-1.4-1 3.6-.8 0 .9-3.6-.5-1 1.1-3.6 2.7-5.7 4.1-6.2 5.7-5.8 3.1-2.4 3.6-2.2z", eyes: [[51.6, 48.5, 8.4, 22.1, -10], [66.8, 42.9, 8.4, 22.1, -10]] },
+  wave: { label: "Wave", body: "M46.1 4l6.1 .3 9.6 2.1 4.5 1.8 4.1 2.4 3.5 2.8 4.4 4.8 2.6 4 2.1 4.1 2.2 6 4.8 26 .5 5.3-.3 4.1-1.2 3.8-1.5 2.8-2.4 2.5-2.1 1.4-3.1 1-3 .3-8.1-1.5-3.2 5.3-2.1 2.1-2.5 1.5-2.8 1-3 .4-9.1-1.6-2.7 4.2-3.4 3.1-4 1.7-4.6 .1-7-1.5-3.5-1.9-3.4-3.5-2.1-4-1.5-5.6-3.7-20.7-.6-5.6-.1-5 .5-6.1 2.3-9.6 2.3-5.5 2.7-4.9 2.7-3.7 3.2-3.6 4.2-3.6 4.7-2.9 4.4-2 4-1.2z", paints: [["M61.6 48.5l2.2-.3 2 1.1 1.1 2.2 .3 3-.6 3.1-1.5 3.5-2.5 4.1-2.4 2.8-5-2.2-3-2.2-2.3-3-.7-3.5 .6-2.6 1.8-2.1 1.6-.7 1.5 0 1.5 .6 1.5 1.3 2-3.6z", "#fff", 0.4]], shade: "M69.3 13.6l2.6 1.3 .5-.3 .5-1.3 2 1.7 .5 0 2.5 2.7 3.5 5.5 3.6 8.6 1.5 6.6 3.5 19.7 .5 5.5-.4 4.6-2 5-1 1.6-2.6 2.5-3 1.5-2.1 .5-4 0-6.6-1.4-1.4 2.9-1.9 2.5-2.7 2.6-3.1 1.5-2.5 .6-4 .1-7.1-1.5-1.5 2.8-2.6 3-2 1.6-3 1.4-4.5 .6-7.1-1.5-3.6-1.5-3.5-3.1 6.6 1.5 2.8-.5 .5-.5-.3-.5 3.2-2-.4-1 1.4-1.5-.3-1 .7-1.6-.2-2.5-3.4-19.2 .3-.5-.6-5 .5-.5-.1-4.6 .4-.5 .3-4 1-4.1 1.5-4.5 3.8-7.7 5.5-6.9 3.1-2.6 6.5-3.9 7.6-2.2 3.1 0 .5-.4 3 .5 1-.5 2.5 1z", light: "M36.5 6.1l2-.3 .5 .6 4.1 .5 1 .7-3.3 1.5-.3 1.2-3 2-.3 .8-2.8 2.6-3.5 4-3.9 5-2 3.6-1 .5-1.7 4-1.5 .5-1.4 4.6-1.6 .2-.5-.4-5.6-.9-.4-.4 1.4-5.1 1.5-3.5 2.6-5.1 4-5.5 6.6-6.2 4-2.5z", eyes: [[47.5, 37.2, 8.4, 22.1, -10], [61.6, 31.9, 8.4, 22.1, -10]] },
+  squircle: { label: "Squircle", body: "M54.5 4.2l3.9-.2 3.7 .3 11.6 2.7 3.1 1.6 2.8 1.9 2.6 2.7 2.2 3.1 2.4 4.8 1.9 5.8 3.7 19.4 .8 11.1-.4 4.7-1 4.7-1.3 3.5-1.8 3.4-4.8 5.8-6.4 4.7-8 4-14.2 5.3-9.5 2.2-7.4 .1-10.5-2.2-5.3-2.5-4.3-3.7-3.3-4.8-2.7-6.3-2.4-9.5-2.8-17.9-.2-7.8 1.3-7.9 2.2-5.3 2.8-4.2 4.1-4.2 4.3-3.1 6.3-3.4 11.6-4.6 7.9-2.7z", shade: "M80.5 11.6l2.1 2.1 2.1 3.2 3.2 7.3 2.1 8.4 2.7 15.8 .5 7.9-.6 7.4-2 6.3-3.8 6.3-4.2 4.3-2.6 2-6.9 3.8-15.2 6.2-9.5 2.7-6.8 .6-6.2-.7-8.5-2-5.8-3.2-3.2-3.3 .5 .4 1.1-.2 5.8 1.4 2.1-.8 1.4-.7-.3-.5 1.4-1.1-.1-1 .8-.5 0-1.1 1.1-1 .1-2.1 .4-.6-.2-3.6-2.4-17.9-.2-9.5 .8-5.3 1.1-3.6 1.2-2.7 2.2-3.5 2.7-2.8 3.1-2.5 5.8-3.2 17.9-6.9 5.3-1.4 8.4-1.4 1.6-1.1 .5 .1 .9-1.5z", light: "M39.4 8.4l1.2 0-1.6 .7-1-.1 1-.1zM36.8 9.5l1 0 .6 .9 4.2 .6 .7 .6-3.8-.4-.3 .4 1.9 .3 .1 .7-3.2 1.6-6.9 5.8-5.3 6-4.7 6.1-3.8 3.7-.2 .5-1.8 .1-6.8-1.7 .4-3.6 2.1-4.2 2.2-3.2 4.2-4.3 4.2-3 3.1-1.8 5.3-2.5zM35.1 10.5l1.7 0-.5 .4zM36.5 11.1l.3-.5 2.2 .1 .4 .4-.4 .3z", eyes: [[52.6, 52.4, 8.4, 22.1, -10], [67.3, 46.9, 8.4, 22.1, -10]] },
+  zed: { label: "Bull", body: "M77 4.4l1.1-.4 1.1 .2 1.2 1.3 2 9.8 2.2 5.9 .4 2.8-.3 2.1-.8 1.7-4.7 5.1-1.3 1.9-.4 1.7 .1 1.6 1 1.7 4.4 .2 3.8 1.3 2 1.7 .6 1.6-.3 1.7-.7 1.1-3.5 2.7 1.7 6 .4 5.9-.8 6.6-1.9 6-3.4 5.9-4.4 5.3-5.5 4.4-6 3.1-6.5 2-7.1 .7-6.5-.7-6.5-2.1-6-3.4-4.8-4.4-3.5-4.9-3.1-6.7-3.3 1.1-2.7 .3-2-.6-1.1-1.1-.3-2.2 .9-2.7 2.9-3.8 4.6-3.8 1.8-7.1-6.3-1.8-1.6-1.3-1.3-1.8-.6-2.7 0-6.6-1.4-8.7 .2-1.1 1.5-1.4 1.1-.1 1 .5 5.5 7.9 2.2 2.2 2.7 1.4 4.9 .4 .5-.1 6.5-5.1 6.6-3.2 6-1.6 8.7-.7 3.8-.9 2.7-1.5 3.9-3.2 3-3.8 2.4-4.9 2.1-10z", paints: [["M61 36.5l1.9 .7 1.4 2-.7 5.4 .3 .4 2.8-1.2 1.1 0 1 .9 .5 1.6-.5 .8-1 .5-7.1 2.4-1.1-.5-.9-1.6 1.4-5.4-.5-.6-3.3 1.1-1.1-.1-1.6-1-1-1.6 .5-.9z", "#fff", 1]], shade: "M80.2 5.5l.6 1.6 1.3 8.2 2.5 6 .2 3.7-.1 1.1-1.2 2.2-5.2 5.4-1.1 3.3 .9 2.7 3.8 3.9 1.6 .1 4.4-1.4 1.2 1.2 .1 1.1-.2 1.7-.6 1.1-3.6 2.7 .9 2.2 1.1 5.4 .1 6-1.1 6.5-2.3 6-3.8 6-6 6-4.9 3.3-5.9 2.6-7.1 1.7-7.1 .1-6-1.1-5.9-2.3-4.4-2.7-4.4-4.5 3.8 .4 5.5-1.5 7.6-3.9 6.8-4.7 7.9-6.5 7.1-6.9 5.4-6.5 4.4-6.7 1.8-4.4 .4-3.2-.3-1.1-3.3-3.8-.8-2.8 .8-2.7 6.2-7 .8-2.2-.1-2.7-1.7-4.4-.8-8.2zM14.9 29.9l.1-.5 4 6.5 2.3 2.7-1.4 .1-2-.6-3.6-7.1zM24.3 44.6l1-.3 1.1 .2 3.3 2.9 1.7 .5 .3 1.6-.5 2.2-1 1.6-1.6 1.5-1.6 .7-1.7 .1-3.2-2.2-2.2 0-2.7-.6-2.9-1.6 3.9-1.6 2.2-1.7 2.2-2.3zM21 68.6l.5-.5 1.1 .1 1.1 .5 .8 1 .6 2.7-.1 1.1-.7 1.1-.6 .1-2.2-1.2-2.7 1.1-3.8 .6-2.7-1.2 3.4-1.6z", light: "M77 4.4l.6-.2 .1 .7-1.2 .8-.1-.8zM74.2 15.8l.6 1.1 .1 2.7-.6 2.2-1 1.6-5.5 5-1.7 .7-3.3 .3 .1-.6 2.1-1.2 4.2-3.6 2.7-3.9zM11.7 28.9l.8 0-.1 .5-1.2 .8-.1-.8zM44.3 32.1l3.1 0 .8 1.1 0 1.1-1.9 4.3-3 4.1-1.7-1.1-2.1-.8-4.4-.6-4.4 .1 5.5-4.4zM22 54.4l.6 0-.3 .6 .2 .5 2.3 2.7 .4 1.7-1 .9-4.8 2.3-7.1 7.8 0-1.8 2.1-3.3 6.4-5.4 1.2-4.3z", eyes: [[61.8, 69, 9.5, 22.3, -10.5], [78.4, 62.7, 6.9, 22.2, -11.2]] },
+  hex: { label: "Blossom", body: "M38.8 4.2l2.6-.1 6 1.3 2 1.3 3 3.3 12-4.5 2-.5 6.5 1.1 2.9 1.6 4.9 6 .8 2 .3 2-.2 2.5-1.9 7-1.3 2.2-1.9 1.8 2.9 1.3 1.8 1.7 10.1 12.5 1.5 3 .1 4-1.8 7-.9 2-2.8 2.7-7.1 2.7-5.2 20-.8 2-1.4 1.9-1.5 1.1-6.5 2.6-3 .2-6.5-1.6-2-1.4-4-4.9-16 5.7-2 .1-4.5-1-3-1.2-5.2-6-1.3-3 0-3.5 2-8.5-10.8-13.4-1.4-3-.3-2 .3-2.5 1.7-6.5 1.8-3 2.2-1.8 5.9-2.2 2.1-.4 2.5 .3 .4-.4-.7-2.5 .1-2.5 4.8-18.5 1-2.5 2.9-2.9z", shade: "M49.7 7.7l.2-.4 .5 .4 2 2.3 0 .7 1.6 1.5 1 2 .1 1.5-.3 .5 .6 1.3 17.5-6.5 2.5-1.3 1-1.5 4.5 6 .6 1.5 .3 3-1.9 8-1 2-3 3-.3 1 .4 .5-1.7 3 .1 .5-.5 .5 0 .7 5.5-2.2 1.5-1.5 2 2 8 10 1 1.5 1 2.5-.1 4-1.9 7-1.1 1.9-2.9 2.5-6.8 2.5-4.7 19-1.5 3.5-2.5 2.5-6.5 2.6-4 0-5.5-1.4-2.2-1.7-3.2-4 4.9 .8 2.5-1.4 1.5-2.6 .7-2.3 1.7-6.5-.4-.3-.6 .8-.7 3.5-1.1 1.5 .3 .5-.3 .5-.7-.5-1.4-5.5-.5 1-.2 2-.9 1-.1 1.5-1.1 2-2.7 2.8-1 .4-1 .1-15.5 5.8-3-.1-4.5-1-2-1-2-2-2.2-3 .2-.2 4 .9 2-1.1 1.7-1.6 1.3-3.2 1.7-6.3 1.1-2.5-.3-.3-.5 .2-6.5-.3-.5-.5-2 0-.5-.5-1.7-.1-10.4-13.4 4.1 .7 3.1-1.7 1.3-2 2.5-8.5 .9-1.5 1.7-1.3 6.5-2.7 2-1.5-.3-.5 .3-.5 1.5-1.2 1.5-3 5.6-20.3 1.9-2 6-2.4 1.1-.6zM73.2 31.2l1.5 0-.8 1-34 12.7-1 .1-1.5-.5-2 .8-1.9-2.6 .4-.9 2 .5 1.5 1 .5-.4 1 .5 1-.3 1 .4 3-1.5 1 .1 3-1.6 1 .1 3-1.6 1 .1 3-1.6 2.5-.5 1.5-1 2.5-.5 1.5-1 2.5-.5 1.5-1 2.5-.5 1.5-1 1 0zM61.3 74.6l.1-.2 .4 .2-.4 1.7z", light: "M33.4 6.2l3 .1 1.9 .9-.1 .5-1.8 2.5-3.4 3.5-4.5 17-3.6-.9-1 .4 0-1 4.4-16.5 0-1.5 2.1-3.1zM68.2 6.2l1.2 0zM14.9 37.7l3.5 .9 .4 .6-.3 1-5 5.5-1.1 4.6-2.5-.5-2 .1 0-1.7 1-4.5 1-2.5 2-2.1zM19.4 71.6l4 .7 1.8 .8-1.2 1-1.1 5.1-4.5-.5-.5-.6 1.4-5z", eyes: [[49.8, 55.5, 6.7, 17.7, -10], [61.6, 51.1, 6.7, 17.7, -10]] },
+  gumdrop: { body: "M38.7 4.5l4.4-.5 4.6 .8 4.1 1.9 3.7 3.2 23.2 36.6 2.3 5 1.4 5.1 .7 6.4-.7 6.4-1.8 6.1-3.1 5.7-4.1 5.1-5.2 4.2-5.8 3.1-6 1.8-6.4 .6-6.4-.6-6-1.8-5.9-3.1-5.1-4.2-4.1-5.1-3-5.4-1.9-6.4-.7-6 .5-5.9 9-41.6 2-4.1 2.6-3.2 3.4-2.5z", shade: "M54.9 9.5l1.9 2.3 22.9 36.5 1.8 4.6 .9 3.7 .6 4.1-.1 5.9-1.4 6.4-2.3 5.5-3.7 5.4-4.1 4.2-4.5 3.3-7.3 3.2-6.4 1.2-6.4 0-5.1-.9-5.9-2.1-5.5-3.3-4.6-4.1 .5-.3 4.1 .8 5.5-1 6.4-2.6 7.3-4.5 7.2-5.7 6.5-6.4 5.5-6.9 3.5-5.9-18.1-37 1.1-3.7 .2-2.3z", light: "M37.1 4.9l2.5 0 .8 1.4-.5 2.1-1.8 2.9-3.2 3.2-3.2 2.1-2.3 .7-1.8-.1-.7-.9 .1-1.8 2.4-4.1 2.7-2.8z", eyes: [[52.1, 40.3, 9.7, 22.9, -15.2], [64.8, 35.6, 6.3, 23, -27]] },
+  peanut: { body: "M43.5 4l6.6 .7 5.8 2.2 5.4 3.8 4.1 4.7 2 3.8 1.4 4.3 1.3 11.9 1 4.3 1.6 3.8 5.8 10.5 1.4 3.8 .8 4.3 .1 6.2-1 5.7-2.1 5.5-3.2 4.9-4.1 4.3-4.8 3.4-5.6 2.4-5.7 1.3-6.1 .1-5.8-1.1-5.7-2.2-4.7-3.1-4.3-4.1-3.3-4.8-2.5-5.7-1.2-5.7-.1-6.7 1.7-9 .4-4.3-.5-4.7-2.5-9.6-.6-3.8 .2-5.2 1.2-5.2 1.5-3.4 2.2-3.3 2.5-2.9 2.8-2.3 3.4-2.1 3.4-1.4 3.8-.9z", shade: "M62.7 12.6l2.6 2.8 2.8 5.8 1.1 4.2 1 11.9 1 3.4 2.3 4.7 4.2 6.7 1.9 4.7 .9 3.8 .2 2.9-.1 6.2-.5 3.3-1.9 5.3-3.4 5.7-3.4 3.8-4.2 3.3-5.7 2.9-4.8 1.4-5.7 .6-6.2-.6-3.8-1-5.2-2.3-4.8-3.4-2.9-2.8 3.9 .8 5.2-.7 6.2-2.5 5.7-3.3 6.7-5.1 6.2-5.9 5.1-6.2 3.5-5.7-1.1-2.8-2.4-2.4-3.2-1.7-11.5-4.1-2.7-1.8-1.6-2.4-.2-2.4 .8-2.9 7.8-8 4.9-7.7 1.6-5.2z", light: "M35.9 5.4l3.2-.2 1.3 .7 .5 1-.5 3.3-2.9 4.8-4.1 4.1-4.8 3.3-4.2 1.5-1.5 0-1.4-.6-.7-1.2 .2-2.4 1.9-3.8 2.4-3.3 4.3-3.9z", eyes: [[50.9, 31.5, 8.7, 20.5, -11.9], [64.2, 26.5, 5.7, 20.3, -16.3]] },
+  saucer: { body: "M45 22.7l6.7 .1 6.7 1.9 4.3 2.5 3.5 3.1 2.8 3.5 2.5 4.5 6.8 .9 5.6 1.2 4.5 1.6 3.5 2.1 2.8 2.8 1.3 3.5-.5 3.5-2 3.5-2.6 2.8-3.5 2.8-4.5 2.8-5.1 2.6-12 4.4-13.6 3.1-13.6 1.5-12.6-.3-5.5-.7-5-1.2-4.1-1.6-3.5-2-2.8-3.1-1.1-3 .5-3.5 2-3.6 2.7-3 3.7-2.9 10.3-5.6 .7-5.1 1.5-4.5 2.6-4.5 3.1-3.5 3-2.4 3.5-2 3.5-1.4z", shade: "M66.5 31.3l.3-.2 .6 .7 1.9 2.5 2 4.5 1.6 1.5 .1 1.5-1.7 1.7-3 1.2-3.1 .5-3.1-.3 4-8.1 .7-3.5zM94.9 47.4l1.1 3-.5 3.5-2.1 3.5-4 4.1-5 3.5-6.1 3.1-7 2.9-6.6 2.1-8 2-9.1 1.5-6.5 .6-11.6 0-4.5-.2-8-1.4-4.6-1.5-3.6-2.1 4.1 1.2 5.1 .8 7 .3 6-.2 15.1-1.9 15.6-3.6 14.5-5.1 5.4-2.5 5.3-3.1 4-3 2.3-2.5 1.2-2.1zM7.3 71l.7 .5z", light: "M40.6 23.7l2.8 0 .8 .5 .7 1.5-.8 3.6-2.6 4-3.9 4-4.5 3.2-4.6 1.7-2.5-.4-1-1.4 0-1.6 .9-2.5 2.1-3.5 2.6-3 3-2.6 3.5-2.1zM22.4 47.4l.7 0-.5 .5 0 1.5 .4 .8 2 1.4 3 1.2 9.1 2 15.1 1.1-.2 1.5-2.2 3.6-3 2.5-4.9 2.5-6 2-7.9 1.5-6.5 .5-7.1-.4-4.9-1.1-3-1.5-1.6-1.7-.6-2.3 1.1-3.1 2.9-3.5 4.1-3.5 4.1-2.6z", eyes: [[53.6, 45, 7.8, 18.4, -14.5], [66.2, 40.3, 5, 18.3, -25.1]] },
+  bunny: { body: "M49.3 4.4l1.5-.4 2 1.2 1.6 2.7 1.2 3.4 1.6 8.9 .2 6-.2 6.4 .6 3 2.4 2.5 5.4 3 3.4 2.4 5.1 5.5 2.4 3.9 1.7 4 1.1 4.4 .4 4.5-.5 5.9-1.6 5.5-2.8 5.4-3.6 4.5-4.6 3.8-4.9 2.7-5.5 1.7-5.9 .7-6-.5-5.4-1.7-4.9-2.5-4.7-3.7-3.8-4.5-2.7-4.9-1.8-5.5-.7-5.9 .6-6.5 1.9-5.9 3.1-5.4 4.6-5.5-.4-2-3.4-8.4-1.8-6.9-.6-6.9 .3-3 .6-2 1.3-1.4 2-.1 2.5 1.5 2.1 2.5 4 6.9 2.1 5.5 1.7 5.9 1.5 2.1 1.8-1.6 .7-2-.4-12.4 1-8.9 1.6-4.9z", shade: "M52.7 5.4l2.1 3.5 1.9 7.4 .7 7.9-.5 8.4 .8 3.6-4.4-2.5-2.1-2.6 1.4-17.3zM31.2 15.3l.3-.5 2 2.5 2.9 4.9 2.5 6 1.7 6.4 1.4 2.5 0 .5-1.1 .9-4.5 1.9-2.4 .2-1.2-.6zM71.5 46l3.6 4.4 2.9 6 1.5 6.4 .1 5.5-1.1 6.3-2 5-3.4 5.4-3.5 3.6-4 2.9-6.4 3-4 1-6.9 .5-5.9-1-5.5-2-5.4-3.5-3.6-3.4 2.6 .7 2.5 .1 2.9-.5 4-1.3 8.4-4.6 8.7-6.8 7.4-7.9 5.3-7.9 1.3-3 1-3.5 .2-2.9-.2-2z", light: "M49.3 4.4l.6 0-3.6 6.2 1-3.7zM26 13.3l.5-.4 .2 .4-1.7 2.2 0-.7zM44.8 34.6l.5-.1 1.2 1.1 .8 1 0 .7-.5 .3-4-.5zM45.1 42.5l.8 0-.3 1-2.4 4.5-3.8 4.4-4.1 3.5-3.8 2.4-4 1.6-2.9 .1-1.8-1.1-.4-2.5 1.1-3.5 3.5-5.4 3-3.1 .2 1.6 .8 .8 3 .1 4.4-1.2z", eyes: [[59.2, 69.2, 8.2, 19.3, -12], [72.9, 64, 5.6, 19.1, -15.4]] },
+  kitty: { body: "M62.4 4.2l1.6-.1 1.5 1.2 7.4 21.3 3.7 6.4 6.2 7.4 3.1 5.9 1.5 4.8 .7 5.3-.2 5.4-1.1 5.3-3 7.4-4.4 6.4-5.3 5.4-6.9 4.6-7.5 3.1-8 1.7-8 .2-7.4-1.4-4.3-1.5-3.7-1.8-3.8-2.5-3.1-2.7-2.7-3-2.5-3.7-1.9-3.7-1.4-4.3-.9-5.3 .1-5.8 1.4-7 1.6-4.2 2-3.8 .8-3.2 .2-20.2 1.1-1.4 1.1-.3 1.1 .3 12.2 9.7 5.9-2.5 8-2.1 3.2-1.8 2.3-2.4 8.3-16z", shade: "M64.9 5.8l.1-.3 .7 .3 6.5 19.7 3.1 5.9 2.5 3.2-1.6-.8-2.6-2.4-5.1-8zM79.4 36.7l2.2 2.1 1.6 2.2 3.3 6.9 1.5 6.9-.1 6.4-1.6 7.5-3.1 6.9-3.8 5.3-5.3 5.4-6.4 4.3-7 3.1-6.3 1.6-4.3 .6-5.3 0-7.5-1.1-5.8-2-5.9-3.3-5.9-5.4 2.7 .7 3.2-.1 3.7-.8 5.2-1.9 10.3-5.5 11-7.8 10.7-9.6 7.8-9.1 3-4.6 1.6-3.4 .7-3.2z", light: "M62.4 4.2l.5-.1 0 .6-.8 1.1-4.5 14.4 .2 2.7-.3 1.6-1.1 1-2 .6-6.9-.5 2.6-1.3 3.1-3 8.1-16zM18.7 20.7l1.1-.5 0 .8-1.1 .9-.6-.1zM39.5 27.7l2.6-.3 1.9 .8 .4 1.6-.7 1.8-4.2-1.5-5.4 .2 0-.5zM16 47.4l.3 4.2 1.6 2.2 3 2.1-.6 .5-3.7 .6-1.1-.3-1.1-1.1-.4-1.8 .4-2.7z", eyes: [[59.6, 65.1, 9.4, 22.6, -11.9], [77.5, 58.4, 7, 22.5, -14]] },
+  beacon: { body: "M40 4.1l2.7 0 2.5 .9 2 1.7 1.1 2.1 .5 2-.2 2.1-2.1 4.1-.4 1.6 1.5 7.7 9-3.1 4.1-.2 18.5 4 3.1 1.6 2.4 2.3 1.3 2.1 .9 2.6 5.8 33.4-.4 3.1-1.3 3.1-2 2.5-2.6 1.9-41.7 15.7-4.1 .7-19.6-4-3.5-1.9-2.5-2.5-1.2-2.1-.8-2.6-5.7-32.9 .4-3.1 1-2.7 1.7-2.5 2.4-1.9 28.4-10.9-1.5-9.3-.7-1-3.5-3.3-.9-1.9-.4-2 .5-2.6 1.1-2.1 1.7-1.5z", shade: "M47.1 7.2l.4 0 .8 1.6 .3 2-.2 2.6-2.5 4.7 1.5 8.2 0 2 .5 .6 .1 1.5 .5 1-1.2 .4-1.3-.4-.3-.5-1.9-10.3-4.1-1.5-3.2-2.6 3.1-.9 3.2-2.2 2.5-2.6zM84.2 30.9l1.2 1.1 1.5 3.6 5.7 32.4 0 2.6-1 3.6-1 1.5-3.1 3.2-4.2 1.9-40.6 15-4.2 0-16.4-3.6-3.6-1.4-2.6-2.2 .5 .4 17.5 3.4 3.8-1.2 5-3.4 1-1.3-5.4-30.3 .2-.6 3.1-3.4 40.2-15.1 2-3.6z", light: "M38.5 4.7l2 0-.1 1-.8 1.4-2.6 2.2-1 .4-1.1-.1-.1-.8 .7-1.6 1.5-1.6zM55 23.7l1.1 .1-1.6 .6-.9-.2 .9 0zM52.4 24.7l1 0-3 1.2-.9-.1 2.4-.6zM48.3 26.3l1 0-1.5 .6zM40 29.4l1.1 0-3.1 1.2-.9-.2 2.5-.5zM35.9 30.9l1 0-3 1.2-.9-.1 2.5-.6zM31.8 32.5l1 0-3 1.2-.9-.2 2.4-.5zM40.2 33l.4-.4 1-.1 1.6 .8 3 .7-1.5 .5-4.1 0-.9-1zM27.7 34l1 0-3 1.2-1-.2 2.5-.5zM23.6 35.6l1 0-3 1.1-1-.1 2.5-.5zM19.4 37.1l1 0-2.4 .8-.5 .7 15.4 3.3 .5 .3 .3 1.1-1.1 2.6-3.3 3.3-3.1 1.5-17.5-3.6-.6-1.2 .5-1.6 3.2-3.7 2.1-1.4 2.5-1.1 1 0 .6-.5 1 0z", eyes: [[55.5, 65.3, 8.4, 22.1, -10], [74.2, 58.3, 8.4, 22.1, -10]] },
+  plus: { body: "M44.6 4.3l3.3-.1 11.9 2.5 2.5 1.3 1.3 1.4 .7 1.6 2.1 11.4 4.1-1.2 2.1 0 12.3 2.6 2.8 1.6 1.2 1.5 .7 1.5 3.8 21.6-.5 3.1-1 1.5-1.3 1.3-17 6.6 3.4 20.4-.4 2.5-1.2 2.1-2.3 1.6-19 6.9-2-.2-11.9-2.5-2.5-1.3-1.3-1.4-.7-1.6-2.1-11.4-4.1 1.2-2.1 0-12.3-2.6-2.8-1.6-1.2-1.5-.7-1.5-3.8-21.6 .5-3.1 1-1.5 1.3-1.3 17-6.6-3.4-20.4 .2-2 1.1-2.2 2.6-2z", shade: "M63.2 9.4l.7 .6 .5 1.5 2.1 13.3 .6 .6 0 2.5 .5 .5 .1 2.6 .5 .5 .1 2.1-.8 3.1 19-7.1 1-1.2 1-2.1 1.1 2.1 .4 2.6 3.2 18 0 3.1-1 2-2.2 2.1-15.9 5.8-.8 .8 3.6 19.5-.1 2.6-1.5 2.6-2.2 1.6-16.4 6.1-2.1 .6-2.5 0-12.4-2.7-2.2-1.5 12.5 2.5 2.4-1 2.7-2-3.9-22.1-3.8 3.5-1 .4-2.6 .5-1.5 1-2.6 .5-1.5 1-2.6 .4-1.5 1-4.6 1.5-2.5 0-11.9-2.6-2.7-1.6 12.4 2.3 2.6-.9 2.4-1.9-3.4-20.5 .3-.5 1.7-1.8 18.6-6.9 .3-.6-.7-1-3.8-22.1 2.1-2.1 16.4-6.1 .6-.5z", light: "M28.4 10.5l1.1 .5 10.2 2.1 .5 .4-.1 1.1-1.9 2.3-2.1 1-12.3-2.5-.1-1.3 1-1.6 1.2-1zM11.4 43.3l11.4 2.2 1 .6 0 .8-1.5 2.3-2.6 1.4-12.3-2.6-.2-1.1 .6-1 2.2-2.1z", eyes: [[54.5, 53.1, 6.1, 15.9, -10], [64.5, 49.4, 6.1, 15.9, -10]] },
+  magnet: { body: "M71.9 4.2l1.2-.2 12.1 2.6 .5 .3 .6 1 6.2 35.6 .6 5.8-.1 5.7-.7 5.8-1.5 5.7-2.2 5.8-4.2 7.3-5.5 6.5-6.5 5-7.1 3.4-6.3 1.3-6.3 0-15.2-3.1-5.2-1.8-5.2-3-4.6-4.1-4-5.2-2.9-5.8-2.4-7.8-6.4-36.2 25-9.5 13.1 2.9 .5 .9 6.3 35.3 1.8-3.9 .5-4.7-6.3-36.1 .4-.6z", shade: "M86.2 9.5l.5 1 5.8 33 .6 4.7 0 5.2-.6 5.8-2.1 8.4-3.1 7.3-3.7 5.8-6.3 6.8-5.7 4.1-5.8 2.7-6.8 1.5-6.3 0-15.2-3.1-5.7-2-5.2-3.2-5.9-5.8 .1-.7 11.5 2.5 .3-3.4-1.9-13.6-5.7-32.4 1-.1 18.3-6.9 .9-.9 .4-1 6.1 35 1.6 2.1 .1 .6 4 4.7 3.2 1.1 3.6-.6 3.2-1.9 2.4-2.8 1.9-4.2 .6-3.7-6.4-36.6 19.3-7.1 .8-.8z", light: "M53.6 54.5l.7-.4 12 2.8 .6 1.8-.6 2.1-2.1 2.4-2.6 1-1.5 0-6.3-1.4-1.6-2.6-.2-2.1z", eyes: [[59.6, 82.1, 6.1, 15.9, -10], [72, 77.5, 6.1, 15.9, -10]] },
+  acorn: { body: "M47.6 4l2.1 .6 1.3 1.5 .4 1.5-.4 5.2 .3 .3 8.8-.1 7.7 1 7.3 2.1 5.7 2.9 3.6 2.9 2.6 3 1.8 3.4 .9 3.7 0 4.1-1 3.6-1.7 2.2-3.9 3 2.9 8.3 .9 8.3-.9 8.3-2.7 7.7-4.2 6.8-2.9 3.1-3.2 2.6-6.7 3.8-3.7 1.2-4.1 .8-7.2 0-7.3-1.7-7-3.6-5.9-5.1-4.8-6.3-3.3-7.3-1.8-7.7-.1-8.3-4.5-1.5-2.6-1.7-2.6-4.1-1.1-4.1 0-4.2 1.2-4.1 2.2-4.1 2.8-3.7 5.2-4.6 6.3-3.8 7.2-3.2 8.3-2.3 .9-8.3 1.2-1.4z", shade: "M50.6 6.1l.1-.5 .6 2-.6 5.7 .2 2.1-1.2 .2-1.2-.7 .5-6.8zM85.8 23.7l1.7 2 1.6 3.7 .6 2.6-.1 4.1-.5 2.6-1.1 2.1-2.1 2-2.9 2.1 1.4 3.1 1.6 5.2 .9 8.8-.5 5.7-1.4 5.7-2.2 5.1-2.6 4.2-5.1 5.7-5.2 3.6-4.7 2.2-6.2 1.5-7.7 .1-5.7-1.2-6.8-3-4.6-3.2-4.2-4.2 2.1 1 2.1 .3 3.1-.3 3.1-.9 6.4-3.1 6.5-4.6 6.6-5.8 5.9-6.4 5.6-7.9 4-7.4-2.4 .4-.5 .5-1.1 0-.5 .5-1 0-.5 .5-1.1 0-.5 .5-1 0-.5 .6-1.6-.1-.5 .5-1.6 0-.5 .5-3.6 .5-.5 .5-2.1-.1-.5 .6-2.1-.1-.5 .7-3.1-.2-.5 .5-3.1 0-.5 .7-4.7-.2-.5 .7-15.6-.3 0-.3 8.3-.6 11.4-2.4 11.4-3.8 10.5-4.8 9.2-5.7 6-5.2 2.2-2.6 1.6-2.9 .5-1.7z", light: "M46 4.5l1.1-.1 0 .6-1.5 1.6-1.1 .2-.1-.7zM38.5 15.9l5 0 3.3 1.6 1.6 3.1 .1 3.1-.9 3.1-1.9 3.1-3.2 3.6-4 3.1-3.6 2.1-8.5 3.2-4.1 .7-4.2 .1-3.1-.5-2.6-1.5-1.1-2 .1-2.1 .5-1.5 2.1-3.7 4.1-4.6 3.7-3.1 5.1-3.2 6.3-3z", eyes: [[63.6, 63.3, 9.6, 22.7, -11.9], [79.5, 57.3, 6.5, 22.5, -15.5]] },
+  pebbles: { body: "M47.3 4.5l2.7-.4 2.7 .1 13.7 3 4.3 2.1 3.3 3.4 1.3 2.2 1 2.8 2 12-.5 4.3-3.1 7.7 .2 .5 8.4 1.9 2.7 1 3.3 2.1 2.7 2.8 2.4 4.3 1.4 6.5 .1 4.4-.8 3.8-1.3 2.7-2 2.8-2.4 2.2-2.7 1.6-45.5 17-3.3 .6-3.2-.2-19.2-4.2-4.9-2.8-3.4-3.8-1.9-4.4-1.3-7.7 .2-3.2 .8-2.8 1.3-2.7 2-2.7 3.2-2.8 7.9-3.8 2.5-2.2-.4-1.6-5.4-6.1-1.8-3.8-2.3-12.5 .2-3.3 .7-2.7 2.6-4.4 2.2-2 2.2-1.4z", shade: "M73.2 12.2l.4 0 1.5 2.2 1.2 3.3 1.8 11.4-.2 4.4-3.3 7.6 0 1.1 .6 1.1-1.2 1.3-26.8 10.1-3.2 .5-5.8-.4-15.2-3.3-1.4-.5-3.5-3.8 .2-.3 1.6 .2 10.9 2.2 2.8-.5 4.4-2.2 5-3.8 .1-.6-1.5-8.7 4-4.5 24.2-9.2 2.4-3.8zM90.9 48.8l2.8 3.8 1 2.8 1.2 6 0 4.3-1.1 3.9-1.7 3.2-3.8 3.9-2.7 1.7-42.1 15.8-5.5 1.6-3.8 0-18-3.8-4.9-2.1-3.4-2.9 17.6 3.8 2.7-.2 3.3-1.2 4.3-2.6 4.4-3.6-.4-3.8 4.4-4.9 42.5-16 2.1-3.1 1.1-2.8 .5-3.3z", light: "M45.6 5.1l1.5 0-.4 .2-22.9 8.5 11.4 2.5 .6 .8 0 1.6-1.5 2.8-1.9 2.2-2.8 2.1-3.1 1.2-13.2-2.8-.1-2.2 1.2-2.2 1.7-2.2 2.7-2.2 2.2-1.1 2.2-.5 .5-.5 2.8-.6 1.6-1.1 2.7-.5 1.7-1.1 2.7-.6 1.6-1 2.8-.6 1.6-1.1 2.8-.5zM21.6 53.2l15.8 3.6 1.2 .7-.1 .9-.8 .8-3.1 1.6-1.3 3.8-3 3.8-3.3 2.5-3.3 1.4-18-3.6-.6-1.3 .6-2.2 1.6-2.7 1.7-1.8 3.8-2.8 5.5-2.2z", eyes: [[51.2, 34.1, 6.9, 18.1, -10], [66.4, 28.4, 6.9, 18.1, -10]] },
+  cushion: { body: "M64.2 4.4l3.3-.4 2.8 .2 3.9 .8 2.8 1.1 2.7 1.7 2.4 2.1 1.9 2.4 1.5 2.8 1.2 3.9 7.1 40.6-.1 5-1.4 4.5-1.6 2.9-1.9 2.2-2.2 1.9-2.8 1.7-45.6 17.1-3.4 .9-3.4 .2-4.5-.7-3.4-1.2-3.3-2-2.9-2.7-2.3-3.4-1.5-3.9-7.3-41.7 .1-5 1.4-4.5 1.6-2.9 1.9-2.2 2.2-1.9 2.8-1.7z", shade: "M82.1 10l2.9 4 1.6 4.5 7.3 42.2-.5 5.1-1.1 3.3-1.7 2.9-4.6 4.5-3.3 1.7-46.8 17.4-5.6 .2-4-.7-3.3-1.2-3.4-2.2-1.7-1.8 .6 .4 3.3 .2 4.5-1.2 5.1-2.8 5.3-4.4-6.9-39.4 5-5.7 43.9-16.4 2.3-3.6 1.1-2.8 .5-3.6z", light: "M62.3 4.9l1.8 .1-43.4 16.1 1.1 .4 .8 .9 .1 1.7-1.6 3.4-2.6 3-3.4 2.7-3.4 1.5-3.4-.2-.8-.8-.2-1.2 .4-1.6 1.7-2.9 3.4-3.5 2.3-1.6 3.4-1.6 5.6-1.8 .6-.5 1.1 0 .5-.6 2.3-.5 .6-.6 1.1 0 .6-.6 2.2-.5 .6-.6 1.1 0 .6-.6 2.2-.5 .6-.6 1.1 0 .6-.5 2.2-.6 .6-.6 1.1 0 .6-.5 2.2-.6 .6-.5 1.1-.1 .6-.5 2.2-.6 .6-.5 1.1-.1 .6-.5 2.2-.6 .6-.5 1.1 0 .6-.6 2.2-.6 .6-.5 1.1 0z", eyes: [[51.1, 57.2, 8.4, 22.1, -10], [69.9, 50.1, 8.4, 22.1, -10]] },
+  ring: { body: "M48.1 4.3l8-.1 7.8 1.8 7.3 3.5 6.7 5.4 5.2 6.7 4.1 8.3 2.3 8.9 .7 9-1 9.5-2.5 8.9-4.1 8.3-5.3 7.3-6.6 6.1-7.3 4.5-7.8 2.7-8.4 .9-7.2-.8-7.3-2.5-6.7-4.1-5.6-5.3-4.5-6.5-3.5-7.8-2-8.4-.6-8.4 .9-8.9 2.2-8.4 3.5-7.8 4.9-7.2 5.8-6.1 6.3-4.5 7.1-3.3zM50.5 33.8l2.3-.3 1.7 .4 1.6 1.1 2 2.2 1.3 2.8 .8 2.7 .4 3.4-.1 3.3-1.4 6.2-3 5.6-2.2 2.4-2.2 1.6-2.3 1-2.2 .3-1.7-.4-1.6-1.1-2.8-3.7-1.5-5.2-.1-5.5 1.2-5.6 2.4-5 3.6-4z", shade: "M76.2 14.9l1.1-.5 3.4 3.8 2.8 3.9 2.3 4.5 1.6 3.9 1.6 5.6 1.1 8.3-.4 10.1-1.3 6.1-2.6 7.8-4.6 8.3-4.4 5.6-6.2 5.7-6.1 3.8-7.2 2.9-6.2 1.1-7.8-.1-7.2-1.7-3.9-1.6-4-2.2-5.5-4.5-2.8-3.4 1.7-.6 2.4-2.1 2-2.8 1.2-2.8 1.2-5 1.1-13.4 1.4-7.8 2.5-7.8 3.8-7.3 3.3-4.5 3.4-3.4 3.9-3.1 4.4-2.6 3.9-1.5 4.5-1.1 12.3-.9zM50.5 33.8l.6-.3 2.8 0 1.6 .9 2.7 2.8 3 1.4 3.3 .5 6.1 .2 3.9 .9 1.7 1 1.7 1.6 2.1 4.4 .7 4.5-.3 5-1.2 5-1.9 4.5-2.8 4.2-3.3 3.6-3.9 2.8-3.9 1.7-3.4 .6-3.3-.1-3.4-1.1-2.5-1.7-2.5-3-3.6-7-2.9-3.4-2.1-5-.6-5.6 .6-4.4 1-3.4 2.3-4.4 1.4-2.1 2.3-2.2 2.7-1.7z", light: "M41.1 5.9l.5 .1 .2 .5-.3 .6-12.4 13.3-13.1 18.1-2.3 2.1-1.1 0-.2-1.2 .2-2.8 1.6-5 4.6-8.3 3.9-5.1 4.4-4.4 4.5-3.4 5-2.8zM60.5 53.3l1.2-.3 1.1 .6 1.1 1.3 .8 1.8-.2 3.3-1.5 2.8-2 1.7-2.6 1-7.3 .2 2.2-1.4 2.6-2.6z", eyes: [[56.2, 84.6, 5.3, 13.3, -6.8], [71.7, 78.8, 5.1, 13.4, -6.5]] },
+  gem: { body: "M57 9.3l2.9-.4 14.9 3.5 19.6 14.1 1 1.4 .6 1.6-.5 2.6-27.1 56.5-1.6 1.8-2.1 .7-15.9-3.4-42.9-30.7-1.3-1.6-.6-1.6 .5-2.6 12-25.2 1.1-1.5 1.5-1z", shade: "M75.7 14.6l.1-.4 .6 .2 16.9 12.3 1.1 .7 .5-.2 .5 .7 .6 2.6-.5 1.6-26.4 55.1-1.2 2.1-1.1 1.1-1.6 .6-2.1 0-14.3-3.3-42.8-30.7 1.5-.2 11.6 2.5 2.2-.7 2.8-2.6 11.9-24.9 .6-.8 38.2-14.2z", light: "M19.1 23.6l1.1-.4 .5 .5 11.7 2.2 1 .9-.2 .5-1.8 2.7-11.7 24.4-1.6 .6-13.3-2.8-.5-.5 12.1-25.4 1.2-1.7z", eyes: [[51.4, 42.9, 6.7, 17.7, -10], [66.1, 37.4, 6.7, 17.7, -10]] }
+};
+var PICKER_SHAPES = Object.keys(CHARACTERS);
+var PICKER_COLUMNS = 6;
+var DEFAULT_SHAPES = ["star", "moon", "gumdrop", "peanut", "bunny", "kitty", "acorn"];
+var FALLBACK_SHAPE = "gumdrop";
+var MAIN_LOOK = Object.freeze({ shape: "whale", color: "deepseek" });
+var CHARACTER_COLORS = ["black", "brown", "red", "orange", "yellow", "green", "cyan", "blue", "violet", "magenta", "gray", "aurora"];
+var DEFAULT_COLORS = CHARACTER_COLORS.filter((color) => !["black", "gray", "brown"].includes(color) && !GRADIENTS[color]);
+var isColor = (color) => isHex(color) || Object.hasOwn(INKS, color);
+function fnv1a(text) {
+  let value = 2166136261;
+  for (let index = 0; index < text.length; index += 1) value = Math.imul(value ^ text.charCodeAt(index), 16777619);
+  return value >>> 0;
+}
+function defaultColor(id) {
+  const t2 = fnv1a(id) + 1831565813 | 0;
+  let n = Math.imul(t2 ^ t2 >>> 15, 1 | t2);
+  n = n + Math.imul(n ^ n >>> 7, 61 | n) ^ n;
+  return DEFAULT_COLORS[Math.floor(((n ^ n >>> 14) >>> 0) / 4294967296 * DEFAULT_COLORS.length)];
+}
+function defaultShape(id) {
+  let value = fnv1a(id) | 0;
+  value = Math.imul(value ^ value >>> 16, 73244475);
+  value = Math.imul(value ^ value >>> 13, 3266489909);
+  return DEFAULT_SHAPES[((value ^ value >>> 16) >>> 0) % DEFAULT_SHAPES.length];
+}
+var colorOf = (bot) => isColor(bot?.color) ? bot.color : bot?.id ? defaultColor(String(bot.id)) : "black";
+function lookOf(bot) {
+  const avatar = bot?.avatar ?? {};
+  return {
+    shape: hasShape(avatar.shape) ? avatar.shape : bot?.id ? defaultShape(String(bot.id)) : FALLBACK_SHAPE,
+    image: avatar.image,
+    color: colorOf(bot)
+  };
+}
+var SHAPES = {};
+for (const [id, character] of Object.entries(CHARACTERS)) {
+  const layers = [
+    ...(character.paints ?? []).map(([d, fill2, opacity]) => `<path d="${d}" fill="${fill2}" fill-opacity="${opacity}"/>`),
+    `<path d="${character.shade}" fill="#000" fill-opacity=".14"/>`,
+    `<path d="${character.light}" fill="#fff" fill-opacity=".16"/>`
+  ].join("");
+  SHAPES[id] = { label: character.label ?? id[0].toUpperCase() + id.slice(1), size: 100, path: character.body, layers, eyes: character.eyes };
+}
+var hasShape = (id) => typeof id === "string" && Object.hasOwn(SHAPES, id);
+var shapeId = (id) => hasShape(id) ? id : FALLBACK_SHAPE;
+var shapeOf = (id) => SHAPES[shapeId(id)];
+function bodyOf(def, paint, flat = false) {
+  if (def.path) return `<g fill-rule="evenodd"><path d="${def.path}" fill="${paint}"/>${flat ? "" : def.layers}</g>`;
+  try {
+    return def.body(paint);
+  } catch {
+    return "";
+  }
+}
+var eyeMarkup = ([cx, cy, w, h27, tilt]) => `<g transform="translate(${cx} ${cy}) rotate(${tilt})"><rect class="bt-eye" x="${-w / 2}" y="${-h27 / 2}" width="${w}" height="${h27}" rx="${w / 2}"/></g>`;
+var happyEyeMarkup = ([cx, cy, w, h27, tilt]) => `<g transform="translate(${cx} ${cy}) rotate(${tilt})"><path class="bt-eye-happy" opacity="0" d="M${-w * 0.62} ${h27 * 0.14}Q0 ${-h27 * 0.42} ${w * 0.62} ${h27 * 0.14}" fill="none" stroke="#000" stroke-width="${w * 0.5}" stroke-linecap="round"/></g>`;
+var maskBox = (size) => `maskUnits="userSpaceOnUse" x="${-size}" y="${-size}" width="${size * 3}" height="${size * 3}"`;
+var holes = (def, eyes) => `<rect x="${-def.size}" y="${-def.size}" width="${def.size * 3}" height="${def.size * 3}" fill="#fff"/>${eyes}`;
+var MASK_ID = "%MASK%";
+var markSerial = 0;
+var nextMarkSerial = () => markSerial += 1;
+var markupCache = /* @__PURE__ */ new Map();
+function characterMarkup(shape, color) {
+  const key = `${shape}|${color}`;
+  let markup = markupCache.get(key);
+  if (markup === void 0) {
+    const def = shapeOf(shape);
+    const eyes = `<g class="bt-gaze"><g class="bt-eyes" fill="#000">${def.eyes.map(eyeMarkup).join("")}${def.eyes.map(happyEyeMarkup).join("")}</g></g>`;
+    const stops = GRADIENTS[color];
+    const gradient = stops ? `<linearGradient id="${MASK_ID}g" gradientUnits="userSpaceOnUse" x1="18" y1="10" x2="78" y2="92">${stops.map(([offset, value]) => `<stop offset="${offset}" stop-color="${value}"/>`).join("")}</linearGradient>` : "";
+    const body = `<g mask="url(#${MASK_ID})">${bodyOf(def, stops ? `url(#${MASK_ID}g)` : inkFill(color))}</g>`;
+    markup = `<defs>${gradient}<mask id="${MASK_ID}" ${maskBox(def.size)}>${holes(def, eyes)}</mask></defs><g class="bt-b">${def.wrap ? `<g transform="${def.wrap}">${body}</g>` : body}</g>`;
+    markupCache.set(key, markup);
+  }
+  return markup;
+}
+var svgUrl = (inner, size) => `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}">${inner}</svg>`)}")`;
+var maskCache = /* @__PURE__ */ new Map();
+function maskOf(shape) {
+  let mask = maskCache.get(shape);
+  if (mask === void 0) {
+    const def = shapeOf(shape);
+    const body = `<g mask="url(#e)">${bodyOf(def, "#000", true)}</g>`;
+    mask = svgUrl(`<mask id="e" ${maskBox(def.size)}>${holes(def, def.eyes.map(eyeMarkup).join("").replaceAll('class="bt-eye"', 'fill="#000"'))}</mask>${def.wrap ? `<g transform="${def.wrap}">${body}</g>` : body}`, def.size);
+    maskCache.set(shape, mask);
+  }
+  return mask;
+}
+var DEFAULT_MASK = maskOf(FALLBACK_SHAPE);
+
+// src/client/mark.js
+var import_react5 = require("react");
+var STATES = ["idle", "thinking", "searching", "working", "sending", "orbit", "waiting", "alert", "done"];
+function useGaze(ref, enabled) {
+  (0, import_react5.useEffect)(() => {
+    if (!enabled) return void 0;
+    let frame = 0;
+    let point = null;
+    const place = () => {
+      frame = 0;
+      const node = ref.current;
+      if (!node || !point) return;
+      const box = node.getBoundingClientRect();
+      const clamp = (value) => Math.max(-1, Math.min(1, value));
+      node.style.setProperty("--bt-gx", clamp((point.x - box.left - box.width / 2) / 160).toFixed(2));
+      node.style.setProperty("--bt-gy", clamp((point.y - box.top - box.height / 2) / 160).toFixed(2));
+    };
+    const onMove = (event) => {
+      point = { x: event.clientX, y: event.clientY };
+      if (!frame) frame = requestAnimationFrame(place);
+    };
+    const onLeave = () => {
+      point = null;
+      ref.current?.style.setProperty("--bt-gx", "0");
+      ref.current?.style.setProperty("--bt-gy", "0");
+    };
+    window.addEventListener("pointermove", onMove, { passive: true });
+    document.documentElement.addEventListener("pointerleave", onLeave);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("pointermove", onMove);
+      document.documentElement.removeEventListener("pointerleave", onLeave);
+    };
+  }, [enabled]);
+}
+var FIDGETS = ["hop", "sway", "stretch", "look"];
+function BotMark({ bot, look: given, size = 36, state = "idle", live = false, gaze = false, pokeable = false, label }) {
+  const look = given ?? lookOf(bot);
+  const ref = (0, import_react5.useRef)(null);
+  const maskId = (0, import_react5.useRef)("");
+  if (maskId.current === "") maskId.current = `bt-mark-${nextMarkSerial()}`;
+  const [poked, setPoked] = (0, import_react5.useState)(false);
+  const [broken, setBroken] = (0, import_react5.useState)("");
+  const image = look.image && look.image !== broken ? look.image : void 0;
+  useGaze(ref, gaze);
+  const common = {
+    ref,
+    className: poked ? "bt-mark bt-mark-poke" : "bt-mark",
+    "data-shape": image ? "image" : shapeId(look.shape),
+    "data-state": STATES.includes(state) ? state : "idle",
+    "data-live": live ? "" : void 0,
+    "data-fidget": live ? FIDGETS[fnv1a(`${bot?.id ?? ""}:fidget`) % FIDGETS.length] : void 0,
+    "data-gaze": gaze ? "" : void 0,
+    "data-poke": pokeable ? "" : void 0,
+    style: { width: size, height: size, ...live ? { "--bt-delay": `${-(fnv1a(String(bot?.id ?? "")) % 5e3) / 1e3}s`, "--bt-fidget-delay": `${-(fnv1a(`${bot?.id ?? ""}:when`) % 9e3) / 1e3}s` } : {} },
+    role: label ? "img" : void 0,
+    "aria-label": label,
+    "aria-hidden": label ? void 0 : true,
+    onClick: pokeable ? () => setPoked(true) : void 0,
+    onAnimationEnd: poked ? (event) => {
+      if (/^bt-poke/.test(event.animationName)) setPoked(false);
+    } : void 0
+  };
+  if (image) return (0, import_react5.createElement)("span", common, (0, import_react5.createElement)("img", { className: "bt-mark-img", src: image, alt: "", draggable: false, onError: () => setBroken(image) }));
+  const box = shapeOf(look.shape).size;
+  return (0, import_react5.createElement)("span", common, (0, import_react5.createElement)("svg", { viewBox: `0 0 ${box} ${box}`, dangerouslySetInnerHTML: { __html: characterMarkup(look.shape, look.color).replaceAll(MASK_ID, maskId.current) } }));
+}
+
+// src/client/product-brand.js
+var import_react6 = require("react");
+function ProductBrandMark({ size = 24 }) {
+  return (0, import_react6.createElement)("span", { className: "bt-brand-whale" }, (0, import_react6.createElement)(BotMark, { look: MAIN_LOOK, size }));
+}
+
+// src/client/product-card.js
+var import_react7 = require("react");
+var capitalize = (word) => word[0].toUpperCase() + word.slice(1);
+function Row({ label, hint, stack = false, children }) {
+  return (0, import_react7.createElement)(
+    "label",
+    { className: stack ? "bt-set-row bt-bs-row bt-bs-stack" : "bt-set-row bt-bs-row" },
+    (0, import_react7.createElement)(
+      "span",
+      { className: "bt-set-copy" },
+      (0, import_react7.createElement)("span", { className: "bt-bs-label" }, label),
+      hint ? (0, import_react7.createElement)("span", { className: "bt-set-hint" }, hint) : null
+    ),
+    children
+  );
+}
+function Card({ title, children }) {
+  return (0, import_react7.createElement)(
+    "section",
+    { className: "bt-set-section" },
+    title ? (0, import_react7.createElement)("h3", null, title) : null,
+    (0, import_react7.createElement)("div", { className: "bt-set-card" }, children)
+  );
+}
+function SwitchRow({ label, hint, on, disabled, onChange }) {
+  return (0, import_react7.createElement)(
+    "div",
+    { className: "bt-set-row bt-bs-row" },
+    (0, import_react7.createElement)(
+      "span",
+      { className: "bt-set-copy" },
+      (0, import_react7.createElement)("span", { className: "bt-bs-label" }, label),
+      hint ? (0, import_react7.createElement)("span", { className: "bt-set-hint" }, hint) : null
+    ),
+    (0, import_react7.createElement)(
+      "button",
+      {
+        type: "button",
+        role: "switch",
+        className: "bt-switch",
+        "aria-checked": on,
+        "aria-label": label,
+        disabled,
+        onClick: () => onChange(!on)
+      },
+      (0, import_react7.createElement)("span", { className: "bt-switch-knob", "aria-hidden": true })
+    )
+  );
+}
+function ShapeRing({ shape, size }) {
+  const maskId = (0, import_react7.useRef)("");
+  if (maskId.current === "") maskId.current = `bt-product-ring-${crypto.randomUUID()}`;
+  const def = shapeOf(shape);
+  const unit = def.size / size;
+  const markup = `<defs><mask id="${maskId.current}" ${maskBox(def.size)}>${holes(def, `<g stroke="#000" stroke-width="${6 * unit}" stroke-linejoin="round">${bodyOf(def, "#000", true)}</g>`)}</mask></defs><g mask="url(#${maskId.current})" stroke="currentColor" stroke-width="${8 * unit}" stroke-linejoin="round">${bodyOf(def, "currentColor", true)}</g>`;
+  return (0, import_react7.createElement)("svg", {
+    className: "bt-ring",
+    viewBox: `0 0 ${def.size} ${def.size}`,
+    "aria-hidden": true,
+    dangerouslySetInnerHTML: { __html: markup }
+  });
+}
+function CharacterGrid({ look, hasPhoto = false, onShape, onColor }) {
+  const shapes = [...PICKER_SHAPES, ...Object.keys(SHAPES).filter((id) => !Object.hasOwn(CHARACTERS, id))];
+  if (!shapes.includes(look.shape)) shapes.push(look.shape);
+  const rows2 = [];
+  for (let index = 0; index < shapes.length; index += PICKER_COLUMNS) rows2.push(shapes.slice(index, index + PICKER_COLUMNS));
+  return (0, import_react7.createElement)(
+    import_react7.Fragment,
+    null,
+    (0, import_react7.createElement)(
+      "div",
+      { className: "bt-shapes", role: "group", "aria-label": t("Character shape") },
+      rows2.map((row, index) => (0, import_react7.createElement)("div", { key: index, className: "bt-shape-row" }, row.map((id) => (0, import_react7.createElement)("button", {
+        key: id,
+        type: "button",
+        className: "bt-shape",
+        "aria-label": t(shapeOf(id).label),
+        title: t(shapeOf(id).label),
+        "aria-pressed": !hasPhoto && look.shape === id,
+        onClick: () => onShape(id)
+      }, (0, import_react7.createElement)(ShapeRing, { shape: id, size: 36 }), (0, import_react7.createElement)(BotMark, { look: { shape: id, color: look.color }, size: 36 })))))
+    ),
+    (0, import_react7.createElement)(
+      "div",
+      { className: "bt-colors", role: "group", "aria-label": t("Character color") },
+      CHARACTER_COLORS.map((color) => (0, import_react7.createElement)("button", {
+        key: color,
+        type: "button",
+        className: "bt-color",
+        "aria-label": t(capitalize(color)),
+        title: t(capitalize(color)),
+        "aria-pressed": look.color === color,
+        onClick: () => onColor(color)
+      }, (0, import_react7.createElement)("span", { style: { background: paintCss(color) } })))
+    )
+  );
+}
+
+// src/client/motion.js
+var import_react8 = require("react");
+var reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+var noHover = () => window.matchMedia?.("(hover: none)").matches === true;
+var viewBottom = () => window.visualViewport ? window.visualViewport.height + window.visualViewport.offsetTop : window.innerHeight;
+function useViewport() {
+  const [tick, setTick] = (0, import_react8.useState)(0);
+  (0, import_react8.useEffect)(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return void 0;
+    const bump = () => setTick((value) => value + 1);
+    viewport.addEventListener("resize", bump);
+    viewport.addEventListener("scroll", bump);
+    return () => {
+      viewport.removeEventListener("resize", bump);
+      viewport.removeEventListener("scroll", bump);
+    };
+  }, []);
+  return tick;
+}
+function springEasing(stiffness, damping) {
+  const w0 = Math.sqrt(stiffness);
+  const zeta = damping / (2 * w0);
+  const at = (t2) => {
+    if (zeta >= 1) return 1 - (1 + w0 * t2) * Math.exp(-w0 * t2);
+    const wd = w0 * Math.sqrt(1 - zeta * zeta);
+    return 1 - Math.exp(-zeta * w0 * t2) * (Math.cos(wd * t2) + zeta * w0 / wd * Math.sin(wd * t2));
+  };
+  let end = 0.05;
+  while (end < 2 && Math.abs(1 - at(end)) > 1e-3) end += 0.01;
+  const points = Array.from({ length: 25 }, (_, index) => (index === 24 ? 1 : at(end * index / 24)).toFixed(4));
+  return { duration: Math.round(end * 1e3), easing: `linear(${points.join(",")})`, stiffness, damping };
+}
+var SPRING_SHAPE = springEasing(400, 31.2);
+var SPRING_TAP = springEasing(900, 48);
+var SPRING_LIST = springEasing(484, 35.2);
+var SPRING_STRETCH = springEasing(320, 20);
+var SPRING_POP = springEasing(500, 22);
+var SPRING_LEAD = springEasing(784, 48.2);
+var SPRING_TRAIL = springEasing(289, 29.2);
+var QUICK_EDGES = { lead: springEasing(900, 51), trail: springEasing(400, 34) };
+var spring = (curve, ...properties) => properties.map((property) => `${property} ${curve.duration}ms ${curve.easing}`).join(",");
+function liveSprings(apply2) {
+  const values = /* @__PURE__ */ new Map();
+  let frame = 0;
+  let last = 0;
+  const read = () => Object.fromEntries([...values].map(([key, value]) => [key, value.x]));
+  const step = (now) => {
+    const dt = Math.min(0.5, Math.max(1e-3, (now - last) / 1e3));
+    last = now;
+    const steps = Math.ceil(dt * 240);
+    const h27 = dt / steps;
+    let moving = false;
+    for (const value of values.values()) {
+      for (let index = 0; index < steps; index += 1) {
+        value.v += (-value.k * (value.x - value.to) - value.c * value.v) * h27;
+        value.x += value.v * h27;
+      }
+      if (Math.abs(value.x - value.to) < 0.05 && Math.abs(value.v) < 1) {
+        value.x = value.to;
+        value.v = 0;
+      } else moving = true;
+    }
+    apply2(read());
+    frame = moving ? requestAnimationFrame(step) : 0;
+  };
+  return {
+    target: () => values.size ? Object.fromEntries([...values].map(([key, value]) => [key, value.to])) : null,
+    set(targets2, curves, jump) {
+      for (const [key, to] of Object.entries(targets2)) {
+        const value = values.get(key);
+        const { stiffness: k, damping: c } = curves[key];
+        if (!value || jump) values.set(key, { x: to, v: 0, to, k, c });
+        else Object.assign(value, { to, k, c });
+      }
+      if (jump) {
+        cancelAnimationFrame(frame);
+        frame = 0;
+        apply2(read());
+        return;
+      }
+      if (!frame) {
+        last = performance.now();
+        frame = requestAnimationFrame(step);
+      }
+    },
+    stop: () => cancelAnimationFrame(frame)
+  };
+}
+var CHOSEN = '[aria-pressed="true"],[aria-selected="true"],[aria-current="page"]';
+function useGlide(key, { axis = "x", selector = CHOSEN, lead = SPRING_LEAD, trail = SPRING_TRAIL, box: given } = {}) {
+  const ownBox = (0, import_react8.useRef)(null);
+  const box = given ?? ownBox;
+  const thumb = (0, import_react8.useRef)(null);
+  const own = (0, import_react8.useRef)(null);
+  if (own.current === null) {
+    own.current = {
+      key: void 0,
+      node: null,
+      observer: null,
+      springs: liveSprings(({ start, end }) => {
+        const knob = thumb.current;
+        if (!knob) return;
+        knob.style.transform = axis === "x" ? `translateX(${start}px)` : `translateY(${start}px)`;
+        knob.style[axis === "x" ? "width" : "height"] = `${Math.max(0, end - start)}px`;
+      })
+    };
+  }
+  const place = (jump) => {
+    const container = box.current;
+    const knob = thumb.current;
+    if (!container || !knob) return;
+    const chosen = container.querySelector(selector);
+    if (!chosen) {
+      knob.dataset.hidden = "";
+      return;
+    }
+    const start = axis === "x" ? chosen.offsetLeft : chosen.offsetTop;
+    const end = start + (axis === "x" ? chosen.offsetWidth : chosen.offsetHeight);
+    const { springs } = own.current;
+    const before = springs.target();
+    const hidden = knob.dataset.hidden !== void 0;
+    if (jump && !hidden && before?.start === start && before?.end === end && container.dataset.glide !== void 0) return;
+    delete knob.dataset.hidden;
+    const forward = before === null || start >= before.start;
+    springs.set({ start, end }, forward ? { start: trail, end: lead } : { start: lead, end: trail }, jump || hidden || before === null || reducedMotion());
+    container.dataset.glide = "";
+  };
+  (0, import_react8.useLayoutEffect)(() => {
+    const state = own.current;
+    const node = box.current;
+    if (node === state.node && key === state.key) return;
+    const fresh = node !== state.node;
+    state.key = key;
+    if (fresh) {
+      state.observer?.disconnect();
+      state.node = node;
+      state.observer = node && typeof ResizeObserver === "function" ? new ResizeObserver(() => place(true)) : null;
+      state.observer?.observe(node);
+    }
+    place(fresh);
+  });
+  (0, import_react8.useEffect)(() => () => {
+    own.current.observer?.disconnect();
+    own.current.springs.stop();
+  }, []);
+  return { box, thumb };
+}
+function Segmented({ label, value, className, children }) {
+  const glide = useGlide(value);
+  return (0, import_react8.createElement)(
+    "div",
+    { ref: glide.box, className: className ? `bt-seg ${className}` : "bt-seg", role: "group", "aria-label": label },
+    (0, import_react8.createElement)("span", { ref: glide.thumb, className: "bt-thumb", "aria-hidden": true }),
+    children
+  );
+}
+function useFlip(list, key, selector, id = (node) => node.dataset.flip) {
+  const tops = (0, import_react8.useRef)(null);
+  (0, import_react8.useLayoutEffect)(() => {
+    const container = list.current;
+    if (!container) return;
+    const next = /* @__PURE__ */ new Map();
+    const moving = tops.current !== null && !reducedMotion();
+    for (const node of container.querySelectorAll(selector)) {
+      const name = id(node);
+      const top = node.offsetTop;
+      next.set(name, top);
+      if (!moving) continue;
+      const before = tops.current.get(name);
+      if (before === void 0) {
+        node.animate([{ opacity: 0, filter: "blur(4px)" }, { opacity: 1, filter: "blur(0)" }], { duration: 180, easing: "ease-out" });
+      } else if (Math.abs(before - top) > 0.5) {
+        node.animate([{ transform: `translateY(${before - top}px)` }, { transform: "none" }], { duration: SPRING_LIST.duration, easing: SPRING_LIST.easing });
+      }
+    }
+    tops.current = next;
+  }, [key]);
+}
+function useMorph(box, key) {
+  const last = (0, import_react8.useRef)({ key, height: null, node: null, observer: null });
+  (0, import_react8.useLayoutEffect)(() => {
+    const node = box.current;
+    const state = last.current;
+    if (node !== state.node) {
+      state.observer?.disconnect();
+      Object.assign(state, { key, height: null, node, observer: null });
+      if (!node || typeof ResizeObserver !== "function") return;
+      state.observer = new ResizeObserver(([entry]) => {
+        if (node.dataset.morph === void 0) state.height = entry.borderBoxSize?.[0]?.blockSize ?? node.offsetHeight;
+      });
+      state.observer.observe(node);
+      return;
+    }
+    if (!node || key === state.key) return;
+    const running = node.getAnimations().filter((animation2) => animation2.id === "bt-morph");
+    const from = running.length ? node.offsetHeight : state.height;
+    for (const animation2 of running) animation2.cancel();
+    const to = node.offsetHeight;
+    Object.assign(state, { key, height: to });
+    if (from === null || Math.abs(from - to) < 1 || reducedMotion()) return;
+    node.dataset.morph = "";
+    const animation = node.animate([{ height: `${from}px` }, { height: `${to}px` }], { duration: SPRING_SHAPE.duration, easing: SPRING_SHAPE.easing, id: "bt-morph" });
+    animation.onfinish = () => {
+      delete node.dataset.morph;
+    };
+    animation.oncancel = () => {
+      if (!node.getAnimations().some((other) => other.id === "bt-morph" && other !== animation)) delete node.dataset.morph;
+    };
+  });
+  (0, import_react8.useEffect)(() => () => last.current.observer?.disconnect(), []);
+}
+function useLinger(value, ms) {
+  const [kept, setKept] = (0, import_react8.useState)(value);
+  (0, import_react8.useEffect)(() => {
+    if (value) {
+      setKept(value);
+      return void 0;
+    }
+    const timer = setTimeout(() => setKept(value), reducedMotion() ? 0 : ms);
+    return () => clearTimeout(timer);
+  }, [value]);
+  return [value || kept, !value && Boolean(kept)];
+}
+
+// src/client/product-schedules.js
+var import_react9 = require("react");
+var pad = (value) => String(value).padStart(2, "0");
+var nextHour = () => {
+  const date = new Date(Date.now() + 36e5);
+  date.setMinutes(0, 0, 0);
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:00`;
+};
+var localZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+var kinds = [["at", "Once"], ["daily", "Every day"], ["weekly", "Every week"], ["every", "Repeat"]];
+var clock = (value) => String(value ?? "").slice(0, 5);
+var formatDate = (ms, options) => new Intl.DateTimeFormat(dateLocale(), options).format(ms);
+var dayAndTime = (ms) => {
+  const sameYear = new Date(ms).getFullYear() === (/* @__PURE__ */ new Date()).getFullYear();
+  return formatDate(ms, {
+    ...sameYear ? {} : { year: "numeric" },
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+};
+var weekdayNames = (days) => days.map((day) => formatDate(Date.UTC(2024, 0, day), {
+  weekday: "short",
+  timeZone: "UTC"
+})).join(dateLocale().startsWith("zh") ? "、" : ", ");
+var everyText = (seconds) => {
+  if (seconds % 86400 === 0) return seconds === 86400 ? t("Every day") : t("Every {count} days", { count: seconds / 86400 });
+  if (seconds % 3600 === 0) return seconds === 3600 ? t("Every hour") : t("Every {count} hours", { count: seconds / 3600 });
+  return t("Every {count} minutes", { count: Math.round(seconds / 60) });
+};
+function timingText(task) {
+  const zone = task.timeZone && task.timeZone !== localZone() ? ` (${task.timeZone})` : "";
+  if (task.kind === "after" || task.kind === "at") return t("Once, {time}", { time: dayAndTime(Date.parse(task.scheduledAt)) });
+  if (task.kind === "every") return everyText(task.everySeconds);
+  if (task.kind === "daily") return `${t("Every day at {time}", { time: clock(task.time) })}${zone}`;
+  if (task.kind === "weekly") {
+    const days = (task.weekdays ?? []).join();
+    const text = days === "1,2,3,4,5" ? t("Every weekday at {time}", { time: clock(task.time) }) : days === "6,7" ? t("Every weekend at {time}", { time: clock(task.time) }) : days === "1,2,3,4,5,6,7" ? t("Every day at {time}", { time: clock(task.time) }) : t("Every {days} at {time}", { days: weekdayNames(task.weekdays ?? []), time: clock(task.time) });
+    return `${text}${zone}`;
+  }
+  if (task.kind === "cron") return `${t("On the schedule {expression}", { expression: task.expression })}${zone}`;
+  return "";
+}
+function whenText(rule) {
+  const when = rule.when;
+  return timingText({
+    kind: when.kind,
+    scheduledAt: new Date(when.at ?? rule.nextAt ?? rule.createdAt).toISOString(),
+    everySeconds: when.minutes * 60,
+    time: when.time,
+    timeZone: rule.timezone,
+    weekdays: when.weekdays
+  });
+}
+function occurrenceText(occurrence) {
+  const state = {
+    delegated: "Delegated to Main",
+    accepted: "Accepted by work",
+    pending: "Pending delivery",
+    blocked: "Blocked",
+    cancelled: "Cancelled",
+    missed: "Missed",
+    failed: "Delivery failed"
+  }[occurrence.status] ?? occurrence.status;
+  const reason = {
+    SCHEDULE_CANCELLED: "This task was cancelled.",
+    SCHEDULE_SOURCE_CLOSED: "The schedule source is paused. Resume it to continue.",
+    TICKET_STOPPED: "This work is stopped. Resume it before scheduling more work.",
+    SOURCE_NOT_AUTHORIZED: "This schedule no longer has access to the work.",
+    SOURCE_NOT_CURRENT: "The source request is no longer current."
+  }[occurrence.reason] ?? "This scheduled delivery could not complete. Check the work status.";
+  return `${new Date(occurrence.dueAt).toLocaleString()} · ${t(state)}${occurrence.reason ? ` · ${t(reason)}` : ""}`;
+}
+function executionText(status) {
+  const label = {
+    stopped: "Stopped work",
+    "waiting-human": "Waiting for an answer",
+    success: "Work complete",
+    failed: "Work failed",
+    unknown: "Work result unknown",
+    "worker-idle": "Work failed",
+    "ready-report": "Work complete",
+    "environment-waiting": "Blocked work"
+  }[status] ?? "Running work";
+  return t(label);
+}
+function occurrenceHistory(occurrences, visibleOccurrences, loadEarlier, onViewWork) {
+  if (!occurrences.length) return (0, import_react9.createElement)("p", { className: "bt-set-hint" }, t("No occurrences yet."));
+  const rows2 = visibleOccurrences.map((occurrence) => {
+    const tickets = occurrence.ticketIds?.map((ticketId) => (0, import_react9.createElement)("p", { key: ticketId, className: "bt-set-hint" }, t("Ticket {id}", { id: ticketId })));
+    const workButtons = occurrence.ticketIds?.length ? occurrence.ticketIds.map((ticketId) => (0, import_react9.createElement)("button", {
+      key: `view:${ticketId}`,
+      type: "button",
+      className: "bt-soft bt-soft-sm",
+      "aria-label": t("View work for Ticket {id}", { id: ticketId }),
+      onClick: () => onViewWork?.({ workBriefId: occurrence.workBriefId, ticketIds: [ticketId] })
+    }, t("View work"))) : occurrence.workBriefId ? (0, import_react9.createElement)("button", {
+      type: "button",
+      className: "bt-soft bt-soft-sm",
+      "aria-label": t("View work brief {id}", { id: occurrence.workBriefId }),
+      onClick: () => onViewWork?.({ workBriefId: occurrence.workBriefId, ticketIds: [] })
+    }, t("View work")) : null;
+    return (0, import_react9.createElement)(
+      "div",
+      { key: occurrence.dueAt, className: "bt-product-schedule-occurrence" },
+      (0, import_react9.createElement)("p", { className: "bt-task-prompt" }, occurrenceText(occurrence)),
+      occurrence.executionStatus ? (0, import_react9.createElement)("p", { className: "bt-task-prompt", role: "status" }, executionText(occurrence.executionStatus)) : null,
+      occurrence.workBriefId ? (0, import_react9.createElement)("p", { className: "bt-set-hint" }, t("Work brief {id}", { id: occurrence.workBriefId })) : null,
+      tickets,
+      workButtons
+    );
+  });
+  const loadEarlierButton = occurrences.length > visibleOccurrences.length ? (0, import_react9.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: loadEarlier }, t("Load earlier occurrences")) : null;
+  return (0, import_react9.createElement)(
+    "details",
+    { className: "bt-product-schedule-history" },
+    (0, import_react9.createElement)("summary", null, t("Occurrence history ({count})", { count: occurrences.length })),
+    (0, import_react9.createElement)("div", { className: "bt-product-schedule-history-list" }, rows2),
+    loadEarlierButton
+  );
+}
+function ProductScheduleSettings({ binding, works, call, onViewWork }) {
+  const [rules, setRules] = (0, import_react9.useState)(null);
+  const [sourceEnabled, setSourceEnabled] = (0, import_react9.useState)(true);
+  const [details, setDetails] = (0, import_react9.useState)({});
+  const [historyCounts, setHistoryCounts] = (0, import_react9.useState)({});
+  const [adding, setAdding] = (0, import_react9.useState)(false);
+  const [title, setTitle] = (0, import_react9.useState)("");
+  const [text, setText] = (0, import_react9.useState)("");
+  const [kind, setKind] = (0, import_react9.useState)("daily");
+  const [at, setAt] = (0, import_react9.useState)(nextHour);
+  const [time, setTime] = (0, import_react9.useState)("09:00");
+  const [weekdays, setWeekdays] = (0, import_react9.useState)([1, 2, 3, 4, 5]);
+  const [minutes, setMinutes] = (0, import_react9.useState)(60);
+  const [targetId, setTargetId] = (0, import_react9.useState)("main");
+  const [busy, setBusy] = (0, import_react9.useState)(false);
+  const [confirming, setConfirming] = (0, import_react9.useState)(null);
+  const [error, setError] = (0, import_react9.useState)("");
+  const pending = (0, import_react9.useRef)(null);
+  const available = works.filter((work) => work.receipt?.status === "accepted" && work.control?.ticketId);
+  const refresh = async () => {
+    try {
+      const [list, source] = await Promise.all([
+        call("schedule-list", { instanceId: binding.instanceId }),
+        call("schedule-source-read", { instanceId: binding.instanceId })
+      ]);
+      const rows2 = await Promise.all(list.items.map(async (rule) => {
+        try {
+          return [rule.ruleId, await call("schedule-read", { instanceId: binding.instanceId, ruleId: rule.ruleId })];
+        } catch {
+          return [rule.ruleId, null];
+        }
+      }));
+      setRules(list.items);
+      setSourceEnabled(source.enabled);
+      setDetails(Object.fromEntries(rows2));
+      setError("");
+    } catch (failure) {
+      setError(failure.message);
+    }
+  };
+  (0, import_react9.useEffect)(() => {
+    void refresh();
+    const timer = setInterval(() => {
+      void refresh();
+    }, 15e3);
+    return () => clearInterval(timer);
+  }, [binding.instanceId]);
+  (0, import_react9.useEffect)(() => {
+    if (!confirming) return void 0;
+    const timer = setTimeout(() => setConfirming(null), 3e3);
+    return () => clearTimeout(timer);
+  }, [confirming]);
+  const submit = async (event) => {
+    event.preventDefault();
+    if (busy) return;
+    const work = available.find((item) => item.brief.workItemId === targetId);
+    const target = targetId === "main" ? { kind: "main" } : work ? { kind: "work", workItemId: work.brief.workItemId, ticketId: work.control.ticketId } : null;
+    const when = kind === "at" ? { kind, at: new Date(at).getTime() } : kind === "every" ? { kind, minutes: Number(minutes) } : kind === "weekly" ? { kind, time, weekdays } : { kind, time };
+    if (!target || kind === "at" && (!Number.isFinite(when.at) || when.at <= Date.now())) {
+      setError(t(kind === "at" ? "Pick a time in the future" : "Choose an authorized work item."));
+      return;
+    }
+    const request = { instanceId: binding.instanceId, title, text, timezone: localZone(), when, target };
+    const fingerprint = JSON.stringify(request);
+    if (pending.current?.fingerprint !== fingerprint) pending.current = { fingerprint, commandId: crypto.randomUUID() };
+    setBusy(true);
+    setError("");
+    try {
+      await call("schedule-create", { ...request, commandId: pending.current.commandId });
+      pending.current = null;
+      setAdding(false);
+      setTitle("");
+      setText("");
+      await refresh();
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const cancel = async (ruleId) => {
+    if (confirming !== ruleId) {
+      setConfirming(ruleId);
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await call("schedule-cancel", { instanceId: binding.instanceId, commandId: `cancel:${ruleId}`, ruleId });
+      setConfirming(null);
+      await refresh();
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const setSource = async (enabled) => {
+    setBusy(true);
+    setError("");
+    try {
+      await call("schedule-source-set", { instanceId: binding.instanceId, commandId: crypto.randomUUID(), enabled });
+      setSourceEnabled(enabled);
+      await refresh();
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (0, import_react9.createElement)(
+    "section",
+    { className: "bt-product-schedules", "aria-label": t("Scheduled tasks") },
+    (0, import_react9.createElement)("div", { className: "bt-set-card" }, (0, import_react9.createElement)(SwitchRow, {
+      label: t("Schedule source"),
+      hint: sourceEnabled ? null : t("Scheduled tasks are paused; existing work continues."),
+      on: sourceEnabled,
+      disabled: busy,
+      onChange: (value) => {
+        void setSource(value);
+      }
+    })),
+    (0, import_react9.createElement)("div", { className: "bt-actions" }, (0, import_react9.createElement)("button", {
+      type: "button",
+      className: "bt-soft bt-soft-sm bt-with-icon",
+      onClick: () => setAdding((value) => !value)
+    }, (0, import_react9.createElement)(PlusIcon), t("New task"))),
+    adding ? (0, import_react9.createElement)(
+      "form",
+      { className: "bt-set-card bt-task-form", onSubmit: submit },
+      (0, import_react9.createElement)(
+        "label",
+        { className: "bt-set-row bt-bs-row" },
+        (0, import_react9.createElement)("span", { className: "bt-set-copy" }, t("Send to")),
+        (0, import_react9.createElement)(
+          "select",
+          { className: "bt-select bt-task-bot", value: targetId, "aria-label": t("Send to"), onChange: (event) => setTargetId(event.target.value) },
+          (0, import_react9.createElement)("option", { value: "main" }, "Main"),
+          available.map((work) => (0, import_react9.createElement)("option", { key: work.brief.workItemId, value: work.brief.workItemId }, work.brief.goal))
+        )
+      ),
+      (0, import_react9.createElement)(
+        "label",
+        { className: "bt-set-row bt-bs-row" },
+        (0, import_react9.createElement)("span", { className: "bt-set-copy" }, t("Name")),
+        (0, import_react9.createElement)("input", { className: "bt-bs-input", value: title, maxLength: 120, required: true, onChange: (event) => setTitle(event.target.value) })
+      ),
+      (0, import_react9.createElement)(
+        "label",
+        { className: "bt-set-row bt-bs-row bt-bs-stack" },
+        (0, import_react9.createElement)("span", { className: "bt-set-copy" }, t("What to do")),
+        (0, import_react9.createElement)("textarea", {
+          className: "bt-bs-input bt-bs-area",
+          value: text,
+          maxLength: 32768,
+          required: true,
+          rows: 3,
+          onChange: (event) => setText(event.target.value)
+        })
+      ),
+      (0, import_react9.createElement)(
+        "div",
+        { className: "bt-set-row bt-bs-row bt-bs-stack" },
+        (0, import_react9.createElement)("span", { className: "bt-set-copy" }, t("When")),
+        (0, import_react9.createElement)(Segmented, { label: t("When"), value: kind }, kinds.map(([value, label]) => (0, import_react9.createElement)("button", {
+          key: value,
+          type: "button",
+          "aria-pressed": kind === value,
+          onClick: () => setKind(value)
+        }, t(label)))),
+        (0, import_react9.createElement)(
+          "div",
+          { className: "bt-task-when" },
+          kind === "at" ? (0, import_react9.createElement)("input", {
+            type: "datetime-local",
+            className: "bt-input",
+            value: at,
+            "aria-label": t("Date and time"),
+            onChange: (event) => setAt(event.target.value)
+          }) : null,
+          kind === "daily" || kind === "weekly" ? (0, import_react9.createElement)("input", {
+            type: "time",
+            className: "bt-input bt-task-time",
+            value: time,
+            "aria-label": t("Time"),
+            onChange: (event) => setTime(event.target.value)
+          }) : null,
+          kind === "every" ? (0, import_react9.createElement)(
+            import_react9.Fragment,
+            null,
+            (0, import_react9.createElement)("span", null, t("Every")),
+            (0, import_react9.createElement)("input", {
+              type: "number",
+              className: "bt-input bt-task-count",
+              value: minutes,
+              min: 1,
+              max: 525600,
+              "aria-label": t("Minutes"),
+              onChange: (event) => setMinutes(event.target.value)
+            }),
+            t("minutes")
+          ) : null,
+          kind === "weekly" ? (0, import_react9.createElement)(
+            "div",
+            { className: "bt-task-days", role: "group", "aria-label": t("Days") },
+            [1, 2, 3, 4, 5, 6, 7].map((day) => (0, import_react9.createElement)("button", {
+              type: "button",
+              key: day,
+              className: "bt-task-day",
+              "aria-pressed": weekdays.includes(day),
+              onClick: () => setWeekdays((current) => current.includes(day) ? current.filter((value) => value !== day) : [...current, day].sort())
+            }, new Intl.DateTimeFormat(void 0, { weekday: "narrow", timeZone: "UTC" }).format(Date.UTC(2024, 0, day))))
+          ) : null
+        )
+      ),
+      (0, import_react9.createElement)("p", { className: "bt-main-status" }, `${t("Time zone")}: ${localZone()}`),
+      (0, import_react9.createElement)(
+        "div",
+        { className: "bt-set-row bt-task-foot" },
+        (0, import_react9.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: () => setAdding(false) }, t("Cancel")),
+        (0, import_react9.createElement)("button", { type: "submit", className: "bt-send bt-soft-sm", disabled: busy || !title.trim() || !text.trim() || kind === "weekly" && weekdays.length === 0 }, busy ? t("Creating…") : t("Create task"))
+      )
+    ) : null,
+    error ? (0, import_react9.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+    !rules ? (0, import_react9.createElement)("p", { className: "bt-main-status", role: "status" }, t("Loading…")) : rules.length === 0 ? (0, import_react9.createElement)("p", { className: "bt-main-status" }, t("No scheduled tasks yet.")) : (0, import_react9.createElement)("div", { className: "bt-set-card" }, rules.map((rule) => {
+      const occurrences = [...details[rule.ruleId]?.occurrences ?? []].sort((left, right) => left.dueAt - right.dueAt);
+      const last = occurrences.at(-1);
+      const visibleCount = Math.min(occurrences.length, historyCounts[rule.ruleId] ?? 20);
+      const visibleOccurrences = occurrences.slice(-visibleCount);
+      const history = occurrenceHistory(occurrences, visibleOccurrences, () => setHistoryCounts((current) => ({
+        ...current,
+        [rule.ruleId]: Math.min(occurrences.length, (current[rule.ruleId] ?? 20) + 20)
+      })), onViewWork);
+      const work = available.find((item) => item.brief.workItemId === rule.target.workItemId);
+      return (0, import_react9.createElement)(
+        "div",
+        { key: rule.ruleId, className: "bt-set-row bt-task bt-product-schedule-row" },
+        (0, import_react9.createElement)(ClockIcon),
+        (0, import_react9.createElement)(
+          "span",
+          { className: "bt-set-copy" },
+          (0, import_react9.createElement)("strong", { className: "bt-task-title" }, rule.title),
+          (0, import_react9.createElement)("span", { className: "bt-set-hint" }, `${whenText(rule)} · ${rule.timezone} · ${rule.target.kind === "main" ? "Main" : work?.brief.goal ?? rule.target.ticketId}`),
+          (0, import_react9.createElement)("span", { className: "bt-task-prompt" }, rule.text),
+          last ? (0, import_react9.createElement)(
+            "span",
+            { className: "bt-task-prompt", role: "status" },
+            occurrenceText(last),
+            last.executionStatus ? ` · ${executionText(last.executionStatus)}` : null,
+            last.ticketIds?.length ? (0, import_react9.createElement)("button", {
+              type: "button",
+              className: "bt-soft bt-soft-sm",
+              "aria-label": t("View work for Ticket {id}", { id: last.ticketIds[0] }),
+              onClick: () => onViewWork?.({ workBriefId: last.workBriefId, ticketIds: last.ticketIds })
+            }, t("View work")) : last.workBriefId ? (0, import_react9.createElement)("button", {
+              type: "button",
+              className: "bt-soft bt-soft-sm",
+              "aria-label": t("View work brief {id}", { id: last.workBriefId }),
+              onClick: () => onViewWork?.({ workBriefId: last.workBriefId, ticketIds: [] })
+            }, t("View work")) : null
+          ) : null
+        ),
+        history,
+        (0, import_react9.createElement)("span", { className: "bt-task-next" }, rule.status === "active" && rule.nextAt ? t("Next: {time}", { time: new Date(rule.nextAt).toLocaleString() }) : t(rule.status === "cancelled" ? "Cancelled" : "Finished")),
+        rule.status === "active" ? (0, import_react9.createElement)("button", {
+          type: "button",
+          className: "bt-mini bt-task-remove",
+          "data-confirm": confirming === rule.ruleId || void 0,
+          "aria-label": confirming === rule.ruleId ? t("Click again to delete") : t("Delete task"),
+          disabled: busy,
+          onClick: () => {
+            void cancel(rule.ruleId);
+          }
+        }, confirming === rule.ruleId ? t("Delete") : (0, import_react9.createElement)(TrashIcon)) : null
+      );
+    }))
+  );
+}
+var PRODUCT_SCHEDULE_CSS = `
+.bt-product-schedules{display:flex;flex-direction:column;gap:12px}
+.bt-product-schedules .bt-switch{position:relative;flex:none;width:36px;height:20px;padding:0;border:0;border-radius:999px;background:var(--bt-line-2);cursor:pointer;transition:background-color .2s ease}
+.bt-product-schedules .bt-switch[aria-checked=true]{background:var(--bt-accent)}
+.bt-product-schedules .bt-switch:disabled{opacity:.45;cursor:default}
+.bt-product-schedules .bt-switch-knob{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:999px;background:var(--bt-main);box-shadow:0 1px 2px rgba(0,0,0,.2);transition:${spring(SPRING_SHAPE, "transform")},${spring(SPRING_TAP, "width")}}
+.bt-product-schedules .bt-switch[aria-checked=true] .bt-switch-knob{transform:translateX(16px)}
+.bt-product-schedules .bt-switch:active:not(:disabled) .bt-switch-knob{width:21px}
+.bt-product-schedules .bt-switch[aria-checked=true]:active:not(:disabled) .bt-switch-knob{transform:translateX(11px)}
+.bt-product-schedule-row{gap:10px;align-items:flex-start;flex-wrap:wrap}
+.bt-product-schedule-row>svg{width:18px;height:18px;flex:none;color:var(--bt-ink-2)}
+.bt-product-schedule-row .bt-set-copy{min-width:0;display:flex;flex-direction:column;gap:4px}
+.bt-product-schedule-history{flex-basis:100%;min-width:0}
+.bt-product-schedule-history summary{cursor:pointer;overflow-wrap:anywhere;color:var(--bt-ink-2)}
+.bt-product-schedule-history summary:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-product-schedule-history-list{padding-left:12px}
+.bt-product-schedule-occurrence{padding:8px 0;border-top:1px solid var(--bt-line-2)}
+.bt-product-schedule-occurrence p{overflow-wrap:anywhere}
+.bt-product-schedule-row .bt-task-next{white-space:normal;max-width:180px;text-align:right}
+.bt-product-schedules button:focus-visible,.bt-product-schedules input:focus-visible,.bt-product-schedules textarea:focus-visible,
+.bt-product-schedules select:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+@media(max-width:640px){.bt-product-schedule-row .bt-task-next{max-width:none;text-align:left}}
+@media(prefers-reduced-motion:reduce){.bt-product-schedules .bt-task-form{animation:none}.bt-product-schedules .bt-switch,.bt-product-schedules .bt-switch-knob{transition:none}}
+`;
+
+// src/client/product-proactive.js
+var import_react10 = require("react");
+var stateText = {
+  running: "Preparing",
+  observed: "Would prepare",
+  prepared: "Ready for review",
+  silent: "Ended quietly",
+  suppressed: "No longer current",
+  "budget-exhausted": "Budget exhausted",
+  failed: "Preparation failed",
+  stopped: "Stopped"
+};
+var workStageText = {
+  pending: "Pending start",
+  draft: "Worker running",
+  idle: "Worker idle",
+  ready: "Ready",
+  ended: "Ended",
+  "waiting-human": "Waiting for human"
+};
+var workReasonText = {
+  "worker-idle": "Worker ended without a verified report",
+  "worker-running": "Worker is executing",
+  "worker-background": "Waiting for background work",
+  "ready-report": "Verified report recorded",
+  "waiting-human": "Waiting for a human answer",
+  stopping: "Stopping",
+  stopped: "Stopped",
+  "environment-waiting": "Waiting for an execution environment",
+  "setup-failed": "Environment setup failed"
+};
+var assignmentStateText = { pending: "Pending execution", running: "Running", stopping: "Stopping", ended: "Ended" };
+var mandateStrengthText = { inferred: "Inferred mandate", explicit: "Explicit mandate" };
+var lifecycleText = { open: "Open", ended: "Ended" };
+var environmentText = { local: "Local", remote: "Remote" };
+var workText = (value, labels) => t(value === void 0 ? "Unavailable" : labels[value] ?? value);
+function usageLine(label, usage) {
+  const count = Number(usage?.totalTokens ?? 0).toLocaleString();
+  const detail = usage?.status === "none" ? t("No model calls.") : usage?.status === "unavailable" ? t("Provider usage was not reported.") : t("{tokens} tok · {reported} of {calls} calls reported", {
+    tokens: count,
+    reported: usage?.reportedCalls ?? 0,
+    calls: usage?.calls ?? 0
+  });
+  const unavailable = usage?.unavailableSessions ? ` · ${t("{count} Session reads unavailable", { count: usage.unavailableSessions })}` : "";
+  return (0, import_react10.createElement)("li", { key: label }, (0, import_react10.createElement)("span", null, t(label)), (0, import_react10.createElement)("span", null, detail + unavailable));
+}
+function ProactiveReview({ runId, instanceId, call, remote = false, canStop = true, onStopped }) {
+  const [run2, setRun] = (0, import_react10.useState)(null);
+  const [error, setError] = (0, import_react10.useState)("");
+  const [artifact, setArtifact] = (0, import_react10.useState)(null);
+  const [workArtifact, setWorkArtifact] = (0, import_react10.useState)(null);
+  const [busy, setBusy] = (0, import_react10.useState)(false);
+  (0, import_react10.useEffect)(() => {
+    let live = true;
+    setRun(null);
+    setArtifact(null);
+    const refresh = () => call("proactive-read", { instanceId, runId }).then((value) => {
+      if (live) setRun(value);
+    }).catch((failure) => {
+      if (live) setError(failure.message);
+    });
+    void refresh();
+    const timer = setInterval(() => {
+      void refresh();
+    }, 15e3);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [runId, instanceId, call]);
+  (0, import_react10.useEffect)(() => {
+    setWorkArtifact(null);
+  }, [run2?.work?.report?.id]);
+  const readArtifact = async (path) => {
+    setBusy(true);
+    setError("");
+    try {
+      let text = "", offset = 0, hasMore = true;
+      for (let page = 0; page < 16 && hasMore; page++) {
+        const result = await call("proactive-artifact", { instanceId, runId, path, offset, maxBytes: 8192 });
+        text += result.text;
+        offset = result.nextOffset;
+        hasMore = result.hasMore;
+      }
+      setArtifact({ path, text, hasMore });
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const stop = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const stopped = await call("proactive-stop", {
+        instanceId,
+        runId,
+        commandId: `stop-preparation:${runId}`,
+        reason: "Stopped by the user."
+      });
+      setRun(stopped);
+      onStopped?.();
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const readWorkArtifact = async (path) => {
+    setBusy(true);
+    setError("");
+    try {
+      let text = "", offset = 0, hasMore = true;
+      for (let page = 0; page < 16 && hasMore; page++) {
+        const result = await call("proactive-work-artifact", { instanceId, runId, path, offset, maxBytes: 8192 });
+        text += result.text;
+        offset = result.nextOffset;
+        hasMore = result.hasMore;
+      }
+      setWorkArtifact({ path, text, hasMore });
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (error && !run2) return (0, import_react10.createElement)("p", { className: "bt-main-error", role: "alert" }, error);
+  if (!run2) return (0, import_react10.createElement)("p", { role: "status" }, t("Loading…"));
+  const work = run2.work;
+  const report = work?.report;
+  return (0, import_react10.createElement)(
+    "section",
+    { className: "bt-product-preparation-detail", "aria-label": t("Preparation review") },
+    (0, import_react10.createElement)("p", null, `${t(stateText[run2.state] ?? run2.state)} · ${run2.ruleId}`),
+    (0, import_react10.createElement)("p", null, `${t("Source Instance ID")}: ${run2.sourceInstanceId} · ${t("Event")}: ${run2.eventId}`),
+    (0, import_react10.createElement)("p", null, `${t("Rule version")}: ${run2.ruleRevision} · ${t("Model steps")}: ${run2.modelSteps ?? t("Unavailable")}`),
+    run2.summary ? (0, import_react10.createElement)("p", null, run2.summary) : null,
+    run2.evidence ? (0, import_react10.createElement)("p", null, `${t("Evidence")}: ${run2.evidence}`) : null,
+    run2.reason ? (0, import_react10.createElement)("p", null, `${t("Reason")}: ${run2.reason}`) : null,
+    run2.isolatedDirectory && !remote ? (0, import_react10.createElement)("p", null, `${t("Preparation directory")}: ${run2.isolatedDirectory}`) : null,
+    work && (work.ticketId || work.usage) ? (0, import_react10.createElement)(
+      "section",
+      { className: "bt-product-preparation-work", "aria-label": t("Work control") },
+      (0, import_react10.createElement)("strong", null, t("Work control")),
+      work.ticketId ? (0, import_react10.createElement)("p", null, `${t("Ticket")}: ${work.ticket?.id ?? work.ticketId} · ${t("State")}: ${workText(work.ticket?.state ?? work.lifecycle, lifecycleText)}`) : null,
+      (0, import_react10.createElement)("p", null, `${t("Stage")}: ${workText(work.stage, workStageText)} · ${t("Reason")}: ${workText(work.reason, workReasonText)}`),
+      work.mandate ? (0, import_react10.createElement)("p", null, `${t("Mandate")}: ${work.mandate.id} · ${workText(work.mandate.strength, mandateStrengthText)} · ${work.mandate.scope}`) : null,
+      work.assignment ? (0, import_react10.createElement)("p", null, `${t("Assignment")}: ${work.assignment.id} · ${t("Generation")}: ${work.assignment.generation} · ${t("State")}: ${workText(work.assignment.state, assignmentStateText)}${work.assignment.environment?.kind ? ` · ${t("Environment")}: ${workText(work.assignment.environment.kind, environmentText)}` : ""}`) : (0, import_react10.createElement)("p", null, t("No Worker assignment yet.")),
+      (0, import_react10.createElement)("p", null, `${t("Step budgets")}: ${t("Preparation")} ${work.budgets?.preparationSteps ?? 0}/${work.budgets?.preparationStepLimit ?? 0} · ${t("Router")} ${work.budgets?.routerSteps ?? 0}/${work.budgets?.routerStepLimit ?? 0} · ${t("Worker turn")} ${work.budgets?.workerLastTurnSteps ?? 0}/${work.budgets?.workerTurnStepLimit ?? 0}`),
+      work.budgets?.workerAssignments > 1 ? (0, import_react10.createElement)("p", null, `${t("Worker assignments included")}: ${work.budgets.workerAssignments}`) : null,
+      work.budgets?.ruleRunLimit ? (0, import_react10.createElement)("p", null, `${t("Rule run budget")}: ${work.budgets.ruleRunsUsed ?? t("Unknown")} / ${work.budgets.ruleRunLimit} · ${work.budgets.ruleWindowMs / 36e5} h`) : null,
+      work.budgets?.maxArtifactBytes ? (0, import_react10.createElement)("p", null, `${t("Artifact byte budget")}: ${work.budgets.maxArtifactBytes}`) : null,
+      work.usage ? (0, import_react10.createElement)(
+        "div",
+        null,
+        (0, import_react10.createElement)("strong", null, t("Token usage by role")),
+        (0, import_react10.createElement)(
+          "ul",
+          { className: "bt-product-preparation-usage" },
+          usageLine("Preparation", work.usage.roles?.preparation),
+          usageLine("Router", work.usage.roles?.router),
+          usageLine("Worker", work.usage.roles?.worker),
+          usageLine("Total", work.usage.total)
+        ),
+        (0, import_react10.createElement)("p", null, `${t("Cost")}: ${work.usage.cost?.status === "unavailable" ? t("Cost unavailable") : work.usage.cost?.amount}`),
+        work.usage.cost?.status === "unavailable" ? (0, import_react10.createElement)("p", { className: "bt-product-preparation-hint" }, t("No model price catalog is configured for this work.")) : null
+      ) : null,
+      report ? (0, import_react10.createElement)(
+        "section",
+        { className: "bt-product-preparation-report" },
+        (0, import_react10.createElement)("strong", null, t("Worker report")),
+        (0, import_react10.createElement)("p", null, report.result),
+        (0, import_react10.createElement)("p", null, `${t("Evidence")}: ${report.evidence}`),
+        report.artifacts?.length ? (0, import_react10.createElement)(
+          "div",
+          null,
+          (0, import_react10.createElement)("strong", null, t("Verified files")),
+          report.artifacts.map((item) => (0, import_react10.createElement)(
+            "div",
+            { key: item.path },
+            (0, import_react10.createElement)("span", null, `${item.path} · ${item.bytes} ${t("bytes")}`),
+            !remote ? (0, import_react10.createElement)("button", {
+              type: "button",
+              className: "bt-soft bt-soft-sm",
+              disabled: busy,
+              onClick: () => {
+                void readWorkArtifact(item.path);
+              }
+            }, t("Read verified file")) : null
+          ))
+        ) : null,
+        workArtifact ? (0, import_react10.createElement)(
+          "div",
+          null,
+          (0, import_react10.createElement)("strong", null, workArtifact.path),
+          (0, import_react10.createElement)("pre", { className: "bt-product-preparation-file" }, workArtifact.text),
+          workArtifact.hasMore ? (0, import_react10.createElement)("p", null, t("Partial evidence")) : null
+        ) : null
+      ) : work.reportState === "stale" ? (0, import_react10.createElement)("p", null, t("A newer Worker assignment makes the previous report stale.")) : (0, import_react10.createElement)("p", null, t("No ready report yet."))
+    ) : null,
+    run2.artifacts?.length ? (0, import_react10.createElement)(
+      "div",
+      null,
+      (0, import_react10.createElement)("strong", null, t("Verified files")),
+      run2.artifacts.map((item) => (0, import_react10.createElement)(
+        "div",
+        { key: item.path },
+        (0, import_react10.createElement)("span", null, `${item.path} · ${item.bytes} ${t("bytes")} · SHA-256 ${item.sha256}`),
+        !remote ? (0, import_react10.createElement)("button", {
+          type: "button",
+          className: "bt-soft bt-soft-sm",
+          disabled: busy,
+          onClick: () => {
+            void readArtifact(item.path);
+          }
+        }, t("Read file")) : null
+      ))
+    ) : null,
+    artifact ? (0, import_react10.createElement)(
+      "div",
+      null,
+      (0, import_react10.createElement)("strong", null, artifact.path),
+      (0, import_react10.createElement)("pre", { className: "bt-product-preparation-file" }, artifact.text),
+      artifact.hasMore ? (0, import_react10.createElement)("p", null, t("Partial evidence")) : null
+    ) : null,
+    canStop && (work?.control?.canStop ?? (run2.state === "running" || run2.state === "prepared")) ? (0, import_react10.createElement)("button", {
+      type: "button",
+      className: "bt-soft bt-soft-sm",
+      disabled: busy,
+      onClick: () => {
+        void stop();
+      }
+    }, t("Stop preparation")) : null,
+    error ? (0, import_react10.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null
+  );
+}
+function ProductProactiveSettings({ binding, call }) {
+  const [snapshot, setSnapshot] = (0, import_react10.useState)(null);
+  const [runs, setRuns] = (0, import_react10.useState)([]);
+  const [before, setBefore] = (0, import_react10.useState)(null);
+  const [draft, setDraft] = (0, import_react10.useState)(null);
+  const [selected, setSelected] = (0, import_react10.useState)(null);
+  const [confirmDelete, setConfirmDelete] = (0, import_react10.useState)(null);
+  const [busy, setBusy] = (0, import_react10.useState)(false);
+  const [error, setError] = (0, import_react10.useState)("");
+  const refresh = async () => {
+    const [rules, history] = await Promise.all([
+      call("proactive-rules", { instanceId: binding.instanceId }),
+      call("proactive-list", { instanceId: binding.instanceId })
+    ]);
+    setSnapshot(rules);
+    setRuns((current) => [...new Map([...current, ...history.items].map((run2) => [run2.id, run2])).values()].sort((left, right) => right.createdAt - left.createdAt || right.id.localeCompare(left.id)));
+    setBefore((current) => current ?? history.before ?? null);
+    setError("");
+  };
+  const loadOlder = async () => {
+    if (!before || busy) return;
+    setBusy(true);
+    try {
+      const history = await call("proactive-list", { instanceId: binding.instanceId, before });
+      setRuns((current) => [...current, ...history.items]);
+      setBefore(history.before ?? null);
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  (0, import_react10.useEffect)(() => {
+    let live = true;
+    void refresh().catch((failure) => {
+      if (live) setError(failure.message);
+    });
+    const timer = setInterval(() => {
+      void refresh().catch(() => {
+      });
+    }, 15e3);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [binding.instanceId]);
+  const save = async (rules) => {
+    setBusy(true);
+    setError("");
+    try {
+      await call("proactive-save", {
+        instanceId: binding.instanceId,
+        commandId: crypto.randomUUID(),
+        expectedRevision: snapshot.revision,
+        rules
+      });
+      setDraft(null);
+      await refresh();
+    } catch (failure) {
+      setError(failure.code === "CONFIG_REVISION_CONFLICT" ? t("Rules changed elsewhere. Review the latest version and save again.") : failure.message);
+      await refresh().catch(() => {
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const pause = async (paused) => {
+    setBusy(true);
+    setError("");
+    try {
+      await call("proactive-pause", { instanceId: binding.instanceId, commandId: crypto.randomUUID(), paused });
+      await refresh();
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = (ruleId) => {
+    if (confirmDelete !== ruleId) {
+      setConfirmDelete(ruleId);
+      return;
+    }
+    setConfirmDelete(null);
+    void save(snapshot.rules.filter((rule) => rule.id !== ruleId));
+  };
+  const sourceFor = (id) => snapshot.sources.find((source) => source.sourceInstanceId === id);
+  const edit = (rule) => setDraft(rule ? structuredClone(rule) : {
+    id: `review-${crypto.randomUUID().slice(0, 8)}`,
+    name: "",
+    mode: "observe",
+    enabled: true,
+    match: {
+      actorKinds: snapshot.sources[0].kind === "github" ? ["bot", "ci"] : ["bot"],
+      addressing: ["direct", "mention"],
+      sourceInstanceIds: [snapshot.sources[0].sourceInstanceId]
+    },
+    scope: "",
+    communication: "silent",
+    budget: { maxRuns: 2, windowMs: 36e5, maxArtifactBytes: 65536 }
+  });
+  const update = (path, value) => setDraft((current) => {
+    const next = structuredClone(current);
+    let part = next;
+    for (const key of path.slice(0, -1)) part = part[key];
+    part[path.at(-1)] = value;
+    return next;
+  });
+  const submit = (event) => {
+    event.preventDefault();
+    const next = {
+      ...draft,
+      name: draft.name.trim(),
+      scope: draft.scope?.trim() || void 0,
+      match: { ...draft.match, textPattern: draft.match.textPattern?.trim() || void 0 }
+    };
+    const rules = snapshot.rules.filter((rule) => rule.id !== next.id);
+    void save([...rules, next]);
+  };
+  return (0, import_react10.createElement)(
+    "section",
+    { className: "bt-product-preparations", "aria-label": t("Proactive preparation") },
+    (0, import_react10.createElement)(
+      Card,
+      { title: t("Proactive preparation") },
+      (0, import_react10.createElement)(SwitchRow, {
+        label: t("Pause proactive preparation"),
+        on: snapshot?.control.paused ?? false,
+        hint: t("Paused preparations cannot submit a result. Existing work continues."),
+        disabled: busy || !snapshot,
+        onChange: (value) => {
+          void pause(value);
+        }
+      }),
+      (0, import_react10.createElement)("p", null, t("Rules use an authenticated source event. Preparation cannot send messages, create PRs or merge changes.")),
+      snapshot?.sources.length ? (0, import_react10.createElement)("button", {
+        type: "button",
+        className: "bt-soft bt-soft-sm",
+        disabled: busy,
+        onClick: () => edit(null)
+      }, t("New rule")) : (0, import_react10.createElement)("p", null, t("Configure a source to enable preparation rules."))
+    ),
+    error ? (0, import_react10.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+    snapshot?.rules.map((rule) => (0, import_react10.createElement)(
+      Card,
+      { key: rule.id, title: rule.name },
+      (0, import_react10.createElement)("p", null, `${rule.enabled ? t(rule.mode === "auto" ? "Auto" : "Observe") : t("Off")} · ${rule.match.sourceInstanceIds?.join(", ") ?? ""}`),
+      (0, import_react10.createElement)("p", null, `${t("Run budget")}: ${rule.budget.maxRuns} / ${rule.budget.windowMs / 36e5} h`),
+      (0, import_react10.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", disabled: busy, onClick: () => edit(rule) }, t("Edit rule")),
+      (0, import_react10.createElement)(
+        "button",
+        {
+          type: "button",
+          className: "bt-soft bt-soft-sm",
+          disabled: busy,
+          onClick: () => {
+            void save(snapshot.rules.map((item) => item.id === rule.id ? { ...item, enabled: !item.enabled } : item));
+          }
+        },
+        t(rule.enabled ? "Disable rule" : "Enable rule")
+      ),
+      (0, import_react10.createElement)("button", {
+        type: "button",
+        className: "bt-soft bt-soft-sm",
+        disabled: busy,
+        onClick: () => remove(rule.id)
+      }, t(confirmDelete === rule.id ? "Confirm delete rule" : "Delete rule"))
+    )),
+    draft ? (0, import_react10.createElement)(
+      "form",
+      { className: "bt-set-card bt-product-preparation-form", onSubmit: submit },
+      (0, import_react10.createElement)("label", null, t("Name"), (0, import_react10.createElement)("input", {
+        className: "bt-bs-input",
+        value: draft.name,
+        maxLength: 128,
+        required: true,
+        onChange: (event) => update(["name"], event.target.value)
+      })),
+      (0, import_react10.createElement)("label", null, t("Source"), (0, import_react10.createElement)(
+        "select",
+        {
+          className: "bt-select",
+          value: draft.match.sourceInstanceIds[0],
+          onChange: (event) => setDraft((current) => ({
+            ...current,
+            match: {
+              ...current.match,
+              sourceInstanceIds: [event.target.value],
+              actorKinds: sourceFor(event.target.value)?.kind === "github" ? ["bot", "ci"] : ["bot"]
+            }
+          }))
+        },
+        snapshot.sources.map((source) => (0, import_react10.createElement)("option", { key: source.sourceInstanceId, value: source.sourceInstanceId }, source.label))
+      )),
+      sourceFor(draft.match.sourceInstanceIds[0])?.kind === "github" ? (0, import_react10.createElement)(
+        "fieldset",
+        null,
+        (0, import_react10.createElement)("legend", null, t("Event actors")),
+        ["bot", "ci"].map((kind) => (0, import_react10.createElement)(
+          "label",
+          { key: kind },
+          (0, import_react10.createElement)("input", {
+            type: "checkbox",
+            checked: draft.match.actorKinds.includes(kind),
+            onChange: (event) => update(["match", "actorKinds"], event.target.checked ? [...draft.match.actorKinds, kind] : draft.match.actorKinds.filter((item) => item !== kind))
+          }),
+          t(kind === "ci" ? "CI events" : "Actor events")
+        ))
+      ) : null,
+      (0, import_react10.createElement)("label", null, t("Mode"), (0, import_react10.createElement)(
+        "select",
+        {
+          className: "bt-select",
+          value: draft.mode,
+          onChange: (event) => update(["mode"], event.target.value)
+        },
+        (0, import_react10.createElement)("option", { value: "observe" }, t("Observe")),
+        (0, import_react10.createElement)("option", { value: "auto" }, t("Auto"))
+      )),
+      (0, import_react10.createElement)("label", null, t("Text contains"), (0, import_react10.createElement)("input", {
+        className: "bt-bs-input",
+        value: draft.match.textPattern ?? "",
+        maxLength: 128,
+        onChange: (event) => update(["match", "textPattern"], event.target.value)
+      })),
+      (0, import_react10.createElement)("label", null, t("Preparation scope"), (0, import_react10.createElement)("textarea", {
+        className: "bt-bs-input bt-bs-area",
+        value: draft.scope ?? "",
+        maxLength: 4096,
+        rows: 2,
+        onChange: (event) => update(["scope"], event.target.value)
+      })),
+      (0, import_react10.createElement)("label", null, t("Notify Main for useful results"), (0, import_react10.createElement)("input", {
+        type: "checkbox",
+        checked: draft.communication === "notify",
+        onChange: (event) => update(["communication"], event.target.checked ? "notify" : "silent")
+      })),
+      (0, import_react10.createElement)("label", null, t("Runs per hour"), (0, import_react10.createElement)("input", {
+        type: "number",
+        min: 1,
+        max: 100,
+        required: true,
+        className: "bt-bs-input",
+        value: draft.budget.maxRuns,
+        onChange: (event) => update(["budget", "maxRuns"], Number(event.target.value))
+      })),
+      (0, import_react10.createElement)("label", null, t("Max file bytes"), (0, import_react10.createElement)("input", {
+        type: "number",
+        min: 1024,
+        max: 10485760,
+        required: true,
+        className: "bt-bs-input",
+        value: draft.budget.maxArtifactBytes,
+        onChange: (event) => update(["budget", "maxArtifactBytes"], Number(event.target.value))
+      })),
+      (0, import_react10.createElement)(
+        "div",
+        { className: "bt-actions" },
+        (0, import_react10.createElement)("button", { type: "submit", className: "bt-soft", disabled: busy || !draft.match.actorKinds.length }, t("Save rule")),
+        (0, import_react10.createElement)("button", { type: "button", className: "bt-soft", onClick: () => setDraft(null) }, t("Cancel"))
+      )
+    ) : null,
+    (0, import_react10.createElement)(
+      Card,
+      { title: t("Preparation history") },
+      runs.length ? runs.map((run2) => (0, import_react10.createElement)(
+        "div",
+        { key: run2.id, className: "bt-product-preparation-row" },
+        (0, import_react10.createElement)("strong", null, `${run2.ruleId} · ${t(stateText[run2.state] ?? run2.state)}`),
+        (0, import_react10.createElement)("span", null, run2.summary || run2.reason || run2.eventId),
+        (0, import_react10.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: () => setSelected(run2.id) }, t("Review"))
+      )) : (0, import_react10.createElement)("p", null, t("No preparations yet.")),
+      before ? (0, import_react10.createElement)("button", {
+        type: "button",
+        className: "bt-soft bt-soft-sm",
+        disabled: busy,
+        onClick: () => {
+          void loadOlder();
+        }
+      }, t("Load earlier preparations")) : null,
+      selected ? (0, import_react10.createElement)(ProactiveReview, {
+        key: selected,
+        runId: selected,
+        instanceId: binding.instanceId,
+        call,
+        onStopped: () => {
+          void refresh();
+        }
+      }) : null
+    )
+  );
+}
+var PRODUCT_PROACTIVE_CSS = `
+.bt-product-preparations{display:grid;gap:12px}
+.bt-product-preparations p{margin:8px 0;font-size:13px;line-height:18px}
+.bt-product-preparation-form{display:grid;gap:12px}
+.bt-product-preparation-form label{display:grid;gap:6px;font-size:13px}
+.bt-product-preparation-form fieldset{border:1px solid var(--bt-line);display:flex;gap:12px;flex-wrap:wrap}
+.bt-product-preparation-form fieldset label{display:flex;align-items:center}
+.bt-product-preparation-row{display:grid;gap:4px;padding:12px 0;border-top:1px solid var(--bt-line);font-size:13px;overflow-wrap:anywhere}
+.bt-product-preparation-row button{justify-self:start}
+.bt-product-preparation-detail{border-top:1px solid var(--bt-line);padding-top:12px;overflow-wrap:anywhere;font-size:13px}
+.bt-product-preparation-file{white-space:pre-wrap;overflow-wrap:anywhere;max-height:280px;overflow:auto}
+.bt-product-preparation-work{margin:14px 0;padding:12px;border:1px solid var(--bt-line);border-radius:12px}
+.bt-product-preparation-usage{display:grid;gap:6px;padding:0;list-style:none}
+.bt-product-preparation-usage li{display:flex;justify-content:space-between;gap:12px}
+.bt-product-preparation-hint{color:var(--bt-muted)}
+.bt-product-preparation-report{display:grid;gap:6px;margin-top:12px}
+`;
+
+// src/client/product-avatar.js
+async function productAvatarImage(file) {
+  if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type)) throw new Error(t("Choose a PNG, JPEG, WebP, or GIF image"));
+  if (file.size > 25 * 1024 * 1024) throw new Error(t("Choose an image smaller than 25 MB"));
+  const bitmap = await createImageBitmap(file);
+  const side = 160;
+  const canvas = document.createElement("canvas");
+  canvas.width = side;
+  canvas.height = side;
+  const context = canvas.getContext("2d");
+  context.imageSmoothingQuality = "high";
+  const crop = Math.min(bitmap.width, bitmap.height);
+  context.drawImage(bitmap, (bitmap.width - crop) / 2, (bitmap.height - crop) / 2, crop, crop, 0, 0, side, side);
+  bitmap.close?.();
+  for (const quality of [0.9, 0.75, 0.6]) {
+    const url = canvas.toDataURL("image/webp", quality);
+    if (url.startsWith("data:image/webp") && url.length < 15e4) return url;
+  }
+  const png = canvas.toDataURL("image/png");
+  if (png.length < 15e4) return png;
+  throw new Error(t("That image is too large"));
+}
+
+// src/client/product-presets.js
+var import_react11 = require("react");
+var roles = [["main", "Main"], ["router", "Router"], ["worker", "Worker"]];
+var legacyFields = ["name", "model", "effort", "instructions", "skills", "color", "avatar"];
+var emptyDraft = () => ({ id: crypto.randomUUID(), name: "", provider: "", model: "", effort: "", instructions: "", skills: "", appearance: {} });
+var appearanceOf = (preset) => lookOf({ id: preset.id, color: preset.appearance?.color, avatar: preset.appearance });
+function selectedCopy(text, sourceIdentity, sourceBotId, targetRole) {
+  const state = JSON.parse(text);
+  const bot = state?.bots?.[sourceBotId];
+  if (!bot || typeof bot !== "object" || Array.isArray(bot) || !Object.hasOwn(state.bots, sourceBotId)) {
+    throw new Error(t("The copy has no selected role configuration."));
+  }
+  const selected = Object.fromEntries(legacyFields.filter((field) => Object.hasOwn(bot, field)).map((field) => [field, bot[field]]));
+  if (selected.avatar && typeof selected.avatar === "object" && !Array.isArray(selected.avatar)) {
+    selected.avatar = Object.fromEntries(["shape", "image"].filter((field) => Object.hasOwn(selected.avatar, field)).map((field) => [field, selected.avatar[field]]));
+  }
+  const ignored = [
+    ...Object.keys(bot).filter((field) => !legacyFields.includes(field)).map((field) => `bot.${field}`),
+    ...bot.avatar && typeof bot.avatar === "object" && !Array.isArray(bot.avatar) ? Object.keys(bot.avatar).filter((field) => field !== "shape" && field !== "image").map((field) => `bot.avatar.${field}`) : [],
+    ...Object.hasOwn(state, "mainBotIds") ? ["state.mainBotIds"] : []
+  ];
+  return { copy: { sourceIdentity, sourceBotId, targetRole, state: { bots: { [sourceBotId]: selected } } }, ignored };
+}
+function draftFromPreview(record) {
+  const profile = record.preview.draft;
+  return {
+    id: `legacy-${record.preview.targetRole}-${record.preview.source.digest.slice(0, 20)}`,
+    name: profile.name,
+    provider: profile.model?.provider ?? "",
+    model: profile.model?.model ?? "",
+    effort: profile.model?.effort ?? "",
+    instructions: profile.instructions,
+    skills: profile.skills.join(", "),
+    appearance: profile.appearance ?? {}
+  };
+}
+function toPreset(draft) {
+  const appearance = draft.appearance;
+  return {
+    id: draft.id.trim(),
+    name: draft.name.trim(),
+    model: {
+      provider: draft.provider.trim(),
+      model: draft.model.trim(),
+      ...draft.effort.trim() ? { effort: draft.effort.trim() } : {}
+    },
+    instructions: draft.instructions,
+    skills: draft.skills.split(/[\n,]/u).map((skill) => skill.trim()).filter(Boolean),
+    ...Object.keys(appearance).length ? { appearance } : {}
+  };
+}
+function requireList(result) {
+  if (!result || !Array.isArray(result.items) || result.items.some((entry) => !entry?.preset?.model || !entry.id)) {
+    throw new Error(t("Role presets are unavailable."));
+  }
+  return result;
+}
+function requireEntry(result) {
+  if (!result || typeof result.id !== "string" || !Number.isSafeInteger(result.revision) || result.revision < 1 || result.status !== "active") throw new Error(t("The preset was not confirmed."));
+  return result;
+}
+function requirePreview(result) {
+  if (!result || typeof result.id !== "string" || !result.preview?.source?.digest || !result.preview?.draft || !Array.isArray(result.preview.fields) || !Array.isArray(result.preview.ignored) || !Array.isArray(result.preview.issues)) {
+    throw new Error(t("The preview was not confirmed."));
+  }
+  return result;
+}
+function requireDecision(result) {
+  if (!result || typeof result.id !== "string" || !["selected", "replaced", "skipped", "duplicate", "conflict"].includes(result.status)) {
+    throw new Error(t("The import decision was not confirmed."));
+  }
+  if (["selected", "replaced"].includes(result.status) && typeof result.presetId !== "string") {
+    throw new Error(t("The selected preset was not confirmed."));
+  }
+  return result;
+}
+function DraftFields({ draft, onChange, onUploading, busy }) {
+  const [showCharacters, setShowCharacters] = (0, import_react11.useState)(false);
+  const patch = (change) => onChange((current) => ({ ...current, ...change }));
+  const appearance = (change) => onChange((current) => ({ ...current, appearance: { ...current.appearance, ...change } }));
+  const upload = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    onUploading(true);
+    try {
+      appearance({ image: await productAvatarImage(file) });
+    } catch (failure) {
+      onChange((current) => current, failure.message);
+    } finally {
+      onUploading(false);
+    }
+  };
+  const field = (label, key, props = {}) => (0, import_react11.createElement)(
+    Row,
+    { label: t(label), stack: key === "instructions" || key === "skills" },
+    key === "instructions" || key === "skills" ? (0, import_react11.createElement)("textarea", {
+      className: "bt-bs-input bt-bs-area",
+      rows: key === "instructions" ? 4 : 2,
+      "aria-label": t(label),
+      disabled: busy,
+      value: draft[key],
+      onChange: (event) => patch({ [key]: event.target.value }),
+      ...props
+    }) : (0, import_react11.createElement)("input", {
+      className: "bt-bs-input",
+      "aria-label": t(label),
+      disabled: busy,
+      value: draft[key],
+      onChange: (event) => patch({ [key]: event.target.value }),
+      ...props
+    })
+  );
+  return (0, import_react11.createElement)(
+    Card,
+    { title: t("Preset profile") },
+    field("Preset ID", "id", { required: true, maxLength: 128 }),
+    field("Name", "name", { required: true, maxLength: 128 }),
+    field("Model provider", "provider", { required: true, maxLength: 128 }),
+    field("Model ID", "model", { required: true, maxLength: 128 }),
+    field("Thinking effort", "effort", { maxLength: 128 }),
+    field("Instructions", "instructions", { maxLength: 16384 }),
+    field("Skills", "skills", { placeholder: t("Comma-separated skill names") }),
+    (0, import_react11.createElement)(
+      "div",
+      { className: "bt-set-row bt-product-preset-appearance" },
+      (0, import_react11.createElement)(
+        "span",
+        { className: "bt-set-copy" },
+        (0, import_react11.createElement)("span", { className: "bt-bs-label" }, t("Appearance")),
+        (0, import_react11.createElement)("span", { className: "bt-set-hint" }, t("The appearance stays with the preset, not role permissions."))
+      ),
+      (0, import_react11.createElement)(BotMark, { look: appearanceOf(draft), size: 36, label: t("Preset appearance") }),
+      (0, import_react11.createElement)("button", {
+        type: "button",
+        className: "bt-soft bt-soft-sm",
+        disabled: busy,
+        "aria-expanded": showCharacters,
+        onClick: () => setShowCharacters((value) => !value)
+      }, t("Choose character"))
+    ),
+    showCharacters ? (0, import_react11.createElement)(
+      "fieldset",
+      { className: "bt-product-preset-picker", disabled: busy },
+      (0, import_react11.createElement)(CharacterGrid, {
+        look: appearanceOf(draft),
+        hasPhoto: Boolean(draft.appearance.image),
+        onShape: (shape) => onChange((current) => {
+          const { image, ...rest } = current.appearance;
+          return { ...current, appearance: { ...rest, shape } };
+        }),
+        onColor: (color) => appearance({ color })
+      }),
+      (0, import_react11.createElement)("label", null, t("Upload image"), (0, import_react11.createElement)("input", {
+        type: "file",
+        accept: "image/png,image/jpeg,image/webp,image/gif",
+        disabled: busy,
+        onChange: (event) => {
+          void upload(event);
+        }
+      })),
+      draft.appearance.image ? (0, import_react11.createElement)("button", {
+        type: "button",
+        className: "bt-soft bt-soft-sm",
+        disabled: busy,
+        onClick: () => onChange((current) => {
+          const { image, ...rest } = current.appearance;
+          return { ...current, appearance: rest };
+        })
+      }, t("Remove photo")) : null
+    ) : null
+  );
+}
+function ProductPresetSettings({ binding, call, settingsRevision, roleSettings, onApplied, onReload }) {
+  const instanceId = binding.instanceId;
+  const [items, setItems] = (0, import_react11.useState)(null);
+  const [cursor, setCursor] = (0, import_react11.useState)(null);
+  const [listError, setListError] = (0, import_react11.useState)("");
+  const [mode, setMode] = (0, import_react11.useState)(null);
+  const [draft, setDraft] = (0, import_react11.useState)(null);
+  const [preview, setPreview] = (0, import_react11.useState)(null);
+  const [replacement, setReplacement] = (0, import_react11.useState)(null);
+  const [reviewCopy, setReviewCopy] = (0, import_react11.useState)(null);
+  const [ignored, setIgnored] = (0, import_react11.useState)([]);
+  const [sourceText, setSourceText] = (0, import_react11.useState)("");
+  const [sourceIdentity, setSourceIdentity] = (0, import_react11.useState)("");
+  const [sourceBotId, setSourceBotId] = (0, import_react11.useState)("");
+  const [targetRole, setTargetRole] = (0, import_react11.useState)("worker");
+  const [applyRole, setApplyRole] = (0, import_react11.useState)("worker");
+  const [revision, setRevision] = (0, import_react11.useState)(settingsRevision);
+  const [stale, setStale] = (0, import_react11.useState)(false);
+  const [busy, setBusy] = (0, import_react11.useState)(null);
+  const [error, setError] = (0, import_react11.useState)("");
+  const [notice, setNotice] = (0, import_react11.useState)("");
+  const [activity, setActivity] = (0, import_react11.useState)(null);
+  const [activityError, setActivityError] = (0, import_react11.useState)("");
+  const [activityBusy, setActivityBusy] = (0, import_react11.useState)(false);
+  const commands = (0, import_react11.useRef)({});
+  const request = (0, import_react11.useRef)(0);
+  const submitting = (0, import_react11.useRef)(false);
+  const uploading = (0, import_react11.useRef)(false);
+  const refresh = (0, import_react11.useCallback)(async (after, append = false) => {
+    const own = ++request.current;
+    try {
+      const page = requireList(await call("preset-list", { instanceId, limit: 50, ...after ? { after } : {} }));
+      if (own !== request.current) return;
+      setItems((previous) => append ? [...previous ?? [], ...page.items] : page.items);
+      setCursor(page.cursor ?? null);
+      setListError("");
+    } catch (failure) {
+      if (own === request.current) setListError(failure.message);
+    }
+  }, [call, instanceId]);
+  (0, import_react11.useEffect)(() => {
+    setItems(null);
+    setMode(null);
+    setPreview(null);
+    setReplacement(null);
+    setReviewCopy(null);
+    setNotice("");
+    setError("");
+    setActivity(null);
+    setActivityError("");
+    commands.current = {};
+    void refresh();
+    return () => {
+      request.current++;
+    };
+  }, [refresh]);
+  (0, import_react11.useEffect)(() => {
+    setRevision(settingsRevision);
+    setStale(false);
+  }, [settingsRevision]);
+  const commandId = (kind, payload) => {
+    const fingerprint = JSON.stringify(payload);
+    if (commands.current[kind]?.fingerprint !== fingerprint) commands.current[kind] = { fingerprint, id: crypto.randomUUID() };
+    return commands.current[kind].id;
+  };
+  const submit = async (kind, endpoint, payload, receive) => {
+    if (submitting.current || uploading.current) return;
+    submitting.current = true;
+    setBusy(kind);
+    setError("");
+    setNotice("");
+    const id = commandId(kind, payload);
+    try {
+      const result = await call(endpoint, { instanceId, commandId: id, ...payload });
+      await receive(result);
+      delete commands.current[kind];
+    } catch (failure) {
+      if (kind === "apply" && (failure?.code === "COMMIT_UNKNOWN" || failure?.code === "CLIENT_JOURNAL_UNAVAILABLE")) {
+        try {
+          const recorded = await call("preset-application-read", { instanceId, commandId: id });
+          if (recorded?.presetId === payload.presetId && recorded.targetRole === payload.targetRole && recorded.revision > payload.expectedRevision) {
+            await receive(recorded);
+            delete commands.current[kind];
+            return;
+          }
+        } catch {
+        }
+      }
+      if (kind === "apply" && failure?.code === "CONFIG_REVISION_CONFLICT") setStale(true);
+      setError(failure?.message ?? t("The preset operation failed."));
+    } finally {
+      submitting.current = false;
+      setBusy(null);
+    }
+  };
+  const loadActivity = async (previous = null) => {
+    setActivityBusy(true);
+    setActivityError("");
+    try {
+      const [imports, applications] = await Promise.all([
+        previous?.importsCursor === null ? { items: [] } : call("preset-imports", {
+          instanceId,
+          limit: 50,
+          ...previous?.importsCursor ? { after: previous.importsCursor } : {}
+        }),
+        previous?.applicationsCursor === null ? { items: [] } : call("preset-applications", {
+          instanceId,
+          limit: 50,
+          ...previous?.applicationsCursor ? { after: previous.applicationsCursor } : {}
+        })
+      ]);
+      if (!Array.isArray(imports?.items) || !Array.isArray(applications?.items)) throw new Error(t("Preset activity is unavailable."));
+      setActivity({
+        imports: [...previous?.imports ?? [], ...imports.items],
+        applications: [...previous?.applications ?? [], ...applications.items],
+        importsCursor: imports.cursor ?? null,
+        applicationsCursor: applications.cursor ?? null
+      });
+    } catch (failure) {
+      setActivityError(failure?.message ?? t("Preset activity is unavailable."));
+    } finally {
+      setActivityBusy(false);
+    }
+  };
+  const reloadSettings = async () => {
+    if (!onReload || submitting.current) return;
+    submitting.current = true;
+    setBusy("reload");
+    setError("");
+    try {
+      await onReload();
+    } catch (failure) {
+      setError(failure?.message ?? t("Could not refresh role settings."));
+    } finally {
+      submitting.current = false;
+      setBusy(null);
+    }
+  };
+  const create = (event) => {
+    event.preventDefault();
+    const preset = toPreset(draft);
+    void submit("create", "preset-create", { preset }, async (result) => {
+      requireEntry(result);
+      if (result.id !== preset.id) throw new Error(t("The created preset does not match your draft."));
+      setMode(null);
+      setDraft(null);
+      setNotice(t("Preset created."));
+      await refresh();
+    });
+  };
+  const prepare = (event) => {
+    event.preventDefault();
+    let selected;
+    try {
+      selected = selectedCopy(sourceText, sourceIdentity.trim(), sourceBotId.trim(), targetRole);
+    } catch (failure) {
+      setError(failure.message);
+      return;
+    }
+    void submit("preview", "preset-preview", { copy: selected.copy }, (result) => {
+      const record = requirePreview(result);
+      if (record.preview.source.identity !== selected.copy.sourceIdentity || record.preview.source.botId !== selected.copy.sourceBotId || record.preview.targetRole !== targetRole) {
+        throw new Error(t("The preview does not match the selected source and target."));
+      }
+      setReplacement(null);
+      setReviewCopy(selected.copy);
+      setIgnored(selected.ignored);
+      setDraft(draftFromPreview(record));
+      setPreview(record);
+    });
+  };
+  const decide = (decision) => {
+    const payload = {
+      previewId: preview.id,
+      decision,
+      ...decision !== "skip" ? { copy: reviewCopy, preset: toPreset(draft) } : {},
+      ...decision === "replace" ? { expectedDecisionId: replacement.conflictWith } : {}
+    };
+    void submit(decision, "preset-select", payload, async (result) => {
+      const record = requireDecision(result);
+      if (record.previewId !== preview.id) throw new Error(t("The import decision does not match this review."));
+      if (record.status === "conflict") {
+        setReplacement(record.reason === "PRESET_CONTENT_CONFLICT" && record.conflictWith ? record : null);
+        setError(t("Import conflict: {reason}. Review the source and preset again.", { reason: t(record.reason ?? "unknown") }));
+        return;
+      }
+      if (decision !== "skip" && record.status === "skipped" || decision === "skip" && ["selected", "replaced"].includes(record.status) || decision === "replace" && record.status !== "replaced") {
+        throw new Error(t("The import decision does not match your choice."));
+      }
+      if (["selected", "replaced"].includes(record.status) && record.presetId !== payload.preset.id) {
+        throw new Error(t("The selected preset does not match your review."));
+      }
+      setReplacement(null);
+      setNotice(t(record.status === "duplicate" ? "This import decision was already recorded." : record.status === "skipped" ? "Import skipped." : record.status === "replaced" ? "Source binding replaced; the earlier preset remains available." : "Preset selected from the reviewed copy."));
+      setPreview(null);
+      setReviewCopy(null);
+      setDraft(null);
+      setSourceText("");
+      setMode(null);
+      await refresh();
+    });
+  };
+  const apply2 = (presetId) => {
+    if (!Number.isSafeInteger(revision) || stale) return;
+    const expectedRevision = revision;
+    void submit("apply", "preset-apply", { presetId, targetRole: applyRole, expectedRevision }, (result) => {
+      if (!Number.isSafeInteger(result?.revision) || result.revision <= expectedRevision) {
+        throw new Error(t("The role configuration revision was not confirmed."));
+      }
+      setRevision(result.revision);
+      setNotice(t("Configuration v{revision} is active for new turns.", { revision: result.revision }));
+      if (onApplied) void Promise.resolve().then(() => onApplied(result)).catch((failure) => {
+        setError(failure?.message ?? t("Could not refresh role settings."));
+      });
+    });
+  };
+  return (0, import_react11.createElement)(
+    "section",
+    { className: "bt-product-presets", "aria-label": t("Role presets") },
+    (0, import_react11.createElement)(
+      Card,
+      { title: t("Role presets") },
+      (0, import_react11.createElement)(
+        "div",
+        { className: "bt-set-row bt-product-preset-actions" },
+        (0, import_react11.createElement)("button", {
+          type: "button",
+          className: "bt-soft bt-soft-sm",
+          disabled: Boolean(busy) || items === null || Boolean(listError) || Boolean(mode),
+          onClick: () => {
+            setDraft(emptyDraft());
+            setMode("new");
+            setError("");
+            setNotice("");
+          }
+        }, t("New preset")),
+        (0, import_react11.createElement)("button", {
+          type: "button",
+          className: "bt-soft bt-soft-sm",
+          disabled: Boolean(busy) || items === null || Boolean(listError) || Boolean(mode),
+          onClick: () => {
+            setMode("import");
+            setError("");
+            setNotice("");
+          }
+        }, t("Review old configuration"))
+      ),
+      listError ? (0, import_react11.createElement)(
+        "div",
+        { className: "bt-set-row" },
+        (0, import_react11.createElement)("p", { className: "bt-main-error", role: "alert" }, listError),
+        (0, import_react11.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: () => {
+          void refresh();
+        } }, t("Retry"))
+      ) : null,
+      items === null && !listError ? (0, import_react11.createElement)("p", { className: "bt-set-row bt-main-status", role: "status" }, t("Loading…")) : null,
+      items?.length === 0 ? (0, import_react11.createElement)("p", { className: "bt-set-row bt-main-status" }, t("No role presets yet.")) : null,
+      items?.length ? (0, import_react11.createElement)(
+        "div",
+        { className: "bt-set-row bt-product-preset-target" },
+        (0, import_react11.createElement)("label", null, t("Apply to"), (0, import_react11.createElement)(
+          "select",
+          {
+            className: "bt-select",
+            "aria-label": t("Apply to"),
+            value: applyRole,
+            disabled: Boolean(busy),
+            onChange: (event) => setApplyRole(event.target.value)
+          },
+          roles.map(([id, name]) => (0, import_react11.createElement)("option", { key: id, value: id }, t(name)))
+        )),
+        !Number.isSafeInteger(revision) ? (0, import_react11.createElement)("span", { className: "bt-set-hint" }, t("Open role settings to load its current revision.")) : null
+      ) : null,
+      items?.map((entry) => (0, import_react11.createElement)(
+        "div",
+        { key: entry.id, className: "bt-set-row bt-product-preset-item" },
+        (0, import_react11.createElement)(BotMark, { look: appearanceOf(entry.preset), size: 36, label: entry.preset.name }),
+        (0, import_react11.createElement)(
+          "span",
+          { className: "bt-set-copy" },
+          (0, import_react11.createElement)("strong", null, entry.preset.name),
+          (0, import_react11.createElement)("span", { className: "bt-set-hint" }, `${entry.preset.model.provider}/${entry.preset.model.model} · ${t("Preset")} v${entry.revision}`),
+          entry.origin ? (0, import_react11.createElement)("span", { className: "bt-set-hint" }, `${t("From")} ${entry.origin.source.identity} / ${entry.origin.source.botId} → ${entry.origin.targetRole}`) : null
+        ),
+        entry.status === "active" ? (0, import_react11.createElement)("button", {
+          type: "button",
+          className: "bt-soft bt-soft-sm",
+          disabled: Boolean(busy) || Boolean(listError) || stale || !Number.isSafeInteger(revision),
+          onClick: () => apply2(entry.id)
+        }, t("Apply preset")) : (0, import_react11.createElement)("span", { className: "bt-set-hint" }, t("Deleted"))
+      )),
+      cursor ? (0, import_react11.createElement)("button", {
+        type: "button",
+        className: "bt-soft bt-soft-sm",
+        disabled: Boolean(busy),
+        onClick: () => {
+          void refresh(cursor, true);
+        }
+      }, t("Load more")) : null,
+      (0, import_react11.createElement)("button", {
+        type: "button",
+        className: "bt-soft bt-soft-sm",
+        disabled: activityBusy,
+        onClick: () => {
+          void loadActivity();
+        }
+      }, t("Preset activity"))
+    ),
+    activityError ? (0, import_react11.createElement)("p", { role: "alert", className: "bt-main-error" }, activityError) : null,
+    activity ? (0, import_react11.createElement)(
+      Card,
+      { title: t("Preset activity") },
+      activity.imports.map((item) => (0, import_react11.createElement)(
+        "p",
+        { key: item.id, className: "bt-set-row bt-set-hint" },
+        `${item.source.identity} / ${item.source.botId} → ${item.targetRole}: ${t(item.status)}${item.reason ? ` (${t(item.reason)})` : ""}`
+      )),
+      activity.applications.map((item) => (0, import_react11.createElement)(
+        "p",
+        { key: `${item.sourceInstanceId}:${item.actorId}:${item.commandId}`, className: "bt-set-row bt-set-hint" },
+        `${item.presetId} v${item.presetRevision} → ${item.targetRole}: ${t("Configuration")} v${item.revision}`
+      )),
+      !activity.imports.length && !activity.applications.length ? (0, import_react11.createElement)("p", { className: "bt-set-row bt-set-hint" }, t("No preset activity yet.")) : null,
+      activity.importsCursor || activity.applicationsCursor ? (0, import_react11.createElement)("button", {
+        type: "button",
+        className: "bt-soft bt-soft-sm",
+        disabled: activityBusy,
+        onClick: () => {
+          void loadActivity(activity);
+        }
+      }, t("Load more")) : null
+    ) : null,
+    stale ? (0, import_react11.createElement)(
+      "div",
+      { className: "bt-set-row" },
+      (0, import_react11.createElement)("p", { role: "alert", className: "bt-main-error" }, t("Role settings changed. Reload settings before applying a preset.")),
+      onReload ? (0, import_react11.createElement)("button", {
+        type: "button",
+        className: "bt-soft bt-soft-sm",
+        disabled: Boolean(busy),
+        onClick: () => {
+          void reloadSettings();
+        }
+      }, t("Reload settings")) : null
+    ) : null,
+    error ? (0, import_react11.createElement)("p", { role: "alert", className: "bt-main-error" }, error) : null,
+    notice ? (0, import_react11.createElement)("p", { role: "status", className: "bt-main-status" }, notice) : null,
+    mode === "import" && !preview ? (0, import_react11.createElement)(
+      "form",
+      { className: "bt-product-preset-form", onSubmit: prepare },
+      (0, import_react11.createElement)(
+        Card,
+        { title: t("Review old configuration") },
+        (0, import_react11.createElement)(
+          Row,
+          { label: t("Copy identity"), hint: t("A name for the explicit copy you provide.") },
+          (0, import_react11.createElement)("input", {
+            className: "bt-bs-input",
+            "aria-label": t("Copy identity"),
+            value: sourceIdentity,
+            required: true,
+            disabled: Boolean(busy),
+            onChange: (event) => setSourceIdentity(event.target.value)
+          })
+        ),
+        (0, import_react11.createElement)(Row, { label: t("Legacy role ID") }, (0, import_react11.createElement)("input", {
+          className: "bt-bs-input",
+          "aria-label": t("Legacy role ID"),
+          value: sourceBotId,
+          required: true,
+          disabled: Boolean(busy),
+          onChange: (event) => setSourceBotId(event.target.value)
+        })),
+        (0, import_react11.createElement)(Row, { label: t("Target role") }, (0, import_react11.createElement)(
+          "div",
+          { className: "bt-product-preset-target" },
+          (0, import_react11.createElement)(BotMark, {
+            look: lookOf({
+              id: `role-${targetRole}`,
+              color: roleSettings?.roles?.[targetRole]?.appearance?.color,
+              avatar: roleSettings?.roles?.[targetRole]?.appearance
+            }),
+            size: 32,
+            label: t(targetRole === "main" ? "Main" : targetRole === "router" ? "Router" : "Worker")
+          }),
+          (0, import_react11.createElement)(
+            "select",
+            {
+              className: "bt-select",
+              "aria-label": t("Target role"),
+              value: targetRole,
+              disabled: Boolean(busy),
+              onChange: (event) => setTargetRole(event.target.value)
+            },
+            roles.map(([id, name]) => (0, import_react11.createElement)("option", { key: id, value: id }, t(name)))
+          )
+        )),
+        (0, import_react11.createElement)(
+          Row,
+          { label: t("Legacy role configuration"), hint: t("Paste a legacy role profile copy. Only the selected configuration fields are reviewed."), stack: true },
+          (0, import_react11.createElement)("textarea", {
+            className: "bt-bs-input bt-bs-area",
+            "aria-label": t("Legacy role configuration"),
+            rows: 5,
+            required: true,
+            value: sourceText,
+            disabled: Boolean(busy),
+            onChange: (event) => setSourceText(event.target.value)
+          })
+        )
+      ),
+      (0, import_react11.createElement)(
+        "div",
+        { className: "bt-actions" },
+        (0, import_react11.createElement)("button", {
+          type: "button",
+          className: "bt-soft bt-soft-sm",
+          disabled: Boolean(busy),
+          onClick: () => {
+            setMode(null);
+            setSourceText("");
+          }
+        }, t("Cancel")),
+        (0, import_react11.createElement)("button", { type: "submit", className: "bt-send bt-soft-sm", disabled: Boolean(busy) }, busy ? t("Loading…") : t("Preview"))
+      )
+    ) : null,
+    preview ? (0, import_react11.createElement)(
+      "div",
+      { className: "bt-product-preset-form" },
+      (0, import_react11.createElement)(
+        Card,
+        { title: t("Review source and target") },
+        (0, import_react11.createElement)("p", { className: "bt-set-row" }, `${preview.preview.source.identity} / ${preview.preview.source.botId} → ${preview.preview.targetRole}`),
+        (0, import_react11.createElement)("p", { className: "bt-set-row bt-set-hint" }, `${t("Source digest")}: ${preview.preview.source.digest}`),
+        preview.preview.fields.map((field) => (0, import_react11.createElement)("p", { key: field.from, className: "bt-set-row bt-set-hint" }, `${field.from} → ${field.to}`)),
+        (/* @__PURE__ */ new Set([...preview.preview.ignored, ...ignored])).size ? (0, import_react11.createElement)(
+          "p",
+          { className: "bt-set-row bt-set-hint" },
+          `${t("Ignored fields")}: ${[.../* @__PURE__ */ new Set([...preview.preview.ignored, ...ignored])].join(", ")}`
+        ) : null,
+        preview.preview.issues.map((issue, index) => (0, import_react11.createElement)(
+          "p",
+          { key: index, role: "status", className: "bt-set-row bt-main-error" },
+          `${issue.field}: ${t(issue.reason)}`
+        ))
+      ),
+      (0, import_react11.createElement)(DraftFields, {
+        draft,
+        busy: Boolean(busy),
+        onUploading: (value) => {
+          uploading.current = value;
+          setBusy(value ? "image" : null);
+        },
+        onChange: (value, failure) => {
+          setDraft(value);
+          setReplacement(null);
+          setError(failure ?? "");
+        }
+      }),
+      replacement ? (0, import_react11.createElement)("p", { className: "bt-set-row bt-set-hint" }, t("Replace only this source binding; the earlier preset stays available.")) : null,
+      (0, import_react11.createElement)(
+        "div",
+        { className: "bt-actions" },
+        (0, import_react11.createElement)("button", {
+          type: "button",
+          className: "bt-soft bt-soft-sm",
+          disabled: Boolean(busy),
+          onClick: () => decide("skip")
+        }, t("Skip import")),
+        (0, import_react11.createElement)("button", {
+          type: "button",
+          className: "bt-soft bt-soft-sm",
+          disabled: Boolean(busy),
+          onClick: () => {
+            setPreview(null);
+            setReplacement(null);
+            setReviewCopy(null);
+            setDraft(null);
+          }
+        }, t("Review again")),
+        replacement ? (0, import_react11.createElement)("button", {
+          type: "button",
+          className: "bt-soft bt-soft-sm",
+          disabled: Boolean(busy),
+          onClick: () => decide("replace")
+        }, t("Replace source binding")) : null,
+        (0, import_react11.createElement)("button", {
+          type: "button",
+          className: "bt-send bt-soft-sm",
+          disabled: Boolean(busy),
+          onClick: () => decide("select")
+        }, busy ? t("Saving…") : t("Select preset"))
+      )
+    ) : null,
+    mode === "new" && draft ? (0, import_react11.createElement)(
+      "form",
+      { className: "bt-product-preset-form", onSubmit: create },
+      (0, import_react11.createElement)(DraftFields, {
+        draft,
+        busy: Boolean(busy),
+        onUploading: (value) => {
+          uploading.current = value;
+          setBusy(value ? "image" : null);
+        },
+        onChange: (value, failure) => {
+          setDraft(value);
+          setError(failure ?? "");
+        }
+      }),
+      (0, import_react11.createElement)(
+        "div",
+        { className: "bt-actions" },
+        (0, import_react11.createElement)("button", {
+          type: "button",
+          className: "bt-soft bt-soft-sm",
+          disabled: Boolean(busy),
+          onClick: () => {
+            setMode(null);
+            setDraft(null);
+          }
+        }, t("Cancel")),
+        (0, import_react11.createElement)("button", { type: "submit", className: "bt-send bt-soft-sm", disabled: Boolean(busy) }, busy ? t("Saving…") : t("Create preset"))
+      )
+    ) : null
+  );
+}
+var PRODUCT_PRESET_CSS = `
+.bt-product-presets{display:flex;flex-direction:column;gap:16px}
+.bt-product-presets .bt-set-row{min-width:0;overflow-wrap:anywhere}
+.bt-product-preset-actions,.bt-product-preset-target,.bt-product-preset-appearance{display:flex;align-items:center;flex-wrap:wrap;gap:12px}
+.bt-product-preset-target label{display:flex;align-items:center;gap:8px}
+.bt-product-preset-item .bt-set-copy{min-width:0}
+.bt-product-preset-form{display:flex;flex-direction:column;gap:12px}
+.bt-product-preset-form .bt-bs-input,.bt-product-preset-form .bt-select{min-width:0;max-width:100%}
+.bt-product-preset-form .bt-bs-area{width:100%;box-sizing:border-box}
+.bt-product-preset-form .bt-actions{justify-content:flex-end;flex-wrap:wrap;gap:8px}
+.bt-product-preset-picker{display:flex;flex-direction:column;gap:12px;margin:0;padding:12px;border:0;border-top:.5px solid var(--bt-line);min-width:0}
+.bt-product-preset-picker .bt-color{width:28px;height:28px}
+.bt-product-presets button:focus-visible,.bt-product-presets input:focus-visible,.bt-product-presets select:focus-visible,
+.bt-product-presets textarea:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+@media(max-width:640px){.bt-product-preset-item{flex-wrap:wrap}.bt-product-preset-item>button{margin-left:48px}}
+`;
+
+// src/client/product-credentials.js
+var import_react12 = require("react");
+var credentialImportStatusText = (status) => t({
+  pending: "Credential import pending",
+  importing: "Credential import in progress",
+  unknown: "Credential import result unknown",
+  applied: "Credential import completed",
+  conflict: "Credential import conflict",
+  cancelled: "Credential import cancelled"
+}[status] ?? "Credential import status unavailable");
+function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
+  const [resources, setResources] = (0, import_react12.useState)(null);
+  const [requests, setRequests] = (0, import_react12.useState)([]);
+  const [requestCursor, setRequestCursor] = (0, import_react12.useState)(null);
+  const [requestError, setRequestError] = (0, import_react12.useState)(null);
+  const [feishu, setFeishu] = (0, import_react12.useState)(null);
+  const [github, setGithub] = (0, import_react12.useState)(null);
+  const [selectedId, setSelectedId] = (0, import_react12.useState)(null);
+  const [label, setLabel] = (0, import_react12.useState)("");
+  const [value, setValue] = (0, import_react12.useState)("");
+  const [rotationValue, setRotationValue] = (0, import_react12.useState)("");
+  const [rotationAttempt, setRotationAttempt] = (0, import_react12.useState)(null);
+  const [rotationResult, setRotationResult] = (0, import_react12.useState)(null);
+  const [rename, setRename] = (0, import_react12.useState)("");
+  const [role, setRole] = (0, import_react12.useState)("worker");
+  const [purpose, setPurpose] = (0, import_react12.useState)("tool");
+  const [workItemId, setWorkItemId] = (0, import_react12.useState)("");
+  const [environmentId, setEnvironmentId] = (0, import_react12.useState)("");
+  const [sourceInstanceId, setSourceInstanceId] = (0, import_react12.useState)("");
+  const [busy, setBusy] = (0, import_react12.useState)(null);
+  const [error, setError] = (0, import_react12.useState)(null);
+  const [notice, setNotice] = (0, import_react12.useState)(null);
+  const [credentialImports, setCredentialImports] = (0, import_react12.useState)([]);
+  const [credentialImportBatch, setCredentialImportBatch] = (0, import_react12.useState)(null);
+  const [credentialImportTargets, setCredentialImportTargets] = (0, import_react12.useState)({});
+  const [credentialImportError, setCredentialImportError] = (0, import_react12.useState)(null);
+  const [credentialImportBusy, setCredentialImportBusy] = (0, import_react12.useState)(false);
+  const pendingCreate = (0, import_react12.useRef)(null);
+  const pendingRotation = (0, import_react12.useRef)(null);
+  const pendingRequest = (0, import_react12.useRef)(null);
+  const pendingCredentialPreview = (0, import_react12.useRef)(null);
+  const pendingDecisions = (0, import_react12.useRef)(/* @__PURE__ */ new Map());
+  const instanceId = binding.instanceId;
+  const rememberRotation = (attempt) => {
+    pendingRotation.current = attempt;
+    setRotationAttempt(attempt);
+    try {
+      if (attempt) window.sessionStorage.setItem(`product-rotation:${instanceId}`, JSON.stringify(attempt));
+      else window.sessionStorage.removeItem(`product-rotation:${instanceId}`);
+    } catch {
+    }
+  };
+  const rememberRequest = (attempt) => {
+    pendingRequest.current = attempt;
+    try {
+      if (attempt) window.sessionStorage.setItem(`product-request:${instanceId}`, JSON.stringify(attempt));
+      else window.sessionStorage.removeItem(`product-request:${instanceId}`);
+    } catch {
+    }
+  };
+  const loadPages = async (endpoint, errorText) => {
+    const items = [];
+    let after;
+    for (let pageNumber = 0; pageNumber < 10; pageNumber++) {
+      const page = await call(endpoint, { instanceId, limit: 100, ...after ? { after } : {} });
+      items.push(...page.items);
+      if (!page.cursor) return items;
+      after = page.cursor;
+    }
+    throw new Error(t(errorText));
+  };
+  const load = () => loadPages("resource-list", "The credential resource list exceeds its bounded limit.");
+  const readRequests = async () => {
+    try {
+      const page = await call("resource-request-list", { instanceId, limit: 100 });
+      return { items: page.items, cursor: page.cursor ?? null, available: true };
+    } catch (failure) {
+      return { items: [], cursor: null, available: false, error: failure.message };
+    }
+  };
+  const readCredentialImports = async () => {
+    try {
+      const result = await call("credential-import-list", { instanceId, limit: 100 });
+      setCredentialImports(result.items);
+      return true;
+    } catch (failure) {
+      setCredentialImportError(failure.message);
+      return false;
+    }
+  };
+  const refresh = async () => {
+    const [items, requestResult] = await Promise.all([load(), readRequests()]);
+    setResources(items);
+    setRequests(requestResult.items);
+    setRequestCursor(requestResult.cursor);
+    setRequestError(requestResult.error ?? null);
+    const [status, githubStatus] = await Promise.all([
+      call("feishu-status", { instanceId }).catch(() => null),
+      call("github-status", { instanceId }).catch(() => null)
+    ]);
+    setFeishu(status);
+    setGithub(githubStatus);
+    if (status?.credentialMode === "managed" || githubStatus?.credentialMode === "managed") {
+      setSourceInstanceId((current) => current || status?.sourceInstanceId || githubStatus?.sourceInstanceId);
+    }
+    return requestResult.available;
+  };
+  (0, import_react12.useEffect)(() => {
+    let live = true;
+    pendingDecisions.current.clear();
+    pendingRotation.current = null;
+    setRotationAttempt(null);
+    setRotationResult(null);
+    setRotationValue("");
+    try {
+      const stored = JSON.parse(window.sessionStorage.getItem(`product-rotation:${instanceId}`));
+      if (stored && typeof stored.commandId === "string" && typeof stored.resourceId === "string" && Number.isSafeInteger(stored.expectedRevision)) {
+        const attempt = { commandId: stored.commandId, resourceId: stored.resourceId, expectedRevision: stored.expectedRevision };
+        pendingRotation.current = attempt;
+        setRotationAttempt(attempt);
+        void call("resource-rotation-read", { instanceId, commandId: attempt.commandId }).then((result) => {
+          if (live) setRotationResult(result);
+        }).catch(() => {
+        });
+      }
+    } catch {
+    }
+    try {
+      const stored = JSON.parse(window.sessionStorage.getItem(`product-request:${instanceId}`));
+      const payload = stored?.payload;
+      if (typeof stored?.commandId === "string" && typeof payload?.resourceId === "string" && ["main", "router", "worker"].includes(payload?.scope?.role) && ["tool", "source", "outbound"].includes(payload?.purpose)) {
+        pendingRequest.current = stored;
+        setSelectedId(payload.resourceId);
+        setRole(payload.scope.role);
+        setPurpose(payload.purpose);
+        setWorkItemId(payload.scope.workItemId ?? "");
+        setEnvironmentId(payload.scope.environmentId ?? "");
+        setSourceInstanceId(payload.scope.sourceInstanceId ?? "");
+      }
+    } catch {
+    }
+    Promise.all([
+      load(),
+      readRequests(),
+      call("feishu-status", { instanceId }).catch(() => null),
+      call("github-status", { instanceId }).catch(() => null),
+      call("credential-import-list", { instanceId, limit: 100 }).catch(() => null)
+    ]).then(
+      ([items, requestResult, status, githubStatus, importResult]) => {
+        if (!live) return;
+        setResources(items);
+        setRequests(requestResult.items);
+        setRequestCursor(requestResult.cursor);
+        setRequestError(requestResult.error ?? null);
+        setFeishu(status);
+        setGithub(githubStatus);
+        if (importResult) {
+          setCredentialImports(importResult.items);
+          setCredentialImportError(null);
+        } else setCredentialImportError(t("Credential export import is available only in the desktop app."));
+        if (status?.credentialMode === "managed" || githubStatus?.credentialMode === "managed") {
+          setSourceInstanceId((current) => current || status?.sourceInstanceId || githubStatus?.sourceInstanceId);
+        }
+      },
+      (failure) => {
+        if (live) setError(failure.message);
+      }
+    );
+    return () => {
+      live = false;
+    };
+  }, [call, instanceId]);
+  (0, import_react12.useEffect)(() => () => {
+    const pendingId = pendingCredentialPreview.current;
+    pendingCredentialPreview.current = null;
+    if (pendingId) void credentialImportBridge?.cancel(pendingId).catch(() => {
+    });
+  }, [credentialImportBridge, instanceId]);
+  const loadMoreRequests = async () => {
+    if (!requestCursor || busy) return;
+    setBusy("requests");
+    setRequestError(null);
+    try {
+      const page = await call("resource-request-list", { instanceId, limit: 100, after: requestCursor });
+      setRequests((current) => {
+        const seen = new Set(current.map((request) => request.id));
+        return [...current, ...page.items.filter((request) => !seen.has(request.id))];
+      });
+      setRequestCursor(page.cursor ?? null);
+    } catch (failure) {
+      setRequestError(failure.message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const run2 = async (name, action, success, onConfirmed) => {
+    setBusy(name);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await action();
+      const requestsAvailable = await refresh();
+      if (requestsAvailable) onConfirmed?.(result);
+      setNotice(t(success));
+    } catch (failure) {
+      setError(failure.message);
+      try {
+        await refresh();
+      } catch {
+      }
+    } finally {
+      setBusy(null);
+    }
+  };
+  const create = (event) => {
+    event.preventDefault();
+    if (!label.trim() || !value.trim() || busy) return;
+    void run2("create", async () => {
+      pendingCreate.current ??= crypto.randomUUID();
+      await call("resource-create", { instanceId, commandId: pendingCreate.current, label: label.trim(), value });
+      pendingCreate.current = null;
+      setLabel("");
+      setValue("");
+    }, "Credential resource saved.");
+  };
+  const selected = resources?.find((resource) => resource.id === selectedId);
+  const choose = (resource) => {
+    if (selectedId !== resource.id) setRotationValue("");
+    setSelectedId(resource.id);
+    setRename(resource.label);
+    setError(null);
+    setNotice(null);
+  };
+  const finishRotation = (result) => {
+    setRotationResult(result);
+    if (result.status === "committed") {
+      rememberRotation(null);
+      setRotationValue("");
+      setNotice(t(result.cleanupPending ? "Credential rotated; old record cleanup pending." : "Credential rotated."));
+    } else if (result.status === "abandoned") {
+      rememberRotation(null);
+      setRotationValue("");
+      setError(t("Rotation was not applied. Refresh the resource before starting another rotation."));
+    } else {
+      setError(t("Rotation is pending. Retry with the same value and command, or check its status."));
+    }
+  };
+  const checkRotation = async (attempt) => {
+    if (busy) return;
+    setBusy("rotation-check");
+    setError(null);
+    setNotice(null);
+    try {
+      finishRotation(await call("resource-rotation-read", { instanceId, commandId: attempt.commandId }));
+      await refresh().catch(() => {
+      });
+    } catch {
+      setError(t("Rotation result is unknown. Keep this command and check again."));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const rotate = (event) => {
+    event.preventDefault();
+    if (!selected || !rotationValue.trim() || busy || pendingRotation.current?.resourceId !== selected.id && pendingRotation.current) return;
+    const attempt = pendingRotation.current ?? {
+      commandId: crypto.randomUUID(),
+      resourceId: selected.id,
+      expectedRevision: selected.revision
+    };
+    rememberRotation(attempt);
+    setBusy("rotate");
+    setError(null);
+    setNotice(null);
+    setRotationResult(null);
+    void (async () => {
+      try {
+        const result = await call("resource-rotate", { instanceId, ...attempt, value: rotationValue });
+        finishRotation(result);
+      } catch {
+        try {
+          finishRotation(await call("resource-rotation-read", { instanceId, commandId: attempt.commandId }));
+        } catch {
+          setError(t("Rotation result is unknown. Keep this command and check again."));
+        }
+      } finally {
+        try {
+          await refresh();
+        } catch {
+        }
+        setBusy(null);
+      }
+    })();
+  };
+  const grant = (event) => {
+    event.preventDefault();
+    if (!selected || busy || purpose !== "tool" && !sourceInstanceId.trim()) return;
+    const scope = {
+      role,
+      ...workItemId.trim() ? { workItemId: workItemId.trim() } : {},
+      ...environmentId.trim() ? { environmentId: environmentId.trim() } : {},
+      ...sourceInstanceId.trim() ? { sourceInstanceId: sourceInstanceId.trim() } : {}
+    };
+    void run2("grant", () => call("resource-grant", {
+      instanceId,
+      commandId: crypto.randomUUID(),
+      resourceId: selected.id,
+      expectedRevision: selected.revision,
+      scope,
+      purposes: [purpose]
+    }), "Authorization recorded.");
+  };
+  const requestAuthorization = () => {
+    if (!selected || busy || requestError || purpose !== "tool" && !sourceInstanceId.trim()) return;
+    const scope = {
+      role,
+      ...workItemId.trim() ? { workItemId: workItemId.trim() } : {},
+      ...environmentId.trim() ? { environmentId: environmentId.trim() } : {},
+      ...sourceInstanceId.trim() ? { sourceInstanceId: sourceInstanceId.trim() } : {}
+    };
+    const payload = { instanceId, resourceId: selected.id, scope, purpose };
+    const fingerprint = JSON.stringify(payload);
+    if (JSON.stringify(pendingRequest.current?.payload) !== fingerprint) rememberRequest({ payload, commandId: crypto.randomUUID() });
+    const commandId = pendingRequest.current.commandId;
+    void run2("request", async () => {
+      const result = await call("resource-request", { ...payload, commandId });
+      if (result?.status !== "pending" || result.resourceId !== selected.id) throw new Error(t("The authorization request was not confirmed."));
+      return result;
+    }, "Authorization request recorded.", (result) => {
+      rememberRequest(null);
+      setRequests((current) => current.some((request) => request.id === result.id) ? current : [result, ...current]);
+    });
+  };
+  const decideRequest = (request, approve) => {
+    if (!selected || busy || requestError || request.status !== "pending") return;
+    const key = `${approve ? "approve" : "cancel"}:${request.id}`;
+    if (!pendingDecisions.current.has(key)) pendingDecisions.current.set(
+      key,
+      { commandId: crypto.randomUUID(), expectedRevision: selected.revision }
+    );
+    const attempt = pendingDecisions.current.get(key);
+    void run2(key, async () => {
+      try {
+        const result = approve ? await call("resource-grant", {
+          instanceId,
+          commandId: attempt.commandId,
+          resourceId: selected.id,
+          expectedRevision: attempt.expectedRevision,
+          scope: request.scope,
+          purposes: [request.purpose],
+          requestId: request.id
+        }) : await call("resource-cancel", { instanceId, commandId: attempt.commandId, requestId: request.id });
+        if (approve ? !Number.isSafeInteger(result?.revision) || result.revision <= attempt.expectedRevision : result?.status !== "cancelled" || result?.id !== request.id) {
+          throw new Error(t("The authorization decision was not confirmed."));
+        }
+        return result;
+      } catch (failure) {
+        if (failure.code === "RESOURCE_REVISION_CONFLICT" || failure.code === "REQUEST_UNAVAILABLE") pendingDecisions.current.delete(key);
+        throw failure;
+      }
+    }, approve ? "Authorization recorded." : "Authorization request cancelled.", (result) => {
+      pendingDecisions.current.delete(key);
+      const decided = approve ? { ...request, status: "granted" } : result;
+      setRequests((current) => current.some((item) => item.id === request.id) ? current.map((item) => item.id === request.id ? decided : item) : [decided, ...current]);
+    });
+  };
+  const remove = (resource) => {
+    if (busy || resource.status !== "deleted" && !window.confirm(t("Delete this credential resource and all its grants?"))) return;
+    void run2("delete", () => resource.status === "deleted" ? call("resource-cleanup", { instanceId, resourceId: resource.id }) : call("resource-delete", {
+      instanceId,
+      commandId: crypto.randomUUID(),
+      resourceId: resource.id,
+      expectedRevision: resource.revision
+    }), "Resource deletion recorded.");
+  };
+  const selectFeishu = (resourceId) => {
+    if (busy) return;
+    void run2(
+      "select-feishu",
+      () => call("resource-select-feishu", { instanceId, commandId: crypto.randomUUID(), resourceId }),
+      "Feishu credential selection saved."
+    );
+  };
+  const selectGithub = (resourceId) => {
+    if (busy) return;
+    if (resourceId && github?.sourceInstanceId) setSourceInstanceId(github.sourceInstanceId);
+    void run2(
+      "select-github",
+      () => call("resource-select-github", { instanceId, commandId: crypto.randomUUID(), resourceId }),
+      "GitHub credential selection saved."
+    );
+  };
+  const pickCredentialExport = async () => {
+    if (credentialImportBusy || !credentialImportBridge) return;
+    setCredentialImportBusy(true);
+    setCredentialImportError(null);
+    let picked;
+    try {
+      picked = await credentialImportBridge.pick();
+      if (picked.canceled) return;
+      if (picked.error) throw new Error(t(picked.error === "too-large" ? "Credential export must be at most 1 MiB." : "The credential export could not be read."));
+      const saved = await call("credential-import-preview", { instanceId, pendingId: picked.id, preview: picked.preview });
+      if (pendingCredentialPreview.current && pendingCredentialPreview.current !== picked.id) {
+        await credentialImportBridge.cancel(pendingCredentialPreview.current);
+      }
+      pendingCredentialPreview.current = picked.id;
+      setCredentialImportBatch({ ...picked.preview, pendingId: picked.id, items: saved.items });
+      setCredentialImportTargets(Object.fromEntries(picked.preview.entries.map((entry) => {
+        const prior = saved.items.find((item) => item.sourceRef === entry.sourceRef)?.target;
+        return [entry.sourceRef, {
+          label: prior?.label ?? entry.label,
+          role: prior?.scope.role ?? "",
+          purpose: prior?.purpose ?? "",
+          workItemId: prior?.scope.workItemId ?? "",
+          environmentId: prior?.scope.environmentId ?? "",
+          sourceInstanceId: prior?.scope.sourceInstanceId ?? ""
+        }];
+      })));
+      await readCredentialImports();
+    } catch (failure) {
+      if (picked?.id) await credentialImportBridge.cancel(picked.id).catch(() => {
+      });
+      setCredentialImportError(failure.message);
+    } finally {
+      setCredentialImportBusy(false);
+    }
+  };
+  const updateCredentialImportTarget = (sourceRef, patch) => setCredentialImportTargets((current) => ({
+    ...current,
+    [sourceRef]: { ...current[sourceRef], ...patch }
+  }));
+  const commitCredentialImport = async (entry) => {
+    if (!credentialImportBatch || credentialImportBusy) return;
+    const target = credentialImportTargets[entry.sourceRef];
+    if (!target?.label.trim() || !target.role || !target.purpose) {
+      setCredentialImportError(t("Choose a new resource name, role, purpose, and exact scope before importing."));
+      return;
+    }
+    if (target.purpose === "tool" && !target.workItemId.trim() && !target.environmentId.trim()) {
+      setCredentialImportError(t("Choose a work item or Environment for a tool grant."));
+      return;
+    }
+    if (target.purpose !== "tool" && !target.sourceInstanceId.trim()) {
+      setCredentialImportError(t("Choose the exact source Instance for this authorization."));
+      return;
+    }
+    const scope = {
+      role: target.role,
+      ...target.workItemId.trim() ? { workItemId: target.workItemId.trim() } : {},
+      ...target.environmentId.trim() ? { environmentId: target.environmentId.trim() } : {},
+      ...target.sourceInstanceId.trim() ? { sourceInstanceId: target.sourceInstanceId.trim() } : {}
+    };
+    setCredentialImportBusy(true);
+    setCredentialImportError(null);
+    try {
+      await call("credential-import-commit", {
+        instanceId,
+        commandId: crypto.randomUUID(),
+        pendingId: credentialImportBatch.pendingId,
+        sourceRef: entry.sourceRef,
+        credentialId: entry.id,
+        target: { label: target.label.trim(), purpose: target.purpose, scope }
+      });
+      setNotice(t("Credential imported with a new authorization."));
+      const [items, imports] = await Promise.all([load(), call("credential-import-list", { instanceId, limit: 100 })]);
+      setResources(items);
+      setCredentialImports(imports.items);
+      setCredentialImportBatch((current) => current ? {
+        ...current,
+        items: current.items.map((item) => item.sourceRef === entry.sourceRef ? imports.items.find((saved) => saved.sourceRef === item.sourceRef) ?? item : item)
+      } : current);
+    } catch (failure) {
+      setCredentialImportError(failure.message);
+      await readCredentialImports();
+    } finally {
+      setCredentialImportBusy(false);
+    }
+  };
+  const cancelCredentialImport = async (item) => {
+    if (credentialImportBusy) return;
+    setCredentialImportBusy(true);
+    setCredentialImportError(null);
+    try {
+      const result = await call("credential-import-cancel", {
+        instanceId,
+        commandId: crypto.randomUUID(),
+        sourceRef: item.sourceRef,
+        ...credentialImportBatch?.pendingId ? { pendingId: credentialImportBatch.pendingId } : {}
+      });
+      setCredentialImports((current) => current.map((saved) => saved.sourceRef === result.sourceRef ? result : saved));
+    } catch (failure) {
+      setCredentialImportError(failure.message);
+      await readCredentialImports();
+    } finally {
+      setCredentialImportBusy(false);
+    }
+  };
+  return (0, import_react12.createElement)(
+    Card,
+    { title: t("Credential resources") },
+    (0, import_react12.createElement)("p", { className: "bt-product-resource-note" }, t("Managed Feishu and GitHub source credentials use separate grants. Feishu delivery and Worker MCP tools need their own grants.")),
+    (0, import_react12.createElement)(
+      "section",
+      { className: "bt-product-credential-import", "aria-label": t("Import credential resources") },
+      (0, import_react12.createElement)("h3", null, t("Import credential resources")),
+      (0, import_react12.createElement)("p", { className: "bt-product-resource-note" }, t("Import accepts a controlled ds-superagent-credential-export version 1 JSON file. DSH does not provide a safe way to browse old vault records; if you do not have an export, create a new resource manually. Old grants are never copied.")),
+      credentialImportBridge ? (0, import_react12.createElement)("button", {
+        className: "bt-soft",
+        type: "button",
+        disabled: credentialImportBusy,
+        onClick: () => void pickCredentialExport()
+      }, credentialImportBusy ? t("Reading export…") : t("Choose credential export")) : null,
+      credentialImportError ? (0, import_react12.createElement)("p", { className: "bt-main-error", role: "alert" }, credentialImportError) : null,
+      credentialImportBatch ? (0, import_react12.createElement)(
+        "div",
+        { className: "bt-product-credential-import-preview" },
+        (0, import_react12.createElement)("strong", null, credentialImportBatch.sourceLabel),
+        (0, import_react12.createElement)("span", null, `${t("Original owner")}: ${credentialImportBatch.owner.label}`),
+        credentialImportBatch.owner.instanceId ? (0, import_react12.createElement)("span", null, `${t("Original instance")}: ${credentialImportBatch.owner.instanceId}`) : null,
+        (0, import_react12.createElement)("button", {
+          className: "bt-soft",
+          type: "button",
+          disabled: credentialImportBusy,
+          onClick: () => {
+            void credentialImportBridge.cancel(credentialImportBatch.pendingId).catch(() => {
+            });
+            pendingCredentialPreview.current = null;
+            setCredentialImportBatch(null);
+          }
+        }, t("Clear credential preview")),
+        credentialImportBatch.items.map((item) => {
+          const entry = credentialImportBatch.entries.find((candidate) => candidate.sourceRef === item.sourceRef);
+          if (!entry) return null;
+          const target = credentialImportTargets[entry.sourceRef] ?? {};
+          const status = credentialImports.find((saved) => saved.sourceRef === entry.sourceRef) ?? item;
+          const canImport = ["pending", "unknown", "importing"].includes(status.status);
+          return (0, import_react12.createElement)(
+            "article",
+            { key: entry.sourceRef, className: "bt-product-credential-import-item" },
+            (0, import_react12.createElement)(
+              "div",
+              { className: "bt-product-resource-row" },
+              (0, import_react12.createElement)("strong", null, entry.label),
+              (0, import_react12.createElement)("span", null, `${t("Credential type")}: ${entry.type}`),
+              (0, import_react12.createElement)("span", null, `${t("Original scope")}: ${[
+                entry.originalScope.kind,
+                entry.originalScope.role,
+                entry.originalScope.work,
+                entry.originalScope.environment,
+                ...entry.originalScope.sharedWith ?? []
+              ].filter(Boolean).join(" · ")}`),
+              (0, import_react12.createElement)("span", { role: "status" }, `${t("Import status")}: ${credentialImportStatusText(status.status)}${status.code ? ` · ${t(status.code)}` : ""}`),
+              status.resourceId ? (0, import_react12.createElement)("span", null, `${t("Imported resource")}: ${resources?.find((resource) => resource.id === status.resourceId)?.label ?? status.resourceId}`) : null,
+              status.cleanupPending ? (0, import_react12.createElement)("span", { className: "bt-main-error" }, t("Import cleanup pending.")) : null
+            ),
+            canImport ? (0, import_react12.createElement)(
+              "div",
+              { className: "bt-product-resource-grant" },
+              (0, import_react12.createElement)("label", null, t("New resource name"), (0, import_react12.createElement)("input", {
+                value: target.label ?? "",
+                maxLength: 128,
+                disabled: credentialImportBusy,
+                onChange: (event) => updateCredentialImportTarget(entry.sourceRef, { label: event.target.value })
+              })),
+              (0, import_react12.createElement)("label", null, t("New authorization role"), (0, import_react12.createElement)(
+                "select",
+                {
+                  value: target.role ?? "",
+                  disabled: credentialImportBusy,
+                  onChange: (event) => updateCredentialImportTarget(entry.sourceRef, { role: event.target.value })
+                },
+                (0, import_react12.createElement)("option", { value: "" }, t("Choose target role")),
+                ...["main", "router", "worker"].map((value2) => (0, import_react12.createElement)("option", { key: value2, value: value2 }, t(value2 === "main" ? "Main" : value2 === "router" ? "Router" : "Worker")))
+              )),
+              (0, import_react12.createElement)("label", null, t("New authorization purpose"), (0, import_react12.createElement)(
+                "select",
+                {
+                  value: target.purpose ?? "",
+                  disabled: credentialImportBusy,
+                  onChange: (event) => updateCredentialImportTarget(entry.sourceRef, { purpose: event.target.value })
+                },
+                (0, import_react12.createElement)("option", { value: "" }, t("Choose purpose")),
+                ...["source", "tool", "outbound"].map((value2) => (0, import_react12.createElement)("option", { key: value2, value: value2 }, t(value2)))
+              )),
+              (0, import_react12.createElement)("label", null, t("Target work item ID"), (0, import_react12.createElement)("input", {
+                value: target.workItemId ?? "",
+                maxLength: 512,
+                disabled: credentialImportBusy,
+                onChange: (event) => updateCredentialImportTarget(entry.sourceRef, { workItemId: event.target.value })
+              })),
+              (0, import_react12.createElement)("label", null, t("Target Environment ID"), (0, import_react12.createElement)("input", {
+                value: target.environmentId ?? "",
+                maxLength: 512,
+                disabled: credentialImportBusy,
+                onChange: (event) => updateCredentialImportTarget(entry.sourceRef, { environmentId: event.target.value })
+              })),
+              (0, import_react12.createElement)("label", null, t("Target source Instance ID"), (0, import_react12.createElement)("input", {
+                value: target.sourceInstanceId ?? "",
+                maxLength: 512,
+                disabled: credentialImportBusy,
+                onChange: (event) => updateCredentialImportTarget(entry.sourceRef, { sourceInstanceId: event.target.value })
+              })),
+              (0, import_react12.createElement)("span", { className: "bt-product-resource-note" }, `${t("New authorization")}: ${[
+                target.role,
+                target.purpose,
+                target.workItemId,
+                target.environmentId,
+                target.sourceInstanceId
+              ].filter(Boolean).join(" · ") || t("Not selected")}`),
+              (0, import_react12.createElement)("button", {
+                className: "bt-soft",
+                type: "button",
+                disabled: credentialImportBusy,
+                onClick: () => void commitCredentialImport(entry)
+              }, t(status.status === "unknown" ? "Retry import" : "Create resource and grant")),
+              (0, import_react12.createElement)("button", {
+                className: "bt-soft",
+                type: "button",
+                disabled: credentialImportBusy,
+                onClick: () => void cancelCredentialImport(status)
+              }, t(status.status === "cancelled" ? "Retry cleanup" : "Cancel import"))
+            ) : null
+          );
+        })
+      ) : null,
+      credentialImports.length ? (0, import_react12.createElement)("div", { className: "bt-product-resource-list" }, credentialImports.map((item) => (0, import_react12.createElement)(
+        "div",
+        {
+          key: item.sourceRef,
+          className: "bt-product-resource-row"
+        },
+        (0, import_react12.createElement)("span", null, `${item.sourceLabel} · ${item.credentialLabel} · ${credentialImportStatusText(item.status)}`),
+        item.resourceId ? (0, import_react12.createElement)("span", null, resources?.find((resource) => resource.id === item.resourceId)?.label ?? item.resourceId) : null,
+        item.cleanupPending ? (0, import_react12.createElement)("button", {
+          className: "bt-soft",
+          type: "button",
+          disabled: credentialImportBusy,
+          onClick: () => void cancelCredentialImport(item)
+        }, t("Retry cleanup")) : null
+      ))) : null
+    ),
+    feishu?.credentialMode === "managed" ? (0, import_react12.createElement)(
+      "div",
+      { className: "bt-product-resource-selected" },
+      (0, import_react12.createElement)("p", { className: "bt-product-resource-note" }, `${t("Feishu source Instance")}: ${feishu.sourceInstanceId}`),
+      (0, import_react12.createElement)("p", { className: "bt-product-resource-note" }, t("Grant Main/source and Router/outbound for this exact source Instance, then reconnect.")),
+      (0, import_react12.createElement)("p", { role: "status" }, `${t("Selected Feishu resource")}: ${feishu.resourceId ? resources?.find((item) => item.id === feishu.resourceId)?.label ?? t("Unavailable resource") : t("No Feishu resource selected")} · ${feishu.state}${feishu.lastError ? ` · ${feishu.lastError}` : ""}`),
+      feishu.resourceId ? (0, import_react12.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy), onClick: () => selectFeishu(null) }, t("Clear Feishu selection")) : null
+    ) : feishu?.credentialMode === "legacy" ? (0, import_react12.createElement)(
+      "p",
+      { className: "bt-product-resource-note" },
+      t("Feishu uses an explicit legacy Host secret. Remove it and restart the Host to select a managed resource."),
+      feishu.lastError ? ` · ${feishu.lastError}` : ""
+    ) : null,
+    github?.credentialMode === "managed" ? (0, import_react12.createElement)(
+      "div",
+      { className: "bt-product-resource-selected" },
+      (0, import_react12.createElement)("p", { className: "bt-product-resource-note" }, `${t("GitHub source Instance")}: ${github.sourceInstanceId}`),
+      (0, import_react12.createElement)("p", { className: "bt-product-resource-note" }, t("Grant Main/source for this exact GitHub source Instance, then reconnect.")),
+      (0, import_react12.createElement)("p", { role: "status" }, `${t("Selected GitHub resource")}: ${github.resourceId ? resources?.find((item) => item.id === github.resourceId)?.label ?? t("Unavailable resource") : t("No GitHub resource selected")} · ${github.state}${github.lastError ? ` · ${github.lastError}` : ""}`),
+      github.resourceId ? (0, import_react12.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy), onClick: () => selectGithub(null) }, t("Clear GitHub selection")) : null
+    ) : null,
+    error ? (0, import_react12.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+    notice ? (0, import_react12.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
+    requestError ? (0, import_react12.createElement)(
+      "div",
+      { className: "bt-product-resource-row" },
+      (0, import_react12.createElement)("p", { className: "bt-main-error", role: "alert" }, requestError),
+      (0, import_react12.createElement)("button", {
+        className: "bt-soft",
+        type: "button",
+        disabled: Boolean(busy),
+        onClick: () => {
+          void refresh().catch((failure) => setError(failure.message));
+        }
+      }, t("Retry request list"))
+    ) : null,
+    rotationAttempt ? (0, import_react12.createElement)(
+      "div",
+      { className: "bt-product-resource-row", role: "status" },
+      (0, import_react12.createElement)("span", null, t(rotationResult?.status === "pending" ? "Rotation pending. Retry with the same value or check its status." : "Rotation command saved. Check its status before starting another rotation.")),
+      (0, import_react12.createElement)("button", {
+        className: "bt-soft",
+        type: "button",
+        disabled: Boolean(busy),
+        onClick: () => {
+          void checkRotation(rotationAttempt);
+        }
+      }, t("Check rotation"))
+    ) : null,
+    (0, import_react12.createElement)(
+      "form",
+      { className: "bt-product-resource-create", onSubmit: create },
+      (0, import_react12.createElement)(Row, { label: t("Resource name") }, (0, import_react12.createElement)("input", {
+        className: "bt-bs-input",
+        value: label,
+        maxLength: 128,
+        disabled: Boolean(busy),
+        onChange: (event) => {
+          setLabel(event.target.value);
+          pendingCreate.current = null;
+        }
+      })),
+      (0, import_react12.createElement)(Row, { label: t("Credential value") }, (0, import_react12.createElement)("input", {
+        className: "bt-bs-input",
+        type: "password",
+        value,
+        autoComplete: "new-password",
+        disabled: Boolean(busy),
+        onChange: (event) => {
+          setValue(event.target.value);
+          pendingCreate.current = null;
+        }
+      })),
+      (0, import_react12.createElement)(
+        "button",
+        { className: "bt-soft", type: "submit", disabled: Boolean(busy) || !label.trim() || !value.trim() },
+        busy === "create" ? t("Saving…") : t("Save resource")
+      )
+    ),
+    resources === null ? (0, import_react12.createElement)("p", { role: "status" }, t("Loading…")) : resources.length === 0 ? (0, import_react12.createElement)("p", { className: "bt-main-status" }, t("No credential resources yet.")) : (0, import_react12.createElement)("div", { className: "bt-product-resource-list" }, resources.map((resource) => (0, import_react12.createElement)(
+      "div",
+      { className: "bt-product-resource-row", key: resource.id },
+      (0, import_react12.createElement)("button", {
+        className: "bt-soft",
+        type: "button",
+        disabled: Boolean(busy),
+        "aria-pressed": selectedId === resource.id,
+        onClick: () => choose(resource)
+      }, resource.label),
+      (0, import_react12.createElement)("span", { role: "status" }, `${resource.status} · v${resource.revision}`),
+      resource.cleanupPending ? (0, import_react12.createElement)("span", { className: "bt-main-error" }, t("Vault cleanup pending.")) : null,
+      (0, import_react12.createElement)(
+        "button",
+        { className: "bt-soft", type: "button", disabled: Boolean(busy), onClick: () => remove(resource) },
+        t(resource.status === "deleted" ? "Retry cleanup" : "Delete resource")
+      )
+    ))),
+    selected?.status === "active" ? (0, import_react12.createElement)(
+      "div",
+      { className: "bt-product-resource-selected" },
+      (0, import_react12.createElement)("h3", null, selected.label),
+      feishu?.credentialMode === "managed" ? (0, import_react12.createElement)("button", {
+        className: "bt-soft",
+        type: "button",
+        disabled: Boolean(busy),
+        onClick: () => selectFeishu(selected.id)
+      }, t(feishu.resourceId === selected.id ? "Reconnect Feishu with this resource" : "Use for Feishu")) : null,
+      github?.credentialMode === "managed" ? (0, import_react12.createElement)("button", {
+        className: "bt-soft",
+        type: "button",
+        disabled: Boolean(busy),
+        onClick: () => selectGithub(selected.id)
+      }, t(github.resourceId === selected.id ? "Reconnect GitHub with this resource" : "Use for GitHub")) : null,
+      (0, import_react12.createElement)(
+        "form",
+        { onSubmit: (event) => {
+          event.preventDefault();
+          if (!rename.trim() || busy) return;
+          void run2("rename", () => call("resource-rename", {
+            instanceId,
+            commandId: crypto.randomUUID(),
+            resourceId: selected.id,
+            expectedRevision: selected.revision,
+            label: rename.trim()
+          }), "Resource name changed.");
+        } },
+        (0, import_react12.createElement)("input", {
+          className: "bt-bs-input",
+          value: rename,
+          maxLength: 128,
+          disabled: Boolean(busy),
+          "aria-label": t("New resource name"),
+          onChange: (event) => setRename(event.target.value)
+        }),
+        (0, import_react12.createElement)("button", { className: "bt-soft", type: "submit", disabled: Boolean(busy) || !rename.trim() }, t("Rename resource"))
+      ),
+      (0, import_react12.createElement)(
+        "form",
+        { className: "bt-product-resource-create", onSubmit: rotate },
+        (0, import_react12.createElement)(Row, { label: t("New credential value") }, (0, import_react12.createElement)("input", {
+          className: "bt-bs-input",
+          type: "password",
+          value: rotationValue,
+          autoComplete: "new-password",
+          disabled: Boolean(busy) || Boolean(rotationAttempt && rotationAttempt.resourceId !== selected.id),
+          onChange: (event) => setRotationValue(event.target.value)
+        })),
+        (0, import_react12.createElement)(
+          "button",
+          {
+            className: "bt-soft",
+            type: "submit",
+            disabled: Boolean(busy) || !rotationValue.trim() || Boolean(rotationAttempt && rotationAttempt.resourceId !== selected.id)
+          },
+          busy === "rotate" ? t("Saving…") : t(rotationAttempt ? "Retry rotation" : "Rotate credential")
+        )
+      ),
+      (0, import_react12.createElement)(
+        "form",
+        { className: "bt-product-resource-grant", onSubmit: grant },
+        (0, import_react12.createElement)("label", null, t("Role"), (0, import_react12.createElement)(
+          "select",
+          { value: role, disabled: Boolean(busy), onChange: (event) => setRole(event.target.value) },
+          ["main", "router", "worker"].map((item) => (0, import_react12.createElement)("option", { key: item, value: item }, item))
+        )),
+        (0, import_react12.createElement)("label", null, t("Purpose"), (0, import_react12.createElement)(
+          "select",
+          { value: purpose, disabled: Boolean(busy), onChange: (event) => setPurpose(event.target.value) },
+          ["tool", "source", "outbound"].map((item) => (0, import_react12.createElement)("option", { key: item, value: item }, item))
+        )),
+        (0, import_react12.createElement)("label", null, t("Work item ID"), (0, import_react12.createElement)("input", { value: workItemId, disabled: Boolean(busy), onChange: (event) => setWorkItemId(event.target.value) })),
+        (0, import_react12.createElement)("label", null, t("Environment ID"), (0, import_react12.createElement)("input", { value: environmentId, disabled: Boolean(busy), onChange: (event) => setEnvironmentId(event.target.value) })),
+        (0, import_react12.createElement)("label", null, t("Source Instance ID"), (0, import_react12.createElement)("input", {
+          value: sourceInstanceId,
+          disabled: Boolean(busy),
+          onChange: (event) => setSourceInstanceId(event.target.value)
+        })),
+        (0, import_react12.createElement)(
+          "button",
+          { className: "bt-soft", type: "submit", disabled: Boolean(busy) || purpose !== "tool" && !sourceInstanceId.trim() },
+          t("Record authorization")
+        ),
+        (0, import_react12.createElement)("button", {
+          className: "bt-soft",
+          type: "button",
+          disabled: Boolean(busy) || Boolean(requestError) || purpose !== "tool" && !sourceInstanceId.trim(),
+          onClick: requestAuthorization
+        }, t("Request authorization"))
+      ),
+      requests.filter((request) => request.resourceId === selected.id).sort((left, right) => (right.createdAt ?? 0) - (left.createdAt ?? 0)).map((request) => (0, import_react12.createElement)(
+        "div",
+        { className: "bt-product-resource-row", key: request.id },
+        (0, import_react12.createElement)(
+          "span",
+          null,
+          `${t(request.status === "pending" ? "Pending authorization request" : request.status === "cancelled" ? "Cancelled authorization request" : "Granted authorization request")} · ${request.scope.role} · ${request.purpose}`,
+          request.scope.workItemId ? ` · ${t("Work item ID")}: ${request.scope.workItemId}` : "",
+          request.scope.environmentId ? ` · ${t("Environment ID")}: ${request.scope.environmentId}` : "",
+          request.scope.sourceInstanceId ? ` · ${t("Source Instance ID")}: ${request.scope.sourceInstanceId}` : ""
+        ),
+        request.status === "granted" && !selected.grants.some((grant2) => grant2.purposes.includes(request.purpose) && ["role", "workItemId", "environmentId", "sourceInstanceId"].every((key) => grant2.scope[key] === request.scope[key])) ? (0, import_react12.createElement)("span", { className: "bt-main-error", role: "status" }, t("Current access revoked")) : null,
+        request.status === "pending" ? (0, import_react12.createElement)(
+          "div",
+          { className: "bt-product-resource-request-actions" },
+          (0, import_react12.createElement)("button", {
+            className: "bt-soft",
+            type: "button",
+            disabled: Boolean(busy) || Boolean(requestError),
+            onClick: () => decideRequest(request, true)
+          }, t("Approve request")),
+          (0, import_react12.createElement)("button", {
+            className: "bt-soft",
+            type: "button",
+            disabled: Boolean(busy) || Boolean(requestError),
+            onClick: () => decideRequest(request, false)
+          }, t("Cancel request"))
+        ) : null
+      )),
+      requestCursor ? (0, import_react12.createElement)("button", {
+        className: "bt-soft",
+        type: "button",
+        disabled: Boolean(busy) || Boolean(requestError),
+        onClick: () => {
+          void loadMoreRequests();
+        }
+      }, t("Load more requests")) : null,
+      selected.grants.map((grant2) => (0, import_react12.createElement)(
+        "div",
+        { className: "bt-product-resource-row", key: grant2.id },
+        (0, import_react12.createElement)("span", null, [
+          grant2.scope.role,
+          grant2.purposes.join(", "),
+          grant2.scope.workItemId ? `${t("Work item ID")}: ${grant2.scope.workItemId}` : null,
+          grant2.scope.environmentId ? `${t("Environment ID")}: ${grant2.scope.environmentId}` : null,
+          grant2.scope.sourceInstanceId ? `${t("Source Instance ID")}: ${grant2.scope.sourceInstanceId}` : null
+        ].filter(Boolean).join(" · ")),
+        (0, import_react12.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy), onClick: () => {
+          void run2("revoke", () => call("resource-revoke", {
+            instanceId,
+            commandId: crypto.randomUUID(),
+            resourceId: selected.id,
+            grantId: grant2.id,
+            expectedRevision: selected.revision
+          }), "Authorization revoked.");
+        } }, t("Revoke authorization"))
+      ))
+    ) : null
+  );
+}
+var PRODUCT_CREDENTIAL_CSS = `
+.bt-product-resource-note{margin:0 0 10px;color:var(--bt-ink-2);font-size:12px;line-height:18px}
+.bt-product-resource-create,.bt-product-resource-selected{display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin:12px 0}
+.bt-product-resource-list{display:flex;flex-direction:column;gap:6px;margin:12px 0;max-height:220px;overflow:auto}
+.bt-product-resource-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:6px 0;border-bottom:1px solid var(--bt-line-2);font-size:12px}
+.bt-product-resource-row>span{min-width:0;overflow-wrap:anywhere;color:var(--bt-ink-2)}
+.bt-product-resource-grant{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%}
+.bt-product-resource-grant label{display:flex;flex-direction:column;gap:4px;min-width:0;font-size:12px;color:var(--bt-ink-2)}
+.bt-product-resource-grant input,.bt-product-resource-grant select{height:32px;min-width:0;box-sizing:border-box;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-main);color:var(--bt-ink);font:inherit;padding:0 8px}
+.bt-product-resource-grant button{justify-self:start}.bt-product-resource-create button:focus-visible,.bt-product-resource-row button:focus-visible,.bt-product-resource-selected button:focus-visible,.bt-product-resource-grant button:focus-visible,.bt-product-resource-create input:focus-visible,.bt-product-resource-selected input:focus-visible,.bt-product-resource-grant input:focus-visible,.bt-product-resource-grant select:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-product-resource-request-actions{display:flex;flex-wrap:wrap;gap:8px}
+.bt-product-credential-import{display:flex;flex-direction:column;gap:8px;margin:14px 0;padding:10px 0;border-top:1px solid var(--bt-line-2)}
+.bt-product-credential-import>button:focus-visible,.bt-product-credential-import-preview>button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-product-credential-import h3{margin:0;font-size:13px}
+.bt-product-credential-import-preview{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.bt-product-credential-import-item{padding:8px 0;border-top:1px solid var(--bt-line-2)}
+@media(max-width:640px){.bt-product-resource-grant{grid-template-columns:minmax(0,1fr)}}
+`;
+
+// src/client/product-memory.js
+var import_react13 = require("react");
+var scopeLabel = (scope) => scope.kind === "main" ? t("Main") : scope.kind === "work" ? `${t("Work private")} · ${scope.workItemId}` : `${t("Explicitly shared")} · ${[scope.main ? t("Main") : "", ...scope.workItemIds].filter(Boolean).join(", ") || t("No readers")}`;
+var originalScopeLabel = (scope) => {
+  const kind = scope.kind === "main" ? t("Main") : scope.kind === "work" ? t("Work private") : scope.kind === "shared" ? t("Explicitly shared") : t("Unknown original scope");
+  return [kind, scope.role, scope.work, scope.label, ...scope.sharedWith ?? []].filter(Boolean).join(" · ");
+};
+var importStatusLabel = (status) => t(status === "ready" ? "Ready to import" : status === "partial" ? "Partially imported" : status === "completed" ? "Import completed" : status === "cancelled" ? "Import cancelled" : status === "rejected" ? "Import item rejected" : status === "imported" ? "Import item completed" : status === "conflict" ? "Import conflict" : status);
+var fileBase64 = async (file) => {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary2 = "";
+  for (let offset = 0; offset < bytes.length; offset += 32768) {
+    binary2 += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
+  }
+  return window.btoa(binary2);
+};
+function ProductMemoryEntryRow({ entry, remove, open }) {
+  const [confirming, setConfirming] = (0, import_react13.useState)(false);
+  const [busy, setBusy] = (0, import_react13.useState)(false);
+  (0, import_react13.useEffect)(() => {
+    if (!confirming) return void 0;
+    const timer = setTimeout(() => setConfirming(false), 3e3);
+    return () => clearTimeout(timer);
+  }, [confirming]);
+  const meta = [entry.added, entry.source === "memory panel" ? t("by you") : entry.by ? t("by {name}", { name: entry.by }) : null].filter(Boolean).join(" · ");
+  const click = async () => {
+    if (!confirming) {
+      setConfirming(true);
+      return;
+    }
+    setBusy(true);
+    if (!await remove(entry)) setBusy(false);
+  };
+  return (0, import_react13.createElement)(
+    "li",
+    { className: "bt-product-memory-entry", "data-busy": busy || void 0 },
+    (0, import_react13.createElement)(
+      "div",
+      null,
+      (0, import_react13.createElement)("span", { className: "bt-product-memory-entry-text" }, entry.text),
+      meta ? (0, import_react13.createElement)("span", { className: "bt-product-memory-entry-meta" }, meta) : null
+    ),
+    open ? (0, import_react13.createElement)("button", { type: "button", className: "bt-soft", onClick: () => open(entry) }, t("View full detail")) : null,
+    (0, import_react13.createElement)(
+      "button",
+      { type: "button", className: "bt-soft", disabled: busy, onClick: () => void click() },
+      confirming ? t("Click again to remove") : t("Remove from memory")
+    )
+  );
+}
+function ProductMemoryProposalCard({ proposal, onAnswer }) {
+  const [busy, setBusy] = (0, import_react13.useState)(false);
+  const [error, setError] = (0, import_react13.useState)("");
+  const titleId = (0, import_react13.useId)();
+  const answer = async (approve) => {
+    setBusy(true);
+    setError("");
+    try {
+      await onAnswer(proposal, approve);
+    } catch (failure) {
+      setError(failure?.message ?? String(failure));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const scope = proposal.scope.kind === "main" ? "Main" : `${t("Work private")} · ${proposal.scope.workItemId}`;
+  return (0, import_react13.createElement)(
+    "section",
+    { className: "bt-product-memory-proposal", "aria-labelledby": titleId, "aria-busy": busy },
+    (0, import_react13.createElement)("h4", { id: titleId }, t("Learning proposal")),
+    (0, import_react13.createElement)("p", null, `${scope} · ${proposal.reason}`),
+    (0, import_react13.createElement)("pre", null, proposal.text ?? ""),
+    (0, import_react13.createElement)("p", null, `${t("Expires")}: ${new Date(proposal.expiresAt).toLocaleString()}`),
+    error ? (0, import_react13.createElement)("p", { className: "bt-product-memory-error", role: "alert" }, error) : null,
+    (0, import_react13.createElement)(
+      "div",
+      { className: "bt-product-memory-form" },
+      (0, import_react13.createElement)("button", { type: "button", className: "bt-soft", disabled: busy, onClick: () => void answer(false) }, t("Decline")),
+      (0, import_react13.createElement)("button", { type: "button", className: "bt-soft", disabled: busy, onClick: () => void answer(true) }, t("Approve"))
+    )
+  );
+}
+function ProductMemorySettings({ binding, works, call }) {
+  const instanceId = binding.instanceId;
+  const workItems = works.filter((work) => work.brief?.workItemId && work.receipt?.status === "accepted").map((work) => ({ id: work.brief.workItemId, goal: work.brief.goal }));
+  const [items, setItems] = (0, import_react13.useState)([]);
+  const [proposals, setProposals] = (0, import_react13.useState)([]);
+  const [cursor, setCursor] = (0, import_react13.useState)(null);
+  const [query, setQuery] = (0, import_react13.useState)("");
+  const [text, setText] = (0, import_react13.useState)("");
+  const [kind, setKind] = (0, import_react13.useState)("main");
+  const [workId, setWorkId] = (0, import_react13.useState)("");
+  const [mainReader, setMainReader] = (0, import_react13.useState)(true);
+  const [recipients, setRecipients] = (0, import_react13.useState)([]);
+  const [selected, setSelected] = (0, import_react13.useState)(null);
+  const [full, setFull] = (0, import_react13.useState)(null);
+  const [access, setAccess] = (0, import_react13.useState)(null);
+  const [sideKind, setSideKind] = (0, import_react13.useState)("main");
+  const [sideWorkId, setSideWorkId] = (0, import_react13.useState)("");
+  const [sideQuery, setSideQuery] = (0, import_react13.useState)("");
+  const [sideMatches, setSideMatches] = (0, import_react13.useState)([]);
+  const [sideSelected, setSideSelected] = (0, import_react13.useState)(null);
+  const [sideFull, setSideFull] = (0, import_react13.useState)(null);
+  const [sideBusy, setSideBusy] = (0, import_react13.useState)(false);
+  const sideGeneration = (0, import_react13.useRef)(0);
+  const [importBatch, setImportBatch] = (0, import_react13.useState)(null);
+  const [importBatches, setImportBatches] = (0, import_react13.useState)([]);
+  const [savedImportId, setSavedImportId] = (0, import_react13.useState)("");
+  const [importChoices, setImportChoices] = (0, import_react13.useState)({});
+  const [importBusy, setImportBusy] = (0, import_react13.useState)(false);
+  const [busy, setBusy] = (0, import_react13.useState)(false);
+  const [error, setError] = (0, import_react13.useState)("");
+  const [notice, setNotice] = (0, import_react13.useState)("");
+  const pending = (0, import_react13.useRef)(null);
+  const importPending = (0, import_react13.useRef)(null);
+  const reload = async (search2 = query) => {
+    const [page, pendingProposals, savedImports] = await Promise.all([
+      call("memory-list", { instanceId, limit: 50, ...search2 ? { query: search2 } : {} }),
+      call("memory-proposals", { instanceId }),
+      call("memory-import-list", { instanceId, limit: 20 })
+    ]);
+    setItems(page.items);
+    setCursor(page.cursor ?? null);
+    setProposals(pendingProposals);
+    setImportBatches(savedImports.items);
+    setSelected((current) => current ? page.items.find((item) => item.id === current.id) ?? null : null);
+  };
+  (0, import_react13.useEffect)(() => {
+    void reload().catch((failure) => setError(failure.message));
+  }, [instanceId]);
+  (0, import_react13.useEffect)(() => {
+    sideGeneration.current++;
+    setSideMatches([]);
+    setSideSelected(null);
+    setSideFull(null);
+    setSideBusy(false);
+  }, [instanceId]);
+  (0, import_react13.useEffect)(() => {
+    let live = true;
+    setAccess(null);
+    if (workId) void call("memory-access-read", { instanceId, workItemId: workId }).then((value) => {
+      if (live) setAccess(value);
+    }, (failure) => {
+      if (live) setError(failure.message);
+    });
+    return () => {
+      live = false;
+    };
+  }, [instanceId, workId]);
+  const run2 = async (action, success) => {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await action();
+      sideGeneration.current++;
+      setSideMatches([]);
+      setSideSelected(null);
+      setSideFull(null);
+      setSideBusy(false);
+      await reload();
+      setNotice(t(success));
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const scope = () => kind === "main" ? { kind: "main" } : kind === "work" ? { kind: "work", workItemId: workId } : { kind: "shared", main: mainReader, workItemIds: recipients };
+  const save = (event) => {
+    event.preventDefault();
+    if (busy || !text.trim()) return;
+    const input = { scope: scope(), text: text.trim() };
+    void run2(async () => {
+      const key = JSON.stringify(input);
+      if (pending.current?.key !== key) pending.current = { key, commandId: crypto.randomUUID() };
+      const result = await call("memory-save", { instanceId, commandId: pending.current.commandId, ...input });
+      if (result.status !== "saved") throw new Error(t("Memory was already forgotten."));
+      pending.current = null;
+      setText("");
+    }, "Memory saved.");
+  };
+  const open = async (entry) => {
+    setError("");
+    setFull(null);
+    setSelected(entry);
+    setMainReader(entry.scope.kind === "shared" ? entry.scope.main : entry.scope.kind === "main");
+    setRecipients(entry.scope.kind === "shared" ? entry.scope.workItemIds : entry.scope.kind === "work" ? [entry.scope.workItemId] : []);
+    try {
+      setFull(await call("memory-read", { instanceId, id: entry.id, maxBytes: 4096 }));
+    } catch (failure) {
+      setError(failure.message);
+    }
+  };
+  const moreText = async () => {
+    if (!full?.pagination.cursor || !selected) return;
+    try {
+      const next = await call("memory-read", { instanceId, id: selected.id, after: full.pagination.cursor, maxBytes: 4096 });
+      setFull((current) => current && current.id === next.id ? { ...next, text: current.text + next.text } : next);
+    } catch (failure) {
+      setError(failure.message);
+      setFull(null);
+    }
+  };
+  const remove = async (entry) => {
+    setBusy(true);
+    setError("");
+    try {
+      await call("memory-forget", { instanceId, commandId: crypto.randomUUID(), id: entry.id, expectedRevision: entry.revision });
+      sideGeneration.current++;
+      setSideMatches([]);
+      setSideSelected(null);
+      setSideFull(null);
+      setSideBusy(false);
+      setFull(null);
+      setSelected(null);
+      await reload();
+      setNotice(t("Memory forgotten."));
+      return true;
+    } catch (failure) {
+      setError(failure.message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+  const toggleRecipient = (id) => setRecipients((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  const share = () => {
+    if (!selected || busy) return;
+    void run2(async () => {
+      const result = await call("memory-share", {
+        instanceId,
+        commandId: crypto.randomUUID(),
+        id: selected.id,
+        expectedRevision: selected.revision,
+        main: mainReader,
+        workItemIds: recipients
+      });
+      setSelected((current) => current ? { ...current, scope: result.scope, revision: result.revision } : current);
+    }, "Memory sharing updated.");
+  };
+  const toggleAccess = () => {
+    if (!workId || !access || busy) return;
+    void run2(async () => {
+      const result = await call("memory-grant", {
+        instanceId,
+        commandId: crypto.randomUUID(),
+        workItemId: workId,
+        expectedRevision: access.revision,
+        enabled: !access.enabled
+      });
+      setAccess(result);
+    }, access.enabled ? "Work memory access revoked." : "Work memory access granted.");
+  };
+  const decide = async (proposal, approve) => {
+    setError("");
+    setNotice("");
+    const result = await call("memory-decide", { instanceId, commandId: crypto.randomUUID(), proposalId: proposal.id, approve });
+    await reload();
+    setNotice(t(result.status === "stale" ? "Learning proposal expired or lost authorization." : result.status === "approved" ? "Learning approved and saved." : "Learning declined."));
+  };
+  const search = (event) => {
+    event.preventDefault();
+    void reload(query).catch((failure) => setError(failure.message));
+  };
+  const loadMore = async () => {
+    if (!cursor) return;
+    try {
+      const page = await call("memory-list", { instanceId, limit: 50, after: cursor, ...query ? { query } : {} });
+      setItems((current) => [...current, ...page.items]);
+      setCursor(page.cursor ?? null);
+    } catch (failure) {
+      setError(failure.message);
+    }
+  };
+  const clearSide = () => {
+    sideGeneration.current++;
+    setSideMatches([]);
+    setSideSelected(null);
+    setSideFull(null);
+    setSideBusy(false);
+    setError("");
+  };
+  const sideTarget = () => sideKind === "main" ? { kind: "main" } : { kind: "work", workItemId: sideWorkId };
+  const sideSearch = async (event) => {
+    event.preventDefault();
+    if (sideBusy || !sideQuery.trim() || sideKind === "work" && !sideWorkId) return;
+    const generation = ++sideGeneration.current;
+    setSideBusy(true);
+    setError("");
+    setSideSelected(null);
+    setSideFull(null);
+    setSideMatches([]);
+    try {
+      const matches = await call("memory-side-query", { instanceId, target: sideTarget(), query: sideQuery.trim() });
+      if (generation === sideGeneration.current) setSideMatches(matches);
+    } catch (failure) {
+      if (generation === sideGeneration.current) setError(failure.message);
+    } finally {
+      if (generation === sideGeneration.current) setSideBusy(false);
+    }
+  };
+  const sideOpen = async (match) => {
+    const generation = ++sideGeneration.current;
+    setSideSelected(match);
+    setSideFull(null);
+    setError("");
+    try {
+      const page = await call("memory-side-read", { instanceId, target: sideTarget(), id: match.id, maxBytes: 4096 });
+      if (generation === sideGeneration.current) setSideFull(page);
+    } catch (failure) {
+      if (generation === sideGeneration.current) {
+        setSideFull(null);
+        setError(failure.message);
+      }
+    }
+  };
+  const sideMore = async () => {
+    if (!sideFull?.pagination.cursor || !sideSelected) return;
+    const generation = sideGeneration.current;
+    try {
+      const page = await call("memory-side-read", {
+        instanceId,
+        target: sideTarget(),
+        id: sideSelected.id,
+        after: sideFull.pagination.cursor,
+        maxBytes: 4096
+      });
+      if (generation === sideGeneration.current) setSideFull((current) => current?.id === page.id ? { ...page, text: current.text + page.text } : page);
+    } catch (failure) {
+      if (generation === sideGeneration.current) {
+        setSideFull(null);
+        setError(failure.message);
+      }
+    }
+  };
+  const acceptImportBatch = (batch) => {
+    const preserveChoices = importBatch?.id === batch.id;
+    setImportBatch(batch);
+    setSavedImportId(batch.id);
+    setImportBatches((current) => [batch, ...current.filter((item) => item.id !== batch.id)]);
+    setImportChoices((current) => Object.fromEntries(batch.items.map((item) => [
+      item.sourceId,
+      preserveChoices && current[item.sourceId] ? current[item.sourceId] : { checked: false, kind: "", workId: "", main: false, workIds: [] }
+    ])));
+  };
+  const chooseImportFile = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file || importBusy) return;
+    setImportBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      if (file.size > 512 * 1024) throw new Error(t("Memory export must be at most 512 KiB."));
+      const dataBase64 = await fileBase64(file);
+      const key = `${file.name}\0${dataBase64}`;
+      if (importPending.current?.key !== key) importPending.current = { key, commandId: crypto.randomUUID() };
+      const batch = await call("memory-import-preview", {
+        instanceId,
+        commandId: importPending.current.commandId,
+        sourceName: file.name,
+        dataBase64
+      });
+      acceptImportBatch(batch);
+      setNotice(t("Memory export previewed. Choose each item and target explicitly."));
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setImportBusy(false);
+      event.target.value = "";
+    }
+  };
+  const updateImportChoice = (sourceId, patch) => setImportChoices((current) => ({
+    ...current,
+    [sourceId]: { ...current[sourceId] ?? { checked: false, kind: "", workId: "", main: false, workIds: [] }, ...patch }
+  }));
+  const importSelected = async () => {
+    if (!importBatch || importBusy) return;
+    const selections = importBatch.items.filter((item) => importChoices[item.sourceId]?.checked).map((item) => {
+      const choice = importChoices[item.sourceId];
+      if (choice.kind === "main") return { sourceId: item.sourceId, scope: { kind: "main" } };
+      if (choice.kind === "work" && choice.workId) return {
+        sourceId: item.sourceId,
+        scope: { kind: "work", workItemId: choice.workId }
+      };
+      if (choice.kind === "shared" && (choice.main || choice.workIds.length)) return {
+        sourceId: item.sourceId,
+        scope: { kind: "shared", main: choice.main, workItemIds: choice.workIds }
+      };
+      throw new Error(t("Choose a target for every selected item."));
+    });
+    if (!selections.length) {
+      setError(t("Select at least one memory item."));
+      return;
+    }
+    setImportBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const batch = await call("memory-import-commit", {
+        instanceId,
+        commandId: crypto.randomUUID(),
+        batchId: importBatch.id,
+        selections
+      });
+      acceptImportBatch(batch);
+      await reload();
+      setNotice(t(batch.status === "completed" ? "Memory import completed." : "Memory import saved. Review remaining or conflicting items."));
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setImportBusy(false);
+    }
+  };
+  const changeImportStatus = async (retry) => {
+    if (!importBatch || importBusy) return;
+    setImportBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const batch = await call(
+        retry ? "memory-import-retry" : "memory-import-cancel",
+        { instanceId, commandId: crypto.randomUUID(), batchId: importBatch.id }
+      );
+      acceptImportBatch(batch);
+      setNotice(t(retry ? "Memory import is ready to continue." : "Memory import cancelled."));
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setImportBusy(false);
+    }
+  };
+  const openSavedImport = async () => {
+    if (!savedImportId || importBusy) return;
+    setImportBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      acceptImportBatch(await call("memory-import-read", { instanceId, batchId: savedImportId }));
+      setNotice(t("Saved memory import opened."));
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setImportBusy(false);
+    }
+  };
+  return (0, import_react13.createElement)(
+    "div",
+    { className: "bt-product-memory" },
+    error ? (0, import_react13.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+    notice ? (0, import_react13.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
+    (0, import_react13.createElement)(
+      Card,
+      { title: t("Side query") },
+      (0, import_react13.createElement)(
+        "form",
+        { className: "bt-product-memory-form", onSubmit: sideSearch },
+        (0, import_react13.createElement)(
+          "select",
+          { value: sideKind, "aria-label": t("Reader"), onChange: (event) => {
+            setSideKind(event.target.value);
+            clearSide();
+          } },
+          (0, import_react13.createElement)("option", { value: "main" }, t("Main")),
+          (0, import_react13.createElement)("option", { value: "work" }, t("Work"))
+        ),
+        sideKind === "work" ? (0, import_react13.createElement)(
+          "select",
+          {
+            value: sideWorkId,
+            "aria-label": t("Work"),
+            onChange: (event) => {
+              setSideWorkId(event.target.value);
+              clearSide();
+            }
+          },
+          (0, import_react13.createElement)("option", { value: "" }, t("Choose work")),
+          workItems.map((work) => (0, import_react13.createElement)("option", { key: work.id, value: work.id }, work.goal))
+        ) : null,
+        (0, import_react13.createElement)("input", {
+          type: "search",
+          value: sideQuery,
+          maxLength: 256,
+          "aria-label": t("Side query"),
+          placeholder: t("Ask about saved memory"),
+          onChange: (event) => {
+            setSideQuery(event.target.value);
+            clearSide();
+          }
+        }),
+        (0, import_react13.createElement)("button", { type: "submit", className: "bt-soft", disabled: sideBusy || !sideQuery.trim() || sideKind === "work" && !sideWorkId }, t("Search"))
+      ),
+      sideMatches.length ? (0, import_react13.createElement)("ul", { className: "bt-mem-list" }, sideMatches.map((match) => (0, import_react13.createElement)(
+        "li",
+        { key: match.id, className: "bt-mem-entry" },
+        (0, import_react13.createElement)("span", { className: "bt-mem-entry-copy" }, (0, import_react13.createElement)("span", { className: "bt-mem-entry-text" }, match.snippet)),
+        (0, import_react13.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: () => void sideOpen(match) }, t("View full detail"))
+      ))) : null,
+      sideSelected ? (0, import_react13.createElement)(
+        "section",
+        { className: "bt-product-memory-detail", "aria-label": t("Full detail") },
+        (0, import_react13.createElement)("strong", null, scopeLabel(sideSelected.scope)),
+        sideFull ? (0, import_react13.createElement)("pre", null, sideFull.text) : null,
+        sideFull?.pagination.truncated ? (0, import_react13.createElement)("button", { type: "button", className: "bt-soft", onClick: () => void sideMore() }, t("Load more detail")) : null
+      ) : null
+    ),
+    (0, import_react13.createElement)(
+      Card,
+      { title: t("Saved memory") },
+      (0, import_react13.createElement)("p", null, t("Main, work private, and explicitly shared memories have separate readers. Searching does not save new memory.")),
+      (0, import_react13.createElement)(
+        "form",
+        { className: "bt-product-memory-form", onSubmit: search },
+        (0, import_react13.createElement)("input", {
+          type: "search",
+          value: query,
+          "aria-label": t("Search memory"),
+          placeholder: t("Search memory"),
+          onChange: (event) => setQuery(event.target.value)
+        }),
+        (0, import_react13.createElement)("button", { type: "submit", className: "bt-soft" }, t("Search"))
+      ),
+      items.length ? (0, import_react13.createElement)("ul", { className: "bt-product-memory-list" }, items.map((entry) => (0, import_react13.createElement)(ProductMemoryEntryRow, {
+        key: entry.id,
+        entry: { ...entry, source: "memory panel" },
+        open,
+        remove
+      }))) : (0, import_react13.createElement)("p", null, t("Nothing saved yet")),
+      cursor ? (0, import_react13.createElement)("button", { type: "button", className: "bt-soft", onClick: () => void loadMore() }, t("Load more")) : null,
+      selected ? (0, import_react13.createElement)(
+        "section",
+        { className: "bt-product-memory-detail", "aria-label": t("Full detail") },
+        (0, import_react13.createElement)("strong", null, scopeLabel(selected.scope)),
+        full?.provenance ? (0, import_react13.createElement)("p", null, `${t("Imported from")} ${full.provenance.originalOwner}: ${originalScopeLabel(full.provenance.originalScope)}`) : null,
+        full ? (0, import_react13.createElement)("pre", null, full.text) : null,
+        full?.pagination.truncated ? (0, import_react13.createElement)("button", { type: "button", className: "bt-soft", onClick: () => void moreText() }, t("Load more detail")) : null,
+        (0, import_react13.createElement)(
+          "div",
+          { className: "bt-product-memory-form" },
+          (0, import_react13.createElement)("label", null, (0, import_react13.createElement)("input", { type: "checkbox", checked: mainReader, onChange: (event) => setMainReader(event.target.checked) }), t("Main")),
+          workItems.map((work) => (0, import_react13.createElement)("label", { key: work.id }, (0, import_react13.createElement)("input", {
+            type: "checkbox",
+            checked: recipients.includes(work.id),
+            onChange: () => toggleRecipient(work.id)
+          }), work.goal)),
+          (0, import_react13.createElement)("button", { type: "button", className: "bt-soft", disabled: busy, onClick: share }, t("Update sharing"))
+        )
+      ) : null
+    ),
+    (0, import_react13.createElement)(
+      Card,
+      { title: t("Import memory") },
+      (0, import_react13.createElement)("p", null, t("Preview a portable JSON memory copy before importing selected items.")),
+      importBatches.length ? (0, import_react13.createElement)(
+        "div",
+        { className: "bt-product-memory-form" },
+        (0, import_react13.createElement)(
+          "select",
+          {
+            value: savedImportId,
+            "aria-label": t("Saved memory imports"),
+            onChange: (event) => setSavedImportId(event.target.value)
+          },
+          (0, import_react13.createElement)("option", { value: "" }, t("Choose saved import")),
+          importBatches.map((batch) => (0, import_react13.createElement)(
+            "option",
+            { key: batch.id, value: batch.id },
+            `${batch.sourceName} · ${importStatusLabel(batch.status)}`
+          ))
+        ),
+        (0, import_react13.createElement)("button", {
+          type: "button",
+          className: "bt-soft",
+          disabled: importBusy || !savedImportId,
+          onClick: () => void openSavedImport()
+        }, t("Open import"))
+      ) : null,
+      (0, import_react13.createElement)(
+        "label",
+        { className: "bt-product-memory-import-file" },
+        t("Choose memory export"),
+        (0, import_react13.createElement)("input", {
+          type: "file",
+          accept: ".json,application/json",
+          "aria-label": t("Choose memory export"),
+          disabled: importBusy,
+          onChange: (event) => void chooseImportFile(event)
+        })
+      ),
+      importBatch ? (0, import_react13.createElement)(
+        "section",
+        { className: "bt-product-memory-import", "aria-label": t("Memory import preview") },
+        (0, import_react13.createElement)(
+          "div",
+          { className: "bt-product-memory-import-meta" },
+          (0, import_react13.createElement)("strong", null, importBatch.sourceName),
+          (0, import_react13.createElement)("span", null, `${t("Original owner")}: ${importBatch.origin.owner}`),
+          importBatch.origin.instanceId ? (0, import_react13.createElement)("span", null, `${t("Original instance")}: ${importBatch.origin.instanceId}`) : null,
+          (0, import_react13.createElement)("span", null, `${t("Original hash")}: ${importBatch.sourceHash}`),
+          (0, import_react13.createElement)("span", null, `${t("Target instance")}: ${importBatch.targetInstanceId}`),
+          (0, import_react13.createElement)("span", null, `${t("Import status")}: ${importStatusLabel(importBatch.status)}`)
+        ),
+        importBatch.items.length ? (0, import_react13.createElement)("ul", { className: "bt-product-memory-import-items" }, importBatch.items.map((item) => {
+          const choice = importChoices[item.sourceId] ?? { checked: false, kind: "", workId: "", main: false, workIds: [] };
+          const active = item.status === "ready" || item.status === "conflict" && item.reason !== "SOURCE_CONTENT_CONFLICT";
+          return (0, import_react13.createElement)(
+            "li",
+            { key: item.sourceId },
+            (0, import_react13.createElement)(
+              "div",
+              { className: "bt-product-memory-import-head" },
+              (0, import_react13.createElement)("input", {
+                type: "checkbox",
+                checked: choice.checked,
+                disabled: !active || importBatch.status === "cancelled" || importBusy,
+                "aria-label": `${t("Import item")} ${item.sourceId}`,
+                onChange: (event) => updateImportChoice(item.sourceId, { checked: event.target.checked })
+              }),
+              (0, import_react13.createElement)("strong", null, item.sourceId),
+              (0, import_react13.createElement)("span", null, `${t("Original scope")}: ${originalScopeLabel(item.originalScope)}`),
+              (0, import_react13.createElement)(
+                "span",
+                { className: `bt-product-memory-import-status is-${item.status}` },
+                importStatusLabel(item.status),
+                item.reason ? ` · ${t(item.reason)}` : ""
+              )
+            ),
+            item.text ? (0, import_react13.createElement)("pre", null, item.text) : (0, import_react13.createElement)("p", null, t("Rejected item content is not retained.")),
+            item.status === "imported" ? (0, import_react13.createElement)("p", null, `${t("Imported to")}: ${scopeLabel(item.target)}`) : null,
+            item.status === "conflict" ? (0, import_react13.createElement)(
+              "p",
+              null,
+              `${t("Conflicts with")}: ${item.existingMemoryId ?? item.existingBatchId ?? t("Earlier import")}`
+            ) : null,
+            choice.checked && active ? (0, import_react13.createElement)(
+              "div",
+              { className: "bt-product-memory-form" },
+              (0, import_react13.createElement)(
+                "label",
+                null,
+                t("Target role"),
+                (0, import_react13.createElement)(
+                  "select",
+                  {
+                    value: choice.kind,
+                    "aria-label": `${t("Target role")} ${item.sourceId}`,
+                    onChange: (event) => updateImportChoice(item.sourceId, { kind: event.target.value })
+                  },
+                  (0, import_react13.createElement)("option", { value: "" }, t("Choose target")),
+                  (importBatch.targetRoles ?? ["main", "worker", "shared"]).map((role) => (0, import_react13.createElement)("option", {
+                    key: role,
+                    value: role
+                  }, t(role === "main" ? "Main" : role === "worker" ? "Worker" : "Explicitly shared")))
+                )
+              ),
+              choice.kind === "work" ? (0, import_react13.createElement)(
+                "label",
+                null,
+                `${t("Target work")} `,
+                (0, import_react13.createElement)(
+                  "select",
+                  {
+                    value: choice.workId,
+                    "aria-label": `${t("Target work")} ${item.sourceId}`,
+                    onChange: (event) => updateImportChoice(item.sourceId, { workId: event.target.value })
+                  },
+                  (0, import_react13.createElement)("option", { value: "" }, t("Choose work")),
+                  workItems.map((work) => (0, import_react13.createElement)("option", { key: work.id, value: work.id }, work.goal))
+                )
+              ) : null,
+              choice.kind === "shared" ? (0, import_react13.createElement)(
+                "fieldset",
+                { className: "bt-product-memory-import-sharing" },
+                (0, import_react13.createElement)("legend", null, t("Choose shared recipients")),
+                (0, import_react13.createElement)("label", null, (0, import_react13.createElement)("input", {
+                  type: "checkbox",
+                  checked: choice.main,
+                  "aria-label": `${t("Share with Main")} ${item.sourceId}`,
+                  onChange: (event) => updateImportChoice(item.sourceId, { main: event.target.checked })
+                }), t("Main")),
+                workItems.map((work) => (0, import_react13.createElement)("label", { key: work.id }, (0, import_react13.createElement)("input", {
+                  type: "checkbox",
+                  checked: choice.workIds.includes(work.id),
+                  "aria-label": `${t("Share with work")} ${work.id} ${item.sourceId}`,
+                  onChange: (event) => updateImportChoice(item.sourceId, { workIds: event.target.checked ? [...choice.workIds, work.id] : choice.workIds.filter((id) => id !== work.id) })
+                }), work.goal))
+              ) : null,
+              (0, import_react13.createElement)("span", null, `${t("Target instance")}: ${importBatch.targetInstanceId}`)
+            ) : null
+          );
+        })) : null,
+        (0, import_react13.createElement)(
+          "div",
+          { className: "bt-product-memory-form" },
+          (0, import_react13.createElement)("button", {
+            type: "button",
+            className: "bt-soft",
+            disabled: importBusy || importBatch.status === "cancelled" || !importBatch.items.some((item) => importChoices[item.sourceId]?.checked),
+            onClick: () => void importSelected()
+          }, t("Import selected")),
+          importBatch.status === "ready" || importBatch.status === "partial" ? (0, import_react13.createElement)("button", {
+            type: "button",
+            className: "bt-soft",
+            disabled: importBusy,
+            onClick: () => void changeImportStatus(false)
+          }, t("Cancel import")) : null,
+          importBatch.status === "cancelled" ? (0, import_react13.createElement)("button", {
+            type: "button",
+            className: "bt-soft",
+            disabled: importBusy,
+            onClick: () => void changeImportStatus(true)
+          }, t("Retry import")) : null
+        )
+      ) : null
+    ),
+    (0, import_react13.createElement)(
+      Card,
+      { title: t("Save memory") },
+      (0, import_react13.createElement)(
+        "form",
+        { className: "bt-product-memory-form", onSubmit: save },
+        (0, import_react13.createElement)(Row, { label: t("Owner") }, (0, import_react13.createElement)(
+          "select",
+          { value: kind, onChange: (event) => setKind(event.target.value) },
+          (0, import_react13.createElement)("option", { value: "main" }, t("Main")),
+          (0, import_react13.createElement)("option", { value: "work" }, t("Work private")),
+          (0, import_react13.createElement)("option", { value: "shared" }, t("Explicitly shared"))
+        )),
+        kind === "work" ? (0, import_react13.createElement)(
+          "select",
+          { value: workId, "aria-label": t("Work"), onChange: (event) => setWorkId(event.target.value) },
+          (0, import_react13.createElement)("option", { value: "" }, t("Choose work")),
+          workItems.map((work) => (0, import_react13.createElement)("option", { key: work.id, value: work.id }, work.goal))
+        ) : null,
+        kind === "shared" ? (0, import_react13.createElement)(
+          "div",
+          { className: "bt-product-memory-form" },
+          (0, import_react13.createElement)("label", null, (0, import_react13.createElement)("input", { type: "checkbox", checked: mainReader, onChange: (event) => setMainReader(event.target.checked) }), t("Main")),
+          workItems.map((work) => (0, import_react13.createElement)("label", { key: work.id }, (0, import_react13.createElement)("input", {
+            type: "checkbox",
+            checked: recipients.includes(work.id),
+            onChange: () => toggleRecipient(work.id)
+          }), work.goal))
+        ) : null,
+        (0, import_react13.createElement)("textarea", {
+          value: text,
+          maxLength: 4096,
+          "aria-label": t("Memory text"),
+          placeholder: t("One lasting fact"),
+          onChange: (event) => setText(event.target.value)
+        }),
+        (0, import_react13.createElement)("button", { type: "submit", className: "bt-soft", disabled: busy || !text.trim() }, t("Save"))
+      )
+    ),
+    (0, import_react13.createElement)(
+      Card,
+      { title: t("Work memory access") },
+      (0, import_react13.createElement)("p", null, t("Worker memory access is off until you grant it for this work. Revoking blocks later reads and proposals.")),
+      (0, import_react13.createElement)(
+        "select",
+        { value: workId, "aria-label": t("Work"), onChange: (event) => setWorkId(event.target.value) },
+        (0, import_react13.createElement)("option", { value: "" }, t("Choose work")),
+        workItems.map((work) => (0, import_react13.createElement)("option", { key: work.id, value: work.id }, work.goal))
+      ),
+      workId && access ? (0, import_react13.createElement)(
+        "button",
+        { type: "button", className: "bt-soft", disabled: busy, onClick: toggleAccess },
+        t(access.enabled ? "Revoke Worker access" : "Grant Worker access")
+      ) : null
+    ),
+    (0, import_react13.createElement)(Card, { title: t("Learning proposals") }, proposals.length ? proposals.map((proposal) => (0, import_react13.createElement)(ProductMemoryProposalCard, { key: proposal.id, proposal, onAnswer: decide })) : (0, import_react13.createElement)("p", null, t("No learning proposals are waiting for review.")))
+  );
+}
+var PRODUCT_MEMORY_CSS = `
+.bt-product-memory{display:flex;flex-direction:column;gap:12px}
+.bt-product-memory p{font-size:12px;line-height:18px;color:var(--bt-ink-2)}
+.bt-product-memory-form{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0}
+.bt-product-memory-form label{display:inline-flex;align-items:center;gap:5px;font-size:12px;overflow-wrap:anywhere}
+.bt-product-memory select,.bt-product-memory input[type=search],.bt-product-memory textarea{min-width:0;max-width:100%;box-sizing:border-box;padding:7px;border:1px solid var(--bt-line);border-radius:6px;background:var(--bt-main);color:var(--bt-ink);font:inherit}
+.bt-product-memory textarea{width:100%;min-height:72px;resize:vertical}
+.bt-product-memory-detail{padding:10px 0;border-top:1px solid var(--bt-line-2);font-size:12px}
+.bt-product-memory-detail pre{max-height:240px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+.bt-product-memory-list{display:flex;flex-direction:column;gap:7px;margin:0;padding:0;list-style:none}
+.bt-product-memory-entry{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:9px;border:1px solid var(--bt-line);border-radius:6px}
+.bt-product-memory-entry>div{flex:1;min-width:180px;display:flex;flex-direction:column;gap:3px}
+.bt-product-memory-entry-text{font-size:12px;line-height:17px;overflow-wrap:anywhere}
+.bt-product-memory-entry-meta{font-size:11px;color:var(--bt-ink-3)}
+.bt-product-memory-proposal{display:flex;flex-direction:column;gap:7px;padding:10px;border:1px solid var(--bt-line);border-radius:6px}
+.bt-product-memory-proposal h4,.bt-product-memory-proposal p{margin:0}
+.bt-product-memory-proposal pre{max-height:240px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:7px;border-radius:6px;background:var(--bt-hover);font-size:12px}
+.bt-product-memory-error{color:var(--bt-danger)}
+.bt-product-memory-import-file{display:flex;flex-direction:column;gap:6px;font-size:12px}
+.bt-product-memory-import{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.bt-product-memory-import-meta{display:flex;flex-direction:column;gap:4px;padding:9px;border:1px solid var(--bt-line);border-radius:6px;font-size:12px;overflow-wrap:anywhere}
+.bt-product-memory-import-items{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
+.bt-product-memory-import-items>li{padding:10px;border:1px solid var(--bt-line);border-radius:6px}
+.bt-product-memory-import-head{display:flex;flex-wrap:wrap;align-items:center;gap:7px;font-size:12px}
+.bt-product-memory-import-head pre{width:100%;max-height:180px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin:2px 0}
+.bt-product-memory-import-sharing{display:flex;flex-wrap:wrap;gap:7px;margin:0;padding:7px;border:1px solid var(--bt-line);border-radius:6px}
+.bt-product-memory-import-sharing legend{padding:0 4px;font-size:12px}
+.bt-product-memory-import-sharing label{display:inline-flex;align-items:center;gap:4px;font-size:12px}
+.bt-product-memory-import-status{padding:2px 6px;border-radius:999px;background:var(--bt-line-2)}
+.bt-product-memory-import-status.is-conflict,.bt-product-memory-import-status.is-rejected{color:var(--bt-danger)}
+.bt-product-memory button:focus-visible,.bt-product-memory select:focus-visible,.bt-product-memory input:focus-visible,.bt-product-memory textarea:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+`;
+
+// src/client/product-supervision.js
+var import_react14 = require("react");
+var inspectionStatus = (run2) => run2.status === "completed" && !run2.partial ? "Inspection complete" : run2.status === "budget-exhausted" ? "Inspection budget exhausted" : run2.status === "partial" || run2.partial && run2.status !== "failed" ? "Partial inspection" : "Inspection failed";
+function ProductSupervisionSettings({ binding, call }) {
+  const [state, setState] = (0, import_react14.useState)(null);
+  const [selected, setSelected] = (0, import_react14.useState)(null);
+  const [busy, setBusy] = (0, import_react14.useState)(false);
+  const [error, setError] = (0, import_react14.useState)(null);
+  const requiresRestart = state?.run?.last?.partial && (state.run.last.status === "completed" && !state.run.checkpoint || state.run.last.status === "failed" && ["INVALID_INPUT", "INCOMPLETE_STATE"].includes(state.run.last.error));
+  const load = async (ticketId) => {
+    const next = await call("supervision", { instanceId: binding.instanceId, ...ticketId ? { ticketId } : {} });
+    setState(next);
+  };
+  (0, import_react14.useEffect)(() => {
+    let live = true;
+    const refresh = () => call("supervision", {
+      instanceId: binding.instanceId,
+      ...selected ? { ticketId: selected } : {}
+    }).then((value) => {
+      if (live) setState(value);
+    }).catch((failure) => {
+      if (live) setError(failure.message);
+    });
+    void refresh();
+    const timer = setInterval(() => {
+      void refresh();
+    }, 3e4);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [binding.instanceId, selected]);
+  const choose = async (ticketId) => {
+    setSelected(ticketId);
+    setError(null);
+    try {
+      await load(ticketId);
+    } catch (failure) {
+      setError(failure.message);
+    }
+  };
+  const inspect = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await call("supervision-inspect", {
+        instanceId: binding.instanceId,
+        ...requiresRestart ? { restart: true } : {}
+      });
+      await load(selected);
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const decide = async (proposal, decision) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await call("supervision-decide", {
+        instanceId: binding.instanceId,
+        commandId: crypto.randomUUID(),
+        proposalId: proposal.id,
+        fingerprint: proposal.fingerprint,
+        decision
+      });
+      await load(selected);
+    } catch (failure) {
+      setError(failure.message);
+      await load(selected).catch(() => {
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (0, import_react14.createElement)(
+    "section",
+    { className: "bt-product-supervision", "aria-label": t("Supervision") },
+    (0, import_react14.createElement)(
+      "div",
+      { className: "bt-product-supervision-head" },
+      (0, import_react14.createElement)("h3", null, t("Supervision")),
+      (0, import_react14.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", disabled: busy, onClick: () => {
+        void inspect();
+      } }, t(requiresRestart ? "Restart inspection" : "Inspect now"))
+    ),
+    error ? (0, import_react14.createElement)("p", { role: "alert", className: "bt-main-error" }, error) : null,
+    (0, import_react14.createElement)("p", { className: "bt-main-status" }, state?.watchdogConfigured ? state.watchdog?.last ? `${t("Watchdog")}: ${state.watchdog.last.kind} · ${new Date(state.watchdog.last.at).toLocaleString()}` : t("Watchdog has not inspected yet.") : t("Independent Watchdog is not configured for this Host.")),
+    state?.run?.last ? (0, import_react14.createElement)("p", { className: "bt-main-status" }, `${t("Semantic inspection")}: ${t(inspectionStatus(state.run.last))}${state.run.last.error && state.run.last.status === "failed" ? ` · ${state.run.last.error}` : ""} · ${new Date(state.run.last.at).toLocaleString()} · ${t("Tickets inspected")} ${state.run.last.coverage?.inspected ?? state.run.last.inspectionBudget?.inspected ?? 0} · ${t("Inspection budget")} ${state.run.last.budget.used}/${state.run.last.budget.max}`) : null,
+    state?.proposals?.length ? (0, import_react14.createElement)(
+      "div",
+      { className: "bt-product-supervision-list" },
+      state.proposals.slice(0, 30).map((proposal) => (0, import_react14.createElement)(
+        "article",
+        { key: proposal.id, className: "bt-product-supervision-item" },
+        (0, import_react14.createElement)(
+          "div",
+          { className: "bt-product-supervision-head" },
+          (0, import_react14.createElement)("strong", null, `${proposal.kind === "pause" ? t("Pause work") : t("Correct direction")} · ${proposal.status}`),
+          (0, import_react14.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: () => {
+            void choose(proposal.ticketId);
+          } }, t("View history"))
+        ),
+        (0, import_react14.createElement)("p", null, `${t("Work")}: ${proposal.ticketId}`),
+        (0, import_react14.createElement)("p", null, `${t("Reason")}: ${proposal.evidence.assessment.reason}`),
+        (0, import_react14.createElement)("p", null, `${t("Recommendation")}: ${proposal.recommendation}`),
+        (0, import_react14.createElement)("p", null, `${t("Impact")}: ${proposal.impact.summary}`),
+        (0, import_react14.createElement)("p", { className: "bt-main-status" }, `${t("Configuration")}: ${proposal.version} · ${new Date(proposal.createdAt).toLocaleString()}`),
+        proposal.action ? (0, import_react14.createElement)("p", { role: "status" }, `${t("Action")}: ${proposal.action.status}${proposal.action.error ? ` · ${proposal.action.error}` : ""}`) : null,
+        proposal.status === "proposed" ? (0, import_react14.createElement)(
+          "div",
+          { className: "bt-actions" },
+          (0, import_react14.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", disabled: busy, onClick: () => {
+            void decide(proposal, "reject");
+          } }, t("Reject")),
+          (0, import_react14.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", disabled: busy, onClick: () => {
+            void decide(proposal, "approve");
+          } }, t("Approve"))
+        ) : null
+      ))
+    ) : (0, import_react14.createElement)("p", { className: "bt-main-status" }, t("No supervision proposals.")),
+    selected && state?.observation ? (0, import_react14.createElement)(
+      "section",
+      { "aria-label": t("Observation history") },
+      (0, import_react14.createElement)("h4", null, t("Observation history")),
+      state.observation.history.slice(0, 20).map((observation) => (0, import_react14.createElement)(
+        "p",
+        { key: `${observation.at}:${observation.finding}` },
+        `${new Date(observation.at).toLocaleString()} · ${observation.finding}${observation.assessment?.reason ? ` · ${observation.assessment.reason}` : ""}`
+      ))
+    ) : null,
+    state?.watchdog?.history?.length ? (0, import_react14.createElement)(
+      "details",
+      null,
+      (0, import_react14.createElement)("summary", null, t("Watchdog history")),
+      state.watchdog.history.slice(0, 20).map((item) => (0, import_react14.createElement)(
+        "p",
+        { key: item.id },
+        `${new Date(item.at).toLocaleString()} · ${item.kind} · ${item.action} · ${item.result} · ${item.version}`
+      ))
+    ) : null
+  );
+}
+var PRODUCT_SUPERVISION_CSS = `
+.bt-product-supervision{display:flex;flex-direction:column;gap:10px;min-width:0;padding:12px 0;border-top:1px solid var(--bt-line)}
+.bt-product-supervision-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.bt-product-supervision h3,.bt-product-supervision h4{margin:0;font-size:14px}
+.bt-product-supervision p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:18px}
+.bt-product-supervision-list{display:flex;flex-direction:column;gap:12px}
+.bt-product-supervision-item{display:flex;flex-direction:column;gap:6px;padding:12px;border:1px solid var(--bt-line);border-radius:8px}
+.bt-product-supervision-item .bt-actions{display:flex;justify-content:flex-end;gap:8px}
+.bt-product-supervision button:focus-visible,.bt-product-supervision summary:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){.bt-product-supervision *{transition:none}}
+`;
+
+// src/client/folder-menu.js
+var import_react15 = require("react");
+var import_react_dom = require("react-dom");
+var MENU_EXIT_MS = 120;
+var Caret = () => (0, import_react15.createElement)("svg", {
+  className: "bt-model-caret",
+  width: 12,
+  height: 12,
+  viewBox: "0 0 20 20",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.8,
+  strokeLinecap: "round",
+  strokeLinejoin: "round",
+  "aria-hidden": true
+}, (0, import_react15.createElement)("path", { d: "M5.5 8l4.5 4.5L14.5 8" }));
+function useAnchoredMenu() {
+  const [anchor, setAnchor] = (0, import_react15.useState)(null);
+  const [place, setPlace] = (0, import_react15.useState)(null);
+  const [shownPlace, leaving] = useLinger(place, MENU_EXIT_MS);
+  const button = (0, import_react15.useRef)(null);
+  const menu = (0, import_react15.useRef)(null);
+  const tick = useViewport();
+  const close = () => {
+    setAnchor(null);
+    setPlace(null);
+  };
+  (0, import_react15.useEffect)(() => {
+    if (place === null) return void 0;
+    const onDown = (event) => {
+      if (menu.current?.contains(event.target) || button.current?.contains(event.target)) return;
+      close();
+    };
+    const onKey = (event) => {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      close();
+      button.current?.focus();
+    };
+    const onScroll = (event) => {
+      if (!menu.current?.contains(event.target)) close();
+    };
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [place]);
+  (0, import_react15.useLayoutEffect)(() => {
+    if (anchor === null || !button.current) return;
+    const rect = button.current.getBoundingClientRect();
+    const width = Math.max(240, rect.width);
+    const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8));
+    const below = viewBottom() - rect.bottom;
+    setPlace(below >= 260 || below >= rect.top ? { left, width, top: rect.bottom + 4, maxHeight: below - 16, "--bt-origin": "top right" } : { left, width, bottom: viewBottom() - rect.top + 4, maxHeight: rect.top - 16, "--bt-origin": "bottom right" });
+  }, [anchor, tick]);
+  return { isOpen: place !== null, shownPlace, leaving, button, menu, open: () => setAnchor({}), close };
+}
+var folderName = (path) => String(path).replace(/[\\/]+$/, "").split(/[\\/]/).pop() || String(path);
+var Tick = ({ on }) => (0, import_react15.createElement)("span", { className: "bt-model-tick", "aria-hidden": true }, on ? (0, import_react15.createElement)(CheckIcon) : null);
+function FolderMenu({
+  value,
+  group = false,
+  team = false,
+  actions,
+  run: run2,
+  onPick,
+  wide = false,
+  disabled = false,
+  fallbackLabel,
+  label
+}) {
+  const { isOpen, shownPlace, leaving, button, menu, open, close } = useAnchoredMenu();
+  const [info, setInfo] = (0, import_react15.useState)(null);
+  const [view, setView] = (0, import_react15.useState)("list");
+  const [draft, setDraft] = (0, import_react15.useState)("");
+  const [listing, setListing] = (0, import_react15.useState)(null);
+  const [problem, setProblem] = (0, import_react15.useState)("");
+  const fallback = fallbackLabel ?? (group ? t("Each Bot's own folder") : t("Team workspace"));
+  const menuLabel = label ?? (team ? t("Team workspace") : t("Working folder"));
+  const toggle = () => {
+    if (isOpen) {
+      close();
+      return;
+    }
+    setView("list");
+    setProblem("");
+    void Promise.resolve(actions.folders()).then(setInfo).catch(() => setInfo((last) => last ?? { team: null, picker: null, folders: [] }));
+    open();
+  };
+  const choose = (path) => {
+    close();
+    if (path !== (value ?? "")) void onPick(path);
+  };
+  const browse = (path) => {
+    setProblem("");
+    void Promise.resolve(actions.folderList(path)).then((next) => {
+      setListing(next);
+      setView("browse");
+    }).catch((failure) => setProblem(failure?.message ?? String(failure)));
+  };
+  const pickNative = () => {
+    close();
+    void run2(Promise.resolve(actions.folderPick()).then((path) => path ? onPick(path) : void 0));
+  };
+  const typed = () => {
+    const path = draft.trim();
+    if (path !== "") choose(path);
+  };
+  const known = info?.folders ?? [];
+  const folders = value && !known.some((folder) => folder.path === value) ? [{ path: value, title: folderName(value) }, ...known] : known;
+  const listView = (0, import_react15.createElement)(
+    "div",
+    { key: "list", className: "bt-folder-view" },
+    team ? null : (0, import_react15.createElement)(
+      "button",
+      { type: "button", role: "menuitemradio", "aria-checked": !value, title: group ? void 0 : info?.team ?? void 0, onClick: () => choose("") },
+      (0, import_react15.createElement)("span", { className: "bt-menu-label" }, fallback),
+      (0, import_react15.createElement)(Tick, { on: !value })
+    ),
+    folders.length > 0 ? (0, import_react15.createElement)("div", { className: "bt-model-group", role: "presentation" }, t("Folders")) : null,
+    folders.map((folder) => (0, import_react15.createElement)(
+      "button",
+      { key: folder.path, type: "button", role: "menuitemradio", "aria-checked": folder.path === value, title: folder.path, onClick: () => choose(folder.path) },
+      (0, import_react15.createElement)("span", { className: "bt-folder-copy" }, (0, import_react15.createElement)("span", { className: "bt-menu-label" }, folder.title), (0, import_react15.createElement)("span", { className: "bt-folder-path" }, folder.path)),
+      (0, import_react15.createElement)(Tick, { on: folder.path === value })
+    )),
+    (0, import_react15.createElement)("div", { className: "bt-menu-sep", role: "separator" }),
+    info?.picker === "native" ? (0, import_react15.createElement)("button", { type: "button", role: "menuitem", onClick: pickNative }, (0, import_react15.createElement)(FolderIcon), (0, import_react15.createElement)("span", { className: "bt-menu-label" }, t("Choose a folder…"))) : null,
+    info?.picker === "browse" ? (0, import_react15.createElement)("button", { type: "button", role: "menuitem", onClick: () => browse(value) }, (0, import_react15.createElement)(FolderIcon), (0, import_react15.createElement)("span", { className: "bt-menu-label" }, t("Browse folders…"))) : null,
+    (0, import_react15.createElement)("button", { type: "button", role: "menuitem", onClick: () => {
+      setDraft(value ?? "");
+      setView("type");
+    } }, (0, import_react15.createElement)(PencilIcon), (0, import_react15.createElement)("span", { className: "bt-menu-label" }, t("Enter a path…")))
+  );
+  const typeView = (0, import_react15.createElement)(
+    "div",
+    { key: "type", className: "bt-folder-view" },
+    (0, import_react15.createElement)("button", { type: "button", className: "bt-folder-back", onClick: () => setView("list") }, (0, import_react15.createElement)(ChevronLeftIcon), (0, import_react15.createElement)("span", { className: "bt-menu-label" }, t("Back"))),
+    (0, import_react15.createElement)("input", {
+      className: "bt-folder-input",
+      autoFocus: true,
+      value: draft,
+      spellCheck: false,
+      "aria-label": t("Folder path"),
+      placeholder: t("Full path of a folder"),
+      onChange: (event) => setDraft(event.target.value),
+      onKeyDown: (event) => {
+        if (event.key === "Enter" && !event.nativeEvent.isComposing) typed();
+      }
+    }),
+    (0, import_react15.createElement)("button", { type: "button", className: "bt-folder-use", disabled: draft.trim() === "", onClick: typed }, t("Use this folder"))
+  );
+  const parent = listing?.crumbs?.length > 1 ? listing.crumbs.at(-2) : void 0;
+  const inside = listing?.entries?.filter((entry) => !entry.hidden) ?? [];
+  const browseView = listing ? (0, import_react15.createElement)(
+    "div",
+    { key: `browse:${listing.path}`, className: "bt-folder-view" },
+    (0, import_react15.createElement)("button", { type: "button", className: "bt-folder-back", onClick: () => setView("list") }, (0, import_react15.createElement)(ChevronLeftIcon), (0, import_react15.createElement)("span", { className: "bt-menu-label" }, t("Back"))),
+    (0, import_react15.createElement)("div", { className: "bt-folder-path bt-folder-here" }, listing.path),
+    parent ? (0, import_react15.createElement)("button", { type: "button", role: "menuitem", title: parent.path, onClick: () => browse(parent.path) }, (0, import_react15.createElement)(FolderIcon), (0, import_react15.createElement)("span", { className: "bt-menu-label" }, t("Up one level"))) : null,
+    inside.map((entry) => (0, import_react15.createElement)(
+      "button",
+      { key: entry.path, type: "button", role: "menuitem", onClick: () => browse(entry.path) },
+      (0, import_react15.createElement)(FolderIcon),
+      (0, import_react15.createElement)("span", { className: "bt-menu-label" }, entry.name),
+      (0, import_react15.createElement)(ChevronRightIcon)
+    )),
+    inside.length === 0 ? (0, import_react15.createElement)("div", { className: "bt-model-none" }, t("No folders inside.")) : null,
+    listing.truncated ? (0, import_react15.createElement)("div", { className: "bt-folder-path bt-folder-here" }, t("Some folders are not shown.")) : null,
+    (0, import_react15.createElement)("div", { className: "bt-menu-sep", role: "separator" }),
+    (0, import_react15.createElement)("button", { type: "button", className: "bt-folder-use", onClick: () => choose(listing.path) }, t("Use this folder"))
+  ) : null;
+  const shownView = view === "type" ? typeView : view === "browse" && browseView ? browseView : listView;
+  return (0, import_react15.createElement)(
+    import_react15.Fragment,
+    null,
+    (0, import_react15.createElement)(
+      "button",
+      {
+        ref: button,
+        type: "button",
+        className: "bt-model-trigger",
+        "data-wide": wide || void 0,
+        "aria-haspopup": "menu",
+        "aria-expanded": isOpen,
+        "aria-label": `${menuLabel}: ${value ?? (team ? "" : fallback)}`,
+        title: value,
+        onClick: toggle,
+        disabled
+      },
+      (0, import_react15.createElement)(
+        "span",
+        { className: "bt-model-copy" },
+        (0, import_react15.createElement)("span", { className: "bt-model-name" }, value ? folderName(value) : fallback),
+        value ? (0, import_react15.createElement)("span", { className: "bt-model-provider" }, value) : null
+      ),
+      (0, import_react15.createElement)(Caret)
+    ),
+    shownPlace ? (0, import_react_dom.createPortal)((0, import_react15.createElement)(
+      "div",
+      { ref: menu, className: `bt-menu bt-model-menu bt-folder-menu${shownPlace.bottom !== void 0 ? " bt-menu-up" : ""}`, role: "menu", "aria-label": menuLabel, style: shownPlace, "data-leaving": leaving || void 0 },
+      shownView,
+      problem ? (0, import_react15.createElement)("div", { className: "bt-folder-error", role: "alert" }, problem) : null
+    ), document.body) : null
+  );
+}
+var FOLDER_CSS = `
+.bt-folder-view{display:flex;flex-direction:column;gap:2px;animation:bt-veil-in .14s ease-out}
+.bt-model-caret{flex:none;color:var(--bt-ink-3);transition:transform .12s ease}
+[aria-expanded=true]>.bt-model-caret{transform:rotate(180deg)}
+.bt-model-group{flex:none;padding:8px 8px 2px;font-size:11px;line-height:14px;font-weight:500;color:var(--bt-ink-3)}
+.bt-model-group:first-child{padding-top:2px}
+.bt-model-tick{flex:none;width:16px;height:16px;display:inline-flex;color:var(--bt-ink-2)}
+.bt-model-none{padding:8px;font-size:13px;line-height:18px;color:var(--bt-ink-2)}
+.bt-folder-copy{flex:1;display:flex;flex-direction:column;min-width:0}
+.bt-folder-copy .bt-menu-label{flex:none}
+.bt-folder-path{min-width:0;font-size:11px;line-height:14px;color:var(--bt-ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-folder-here{padding:0 8px 4px;white-space:normal;overflow-wrap:anywhere}
+.bt-menu .bt-folder-back{color:var(--bt-ink-2);font-weight:500}
+.bt-folder-input{height:30px;margin:2px 4px;padding:0 8px;border:1px solid var(--bt-line-2);border-radius:8px;background:var(--bt-main);color:var(--bt-ink);font:inherit;font-size:13px;outline:none;box-sizing:border-box}
+.bt-folder-input:focus{border-color:var(--bt-accent)}
+.bt-menu .bt-folder-use{justify-content:center;font-weight:500;color:var(--bt-accent)}
+.bt-menu .bt-folder-use:disabled{color:var(--bt-ink-3);cursor:default;background:none}
+.bt-model-trigger:disabled{opacity:.6;cursor:default}
+.bt-folder-error{padding:4px 8px;font-size:12px;line-height:16px;color:var(--bt-danger);overflow-wrap:anywhere}
+@media (prefers-reduced-motion:reduce){.bt-folder-view{animation:none}}
+`;
+
+// src/client/sources.js
+function createSource(initial) {
+  let value = initial;
+  const listeners = /* @__PURE__ */ new Set();
+  return {
+    getSnapshot: () => value,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    set(next) {
+      const resolved = typeof next === "function" ? next(value) : next;
+      if (resolved === value) return;
+      value = resolved;
+      for (const listener of [...listeners]) listener();
+    }
+  };
+}
+var EMPTY_ROSTER = { revision: -1, mainBotId: null, mainBotIds: [], bots: [], rooms: [], agents: [], exchangeTurns: {}, questions: {}, btwCards: {}, sideChats: {}, learning: {}, secrets: [], capabilities: [], capabilityStatuses: {}, secretRequests: {}, models: [], defaultModel: null, modelsKey: null, prefs: {}, byId: {}, roomsById: {}, agentsById: {}, agentOf: {}, ready: false };
+var isMainOf = (roster, id) => id !== void 0 && (roster.mainBotIds ?? []).includes(id);
+function indexRoster(value) {
+  const byId = {};
+  for (const bot of value.bots) {
+    for (const id of [...bot.parts ?? [], bot.sessionId ?? bot.id, bot.id]) byId[id] = bot;
+  }
+  const roomsById = {};
+  for (const room of value.rooms) {
+    for (const id of [room.id, room.sessionId, ...room.ownParts ?? []]) roomsById[id] = room;
+  }
+  const agentsById = {};
+  const agentOf = {};
+  for (const agent of value.agents ?? []) {
+    agentsById[agent.id] = agent;
+    for (const sessionId of agent.sessions ?? []) agentOf[sessionId] = agent.id;
+  }
+  return { ...value, agents: value.agents ?? [], byId, roomsById, agentsById, agentOf, ready: true };
+}
+function isAgentSession(roster, cache, sessionId) {
+  if (sessionId === void 0 || sessionId === null || sessionId === "") return false;
+  if (roster.ready) return roster.agentOf[sessionId] !== void 0;
+  return cache.has(sessionId);
+}
+var heldCardKey = (kind, requestId) => JSON.stringify([kind, requestId]);
+function countCards(state, sessionId, callIds, delta) {
+  const own = { ...state[sessionId] };
+  for (const callId of callIds) {
+    const count = (own[callId] ?? 0) + delta;
+    if (count > 0) own[callId] = count;
+    else delete own[callId];
+  }
+  return { ...state, [sessionId]: own };
+}
+
+// src/client/product-state.js
+function mergeObservationItems(existing, incoming) {
+  const byId = new Map(existing.map((item) => [item.id, item]));
+  for (const item of incoming) byId.set(item.id, item);
+  return [...byId.values()].sort((left, right) => right.createdAt - left.createdAt || right.id.localeCompare(left.id));
+}
+function mergeMessages(existing, incoming) {
+  const byId = new Map(existing.map((message) => [message.id, message]));
+  for (const message of incoming) byId.set(message.id, message);
+  return [...byId.values()].sort((left, right) => left.sequence - right.sequence);
+}
+function rebaseRoleDraft(base, draft, latest) {
+  const merged = JSON.parse(JSON.stringify(latest));
+  for (const role of ["main", "router", "worker"]) {
+    if (!draft[role]) continue;
+    for (const field of ["provider", "model", "effort"]) {
+      if (draft[role].model?.[field] === base[role].model?.[field]) continue;
+      if (draft[role].model?.[field] === void 0) delete merged[role].model[field];
+      else merged[role].model[field] = draft[role].model[field];
+    }
+    if (draft[role].instructions !== base[role].instructions) merged[role].instructions = draft[role].instructions;
+  }
+  return merged;
+}
+
+// src/client/themes.js
+var THEME_KEYS = ["bg", "sidebar", "bubble", "card", "text", "user", "userText", "accent"];
+var THEMES = {
+  deepseek: {
+    label: "DeepSeek",
+    light: { bg: "#fcfcfc", sidebar: "#f7f7f7", bubble: "#eeeeee", card: "#ffffff", text: "#141414", user: "#070707", userText: "#fcfcfc", accent: "#4d6bfe" },
+    dark: { bg: "#141414", sidebar: "#1b1b1b", bubble: "#262626", card: "#1f1f1f", text: "#f2f2f2", user: "#f2f2f2", userText: "#141414", accent: "#5b7bff" }
+  },
+  mono: {
+    label: "Mono",
+    light: { bg: "#ffffff", sidebar: "#f9f9f9", bubble: "#f0f0f0", card: "#ffffff", text: "#0d0d0d", user: "#0d0d0d", userText: "#ffffff", accent: "#0d0d0d" },
+    dark: { bg: "#0f0f0f", sidebar: "#171717", bubble: "#242424", card: "#1c1c1c", text: "#f4f4f4", user: "#f4f4f4", userText: "#0f0f0f", accent: "#f4f4f4" }
+  },
+  paper: {
+    label: "Paper",
+    light: { bg: "#faf9f5", sidebar: "#f3f0e8", bubble: "#ebe7dc", card: "#ffffff", text: "#1f1e1b", user: "#2b2a26", userText: "#faf9f5", accent: "#d97757" },
+    dark: { bg: "#1f1e1b", sidebar: "#262521", bubble: "#34322d", card: "#2a2925", text: "#f3f0e8", user: "#f3f0e8", userText: "#1f1e1b", accent: "#e08a6d" }
+  },
+  moonlight: {
+    label: "Moonlight",
+    light: { bg: "#f7f9fc", sidebar: "#eef2f8", bubble: "#e5ebf5", card: "#ffffff", text: "#121826", user: "#1e3a8a", userText: "#ffffff", accent: "#1e86ff" },
+    dark: { bg: "#0b1020", sidebar: "#10172a", bubble: "#1a2340", card: "#141c33", text: "#e8edf7", user: "#3b6fd8", userText: "#ffffff", accent: "#4f9dff" }
+  }
+};
+var DARK_INK = "#141414";
+var accentInk = (accent) => (luminance(accent) + 0.05) ** 2 > 1.05 * (luminance(DARK_INK) + 0.05) ? DARK_INK : "#ffffff";
+var rgba = (hex, alpha) => `rgba(${[1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16)).join(",")},${alpha})`;
+function themeVars(mode, dark, accent = mode.accent) {
+  return {
+    "--bt-ink": mode.text,
+    "--bt-ink-2": rgba(mode.text, 0.6),
+    "--bt-ink-3": rgba(mode.text, 0.36),
+    "--bt-bubble": mode.bubble,
+    "--bt-sidebar": mode.sidebar,
+    "--bt-main": mode.bg,
+    "--bt-card": mode.card,
+    "--bt-line": rgba(mode.text, 0.08),
+    "--bt-line-2": rgba(mode.text, 0.15),
+    "--bt-hover": dark ? "rgba(160,160,160,.12)" : "rgba(119,119,119,.09)",
+    "--bt-active": dark ? "rgba(160,160,160,.2)" : "rgba(119,119,119,.17)",
+    "--bt-accent": accent,
+    "--bt-accent-ink": accentInk(accent),
+    "--bt-user": mode.user,
+    "--bt-user-ink": mode.userText,
+    "--bt-tag-bg": rgba(mode.text, dark ? 0.09 : 0.06),
+    "--bt-tag-ink": rgba(mode.text, 0.58)
+  };
+}
+var declarations = (vars) => Object.entries(vars).map(([name, value]) => `${name}:${value}`).join(";");
+var darkAccent = (accent) => {
+  const ink = ACCENT_INKS.find((id) => INKS[id][0] === accent);
+  return ink === void 0 ? accent : INKS[ink][1];
+};
+var themeCss = (theme, accent) => `html body{${declarations(themeVars(theme.light, false, accent ?? theme.light.accent))}}
+html body[data-ds-dark-theme]{${declarations(themeVars(theme.dark, true, darkAccent(accent) ?? theme.dark.accent))}}
+${theme.css ?? ""}`;
+var shellTokens = ({ light, dark }) => ({
+  "--dsw-alias-bg-base": { light: light.bg, dark: dark.bg },
+  "--dsw-specific-sidebar-fill": { light: light.sidebar, dark: dark.sidebar },
+  "--dsw-specific-input-major": { light: light.bg, dark: dark.sidebar },
+  "--dsw-alias-label-primary": { light: light.text, dark: dark.text },
+  "--dsw-alias-label-secondary": { light: rgba(light.text, 0.74), dark: rgba(dark.text, 0.74) },
+  "--dsw-alias-label-tertiary": { light: rgba(light.text, 0.6), dark: rgba(dark.text, 0.6) }
+});
+var customThemes = {};
+var registry = createSource(0);
+var isPoint = (point) => Array.isArray(point) && point.length === 2 && point.every(Number.isFinite);
+function registerShape(id, shape) {
+  if (typeof id !== "string" || !/^[a-z][\w-]{0,31}$/.test(id)) throw new Error("Shape ids are lowercase words");
+  if (typeof shape?.body !== "function" || typeof shape.body("#000") !== "string") throw new Error("A shape needs body(paint) returning SVG markup");
+  const at = shape.eyes?.at;
+  if (!Array.isArray(at) || at.length !== 2 || !at.every(isPoint)) throw new Error("A shape needs eyes.at: two [x, y] points");
+  const size = Number.isFinite(shape.size) && shape.size > 0 ? shape.size : 100;
+  const pick = (key, fallback) => Number.isFinite(shape.eyes[key]) ? shape.eyes[key] : fallback;
+  const eyes = at.map(([x, y]) => [x, y, pick("w", size * 0.1), pick("h", size * 0.23), pick("tilt", -27)]);
+  const previous = SHAPES[id];
+  SHAPES[id] = {
+    label: String(shape.label ?? id),
+    size,
+    body: shape.body,
+    eyes,
+    ...typeof shape.wrap === "string" ? { wrap: shape.wrap } : {}
+  };
+  const refresh = () => {
+    markupCache.clear();
+    maskCache.delete(id);
+    registry.set((value) => value + 1);
+  };
+  refresh();
+  return () => {
+    if (previous) SHAPES[id] = previous;
+    else delete SHAPES[id];
+    refresh();
+  };
+}
+function registerTheme(id, theme) {
+  if (typeof id !== "string" || !/^[a-z][\w-]{0,31}$/.test(id)) throw new Error("Theme ids are lowercase words");
+  for (const mode of ["light", "dark"]) {
+    for (const key of THEME_KEYS) if (!isHex(theme?.[mode]?.[key])) throw new Error(`Theme ${mode}.${key} must be a #rrggbb color`);
+  }
+  const previous = customThemes[id];
+  customThemes[id] = { label: String(theme.label ?? id), light: theme.light, dark: theme.dark, css: typeof theme.css === "string" ? theme.css : "" };
+  registry.set((value) => value + 1);
+  return () => {
+    if (previous) customThemes[id] = previous;
+    else delete customThemes[id];
+    registry.set((value) => value + 1);
+  };
+}
+var allThemes = () => ({ ...THEMES, ...customThemes });
+
+// src/client/styles.js
+var SHELL_CSS = `
+body{--bt-ink:#141414;--bt-danger:#e02135;--bt-ink-2:rgba(20,20,20,.6);--bt-ink-3:rgba(20,20,20,.36);--bt-bubble:#eeeeee;--bt-sidebar:#f7f7f7;--bt-main:#fcfcfc;--bt-line:rgba(20,20,20,.08);--bt-line-2:rgba(20,20,20,.15);--bt-line-weak:rgba(20,20,20,.1);--bt-hover:rgba(119,119,119,.09);--bt-active:rgba(119,119,119,.17);--bt-card:#ffffff;--bt-accent:#4d6bfe;--bt-green:#00c972;--bt-star:#ff9800;--bt-user:#070707;--bt-user-ink:#fcfcfc;--bt-tag-bg:rgba(20,20,20,.06);--bt-tag-ink:rgba(20,20,20,.56);--bt-knob:#ffffff;-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;--bt-font:var(--dsw-font-family,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif)}
+/* iOS waits out a double-tap zoom on buttons; the plugin's own controls never zoom. */
+:is(.bt-tool,.bt-uaction,.bt-menu button,.bt-menu-item,.bt-icon-btn,.bt-round,.bt-pill,.bt-account,.bt-set-row,.bt-settings-item,.bt-react-strip button,.bt-palette-row,.bt-palette-clear,.bt-tab,.bt-ptab,.bt-ptab-x,.bt-bcard-x,.bt-plus,.bt-q-btn,.bt-q-x,.bt-x,.bt-nc-send,.bt-send,.bt-soft,.bt-mini,.bt-shape,.bt-swatch,.bt-color,.bt-newchat,.bt-task-day,.bt-task-remove,.bt-fb-btn){touch-action:manipulation}
+body[data-ds-dark-theme]{--bt-ink:#f2f2f2;--bt-ink-2:rgba(242,242,242,.6);--bt-ink-3:rgba(242,242,242,.36);--bt-bubble:#262626;--bt-sidebar:#1b1b1b;--bt-main:#141414;--bt-line:rgba(255,255,255,.08);--bt-line-2:rgba(255,255,255,.15);--bt-line-weak:rgba(255,255,255,.1);--bt-hover:rgba(160,160,160,.12);--bt-active:rgba(160,160,160,.2);--bt-card:#1f1f1f;--bt-user:#f2f2f2;--bt-user-ink:#141414;--bt-tag-bg:rgba(255,255,255,.09);--bt-tag-ink:rgba(242,242,242,.62)}
+${Object.entries(INKS).map(([name, [light]]) => `body{--bt-ink-${name}:${light}}`).join("")}
+${Object.entries(INKS).map(([name, [, dark]]) => `body[data-ds-dark-theme]{--bt-ink-${name}:${dark}}`).join("")}
+.bt-mark{display:inline-block;flex:none;position:relative;line-height:0}
+.bt-mark svg{width:100%;height:100%;overflow:visible}
+.bt-mark-img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;box-shadow:inset 0 0 0 1px var(--bt-line)}
+.bt-mark .bt-b,.bt-mark .bt-eye,.bt-mark .bt-eyes,.bt-mark .bt-gaze{transform-box:fill-box}
+.bt-mark .bt-b{transform-origin:50% 100%}
+.bt-mark .bt-eye,.bt-mark .bt-eyes{transform-origin:center}
+/* Motion levels (Settings → Bots → Animation) set body[data-bt-motion]: quiet moves a
+   mark only for its state; normal, the default, adds petting, pokes and eyes that follow
+   the pointer; lively adds blinks and fidgets at rest and a question riding on the head. */
+body[data-bt-motion=lively] .bt-mark[data-live]:is([data-state=idle],[data-state=alert]) .bt-eye{animation:bt-blink-idle 5s linear infinite;animation-delay:var(--bt-delay,0s)}
+body[data-bt-motion=lively] .bt-mark[data-live][data-state=idle]:is([data-fidget=hop],[data-fidget=sway],[data-fidget=stretch]) :is(.bt-b,.bt-mark-img){animation:var(--bt-fidget) 9s ease-in-out var(--bt-fidget-delay,0s) infinite}
+body[data-bt-motion=lively] .bt-mark[data-live][data-state=idle][data-fidget=hop]{--bt-fidget:bt-fidget-hop}
+body[data-bt-motion=lively] .bt-mark[data-live][data-state=idle][data-fidget=sway]{--bt-fidget:bt-fidget-sway}
+body[data-bt-motion=lively] .bt-mark[data-live][data-state=idle][data-fidget=stretch]{--bt-fidget:bt-fidget-stretch}
+body[data-bt-motion=lively] .bt-mark[data-live][data-state=idle][data-fidget=look] .bt-eyes{animation:bt-fidget-look 9s ease-in-out var(--bt-fidget-delay,0s) infinite}
+@keyframes bt-fidget-hop{0%,8%,100%{transform:none}3%{transform:translateY(-10%) scale(.97,1.04)}5.5%{transform:translateY(0) scale(1.05,.95)}}
+@keyframes bt-fidget-sway{0%,10%,100%{transform:none}2.5%{transform:rotate(-8deg)}5%{transform:rotate(7deg)}7.5%{transform:rotate(-3deg)}}
+@keyframes bt-fidget-stretch{0%,9%,100%{transform:none}4%{transform:scale(.94,1.08)}7%{transform:scale(1.03,.97)}}
+@keyframes bt-fidget-look{0%,22%,100%{transform:none}3%,9%{transform:translateX(-14%)}12%,19%{transform:translateX(14%)}}
+body[data-bt-motion=lively] .bt-badge-alert{right:auto;bottom:auto;left:50%;top:calc(var(--bt-size,36px) * -.14);translate:-50% 0;animation:bt-q-ride 1.3s cubic-bezier(.3,.7,.4,1) infinite}
+body[data-bt-motion=lively] :is(.bt-row,.bt-tile)>.bt-mark:hover .bt-badge-alert{animation:none}
+@keyframes bt-q-ride{0%,55%,100%{transform:translateY(0)}20%{transform:translateY(calc(var(--bt-size,36px) * -.14))}40%{transform:translateY(0)}}
+/* Petting: with the pointer on a sidebar avatar or just around it (a ring a fifth of its
+   size wide), a resting mark leans into the pointer and keeps nuzzling it, its eyes
+   closed in a happy arc, and springs back when the pointer leaves. */
+:is(.bt-row,.bt-tile)>:is(.bt-mark,.bt-cluster)::before{content:'';position:absolute;inset:-20%;border-radius:50%}
+.bt-mark[data-live] .bt-b,.bt-mark[data-live] .bt-mark-img{transition:rotate .5s cubic-bezier(.34,1.56,.64,1),translate .5s cubic-bezier(.34,1.56,.64,1),scale .3s ease-out}
+.bt-mark[data-live] .bt-eye{transition:scale .14s ease-in}
+.bt-mark[data-live] .bt-eye-happy{transition:opacity .12s ease-out}
+body:not([data-bt-motion=quiet]) :is(.bt-row,.bt-tile)>:is(.bt-mark,.bt-cluster):hover .bt-mark[data-live]:is([data-state=idle],[data-state=alert]):not(.bt-mark-poke) :is(.bt-b,.bt-mark-img){rotate:8deg;translate:5% -1%;animation:bt-nuzzle .78s ease-in-out .32s infinite}
+body:not([data-bt-motion=quiet]) :is(.bt-row,.bt-tile)>:is(.bt-mark,.bt-cluster):hover .bt-mark[data-live]:is([data-state=idle],[data-state=alert]) .bt-eye{scale:1 0;animation:none}
+body:not([data-bt-motion=quiet]) :is(.bt-row,.bt-tile)>:is(.bt-mark,.bt-cluster):hover .bt-mark[data-live]:is([data-state=idle],[data-state=alert]) .bt-eye-happy{opacity:1;transition-delay:.1s}
+@keyframes bt-nuzzle{50%{rotate:14deg;translate:8% -3%;scale:1.03 .97}}
+.bt-mark[data-gaze] .bt-b{translate:calc(var(--bt-gx,0) * 5%) calc(var(--bt-gy,0) * 4%);transition:translate .18s ease-out}
+.bt-mark[data-gaze] .bt-gaze{transform:translate(calc(var(--bt-gx,0) * 12%),calc(var(--bt-gy,0) * 11%));transition:transform .18s ease-out}
+body[data-bt-motion=quiet] .bt-mark[data-gaze] .bt-b{translate:none}
+body[data-bt-motion=quiet] .bt-mark[data-gaze] .bt-gaze{transform:none}
+.bt-mark[data-state=thinking] .bt-b{animation:bt-ponder 2.2s ease-in-out infinite}
+.bt-mark[data-state=thinking] .bt-eyes{animation:bt-squint 2.2s ease-in-out infinite}
+.bt-mark[data-state=searching] .bt-b{animation:bt-seek 1s ease-in-out infinite}
+.bt-mark[data-state=searching] .bt-eyes{animation:bt-scan 1.6s ease-in-out infinite}
+.bt-mark[data-state=working] .bt-b{animation:bt-bob 1.6s ease-in-out infinite}
+.bt-mark[data-state=working]:is([data-shape=star],[data-shape=hex],[data-shape=plus],[data-shape=gem],[data-shape=magnet],[data-shape=ring]) .bt-b{animation:bt-wiggle 1.4s ease-in-out infinite;transform-origin:50% 50%}
+.bt-mark[data-state=working]:is([data-shape=gumdrop],[data-shape=peanut],[data-shape=cushion],[data-shape=squircle],[data-shape=moon],[data-shape=wave]) .bt-b{animation:bt-squash 1.2s ease-in-out infinite}
+.bt-mark[data-state=working] .bt-eye{animation:bt-blink 2.4s ease-in-out infinite}
+.bt-mark[data-state=sending] .bt-b{animation:bt-dash 1.1s cubic-bezier(.4,0,.2,1) infinite}
+/* Waiting for teammates to hand back work circles like coordinating them. */
+.bt-mark:is([data-state=orbit],[data-state=waiting]) .bt-b{animation:bt-sway 2.6s ease-in-out infinite;transform-origin:50% 50%}
+.bt-mark:is([data-state=orbit],[data-state=waiting]) .bt-eyes{animation:bt-roll 2.6s linear infinite}
+/* A question for you hops twice when it arrives and the badge keeps it in view after;
+   a lively mark keeps hopping. */
+.bt-mark[data-state=alert] .bt-b{animation:bt-hop 1.3s cubic-bezier(.3,.7,.4,1) 2}
+.bt-mark[data-shape=image]:not([data-state=idle]) .bt-mark-img{animation:bt-bob 1.6s ease-in-out infinite}
+.bt-mark[data-shape=image][data-state=alert] .bt-mark-img{animation:bt-hop 1.3s cubic-bezier(.3,.7,.4,1) 2}
+body[data-bt-motion=lively] .bt-mark[data-state=alert] :is(.bt-b,.bt-mark-img){animation-iteration-count:infinite}
+.bt-mark[data-state=done] .bt-b{animation:bt-done 1.8s linear 1}
+.bt-mark[data-shape=image][data-state=done] .bt-mark-img{animation:bt-done 1.8s linear 1;transform-origin:50% 100%}
+@keyframes bt-done{0%{transform:none;animation-timing-function:cubic-bezier(.4,0,.2,1)}13.3%{transform:scale(1.12,.88);animation-timing-function:cubic-bezier(.4,0,.2,1)}25.6%{transform:scale(.93,1.09);animation-timing-function:cubic-bezier(.4,0,.2,1)}37.8%{transform:scale(1.04,.97);animation-timing-function:cubic-bezier(.4,0,.2,1)}51.1%,100%{transform:none}}
+.bt-mark-poke .bt-b{animation:bt-poke .8s cubic-bezier(.3,.7,.4,1) 1!important;transform-origin:50% 60%!important}
+.bt-mark-poke .bt-mark-img{animation:bt-poke-img .6s ease-out 1!important}
+.bt-mark[data-poke]{cursor:pointer}
+body[data-bt-motion=quiet] .bt-mark-poke :is(.bt-b,.bt-mark-img){animation:none!important}
+body[data-bt-motion=quiet] .bt-mark[data-poke]{cursor:default}
+@keyframes bt-bob{0%,100%{transform:translateY(0) rotate(0)}30%{transform:translateY(-4%) rotate(-5deg)}65%{transform:translateY(0) rotate(4deg)}}
+@keyframes bt-wiggle{0%,100%{transform:rotate(0) scale(1)}25%{transform:rotate(-12deg) scale(1.04)}75%{transform:rotate(12deg) scale(1.04)}}
+@keyframes bt-squash{0%,100%{transform:scale(1,1)}30%{transform:scale(1.08,.9)}55%{transform:translateY(-4%) scale(.94,1.08)}80%{transform:scale(1.02,.98)}}
+@keyframes bt-ponder{0%,100%{transform:translateY(0) rotate(4deg)}50%{transform:translateY(-3%) rotate(7deg)}}
+@keyframes bt-squint{0%,100%{transform:translate(0,-4%) scaleY(.7)}50%{transform:translate(5%,-5%) scaleY(.78)}}
+@keyframes bt-seek{0%,100%{transform:translateY(0) rotate(-4deg)}50%{transform:translateY(-5%) rotate(-1deg)}}
+@keyframes bt-scan{0%,100%{transform:translateX(-12%)}50%{transform:translateX(12%)}}
+@keyframes bt-dash{0%,100%{transform:translateX(0) rotate(0)}35%{transform:translateX(9%) rotate(7deg)}55%{transform:translateX(-2%) rotate(-3deg)}}
+@keyframes bt-sway{0%,100%{transform:rotate(-10deg)}50%{transform:rotate(10deg)}}
+@keyframes bt-roll{0%,100%{transform:translate(12%,0)}25%{transform:translate(0,9%)}50%{transform:translate(-12%,0)}75%{transform:translate(0,-9%)}}
+@keyframes bt-hop{0%,55%,100%{transform:translateY(0) scale(1,1)}20%{transform:translateY(-14%) scale(.96,1.05)}40%{transform:translateY(0) scale(1.06,.94)}}
+@keyframes bt-poke{0%{transform:none}55%{transform:translateY(-16%) rotate(360deg)}78%{transform:translateY(0) scale(1.08,.92) rotate(360deg)}100%{transform:rotate(360deg)}}
+@keyframes bt-poke-img{0%,100%{transform:scale(1)}40%{transform:scale(1.14) rotate(-6deg)}}
+/* Idle clip: two .26s blinks (lid to 3%, then a 6% overshoot) at 1.48s and 3.46s. */
+@keyframes bt-blink-idle{0%,29.6%,35%,69.2%,74.6%,100%{transform:scaleY(1)}32.2%,71.8%{transform:scaleY(.03)}33.8%,73.4%{transform:scaleY(1.06)}}
+@keyframes bt-blink{0%,42%,50%,100%{transform:scaleY(1)}46%{transform:scaleY(.03)}48%{transform:scaleY(1.06)}}
+@media (prefers-reduced-motion:reduce){.bt-mark *{animation:none!important;transition:none!important}}
+.bt-badge{position:absolute;right:0;bottom:0;width:12px;height:12px;border-radius:50%;corner-shape:round;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 1.5px var(--bt-sidebar)}
+.bt-badge-admin{background:color-mix(in srgb,var(--bt-star) 82%,var(--bt-sidebar))}
+.bt-badge-admin svg{width:7px;height:7px}
+.bt-badge-main{right:calc(var(--bt-size,36px) * -.07);bottom:calc(var(--bt-size,36px) * -.07);width:clamp(14px,calc(var(--bt-size,36px) * .36),22px);height:clamp(14px,calc(var(--bt-size,36px) * .36),22px);border-radius:0;box-shadow:none}
+.bt-badge-main svg{width:100%;height:100%;overflow:visible}
+.bt-badge-main path{fill:var(--bt-star);stroke:var(--bt-sidebar);stroke-width:2.6;stroke-linejoin:round;paint-order:stroke}
+.bt-badge-alert{background:color-mix(in srgb,var(--bt-accent) 78%,var(--bt-sidebar));color:var(--bt-accent-ink,#fff);font-size:8.5px;line-height:12px;font-weight:600;font-family:var(--bt-font)}
+.bt-badge-working{background:color-mix(in srgb,var(--bt-green) 82%,var(--bt-sidebar));width:8px;height:8px;right:1px;bottom:1px}
+.bt-cluster{position:relative;display:inline-block;flex:none;line-height:0}
+.bt-cluster>*{position:absolute}
+.bt-cluster-more,.bt-cluster-you{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:var(--bt-active);color:var(--bt-ink-3);font-family:var(--bt-font);font-weight:500;line-height:1;font-variant-numeric:tabular-nums}
+.bt-cluster-you{background:color-mix(in srgb,var(--bt-ink) 12%,transparent)}
+.bt-stack{display:inline-flex;align-items:center;flex:none;line-height:0}
+.bt-stack>*+*{margin-left:calc(var(--bt-stack-size) * -.3)}
+.bt-stack-more{font-size:11px;line-height:16px;color:var(--bt-ink-3);margin-left:3px!important}
+
+.bt-side{display:flex;flex-direction:column;min-height:0;flex:1 1 auto;gap:2px;padding:0 12px 8px 0;color:var(--bt-ink);font-family:var(--bt-font)}
+.bt-side-top{display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:6px 5px 0 0}
+.bt-brand{display:inline-flex;align-items:center;gap:6px;margin-right:auto;padding:4px 8px 4px 4px;border:0;border-radius:8px;background:none;cursor:pointer;font-family:inherit;font-size:15px;line-height:20px;font-weight:600;letter-spacing:-.01em;color:var(--bt-ink);white-space:nowrap}
+.bt-brand-whale{display:inline-flex;color:var(--bt-accent)}
+.bt-round{width:36px;height:36px;border-radius:50%;border:1px solid var(--bt-line);background:var(--bt-main);color:var(--bt-ink);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:background-color .12s ease,transform .12s ease}
+.bt-round:hover{background:var(--bt-hover)}
+.bt-round:active{transform:scale(.94)}
+.bt-list{display:flex;flex-direction:column;gap:3px;overflow-y:auto;min-height:0;flex:1 1 auto}
+/* Chromium ignores ::-webkit-scrollbar when scrollbar-width or scrollbar-color (inherited) is non-auto. */
+.bt-side:not(.bt-rail)>.bt-list{margin-right:-12px;scrollbar-gutter:stable;scrollbar-width:auto;scrollbar-color:auto}
+.bt-side:not(.bt-rail)>.bt-list::-webkit-scrollbar{width:12px}
+.bt-side:not(.bt-rail)>.bt-list::-webkit-scrollbar-track{background:transparent}
+.bt-side:not(.bt-rail)>.bt-list::-webkit-scrollbar-thumb{border:4px solid transparent;border-radius:6px;background:color-mix(in srgb,var(--bt-ink) 16%,transparent) padding-box}
+.bt-side:not(.bt-rail)>.bt-list:hover::-webkit-scrollbar-thumb{background-color:color-mix(in srgb,var(--bt-ink) 30%,transparent)}
+.bt-tile-wrap{display:flex;justify-content:center;padding:20px 0 15px}
+.bt-tile{display:flex;flex-direction:column;align-items:center;gap:4px;width:95px;padding:6px 8px 4px;border-radius:12px;border:0;background:transparent;color:var(--bt-ink);cursor:pointer;font-family:inherit;transition:background-color .12s ease}
+.bt-tile:hover{background:var(--bt-hover)}
+.bt-tile[aria-current=page]{background:var(--bt-active)}
+.bt-tile-name{font-size:13px;line-height:18px;font-weight:400;max-width:84px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-chip{font-size:11px;line-height:16px;padding:1px 4px;border-radius:4px;background:var(--bt-hover);border:1px solid var(--bt-line);color:var(--bt-ink-2);white-space:nowrap;max-width:84px;overflow:hidden;text-overflow:ellipsis}
+.bt-row{display:flex;align-items:center;gap:8px;min-height:54px;padding:8px;border:0;border-radius:10px;background:transparent;color:var(--bt-ink);text-align:left;cursor:pointer;width:100%;box-sizing:border-box;font-family:inherit;transition:background-color .12s ease}
+.bt-row:hover{background:var(--bt-hover)}
+.bt-row[aria-current=page]{background:var(--bt-active)}
+.bt-row-body{display:flex;flex-direction:column;min-width:0;flex:1 1 auto}
+.bt-row-name{display:flex;align-items:center;gap:6px;min-width:0;font-size:14px;line-height:20px;font-weight:400}
+.bt-row-title{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bt-tag{flex:none;max-width:96px;font-size:12px;line-height:16px;font-weight:400;padding:1px 6px;border-radius:4px;background:var(--bt-tag-bg);color:var(--bt-tag-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bt-row-preview{font-size:13px;line-height:18px;color:var(--bt-ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bt-unread{width:8px;height:8px;border-radius:50%;background:var(--bt-accent);flex:none;margin-right:2px;animation:bt-fade .13s cubic-bezier(.22,1,.36,1)}
+.bt-unread-wait{background:var(--bt-star)}
+/* Our own left column, portalled over the shell's collapsed sidebar. It reaches
+   the window's top edge so the title band and the column share one fill (under
+   Mica the app styles DSH's sidebar the same way, via --bt-leftcol-fill there);
+   it stays under the shell's title-bar switch (z 30) and the popovers (z 60),
+   and the floating drawer keeps the opaque fill over the conversation. */
+.bt-leftcol{position:fixed;left:0;top:0;bottom:0;z-index:25;display:flex;--bt-lc-clear:var(--dsh-frame-top-clearance,var(--dsh-windows-titlebar-height,0px));background:var(--bt-leftcol-fill,var(--bt-sidebar));border-right:.5px solid var(--bt-line);box-sizing:border-box;padding:calc(var(--bt-lc-clear) + 6px) 12px 6px;color:var(--bt-ink);font-family:var(--bt-font)}
+html[data-windows-titlebar] .bt-leftcol,html[data-platform=darwin] .bt-leftcol{border-right:none}
+.bt-leftcol-grip{position:absolute;right:-4px;top:0;bottom:0;width:8px;cursor:col-resize;z-index:3;touch-action:none}
+.bt-leftcol-grip:hover,.bt-leftcol-grip:active{background:linear-gradient(to right,transparent 3px,var(--bt-line-2) 3px,var(--bt-line-2) 5px,transparent 5px)}
+/* The shell's collapsed sidebar keeps no track in the Bot view, so a hidden
+   column leaves nothing behind (the shell's right column, when open, keeps its
+   own geometry). Our own collapse of it lands without the shell's slide. */
+[class*="_frame"][data-sidebar-collapsed][data-rightbar-collapsed]:has(>[class*="_sidebarCol"]){grid-template-columns:0px minmax(0,1fr) 0px!important}
+html[data-bt-collapsing] [class*="_frame"]:has(>[class*="_sidebarCol"]){transition:none!important}
+.bt-leftcol[data-left=drawer]{background:var(--bt-sidebar);box-shadow:8px 0 24px rgba(0,0,0,.14)}
+.bt-leftcol>.bt-side{width:100%}
+.bt-leftcol-foot{display:flex;align-items:center;gap:9px;padding-top:8px;flex:none}
+.bt-rail{align-items:center;padding:0}
+.bt-rail .bt-row{justify-content:center;width:56px;height:56px;min-height:56px;padding:0;border-radius:16px}
+.bt-rail-top{display:flex;flex-direction:column;align-items:center;gap:6px;padding-bottom:8px}
+.bt-rail-sep{width:24px;height:1px;flex:none;background:var(--bt-line)}
+.bt-rail .bt-agent-ava{width:44px;height:44px}
+.bt-rail .bt-list{align-self:stretch;align-items:center;gap:4px}
+/* The rail's list spans the whole column: the badges and dots that sit on a row's
+   edge need room beside the 56px rows, or the list scrolls sideways. */
+.bt-leftcol[data-left=rail]{padding:calc(var(--bt-lc-clear) + 8px) 0 8px}
+.bt-leftcol-foot-rail{flex-direction:column;gap:6px}
+/* A drag that crosses the rail's snap line rides the spring to its target: the
+   content is pinned at the target size so only the column's edge moves. */
+.bt-leftcol[data-folding]{overflow:hidden;transition:width ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing}}
+.bt-leftcol[data-folding]>.bt-side{flex:none;width:calc(var(--bt-lc-w) - 24px)}
+.bt-leftcol[data-left=rail][data-folding]>.bt-side{width:var(--bt-lc-w);margin-inline:auto}
+.bt-dot{position:absolute;top:4px;right:8px;width:8px;height:8px;border-radius:50%;background:var(--bt-accent);box-shadow:0 0 0 1.5px var(--bt-sidebar)}
+.bt-dot-wait{background:var(--bt-star)}
+.bt-side-foot{display:flex;padding-top:8px}
+
+.bt-head{position:relative;display:flex;justify-content:center;align-items:center;height:40px;flex:none;pointer-events:none}
+.bt-pill{pointer-events:auto;display:inline-flex;align-items:center;gap:8px;height:40px;padding:7.5px 13.5px 7.5px 7.5px;border-radius:999px;background:var(--bt-main);border:.5px solid var(--bt-line-2);box-shadow:0 2px 8px -1px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);color:var(--bt-ink);font-family:inherit;font-size:14px;line-height:20px;cursor:pointer;max-width:70%;box-sizing:border-box;transition:background-color .12s ease,transform ${SPRING_TAP.duration}ms ${SPRING_TAP.easing}}
+.bt-pill:hover{background:color-mix(in srgb,var(--bt-main),#777 9%)}
+.bt-pill:active{transform:scale(.965)}
+.bt-pill-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
+.bt-pill-mem{flex:none;display:inline-flex;width:0;margin-left:-8px;overflow:hidden;transition:${spring(SPRING_SHAPE, "width", "margin-left")}}
+.bt-pill[data-memory=updated] .bt-pill-mem{width:var(--bt-mem-w);margin-left:0;transition:${spring(SPRING_STRETCH, "width", "margin-left")}}
+.bt-pill-mem-in{flex:none;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;color:var(--bt-ink-2);font-size:13px;font-weight:500;opacity:0;filter:blur(6px);transform:translateX(-8px);transition:opacity .14s ease,filter .18s ease,${spring(SPRING_SHAPE, "transform")}}
+.bt-pill-mem-in::before{content:"";flex:none;width:1px;height:14px;margin-right:4px;background:var(--bt-line-2)}
+.bt-pill[data-memory=updated] .bt-pill-mem-in{opacity:1;filter:none;transform:none;transition-delay:70ms}
+.bt-pill-mem-ico{flex:none;display:inline-flex;width:16px;height:16px;color:var(--bt-accent)}
+.bt-pill-mem-ico svg{width:16px;height:16px}
+.bt-pill[data-memory=updated] .bt-pill-mem-ico{animation:bt-mem-pop ${SPRING_POP.duration}ms ${SPRING_POP.easing} 90ms both}
+@keyframes bt-mem-pop{from{transform:scale(.4) rotate(-14deg)}to{transform:none}}
+.bt-sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+@media (prefers-reduced-motion:reduce){.bt-pill-mem,.bt-pill-mem-in{transition:none!important}.bt-pill-mem-in{filter:none;transform:none}.bt-pill[data-memory=updated] .bt-pill-mem-ico{animation:none}}
+.bt-swap{color:var(--bt-ink-3);font-size:12px}
+.bt-pill-go{flex:none;display:inline-flex;align-items:center;justify-content:flex-end;width:0;margin-left:-8px;overflow:hidden;opacity:0;filter:blur(6px);transform:translateX(-6px);color:var(--bt-ink-2);transition:width ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing},margin-left ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing},transform ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing},opacity .18s ease,filter .18s ease}
+.bt-pill-go svg{flex:none;transition:transform ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing}}
+.bt-pill:hover .bt-pill-go,.bt-pill:focus-visible .bt-pill-go,.bt-pill[aria-expanded=true] .bt-pill-go{width:18px;margin-left:0;opacity:1;filter:none;transform:none}
+.bt-pill[aria-expanded=true] .bt-pill-go svg{transform:rotate(180deg)}
+.bt-pill[data-memory=updated]:is(:hover,:focus-visible,[aria-expanded=true]) .bt-pill-go{width:0;margin-left:-8px;opacity:0;filter:blur(6px);transform:translateX(-6px)}
+@media (prefers-reduced-motion:reduce){.bt-pill,.bt-pill-go,.bt-pill-go svg{transition:none!important}.bt-pill-go{filter:none}.bt-pill:active{transform:none}}
+
+/* The width settings: the share of the column a bubble may take, and the flat text. */
+body{--bt-msg-w:.8;--bt-flat-w:1}
+.bt-astack{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin:0}
+.bt-bubble{max-width:min(calc(var(--bt-msg-w) * 100%),calc(100% - 82px));background:var(--bt-bubble);color:var(--bt-ink);border-radius:18px;padding:7px 12px;font-size:var(--dsh-content-font-size,14px);line-height:calc(var(--dsh-content-font-size,14px) + 10px);box-sizing:border-box;overflow-wrap:anywhere;text-wrap:pretty;text-autospace:normal}
+.bt-msg:not(:first-child)>.bt-msg-line>.bt-bubble{border-start-start-radius:6px}
+.bt-msg:not(:last-child)>.bt-msg-line>.bt-bubble{border-end-start-radius:6px}
+.bt-bubble [class*="_markdown"]>*+*{margin-top:10px}
+.bt-bubble [class*="_markdown"]{color:inherit!important;font-size:inherit!important;line-height:inherit!important}
+.bt-bubble p{margin:0}
+.bt-bubble p + p{margin-top:6px}
+.bt-bubble ul,.bt-bubble ol{margin:4px 0;padding-left:20px}
+.bt-bubble [class*="_markdown"] li+li{margin-top:6px}
+.bt-bubble [class*="_markdown"] li::marker{color:var(--bt-ink-2)}
+/* line-height:1 keeps the monospace line box from making an inline code line taller. */
+.bt-bubble [class*="_markdown"] :not(pre)>code{line-height:1;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.bt-bubble :is(img,video),.bt-ububble :is(img,video),[data-chat-flow] [class*="_bubble"] :is(img,video){max-width:100%;height:auto}
+.bt-group-msg{display:flex;flex-direction:column;gap:4px;margin:16px 0 0}
+.bt-group-msg:first-child{margin-top:0}
+.bt-lead{flex:none;display:flex;margin-bottom:1px}
+button.bt-lead{border:0;background:none;padding:0;cursor:pointer}
+/* Rows without the avatar start where the bubble beside it starts: 22px avatar + 8px gap. */
+.bt-astack[data-lead]>.bt-msg:not(:last-child)>.bt-msg-line,.bt-astack[data-lead] .bt-reacts{margin-left:30px}
+.bt-group-name{font-size:12px;line-height:16px;font-weight:500;margin-left:42px}
+.bt-group-name:has(>.bt-lead){display:flex;align-items:center;margin:0 0 2px;font-size:13px;line-height:22px;font-weight:600;color:var(--bt-ink)}
+.bt-group-name>.bt-lead{margin:0 8px 0 0}
+.bt-group-time,.bt-group-took{margin-left:6px;font-size:11px;line-height:16px;font-weight:400;color:var(--bt-ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.bt-x{border:0;background:none;color:var(--bt-ink-2);cursor:pointer;width:24px;height:24px;border-radius:6px;font-size:16px;line-height:24px;padding:0;transition:background-color .12s ease,color .12s ease,${spring(SPRING_TAP, "scale")}}
+.bt-x:hover{background:var(--bt-hover);color:var(--bt-ink)}
+
+.bt-q{margin:0 auto 8px;width:100%;max-width:var(--dsh-chat-content-width,748px);display:flex;flex-direction:column;gap:12px;--bt-q-edge:color-mix(in srgb,var(--bt-ink) 10%,transparent);--bt-q-rule:color-mix(in srgb,var(--bt-ink) 8%,transparent);--bt-q-rule-2:color-mix(in srgb,var(--bt-ink) 5%,transparent);background:var(--bt-card);box-shadow:0 1px 3px rgba(20,20,20,.04),inset 0 0 0 1px var(--bt-q-edge);border-radius:16px;padding:14px 16px;box-sizing:border-box;color:var(--bt-ink);font-family:var(--bt-font);animation:bt-q-in ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing} backwards,bt-veil-in .2s ease-out backwards}
+body[data-ds-dark-theme] .bt-q{--bt-q-edge:rgba(255,255,255,.16);--bt-q-rule:rgba(255,255,255,.12);--bt-q-rule-2:rgba(255,255,255,.08)}
+@keyframes bt-q-in{from{transform:translateY(10px) scale(.97)}}
+.bt-q-settled{animation:none}
+.bt-q-head{display:flex;align-items:flex-start;gap:8px;min-width:0}
+.bt-q-text{flex:1 1 0;min-width:0;display:flex;flex-direction:column}
+.bt-q-title{margin:0;font-size:15px;line-height:22px;font-weight:600;overflow-wrap:anywhere}
+.bt-q-detail{font-size:13px;line-height:18px;color:var(--bt-ink-2)}
+.bt-q-x{flex:none;width:20px;height:20px;border:0;padding:0;border-radius:6px;background:none;color:var(--bt-ink-2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background-color .12s ease,color .12s ease,${spring(SPRING_TAP, "scale")}}
+.bt-q-x svg{width:14px;height:14px}
+.bt-q-x:hover{background:var(--bt-hover);color:var(--bt-ink)}
+.bt-q-x:focus-visible,.bt-q-opt:focus-visible{outline:2px solid var(--bt-accent);outline-offset:-2px}
+.bt-q-list{display:flex;flex-direction:column;gap:1px;min-width:0;box-sizing:border-box;margin:0 -8px}
+.bt-q-opt{position:relative;display:flex;align-items:flex-start;gap:16px;width:100%;min-width:0;box-sizing:border-box;margin:0;border:0;border-radius:12px;background:transparent;padding:10px 8px;font:inherit;color:var(--bt-ink);text-align:start;cursor:pointer;transition:background-color .12s ease}
+.bt-q:not(.bt-q-raised)>.bt-q-head:has(+.bt-q-list){padding-bottom:12px;border-bottom:1px solid var(--bt-q-rule)}
+.bt-q:not(.bt-q-raised)>.bt-q-head+.bt-q-list{margin-top:-6px}
+.bt-q-opt+.bt-q-opt::before{content:"";position:absolute;left:calc(var(--bt-key,24px) + 24px);right:8px;top:-1px;height:1px;background:var(--bt-q-rule-2);transition:opacity .12s ease;pointer-events:none}
+button.bt-q-opt:hover::before,button.bt-q-opt:hover+.bt-q-opt::before,.bt-q-opt[aria-pressed=true]::before,.bt-q-opt[aria-pressed=true]+.bt-q-opt::before{opacity:0}
+.bt-q-raised .bt-q-opt::before{display:none}
+button.bt-q-opt:hover{background:var(--bt-hover)}
+button.bt-q-opt:active{background:var(--bt-active)}
+.bt-q-opt[aria-pressed=true]{background:var(--bt-active)}
+.bt-q:not(.bt-q-raised) :is(button.bt-q-opt:hover,.bt-q-opt[aria-pressed=true]) .bt-key{background:var(--bt-card);color:var(--bt-ink)}
+.bt-key{flex:none;box-sizing:border-box;width:var(--bt-key,24px);height:var(--bt-key,24px);border-radius:8px;background:var(--bt-hover);color:var(--bt-ink-2);font-size:12px;line-height:var(--bt-key,24px);font-weight:500;text-align:center;font-variant-numeric:tabular-nums;transition:background-color .12s ease,color .12s ease}
+.bt-q-body{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px;padding-top:2px}
+/* With a description the key spans the two text lines less 2px above and below. */
+.bt-q-opt:has(.bt-q-desc){--bt-key:34px}
+.bt-q-opt:has(.bt-q-desc) .bt-key{margin-top:2px;border-radius:10px;font-size:13px}
+.bt-q-opt:has(.bt-q-desc) .bt-q-body{padding-top:0}
+.bt-q-label{font-size:14px;line-height:20px;font-weight:500;white-space:normal;overflow-wrap:anywhere}
+.bt-q-desc{font-size:12px;line-height:17px;color:var(--bt-ink-2);overflow-wrap:anywhere}
+.bt-q-check{flex:none;display:inline-flex;align-items:center;color:var(--bt-ink-2);animation:bt-check-pop ${SPRING_POP.duration}ms ${SPRING_POP.easing} backwards}
+.bt-q-settled .bt-q-check{animation:none}
+.bt-q-check svg{width:16px;height:16px}
+.bt-q-settled .bt-key{opacity:.4}
+.bt-q-settled .bt-q-label{color:color-mix(in srgb,var(--bt-ink) 45%,transparent)}
+.bt-q-dismissed .bt-q-title{color:var(--bt-ink-2)}
+.bt-q.bt-q-settled{gap:6px;padding:12px 16px}
+.bt-q-settled .bt-q-title{font-size:14px;line-height:20px;font-weight:500}
+.bt-q.bt-q-settled>.bt-q-head:has(+.bt-q-list){padding-bottom:0;border-bottom:0}
+.bt-q.bt-q-settled>.bt-q-head+.bt-q-list{margin-top:0}
+.bt-q-settled .bt-q-opt{padding:4px 8px}
+.bt-q-badge{flex:none;height:20px;padding:0 7px;border-radius:999px;border:1px dotted var(--bt-line-2);color:var(--bt-ink-2);font-size:12px;line-height:18px;box-sizing:border-box}
+.bt-q-custom{display:flex;align-items:flex-start;gap:8px;width:100%;min-width:0}
+.bt-q-field{flex:1 1 0;min-width:0;display:flex;box-sizing:border-box;min-height:32px;padding:5px 11px;border-radius:8px;border:.5px solid var(--bt-line-2);background:none;cursor:text;transition:border-color .12s ease}
+.bt-q-field:focus-within{border-color:color-mix(in srgb,var(--bt-ink) 30%,transparent)}
+.bt-q-input{flex:1;width:100%;min-width:0;max-height:120px;margin:0;padding:0;border:0;outline:none;background:transparent;color:var(--bt-ink);font:inherit;font-size:14px;line-height:20px;resize:none;overflow-y:hidden;white-space:pre-wrap;overflow-wrap:anywhere}
+.bt-q-input:not(:placeholder-shown){field-sizing:content}
+.bt-q-input::placeholder{color:var(--bt-ink-3)}
+.bt-q-submit,.bt-q-btn{flex:none;height:36px;padding:0 14px;border:0;border-radius:999px;font:inherit;font-size:14px;font-weight:500;cursor:pointer;transition:opacity .12s ease,background-color .12s ease,${spring(SPRING_TAP, "scale")}}
+.bt-q-submit{background:var(--bt-accent);color:var(--bt-accent-ink,#fff);animation:bt-q-submit-in ${SPRING_TAP.duration}ms ${SPRING_TAP.easing} backwards,bt-veil-in .16s ease-out backwards}
+@keyframes bt-q-submit-in{from{transform:translateX(8px) scale(.9)}}
+.bt-q-submit:hover:not(:disabled){opacity:.86}
+.bt-q-submit:disabled{opacity:.4;cursor:default}
+.bt-q-btn{background:var(--bt-hover);color:var(--bt-ink)}
+.bt-q-btn:hover{background:var(--bt-active)}
+.bt-q-submit:focus-visible,.bt-q-btn:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-q-foot{display:flex;justify-content:flex-end;gap:8px}
+.bt-q-raised{width:calc(var(--dsh-chat-content-width,748px) - 32px);max-width:calc(100% - 32px);gap:0;padding:0;box-shadow:0 2px 8px rgba(20,20,20,.035),inset 0 0 0 .5px color-mix(in srgb,var(--bt-ink) 5%,transparent)}
+.bt-q-raised .bt-q-head{padding:14px 16px 4px 20px}
+.bt-q-raised .bt-q-head:last-child{padding-bottom:16px}
+.bt-q-raised .bt-q-list{gap:1px;margin:0;padding:8px}
+.bt-q-raised .bt-q-opt{gap:4px;padding:7px;border-radius:16px;color:var(--bt-ink-2)}
+.bt-q-raised button.bt-q-opt:hover{color:var(--bt-ink)}
+.bt-q-raised .bt-q-opt[aria-pressed=true]{background:transparent;color:var(--bt-ink)}
+.bt-q-raised .bt-q-opt[aria-pressed=true]:hover{background:var(--bt-hover)}
+.bt-q-raised .bt-q-opt[aria-pressed=true] .bt-key,.bt-q-ownrow:focus-within .bt-key,.bt-q-ownrow[data-filled] .bt-key{background:var(--bt-user);color:var(--bt-user-ink)}
+.bt-q-raised .bt-q-body{padding:2px 6px 0}
+.bt-q-raised .bt-q-desc{color:color-mix(in srgb,var(--bt-ink) 61%,transparent)}
+.bt-q-ownrow{cursor:text}
+.bt-q-ownrow .bt-q-input{color:var(--bt-ink)}
+.bt-q-raised .bt-q-foot{padding:0 8px 8px}
+@media (prefers-reduced-motion:reduce){.bt-q{animation:bt-fade .12s ease-out backwards}.bt-q-settled{animation:none}.bt-q-submit{animation:none}}
+
+.bt-newchat{flex:1;display:flex;flex-direction:column;min-width:0;position:relative;animation:bt-veil-in .18s ease-out}
+.bt-to{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-height:48px;padding:6px 12px;border-bottom:1px solid var(--bt-line);font-size:14px;box-sizing:border-box}
+.bt-to-label{color:var(--bt-ink-2)}
+.bt-to input{flex:1;min-width:120px;border:0;outline:none;background:none;color:var(--bt-ink);font-size:14px;height:26px}
+.bt-token{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 6px 0 4px;border-radius:999px;background:var(--bt-hover);font-size:13px;animation:bt-check-pop ${SPRING_POP.duration}ms ${SPRING_POP.easing}}
+.bt-token button{border:0;background:none;color:var(--bt-ink-2);cursor:pointer;padding:0 2px}
+.bt-admin-star{flex:none;display:inline-flex;align-items:center;justify-content:center;width:12px;height:12px;border-radius:50%;corner-shape:round;background:color-mix(in srgb,var(--bt-star) 82%,var(--bt-sidebar));vertical-align:-1px}
+.bt-to-star{display:inline-flex;margin-right:-2px;animation:bt-check-pop ${SPRING_POP.duration}ms ${SPRING_POP.easing}}
+.bt-to .bt-to-create{flex:none;height:28px;padding:0 12px;font-size:13px;animation:bt-q-submit-in ${SPRING_TAP.duration}ms ${SPRING_TAP.easing},bt-veil-in .16s ease-out}
+.bt-drop{position:absolute;top:48px;left:32px;width:min(550px,calc(100% - 64px));display:flex;flex-direction:column;padding:6px;max-height:min(420px,60vh);overflow-y:auto;background:var(--bt-card);border:1px solid var(--bt-line-2);border-radius:12px;box-shadow:0 6px 20px -4px rgba(0,0,0,.12);box-sizing:border-box;z-index:1;transform-origin:24px 0;animation:bt-pop-drop ${SPRING_TAP.duration}ms ${SPRING_TAP.easing},bt-veil-in .14s ease-out}
+.bt-option{display:flex;align-items:center;gap:10px;border:0;background:none;border-radius:8px;padding:7px 8px;min-height:36px;box-sizing:border-box;font-size:13px;line-height:18px;color:var(--bt-ink);cursor:pointer;text-align:left;width:100%}
+.bt-option[aria-selected=true]{background:var(--bt-active)}
+.bt-drop-list>.bt-option:not([aria-selected=true]):hover{background:var(--bt-hover)}
+.bt-option-label{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bt-option-hint{font-size:11px;color:var(--bt-ink-2);flex:none;animation:bt-veil-in .16s ease-out}
+.bt-option-icon{width:22px;height:22px;border-radius:50%;background:var(--bt-hover);color:var(--bt-ink-2);display:inline-flex;align-items:center;justify-content:center;flex:none}
+.bt-hint{padding:14px;text-align:center;font-size:13px;color:var(--bt-ink-2)}
+.bt-nc-spacer{flex:1}
+.bt-nc-compose{padding:0 16px 14px;display:flex;justify-content:center}
+.bt-nc-card{display:flex;align-items:flex-end;gap:6px;width:100%;max-width:var(--dsh-chat-content-width,748px);min-height:44px;padding:4px 6px;border-radius:22px;border:1px solid var(--bt-line-2);background:var(--bt-main);box-shadow:0 2px 8px -2px rgba(0,0,0,.06);box-sizing:border-box}
+.bt-nc-plus{width:34px;height:34px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:var(--bt-ink-2);background:var(--bt-hover);flex:none}
+.bt-nc-card textarea{flex:1;resize:none;border:0;outline:none;background:none;color:var(--bt-ink);font:inherit;font-size:14px;line-height:20px;padding:7px 4px;min-height:34px;max-height:140px;box-sizing:border-box}
+.bt-nc-send{width:34px;height:34px;border-radius:50%;border:0;background:var(--bt-accent);color:var(--bt-accent-ink,#fff);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex:none}
+.bt-nc-send:disabled{opacity:.3;cursor:default}
+.bt-create{flex:1;display:flex;flex-direction:column;min-width:0}
+.bt-create-head{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:48px;padding:6px 12px;border-bottom:1px solid var(--bt-line);box-sizing:border-box}
+.bt-create-gap{width:28px}
+.bt-create-title{font-size:14px;line-height:20px;font-weight:500}
+.bt-create-body{flex:1;overflow-y:auto;padding:28px 16px 32px;display:flex;justify-content:center}
+.bt-create-card{width:100%;max-width:400px;display:flex;flex-direction:column;gap:18px;animation:bt-q-in ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing} both,bt-veil-in .22s ease-out both}
+.bt-create-preview{display:flex;flex-direction:column;align-items:center;gap:10px}
+.bt-create-pop{display:inline-flex;animation:bt-create-pop ${SPRING_POP.duration}ms ${SPRING_POP.easing} both}
+@keyframes bt-create-pop{from{transform:scale(.72);opacity:.4}}
+.bt-create-name{font-size:17px;line-height:24px;font-weight:500;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-create-step{font-size:12px;line-height:16px;color:var(--bt-ink-2);margin-bottom:-10px}
+.bt-create-looks{display:flex;flex-direction:column;gap:10px;padding:10px;border:1px solid var(--bt-line);border-radius:12px;background:var(--bt-card)}
+.bt-create-lookbar{justify-content:center}
+.bt-create-foot{display:flex;justify-content:flex-end;gap:8px;padding-top:4px}
+.bt-create-go{height:36px;padding:0 20px}
+@media (prefers-reduced-motion:reduce){.bt-create-card,.bt-create-pop{animation:none}}
+.bt-send{height:40px;min-width:40px;border-radius:999px;border:0;background:var(--bt-accent);color:var(--bt-accent-ink,#fff);font-size:14px;padding:0 14px;cursor:pointer;flex:none;white-space:nowrap}
+.bt-send:disabled{opacity:.35;cursor:default}
+.bt-error{padding:0 14px 10px;color:var(--bt-danger);font-size:12px}
+
+/* Side panels keep their content clear of the Windows caption buttons. A host may set the
+   chrome top to 0 so that dialog masks also cover the caption band; the panel then reaches
+   the top edge, its own surface under the buttons, and the band over it still drags the
+   window. Where the chrome top already clears the title bar the band is 0. */
+html[data-windows-titlebar]:not([data-fullscreen]) :is(.bt-pane,.bt-panel){--bt-caption-band:calc(var(--dsh-windows-titlebar-height,0px) - var(--dsh-frame-chrome-top,0px));padding-top:var(--bt-caption-band)}
+html[data-windows-titlebar]:not([data-fullscreen]) :is(.bt-pane,.bt-panel)::before{content:"";position:absolute;top:0;left:0;right:0;height:var(--bt-caption-band);-webkit-app-region:drag}
+.bt-pane{position:fixed;top:var(--dsh-frame-chrome-top,0px);right:0;bottom:0;z-index:45;pointer-events:auto;background:var(--bt-main);color:var(--bt-ink);display:flex;font-family:var(--bt-font)}
+.bt-dialog{flex:1;display:flex;flex-direction:column;min-width:0}
+.bt-dialog .bt-head{height:62px}
+.bt-dialog-log{flex:1;overflow-y:auto;padding:8px 16px 20px;width:100%;max-width:var(--dsh-chat-content-width,748px);margin:0 auto;box-sizing:border-box}
+.bt-dialog-foot{display:flex;justify-content:center;padding:10px 10px 16px}
+.bt-exchange{animation:bt-sheet-in ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing} both,bt-veil-in .24s ease-out both}
+.bt-exchange[data-leaving]{animation:bt-sheet-out .22s cubic-bezier(.4,0,1,1) forwards;pointer-events:none}
+@keyframes bt-sheet-in{from{transform:translateY(24px)}}
+@keyframes bt-sheet-out{to{opacity:0;transform:translateY(16px);filter:blur(4px)}}
+.bt-exchange .bt-dialog{position:relative}
+.bt-exchange .bt-dialog-log{max-width:none;margin:0;padding:39px max(16px,calc((100% - 960px)/2)) 116px;scrollbar-width:thin}
+.bt-exchange .bt-tools{display:none}
+.bt-fold{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px;margin-top:4px;white-space:normal}
+.bt-fold-code{position:relative}
+.bt-fold-code>.bt-tool{position:absolute;right:6px;bottom:6px}
+/* The part of a cut code block the preview keeps, drawn by DS SuperAgent so the host's
+   Markdown draws no copy control of its own for it. */
+.bt-fold-code>.bt-fold-pre{margin:0;padding:10px 12px;border-radius:10px;background:color-mix(in srgb,currentColor 6%,transparent);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;line-height:20px;overflow-x:auto}
+.bt-fold-code>*+.bt-fold-pre{margin-top:6px}
+.bt-fold-note{font-size:12px;line-height:16px;color:var(--bt-ink-3)}
+[data-folded] .bt-fold-body{-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 40px),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - 40px),transparent)}
+.bt-ubody .bt-fold .bt-more,.bt-ububble .bt-fold .bt-more,.bt-ubody .bt-fold-note,.bt-ububble .bt-fold-note{color:inherit;opacity:.7}
+.bt-ubody .bt-fold .bt-more:hover,.bt-ububble .bt-fold .bt-more:hover{opacity:1}
+.bt-ubody .bt-fold-code>.bt-tool,.bt-ububble .bt-fold-code>.bt-tool{color:inherit;opacity:.7}
+.bt-ubody .bt-fold-code>.bt-tool:hover,.bt-ububble .bt-fold-code>.bt-tool:hover{color:inherit;opacity:1}
+.bt-exchange .bt-dialog-foot{position:absolute;left:0;right:0;bottom:0;height:76px;box-sizing:border-box;align-items:flex-end;padding:0 0 28px;background:var(--bt-main);z-index:3;animation:bt-foot-in .3s cubic-bezier(.22,1,.36,1) .3s both}
+.bt-exchange .bt-dialog-foot::before{content:"";position:absolute;left:0;right:0;bottom:100%;height:40px;background:linear-gradient(to top,var(--bt-main),transparent);pointer-events:none}
+.bt-exchange[data-leaving] .bt-dialog-foot{animation:bt-foot-out .22s cubic-bezier(.4,0,1,1) forwards}
+@keyframes bt-foot-in{from{opacity:0;transform:translateY(6px)}}
+@keyframes bt-foot-out{to{opacity:0;transform:translateY(6px)}}
+@media (prefers-reduced-motion:reduce){.bt-exchange,.bt-exchange .bt-dialog-foot{animation-duration:.01s}}
+.bt-soft{height:36px;border-radius:999px;border:0;background:var(--bt-hover);color:var(--bt-ink);padding:0 16px;font-size:14px;cursor:pointer;flex:none;white-space:nowrap}
+.bt-soft:hover{background:var(--bt-active)}
+.bt-time{display:block;text-align:center;font-size:12px;line-height:16px;color:var(--bt-ink-2);padding:6px 0}
+
+.bt-panel{position:fixed;top:var(--dsh-frame-chrome-top,0px);right:0;bottom:0;width:var(--bt-panel-w,320px);pointer-events:auto;z-index:40;background:var(--bt-main);border-left:.5px solid var(--bt-line-2);display:flex;flex-direction:column;color:var(--bt-ink);font-family:var(--bt-font);box-sizing:border-box;animation:bt-pane-in .3s cubic-bezier(.2,0,0,1);transition:width ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing}}
+.bt-panel[data-leaving]{transform:translateX(100%);transition:transform .3s cubic-bezier(.2,0,0,1);pointer-events:none}
+.bt-panel[data-instant]{transition:none}
+@keyframes bt-pane-in{from{transform:translateX(100%)}}
+/* The right margin glides with the Bot panel's slide; the left one lands at once,
+   as our left column appears, folds and hides without a slide of its own. */
+[class*="_centerCol"]{transition:margin-right ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing}}
+.bt-panel-grip{position:absolute;left:-5px;top:0;bottom:0;width:8px;cursor:col-resize;z-index:3;touch-action:none}
+.bt-panel-grip:hover,.bt-panel[data-dragging] .bt-panel-grip{background:linear-gradient(to right,transparent 4px,var(--bt-line-2) 4px,var(--bt-line-2) 6px,transparent 6px)}
+.bt-drag-shield{position:fixed;inset:0;z-index:45;cursor:col-resize}
+.bt-panel-view{flex:1;min-height:0;display:flex;flex-direction:column}
+.bt-drawer-top{display:flex;justify-content:flex-end;gap:8px;padding:12px 17px 6px 12px}
+.bt-drawer-id{display:flex;flex-direction:column;align-items:center;padding:14px 16px 0}
+.bt-drawer-id>.bt-mark,.bt-drawer-id>.bt-cluster,.bt-drawer-id>.bt-pile{margin-bottom:16px}
+.bt-pile{display:flex;align-items:center;justify-content:center;line-height:0}
+.bt-pile-face{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:none;width:44px;height:44px;border-radius:50%;background:var(--bt-main);box-shadow:0 0 0 3px var(--bt-main);animation:bt-pile-in .36s cubic-bezier(.34,1.56,.64,1) backwards}
+.bt-pile-face+.bt-pile-face{margin-left:-10px}
+.bt-pile-more{background:var(--bt-hover);color:var(--bt-ink-2);font-size:13px;line-height:1;font-weight:500;font-variant-numeric:tabular-nums}
+@keyframes bt-pile-in{from{opacity:0;transform:translateY(6px) scale(.85)}}
+@media (prefers-reduced-motion:reduce){.bt-pile-face{animation:none}}
+.bt-drawer-name{font-size:17px;line-height:24px;font-weight:500;border:0;background:none;color:inherit;cursor:text;padding:0 6px;border-radius:6px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-drawer-name:hover{background:var(--bt-hover)}
+.bt-drawer-name-input{font-size:17px;line-height:24px;text-align:center;border:.5px solid var(--bt-line-2);border-radius:6px;padding:0 6px;background:var(--bt-main);color:var(--bt-ink);outline:none;font-weight:500}
+.bt-drawer-role{font-size:12px;line-height:16px;color:var(--bt-ink-3);margin-top:6px;text-align:center}
+.bt-tabs{position:relative;display:flex;justify-content:center;gap:2px;margin:16px 16px 0}
+.bt-tab{position:relative;z-index:1;border:0;background:none;border-radius:9999px;padding:4px 8px;font-size:13px;line-height:20px;color:var(--bt-ink-2);cursor:pointer;white-space:nowrap}
+.bt-tab:hover{color:var(--bt-ink)}
+.bt-tab[aria-selected=true]{background:var(--bt-hover);color:var(--bt-ink)}
+.bt-tabs>.bt-thumb{top:0;bottom:0;border-radius:9999px;background:var(--bt-hover)}
+.bt-tabs[data-glide] .bt-tab[aria-selected=true]{background:transparent}
+.bt-drawer-body{flex:1;overflow-y:auto;padding:20px 16px 16px;font-size:13px;line-height:18px;display:flex;flex-direction:column;gap:16px}
+.bt-empty{text-align:center;color:var(--bt-ink-3);font-size:13px;line-height:18px;padding:8px 12px}
+.bt-section-title{font-size:12px;color:var(--bt-ink-2);margin-bottom:6px}
+.bt-muted{color:var(--bt-ink-2)}
+.bt-swatches{display:flex;flex-wrap:wrap;gap:6px}
+.bt-swatch{width:22px;height:22px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;box-shadow:inset 0 0 0 1px var(--bt-line-2)}
+.bt-swatch[aria-pressed=true]{border-color:var(--bt-ink)}
+.bt-textarea{width:100%;box-sizing:border-box;min-height:120px;border:1px solid var(--bt-line);border-radius:8px;padding:8px;background:var(--bt-card);color:var(--bt-ink);font:inherit;resize:vertical}
+.bt-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.bt-kv{display:flex;justify-content:space-between;gap:8px;font-size:12px;line-height:20px;color:var(--bt-ink-2)}
+.bt-kv span:last-child{color:var(--bt-ink);font-variant-numeric:tabular-nums}
+.bt-run-stats{display:flex;flex-wrap:wrap;justify-content:center;gap:0 6px;margin-top:-6px;font-size:12px;line-height:18px;color:var(--bt-ink-2);font-variant-numeric:tabular-nums}
+.bt-run-sep{color:var(--bt-ink-3)}
+.bt-danger{color:var(--bt-danger)}
+
+/* Bot settings: fields, the avatar editor popover, and the details-pane sub-view. */
+.bt-field{display:flex;flex-direction:column;gap:6px}
+.bt-field-label{font-size:13px;line-height:18px;font-weight:500}
+.bt-input{width:100%;box-sizing:border-box;height:36px;border:1px solid var(--bt-line);border-radius:8px;padding:0 10px;background:var(--bt-card);color:var(--bt-ink);font:inherit;font-size:13px;outline:none}
+.bt-input:focus{border-color:var(--bt-line-2)}
+.bt-input-area{height:auto;min-height:96px;padding:8px 10px;line-height:18px;resize:vertical}
+.bt-note{font-size:12px;line-height:16px;color:var(--bt-ink-3)}
+.bt-soft-sm{height:28px;padding:0 12px;font-size:12px}
+.bt-set-avatar{display:flex;justify-content:center;padding:4px 0}
+.bt-avatar-anchor{position:relative}
+.bt-avatar-trigger{position:relative;width:64px;height:64px;border:0;border-radius:50%;background:none;cursor:pointer;padding:0}
+.bt-avatar-pencil{position:absolute;right:-2px;bottom:-2px;width:22px;height:22px;border-radius:50%;background:var(--bt-main);border:1px solid var(--bt-line-2);color:var(--bt-ink-2);display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.bt-avedit{position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);width:300px;background:var(--bt-main);border:1px solid var(--bt-line);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.18);padding:10px;z-index:70;display:flex;flex-direction:column;gap:10px;color:var(--bt-ink);transform-origin:top center;animation:bt-pop-drop ${SPRING_TAP.duration}ms ${SPRING_TAP.easing},bt-veil-in .16s ease-out}
+.bt-bs .bt-avedit{transform-origin:32px 0}
+.bt-avedit-top{display:flex;align-items:center;justify-content:space-between}
+.bt-avedit-tabs{position:relative;display:flex;gap:2px;background:var(--bt-hover);border-radius:999px;padding:2px}
+.bt-avedit-tab{position:relative;z-index:1;border:0;background:none;border-radius:999px;padding:3px 10px;font-size:12px;line-height:16px;color:var(--bt-ink-2);cursor:pointer}
+.bt-avedit-tab[aria-selected=true]{background:var(--bt-main);color:var(--bt-ink)}
+.bt-avedit-tabs>.bt-thumb{top:2px;bottom:2px;border-radius:999px;background:var(--bt-main);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.bt-avedit-tabs[data-glide] .bt-avedit-tab[aria-selected=true]{background:transparent}
+.bt-avedit-reset{color:var(--bt-ink-3)}
+.bt-avedit-reset:hover{color:var(--bt-ink)}
+.bt-shapes{display:flex;flex-direction:column;gap:2px}
+.bt-shape-row{display:grid;grid-template-columns:repeat(6,1fr);gap:2px}
+.bt-shape{position:relative;aspect-ratio:1;border:0;border-radius:8px;background:none;color:var(--bt-ink);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.bt-shape:hover{background:var(--bt-hover)}
+.bt-shape .bt-ring{position:absolute;left:50%;top:50%;width:36px;height:36px;translate:-50% -50%;overflow:visible;opacity:0;scale:.82;pointer-events:none;transition:opacity .14s ease,${spring(SPRING_POP, "scale")}}
+.bt-shape[aria-pressed=true] .bt-ring{opacity:1;scale:1}
+.bt-colors{display:flex;justify-content:space-between}
+.bt-color{width:22px;height:22px;border-radius:50%;border:2px solid transparent;padding:2px;background:none;cursor:pointer;box-sizing:border-box;transition:border-color .14s ease,${spring(SPRING_TAP, "scale")}}
+.bt-color[aria-pressed=true] span{animation:bt-check-pop ${SPRING_POP.duration}ms ${SPRING_POP.easing}}
+.bt-color span{display:block;width:100%;height:100%;border-radius:50%}
+.bt-color[aria-pressed=true]{border-color:var(--bt-ink)}
+.bt-dropzone{border:1.5px dashed var(--bt-line-2);border-radius:10px;padding:18px 12px;display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--bt-ink-2);font-size:12px;line-height:16px;text-align:center}
+.bt-dropzone[data-over]{border-color:var(--bt-accent);color:var(--bt-ink)}
+.bt-dropzone img{width:64px;height:64px;border-radius:50%;object-fit:cover}
+.bt-set-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.bt-about{white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}
+.bt-about[data-open]{display:block;-webkit-line-clamp:unset}
+.bt-more{border:0;background:none;color:var(--bt-ink-3);font-size:12px;line-height:16px;cursor:pointer;padding:2px 0}
+.bt-more:hover{color:var(--bt-ink)}
+.bt-subhead{display:flex;align-items:center;gap:4px;padding:10px 12px 4px}
+.bt-subhead-title{flex:1;font-size:15px;line-height:24px;font-weight:600;padding-left:4px}
+.bt-icon-btn{width:28px;height:28px;border-radius:50%;border:0;background:none;color:var(--bt-ink-2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+.bt-icon-btn:hover{background:var(--bt-hover);color:var(--bt-ink)}
+.bt-set-body{gap:20px}
+.bt-drawer-model{display:flex;flex-direction:column}
+.bt-drawer-model .bt-note{margin-top:6px}
+.bt-drawer-permission{display:flex;flex-direction:column}
+.bt-seg button.bt-perm-danger,.bt-seg button.bt-perm-danger[aria-pressed=true],.bt-kv span.bt-perm-danger{color:var(--bt-danger)}
+
+/* Settings dialog: a 198px page list beside the page. */
+.bt-settings-layer{position:fixed;inset:var(--dsh-frame-chrome-top,0px) 0 0;z-index:60;display:flex;align-items:center;justify-content:center;font-family:var(--bt-font)}
+.bt-scrim{position:absolute;inset:0;background:rgba(0,0,0,.32);animation:bt-fade .22s ease-out}
+body[data-ds-dark-theme] .bt-scrim{background:rgba(0,0,0,.5)}
+.bt-settings{--bt-set-w:min(1100px,calc(100vw - 48px));--bt-set-h:min(780px,calc(100vh - 2*max(32px,var(--dsh-frame-overlay-top,32px))));position:relative;width:var(--bt-set-w);height:var(--bt-set-h);background:var(--bt-main);border-radius:16px;border:.5px solid var(--bt-line-2);box-shadow:0 24px 80px rgba(0,0,0,.24);display:flex;overflow:hidden;color:var(--bt-ink);animation:bt-dialog-rise ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing},bt-veil-in .2s ease-out}
+:is(.bt-settings-layer,.bt-mem-layer)[data-leaving]{pointer-events:none}
+:is(.bt-settings-layer,.bt-mem-layer)[data-leaving] .bt-scrim{opacity:0;transition:opacity .16s ease-in}
+:is(.bt-settings-layer,.bt-mem-layer)[data-leaving]>[role=dialog]{animation:bt-dialog-sink .16s cubic-bezier(.4,0,1,1) forwards}
+@keyframes bt-dialog-rise{from{transform:translateY(12px) scale(.96)}}
+@keyframes bt-dialog-sink{to{opacity:0;transform:translateY(6px) scale(.975);filter:blur(3px)}}
+@media (prefers-reduced-motion:reduce){.bt-settings,.bt-scrim,.bt-settings-page>*{animation:bt-fade .12s ease-out!important}}
+.bt-settings-nav{position:relative;width:198px;flex:none;padding:16px 8px;border-right:.5px solid var(--bt-line);display:flex;flex-direction:column;gap:2px;background:var(--bt-sidebar);box-sizing:border-box}
+.bt-settings-item{position:relative;z-index:1;display:flex;align-items:center;gap:8px;padding:6px 8px;border:0;border-radius:8px;background:none;color:var(--bt-ink-2);font:inherit;font-size:13px;line-height:20px;cursor:pointer;text-align:left;transition:background-color .12s ease,color .12s ease}
+.bt-settings-item:hover{color:var(--bt-ink);background:var(--bt-hover)}
+.bt-settings-item[aria-current=page]{background:var(--bt-active);color:var(--bt-ink)}
+.bt-settings-nav>.bt-thumb{left:8px;right:8px;border-radius:8px;background:var(--bt-active)}
+.bt-settings-nav[data-glide] .bt-settings-item[aria-current=page]{background:transparent}
+.bt-settings-shell{margin-top:auto}
+/* Usage while another page is open: out of the flow, so it keeps its layout, and not
+   rendered. */
+.bt-settings-usage[data-off]{position:absolute;top:0;left:198px;width:calc(var(--bt-set-w) - 198px);height:100%;box-sizing:border-box;content-visibility:hidden;pointer-events:none}
+.bt-settings-main{flex:none;display:flex;flex-direction:column;min-width:0;width:calc(var(--bt-set-w) - 198px);height:var(--bt-set-h)}
+.bt-settings-head{display:flex;align-items:center;gap:6px;padding:16px 56px 4px 20px}
+.bt-settings-head h2{margin:0;font-size:15px;line-height:24px;font-weight:600;animation:bt-veil-in .2s ease-out}
+.bt-settings-head>.bt-icon-btn{animation:bt-back-in ${SPRING_TAP.duration}ms ${SPRING_TAP.easing},bt-veil-in .16s ease-out}
+@keyframes bt-back-in{from{translate:6px 0;scale:.8}}
+.bt-settings-scroll{flex:1;overflow-y:auto;padding:12px 20px 24px;display:flex;flex-direction:column;gap:20px;scrollbar-width:thin}
+.bt-settings-page>:not(.bt-us){animation:bt-page-up ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing} backwards,bt-veil-in .22s ease-out backwards}
+.bt-settings-page[data-move=in]>:not(.bt-us){animation-name:bt-page-in,bt-veil-in}
+.bt-settings-page[data-move=out]>:not(.bt-us){animation-name:bt-page-out,bt-veil-in}
+.bt-settings-page>:nth-child(2){animation-delay:30ms}
+.bt-settings-page>:nth-child(3){animation-delay:60ms}
+.bt-settings-page>:nth-child(4){animation-delay:90ms}
+.bt-settings-page>:nth-child(n+5){animation-delay:120ms}
+@keyframes bt-page-up{from{transform:translateY(10px)}}
+@keyframes bt-page-in{from{transform:translateX(18px)}}
+@keyframes bt-page-out{from{transform:translateX(-18px)}}
+.bt-settings-close{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;border:0;background:var(--bt-hover);color:var(--bt-ink-2);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+.bt-settings-close:hover{background:var(--bt-active);color:var(--bt-ink)}
+.bt-settings-form{display:flex;flex-direction:column;gap:16px}
+.bt-set-section h3{font-size:13px;line-height:18px;font-weight:600;margin:0 0 8px;padding:0 4px}
+.bt-set-card{border:1px solid var(--bt-line);border-radius:12px;background:var(--bt-card);display:flex;flex-direction:column}
+.bt-set-card>*+*{border-top:.5px solid var(--bt-line)}
+.bt-set-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border:0;background:none;color:var(--bt-ink);font:inherit;font-size:13px;line-height:18px;text-align:left;width:100%;box-sizing:border-box;border-radius:0}
+button.bt-set-row{cursor:pointer}
+button.bt-set-row:hover{background:var(--bt-hover)}
+.bt-set-card>.bt-set-row+.bt-set-row{border-top:.5px solid var(--bt-line)}
+.bt-set-row:first-child{border-top-left-radius:12px;border-top-right-radius:12px}
+.bt-set-row:last-child{border-bottom-left-radius:12px;border-bottom-right-radius:12px}
+.bt-set-copy{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
+.bt-set-hint{font-size:12px;line-height:16px;color:color-mix(in srgb,var(--bt-ink-2) 50%,var(--bt-ink-3))}
+.bt-set-control{flex:none;display:flex;align-items:center;gap:6px}
+.bt-set-places .bt-set-control{flex:0 1 auto;max-width:50%;min-width:0}
+.bt-set-places .bt-set-hint{overflow-wrap:anywhere}
+.bt-set-value{font-size:13px;color:var(--bt-ink-2);text-align:right}
+.bt-set-bot{flex:1;display:flex;align-items:center;gap:8px;min-width:0}
+.bt-browser-note{margin:0;padding:10px 12px;color:var(--bt-ink-2);font-size:12px;line-height:17px}
+.bt-browser-grant{display:flex;align-items:center;gap:12px;padding:10px 12px}
+.bt-browser-grant+.bt-browser-grant{border-top:.5px solid var(--bt-line)}
+.bt-browser-grant-who{display:flex;align-items:center;gap:8px;flex:0 0 150px;min-width:0;font-size:13px}
+.bt-browser-grant-who>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-browser-grant-meta{display:flex;flex:1;flex-direction:column;gap:4px;min-width:0}
+.bt-browser-grant-site{font-size:13px;overflow-wrap:anywhere}
+.bt-browser-grant-kinds{display:flex;gap:4px;flex-wrap:wrap}
+.bt-browser-grant-expired{opacity:.5}
+.bt-browser-action-list,.bt-browser-duration{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.bt-browser-action-choice{display:inline-flex;align-items:center;gap:4px;font-size:12px;white-space:nowrap}
+.bt-browser-duration-choice{border:1px solid var(--bt-line);border-radius:8px;padding:5px 8px;background:var(--bt-card);color:var(--bt-ink-2);font:inherit;font-size:12px;cursor:pointer}
+.bt-browser-duration-choice[aria-pressed=true]{background:var(--bt-hover);color:var(--bt-ink)}
+.bt-browser-form>.bt-set-row>.bt-set-control{flex:1;min-width:0}
+.bt-browser-form>.bt-set-row+.bt-set-row{border-top:.5px solid var(--bt-line)}
+.bt-browser-site{max-width:320px}
+.bt-browser-form-foot{display:flex;justify-content:flex-end;padding:10px 12px;border-top:.5px solid var(--bt-line)}
+@media(max-width:700px){.bt-browser-grant{flex-wrap:wrap}.bt-browser-grant-who{flex:1}.bt-browser-grant-meta{order:3;flex:1 0 100%}}
+.bt-set-paste{flex-direction:column;align-items:stretch;gap:8px}
+.bt-chevron{color:var(--bt-ink-3);display:inline-flex;flex:none}
+
+/* Settings → Connectors. */
+.bt-connector{display:flex;flex-direction:column;gap:10px;padding:12px}
+.bt-connector-head{display:flex;align-items:center;gap:12px;min-width:0}
+.bt-connector-mark{flex:none;width:36px;height:36px;border-radius:10px;background:var(--bt-card);border:.5px solid var(--bt-line);display:flex;align-items:center;justify-content:center;color:var(--bt-ink)}
+.bt-connector-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.bt-connector-name{font-size:14px;line-height:20px;font-weight:500}
+.bt-connector-status{font-size:12px;line-height:16px;color:var(--bt-ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-connector[data-state=ready] .bt-connector-status{color:var(--bt-ink-2)}
+.bt-connector[data-state=error] .bt-connector-status{color:var(--bt-danger);white-space:normal}
+.bt-connector-actions{flex:none;display:flex;gap:6px}
+.bt-connector-form{display:flex;flex-direction:column;gap:8px;padding-left:48px;animation:bt-q-in ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing},bt-veil-in .2s ease-out}
+.bt-connector-form-row{display:flex;align-items:center;gap:6px}
+.bt-connector-link{flex:1;font-size:12px;color:var(--bt-ink-2)}
+.bt-connector-error{padding-left:48px;font-size:12px;line-height:16px;color:var(--bt-danger)}
+
+/* Shell chrome reshaped for the team view. Selectors use stable data attributes where the
+   shell offers them and CSS-module name suffixes elsewhere. */
+[class*="_newSession"],nav[class*="_panelList"],[class*="_logoRow"]>[class*="_brand"],[class*="_logoRow"]:not(:has([class*="_toggle"])){display:none!important}
+/* The shell's sidebar switch stays where the shell puts it whenever the sidebar is
+   collapsed: on the rail, or fixed in a Windows title bar, where it also stays while
+   the sidebar is open. Elsewhere an open sidebar uses the team's own top row. */
+html:not([data-windows-titlebar]) :not([class*="_collapsed"])>[class*="_logoRow"]{display:none!important}
+html[data-windows-titlebar] :not([class*="_collapsed"])>[class*="_logoRow"]{height:0!important;margin:0!important}
+html[data-windows-titlebar] .bt-side-collapse{display:none}
+/* Under a Windows title bar our own switch replaces the shell's: the shell's
+   toggle expands the shell sidebar first, and pulling it back afterwards is a
+   visible flash of the shell's column. */
+html[data-windows-titlebar] [class*="_logoRow"]>[class*="_toggle"]{display:none!important}
+html[data-windows-titlebar] .bt-title-toggle{position:fixed;left:12px;top:calc((var(--dsh-windows-titlebar-height,0px) - 28px) / 2);width:28px;height:28px;z-index:30;-webkit-app-region:no-drag;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:6px;padding:0;background:transparent;color:var(--bt-ink);cursor:pointer;font-family:var(--bt-font)}
+html[data-windows-titlebar] .bt-title-toggle:hover{background:var(--bt-hover)}
+/* Elsewhere the switch shows only while the column is hidden, where the column's
+   own top row had it. */
+html:not([data-windows-titlebar]) .bt-title-toggle{position:fixed;left:12px;top:calc(var(--dsh-frame-top-clearance,0px) + 6px);z-index:30}
+/* The footer ends in the Bot row: the whale's settings seat, then the account menu
+   when no plugin holds that seat. Every other plugin's entry takes a whole row above
+   it, in the shell's order, so none of them squeezes the Bot row. */
+[class*="_footArea"]{grid-template-columns:auto minmax(0,1fr);grid-auto-flow:row dense;align-items:center;gap:4px 9px;padding:8px 6px 6px!important}
+/* DSH hides the footer of a collapsed sidebar under a Windows title bar; the grid
+   stays out of that one place. */
+html:not([data-windows-titlebar]) [class*="_footArea"],:not([class*="_collapsed"])>[class*="_footArea"]{display:grid!important}
+[class*="_footArea"]>[class*="_footerActions"],[class*="_footArea"]>[class*="_footerActions"]>div{display:contents!important}
+[class*="_footArea"]>[class*="_footerActions"]>div>*{grid-column:1/-1}
+[class*="_footArea"]>[class*="_settingsArea"]{grid-column:1;order:1;width:auto!important}
+[class*="_footArea"] button[aria-label="Settings"]{width:auto!important;padding:0!important;background:none!important;border-radius:50%!important;height:auto!important}
+[class*="_widthHandle"]{display:none!important}
+
+.bt-voice-pane{flex-direction:column;align-items:center;justify-content:center;animation:bt-fade .2s ease-out}
+.bt-voice-stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:24px;max-width:560px;text-align:center}
+.bt-voice-orb{position:relative;width:200px;height:200px;display:grid;place-items:center;margin-bottom:8px}
+.bt-voice-ring{position:absolute;inset:34px;border-radius:50%;background:var(--bt-hover);transform:scale(calc(1 + var(--bt-level,0) * .55));transition:transform .08s linear}
+.bt-voice-ring-2{inset:14px;background:none;box-shadow:inset 0 0 0 1px var(--bt-line-2);transform:scale(calc(.94 + var(--bt-level,0) * .3));opacity:.8}
+.bt-voice-stage[data-phase=thinking] .bt-voice-ring{animation:bt-voice-breathe 1.6s ease-in-out infinite}
+.bt-voice-stage[data-phase=speaking] .bt-voice-ring{animation:bt-voice-speak .9s ease-in-out infinite}
+@keyframes bt-voice-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+@keyframes bt-voice-speak{0%,100%{transform:scale(1.04)}30%{transform:scale(1.2)}60%{transform:scale(1.1)}}
+.bt-voice-orb>.bt-mark{position:relative}
+.bt-voice-name{font-size:16px;line-height:22px;font-weight:500}
+.bt-voice-status{font-size:13px;line-height:18px;color:var(--bt-ink-2);min-height:18px}
+.bt-voice-caption{min-height:44px;font-size:15px;line-height:22px;color:var(--bt-ink);animation:bt-blur-in .25s ease-out;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.bt-voice-note{font-size:12px;color:var(--bt-danger)}
+.bt-voice-setup{height:32px;padding:0 14px;border-radius:16px;border:0;background:var(--bt-hover);color:var(--bt-ink);font:inherit;font-size:13px;cursor:pointer;transition:background-color .15s ease}
+.bt-voice-setup:hover{background:var(--bt-active)}
+.bt-voice-bar{display:flex;gap:16px;padding:0 0 32px}
+.bt-voice-btn{position:relative;width:52px;height:52px;border-radius:50%;border:0;background:var(--bt-hover);color:var(--bt-ink);display:grid;place-items:center;cursor:pointer;transition:background-color .15s ease,transform .12s ease}
+.bt-voice-btn:hover{background:var(--bt-active)}
+.bt-voice-btn:active{transform:scale(.94)}
+.bt-voice-btn[aria-pressed=true]{background:var(--bt-user);color:var(--bt-user-ink)}
+.bt-voice-slash{position:absolute;width:24px;height:2px;border-radius:1px;background:currentColor;transform:rotate(-45deg)}
+.bt-voice-end{background:#ff3e51;color:#fff}
+.bt-voice-end:hover{background:#e02135}
+@keyframes bt-fade{from{opacity:0}to{opacity:1}}
+@keyframes bt-blur-in{from{opacity:0;filter:blur(2px)}to{opacity:1;filter:blur(0)}}
+@media (prefers-reduced-motion:reduce){.bt-voice-pane,.bt-voice-caption,.bt-voice-ring{animation:none!important}}
+/* A bubble takes the set share of the column, as the user's does; 82px stays free for
+   the hover toolbar beside it: a 6px margin and three 24px tools 2px apart. */
+.bt-msg{display:flex;flex-direction:column;align-items:flex-start;max-width:min(calc(var(--bt-msg-w) * 100%),calc(100% - 82px))}
+/* The bubble's row: reactions hang below it, so the hover toolbar (and a group
+   sender's avatar) line up with the bubble alone. */
+.bt-msg-line{position:relative;display:flex;align-items:flex-end;gap:8px;max-width:100%}
+.bt-msg-line>.bt-bubble{max-width:none;min-width:0}
+/* The same bubble width as beside an avatar column: the share of (100% - 30px), plus the 30px. */
+.bt-astack[data-lead]>.bt-msg{max-width:min(calc(var(--bt-msg-w) * (100% - 30px) + 30px),calc(100% - 52px))}
+.bt-tools{position:absolute;top:50%;left:100%;margin-left:6px;transform:translateY(-50%);display:flex;gap:2px;opacity:0;visibility:hidden;transition:opacity .12s ease,visibility .12s}
+/* The hover bridge spans only the 6px gap (plus a little overlap) between the
+   bubble's edge and the toolbar: wider, it sits over the bubble's tail and
+   blocks text selection and link clicks there. */
+.bt-tools::after{content:"";position:absolute;top:-8px;bottom:-8px;right:100%;width:10px;z-index:-1}
+.bt-msg:hover>.bt-msg-line>.bt-tools,.bt-msg:focus-within>.bt-msg-line>.bt-tools,.bt-tools[data-open]{opacity:1;visibility:visible}
+/* The flat layout: a Bot's text has no bubble and takes its own share of the column
+   (the whole of it unless set). The toolbar floats over the message's top right. */
+body[data-bt-layout=flat] .bt-astack{align-items:stretch;gap:10px}
+body[data-bt-layout=flat] .bt-msg,body[data-bt-layout=flat] .bt-astack[data-lead]>.bt-msg{align-items:stretch;max-width:calc(var(--bt-flat-w) * 100%)}
+body[data-bt-layout=flat] .bt-bubble{background:none;padding:0;border-radius:0}
+body[data-bt-layout=flat] .bt-tools{top:-14px;right:0;left:auto;margin-left:0;transform:none;padding:2px;border-radius:999px;background:var(--bt-card);box-shadow:inset 0 0 0 .5px var(--bt-line-2),0 4px 14px rgba(0,0,0,.14)}
+body[data-bt-layout=flat] .bt-tools::after{display:none}
+.bt-tool{width:24px;height:24px;border:0;padding:0;border-radius:6px;background:none;color:var(--bt-ink-2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background-color .12s ease,color .12s ease}
+.bt-tool:hover,.bt-tool[aria-expanded=true]{background:var(--bt-hover);color:var(--bt-ink)}
+.bt-tool:active{background:var(--bt-active)}
+.bt-tool:focus-visible{outline:2px solid var(--bt-accent);outline-offset:-2px}
+.bt-react-strip{position:fixed;z-index:60;pointer-events:auto;display:flex;gap:2px;padding:4px;border-radius:999px;background:var(--bt-main);border:.5px solid var(--bt-line-2);box-shadow:0 10px 20px -3px rgba(0,0,0,.08),0 4px 6px -4px rgba(0,0,0,.06);transform:translate(-50%,-100%);transform-origin:bottom center;animation:bt-pop-lift ${SPRING_TAP.duration}ms ${SPRING_TAP.easing},bt-veil-in .14s ease-out}
+.bt-react-strip button{width:32px;height:32px;border:0;border-radius:50%;background:none;font-size:18px;line-height:1;cursor:pointer;transition:background-color .12s ease,${spring(SPRING_POP, "transform")};animation:bt-check-pop ${SPRING_POP.duration}ms ${SPRING_POP.easing} backwards}
+.bt-react-strip button:nth-child(2){animation-delay:20ms}
+.bt-react-strip button:nth-child(3){animation-delay:40ms}
+.bt-react-strip button:nth-child(4){animation-delay:60ms}
+.bt-react-strip button:nth-child(n+5){animation-delay:80ms}
+.bt-react-strip button:hover{background:var(--bt-hover);transform:scale(1.15)}
+.bt-react-strip button:active{transform:scale(.92)}
+.bt-reacts{display:flex;gap:4px;margin-top:4px}
+.bt-react{height:22px;min-width:30px;padding:0 6px;border-radius:999px;border:.5px solid var(--bt-line-2);background:var(--bt-main);font-size:13px;line-height:20px;cursor:pointer;animation:bt-react-pop ${SPRING_POP.duration}ms ${SPRING_POP.easing};transition:background-color .12s ease,${spring(SPRING_TAP, "scale")}}
+.bt-react:hover{background:var(--bt-hover)}
+.bt-react:active{scale:.92}
+@keyframes bt-react-pop{from{transform:scale(.6);opacity:0}}
+.bt-you{width:36px;height:36px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bt-ink) 5%,var(--bt-sidebar));color:var(--bt-ink-2);box-shadow:inset 0 0 0 1px var(--bt-line);transition:background-color .12s ease}
+button:hover .bt-you{background:color-mix(in srgb,var(--bt-ink) 9%,var(--bt-sidebar))}
+.bt-you-wrap{display:inline-flex;padding:0}
+
+.bt-menu{position:fixed;pointer-events:auto;z-index:60;min-width:200px;padding:6px;border-radius:12px;background:var(--bt-main);border:.5px solid var(--bt-line-2);box-shadow:0 10px 20px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1),0 0 0 1px rgba(228,228,228,.04);display:flex;flex-direction:column;gap:2px;transform-origin:var(--bt-origin,top left);animation:bt-pop-drop ${SPRING_TAP.duration}ms ${SPRING_TAP.easing},bt-veil-in .14s ease-out;font-family:var(--bt-font);box-sizing:border-box}
+.bt-menu button{display:flex;align-items:center;gap:4px;width:100%;min-height:30px;text-align:left;border:0;background:none;border-radius:6px;padding:6px 8px;font:inherit;font-size:13px;line-height:18px;color:var(--bt-ink);cursor:pointer;box-sizing:border-box}
+.bt-menu button:hover{background:var(--bt-hover)}
+.bt-menu button svg{flex:none;width:16px;height:16px;margin:0 1px}
+.bt-menu .bt-danger{color:var(--bt-danger)}
+.bt-menu-sep{height:.5px;flex:none;background:var(--bt-line-2);margin:4px 8px}
+.bt-menu-up{--bt-origin:bottom left;animation-name:bt-pop-lift,bt-veil-in}
+.bt-menu[data-leaving]{pointer-events:none;animation:bt-pop-out .12s cubic-bezier(.4,0,1,1) forwards}
+.bt-menu-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-menu-hint{flex:none;color:var(--bt-ink-3);font-size:12px;font-variant-numeric:tabular-nums}
+.bt-palette-layer{position:fixed;inset:var(--dsh-frame-chrome-top,0px) 0 0;z-index:70;pointer-events:auto;font-family:var(--bt-font)}
+.bt-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.46);animation:bt-fade .22s ease-out}
+.bt-palette{position:absolute;top:50%;left:50%;width:min(560px,92vw);transform:translate(-50%,-50%);display:flex;flex-direction:column;border-radius:12px;background:var(--bt-main);border:1px solid var(--bt-line-2);box-shadow:0 24px 48px -12px rgba(0,0,0,.25);overflow:hidden;color:var(--bt-ink);animation:bt-palette-in ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing},bt-veil-in .2s ease-out}
+.bt-palette-layer[data-leaving]{pointer-events:none}
+.bt-palette-layer[data-leaving] .bt-backdrop{opacity:0;transition:opacity .16s ease-in}
+.bt-palette-layer[data-leaving] .bt-palette{animation:bt-dialog-sink .16s cubic-bezier(.4,0,1,1) forwards}
+@keyframes bt-palette-in{from{translate:0 -10px;scale:.96}}
+.bt-palette-head{display:flex;align-items:center;gap:4px;padding:14px 10px 14px 14px;border-bottom:.5px solid var(--bt-line-2)}
+.bt-palette-glyph{display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;color:var(--bt-ink-3);margin-right:4px}
+.bt-palette-head input{flex:1;min-width:0;border:0;outline:none;background:none;color:var(--bt-ink);font:inherit;font-size:15px;line-height:22px;padding:0}
+.bt-palette-head input::placeholder{color:var(--bt-ink-3)}
+.bt-palette-clear{width:18px;height:18px;border:0;padding:0;border-radius:6px;background:none;color:var(--bt-ink-3);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.bt-palette-clear:hover{color:var(--bt-ink)}
+.bt-palette-clear svg{width:12px;height:12px}
+.bt-palette-list{position:relative;height:402px;height:min(402px,54vh);height:min(402px,54dvh);overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:2px;box-sizing:border-box}
+.bt-palette-list>.bt-thumb,.bt-drop-list>.bt-thumb{left:0;right:0;border-radius:8px;background:var(--bt-active)}
+.bt-palette-list>.bt-thumb{left:8px;right:8px}
+:is(.bt-palette-list,.bt-drop-list)[data-glide] [aria-selected=true]{background:transparent}
+:is(.bt-palette-row,.bt-palette-section,.bt-drop-list>.bt-option){position:relative;z-index:1}
+.bt-palette-section{padding:8px 8px 4px;font-size:12px;line-height:16px;color:var(--bt-ink-3);flex:none}
+.bt-palette-section:first-of-type{padding-top:0}
+.bt-palette-row{flex:none;display:flex;align-items:center;gap:8px;height:49px;padding:6px 10px 6px 8px;border:0;border-radius:8px;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;box-sizing:border-box;width:100%}
+.bt-palette-row[aria-selected=true]{background:var(--bt-active)}
+.bt-palette-lead{flex:none;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center}
+.bt-palette-cmd{width:24px;height:24px;border-radius:50%;background:var(--bt-hover);display:inline-flex;align-items:center;justify-content:center;color:var(--bt-ink-2)}
+.bt-palette-cmd svg{width:14px;height:14px}
+.bt-palette-agent{width:24px;height:24px;border-radius:50%;background:var(--bt-hover);display:inline-flex;align-items:center;justify-content:center;color:var(--bt-ink)}
+.bt-palette-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.bt-palette-title{font-size:14px;line-height:20px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-palette-sub{font-size:12px;line-height:16px;color:var(--bt-ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-palette-badge{flex:none;font-size:11px;line-height:16px;padding:0 6px;border-radius:4px;background:var(--bt-tag-bg);color:var(--bt-tag-ink)}
+.bt-palette-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 16px;text-align:center;animation:bt-veil-in .22s ease-out}
+.bt-palette-empty-icon{color:var(--bt-line-2)}
+.bt-palette-empty-icon svg{width:32px;height:32px}
+.bt-palette-empty-label{font-size:14px;font-weight:500;color:var(--bt-ink-2)}
+.bt-palette-empty-hint{font-size:13px;line-height:16px;color:var(--bt-ink-3)}
+@media (prefers-reduced-motion:reduce){.bt-palette{animation:bt-fade .1s ease-out}}
+.bt-account-menu{width:224px}
+.bt-account{flex:none;width:36px;height:36px;border:0;padding:0;background:none;border-radius:50%;cursor:pointer;display:inline-flex}
+.bt-account:hover .bt-you,.bt-account[aria-expanded=true] .bt-you{background:color-mix(in srgb,var(--bt-ink) 9%,var(--bt-sidebar))}
+/* Popover keyframes move translate and scale, which compose with a transform the popover
+   already has. */
+@keyframes bt-pop-drop{from{translate:0 -4px;scale:.96}}
+@keyframes bt-pop-lift{from{translate:0 4px;scale:.96}}
+@keyframes bt-pop-out{to{opacity:0;scale:.97;filter:blur(2px)}}
+@keyframes bt-veil-in{from{opacity:0;filter:blur(6px)}}
+@keyframes bt-check-pop{from{opacity:0;scale:.4}}
+@media (prefers-reduced-motion:reduce){.bt-menu,.bt-avedit,.bt-react-strip{animation:bt-fade .1s ease-out}.bt-react-strip button,.bt-q-check,.bt-color[aria-pressed=true] span{animation:none}}
+.bt-brand:hover{background:var(--bt-hover)}
+.bt-drop-list{position:relative;display:flex;flex-direction:column;gap:2px}
+.bt-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+.bt-pick{display:flex;flex-direction:column;align-items:center;gap:4px;padding:7px 2px 6px;border-radius:10px;border:1px solid transparent;background:none;color:var(--bt-ink);cursor:pointer;font:inherit;font-size:11px;line-height:14px;min-width:0}
+.bt-pick:hover{background:var(--bt-hover)}
+.bt-pick[aria-pressed=true]{border-color:var(--bt-line-2);background:var(--bt-hover)}
+.bt-pick>span:last-child:not(.bt-mark){max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-pick:hover .bt-mark[data-state=idle] .bt-eye{animation:bt-blink .5s linear 1}
+.bt-select{width:100%;height:34px;box-sizing:border-box;border-radius:8px;border:1px solid var(--bt-line);background:var(--bt-card);color:var(--bt-ink);padding:0 8px;font:inherit;font-size:13px}
+.bt-note{font-size:12px;line-height:16px;color:var(--bt-ink-2);margin-top:6px}
+.bt-swatch-sep{width:1px;height:22px;background:var(--bt-line-2);margin:0 2px}
+.bt-swatch-custom{position:relative;overflow:hidden;background:conic-gradient(#ff3e51,#ffaf38,#00c972,#1cc3b0,#2a92fe,#a97efe,#ff5eb1,#ff3e51);box-sizing:border-box}
+.bt-swatch-custom[data-on=true]{border-color:var(--bt-ink)}
+.bt-swatch-custom input{position:absolute;inset:-4px;width:calc(100% + 8px);height:calc(100% + 8px);opacity:0;cursor:pointer;border:0;padding:0}
+.bt-swatch-default{background:linear-gradient(135deg,var(--bt-card) 0 46%,var(--bt-line-2) 46% 54%,var(--bt-card) 54%);box-shadow:inset 0 0 0 1px var(--bt-line-2)}
+.bt-states{display:flex;flex-wrap:wrap;gap:4px}
+.bt-state{border:1px solid var(--bt-line);background:none;border-radius:999px;font:inherit;font-size:11px;line-height:16px;padding:2px 8px;color:var(--bt-ink-2);cursor:pointer}
+.bt-state:hover{color:var(--bt-ink)}
+.bt-state[aria-pressed=true]{background:var(--bt-active);border-color:var(--bt-line-2);color:var(--bt-ink)}
+.bt-theme-chip{position:relative;width:46px;height:30px;border-radius:8px;box-shadow:inset 0 0 0 1px var(--bt-line-2);background:linear-gradient(90deg,var(--ls) 0 36%,var(--lb) 36%);overflow:hidden}
+.bt-theme-chip i{position:absolute;right:7px;bottom:7px;width:10px;height:10px;border-radius:50%;background:var(--la)}
+body[data-ds-dark-theme] .bt-theme-chip{background:linear-gradient(90deg,var(--ds) 0 36%,var(--db) 36%)}
+body[data-ds-dark-theme] .bt-theme-chip i{background:var(--da)}
+.bt-tabs{flex-wrap:wrap}
+.bt-soft:disabled{opacity:.4;cursor:default}
+.bt-group-role{margin-left:6px;font-size:11px;line-height:14px;padding:1px 5px;border-radius:4px;background:var(--bt-tag-bg);color:var(--bt-tag-ink);vertical-align:1px}
+.bt-mini{flex:none;border:0;background:none;border-radius:6px;padding:2px 6px;font:inherit;font-size:12px;line-height:18px;color:var(--bt-ink-2);cursor:pointer}
+.bt-mini:hover{background:var(--bt-active);color:var(--bt-ink)}
+.bt-add{color:var(--bt-ink-2);margin-top:2px}
+.bt-add:hover,.bt-addlist .bt-option:hover{background:var(--bt-hover);color:var(--bt-ink)}
+.bt-addlist{display:flex;flex-direction:column;margin-top:4px;padding:4px;border:1px solid var(--bt-line);border-radius:10px;background:var(--bt-card);animation:bt-rise .16s ease-out}
+.bt-seg{position:relative;display:flex;gap:2px;padding:2px;border-radius:10px;background:var(--bt-hover)}
+.bt-motion-seg,.bt-look-seg{width:216px}
+/* A range input: the track fills with the accent up to the thumb (--bt-fill). */
+.bt-range{display:flex;align-items:center;gap:10px;width:216px}
+.bt-range input{flex:1;min-width:0;height:20px;margin:0;background:none;-webkit-appearance:none;appearance:none;cursor:pointer}
+.bt-range input::-webkit-slider-runnable-track{height:4px;border-radius:999px;background:linear-gradient(to right,var(--bt-accent) var(--bt-fill),var(--bt-active) var(--bt-fill))}
+.bt-range input::-moz-range-track{height:4px;border-radius:999px;background:linear-gradient(to right,var(--bt-accent) var(--bt-fill),var(--bt-active) var(--bt-fill))}
+.bt-range input::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;margin-top:-6px;border:0;border-radius:50%;corner-shape:round;background:var(--bt-card);box-shadow:inset 0 0 0 .5px var(--bt-line-2),0 1px 3px rgba(0,0,0,.08);transition:${spring(SPRING_TAP, "scale")}}
+.bt-range input::-moz-range-thumb{width:16px;height:16px;border:0;border-radius:50%;background:var(--bt-card);box-shadow:inset 0 0 0 .5px var(--bt-line-2),0 1px 3px rgba(0,0,0,.08)}
+.bt-range input:active::-webkit-slider-thumb{scale:1.15}
+.bt-range input:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px;border-radius:999px}
+.bt-range output{flex:none;width:38px;text-align:right;font-size:13px;color:var(--bt-ink-2);font-variant-numeric:tabular-nums}
+.bt-seg button{position:relative;z-index:1;flex:1;height:30px;border:0;border-radius:8px;background:none;font:inherit;font-size:13px;color:var(--bt-ink-2);cursor:pointer;transition:background-color .15s ease,color .15s ease,box-shadow .15s ease,${spring(SPRING_TAP, "scale")}}
+.bt-seg button[aria-pressed=true]{background:var(--bt-card);color:var(--bt-ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.bt-seg button:disabled{opacity:.4;cursor:default}
+.bt-seg button:active:not(:disabled){scale:.96}
+.bt-seg>.bt-thumb{top:2px;bottom:2px;border-radius:8px;background:var(--bt-card);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.bt-seg[data-glide] button[aria-pressed=true]{background:transparent;box-shadow:none}
+@keyframes bt-rise{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.bt-addlist{animation:none}}
+
+/* Memory dialog: a summary of every entry, the entries behind the menu, "Ask or update" below. */
+.bt-mem-row{display:flex;align-items:center;gap:8px;width:100%;height:36px;padding:0 8px 0 10px;border:.5px solid var(--bt-line-2);border-radius:10px;background:var(--bt-card);color:var(--bt-ink);font:inherit;font-size:13px;cursor:pointer;box-sizing:border-box;transition:background-color .12s ease}
+.bt-mem-row:hover{background:var(--bt-hover)}
+.bt-mem-row>svg{flex:none;color:var(--bt-ink-2)}
+.bt-mem-row-copy{flex:1;text-align:left}
+.bt-mem-row-go{display:inline-flex;align-items:center;gap:2px;color:var(--bt-ink-3);font-size:12px;flex:none;white-space:nowrap}
+.bt-mem-layer{position:fixed;inset:var(--dsh-frame-chrome-top,0px) 0 0;z-index:61;display:flex;align-items:center;justify-content:center;font-family:var(--bt-font)}
+.bt-mem-scrim{animation:bt-fade .2s ease-out}
+.bt-mem{position:relative;width:min(680px,calc(100vw - 48px));height:min(760px,calc(100vh - 2*max(32px,var(--dsh-frame-overlay-top,32px))));background:var(--bt-main);border-radius:20px;border:.5px solid var(--bt-line-2);box-shadow:0 24px 80px rgba(0,0,0,.24);display:flex;flex-direction:column;overflow:hidden;color:var(--bt-ink);animation:bt-dialog-rise ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing},bt-veil-in .2s ease-out}
+.bt-mem-head{position:relative;display:flex;align-items:center;gap:8px;height:60px;flex:none;padding:0 14px 0 24px;border-bottom:.5px solid var(--bt-line);box-sizing:border-box}
+.bt-mem-head .bt-icon-btn{width:32px;height:32px;flex:none}
+.bt-mem-head [aria-haspopup] svg{width:18px;height:18px;stroke-width:2.6}
+.bt-mem-head>.bt-icon-btn:first-child{margin-left:-10px}
+.bt-mem-head h2{margin:0;font-size:17px;line-height:24px;font-weight:600;white-space:nowrap}
+.bt-mem-status{font-size:13px;line-height:18px;color:var(--bt-ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;font-variant-numeric:tabular-nums}
+.bt-mem-head-gap{flex:1}
+.bt-mem-menu{position:absolute;top:52px;right:50px;min-width:220px;--bt-origin:top right}
+.bt-mem-menu button:disabled{opacity:.4;cursor:default;background:none}
+.bt-mem-body{flex:1;overflow-y:auto;padding:22px 28px 24px;scrollbar-width:thin;display:flex;flex-direction:column;gap:12px}
+.bt-mem-summary{transition:opacity .3s ease}
+.bt-mem-summary[data-stale]{opacity:.55}
+.bt-mem-summary h3{margin:20px 0 6px;font-size:17px;line-height:26px;font-weight:600}
+.bt-mem-summary h3:first-child{margin-top:0}
+.bt-mem-summary p{margin:0;font-size:15px;line-height:26px}
+.bt-mem-summary>*{animation:bt-mem-line .45s cubic-bezier(.16,1,.3,1) both}
+.bt-mem-summary>:nth-child(2){animation-delay:.03s}
+.bt-mem-summary>:nth-child(3){animation-delay:.06s}
+.bt-mem-summary>:nth-child(4){animation-delay:.09s}
+.bt-mem-summary>:nth-child(5){animation-delay:.12s}
+.bt-mem-summary>:nth-child(6){animation-delay:.15s}
+.bt-mem-summary>:nth-child(n+7){animation-delay:.18s}
+@keyframes bt-mem-line{from{opacity:0;transform:translateY(4px)}}
+.bt-mem-skel{display:flex;flex-direction:column;gap:24px}
+.bt-mem-skel-block{display:flex;flex-direction:column;gap:10px}
+.bt-mem-skel-block span{display:block;height:12px;border-radius:6px;background:linear-gradient(90deg,var(--bt-hover) 25%,var(--bt-active) 50%,var(--bt-hover) 75%);background-size:200% 100%;animation:bt-mem-skel 1.4s ease-in-out infinite}
+.bt-mem-skel-block .bt-mem-skel-head{width:30%;height:16px;margin-bottom:2px}
+@keyframes bt-mem-skel{from{background-position:150% 0}to{background-position:-50% 0}}
+.bt-mem-skel-label{font-size:13px;line-height:18px;color:var(--bt-ink-3)}
+.bt-mem-empty{margin:auto;max-width:400px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;padding:24px 0;animation:bt-mem-line .45s cubic-bezier(.16,1,.3,1) both}
+.bt-mem-empty-mark{width:48px;height:48px;border-radius:50%;background:var(--bt-hover);display:flex;align-items:center;justify-content:center;color:var(--bt-ink-2);margin-bottom:4px}
+.bt-mem-empty-mark svg{width:22px;height:22px}
+.bt-mem-empty-title{font-size:15px;line-height:22px;font-weight:600}
+.bt-mem-empty-text{font-size:13px;line-height:20px;color:var(--bt-ink-2)}
+.bt-mem-failed{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;background:var(--bt-hover);font-size:13px;line-height:18px;color:var(--bt-ink-2)}
+.bt-mem-failed>span{flex:1;min-width:0;overflow-wrap:anywhere}
+.bt-mem-entries{display:flex;flex-direction:column;gap:28px;animation:bt-page-in ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing},bt-veil-in .22s ease-out}
+.bt-mem-section-head{display:flex;align-items:baseline;gap:8px;margin-bottom:4px}
+.bt-mem-section-head h3{margin:0;font-size:15px;line-height:22px;font-weight:600}
+.bt-mem-section-head span{font-size:12px;line-height:16px;color:var(--bt-ink-3)}
+.bt-mem-section-head .bt-mem-size{margin-left:auto;font-variant-numeric:tabular-nums;white-space:nowrap}
+.bt-mem-topic{font-size:12px;line-height:16px;color:var(--bt-ink-2);margin:14px 0 2px 4px;font-weight:500}
+.bt-mem-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.bt-mem-entry{display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:.5px solid var(--bt-line);transition:opacity .2s ease}
+.bt-mem-entry[data-busy]{opacity:.4}
+.bt-mem-entry-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.bt-mem-entry-text{font-size:14px;line-height:20px;overflow-wrap:anywhere}
+.bt-mem-entry-meta{font-size:12px;line-height:16px;color:var(--bt-ink-3);font-variant-numeric:tabular-nums}
+.bt-mem-remove{flex:none;height:28px;min-width:28px;border-radius:999px;border:0;background:none;color:var(--bt-ink-3);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0 6px;font:inherit;font-size:12px;opacity:0;transition:opacity .12s ease,background-color .12s ease,color .12s ease}
+.bt-mem-entry:hover .bt-mem-remove,.bt-mem-remove:focus-visible,.bt-mem-remove[data-confirm]{opacity:1}
+.bt-mem-remove:hover{background:var(--bt-hover);color:var(--bt-ink)}
+.bt-mem-remove[data-confirm]{background:color-mix(in srgb,var(--bt-danger) 10%,transparent);color:var(--bt-danger);padding:0 10px}
+@media (hover:none){.bt-mem-remove{opacity:1}}
+.bt-mem-none{font-size:13px;line-height:18px;color:var(--bt-ink-3);padding:8px 4px}
+.bt-mem-foot{flex:none;padding:8px 20px 20px;display:flex;flex-direction:column;gap:10px}
+.bt-mem-reply{border-radius:16px;background:var(--bt-hover);padding:8px 8px 12px 16px;display:flex;flex-direction:column;gap:6px;max-height:36vh;max-height:36dvh;overflow-y:auto;scrollbar-width:thin;transform-origin:50% 100%;animation:bt-pop-lift ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing},bt-veil-in .2s ease-out}
+.bt-mem-reply-head{display:flex;align-items:center;gap:8px;min-height:24px}
+.bt-mem-reply-asked{flex:1;min-width:0;font-size:12px;line-height:16px;color:var(--bt-ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-mem-reply .bt-icon-btn{width:24px;height:24px;flex:none}
+.bt-mem-reply-text{font-size:14px;line-height:21px;padding-right:8px;overflow-wrap:anywhere}
+.bt-mem-changes{list-style:none;margin:2px 0 0;padding:0 8px 0 0;display:flex;flex-direction:column;gap:4px}
+.bt-mem-changes li{display:flex;align-items:flex-start;gap:6px;font-size:13px;line-height:18px;color:var(--bt-ink-2);overflow-wrap:anywhere}
+.bt-mem-changes li svg{flex:none;margin-top:1px;color:var(--bt-danger);animation:bt-check-pop ${SPRING_POP.duration}ms ${SPRING_POP.easing} .12s backwards}
+.bt-mem-changes li[data-ok] svg{color:var(--bt-green)}
+.bt-mem-ask{display:flex;align-items:center;gap:8px;height:52px;padding:0 8px 0 22px;border-radius:999px;border:.5px solid var(--bt-line-2);background:var(--bt-card);box-shadow:0 4px 16px rgba(0,0,0,.06);box-sizing:border-box;transition:border-color .15s ease,box-shadow .15s ease}
+.bt-mem-ask:focus-within{border-color:var(--bt-ink-3);box-shadow:0 4px 20px rgba(0,0,0,.1)}
+.bt-mem-input{flex:1;min-width:0;border:0;background:none;outline:none;color:var(--bt-ink);font:inherit;font-size:15px;line-height:22px;padding:0}
+.bt-mem-input::placeholder{color:var(--bt-ink-3)}
+.bt-mem-send{flex:none;width:36px;height:36px;border-radius:50%;border:0;background:var(--bt-ink);color:var(--bt-main);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:opacity .15s ease,${spring(SPRING_TAP, "scale")}}
+.bt-mem-send:disabled{opacity:.22;cursor:default}
+.bt-mem-send:not(:disabled):active{scale:.92}
+.bt-mem-send>*{animation:bt-check-pop ${SPRING_POP.duration}ms ${SPRING_POP.easing}}
+.bt-mem-spin{width:14px;height:14px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;box-sizing:border-box;animation:bt-mem-spin .7s linear infinite}
+@keyframes bt-mem-spin{to{transform:rotate(360deg)}}
+@media (max-width:640px){.bt-mem{width:100vw;height:100%;border-radius:0;border:0}.bt-mem-body{padding:18px 18px 20px}.bt-mem-foot{padding:8px 12px 12px}}
+@media (prefers-reduced-motion:reduce){.bt-mem,.bt-mem-scrim,.bt-mem-summary>*,.bt-mem-empty,.bt-mem-reply,.bt-mem-skel-block span,.bt-mem-entries,.bt-mem-send>*,.bt-mem-changes li svg{animation:none}}
+
+.bt-thumb{position:absolute;left:0;top:0;z-index:0;pointer-events:none;transition:opacity .14s ease}
+.bt-thumb[data-hidden]{opacity:0}
+[data-morph]{overflow:hidden!important}
+.bt-veil{animation:bt-veil-in .22s ease-out}
+.bt-with-icon{display:inline-flex;align-items:center;gap:4px}
+.bt-with-icon svg{width:14px;height:14px}
+.bt-tag-admin{display:inline-flex;align-items:center;gap:4px}
+.bt-create-inline{padding:18px 16px;border:1px solid var(--bt-line);border-radius:12px;background:var(--bt-card)}
+.bt-create-inline .bt-create-card{max-width:none}
+.bt-panel-view>[data-move=in]{animation:bt-page-in ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing} backwards,bt-veil-in .2s ease-out backwards}
+.bt-panel-view>[data-move=out]{animation:bt-page-out ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing} backwards,bt-veil-in .2s ease-out backwards}
+.bt-panel-view>:is([data-move=in],[data-move=out]):nth-child(2){animation-delay:25ms}
+.bt-panel-view>:is([data-move=in],[data-move=out]):nth-child(n+3){animation-delay:50ms}
+.bt-panel-view>.bt-drawer-body[data-move=tab]{animation:bt-veil-in .2s ease-out}
+.bt-drawer-name-input{animation:bt-veil-in .16s ease-out}
+.bt-pop-in{display:inline-flex;animation:bt-check-pop ${SPRING_POP.duration}ms ${SPRING_POP.easing}}
+:is(.bt-soft,.bt-send,.bt-icon-btn,.bt-settings-close,.bt-mini,.bt-tab,.bt-nc-send,.bt-avedit-tab,.bt-shape,.bt-pick,.bt-swatch,.bt-palette-clear){transition:background-color .12s ease,color .12s ease,border-color .12s ease,opacity .12s ease,${spring(SPRING_TAP, "scale")}}
+:is(.bt-icon-btn,.bt-settings-close,.bt-nc-send,.bt-shape,.bt-swatch,.bt-color,.bt-x,.bt-q-x,.bt-palette-clear):active:not(:disabled){scale:.9}
+:is(.bt-soft,.bt-send,.bt-mini,.bt-tab,.bt-avedit-tab,.bt-pick,.bt-q-submit,.bt-q-btn):active:not(:disabled){scale:.96}
+@media (prefers-reduced-motion:reduce){.bt-thumb{transition:none}.bt-panel-view>[data-move],.bt-drawer-name-input,.bt-veil,.bt-pop-in,.bt-token,.bt-drop,.bt-newchat,.bt-option-hint,.bt-connector-form,.bt-settings-head>*{animation:none}}
+/* Phone-width viewports: the settings dialog takes the whole screen, its page
+   list becomes a horizontal strip across the top, and fixed-width pages wrap
+   or scroll instead of overflowing. These rules sit at the end of the sheet:
+   the base column widths below would otherwise win the cascade back. */
+@media (max-width:640px){
+  .bt-settings-layer{align-items:stretch;justify-content:stretch}
+  .bt-settings{--bt-set-w:100vw;--bt-set-h:100vh;width:100vw;height:100vh;height:100dvh;border-radius:0;border-width:0;flex-direction:column}
+  /* Right padding is not honored inside a scrolling flex row; a transparent
+     right border keeps the last tab clear of the close button. */
+  .bt-settings-nav{width:100%;flex:none;flex-direction:row;align-items:center;overflow-x:auto;padding:8px;border:0;border-right:52px solid transparent;border-bottom:.5px solid var(--bt-line);scrollbar-width:thin;box-sizing:border-box}
+  .bt-settings-item{flex:none}
+  .bt-settings-shell{margin-top:0;margin-left:auto;flex:none}
+  .bt-settings-main{width:100%;flex:1;min-height:0;height:auto}
+  .bt-settings-usage[data-off]{left:0;width:100%}
+  .bt-settings-scroll{overflow-x:clip}
+  .bt-set-row{flex-direction:column;align-items:stretch;gap:8px}
+  .bt-set-row>.bt-set-copy{width:100%}
+  .bt-avedit{width:min(300px,calc(100vw - 32px))}
+  .bt-shape-row{grid-template-columns:repeat(4,1fr)}
+}
+/* Follow the visible viewport, not the layout one: dvh where the browser knows
+   it (the earlier vh value is the fallback), and safe-area padding where
+   full-screen layers and bottom regions meet the device's own bars. */
+.bt-settings{--bt-set-h:min(780px,calc(100dvh - 2*max(32px,var(--dsh-frame-overlay-top,32px))))}
+.bt-mem{height:min(760px,calc(100dvh - 2*max(32px,var(--dsh-frame-overlay-top,32px))))}
+.bt-settings-layer,.bt-mem-layer,.bt-palette-layer{padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
+.bt-panel{padding-bottom:env(safe-area-inset-bottom,0px)}
+.bt-settings-scroll{padding-bottom:calc(24px + env(safe-area-inset-bottom,0px))}
+.bt-voice-bar{padding-bottom:calc(32px + env(safe-area-inset-bottom,0px))}
+.bt-exchange .bt-dialog-foot{padding-bottom:calc(28px + env(safe-area-inset-bottom,0px))}
+/* iOS zooms the whole page on focused inputs under 16px. */
+@media (max-width:640px) and (pointer:coarse){
+  .bt-input,.bt-bs-input,.bt-browser-address input,.bt-folder-input,.bt-secret-input,.bt-q-input,.bt-to input,.bt-palette-head input,.bt-mem-input{font-size:16px}
+}
+`;
+var CONVERSATION_CSS = `
+.bt-think{font-size:13px;line-height:18px;color:var(--bt-ink-2);margin:2px 0 4px;max-width:calc(var(--bt-msg-w) * 100%)}
+body[data-bt-layout=flat] .bt-think{max-width:calc(var(--bt-flat-w) * 100%)}
+.bt-think summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px}
+.bt-think summary::-webkit-details-marker{display:none}
+.bt-think-time{font-variant-numeric:tabular-nums;white-space:nowrap}
+/* Five lines of the 18px line height; the rest scrolls inside the box. */
+.bt-think-text{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:6px;padding-left:10px;border-left:2px solid var(--bt-line-2);max-height:90px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;outline:none}
+.bt-think-text:focus-visible{border-left-color:var(--bt-ink-2)}
+.bt-think-text[data-fade=top]{mask-image:linear-gradient(to bottom,transparent,#000 18px)}
+.bt-think-text[data-fade=bottom]{mask-image:linear-gradient(to top,transparent,#000 18px)}
+.bt-think-text[data-fade=both]{mask-image:linear-gradient(to bottom,transparent,#000 18px,#000 calc(100% - 18px),transparent)}
+.bt-event{display:flex;justify-content:center;align-items:center;gap:2px;min-height:24px;margin:2px 0;font-size:12px;line-height:16px;color:var(--bt-ink-2);flex-wrap:wrap}
+.bt-event>span{padding:0 2px}
+.bt-event button:not(.bt-soft){border:0;background:none;color:inherit;font:inherit;display:inline-flex;align-items:center;gap:4px;cursor:pointer;height:24px;padding:4px 6px 4px 4px;border-radius:999px;box-sizing:border-box;transition:background-color .12s ease}
+.bt-event button:not(.bt-soft):hover{background:var(--bt-hover)}
+.bt-event button:not(.bt-soft):active{background:var(--bt-active)}
+.bt-event .bt-soft{margin-left:6px}
+.bt-event button.bt-event-whole{min-width:0;max-width:100%;padding:4px 6px 4px 8px}
+.bt-event-whole>*{flex:none}
+.bt-event-whole>span:first-child{margin-right:2px}
+/* One button cannot wrap like separate parts, so a long name is cut to fit the chat. */
+.bt-event-whole>.bt-event-name{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-time-sep{display:flex;justify-content:center;align-items:center;height:28px;margin:14px 0 8px;font-size:12px;line-height:16px;color:var(--bt-ink-2);white-space:nowrap}
+[class*="_scroll"]>[class*="_column"]::before{content:var(--bt-first-sep,none);display:block;flex:none;height:28px;margin:17px 0 12px;font-size:12px;line-height:28px;text-align:center;color:var(--bt-ink-2);white-space:nowrap}
+.bt-activity{display:flex;align-items:center;gap:10px;margin:8px 0 4px 2px;font-size:14px;color:var(--bt-ink-2)}
+.bt-group-replies{display:contents}
+/* A Bot chat is flat in every work-details mode, without changing the user's mode
+   (it is a DSH-wide setting): step groups lose their header and stay open, and what a
+   mode folds away in a finished turn stays shown. TurnProcessCell also opens that
+   fold; these rules cover the first frame before it does. */
+[data-step-process]>div:first-child{display:none!important}
+[data-step-process]>[data-step-process-body]{display:block!important;content-visibility:visible!important;max-height:none!important;overflow:visible!important;mask-image:none!important;scrollbar-gutter:auto!important}
+:is([data-step-process],[data-turn-process-hidden])[hidden]{content-visibility:visible!important}
+[class*="_flowItem"]:has(> [data-slot="conversation.chat.node"]:empty, > [data-slot="conversation.chat.node"][data-bt-emptied]){display:none!important}
+/* A turn's process seat is a flow child of its own, not a flowItem: a seat whose
+   member cells all emptied themselves (a hidden exchange turn, a turn whose
+   calls draw nothing) still kept its margin, stacking a blank band per hidden
+   call. Only the slot a DS SuperAgent cell marked counts, so a seat another renderer
+   fills — even with plain text and no element child — is never taken for empty. */
+[data-step-process]:has(> [data-step-process-body] [data-slot="conversation.chat.node"][data-bt-emptied]):not(:has(> [data-step-process-body] [data-slot="conversation.chat.node"]:not([data-bt-emptied]))){display:none!important}
+[class*="_header"]:has(.bt-head){border-bottom-color:transparent!important;box-shadow:none!important}
+/* The transcript runs under a floating header pill. */
+header[class*="_header"]:has(.bt-head){position:absolute!important;top:0;left:0;right:0;z-index:8;display:flex!important;padding:10px 0 0!important;background:transparent!important;pointer-events:none;justify-content:center}
+header[class*="_header"]:has(.bt-head)::before{content:"";position:absolute;inset:0 0 auto;height:calc(60px + env(safe-area-inset-top,0px));background:linear-gradient(to bottom,var(--bt-main),color-mix(in srgb,var(--bt-main) 0%,transparent));pointer-events:none;z-index:-1}
+header[class*="_header"]:has(.bt-head)>[class*="_headerLeading"]{position:absolute;left:12px;top:10px;pointer-events:auto}
+header[class*="_header"] .bt-head{flex:1 1 auto;width:100%}
+/* On macOS the shell's header row is the window's drag strip (data-window-drag
+   becomes -webkit-app-region:drag). The floating header stays click-through, so
+   the transcript under it still takes links and the wheel. Only the 40px .bt-head
+   bar the pill sits in is hit again and carries the drag mark; controls inside
+   keep no-drag. The data-slot anchor must not take no-drag, or the bar inherits it. */
+html[data-platform=darwin] header[class*="_header"]:has(.bt-head) .bt-head{pointer-events:auto;-webkit-app-region:drag}
+html[data-platform=darwin] header[class*="_header"]:has(.bt-head) :is(a,button,input,textarea,select,[role=button],[role=menuitem],[role=menu],[contenteditable=true]){-webkit-app-region:no-drag}
+[class*="_body"]:has(> [class*="_scrollBody"]){--dsh-chat-content-width:min(960px,100%)}
+/* The shell writes the column's width on the conversation root at every resize, only to
+   derive the content width that the rule above replaces. Inherited, each write restyled
+   the whole conversation: once a frame while the details panel glides, most in a long
+   group chat. Kept on the root alone, a write restyles one element. */
+@property --dsh-conversation-column-width{syntax:"*";inherits:false}
+@property --dsh-chat-user-width{syntax:"*";inherits:false}
+/* DSH's turn tail keeps what plugins put in it (delivered files, the Bot's separators),
+   without its copy and branch row; a tail with nothing in it takes no room. */
+[data-turn-tail]>:not([data-slot="conversation.chat.turnTail"]){display:none!important}
+[class*="_flowItem"][data-chat-flow-kind="turn-tail"]:not(:has([data-slot="conversation.chat.turnTail"]:not(:empty))){display:none!important}
+/* Every team Session belongs to a Bot or a group, so a blank one is an empty chat, not
+   the shell's new-session hero: no headline, no workspace or mode picker, and the
+   composer stays docked at the bottom. */
+[data-content-phase=hero] [class*="_scrollBody"]{justify-content:flex-end!important}
+[data-content-phase=hero] [class*="_composerHero"]{align-self:stretch!important;width:auto!important;padding-bottom:0!important}
+[data-content-phase=hero] [class*="_composerHero"]>[class$="_root"],[data-content-phase=hero] [class*="_heroWorkspaceRow"]{display:none!important}
+[data-content-phase=hero] [class*="_composerHero"] [class*="_input"]{min-height:0!important}
+/* The right sides give back the scrollbar gutter so both edges sit 16px from the column. */
+[class*="_scroll"]:has(> [class*="_column"]){padding:calc(60px + env(safe-area-inset-top,0px)) calc(11px + env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) calc(16px + env(safe-area-inset-left,0px))!important}
+/* The shell's running status only hosts the activity row (.bt-typing). */
+[data-chat-running]{display:block!important;width:100%;min-height:0!important;margin:0!important;padding:0!important}
+[data-chat-running]>span:not([role=status]){display:none!important}
+[data-chat-running]:has(> .bt-typing){margin-top:var(--dsh-chat-flow-gap,12px)!important}
+.bt-typing{display:flex;align-items:center;gap:12px;height:36px;min-width:0;padding-inline-start:8px;transform-origin:0 50%;animation:bt-typing-in ${SPRING_TAP.duration}ms ${SPRING_TAP.easing} backwards}
+.bt-typing[data-exiting]{animation:bt-typing-out .14s cubic-bezier(.22,1,.36,1) forwards}
+.bt-typing>.bt-mark,.bt-typing>.bt-cluster{flex-shrink:0}
+.bt-typing>.bt-mark{cursor:pointer;transition:filter .16s ease-out}
+.bt-typing>.bt-mark:hover{filter:drop-shadow(0 2px 4px rgba(0,0,0,.18))}
+.bt-typing>.bt-mark .bt-eyes{transition:scale .28s cubic-bezier(.4,.06,.18,1)}
+.bt-typing>.bt-mark:hover .bt-eyes{scale:1.18}
+.bt-typing-text{display:flex;align-items:center;flex:1 1 auto;min-width:0;animation:bt-typing-label .22s ease-out .2s backwards}
+.bt-typing-label{display:inline-flex;align-items:center;gap:6px;min-width:0;animation:bt-typing-label .22s ease-out backwards}
+.bt-typing-label>.bt-shimmer{font-size:14px;line-height:22px;font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-typing-time{flex-shrink:0;margin-left:6px;font-size:12px;line-height:22px;color:var(--bt-ink-3);font-variant-numeric:tabular-nums;white-space:nowrap}
+@keyframes bt-typing-in{from{opacity:0;transform:scale(.9)}}
+@keyframes bt-typing-out{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.92);filter:blur(3px)}}
+@keyframes bt-typing-label{from{opacity:0;filter:blur(5px);transform:translateY(3px)}}
+/* Shimmer: a stepped sweep clipped to the text. */
+.bt-shimmer{color:transparent;background:linear-gradient(90deg,var(--bt-shimmer-base) 0%,var(--bt-shimmer-base) 25%,var(--bt-ink) 60%,var(--bt-shimmer-base) 75%,var(--bt-shimmer-base) 100%);background-size:200% 100%;-webkit-background-clip:text;background-clip:text;animation:bt-shimmer 2.2s steps(60) infinite;--bt-shimmer-base:color-mix(in srgb,var(--bt-ink) 40%,transparent)}
+@keyframes bt-shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+/* New rows slide up; a reply that replaces the activity row grows out of its corner. */
+[data-bt-enter="new"]{animation:bt-row-in ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing}}
+[data-bt-enter="after-collapse"]{transform-origin:0 100%;animation:bt-row-after .24s cubic-bezier(.23,1,.32,1) .38s backwards}
+@keyframes bt-row-in{from{transform:translateY(12px)}to{transform:none}}
+@keyframes bt-row-after{0%{opacity:0;transform:translateY(12px) scale(.94)}55%{opacity:1}100%{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){
+.bt-typing,.bt-typing[data-exiting]{animation-name:bt-fade-in;animation-duration:.12s;transform:none}
+.bt-typing[data-exiting]{animation-name:bt-fade-out}
+.bt-typing-text,.bt-typing-label{animation-name:bt-fade-in;animation-delay:0s}
+.bt-shimmer{animation:none;background:none;color:var(--bt-ink-2)}
+[data-bt-enter="new"]{animation:none}
+[data-bt-enter="after-collapse"]{animation:bt-fade-in .12s ease-out}
+}
+@keyframes bt-fade-in{from{opacity:0}to{opacity:1}}
+@keyframes bt-fade-out{from{opacity:1}to{opacity:0}}
+[data-composer-card]{display:flex!important;flex-direction:row!important;flex-wrap:wrap!important;align-items:center!important;gap:0!important;min-height:44px!important;border-radius:22px!important;padding:7.5px!important;box-sizing:border-box;background:var(--bt-main)!important;border:.5px solid var(--bt-line-2)!important;box-shadow:0 2px 8px -1px rgba(0,0,0,.05),0 1px 2px rgba(0,0,0,.03),0 0 0 1px rgba(228,228,228,.04)!important;transition:border-color .15s ease,background-color .15s ease,${spring(SPRING_SHAPE, "border-radius")}!important}
+[data-composer-card]:hover,[data-composer-card]:focus-within{border-color:color-mix(in srgb,var(--bt-ink) 30%,transparent)!important}
+[data-composer-card]:has(> [data-slot="conversation.input.attachments"] *),[data-composer-card]:has([data-composer-input] br + *),[data-composer-card]:has([data-composer-input] > :nth-child(2)){border-radius:18px!important}
+[class*="_root"]:has(> [data-composer-card]){padding:0 11px 13px 16px!important}
+[class*="_root"]:has(> [data-composer-card])>[data-composer-card]{max-width:min(992px,100%)!important}
+[data-composer-card]>[class*="_row"]{display:contents!important}
+[data-composer-card] [class*="_tools"]{order:1!important;flex:none!important;align-self:flex-end!important;margin:0!important}
+[data-composer-card]>[data-input-scroll]{order:2!important;flex:1 1 0!important;min-width:0!important;padding:0 8px!important;margin:0!important}
+[data-composer-card] [class*="_trailing"]{order:3!important;flex:none!important;align-self:flex-end!important;margin:0!important}
+/* The slot anchor is display:contents, so the rail inside it is the flex item. */
+[data-composer-card]>[data-slot="conversation.input.attachments"]>[class*="_rail"]{order:0!important;flex:0 0 100%!important;margin:0!important;padding:2px 8px 6px!important}
+[data-composer-card]:has(> [data-slot="conversation.input.attachments"] > [class*="_rail"])>[data-input-scroll]{order:1!important;flex:0 0 100%!important;margin:0 0 6px!important}
+[data-composer-card]:has(> [data-slot="conversation.input.attachments"] > [class*="_rail"]) [class*="_tools"]{order:2!important}
+[data-composer-card]:has(> [data-slot="conversation.input.attachments"] > [class*="_rail"]) [class*="_trailing"]{margin-left:auto!important}
+[data-composer-card] [data-composer-input]{min-height:24px!important;padding:2px 0!important}
+[data-composer-card] [data-composer-placeholder]{left:0!important;top:2px!important}
+[data-composer-placeholder]{font-size:0!important;line-height:0!important}
+/* The name sits on ::before so that ::after stays free for other composer skins. */
+[data-composer-placeholder]::before{content:var(--bt-placeholder,"Message")!important;display:block!important;font-size:14px!important;line-height:24px!important;color:color-mix(in srgb,var(--bt-ink) 36%,transparent)!important}
+/* The team's "+" (ComposerPlus) takes the seat of the shell's command-menu button. */
+[data-composer-card] button[class*="_add"]{display:none!important}
+.bt-plus{flex:none;width:28px;height:28px;padding:0;border:0;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bt-ink) 5%,transparent);box-shadow:inset 0 0 0 .5px var(--bt-line);color:var(--bt-ink-2);cursor:pointer;transition:background-color .15s ease,color .15s ease,${spring(SPRING_TAP, "scale")}}
+.bt-plus:hover,.bt-plus[aria-expanded=true]{background:color-mix(in srgb,var(--bt-ink) 10%,transparent);color:var(--bt-ink)}
+.bt-plus:active{scale:.9}
+.bt-plus svg{width:14px;height:14px;transition:${spring(SPRING_POP, "rotate")}}
+.bt-plus[aria-expanded=true] svg{rotate:45deg}
+.bt-plus-menu{min-width:180px}
+[data-composer-card] [class*="_tools"]{gap:0!important}
+[data-composer-card] [class*="_modes"]:empty{display:none!important}
+[data-composer-card] [class*="_activity"]:not(:has([data-slot] > *)){display:none!important}
+[data-composer-card] [class*="_trailing"]{gap:8px!important}
+/* No display here: DSH hides these controls with [hidden] while the Bot works. */
+[data-composer-card] [class*="_standardControls"]{align-items:center!important;gap:8px!important}
+[data-composer-card] button[class*="_primary"]{width:28px!important;height:28px!important;background:var(--bt-accent)!important;color:var(--bt-accent-ink,#fff)!important;border-radius:50%!important;transition:opacity .15s ease,${spring(SPRING_TAP, "scale")};animation:bt-icon-swap ${SPRING_POP.duration}ms ${SPRING_POP.easing}}
+[data-composer-card] button[class*="_primary"]:hover:not(:disabled){opacity:.9}
+[data-composer-card] button[class*="_primary"]:active:not(:disabled){scale:.9}
+@keyframes bt-icon-swap{from{opacity:0;transform:scale(.5) rotate(-30deg)}}
+[data-composer-card] button[class*="_primary"] svg{width:14px;height:14px}
+[data-composer-card] button[class*="_primary"]:disabled{display:none!important}
+[data-composer-dock]{display:none!important}
+.bt-mic,.bt-voice{flex:none;width:28px;height:28px;border-radius:50%;border:0;padding:0;display:inline-grid;place-items:center;cursor:pointer;transition:background-color .15s ease,color .15s ease,${spring(SPRING_TAP, "scale")}}
+.bt-mic{background:color-mix(in srgb,var(--bt-ink) 5%,transparent);box-shadow:inset 0 0 0 .5px var(--bt-line);color:var(--bt-ink-2)}
+.bt-mic:hover{background:color-mix(in srgb,var(--bt-ink) 10%,transparent);color:var(--bt-ink)}
+.bt-mic[aria-pressed=true]{background:#ff3e51;color:#fff;animation:bt-mic-pulse 1.4s ease-in-out infinite}
+@keyframes bt-mic-pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,62,81,.35)}50%{box-shadow:0 0 0 5px rgba(255,62,81,0)}}
+.bt-voice{display:none;background:var(--bt-accent);color:var(--bt-accent-ink,#fff);animation:bt-icon-swap ${SPRING_POP.duration}ms ${SPRING_POP.easing}}
+.bt-voice:hover{opacity:.9}
+.bt-mic:active,.bt-voice:active{scale:.9}
+/* Touch devices never hover: tap-open toolbars (data-open on the message), always
+   visible icon buttons and 44px targets replace the hover affordances. */
+@media (hover:none){
+  .bt-tools{left:auto;right:4px;margin-left:0;border-radius:999px;padding:2px;background:var(--bt-card);box-shadow:inset 0 0 0 .5px var(--bt-line-2),0 4px 14px rgba(0,0,0,.14)}
+  .bt-tools::after{display:none}
+  .bt-tool{width:44px;height:44px}
+  .bt-menu button,.bt-menu [role=menuitem],.bt-react-strip button{min-height:44px}
+  .bt-utools[data-open]{opacity:1;visibility:visible}
+  .bt-utools button{width:44px;height:44px}
+  [data-chat-flow-kind=user] [class*="_actions"] button{width:44px;height:44px}
+}
+[data-composer-card]:has(button[class*="_primary"]:disabled) .bt-voice{display:inline-grid}
+body[data-bt-room] .bt-voice{display:none!important}
+body[data-bt-room] [data-composer-card]:has(button[class*="_primary"]:disabled) .bt-mic:not([aria-pressed=true]){background:var(--bt-accent);color:var(--bt-accent-ink,#fff)}
+.bt-mic-note{position:absolute;right:12px;bottom:calc(100% + 8px);padding:5px 10px;border-radius:8px;background:var(--bt-user);color:var(--bt-user-ink);font-size:12px;line-height:16px;white-space:nowrap;pointer-events:none;animation:bt-rise .16s ease-out}
+[data-chain-overlay-fallback="conversation.composer"]:has(~ .bt-q){display:block!important;order:2}
+.bt-q{order:1}
+div:has(> nav [class*="_marks"]){display:none!important}
+/* Every user-side bubble (sent, steering mid-turn, not yet admitted, question replies)
+   takes its surface and its text from the one --bt-user pair: a skin that repaints
+   the host's bubble surface alone would otherwise leave the text unreadable. */
+[class*="_userRow"] [class*="_bubble"],[data-chat-flow-kind=question-reply] [class*="_bubble"],[data-chat-flow-kind=command-input] [class*="_bubble"]{background:var(--bt-user)!important;color:var(--bt-user-ink)!important;border-radius:18px!important;padding:7px 12px!important;font-size:var(--dsh-content-font-size,14px)!important;line-height:calc(var(--dsh-content-font-size,14px) + 8px)!important}
+[class*="_userRow"] [class*="_bubble"] [class*="_markdown"],[class*="_userRow"] [class*="_bubble"] a{color:inherit}
+/* Sent messages get the hover toolbar below; steering and unsent bubbles keep none. */
+[class*="_userRow"] [class*="_actions"]{display:none!important}
+/* A steering message the Bot has not read yet shows a small unread label under
+   its bubble's right edge; --bt-steer-unread is set per window (header.js), and
+   the none fallback means no English can leak into a Chinese window. */
+[data-pending-steering]{flex-wrap:wrap}
+[data-pending-steering]::after{content:var(--bt-steer-unread,none);display:block;flex-basis:100%;width:100%;order:99;margin-top:4px;font-size:11px;line-height:14px;color:var(--bt-ink-3);font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+[data-chat-flow-kind=user] [class*="_userRow"]{flex-direction:row-reverse;align-items:center;justify-content:flex-start}
+[data-chat-flow-kind=user] [class*="_actions"]{display:flex!important;height:24px!important;gap:2px!important;opacity:0!important;visibility:hidden;transition:opacity .12s ease,visibility .12s!important;flex:none}
+[data-chat-flow-kind=user] [class*="_userRow"]:hover [class*="_actions"],[data-chat-flow-kind=user] [class*="_userRow"]:focus-within [class*="_actions"]{opacity:1!important;visibility:visible}
+@media (hover:none){[data-chat-flow-kind=user] [class*="_actions"]{opacity:1!important;visibility:visible}}
+[data-chat-flow-kind=user] [class*="_actions"] [class*="_timeStart"]{display:none}
+[data-chat-flow-kind=user] [class*="_actions"] button{width:24px;height:24px;border-radius:6px;color:var(--bt-ink-2)}
+[data-chat-flow-kind=user] [class*="_actions"] button:hover{background:var(--bt-hover);color:var(--bt-ink)}
+[data-chat-flow-kind=user] [class*="_actions"] svg{width:15px;height:15px}
+.bt-q-inline{display:flex;margin:4px 0 6px}
+[data-chat-flow-kind=assistant-step]+[data-step-process]:has(.bt-q-inline){margin-top:0!important}
+[data-chat-flow-kind=question-reply]:has(.bt-q-inline),[data-chat-group-key]:has([data-chat-flow-kind=question-reply] .bt-q-inline),[data-chat-group-key]:has(.bt-q-gone){margin-top:0!important}
+.bt-q-inline .bt-q{margin:0;max-width:min(550px,86%);order:0}
+.bt-q-dock{width:100%;display:flex;justify-content:center}
+.bt-q-dock .bt-q{margin:0 auto 8px}
+[class*="_toBottomSlot"]{justify-content:center!important;padding-right:0!important}
+[data-conversation-scroll] [class*="_toBottomSlot"]{bottom:calc(var(--dsh-composer-height,152px) + 8px)!important}
+[class*="_toBottomSlot"]>button{width:36px!important;height:36px!important;margin-top:-36px!important;background:var(--bt-main)!important;color:var(--bt-ink)!important;box-shadow:0 0 0 .5px var(--bt-line-2),0 2px 8px -2px rgba(0,0,0,.12)!important;animation:bt-tobottom-in ${SPRING_TAP.duration}ms ${SPRING_TAP.easing},bt-veil-in .16s ease-out;transition:background-color .12s ease,${spring(SPRING_TAP, "scale")}}
+[class*="_toBottomSlot"]>button:active{scale:.9}
+[class*="_toBottomSlot"]>button:hover{background:color-mix(in srgb,var(--bt-ink) 4%,var(--bt-main))!important}
+[class*="_toBottomSlot"]>button svg{display:none}
+[class*="_toBottomSlot"]>button::before{content:"";width:20px;height:20px;background:currentColor;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 4v12M5 11l5 5 5-5'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 4v12M5 11l5 5 5-5'/%3E%3C/svg%3E") center/contain no-repeat}
+@keyframes bt-tobottom-in{from{translate:0 8px;scale:.8}}
+[data-bt-news] [class*="_toBottomSlot"]>button{visibility:hidden!important;pointer-events:none!important}
+.bt-news{position:fixed;z-index:30;transform:translateX(-50%);display:inline-flex;align-items:center;overflow:hidden;border-radius:999px;background:var(--bt-accent);color:var(--bt-accent-ink);box-shadow:inset 0 0 0 1px rgba(20,20,20,.05),0 1px 3px 0 rgba(0,0,0,.12);font-family:var(--bt-font);animation:bt-news-in ${SPRING_TAP.duration}ms ${SPRING_TAP.easing},bt-veil-in .16s ease-out}
+@keyframes bt-news-in{from{translate:0 8px;scale:.9}}
+.bt-news[data-direction=up]{animation-name:bt-news-in-up,bt-veil-in}
+@keyframes bt-news-in-up{from{translate:0 -8px;scale:.9}}
+.bt-news-jump{display:inline-flex;align-items:center;gap:2px;margin:0;padding:4px 26px 4px 4px;border:0;border-radius:0;background:transparent;color:inherit;font:inherit;font-size:13px;line-height:18px;white-space:nowrap;cursor:pointer;outline:none}
+.bt-news-ico{flex:none;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px}
+.bt-news-ico svg{width:16px;height:16px}
+.bt-news-x{position:absolute;right:4px;top:50%;z-index:1;transform:translateY(-50%);width:20px;height:20px;padding:0;border:0;border-radius:999px;background:transparent;color:inherit;opacity:.75;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.bt-news-x svg{width:12px;height:12px}
+.bt-news-x:hover{opacity:1;background:rgba(20,20,20,.5)}
+@media (prefers-reduced-motion:reduce){.bt-news,[class*="_toBottomSlot"]>button{animation:none}}
+.bt-new-sep{display:flex;align-items:center;gap:8px;margin:14px 0 8px;padding:2px 0;font-size:11px;line-height:14px;font-weight:500;letter-spacing:.02em;text-transform:uppercase;color:var(--bt-accent);font-family:var(--bt-font)}
+.bt-new-sep::before,.bt-new-sep::after{content:"";flex:1;height:1px;background:color-mix(in srgb,var(--bt-accent) 20%,transparent)}
+.bt-open-new{display:flex;flex-direction:column}
+.bt-open-new .bt-new-sep{margin:18px 0 0}
+.bt-open-new .bt-time-sep{height:16px;margin:32px 0 2px}
+.bt-earlier{display:flex;flex-direction:column;gap:6px}
+.bt-earlier-top{display:flex;justify-content:center;align-items:center;height:34px;flex:none}
+.bt-earlier-top:empty{display:none}
+.bt-earlier-top .bt-soft{height:28px;font-size:12px;padding:0 12px}
+.bt-urow{display:flex;justify-content:flex-end}
+.bt-ububble{max-width:calc(var(--bt-msg-w) * 100%);background:var(--bt-user);color:var(--bt-user-ink);border-radius:18px;padding:7px 12px;font-size:14px;line-height:24px;box-sizing:border-box;overflow-wrap:anywhere;text-wrap:pretty;text-autospace:normal}
+.bt-ububble [class*="_markdown"],.bt-ububble a{color:inherit!important}
+.bt-ububble p{margin:0;line-height:24px}
+.bt-uimages{display:block;font-size:12px;opacity:.7}
+.bt-utime{margin-top:-4px;font-size:11px;line-height:14px;color:var(--bt-ink-3);font-variant-numeric:tabular-nums;white-space:nowrap}
+.bt-earlier .bt-event{margin:4px 0}
+.bt-part-line{display:flex;align-items:center;gap:10px;margin:10px 0 6px;font-size:11px;line-height:14px;color:var(--bt-ink-3)}
+.bt-part-line::before,.bt-part-line::after{content:"";flex:1;height:1px;background:var(--bt-line)}
+/* The dock wrapper also holds the context meter, so it stays hidden until a side question is in it. */
+[data-composer-dock]:has(.bt-btw){display:flex!important;flex-direction:column;align-items:center;width:100%;max-width:var(--dsh-composer-card-max-width,748px)}
+[data-composer-dock]:has(.bt-btw)>:not([data-slot="conversation.composer.dock"]){display:none!important}
+.bt-btw-dock,.bt-btw-stack{display:flex;flex-direction:column;gap:6px;width:100%;max-width:var(--dsh-composer-card-max-width,748px)}
+.bt-btw{box-sizing:border-box;width:100%;margin:6px auto;padding:8px 12px;border:1px solid var(--bt-line);border-radius:12px;background:var(--bt-card);color:var(--bt-ink)}
+.bt-btw-dock .bt-btw,.bt-btw-stack .bt-btw{margin:0}
+.bt-btw-compact{padding:6px 10px}
+.bt-btw-head{display:flex;align-items:center;gap:8px;min-width:0}
+.bt-btw-toggle{display:flex;align-items:center;gap:8px;flex:1;min-width:0;margin:0;padding:0;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.bt-btw-chevron{flex:none;width:7px;height:7px;border-right:1.5px solid var(--bt-ink-3);border-bottom:1.5px solid var(--bt-ink-3);transform:rotate(-45deg)}
+.bt-btw[data-open] .bt-btw-chevron{transform:rotate(45deg)}
+.bt-btw-q{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;line-height:18px}
+.bt-btw[data-open] .bt-btw-q{white-space:normal}
+.bt-btw-time,.bt-btw-status{flex:none;color:var(--bt-ink-3);font-size:11px;line-height:14px;font-variant-numeric:tabular-nums}
+.bt-btw-cancel{margin-left:auto}
+.bt-btw-cancel:disabled{opacity:.55;cursor:default}
+.bt-btw-delete{flex:none;margin:-4px}
+.bt-btw-note{margin:4px 0 0;color:var(--bt-ink-3);font-size:12px;line-height:16px}
+.bt-btw-body{margin-top:6px}
+.bt-btw-answer{font-size:14px;line-height:20px}
+.bt-btw-answer p{margin:0}
+.bt-btw-fail{margin:0 0 6px;color:var(--bt-danger);font-size:13px;line-height:18px}
+@media (prefers-reduced-motion:reduce){.bt-btw-chevron{transition:none}}
+`;
+var PLUGIN_ID = "ds-superagent";
+function installStyles(text, tag) {
+  const style = document.createElement("style");
+  style.dataset.dshBot = tag;
+  style.dataset.plugin = PLUGIN_ID;
+  style.textContent = text;
+  document.head.appendChild(style);
+  return style;
+}
+var FRAGMENT_SELECTOR = /\[class\*="(_[\w-]+)"\]/g;
+var CLASS_TOKEN = /\.((?:\\.|[\w-])+)/g;
+function sheetClassNames(sheet) {
+  const names = [];
+  const visit = (rules) => {
+    for (const rule of rules) {
+      if (rule.selectorText) for (const match of rule.selectorText.matchAll(CLASS_TOKEN)) names.push(match[1]);
+      if (rule.cssRules) visit(rule.cssRules);
+    }
+  };
+  try {
+    visit(sheet.cssRules);
+  } catch {
+  }
+  return names;
+}
+function compileFragmentSelectors(text, names) {
+  const compiled2 = /* @__PURE__ */ new Map();
+  return text.replace(FRAGMENT_SELECTOR, (whole, fragment) => {
+    if (!compiled2.has(fragment)) {
+      const exact = [];
+      for (const name of names) if (name.includes(fragment)) exact.push(`.${name}`);
+      compiled2.set(fragment, exact.length ? `:is(${exact.join(",")})` : whole);
+    }
+    return compiled2.get(fragment);
+  });
+}
+function installCompiledStyles(text, tag) {
+  const style = installStyles("", tag);
+  let disposed = false;
+  const cache = /* @__PURE__ */ new WeakMap();
+  const render = () => {
+    if (disposed) return;
+    if (!style.isConnected) document.head.appendChild(style);
+    const names = /* @__PURE__ */ new Set();
+    for (const sheet of document.styleSheets) {
+      if (sheet.ownerNode?.dataset?.dshBot) continue;
+      let list = cache.get(sheet);
+      if (!list) {
+        list = sheetClassNames(sheet);
+        cache.set(sheet, list);
+      }
+      for (const name of list) names.add(name);
+    }
+    const next = compileFragmentSelectors(text, names);
+    if (style.textContent !== next) style.textContent = next;
+  };
+  render();
+  let timer;
+  const schedule = () => {
+    clearTimeout(timer);
+    timer = setTimeout(render, 120);
+  };
+  const onLoad = (event) => {
+    if (event.target instanceof HTMLLinkElement) schedule();
+  };
+  const shell = (node) => node.dataset?.dshBot === void 0;
+  const observer = new MutationObserver((records) => {
+    if (records.some((record) => [...record.removedNodes].includes(style))) render();
+    if (records.some((record) => [...record.addedNodes, ...record.removedNodes].some(shell))) schedule();
+  });
+  observer.observe(document.head, { childList: true });
+  document.addEventListener("load", onLoad, true);
+  return () => {
+    disposed = true;
+    observer.disconnect();
+    document.removeEventListener("load", onLoad, true);
+    clearTimeout(timer);
+    style.remove();
+  };
+}
+
+// src/client/product-mcp-settings.js
+var import_react16 = require("react");
+function ProductMcpSettings({ binding, call }) {
+  const instanceId = binding.instanceId;
+  const [status, setStatus] = (0, import_react16.useState)(null);
+  const [resources, setResources] = (0, import_react16.useState)([]);
+  const [resourceId, setResourceId] = (0, import_react16.useState)("");
+  const [pending, setPending] = (0, import_react16.useState)(null);
+  const [busy, setBusy] = (0, import_react16.useState)(false);
+  const [error, setError] = (0, import_react16.useState)(null);
+  const [notice, setNotice] = (0, import_react16.useState)(null);
+  const inFlight = (0, import_react16.useRef)(null);
+  const storageKey = `product-mcp-command:${instanceId}`;
+  const refresh = async () => {
+    const next = await call("mcp-status", { instanceId });
+    setStatus(next);
+    if (!next.configured) return next;
+    const items = [];
+    let after;
+    for (let page = 0; page < 10; page++) {
+      const result = await call("resource-list", { instanceId, limit: 100, ...after ? { after } : {} });
+      items.push(...result.items.filter((item) => item.status === "active"));
+      if (!result.cursor) {
+        setResources(items);
+        setResourceId((current) => current || next.resourceId);
+        return next;
+      }
+      after = result.cursor;
+    }
+    throw new Error(t("The credential resource list exceeds its bounded limit."));
+  };
+  (0, import_react16.useEffect)(() => {
+    let live = true;
+    try {
+      const saved = JSON.parse(window.sessionStorage.getItem(storageKey));
+      if (saved && ["mcp-save", "mcp-approve", "mcp-connect", "mcp-disconnect", "mcp-retry"].includes(saved.endpoint) && typeof saved.commandId === "string" && Number.isSafeInteger(saved.expectedRevision) && saved.expectedRevision >= 0 && (saved.endpoint !== "mcp-save" || typeof saved.resourceId === "string") && (saved.endpoint !== "mcp-approve" || typeof saved.approved === "boolean")) {
+        const attempt = {
+          endpoint: saved.endpoint,
+          commandId: saved.commandId,
+          expectedRevision: saved.expectedRevision,
+          ...saved.endpoint === "mcp-save" ? { resourceId: saved.resourceId } : {},
+          ...saved.endpoint === "mcp-approve" ? { approved: saved.approved } : {}
+        };
+        inFlight.current = attempt;
+        setPending(attempt);
+      } else if (saved) {
+        window.sessionStorage.removeItem(storageKey);
+      }
+    } catch {
+    }
+    void refresh().catch((failure) => {
+      if (live) setError(failure.message);
+    });
+    return () => {
+      live = false;
+    };
+  }, [call, instanceId]);
+  const remember = (attempt) => {
+    inFlight.current = attempt;
+    setPending(attempt);
+    try {
+      if (attempt) window.sessionStorage.setItem(storageKey, JSON.stringify(attempt));
+      else window.sessionStorage.removeItem(storageKey);
+    } catch {
+    }
+  };
+  const execute = async (endpoint, extra = {}, retry = false) => {
+    if (busy || !status?.configured || inFlight.current && !retry) return;
+    const attempt = retry ? inFlight.current : {
+      endpoint,
+      commandId: crypto.randomUUID(),
+      expectedRevision: status.revision,
+      ...extra
+    };
+    if (!attempt) return;
+    remember(attempt);
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await call(attempt.endpoint, {
+        instanceId,
+        commandId: attempt.commandId,
+        expectedRevision: attempt.expectedRevision,
+        ...attempt.resourceId ? { resourceId: attempt.resourceId } : {},
+        ...typeof attempt.approved === "boolean" ? { approved: attempt.approved } : {}
+      });
+      remember(null);
+      await refresh();
+      setNotice(t("MCP setting saved."));
+    } catch (failure) {
+      if ([
+        "GRANT_DENIED",
+        "MCP_NOT_APPROVED",
+        "RESOURCE_UNAVAILABLE",
+        "CONFIG_CHANGED",
+        "MCP_REVISION_CONFLICT",
+        "INVALID_CONFIG",
+        "IDENTITY_CONFLICT"
+      ].includes(failure.code)) remember(null);
+      setError(failure.message);
+      await refresh().catch(() => {
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (0, import_react16.createElement)(
+    Card,
+    { title: t("MCP tools") },
+    !status ? (0, import_react16.createElement)("p", { role: "status" }, t("Loading…")) : !status.configured ? (0, import_react16.createElement)("p", { className: "bt-product-resource-note" }, t("No trusted Host MCP tool is configured.")) : (0, import_react16.createElement)(
+      "div",
+      { className: "bt-product-resource-selected" },
+      (0, import_react16.createElement)("p", { className: "bt-product-resource-note" }, `${status.serverName} / ${status.toolName} · ${t("Host only; remote execution unsupported.")}`),
+      (0, import_react16.createElement)("p", { className: "bt-product-resource-note" }, t("Grant Worker/tool for the intended work item or Environment in Credential resources. The MCP endpoint is checked when work calls it.")),
+      (0, import_react16.createElement)("p", { role: "status" }, `${t("MCP state")}: ${t(status.state)}${status.error ? ` · ${status.error}` : ""} · v${status.revision}`),
+      (0, import_react16.createElement)(Row, { label: t("MCP credential resource") }, (0, import_react16.createElement)(
+        "select",
+        {
+          className: "bt-bs-input",
+          value: resourceId,
+          disabled: busy || Boolean(pending),
+          onChange: (event) => setResourceId(event.target.value)
+        },
+        (0, import_react16.createElement)("option", { value: "" }, t("Choose a resource")),
+        resources.map((item) => (0, import_react16.createElement)("option", { key: item.id, value: item.id }, item.label))
+      )),
+      (0, import_react16.createElement)(
+        "div",
+        { className: "bt-product-resource-row" },
+        (0, import_react16.createElement)("button", {
+          type: "button",
+          className: "bt-soft",
+          disabled: busy || Boolean(pending) || !resourceId,
+          onClick: () => void execute("mcp-save", { resourceId })
+        }, t("Save MCP resource")),
+        (0, import_react16.createElement)(
+          "button",
+          {
+            type: "button",
+            className: "bt-soft",
+            disabled: busy || Boolean(pending) || status.state === "error",
+            onClick: () => void execute("mcp-approve", { approved: !status.approved })
+          },
+          t(status.approved ? "Revoke tool approval" : "Approve tool")
+        ),
+        status.connected ? (0, import_react16.createElement)("button", {
+          type: "button",
+          className: "bt-soft",
+          disabled: busy || Boolean(pending),
+          onClick: () => void execute("mcp-disconnect")
+        }, t("Disconnect")) : (0, import_react16.createElement)("button", {
+          type: "button",
+          className: "bt-soft",
+          disabled: busy || Boolean(pending) || !status.approved || status.state === "error",
+          onClick: () => void execute("mcp-connect")
+        }, t("Connect")),
+        (0, import_react16.createElement)("button", {
+          type: "button",
+          className: "bt-soft",
+          disabled: busy || Boolean(pending) || !status.approved || status.state === "error",
+          onClick: () => void execute("mcp-retry")
+        }, t("Try again"))
+      ),
+      pending ? (0, import_react16.createElement)(
+        "div",
+        { className: "bt-product-resource-row", role: "status" },
+        (0, import_react16.createElement)("span", null, t("MCP change pending confirmation. Retry the same command.")),
+        (0, import_react16.createElement)("button", {
+          type: "button",
+          className: "bt-soft",
+          disabled: busy,
+          onClick: () => void execute(pending.endpoint, {}, true)
+        }, t("Retry pending change"))
+      ) : null,
+      error ? (0, import_react16.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+      notice ? (0, import_react16.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null
+    )
+  );
+}
+
+// src/client/product-browser-import.js
+var import_react17 = require("react");
+var IMPORT_STATES = {
+  pending: "Import pending",
+  unknown: "Import needs retry",
+  applied: "Import applied",
+  cancelled: "Import cancelled"
+};
+var previewText = (preview) => `${preview.source.label} · ${preview.format ?? preview.source.kind} · ${preview.cookies} cookies`;
+function ProductBrowserImport({ binding, call, browserBridge, directoryOptions, onChanged }) {
+  const instanceId = binding.instanceId;
+  const storageKey = `product-browser-import:${instanceId}`;
+  const directories = directoryOptions?.directories ?? [];
+  const [pending, setPending] = (0, import_react17.useState)(null);
+  const [batches, setBatches] = (0, import_react17.useState)([]);
+  const [sources, setSources] = (0, import_react17.useState)([]);
+  const [sourceId, setSourceId] = (0, import_react17.useState)("");
+  const [environmentId, setEnvironmentId] = (0, import_react17.useState)("");
+  const [label, setLabel] = (0, import_react17.useState)("");
+  const [busy, setBusy] = (0, import_react17.useState)(false);
+  const [error, setError] = (0, import_react17.useState)(null);
+  const [notice, setNotice] = (0, import_react17.useState)(null);
+  const generation = (0, import_react17.useRef)(0);
+  const persist = (value) => {
+    setPending(value);
+    try {
+      if (value) window.sessionStorage.setItem(storageKey, JSON.stringify(value));
+      else window.sessionStorage.removeItem(storageKey);
+    } catch {
+    }
+  };
+  const refresh = async () => {
+    const current = ++generation.current;
+    try {
+      const [imports, available] = await Promise.all([
+        call("browser-import-list", { instanceId, limit: 20 }),
+        browserBridge?.importSources ? browserBridge.importSources() : Promise.resolve([])
+      ]);
+      if (current !== generation.current) return;
+      setBatches(imports.items);
+      setSources(available);
+      setSourceId((value) => available.some((source) => source.id === value) ? value : available[0]?.id ?? "");
+    } catch (failure) {
+      if (current === generation.current) setError(failure.message);
+    }
+  };
+  (0, import_react17.useEffect)(() => {
+    try {
+      const saved = JSON.parse(window.sessionStorage.getItem(storageKey));
+      if (saved && typeof saved.id === "string" && typeof saved.sourceRef === "string" && saved.preview && typeof saved.commandId === "string") {
+        setPending(saved);
+        setEnvironmentId(saved.environmentId ?? "");
+        setLabel(saved.label ?? saved.preview.source?.label ?? "");
+      }
+    } catch {
+    }
+    void refresh();
+    return () => {
+      generation.current += 1;
+    };
+  }, [call, instanceId]);
+  (0, import_react17.useEffect)(() => {
+    if (!pending?.targetLocked && !directories.some((directory) => directory.id === environmentId)) {
+      setEnvironmentId("");
+    }
+  }, [directoryOptions, pending?.targetLocked, environmentId]);
+  const acceptPreview = (result) => {
+    if (!result?.id || !result.preview) throw new Error(t("The browser preview is unavailable."));
+    const next = {
+      id: result.id,
+      sourceRef: crypto.randomUUID(),
+      preview: result.preview,
+      commandId: crypto.randomUUID(),
+      environmentId: "",
+      label: "",
+      targetLocked: false
+    };
+    setEnvironmentId("");
+    setLabel("");
+    persist(next);
+    setError(null);
+    setNotice(t("Browser data previewed. Review the source and target before importing."));
+  };
+  const chooseFile = async () => {
+    if (busy || !browserBridge?.importPick) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await browserBridge.importPick();
+      if (result?.canceled) return;
+      if (result?.error) throw new Error(t("The browser export could not be read."));
+      acceptPreview(result);
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const chooseLive = async () => {
+    if (busy || !sourceId || !browserBridge?.importLive) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      let result = await browserBridge.importLive(sourceId, false);
+      if (result?.running) {
+        if (!window.confirm(t("Close the selected browser briefly to copy its cookies, then reopen it with your tabs?"))) return;
+        result = await browserBridge.importLive(sourceId, true);
+      }
+      if (result?.error) throw new Error(t("The selected browser profile could not be copied."));
+      acceptPreview(result);
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const cancelPreview = async () => {
+    if (!pending || busy) return;
+    try {
+      await browserBridge?.importCancel?.(pending.id);
+    } catch {
+    }
+    persist(null);
+    setLabel("");
+    setNotice(t("Browser import preview cancelled."));
+  };
+  const sendImport = async (next) => {
+    if (!next || !next.environmentId || !next.label.trim() || busy) return;
+    persist(next);
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await call("browser-import", {
+        instanceId,
+        commandId: next.commandId,
+        sourceRef: next.sourceRef,
+        pendingId: next.id,
+        preview: next.preview,
+        environmentId: next.environmentId,
+        label: next.label
+      });
+      persist(null);
+      setLabel("");
+      setNotice(t(result.status === "applied" ? "Browser data imported into a new isolated resource." : "Browser import needs another retry."));
+      await refresh();
+      if (result.status === "applied") onChanged?.();
+    } catch (failure) {
+      setError(failure.message);
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+  const commit = () => sendImport(pending && {
+    ...pending,
+    environmentId,
+    label: label.trim(),
+    targetLocked: true
+  });
+  const retryBatch = (batch) => {
+    if (!pending || busy) return;
+    const next = {
+      ...pending,
+      sourceRef: batch.sourceRef,
+      environmentId: batch.environmentId,
+      label: batch.label,
+      commandId: crypto.randomUUID(),
+      targetLocked: true
+    };
+    setEnvironmentId(batch.environmentId);
+    setLabel(batch.label);
+    void sendImport(next);
+  };
+  const cancelImport = async (batch) => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await call("browser-import-cancel", { instanceId, commandId: crypto.randomUUID(), importId: batch.id });
+      if (pending?.sourceRef === batch.sourceRef) {
+        try {
+          await browserBridge?.importCancel?.(pending.id);
+        } catch {
+        }
+        persist(null);
+      }
+      setNotice(t(result.status === "cancelled" ? "Browser import cancelled." : "Browser import is already complete."));
+      await refresh();
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (0, import_react17.createElement)(
+    "section",
+    { className: "bt-product-browser-import", "aria-label": t("Import browser data") },
+    (0, import_react17.createElement)("h3", null, t("Import browser data")),
+    (0, import_react17.createElement)(
+      "p",
+      { className: "bt-product-resource-note" },
+      t("Preview a cookie export or installed browser profile before creating a new isolated browser.")
+    ),
+    browserBridge?.importPick ? (0, import_react17.createElement)(
+      "div",
+      { className: "bt-product-resource-row" },
+      (0, import_react17.createElement)(
+        "button",
+        { type: "button", className: "bt-soft", disabled: busy, onClick: () => void chooseFile() },
+        t("Choose cookie export")
+      )
+    ) : null,
+    sources.length ? (0, import_react17.createElement)(
+      "div",
+      { className: "bt-product-resource-row" },
+      (0, import_react17.createElement)(
+        "select",
+        {
+          className: "bt-bs-input",
+          value: sourceId,
+          "aria-label": t("Installed browser profile"),
+          disabled: busy,
+          onChange: (event) => setSourceId(event.target.value)
+        },
+        sources.map((source) => (0, import_react17.createElement)("option", { key: source.id, value: source.id }, source.label))
+      ),
+      (0, import_react17.createElement)("button", {
+        type: "button",
+        className: "bt-soft",
+        disabled: busy || !sourceId,
+        onClick: () => void chooseLive()
+      }, t("Preview installed profile"))
+    ) : null,
+    pending ? (0, import_react17.createElement)(
+      "div",
+      { className: "bt-product-browser-import-preview" },
+      (0, import_react17.createElement)("strong", null, pending.preview.source.label),
+      (0, import_react17.createElement)("p", null, previewText(pending.preview)),
+      (0, import_react17.createElement)("p", null, `${t("Source ownership")}: ${pending.preview.source.kind} · ${t("Privacy scope")}: ${t("Isolated browser profile")}`),
+      (0, import_react17.createElement)("p", null, `${t("Target instance")}: ${instanceId} · ${t("Target role")}: ${t("Local browser")} · ${t("The new browser starts with no work grants.")}`),
+      pending.preview.sites?.length ? (0, import_react17.createElement)("ul", null, pending.preview.sites.slice(0, 20).map((site) => (0, import_react17.createElement)("li", { key: site.site }, `${site.site} · ${site.cookies} cookies · ${site.httpOnly} HTTP-only`))) : null,
+      (0, import_react17.createElement)(Row, { label: t("Browser Environment") }, (0, import_react17.createElement)("select", {
+        className: "bt-bs-input",
+        value: environmentId,
+        disabled: busy || pending.targetLocked || directories.length === 0,
+        onChange: (event) => {
+          const value = event.target.value;
+          setEnvironmentId(value);
+          persist({ ...pending, environmentId: value, label: label.trim() || pending.label });
+        }
+      }, (0, import_react17.createElement)("option", { value: "" }, t("Choose Environment")), directories.map((directory) => (0, import_react17.createElement)(
+        "option",
+        { key: directory.id, value: directory.id },
+        directory.title ?? directory.id
+      )))),
+      (0, import_react17.createElement)(Row, { label: t("Browser name") }, (0, import_react17.createElement)("input", {
+        className: "bt-bs-input",
+        value: label,
+        maxLength: 128,
+        disabled: busy || pending.targetLocked,
+        onChange: (event) => {
+          setLabel(event.target.value);
+          persist({ ...pending, environmentId, label: event.target.value });
+        }
+      })),
+      (0, import_react17.createElement)(
+        "div",
+        { className: "bt-product-resource-row" },
+        (0, import_react17.createElement)("button", {
+          type: "button",
+          className: "bt-soft",
+          disabled: busy || !environmentId || !label.trim(),
+          onClick: () => void commit()
+        }, busy ? t("Importing…") : t("Import into new browser")),
+        (0, import_react17.createElement)("button", {
+          type: "button",
+          className: "bt-soft",
+          disabled: busy,
+          onClick: () => void cancelPreview()
+        }, t("Cancel preview"))
+      )
+    ) : null,
+    error ? (0, import_react17.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+    notice ? (0, import_react17.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
+    batches.length ? (0, import_react17.createElement)(
+      "div",
+      { className: "bt-product-browser-import-history" },
+      (0, import_react17.createElement)("h4", null, t("Recent browser imports")),
+      batches.map((batch) => (0, import_react17.createElement)(
+        "div",
+        { key: batch.id, className: "bt-product-browser-import-row" },
+        (0, import_react17.createElement)(
+          "div",
+          null,
+          (0, import_react17.createElement)("strong", null, batch.label),
+          (0, import_react17.createElement)("p", null, `${previewText(batch.preview)} · ${t(IMPORT_STATES[batch.status] ?? batch.status)}`),
+          batch.report ? (0, import_react17.createElement)("p", null, `${t("Stored cookies")}: ${batch.report.stored} · ${t("Dropped")}: ${batch.report.droppedCount} · ${t("Failed")}: ${batch.report.failedCount}`) : null
+        ),
+        (0, import_react17.createElement)(
+          "div",
+          { className: "bt-product-resource-row" },
+          batch.status === "pending" || batch.status === "unknown" ? (0, import_react17.createElement)(
+            import_react17.Fragment,
+            null,
+            pending ? (0, import_react17.createElement)("button", {
+              type: "button",
+              className: "bt-soft",
+              disabled: busy,
+              onClick: () => retryBatch(batch)
+            }, t("Use preview to retry")) : null,
+            (0, import_react17.createElement)("button", {
+              type: "button",
+              className: "bt-soft",
+              disabled: busy,
+              onClick: () => void cancelImport(batch)
+            }, t("Cancel browser import"))
+          ) : null
+        )
+      ))
+    ) : null
+  );
+}
+var PRODUCT_BROWSER_IMPORT_CSS = `
+.bt-product-browser-import{display:flex;flex-direction:column;gap:8px;margin:14px 0;padding:12px;border:1px solid var(--bt-line);border-radius:8px}
+.bt-product-browser-import h3,.bt-product-browser-import h4{margin:0;font-size:13px}
+.bt-product-browser-import p{margin:3px 0;color:var(--bt-ink-2);font-size:12px;line-height:18px}
+.bt-product-browser-import-preview{padding:10px;border:1px solid var(--bt-line);border-radius:8px}
+.bt-product-browser-import-preview ul{padding-left:18px;margin:6px 0;font-size:12px}
+.bt-product-browser-import-history{display:flex;flex-direction:column;gap:6px}
+.bt-product-browser-import-row{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--bt-line)}
+.bt-product-browser-import button:focus-visible,.bt-product-browser-import select:focus-visible,.bt-product-browser-import input:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+@media(max-width:640px){.bt-product-browser-import-row{align-items:flex-start;flex-direction:column}}
+`;
+
+// src/client/product-browser-settings.js
+var import_react18 = require("react");
+var BROWSER_STATES = {
+  available: "Available",
+  busy: "In use",
+  human: "Human control",
+  unknown: "Outcome unknown",
+  importing: "Importing",
+  revoked: "Revoked"
+};
+var OPERATION_STATES = {
+  pending: "Pending",
+  succeeded: "Succeeded",
+  unknown: "Outcome unknown",
+  resolved: "Checked"
+};
+var OBSERVATIONS = {
+  UNCHANGED: "Page stayed on the original view",
+  CHANGED: "Page visibly changed",
+  CLOSED: "Browser page was closed",
+  INSPECTED: "I inspected the page without recording its contents"
+};
+var DETERMINISTIC = /* @__PURE__ */ new Set([
+  "INVALID_INPUT",
+  "RESOURCE_STALE",
+  "SOURCE_NOT_AUTHORIZED",
+  "ENVIRONMENT_DENIED",
+  "RESOURCE_LIMIT",
+  "IDENTITY_CONFLICT",
+  "BROWSER_RECONCILE_REQUIRED",
+  "BROWSER_DENIED",
+  "BROWSER_HUMAN_CONTROL",
+  "NOT_FOUND",
+  "UNAVAILABLE"
+]);
+function ProductBrowserSettings({ binding, works = [], directoryOptions, call, browserBridge }) {
+  const instanceId = binding.instanceId;
+  const storageKey = `product-browser-command:${instanceId}`;
+  const acceptedWorks = works.filter((work) => work.receipt?.status === "accepted" && work.brief?.workItemId);
+  const directories = directoryOptions?.directories ?? [];
+  const [resources, setResources] = (0, import_react18.useState)(null);
+  const [selectedId, setSelectedId] = (0, import_react18.useState)("");
+  const [workItemId, setWorkItemId] = (0, import_react18.useState)("");
+  const [environmentId, setEnvironmentId] = (0, import_react18.useState)(directories[0]?.id ?? "");
+  const [label, setLabel] = (0, import_react18.useState)("");
+  const [reasons, setReasons] = (0, import_react18.useState)({});
+  const [pending, setPending] = (0, import_react18.useState)({});
+  const [busy, setBusy] = (0, import_react18.useState)(false);
+  const [unavailable, setUnavailable] = (0, import_react18.useState)(false);
+  const [error, setError] = (0, import_react18.useState)(null);
+  const [notice, setNotice] = (0, import_react18.useState)(null);
+  const [manual, setManual] = (0, import_react18.useState)(null);
+  const inFlight = (0, import_react18.useRef)({});
+  const refreshGeneration = (0, import_react18.useRef)(0);
+  const selected = resources?.find((resource) => resource.id === selectedId);
+  const selectedWorks = acceptedWorks.filter((work) => !selected?.environmentId || !work.brief.environmentId || work.brief.environmentId === selected.environmentId);
+  const activeGrant = selected?.grants?.find((grant) => grant.workItemId === workItemId && grant.active);
+  const actionKey = (endpoint, input) => endpoint === "browser-create" ? `create:${input.environmentId}` : endpoint === "browser-grant" ? `grant:${input.resourceId}:${input.workItemId}` : endpoint === "browser-revoke" ? `resource:${input.resourceId}` : endpoint === "browser-resolve" ? `resolve:${input.resourceId}:${input.operationId}` : endpoint === "browser-take" || endpoint === "browser-return" ? `control:${input.resourceId}` : endpoint;
+  const actionLabel = (attempt) => attempt.endpoint === "browser-create" ? t("Create browser in {environment}", { environment: attempt.input.environmentId }) : attempt.endpoint === "browser-grant" ? t("Change browser grant for {workItemId}", { workItemId: attempt.input.workItemId }) : attempt.endpoint === "browser-revoke" ? t("Revoke browser {resourceId}", { resourceId: attempt.input.resourceId }) : attempt.endpoint === "browser-take" ? t("Take over browser") : attempt.endpoint === "browser-return" ? t("Give browser back") : t("Check browser operation {operationId}", { operationId: attempt.input.operationId });
+  const remember = (attempt, key) => {
+    const next = { ...inFlight.current };
+    if (attempt) next[key] = attempt;
+    else delete next[key];
+    inFlight.current = next;
+    setPending(next);
+    try {
+      if (Object.keys(next).length) window.sessionStorage.setItem(storageKey, JSON.stringify(next));
+      else window.sessionStorage.removeItem(storageKey);
+    } catch {
+    }
+  };
+  const refresh = async () => {
+    const generation = ++refreshGeneration.current;
+    try {
+      const items = await call("browser-list", { instanceId });
+      if (generation !== refreshGeneration.current) return items;
+      setResources(items);
+      setSelectedId((current) => items.some((resource) => resource.id === current) ? current : items[0]?.id ?? "");
+      setUnavailable(false);
+      return items;
+    } catch (failure) {
+      if (generation !== refreshGeneration.current) return [];
+      if (failure.code === "UNAVAILABLE") {
+        setUnavailable(true);
+        setResources([]);
+        return [];
+      }
+      setError(failure.message);
+      return [];
+    }
+  };
+  (0, import_react18.useEffect)(() => {
+    let live = true;
+    try {
+      const saved = JSON.parse(window.sessionStorage.getItem(storageKey));
+      const values = saved && typeof saved === "object" ? saved.endpoint ? [saved] : Object.values(saved) : [];
+      const valid = Object.fromEntries(values.filter((attempt) => attempt && ["browser-create", "browser-grant", "browser-revoke", "browser-resolve", "browser-take", "browser-return"].includes(attempt.endpoint) && typeof attempt.commandId === "string" && attempt.input && typeof attempt.input === "object").map((attempt) => [actionKey(attempt.endpoint, attempt.input), attempt]));
+      inFlight.current = valid;
+      setPending(valid);
+    } catch {
+    }
+    void refresh().then((items) => {
+      if (!live) return;
+      setSelectedId((current) => items.some((resource) => resource.id === current) ? current : items[0]?.id ?? "");
+    });
+    const timer = window.setInterval(() => {
+      if (live && !document.hidden) void refresh();
+    }, 15e3);
+    return () => {
+      live = false;
+      refreshGeneration.current += 1;
+      window.clearInterval(timer);
+    };
+  }, [call, instanceId]);
+  (0, import_react18.useEffect)(() => {
+    if (!directories.some((directory) => directory.id === environmentId)) setEnvironmentId(directories[0]?.id ?? "");
+  }, [directoryOptions]);
+  (0, import_react18.useEffect)(() => {
+    if (!selectedWorks.some((work) => work.brief.workItemId === workItemId)) setWorkItemId(selectedWorks[0]?.brief?.workItemId ?? "");
+  }, [selectedId, resources, workItemId]);
+  (0, import_react18.useEffect)(() => {
+    let live = true;
+    const control = selected?.control;
+    if (control?.state === "held" && browserBridge) {
+      void call("browser-control-view", { instanceId, resourceId: selected.id, controlId: control.id }).then((result) => {
+        if (live) setManual({ resourceId: selected.id, controlId: control.id, profile: result.profileKey });
+      }).catch((failure) => {
+        if (live) setError(failure.message);
+      });
+    } else setManual(null);
+    return () => {
+      live = false;
+    };
+  }, [selected?.id, selected?.control?.id, selected?.control?.state, browserBridge, call, instanceId]);
+  const execute = async (endpoint, input, success, retry = false, explicit = null) => {
+    const key = actionKey(endpoint, input);
+    if (busy || inFlight.current[key] && !retry) return;
+    const fingerprint = JSON.stringify([endpoint, input]);
+    const attempt = retry ? explicit ?? inFlight.current[key] : { endpoint, input, fingerprint, commandId: crypto.randomUUID() };
+    if (!attempt) return;
+    remember(attempt, key);
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await call(endpoint, { instanceId, commandId: attempt.commandId, ...attempt.input });
+      remember(null, key);
+      await refresh();
+      setNotice(t(success));
+      return result;
+    } catch (failure) {
+      if (DETERMINISTIC.has(failure.code)) remember(null, key);
+      setError(failure.message);
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+  const create = (event) => {
+    event.preventDefault();
+    if (!label.trim() || !environmentId || busy) return;
+    void execute("browser-create", { environmentId, label: label.trim() }, "Browser resource created.").then((result) => {
+      if (result) setLabel("");
+    });
+  };
+  const setGrant = (active) => {
+    if (!selected || !workItemId || busy || selected.state === "revoked") return;
+    void execute(
+      "browser-grant",
+      { resourceId: selected.id, workItemId, expectedRevision: selected.revision, active },
+      active ? "Browser access granted." : "Browser access revoked."
+    );
+  };
+  const revoke = () => {
+    if (!selected || busy || !["available", "busy", "human", "unknown"].includes(selected.state) || !window.confirm(t("Revoke this browser resource and all of its work grants?"))) return;
+    void execute(
+      "browser-revoke",
+      { resourceId: selected.id, expectedRevision: selected.revision },
+      "Browser resource revoked."
+    );
+  };
+  const resolve2 = (operation) => {
+    const reason = reasons[operation.id]?.trim();
+    if (!selected || !reason || busy) return;
+    void execute(
+      "browser-resolve",
+      { resourceId: selected.id, operationId: operation.id, reason },
+      "Browser operation checked.",
+      false
+    ).then((result) => {
+      if (result) setReasons((current) => ({ ...current, [operation.id]: "" }));
+    });
+  };
+  const take = () => {
+    if (!selected || !workItemId || busy || selected.state === "revoked" || !browserBridge) return;
+    void execute(
+      "browser-take",
+      { resourceId: selected.id, workItemId, expectedRevision: selected.revision },
+      "Browser control taken."
+    );
+  };
+  const reconcileTake = () => {
+    if (!selected?.control || busy) return;
+    setBusy(true);
+    setError(null);
+    void call("browser-reconcile-take", { instanceId, resourceId: selected.id, controlId: selected.control.id }).then(
+      async () => {
+        remember(null, actionKey("browser-take", { resourceId: selected.id }));
+        await refresh();
+      },
+      (failure) => setError(failure.message)
+    ).finally(() => setBusy(false));
+  };
+  const giveBack = () => {
+    if (!selected?.control || busy) return;
+    void execute(
+      "browser-return",
+      { resourceId: selected.id, controlId: selected.control.id },
+      "Browser control returned."
+    ).then((result) => {
+      if (result) setManual(null);
+    });
+  };
+  const stop = () => {
+    const work = works.find((item) => item.brief?.workItemId === selected?.control?.workItemId);
+    if (!work?.receipt?.ticketId || !work.control?.assignment || busy) return;
+    void execute("work-stop", {
+      workItemId: selected.control.workItemId,
+      ticketId: work.receipt.ticketId,
+      expectedGeneration: work.control.assignment.generation,
+      expectedTicketVersion: work.control.ticketVersion,
+      reason: "Stopped by the user during browser control."
+    }, "Work stop requested.");
+  };
+  if (unavailable) return (0, import_react18.createElement)(
+    Card,
+    { title: t("Browser resources") },
+    (0, import_react18.createElement)("p", { className: "bt-product-resource-note" }, t("The local Host has no CDP browser bridge. Browser work remains unavailable."))
+  );
+  return (0, import_react18.createElement)(
+    import_react18.Fragment,
+    null,
+    (0, import_react18.createElement)(
+      Card,
+      { title: t("Browser resources") },
+      (0, import_react18.createElement)(
+        "p",
+        { className: "bt-product-resource-note" },
+        t("Each browser keeps an isolated profile. A local Worker needs an exact work-item grant before navigation or a read-only snapshot.")
+      ),
+      browserBridge ? (0, import_react18.createElement)(ProductBrowserImport, {
+        binding,
+        call,
+        browserBridge,
+        directoryOptions,
+        onChanged: () => {
+          void refresh();
+        }
+      }) : null,
+      (0, import_react18.createElement)("button", {
+        type: "button",
+        className: "bt-product-browser-refresh bt-soft bt-soft-sm",
+        disabled: Boolean(busy),
+        onClick: () => {
+          void refresh();
+        }
+      }, t("Refresh browser resources")),
+      !resources ? (0, import_react18.createElement)("p", { role: "status" }, t("Loading…")) : resources.length === 0 ? (0, import_react18.createElement)("p", { className: "bt-main-status" }, t("No browser resources yet.")) : (0, import_react18.createElement)("div", { className: "bt-product-resource-list" }, resources.map((resource) => (0, import_react18.createElement)(
+        "div",
+        {
+          key: resource.id,
+          className: "bt-product-browser-resource"
+        },
+        (0, import_react18.createElement)("button", {
+          type: "button",
+          className: "bt-soft",
+          disabled: Boolean(busy),
+          "aria-pressed": selectedId === resource.id,
+          onClick: () => setSelectedId(resource.id)
+        }, resource.label),
+        (0, import_react18.createElement)("span", { role: "status" }, `${t(BROWSER_STATES[resource.state] ?? "Unavailable")} · v${resource.revision} · ${resource.environmentId}`)
+      ))),
+      error ? (0, import_react18.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+      notice ? (0, import_react18.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
+      Object.values(pending).map((attempt) => (0, import_react18.createElement)(
+        "div",
+        { key: attempt.commandId, className: "bt-product-resource-row", role: "status" },
+        (0, import_react18.createElement)("span", null, `${actionLabel(attempt)} · ${t("pending confirmation. Retry the same command.")}`),
+        (0, import_react18.createElement)(
+          "button",
+          {
+            className: "bt-soft",
+            type: "button",
+            disabled: Boolean(busy),
+            "aria-label": t("Retry {action}", { action: actionLabel(attempt) }),
+            onClick: () => void execute(attempt.endpoint, attempt.input, "Browser change confirmed.", true, attempt)
+          },
+          t("Retry pending browser change")
+        )
+      )),
+      (0, import_react18.createElement)(
+        "form",
+        { className: "bt-product-browser-create", onSubmit: create },
+        (0, import_react18.createElement)(Row, { label: t("Browser name") }, (0, import_react18.createElement)("input", {
+          className: "bt-bs-input",
+          value: label,
+          maxLength: 128,
+          disabled: Boolean(busy),
+          placeholder: t("Research browser"),
+          onChange: (event) => setLabel(event.target.value)
+        })),
+        (0, import_react18.createElement)(Row, { label: t("Browser Environment") }, (0, import_react18.createElement)(
+          "select",
+          {
+            className: "bt-bs-input",
+            value: environmentId,
+            disabled: Boolean(busy) || directories.length === 0,
+            onChange: (event) => setEnvironmentId(event.target.value)
+          },
+          directories.length === 0 ? (0, import_react18.createElement)("option", { value: "" }, t("No local Environment")) : null,
+          directories.map((directory) => (0, import_react18.createElement)(
+            "option",
+            { key: directory.id, value: directory.id },
+            directory.title ?? directory.id
+          ))
+        )),
+        (0, import_react18.createElement)(
+          "button",
+          { className: "bt-soft", type: "submit", disabled: Boolean(busy) || Boolean(pending[actionKey("browser-create", { environmentId })]) || !label.trim() || !environmentId },
+          busy ? t("Saving…") : t("Create browser resource")
+        )
+      )
+    ),
+    selected ? (0, import_react18.createElement)(
+      Card,
+      { title: t("Browser work access") },
+      (0, import_react18.createElement)(
+        "div",
+        { className: "bt-product-resource-selected" },
+        (0, import_react18.createElement)("h3", null, selected.label),
+        (0, import_react18.createElement)("p", { role: "status" }, `${t(BROWSER_STATES[selected.state] ?? "Unavailable")} · v${selected.revision}`),
+        selected.owner ? (0, import_react18.createElement)(
+          "p",
+          { className: "bt-product-resource-note" },
+          `${t("Browser owner")}: ${selected.owner.ticketId} · ${selected.owner.generation}`
+        ) : null,
+        selected.control ? (0, import_react18.createElement)(
+          "div",
+          { className: "bt-product-browser-control", role: "status" },
+          (0, import_react18.createElement)("p", null, t("A person controls this browser. Worker browser calls wait for explicit return.")),
+          selected.control.state === "held" && manual?.controlId === selected.control.id && manual.profile && browserBridge ? (0, import_react18.createElement)(ManualBrowserView, { browserBridge, profile: manual.profile, label: selected.label }) : null,
+          selected.control.state === "held" || selected.control.state === "returning" ? (0, import_react18.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy) || Boolean(pending[actionKey("browser-return", { resourceId: selected.id })]), onClick: giveBack }, t("Give browser back")) : null,
+          selected.control.state === "taking" ? (0, import_react18.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy), onClick: reconcileTake }, t("Reconnect browser control")) : null
+        ) : selectedWorks.length > 0 && browserBridge ? (0, import_react18.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy) || selected.state === "revoked" || !workItemId || !activeGrant || Boolean(pending[actionKey("browser-take", { resourceId: selected.id })]), onClick: take }, t("Take over browser")) : null,
+        selected.control && works.some((item) => item.brief?.workItemId === selected.control.workItemId && item.control?.assignment && item.control.stop?.state !== "stopped") ? (0, import_react18.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy), onClick: stop }, t("Stop browser work")) : null,
+        (0, import_react18.createElement)(
+          "div",
+          { className: "bt-product-resource-row" },
+          (0, import_react18.createElement)("button", {
+            className: "bt-soft",
+            type: "button",
+            disabled: Boolean(busy) || Boolean(pending[actionKey("browser-revoke", { resourceId: selected.id })]) || selected.state === "importing" || selected.state === "revoked",
+            onClick: revoke
+          }, t("Revoke browser resource"))
+        ),
+        selected.grantsTruncated ? (0, import_react18.createElement)(
+          "p",
+          { className: "bt-product-resource-note", role: "status" },
+          t("This resource has more than 100 grants. No new grant can be added until stored grants are cleaned up.")
+        ) : null,
+        selectedWorks.length === 0 ? (0, import_react18.createElement)(
+          "p",
+          { className: "bt-main-status" },
+          t("No accepted work item is available in this Environment.")
+        ) : (0, import_react18.createElement)(
+          import_react18.Fragment,
+          null,
+          (0, import_react18.createElement)(Row, { label: t("Browser work item") }, (0, import_react18.createElement)(
+            "select",
+            {
+              className: "bt-bs-input",
+              value: workItemId,
+              disabled: Boolean(busy) || selected.state === "revoked",
+              onChange: (event) => setWorkItemId(event.target.value)
+            },
+            selectedWorks.map((work) => (0, import_react18.createElement)("option", { key: work.brief.workItemId, value: work.brief.workItemId }, work.brief.goal))
+          )),
+          (0, import_react18.createElement)(
+            "div",
+            { className: "bt-product-resource-row" },
+            (0, import_react18.createElement)(
+              "button",
+              { className: "bt-soft", type: "button", disabled: Boolean(busy) || Boolean(selected && pending[actionKey("browser-grant", { resourceId: selected.id, workItemId })]) || selected.state === "revoked" || !workItemId, onClick: () => setGrant(!activeGrant) },
+              t(activeGrant ? "Revoke browser from this work" : "Grant browser to this work")
+            )
+          )
+        ),
+        selected.grants?.length ? (0, import_react18.createElement)(
+          "div",
+          { className: "bt-product-resource-list" },
+          selected.grants.map((grant) => (0, import_react18.createElement)(
+            "div",
+            { key: grant.workItemId, className: "bt-product-resource-row" },
+            (0, import_react18.createElement)("span", null, `${grant.workItemId} · ${t(grant.active ? "Allowed" : "Revoked")}`)
+          ))
+        ) : null,
+        (0, import_react18.createElement)(
+          "details",
+          { className: "bt-product-browser-operations", open: selected.state === "unknown" || void 0 },
+          (0, import_react18.createElement)("summary", null, t("Recent browser operations")),
+          selected.operations?.length ? selected.operations.slice().reverse().map((operation) => (0, import_react18.createElement)(
+            "div",
+            {
+              key: operation.id,
+              className: "bt-product-browser-operation"
+            },
+            (0, import_react18.createElement)("p", null, `${operation.action} · ${t(OPERATION_STATES[operation.state] ?? operation.state)} · ${new Date(operation.createdAt).toLocaleString()}`),
+            (0, import_react18.createElement)("span", { className: "bt-set-hint" }, operation.id),
+            operation.code ? (0, import_react18.createElement)("p", { className: "bt-main-error" }, operation.code) : null,
+            operation.resolution ? (0, import_react18.createElement)(
+              "p",
+              { className: "bt-set-hint" },
+              t(OBSERVATIONS[operation.resolution] ?? "Browser operation checked")
+            ) : null,
+            operation.state === "unknown" || selected.state === "unknown" && operation.state === "pending" ? (0, import_react18.createElement)(
+              "div",
+              { className: "bt-product-browser-resolve" },
+              (0, import_react18.createElement)(
+                "select",
+                {
+                  className: "bt-bs-input",
+                  value: reasons[operation.id] ?? "",
+                  "aria-label": t("Observed browser state"),
+                  disabled: Boolean(busy),
+                  onChange: (event) => setReasons((current) => ({ ...current, [operation.id]: event.target.value }))
+                },
+                (0, import_react18.createElement)("option", { value: "" }, t("Choose the observed browser state")),
+                Object.entries(OBSERVATIONS).map(([value, label2]) => (0, import_react18.createElement)("option", { key: value, value }, t(label2)))
+              ),
+              (0, import_react18.createElement)(
+                "button",
+                { className: "bt-soft", type: "button", disabled: Boolean(busy) || Boolean(pending[actionKey("browser-resolve", { resourceId: selected.id, operationId: operation.id })]) || !(reasons[operation.id] ?? "").trim(), onClick: () => resolve2(operation) },
+                t("Record browser check")
+              )
+            ) : null
+          )) : (0, import_react18.createElement)("p", { className: "bt-set-hint" }, t("No browser operations yet."))
+        )
+      )
+    ) : null
+  );
+}
+function ManualBrowserView({ browserBridge, profile, label }) {
+  const frame = (0, import_react18.useRef)(null);
+  const tabId = (0, import_react18.useRef)(null);
+  if (!tabId.current) tabId.current = crypto.randomUUID();
+  const [address, setAddress] = (0, import_react18.useState)("");
+  const [error, setError] = (0, import_react18.useState)(null);
+  (0, import_react18.useEffect)(() => {
+    let live = true;
+    const tab = tabId.current;
+    const place = () => {
+      if (!live || !frame.current) return;
+      const box = frame.current.getBoundingClientRect();
+      const scroll = frame.current.closest(".bt-settings-scroll")?.getBoundingClientRect();
+      const visible = !document.hidden && box.width > 0 && box.height > 0 && (!scroll || box.top >= scroll.top && box.bottom <= scroll.bottom);
+      void browserBridge.views.place(tab, { left: box.left, top: box.top, width: box.width, height: box.height }, visible);
+    };
+    void browserBridge.views.create(profile, tab, "about:blank").then(place, (failure) => {
+      if (live) setError(failure.message);
+    });
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(place) : null;
+    if (frame.current) observer?.observe(frame.current);
+    window.addEventListener("resize", place);
+    document.addEventListener("scroll", place, true);
+    document.addEventListener("visibilitychange", place);
+    return () => {
+      live = false;
+      observer?.disconnect();
+      window.removeEventListener("resize", place);
+      document.removeEventListener("scroll", place, true);
+      document.removeEventListener("visibilitychange", place);
+      void browserBridge.views.place(tab, null, false);
+      void browserBridge.views.close(profile, tab);
+    };
+  }, [browserBridge, profile]);
+  const open = (event) => {
+    event.preventDefault();
+    const url = address.trim();
+    if (!/^https?:\/\//iu.test(url)) {
+      setError(t("Enter an HTTP or HTTPS address."));
+      return;
+    }
+    setError(null);
+    void browserBridge.views.navigate(profile, tabId.current, url).catch((failure) => setError(failure.message));
+  };
+  return (0, import_react18.createElement)(
+    "div",
+    { className: "bt-product-manual-browser" },
+    (0, import_react18.createElement)("p", { className: "bt-product-resource-note" }, t("Manual browser control: {label}", { label })),
+    (0, import_react18.createElement)(
+      "form",
+      { onSubmit: open, className: "bt-product-manual-browser-form" },
+      (0, import_react18.createElement)("input", {
+        className: "bt-bs-input",
+        value: address,
+        "aria-label": t("Browser address"),
+        onChange: (event) => setAddress(event.target.value)
+      }),
+      (0, import_react18.createElement)("button", { className: "bt-soft", type: "submit" }, t("Open"))
+    ),
+    error ? (0, import_react18.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+    (0, import_react18.createElement)("div", { ref: frame, className: "bt-product-manual-browser-frame", role: "region", "aria-label": t("Manual browser") })
+  );
+}
+var PRODUCT_BROWSER_CSS = PRODUCT_BROWSER_IMPORT_CSS + `
+.bt-product-browser-resource{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.bt-product-browser-control{margin-top:10px;padding:10px;border:1px solid var(--bt-line-2);border-radius:8px;background:var(--bt-hover)}
+.bt-product-browser-control>p{margin:0 0 8px;font-size:12px;color:var(--bt-ink-2)}
+.bt-product-manual-browser{margin:10px 0}
+.bt-product-manual-browser-form{display:flex;gap:6px;margin-bottom:8px}
+.bt-product-manual-browser-form input{flex:1;min-width:0}
+.bt-product-manual-browser-frame{height:280px;min-height:160px;border:1px solid var(--bt-line-2);border-radius:8px;overflow:hidden;background:var(--bt-main)}
+.bt-product-browser-resource>span{color:var(--bt-ink-2);font-size:12px}
+.bt-product-browser-create{display:flex;flex-direction:column;align-items:stretch;gap:8px;margin-top:12px}
+.bt-product-browser-operations{margin-top:12px}
+.bt-product-browser-operations summary{cursor:pointer;font-size:12px;color:var(--bt-ink-2)}
+.bt-product-browser-operation{padding:9px 0;border-top:1px solid var(--bt-line-2);font-size:12px}
+.bt-product-browser-operation>p{margin:3px 0;overflow-wrap:anywhere}
+.bt-product-browser-resolve{display:flex;gap:8px;align-items:center;margin-top:8px}
+.bt-product-browser-resolve input{flex:1;min-width:0}
+.bt-product-browser-resolve select{flex:1;min-width:0}
+.bt-product-browser-refresh:focus-visible,.bt-product-browser-resource button:focus-visible,.bt-product-browser-create button:focus-visible,.bt-product-browser-create input:focus-visible,.bt-product-browser-create select:focus-visible,.bt-product-resource-selected select:focus-visible,.bt-product-browser-operation button:focus-visible,.bt-product-browser-operation select:focus-visible,.bt-product-manual-browser input:focus-visible,.bt-product-manual-browser button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+@media(max-width:640px){.bt-product-browser-resource{align-items:flex-start;flex-direction:column}.bt-product-browser-resolve{align-items:stretch;flex-direction:column}}
+`;
+
+// src/client/product-execution.js
+var import_react19 = require("react");
+var targets = [["local", "Local"], ["remote-only", "Remote only"], ["auto", "Auto"]];
+var permissions = ["read", "write", "search", "command"];
+var permissionLabels = {
+  read: "Read access",
+  write: "Write access",
+  search: "Search access",
+  command: "Command access",
+  browser: "Browser",
+  mcp: "MCP",
+  office: "Office"
+};
+function permissionLabel(permission) {
+  return t(permissionLabels[permission] ?? permission);
+}
+function permissionCopy(permissions2) {
+  return permissions2.map(permissionLabel).join(", ");
+}
+function candidateReasonCopy(reason) {
+  const target = /^target ([^ ]+) excludes (local|remote) Environments$/u.exec(reason);
+  if (target) return t(
+    "target {target} excludes {kind} Environments",
+    { target: target[1] === "remote-only" ? t("Remote only") : t("Local"), kind: target[2] === "local" ? t("Local") : t("Remote") }
+  );
+  if (reason.startsWith("Environment is offline:")) return t(
+    "Environment is offline: {reason}",
+    { reason: reason.slice("Environment is offline: ".length) }
+  );
+  if (reason === "Environment is offline") return t("Environment is offline");
+  if (reason === "Environment version is unverified") return t("Environment version is unverified");
+  if (reason === "Environment fingerprint is unverified") return t("Environment fingerprint is unverified");
+  if (reason === "Environment capacity is unknown") return t("Environment capacity is unknown");
+  const missing = /^missing capability: ([^ (]+)(?: \((.+)\))?$/u.exec(reason);
+  if (missing) return missing[2] ? t("Missing capability: {capability} ({detail})", { capability: t(missing[1]), detail: missing[2] }) : t("Missing capability: {capability}", { capability: t(missing[1]) });
+  const capacity = /^capacity is full \((.+)\)$/u.exec(reason);
+  if (capacity) return t("Execution capacity is full ({count}).", { count: capacity[1] });
+  return t(reason);
+}
+function environmentLabel(environment) {
+  const name = environment.label || environment.title;
+  return `${name || environment.id} · ${environment.kind === "remote" ? t("Remote") : t("Local")}`;
+}
+function capabilityReadErrorCopy(reason) {
+  if (reason === "RESOURCE_UNAVAILABLE") return t("The remote Environment credential record is unavailable.");
+  if (reason === "ENVIRONMENT_DENIED") return t("This Environment is not authorized for the current Instance.");
+  if (/^[A-Z][A-Z0-9_]+$/u.test(reason)) return t("Capabilities could not be read. Check this Environment before assigning work.");
+  return t(reason);
+}
+function pairingStatusCopy(status) {
+  return {
+    pending: t("Pairing running"),
+    unknown: t("Pairing unknown"),
+    completed: t("Pairing completed"),
+    abandoned: t("Pairing abandoned")
+  }[status] ?? t("Unknown");
+}
+function ProductExecutionSettings({ binding, call, onChanged }) {
+  const [snapshot, setSnapshot] = (0, import_react19.useState)(null);
+  const [draft, setDraft] = (0, import_react19.useState)(null);
+  const [pairing, setPairing] = (0, import_react19.useState)(null);
+  const [pairIssue, setPairIssue] = (0, import_react19.useState)(null);
+  const [confirmPairAbandon, setConfirmPairAbandon] = (0, import_react19.useState)(false);
+  const [revocation, setRevocation] = (0, import_react19.useState)(null);
+  const [cleanup, setCleanup] = (0, import_react19.useState)(null);
+  const [busy, setBusy] = (0, import_react19.useState)(false);
+  const [error, setError] = (0, import_react19.useState)("");
+  const [notice, setNotice] = (0, import_react19.useState)("");
+  const load = async () => {
+    const value = await call("execution-options", { instanceId: binding.instanceId });
+    setSnapshot(value);
+    setDraft((current) => current ?? { ...value.policy, requiredPermissions: [...value.policy.requiredPermissions] });
+    return value;
+  };
+  (0, import_react19.useEffect)(() => {
+    let live = true;
+    setSnapshot(null);
+    setDraft(null);
+    setError("");
+    void load().catch((failure) => {
+      if (live) setError(t(failure.message));
+    });
+    return () => {
+      live = false;
+    };
+  }, [binding.instanceId]);
+  const run2 = async (operation) => {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await operation();
+    } catch (failure) {
+      setError(t(failure.message));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const savePolicy = () => run2(async () => {
+    await call("execution-policy-save", {
+      instanceId: binding.instanceId,
+      commandId: crypto.randomUUID(),
+      expectedRevision: snapshot.policy.revision,
+      policy: {
+        defaultTarget: draft.defaultTarget,
+        requiredPermissions: draft.requiredPermissions,
+        preferredEnvironmentId: draft.preferredEnvironmentId || null
+      }
+    });
+    await load();
+    setNotice(t("Execution policy saved."));
+    onChanged?.();
+  });
+  const openPairing = () => {
+    setPairIssue(null);
+    setConfirmPairAbandon(false);
+    setPairing({
+      commandId: crypto.randomUUID(),
+      label: "",
+      environmentId: `remote-${crypto.randomUUID().slice(0, 8)}`,
+      endpoint: "",
+      deviceId: "",
+      deviceKey: "",
+      pairingCode: "",
+      permissions: ["read", "write", "search"]
+    });
+  };
+  const checkPairing = async () => {
+    const result = await call("remote-environment-pair-read", {
+      instanceId: binding.instanceId,
+      commandId: pairing.commandId
+    });
+    setPairIssue(result);
+    return result;
+  };
+  const pair = (event) => {
+    event.preventDefault();
+    void run2(async () => {
+      try {
+        await call("remote-environment-pair", {
+          instanceId: binding.instanceId,
+          commandId: pairing.commandId,
+          environmentId: pairing.environmentId,
+          label: pairing.label,
+          endpoint: pairing.endpoint,
+          pairingCode: pairing.pairingCode,
+          expectedDeviceId: pairing.deviceId,
+          expectedDeviceKey: pairing.deviceKey,
+          permissions: pairing.permissions
+        });
+      } catch (failure) {
+        if (["PAIRING_UNKNOWN", "PAIRING_PENDING", "PAIRING_STALE"].includes(failure.code)) {
+          await checkPairing().catch(() => {
+          });
+        }
+        throw failure;
+      }
+      setPairing(null);
+      setPairIssue(null);
+      await load();
+      setNotice(t("Device paired."));
+      onChanged?.();
+    });
+  };
+  const abandonPairing = () => {
+    if (!confirmPairAbandon) {
+      setConfirmPairAbandon(true);
+      return;
+    }
+    setConfirmPairAbandon(false);
+    void run2(async () => {
+      const result = await call("remote-environment-pair-abandon", {
+        instanceId: binding.instanceId,
+        commandId: pairing.commandId
+      });
+      setPairing(null);
+      setPairIssue(null);
+      await load();
+      if (result.secretCleanupPending) {
+        setCleanup({ kind: "pair", commandId: pairing.commandId });
+        setNotice(t("Pairing state abandoned; credential cleanup is pending."));
+      } else setNotice(t("Pairing state abandoned. Check the device before pairing again."));
+      onChanged?.();
+    });
+  };
+  const revoke = (environmentId) => {
+    if (revocation?.environmentId !== environmentId) {
+      setRevocation({ environmentId, commandId: crypto.randomUUID() });
+      return;
+    }
+    void run2(async () => {
+      const result = await call("remote-environment-revoke", {
+        instanceId: binding.instanceId,
+        commandId: revocation.commandId,
+        environmentId
+      });
+      await load();
+      setRevocation(null);
+      if (result.secretCleanupPending) {
+        setCleanup({ kind: "revoke", commandId: revocation.commandId, environmentId });
+        setNotice(t("Device revoked; credential cleanup is pending."));
+      } else setNotice(result.deviceConfirmed ? t("Device revoked.") : t("Host revoked this device; confirmation was unavailable."));
+      onChanged?.();
+    });
+  };
+  const retryCleanup = () => {
+    if (!cleanup) return;
+    void run2(async () => {
+      const result = cleanup.kind === "pair" ? await call("remote-environment-pair-abandon", { instanceId: binding.instanceId, commandId: cleanup.commandId }) : await call("remote-environment-revoke", {
+        instanceId: binding.instanceId,
+        commandId: cleanup.commandId,
+        environmentId: cleanup.environmentId
+      });
+      if (result.secretCleanupPending) {
+        setNotice(t("Credential cleanup is still pending. Retry after the credential service recovers."));
+        return;
+      }
+      setCleanup(null);
+      setNotice(t("Credential cleanup completed."));
+    });
+  };
+  const update = (path, value) => setDraft((current) => {
+    const next = structuredClone(current);
+    let target = next;
+    for (const key of path.slice(0, -1)) target = target[key];
+    target[path.at(-1)] = value;
+    return next;
+  });
+  if (!snapshot || !draft) return (0, import_react19.createElement)("p", { role: "status" }, error || t("Loading…"));
+  return (0, import_react19.createElement)(
+    "section",
+    { className: "bt-product-execution", "aria-label": t("Execution targets") },
+    error ? (0, import_react19.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+    notice ? (0, import_react19.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
+    cleanup ? (0, import_react19.createElement)(
+      "div",
+      { className: "bt-product-execution-cleanup" },
+      (0, import_react19.createElement)("p", { className: "bt-main-error" }, t("Credential cleanup is pending for a device operation.")),
+      (0, import_react19.createElement)(
+        "button",
+        { type: "button", className: "bt-soft bt-danger", disabled: busy, onClick: retryCleanup },
+        t("Retry credential cleanup")
+      )
+    ) : null,
+    snapshot.remoteLoadErrors?.length ? (0, import_react19.createElement)(
+      Card,
+      { title: t("Unavailable remote devices") },
+      snapshot.remoteLoadErrors.map((item) => (0, import_react19.createElement)(
+        "p",
+        { key: item.id, className: "bt-main-error" },
+        `${item.id}: ${capabilityReadErrorCopy(item.reason)}`
+      ))
+    ) : null,
+    (0, import_react19.createElement)(
+      Card,
+      { title: t("Execution policy") },
+      (0, import_react19.createElement)("p", null, t("This policy chooses a target for new work. Active assignments keep their original Environment.")),
+      (0, import_react19.createElement)("label", null, t("Default target"), (0, import_react19.createElement)("select", {
+        className: "bt-select",
+        value: draft.defaultTarget,
+        onChange: (event) => update(["defaultTarget"], event.target.value)
+      }, targets.map(([value, label]) => (0, import_react19.createElement)("option", { key: value, value }, t(label))))),
+      (0, import_react19.createElement)("label", null, t("Preferred Environment"), (0, import_react19.createElement)(
+        "select",
+        {
+          className: "bt-select",
+          value: draft.preferredEnvironmentId ?? "",
+          onChange: (event) => update(["preferredEnvironmentId"], event.target.value || void 0)
+        },
+        (0, import_react19.createElement)("option", { value: "" }, t("No preference")),
+        snapshot.environments.map((environment) => (0, import_react19.createElement)("option", { key: environment.id, value: environment.id }, environmentLabel(environment)))
+      )),
+      (0, import_react19.createElement)(
+        "fieldset",
+        null,
+        (0, import_react19.createElement)("legend", null, t("Required capabilities")),
+        permissions.map((permission) => (0, import_react19.createElement)(
+          "label",
+          { key: permission },
+          (0, import_react19.createElement)("input", {
+            type: "checkbox",
+            checked: draft.requiredPermissions.includes(permission),
+            onChange: (event) => update(["requiredPermissions"], event.target.checked ? [...draft.requiredPermissions, permission] : draft.requiredPermissions.filter((item) => item !== permission))
+          }),
+          permissionLabel(permission)
+        ))
+      ),
+      (0, import_react19.createElement)("button", {
+        type: "button",
+        className: "bt-soft",
+        disabled: busy || !draft.requiredPermissions.length,
+        onClick: savePolicy
+      }, t("Save execution policy"))
+    ),
+    (0, import_react19.createElement)(
+      Card,
+      { title: t("Devices and Environments") },
+      snapshot.environments.map((environment) => (0, import_react19.createElement)(
+        "article",
+        { key: environment.id, className: "bt-product-execution-row" },
+        (0, import_react19.createElement)("strong", null, environmentLabel(environment)),
+        (0, import_react19.createElement)("p", null, `${t("Status")}: ${environment.kind === "remote" ? environment.online === false ? t("Offline") : t("Configured") : t("Local")} · ${t("Permissions")}: ${permissionCopy(environment.permissions)}`),
+        (0, import_react19.createElement)("p", null, `${t("Device")}: ${environment.deviceId ?? t("This Host")} · ${t("Directory")}: ${environment.root}`),
+        environment.reasons?.length ? (0, import_react19.createElement)(
+          "p",
+          { className: "bt-main-work-detail" },
+          `${t("Selection issues")}: ${environment.reasons.map(candidateReasonCopy).join("; ")}`
+        ) : null,
+        environment.capabilities?.unavailable ? (0, import_react19.createElement)(
+          "p",
+          { className: "bt-main-error" },
+          `${t("Capabilities unavailable")}: ${capabilityReadErrorCopy(environment.capabilities.reason)}`
+        ) : (0, import_react19.createElement)(
+          "p",
+          null,
+          `${t("Attachments")}: ${environment.capabilities?.attachments?.supported ? t("Available") : t("Unavailable")} · ${t("Skills")}: ${environment.capabilities?.skills?.supported ? t("Available") : t("Unavailable")}`
+        ),
+        environment.kind === "remote" ? (0, import_react19.createElement)("button", {
+          type: "button",
+          className: `bt-soft bt-soft-sm${revocation?.environmentId === environment.id ? " bt-danger" : ""}`,
+          disabled: busy,
+          onClick: () => revoke(environment.id)
+        }, t(revocation?.environmentId === environment.id ? "Confirm revoke device" : "Revoke device")) : null
+      )),
+      pairing ? (0, import_react19.createElement)(
+        "form",
+        { className: "bt-product-execution-form", onSubmit: pair },
+        pairIssue ? (0, import_react19.createElement)(
+          "section",
+          { className: "bt-product-execution-pair-issue" },
+          (0, import_react19.createElement)("p", { role: "status" }, `${t("Pairing status")}: ${pairingStatusCopy(pairIssue.status)}${pairIssue.active ? ` · ${t("Command running")}` : ""}${pairIssue.recoverable ? ` · ${t("Saved device can be restored after Host restart")}` : ""}`),
+          (0, import_react19.createElement)(
+            "div",
+            { className: "bt-actions" },
+            (0, import_react19.createElement)(
+              "button",
+              { type: "button", className: "bt-soft", disabled: busy, onClick: () => void run2(checkPairing) },
+              t("Check pairing status")
+            ),
+            pairIssue.canAbandon ? (0, import_react19.createElement)("button", {
+              type: "button",
+              className: "bt-soft bt-danger",
+              disabled: busy,
+              onClick: abandonPairing
+            }, t(confirmPairAbandon ? "Confirm abandon pairing" : "Abandon uncertain pairing")) : null
+          )
+        ) : null,
+        (0, import_react19.createElement)("label", null, t("Device name"), (0, import_react19.createElement)("input", {
+          className: "bt-bs-input",
+          required: true,
+          maxLength: 128,
+          value: pairing.label,
+          onChange: (event) => setPairing((current) => ({ ...current, label: event.target.value }))
+        })),
+        (0, import_react19.createElement)("label", null, t("Environment ID"), (0, import_react19.createElement)("input", {
+          className: "bt-bs-input",
+          required: true,
+          value: pairing.environmentId,
+          onChange: (event) => setPairing((current) => ({ ...current, environmentId: event.target.value }))
+        })),
+        (0, import_react19.createElement)("label", null, t("Device endpoint"), (0, import_react19.createElement)("input", {
+          className: "bt-bs-input",
+          required: true,
+          inputMode: "url",
+          placeholder: "https://device.example",
+          value: pairing.endpoint,
+          onChange: (event) => setPairing((current) => ({ ...current, endpoint: event.target.value }))
+        })),
+        (0, import_react19.createElement)("label", null, t("Device ID"), (0, import_react19.createElement)("input", {
+          className: "bt-bs-input",
+          required: true,
+          value: pairing.deviceId,
+          onChange: (event) => setPairing((current) => ({ ...current, deviceId: event.target.value }))
+        })),
+        (0, import_react19.createElement)("label", null, t("Device key fingerprint"), (0, import_react19.createElement)("input", {
+          className: "bt-bs-input",
+          required: true,
+          pattern: "[a-f0-9]{64}",
+          value: pairing.deviceKey,
+          onChange: (event) => setPairing((current) => ({ ...current, deviceKey: event.target.value }))
+        })),
+        (0, import_react19.createElement)("label", null, t("Pairing code"), (0, import_react19.createElement)("input", {
+          className: "bt-bs-input",
+          required: true,
+          type: "password",
+          autoComplete: "one-time-code",
+          value: pairing.pairingCode,
+          onChange: (event) => setPairing((current) => ({ ...current, pairingCode: event.target.value }))
+        })),
+        (0, import_react19.createElement)(
+          "fieldset",
+          null,
+          (0, import_react19.createElement)("legend", null, t("Device permissions")),
+          permissions.map((permission) => (0, import_react19.createElement)(
+            "label",
+            { key: permission },
+            (0, import_react19.createElement)("input", {
+              type: "checkbox",
+              checked: pairing.permissions.includes(permission),
+              onChange: (event) => setPairing((current) => ({ ...current, permissions: event.target.checked ? [...current.permissions, permission] : current.permissions.filter((item) => item !== permission) }))
+            }),
+            permissionLabel(permission)
+          ))
+        ),
+        (0, import_react19.createElement)(
+          "div",
+          { className: "bt-actions" },
+          (0, import_react19.createElement)("button", { type: "submit", className: "bt-soft", disabled: busy || !pairing.permissions.length }, t("Pair device")),
+          (0, import_react19.createElement)("button", { type: "button", className: "bt-soft", onClick: () => setPairing(null) }, t("Cancel"))
+        )
+      ) : (0, import_react19.createElement)("button", { type: "button", className: "bt-soft", onClick: openPairing }, t("Pair a device"))
+    )
+  );
+}
+var PRODUCT_EXECUTION_CSS = `
+.bt-product-execution{display:grid;gap:12px}
+.bt-product-execution label{display:grid;gap:6px;font-size:13px}
+.bt-product-execution fieldset{display:flex;gap:12px;flex-wrap:wrap;border:1px solid var(--bt-line);border-radius:12px}
+.bt-product-execution fieldset label{display:flex;align-items:center;gap:6px}
+.bt-product-execution-row{display:grid;gap:5px;padding:12px 0;border-top:1px solid var(--bt-line);overflow-wrap:anywhere}
+.bt-product-execution-row button{justify-self:start}
+.bt-product-execution-form{display:grid;gap:12px}
+.bt-product-execution-pair-issue{display:grid;gap:8px;padding:10px 12px;border:1px solid var(--bt-line);border-radius:12px}
+.bt-product-execution-cleanup{display:grid;gap:8px;justify-items:start}
+`;
+
+// node_modules/deep-view/src/react/ui.js
+var import_react20 = require("react");
+var FallbackMarkdown = ({ text }) => (0, import_react20.createElement)("span", null, String(text ?? ""));
+var ViewUi = (0, import_react20.createContext)({ t: (key) => key, Markdown: FallbackMarkdown });
+var useViewUi = () => (0, import_react20.useContext)(ViewUi);
+var lineIcon2 = (paths) => function LineIcon() {
+  return (0, import_react20.createElement)(
+    "svg",
+    { width: 15, height: 15, viewBox: "0 0 20 20", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true },
+    paths.map((d, index) => (0, import_react20.createElement)("path", { key: index, d }))
+  );
+};
+var DotsIcon2 = lineIcon2(["M5 10h.01M10 10h.01M15 10h.01"]);
+var CheckIcon2 = lineIcon2(["M4.5 10.5l3.5 3.5 7.5-8"]);
+var DownloadIcon2 = lineIcon2(["M10 3.5v9", "M6.5 9.5L10 13l3.5-3.5", "M4 16h12"]);
+var CopyIcon2 = lineIcon2(["M8.5 7h6A1.5 1.5 0 0 1 16 8.5v6a1.5 1.5 0 0 1-1.5 1.5h-6A1.5 1.5 0 0 1 7 14.5v-6A1.5 1.5 0 0 1 8.5 7z", "M4 12.5V5.5A1.5 1.5 0 0 1 5.5 4H13"]);
+var InfoIcon2 = lineIcon2(["M10 3.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13z", "M10 9.25v4", "M10 6.6h.01"]);
+function CloseIcon2() {
+  return (0, import_react20.createElement)("svg", { width: 16, height: 16, viewBox: "0 0 20 20", "aria-hidden": true }, (0, import_react20.createElement)("path", { d: "M5 5l10 10M15 5L5 15", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" }));
+}
+function Segmented2({ label, value, className, children }) {
+  return (0, import_react20.createElement)("div", { className: className ? `dv-seg ${className}` : "dv-seg", role: "group", "aria-label": label, "data-active": value }, children);
+}
+var keyLetter = (index) => String.fromCharCode(65 + index);
+var isTypingTarget = (node) => node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement || node instanceof HTMLSelectElement || node instanceof HTMLElement && node.isContentEditable;
+var keyCards = /* @__PURE__ */ (() => {
+  let count = 0;
+  const listeners = /* @__PURE__ */ new Set();
+  return {
+    subscribe: (fn) => (listeners.add(fn), () => listeners.delete(fn)),
+    getSnapshot: () => count,
+    set: (change) => {
+      count = change(count);
+      for (const fn of listeners) fn();
+    }
+  };
+})();
+function useOptionKeys(count, onPick, ownRef) {
+  const pick = (0, import_react20.useRef)(onPick);
+  pick.current = onPick;
+  const listening = (0, import_react20.useSyncExternalStore)(keyCards.subscribe, keyCards.getSnapshot);
+  (0, import_react20.useEffect)(() => {
+    if (count === 0) return void 0;
+    keyCards.set((value) => value + 1);
+    const onKey = (event) => {
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.key.length !== 1) return;
+      if (isTypingTarget(event.target) || isTypingTarget(document.activeElement)) return;
+      if (document.querySelector('[role="dialog"], [aria-modal="true"]') !== null) return;
+      if (keyCards.getSnapshot() !== 1) return;
+      const index = event.key.toUpperCase().charCodeAt(0) - 65;
+      if (index >= 0 && index < count) {
+        event.preventDefault();
+        pick.current(index);
+      } else if (index === count && ownRef.current) {
+        event.preventDefault();
+        ownRef.current.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("keydown", onKey, true);
+      keyCards.set((value) => value - 1);
+    };
+  }, [count, ownRef]);
+  return count > 0 && listening <= 1;
+}
+
+// node_modules/deep-view/src/core/formula.js
+var FUNCTIONS = {
+  min: { args: [1, Infinity], run: (...values) => Math.min(...values.map(num)) },
+  max: { args: [1, Infinity], run: (...values) => Math.max(...values.map(num)) },
+  abs: { args: [1, 1], run: (value) => Math.abs(num(value)) },
+  floor: { args: [1, 1], run: (value) => Math.floor(num(value)) },
+  ceil: { args: [1, 1], run: (value) => Math.ceil(num(value)) },
+  sqrt: { args: [1, 1], run: (value) => Math.sqrt(num(value)) },
+  pow: { args: [2, 2], run: (base, power) => num(base) ** num(power) },
+  round: { args: [1, 2], run: (value, digits = 0) => roundTo(num(value), digitsOf(digits)) },
+  clamp: { args: [3, 3], run: (value, low, high) => Math.min(Math.max(num(value), num(low)), num(high)) },
+  fixed: { args: [1, 2], run: (value, digits = 0) => roundTo(num(value), digitsOf(digits)).toFixed(digitsOf(digits)) },
+  format: { args: [1, 2], run: (value, digits = 0) => grouped(num(value), digitsOf(digits)) },
+  percent: { args: [1, 2], run: (value, digits = 0) => `${grouped(num(value) * 100, digitsOf(digits))}%` }
+};
+var FORMULA_FUNCTIONS = Object.keys(FUNCTIONS);
+var CONSTANTS = /* @__PURE__ */ new Map([["true", true], ["false", false]]);
+var MAX_NESTING = 64;
+var FormulaError = class extends Error {
+};
+var fail = (message) => {
+  throw new FormulaError(message);
+};
+function num(value) {
+  if (typeof value === "number") return value;
+  if (typeof value === "boolean") return value ? 1 : 0;
+  const parsed = Number(value);
+  if (typeof value === "string" && value.trim() !== "" && !Number.isNaN(parsed)) return parsed;
+  return fail(`${JSON.stringify(value)} is not a number`);
+}
+var digitsOf = (digits) => {
+  const value = num(digits);
+  if (!Number.isInteger(value) || value < 0 || value > 10) fail("digits must be a whole number from 0 to 10");
+  return value;
+};
+var roundTo = (value, digits) => {
+  const scale = 10 ** digits;
+  return Math.round(value * scale) / scale;
+};
+function grouped(value, digits) {
+  if (!Number.isFinite(value)) return String(value);
+  const [whole, part] = Math.abs(roundTo(value, digits)).toFixed(digits).split(".");
+  const sign = value < 0 && Number(whole + (part ?? "")) !== 0 ? "-" : "";
+  return `${sign}${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}${part ? `.${part}` : ""}`;
+}
+var IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
+var isName = (value) => typeof value === "string" && IDENT.test(value);
+var OPERATORS = ["==", "!=", "<=", ">=", "&&", "||", "+", "-", "*", "/", "%", "<", ">", "!", "?", ":", "(", ")", ","];
+function tokenize(source) {
+  const tokens = [];
+  let at = 0;
+  while (at < source.length) {
+    const char = source[at];
+    if (/\s/.test(char)) {
+      at += 1;
+      continue;
+    }
+    const number2 = /^(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/.exec(source.slice(at));
+    if (number2) {
+      tokens.push({ kind: "number", value: Number(number2[0]), at });
+      at += number2[0].length;
+      continue;
+    }
+    const name = /^[A-Za-z_][A-Za-z0-9_]*/.exec(source.slice(at));
+    if (name) {
+      tokens.push({ kind: "name", value: name[0], at });
+      at += name[0].length;
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      let end = at + 1;
+      let text = "";
+      while (end < source.length && source[end] !== char) {
+        if (source[end] === "\\" && end + 1 < source.length) {
+          text += source[end + 1];
+          end += 2;
+          continue;
+        }
+        text += source[end];
+        end += 1;
+      }
+      if (end >= source.length) fail(`unclosed string at ${at + 1}`);
+      tokens.push({ kind: "string", value: text, at });
+      at = end + 1;
+      continue;
+    }
+    const operator = OPERATORS.find((op) => source.startsWith(op, at));
+    if (operator === void 0) fail(`unexpected ${JSON.stringify(char)} at ${at + 1}`);
+    tokens.push({ kind: "op", value: operator, at });
+    at += operator.length;
+  }
+  return tokens;
+}
+var BINARY = [["||"], ["&&"], ["==", "!="], ["<", "<=", ">", ">="], ["+", "-"], ["*", "/", "%"]];
+function parse(source) {
+  const tokens = tokenize(source);
+  let index = 0;
+  let depth = 0;
+  const peek = () => tokens[index];
+  const isOp = (value) => peek()?.kind === "op" && peek().value === value;
+  const expect = (value) => {
+    if (!isOp(value)) fail(peek() ? `expected "${value}" at ${peek().at + 1}` : `expected "${value}" at the end`);
+    index += 1;
+  };
+  const nest = (read) => {
+    depth += 1;
+    if (depth > MAX_NESTING) fail(`nested more than ${MAX_NESTING} levels`);
+    const node = read();
+    depth -= 1;
+    return node;
+  };
+  const ternary = () => nest(() => {
+    const test = binary2(0);
+    if (!isOp("?")) return test;
+    index += 1;
+    const yes = ternary();
+    expect(":");
+    return { type: "if", test, yes, no: ternary() };
+  });
+  const binary2 = (level) => {
+    if (level === BINARY.length) return unary();
+    let left = binary2(level + 1);
+    while (peek()?.kind === "op" && BINARY[level].includes(peek().value)) {
+      const op = peek().value;
+      index += 1;
+      left = { type: "binary", op, left, right: binary2(level + 1) };
+    }
+    return left;
+  };
+  const unary = () => {
+    if (isOp("-") || isOp("!") || isOp("+")) {
+      const op = peek().value;
+      index += 1;
+      return nest(() => ({ type: "unary", op, value: unary() }));
+    }
+    return primary();
+  };
+  const primary = () => {
+    const token = peek();
+    if (token === void 0) fail("the formula ends too early");
+    index += 1;
+    if (token.kind === "number" || token.kind === "string") return { type: "value", value: token.value };
+    if (token.kind === "op" && token.value === "(") {
+      const inner = ternary();
+      expect(")");
+      return inner;
+    }
+    if (token.kind !== "name") fail(`unexpected "${token.value}" at ${token.at + 1}`);
+    if (!isOp("(")) return CONSTANTS.has(token.value) ? { type: "value", value: CONSTANTS.get(token.value) } : { type: "name", name: token.value };
+    const fn = Object.hasOwn(FUNCTIONS, token.value) ? FUNCTIONS[token.value] : void 0;
+    if (fn === void 0) fail(`unknown function "${token.value}"; allowed: ${FORMULA_FUNCTIONS.join(", ")}`);
+    index += 1;
+    const args = [];
+    if (!isOp(")")) {
+      args.push(ternary());
+      while (isOp(",")) {
+        index += 1;
+        args.push(ternary());
+      }
+    }
+    expect(")");
+    if (args.length < fn.args[0] || args.length > fn.args[1]) {
+      fail(`${token.value}() takes ${fn.args[0] === fn.args[1] ? fn.args[0] : fn.args[1] === Infinity ? `at least ${fn.args[0]}` : `${fn.args[0]} or ${fn.args[1]}`} argument${fn.args[1] === 1 ? "" : "s"}; got ${args.length}`);
+    }
+    return { type: "call", name: token.value, args };
+  };
+  if (tokens.length === 0) fail("the formula is empty");
+  const tree = ternary();
+  if (index < tokens.length) fail(`unexpected "${peek().value}" at ${peek().at + 1}`);
+  return tree;
+}
+function namesIn(node, found = /* @__PURE__ */ new Set()) {
+  if (node.type === "name") found.add(node.name);
+  else if (node.type === "unary") namesIn(node.value, found);
+  else if (node.type === "binary") {
+    namesIn(node.left, found);
+    namesIn(node.right, found);
+  } else if (node.type === "if") {
+    namesIn(node.test, found);
+    namesIn(node.yes, found);
+    namesIn(node.no, found);
+  } else if (node.type === "call") for (const arg of node.args) namesIn(arg, found);
+  return found;
+}
+function compileFormula(source) {
+  if (typeof source !== "string") return { error: "expected a formula string" };
+  try {
+    const tree = parse(source);
+    return { tree, names: [...namesIn(tree)] };
+  } catch (error) {
+    if (error instanceof FormulaError) return { error: error.message };
+    throw error;
+  }
+}
+function run(node, lookup) {
+  switch (node.type) {
+    case "value":
+      return node.value;
+    case "name":
+      return lookup(node.name);
+    case "unary": {
+      const value = run(node.value, lookup);
+      if (node.op === "!") return !truthy(value);
+      return node.op === "-" ? -num(value) : num(value);
+    }
+    case "if":
+      return truthy(run(node.test, lookup)) ? run(node.yes, lookup) : run(node.no, lookup);
+    case "call":
+      return FUNCTIONS[node.name].run(...node.args.map((arg) => run(arg, lookup)));
+    default:
+      return binary(node, lookup);
+  }
+}
+var truthy = (value) => typeof value === "string" ? value !== "" : Boolean(value);
+function binary(node, lookup) {
+  if (node.op === "&&") return truthy(run(node.left, lookup)) ? run(node.right, lookup) : false;
+  if (node.op === "||") {
+    const left2 = run(node.left, lookup);
+    return truthy(left2) ? left2 : run(node.right, lookup);
+  }
+  const left = run(node.left, lookup);
+  const right = run(node.right, lookup);
+  switch (node.op) {
+    case "+":
+      return typeof left === "string" || typeof right === "string" ? `${show(left)}${show(right)}` : num(left) + num(right);
+    case "-":
+      return num(left) - num(right);
+    case "*":
+      return num(left) * num(right);
+    case "/":
+      return num(left) / num(right);
+    case "%":
+      return num(left) % num(right);
+    case "==":
+      return left === right;
+    case "!=":
+      return left !== right;
+    case "<":
+      return num(left) < num(right);
+    case "<=":
+      return num(left) <= num(right);
+    case ">":
+      return num(left) > num(right);
+    default:
+      return num(left) >= num(right);
+  }
+}
+function show(value) {
+  if (typeof value === "number") return Number.isFinite(value) ? String(Number(value.toPrecision(12))) : String(value);
+  return String(value);
+}
+function createScope(inputs, lets) {
+  const done = /* @__PURE__ */ new Map();
+  const busy = /* @__PURE__ */ new Set();
+  const lookup = (name) => {
+    if (inputs.has(name)) return inputs.get(name);
+    if (done.has(name)) return done.get(name);
+    const tree = lets.get(name);
+    if (tree === void 0) fail(`unknown name "${name}"`);
+    if (busy.has(name)) fail(`"${name}" refers to itself`);
+    busy.add(name);
+    try {
+      const value = run(tree, lookup);
+      done.set(name, value);
+      return value;
+    } finally {
+      busy.delete(name);
+    }
+  };
+  return lookup;
+}
+function evaluate(tree, lookup) {
+  try {
+    return { value: run(tree, lookup) };
+  } catch (error) {
+    if (error instanceof FormulaError) return { error: error.message };
+    if (error instanceof RangeError) return { error: "the formula is too deep to work out" };
+    throw error;
+  }
+}
+
+// node_modules/deep-view/src/core/views.js
+var LAYOUT = ["stack", "row"];
+var DISPLAY = ["text", "metric", "table", "chart", "progress", "callout", "sources", "html"];
+var INPUT_TYPES = ["slider", "choice", "toggle", "number"];
+var ANSWERS = ["options", "confirm", "form", "submit"];
+var COMPONENTS = [...LAYOUT, ...DISPLAY, ...INPUT_TYPES, ...ANSWERS];
+var TONES = ["good", "warn", "bad"];
+var TEXT_TONES = ["muted"];
+var CALLOUT_TONES = ["info", "good", "warn", "bad"];
+var CHART_KINDS = ["bar", "hbar", "line", "area", "donut"];
+var INTERACTIVE = new Set(ANSWERS);
+var INPUTS = new Set(INPUT_TYPES);
+var PROPS = {
+  stack: ["children", "let"],
+  row: ["children", "let"],
+  text: ["text", "tone"],
+  metric: ["label", "value", "tone", "caption"],
+  table: ["columns", "rows"],
+  chart: ["kind", "categories", "series", "unit", "caption"],
+  progress: ["label", "percent", "value", "max", "valueLabel", "tone"],
+  callout: ["text", "tone"],
+  sources: ["items"],
+  html: ["html", "summary", "height"],
+  slider: ["id", "label", "min", "max", "step", "value", "unit"],
+  choice: ["id", "label", "options", "value"],
+  toggle: ["id", "label", "value"],
+  number: ["id", "label", "min", "max", "step", "value", "unit"],
+  options: ["id", "options", "multi"],
+  confirm: ["id", "confirmLabel", "cancelLabel"],
+  form: ["id", "fields", "submitLabel"],
+  submit: ["id", "label"]
+};
+var MAX_DEPTH = 8;
+var MAX_NODES = 64;
+var MAX_CHILDREN = 16;
+var MAX_TEXT = 2e3;
+var MAX_CELL = 200;
+var MAX_COLUMNS = 8;
+var MAX_ROWS = 50;
+var MAX_OPTIONS = 8;
+var MAX_FIELDS = 6;
+var SUMMARY_PART = 40;
+var SUMMARY_COUNT = 8;
+var RESERVED = /* @__PURE__ */ new Set(["true", "false"]);
+var VIEW_BYTE_LIMIT = 8192;
+var isRecord = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+var quoted = (value) => JSON.stringify(value);
+var allowed = (list) => list.join(", ");
+var isNumber = (value) => typeof value === "number" && Number.isFinite(value);
+var isScalar = (value) => typeof value === "string" || typeof value === "boolean" || isNumber(value);
+var isFormula = (value) => isRecord(value) && Object.keys(value).length === 1 && Object.hasOwn(value, "=");
+function viewBytes(title, view) {
+  return new TextEncoder().encode(`${JSON.stringify(view) ?? ""}${title ?? ""}`).length;
+}
+var NUMERIC = ["value", "percent", "min", "max", "step", "height"];
+var numeric = (value) => typeof value === "string" && value.trim() !== "" && !Number.isNaN(Number(value)) ? Number(value) : value;
+function normalizeView(value) {
+  if (Array.isArray(value)) return value.map(normalizeView);
+  if (!isRecord(value)) return value;
+  const keys = Object.keys(value);
+  if (keys.length === 1 && keys[0] === "item") {
+    const inner = normalizeView(value.item);
+    if (Array.isArray(inner)) return inner;
+  }
+  const out = {};
+  for (const key of keys) Object.defineProperty(out, key, { value: normalizeView(value[key]), writable: true, enumerable: true, configurable: true });
+  for (const field of NUMERIC) if (Object.hasOwn(out, field)) out[field] = numeric(out[field]);
+  if (Array.isArray(out.values)) out.values = out.values.map(numeric);
+  return out;
+}
+function validateView(view) {
+  const ctx = { ids: /* @__PURE__ */ new Set(), nodes: 0, interactive: false, inputs: /* @__PURE__ */ new Map(), lets: /* @__PURE__ */ new Map(), formulas: [] };
+  const error = checkNode(view, "view", 1, ctx) ?? checkFormulas(ctx);
+  return error === void 0 ? { ok: true, interactive: ctx.interactive } : { ok: false, error };
+}
+function checkShownView(title, sent) {
+  let bytes;
+  try {
+    bytes = viewBytes(title, sent);
+  } catch {
+    return { error: "The view is not JSON data." };
+  }
+  if (bytes > VIEW_BYTE_LIMIT) return { error: `The view is ${bytes} bytes; the limit is ${VIEW_BYTE_LIMIT}.` };
+  if (title !== void 0 && title !== null && typeof title !== "string") return { error: "title: expected a string" };
+  const named = String(title ?? "").trim();
+  const view = normalizeView(sent);
+  const checked = validateView(view);
+  if (!checked.ok) return { error: checked.error };
+  return { title: named, view, interactive: checked.interactive };
+}
+function checkNode(node, path, depth, ctx) {
+  if (!isRecord(node)) return `${path}: expected a component object`;
+  if (depth > MAX_DEPTH) return `${path}: ${depth} levels exceeds the limit of ${MAX_DEPTH}`;
+  ctx.nodes += 1;
+  if (ctx.nodes > MAX_NODES) return `${path}: ${ctx.nodes} components exceeds the limit of ${MAX_NODES}`;
+  const type = node.type;
+  if (!COMPONENTS.includes(type)) return `${path}.type: unknown component ${quoted(type)}; allowed: ${allowed(COMPONENTS)}`;
+  const props = PROPS[type];
+  for (const key of Object.keys(node)) {
+    if (key === "type" || props.includes(key)) continue;
+    return `${path}.${key}: unknown property ${quoted(key)}; allowed: ${allowed(props)}`;
+  }
+  if (INTERACTIVE.has(type)) ctx.interactive = true;
+  switch (type) {
+    case "stack":
+    case "row":
+      return checkLayout(node, path, depth, ctx);
+    case "text":
+      return checkText(node, path, ctx);
+    case "metric":
+      return checkMetric(node, path, ctx);
+    case "table":
+      return checkTable(node, path, ctx);
+    case "chart":
+      return checkChart(node, path, ctx);
+    case "progress":
+      return checkProgress(node, path, ctx);
+    case "callout":
+      return checkCallout(node, path, ctx);
+    case "sources":
+      return checkSources(node, path);
+    case "html":
+      return checkHtml(node, path);
+    case "slider":
+    case "number":
+      return checkNumberInput(node, path, ctx);
+    case "choice":
+      return checkChoice(node, path, ctx);
+    case "toggle":
+      return checkToggle(node, path, ctx);
+    case "options":
+      return checkOptions(node, path, ctx);
+    case "confirm":
+      return checkConfirm(node, path, ctx);
+    case "form":
+      return checkForm(node, path, ctx);
+    default:
+      return checkSubmit(node, path, ctx);
+  }
+}
+function checkLayout(node, path, depth, ctx) {
+  if (node.let !== void 0) {
+    if (depth !== 1) return `${path}.let: only the outermost component can define names`;
+    if (!isRecord(node.let)) return `${path}.let: expected an object of names to formulas`;
+    for (const [name, source] of Object.entries(node.let)) {
+      if (!isName(name) || RESERVED.has(name)) return `${path}.let.${name}: a name is letters, digits and _, and starts with a letter or _`;
+      if (typeof source !== "string") return `${path}.let.${name}: expected a formula string`;
+      ctx.lets.set(name, { source, path: `${path}.let.${name}` });
+    }
+  }
+  if (!Array.isArray(node.children)) return `${path}.children: expected an array of 1 to ${MAX_CHILDREN} components`;
+  if (node.children.length < 1 || node.children.length > MAX_CHILDREN) return `${path}.children: expected 1 to ${MAX_CHILDREN} children; got ${node.children.length}`;
+  for (let index = 0; index < node.children.length; index += 1) {
+    const error = checkNode(node.children[index], `${path}.children[${index}]`, depth + 1, ctx);
+    if (error !== void 0) return error;
+  }
+  return void 0;
+}
+function checkValue(node, key, path, ctx, kind, { required = false, max = MAX_TEXT } = {}) {
+  const value = node[key];
+  const at = `${path}.${key}`;
+  if (value === void 0) return required ? `${at}: ${expected(kind)}` : void 0;
+  if (isFormula(value)) {
+    ctx.formulas.push({ source: value["="], path: at, kind });
+    return void 0;
+  }
+  if (kind === "number") return isNumber(value) ? void 0 : `${at}: ${expected(kind)}`;
+  if (Array.isArray(kind)) return kind.includes(value) ? void 0 : `${at}: unknown tone ${quoted(value)}; allowed: ${allowed(kind)}`;
+  if (kind === "string") {
+    if (typeof value !== "string") return `${at}: ${expected(kind)}`;
+    return value.length > max ? `${at}: ${value.length} characters exceeds the limit of ${max}` : void 0;
+  }
+  if (!isScalar(value)) return `${at}: ${expected(kind)}`;
+  return void 0;
+}
+var expected = (kind) => kind === "number" ? "expected a number" : kind === "string" ? "expected a string" : Array.isArray(kind) ? `expected one of ${allowed(kind)}` : "expected a string or a number";
+function checkText(node, path, ctx) {
+  return checkValue(node, "text", path, ctx, "string", { required: true }) ?? checkValue(node, "tone", path, ctx, TEXT_TONES);
+}
+function checkMetric(node, path, ctx) {
+  if (typeof node.label !== "string") return `${path}.label: expected a string`;
+  if (node.value === void 0) return `${path}.value: expected a string or a number`;
+  if (typeof node.value === "number" && !Number.isFinite(node.value)) return `${path}.value: expected a finite number`;
+  return checkValue(node, "value", path, ctx, "scalar") ?? checkValue(node, "tone", path, ctx, TONES) ?? checkValue(node, "caption", path, ctx, "string");
+}
+function checkTable(node, path, ctx) {
+  if (!Array.isArray(node.columns)) return `${path}.columns: expected an array of at most ${MAX_COLUMNS} columns`;
+  if (node.columns.length > MAX_COLUMNS) return `${path}.columns: ${node.columns.length} columns exceeds the limit of ${MAX_COLUMNS}`;
+  for (let index = 0; index < node.columns.length; index += 1) {
+    const column = node.columns[index];
+    const at = `${path}.columns[${index}]`;
+    if (!isRecord(column)) return `${at}: expected a column object`;
+    for (const key of Object.keys(column)) {
+      if (key !== "key" && key !== "label") return `${at}.${key}: unknown property ${quoted(key)}; allowed: key, label`;
+    }
+    if (typeof column.key !== "string" || column.key === "") return `${at}.key: expected a non-empty string`;
+    if (typeof column.label !== "string") return `${at}.label: expected a string`;
+  }
+  if (!Array.isArray(node.rows)) return `${path}.rows: expected an array of at most ${MAX_ROWS} rows`;
+  if (node.rows.length > MAX_ROWS) return `${path}.rows: ${node.rows.length} rows exceeds the limit of ${MAX_ROWS}`;
+  for (let row = 0; row < node.rows.length; row += 1) {
+    const cells = node.rows[row];
+    if (!Array.isArray(cells)) return `${path}.rows[${row}]: expected an array of cells`;
+    for (let column = 0; column < cells.length; column += 1) {
+      const at = `${path}.rows[${row}][${column}]`;
+      if (isFormula(cells[column])) {
+        ctx.formulas.push({ source: cells[column]["="], path: at, kind: "scalar" });
+        continue;
+      }
+      const text = cellText(cells[column]);
+      if (text.length > MAX_CELL) return `${at}: ${text.length} characters exceeds the limit of ${MAX_CELL}`;
+    }
+  }
+  return void 0;
+}
+function checkChart(node, path, ctx) {
+  if (node.kind !== void 0 && !CHART_KINDS.includes(node.kind)) return `${path}.kind: unknown chart ${quoted(node.kind)}; allowed: ${allowed(CHART_KINDS)}`;
+  if (!Array.isArray(node.categories) || node.categories.length === 0) return `${path}.categories: expected a non-empty array of labels`;
+  for (let index = 0; index < node.categories.length; index += 1) {
+    const label = node.categories[index];
+    if (typeof label !== "string" && !isNumber(label)) return `${path}.categories[${index}]: expected a string`;
+  }
+  if (!Array.isArray(node.series) || node.series.length === 0) return `${path}.series: expected a non-empty array of { name?, values }`;
+  if (node.kind === "donut" && node.series.length > 1) return `${path}.series: a donut takes one series; got ${node.series.length}`;
+  for (let index = 0; index < node.series.length; index += 1) {
+    const series = node.series[index];
+    const at = `${path}.series[${index}]`;
+    if (!isRecord(series)) return `${at}: expected a series object`;
+    for (const key of Object.keys(series)) {
+      if (key !== "name" && key !== "values") return `${at}.${key}: unknown property ${quoted(key)}; allowed: name, values`;
+    }
+    if (series.name !== void 0 && typeof series.name !== "string") return `${at}.name: expected a string`;
+    if (!Array.isArray(series.values)) return `${at}.values: expected an array of numbers`;
+    if (series.values.length !== node.categories.length) return `${at}.values: ${series.values.length} values for ${node.categories.length} categories`;
+    for (let item = 0; item < series.values.length; item += 1) {
+      const value = series.values[item];
+      if (isFormula(value)) ctx.formulas.push({ source: value["="], path: `${at}.values[${item}]`, kind: "number" });
+      else if (!isNumber(value)) return `${at}.values[${item}]: expected a number`;
+    }
+  }
+  if (node.unit !== void 0 && typeof node.unit !== "string") return `${path}.unit: expected a string`;
+  if (node.caption !== void 0 && typeof node.caption !== "string") return `${path}.caption: expected a string`;
+  return void 0;
+}
+function checkProgress(node, path, ctx) {
+  if (node.label !== void 0 && typeof node.label !== "string") return `${path}.label: expected a string`;
+  if (node.percent === void 0 === (node.value === void 0)) return `${path}: give percent (0 to 100), or value with max`;
+  if (node.percent !== void 0 && !isFormula(node.percent)) {
+    if (typeof node.percent !== "number" || !Number.isFinite(node.percent) || node.percent < 0 || node.percent > 100) return `${path}.percent: expected a number from 0 to 100`;
+  }
+  if (node.value !== void 0 && node.max === void 0) return `${path}.max: expected a number with value`;
+  if (node.value === void 0 && node.max !== void 0) return `${path}.value: expected a number with max`;
+  return checkValue(node, "percent", path, ctx, "number") ?? checkValue(node, "value", path, ctx, "number") ?? checkValue(node, "max", path, ctx, "number") ?? checkValue(node, "valueLabel", path, ctx, "scalar") ?? checkValue(node, "tone", path, ctx, TONES);
+}
+function checkCallout(node, path, ctx) {
+  return checkValue(node, "text", path, ctx, "string", { required: true }) ?? checkValue(node, "tone", path, ctx, CALLOUT_TONES);
+}
+function checkSources(node, path) {
+  if (!Array.isArray(node.items) || node.items.length === 0) return `${path}.items: expected a non-empty array of { label, url }`;
+  for (let index = 0; index < node.items.length; index += 1) {
+    const item = node.items[index];
+    const at = `${path}.items[${index}]`;
+    if (!isRecord(item)) return `${at}: expected a { label, url } object`;
+    for (const key of Object.keys(item)) {
+      if (key !== "label" && key !== "url") return `${at}.${key}: unknown property ${quoted(key)}; allowed: label, url`;
+    }
+    if (typeof item.label !== "string" || item.label.trim() === "") return `${at}.label: expected a non-empty string`;
+    if (typeof item.url !== "string" || !/^https?:\/\/[^\s]+$/i.test(item.url)) return `${at}.url: expected an http(s) address`;
+  }
+  return void 0;
+}
+function checkHtml(node, path) {
+  if (typeof node.html !== "string" || node.html.trim() === "") return `${path}.html: expected a non-empty string`;
+  if (typeof node.summary !== "string" || node.summary.trim() === "") return `${path}.summary: expected one line that says what the view shows`;
+  if (node.height !== void 0 && (!isNumber(node.height) || node.height <= 0)) return `${path}.height: expected a positive number of pixels`;
+  return void 0;
+}
+function checkInputId(node, path, ctx) {
+  if (!isName(node.id) || RESERVED.has(node.id)) return `${path}.id: an input id is letters, digits and _, and starts with a letter or _, so formulas can use it`;
+  if (ctx.ids.has(node.id)) return `${path}.id: duplicate id ${quoted(node.id)}`;
+  ctx.ids.add(node.id);
+  if (typeof node.label !== "string") return `${path}.label: expected a string`;
+  return void 0;
+}
+function checkNumberInput(node, path, ctx) {
+  const idError = checkInputId(node, path, ctx);
+  if (idError !== void 0) return idError;
+  for (const key of ["min", "max", "step"]) {
+    if (node[key] !== void 0 && !isNumber(node[key])) return `${path}.${key}: expected a number`;
+  }
+  if (node.type === "slider" && (node.min === void 0 || node.max === void 0)) return `${path}: a slider needs min and max`;
+  if (node.min !== void 0 && node.max !== void 0 && node.max <= node.min) return `${path}.max: expected more than min (${node.min})`;
+  if (node.step !== void 0 && node.step <= 0) return `${path}.step: expected more than 0`;
+  if (!isNumber(node.value)) return `${path}.value: expected a number`;
+  if (node.min !== void 0 && node.value < node.min || node.max !== void 0 && node.value > node.max) return `${path}.value: expected a number from ${node.min ?? "-∞"} to ${node.max ?? "∞"}`;
+  if (node.unit !== void 0 && typeof node.unit !== "string") return `${path}.unit: expected a string`;
+  ctx.inputs.set(node.id, node.value);
+  return void 0;
+}
+function checkChoice(node, path, ctx) {
+  const idError = checkInputId(node, path, ctx);
+  if (idError !== void 0) return idError;
+  if (!Array.isArray(node.options) || node.options.length === 0) return `${path}.options: expected a non-empty array of { label, value }`;
+  const labels = /* @__PURE__ */ new Set();
+  const values = /* @__PURE__ */ new Set();
+  for (let index = 0; index < node.options.length; index += 1) {
+    const option = node.options[index];
+    const at = `${path}.options[${index}]`;
+    if (!isRecord(option)) return `${at}: expected a { label, value } object`;
+    for (const key of Object.keys(option)) {
+      if (key !== "label" && key !== "value") return `${at}.${key}: unknown property ${quoted(key)}; allowed: label, value`;
+    }
+    if (typeof option.label !== "string" || option.label.trim() === "") return `${at}.label: expected a non-empty string`;
+    if (labels.has(option.label)) return `${at}.label: duplicate label ${quoted(option.label)}`;
+    labels.add(option.label);
+    const value = option.value ?? option.label;
+    if (!isScalar(value)) return `${at}.value: expected a string, a number or true/false`;
+    if (values.has(value)) return `${at}.value: duplicate value ${quoted(value)}`;
+    values.add(value);
+  }
+  const chosen = node.value ?? choiceValue(node.options[0]);
+  if (!values.has(chosen)) return `${path}.value: expected one of the options' values`;
+  ctx.inputs.set(node.id, chosen);
+  return void 0;
+}
+function checkToggle(node, path, ctx) {
+  const idError = checkInputId(node, path, ctx);
+  if (idError !== void 0) return idError;
+  if (node.value !== void 0 && typeof node.value !== "boolean") return `${path}.value: expected true or false`;
+  ctx.inputs.set(node.id, node.value === true);
+  return void 0;
+}
+function checkOptions(node, path, ctx) {
+  const idError = checkId(node, path, ctx);
+  if (idError !== void 0) return idError;
+  if (node.multi !== void 0 && typeof node.multi !== "boolean") return `${path}.multi: expected a boolean`;
+  if (!Array.isArray(node.options)) return `${path}.options: expected an array of 1 to ${MAX_OPTIONS} options`;
+  if (node.options.length < 1 || node.options.length > MAX_OPTIONS) return `${path}.options: expected 1 to ${MAX_OPTIONS} options; got ${node.options.length}`;
+  const labels = /* @__PURE__ */ new Set();
+  for (let index = 0; index < node.options.length; index += 1) {
+    const option = node.options[index];
+    const at = `${path}.options[${index}]`;
+    if (!isRecord(option)) return `${at}: expected an option object`;
+    for (const key of Object.keys(option)) {
+      if (key !== "label" && key !== "description") return `${at}.${key}: unknown property ${quoted(key)}; allowed: label, description`;
+    }
+    if (typeof option.label !== "string" || option.label.trim() === "") return `${at}.label: expected a non-empty string`;
+    if (labels.has(option.label)) return `${at}.label: duplicate label ${quoted(option.label)}`;
+    labels.add(option.label);
+    if (option.description !== void 0 && typeof option.description !== "string") return `${at}.description: expected a string`;
+  }
+  return void 0;
+}
+function checkConfirm(node, path, ctx) {
+  const idError = checkId(node, path, ctx);
+  if (idError !== void 0) return idError;
+  if (node.confirmLabel !== void 0 && typeof node.confirmLabel !== "string") return `${path}.confirmLabel: expected a string`;
+  if (node.cancelLabel !== void 0 && typeof node.cancelLabel !== "string") return `${path}.cancelLabel: expected a string`;
+  return void 0;
+}
+function checkForm(node, path, ctx) {
+  const idError = checkId(node, path, ctx);
+  if (idError !== void 0) return idError;
+  if (node.submitLabel !== void 0 && typeof node.submitLabel !== "string") return `${path}.submitLabel: expected a string`;
+  if (!Array.isArray(node.fields)) return `${path}.fields: expected an array of at most ${MAX_FIELDS} fields`;
+  if (node.fields.length > MAX_FIELDS) return `${path}.fields: ${node.fields.length} fields exceeds the limit of ${MAX_FIELDS}`;
+  const seen = /* @__PURE__ */ new Set();
+  for (let index = 0; index < node.fields.length; index += 1) {
+    const field = node.fields[index];
+    const at = `${path}.fields[${index}]`;
+    if (!isRecord(field)) return `${at}: expected a field object`;
+    for (const key of Object.keys(field)) {
+      if (key !== "id" && key !== "label" && key !== "placeholder") return `${at}.${key}: unknown property ${quoted(key)}; allowed: id, label, placeholder`;
+    }
+    if (typeof field.id !== "string" || field.id === "") return `${at}.id: expected a non-empty string`;
+    if (field.id === "__proto__") return `${at}.id: "__proto__" cannot be an id`;
+    if (seen.has(field.id)) return `${at}.id: duplicate field id ${quoted(field.id)}`;
+    seen.add(field.id);
+    if (typeof field.label !== "string") return `${at}.label: expected a string`;
+    if (field.placeholder !== void 0 && typeof field.placeholder !== "string") return `${at}.placeholder: expected a string`;
+  }
+  return void 0;
+}
+function checkSubmit(node, path, ctx) {
+  const idError = checkId(node, path, ctx);
+  if (idError !== void 0) return idError;
+  if (node.label !== void 0 && typeof node.label !== "string") return `${path}.label: expected a string`;
+  return void 0;
+}
+function checkId(node, path, ctx) {
+  if (typeof node.id !== "string" || node.id === "") return `${path}.id: expected a non-empty string`;
+  if (node.id === "__proto__") return `${path}.id: "__proto__" cannot be an id`;
+  if (ctx.ids.has(node.id)) return `${path}.id: duplicate id ${quoted(node.id)}`;
+  ctx.ids.add(node.id);
+  return void 0;
+}
+function checkFormulas(ctx) {
+  const known = /* @__PURE__ */ new Set([...ctx.inputs.keys(), ...ctx.lets.keys()]);
+  const lets = /* @__PURE__ */ new Map();
+  for (const [name, entry] of ctx.lets) {
+    if (ctx.inputs.has(name)) return `${entry.path}: ${quoted(name)} is already an input id`;
+    const compiled2 = compileFormula(entry.source);
+    if (compiled2.error !== void 0) return `${entry.path}: ${compiled2.error}`;
+    const unknown = compiled2.names.find((item) => !known.has(item));
+    if (unknown !== void 0) return `${entry.path}: unknown name ${quoted(unknown)}; known: ${allowed([...known]) || "(none)"}`;
+    lets.set(name, compiled2.tree);
+  }
+  const lookup = createScope(ctx.inputs, lets);
+  for (const [name, entry] of ctx.lets) {
+    const result = evaluate(lets.get(name), lookup);
+    if (result.error !== void 0) return `${entry.path}: ${result.error}`;
+  }
+  for (const formula of ctx.formulas) {
+    const compiled2 = compileFormula(formula.source);
+    if (compiled2.error !== void 0) return `${formula.path}: ${compiled2.error}`;
+    const unknown = compiled2.names.find((item) => !known.has(item));
+    if (unknown !== void 0) return `${formula.path}: unknown name ${quoted(unknown)}; known: ${allowed([...known]) || "(none)"}`;
+    const result = evaluate(compiled2.tree, lookup);
+    if (result.error !== void 0) return `${formula.path}: ${result.error}`;
+    const problem = kindProblem(result.value, formula.kind);
+    if (problem !== void 0) return `${formula.path}: the formula gives ${quoted(result.value)}; ${problem}`;
+  }
+  return void 0;
+}
+function kindProblem(value, kind) {
+  if (kind === "number") return isNumber(value) ? void 0 : "expected a number";
+  if (Array.isArray(kind)) return kind.includes(value) ? void 0 : `expected one of ${allowed(kind)}`;
+  if (kind === "string") return isScalar(value) ? void 0 : "expected text";
+  return isScalar(value) ? void 0 : "expected a string or a number";
+}
+function cellText(value) {
+  if (typeof value === "string") return value;
+  const text = JSON.stringify(value);
+  return typeof text === "string" ? text : "";
+}
+var compiled = /* @__PURE__ */ new WeakMap();
+var treeOf = (formula) => {
+  let entry = compiled.get(formula);
+  if (entry === void 0) {
+    entry = compileFormula(formula["="]);
+    compiled.set(formula, entry);
+  }
+  return entry;
+};
+var choiceValue = (option) => option?.value ?? option?.label;
+function walk(node, visit) {
+  if (!isRecord(node)) return;
+  visit(node);
+  if (LAYOUT.includes(node.type) && Array.isArray(node.children)) for (const child of node.children) walk(child, visit);
+}
+function viewInputs(view) {
+  const found = [];
+  walk(view, (node) => {
+    if (INPUTS.has(node.type)) found.push(node);
+  });
+  return found;
+}
+function inputDefault(node) {
+  if (node.type === "toggle") return node.value === true;
+  if (node.type === "choice") return node.value ?? choiceValue(Array.isArray(node.options) ? node.options[0] : void 0);
+  return node.value;
+}
+var hasInputs = (view) => viewInputs(view).length > 0;
+function viewScope(view, values = {}) {
+  const inputs = /* @__PURE__ */ new Map();
+  for (const node of viewInputs(view)) inputs.set(node.id, Object.hasOwn(values, node.id) ? values[node.id] : inputDefault(node));
+  const lets = /* @__PURE__ */ new Map();
+  for (const [name, source] of Object.entries(isRecord(view?.let) ? view.let : {})) {
+    const entry = compileFormula(source);
+    if (entry.tree !== void 0) lets.set(name, entry.tree);
+  }
+  return createScope(inputs, lets);
+}
+function resolve(value, lookup, fallback = void 0) {
+  if (!isFormula(value)) return value;
+  const entry = treeOf(value);
+  if (entry.tree === void 0) return fallback;
+  const result = evaluate(entry.tree, lookup);
+  return result.error === void 0 ? result.value : fallback;
+}
+var asText = (value) => value === void 0 || value === null ? "" : show(value);
+function clip(text) {
+  const flat = String(text).replace(/\s+/g, " ").trim();
+  return flat.length <= SUMMARY_PART ? flat : flat.slice(0, SUMMARY_PART);
+}
+var choiceLabel = (node, value) => (Array.isArray(node.options) ? node.options : []).find((option) => choiceValue(option) === value)?.label ?? asText(value);
+function inputText(node, value) {
+  if (node.type === "toggle") return value === true ? "on" : "off";
+  if (node.type === "choice") return choiceLabel(node, value);
+  return `${asText(value)}${node.unit ? ` ${node.unit}` : ""}`;
+}
+function progressPercent(node, lookup) {
+  if (node.percent !== void 0) return Number(resolve(node.percent, lookup, 0));
+  const max = Number(resolve(node.max, lookup, 0));
+  return max > 0 ? Number(resolve(node.value, lookup, 0)) / max * 100 : 0;
+}
+function componentSummary(node, lookup) {
+  const value = (item) => asText(resolve(item, lookup, ""));
+  switch (node.type) {
+    case "text":
+      return `text: ${value(node.text)}`;
+    case "metric":
+      return `metric: ${node.label}=${value(node.value)}`;
+    case "table":
+      return `table: ${(Array.isArray(node.columns) ? node.columns : []).map((column) => column?.label ?? column?.key ?? "").filter(Boolean).join("/")}`;
+    case "chart": {
+      const series = Array.isArray(node.series) ? node.series[0] : void 0;
+      const values = Array.isArray(series?.values) ? series.values : [];
+      const unit = node.unit ? ` ${node.unit}` : "";
+      return `chart: ${(Array.isArray(node.categories) ? node.categories : []).map((label, index) => `${label}=${value(values[index])}${unit}`).join(", ")}`;
+    }
+    case "progress":
+      return `progress: ${node.label ? `${node.label} ` : ""}${Math.round(progressPercent(node, lookup))}%`;
+    case "callout":
+      return `callout: ${value(node.text)}`;
+    case "sources":
+      return `sources: ${(Array.isArray(node.items) ? node.items : []).map((item) => item?.label).filter(Boolean).join("/")}`;
+    case "html":
+      return `html: ${node.summary ?? ""}`;
+    case "slider":
+    case "number":
+    case "choice":
+    case "toggle":
+      return `${node.type}: ${node.label}=${inputText(node, inputDefault(node))}`;
+    case "options":
+      return `options: ${(Array.isArray(node.options) ? node.options : []).map((option) => option?.label).filter(Boolean).join("/")}`;
+    case "confirm":
+      return "confirm";
+    case "form":
+      return `form: ${(Array.isArray(node.fields) ? node.fields : []).map((field) => field?.label ?? field?.id).filter(Boolean).join("/")}`;
+    case "submit":
+      return `submit: ${node.label ?? "Send"}`;
+    default:
+      return void 0;
+  }
+}
+function viewSummary(view) {
+  const parts = [];
+  const lookup = viewScope(view);
+  const visit = (node) => {
+    if (parts.length >= SUMMARY_COUNT || !isRecord(node)) return;
+    const line = componentSummary(node, lookup);
+    if (line !== void 0) parts.push(clip(line));
+    if (parts.length >= SUMMARY_COUNT || !LAYOUT.includes(node.type) || !Array.isArray(node.children)) return;
+    for (const child of node.children) visit(child);
+  };
+  visit(view);
+  return parts.join("; ");
+}
+function inputsSummary(view, inputs) {
+  if (!isRecord(inputs)) return "";
+  return viewInputs(view).filter((node) => Object.hasOwn(inputs, node.id)).map((node) => `${node.label || node.id}=${inputText(node, inputs[node.id])}`).join("; ");
+}
+function interactiveNodes(node, found = []) {
+  walk(node, (item) => {
+    if (INTERACTIVE.has(item.type)) found.push(item);
+  });
+  return found;
+}
+function validateViewAnswer(view, action, values) {
+  const nodes = interactiveNodes(view);
+  if (typeof action !== "string" || action === "") return { error: `action: expected an interactive component id; allowed: ${allowed(nodes.map((node2) => node2.id))}` };
+  const node = nodes.find((item) => item.id === action);
+  if (node === void 0) return { error: `action: no interactive component with id ${quoted(action)}; allowed: ${allowed(nodes.map((item) => item.id))}` };
+  if (!isRecord(values)) return { error: "values: expected an object" };
+  const inputs = validateInputs(view, values.inputs);
+  if (inputs.error !== void 0) return inputs;
+  const extra = inputs.inputs === void 0 ? {} : { inputs: inputs.inputs };
+  if (node.type === "submit") return { ...extra };
+  const own = node.type === "options" ? validateOptions(node, values) : node.type === "confirm" ? validateConfirm(values) : validateForm(node, values);
+  return own.error === void 0 ? { ...own, ...extra } : own;
+}
+function validateInputs(view, sent) {
+  const nodes = viewInputs(view);
+  if (nodes.length === 0) return sent === void 0 ? {} : { error: "values.inputs: this view has no inputs" };
+  if (sent !== void 0 && !isRecord(sent)) return { error: "values.inputs: expected an object of input ids to values" };
+  const given = sent ?? {};
+  const ids = nodes.map((node) => node.id);
+  const unknown = Object.keys(given).find((key) => !ids.includes(key));
+  if (unknown !== void 0) return { error: `values.inputs.${unknown}: unknown input; allowed: ${allowed(ids)}` };
+  const inputs = {};
+  for (const node of nodes) {
+    const value = Object.hasOwn(given, node.id) ? given[node.id] : inputDefault(node);
+    const at = `values.inputs.${node.id}`;
+    if (node.type === "toggle" && typeof value !== "boolean") return { error: `${at}: expected true or false` };
+    if (node.type === "choice" && !(Array.isArray(node.options) ? node.options : []).some((option) => choiceValue(option) === value)) return { error: `${at}: expected one of the options' values` };
+    if (node.type === "slider" || node.type === "number") {
+      if (!isNumber(value)) return { error: `${at}: expected a number` };
+      if (node.min !== void 0 && value < node.min || node.max !== void 0 && value > node.max) return { error: `${at}: expected a number from ${node.min ?? "-∞"} to ${node.max ?? "∞"}` };
+    }
+    inputs[node.id] = value;
+  }
+  return { inputs };
+}
+function validateOptions(node, values) {
+  if (!Array.isArray(values.selected)) return { error: "values.selected: expected an array of option labels" };
+  const labels = new Set((node.options ?? []).map((option) => option?.label));
+  const picked = values.selected.filter((label) => typeof label === "string" && labels.has(label));
+  const selected = node.multi === true ? [...new Set(picked)] : picked.slice(0, 1);
+  if (selected.length === 0) return { error: "values.selected: select at least one option" };
+  return { selected };
+}
+function validateConfirm(values) {
+  if (typeof values.confirmed !== "boolean") return { error: "values.confirmed: expected a boolean" };
+  return { confirmed: values.confirmed };
+}
+function validateForm(node, values) {
+  if (!isRecord(values.fields)) return { error: "values.fields: expected an object of field ids to strings" };
+  const declared = (node.fields ?? []).map((field) => field?.id).filter((id) => typeof id === "string");
+  const allowedIds = new Set(declared);
+  const fields = {};
+  for (const [key, value] of Object.entries(values.fields)) {
+    if (!allowedIds.has(key)) return { error: `values.fields.${key}: unknown field; allowed: ${allowed(declared)}` };
+    if (typeof value !== "string") return { error: `values.fields.${key}: expected a string` };
+    if (value.length > MAX_TEXT) return { error: `values.fields.${key}: ${value.length} characters exceeds the limit of ${MAX_TEXT}` };
+    fields[key] = value;
+  }
+  return { fields };
+}
+
+// node_modules/deep-view/src/react/chart.js
+var import_react21 = require("react");
+var PALETTE = ["var(--dv-accent)", "var(--dv-ink-tangerine)", "var(--dv-ink-green)", "var(--dv-ink-violet)", "var(--dv-ink-sky)", "var(--dv-ink-rose)", "var(--dv-ink-yellow)", "var(--dv-ink-cyan)", "var(--dv-ink-magenta)"];
+var colorAt = (index) => PALETTE[index % PALETTE.length];
+var TICK = 10;
+var LABEL = 11;
+var textWidth = (text, size) => [...String(text)].reduce((sum, char) => sum + (char.charCodeAt(0) > 11904 ? size : size * 0.58), 0);
+var fit = (text, room, size) => {
+  if (textWidth(text, size) <= room) return text;
+  let out = "";
+  for (const char of String(text)) {
+    if (textWidth(`${out}${char}…`, size) > room) break;
+    out += char;
+  }
+  return out === "" ? "" : `${out}…`;
+};
+function formatNumber(value) {
+  if (!Number.isFinite(value)) return asText(value);
+  const abs = Math.abs(value);
+  const digits = abs >= 100 ? 0 : abs >= 10 ? 1 : 2;
+  return Number(value.toFixed(digits)).toLocaleString("en-US", { maximumFractionDigits: digits });
+}
+var withUnit = (value, unit) => unit ? unit === "%" ? `${formatNumber(value)}%` : `${formatNumber(value)} ${unit}` : formatNumber(value);
+function niceTicks(low, high) {
+  let lo = low;
+  let hi = high;
+  if (lo === hi) {
+    lo = Math.min(0, lo);
+    hi = hi === 0 ? 1 : Math.max(0, hi);
+  }
+  if (lo === hi) hi = lo + 1;
+  const raw = (hi - lo) / 4;
+  const magnitude = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((scale) => scale * magnitude).find((candidate) => candidate >= raw);
+  const start = Math.floor(lo / step + 1e-9) * step;
+  const end = Math.ceil(hi / step - 1e-9) * step;
+  const ticks = [];
+  for (let value = start; value <= end + step / 2; value += step) ticks.push(Number(value.toPrecision(12)));
+  return ticks;
+}
+function chartData(node, lookup) {
+  const categories = (Array.isArray(node.categories) ? node.categories : []).map(asText);
+  const series = (Array.isArray(node.series) ? node.series : []).map((item, index) => ({
+    name: typeof item?.name === "string" ? item.name : "",
+    color: colorAt(index),
+    values: categories.map((_, at) => {
+      const value = Number(resolve(Array.isArray(item?.values) ? item.values[at] : void 0, lookup, 0));
+      return Number.isFinite(value) ? value : 0;
+    })
+  }));
+  return { kind: node.kind ?? "bar", categories, series, unit: typeof node.unit === "string" ? node.unit : "" };
+}
+var csvCell = (value) => /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+function chartCsv({ categories, series, unit }, t2 = (key) => key) {
+  const head = ["", ...series.map((item, index) => item.name || (series.length === 1 ? unit || t2("Value") : `${t2("Series")} ${index + 1}`))];
+  const rows2 = categories.map((label, at) => [label, ...series.map((item) => String(item.values[at]))]);
+  return [head, ...rows2].map((row) => row.map((cell) => csvCell(String(cell))).join(",")).join("\n");
+}
+function valueAxis(values, zero) {
+  const finite = values.length > 0 ? values : [0];
+  const low = Math.min(...finite);
+  const high = Math.max(...finite);
+  if (zero) return niceTicks(Math.min(0, low), Math.max(0, high));
+  const pad2 = (high - low) * 0.1 || Math.abs(high) * 0.1 || 1;
+  return niceTicks(low - pad2, high + pad2);
+}
+function columns({ categories, series, unit, kind }, width, active, shown) {
+  const visible = series.filter((_, index) => shown[index]);
+  const ticks = valueAxis(visible.flatMap((item) => item.values), kind !== "line");
+  const lo = ticks[0];
+  const hi = ticks.at(-1);
+  const left = Math.ceil(Math.max(...ticks.map((tick) => textWidth(withUnit(tick, unit), TICK)))) + 10;
+  const top = 8;
+  const height = 220;
+  const bottom = 24;
+  const plot = { x: left, y: top, w: Math.max(40, width - left - 4), h: height - top - bottom };
+  const y = (value) => plot.y + plot.h - (value - lo) / (hi - lo) * plot.h;
+  const band = plot.w / categories.length;
+  const parts = [];
+  for (const tick of ticks) {
+    parts.push((0, import_react21.createElement)("line", { key: `g${tick}`, className: "dv-chart-grid", x1: plot.x, x2: plot.x + plot.w, y1: y(tick), y2: y(tick) }));
+    parts.push((0, import_react21.createElement)("text", { key: `t${tick}`, className: "dv-chart-tick", x: plot.x - 8, y: y(tick) + 3, textAnchor: "end" }, withUnit(tick, unit)));
+  }
+  const points = [];
+  categories.forEach((label, at) => {
+    const cx = plot.x + band * at + band / 2;
+    parts.push((0, import_react21.createElement)("text", { key: `c${at}`, className: "dv-chart-label", x: cx, y: height - 7, textAnchor: "middle" }, fit(label, band - 4, LABEL)));
+    points.push({ x: cx, y: y(Math.max(...visible.map((item) => item.values[at]), lo)) });
+  });
+  if (kind === "bar") {
+    const group = band * 0.72;
+    const gap = visible.length > 1 ? 2 : 0;
+    const barW = Math.max(2, (group - gap * (visible.length - 1)) / visible.length);
+    const zero = y(Math.max(lo, Math.min(0, hi)));
+    categories.forEach((_, at) => {
+      visible.forEach((item, row) => {
+        const value = item.values[at];
+        const x = plot.x + band * at + (band - group) / 2 + row * (barW + gap);
+        const top2 = Math.min(y(value), zero);
+        const tall = Math.max(1, Math.abs(y(value) - zero));
+        const r = Math.min(4, barW / 2, tall);
+        const up = value >= 0;
+        const d = up ? `M${x},${top2 + tall}V${top2 + r}q0,-${r} ${r},-${r}h${barW - 2 * r}q${r},0 ${r},${r}V${top2 + tall}z` : `M${x},${top2}V${top2 + tall - r}q0,${r} ${r},${r}h${barW - 2 * r}q${r},0 ${r},-${r}V${top2}z`;
+        parts.push((0, import_react21.createElement)("path", { key: `b${at}-${row}`, className: "dv-chart-mark", "data-dim": active !== null && active !== at ? "" : void 0, d, style: { fill: item.color } }));
+      });
+    });
+  } else {
+    const xs = categories.map((_, at) => plot.x + band * at + band / 2);
+    visible.forEach((item, row) => {
+      const line = item.values.map((value, at) => `${at === 0 ? "M" : "L"}${xs[at]},${y(value)}`).join("");
+      if (kind === "area") {
+        const base = y(Math.max(lo, Math.min(0, hi)));
+        parts.push((0, import_react21.createElement)("path", { key: `a${row}`, className: "dv-chart-area", d: `${line}L${xs.at(-1)},${base}L${xs[0]},${base}z`, style: { fill: item.color } }));
+      }
+      parts.push((0, import_react21.createElement)("path", { key: `l${row}`, className: "dv-chart-line", d: line, style: { stroke: item.color } }));
+      item.values.forEach((value, at) => {
+        parts.push((0, import_react21.createElement)("circle", { key: `p${row}-${at}`, className: "dv-chart-dot", cx: xs[at], cy: y(value), r: active === at ? 4 : 2.5, style: { fill: item.color } }));
+      });
+    });
+    if (active !== null) parts.unshift((0, import_react21.createElement)("line", { key: "guide", className: "dv-chart-guide", x1: xs[active], x2: xs[active], y1: plot.y, y2: plot.y + plot.h }));
+  }
+  const hits = categories.map((_, at) => ({ x: plot.x + band * at, y: plot.y, w: band, h: plot.h }));
+  return { parts, height, points, hits };
+}
+function rows({ categories, series, unit }, width, active, shown) {
+  const visible = series.filter((_, index) => shown[index]);
+  const ticks = valueAxis(visible.flatMap((item) => item.values), true);
+  const lo = ticks[0];
+  const hi = ticks.at(-1);
+  const labelW = Math.min(width * 0.38, Math.ceil(Math.max(...categories.map((label) => textWidth(label, LABEL)))) + 10);
+  const valueW = Math.ceil(Math.max(...visible.flatMap((item) => item.values).map((value) => textWidth(withUnit(value, unit), LABEL)))) + 10;
+  const barH = 14;
+  const rowH = 10 + visible.length * barH + (visible.length - 1) * 2;
+  const top = 4;
+  const height = top + rowH * categories.length + 22;
+  const plot = { x: labelW, y: top, w: Math.max(40, width - labelW - valueW), h: rowH * categories.length };
+  const x = (value) => plot.x + (value - lo) / (hi - lo) * plot.w;
+  const parts = [];
+  for (const tick of ticks) {
+    parts.push((0, import_react21.createElement)("line", { key: `g${tick}`, className: "dv-chart-grid", x1: x(tick), x2: x(tick), y1: plot.y, y2: plot.y + plot.h }));
+    parts.push((0, import_react21.createElement)("text", { key: `t${tick}`, className: "dv-chart-tick", x: x(tick), y: height - 6, textAnchor: "middle" }, withUnit(tick, unit)));
+  }
+  const points = [];
+  const zero = x(Math.max(lo, Math.min(0, hi)));
+  categories.forEach((label, at) => {
+    const rowY = plot.y + rowH * at + 5;
+    parts.push((0, import_react21.createElement)("text", { key: `c${at}`, className: "dv-chart-label", x: labelW - 10, y: rowY + (rowH - 10) / 2 + 4, textAnchor: "end" }, fit(label, labelW - 12, LABEL)));
+    visible.forEach((item, row) => {
+      const value = item.values[at];
+      const by = rowY + row * (barH + 2);
+      const left = Math.min(x(value), zero);
+      const long = Math.max(1, Math.abs(x(value) - zero));
+      parts.push((0, import_react21.createElement)("rect", { key: `b${at}-${row}`, className: "dv-chart-mark", "data-dim": active !== null && active !== at ? "" : void 0, x: left, y: by, width: long, height: barH, rx: Math.min(4, long / 2), style: { fill: item.color } }));
+      parts.push((0, import_react21.createElement)("text", { key: `v${at}-${row}`, className: "dv-chart-value", x: left + long + 6, y: by + barH - 3 }, withUnit(value, unit)));
+    });
+    points.push({ x: Math.max(...visible.map((item) => x(item.values[at])), zero), y: rowY });
+  });
+  const hits = categories.map((_, at) => ({ x: 0, y: plot.y + rowH * at, w: width, h: rowH }));
+  return { parts, height, points, hits };
+}
+function donut({ categories, series }, width, active, hover) {
+  const values = (series[0]?.values ?? []).map((value) => Math.max(0, value));
+  const total = values.reduce((sum, value) => sum + value, 0);
+  const size = Math.min(180, Math.max(120, width * 0.42));
+  const r = size / 2;
+  const inner = r * 0.62;
+  const cx = r;
+  const cy = r;
+  const parts = [];
+  const points = [];
+  let angle = -Math.PI / 2;
+  values.forEach((value, at) => {
+    const sweep = total > 0 ? value / total * Math.PI * 2 : 0;
+    const end = angle + sweep;
+    const mid = angle + sweep / 2;
+    points.push({ x: cx + Math.cos(mid) * (r - (r - inner) / 2), y: cy + Math.sin(mid) * (r - (r - inner) / 2) });
+    if (sweep > 0) {
+      const large = sweep > Math.PI ? 1 : 0;
+      const full = sweep >= Math.PI * 2 - 1e-6;
+      const p = (radius, theta) => `${cx + Math.cos(theta) * radius},${cy + Math.sin(theta) * radius}`;
+      const d = full ? `M${p(r, angle)}A${r},${r} 0 1 1 ${p(r, angle + Math.PI)}A${r},${r} 0 1 1 ${p(r, angle)}M${p(inner, angle)}A${inner},${inner} 0 1 0 ${p(inner, angle + Math.PI)}A${inner},${inner} 0 1 0 ${p(inner, angle)}z` : `M${p(r, angle)}A${r},${r} 0 ${large} 1 ${p(r, end)}L${p(inner, end)}A${inner},${inner} 0 ${large} 0 ${p(inner, angle)}z`;
+      parts.push((0, import_react21.createElement)("path", { key: `s${at}`, className: "dv-chart-mark", "data-dim": active !== null && active !== at ? "" : void 0, d, fillRule: "evenodd", style: { fill: colorAt(at) }, onPointerEnter: () => hover(at) }));
+    }
+    angle = end;
+  });
+  return { parts, height: size, size, points, total, values, categories };
+}
+function useWidth(box, initial) {
+  const [width, setWidth] = (0, import_react21.useState)(initial);
+  (0, import_react21.useLayoutEffect)(() => {
+    const node = box.current;
+    if (!node || typeof ResizeObserver !== "function") return void 0;
+    const measure = () => {
+      const next = Math.round(node.clientWidth);
+      if (next > 0) setWidth(next);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  return width;
+}
+var INLINE = ["fill", "stroke", "stroke-width", "stroke-dasharray", "opacity", "fill-opacity", "font-size", "font-family", "font-weight"];
+function saveImage(svg, name) {
+  const clone = svg.cloneNode(true);
+  const live = [svg, ...svg.querySelectorAll("*")];
+  const copy = [clone, ...clone.querySelectorAll("*")];
+  live.forEach((node, index) => {
+    const style = getComputedStyle(node);
+    copy[index].setAttribute("style", INLINE.map((prop) => `${prop}:${style.getPropertyValue(prop)}`).join(";"));
+  });
+  const width = Number(svg.getAttribute("width"));
+  const height = Number(svg.getAttribute("height"));
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  const page = getComputedStyle(document.body);
+  const background = page.getPropertyValue("--dv-main").trim() || page.backgroundColor;
+  const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)], { type: "image/svg+xml" }));
+  const image = new Image();
+  image.onload = () => {
+    const scale = 2;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.ceil(width * scale);
+    canvas.height = Math.ceil(height * scale);
+    const paint = canvas.getContext("2d");
+    paint.fillStyle = background;
+    paint.fillRect(0, 0, canvas.width, canvas.height);
+    paint.drawImage(image, 0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(url);
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = name;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(link.href), 1e3);
+    }, "image/png");
+  };
+  image.onerror = () => URL.revokeObjectURL(url);
+  image.src = url;
+}
+var TableIcon = () => (0, import_react21.createElement)(
+  "svg",
+  { width: 16, height: 16, viewBox: "0 0 20 20", fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true },
+  (0, import_react21.createElement)("path", { d: "M4.5 4h11A1.5 1.5 0 0 1 17 5.5v9a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 14.5v-9A1.5 1.5 0 0 1 4.5 4z" }),
+  (0, import_react21.createElement)("path", { d: "M3 8.5h14M8 8.5V16" })
+);
+function ChartTable({ data }) {
+  const ui = useViewUi();
+  const { categories, series, unit } = data;
+  const heads = series.map((item, index) => item.name || (series.length === 1 ? unit || ui.t("Value") : `${ui.t("Series")} ${index + 1}`));
+  return (0, import_react21.createElement)(
+    "div",
+    { className: "dv-widget-table" },
+    (0, import_react21.createElement)(
+      "table",
+      null,
+      (0, import_react21.createElement)("thead", null, (0, import_react21.createElement)("tr", null, (0, import_react21.createElement)("th", { scope: "col" }), heads.map((head, index) => (0, import_react21.createElement)("th", { key: index, scope: "col", className: "dv-num" }, head)))),
+      (0, import_react21.createElement)("tbody", null, categories.map((label, at) => (0, import_react21.createElement)(
+        "tr",
+        { key: at },
+        (0, import_react21.createElement)("th", { scope: "row" }, label),
+        series.map((item, index) => (0, import_react21.createElement)("td", { key: index, className: "dv-num" }, withUnit(item.values[at], series.length === 1 && !item.name ? "" : unit)))
+      )))
+    )
+  );
+}
+function WidgetChart({ node, lookup, registerChart, refreshCharts }) {
+  const ui = useViewUi();
+  const data = chartData(node, lookup);
+  const { kind, categories, series, unit } = data;
+  const box = (0, import_react21.useRef)(null);
+  const svg = (0, import_react21.useRef)(null);
+  const width = useWidth(box, 520);
+  const [active, setActive] = (0, import_react21.useState)(null);
+  const [hidden, setHidden] = (0, import_react21.useState)([]);
+  const [asTable, setAsTable] = (0, import_react21.useState)(false);
+  const [copied, setCopied] = (0, import_react21.useState)(false);
+  const labelId = (0, import_react21.useId)();
+  const menuKey = (0, import_react21.useId)();
+  const table = (0, import_react21.useRef)(asTable);
+  table.current = asTable;
+  const shown = series.map((_, index) => !hidden.includes(index));
+  const toggle = (index) => {
+    if (hidden.includes(index)) setHidden(hidden.filter((item) => item !== index));
+    else if (shown.filter(Boolean).length > 1) setHidden([...hidden, index]);
+  };
+  const label = typeof node.caption === "string" && node.caption !== "" ? node.caption : ui.t("Chart");
+  const isDonut = kind === "donut";
+  const legendBeside = isDonut && width >= 360;
+  const drawn = isDonut ? donut(data, legendBeside ? width - 200 : width, active, setActive) : kind === "hbar" ? rows(data, width, active, shown) : columns(data, width, active, shown);
+  const svgWidth = isDonut ? drawn.size : width;
+  const move = (event) => {
+    const keys = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
+    if (event.key === "Escape") {
+      setActive(null);
+      return;
+    }
+    if (keys[event.key] === void 0) return;
+    event.preventDefault();
+    setActive((current) => current === null ? 0 : (current + keys[event.key] + categories.length) % categories.length);
+  };
+  const point = active === null ? null : drawn.points[active];
+  const share = (at) => unit === "%" ? withUnit(drawn.values[at], unit) : `${withUnit(drawn.values[at], unit)} · ${drawn.total > 0 ? Math.round(drawn.values[at] / drawn.total * 100) : 0}%`;
+  const tipRows = active === null || isDonut ? [] : series.filter((_, index) => shown[index]).map((item) => ({ color: item.color, name: item.name, value: withUnit(item.values[active], unit) }));
+  const copy = () => {
+    void navigator.clipboard?.writeText(chartCsv(data, ui.t)).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    });
+  };
+  const toggleTable = () => {
+    table.current = !table.current;
+    setAsTable(table.current);
+  };
+  const menuLabel = typeof node.caption === "string" && node.caption !== "" ? node.caption : null;
+  const action = (0, import_react21.useRef)(null);
+  action.current = { label: menuLabel, copy, save: () => {
+    if (svg.current) saveImage(svg.current, "chart.png");
+  }, toggleTable };
+  (0, import_react21.useEffect)(() => registerChart?.(menuKey, {
+    get label() {
+      return action.current.label;
+    },
+    get asTable() {
+      return table.current;
+    },
+    toggleTable: () => action.current.toggleTable(),
+    copy: () => action.current.copy(),
+    save: () => action.current.save()
+  }), [registerChart, menuKey]);
+  (0, import_react21.useEffect)(() => refreshCharts?.(), [refreshCharts, asTable, menuLabel]);
+  const legend = isDonut ? (0, import_react21.createElement)("div", { className: "dv-chart-legend dv-chart-legend-list" }, categories.map((name, at) => (0, import_react21.createElement)(
+    "div",
+    {
+      key: at,
+      className: "dv-chart-key",
+      "data-dim": active !== null && active !== at ? "" : void 0,
+      onPointerEnter: () => setActive(at),
+      onPointerLeave: () => setActive(null)
+    },
+    (0, import_react21.createElement)("i", { style: { background: colorAt(at) } }),
+    (0, import_react21.createElement)("span", { className: "dv-chart-key-name" }, name),
+    (0, import_react21.createElement)("span", { className: "dv-chart-key-value" }, share(at))
+  ))) : series.length > 1 ? (0, import_react21.createElement)("div", { className: "dv-chart-legend" }, series.map((item, index) => (0, import_react21.createElement)("button", {
+    key: index,
+    type: "button",
+    className: "dv-chart-key",
+    "aria-pressed": shown[index],
+    onClick: () => toggle(index)
+  }, (0, import_react21.createElement)("i", { style: { background: item.color } }), item.name || `${ui.t("Series")} ${index + 1}`))) : null;
+  const plot = (0, import_react21.createElement)(
+    "div",
+    { className: "dv-chart-plot", style: isDonut ? { width: svgWidth } : void 0 },
+    (0, import_react21.createElement)(
+      "svg",
+      {
+        ref: svg,
+        className: "dv-chart-svg",
+        width: svgWidth,
+        height: drawn.height,
+        viewBox: `0 0 ${svgWidth} ${drawn.height}`,
+        role: "img",
+        "aria-labelledby": labelId,
+        tabIndex: 0,
+        onKeyDown: move,
+        onBlur: () => setActive(null),
+        onPointerLeave: () => setActive(null)
+      },
+      drawn.parts,
+      isDonut ? active === null ? (0, import_react21.createElement)("text", { className: "dv-chart-center", x: svgWidth / 2, y: drawn.height / 2 + 5, textAnchor: "middle" }, unit === "%" ? "" : withUnit(drawn.total, unit)) : (0, import_react21.createElement)(
+        import_react21.Fragment,
+        null,
+        (0, import_react21.createElement)("text", { className: "dv-chart-center-name", x: svgWidth / 2, y: drawn.height / 2 - 4, textAnchor: "middle" }, fit(categories[active], drawn.size * 0.56, LABEL)),
+        (0, import_react21.createElement)("text", { className: "dv-chart-center", x: svgWidth / 2, y: drawn.height / 2 + 14, textAnchor: "middle" }, share(active))
+      ) : drawn.hits.map((hit, at) => (0, import_react21.createElement)("rect", { key: `h${at}`, className: "dv-chart-hit", x: hit.x, y: hit.y, width: hit.w, height: hit.h, onPointerEnter: () => setActive(at) }))
+    ),
+    point && !asTable && !isDonut ? (0, import_react21.createElement)(
+      "div",
+      { className: "dv-chart-tip", role: "status", style: { left: point.x, top: point.y } },
+      (0, import_react21.createElement)("b", null, categories[active]),
+      tipRows.map((row, index) => (0, import_react21.createElement)("span", { key: index }, (0, import_react21.createElement)("i", { style: { background: row.color } }), row.name ? `${row.name}  ` : "", row.value))
+    ) : null
+  );
+  const body = asTable ? (0, import_react21.createElement)(ChartTable, { data }) : isDonut ? (0, import_react21.createElement)("div", { className: legendBeside ? "dv-chart-donut dv-chart-donut-beside" : "dv-chart-donut", onPointerLeave: () => setActive(null) }, plot, legend) : (0, import_react21.createElement)(import_react21.Fragment, null, legend, plot);
+  return (0, import_react21.createElement)(
+    "figure",
+    { ref: box, className: "dv-chart", "data-kind": kind },
+    (0, import_react21.createElement)("span", { id: labelId, hidden: true }, label),
+    body,
+    // The SVG stays mounted under the table, so the image can still be saved from it.
+    asTable ? (0, import_react21.createElement)("div", { hidden: true }, plot) : null,
+    copied ? (0, import_react21.createElement)("span", { className: "dv-chart-copied", role: "status" }, ui.t("Copied")) : null,
+    typeof node.caption === "string" && node.caption !== "" ? (0, import_react21.createElement)("figcaption", { className: "dv-view-caption" }, node.caption) : null
+  );
+}
+var CHART_CSS = `
+.dv-chart{position:relative;margin:0;min-width:0;display:flex;flex-direction:column;gap:8px}
+.dv-chart-plot{position:relative;min-width:0}
+.dv-chart-svg{display:block;overflow:visible;outline:none;font-family:inherit}
+.dv-chart-svg text{pointer-events:none}
+.dv-chart-svg:focus-visible{outline:2px solid var(--dv-accent);outline-offset:4px;border-radius:4px}
+.dv-chart-grid{stroke:var(--dv-line);stroke-width:1;stroke-dasharray:3 3}
+.dv-chart-tick{font-size:${TICK}px;fill:var(--dv-ink-3);font-variant-numeric:tabular-nums}
+.dv-chart-label{font-size:${LABEL}px;fill:var(--dv-ink-2)}
+.dv-chart-value{font-size:${LABEL}px;fill:var(--dv-ink-2);font-variant-numeric:tabular-nums}
+.dv-chart-center{font-size:15px;font-weight:600;fill:var(--dv-ink);font-variant-numeric:tabular-nums}
+.dv-chart-center-name{font-size:${LABEL}px;fill:var(--dv-ink-2)}
+.dv-chart-mark{transition:opacity .12s ease}
+.dv-chart-mark[data-dim]{opacity:.28}
+.dv-chart-line{fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.dv-chart-area{opacity:.14}
+.dv-chart-dot{transition:r .12s ease}
+.dv-chart-guide{stroke:var(--dv-line-2);stroke-width:1}
+.dv-chart-hit{fill:transparent}
+.dv-chart-tip{position:absolute;z-index:4;pointer-events:none;transform:translate(-50%,calc(-100% - 8px));display:flex;flex-direction:column;gap:2px;padding:6px 10px;border-radius:10px;background:var(--dv-main);border:.5px solid var(--dv-line-2);box-shadow:0 10px 20px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1);font-size:12px;line-height:16px;color:var(--dv-ink);white-space:nowrap;font-variant-numeric:tabular-nums;animation:dv-veil-in .12s ease-out}
+.dv-chart-tip b{font-weight:600}
+.dv-chart-tip span{display:flex;align-items:center;gap:6px;color:var(--dv-ink-2)}
+.dv-chart-tip i,.dv-chart-key i{flex:none;width:8px;height:8px;border-radius:50%;corner-shape:round}
+.dv-chart-legend{display:flex;flex-wrap:wrap;gap:4px 12px;padding-right:32px}
+.dv-chart-key{display:inline-flex;align-items:center;gap:6px;min-height:20px;padding:0;border:0;background:none;font:inherit;font-size:12px;line-height:16px;color:var(--dv-ink-2);cursor:pointer;transition:opacity .12s ease}
+.dv-chart-key[aria-pressed=false]{opacity:.4}
+.dv-chart-key:focus-visible{outline:2px solid var(--dv-accent);outline-offset:2px;border-radius:4px}
+.dv-chart-legend-list{flex-direction:column;flex-wrap:nowrap;gap:6px;padding:0;min-width:0}
+.dv-chart-legend-list .dv-chart-key{cursor:default;width:100%}
+.dv-chart-legend-list .dv-chart-key[data-dim]{opacity:.4}
+.dv-chart-key-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dv-ink)}
+.dv-chart-key-value{flex:none;font-variant-numeric:tabular-nums}
+.dv-chart-donut{display:flex;flex-direction:column;align-items:center;gap:12px}
+.dv-chart-donut-beside{flex-direction:row;align-items:center;gap:24px}
+.dv-chart-donut-beside .dv-chart-legend-list{flex:1 1 auto;max-width:280px}
+.dv-chart-copied{position:absolute;top:2px;right:36px;font-size:12px;line-height:16px;color:var(--dv-ink-2);animation:dv-veil-in .16s ease-out}
+.dv-widget-table .dv-num{text-align:end;font-variant-numeric:tabular-nums}
+.dv-widget-table tbody th{padding:6px 10px;font-weight:400;text-align:start;color:var(--dv-ink);border-bottom:0}
+@media (prefers-reduced-motion:reduce){.dv-chart-mark,.dv-chart-dot{transition:none}.dv-chart-tip{animation:none}}
+`;
+
+// node_modules/deep-view/src/react/frame.js
+var import_react22 = require("react");
+var THEME_VARS = [
+  ["--view-ink", "--bt-ink", "--dv-ink"],
+  ["--view-ink-2", "--bt-ink-2", "--dv-ink-2"],
+  ["--view-ink-3", "--bt-ink-3", "--dv-ink-3"],
+  ["--view-line", "--bt-line", "--dv-line"],
+  ["--view-line-2", "--bt-line-2", "--dv-line-2"],
+  ["--view-card", "--bt-card", "--dv-card"],
+  ["--view-main", "--bt-main", "--dv-main"],
+  ["--view-hover", "--bt-hover", "--dv-hover"],
+  ["--view-accent", "--bt-accent", "--dv-accent"],
+  ["--view-accent-ink", "--bt-accent-ink", "--dv-accent-ink"],
+  ["--view-green", "--bt-green", "--dv-green"],
+  ["--view-star", "--bt-star", "--dv-star"],
+  ["--view-danger", "--bt-danger", "--dv-danger"]
+];
+var FRAME_POLICY = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; form-action 'none'; base-uri 'none'";
+var HEIGHT = "dv-view-height";
+var THEME = "dv-view-theme";
+var MIN_HEIGHT = 24;
+function themeVars2() {
+  if (typeof getComputedStyle !== "function" || typeof document === "undefined" || !document.body) return {};
+  const style = getComputedStyle(document.body);
+  const vars = {};
+  for (const [view, legacy, source] of THEME_VARS) {
+    const value = style.getPropertyValue(source).trim();
+    if (value === "") continue;
+    vars[view] = value;
+    vars[legacy] = value;
+  }
+  vars["color-scheme"] = style.getPropertyValue("color-scheme").trim() || "normal";
+  return vars;
+}
+var cssValue = (value) => String(value).replace(/[<>{};]/g, "");
+function frameDocument(html, vars = {}) {
+  const root = Object.entries(vars).map(([name, value]) => `${name}:${cssValue(value)}`).join(";");
+  const report = `(()=>{const send=()=>parent.postMessage({type:${JSON.stringify(HEIGHT)},height:Math.ceil(document.documentElement.getBoundingClientRect().height)},'*');new ResizeObserver(send).observe(document.documentElement);addEventListener('load',send);addEventListener('message',e=>{if(e.source!==parent||!e.data||e.data.type!==${JSON.stringify(THEME)})return;for(const[k,v]of Object.entries(e.data.vars||{}))document.documentElement.style.setProperty(k,String(v))})})()`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${FRAME_POLICY}"><style>:root{${root}}html,body{margin:0;padding:0;background:transparent;color:var(--view-ink,var(--bt-ink));font:14px/22px -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}*{box-sizing:border-box}</style><script>${report}<\/script></head><body>${html}</body></html>`;
+}
+function HtmlFrame({ node }) {
+  const ui = useViewUi();
+  const frame = (0, import_react22.useRef)(null);
+  const loads = (0, import_react22.useRef)(0);
+  const [height, setHeight] = (0, import_react22.useState)(Number.isFinite(node.height) ? node.height : 120);
+  const [stopped, setStopped] = (0, import_react22.useState)(false);
+  const doc = (0, import_react22.useMemo)(() => frameDocument(String(node.html ?? ""), themeVars2()), [node.html]);
+  (0, import_react22.useEffect)(() => {
+    const onMessage = (event) => {
+      if (event.source !== frame.current?.contentWindow || event.data?.type !== HEIGHT) return;
+      const next = Number(event.data.height);
+      if (Number.isFinite(next)) setHeight(Math.max(MIN_HEIGHT, Math.ceil(next)));
+    };
+    window.addEventListener("message", onMessage);
+    const retheme = () => frame.current?.contentWindow?.postMessage({ type: THEME, vars: themeVars2() }, "*");
+    const observer = typeof MutationObserver === "function" ? new MutationObserver(retheme) : null;
+    observer?.observe(document.body, { attributes: true, attributeFilter: ["data-ds-dark-theme", "style", "class"] });
+    return () => {
+      window.removeEventListener("message", onMessage);
+      observer?.disconnect();
+    };
+  }, []);
+  if (stopped) return (0, import_react22.createElement)("p", { className: "dv-view-frame-stopped" }, ui.t("This view tried to open a page and was stopped."));
+  return (0, import_react22.createElement)("iframe", {
+    ref: frame,
+    className: "dv-view-frame",
+    title: String(node.summary ?? ""),
+    sandbox: "allow-scripts",
+    srcDoc: doc,
+    referrerPolicy: "no-referrer",
+    style: { height: `${height}px` },
+    onLoad: () => {
+      loads.current += 1;
+      if (loads.current > 1) setStopped(true);
+    }
+  });
+}
+var HTML_CSS = `
+.dv-view-frame{display:block;width:100%;border:0;background:transparent}
+.dv-view-frame-stopped{margin:0;font-size:13px;line-height:18px;color:var(--dv-ink-2)}
+`;
+
+// node_modules/deep-view/src/react/card.js
+var import_react23 = require("react");
+var mdLabels = (ui) => ({ code: { copyLabel: ui.t("Copy"), copiedLabel: ui.t("Copied") }, footnotes: ui.t("Footnotes") });
+var TONES2 = ["good", "warn", "bad"];
+var CALLOUT_TONES2 = ["info", "good", "warn", "bad"];
+var optionsOf = (node) => (Array.isArray(node?.options) ? node.options : []).map((option) => typeof option === "string" ? { label: option } : option).filter((option) => option !== null && typeof option === "object" && option.label !== void 0);
+var fieldsOf = (node) => (Array.isArray(node?.fields) ? node.fields : []).filter((field) => field !== null && typeof field === "object" && field.id !== void 0);
+var cellText2 = (value) => value === null || value === void 0 ? "" : typeof value === "object" ? JSON.stringify(value) : asText(value);
+var NUMERIC_CELL = /^[-+]?[\d.,]+\s?(%|[a-zA-Z]{1,4})?$/;
+var countType = (node, type) => {
+  if (node === null || typeof node !== "object") return 0;
+  const children = Array.isArray(node.children) ? node.children : [];
+  return (node.type === type ? 1 : 0) + children.reduce((sum, child) => sum + countType(child, type), 0);
+};
+var ANSWER_TYPES = /* @__PURE__ */ new Set(["options", "confirm", "form", "submit", "slider", "choice", "toggle", "number"]);
+var hasControls = (node) => {
+  if (node === null || typeof node !== "object") return false;
+  if (ANSWER_TYPES.has(node.type)) return true;
+  return Array.isArray(node.children) && node.children.some(hasControls);
+};
+var answerValues = (answer, node) => answer?.action === node.id ? answer.values : void 0;
+function OptionsInput({ node, onSubmit, keys, busy = false }) {
+  const ui = useViewUi();
+  const [picked, setPicked] = (0, import_react23.useState)([]);
+  const options = optionsOf(node);
+  const multi = node.multi === true;
+  const choose = (label) => {
+    if (busy) return;
+    if (multi) {
+      setPicked((current) => current.includes(label) ? current.filter((item) => item !== label) : [...current, label]);
+      return;
+    }
+    onSubmit?.(node.id, { selected: [label] });
+  };
+  const submit = () => {
+    if (!busy && picked.length > 0) onSubmit?.(node.id, { selected: picked });
+  };
+  const ownRef = (0, import_react23.useRef)(null);
+  const hints = useOptionKeys(busy || !keys ? 0 : options.length, (index) => choose(options[index].label), ownRef);
+  return (0, import_react23.createElement)(
+    import_react23.Fragment,
+    null,
+    (0, import_react23.createElement)("div", { className: "dv-q-list", role: "group" }, options.map((option, index) => {
+      const selected = multi && picked.includes(option.label);
+      return (0, import_react23.createElement)(
+        "button",
+        {
+          key: option.label,
+          type: "button",
+          className: "dv-q-opt",
+          disabled: busy,
+          "aria-pressed": multi ? selected : void 0,
+          "aria-keyshortcuts": hints ? keyLetter(index).toLowerCase() : void 0,
+          onClick: () => choose(option.label)
+        },
+        hints ? (0, import_react23.createElement)("span", { className: "dv-key", "aria-hidden": true }, keyLetter(index)) : null,
+        (0, import_react23.createElement)(
+          "span",
+          { className: "dv-q-body" },
+          (0, import_react23.createElement)("span", { className: "dv-q-label" }, option.label),
+          option.description ? (0, import_react23.createElement)("span", { className: "dv-q-desc" }, option.description) : null
+        ),
+        selected ? (0, import_react23.createElement)("span", { className: "dv-q-check", title: ui.t("Selected") }, (0, import_react23.createElement)(CheckIcon2)) : null
+      );
+    })),
+    multi ? (0, import_react23.createElement)(
+      "div",
+      { className: "dv-q-foot" },
+      (0, import_react23.createElement)("button", { type: "button", className: "dv-q-submit", disabled: busy || picked.length === 0, onClick: submit }, ui.t("Submit"))
+    ) : null
+  );
+}
+function SettledOptions({ node, answer }) {
+  const ui = useViewUi();
+  const selected = answerValues(answer, node)?.selected;
+  const chosen = Array.isArray(selected) ? selected : [];
+  return (0, import_react23.createElement)(
+    "div",
+    { className: "dv-q-list", role: "group", "aria-label": ui.t("Your answer") },
+    optionsOf(node).map((option) => (0, import_react23.createElement)(
+      "div",
+      { key: option.label, className: "dv-q-opt" },
+      (0, import_react23.createElement)(
+        "span",
+        { className: "dv-q-body" },
+        (0, import_react23.createElement)("span", { className: "dv-q-label" }, option.label),
+        option.description ? (0, import_react23.createElement)("span", { className: "dv-q-desc" }, option.description) : null
+      ),
+      chosen.includes(option.label) ? (0, import_react23.createElement)("span", { className: "dv-q-check", title: ui.t("Selected") }, (0, import_react23.createElement)(CheckIcon2)) : null
+    ))
+  );
+}
+function ConfirmInput({ node, onSubmit, busy = false }) {
+  const ui = useViewUi();
+  return (0, import_react23.createElement)(
+    "div",
+    { className: "dv-q-foot" },
+    (0, import_react23.createElement)("button", { type: "button", className: "dv-q-btn", disabled: busy, onClick: () => onSubmit?.(node.id, { confirmed: false }) }, node.cancelLabel ?? ui.t("Cancel")),
+    (0, import_react23.createElement)("button", { type: "button", className: "dv-q-submit", disabled: busy, onClick: () => onSubmit?.(node.id, { confirmed: true }) }, node.confirmLabel ?? ui.t("Confirm"))
+  );
+}
+function SettledConfirm({ node, answer }) {
+  const ui = useViewUi();
+  const confirmed = answerValues(answer, node)?.confirmed;
+  if (confirmed !== true && confirmed !== false) {
+    return (0, import_react23.createElement)(
+      "div",
+      { className: "dv-q-foot" },
+      (0, import_react23.createElement)("button", { type: "button", className: "dv-q-btn", disabled: true }, node.cancelLabel ?? ui.t("Cancel")),
+      (0, import_react23.createElement)("button", { type: "button", className: "dv-q-submit", disabled: true }, node.confirmLabel ?? ui.t("Confirm"))
+    );
+  }
+  const label = confirmed ? node.confirmLabel ?? ui.t("Confirm") : node.cancelLabel ?? ui.t("Cancel");
+  return (0, import_react23.createElement)("span", { className: "dv-q-badge" }, label);
+}
+function FormInput({ node, onSubmit, busy = false }) {
+  const ui = useViewUi();
+  const fields = fieldsOf(node);
+  const [draft, setDraft] = (0, import_react23.useState)({});
+  const submit = () => {
+    if (!busy) onSubmit?.(node.id, { fields: Object.fromEntries(fields.map((field) => [field.id, draft[field.id] ?? ""])) });
+  };
+  return (0, import_react23.createElement)(
+    "form",
+    {
+      className: "dv-widget-form",
+      onSubmit: (event) => {
+        event.preventDefault();
+        submit();
+      }
+    },
+    fields.map((field) => (0, import_react23.createElement)(
+      "label",
+      { key: field.id, className: "dv-widget-field" },
+      (0, import_react23.createElement)("span", { className: "dv-widget-field-label" }, field.label),
+      (0, import_react23.createElement)(
+        "span",
+        { className: "dv-q-field" },
+        (0, import_react23.createElement)("input", {
+          className: "dv-q-input",
+          type: "text",
+          value: draft[field.id] ?? "",
+          autoComplete: "off",
+          spellCheck: false,
+          readOnly: busy,
+          "aria-label": field.label,
+          placeholder: field.placeholder ?? void 0,
+          onChange: (event) => {
+            if (!busy) setDraft((current) => ({ ...current, [field.id]: event.target.value }));
+          },
+          onKeyDown: (event) => {
+            if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+            event.preventDefault();
+            submit();
+          }
+        })
+      )
+    )),
+    (0, import_react23.createElement)("div", { className: "dv-q-foot" }, (0, import_react23.createElement)("button", { type: "submit", className: "dv-q-submit", disabled: busy }, node.submitLabel ?? ui.t("Submit")))
+  );
+}
+function SettledForm({ node, answer }) {
+  const fields = answerValues(answer, node)?.fields;
+  const values = fields !== null && typeof fields === "object" ? fields : {};
+  return (0, import_react23.createElement)(
+    "div",
+    { className: "dv-widget-form" },
+    fieldsOf(node).map((field) => (0, import_react23.createElement)(
+      "label",
+      { key: field.id, className: "dv-widget-field" },
+      (0, import_react23.createElement)("span", { className: "dv-widget-field-label" }, field.label),
+      (0, import_react23.createElement)(
+        "span",
+        { className: "dv-q-field" },
+        (0, import_react23.createElement)("input", { className: "dv-q-input", type: "text", value: values[field.id] ?? "", disabled: true, readOnly: true, "aria-label": field.label })
+      )
+    ))
+  );
+}
+function SubmitInput({ node, ctx }) {
+  const ui = useViewUi();
+  if (ctx.settled) return null;
+  return (0, import_react23.createElement)(
+    "div",
+    { className: "dv-q-foot" },
+    (0, import_react23.createElement)("button", { type: "button", className: "dv-q-submit", disabled: ctx.busy, onClick: () => ctx.onSubmit?.(node.id, {}) }, node.label || ui.t("Send"))
+  );
+}
+function WidgetTable({ node, lookup }) {
+  const columns2 = (Array.isArray(node.columns) ? node.columns : []).filter((column) => column !== null && typeof column === "object");
+  const rows2 = (Array.isArray(node.rows) ? node.rows : []).map((row) => (Array.isArray(row) ? row : []).map((cell) => resolve(cell, lookup, "")));
+  const numeric2 = columns2.map((_, index) => {
+    const cells = rows2.map((row) => row[index]).filter((cell) => cell !== void 0 && cell !== "");
+    return cells.length > 0 && cells.every((cell) => typeof cell === "number" || typeof cell === "string" && NUMERIC_CELL.test(cell.trim()));
+  });
+  return (0, import_react23.createElement)(
+    "div",
+    { className: "dv-widget-table" },
+    (0, import_react23.createElement)(
+      "table",
+      null,
+      (0, import_react23.createElement)("thead", null, (0, import_react23.createElement)("tr", null, columns2.map((column, index) => (0, import_react23.createElement)("th", { key: column.key ?? index, scope: "col", className: numeric2[index] ? "dv-num" : void 0 }, column.label)))),
+      (0, import_react23.createElement)("tbody", null, rows2.map((row, rowIndex) => (0, import_react23.createElement)(
+        "tr",
+        { key: rowIndex },
+        columns2.map((column, columnIndex) => (0, import_react23.createElement)("td", { key: column.key ?? columnIndex, className: numeric2[columnIndex] ? "dv-num" : void 0 }, cellText2(row[columnIndex])))
+      )))
+    )
+  );
+}
+function WidgetProgress({ node, lookup }) {
+  const ui = useViewUi();
+  let percent;
+  if (node.percent !== void 0) percent = Number(resolve(node.percent, lookup, 0));
+  else {
+    const max = Number(resolve(node.max, lookup, 0));
+    percent = max > 0 ? Number(resolve(node.value, lookup, 0)) / max * 100 : 0;
+  }
+  percent = Math.max(0, Math.min(100, Number.isFinite(percent) ? percent : 0));
+  const tone = resolve(node.tone, lookup);
+  const right = node.valueLabel !== void 0 ? asText(resolve(node.valueLabel, lookup, "")) : `${Math.round(percent)}%`;
+  return (0, import_react23.createElement)(
+    "div",
+    { className: "dv-widget-progress", "data-tone": TONES2.includes(tone) ? tone : void 0 },
+    (0, import_react23.createElement)("span", { className: "dv-widget-progress-label" }, (0, import_react23.createElement)("span", { className: "dv-widget-progress-name" }, node.label), (0, import_react23.createElement)("span", null, right)),
+    (0, import_react23.createElement)("div", {
+      className: "dv-widget-progress-track",
+      role: "progressbar",
+      "aria-valuenow": Math.round(percent),
+      "aria-valuemin": 0,
+      "aria-valuemax": 100,
+      "aria-label": node.label ?? ui.t("Progress"),
+      "aria-valuetext": right
+    }, (0, import_react23.createElement)("div", { className: "dv-widget-progress-fill", style: { width: `${percent}%` } }))
+  );
+}
+function WidgetMetric({ node, lookup }) {
+  const tone = resolve(node.tone, lookup);
+  const caption = node.caption === void 0 ? "" : asText(resolve(node.caption, lookup, ""));
+  return (0, import_react23.createElement)(
+    "div",
+    { className: "dv-widget-metric", "data-tone": TONES2.includes(tone) ? tone : void 0 },
+    (0, import_react23.createElement)("span", { className: "dv-widget-metric-label" }, node.label),
+    (0, import_react23.createElement)("span", { className: "dv-widget-metric-value" }, asText(resolve(node.value, lookup, "—"))),
+    caption !== "" ? (0, import_react23.createElement)("span", { className: "dv-view-caption" }, caption) : null
+  );
+}
+function WidgetCallout({ node, lookup }) {
+  const ui = useViewUi();
+  const tone = resolve(node.tone, lookup);
+  return (0, import_react23.createElement)(
+    "div",
+    { className: "dv-view-callout", "data-tone": CALLOUT_TONES2.includes(tone) ? tone : "info" },
+    (0, import_react23.createElement)("span", { className: "dv-view-callout-icon", "aria-hidden": true }, (0, import_react23.createElement)(InfoIcon2)),
+    (0, import_react23.createElement)("div", { className: "dv-view-callout-text" }, (0, import_react23.createElement)(ui.Markdown, { text: asText(resolve(node.text, lookup, "")), labels: mdLabels(ui), variant: "compact" }))
+  );
+}
+var LinkIcon = () => (0, import_react23.createElement)(
+  "svg",
+  { width: 12, height: 12, viewBox: "0 0 20 20", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true },
+  (0, import_react23.createElement)("path", { d: "M8.5 11.5l3-3" }),
+  (0, import_react23.createElement)("path", { d: "M7 9.5L5.5 11a2.5 2.5 0 0 0 3.5 3.5L10.5 13" }),
+  (0, import_react23.createElement)("path", { d: "M13 10.5l1.5-1.5A2.5 2.5 0 0 0 11 5.5L9.5 7" })
+);
+function WidgetSources({ node }) {
+  const ui = useViewUi();
+  const items = (Array.isArray(node.items) ? node.items : []).filter((item) => typeof item?.url === "string" && /^https?:\/\//i.test(item.url));
+  return (0, import_react23.createElement)(
+    "div",
+    { className: "dv-view-sources", role: "list", "aria-label": ui.t("Sources") },
+    items.map((item, index) => (0, import_react23.createElement)("a", { key: index, role: "listitem", className: "dv-view-source", href: item.url, target: "_blank", rel: "noopener noreferrer", title: item.url }, (0, import_react23.createElement)(LinkIcon), item.label))
+  );
+}
+function InputHead({ id, label, value }) {
+  return (0, import_react23.createElement)(
+    "div",
+    { className: "dv-view-input-head" },
+    (0, import_react23.createElement)("label", { htmlFor: id, className: "dv-view-input-label" }, label),
+    value !== void 0 ? (0, import_react23.createElement)("output", { htmlFor: id, className: "dv-view-input-value" }, value) : null
+  );
+}
+var withUnit2 = (value, unit) => `${asText(value)}${unit ? ` ${unit}` : ""}`;
+var grouped2 = (value) => typeof value === "number" && Number.isFinite(value) ? value.toLocaleString("en-US", { maximumFractionDigits: 6 }) : asText(value);
+function SliderInput({ node, ctx }) {
+  const id = (0, import_react23.useId)();
+  const value = Number(ctx.values[node.id]);
+  const percent = node.max > node.min ? (value - node.min) / (node.max - node.min) * 100 : 0;
+  return (0, import_react23.createElement)(
+    "div",
+    { className: "dv-view-input" },
+    (0, import_react23.createElement)(InputHead, { id, label: node.label, value: withUnit2(grouped2(value), node.unit) }),
+    (0, import_react23.createElement)("input", {
+      id,
+      type: "range",
+      className: "dv-view-range",
+      min: node.min,
+      max: node.max,
+      step: node.step ?? "any",
+      value,
+      disabled: ctx.locked,
+      style: { "--dv-fill": `${percent}%` },
+      onChange: (event) => ctx.setInput(node.id, Number(event.target.value))
+    })
+  );
+}
+function NumberInput({ node, ctx }) {
+  const id = (0, import_react23.useId)();
+  const [draft, setDraft] = (0, import_react23.useState)(null);
+  const value = ctx.values[node.id];
+  const accept = (raw) => {
+    setDraft(raw);
+    const next = Number(raw);
+    if (raw.trim() === "" || !Number.isFinite(next)) return;
+    if (node.min !== void 0 && next < node.min || node.max !== void 0 && next > node.max) return;
+    ctx.setInput(node.id, next);
+  };
+  return (0, import_react23.createElement)(
+    "div",
+    { className: "dv-view-input" },
+    (0, import_react23.createElement)(InputHead, { id, label: node.label }),
+    (0, import_react23.createElement)(
+      "span",
+      { className: "dv-q-field dv-view-number" },
+      (0, import_react23.createElement)("input", {
+        id,
+        className: "dv-q-input",
+        type: "number",
+        inputMode: "decimal",
+        value: draft ?? asText(value),
+        min: node.min,
+        max: node.max,
+        step: node.step ?? "any",
+        disabled: ctx.locked,
+        onChange: (event) => accept(event.target.value),
+        onBlur: () => setDraft(null)
+      }),
+      node.unit ? (0, import_react23.createElement)("span", { className: "dv-view-unit" }, node.unit) : null
+    )
+  );
+}
+function ChoiceInput({ node, ctx }) {
+  const labelId = (0, import_react23.useId)();
+  const options = optionsOf(node);
+  const current = ctx.values[node.id];
+  const side = options.length <= 4 && options.every((option) => [...option.label].length <= 14);
+  const pick = (option) => () => {
+    if (!ctx.locked) ctx.setInput(node.id, choiceValue(option));
+  };
+  return (0, import_react23.createElement)(
+    "div",
+    { className: "dv-view-input" },
+    (0, import_react23.createElement)("span", { className: "dv-view-input-label", id: labelId }, node.label),
+    side ? (0, import_react23.createElement)(
+      Segmented2,
+      { label: node.label, value: options.findIndex((option) => choiceValue(option) === current), className: "dv-view-seg" },
+      options.map((option) => (0, import_react23.createElement)("button", { key: option.label, type: "button", "aria-pressed": choiceValue(option) === current, disabled: ctx.locked, onClick: pick(option) }, option.label))
+    ) : (0, import_react23.createElement)(
+      "div",
+      { className: "dv-view-radios", role: "radiogroup", "aria-labelledby": labelId },
+      options.map((option) => (0, import_react23.createElement)("button", {
+        key: option.label,
+        type: "button",
+        role: "radio",
+        className: "dv-view-radio",
+        "aria-checked": choiceValue(option) === current,
+        disabled: ctx.locked,
+        onClick: pick(option)
+      }, (0, import_react23.createElement)("span", { className: "dv-view-radio-dot", "aria-hidden": true }), option.label))
+    )
+  );
+}
+function ToggleInput({ node, ctx }) {
+  const on = ctx.values[node.id] === true;
+  return (0, import_react23.createElement)(
+    "div",
+    { className: "dv-view-toggle" },
+    (0, import_react23.createElement)("span", { className: "dv-view-input-label" }, node.label),
+    (0, import_react23.createElement)(
+      "button",
+      { type: "button", role: "switch", className: "dv-switch", "aria-checked": on, "aria-label": node.label, disabled: ctx.locked, onClick: () => ctx.setInput(node.id, !on) },
+      (0, import_react23.createElement)("span", { className: "dv-switch-knob", "aria-hidden": true })
+    )
+  );
+}
+function WidgetNode({ node, ctx }) {
+  const ui = useViewUi();
+  if (node === null || typeof node !== "object") return null;
+  const { lookup } = ctx;
+  switch (node.type) {
+    case "stack":
+    case "row": {
+      const children = Array.isArray(node.children) ? node.children : [];
+      return (0, import_react23.createElement)(
+        "div",
+        { className: node.type === "row" ? "dv-view-row" : "dv-widget-stack" },
+        children.map((child, index) => (0, import_react23.createElement)(WidgetNode, { key: child?.id ?? index, node: child, ctx }))
+      );
+    }
+    case "text": {
+      const text = (0, import_react23.createElement)(ui.Markdown, { text: asText(resolve(node.text, lookup, "")), labels: mdLabels(ui), variant: "compact" });
+      return node.tone === "muted" ? (0, import_react23.createElement)("div", { className: "dv-view-muted" }, text) : text;
+    }
+    case "metric":
+      return (0, import_react23.createElement)(WidgetMetric, { node, lookup });
+    case "table":
+      return (0, import_react23.createElement)(WidgetTable, { node, lookup });
+    case "chart":
+      return (0, import_react23.createElement)(WidgetChart, { node, lookup, registerChart: ctx.registerChart, refreshCharts: ctx.refreshCharts });
+    case "progress":
+      return (0, import_react23.createElement)(WidgetProgress, { node, lookup });
+    case "callout":
+      return (0, import_react23.createElement)(WidgetCallout, { node, lookup });
+    case "sources":
+      return (0, import_react23.createElement)(WidgetSources, { node });
+    case "html":
+      return (0, import_react23.createElement)(HtmlFrame, { node });
+    case "slider":
+      return (0, import_react23.createElement)(SliderInput, { node, ctx });
+    case "number":
+      return (0, import_react23.createElement)(NumberInput, { node, ctx });
+    case "choice":
+      return (0, import_react23.createElement)(ChoiceInput, { node, ctx });
+    case "toggle":
+      return (0, import_react23.createElement)(ToggleInput, { node, ctx });
+    case "submit":
+      return (0, import_react23.createElement)(SubmitInput, { node, ctx });
+    case "options":
+      return ctx.settled ? (0, import_react23.createElement)(SettledOptions, { node, answer: ctx.answer }) : (0, import_react23.createElement)(OptionsInput, { node, onSubmit: ctx.onSubmit, keys: ctx.keys, busy: ctx.busy });
+    case "confirm":
+      return ctx.settled ? (0, import_react23.createElement)(SettledConfirm, { node, answer: ctx.answer }) : (0, import_react23.createElement)(ConfirmInput, { node, onSubmit: ctx.onSubmit, busy: ctx.busy });
+    case "form":
+      return ctx.settled ? (0, import_react23.createElement)(SettledForm, { node, answer: ctx.answer }) : (0, import_react23.createElement)(FormInput, { node, onSubmit: ctx.onSubmit, busy: ctx.busy });
+    default:
+      return null;
+  }
+}
+function WidgetView({ view, onSubmit, settled = false, answer = null, busy = false, registerChart, refreshCharts }) {
+  const inputs = viewInputs(view);
+  const [values, setValues] = (0, import_react23.useState)(() => Object.fromEntries(inputs.map((node) => [node.id, inputDefault(node)])));
+  const sent = answer?.values?.inputs;
+  const current = settled && sent !== null && typeof sent === "object" ? { ...values, ...sent } : values;
+  const submit = (action, extra) => onSubmit?.(action, inputs.length > 0 ? { ...extra, inputs: current } : extra);
+  const ctx = {
+    onSubmit: submit,
+    settled,
+    answer,
+    busy,
+    keys: !settled && countType(view, "options") === 1,
+    lookup: viewScope(view, current),
+    values: current,
+    locked: settled || busy,
+    setInput: (id, value) => setValues((before) => ({ ...before, [id]: value })),
+    registerChart,
+    refreshCharts
+  };
+  return (0, import_react23.createElement)(WidgetNode, { node: view, ctx });
+}
+function useChartHandles() {
+  const [, bump] = (0, import_react23.useState)(0);
+  const charts = (0, import_react23.useRef)(/* @__PURE__ */ new Map());
+  const fns = (0, import_react23.useRef)(null);
+  if (fns.current === null) {
+    const refresh = () => bump((value) => value + 1);
+    fns.current = {
+      registerChart: (key, handle) => {
+        charts.current.set(key, handle);
+        refresh();
+        return () => {
+          charts.current.delete(key);
+          refresh();
+        };
+      },
+      refreshCharts: refresh
+    };
+  }
+  return { charts: [...charts.current.values()], ...fns.current };
+}
+function ViewMenuList({ charts, pick }) {
+  const ui = useViewUi();
+  return (0, import_react23.createElement)(
+    "div",
+    { className: "dv-menu dv-view-menu", role: "menu" },
+    charts.map((chart, index) => (0, import_react23.createElement)(
+      import_react23.Fragment,
+      { key: index },
+      charts.length > 1 ? (0, import_react23.createElement)(
+        import_react23.Fragment,
+        null,
+        index > 0 ? (0, import_react23.createElement)("div", { className: "dv-menu-sep", role: "separator" }) : null,
+        (0, import_react23.createElement)("div", { className: "dv-view-menu-label" }, chart.label ?? ui.t("Chart {n}", { n: index + 1 }))
+      ) : null,
+      (0, import_react23.createElement)("button", { type: "button", role: "menuitem", onClick: pick(chart.toggleTable) }, (0, import_react23.createElement)(TableIcon), chart.asTable ? ui.t("View as chart") : ui.t("View as table")),
+      (0, import_react23.createElement)("button", { type: "button", role: "menuitem", onClick: pick(chart.copy) }, (0, import_react23.createElement)(CopyIcon2), ui.t("Copy data")),
+      (0, import_react23.createElement)("button", { type: "button", role: "menuitem", onClick: pick(chart.save) }, (0, import_react23.createElement)(DownloadIcon2), ui.t("Download image"))
+    ))
+  );
+}
+function ViewMenu({ charts }) {
+  const ui = useViewUi();
+  const [open, setOpen] = (0, import_react23.useState)(false);
+  const root = (0, import_react23.useRef)(null);
+  (0, import_react23.useEffect)(() => {
+    if (!open) return void 0;
+    const away = (event) => {
+      if (!root.current?.contains(event.target)) setOpen(false);
+    };
+    const key = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", away, true);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("pointerdown", away, true);
+      document.removeEventListener("keydown", key);
+    };
+  }, [open]);
+  const pick = (run2) => () => {
+    setOpen(false);
+    run2();
+  };
+  return (0, import_react23.createElement)(
+    "div",
+    { ref: root, className: "dv-view-tools", "data-open": open ? "" : void 0 },
+    (0, import_react23.createElement)("button", { type: "button", className: "dv-view-more", "aria-label": ui.t("Chart options"), "aria-haspopup": "menu", "aria-expanded": open, onClick: () => setOpen((value) => !value) }, (0, import_react23.createElement)(DotsIcon2)),
+    open ? (0, import_react23.createElement)(ViewMenuList, { charts, pick }) : null
+  );
+}
+function WidgetCard({ title, view, onSubmit, onDismiss, busy = false, raised = false, settled = false, answer = null }) {
+  const ui = useViewUi();
+  const titleId = (0, import_react23.useId)();
+  const { charts, registerChart, refreshCharts } = useChartHandles();
+  const framed = raised || hasControls(view);
+  const className = ["dv-view", framed ? "dv-q" : "dv-view-bare", settled ? "dv-q-settled" : "", raised ? "dv-q-raised" : ""].filter(Boolean).join(" ");
+  const head = title || onDismiss || countType(view, "chart") > 0 ? (0, import_react23.createElement)(
+    "div",
+    { className: "dv-view-head" },
+    title ? (0, import_react23.createElement)("p", { className: "dv-view-title", id: titleId }, title) : (0, import_react23.createElement)("span", { className: "dv-view-title" }),
+    countType(view, "chart") > 0 ? (0, import_react23.createElement)(ViewMenu, { charts }) : null,
+    onDismiss ? (0, import_react23.createElement)("button", { type: "button", className: "dv-q-x", "aria-label": ui.t("Dismiss view"), title: ui.t("Dismiss"), onClick: onDismiss, disabled: busy }, (0, import_react23.createElement)(CloseIcon2)) : null
+  ) : null;
+  return (0, import_react23.createElement)(
+    "div",
+    {
+      className,
+      role: "group",
+      "aria-labelledby": title ? titleId : void 0,
+      "aria-label": title ? void 0 : ui.t("View"),
+      "aria-busy": busy || void 0
+    },
+    head,
+    (0, import_react23.createElement)("div", { className: "dv-view-body" }, (0, import_react23.createElement)(WidgetView, { view, onSubmit, settled, answer, busy, registerChart, refreshCharts }))
+  );
+}
+function AnsweredView({ node }) {
+  const data = node.data ?? {};
+  let payload = null;
+  if (Array.isArray(data.views)) payload = data;
+  else {
+    try {
+      payload = typeof data.text === "string" ? JSON.parse(data.text) : null;
+    } catch {
+      payload = null;
+    }
+    if (payload?.kind !== "answer_to_pending_view") payload = null;
+  }
+  const view = payload?.views?.[0];
+  if (view === null || typeof view !== "object" || view.view === void 0) return null;
+  const answers = Array.isArray(payload.answers) ? payload.answers : [];
+  const answer = answers.find((entry) => entry?.id === view.id) ?? answers[0] ?? null;
+  return (0, import_react23.createElement)("div", { className: "dv-q-inline" }, (0, import_react23.createElement)(WidgetCard, { title: view.title ?? "", view: view.view, settled: true, answer }));
+}
+var WIDGET_CSS = `
+.dv-view{min-width:0}
+.dv-view-bare{display:flex;flex-direction:column;gap:8px;width:100%;color:var(--dv-ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;animation:dv-veil-in .2s ease-out backwards}
+.dv-view-head{display:flex;align-items:flex-start;gap:8px;min-width:0}
+.dv-view-title{flex:1 1 0;min-width:0;margin:0;font-size:13px;line-height:18px;font-weight:500;color:var(--dv-ink);overflow-wrap:anywhere}
+.dv-q-settled .dv-view-title{color:var(--dv-ink-2)}
+.dv-view-tools{position:relative;flex:none;align-self:flex-start;opacity:0;transition:opacity .12s ease}
+.dv-view:hover .dv-view-tools,.dv-view-tools:focus-within,.dv-view-tools[data-open]{opacity:1}
+@media (hover:none){.dv-view-tools{opacity:1}}
+.dv-view-more{width:28px;height:28px;padding:0;border:0;border-radius:50%;background:none;color:var(--dv-ink-2);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background-color .12s ease,color .12s ease}
+.dv-view-more:hover,.dv-view-tools[data-open] .dv-view-more{background:var(--dv-hover);color:var(--dv-ink)}
+.dv-view-more:focus-visible{outline:2px solid var(--dv-accent);outline-offset:1px}
+.dv-view-more svg{width:16px;height:16px}
+.dv-menu.dv-view-menu{position:absolute;top:32px;right:0;--dv-origin:top right;min-width:180px}
+.dv-menu.dv-view-menu button{gap:8px}
+.dv-view-menu-label{padding:2px 8px;font-size:11px;line-height:14px;color:var(--dv-ink-3);white-space:nowrap}
+.dv-view-body{min-width:0}
+.dv-widget-stack{display:flex;flex-direction:column;gap:12px;min-width:0}
+.dv-view-row{display:flex;flex-wrap:wrap;gap:12px 24px;min-width:0}
+.dv-view-row>*{flex:1 1 160px;min-width:0}
+.dv-widget-metric{display:flex;flex-direction:column;gap:1px;min-width:0}
+.dv-widget-metric-label{font-size:12px;line-height:16px;color:var(--dv-ink-2)}
+.dv-widget-metric-value{font-size:22px;line-height:28px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--dv-ink);overflow-wrap:anywhere}
+.dv-widget-metric[data-tone=good] .dv-widget-metric-value{color:var(--dv-green)}
+.dv-widget-metric[data-tone=warn] .dv-widget-metric-value{color:var(--dv-star)}
+.dv-widget-metric[data-tone=bad] .dv-widget-metric-value{color:var(--dv-danger)}
+.dv-view-caption{font-size:12px;line-height:16px;color:var(--dv-ink-2);overflow-wrap:anywhere}
+.dv-view-muted{font-size:12px;line-height:16px;color:var(--dv-ink-2)}
+.dv-view-muted *{font-size:inherit!important;line-height:inherit!important;color:inherit!important}
+.dv-widget-table{max-width:100%;overflow-x:auto;border:.5px solid var(--dv-line-2);border-radius:10px}
+.dv-widget-table table{border-collapse:collapse;min-width:100%;font-size:13px;line-height:18px}
+.dv-widget-table th{padding:6px 10px;font-weight:500;text-align:start;white-space:nowrap;color:var(--dv-ink-2);border-bottom:.5px solid var(--dv-line-2)}
+.dv-widget-table td{padding:6px 10px;max-width:280px;color:var(--dv-ink);overflow-wrap:anywhere}
+.dv-widget-table tbody tr+tr>*{border-top:.5px solid var(--dv-line)}
+.dv-widget-table .dv-num{text-align:end;font-variant-numeric:tabular-nums}
+.dv-widget-form{display:flex;flex-direction:column;gap:8px;margin:0}
+.dv-widget-field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.dv-widget-field-label{font-size:12px;line-height:16px;color:var(--dv-ink-2)}
+.dv-widget-field .dv-q-field:has(.dv-q-input:disabled){cursor:default;opacity:.75}
+.dv-widget-progress{display:flex;flex-direction:column;gap:5px;min-width:0}
+.dv-widget-progress-label{display:flex;justify-content:space-between;gap:8px;font-size:12px;line-height:16px;color:var(--dv-ink-2);font-variant-numeric:tabular-nums}
+.dv-widget-progress-name{color:var(--dv-ink);font-weight:500}
+.dv-widget-progress-track{height:6px;border-radius:999px;background:var(--dv-hover);overflow:hidden}
+.dv-widget-progress-fill{height:100%;border-radius:inherit;background:var(--dv-accent);transition:width .12s ease,background-color .12s ease}
+.dv-widget-progress[data-tone=good] .dv-widget-progress-fill{background:var(--dv-green)}
+.dv-widget-progress[data-tone=warn] .dv-widget-progress-fill{background:var(--dv-star)}
+.dv-widget-progress[data-tone=bad] .dv-widget-progress-fill{background:var(--dv-danger)}
+.dv-widget-progress[data-tone=bad] .dv-widget-progress-label>span:last-child{color:var(--dv-danger)}
+.dv-view-callout{display:flex;gap:8px;padding:8px 12px;border-radius:10px;--dv-tone:var(--dv-accent);background:color-mix(in srgb,var(--dv-tone) 8%,transparent);color:var(--dv-ink)}
+.dv-view-callout[data-tone=good]{--dv-tone:var(--dv-green)}
+.dv-view-callout[data-tone=warn]{--dv-tone:var(--dv-star)}
+.dv-view-callout[data-tone=bad]{--dv-tone:var(--dv-danger)}
+.dv-view-callout-icon{flex:none;display:flex;padding-top:3px;color:var(--dv-tone)}
+.dv-view-callout-icon svg{width:16px;height:16px}
+.dv-view-callout-text{flex:1 1 auto;min-width:0}
+.dv-view-sources{display:flex;flex-wrap:wrap;gap:6px}
+.dv-view-source{display:inline-flex;align-items:center;gap:4px;max-width:100%;height:20px;padding:0 6px;border-radius:4px;background:var(--dv-tag-bg,var(--dv-hover));color:var(--dv-ink-2);font-size:11px;line-height:16px;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background-color .12s ease,color .12s ease}
+.dv-view-source:hover{background:var(--dv-hover);color:var(--dv-ink)}
+.dv-view-source:focus-visible{outline:2px solid var(--dv-accent);outline-offset:1px}
+.dv-view-input{display:flex;flex-direction:column;gap:6px;min-width:0}
+.dv-view-input-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.dv-view-input-label{font-size:12px;line-height:16px;color:var(--dv-ink-2)}
+.dv-view-input-value{font-size:15px;line-height:20px;font-weight:600;color:var(--dv-ink);font-variant-numeric:tabular-nums}
+.dv-view-range{-webkit-appearance:none;appearance:none;width:100%;height:20px;margin:0;background:transparent;cursor:pointer}
+.dv-view-range:disabled{cursor:default;opacity:.6}
+.dv-view-range::-webkit-slider-runnable-track{height:6px;border-radius:999px;background:linear-gradient(to right,var(--dv-accent) var(--dv-fill,0%),var(--dv-hover) var(--dv-fill,0%))}
+.dv-view-range::-moz-range-track{height:6px;border-radius:999px;background:var(--dv-hover)}
+.dv-view-range::-moz-range-progress{height:6px;border-radius:999px;background:var(--dv-accent)}
+.dv-view-range::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;margin-top:-5px;border-radius:50%;corner-shape:round;background:var(--dv-knob);box-shadow:0 1px 3px rgba(0,0,0,.25),0 0 0 .5px rgba(0,0,0,.12)}
+.dv-view-range::-moz-range-thumb{width:16px;height:16px;border:0;border-radius:50%;background:var(--dv-knob);box-shadow:0 1px 3px rgba(0,0,0,.25),0 0 0 .5px rgba(0,0,0,.12)}
+.dv-view-range:focus-visible{outline:2px solid var(--dv-accent);outline-offset:2px;border-radius:6px}
+.dv-view-number{max-width:200px;align-items:center;gap:6px}
+.dv-view-number .dv-q-input{font-variant-numeric:tabular-nums}
+.dv-view-unit{flex:none;font-size:13px;color:var(--dv-ink-2)}
+.dv-seg.dv-view-seg{align-self:flex-start;max-width:100%}
+.dv-seg.dv-view-seg button{flex:none;padding:0 12px;white-space:nowrap}
+.dv-view-radios{display:flex;flex-direction:column;gap:2px}
+.dv-view-radio{display:flex;align-items:center;gap:8px;min-height:30px;padding:4px 8px;margin:0 -8px;border:0;border-radius:8px;background:none;font:inherit;font-size:14px;line-height:20px;color:var(--dv-ink);text-align:start;cursor:pointer;transition:background-color .12s ease}
+.dv-view-radio:hover:not(:disabled){background:var(--dv-hover)}
+.dv-view-radio:disabled{cursor:default}
+.dv-view-radio:focus-visible{outline:2px solid var(--dv-accent);outline-offset:-2px}
+.dv-view-radio-dot{flex:none;width:16px;height:16px;border-radius:50%;corner-shape:round;box-shadow:inset 0 0 0 1.5px var(--dv-line-2);transition:box-shadow .12s ease}
+.dv-view-radio[aria-checked=true] .dv-view-radio-dot{box-shadow:inset 0 0 0 5px var(--dv-accent)}
+.dv-view-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:28px}
+.dv-view-toggle .dv-view-input-label{font-size:14px;line-height:20px;color:var(--dv-ink)}
+.dv-q.dv-view{gap:10px}
+.dv-q.dv-view:not(.dv-q-raised):not(.dv-q-settled)>.dv-view-head:has(.dv-view-title:empty){margin-bottom:-6px}
+.dv-q-raised .dv-view-head{padding:14px 16px 4px 20px}
+.dv-q-raised .dv-view-body{padding:0 16px 14px 20px}
+.dv-q-raised .dv-view-body .dv-q-list{padding:0;margin:0 -8px}
+.dv-q-inline .dv-view{margin:0;width:100%;max-width:min(100%,max(calc(var(--dv-msg-w,.8) * 100%),560px));order:0}
+body[data-dv-layout=flat] .dv-q-inline .dv-view{max-width:calc(var(--dv-flat-w,1) * 100%)}
+.dv-q-inline:has(>.dv-view-bare){margin:8px 0 12px}
+@media (prefers-reduced-motion:reduce){.dv-widget-progress-fill,.dv-view-radio-dot,.dv-view-tools,.dv-view-more{transition:none}.dv-view-bare{animation:none}}
+${CHART_CSS}
+${HTML_CSS}
+`;
+
+// node_modules/deep-view/src/react/styles.js
+var THEME_CSS = `
+body{
+--dv-ink:var(--dsw-alias-label-primary);
+--dv-ink-2:var(--dsw-alias-label-secondary);
+--dv-ink-3:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-caption));
+--dv-line:color-mix(in srgb,var(--dsw-alias-label-primary) 8%,transparent);
+--dv-line-2:color-mix(in srgb,var(--dsw-alias-label-primary) 15%,transparent);
+--dv-card:var(--dsw-specific-menu,var(--dsw-alias-bg-layer-1,var(--dsw-alias-bg-base)));
+--dv-main:var(--dsw-alias-bg-base);
+--dv-hover:var(--dsw-alias-interactive-bg-hover);
+--dv-active:var(--dsw-alias-interactive-bg-active,var(--dsw-alias-interactive-bg-hover));
+--dv-accent:var(--dsw-alias-state-business-primary);
+--dv-accent-ink:var(--dsw-alias-label-primary-inverted,#fff);
+--dv-green:var(--dsw-alias-state-success-primary);
+--dv-star:var(--dsw-alias-state-warn-primary,var(--dsw-alias-state-warn-label));
+--dv-danger:var(--dsw-alias-state-error-primary);
+--dv-knob:var(--dsw-alias-label-primary-inverted,#fff);
+--dv-tag-bg:var(--dsw-alias-interactive-bg-hover);
+--dv-ink-tangerine:var(--dsw-alias-brand-text,var(--dsw-alias-state-warn-primary));
+--dv-ink-green:var(--dsw-alias-state-success-primary);
+--dv-ink-violet:color-mix(in srgb,var(--dsw-alias-state-business-primary) 60%,var(--dsw-alias-state-error-primary));
+--dv-ink-sky:var(--dsw-alias-link,var(--dsw-alias-state-business-primary));
+--dv-ink-rose:var(--dsw-alias-state-error-primary);
+--dv-ink-yellow:var(--dsw-alias-state-warn-label,var(--dsw-alias-state-warn-primary));
+--dv-ink-cyan:var(--dsw-alias-state-success-tertiary,var(--dsw-alias-state-success-primary));
+--dv-ink-magenta:var(--dsw-alias-state-error-secondary,var(--dsw-alias-state-error-primary));
+color-scheme:light}
+body[data-ds-dark-theme]{color-scheme:dark}
+.dv-q-inline .dv-view{max-width:100%}
+`;
+var QUESTION_CSS = `
+.dv-q{margin:0 auto 8px;width:100%;max-width:var(--dsh-chat-content-width,748px);display:flex;flex-direction:column;gap:12px;--dv-q-edge:color-mix(in srgb,var(--dv-ink) 10%,transparent);--dv-q-rule:color-mix(in srgb,var(--dv-ink) 8%,transparent);--dv-q-rule-2:color-mix(in srgb,var(--dv-ink) 5%,transparent);background:var(--dv-card);box-shadow:0 1px 3px rgba(20,20,20,.04),inset 0 0 0 1px var(--dv-q-edge);border-radius:16px;padding:14px 16px;box-sizing:border-box;color:var(--dv-ink);font-family:var(--dsw-font-family,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif);animation:dv-veil-in .2s ease-out backwards}
+body[data-ds-dark-theme] .dv-q{--dv-q-edge:rgba(255,255,255,.16);--dv-q-rule:rgba(255,255,255,.12);--dv-q-rule-2:rgba(255,255,255,.08)}
+.dv-q-settled{animation:none}
+.dv-q-x{flex:none;width:20px;height:20px;border:0;padding:0;border-radius:6px;background:none;color:var(--dv-ink-2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background-color .12s ease,color .12s ease}
+.dv-q-x svg{width:14px;height:14px}
+.dv-q-x:hover{background:var(--dv-hover);color:var(--dv-ink)}
+.dv-q-x:focus-visible,.dv-q-opt:focus-visible{outline:2px solid var(--dv-accent);outline-offset:-2px}
+.dv-q-list{display:flex;flex-direction:column;gap:1px;min-width:0;box-sizing:border-box;margin:0 -8px}
+.dv-q-opt{position:relative;display:flex;align-items:flex-start;gap:16px;width:100%;min-width:0;box-sizing:border-box;margin:0;border:0;border-radius:12px;background:transparent;padding:10px 8px;font:inherit;color:var(--dv-ink);text-align:start;cursor:pointer;transition:background-color .12s ease}
+.dv-q-opt+.dv-q-opt::before{content:"";position:absolute;left:calc(var(--dv-key,24px) + 24px);right:8px;top:-1px;height:1px;background:var(--dv-q-rule-2);pointer-events:none}
+button.dv-q-opt:hover::before,button.dv-q-opt:hover+.dv-q-opt::before,.dv-q-opt[aria-pressed=true]::before,.dv-q-opt[aria-pressed=true]+.dv-q-opt::before{opacity:0}
+button.dv-q-opt:hover{background:var(--dv-hover)}
+button.dv-q-opt:active{background:var(--dv-active)}
+.dv-q-opt[aria-pressed=true]{background:var(--dv-active)}
+.dv-key{flex:none;box-sizing:border-box;width:var(--dv-key,24px);height:var(--dv-key,24px);border-radius:8px;background:var(--dv-hover);color:var(--dv-ink-2);font-size:12px;line-height:var(--dv-key,24px);font-weight:500;text-align:center;font-variant-numeric:tabular-nums;transition:background-color .12s ease,color .12s ease}
+.dv-q-body{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px;padding-top:2px}
+.dv-q-opt:has(.dv-q-desc){--dv-key:34px}
+.dv-q-opt:has(.dv-q-desc) .dv-key{margin-top:2px;border-radius:10px;font-size:13px}
+.dv-q-opt:has(.dv-q-desc) .dv-q-body{padding-top:0}
+.dv-q-label{font-size:14px;line-height:20px;font-weight:500;white-space:normal;overflow-wrap:anywhere}
+.dv-q-desc{font-size:12px;line-height:17px;color:var(--dv-ink-2);overflow-wrap:anywhere}
+.dv-q-check{flex:none;display:inline-flex;align-items:center;color:var(--dv-ink-2);animation:dv-check-pop .18s ease-out backwards}
+.dv-q-settled .dv-q-check{animation:none}
+.dv-q-check svg{width:16px;height:16px}
+.dv-q-settled .dv-key{opacity:.4}
+.dv-q-settled .dv-q-label{color:color-mix(in srgb,var(--dv-ink) 45%,transparent)}
+.dv-q.dv-q-settled{gap:6px;padding:12px 16px}
+.dv-q-settled .dv-q-opt{padding:4px 8px}
+.dv-q-badge{flex:none;height:20px;padding:0 7px;border-radius:999px;border:1px dotted var(--dv-line-2);color:var(--dv-ink-2);font-size:12px;line-height:18px;box-sizing:border-box}
+.dv-q-field{flex:1 1 0;min-width:0;display:flex;box-sizing:border-box;min-height:32px;padding:5px 11px;border-radius:8px;border:.5px solid var(--dv-line-2);background:none;cursor:text;transition:border-color .12s ease}
+.dv-q-field:focus-within{border-color:color-mix(in srgb,var(--dv-ink) 30%,transparent)}
+.dv-q-input{flex:1;width:100%;min-width:0;max-height:120px;margin:0;padding:0;border:0;outline:none;background:transparent;color:var(--dv-ink);font:inherit;font-size:14px;line-height:20px;resize:none;overflow-y:hidden;white-space:pre-wrap;overflow-wrap:anywhere}
+.dv-q-input::placeholder{color:var(--dv-ink-3)}
+.dv-q-submit,.dv-q-btn{flex:none;height:36px;padding:0 14px;border:0;border-radius:999px;font:inherit;font-size:14px;font-weight:500;cursor:pointer;transition:opacity .12s ease,background-color .12s ease}
+.dv-q-submit{background:var(--dv-accent);color:var(--dv-accent-ink,#fff);animation:dv-veil-in .16s ease-out backwards}
+.dv-q-submit:hover:not(:disabled){opacity:.86}
+.dv-q-submit:disabled{opacity:.4;cursor:default}
+.dv-q-btn{background:var(--dv-hover);color:var(--dv-ink)}
+.dv-q-btn:hover{background:var(--dv-active)}
+.dv-q-foot{display:flex;justify-content:flex-end;gap:8px}
+.dv-menu{position:fixed;pointer-events:auto;z-index:60;min-width:200px;padding:6px;border-radius:12px;background:var(--dv-main);border:.5px solid var(--dv-line-2);box-shadow:0 10px 20px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1),0 0 0 1px rgba(228,228,228,.04);display:flex;flex-direction:column;gap:2px;transform-origin:var(--dv-origin,top left);animation:dv-veil-in .14s ease-out;font-family:var(--dsw-font-family,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif);box-sizing:border-box}
+.dv-menu.dv-view-menu{position:absolute;z-index:4}
+.dv-menu button{display:flex;align-items:center;gap:4px;width:100%;min-height:30px;text-align:left;border:0;background:none;border-radius:6px;padding:6px 8px;font:inherit;font-size:13px;line-height:18px;color:var(--dv-ink);cursor:pointer;box-sizing:border-box}
+.dv-menu button:hover{background:var(--dv-hover)}
+.dv-menu
+.dv-menu button{display:flex;align-items:center;gap:4px;width:100%;min-height:30px;text-align:left;border:0;background:none;border-radius:6px;padding:6px 8px;font:inherit;font-size:13px;line-height:18px;color:var(--dv-ink);cursor:pointer;box-sizing:border-box}
+.dv-menu button:hover{background:var(--dv-hover)}
+.dv-menu button svg{flex:none;width:16px;height:16px;margin:0 1px}
+.dv-menu-sep{height:.5px;flex:none;background:var(--dv-line-2);margin:4px 8px}
+.dv-seg{position:relative;display:flex;gap:2px;padding:2px;border-radius:10px;background:var(--dv-hover)}
+.dv-seg button{position:relative;z-index:1;flex:1;height:30px;border:0;border-radius:8px;background:none;font:inherit;font-size:13px;color:var(--dv-ink-2);cursor:pointer;transition:background-color .15s ease,color .15s ease,box-shadow .15s ease}
+.dv-seg button[aria-pressed=true]{background:var(--dv-card);color:var(--dv-ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.dv-seg button:disabled{opacity:.4;cursor:default}
+.dv-switch{position:relative;flex:none;width:36px;height:20px;padding:0;border:0;border-radius:999px;background:var(--dv-line-2);cursor:pointer;transition:background-color .15s ease}
+.dv-switch[aria-checked=true]{background:var(--dv-accent)}
+.dv-switch:disabled{opacity:.4;cursor:default}
+.dv-switch-knob{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--dv-knob);box-shadow:0 1px 3px rgba(0,0,0,.2);transition:transform .15s ease}
+.dv-switch[aria-checked=true] .dv-switch-knob{transform:translateX(16px)}
+.dv-switch:focus-visible{outline:2px solid var(--dv-accent);outline-offset:2px}
+.dv-gone{display:none}
+@keyframes dv-veil-in{from{opacity:0;filter:blur(6px)}}
+@keyframes dv-check-pop{from{opacity:0;scale:.4}}
+@media (prefers-reduced-motion:reduce){.dv-q,.dv-view-bare,.dv-q-submit,.dv-menu,.dv-q-check{animation:none}}
+`;
+
+// node_modules/deep-view/src/react/index.js
+var DEEP_VIEW_CSS = THEME_CSS + QUESTION_CSS + WIDGET_CSS;
+
+// src/client/product-work-view.js
+var import_react24 = require("react");
+var viewT = (key, params) => key === "Send" ? t("Send to Main") : t(key, params);
+var VIEW_UI = { t: viewT, Markdown: import_dsh_client_ui_primitives.MarkdownText };
+var Card2 = (props) => (0, import_react24.createElement)(ViewUi.Provider, { value: VIEW_UI }, (0, import_react24.createElement)(WidgetCard, props));
+function ProductWorkView({ title, view, answer, onSubmit, busy = false }) {
+  return (0, import_react24.createElement)(
+    "div",
+    { className: "bt-main-work-view" },
+    (0, import_react24.createElement)(Card2, { title, view, ...onSubmit ? { onSubmit, busy } : { settled: true, answer } })
+  );
+}
+
+// src/client/product-operations.js
+var import_react26 = require("react");
+var number = (value) => Number(value ?? 0).toLocaleString();
+var byteCount = (value) => {
+  const bytes = Number(value ?? 0);
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+};
+var updateCopy = (phase) => ({
+  checking: "Checking for updates",
+  current: "Up to date",
+  available: "Update available",
+  downloading: "Downloading update",
+  downloaded: "Update ready",
+  installing: "Preparing to install update",
+  failed: "Update check failed"
+})[phase] ?? "Update status unavailable";
+var coverageCopy = (status) => ({
+  none: "No usage yet.",
+  available: "Included Sessions read",
+  partial: "Partial usage",
+  unavailable: "Usage unavailable."
+})[status] ?? "Usage unavailable.";
+var usageLine2 = (value) => value?.status === "none" ? t("No model calls.") : value?.status === "unavailable" ? t("Usage unavailable.") : t("{tokens} tokens · {reported} of {calls} calls reported", {
+  tokens: number(value?.totalTokens),
+  reported: number(value?.reportedCalls),
+  calls: number(value?.calls)
+});
+function UsageItems({ title, items }) {
+  return (0, import_react26.createElement)(Card, { title }, items?.length ? (0, import_react26.createElement)("ul", { className: "bt-product-operations-list" }, items.map((item) => (0, import_react26.createElement)(
+    "li",
+    { key: item.id },
+    (0, import_react26.createElement)("span", null, item.title),
+    (0, import_react26.createElement)("strong", null, usageLine2(item.total))
+  ))) : (0, import_react26.createElement)("p", { className: "bt-product-operations-note" }, t("No attributed work usage.")));
+}
+function ProductOperationsSettings({ binding, call, onNavigate, app = globalThis.window?.dsSuperagentApp }) {
+  const [status, setStatus] = (0, import_react26.useState)(null);
+  const [usage, setUsage] = (0, import_react26.useState)(null);
+  const [updates, setUpdates] = (0, import_react26.useState)(null);
+  const [backups, setBackups] = (0, import_react26.useState)([]);
+  const [diagnostics, setDiagnostics] = (0, import_react26.useState)(null);
+  const [error, setError] = (0, import_react26.useState)(null);
+  const [busy, setBusy] = (0, import_react26.useState)(false);
+  const request = (0, import_react26.useRef)(0);
+  const working = (0, import_react26.useRef)(false);
+  const refresh = async () => {
+    const current = ++request.current;
+    const results = await Promise.allSettled([
+      call("product-status", { instanceId: binding.instanceId }),
+      call("product-usage", { instanceId: binding.instanceId }),
+      app?.backups?.list?.() ?? Promise.resolve([]),
+      app?.diagnostics?.() ?? Promise.resolve(null)
+    ]);
+    if (current !== request.current) return;
+    if (results[0].status === "fulfilled") setStatus(results[0].value);
+    else setError(results[0].reason.message);
+    if (results[1].status === "fulfilled") setUsage(results[1].value);
+    else setError(results[1].reason.message);
+    if (results[2].status === "fulfilled") setBackups(results[2].value);
+    else setError(t("Backups could not be listed."));
+    if (results[3].status === "fulfilled") setDiagnostics(results[3].value);
+    else setError(t("Diagnostics could not be loaded."));
+  };
+  (0, import_react26.useEffect)(() => {
+    void refresh();
+    return () => {
+      request.current++;
+    };
+  }, [binding.instanceId]);
+  (0, import_react26.useEffect)(() => {
+    let current = true;
+    let changed = false;
+    const off = app?.updates?.subscribe?.((value) => {
+      changed = true;
+      setUpdates(value);
+    });
+    void app?.updates?.state?.().then((value) => {
+      if (current && !changed) setUpdates(value);
+    }).catch(() => {
+    });
+    return () => {
+      current = false;
+      off?.();
+    };
+  }, [app]);
+  const run2 = async (operation) => {
+    if (working.current) return;
+    working.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      await operation();
+      await refresh();
+    } catch (failure) {
+      setError(t(failure.message));
+    } finally {
+      working.current = false;
+      setBusy(false);
+    }
+  };
+  const [confirm2, setConfirm] = (0, import_react26.useState)(null);
+  const downloadDiagnostics = async () => {
+    const diagnostic = {
+      generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      ...diagnostics,
+      status,
+      usageCoverage: usage?.coverage
+    };
+    const url = URL.createObjectURL(new Blob([`${JSON.stringify(diagnostic, null, 2)}
+`], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "ds-superagent-diagnostics.json";
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1e4);
+  };
+  const statusRows = status ? [
+    [t("Main"), `${t({ ready: "Main ready", running: "Main running", degraded: "Main degraded" }[status.main.state])}${status.main.errorCode ? ` · ${status.main.errorCode}` : ""}`],
+    [t("Processing"), status?.processingPaused ? t("Paused") : t("Running")],
+    [t("Semantic inspection"), status?.supervision?.semanticInspection ? `${t(status.supervision.semanticInspection.status)}${status.supervision.semanticInspection.errorCode ? ` · ${status.supervision.semanticInspection.errorCode}` : ""}` : t("No inspection recorded")],
+    [t("Watchdog"), status?.supervision?.watchdog ? `${t(status.supervision.watchdog.kind)} · ${new Date(status.supervision.watchdog.at).toLocaleString()}` : status?.supervision?.watchdogConfigured ? t("No inspection recorded") : t("Not configured")]
+  ] : [];
+  const coverage = usage?.coverage;
+  const updateError = updates?.failure === "install_failed" ? "Update installation failed" : updates?.failure === "download_failed" ? "Update download failed" : null;
+  return (0, import_react26.createElement)(
+    "section",
+    { className: "bt-product-operations", "aria-label": t("Status and usage") },
+    (0, import_react26.createElement)(
+      "div",
+      { className: "bt-product-operations-toolbar" },
+      (0, import_react26.createElement)("span", { role: "status" }, busy ? t("Working…") : status ? t("Last checked {time}", { time: new Date(usage?.createdAt ?? Date.now()).toLocaleTimeString() }) : ""),
+      (0, import_react26.createElement)("button", {
+        type: "button",
+        className: "bt-soft bt-soft-sm",
+        disabled: busy,
+        onClick: () => {
+          void run2(() => Promise.resolve());
+        }
+      }, t("Refresh status and usage"))
+    ),
+    error ? (0, import_react26.createElement)("p", { role: "alert", className: "bt-main-error" }, error) : null,
+    (0, import_react26.createElement)(
+      Card,
+      { title: t("Product health") },
+      statusRows.length ? statusRows.map(([label, value]) => (0, import_react26.createElement)(Row, { key: label, label }, value)) : t("Status unavailable"),
+      (0, import_react26.createElement)(
+        "div",
+        { className: "bt-product-operations-actions" },
+        (0, import_react26.createElement)("button", { type: "button", className: "bt-soft", onClick: () => onNavigate("supervision") }, t("Open supervision")),
+        (0, import_react26.createElement)("button", { type: "button", className: "bt-soft", onClick: () => onNavigate("roles") }, t("Open role settings"))
+      )
+    ),
+    usage ? (0, import_react26.createElement)(
+      Card,
+      { title: t("Token usage by role") },
+      [["main", "Main"], ["router", "Router"], ["worker", "Worker"]].map(([role, label]) => (0, import_react26.createElement)(Row, { key: role, label: t(label) }, usageLine2(usage.roles?.[role])))
+    ) : null,
+    usage ? (0, import_react26.createElement)(UsageItems, { title: t("Work usage"), items: usage.works }) : null,
+    usage ? (0, import_react26.createElement)(UsageItems, { title: t("Planning usage"), items: usage.planning }) : null,
+    coverage ? (0, import_react26.createElement)(
+      Card,
+      { title: t("Usage coverage") },
+      (0, import_react26.createElement)(Row, { label: t("Coverage") }, t(coverageCopy(coverage.status))),
+      (0, import_react26.createElement)("p", { className: "bt-product-operations-note" }, t("Totals cover recent Main, Router and Worker Sessions. Supervisor, subagent and preparation calls outside those Sessions are excluded.")),
+      (0, import_react26.createElement)(Row, { label: t("Sessions included") }, t("{included} of {known}", {
+        included: number(coverage.includedSessions),
+        known: number(coverage.knownSessions)
+      })),
+      (0, import_react26.createElement)(Row, { label: t("Omitted") }, t("{uses} role uses · {sessions} Sessions · at least {events} events", {
+        uses: number(coverage.omittedRoleUses),
+        sessions: number(coverage.omittedSessions),
+        events: number(coverage.omittedEvents)
+      })),
+      coverage.missingSessions ? (0, import_react26.createElement)(Row, { label: t("Unreadable Sessions") }, number(coverage.missingSessions)) : null,
+      coverage.overBudgetSessions ? (0, import_react26.createElement)(Row, { label: t("Sessions over the read limit") }, number(coverage.overBudgetSessions)) : null,
+      coverage.conflictingSessions ? (0, import_react26.createElement)(Row, { label: t("Sessions with conflicting roles") }, number(coverage.conflictingSessions)) : null,
+      coverage.workRecordsTruncated ? (0, import_react26.createElement)("p", null, t("Some work records were outside the attribution limits.")) : null,
+      (0, import_react26.createElement)(Row, { label: t("Unattributed usage") }, usageLine2(usage.unattributed)),
+      (0, import_react26.createElement)(Row, { label: t("Cost") }, t(usage.cost.reason)),
+      (0, import_react26.createElement)("p", { className: "bt-product-operations-note" }, t("Limits: {roles} role uses · {sessions} Sessions · {events} events per Session", {
+        roles: number(coverage.limits.roleUses),
+        sessions: number(coverage.limits.sessions),
+        events: number(coverage.limits.eventsPerSession)
+      }))
+    ) : null,
+    (0, import_react26.createElement)(
+      Card,
+      { title: t("Updates") },
+      (0, import_react26.createElement)(Row, { label: t("DS SuperAgent") }, t(updateCopy(updates?.phase))),
+      diagnostics?.appVersion ? (0, import_react26.createElement)(Row, { label: t("Installed version") }, diagnostics.appVersion) : null,
+      diagnostics?.dshVersion ? (0, import_react26.createElement)(Row, { label: "DSH" }, diagnostics.dshVersion) : null,
+      updates?.version ? (0, import_react26.createElement)(Row, { label: t("Version") }, updates.version) : null,
+      updateError ? (0, import_react26.createElement)("p", { role: "alert", className: "bt-main-error" }, t(updateError)) : null,
+      updates?.phase === "downloaded" ? (0, import_react26.createElement)("button", {
+        type: "button",
+        className: "bt-soft",
+        disabled: busy,
+        onClick: () => {
+          void run2(() => app?.updates?.install?.());
+        }
+      }, t("Install and restart")) : null,
+      ["failed", "current", "available"].includes(updates?.phase) ? (0, import_react26.createElement)("button", {
+        type: "button",
+        className: "bt-soft",
+        disabled: busy,
+        onClick: () => {
+          void run2(() => app.updates.check());
+        }
+      }, t("Check for updates")) : null,
+      updates?.phase === "available" ? (0, import_react26.createElement)("button", {
+        type: "button",
+        className: "bt-soft",
+        disabled: busy,
+        onClick: () => {
+          void run2(() => app.updates.open());
+        }
+      }, t("Open download page")) : null,
+      updates === null ? (0, import_react26.createElement)("p", { className: "bt-product-operations-note" }, t("Updates come with the DS SuperAgent app.")) : null
+    ),
+    diagnostics?.backupsAvailable ? (0, import_react26.createElement)(
+      Card,
+      { title: t("Backups") },
+      (0, import_react26.createElement)("p", { className: "bt-product-operations-note" }, t("Business state and DSH Sessions are backed up separately. Restores refuse changed authority or unresolved external effects.")),
+      (0, import_react26.createElement)(
+        "div",
+        { className: "bt-product-operations-actions" },
+        (0, import_react26.createElement)("button", {
+          type: "button",
+          className: "bt-soft",
+          disabled: busy,
+          onClick: () => {
+            void run2(() => app.backups.create());
+          }
+        }, t("Create backup"))
+      ),
+      confirm2 ? (0, import_react26.createElement)(
+        "div",
+        { className: "bt-product-operations-actions", role: "group", "aria-label": t("Restore this backup") },
+        (0, import_react26.createElement)("p", null, t("Restore the business and Session snapshot from {time}? The Host will restart.", { time: new Date(confirm2.createdAt).toLocaleString() })),
+        (0, import_react26.createElement)("button", { type: "button", className: "bt-soft bt-danger", disabled: busy, onClick: () => {
+          void run2(() => app.backups.restore(confirm2.id));
+          setConfirm(null);
+        } }, t("Confirm restore")),
+        (0, import_react26.createElement)("button", { type: "button", className: "bt-soft", onClick: () => setConfirm(null) }, t("Cancel"))
+      ) : null,
+      backups.length ? (0, import_react26.createElement)("ul", { className: "bt-product-operations-list" }, backups.slice(0, 10).map((backup) => (0, import_react26.createElement)(
+        "li",
+        { key: backup.id },
+        (0, import_react26.createElement)(
+          "div",
+          null,
+          (0, import_react26.createElement)("strong", null, new Date(backup.createdAt).toLocaleString()),
+          (0, import_react26.createElement)("span", null, t("{records} records · {sessions} Sessions · {size}", {
+            records: number(backup.business.recordCount),
+            sessions: number(backup.sessions.sessionCount ?? backup.sessions.fileCount),
+            size: byteCount(backup.business.sizeBytes + backup.sessions.totalBytes)
+          }))
+        ),
+        (0, import_react26.createElement)("button", {
+          type: "button",
+          className: "bt-soft bt-soft-sm",
+          disabled: busy || !backup.restorable,
+          title: backup.restorable ? t("Restore this backup") : t("Unresolved external effects prevent restoring this backup."),
+          onClick: () => setConfirm(backup)
+        }, t("Restore"))
+      ))) : (0, import_react26.createElement)("p", { className: "bt-product-operations-note" }, t("No backups yet."))
+    ) : null,
+    (0, import_react26.createElement)(
+      Card,
+      { title: t("Diagnostics") },
+      diagnostics?.events?.length ? (0, import_react26.createElement)(
+        "details",
+        null,
+        (0, import_react26.createElement)("summary", null, t("Recent operational events")),
+        (0, import_react26.createElement)("ul", { className: "bt-product-operations-list" }, diagnostics.events.map((event, index) => (0, import_react26.createElement)(
+          "li",
+          { key: index },
+          (0, import_react26.createElement)("time", { dateTime: new Date(event.at).toISOString() }, new Date(event.at).toLocaleString()),
+          (0, import_react26.createElement)("span", null, `${event.code}${event.version ? ` · ${event.version}` : ""}`)
+        )))
+      ) : null,
+      (0, import_react26.createElement)("button", { type: "button", className: "bt-soft", onClick: () => {
+        void downloadDiagnostics();
+      } }, t("Download diagnostic summary"))
+    )
+  );
+}
+var PRODUCT_OPERATIONS_CSS = `
+.bt-product-operations{display:grid;gap:12px;min-width:0}
+.bt-product-operations-toolbar{display:flex;align-items:center;justify-content:space-between;min-height:32px;color:var(--bt-ink-2);font-size:12px}
+.bt-product-operations-list{display:grid;gap:9px;margin:0;padding:0;list-style:none}
+.bt-product-operations-list li{display:flex;justify-content:space-between;align-items:center;gap:12px;min-width:0}
+.bt-product-operations-list li>div{display:grid;gap:3px;min-width:0}
+.bt-product-operations-list li span{color:var(--bt-ink-2);font-size:12px;overflow-wrap:anywhere}
+.bt-product-operations-list li strong{overflow-wrap:anywhere}
+.bt-product-operations-actions{display:flex;flex-wrap:wrap;gap:8px}
+.bt-product-operations-note{margin:0;color:var(--bt-ink-2);font-size:12px;line-height:18px;overflow-wrap:anywhere}
+@media(max-width:640px){.bt-product-operations-list li{align-items:flex-start;flex-wrap:wrap}.bt-product-operations-list li>button{margin-left:auto}}
+`;
+
+// src/client/product.js
+var import_react27 = require("react");
+var clientBridge = () => window.dsSuperagentApp?.productClient;
+var activeHost = "local";
+function offerDownload(data, name, mediaType = "application/octet-stream") {
+  const url = URL.createObjectURL(new Blob([data], { type: mediaType }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1e4);
+}
+async function productCall(endpoint, payload = {}) {
+  const bridge = clientBridge();
+  if (activeHost === "remote") {
+    if (!bridge) throw new Error(t("The remote Host connection is unavailable."));
+    return bridge.call(endpoint, payload);
+  }
+  if (bridge && (await bridge.status()).connected) {
+    activeHost = "remote";
+    return bridge.call(endpoint, payload);
+  }
+  const response = await fetch("api/product", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ endpoint, payload }) });
+  let result;
+  try {
+    result = await response.json();
+  } catch {
+    throw new Error(t("Could not reach Main. Check that the app is running."));
+  }
+  if (!response.ok || !result.ok) throw Object.assign(new Error(t(result.error?.message ?? "Main is unavailable.")), { code: result.error?.code });
+  return result.value;
+}
+var rolesNeedingModels = ({ roles: roles2, providers }) => ["main", "router", "worker"].filter((role) => {
+  const model = roles2[role]?.model;
+  return !model || !providers.some((provider) => provider.id === model.provider && provider.models.some((candidate) => candidate.model === model.model));
+});
+function applyProduct(ctx) {
+  ctx.effect(() => installLocale(ctx.get("locale")), "superagent: interface copy");
+  const view = createSource({
+    binding: null,
+    messages: [],
+    works: [],
+    activeTurn: null,
+    health: null,
+    modelsNeedSetup: null,
+    sources: [],
+    preparations: [],
+    mainEvidence: null,
+    mainEvidenceLoading: false,
+    mainEvidenceError: null,
+    error: null,
+    mainDraft: "",
+    messageBefore: null,
+    messagesComplete: false,
+    messagesLoading: false,
+    route: "main",
+    observations: [],
+    observationCursor: null,
+    observationQuery: "",
+    selectedObservation: null,
+    observationGeneration: null,
+    observation: null,
+    observationLoading: false,
+    observationError: null,
+    observationDetail: null,
+    observationDetailLoading: false,
+    observationDetailError: null,
+    activityLoading: false,
+    activityError: null,
+    settingsOpen: false,
+    connection: null,
+    connectOpen: false,
+    directoryOptions: null,
+    directoryOverride: null,
+    executionTarget: null,
+    localEnvironmentOverride: null,
+    remoteEnvironmentOverride: null,
+    directoryBusy: false,
+    directoryError: null
+  });
+  const useView = () => (0, import_react27.useSyncExternalStore)(view.subscribe, view.getSnapshot);
+  let stopped = false;
+  let observationListRequest = 0;
+  let observationRequest = 0;
+  let observationDetailRequest = 0;
+  const refreshMain = async (binding) => {
+    try {
+      const page = await productCall("history", { instanceId: binding.instanceId, limit: 100 });
+      if (!stopped) view.set((state) => {
+        return {
+          ...state,
+          binding,
+          messages: mergeMessages(state.messages, page.messages),
+          works: page.works ?? state.works,
+          activeTurn: page.activeTurn ?? null,
+          health: page.health ?? state.health,
+          sources: page.sources ?? state.sources,
+          preparations: page.preparations ?? state.preparations,
+          messageBefore: state.messagesComplete ? null : state.messageBefore ?? page.cursor ?? null,
+          messagesComplete: state.messagesComplete || page.cursor === void 0,
+          error: null
+        };
+      });
+    } catch (error) {
+      if (!stopped) view.set((state) => ({ ...state, error: error.message }));
+    }
+  };
+  const loadDirectories = async (binding) => {
+    try {
+      const [options, execution] = await Promise.all([
+        productCall("directory-options", { instanceId: binding.instanceId }),
+        productCall("execution-options", { instanceId: binding.instanceId })
+      ]);
+      options.execution = execution;
+      if (!stopped) view.set((state) => ({ ...state, directoryOptions: options }));
+      return options;
+    } catch (error) {
+      if (!stopped) view.set((state) => ({ ...state, directoryError: error.message }));
+      throw error;
+    }
+  };
+  const directoryActions = (binding) => ({
+    folders: async () => {
+      const options = await loadDirectories(binding);
+      return {
+        team: options.default?.root ?? null,
+        picker: options.picker,
+        folders: options.directories.map((directory) => ({ path: directory.root, title: directory.title }))
+      };
+    },
+    folderPick: () => productCall("directory-pick", { instanceId: binding.instanceId }),
+    folderList: (path) => productCall("directory-list", { instanceId: binding.instanceId, ...path ? { path } : {} })
+  });
+  const registerDirectory = (binding, path) => productCall("directory-register", {
+    instanceId: binding.instanceId,
+    commandId: crypto.randomUUID(),
+    path
+  });
+  const loadEarlierMessages = async (binding) => {
+    const current = view.getSnapshot();
+    if (!current.messageBefore || current.messagesLoading) return;
+    try {
+      view.set((state) => ({ ...state, messagesLoading: true }));
+      const page = await productCall("history", { instanceId: binding.instanceId, before: current.messageBefore, limit: 100 });
+      if (stopped) return;
+      view.set((state) => {
+        return {
+          ...state,
+          messages: mergeMessages(state.messages, page.messages),
+          messageBefore: page.cursor ?? null,
+          messagesComplete: page.cursor === void 0,
+          messagesLoading: false
+        };
+      });
+    } catch (error) {
+      if (!stopped) view.set((state) => ({ ...state, messagesLoading: false, error: error.message }));
+    }
+  };
+  const loadMainEvidence = async (binding, work, { append = false } = {}) => {
+    const current = view.getSnapshot().mainEvidence;
+    const same = current?.workItemId === work.brief.workItemId;
+    if (append && (!same || !current.pagination?.truncated || !current.pagination?.cursor)) return;
+    try {
+      view.set((state) => ({ ...state, mainEvidenceLoading: true, mainEvidenceError: null }));
+      const page = await productCall("evidence", {
+        instanceId: binding.instanceId,
+        workItemId: work.brief.workItemId,
+        ref: { kind: "trigger" },
+        maxBytes: 4096,
+        ...append && same ? { after: current.pagination.cursor } : {}
+      });
+      if (stopped) return;
+      view.set((state) => ({
+        ...state,
+        mainEvidence: {
+          ...page,
+          workItemId: work.brief.workItemId,
+          goal: work.brief.goal,
+          text: append && state.mainEvidence?.workItemId === work.brief.workItemId ? state.mainEvidence.text + page.text : page.text
+        },
+        mainEvidenceLoading: false,
+        mainEvidenceError: null
+      }));
+    } catch (error) {
+      if (!stopped) view.set((state) => ({ ...state, mainEvidenceLoading: false, mainEvidenceError: error.message }));
+    }
+  };
+  const loadObservations = async (binding, { append = false, reset = false } = {}) => {
+    const current = view.getSnapshot();
+    const query = current.observationQuery;
+    const request = ++observationListRequest;
+    try {
+      view.set((state) => ({ ...state, activityLoading: true, activityError: null }));
+      const page = await productCall("observe-list", {
+        instanceId: binding.instanceId,
+        limit: 30,
+        ...query ? { query } : {},
+        ...append && current.observationCursor ? { after: current.observationCursor } : {}
+      });
+      if (stopped || request !== observationListRequest || view.getSnapshot().observationQuery !== query) return;
+      view.set((state) => {
+        const selectedObservation = state.selectedObservation ? page.items.find((item) => item.id === state.selectedObservation.id) ?? state.selectedObservation : null;
+        return {
+          ...state,
+          observations: mergeObservationItems(reset ? [] : state.observations, page.items),
+          observationCursor: reset || append ? page.cursor ?? null : state.observationCursor ?? page.cursor ?? null,
+          selectedObservation,
+          activityLoading: false,
+          activityError: null
+        };
+      });
+    } catch (error) {
+      if (!stopped) view.set((state) => ({ ...state, activityLoading: false, activityError: error.message }));
+    }
+  };
+  const loadObservation = async (binding, item, { reset = false, older = false } = {}) => {
+    const current = view.getSnapshot();
+    if (!item) return;
+    if (!reset && !older && current.observation?.hasMore) return;
+    const after = reset ? void 0 : older || !current.observation?.hasMore ? current.observation?.next : void 0;
+    const request = ++observationRequest;
+    try {
+      if (reset) view.set((state) => ({ ...state, observationLoading: true, observationError: null }));
+      const generation = current.observationGeneration ?? item.generation;
+      const detail = await productCall("observe-read", {
+        instanceId: binding.instanceId,
+        observationId: item.id,
+        ...generation ? { generation } : {},
+        limit: 50,
+        ...after === void 0 ? {} : { after }
+      });
+      if (stopped || request !== observationRequest || view.getSnapshot().selectedObservation?.id !== item.id || view.getSnapshot().observationGeneration !== generation) return;
+      view.set((state) => {
+        if (reset) return {
+          ...state,
+          observation: detail,
+          observationLoading: false,
+          observationError: null,
+          observationDetail: null,
+          observationDetailLoading: false,
+          observationDetailError: null
+        };
+        if (!state.observation) return { ...state, observation: detail, observationLoading: false, observationError: null };
+        const events = new Map(state.observation.events.map((event) => [event.seq, event]));
+        for (const event of detail.events) events.set(event.seq, event);
+        return {
+          ...state,
+          observation: { ...detail, events: [...events.values()].sort((left, right) => left.seq - right.seq) },
+          observationLoading: false,
+          observationError: null
+        };
+      });
+    } catch (error) {
+      if (!stopped && request === observationRequest) {
+        view.set((state) => ({ ...state, observationLoading: false, observationError: error.message }));
+      }
+    }
+  };
+  const loadObservationDetail = async (binding, item, detailId, { append = false } = {}) => {
+    const current = view.getSnapshot();
+    if (!item || !detailId) return;
+    const same = current.observationDetail?.detailId === detailId;
+    if (append && (!same || !current.observationDetail?.hasMore)) return;
+    const generation = current.observationGeneration ?? item.generation;
+    const request = ++observationDetailRequest;
+    try {
+      view.set((state) => ({ ...state, observationDetailLoading: true, observationDetailError: null }));
+      const page = await productCall("observe-detail", {
+        instanceId: binding.instanceId,
+        observationId: item.id,
+        detailId,
+        limit: 8192,
+        ...generation ? { generation } : {},
+        ...append && same ? { offset: current.observationDetail.next } : {}
+      });
+      if (stopped || request !== observationDetailRequest || view.getSnapshot().selectedObservation?.id !== item.id || view.getSnapshot().observationGeneration !== generation) return;
+      view.set((state) => {
+        const text = append && state.observationDetail?.detailId === detailId ? state.observationDetail.text + page.text : page.text;
+        return { ...state, observationDetail: { ...page, text }, observationDetailLoading: false, observationDetailError: null };
+      });
+    } catch (error) {
+      if (!stopped && request === observationDetailRequest) {
+        view.set((state) => ({ ...state, observationDetailLoading: false, observationDetailError: error.message }));
+      }
+    }
+  };
+  const refresh = async () => {
+    try {
+      const bridge = clientBridge();
+      const connection = bridge ? await bridge.status() : { connected: false };
+      const previous = view.getSnapshot().connection;
+      if (previous && (previous.connected !== connection.connected || previous.connected && (previous.address !== connection.address || previous.instanceId !== connection.instanceId || previous.client.id !== connection.client.id))) {
+        location.reload();
+        return;
+      }
+      if (connection.connected) activeHost = "remote";
+      if (!stopped) view.set((state) => ({ ...state, connection }));
+      if (connection.connected) await bridge.events();
+      const current = view.getSnapshot();
+      const binding = current.binding ?? await productCall("open");
+      if (current.route === "main") await refreshMain(binding);
+      if (!connection.connected && !current.binding) {
+        void productCall("settings", { instanceId: binding.instanceId, limit: 1 }).then((snapshot) => {
+          if (!stopped) view.set((state) => ({ ...state, modelsNeedSetup: state.modelsNeedSetup ?? rolesNeedingModels(snapshot).length > 0 }));
+        }).catch(() => {
+        });
+      }
+      if (!connection.connected && !view.getSnapshot().directoryOptions) await loadDirectories(binding);
+      else if (connection.connected && !view.getSnapshot().directoryOptions?.execution) {
+        const execution = await productCall("execution-options", { instanceId: binding.instanceId });
+        if (!stopped) view.set((state) => ({ ...state, directoryOptions: { ...state.directoryOptions, execution } }));
+      }
+      await loadObservations(binding);
+      const selected = view.getSnapshot().route === "observe" ? view.getSnapshot().selectedObservation : null;
+      if (selected) await loadObservation(binding, selected);
+    } catch (error) {
+      if (!stopped) view.set((state) => ({ ...state, error: error.message }));
+    }
+  };
+  ctx.effect(() => {
+    let timer;
+    const poll = async () => {
+      await refresh();
+      if (!stopped) timer = setTimeout(poll, 750);
+    };
+    void poll();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, "superagent: follow the shared Main");
+  const statusCopy = (status) => ({
+    routing: t("Routing work"),
+    pending: t("Pending work"),
+    running: t("Running work"),
+    waiting: t("Waiting for an answer"),
+    blocked: t("Blocked work"),
+    stopped: t("Stopped work"),
+    success: t("Work complete"),
+    failed: t("Work failed"),
+    rejected: t("Work declined"),
+    accepted: t("Accepted by Router"),
+    ended: t("Generation ended"),
+    unknown: t("Work result unknown")
+  })[status] ?? status;
+  const followUpCopy = (status) => ({
+    queued: t("Follow-up queued"),
+    persisted: t("Follow-up persisted"),
+    delivering: t("Follow-up delivery started"),
+    ready: t("Direction completed"),
+    waiting: t("Direction waiting"),
+    "handed-back": t("Direction handed back"),
+    stopped: t("Direction blocked by stop"),
+    expired: t("Follow-up delivery expired")
+  })[status] ?? status;
+  const receiptCopy = (status) => ({ routing: t("Router is routing"), accepted: t("Accepted by Router"), rejected: t("Not accepted") })[status] ?? status;
+  const mainHealthCopy = (health) => health?.state === "running" ? t("Main running") : health?.state === "degraded" ? t("Main degraded") : t("Main ready");
+  const sourceStatusCopy = (status) => ({
+    pending: t("Waiting for Main"),
+    presented: t("Reviewed by Main"),
+    delegated: t("Delegated by Main"),
+    discarded: t("Dismissed by Main")
+  })[status] ?? status;
+  const deliveryCopy = (status) => ({
+    pending: t("Delivery pending"),
+    sent: t("Delivery sent"),
+    dropped: t("Delivery dropped"),
+    unknown: t("Delivery needs reconciliation")
+  })[status] ?? status;
+  const deliveryPurposeCopy = (purpose) => ({
+    acknowledgement: t("Acknowledgement"),
+    answer: t("Answer"),
+    attention: t("Question"),
+    result: t("Result"),
+    policy: t("Policy update")
+  })[purpose] ?? purpose;
+  const conditionCopy = (state) => ({
+    open: t("Pull request open"),
+    draft: t("Pull request draft"),
+    merged: t("Pull request merged"),
+    closed: t("Pull request closed")
+  })[state] ?? state;
+  const executionTargetCopy = (target) => ({
+    "local-only": t("Local"),
+    "remote-only": t("Remote only"),
+    auto: t("Auto")
+  })[target] ?? target;
+  const executionSourceCopy = (source) => ({
+    default: t("Policy default"),
+    ticket: t("Main request"),
+    explicit: t("Exact Environment")
+  })[source] ?? source;
+  const executionStatusCopy = (status) => ({
+    selected: t("Selected"),
+    waiting: t("Waiting for an eligible Environment")
+  })[status] ?? status;
+  const permissionLabels2 = {
+    read: t("Read access"),
+    write: t("Write access"),
+    search: t("Search access"),
+    command: t("Command access"),
+    browser: t("Browser"),
+    mcp: t("MCP"),
+    office: t("Office")
+  };
+  const permissionCopy2 = (values) => (values ?? []).map((value) => permissionLabels2[value] ?? t(value)).join(", ");
+  const capabilityReasonCopy = (reason) => {
+    const target = /^target ([^ ]+) excludes (local|remote) Environments$/u.exec(reason);
+    if (target) return t(
+      "target {target} excludes {kind} Environments",
+      { target: executionTargetCopy(target[1]), kind: target[2] === "local" ? t("Local") : t("Remote") }
+    );
+    if (reason.startsWith("Environment is offline:")) return t(
+      "Environment is offline: {reason}",
+      { reason: reason.slice("Environment is offline: ".length) }
+    );
+    if (reason === "Environment is offline") return t("Environment is offline");
+    if (reason === "Environment version is unverified") return t("Environment version is unverified");
+    if (reason === "Environment fingerprint is unverified") return t("Environment fingerprint is unverified");
+    if (reason === "Environment capacity is unknown") return t("Environment capacity is unknown");
+    const missing = /^missing capability: ([^ (]+)(?: \((.+)\))?$/u.exec(reason);
+    if (missing) return missing[2] ? t("Missing capability: {capability} ({detail})", { capability: t(missing[1]), detail: missing[2] }) : t("Missing capability: {capability}", { capability: t(missing[1]) });
+    const capacity = /^capacity is full \((.+)\)$/u.exec(reason);
+    if (capacity) return t("Execution capacity is full ({count}).", { count: capacity[1] });
+    return t(reason);
+  };
+  const handoffStatusCopy = (status) => ({
+    requested: t("Handoff requested"),
+    blocked: t("Handoff blocked"),
+    flushing: t("Flushing source Session"),
+    switching: t("Switching execution Environment"),
+    completed: t("Handoff completed"),
+    prepared: t("Handoff prepared"),
+    verified: t("Handoff copy verified"),
+    "handoff-blocked": t("Handoff blocked"),
+    available: t("Handoff available")
+  })[status] ?? status;
+  const handoffOwnerCopy = (owner) => ({
+    worker: t("Worker"),
+    operator: t("Operator"),
+    human: t("You"),
+    host: t("Host")
+  })[owner] ?? t("Unknown");
+  const handoffNextStepCopy = (nextStep) => ({
+    prepare: t("Choose a target Environment and prepare the work copy."),
+    synchronize: t("Synchronize the prepared changes to the target, then verify the copy."),
+    verify: t("Verify the prepared work copy before handing off."),
+    handoff: t("The copied work is verified. Hand off the same work when ready."),
+    reconcile: t("The Host is reconciling the original execution before switching generations."),
+    continue: t("Continue in the new execution Environment."),
+    resolve: t("Resolve the current handoff blocker.")
+  })[nextStep] ?? t("Review the handoff state.");
+  const handoffBlockerCopy = (blocker) => {
+    const excluded = /^The (local|remote) Environment is excluded by the Ticket execution target (.+)$/u.exec(blocker.message);
+    if (excluded) return t(
+      "The {kind} Environment is excluded by the Ticket execution target {target}.",
+      { kind: excluded[1] === "local" ? t("Local") : t("Remote"), target: executionTargetCopy(excluded[2]) }
+    );
+    const unknownChange = /^The target has an unlisted change at (.+); it will not be overwritten\.$/u.exec(blocker.message);
+    if (unknownChange) return t(
+      "The target has an unlisted change at {path}; it will not be overwritten.",
+      { path: unknownChange[1] }
+    );
+    const conflict = /^The target already has a different change at (.+)\.$/u.exec(blocker.message);
+    if (conflict) return t("The target already has a different change at {path}.", { path: conflict[1] });
+    const mismatch = /^The target content at (.+) does not match the prepared copy\.$/u.exec(blocker.message);
+    if (mismatch) return t("The target content at {path} does not match the prepared copy.", { path: mismatch[1] });
+    const messages = {
+      "target-ineligible": t("The target Environment is not eligible for this handoff."),
+      "source-environment-changed": t("The source Environment changed after the work copy was prepared."),
+      "target-environment-changed": t("The target Environment changed after the work copy was prepared."),
+      "handoff-copy-missing": t("Prepare and verify a work copy before handing off."),
+      "handoff-copy-not-verified": t("The work copy has not been verified."),
+      "handoff-copy-stale": t("The work copy belongs to another execution generation or Environment."),
+      "assignment-changed": t("The work Assignment changed during the handoff."),
+      "source-changed": t("The source work copy changed after preparation."),
+      "target-commit-mismatch": t("The target repository version differs from the source."),
+      "target-missing-change": t("The target is missing a prepared work-copy file."),
+      "target-file-conflict": t("A prepared work-copy file conflicts with the target."),
+      "ticket-ended": t("The work has ended."),
+      "ticket-constrained": t("The work is stopped or waiting for a person."),
+      "ticket-stopping": t("The work has an active stop request."),
+      "waiting-human": t("Answer the current work question before handing off."),
+      "unknown-effect": t("Reconcile an external result before handing off."),
+      "handoff-superseded": t("The source Assignment was replaced before recovery."),
+      "session-flush-failed": t("The source Session could not be flushed."),
+      "handoff-recovery-failed": t("The interrupted handoff could not be reconciled."),
+      "active-turn": t("Wait for the Worker turn to reach a safe boundary."),
+      "active-job": t("Wait for the background job to settle."),
+      "active-subagent": t("Wait for the child Agent to settle."),
+      "active-preview": t("Close the retained preview before handing off."),
+      "handoff-stale": t("The work generation changed during the handoff."),
+      "handoff-revalidation-failed": t("The target or work copy could not be revalidated after flush."),
+      "same-environment": t("Choose a different target Environment."),
+      "no-assignment": t("The work has no active Assignment."),
+      "assignment-not-running": t("The source Assignment is not running."),
+      "ready-report": t("A verified result already ended this Assignment."),
+      "setup-failed": t("The source workspace setup failed."),
+      "processing-paused": t("Processing is paused, so a handoff cannot start."),
+      "WORK_COPY_UNSUPPORTED": t("The work copy uses a format or size outside the safe handoff limits."),
+      "WORK_COPY_GIT_FAILED": t("The work copy could not be inspected safely.")
+    };
+    return messages[blocker.code] ?? t("This handoff step is blocked.");
+  };
+  function MainWorkHandoffPanel({ handoff, busy, canHandoff, onRun }) {
+    const [targetId, setTargetId] = (0, import_react27.useState)("");
+    const targets2 = handoff.targets ?? [];
+    const copy = handoff.copy;
+    const record = handoff.record;
+    const selectedTarget = targets2.find((target) => target.id === targetId) ?? targets2[0];
+    const active = ["requested", "flushing", "switching"].includes(handoff.status);
+    const completed = record?.state === "completed";
+    return (0, import_react27.createElement)(
+      "section",
+      {
+        className: "bt-main-work-handoff",
+        "aria-label": t("Execution Environment handoff")
+      },
+      (0, import_react27.createElement)("h3", null, t("Execution Environment handoff")),
+      (0, import_react27.createElement)("p", { role: "status" }, `${t("Handoff status")}: ${handoffStatusCopy(handoff.status)}`),
+      (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, `${t("Responsible")}: ${handoffOwnerCopy(handoff.owner)}`),
+      (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${handoffNextStepCopy(handoff.nextStep)}`),
+      handoff.blockers?.length ? (0, import_react27.createElement)("ul", { className: "bt-main-work-handoff-blockers" }, handoff.blockers.map((blocker) => (0, import_react27.createElement)(
+        "li",
+        { key: `${blocker.code}:${blocker.message}` },
+        `${handoffBlockerCopy(blocker)} · ${t("Responsible")}: ${handoffOwnerCopy(blocker.nextOwner)}`
+      ))) : null,
+      copy ? (0, import_react27.createElement)(
+        "div",
+        { className: "bt-main-work-handoff-copy" },
+        (0, import_react27.createElement)("p", null, `${t("Source")}: ${copy.source.id} · ${copy.source.root}`),
+        (0, import_react27.createElement)("p", null, `${t("Target")}: ${copy.target.id} · ${copy.target.root}`),
+        (0, import_react27.createElement)("p", null, `${t("Base version")}: ${copy.baseCommit.slice(0, 12)} · ${t("Changed files")}: ${copy.files.length} · ${copy.totalBytes} ${t("bytes")}`),
+        (0, import_react27.createElement)("ul", { "aria-label": t("Prepared work-copy files") }, copy.files.map((file) => (0, import_react27.createElement)("li", { key: file.path }, (0, import_react27.createElement)("code", null, file.path), ` · ${t(file.state)} · ${file.bytes} ${t("bytes")}`)))
+      ) : null,
+      canHandoff ? (0, import_react27.createElement)(
+        "div",
+        { className: "bt-main-work-handoff-actions" },
+        targets2.length ? (0, import_react27.createElement)("label", null, t("Handoff target"), (0, import_react27.createElement)("select", {
+          className: "bt-select",
+          "aria-label": t("Handoff target"),
+          value: selectedTarget?.id ?? "",
+          disabled: busy,
+          onChange: (event) => setTargetId(event.target.value)
+        }, targets2.map((target) => (0, import_react27.createElement)(
+          "option",
+          { key: target.id, value: target.id },
+          `${target.id} · ${target.kind === "remote" ? t("Remote") : t("Local")}${target.deviceId ? ` · ${t("Device")}: ${target.deviceId}` : ""}`
+        )))) : null,
+        (0, import_react27.createElement)(
+          "button",
+          {
+            type: "button",
+            className: "bt-soft",
+            disabled: busy || !selectedTarget,
+            onClick: () => void onRun("work-handoff-prepare", selectedTarget.id)
+          },
+          busy === "work-handoff-prepare" ? t("Preparing handoff…") : t("Prepare handoff")
+        ),
+        copy && !active && !completed ? (0, import_react27.createElement)(
+          "button",
+          {
+            type: "button",
+            className: "bt-soft",
+            disabled: busy,
+            onClick: () => void onRun("work-handoff-verify")
+          },
+          busy === "work-handoff-verify" ? t("Verifying handoff copy…") : t("Verify handoff copy")
+        ) : null,
+        copy?.status === "verified" && !active && !completed ? (0, import_react27.createElement)("button", {
+          type: "button",
+          className: "bt-soft",
+          disabled: busy,
+          onClick: () => void onRun("work-handoff", selectedTarget.id)
+        }, busy === "work-handoff" ? t("Handing off…") : t("Hand off work")) : null,
+        !targets2.length ? (0, import_react27.createElement)(
+          "p",
+          { className: "bt-main-work-detail" },
+          t("No other Environment is available for handoff.")
+        ) : null
+      ) : null
+    );
+  }
+  function MainWorkCard({ work, onEvidence }) {
+    const state = useView();
+    const canCommand = !state.connection?.connected || state.connection.capabilities.includes("command");
+    const [controlBusy, setControlBusy] = (0, import_react27.useState)(null);
+    const [controlError, setControlError] = (0, import_react27.useState)(null);
+    const [toolFactsBusy, setToolFactsBusy] = (0, import_react27.useState)(false);
+    const [toolFactsError, setToolFactsError] = (0, import_react27.useState)(null);
+    const [attentionDraft, setAttentionDraft] = (0, import_react27.useState)("");
+    const control = work.control;
+    const [artifactBusy, setArtifactBusy] = (0, import_react27.useState)(null);
+    const [artifactError, setArtifactError] = (0, import_react27.useState)(null);
+    const [viewError, setViewError] = (0, import_react27.useState)(null);
+    const downloadArtifact = async (artifact) => {
+      if (!state.binding) return;
+      setArtifactBusy(artifact.path);
+      setArtifactError(null);
+      try {
+        const data = await readProductArtifact(productCall, state.binding.instanceId, work.brief.workItemId, artifact.path);
+        offerDownload(data, artifact.path.split(/[\\/]/u).at(-1) || "artifact");
+      } catch (error) {
+        setArtifactError(t(error.message));
+      } finally {
+        setArtifactBusy(null);
+      }
+    };
+    const assignment = control?.assignment;
+    const handoff = control?.handoff;
+    const runControl = async (endpoint) => {
+      if (!state.binding || !control || !assignment && endpoint !== "work-stop" && endpoint !== "work-reconcile-stop") return;
+      setControlBusy(endpoint);
+      setControlError(null);
+      const payload = {
+        instanceId: state.binding.instanceId,
+        commandId: crypto.randomUUID(),
+        workItemId: control.workItemId,
+        ticketId: control.ticketId,
+        ...assignment ? { expectedGeneration: assignment.generation } : {}
+      };
+      if (endpoint === "work-stop") {
+        payload.expectedTicketVersion = control.ticketVersion;
+        payload.reason = t("Stopped from the Main work card.");
+      }
+      if (endpoint === "work-retry") payload.reason = t("Retry requested from the Main work card.");
+      try {
+        await productCall(endpoint, payload);
+        await refreshMain(state.binding);
+      } catch (error) {
+        setControlError(error.message);
+        await refreshMain(state.binding);
+      } finally {
+        setControlBusy(null);
+      }
+    };
+    const runHandoff = async (endpoint, targetEnvironmentId) => {
+      if (!state.binding || !control || !assignment || controlBusy) return;
+      if (endpoint !== "work-handoff-verify" && !targetEnvironmentId) return;
+      setControlBusy(endpoint);
+      setControlError(null);
+      const payload = {
+        instanceId: state.binding.instanceId,
+        commandId: crypto.randomUUID(),
+        workItemId: control.workItemId,
+        ticketId: control.ticketId,
+        expectedGeneration: assignment.generation,
+        ...endpoint === "work-handoff-verify" ? {} : { targetEnvironmentId },
+        ...endpoint === "work-handoff" ? { reason: t("Hand off from the Main work card.") } : {}
+      };
+      try {
+        await productCall(endpoint, payload);
+        await refreshMain(state.binding);
+      } catch (error) {
+        setControlError(error.message);
+        await refreshMain(state.binding);
+      } finally {
+        setControlBusy(null);
+      }
+    };
+    const stop = control?.stop;
+    const openToolFacts = async () => {
+      if (!state.binding || !work.receipt.ticketId || toolFactsBusy) return;
+      setToolFactsBusy(true);
+      setToolFactsError(null);
+      try {
+        const page = await productCall("observe-list", {
+          instanceId: state.binding.instanceId,
+          query: work.receipt.ticketId,
+          limit: 100
+        });
+        const item = page.items.find((candidate) => candidate.role === "worker" && candidate.ticketId === work.receipt.ticketId);
+        if (!item) throw new Error(t("Worker activity is unavailable."));
+        view.set((current) => ({
+          ...current,
+          route: "observe",
+          selectedObservation: item,
+          observationGeneration: item.generation ?? null,
+          observation: null,
+          observationError: null,
+          observationDetail: null,
+          observationDetailError: null
+        }));
+        await loadObservation(state.binding, item, { reset: true });
+      } catch (error) {
+        setToolFactsError(error.message);
+      } finally {
+        setToolFactsBusy(false);
+      }
+    };
+    const attention = control?.attention;
+    const answer = async (event) => {
+      event.preventDefault();
+      const text = attentionDraft.trim();
+      if (!state.binding || !control || !assignment || !attention || attention.status !== "waiting" || !text) return;
+      setControlBusy("work-answer");
+      setControlError(null);
+      try {
+        await productCall("work-answer", {
+          instanceId: state.binding.instanceId,
+          commandId: crypto.randomUUID(),
+          workItemId: control.workItemId,
+          ticketId: control.ticketId,
+          expectedGeneration: assignment.generation,
+          attentionId: attention.id,
+          attentionVersion: attention.version,
+          text
+        });
+        setAttentionDraft("");
+        await refreshMain(state.binding);
+      } catch (error) {
+        setControlError(error.message);
+        await refreshMain(state.binding);
+      } finally {
+        setControlBusy(null);
+      }
+    };
+    const answerView = async (action, values) => {
+      if (!state.binding || !control || !assignment || !attention?.view) return;
+      setControlBusy("work-answer-view");
+      setViewError(null);
+      try {
+        await productCall("work-answer-view", {
+          instanceId: state.binding.instanceId,
+          commandId: crypto.randomUUID(),
+          workItemId: control.workItemId,
+          ticketId: control.ticketId,
+          expectedGeneration: assignment.generation,
+          attentionId: attention.id,
+          attentionVersion: attention.version,
+          action,
+          values
+        });
+        await refreshMain(state.binding);
+      } catch (error) {
+        setViewError(error.message);
+        await refreshMain(state.binding);
+      } finally {
+        setControlBusy(null);
+      }
+    };
+    return (0, import_react27.createElement)(
+      "article",
+      {
+        className: "bt-main-work",
+        "aria-label": t("Work item: {goal}", { goal: work.brief.goal }),
+        "data-ticket-id": control?.ticketId ?? work.receipt.ticketId,
+        "data-work-brief-id": work.brief.id,
+        tabIndex: -1
+      },
+      (0, import_react27.createElement)(
+        "div",
+        { className: "bt-main-work-head" },
+        (0, import_react27.createElement)(
+          "div",
+          { className: "bt-main-work-title" },
+          (0, import_react27.createElement)("span", { className: "bt-main-work-source" }, t("System work fact")),
+          (0, import_react27.createElement)("strong", null, work.brief.goal)
+        ),
+        (0, import_react27.createElement)("span", { className: "bt-main-work-status", role: "status" }, statusCopy(work.status))
+      ),
+      (0, import_react27.createElement)("p", { className: "bt-main-work-id" }, `${t("Work brief")} ${work.brief.id}`),
+      work.brief.configurationRevision ? (0, import_react27.createElement)(
+        "p",
+        { className: "bt-main-work-id" },
+        `${t("Configuration version")} v${work.brief.configurationRevision}`
+      ) : null,
+      work.brief.target ? (0, import_react27.createElement)(
+        "p",
+        { className: "bt-main-work-id" },
+        `${t("Execution target")}: ${executionTargetCopy(work.brief.target)}`
+      ) : null,
+      work.brief.capabilities?.length ? (0, import_react27.createElement)(
+        "p",
+        { className: "bt-main-work-id" },
+        `${t("Required capabilities")}: ${permissionCopy2(work.brief.capabilities)}`
+      ) : null,
+      work.brief.directory ? (0, import_react27.createElement)("p", { className: "bt-main-work-id" }, `${t("Work directory")}: ${work.brief.directory}`) : null,
+      work.executionLocation ? (0, import_react27.createElement)(
+        "p",
+        { className: "bt-main-work-id" },
+        `${t("Bound Environment")}: ${work.executionLocation.kind === "remote" ? t("Remote") : t("Local")}${work.executionLocation.deviceId ? ` · ${t("Device")}: ${work.executionLocation.deviceId}` : ""} · ${t("Directory")}: ${work.executionLocation.root}${work.executionLocation.version ? ` · ${t("Version")}: ${work.executionLocation.version}` : ""}`
+      ) : null,
+      work.executionSelection ? (0, import_react27.createElement)(
+        "div",
+        { className: "bt-main-work-detail" },
+        (0, import_react27.createElement)("p", null, `${t("Selection basis")}: ${executionSourceCopy(work.executionSelection.source)} · ${executionStatusCopy(work.executionSelection.status)}${work.executionSelection.reason ? ` · ${capabilityReasonCopy(work.executionSelection.reason)}` : ""}`),
+        work.executionSelection.candidates?.length ? (0, import_react27.createElement)("ul", null, work.executionSelection.candidates.slice(0, 8).map((candidate) => (0, import_react27.createElement)("li", { key: candidate.id }, `${candidate.kind === "remote" ? t("Remote") : t("Local")} · ${candidate.id}${candidate.deviceId ? ` · ${t("Device")}: ${candidate.deviceId}` : ""} · ${candidate.eligible ? t("Eligible") : t("Not eligible")}${candidate.permissions?.length ? ` · ${t("Capabilities")}: ${permissionCopy2(candidate.permissions)}` : ""}${candidate.reasons?.length ? ` · ${candidate.reasons.map(capabilityReasonCopy).join("; ")}` : ""}`))) : null
+      ) : null,
+      (0, import_react27.createElement)("p", { className: "bt-main-work-id" }, `${t("Receipt")}: ${receiptCopy(work.receipt.status)}`),
+      work.receipt.ticketId ? (0, import_react27.createElement)("p", { className: "bt-main-work-id" }, `${t("Ticket")} ${work.receipt.ticketId}`) : null,
+      control ? (0, import_react27.createElement)("p", { className: "bt-main-work-id" }, `${t("Ticket version")}: ${control.ticketVersion}`) : null,
+      assignment ? (0, import_react27.createElement)("p", { className: "bt-main-work-id" }, `${t("Execution version")}: ${assignment.generation}`) : null,
+      control && canCommand && handoff ? (0, import_react27.createElement)(MainWorkHandoffPanel, {
+        handoff,
+        busy: controlBusy,
+        canHandoff: control.permissions.canHandoff,
+        onRun: runHandoff
+      }) : null,
+      stop ? (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, stop.pendingDeviceConfirmation ? t("Stopping · waiting for device cancellation confirmation.") : stop.state === "stopping" ? t("Stopping · waiting for the current execution to become quiet.") : stop.cancellationConfirmedAt ? t("Stopped · execution cancellation confirmed.") : t("Stopped · cancellation confirmation is unavailable.")) : null,
+      stop?.pendingDeviceConfirmation && canCommand ? (0, import_react27.createElement)(
+        "button",
+        {
+          type: "button",
+          className: "bt-soft",
+          disabled: Boolean(controlBusy),
+          onClick: () => runControl("work-reconcile-stop")
+        },
+        controlBusy === "work-reconcile-stop" ? t("Checking device stop…") : t("Check device stop")
+      ) : null,
+      attention?.view ? (0, import_react27.createElement)(
+        "div",
+        { className: "bt-main-work-attention" },
+        (0, import_react27.createElement)("p", { className: "bt-main-work-id" }, `${t("View version")} ${attention.version} · ${attention.status}`),
+        (0, import_react27.createElement)(ProductWorkView, {
+          title: attention.view.title,
+          view: attention.view.view,
+          answer: attention.answerView ?? null,
+          busy: controlBusy === "work-answer-view",
+          ...attention.status === "waiting" && canCommand && control.permissions.canAnswer && assignment ? { onSubmit: answerView } : {}
+        }),
+        attention.status === "waiting" ? (0, import_react27.createElement)(
+          "p",
+          { className: "bt-main-work-detail" },
+          t("Answer this view to continue the same work.")
+        ) : attention.status === "answered" ? (0, import_react27.createElement)(
+          "p",
+          { className: "bt-main-work-detail" },
+          `${t("Answered by")} ${attention.answeredBy ?? control.permissions.actorId}`
+        ) : (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, t("This view is no longer active."))
+      ) : attention ? (0, import_react27.createElement)(
+        "div",
+        { className: "bt-main-work-attention" },
+        (0, import_react27.createElement)("p", { className: "bt-main-work-id" }, `${t("Question version")} ${attention.version} · ${attention.status}`),
+        (0, import_react27.createElement)("p", null, attention.question),
+        attention.status === "waiting" && canCommand && control.permissions.canAnswer && assignment ? (0, import_react27.createElement)(
+          "form",
+          { className: "bt-main-work-answer", onSubmit: answer },
+          attention.options.length ? (0, import_react27.createElement)("div", { className: "bt-main-work-options" }, attention.options.map((option) => (0, import_react27.createElement)("button", { key: option, type: "button", className: "bt-soft", onClick: () => setAttentionDraft(option) }, option))) : null,
+          (0, import_react27.createElement)("label", { htmlFor: `work-answer-${attention.id}` }, t("Answer this work question")),
+          (0, import_react27.createElement)("textarea", {
+            id: `work-answer-${attention.id}`,
+            value: attentionDraft,
+            maxLength: 65536,
+            rows: 2,
+            placeholder: t("Type an answer…"),
+            onChange: (event) => setAttentionDraft(event.currentTarget.value)
+          }),
+          (0, import_react27.createElement)(
+            "button",
+            { type: "submit", className: "bt-soft", disabled: Boolean(controlBusy) || !attentionDraft.trim() },
+            controlBusy === "work-answer" ? t("Sending answer…") : t("Send answer")
+          )
+        ) : (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, attention.status === "answered" ? `${t("Answered by")} ${attention.answeredBy ?? control.permissions.actorId}${attention.answerText ? `: ${attention.answerText}` : ""}` : t("This question is no longer active."))
+      ) : null,
+      controlError ? (0, import_react27.createElement)("p", { className: "bt-main-error", role: "alert" }, controlError) : null,
+      viewError ? (0, import_react27.createElement)("p", { className: "bt-main-error", role: "alert" }, viewError) : null,
+      work.receipt.reason ? (0, import_react27.createElement)("p", { className: "bt-main-error" }, `${t("Work receipt")}: ${work.receipt.reason}`) : null,
+      work.receipt.status === "routing" ? (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${work.receipt.nextStep}`) : null,
+      (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, `${t("Constraints")}: ${work.brief.constraints}`),
+      (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, `${t("Acceptance criteria")}: ${work.brief.acceptanceCriteria}`),
+      work.followUps?.length ? (0, import_react27.createElement)(
+        "div",
+        { className: "bt-main-work-followups", "aria-label": t("Follow-up history") },
+        work.followUps.map((followUp) => (0, import_react27.createElement)(
+          "div",
+          { key: followUp.id, className: "bt-main-work-followup" },
+          (0, import_react27.createElement)("p", null, `${t("Direction v{version}", { version: followUp.directionVersion })}: ${followUpCopy(followUp.status)}`),
+          (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, followUp.text),
+          (0, import_react27.createElement)(
+            "p",
+            { className: "bt-main-work-detail" },
+            `${followUp.persisted ? t("Input persisted") : t("Input not yet persisted")} · ${followUp.adopted ? t("Direction adopted by Worker") : t("Direction not yet adopted")}`
+          ),
+          followUp.displayReason ? (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, `${t("Reason")}: ${followUp.displayReason}`) : null
+        ))
+      ) : null,
+      work.outcome ? (0, import_react27.createElement)(
+        "div",
+        { className: "bt-main-work-result" },
+        (0, import_react27.createElement)("p", null, work.outcome.summary),
+        (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, `${t("Verification")}: ${work.outcome.evidence}`),
+        (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${work.outcome.nextStep}`),
+        work.outcome.view ? (0, import_react27.createElement)(ProductWorkView, { title: work.outcome.view.title, view: work.outcome.view.view }) : null,
+        work.outcome.artifacts.map((artifact) => (0, import_react27.createElement)(
+          "p",
+          { key: artifact.path, className: "bt-main-work-artifact" },
+          (0, import_react27.createElement)("code", null, artifact.path),
+          " ",
+          (0, import_react27.createElement)("span", null, `${artifact.bytes} ${t("bytes")} · ${artifact.sha256.slice(0, 12)}`),
+          artifact.reference && !state.connection?.connected ? (0, import_react27.createElement)(
+            "button",
+            {
+              type: "button",
+              className: "bt-soft",
+              disabled: artifactBusy === artifact.path,
+              onClick: () => void downloadArtifact(artifact)
+            },
+            artifactBusy === artifact.path ? t("Loading…") : t("Download")
+          ) : null
+        ))
+      ) : null,
+      artifactError ? (0, import_react27.createElement)("p", { className: "bt-main-error", role: "alert" }, artifactError) : null,
+      toolFactsError ? (0, import_react27.createElement)("p", { className: "bt-main-error", role: "alert" }, toolFactsError) : null,
+      control && canCommand ? (0, import_react27.createElement)(
+        "div",
+        { className: "bt-main-work-controls" },
+        control.permissions.canStop ? (0, import_react27.createElement)(
+          "button",
+          {
+            type: "button",
+            className: "bt-soft",
+            disabled: Boolean(controlBusy),
+            onClick: () => runControl("work-stop")
+          },
+          controlBusy === "work-stop" ? t("Stopping…") : t("Stop work")
+        ) : null,
+        assignment && control.permissions.canResume ? (0, import_react27.createElement)(
+          "button",
+          {
+            type: "button",
+            className: "bt-soft",
+            disabled: Boolean(controlBusy),
+            onClick: () => runControl("work-resume")
+          },
+          controlBusy === "work-resume" ? t("Resuming…") : t("Resume work")
+        ) : null,
+        assignment && control.permissions.canRetry ? (0, import_react27.createElement)(
+          "button",
+          {
+            type: "button",
+            className: "bt-soft",
+            disabled: Boolean(controlBusy),
+            onClick: () => runControl("work-retry")
+          },
+          controlBusy === "work-retry" ? t("Retrying…") : t("Retry work")
+        ) : null
+      ) : null,
+      work.receipt.status === "accepted" ? (0, import_react27.createElement)(
+        "div",
+        { className: "bt-main-work-evidence-actions" },
+        (0, import_react27.createElement)("button", { type: "button", className: "bt-soft", onClick: () => onEvidence(work) }, t("View original request")),
+        (0, import_react27.createElement)(
+          "button",
+          { type: "button", className: "bt-soft", disabled: toolFactsBusy, onClick: () => void openToolFacts() },
+          toolFactsBusy ? t("Loading…") : t("View tool facts")
+        )
+      ) : null
+    );
+  }
+  function MainPreparationCard({ preparation }) {
+    const state = useView();
+    const [expanded, setExpanded] = (0, import_react27.useState)(false);
+    return (0, import_react27.createElement)(
+      "article",
+      { className: "bt-main-work", "aria-label": t("Prepared review") },
+      (0, import_react27.createElement)(
+        "div",
+        { className: "bt-main-work-head" },
+        (0, import_react27.createElement)("strong", null, t("Prepared review")),
+        (0, import_react27.createElement)("span", { className: "bt-main-work-status" }, preparation.ruleId)
+      ),
+      (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, preparation.summary),
+      (0, import_react27.createElement)("button", {
+        type: "button",
+        className: "bt-soft bt-soft-sm",
+        "aria-expanded": expanded,
+        onClick: () => setExpanded((value) => !value)
+      }, t(expanded ? "Hide review" : "Review")),
+      expanded ? (0, import_react27.createElement)(ProactiveReview, {
+        runId: preparation.id,
+        instanceId: state.binding.instanceId,
+        call: productCall,
+        remote: Boolean(state.connection?.connected),
+        canStop: !state.connection?.connected || state.connection.capabilities.includes("command"),
+        onStopped: () => {
+          void refreshMain(state.binding);
+        }
+      }) : null
+    );
+  }
+  function MainSourceCard({ source, instanceId, onRefresh, canCommand }) {
+    const [receipts, setReceipts] = (0, import_react27.useState)(source.deliveries ?? []);
+    const [receiptCursor, setReceiptCursor] = (0, import_react27.useState)(source.deliveryCursor ?? null);
+    const [receiptsBusy, setReceiptsBusy] = (0, import_react27.useState)(false);
+    const [receiptsError, setReceiptsError] = (0, import_react27.useState)(null);
+    const [reconciling, setReconciling] = (0, import_react27.useState)(null);
+    const receiptPagesLoaded = (0, import_react27.useRef)(false);
+    (0, import_react27.useEffect)(() => {
+      setReceipts((current) => {
+        const merged = new Map(current.map((receipt) => [`${receipt.ticketId}:${receipt.id}:${receipt.sequence}`, receipt]));
+        for (const receipt of source.deliveries ?? []) merged.set(`${receipt.ticketId}:${receipt.id}:${receipt.sequence}`, receipt);
+        return [...merged.values()].sort((left, right) => right.createdAt - left.createdAt || right.sequence - left.sequence || left.ticketId.localeCompare(right.ticketId) || left.id.localeCompare(right.id));
+      });
+      if (!receiptPagesLoaded.current) setReceiptCursor(source.deliveryCursor ?? null);
+    }, [source.deliveries, source.deliveryCursor]);
+    const loadEarlierReceipts = async () => {
+      if (!receiptCursor || receiptsBusy) return;
+      receiptPagesLoaded.current = true;
+      setReceiptsBusy(true);
+      setReceiptsError(null);
+      try {
+        const page = await productCall("source-deliveries", { instanceId, sourceId: source.id, after: receiptCursor, limit: 10 });
+        setReceipts((current) => {
+          const merged = new Map(current.map((receipt) => [`${receipt.ticketId}:${receipt.id}:${receipt.sequence}`, receipt]));
+          for (const receipt of page.items) merged.set(`${receipt.ticketId}:${receipt.id}:${receipt.sequence}`, receipt);
+          return [...merged.values()].sort((left, right) => right.createdAt - left.createdAt || right.sequence - left.sequence || left.ticketId.localeCompare(right.ticketId) || left.id.localeCompare(right.id));
+        });
+        setReceiptCursor(page.cursor ?? null);
+      } catch (error) {
+        setReceiptsError(error.message);
+      } finally {
+        setReceiptsBusy(false);
+      }
+    };
+    const reconcile = async (receipt) => {
+      if (reconciling) return;
+      setReconciling(receipt.id);
+      setReceiptsError(null);
+      try {
+        await productCall("reconcile-delivery", {
+          instanceId,
+          commandId: `reconcile:${receipt.ticketId}:${receipt.id}:${receipt.sequence}`,
+          ticketId: receipt.ticketId,
+          deliveryId: receipt.id
+        });
+        await onRefresh();
+      } catch (error) {
+        setReceiptsError(error.message);
+      } finally {
+        setReconciling(null);
+      }
+    };
+    const scheduled = source.sourceInstanceId.startsWith("schedule:");
+    const feishu = source.sourceInstanceId.startsWith("feishu:");
+    return (0, import_react27.createElement)(
+      "article",
+      { className: "bt-main-source", "aria-label": t(scheduled ? "Scheduled occurrence" : feishu ? "Feishu source request" : "GitHub source request") },
+      (0, import_react27.createElement)(
+        "div",
+        { className: "bt-main-work-head" },
+        (0, import_react27.createElement)("strong", null, t(scheduled ? "Scheduled occurrence" : feishu ? "Feishu request" : "GitHub request")),
+        (0, import_react27.createElement)("span", { className: "bt-main-work-status", role: "status" }, sourceStatusCopy(source.state))
+      ),
+      (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, `${source.objectId} · @${source.authorId}`),
+      (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, source.text),
+      (0, import_react27.createElement)("code", { className: "bt-main-source-reference" }, source.reference),
+      source.lastError ? (0, import_react27.createElement)("p", { className: "bt-main-error", role: "status" }, `${t("Main source failed")}: ${source.lastError}`) : null,
+      receipts.length ? (0, import_react27.createElement)(
+        "div",
+        { className: "bt-main-source-deliveries", "aria-label": t("Delivery receipts") },
+        receipts.map((delivery) => (0, import_react27.createElement)(
+          "div",
+          {
+            key: `${delivery.ticketId}:${delivery.id}:${delivery.sequence}`,
+            className: delivery.state === "unknown" ? "bt-main-error" : "bt-main-work-detail"
+          },
+          (0, import_react27.createElement)("p", null, `${deliveryPurposeCopy(delivery.purpose)}: ${deliveryCopy(delivery.state)}${delivery.reason ? ` · ${delivery.reason}` : ""}`),
+          (0, import_react27.createElement)("p", null, `${delivery.destination.sourceInstanceId} · ${delivery.destination.eventId}${delivery.destination.threadId ? ` · ${delivery.destination.threadId}` : ""} · @${delivery.destination.actorId}`),
+          canCommand && (delivery.state === "unknown" || delivery.state === "pending" && delivery.attempts > 0) ? (0, import_react27.createElement)(
+            "button",
+            {
+              type: "button",
+              className: "bt-soft",
+              disabled: reconciling === delivery.id,
+              onClick: () => void reconcile(delivery)
+            },
+            reconciling === delivery.id ? t("Reconciling…") : t("Reconcile delivery")
+          ) : null
+        )),
+        receiptCursor ? (0, import_react27.createElement)("button", {
+          type: "button",
+          className: "bt-soft",
+          disabled: receiptsBusy,
+          onClick: () => void loadEarlierReceipts()
+        }, receiptsBusy ? t("Loading…") : t("Load earlier receipts")) : null,
+        receiptsError ? (0, import_react27.createElement)("p", { className: "bt-main-error", role: "status" }, receiptsError) : null
+      ) : null,
+      !feishu && source.conditions.length ? (0, import_react27.createElement)(
+        "div",
+        { className: "bt-main-source-deliveries", "aria-label": t("Pull request conditions") },
+        source.conditions.map((condition) => (0, import_react27.createElement)(
+          "p",
+          { key: `${condition.ticketId}:${condition.number}`, className: "bt-main-work-detail" },
+          `#${condition.number}: ${conditionCopy(condition.state)}${condition.reason ? ` · ${condition.reason}` : ""}`
+        ))
+      ) : null
+    );
+  }
+  function MainConversation() {
+    const state = useView();
+    const canCommand = !state.connection?.connected || state.connection.capabilities.includes("command");
+    const [sending, setSending] = (0, import_react27.useState)(false);
+    const [sendError, setSendError] = (0, import_react27.useState)(null);
+    const [attachments, setAttachments] = (0, import_react27.useState)([]);
+    const [uploading, setUploading] = (0, import_react27.useState)(false);
+    const [speakingId, setSpeakingId] = (0, import_react27.useState)(null);
+    (0, import_react27.useEffect)(() => () => window.speechSynthesis?.cancel(), []);
+    const bottom = (0, import_react27.useRef)(null);
+    const pending = (0, import_react27.useRef)(null);
+    const scroll = (0, import_react27.useRef)(null);
+    const follow = (0, import_react27.useRef)(true);
+    const restoreHeight = (0, import_react27.useRef)(null);
+    const execution = state.directoryOptions?.execution;
+    const policyTarget = execution?.policy?.defaultTarget === "remote-only" ? "remote-only" : execution?.policy?.defaultTarget === "auto" ? "auto" : "local-only";
+    const executionTarget = state.executionTarget ?? policyTarget;
+    const localEnvironments = execution?.environments?.filter((environment) => environment.kind === "local") ?? [];
+    const remoteEnvironments = execution?.environments?.filter((environment) => environment.kind === "remote") ?? [];
+    const selectedRemoteEnvironment = remoteEnvironments.find((environment) => environment.id === state.remoteEnvironmentOverride) ?? remoteEnvironments[0];
+    const selectedLocalEnvironmentId = state.directoryOverride ?? state.directoryOptions?.default?.environmentId ?? state.localEnvironmentOverride ?? (state.connection?.connected ? localEnvironments[0]?.id : void 0);
+    const selectedEnvironmentId = executionTarget === "remote-only" ? selectedRemoteEnvironment?.id : executionTarget === "local-only" ? selectedLocalEnvironmentId : void 0;
+    const selectedEnvironment = execution?.environments?.find((environment) => environment.id === selectedEnvironmentId);
+    (0, import_react27.useEffect)(() => {
+      if (restoreHeight.current !== null && scroll.current) {
+        scroll.current.scrollTop += scroll.current.scrollHeight - restoreHeight.current;
+        restoreHeight.current = null;
+      } else if (follow.current) bottom.current?.scrollIntoView({ block: "end", behavior: "instant" });
+    }, [state.messages.length]);
+    const uploadFiles = async (files) => {
+      if (executionTarget === "auto") {
+        setSendError(t("Choose Local or Remote only before adding files."));
+        return;
+      }
+      const environmentId = selectedEnvironmentId;
+      if (!state.binding || !environmentId) {
+        setSendError(t("Choose a work directory before adding files."));
+        return;
+      }
+      if (attachments.some((attachment) => attachment.environmentId !== environmentId)) {
+        setSendError(t("Remove attached files before changing directories."));
+        return;
+      }
+      if (attachments.length + files.length > 10) {
+        setSendError(t("Attach at most ten files."));
+        return;
+      }
+      setUploading(true);
+      setSendError(null);
+      try {
+        for (const file of files) {
+          const payload = await uploadPayload(file);
+          const uploaded = await uploadWithRetry(productCall, sessionStorage, state.binding.instanceId, environmentId, payload);
+          setAttachments((current) => current.some((item) => item.id === uploaded.id) ? current : [...current, uploaded]);
+        }
+      } catch (error) {
+        setSendError(t(error.message));
+      } finally {
+        setUploading(false);
+      }
+    };
+    const removeAttachment = async (attachment) => {
+      if (!state.binding) return;
+      try {
+        await productCall("attachment-revoke", { instanceId: state.binding.instanceId, id: attachment.id });
+        setAttachments((current) => current.filter((item) => item.id !== attachment.id));
+      } catch (error) {
+        setSendError(t(error.message));
+      }
+    };
+    const downloadAttachment = async (attachment) => {
+      if (!state.binding) return;
+      try {
+        const data = await readProductAttachment(productCall, state.binding.instanceId, attachment.id);
+        offerDownload(data, attachment.name, attachment.mediaType);
+      } catch (error) {
+        setSendError(t(error.message));
+      }
+    };
+    const speakReply = (message) => {
+      if (speakingId === message.id) {
+        window.speechSynthesis.cancel();
+        setSpeakingId(null);
+        return;
+      }
+      const text = plainSpeech(message.text);
+      if (!text || !window.speechSynthesis) return;
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = /[\u3400-\u9fff]/u.test(text) ? "zh-CN" : "en-US";
+      utterance.onend = () => setSpeakingId((current) => current === message.id ? null : current);
+      utterance.onerror = utterance.onend;
+      window.speechSynthesis.speak(utterance);
+      setSpeakingId(message.id);
+    };
+    const send = async (text) => {
+      if (!state.binding) return false;
+      const attachmentIds = attachments.map((attachment) => attachment.id);
+      const environmentId = attachments[0]?.environmentId ?? selectedEnvironmentId;
+      if (executionTarget === "local-only" && !environmentId || attachmentIds.length && !environmentId) {
+        setSendError(t("Choose an authorized Environment for this execution target."));
+        return false;
+      }
+      if (executionTarget === "auto" && attachmentIds.length) {
+        setSendError(t("Remove attached files before using automatic target selection."));
+        return false;
+      }
+      const storageKey = `superagent:pending:${state.connection?.connected ? `${state.connection.address}:${state.connection.client.id}` : "local"}:${state.binding.instanceId}`;
+      try {
+        setSending(true);
+        setSendError(null);
+        if (!pending.current) {
+          try {
+            pending.current = JSON.parse(sessionStorage.getItem(storageKey) ?? "null");
+          } catch {
+          }
+        }
+        if (!pending.current || pending.current.text !== text || pending.current.target !== executionTarget || pending.current.environmentId !== environmentId || JSON.stringify(pending.current.attachments ?? []) !== JSON.stringify(attachmentIds)) {
+          pending.current = {
+            commandId: crypto.randomUUID(),
+            text,
+            ...attachmentIds.length ? { attachments: attachmentIds } : {},
+            target: executionTarget,
+            ...environmentId ? { environmentId } : {}
+          };
+        }
+        try {
+          sessionStorage.setItem(storageKey, JSON.stringify(pending.current));
+        } catch {
+        }
+        const result = await productCall("send", { instanceId: state.binding.instanceId, ...pending.current });
+        pending.current = null;
+        try {
+          sessionStorage.removeItem(storageKey);
+        } catch {
+        }
+        await refreshMain(state.binding);
+        setAttachments([]);
+        view.set((current) => ({ ...current, directoryOverride: null, localEnvironmentOverride: null, remoteEnvironmentOverride: null }));
+        if (result.status === "failed") {
+          setSendError(t("Main could not finish this reply. Your message is saved."));
+          return false;
+        }
+        return true;
+      } catch (error) {
+        setSendError(error.message);
+        await refreshMain(state.binding);
+        return false;
+      } finally {
+        setSending(false);
+      }
+    };
+    const busy = sending || Boolean(state.activeTurn) || state.messages.some((message) => ["queued", "running", "stopping"].includes(message.status));
+    const stopping = state.activeTurn?.status === "stopping";
+    const stop = async () => {
+      if (!state.binding || !state.activeTurn) return;
+      const commandId = crypto.randomUUID();
+      try {
+        setSendError(null);
+        await productCall("stop-main", { instanceId: state.binding.instanceId, commandId, messageId: state.activeTurn.messageId });
+        await refreshMain(state.binding);
+      } catch (error) {
+        setSendError(error.message);
+      }
+    };
+    const options = state.directoryOptions;
+    const override = options?.directories.find((directory) => directory.id === state.directoryOverride);
+    const chooseWorkDirectory = async (path) => {
+      if (!state.binding) return;
+      if (attachments.length) {
+        setSendError(t("Remove attached files before changing directories."));
+        return;
+      }
+      view.set((current) => ({ ...current, directoryBusy: true, directoryError: null }));
+      try {
+        const selected = path ? await registerDirectory(state.binding, path) : null;
+        await loadDirectories(state.binding);
+        view.set((current) => ({ ...current, directoryOverride: selected?.id ?? null }));
+      } catch (error) {
+        view.set((current) => ({ ...current, directoryError: error.message }));
+      } finally {
+        view.set((current) => ({ ...current, directoryBusy: false }));
+      }
+    };
+    const chooseTarget = (value) => {
+      if (attachments.length) {
+        setSendError(t("Remove attached files before changing execution targets."));
+        return;
+      }
+      view.set((current) => ({ ...current, executionTarget: value, localEnvironmentOverride: null, remoteEnvironmentOverride: null }));
+    };
+    const targetControl = execution ? (0, import_react27.createElement)(
+      "div",
+      { className: "bt-main-directory" },
+      (0, import_react27.createElement)("span", { className: "bt-main-label" }, t("Execution target")),
+      (0, import_react27.createElement)(
+        "select",
+        {
+          className: "bt-select",
+          "aria-label": t("Execution target"),
+          value: executionTarget,
+          onChange: (event) => chooseTarget(event.target.value),
+          disabled: busy
+        },
+        (0, import_react27.createElement)("option", { value: "local-only" }, t("Local")),
+        (0, import_react27.createElement)("option", { value: "remote-only" }, t("Remote only")),
+        (0, import_react27.createElement)("option", { value: "auto" }, t("Auto"))
+      ),
+      executionTarget === "remote-only" ? (0, import_react27.createElement)(
+        "select",
+        {
+          className: "bt-select",
+          "aria-label": t("Remote Environment"),
+          value: selectedRemoteEnvironment?.id ?? "",
+          onChange: (event) => {
+            if (attachments.length) {
+              setSendError(t("Remove attached files before changing Environments."));
+              return;
+            }
+            view.set((current) => ({ ...current, remoteEnvironmentOverride: event.target.value || null }));
+          },
+          disabled: busy
+        },
+        (0, import_react27.createElement)("option", { value: "" }, t("Choose an authorized remote Environment")),
+        remoteEnvironments.map((environment) => (0, import_react27.createElement)(
+          "option",
+          { key: environment.id, value: environment.id },
+          `${environment.label || environment.title || environment.id} · ${environment.root}`
+        ))
+      ) : null,
+      state.connection?.connected && executionTarget === "local-only" ? (0, import_react27.createElement)(
+        "select",
+        {
+          className: "bt-select",
+          "aria-label": t("Local Environment"),
+          value: selectedLocalEnvironmentId ?? "",
+          onChange: (event) => view.set((current) => ({ ...current, localEnvironmentOverride: event.target.value || null }))
+        },
+        (0, import_react27.createElement)("option", { value: "" }, t("Choose an authorized local Environment")),
+        localEnvironments.map((environment) => (0, import_react27.createElement)(
+          "option",
+          { key: environment.id, value: environment.id },
+          `${environment.title || environment.id} · ${environment.root}`
+        ))
+      ) : null,
+      selectedEnvironment ? (0, import_react27.createElement)(
+        "span",
+        { className: "bt-main-directory-note" },
+        `${selectedEnvironment.eligible ? t("Eligible") : t("Not eligible")}${selectedEnvironment.version ? ` · ${t("Version")}: ${selectedEnvironment.version}` : ""}${selectedEnvironment.deviceId ? ` · ${t("Device")}: ${selectedEnvironment.deviceId}` : ""}${selectedEnvironment.reasons?.length ? ` · ${selectedEnvironment.reasons.map(capabilityReasonCopy).join("; ")}` : ""}`
+      ) : null,
+      (0, import_react27.createElement)("span", { className: "bt-main-directory-note" }, executionTarget === "auto" ? t("This work chooses an eligible Environment when its Ticket starts. Attachments need an exact target.") : executionTarget === "remote-only" && !selectedEnvironmentId ? t("No remote Environment is available. This work will wait for an eligible device.") : t("New work uses this Environment. Active work keeps its original binding."))
+    ) : null;
+    return (0, import_react27.createElement)(
+      "section",
+      { className: "bt-main-conversation", "aria-label": "Main" },
+      (0, import_react27.createElement)(
+        "header",
+        { className: "bt-main-header" },
+        (0, import_react27.createElement)(ProductBrandMark, { size: 28 }),
+        (0, import_react27.createElement)("span", null, "Main"),
+        (0, import_react27.createElement)(
+          "span",
+          { className: `bt-main-health bt-main-health-${state.health?.state ?? "ready"}`, role: "status" },
+          state.modelsNeedSetup && state.health?.state !== "running" ? t("Models need setup") : mainHealthCopy(state.health)
+        ),
+        state.health?.queuedInputs ? (0, import_react27.createElement)(
+          "span",
+          { className: "bt-main-health-detail" },
+          t("{count} inputs queued", { count: state.health.queuedInputs })
+        ) : null,
+        state.connection?.connected ? (0, import_react27.createElement)(
+          "span",
+          { className: "bt-main-remote", title: state.connection.address },
+          `${t("Remote Host")} · ${state.connection.client.label}`
+        ) : null,
+        clientBridge() ? (0, import_react27.createElement)(
+          "button",
+          { type: "button", className: "bt-soft", onClick: () => view.set((current) => ({ ...current, connectOpen: true })) },
+          state.connection?.connected ? t("Connection") : t("Connect to Host")
+        ) : null,
+        !state.connection?.connected ? (0, import_react27.createElement)("button", {
+          type: "button",
+          className: "bt-icon-btn bt-main-settings",
+          title: t("Settings"),
+          "aria-label": t("Settings"),
+          onClick: () => view.set((current) => ({ ...current, settingsOpen: true }))
+        }, (0, import_react27.createElement)(SlidersIcon)) : null
+      ),
+      state.modelsNeedSetup ? (0, import_react27.createElement)(
+        "p",
+        { className: "bt-main-health-warning", role: "alert" },
+        t("Open Settings to select models for Main, Router and Worker.")
+      ) : state.health?.state === "degraded" ? (0, import_react27.createElement)(
+        "p",
+        { className: "bt-main-health-warning", role: "alert" },
+        t(state.connection?.connected ? "Main model failed. Ask the Host operator to check the model and provider configuration." : "Main model failed. Check the model and provider credentials in Settings.")
+      ) : null,
+      (0, import_react27.createElement)(
+        "div",
+        { className: "bt-main-history", ref: scroll, onScroll: () => {
+          const node = scroll.current;
+          follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80;
+        } },
+        (0, import_react27.createElement)(
+          "div",
+          { className: "bt-main-messages" },
+          !state.messagesComplete && state.messageBefore ? (0, import_react27.createElement)("button", {
+            type: "button",
+            className: "bt-soft bt-main-history-more",
+            disabled: state.messagesLoading,
+            onClick: async () => {
+              follow.current = false;
+              restoreHeight.current = scroll.current?.scrollHeight ?? null;
+              await loadEarlierMessages(state.binding);
+            }
+          }, state.messagesLoading ? t("Loading…") : t("Load earlier messages")) : null,
+          state.messages.length === 0 ? (0, import_react27.createElement)("p", { className: "bt-main-empty" }, t("What would you like to discuss?")) : null,
+          state.messages.map((message) => (0, import_react27.createElement)(
+            "div",
+            { key: message.id },
+            message.role === "system" ? (0, import_react27.createElement)(
+              "div",
+              { className: "bt-main-system-fact", role: "status" },
+              (0, import_react27.createElement)("span", null, t("System fact")),
+              (0, import_react27.createElement)("p", null, message.text)
+            ) : (0, import_react27.createElement)(
+              "div",
+              null,
+              message.source ? (0, import_react27.createElement)(
+                "p",
+                { className: "bt-main-source-label" },
+                message.source.kind === "client" ? `${t("Client")} · ${message.source.clientId}` : message.source.kind === "schedule" ? `${t("Scheduled occurrence")} · ${message.source.objectId}` : `${t(message.source.kind === "feishu" ? "Feishu" : "GitHub")} · @${message.source.authorId} · ${message.source.objectId}`
+              ) : null,
+              (0, import_react27.createElement)(ProductChatRow, { kind: message.role === "main" ? "bot" : "user", text: message.text }),
+              message.role === "main" && message.text && window.speechSynthesis ? (0, import_react27.createElement)("button", {
+                type: "button",
+                className: "bt-soft bt-main-read-aloud",
+                onClick: () => speakReply(message)
+              }, t(speakingId === message.id ? "Stop reading" : "Read aloud")) : null,
+              message.attachments?.length ? (0, import_react27.createElement)(
+                "div",
+                { className: "bt-main-message-attachments", "aria-label": t("Attached files") },
+                message.attachments.map((attachment) => (0, import_react27.createElement)(
+                  "button",
+                  {
+                    key: attachment.id,
+                    type: "button",
+                    className: "bt-soft",
+                    disabled: Boolean(state.connection?.connected),
+                    onClick: () => void downloadAttachment(attachment)
+                  },
+                  `${t("Download")} ${attachment.name} · ${attachment.bytes} ${t("bytes")}`
+                ))
+              ) : null,
+              message.status === "failed" ? (0, import_react27.createElement)(
+                "p",
+                { className: "bt-main-error", role: "status" },
+                t("Main could not finish this reply. Your message is saved.")
+              ) : null
+            )
+          )),
+          !state.connection?.connected ? (0, import_react27.createElement)(FeishuSourceStatus, { instanceId: state.binding?.instanceId, call: productCall }) : null,
+          state.sources.map((source) => (0, import_react27.createElement)(MainSourceCard, {
+            key: source.id,
+            source,
+            instanceId: state.binding?.instanceId,
+            onRefresh: refresh,
+            canCommand
+          })),
+          state.preparations.map((preparation) => (0, import_react27.createElement)(MainPreparationCard, { key: preparation.id, preparation })),
+          state.works.map((work) => (0, import_react27.createElement)(MainWorkCard, {
+            key: work.brief.workItemId ?? work.brief.id,
+            work,
+            onEvidence: (selected) => {
+              if (state.binding) void loadMainEvidence(state.binding, selected);
+            }
+          })),
+          state.mainEvidenceError && !state.mainEvidence ? (0, import_react27.createElement)("p", { role: "alert", className: "bt-main-error" }, state.mainEvidenceError) : null,
+          state.mainEvidence ? (0, import_react27.createElement)(
+            "section",
+            { className: "bt-main-evidence", "aria-label": t("Original request evidence") },
+            (0, import_react27.createElement)(
+              "div",
+              { className: "bt-main-evidence-head" },
+              (0, import_react27.createElement)(
+                "div",
+                null,
+                (0, import_react27.createElement)("strong", null, t("Original request evidence")),
+                (0, import_react27.createElement)("p", null, t(state.mainEvidence.goal))
+              ),
+              (0, import_react27.createElement)("span", null, t(state.mainEvidence.pagination.truncated ? "Partial evidence" : "Complete evidence"))
+            ),
+            (0, import_react27.createElement)("pre", null, redactObservationText(state.mainEvidence.text)),
+            state.mainEvidenceError ? (0, import_react27.createElement)("p", { role: "alert", className: "bt-main-error" }, state.mainEvidenceError) : null,
+            state.mainEvidence.pagination.truncated ? (0, import_react27.createElement)(
+              "button",
+              {
+                type: "button",
+                className: "bt-soft",
+                disabled: state.mainEvidenceLoading,
+                onClick: () => {
+                  if (state.binding) void loadMainEvidence(
+                    state.binding,
+                    { brief: { workItemId: state.mainEvidence.workItemId, goal: state.mainEvidence.goal } },
+                    { append: true }
+                  );
+                }
+              },
+              state.mainEvidenceLoading ? t("Loading…") : t("Load more evidence")
+            ) : null
+          ) : null,
+          stopping ? (0, import_react27.createElement)("p", { className: "bt-main-status", role: "status" }, t("Stopping this Main reply…")) : busy ? (0, import_react27.createElement)("p", { className: "bt-main-status", role: "status" }, t("Main is replying…")) : null,
+          (0, import_react27.createElement)("div", { ref: bottom })
+        )
+      ),
+      (0, import_react27.createElement)(MainComposer, {
+        onSend: send,
+        onStop: canCommand && state.activeTurn ? stop : void 0,
+        busy,
+        stopping,
+        readOnly: !canCommand,
+        error: sendError ?? state.error,
+        value: state.mainDraft,
+        onValueChange: (mainDraft) => view.set((current) => ({ ...current, mainDraft })),
+        attachments,
+        uploading,
+        onRemoveAttachment: removeAttachment,
+        speechRemote: () => ctx.get("remote.speech") ?? void 0,
+        onFiles: !state.connection?.connected && executionTarget !== "auto" && selectedEnvironmentId ? (files) => void uploadFiles(files) : void 0,
+        directoryControl: execution ? (0, import_react27.createElement)(
+          "div",
+          { className: "bt-main-directory" },
+          targetControl,
+          !state.connection?.connected && executionTarget === "local-only" && options?.default ? (0, import_react27.createElement)(
+            import_react27.Fragment,
+            null,
+            (0, import_react27.createElement)("span", { className: "bt-main-label" }, t("Work directory")),
+            (0, import_react27.createElement)(FolderMenu, {
+              value: override?.root,
+              label: t("Work directory"),
+              fallbackLabel: t("Instance default"),
+              actions: directoryActions(state.binding),
+              run: (promise) => void Promise.resolve(promise).catch((error) => view.set((current) => ({ ...current, directoryError: error.message }))),
+              onPick: chooseWorkDirectory,
+              disabled: busy || state.directoryBusy
+            })
+          ) : null,
+          state.directoryError ? (0, import_react27.createElement)("p", { className: "bt-main-error", role: "alert" }, state.directoryError) : null
+        ) : null
+      })
+    );
+  }
+  function ObservationConversation() {
+    const state = useView();
+    const [copyState, setCopyState] = (0, import_react27.useState)("idle");
+    const [detailCopyState, setDetailCopyState] = (0, import_react27.useState)("idle");
+    const observation = state.observation;
+    const openDetail = (detailId, append = false) => {
+      if (state.binding && state.selectedObservation) {
+        void loadObservationDetail(state.binding, state.selectedObservation, detailId, { append });
+      }
+    };
+    const backToMain = () => {
+      view.set((current) => ({
+        ...current,
+        route: "main",
+        selectedObservation: null,
+        observationGeneration: null,
+        observation: null,
+        observationError: null,
+        observationDetail: null,
+        observationDetailError: null
+      }));
+      void refresh();
+      setTimeout(() => document.querySelector("#main-message, .bt-main-composer textarea")?.focus(), 0);
+    };
+    const copy = async () => {
+      if (!observation || !state.binding) return;
+      try {
+        await navigator.clipboard.writeText(JSON.stringify({ ...observation, instanceId: state.binding.instanceId }, null, 2));
+        setCopyState("copied");
+        setTimeout(() => setCopyState("idle"), 1600);
+      } catch {
+        setCopyState("failed");
+      }
+    };
+    const copyDetail = async () => {
+      if (!state.observationDetail) return;
+      try {
+        await navigator.clipboard.writeText(state.observationDetail.text);
+        setDetailCopyState("copied");
+        setTimeout(() => setDetailCopyState("idle"), 1600);
+      } catch {
+        setDetailCopyState("failed");
+      }
+    };
+    return (0, import_react27.createElement)(
+      "section",
+      { className: "bt-observation", "aria-label": t("Read-only work activity") },
+      (0, import_react27.createElement)(
+        "header",
+        { className: "bt-observation-header" },
+        (0, import_react27.createElement)("button", { type: "button", className: "bt-soft", onClick: backToMain }, t("Back to Main")),
+        (0, import_react27.createElement)(
+          "div",
+          { className: "bt-observation-heading" },
+          (0, import_react27.createElement)("span", { className: "bt-observation-role" }, observation?.role === "router" ? "Router" : "Worker"),
+          (0, import_react27.createElement)("strong", null, observation?.title ?? state.selectedObservation?.title ?? "")
+        ),
+        (0, import_react27.createElement)("span", { className: "bt-observation-readonly" }, t("Read-only")),
+        !state.connection?.connected ? (0, import_react27.createElement)("button", {
+          type: "button",
+          className: "bt-icon-btn",
+          title: t("Settings"),
+          "aria-label": t("Settings"),
+          onClick: () => view.set((current) => ({ ...current, settingsOpen: true }))
+        }, (0, import_react27.createElement)(SlidersIcon)) : null
+      ),
+      (0, import_react27.createElement)(
+        "div",
+        { className: "bt-observation-body" },
+        state.observationLoading && !observation ? (0, import_react27.createElement)("p", { role: "status", className: "bt-main-status" }, t("Loading history…")) : null,
+        state.observationError ? (0, import_react27.createElement)("p", { role: "alert", className: "bt-main-error" }, state.observationError) : null,
+        observation ? (0, import_react27.createElement)(
+          "div",
+          { className: "bt-observation-content" },
+          (0, import_react27.createElement)(
+            "div",
+            { className: "bt-observation-summary" },
+            (0, import_react27.createElement)(
+              "div",
+              null,
+              (0, import_react27.createElement)(
+                "p",
+                { className: "bt-observation-status", role: "status" },
+                `${statusCopy(observation.status)}${observation.generation && !observation.current ? ` · ${t("Historical generation")}` : ""}`
+              ),
+              (0, import_react27.createElement)("p", null, t(observation.summary)),
+              (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${t(observation.nextStep)}`)
+            ),
+            observation.historyStatus === "missing" ? (0, import_react27.createElement)(
+              "p",
+              { className: "bt-main-error", role: "alert" },
+              t("The Session history is missing. Durable work facts remain available.")
+            ) : null,
+            observation.historyStatus === "not-started" ? (0, import_react27.createElement)(
+              "p",
+              { className: "bt-main-status", role: "status" },
+              t("The assigned Session has not started.")
+            ) : null,
+            (0, import_react27.createElement)(
+              "div",
+              { className: "bt-observation-actions" },
+              (0, import_react27.createElement)(
+                "button",
+                { type: "button", className: "bt-soft", onClick: copy },
+                copyState === "copied" ? t("Copied") : copyState === "failed" ? t("Copy failed") : t("Copy details")
+              )
+            )
+          ),
+          (0, import_react27.createElement)("dl", { className: "bt-observation-facts" }, observation.facts.map((fact, index) => (0, import_react27.createElement)(
+            "div",
+            { key: `${fact.label}:${index}` },
+            (0, import_react27.createElement)("dt", null, t(fact.label)),
+            (0, import_react27.createElement)(
+              "dd",
+              null,
+              (0, import_react27.createElement)("span", null, t(fact.value)),
+              fact.detailId ? (0, import_react27.createElement)(
+                "button",
+                {
+                  type: "button",
+                  className: "bt-soft bt-observation-detail-open",
+                  onClick: () => openDetail(fact.detailId)
+                },
+                `${t("View full detail")}${fact.detailBytes ? ` · ${fact.detailBytes} ${t("bytes")}` : ""}`
+              ) : null
+            )
+          ))),
+          state.observationDetail ? (0, import_react27.createElement)(
+            "section",
+            { className: "bt-observation-detail", "aria-label": t("Full detail") },
+            (0, import_react27.createElement)(
+              "div",
+              { className: "bt-observation-detail-head" },
+              (0, import_react27.createElement)("h2", null, t(state.observationDetail.label)),
+              (0, import_react27.createElement)("span", null, `${state.observationDetail.bytes} ${t("bytes")}`)
+            ),
+            (0, import_react27.createElement)("pre", null, redactObservationText(state.observationDetail.text)),
+            (0, import_react27.createElement)(
+              "div",
+              { className: "bt-observation-detail-actions" },
+              state.observationDetail.hasMore ? (0, import_react27.createElement)(
+                "button",
+                {
+                  type: "button",
+                  className: "bt-soft",
+                  disabled: state.observationDetailLoading,
+                  onClick: () => openDetail(state.observationDetail.detailId, true)
+                },
+                state.observationDetailLoading ? t("Loading…") : t("Load more detail")
+              ) : null,
+              (0, import_react27.createElement)(
+                "button",
+                { type: "button", className: "bt-soft", onClick: copyDetail },
+                detailCopyState === "copied" ? t("Copied") : detailCopyState === "failed" ? t("Copy failed") : t("Copy loaded detail")
+              )
+            ),
+            state.observationDetailError ? (0, import_react27.createElement)("p", { role: "alert", className: "bt-main-error" }, state.observationDetailError) : null
+          ) : null,
+          observation.generations.length > 1 ? (0, import_react27.createElement)(
+            "section",
+            { className: "bt-observation-generations", "aria-label": t("Assignment generations") },
+            (0, import_react27.createElement)("h2", null, t("Assignment generations")),
+            observation.generations.map((generation) => (0, import_react27.createElement)(
+              "button",
+              {
+                key: generation.assignmentId,
+                type: "button",
+                className: "bt-observation-generation",
+                "aria-current": generation.current ? "true" : void 0,
+                "aria-pressed": generation.generation === observation.generation ? "true" : "false",
+                disabled: generation.generation === observation.generation,
+                onClick: () => {
+                  if (!state.binding || !state.selectedObservation) return;
+                  view.set((current) => ({
+                    ...current,
+                    observationGeneration: generation.generation,
+                    observationDetail: null,
+                    observationDetailError: null
+                  }));
+                  void loadObservation(state.binding, state.selectedObservation, { reset: true });
+                }
+              },
+              (0, import_react27.createElement)("span", null, generation.generation),
+              (0, import_react27.createElement)(
+                "span",
+                null,
+                `${generation.configurationRevision ? `${t("Configuration")} v${generation.configurationRevision} · ` : ""}${generation.current ? t("Current generation") : t("Historical generation")}`
+              ),
+              (0, import_react27.createElement)("span", null, statusCopy(generation.state))
+            ))
+          ) : null,
+          (0, import_react27.createElement)(
+            "section",
+            { className: "bt-observation-history", "aria-label": t("Observation history") },
+            (0, import_react27.createElement)("h2", null, t("Observation history")),
+            observation.events.length ? observation.events.map((event) => (0, import_react27.createElement)(
+              "article",
+              { key: event.seq, className: "bt-observation-event" },
+              (0, import_react27.createElement)(
+                "div",
+                { className: "bt-observation-event-head" },
+                (0, import_react27.createElement)("span", null, event.kind === "user-message" ? t("Input") : event.kind === "assistant-message" ? t("Response") : event.kind === "tool-call" ? t("Tool call") : event.kind === "tool-result" ? t("Tool result") : t("Turn")),
+                (0, import_react27.createElement)("time", null, event.time ? new Date(event.time).toLocaleTimeString() : "")
+              ),
+              (0, import_react27.createElement)("p", null, event.kind === "tool-call" ? t("Called {tool}.", { tool: event.tool ?? "tool" }) : event.kind === "tool-result" ? t(event.isError ? "Tool call failed." : "Tool call completed.") : event.kind === "turn" && event.reason ? t("Turn ended: {reason}.", { reason: event.reason }) : redactObservationText(event.text)),
+              event.detail ? (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, redactObservationText(event.detail)) : null,
+              event.detailId ? (0, import_react27.createElement)(
+                "button",
+                {
+                  type: "button",
+                  className: "bt-soft bt-observation-detail-open",
+                  onClick: () => openDetail(event.detailId)
+                },
+                `${t("View full detail")}${event.detailBytes ? ` · ${event.detailBytes} ${t("bytes")}` : ""}`
+              ) : null,
+              event.argumentKeys?.length ? (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, `${t("Arguments")}: ${event.argumentKeys.join(", ")}`) : null
+            )) : (0, import_react27.createElement)("p", { className: "bt-main-status" }, observation.historyStatus === "missing" ? t("The Session history is missing. Durable work facts remain available.") : observation.historyStatus === "not-started" ? t("The assigned Session has not started.") : t("No execution history has been recorded yet.")),
+            observation.hasMore ? (0, import_react27.createElement)("button", { type: "button", className: "bt-soft bt-observation-more", onClick: () => {
+              if (state.binding && state.selectedObservation) void loadObservation(state.binding, state.selectedObservation, { older: true });
+            } }, t("Load more history")) : null
+          )
+        ) : null
+      )
+    );
+  }
+  function MainNavigation() {
+    const state = useView();
+    const [search, setSearch] = (0, import_react27.useState)(state.observationQuery);
+    const timer = (0, import_react27.useRef)(null);
+    (0, import_react27.useEffect)(() => () => clearTimeout(timer.current), []);
+    const changeSearch = (value) => {
+      setSearch(value);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => {
+        if (!state.binding) return;
+        view.set((current) => ({ ...current, observationQuery: value, observationCursor: null }));
+        void loadObservations(state.binding, { reset: true });
+      }, 180);
+    };
+    return (0, import_react27.createElement)(
+      "nav",
+      { className: "bt-main-nav", "aria-label": t("Work navigation") },
+      (0, import_react27.createElement)("button", {
+        type: "button",
+        className: "bt-soft",
+        "aria-current": state.route === "main" ? "page" : void 0,
+        onClick: () => {
+          view.set((current) => ({
+            ...current,
+            route: "main",
+            selectedObservation: null,
+            observationGeneration: null,
+            observation: null,
+            observationError: null,
+            observationDetail: null,
+            observationDetailError: null
+          }));
+          void refresh();
+          setTimeout(() => document.querySelector("#main-message, .bt-main-composer textarea")?.focus(), 0);
+        }
+      }, (0, import_react27.createElement)(ProductBrandMark, { size: 24 }), "Main"),
+      clientBridge() ? (0, import_react27.createElement)(
+        "button",
+        {
+          type: "button",
+          className: "bt-soft",
+          onClick: () => view.set((current) => ({ ...current, connectOpen: true }))
+        },
+        state.connection?.connected ? `${t("Remote Host")} · ${state.connection.client.label}` : t("Connect to Host")
+      ) : null,
+      (0, import_react27.createElement)(
+        "div",
+        { className: "bt-observation-search" },
+        (0, import_react27.createElement)("label", { htmlFor: "work-observation-search" }, t("Find activity")),
+        (0, import_react27.createElement)("input", {
+          id: "work-observation-search",
+          type: "search",
+          value: search,
+          placeholder: t("Search Router and Worker history"),
+          onChange: (event) => changeSearch(event.currentTarget.value)
+        })
+      ),
+      (0, import_react27.createElement)(
+        "div",
+        { className: "bt-observation-nav-head" },
+        (0, import_react27.createElement)("span", null, t("Work activity")),
+        (0, import_react27.createElement)("span", null, t("Read-only"))
+      ),
+      state.observations.length ? state.observations.map((item) => (0, import_react27.createElement)(
+        "button",
+        {
+          key: item.id,
+          type: "button",
+          className: "bt-observation-nav-item",
+          "aria-current": state.route === "observe" && state.selectedObservation?.id === item.id ? "page" : void 0,
+          onClick: () => {
+            view.set((current) => ({
+              ...current,
+              route: "observe",
+              selectedObservation: item,
+              observationGeneration: item.generation ?? null,
+              observation: null,
+              observationError: null,
+              observationDetail: null,
+              observationDetailError: null
+            }));
+            if (state.binding) void loadObservation(state.binding, item, { reset: true });
+          }
+        },
+        (0, import_react27.createElement)("span", { className: "bt-observation-role" }, item.role === "router" ? "Router" : "Worker"),
+        (0, import_react27.createElement)("span", { className: "bt-observation-nav-copy" }, (0, import_react27.createElement)("strong", null, item.title), (0, import_react27.createElement)("span", null, statusCopy(item.status)))
+      )) : (0, import_react27.createElement)("p", { className: "bt-observation-empty" }, t("No Router or Worker activity yet.")),
+      state.activityError ? (0, import_react27.createElement)("p", { role: "alert", className: "bt-main-error" }, state.activityError) : null,
+      state.observationCursor ? (0, import_react27.createElement)(
+        "button",
+        {
+          type: "button",
+          className: "bt-soft bt-observation-more",
+          disabled: state.activityLoading,
+          onClick: () => {
+            if (state.binding) void loadObservations(state.binding, { append: true });
+          }
+        },
+        state.activityLoading ? t("Loading…") : t("Load more activity")
+      ) : null
+    );
+  }
+  function ClientSettings({ binding }) {
+    const [clients, setClients] = (0, import_react27.useState)([]);
+    const [label, setLabel] = (0, import_react27.useState)("");
+    const [readOnly, setReadOnly] = (0, import_react27.useState)(false);
+    const [issued, setIssued] = (0, import_react27.useState)(null);
+    const [busy, setBusy] = (0, import_react27.useState)(false);
+    const [error, setError] = (0, import_react27.useState)(null);
+    const pending = (0, import_react27.useRef)(null);
+    const load = async () => setClients(await productCall("clients-list", { instanceId: binding.instanceId }));
+    (0, import_react27.useEffect)(() => {
+      void load().catch((failure) => setError(failure.message));
+    }, [binding.instanceId]);
+    const enroll = async (event) => {
+      event.preventDefault();
+      if (!label.trim() || busy) return;
+      setBusy(true);
+      setError(null);
+      setIssued(null);
+      try {
+        const capabilities = readOnly ? ["read"] : ["read", "command"];
+        if (!pending.current || pending.current.label !== label.trim() || pending.current.readOnly !== readOnly) {
+          pending.current = { commandId: crypto.randomUUID(), label: label.trim(), readOnly };
+        }
+        const result = await productCall("client-enroll", {
+          instanceId: binding.instanceId,
+          commandId: pending.current.commandId,
+          label: pending.current.label,
+          capabilities
+        });
+        pending.current = null;
+        setLabel("");
+        if (result.token) setIssued(result.token);
+        else setError(t("This enrollment already completed. Its credential cannot be shown again; revoke it and create a new client."));
+        await load();
+      } catch (failure) {
+        setError(failure.message);
+      } finally {
+        setBusy(false);
+      }
+    };
+    const revoke = async (client) => {
+      if (busy || !confirm(t("Revoke this client’s access now?"))) return;
+      setBusy(true);
+      setError(null);
+      setIssued(null);
+      try {
+        await productCall("client-revoke", {
+          instanceId: binding.instanceId,
+          commandId: `revoke-client:${client.id}`,
+          clientId: client.id,
+          reason: "Revoked from the product settings."
+        });
+        await load();
+      } catch (failure) {
+        setError(failure.message);
+      } finally {
+        setBusy(false);
+      }
+    };
+    return (0, import_react27.createElement)(
+      Card,
+      { title: t("Authorized clients") },
+      (0, import_react27.createElement)(
+        "form",
+        { className: "bt-main-client-form", onSubmit: (event) => {
+          void enroll(event);
+        } },
+        (0, import_react27.createElement)("label", { htmlFor: "client-label" }, t("Client name")),
+        (0, import_react27.createElement)("input", {
+          id: "client-label",
+          className: "bt-bs-input",
+          value: label,
+          maxLength: 128,
+          required: true,
+          onChange: (event) => setLabel(event.currentTarget.value)
+        }),
+        (0, import_react27.createElement)("label", { htmlFor: "client-scope" }, t("Client access")),
+        (0, import_react27.createElement)(
+          "select",
+          {
+            id: "client-scope",
+            className: "bt-select",
+            value: readOnly ? "read" : "command",
+            onChange: (event) => setReadOnly(event.currentTarget.value === "read")
+          },
+          (0, import_react27.createElement)("option", { value: "command" }, t("Read and command")),
+          (0, import_react27.createElement)("option", { value: "read" }, t("Read-only"))
+        ),
+        (0, import_react27.createElement)("button", { type: "submit", className: "bt-soft", disabled: busy || !label.trim() }, t("Issue credential"))
+      ),
+      issued ? (0, import_react27.createElement)(
+        "div",
+        { className: "bt-main-client-issued", role: "status" },
+        (0, import_react27.createElement)("p", null, t("This credential is shown once. Transfer it to the desktop client securely.")),
+        (0, import_react27.createElement)("input", { type: "password", readOnly: true, value: issued, "aria-label": t("Issued client credential") }),
+        (0, import_react27.createElement)("button", { type: "button", className: "bt-soft", onClick: () => {
+          void navigator.clipboard.writeText(issued).catch(() => setError(t("Could not copy the credential.")));
+        } }, t("Copy credential"))
+      ) : null,
+      error ? (0, import_react27.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+      clients.map((client) => (0, import_react27.createElement)(
+        "div",
+        { key: client.id, className: "bt-main-client-row" },
+        (0, import_react27.createElement)(
+          "div",
+          null,
+          (0, import_react27.createElement)("strong", null, client.label),
+          (0, import_react27.createElement)("span", null, client.id),
+          (0, import_react27.createElement)("span", null, client.revokedAt ? t("Revoked") : client.grants[0]?.capabilities.includes("command") ? t("Read and command") : t("Read-only"))
+        ),
+        client.revokedAt ? null : (0, import_react27.createElement)("button", {
+          type: "button",
+          className: "bt-soft",
+          disabled: busy,
+          onClick: () => {
+            void revoke(client);
+          }
+        }, t("Revoke"))
+      ))
+    );
+  }
+  function SettingsDialog({ binding, onClose }) {
+    const [page, setPage] = (0, import_react27.useState)("roles");
+    const viewState = useView();
+    const [snapshot, setSnapshot] = (0, import_react27.useState)(null);
+    const [draft, setDraft] = (0, import_react27.useState)(null);
+    const [base, setBase] = (0, import_react27.useState)(null);
+    const [efforts, setEfforts] = (0, import_react27.useState)({});
+    const [keyDrafts, setKeyDrafts] = (0, import_react27.useState)({});
+    const [error, setError] = (0, import_react27.useState)(null);
+    const [notice, setNotice] = (0, import_react27.useState)(null);
+    const [conflict, setConflict] = (0, import_react27.useState)(false);
+    const [loading, setLoading] = (0, import_react27.useState)(true);
+    const [saving, setSaving] = (0, import_react27.useState)(false);
+    const draftRef = (0, import_react27.useRef)(draft);
+    const draftVersion = (0, import_react27.useRef)(0);
+    const savingRef = (0, import_react27.useRef)(false);
+    const clone = (value) => JSON.parse(JSON.stringify(value));
+    const roleRows = [["main", "Main"], ["router", "Router"], ["worker", "Worker"]];
+    const refOf = (model) => `${model.provider}/${model.model}`;
+    const loadEfforts = async (roles2) => {
+      const refs = [...new Set([roles2.main, roles2.router, roles2.worker].filter(Boolean).map((profile) => refOf(profile.model)))];
+      const values = await Promise.all(refs.map(async (ref) => {
+        const [provider, ...model] = ref.split("/");
+        try {
+          return [ref, await productCall("settings-efforts", { instanceId: binding.instanceId, provider, model: model.join("/") })];
+        } catch {
+          return [ref, { efforts: [] }];
+        }
+      }));
+      setEfforts(Object.fromEntries(values));
+    };
+    const applySnapshot = (value, preserve = false) => {
+      setSnapshot(value);
+      view.set((current) => ({ ...current, modelsNeedSetup: rolesNeedingModels(value).length > 0 }));
+      if (!preserve) {
+        const nextDraft = clone(value.roles);
+        draftRef.current = nextDraft;
+        draftVersion.current += 1;
+        setDraft(nextDraft);
+        setBase(clone(value.roles));
+        void loadEfforts(value.roles);
+      }
+    };
+    const load = async ({ preserve = false } = {}) => {
+      setLoading(true);
+      try {
+        const value = await productCall("settings", { instanceId: binding.instanceId, limit: 50 });
+        applySnapshot(value, preserve);
+        setError(null);
+      } catch (failure) {
+        setError(failure.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    (0, import_react27.useEffect)(() => {
+      void load();
+    }, [binding.instanceId]);
+    (0, import_react27.useEffect)(() => {
+      const close2 = (event) => {
+        if (event.key === "Escape") onClose();
+      };
+      window.addEventListener("keydown", close2);
+      return () => window.removeEventListener("keydown", close2);
+    }, [onClose]);
+    const updateRole = (role, change) => {
+      if (savingRef.current) return;
+      draftVersion.current += 1;
+      setDraft((current) => {
+        const next = clone(current);
+        next[role] = { ...next[role], ...change };
+        draftRef.current = next;
+        return next;
+      });
+    };
+    const updateModel = async (role, ref) => {
+      if (savingRef.current) return;
+      const [provider, ...model] = ref.split("/");
+      updateRole(role, { model: { provider, model: model.join("/") } });
+      if (!efforts[ref]) {
+        try {
+          const value = await productCall("settings-efforts", { instanceId: binding.instanceId, provider, model: model.join("/") });
+          setEfforts((current) => ({ ...current, [ref]: value }));
+        } catch {
+        }
+      }
+    };
+    const updateEffort = (role, effort) => {
+      if (savingRef.current) return;
+      const current = draft[role];
+      updateRole(role, { model: { ...current.model, ...effort ? { effort } : {} } });
+      if (!effort) setDraft((latest) => {
+        const next = clone(latest);
+        delete next[role].model.effort;
+        draftRef.current = next;
+        return next;
+      });
+    };
+    const validate = () => {
+      if (draft.router.instructions.trim() && !draft.router.instructions.includes("{{goal}}")) return "The Router prompt must keep the {{goal}} placeholder.";
+      if (draft.worker.instructions.trim() && (!draft.worker.instructions.includes("{{goal}}") || !draft.worker.instructions.includes("{{constraints}}"))) {
+        return "The Worker prompt must keep the {{goal}} and {{constraints}} placeholders.";
+      }
+      return null;
+    };
+    const save = async () => {
+      if (savingRef.current) return;
+      const problem = validate();
+      if (problem) {
+        setError(problem);
+        return;
+      }
+      const submitted = clone(draftRef.current);
+      const submittedVersion = draftVersion.current;
+      savingRef.current = true;
+      setSaving(true);
+      setError(null);
+      setNotice(null);
+      try {
+        const value = await productCall("settings-save", {
+          instanceId: binding.instanceId,
+          commandId: crypto.randomUUID(),
+          expectedRevision: snapshot.revision,
+          roles: submitted
+        });
+        const editedDuringSave = draftVersion.current !== submittedVersion;
+        const nextDraft = editedDuringSave ? rebaseRoleDraft(submitted, draftRef.current, value.roles) : clone(value.roles);
+        setSnapshot((current) => ({ ...current, ...value, providers: current.providers, history: current.history }));
+        setBase(clone(value.roles));
+        setDraft(nextDraft);
+        draftRef.current = nextDraft;
+        draftVersion.current += 1;
+        setConflict(false);
+        setNotice(t("Configuration v{revision} is active for new turns.", { revision: value.revision }));
+        const latest = await productCall("settings", { instanceId: binding.instanceId, limit: 50 });
+        applySnapshot(latest, true);
+      } catch (failure) {
+        if (failure.code === "CONFIG_REVISION_CONFLICT") {
+          setConflict(true);
+          setError(t("The configuration changed elsewhere. Your edits are still here."));
+        } else setError(failure.message);
+      } finally {
+        savingRef.current = false;
+        setSaving(false);
+      }
+    };
+    const rebase = async () => {
+      setSaving(true);
+      setError(null);
+      try {
+        const latest = await productCall("settings", { instanceId: binding.instanceId, limit: 50 });
+        const merged = rebaseRoleDraft(base, draft, latest.roles);
+        applySnapshot(latest);
+        draftRef.current = merged;
+        draftVersion.current += 1;
+        setDraft(merged);
+        setBase(clone(latest.roles));
+        setConflict(false);
+        setNotice(t("Your changed fields were applied over configuration v{revision}. Review and save.", { revision: latest.revision }));
+      } catch (failure) {
+        setError(failure.message);
+      } finally {
+        setSaving(false);
+      }
+    };
+    const refreshAfterPreset = async () => {
+      const latest = await productCall("settings", { instanceId: binding.instanceId, limit: 50 });
+      applySnapshot(latest);
+      setConflict(false);
+      setError(null);
+    };
+    const saveKey = async (provider, value) => {
+      if (value === void 0) return;
+      setError(null);
+      setNotice(null);
+      try {
+        const result = await productCall("provider-key", { instanceId: binding.instanceId, provider, value });
+        setKeyDrafts((current) => ({ ...current, [provider]: "" }));
+        setSnapshot((current) => ({ ...current, providers: current.providers.map((item) => item.id === provider ? { ...item, key: { ...item.key, configured: result.configured } } : item) }));
+        setNotice(value === null ? t("Provider key removed.") : t("Provider key saved."));
+      } catch (failure) {
+        setKeyDrafts((current) => ({ ...current, [provider]: "" }));
+        setError(failure.message);
+      }
+    };
+    const chooseDefaultDirectory = async (path) => {
+      if (!path || viewState.directoryBusy) return;
+      view.set((current) => ({ ...current, directoryBusy: true, directoryError: null }));
+      try {
+        const selected = await registerDirectory(binding, path);
+        await productCall("directory-default-save", {
+          instanceId: binding.instanceId,
+          commandId: crypto.randomUUID(),
+          expectedRevision: viewState.directoryOptions?.default?.revision ?? 0,
+          environmentId: selected.id
+        });
+        await loadDirectories(binding);
+      } catch (failure) {
+        view.set((current) => ({ ...current, directoryError: failure.message }));
+        await loadDirectories(binding).catch(() => {
+        });
+      } finally {
+        view.set((current) => ({ ...current, directoryBusy: false }));
+      }
+    };
+    const close = (0, import_react27.createElement)("button", { type: "button", className: "bt-settings-close", "aria-label": t("Close settings"), onClick: onClose }, (0, import_react27.createElement)(CloseIcon));
+    if (loading && !draft) return (0, import_react27.createElement)(
+      "div",
+      { className: "bt-settings-layer" },
+      (0, import_react27.createElement)("div", { className: "bt-scrim", onMouseDown: onClose }),
+      (0, import_react27.createElement)(
+        "div",
+        { className: "bt-settings bt-main-settings-dialog", role: "dialog", "aria-modal": true, "aria-label": t("Super-agent settings") },
+        (0, import_react27.createElement)(
+          "div",
+          { className: "bt-settings-main" },
+          (0, import_react27.createElement)("div", { className: "bt-settings-head" }, (0, import_react27.createElement)("h2", null, t("Super-agent settings"))),
+          (0, import_react27.createElement)("div", { className: "bt-settings-scroll" }, (0, import_react27.createElement)("p", { className: "bt-main-status", role: "status" }, t("Loading configuration…")))
+        ),
+        close
+      )
+    );
+    if (!draft) return (0, import_react27.createElement)(
+      "div",
+      { className: "bt-settings-layer" },
+      (0, import_react27.createElement)("div", { className: "bt-scrim", onMouseDown: onClose }),
+      (0, import_react27.createElement)(
+        "div",
+        { className: "bt-settings bt-main-settings-dialog", role: "dialog", "aria-modal": true, "aria-label": t("Super-agent settings") },
+        (0, import_react27.createElement)(
+          "div",
+          { className: "bt-settings-main" },
+          (0, import_react27.createElement)("div", { className: "bt-settings-head" }, (0, import_react27.createElement)("h2", null, t("Super-agent settings"))),
+          (0, import_react27.createElement)("div", { className: "bt-settings-scroll" }, (0, import_react27.createElement)("p", { className: "bt-main-error", role: "alert" }, error ?? t("Configuration is unavailable.")))
+        ),
+        close
+      )
+    );
+    const models = snapshot.providers.flatMap((provider) => provider.models);
+    const viewWork = ({ ticketIds = [], workBriefId } = {}) => {
+      onClose();
+      view.set((current) => ({ ...current, route: "main" }));
+      void refreshMain(binding).then(() => {
+        requestAnimationFrame(() => {
+          const cards = [...document.querySelectorAll("[data-ticket-id], [data-work-brief-id]")];
+          const card = cards.find((item) => ticketIds.includes(item.dataset.ticketId) || workBriefId && item.dataset.workBriefId === workBriefId);
+          if (!card) return;
+          card.focus({ preventScroll: true });
+          card.scrollIntoView?.({ behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+        });
+      });
+    };
+    return (0, import_react27.createElement)(
+      "div",
+      { className: "bt-settings-layer" },
+      (0, import_react27.createElement)("div", { className: "bt-scrim", onMouseDown: onClose }),
+      (0, import_react27.createElement)(
+        "div",
+        { className: "bt-settings bt-main-settings-dialog", role: "dialog", "aria-modal": true, "aria-label": t("Super-agent settings") },
+        (0, import_react27.createElement)(
+          "nav",
+          { className: "bt-settings-nav", "aria-label": t("Settings pages") },
+          (0, import_react27.createElement)("button", {
+            type: "button",
+            className: "bt-settings-item bt-main-settings-nav-item",
+            "aria-current": page === "roles" ? "page" : void 0,
+            onClick: () => setPage("roles")
+          }, (0, import_react27.createElement)(SlidersIcon), t("Roles and providers")),
+          (0, import_react27.createElement)("button", {
+            type: "button",
+            className: "bt-settings-item bt-main-settings-nav-item",
+            "aria-current": page === "execution" ? "page" : void 0,
+            onClick: () => setPage("execution")
+          }, (0, import_react27.createElement)(GlobeIcon), t("Execution")),
+          (0, import_react27.createElement)("button", {
+            type: "button",
+            className: "bt-settings-item bt-main-settings-nav-item",
+            "aria-current": page === "schedules" ? "page" : void 0,
+            onClick: () => setPage("schedules")
+          }, (0, import_react27.createElement)(ClockIcon), t("Scheduled tasks")),
+          (0, import_react27.createElement)("button", {
+            type: "button",
+            className: "bt-settings-item bt-main-settings-nav-item",
+            "aria-current": page === "preparations" ? "page" : void 0,
+            onClick: () => setPage("preparations")
+          }, (0, import_react27.createElement)(ClockIcon), t("Proactive preparation")),
+          (0, import_react27.createElement)("button", {
+            type: "button",
+            className: "bt-settings-item bt-main-settings-nav-item",
+            "aria-current": page === "presets" ? "page" : void 0,
+            onClick: () => setPage("presets")
+          }, (0, import_react27.createElement)(SlidersIcon), t("Role presets")),
+          (0, import_react27.createElement)("button", {
+            type: "button",
+            className: "bt-settings-item bt-main-settings-nav-item",
+            "aria-current": page === "memory" ? "page" : void 0,
+            onClick: () => setPage("memory")
+          }, (0, import_react27.createElement)(MemoryIcon), t("Memory")),
+          !viewState.connection?.connected ? (0, import_react27.createElement)("button", {
+            type: "button",
+            className: "bt-settings-item bt-main-settings-nav-item",
+            "aria-current": page === "browser" ? "page" : void 0,
+            onClick: () => setPage("browser")
+          }, (0, import_react27.createElement)(GlobeIcon), t("Browser resources")) : null,
+          !viewState.connection?.connected ? (0, import_react27.createElement)("button", {
+            type: "button",
+            className: "bt-settings-item bt-main-settings-nav-item",
+            "aria-current": page === "supervision" ? "page" : void 0,
+            onClick: () => setPage("supervision")
+          }, (0, import_react27.createElement)(SlidersIcon), t("Supervision")) : null,
+          (0, import_react27.createElement)("button", {
+            type: "button",
+            className: "bt-settings-item bt-main-settings-nav-item",
+            "aria-current": page === "operations" ? "page" : void 0,
+            onClick: () => setPage("operations")
+          }, (0, import_react27.createElement)(GaugeIcon), t("Status and usage")),
+          (0, import_react27.createElement)("span", { className: "bt-main-settings-revision" }, `${t("Configuration")} v${snapshot.revision}`)
+        ),
+        (0, import_react27.createElement)(
+          "div",
+          { className: "bt-settings-main" },
+          (0, import_react27.createElement)("div", { className: "bt-settings-head" }, (0, import_react27.createElement)("h2", null, page === "execution" ? t("Execution") : page === "schedules" ? t("Scheduled tasks") : page === "presets" ? t("Role presets") : page === "preparations" ? t("Proactive preparation") : page === "memory" ? t("Memory") : page === "browser" ? t("Browser resources") : page === "supervision" ? t("Supervision") : page === "operations" ? t("Status and usage") : t("Super-agent settings"))),
+          (0, import_react27.createElement)(
+            "div",
+            { className: "bt-settings-scroll" },
+            page === "execution" ? (0, import_react27.createElement)(ProductExecutionSettings, {
+              binding,
+              call: productCall,
+              onChanged: () => {
+                void loadDirectories(binding);
+              }
+            }) : page === "schedules" ? (0, import_react27.createElement)(ProductScheduleSettings, {
+              binding,
+              works: view.getSnapshot().works,
+              call: productCall,
+              onViewWork: viewWork
+            }) : page === "preparations" ? (0, import_react27.createElement)(ProductProactiveSettings, { binding, call: productCall }) : page === "presets" ? (0, import_react27.createElement)(ProductPresetSettings, {
+              binding,
+              call: productCall,
+              settingsRevision: snapshot.revision,
+              roleSettings: snapshot,
+              onApplied: refreshAfterPreset,
+              onReload: refreshAfterPreset
+            }) : page === "memory" ? (0, import_react27.createElement)(ProductMemorySettings, { key: binding.instanceId, binding, works: view.getSnapshot().works, call: productCall }) : page === "browser" ? (0, import_react27.createElement)(ProductBrowserSettings, {
+              binding,
+              works: view.getSnapshot().works,
+              directoryOptions: viewState.directoryOptions,
+              call: productCall,
+              browserBridge: globalThis.dsSuperagentApp?.browser
+            }) : page === "supervision" ? (0, import_react27.createElement)(ProductSupervisionSettings, { binding, call: productCall }) : page === "operations" ? (0, import_react27.createElement)(ProductOperationsSettings, {
+              binding,
+              call: productCall,
+              onNavigate: (next) => setPage(next)
+            }) : (0, import_react27.createElement)(
+              import_react27.Fragment,
+              null,
+              error ? (0, import_react27.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+              viewState.directoryError ? (0, import_react27.createElement)("p", { className: "bt-main-error", role: "alert" }, viewState.directoryError) : null,
+              conflict ? (0, import_react27.createElement)(
+                "div",
+                { className: "bt-main-settings-conflict", role: "status" },
+                (0, import_react27.createElement)("p", null, t("Newer settings exist. Rebase only your changed fields, then review and save.")),
+                (0, import_react27.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", disabled: saving, onClick: () => {
+                  void rebase();
+                } }, t("Rebase my edits"))
+              ) : null,
+              notice ? (0, import_react27.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
+              viewState.directoryOptions?.default ? (0, import_react27.createElement)(
+                Card,
+                { title: t("Work directories") },
+                (0, import_react27.createElement)(
+                  Row,
+                  { label: t("Instance default directory"), hint: t("New work starts here unless you choose a work directory in Main.") },
+                  (0, import_react27.createElement)(FolderMenu, {
+                    value: viewState.directoryOptions.default.root,
+                    team: true,
+                    label: t("Instance default directory"),
+                    actions: directoryActions(binding),
+                    run: (promise) => void Promise.resolve(promise).catch((failure) => view.set((current) => ({ ...current, directoryError: failure.message }))),
+                    onPick: chooseDefaultDirectory,
+                    disabled: viewState.directoryBusy
+                  })
+                )
+              ) : null,
+              models.length === 0 ? (0, import_react27.createElement)(
+                "p",
+                { className: "bt-main-health-warning", role: "alert" },
+                t("No models are available. Configure a provider in DSH settings, then reopen this panel to select the role models.")
+              ) : rolesNeedingModels({ roles: draft, providers: snapshot.providers }).length ? (0, import_react27.createElement)(
+                "p",
+                { className: "bt-main-health-warning", role: "alert" },
+                t("Select an available model for each role before saving.")
+              ) : null,
+              roleRows.map(([role, label]) => {
+                const profile = draft[role];
+                if (!profile) return null;
+                const ref = refOf(profile.model);
+                const reasoning = efforts[ref];
+                return (0, import_react27.createElement)(
+                  Card,
+                  { key: role, title: label },
+                  (0, import_react27.createElement)(
+                    Row,
+                    { label: t("Model"), hint: t("The provider and model this role uses. New turns use the saved version.") },
+                    (0, import_react27.createElement)(
+                      "select",
+                      {
+                        className: "bt-select bt-main-settings-select",
+                        "aria-label": t("{role} model", { role: label }),
+                        value: ref,
+                        disabled: saving,
+                        onChange: (event) => {
+                          void updateModel(role, event.target.value);
+                        }
+                      },
+                      !models.some((model) => model.ref === ref) ? (0, import_react27.createElement)("option", { value: ref }, ref) : null,
+                      snapshot.providers.map((provider) => (0, import_react27.createElement)(
+                        "optgroup",
+                        { key: provider.id, label: provider.name },
+                        provider.models.map((model) => (0, import_react27.createElement)("option", { key: model.ref, value: model.ref }, model.name))
+                      ))
+                    )
+                  ),
+                  reasoning?.efforts?.length ? (0, import_react27.createElement)(
+                    Row,
+                    { label: t("Thinking effort"), hint: t("Kept with the model route and recorded in configuration uses.") },
+                    (0, import_react27.createElement)(
+                      "select",
+                      {
+                        className: "bt-select bt-main-settings-select",
+                        "aria-label": t("{role} thinking effort", { role: label }),
+                        value: profile.model.effort ?? "",
+                        disabled: saving,
+                        onChange: (event) => updateEffort(role, event.target.value)
+                      },
+                      (0, import_react27.createElement)("option", { value: "" }, t("Provider default")),
+                      reasoning.efforts.map((effort) => (0, import_react27.createElement)("option", { key: effort.id, value: effort.id }, effort.name))
+                    )
+                  ) : null,
+                  (0, import_react27.createElement)(
+                    Row,
+                    { label: t("Instructions"), hint: t("Role prompts are versioned. Router keeps {{goal}}; Worker keeps {{goal}} and {{constraints}}."), stack: true },
+                    (0, import_react27.createElement)("textarea", {
+                      className: "bt-bs-input bt-bs-area bt-main-settings-prompt",
+                      value: profile.instructions,
+                      maxLength: 16384,
+                      spellCheck: false,
+                      disabled: saving,
+                      "aria-label": t("{role} instructions", { role: label }),
+                      onChange: (event) => updateRole(role, { instructions: event.target.value })
+                    })
+                  ),
+                  (0, import_react27.createElement)(
+                    Row,
+                    { label: t("Profile"), hint: `${profile.name} · ${profile.skills.length ? t("Skills: {skills}", { skills: profile.skills.join(", ") }) : t("No reserved skills")}` },
+                    (0, import_react27.createElement)("span", { className: "bt-main-settings-route" }, ref)
+                  )
+                );
+              }),
+              (0, import_react27.createElement)(
+                "div",
+                { className: "bt-actions bt-main-settings-save" },
+                (0, import_react27.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", disabled: saving, onClick: onClose }, t("Cancel")),
+                (0, import_react27.createElement)(
+                  "button",
+                  { type: "button", className: "bt-send bt-soft bt-soft-sm", disabled: saving, onClick: () => {
+                    void save();
+                  } },
+                  saving ? t("Saving…") : t("Save configuration")
+                )
+              ),
+              (0, import_react27.createElement)(
+                Card,
+                { title: t("Providers") },
+                snapshot.providers.length ? snapshot.providers.map((provider) => (0, import_react27.createElement)(
+                  "div",
+                  { key: provider.id, className: "bt-main-provider" },
+                  (0, import_react27.createElement)("div", { className: "bt-main-provider-copy" }, (0, import_react27.createElement)("strong", null, provider.name), (0, import_react27.createElement)("span", null, t("{count} models", { count: provider.models.length }))),
+                  provider.key ? (0, import_react27.createElement)(
+                    "div",
+                    { className: "bt-main-provider-key" },
+                    (0, import_react27.createElement)("span", { role: "status" }, provider.key.configured ? t("API key configured") : t("API key missing")),
+                    provider.key.writable ? (0, import_react27.createElement)(
+                      import_react27.Fragment,
+                      null,
+                      (0, import_react27.createElement)("input", {
+                        type: "password",
+                        value: keyDrafts[provider.id] ?? "",
+                        autoComplete: "off",
+                        "aria-label": t("{provider} API key", { provider: provider.name }),
+                        disabled: saving,
+                        placeholder: t("Paste a new key"),
+                        onChange: (event) => setKeyDrafts((current) => ({ ...current, [provider.id]: event.target.value }))
+                      }),
+                      (0, import_react27.createElement)("button", {
+                        type: "button",
+                        className: "bt-soft bt-soft-sm",
+                        disabled: saving || !(keyDrafts[provider.id] ?? "").trim(),
+                        onClick: () => {
+                          void saveKey(provider.id, keyDrafts[provider.id]);
+                        }
+                      }, t("Save key")),
+                      provider.key.configured ? (0, import_react27.createElement)("button", {
+                        type: "button",
+                        className: "bt-soft bt-soft-sm bt-bs-danger",
+                        disabled: saving,
+                        onClick: () => {
+                          void saveKey(provider.id, null);
+                        }
+                      }, t("Remove key")) : null
+                    ) : (0, import_react27.createElement)("span", null, t("Set outside this product"))
+                  ) : null
+                )) : (0, import_react27.createElement)("p", { className: "bt-main-status" }, t("No provider catalog is available. Configure providers in DSH settings."))
+              ),
+              (0, import_react27.createElement)(ProductCredentialSettings, { binding, call: productCall, credentialImportBridge: globalThis.dsSuperagentApp?.browser?.credentialImport }),
+              (0, import_react27.createElement)(ProductMcpSettings, { binding, call: productCall }),
+              (0, import_react27.createElement)(ClientSettings, { binding }),
+              (0, import_react27.createElement)(
+                Card,
+                { title: t("Recent configuration uses") },
+                snapshot.uses.length ? snapshot.uses.slice(0, 20).map((use) => (0, import_react27.createElement)(
+                  "div",
+                  { key: use.id, className: "bt-main-settings-use" },
+                  (0, import_react27.createElement)("span", { className: "bt-observation-role" }, use.role),
+                  (0, import_react27.createElement)("span", null, `${t("Configuration")} v${use.revision}`),
+                  (0, import_react27.createElement)("span", null, refOf(use[use.role] ?? use.worker ?? use.router)),
+                  (0, import_react27.createElement)("span", { className: "bt-main-settings-use-session", title: use.sessionId }, use.sessionId),
+                  (0, import_react27.createElement)("time", null, new Date(use.createdAt).toLocaleString())
+                )) : (0, import_react27.createElement)("p", { className: "bt-main-status" }, t("No role turn has recorded a configuration version yet."))
+              ),
+              (0, import_react27.createElement)("p", { className: "bt-main-status" }, t("Configuration versions apply at request boundaries. A turn already running keeps the version it started with."))
+            )
+          ),
+          close
+        )
+      )
+    );
+  }
+  function ConnectionDialog({ connection, onClose }) {
+    const [address, setAddress] = (0, import_react27.useState)("");
+    const [instanceId, setInstanceId] = (0, import_react27.useState)("personal");
+    const [credential, setCredential] = (0, import_react27.useState)("");
+    const [busy, setBusy] = (0, import_react27.useState)(false);
+    const [error, setError] = (0, import_react27.useState)(null);
+    (0, import_react27.useEffect)(() => {
+      document.getElementById("product-host-address")?.focus();
+    }, []);
+    const connect = async (event) => {
+      event.preventDefault();
+      if (busy) return;
+      setBusy(true);
+      setError(null);
+      try {
+        await clientBridge().connect({ address: address.trim(), instanceId: instanceId.trim(), credential: credential.trim() });
+        setCredential("");
+        location.reload();
+      } catch (failure) {
+        setCredential("");
+        setError(failure.message);
+        setBusy(false);
+      }
+    };
+    const disconnect = async () => {
+      setBusy(true);
+      setError(null);
+      try {
+        await clientBridge().disconnect();
+        location.reload();
+      } catch (failure) {
+        setError(failure.message);
+        setBusy(false);
+      }
+    };
+    return (0, import_react27.createElement)(
+      "div",
+      { className: "bt-settings-layer" },
+      (0, import_react27.createElement)("div", { className: "bt-scrim", onMouseDown: onClose }),
+      (0, import_react27.createElement)(
+        "div",
+        {
+          className: "bt-settings bt-main-connect-dialog",
+          role: "dialog",
+          "aria-modal": true,
+          "aria-label": t("Host connection"),
+          onKeyDown: (event) => {
+            if (event.key === "Escape") onClose();
+          }
+        },
+        (0, import_react27.createElement)(
+          "div",
+          { className: "bt-settings-main" },
+          (0, import_react27.createElement)("div", { className: "bt-settings-head" }, (0, import_react27.createElement)("h2", null, t("Host connection"))),
+          connection?.connected ? (0, import_react27.createElement)(
+            "div",
+            { className: "bt-main-connect-body" },
+            (0, import_react27.createElement)("p", { role: "status" }, `${t("Remote Host")} · ${connection.address} · ${connection.instanceId}`),
+            (0, import_react27.createElement)("p", null, `${t("Client")} · ${connection.client.label} · ${connection.capabilities.includes("command") ? t("Read and command") : t("Read-only")}`),
+            error ? (0, import_react27.createElement)("p", { role: "alert", className: "bt-main-error" }, error) : null,
+            (0, import_react27.createElement)("button", { type: "button", className: "bt-soft", disabled: busy, onClick: () => void disconnect() }, t("Disconnect"))
+          ) : (0, import_react27.createElement)(
+            "form",
+            { className: "bt-main-connect-body", onSubmit: (event) => {
+              void connect(event);
+            } },
+            (0, import_react27.createElement)("label", { htmlFor: "product-host-address" }, t("Host address")),
+            (0, import_react27.createElement)("input", {
+              id: "product-host-address",
+              type: "url",
+              required: true,
+              value: address,
+              placeholder: "https://host.example:8443",
+              onChange: (event) => setAddress(event.currentTarget.value)
+            }),
+            (0, import_react27.createElement)("label", { htmlFor: "product-host-instance" }, t("Instance")),
+            (0, import_react27.createElement)("input", {
+              id: "product-host-instance",
+              required: true,
+              value: instanceId,
+              onChange: (event) => setInstanceId(event.currentTarget.value)
+            }),
+            (0, import_react27.createElement)("label", { htmlFor: "product-host-credential" }, t("Client credential")),
+            (0, import_react27.createElement)("input", {
+              id: "product-host-credential",
+              type: "password",
+              required: true,
+              autoComplete: "off",
+              value: credential,
+              onChange: (event) => setCredential(event.currentTarget.value)
+            }),
+            (0, import_react27.createElement)("p", { className: "bt-main-status" }, t("Use HTTPS or an authorized local SSH tunnel. The credential stays in this app process until disconnect or quit.")),
+            error ? (0, import_react27.createElement)("p", { role: "alert", className: "bt-main-error" }, error) : null,
+            (0, import_react27.createElement)("button", { type: "submit", className: "bt-soft", disabled: busy }, busy ? t("Connecting…") : t("Connect"))
+          )
+        ),
+        (0, import_react27.createElement)("button", { type: "button", className: "bt-settings-close", "aria-label": t("Close connection"), onClick: onClose }, (0, import_react27.createElement)(CloseIcon))
+      )
+    );
+  }
+  function ProductSurface() {
+    const state = useView();
+    return (0, import_react27.createElement)(
+      import_react27.Fragment,
+      null,
+      state.route === "observe" ? (0, import_react27.createElement)(ObservationConversation) : (0, import_react27.createElement)(MainConversation),
+      state.settingsOpen && state.binding && !state.connection?.connected ? (0, import_react27.createElement)(SettingsDialog, {
+        binding: state.binding,
+        onClose: () => view.set((current) => ({ ...current, settingsOpen: false }))
+      }) : null,
+      state.connectOpen && clientBridge() ? (0, import_react27.createElement)(ConnectionDialog, {
+        connection: state.connection,
+        onClose: () => view.set((current) => ({ ...current, connectOpen: false }))
+      }) : null
+    );
+  }
+  const shadow = (name, component) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200 }, component));
+  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_EXECUTION_CSS + PRODUCT_OPERATIONS_CSS, "main"), "superagent: existing chat styles");
+  ctx.effect(() => {
+    const style = installStyles(themeCss(allThemes().deepseek), "main-theme");
+    return () => style.remove();
+  }, "superagent: existing theme");
+  shadow("main.conversation", ProductSurface);
+  shadow("sidebar.workspaces", MainNavigation);
+  shadow("sidebar.brand.name", () => (0, import_react27.createElement)("span", null, "DS-SuperAgent"));
+  shadow("sidebar.brand.mark", ProductBrandMark);
+}
+function redactObservationText(value) {
+  return String(value).replace(/\b(Bearer\s+)[A-Za-z0-9._~+\x2f-]+=*/giu, "$1[redacted]").replace(/\b(api[_-]?key|token|secret|password)(\s*[:=]\s*)[^\s,;]+/giu, "$1$2[redacted]");
+}
+var PRODUCT_CSS = `
+.bt-product-message{display:flex;margin:10px 0}.bt-product-message-bot{justify-content:flex-start}.bt-product-message-user{justify-content:flex-end}.bt-product-message .bt-bubble{max-width:min(720px,88%);box-sizing:border-box;padding:12px 14px;border-radius:16px;background:var(--bt-bubble);color:var(--bt-ink)}.bt-product-message-user .bt-bubble{background:var(--bt-user);color:var(--bt-user-ink)}
+.bt-main-settings-nav-item{display:flex;width:100%;border:0;text-align:left;cursor:pointer;font:inherit}
+.bt-main-settings-nav-item:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-main-conversation{height:100%;min-height:0;display:flex;flex-direction:column;background:var(--bt-main);color:var(--bt-ink);font-family:var(--bt-font)}
+.bt-main-header{height:56px;flex-shrink:0;display:flex;align-items:center;gap:10px;padding:0 24px;border-bottom:.5px solid var(--bt-line-2);font-size:15px;font-weight:600}
+.bt-main-health{margin-left:auto;padding:2px 8px;border:1px solid var(--bt-line);border-radius:999px;color:var(--bt-ink-2);font-size:11px;line-height:16px;font-weight:500}
+.bt-main-health-running{border-color:var(--bt-accent);color:var(--bt-ink)}
+.bt-main-health-degraded{border-color:var(--bt-danger);color:var(--bt-danger)}
+.bt-main-health-detail{color:var(--bt-ink-2);font-size:11px;font-weight:400}
+.bt-main-remote{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--bt-ink-2);font-size:11px;font-weight:400}
+.bt-main-connect-dialog{--bt-set-w:min(480px,calc(100vw - 32px));--bt-set-h:auto;width:var(--bt-set-w);height:auto;max-height:calc(100vh - 32px);overflow:auto}
+.bt-main-connect-dialog .bt-settings-main{width:100%;height:auto}
+.bt-main-connect-body{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:16px;color:var(--bt-ink);font-size:13px;line-height:18px}
+.bt-main-connect-body label{font-size:12px;color:var(--bt-ink-2)}
+.bt-main-connect-body input{width:100%;height:36px;box-sizing:border-box;padding:0 10px;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card);color:var(--bt-ink);font:inherit}
+.bt-main-connect-body input:focus-visible{outline:2px solid var(--bt-accent);outline-offset:1px}
+.bt-main-connect-body p{margin:4px 0;overflow-wrap:anywhere}
+.bt-main-connect-body button{min-height:36px}
+.bt-main-client-form{display:flex;align-items:flex-end;flex-wrap:wrap;gap:8px;padding:10px 12px;font-size:12px}
+.bt-main-client-form label{align-self:center;color:var(--bt-ink-2)}
+.bt-main-client-form input{max-width:190px}.bt-main-client-form select{max-width:170px}
+.bt-main-client-issued{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 12px;border-top:1px solid var(--bt-line);font-size:12px}
+.bt-main-client-issued p{width:100%;margin:0}.bt-main-client-issued input{max-width:300px;min-width:0;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card);color:var(--bt-ink);padding:8px}
+.bt-main-client-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border-top:1px solid var(--bt-line);font-size:12px}
+.bt-main-client-row>div{min-width:0;display:flex;flex-direction:column;gap:2px}.bt-main-client-row span{color:var(--bt-ink-2);overflow-wrap:anywhere}
+.bt-main-health-warning{margin:0;padding:8px 24px;border-bottom:.5px solid var(--bt-line-2);background:var(--bt-card);color:var(--bt-danger);font-size:12px;line-height:18px}
+.bt-main-settings{margin-left:2px}
+.bt-main-history{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:24px}
+.bt-main-messages{max-width:800px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+.bt-main-composer{width:min(800px,100% - 32px);margin:16px auto 20px;padding:12px;border:1px solid var(--bt-line);border-radius:16px;background:var(--bt-card)}
+.bt-main-composer textarea{display:block;width:100%;resize:vertical;min-height:80px;max-height:200px;padding:4px;border:0;background:transparent;color:var(--bt-ink);font:inherit;font-size:14px;line-height:22px;box-sizing:border-box}
+.bt-main-composer textarea:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px;border-radius:4px}
+.bt-main-attachments,.bt-main-message-attachments{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.bt-main-attachment{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:4px 7px;border:1px solid var(--bt-line);border-radius:6px;color:var(--bt-ink-2);font-size:12px;overflow-wrap:anywhere}
+.bt-main-attachment button{border:0;background:transparent;color:var(--bt-ink);cursor:pointer;font:inherit}
+.bt-main-attachment button:focus-visible,.bt-main-message-attachments button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-main-read-aloud{margin:4px 0 4px 12px}.bt-main-read-aloud:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-main-send button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-main-directory{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}.bt-main-directory .bt-main-label{margin:0}.bt-main-directory-note{color:var(--bt-ink-2);font-size:11px;line-height:16px}.bt-main-directory .bt-main-error{width:100%;margin:0}
+.bt-main-send{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
+.bt-main-send button{height:36px;min-width:64px}
+.bt-main-label{display:block;margin:0 0 6px;font-size:12px;color:var(--bt-ink-2)}
+.bt-main-empty{margin:48px 0;color:var(--bt-ink-2);font-size:14px;line-height:22px;text-align:center}
+.bt-main-error{margin:8px 0;color:var(--bt-danger);font-size:13px;line-height:18px}
+.bt-main-status{color:var(--bt-ink-2);font-size:13px;line-height:18px}
+.bt-main-system-fact{padding:10px 12px;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card);color:var(--bt-ink-2);font-size:12px;line-height:18px}
+.bt-main-system-fact>span{display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.05em;font-size:10px}.bt-main-system-fact p{margin:0;color:var(--bt-ink)}
+.bt-main-work,.bt-main-source{max-width:800px;margin:0 auto;width:calc(100% - 32px);padding:12px;border:1px solid var(--bt-line);border-radius:6px;background:var(--bt-card);box-sizing:border-box}
+.bt-main-work:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-main-work-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;color:var(--bt-ink);font-size:14px;line-height:20px}
+.bt-main-work-title{min-width:0;display:flex;flex-direction:column;gap:2px}
+.bt-main-work-source{color:var(--bt-ink-2);font-size:10px;line-height:14px;text-transform:uppercase;letter-spacing:.05em}
+.bt-main-work-head strong{min-width:0;overflow-wrap:anywhere;font-weight:600}
+.bt-main-work-status{flex:none;color:var(--bt-ink-2);font-size:12px;line-height:16px}
+.bt-main-work-id,.bt-main-work-detail,.bt-main-work-artifact,.bt-main-source-label{margin:6px 0 0;color:var(--bt-ink-2);font-size:12px;line-height:16px;overflow-wrap:anywhere}
+.bt-main-source-label{font-weight:600}
+.bt-main-source-reference{display:block;margin:6px 0 0;overflow-wrap:anywhere;color:var(--bt-ink-2);font:11px/16px ui-monospace,SFMono-Regular,Consolas,monospace}
+.bt-main-source-deliveries{display:flex;flex-direction:column;align-items:flex-start;gap:6px;margin-top:8px;padding-top:6px;border-top:1px solid var(--bt-line)}
+.bt-main-source-deliveries p{margin:0}
+.bt-main-work-followups{margin-top:8px;padding-top:8px;border-top:.5px solid var(--bt-line-2)}
+.bt-main-work-followup{padding:6px 0;color:var(--bt-ink);font-size:12px;line-height:16px;overflow-wrap:anywhere}
+.bt-main-work-followup+.bt-main-work-followup{border-top:.5px solid var(--bt-line-2)}
+.bt-main-work-followup p{margin:0}
+.bt-main-work-controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;padding-top:8px;border-top:.5px solid var(--bt-line-2)}
+.bt-main-work-controls button{height:32px}
+.bt-main-work-handoff{margin-top:10px;padding:10px;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-main);font-size:13px;line-height:18px;overflow-wrap:anywhere}
+.bt-main-work-handoff h3{margin:0 0 6px;font-size:13px;line-height:18px}
+.bt-main-work-handoff p{margin:0 0 6px}.bt-main-work-handoff-copy p{margin:6px 0 0}
+.bt-main-work-handoff ul{max-height:240px;overflow:auto;margin:8px 0 0;padding-left:20px}
+.bt-main-work-handoff li{margin:4px 0}.bt-main-work-handoff-blockers{color:var(--bt-danger)}
+.bt-main-work-handoff-actions{display:flex;flex-wrap:wrap;align-items:end;gap:8px;margin-top:10px}
+.bt-main-work-handoff-actions label{display:flex;flex-direction:column;gap:4px;min-width:220px;font-size:12px;color:var(--bt-ink-2)}
+.bt-main-work-handoff-actions button{height:32px}
+.bt-main-work-handoff button:focus-visible,.bt-main-work-handoff select:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-main-work-attention{margin-top:10px;padding:10px;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-main);font-size:13px;line-height:18px;overflow-wrap:anywhere}
+.bt-main-work-attention p{margin:0 0 8px}.bt-main-work-options{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.bt-main-work-answer label{display:block;margin-bottom:6px;font-size:12px;color:var(--bt-ink-2)}
+.bt-main-work-answer textarea{display:block;width:100%;min-height:58px;box-sizing:border-box;resize:vertical;padding:8px;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card);color:var(--bt-ink);font:inherit}
+.bt-main-work-answer textarea:focus-visible{outline:2px solid var(--bt-accent);outline-offset:1px}
+.bt-main-work-answer>button{margin-top:8px}
+.bt-main-work-result{margin-top:8px;padding-top:8px;border-top:.5px solid var(--bt-line-2);color:var(--bt-ink);font-size:13px;line-height:18px;overflow-wrap:anywhere}
+.bt-main-work-result p{margin:0 0 6px}.bt-main-work-result p:last-child{margin-bottom:0}
+.bt-main-work-artifact code{font:inherit;color:var(--bt-ink)}
+.bt-main-work-evidence-actions{margin-top:10px}.bt-main-work-evidence-actions button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:1px}
+.bt-main-evidence{grid-column:1/-1;padding:14px;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card)}
+.bt-main-evidence-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.bt-main-evidence-head>div{min-width:0}
+.bt-main-evidence-head strong{font-size:13px}.bt-main-evidence-head p{margin:3px 0 0;color:var(--bt-ink-2);font-size:12px;line-height:18px}.bt-main-evidence-head>span{flex:none;color:var(--bt-ink-2);font-size:11px}
+.bt-main-evidence pre{margin:10px 0;padding:10px;max-height:360px;overflow:auto;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-main);color:var(--bt-ink);font:12px/18px ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+.bt-main-history-more{display:block;margin:0 auto 8px}
+.bt-main-nav{padding:12px;display:flex;flex-direction:column;gap:6px}
+.bt-main-nav>button,.bt-observation-nav-item{width:100%;display:flex;align-items:center;gap:10px;justify-content:flex-start;min-height:40px;text-align:left}
+.bt-observation-search{margin:8px 0 4px;color:var(--bt-ink-2);font-size:12px}
+.bt-observation-search label{display:block;margin:0 0 5px}
+.bt-observation-search input{width:100%;height:36px;box-sizing:border-box;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card);color:var(--bt-ink);padding:0 9px;font:inherit;font-size:13px}
+.bt-observation-search input:focus-visible{outline:2px solid var(--bt-accent);outline-offset:1px}
+.bt-observation-nav-head{display:flex;justify-content:space-between;gap:8px;margin:8px 2px 2px;color:var(--bt-ink-2);font-size:11px;line-height:16px;text-transform:uppercase;letter-spacing:.04em}
+.bt-observation-nav-item{align-items:flex-start;padding:8px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--bt-ink)}
+.bt-observation-nav-item:hover,.bt-observation-nav-item:focus-visible,.bt-observation-nav-item[aria-current=page]{border-color:var(--bt-line);background:var(--bt-card)}
+.bt-observation-nav-item:focus-visible,.bt-observation-generation:focus-visible{outline:2px solid var(--bt-accent);outline-offset:1px}
+.bt-observation-role{flex:none;padding:1px 6px;border:1px solid var(--bt-line);border-radius:999px;color:var(--bt-ink-2);font-size:11px;line-height:16px;text-transform:uppercase;letter-spacing:.04em}
+.bt-observation-nav-copy{min-width:0;display:flex;flex-direction:column;gap:2px;font-size:12px;line-height:16px}
+.bt-observation-nav-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.bt-observation-nav-copy>span{color:var(--bt-ink-2);font-size:11px}
+.bt-observation-empty{margin:8px;color:var(--bt-ink-2);font-size:12px;line-height:18px}
+.bt-observation-more{margin-top:8px}
+.bt-observation{height:100%;min-height:0;display:flex;flex-direction:column;background:var(--bt-main);color:var(--bt-ink);font-family:var(--bt-font)}
+.bt-observation-header{min-height:56px;flex-shrink:0;display:flex;align-items:center;gap:12px;padding:8px 24px;border-bottom:.5px solid var(--bt-line-2);box-sizing:border-box}
+.bt-observation-heading{min-width:0;flex:1;display:flex;align-items:center;gap:8px}
+.bt-observation-heading strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px}
+.bt-observation-readonly{flex:none;padding:2px 8px;border:1px solid var(--bt-line);border-radius:999px;color:var(--bt-ink-2);font-size:11px}
+.bt-observation-body{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:24px}
+.bt-observation-content{max-width:880px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+.bt-observation-summary{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:16px;border:1px solid var(--bt-line);border-radius:10px;background:var(--bt-card);font-size:14px;line-height:22px}
+.bt-observation-summary>div:first-child{min-width:0}
+.bt-observation-summary p{margin:0 0 6px;overflow-wrap:anywhere}.bt-observation-summary p:last-child{margin-bottom:0}
+.bt-observation-status{font-size:12px;line-height:18px;color:var(--bt-ink-2);font-weight:600}
+.bt-observation-actions{flex:none}
+.bt-observation-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;margin:0;overflow:hidden;border:1px solid var(--bt-line);border-radius:10px;background:var(--bt-line)}
+.bt-observation-facts>div{min-width:0;padding:10px 12px;background:var(--bt-card)}
+.bt-observation-facts dt{color:var(--bt-ink-2);font-size:11px;line-height:16px}
+.bt-observation-facts dd{margin:2px 0 0;overflow-wrap:anywhere;font-size:12px;line-height:18px}
+.bt-observation-detail-open{display:block;margin-top:8px}.bt-observation-detail-open:focus-visible{outline:2px solid var(--bt-accent);outline-offset:1px}
+.bt-observation-detail{padding:12px;border:1px solid var(--bt-line);border-radius:10px;background:var(--bt-card)}
+.bt-observation-detail-head,.bt-observation-detail-actions{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.bt-observation-detail-head h2{margin:0;font-size:13px;line-height:20px}.bt-observation-detail-head span{color:var(--bt-ink-2);font-size:11px}
+.bt-observation-detail pre{margin:10px 0;padding:10px;max-height:360px;overflow:auto;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-main);color:var(--bt-ink);font:12px/18px ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+.bt-observation-detail-actions{justify-content:flex-end;flex-wrap:wrap}
+.bt-observation-generations,.bt-observation-history{display:flex;flex-direction:column;gap:8px}
+.bt-observation-generations h2,.bt-observation-history h2{margin:0;font-size:13px;line-height:20px}
+.bt-observation-generation{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;padding:8px 10px;border:1px solid var(--bt-line);border-radius:8px;background:transparent;color:var(--bt-ink-2);font:inherit;font-size:11px;text-align:left;overflow-wrap:anywhere}
+.bt-observation-generation:not(:disabled):hover,.bt-observation-generation:not(:disabled):focus-visible{border-color:var(--bt-accent);color:var(--bt-ink)}
+.bt-observation-generation[aria-current=true]{border-color:var(--bt-accent);color:var(--bt-ink)}
+.bt-observation-event{padding:10px 12px;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card)}
+.bt-observation-event-head{display:flex;justify-content:space-between;gap:12px;color:var(--bt-ink-2);font-size:11px;line-height:16px}
+.bt-observation-event-head>span{font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.bt-observation-event p{margin:5px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:20px}
+.bt-main-settings-revision{margin-top:auto;padding:12px 8px 4px;color:var(--bt-ink-2);font-size:11px;line-height:16px}
+.bt-main-settings-select{max-width:min(100%,360px)}
+.bt-main-settings-prompt{width:100%;min-height:120px;box-sizing:border-box;resize:vertical;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-main);color:var(--bt-ink);padding:9px;font:inherit;font-size:13px;line-height:19px}
+.bt-main-settings-prompt:focus-visible{outline:2px solid var(--bt-accent);outline-offset:1px}
+.bt-main-settings-route{max-width:58%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--bt-ink-2);font-size:12px}
+.bt-main-settings-save{justify-content:flex-end;gap:8px}
+.bt-main-settings-conflict{margin:0;padding:10px 12px;border:1px solid var(--bt-danger);border-radius:10px;background:color-mix(in srgb,var(--bt-danger) 7%,transparent);font-size:13px;line-height:19px}
+.bt-main-settings-conflict p{margin:0 0 8px}
+.bt-main-provider{padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.bt-main-provider+.bt-main-provider{border-top:.5px solid var(--bt-line)}
+.bt-main-provider-copy{min-width:0;display:flex;flex-direction:column;gap:2px}
+.bt-main-provider-copy strong{font-size:13px}.bt-main-provider-copy span,.bt-main-provider-key>span{color:var(--bt-ink-2);font-size:11px;line-height:16px}
+.bt-main-provider-key{min-width:0;display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}
+.bt-main-provider-key input{width:160px;height:32px;box-sizing:border-box;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-main);color:var(--bt-ink);padding:0 8px;font:inherit;font-size:12px}
+.bt-main-settings-use{display:grid;grid-template-columns:auto auto minmax(0,1fr) minmax(80px,1.5fr) auto;align-items:center;gap:8px;padding:8px 12px;font-size:11px;line-height:16px;color:var(--bt-ink-2)}
+.bt-main-settings-use+.bt-main-settings-use{border-top:.5px solid var(--bt-line)}
+.bt-main-settings-use-session{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:640px){.bt-main-history,.bt-observation-body{padding:16px}.bt-main-header,.bt-observation-header{padding-left:16px;padding-right:16px}.bt-main-header{flex-wrap:wrap;height:auto;min-height:56px}.bt-main-health-detail{width:100%;margin-left:38px}.bt-main-health-warning{padding-left:16px;padding-right:16px}.bt-observation-header{align-items:flex-start;flex-wrap:wrap}.bt-observation-heading{order:3;width:100%}.bt-observation-summary{flex-direction:column}.bt-observation-facts{grid-template-columns:1fr}.bt-observation-generation{grid-template-columns:1fr}.bt-main-settings-dialog .bt-settings-nav{height:auto}.bt-main-settings-revision{padding:4px 8px}.bt-main-provider{align-items:stretch;flex-direction:column}.bt-main-provider-key{justify-content:flex-start}.bt-main-settings-use{grid-template-columns:auto auto minmax(0,1fr)}.bt-main-settings-use-session,.bt-main-settings-use time{grid-column:1/-1}.bt-main-settings-route{max-width:100%}}
+`;
+
+// src/client/index.js
+var inject = ["sessions", "uiWorkspace", "uiConversation", "slots", "theme", "layout"];
+function apply(ctx) {
+  return applyProduct(ctx);
+}
+return Object.defineProperty({ ...module.exports }, Symbol.toStringTag, { value: 'Module' })
+  },
+})

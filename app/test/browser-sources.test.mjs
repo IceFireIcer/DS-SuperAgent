@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import test from 'node:test'
-import { appBoundRows, chromiumProfiles, cloneCookieStore, cloneWorkDir, firefoxProfiles, harvestCookies, locksProfile } from '../src/browser-sources.mjs'
+import { appBoundRows, cdpCookies, chromiumArgs, chromiumProfiles, cloneCookieStore, cloneWorkDir, firefoxProfiles, harvestCookies, locksProfile } from '../src/browser-sources.mjs'
 
 async function tempRoot() {
   const dir = await mkdtemp(join(tmpdir(), 'dsb-sources-test-'))
@@ -69,6 +69,23 @@ test('cloneCookieStore lays out Local State plus the profile cookie db', async (
     assert.ok(existsSync(join(work.dir, 'Default', 'Network', 'Cookies')))
     assert.ok(existsSync(join(work.dir, 'Default', 'Network', 'Cookies-wal')))
   } finally { await work.remove(); await root.remove() }
+})
+
+test('a Chromium clone opens the selected profile, not the clone default', () => {
+  const work = join('somewhere', 'clone')
+  const args = chromiumArgs({ profilePath: join('User Data', 'Profile 1') }, work)
+  assert.ok(args.includes('--profile-directory=Profile 1'))
+  assert.ok(args.includes(`--user-data-dir=${work}`))
+})
+
+test('CDP cookies keep partitioned cookies out of the default context', () => {
+  const result = cdpCookies([
+    { name: 'plain', value: 'v', domain: 'example.com', path: '/', secure: true },
+    { name: 'part', value: 'v', domain: 'example.com', path: '/', secure: true, partitionKey: { topLevelSite: 'https://top.example', hasCrossSiteAncestor: false } },
+  ])
+  assert.deepEqual(result.cookies.map(cookie => cookie.name), ['plain'])
+  assert.equal(result.skipped.length, 1)
+  assert.equal(result.skipped[0].code, 'partitioned-unsupported')
 })
 
 test('cloneCookieStore needs Local State: without it the clone cannot decrypt', async () => {

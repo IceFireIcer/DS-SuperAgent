@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import { nativeContext, textResponse } from '../dev/native-mock.mjs'
 
 test('a Promise-returning mock responder reports its contract error before a Session starts', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-mock-contract-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-mock-contract-'))
   let native
   t.after(async () => { await native?.fiber.dispose() })
   t.after(() => rm(directory, { recursive: true, force: true }))

@@ -1,0 +1,399 @@
+import assert from 'node:assert/strict'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { test } from 'node:test'
+import { SqliteStorage } from '../dist/storage.js'
+import { Supervisor } from '../dist/supervisor.js'
+
+const base = () => ({
+  ticketId: 't1', request: 'Inspect the project.', bucket: 'running', state: 'running', reason: 'worker-running', lifecycle: 'open',
+  health: { effectsUnknown: 0, jobsUnknown: 0, attention: 'none', stop: 'none', setup: 'ready' },
+  attention: { status: 'none' }, setup: { state: 'ready' },
+  assignment: { id: 'a1', generation: 'g1', state: 'running', sessionId: 's1' },
+  reports: [{ id: 'r1', result: 'Working.', evidence: 'Read the original request.', toolFacts: [{ tool: 'read_file', outcome: 'success', output: {} }], createdAt: 1_000 }],
+  reportHistory: [], messages: [{ id: 'm1', state: 'sent', purpose: 'acknowledgement', text: 'Working on it.' }], jobs: [], subagents: [],
+})
+
+async function open(t, { assess, maxProposals = 2, supervisionItems, maxPages } = {}) {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-supervisor-'))
+  const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  await storage.transaction('private', async tx => {
+    await tx.insert('ticket', 't1', { id: 't1', state: 'open', directionVersion: 1 })
+    await tx.insert('assignment', 't1', { id: 'a1', generation: 'g1', state: 'running' })
+  })
+  t.after(async () => { await storage.close().catch(() => {}); await rm(directory, { recursive: true, force: true }) })
+  let item = base()
+  let paused = false
+  let clock = 1_000
+  const calls = { directions: [], stops: [], assess: 0, remoteReconcile: [], stopReconcile: [], pages: [] }
+  const engine = {
+    async getSupervision(options = {}) {
+      if (!supervisionItems) return { items: [structuredClone(item)], processingPaused: paused, hasMore: false }
+      calls.pages.push(options)
+      const start = Number(options.cursor ?? 0)
+      const end = Math.min(start + 100, supervisionItems.length)
+      return { items: structuredClone(supervisionItems.slice(start, end)), processingPaused: paused,
+        hasMore: end < supervisionItems.length, ...(end < supervisionItems.length ? { nextCursor: String(end) } : {}) }
+    },
+    async getTicket() { return { mandate: { id: 'mandate-1', scope: 'Inspect the project.' } } },
+    async getTicketDirection() { return { directionVersion: 1 } },
+    async correctTicket(command) { calls.directions.push(command); return { id: 'input-1', directionVersion: 2 } },
+    async stopTicket(command) { calls.stops.push(command); return { state: 'stopping' } },
+    async reconcileRemoteWork(command) { calls.remoteReconcile.push(command); return { state: 'reconciled' } },
+    async reconcileStop(command) { calls.stopReconcile.push(command); return { state: 'reconciled-stop' } },
+  }
+  const supervisor = new Supervisor({
+    engine, storage, instanceId: 'private', actorId: 'user', stallMs: 1_000, stallObservations: 3, loopObservations: 3,
+    proposalWindowMs: 60_000, maxProposals, version: 't48-test', now: () => clock,
+    ...(maxPages === undefined ? {} : { maxPages }),
+    ...(assess === undefined ? {} : { assess: async (snapshot, signal) => { calls.assess += 1; return assess(snapshot, signal) } }),
+  })
+  return {
+    supervisor, engine, storage, calls, item: () => item, setItem(next) { item = next }, setPaused(value) { paused = value },
+    advance(ms = 1_000) { clock += ms },
+  }
+}
+
+test('bounded semantic pages expose a continuation and finish the remaining Tickets', async t => {
+  const items = Array.from({ length: 225 }, (_, index) => ({ ...base(), ticketId: `t-${index}`,
+    bucket: 'pending', state: 'pending', reason: 'router-pending' }))
+  const app = await open(t, { supervisionItems: items, maxPages: 2 })
+  const first = await app.supervisor.inspect()
+  assert.equal(first.observations.length, 200)
+  assert.equal(first.partial, true)
+  assert.equal(first.nextCursor, '200')
+  assert.deepEqual(first.inspectionBudget, { inspected: 200, maxTickets: 200 })
+  const second = await app.supervisor.inspect(new AbortController().signal, first.nextCursor)
+  assert.equal(second.observations.length, 25)
+  assert.equal(second.partial, undefined)
+  assert.equal(second.nextCursor, undefined)
+  assert.equal((await app.supervisor.getState('t-224')).last.finding, 'normal-wait')
+  assert.deepEqual(app.calls.pages.map(page => [page.pageLimit, page.cursor]), [[1, undefined], [1, '100'], [1, '200']])
+})
+
+test('a late page proposes without bypassing direction, generation, stop or Instance checks', async t => {
+  const items = Array.from({ length: 151 }, (_, index) => ({ ...base(), ticketId: `t-${index}`,
+    ...(index === 150 ? {} : { bucket: 'pending', state: 'pending', reason: 'router-pending' }) }))
+  const app = await open(t, { supervisionItems: items, assess: async snapshot => ({ kind: snapshot.ticketId === 't-150' ? 'deviation' : 'normal',
+    reason: 'Check the original goal.', recommendation: 'Return to scope.', action: 'correct' }) })
+  await app.storage.transaction('private', async tx => {
+    await tx.insert('ticket', 't-150', { id: 't-150', state: 'open', directionVersion: 1 })
+    await tx.insert('assignment', 't-150', { id: 'a1', generation: 'g1', state: 'running' })
+  })
+  const report = await app.supervisor.inspect()
+  assert.equal(report.observations.length, 151)
+  assert.equal(report.proposals.length, 1)
+  const proposal = report.proposals[0]
+  assert.equal(proposal.ticketId, 't-150')
+  assert.equal(await app.storage.transaction('another-instance', tx => tx.get('supervisor-proposal', JSON.stringify(['supervisor-proposal', proposal.id]))), undefined)
+  await app.storage.transaction('private', async tx => {
+    const ticket = await tx.get('ticket', 't-150')
+    await tx.replace('ticket', 't-150', { ...ticket, directionVersion: 2 })
+  })
+  await assert.rejects(app.supervisor.decide({ commandId: 'late-direction', proposalId: proposal.id, decision: 'approve' }), { code: 'PROPOSAL_STALE' })
+  await app.storage.transaction('private', async tx => {
+    const ticket = await tx.get('ticket', 't-150')
+    await tx.replace('ticket', 't-150', { ...ticket, directionVersion: 1 })
+    await tx.replace('assignment', 't-150', { id: 'a2', generation: 'g2', state: 'running' })
+  })
+  await assert.rejects(app.supervisor.decide({ commandId: 'late-generation', proposalId: proposal.id, decision: 'approve' }), { code: 'PROPOSAL_STALE' })
+  await app.storage.transaction('private', async tx => {
+    await tx.replace('assignment', 't-150', { id: 'a1', generation: 'g1', state: 'running' })
+    await tx.insert('stop-head', JSON.stringify(['stop-head', 't-150']), { stopId: 'human-stop' })
+    await tx.insert('stop-state', 'human-stop', { state: 'stopped' })
+  })
+  await assert.rejects(app.supervisor.decide({ commandId: 'late-stop', proposalId: proposal.id, decision: 'approve' }), { code: 'PROPOSAL_STALE' })
+  assert.deepEqual(app.calls.directions, [])
+  assert.equal((await app.supervisor.getProposal(proposal.id)).status, 'proposed')
+})
+
+test('invalid semantic pages fail closed instead of claiming full coverage', async t => {
+  const app = await open(t)
+  app.engine.getSupervision = async () => ({ items: [base()], hasMore: true })
+  await assert.rejects(app.supervisor.inspect(), { code: 'INCOMPLETE_STATE' })
+  app.engine.getSupervision = async () => ({ items: [base()], hasMore: true, nextCursor: 'same' })
+  await assert.rejects(app.supervisor.inspect(new AbortController().signal, 'same'), { code: 'INCOMPLETE_STATE' })
+  app.engine.getSupervision = async () => ({ items: Array.from({ length: 101 }, () => base()), hasMore: false })
+  await assert.rejects(app.supervisor.inspect(), { code: 'INCOMPLETE_STATE' })
+  app.engine.getSupervision = async () => ({ items: [base()] })
+  await assert.rejects(app.supervisor.inspect(), { code: 'INCOMPLETE_STATE' })
+  app.engine.getSupervision = async () => ({ items: [base()], hasMore: false, nextCursor: 'contradiction' })
+  await assert.rejects(app.supervisor.inspect(), { code: 'INCOMPLETE_STATE' })
+  app.engine.getSupervision = async () => ({ items: [base()], hasMore: false, nextCursor: '' })
+  await assert.rejects(app.supervisor.inspect(), { code: 'INCOMPLETE_STATE' })
+})
+
+test('normal waiting, unknown, ready and ended are not semantic failures', async t => {
+  const app = await open(t, { assess: async () => { throw new Error('the assessor must not be called') } })
+  app.setItem({ ...base(), attention: { status: 'waiting' }, bucket: 'needsHuman' })
+  assert.equal((await app.supervisor.inspect()).observations[0].finding, 'normal-wait')
+  app.setItem({ ...base(), health: { ...base().health, effectsUnknown: 1 }, bucket: 'blocked' })
+  assert.equal((await app.supervisor.inspect()).observations[0].finding, 'unknown')
+  app.setItem({ ...base(), bucket: 'ready', state: 'ready' })
+  assert.equal((await app.supervisor.inspect()).observations[0].finding, 'ready')
+  app.setItem({ ...base(), lifecycle: 'ended', state: 'ended' })
+  assert.equal((await app.supervisor.inspect()).observations[0].finding, 'ended')
+  app.setItem({ ...base(), reason: 'handoff-pending' })
+  assert.equal((await app.supervisor.inspect()).observations[0].finding, 'normal-wait')
+  assert.equal(app.calls.assess, 0)
+  assert.deepEqual(await app.supervisor.listProposals(), [])
+})
+
+test('a changing report is progress and creates no proposal', async t => {
+  const app = await open(t)
+  for (let index = 0; index < 4; index++) {
+    app.setItem({ ...base(), reports: [{ ...base().reports[0], id: `r${index + 1}`, result: `Working step ${index + 1}.`, createdAt: 1_000 + index * 500 }] })
+    app.advance(500)
+    assert.equal((await app.supervisor.inspect()).observations[0].finding, 'normal')
+  }
+  assert.deepEqual(await app.supervisor.listProposals(), [])
+})
+
+test('an unchanged Ticket without a new report or delivery becomes a pause proposal', async t => {
+  const app = await open(t)
+  app.setItem({ ...base(), reports: [{ ...base().reports[0], toolFacts: [] }] })
+  await app.supervisor.inspect()
+  app.advance(500)
+  await app.supervisor.inspect()
+  app.advance(500)
+  const report = await app.supervisor.inspect()
+  const observation = report.observations[0]
+  assert.equal(observation.finding, 'no-progress')
+  assert.equal(report.proposals.length, 1)
+  const proposal = report.proposals[0]
+  assert.equal(proposal.kind, 'pause')
+  assert.equal(proposal.status, 'proposed')
+  assert.equal(proposal.version, 't48-test')
+  assert.equal(proposal.impact.stopsNewWork, true)
+  assert.equal(proposal.evidence.snapshot.mandateScope, 'Inspect the project.')
+  assert.equal(app.calls.stops.length, 0, 'a proposal does not stop anything')
+})
+
+test('repeated inspection of one report is not a tool loop', async t => {
+  const app = await open(t)
+  for (let index = 0; index < 3; index++) {
+    app.advance(100)
+    const report = await app.supervisor.inspect()
+    assert.notEqual(report.observations[0].finding, 'loop')
+    assert.deepEqual(report.proposals, [])
+  }
+})
+
+test('different reports repeating the same tool facts become a loop proposal', async t => {
+  const app = await open(t)
+  for (let index = 0; index < 3; index++) {
+    app.setItem({ ...base(), reports: [{ ...base().reports[0], id: `r${index + 1}`, createdAt: 1_000 + index * 100 }] })
+    app.advance(100)
+    const report = await app.supervisor.inspect()
+    if (index < 2) assert.equal(report.observations[0].finding, 'normal')
+    else {
+      assert.equal(report.observations[0].finding, 'loop')
+      assert.equal(report.proposals[0].kind, 'pause')
+      assert.match(report.proposals[0].recommendation, /repeated/u)
+    }
+  }
+})
+
+test('the snapshot carries bounded report, tool and delivery evidence', async t => {
+  let seen
+  const app = await open(t, { assess: async snapshot => { seen = snapshot; return { kind: 'normal', reason: 'The Ticket is progressing.' } } })
+  const toolFacts = Array.from({ length: 14 }, (_, index) => ({ tool: `read_${index}`, outcome: 'success', output: { text: 'y'.repeat(1_500) } }))
+  app.setItem({ ...base(),
+    reports: [{ id: 'r1', result: 'x'.repeat(9_000), evidence: 'Verified the report.', toolFacts, createdAt: 1_000 }],
+    messages: [{ id: 'm1', state: 'sent', purpose: 'result', text: 'Delivered result body.' }] })
+  await app.supervisor.inspect()
+  assert.equal(seen.lastReport.id, 'r1')
+  assert.equal(seen.lastReport.result.length, 8_192)
+  assert.equal(seen.lastReport.evidence, 'Verified the report.')
+  assert.equal(seen.lastReport.truncated, true)
+  assert.equal(seen.lastReport.toolFacts.length, 12)
+  assert.equal(seen.lastReport.omittedToolFacts, 2)
+  assert.equal(seen.lastReport.toolFacts[0].tool, 'read_2')
+  assert.equal(seen.lastReport.toolFacts[0].output.truncated, true)
+  assert.match(seen.lastReport.toolFacts[0].output.preview, /y{100}/u)
+  assert.equal(seen.deliveries[0].text, 'Delivered result body.')
+  assert.equal(seen.deliveries[0].truncated, false)
+})
+
+test('a semantic deviation is a correct proposal and still executes nothing', async t => {
+  const app = await open(t, { assess: async () => ({ kind: 'deviation', reason: 'The report changed a file outside the requested scope.', recommendation: 'Return to the requested file set and verify it.', action: 'correct' }) })
+  const report = await app.supervisor.inspect()
+  assert.equal(report.observations[0].finding, 'deviation')
+  assert.equal(report.proposals[0].kind, 'correct')
+  assert.equal(report.proposals[0].impact.wakesWorker, true)
+  assert.equal(report.proposals[0].evidence.assessment.reason, 'The report changed a file outside the requested scope.')
+  assert.deepEqual(app.calls.directions, [])
+  assert.deepEqual(app.calls.stops, [])
+})
+
+test('approval of a pause runs the existing stop command once and is idempotent', async t => {
+  const app = await open(t)
+  await app.supervisor.inspect()
+  app.advance(500)
+  await app.supervisor.inspect()
+  app.advance(500)
+  const proposal = (await app.supervisor.inspect()).proposals[0]
+  const approved = await app.supervisor.decide({ commandId: 'decision-1', proposalId: proposal.id, decision: 'approve' })
+  assert.equal(approved.status, 'approved')
+  assert.equal(approved.decision, 'approved')
+  assert.equal(approved.action.kind, 'stop')
+  assert.equal(app.calls.stops.length, 1)
+  assert.equal(app.calls.stops[0].reason, proposal.recommendation)
+  const replay = await app.supervisor.decide({ commandId: 'decision-1', proposalId: proposal.id, decision: 'approve' })
+  assert.deepEqual(replay, approved)
+  await assert.rejects(app.supervisor.decide({ commandId: 'decision-2', proposalId: proposal.id, decision: 'reject' }), { code: 'PROPOSAL_CLOSED' })
+})
+
+test('approval of a correction adds an authorized direction input and records it', async t => {
+  const app = await open(t, { assess: async () => ({ kind: 'deviation', reason: 'The direction drifted.', recommendation: 'Return to the original request.', action: 'correct' }) })
+  const proposal = (await app.supervisor.inspect()).proposals[0]
+  const approved = await app.supervisor.decide({ commandId: 'decision-correct', proposalId: proposal.id, decision: 'approve' })
+  assert.equal(approved.status, 'approved')
+  assert.equal(approved.action.kind, 'direction')
+  assert.equal(approved.action.id, 'input-1')
+  assert.deepEqual(app.calls.directions, [{ commandId: 'decision-correct:direction', ticketId: 't1', text: 'Return to the original request.', reason: 'The direction drifted.', expectedDirectionVersion: 1, expectedGeneration: 'g1' }])
+})
+
+test('a changed direction or human stop rejects an old proposal before it acts', async t => {
+  const app = await open(t, { assess: async () => ({ kind: 'deviation', reason: 'Outside the requested scope.', recommendation: 'Return to scope.', action: 'correct' }) })
+  const proposal = (await app.supervisor.inspect()).proposals[0]
+  await app.storage.transaction('private', async tx => {
+    const ticket = await tx.get('ticket', 't1')
+    await tx.replace('ticket', 't1', { ...ticket, directionVersion: 2 })
+  })
+  await assert.rejects(app.supervisor.decide({ commandId: 'stale-direction', proposalId: proposal.id, decision: 'approve' }), { code: 'PROPOSAL_STALE' })
+  await app.storage.transaction('private', async tx => {
+    const ticket = await tx.get('ticket', 't1')
+    await tx.replace('ticket', 't1', { ...ticket, directionVersion: 1 })
+    await tx.insert('stop-head', JSON.stringify(['stop-head', 't1']), { stopId: 'human-stop' })
+    await tx.insert('stop-state', 'human-stop', { state: 'stopped' })
+  })
+  await assert.rejects(app.supervisor.decide({ commandId: 'stale-stop', proposalId: proposal.id, decision: 'approve' }), { code: 'PROPOSAL_STALE' })
+  assert.deepEqual(app.calls.directions, [])
+  assert.equal((await app.supervisor.getProposal(proposal.id)).status, 'proposed')
+})
+
+test('rejection executes nothing and keeps the reason', async t => {
+  const app = await open(t)
+  await app.supervisor.inspect()
+  app.advance(500)
+  await app.supervisor.inspect()
+  app.advance(500)
+  const proposal = (await app.supervisor.inspect()).proposals[0]
+  const rejected = await app.supervisor.decide({ commandId: 'reject-1', proposalId: proposal.id, decision: 'reject', reason: 'This is expected investigation.' })
+  assert.equal(rejected.status, 'rejected')
+  assert.equal(rejected.decisionReason, 'This is expected investigation.')
+  assert.deepEqual(app.calls.directions, [])
+  assert.deepEqual(app.calls.stops, [])
+})
+
+test('an open proposal is deduplicated and the proposal budget stops repeated suggestions', async t => {
+  const app = await open(t, { maxProposals: 1 })
+  await app.supervisor.inspect()
+  app.advance(500)
+  await app.supervisor.inspect()
+  app.advance(500)
+  const first = await app.supervisor.inspect()
+  assert.equal(first.proposals.length, 1)
+  const duplicate = await app.supervisor.inspect()
+  assert.equal(duplicate.observations[0].finding, 'duplicate')
+  assert.equal((await app.supervisor.listProposals()).length, 1)
+  await app.supervisor.decide({ commandId: 'reject-first', proposalId: first.proposals[0].id, decision: 'reject' })
+  app.setItem({ ...base(), reports: [{ ...base().reports[0], id: 'r2', result: 'A different report.', createdAt: 2_000 }] })
+  for (let index = 0; index < 3; index++) { app.advance(500); await app.supervisor.inspect() }
+  const exhausted = await app.supervisor.inspect()
+  assert.equal(exhausted.observations[0].finding, 'budget-exhausted')
+  assert.equal((await app.supervisor.listProposals()).length, 1)
+})
+
+test('a rejected proposal can be proposed again only after the evidence changes', async t => {
+  const app = await open(t)
+  app.setItem({ ...base(), reports: [{ ...base().reports[0], toolFacts: [] }] })
+  await app.supervisor.inspect()
+  app.advance(500)
+  await app.supervisor.inspect()
+  app.advance(500)
+  const first = (await app.supervisor.inspect()).proposals[0]
+  await app.supervisor.decide({ commandId: 'reject-1', proposalId: first.id, decision: 'reject' })
+  const duplicate = await app.supervisor.inspect()
+  assert.equal(duplicate.observations[0].finding, 'duplicate')
+  app.setItem({ ...base(), reports: [{ ...base().reports[0], id: 'r2', result: 'New evidence.', createdAt: 2_000 }] })
+  await app.supervisor.inspect()
+  app.advance(1_000)
+  await app.supervisor.inspect()
+  assert.equal((await app.supervisor.inspect()).proposals.length, 1)
+})
+
+test('unknown outcomes are reconciled before any semantic proposal', async t => {
+  const app = await open(t)
+  app.setItem({ ...base(), health: { ...base().health, effectsUnknown: 1 }, bucket: 'blocked' })
+  const report = await app.supervisor.inspect()
+  assert.equal(report.observations[0].finding, 'unknown')
+  assert.deepEqual(report.proposals, [])
+  assert.equal(app.calls.remoteReconcile.length, 1)
+  assert.equal(report.observations[0].reconciliation.kind, 'remote-work')
+  assert.deepEqual(report.observations[0].reconciliation.result, { state: 'reconciled' })
+})
+
+test('a decision command ID cannot be reused for another proposal', async t => {
+  const app = await open(t)
+  const proposal = (id) => ({
+    id, instanceId: 'private', ticketId: 't1', kind: 'pause', status: 'proposed', version: 't48-test', fingerprint: `f-${id}`,
+    evidence: { snapshot: {}, assessment: { kind: 'no-progress', reason: 'stalled' }, finding: 'no-progress' },
+    recommendation: 'Pause.', impact: { stopsNewWork: true, wakesWorker: false, summary: 'Pause.' }, createdAt: 1,
+  })
+  await app.storage.transaction('private', async transaction => {
+    for (const id of ['p1', 'p2']) await transaction.insert('supervisor-proposal', JSON.stringify(['supervisor-proposal', id]), proposal(id))
+  })
+  await app.supervisor.decide({ commandId: 'shared-decision', proposalId: 'p1', decision: 'reject' })
+  await assert.rejects(app.supervisor.decide({ commandId: 'shared-decision', proposalId: 'p2', decision: 'reject' }), { code: 'IDENTITY_CONFLICT' })
+})
+
+test('concurrent decisions claim the proposal once and execute one action', async t => {
+  const app = await open(t)
+  const proposal = {
+    id: 'race', instanceId: 'private', ticketId: 't1', kind: 'pause', status: 'proposed', version: 't48-test', fingerprint: 'race',
+    evidence: { snapshot: {}, assessment: { kind: 'no-progress', reason: 'stalled' }, finding: 'no-progress' },
+    recommendation: 'Pause.', impact: { stopsNewWork: true, wakesWorker: false, summary: 'Pause.' }, createdAt: 1,
+  }
+  await app.storage.transaction('private', transaction => transaction.insert('supervisor-proposal', JSON.stringify(['supervisor-proposal', 'race']), proposal))
+  const results = await Promise.allSettled([
+    app.supervisor.decide({ commandId: 'race-a', proposalId: 'race', decision: 'approve' }),
+    app.supervisor.decide({ commandId: 'race-b', proposalId: 'race', decision: 'approve' }),
+  ])
+  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1)
+  const rejected = results.find(result => result.status === 'rejected')
+  assert.equal(rejected.reason.code, 'PROPOSAL_CLOSED')
+  assert.equal(app.calls.stops.length, 1)
+})
+
+test('concurrent inspections create one proposal and one observation update', async t => {
+  let started = 0
+  let release
+  const gate = new Promise(resolve => { release = resolve })
+  const app = await open(t, { maxProposals: 1, assess: async () => {
+    started += 1
+    if (started === 2) release()
+    await gate
+    return { kind: 'deviation', reason: 'The report left the requested scope.', recommendation: 'Return to the requested scope.', action: 'correct' }
+  } })
+  const reports = await Promise.all([app.supervisor.inspect(), app.supervisor.inspect()])
+  assert.deepEqual(reports.map(report => report.observations[0].finding).sort(), ['deviation', 'duplicate'])
+  assert.equal((await app.supervisor.listProposals()).length, 1)
+  assert.equal((await app.supervisor.getState('t1')).proposals.length, 1)
+})
+
+test('proposal queries do not lose records after the first hundred', async t => {
+  const app = await open(t)
+  const proposal = (id) => ({
+    id, instanceId: 'private', ticketId: 't1', kind: 'pause', status: 'proposed', version: 't48-test', fingerprint: `f-${id}`,
+    evidence: { snapshot: {}, assessment: { kind: 'no-progress', reason: 'stalled' }, finding: 'no-progress' },
+    recommendation: 'Pause.', impact: { stopsNewWork: true, wakesWorker: false, summary: 'Pause.' }, createdAt: 1,
+  })
+  await app.storage.transaction('private', async transaction => {
+    for (let index = 0; index < 105; index++) await transaction.insert('supervisor-proposal', JSON.stringify(['supervisor-proposal', `p${index}`]), proposal(`p${index}`))
+  })
+  assert.equal((await app.supervisor.listProposals()).length, 105)
+  assert.equal((await app.supervisor.getProposal('p104')).id, 'p104')
+})

@@ -8,12 +8,13 @@ import { join } from 'node:path'
 
 // The data of the app in this process: a folder of its own, so that a test never writes
 // into the data of the user.
-const root = mkdtempSync(join(tmpdir(), 'ds-bot-fake-user-data-'))
+const root = mkdtempSync(join(tmpdir(), 'ds-superagent-fake-user-data-'))
 export const paths = {
   root,
-  userData: join(root, 'userData'),
+  appData: join(root, 'appData'),
+  userData: join(root, 'appData', 'DS SuperAgent'),
   downloads: join(root, 'downloads'),
-  exe: join(root, 'DS Bot.exe'),
+  exe: join(root, 'program', 'DS SuperAgent.exe'),
   // The folder of the app itself: the Host's pnpm lives in it.
   appPath: join(root, 'app'),
 }
@@ -30,6 +31,8 @@ export const state = {
   tray: undefined,
   // The tray cannot always be built; a test says so before the app starts.
   trayFails: false,
+  // A tray update can fail after startup; that must not strand the app during quit.
+  trayUpdatesFail: false,
   // The app is a packaged one: it has an updater. It is set after the app starts, so that
   // the paths of the packaged app do not come into the way of the start.
   packaged: false,
@@ -76,6 +79,7 @@ export class FakeWindow extends EventEmitter {
   getBounds() { return { x: 0, y: 0, width: 800, height: 600 } }
   async loadURL(url) {
     this.url = url
+    this.webContents.mainFrame.url = url
     this.loaded.push(url)
     if (state.rejectLoads || this.rejectLoads) throw new Error(`the page ${url} did not load`)
     // The Host trades the token of the launch URL for a cookie of the browser's session.
@@ -100,7 +104,7 @@ class FakeWebContents extends EventEmitter {
     this.mainFrame = {}
     this.isDestroyed = () => this.win.destroyed
     this.getURL = () => this.win.url
-    this.getTitle = () => 'DS Bot'
+    this.getTitle = () => win.options?.title ?? ''
     this.send = () => {}
     this.setWindowOpenHandler = () => {}
     this.insertCSS = async () => {}
@@ -112,10 +116,10 @@ class FakeWebContents extends EventEmitter {
 class FakeApp extends EventEmitter {
   constructor() {
     super()
-    this.name = 'DS Bot'
+    this.name = 'Electron'
     this.getVersion = () => '0.2.2'
     this.getLocale = () => 'en-US'
-    this.getPath = (name) => paths[name] ?? join(root, String(name))
+    this.getPath = (name) => state.paths[name] ?? paths[name] ?? join(root, String(name))
     this.getAppPath = () => paths.appPath
     this.setPath = (name, value) => { state.paths[name] = value }
     this.setName = (name) => { this.name = name }
@@ -143,6 +147,7 @@ class FakeApp extends EventEmitter {
 }
 
 export const app = new FakeApp()
+export const autoUpdater = new EventEmitter()
 
 export const BrowserWindow = FakeWindow
 
@@ -165,7 +170,10 @@ export const Tray = class extends EventEmitter {
     this.menu = undefined
     state.tray = this
   }
-  setToolTip(value) { this.tooltip = value }
+  setToolTip(value) {
+    if (state.trayUpdatesFail) throw new Error('the tray could not be updated')
+    this.tooltip = value
+  }
   setContextMenu(menu) { this.menu = menu }
   destroy() { this.destroyed = true }
 }

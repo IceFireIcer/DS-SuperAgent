@@ -1,7 +1,8 @@
 import { CoreError } from './model.js'
 import type { Storage } from './storage.js'
 import type { Engine } from './engine.js'
-import type { SourceReceipt } from './source-events.js'
+import type { ReceiveSourceEvent, SourceReceipt } from './source-events.js'
+import { isGitHubDeliveryComment } from './github-delivery.js'
 
 interface Cursor { cursor: string; updatedAt: number }
 const cursorKey = (sourceInstanceId: string) => JSON.stringify(['channel-cursor', sourceInstanceId])
@@ -24,23 +25,30 @@ export interface GitHubEvent {
   cursor: string
   repo: string
   kind: 'issue' | 'pull_request' | 'review' | 'ci' | 'comment'
-  action: 'created' | 'edited' | 'deleted' | 'closed' | 'reopened' | 'synchronize' | 'reviewed' | 'completed'
+  action: 'created' | 'edited' | 'deleted' | 'closed' | 'merged' | 'reopened' | 'synchronize' | 'reviewed' | 'completed'
   number: number
   id: string
   authorId: string
   authorKind?: 'human' | 'bot' | 'ci' | 'system'
   title?: string
   body?: string
+  /** IDs admitted to this Instance and Environment by the trusted source adapter. */
+  attachmentIds?: string[]
+  environmentId?: string
   updatedAt: string
   deletionEvidence?: string
   draft?: boolean
   state?: 'open' | 'closed' | 'merged'
+  deliveryCommentActorId?: string
 }
 
 export interface GitHubSourceConfig {
   owner: string
   repo: string
   selfActorIds?: string[]
+  postingActorId?: string
+  /** New authorized human discussions are routed to Main; existing ownership stays on its Ticket. */
+  mainIntake?: boolean
 }
 
 function githubObjectId(event: GitHubEvent) {
@@ -63,30 +71,57 @@ export class GitHubSource {
   async receive(event: GitHubEvent): Promise<SourceReceipt> {
     if (!event || event.repo !== `${this.config.owner}/${this.config.repo}`) throw new CoreError('SOURCE_SCOPE_DENIED', 'The GitHub event belongs to another repository.')
     if (!Number.isInteger(event.number) || event.number < 1) throw new CoreError('INVALID_INPUT', 'A GitHub event needs a positive issue or pull request number.')
-    if (this.config.selfActorIds?.includes(event.authorId)) {
-      await this.cursors.write(this.sourceInstanceId, event.cursor)
+    if (event.action === 'deleted' && (event.attachmentIds !== undefined || event.environmentId !== undefined)) {
+      throw new CoreError('INVALID_INPUT', 'A source deletion cannot carry attachments.')
+    }
+    if (this.config.selfActorIds?.includes(event.authorId) || (event.kind === 'comment'
+      && event.authorId === this.config.postingActorId && isGitHubDeliveryComment(event.body))) {
+      await this.advance(event.cursor)
       return { status: 'filtered', reason: 'SOURCE_SELF' }
     }
     const threadId = `github:${this.config.owner}/${this.config.repo}#${event.number}`
     const objectId = githubObjectId(event)
+    if (this.config.postingActorId && event.deliveryCommentActorId === this.config.postingActorId
+      && event.action === 'edited' && event.authorKind === 'system' && event.state === 'open'
+      && (event.kind === 'issue' || event.kind === 'pull_request')) {
+      const current = await this.engine.getSourceCandidate({ threadId, objectId })
+      // A comment can change the parent timestamp without editing the request that authorized delivery.
+      if (current && (['created', 'edited', 'reopened'] as const).some(action => current.text === githubBody({ ...event, action }))) {
+        await this.advance(event.cursor)
+        return { status: 'filtered', reason: 'SOURCE_COMMENT_ACTIVITY' }
+      }
+    }
     const type = event.action === 'deleted' ? 'deleted' : event.action === 'edited' || event.action === 'synchronize' ? 'edited' : 'created'
     const body = githubBody(event)
-    const receipt = await this.engine.receiveSource({ commandId: `github:${event.deliveryId}`, threadId, objectId, type,
+    const authorKind = event.authorKind ?? (event.authorId.endsWith('[bot]') ? 'bot' : 'human')
+    const input: ReceiveSourceEvent = { commandId: `github:${event.deliveryId}`, threadId, objectId, type,
       version: sequenceVersion(event),
       ...(type === 'deleted' ? { deletionEvidence: event.deletionEvidence ?? `GitHub deleted ${event.kind} ${event.id}.` } : { text: body }),
-      authorId: event.authorId, authorKind: event.authorKind ?? (event.authorId.endsWith('[bot]') ? 'bot' : 'human'),
-      addressing: event.kind === 'review' || event.kind === 'comment' ? 'mention' : 'direct' })
-    await this.cursors.write(this.sourceInstanceId, event.cursor)
+      ...(type !== 'deleted' && event.attachmentIds !== undefined ? { attachmentIds: event.attachmentIds,
+        ...(event.environmentId === undefined ? {} : { environmentId: event.environmentId }) } : {}),
+      authorId: event.authorId, authorKind,
+      addressing: event.kind === 'review' || event.kind === 'comment' ? 'mention' as const : 'direct' as const }
+    const receipt = this.config.mainIntake && authorKind === 'human' && type !== 'deleted'
+      ? await this.engine.receiveSourceForMain(input) : await this.engine.receiveSource(input)
+    await this.advance(event.cursor)
     return receipt
   }
 
+  /** A webhook replayed out of order must not move the durable cursor backwards. */
+  private async advance(cursor: string) {
+    const current = await this.cursor()
+    if (current !== undefined && compareCursor(cursor, current) <= 0) return
+    await this.cursors.write(this.sourceInstanceId, cursor)
+  }
+
   /** Process an ordered delivery page, advancing the durable cursor only after each event is recorded. */
-  async poll(events: GitHubEvent[]) {
+  async poll(events: GitHubEvent[], signal?: AbortSignal) {
     if (!Array.isArray(events) || events.length > 1000) throw new CoreError('INVALID_INPUT', 'A GitHub poll accepts at most 1000 ordered events.')
     const prior = await this.cursor()
     let processed = 0, filtered = 0, malformed = 0, failed = 0
     for (const event of [...events].sort((left, right) => compareCursor(left.cursor, right.cursor))) {
-      if (prior !== undefined && event.cursor <= prior) continue
+      signal?.throwIfAborted()
+      if (prior !== undefined && compareCursor(event.cursor, prior) <= 0) continue
       try {
         const receipt = await this.receive(event)
         if (receipt.status === 'recorded') processed++
@@ -94,7 +129,7 @@ export class GitHubSource {
       } catch (error) {
         if (error instanceof CoreError && ['SOURCE_SCOPE_DENIED', 'INVALID_INPUT', 'NOT_FOUND'].includes(error.code)) {
           malformed++
-          await this.cursors.write(this.sourceInstanceId, event.cursor)
+          await this.advance(event.cursor)
           continue
         }
         failed++
@@ -137,9 +172,14 @@ export interface FeishuEvent {
   chatId: string
   chatType?: 'p2p' | 'group'
   messageId: string
+  rootId?: string
+  threadId?: string
   senderId: string
   senderKind?: 'human' | 'bot' | 'system'
   text?: string
+  /** IDs admitted to this Instance and Environment by the trusted source adapter. */
+  attachmentIds?: string[]
+  environmentId?: string
   createTime: string
   updateTime?: string
   mentionIds?: string[]
@@ -152,6 +192,8 @@ export interface FeishuSourceConfig {
   tenantKey: string
   chatIds: string[]
   selfActorIds?: string[]
+  /** New addressed human requests enter Main; owned discussions remain on their Ticket. */
+  mainIntake?: boolean
 }
 
 export class FeishuSource {
@@ -169,26 +211,30 @@ export class FeishuSource {
     if (!event || event.tenantKey !== this.config.tenantKey || !this.config.chatIds.includes(event.chatId)) {
       throw new CoreError('SOURCE_SCOPE_DENIED', 'The Feishu event is outside the configured tenant or chat scope.')
     }
+    if (event.deleted && (event.attachmentIds !== undefined || event.environmentId !== undefined)) {
+      throw new CoreError('INVALID_INPUT', 'A source deletion cannot carry attachments.')
+    }
     if (this.config.selfActorIds?.includes(event.senderId)) {
       await this.advance(event.cursor)
       return { status: 'filtered', reason: 'SOURCE_SELF' }
     }
-    const threadId = `feishu:${this.config.tenantKey}:${event.chatId}`
+    const threadId = `feishu:${this.config.tenantKey}:${event.chatId}${this.config.mainIntake && event.chatType !== 'p2p'
+      ? `:message:${event.rootId ?? event.messageId}` : ''}`
     const objectId = `message:${event.messageId}`
     const addressed = event.chatType === 'p2p' ? 'direct'
       : event.mentionIds?.some(id => this.config.selfActorIds?.includes(id)) ? 'mention' : 'ambient'
     const commandId = `feishu:${event.eventId}`
     const prior = await this.engine.getSourceReceipt(commandId)
-    if (prior) {
-      await this.advance(event.cursor)
-      return { status: 'filtered', reason: 'SOURCE_REPLAY' }
-    }
-    const receipt = await this.engine.receiveSource({ commandId, threadId, objectId,
+    const input: ReceiveSourceEvent = { commandId, threadId, objectId,
       type: event.deleted ? 'deleted' : event.edited ? 'edited' : 'created', version: feishuVersion(event),
       ...(event.deleted ? { deletionEvidence: event.deletionEvidence ?? `Feishu deleted message ${event.messageId}.` } : { text: event.text ?? '' }),
-      authorId: event.senderId, authorKind: event.senderKind ?? 'human', addressing: addressed })
+      ...(!event.deleted && event.attachmentIds !== undefined ? { attachmentIds: event.attachmentIds,
+        ...(event.environmentId === undefined ? {} : { environmentId: event.environmentId }) } : {}),
+      authorId: event.senderId, authorKind: event.senderKind ?? 'human', addressing: addressed }
+    const receipt = this.config.mainIntake && input.authorKind === 'human' && !event.deleted
+      ? await this.engine.receiveSourceForMain(input) : await this.engine.receiveSource(input)
     await this.advance(event.cursor)
-    return receipt
+    return prior ? { status: 'filtered', reason: 'SOURCE_REPLAY' } : receipt
   }
 
   /** A replay of an older message (or an edit of an old message) never moves the cursor backwards. */
@@ -268,7 +314,7 @@ function localBoundary(instant: number, timeZone: string, interval: number) {
   return Math.floor((instant + zoneOffsetMs(timeZone, instant)) / interval) * interval
 }
 
-function zoneOffsetMs(timeZone: string, instant: number) {
+export function zoneOffsetMs(timeZone: string, instant: number) {
   const second = instant - (((instant % 1000) + 1000) % 1000)
   const parts = new Intl.DateTimeFormat('en-US', { timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(new Date(second))
@@ -277,7 +323,7 @@ function zoneOffsetMs(timeZone: string, instant: number) {
 }
 
 /** Return the real instant for a local wall time, or undefined when the local time never existed. */
-function localToInstant(local: number, timeZone: string) {
+export function localToInstant(local: number, timeZone: string) {
   const first = local - zoneOffsetMs(timeZone, local)
   if (first + zoneOffsetMs(timeZone, first) === local) return first
   const second = local - zoneOffsetMs(timeZone, first)

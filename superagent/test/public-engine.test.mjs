@@ -30,7 +30,7 @@ async function open(t, options = {}) {
   }
   cleanups.get(t).contexts.push(ctx)
   cleanups.get(t).directories.push(directory)
-  await ctx.plugin(plugin, { databasePath: join(directory, 'state.sqlite'), instanceId: 'private', source, ...options })
+  await ctx.plugin(plugin.enginePlugin, { databasePath: join(directory, 'state.sqlite'), instanceId: 'private', source, ...options })
   return { engine: ctx.get('superagent'), ctx, directory }
 }
 
@@ -62,14 +62,20 @@ test('request data cannot replace the trusted desktop source, instance or author
 test('an awaited transaction accepts the original request snapshot and returns its original receipt on replay', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-snapshot-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
-  let release
-  const gate = new Promise(resolve => { release = resolve })
+  let armed = false
+  let release = () => {}
+  let gate = Promise.resolve()
   const delayed = {
-    transaction: async (instanceId, operation) => { await gate; return storage.transaction(instanceId, operation) },
+    transaction: async (instanceId, operation) => {
+      if (armed) await gate
+      return storage.transaction(instanceId, operation)
+    },
     close: () => storage.close(),
   }
   const { engine } = await open(t, { storage: delayed })
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
+  armed = true
+  gate = new Promise(resolve => { release = resolve })
   const original = { ...command }
   const accepting = engine.submit(original)
   original.text = 'An unrelated request introduced after acceptance began.'
@@ -107,10 +113,12 @@ test('two instances and two desktop sources cannot collide or borrow another sou
   const { engine: otherSource } = await open(t, { databasePath, source: { ...source, sourceInstanceId: 'desktop-two' } })
   const sourceReceipt = await otherSource.submit({ ...command, commandId: 'second-source-command' })
   assert.notEqual(sourceReceipt.triggerId, firstReceipt.triggerId)
+  await assert.rejects(otherSource.getTicket(firstReceipt.ticketId), { code: 'SOURCE_NOT_AUTHORIZED' })
   const { engine: deniedSource } = await open(t, { databasePath, source: { ...source, sourceInstanceId: 'desktop-denied', allowedActorIds: [] } })
   await assert.rejects(deniedSource.submit(command), { code: 'SOURCE_NOT_AUTHORIZED' })
-  assert.equal((await first.listTickets()).items.length, 2)
+  assert.equal((await first.listTickets()).items.length, 1)
   assert.equal((await second.listTickets()).items.length, 1)
+  assert.equal((await otherSource.listTickets()).items.length, 1)
 })
 
 test('parallel delivery retries create one durable work item with the original receipt', async t => {
@@ -153,15 +161,19 @@ test('a precommit adapter failure leaves no acceptance, authorization or pending
   const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-rollback-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { try { await storage.close() } finally { await rm(directory, { recursive: true, force: true }) } })
+  let armed = false
   const failing = {
     transaction: (instanceId, operation) => storage.transaction(instanceId, async tx => {
-      await operation(tx)
-      throw new Error('Injected failure before commit')
+      const result = await operation(tx)
+      if (armed) throw new Error('Injected failure before commit')
+      return result
     }),
     close: () => storage.close(),
   }
   const { engine } = await open(t, { storage: failing })
+  armed = true
   await assert.rejects(engine.submit(command), /Injected failure before commit/u)
+  armed = false
   const recovered = new plugin.Engine(storage, 'private', source)
   assert.equal(await recovered.getReceipt(command.commandId), undefined)
   assert.deepEqual(await recovered.listTickets(), { items: [], hasMore: false })

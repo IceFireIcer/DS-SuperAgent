@@ -15,7 +15,7 @@ test('a Feishu answer replies in place and reuses the same uuid for retries', as
     calls.push(request)
     if (fail) throw new core.FeishuApiError(undefined, 503, 'unavailable')
     return { messageId: 'om_reply' }
-  } })
+  } }, { now: () => 1000 })
   assert.deepEqual(await channel.deliver(view(), context), { type: 'success' })
   assert.equal(calls[0].messageId, 'om_question')
   assert.equal(calls[0].text, 'Use the blue option.')
@@ -28,7 +28,7 @@ test('a Feishu answer replies in place and reuses the same uuid for retries', as
 })
 
 test('Feishu delivery maps transient, gone and unsupported destinations', async () => {
-  const withError = error => new core.FeishuDeliveryChannel({ replyMessage: async () => { throw error } })
+  const withError = error => new core.FeishuDeliveryChannel({ replyMessage: async () => { throw error } }, { now: () => 1000 })
   assert.deepEqual(await withError(new core.FeishuApiError(99991400, undefined, 'rate limited')).deliver(view(), context),
     { type: 'transient', reason: 'FEISHU_99991400' })
   assert.deepEqual(await withError(new core.FeishuApiError(undefined, 503, 'unavailable')).deliver(view(), context),
@@ -39,19 +39,65 @@ test('Feishu delivery maps transient, gone and unsupported destinations', async 
     { type: 'permanent', reason: 'FEISHU_230027' })
   assert.deepEqual(await withError(new core.FeishuApiError(12345, undefined, 'unexpected')).deliver(view(), context),
     { type: 'unknown', reason: 'FEISHU_12345' })
-  const channel = new core.FeishuDeliveryChannel({ replyMessage: async () => ({ messageId: 'om_reply' }) })
+  const channel = new core.FeishuDeliveryChannel({ replyMessage: async () => ({ messageId: 'om_reply' }) }, { now: () => 1000 })
   assert.equal((await channel.deliver(view({ destination: { sourceInstanceId: 'github:repo', actorId: 'alice', eventId: 'message:om_question',
     threadId: 'github:repo#1' } }), context)).type, 'permanent')
   assert.equal((await channel.deliver(view({ destination: { sourceInstanceId: 'feishu:tenant:chat', actorId: 'alice', eventId: 'issue:1',
     threadId: 'feishu:tenant:chat' } }), context)).type, 'permanent')
-  const huge = new core.FeishuDeliveryChannel({ replyMessage: async () => ({ messageId: 'om_reply' }) }, { maxTextChars: 150000 })
+  const huge = new core.FeishuDeliveryChannel({ replyMessage: async () => ({ messageId: 'om_reply' }) }, { maxTextChars: 150000, now: () => 1000 })
   assert.equal((await huge.deliver(view({ text: '\n'.repeat(150000) }), context)).type, 'permanent')
 })
 
 test('a Feishu IM reply is kept short while the full text stays in the Ticket', async () => {
   const calls = []
-  const channel = new core.FeishuDeliveryChannel({ replyMessage: async request => { calls.push(request); return { messageId: 'om_reply' } } })
+  const channel = new core.FeishuDeliveryChannel({ replyMessage: async request => { calls.push(request); return { messageId: 'om_reply' } } }, { now: () => 1000 })
   await channel.deliver(view({ text: 'x'.repeat(5000) }), context)
   assert.equal(calls[0].text.length <= 4000, true)
   assert.match(calls[0].text, /\[Truncated for Feishu\. The full text is in the Ticket\.\]$/u)
+})
+
+test('a long Feishu question retains its exact answer code after truncation', async () => {
+  const calls = []
+  const channel = new core.FeishuDeliveryChannel({ replyMessage: async request => {
+    calls.push(request)
+    return { messageId: 'om_reply' }
+  } }, { maxTextChars: 200, now: () => 1000 })
+  const question = view({ purpose: 'attention', text: 'Question: '.repeat(40),
+    basis: { kind: 'waiting-attention', attentionId: 'attention-1' } })
+  assert.equal((await channel.deliver(question, context)).type, 'success')
+  assert.equal(calls[0].text.length <= 200, true)
+  assert.match(calls[0].text, /Reply with Q-[a-f0-9]{16}: followed by your answer\.$/u)
+})
+
+test('a first send is not blocked by time the Delivery spent waiting in the local queue', async () => {
+  const calls = []
+  const channel = new core.FeishuDeliveryChannel({ replyMessage: async request => { calls.push(request); return { messageId: 'om_reply' } } },
+    { now: () => 2 * 60 * 60 * 1000 })
+  assert.deepEqual(await channel.deliver(view({ createdAt: 0 }), context), { type: 'success' })
+  assert.equal(calls.length, 1)
+  assert.deepEqual(await channel.deliver(view({ createdAt: 0, attempts: 0 }), context), { type: 'success' })
+  assert.equal(calls.length, 2)
+})
+
+test('a reconcile past the uuid window is not sent a second time', async () => {
+  const calls = []
+  const channel = new core.FeishuDeliveryChannel({ replyMessage: async request => { calls.push(request); return { messageId: 'om_reply' } } },
+    { now: () => 2 * 60 * 60 * 1000 })
+  assert.deepEqual(await channel.reconcile(view({ createdAt: 0, attempts: 1 }), context),
+    { type: 'unknown', reason: 'FEISHU_RECONCILIATION_REQUIRED: the safe uuid window has expired.' })
+  assert.equal(calls.length, 0)
+})
+
+test('an ambiguous send or an unrecorded receipt stays unknown instead of retrying blindly', async () => {
+  const at = { now: () => 1000 }
+  const timedOut = new core.FeishuDeliveryChannel({ replyMessage: async () => { throw new core.CoreError('SOURCE_TIMEOUT', 'The Feishu request timed out.') } }, at)
+  assert.equal((await timedOut.deliver(view(), context)).type, 'unknown')
+  const network = new core.FeishuDeliveryChannel({ replyMessage: async () => { throw new core.CoreError('SOURCE_FAILED', 'The Feishu request failed.') } }, at)
+  assert.equal((await network.deliver(view(), context)).type, 'unknown')
+  const unrecorded = new core.FeishuDeliveryChannel({ replyMessage: async () => ({ messageId: 'om_reply' }) },
+    { ...at, recordReceipt: async () => { throw new Error('storage unavailable') } })
+  assert.deepEqual(await unrecorded.deliver(view(), context), { type: 'unknown', reason: 'FEISHU_RECEIPT_UNRECORDED' })
+  const beforeSend = new core.FeishuDeliveryChannel({ replyMessage: async () => { throw new Error('must not send') } },
+    { ...at, authorize: async () => { throw new core.CoreError('SOURCE_STOPPED', 'The Feishu source is stopped.') } })
+  assert.deepEqual(await beforeSend.deliver(view(), context), { type: 'transient', reason: 'SOURCE_STOPPED' })
 })

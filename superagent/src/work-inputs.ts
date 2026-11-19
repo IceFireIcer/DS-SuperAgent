@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { CoreError, identifier, type DesktopSource, type Work } from './model.js'
+import { CoreError, identifier, triggerDeliveryTarget, type DesktopSource, type Source, type Work } from './model.js'
 import type { AsyncTx, Storage } from './storage.js'
 import type { SourceEvent, SourceEvents } from './source-events.js'
 import type { EffectRequest } from './effects.js'
@@ -32,6 +32,17 @@ export interface WorkInput {
   recoveryDecisionId?: string
   receivedAt: number
   delivery?: InputDelivery
+  association?: CrossSourceAssociation
+}
+
+export interface CrossSourceAssociation {
+  reference: string
+  source: Source
+  sourceActorId: string
+  authorizedBy: string
+  ownerSourceInstanceId: string
+  reason: string
+  checkedAt: number
 }
 
 /**
@@ -66,7 +77,7 @@ export interface RecoveryDecision {
   mandateDecisionId: string
   policyVersion: string
   currentPolicyVersion: string
-  reason: 'AUTHORIZED_HUMAN_FOLLOWUP'
+  reason: 'AUTHORIZED_HUMAN_FOLLOWUP' | 'AUTHORIZED_SCHEDULE_RULE'
   checkedAt: number
 }
 
@@ -78,7 +89,7 @@ export interface WorkOwnership {
   inputId: string
   subscriptionId: string
   state: 'owned' | 'handed-back' | 'requeued'
-  basis: 'fanout' | 'explicit-attach' | 'attention-answer'
+  basis: 'fanout' | 'explicit-attach' | 'attention-answer' | 'supervisor-correction' | 'main-follow-up' | 'schedule'
   reason?: string
   requeueCommandId?: string
   assignedAt: number
@@ -97,6 +108,22 @@ export interface RequeueDecision {
   createdAt: number
   claimedAt?: number
   consumedAt?: number
+}
+
+export interface MainFollowUpAttachment {
+  status: 'attached' | 'waiting' | 'stopped'
+  directionVersion: number
+  inputId?: string
+  ownershipId?: string
+  reason?: string
+}
+
+export interface MainFollowUpAttachmentRequest {
+  ticketId: string
+  followUpId: string
+  text: string
+  authorId: string
+  reason: string
 }
 
 export interface WorkNote {
@@ -190,6 +217,16 @@ export function deliveryMessageId(inputId: string, generation = 0) {
   return createHash('sha256').update(JSON.stringify(['input-message', inputId, generation])).digest('hex')
 }
 
+/** A bounded provenance lookup; it grants only the event previously approved for this Ticket. */
+export async function associatedInput(tx: AsyncTx, ticketId: string, event: SourceEvent): Promise<WorkInput | undefined> {
+  const input = await tx.get<WorkInput>('work-input', inputKey(ticketId, event.id))
+  if (event.instanceId !== tx.instanceId || input?.ticketId !== ticketId || input.sourceEventId !== event.id || input.association?.source.sourceInstanceId !== event.source.sourceInstanceId
+    || input.association.source.kind !== event.source.kind || input.association.source.actorId !== event.source.actorId || input.association.sourceActorId !== event.authorId) return undefined
+  const ownership = await tx.get<WorkOwnership>('work-ownership', ownershipKey(ticketId, event.id))
+  if (ownership?.state !== 'owned') return undefined
+  return input
+}
+
 export class WorkInputs {
   private allowedRequesterIds: string[]
   constructor(
@@ -208,18 +245,23 @@ export class WorkInputs {
   }
 
   async subscribe(tx: AsyncTx, ticketId: string, trigger: Work['trigger']) {
-    if (!trigger.threadId) return
-    await this.addSubscription(tx, ticketId, trigger.threadId, 'trigger', true, 'worker', 'Original source Thread', this.source.actorId)
+    const target = triggerDeliveryTarget(trigger)
+    if (!target.threadId) return
+    await this.addSubscription(tx, ticketId, target.threadId, 'trigger', true, 'worker', 'Original source Thread', this.source.actorId,
+      target.source.sourceInstanceId)
   }
 
-  async addSubscription(tx: AsyncTx, ticketId: string, threadId: string, basis: ThreadSubscription['basis'], required: boolean, mode: ThreadSubscription['mode'], reason: string, addedBy: string) {
-    identifier(ticketId, 'ticketId'); identifier(threadId, 'threadId'); identifier(addedBy, 'addedBy')
+  async addSubscription(tx: AsyncTx, ticketId: string, threadId: string, basis: ThreadSubscription['basis'], required: boolean, mode: ThreadSubscription['mode'], reason: string, addedBy: string,
+    sourceInstanceId = this.source.sourceInstanceId) {
+    identifier(ticketId, 'ticketId'); identifier(threadId, 'threadId'); identifier(addedBy, 'addedBy'); identifier(sourceInstanceId, 'sourceInstanceId')
     const inThreads = this.source.allowedThreadIds?.includes(threadId) ?? false
     const inPrefixes = this.source.allowedThreadPrefixes?.some(prefix => threadId.startsWith(prefix)) ?? false
-    if (!inThreads && !inPrefixes) throw new CoreError('SOURCE_SCOPE_DENIED', 'The additional Thread is outside the configured reception scope.')
+    if (sourceInstanceId === this.source.sourceInstanceId && !inThreads && !inPrefixes) {
+      throw new CoreError('SOURCE_SCOPE_DENIED', 'The additional Thread is outside the configured reception scope.')
+    }
     if (!reason.trim() || Buffer.byteLength(reason) > 2048) throw new CoreError('INVALID_INPUT', 'A Thread subscription needs a bounded reason.')
     await this.authorizedTicket(tx, ticketId)
-    const id = subscriptionKey(this.source.sourceInstanceId, threadId, ticketId)
+    const id = subscriptionKey(sourceInstanceId, threadId, ticketId)
     const existing = await tx.get<ThreadSubscription>('thread-subscription', id)
     if (!existing && basis === 'worker') {
       const decisions = await this.scanAll<SubscriptionDecision>(tx, 'subscription-decision', subscriptionDecisionPrefix(ticketId),
@@ -229,7 +271,7 @@ export class WorkInputs {
     if (!existing && (await this.subscriptionsForTicket(tx, ticketId)).length >= 1000
       || !existing && (await this.subscriptionsForThread(tx, threadId)).length >= 1000) throw new CoreError('WORK_OWNERSHIP_BUDGET', 'A Ticket or Thread already has its declared 1000 subscriptions.')
     const subscription: ThreadSubscription = { id, instanceId: this.instanceId, ticketId, threadId,
-      sourceInstanceId: this.source.sourceInstanceId, required: existing?.required || required, basis: existing?.basis ?? basis, mode: existing?.required ? 'worker' : mode, reason, addedBy }
+      sourceInstanceId, required: existing?.required || required, basis: existing?.basis ?? basis, mode: existing?.required ? 'worker' : mode, reason, addedBy }
     if (!await tx.replace('thread-subscription', id, subscription)) await tx.insert('thread-subscription', id, subscription)
     const ticketKey = ticketSubscriptionKey(ticketId, id)
     if (!await tx.replace('ticket-thread-subscription', ticketKey, subscription)) await tx.insert('ticket-thread-subscription', ticketKey, subscription)
@@ -237,6 +279,7 @@ export class WorkInputs {
   }
 
   async recordFanout(tx: AsyncTx, event: SourceEvent): Promise<WorkFanout> {
+    if (event.attachments?.length) throw new CoreError('ATTACHMENT_SCOPE_AMBIGUOUS', 'Attached source follow-ups need a separately authorized work-item grant.')
     const key = fanoutKey(event.id)
     const prior = await tx.get<WorkFanout>('work-fanout', key)
     if (prior) return prior
@@ -270,7 +313,7 @@ export class WorkInputs {
       }
       const directionVersion = (ticket.directionVersion ?? 1) + 1
       const previousState = ticket.state
-      const recoveryDecisionId = previousState === 'ended' ? await this.recordRecovery(tx, ticket, event, id) : undefined
+      const recoveryDecisionId = previousState === 'ended' ? await this.recordRecovery(tx, ticket, event.id, id) : undefined
       const input: WorkInput = { id, instanceId: this.instanceId, ticketId: ticket.id, sourceEventId: event.id, threadId: event.threadId, objectId: event.objectId,
         text: event.text!, authorId: event.authorId, ownership: 'worker', directionVersion, state: 'pending', ...(recoveryDecisionId ? { recoveryDecisionId } : {}), receivedAt: this.now() }
       await this.insertInput(tx, input)
@@ -294,6 +337,10 @@ export class WorkInputs {
 
   async owns(tx: AsyncTx, event: SourceEvent) {
     return (await this.ownershipsForEvent(tx, event.id)).some(ownership => ownership.state === 'owned')
+  }
+
+  async threadHasWorkerSubscriptions(tx: AsyncTx, threadId: string) {
+    return (await this.subscriptionsForThread(tx, threadId)).some(subscription => subscription.mode === 'worker')
   }
 
   async ownershipsForEventInTransaction(tx: AsyncTx, eventId: string) {
@@ -326,7 +373,7 @@ export class WorkInputs {
     return input
   }
 
-  async attachSyntheticInput(tx: AsyncTx, request: { ticketId: string; sourceEventId: string; threadId: string; text: string; authorId: string; reason: string; dispatch?: boolean }) {
+  async attachSyntheticInput(tx: AsyncTx, request: { ticketId: string; sourceEventId: string; threadId: string; text: string; authorId: string; reason: string; dispatch?: boolean; basis?: WorkOwnership['basis'] }) {
     const ticket = await this.authorizedTicket(tx, request.ticketId)
     const id = inputKey(ticket.id, request.sourceEventId)
     const existing = await tx.get<WorkInput>('work-input', id)
@@ -335,7 +382,7 @@ export class WorkInputs {
     const input: WorkInput = { id, instanceId: this.instanceId, ticketId: ticket.id, sourceEventId: request.sourceEventId, threadId: request.threadId,
       objectId: request.sourceEventId, text: request.text, authorId: request.authorId, ownership: 'worker', directionVersion, state: 'pending', receivedAt: this.now() }
     await this.insertInput(tx, input)
-    await this.addOwnership(tx, ticket.id, request.sourceEventId, id, '__attention__', 'attention-answer', request.reason)
+    await this.addOwnership(tx, ticket.id, request.sourceEventId, id, '__attention__', request.basis ?? 'attention-answer', request.reason)
     ticket.state = 'open'
     ticket.directionVersion = directionVersion
     await tx.replace('ticket', ticket.id, ticket)
@@ -343,6 +390,104 @@ export class WorkInputs {
     if (!intent) throw new CoreError('INCOMPLETE_STATE', 'Attention answer is missing the Ticket intent.')
     await tx.replace('intent', ticket.id, { ...intent, state: 'pending', reason: 'followup-pending' })
     if (request.dispatch !== false) await this.enqueue(tx, { key: `followup:${id}`, stream: 'relay', scope: ticket.id, payload: { ticketId: ticket.id, inputId: id } })
+    return input
+  }
+
+  /**
+   * A Main-owned follow-up may continue only the exact original Ticket and Session.
+   * Waiting and stop remain constraints; a naturally ended Ticket requires a new recovery decision.
+   */
+  async attachMainFollowUp(tx: AsyncTx, request: MainFollowUpAttachmentRequest): Promise<MainFollowUpAttachment> {
+    identifier(request.ticketId, 'ticketId')
+    identifier(request.followUpId, 'followUpId')
+    identifier(request.authorId, 'authorId')
+    if (!request.text.trim() || Buffer.byteLength(request.text) > 32768) {
+      throw new CoreError('INVALID_INPUT', 'A Main follow-up needs nonempty text of at most 32768 bytes.')
+    }
+    if (!request.reason.trim() || Buffer.byteLength(request.reason) > 2048) {
+      throw new CoreError('INVALID_INPUT', 'A Main follow-up needs a bounded reason.')
+    }
+    const ticket = await this.authorizedTicket(tx, request.ticketId)
+    const previousState = ticket.state
+    const directionVersion = ticket.directionVersion ?? 1
+    if (!this.allowedRequesterIds.includes(request.authorId)) {
+      throw new CoreError('ACTOR_NOT_ALLOWED', 'The Main actor is not currently authorized for this work.')
+    }
+    if (ticket.constraint) {
+      return {
+        status: ticket.constraint.kind === 'stopped' ? 'stopped' : 'waiting',
+        directionVersion,
+        reason: ticket.constraint.reason ?? ticket.constraint.kind,
+      }
+    }
+    const sourceEventId = `main-follow-up:${request.followUpId}`
+    const id = inputKey(ticket.id, sourceEventId)
+    const existing = await tx.get<WorkInput>('work-input', id)
+    if (existing) {
+      const ownership = (await this.ownershipsForEvent(tx, sourceEventId))[0]
+      return { status: 'attached', directionVersion: existing.directionVersion, inputId: existing.id,
+        ...(ownership ? { ownershipId: ownership.id } : {}) }
+    }
+    const trigger = await tx.get<Work['trigger']>('trigger', ticket.triggerId)
+    if (!trigger) throw new CoreError('INCOMPLETE_STATE', 'The Main follow-up Ticket trigger is missing.')
+    const nextDirectionVersion = directionVersion + 1
+    const recoveryDecisionId = previousState === 'ended'
+      ? await this.recordRecovery(tx, ticket, sourceEventId, id)
+      : undefined
+    const input: WorkInput = {
+      id,
+      instanceId: this.instanceId,
+      ticketId: ticket.id,
+      sourceEventId,
+      threadId: trigger.threadId ?? `main-follow-up:${ticket.id}`,
+      objectId: sourceEventId,
+      text: request.text.trim(),
+      authorId: request.authorId,
+      ownership: 'worker',
+      directionVersion: nextDirectionVersion,
+      state: 'pending',
+      ...(recoveryDecisionId ? { recoveryDecisionId } : {}),
+      receivedAt: this.now(),
+    }
+    await this.insertInput(tx, input)
+    const ownership = await this.addOwnership(tx, ticket.id, sourceEventId, id, `main-follow-up:${request.followUpId}`, 'main-follow-up', request.reason)
+    ticket.state = 'open'
+    ticket.directionVersion = nextDirectionVersion
+    await tx.replace('ticket', ticket.id, ticket)
+    const intent = await tx.get<Work['intent']>('intent', ticket.id)
+    if (!intent) throw new CoreError('INCOMPLETE_STATE', 'The Main follow-up is missing the Ticket intent.')
+    await tx.replace('intent', ticket.id, { ...intent, state: 'pending', reason: 'followup-pending' })
+    await this.enqueue(tx, { key: `followup:${id}`, stream: 'relay', scope: ticket.id, payload: { ticketId: ticket.id, inputId: id } })
+    return { status: 'attached', directionVersion: nextDirectionVersion, inputId: input.id, ownershipId: ownership.id }
+  }
+
+  /** The owning Engine has verified both grants and the native event; this grants ownership of only that event. */
+  async attachAssociated(tx: AsyncTx, ticketId: string, event: SourceEvent, association: CrossSourceAssociation,
+    options: { schedule?: boolean } = {}) {
+    if (event.attachments?.length) throw new CoreError('ATTACHMENT_SCOPE_AMBIGUOUS', 'An attached source event cannot become a text-only Worker input.')
+    const ticket = options.schedule ? await tx.get<Work['ticket']>('ticket', ticketId) : await this.authorizedTicket(tx, ticketId)
+    if (!ticket) throw new CoreError('NOT_FOUND', 'The Ticket does not exist.')
+    if (ticket.constraint) throw new CoreError('TICKET_BLOCKED', 'Resolve the Ticket constraint before associating cross-source input.')
+    const id = inputKey(ticket.id, event.id)
+    const existing = await tx.get<WorkInput>('work-input', id)
+    if (existing) {
+      const ownership = await tx.get<WorkOwnership>('work-ownership', ownershipKey(ticketId, event.id))
+      if (!ownership || ownership.state !== 'owned') throw new CoreError('OWNERSHIP_INACTIVE', 'A new association cannot reuse an input whose ownership was handed back or requeued.')
+      return existing
+    }
+    const directionVersion = (ticket.directionVersion ?? 1) + 1
+    const recoveryDecisionId = options.schedule && ticket.state === 'ended'
+      ? await this.recordRecovery(tx, ticket, event.id, id, 'AUTHORIZED_SCHEDULE_RULE') : undefined
+    const input: WorkInput = { id, instanceId: this.instanceId, ticketId, sourceEventId: event.id, threadId: event.threadId,
+      objectId: event.objectId, text: event.text!, authorId: event.authorId, ownership: 'worker', directionVersion,
+      state: 'pending', ...(recoveryDecisionId ? { recoveryDecisionId } : {}), receivedAt: this.now(), association }
+    await this.insertInput(tx, input)
+    await this.addOwnership(tx, ticket.id, event.id, id, `association:${id}`, options.schedule ? 'schedule' : 'explicit-attach', association.reason)
+    await tx.replace('ticket', ticket.id, { ...ticket, state: 'open', directionVersion })
+    const intent = await tx.get<Work['intent']>('intent', ticket.id)
+    if (!intent) throw new CoreError('INCOMPLETE_STATE', 'Associated work is missing its original intent.')
+    await tx.replace('intent', ticket.id, { ...intent, state: 'pending', reason: 'followup-pending' })
+    await this.enqueue(tx, { key: `followup:${id}`, stream: 'relay', scope: ticket.id, payload: { ticketId: ticket.id, inputId: id } })
     return input
   }
 
@@ -628,14 +773,15 @@ export class WorkInputs {
     return this.scanAll<WorkOwnership>(tx, 'event-work-ownership', eventOwnershipPrefix(eventId), ownership => ownership.sourceEventId === eventId, 'WORK_OWNERSHIP_BUDGET')
   }
 
-  private async recordRecovery(tx: AsyncTx, ticket: Work['ticket'], event: SourceEvent, inputId: string) {
+  private async recordRecovery(tx: AsyncTx, ticket: Work['ticket'], sourceEventId: string, inputId: string,
+    reason: RecoveryDecision['reason'] = 'AUTHORIZED_HUMAN_FOLLOWUP') {
     const mandate = await tx.get<Work['mandate']>('mandate', ticket.mandateId)
     const decision = mandate && await tx.get<Work['decision']>('decision', mandate.decisionId)
     if (!mandate || !decision) throw new CoreError('INCOMPLETE_STATE', 'Recovering a Ticket requires its original Mandate and Decision.')
     const id = recoveryKey(ticket.id, inputId)
-    const recovery: RecoveryDecision = { id, instanceId: this.instanceId, ticketId: ticket.id, inputId, sourceEventId: event.id,
+    const recovery: RecoveryDecision = { id, instanceId: this.instanceId, ticketId: ticket.id, inputId, sourceEventId,
       mandateId: mandate.id, mandateDecisionId: decision.id, policyVersion: decision.policyVersion, currentPolicyVersion: this.policyVersion(),
-      reason: 'AUTHORIZED_HUMAN_FOLLOWUP', checkedAt: this.now() }
+      reason, checkedAt: this.now() }
     if (!await tx.replace('recovery-decision', id, recovery)) await tx.insert('recovery-decision', id, recovery)
     return id
   }
@@ -649,17 +795,28 @@ export class WorkInputs {
     const decision = mandate && await tx.get<Work['decision']>('decision', mandate.decisionId)
     const trigger = await tx.get<Work['trigger']>('trigger', ticket.triggerId)
     if (!mandate || !decision || !trigger) throw new CoreError('INCOMPLETE_STATE', 'Recovering a Ticket requires its Mandate, Decision and Trigger.')
-    if (mandate.scope !== trigger.text || !['local', 'remote', 'auto'].includes(mandate.environment) || subscription.sourceInstanceId !== this.source.sourceInstanceId) return false
+    let scopeMatchesSource = mandate.scope === trigger.text
+    if (!scopeMatchesSource) {
+      const link = await tx.get<{ workBriefId: string; workItemId: string }>('work-ticket', ticket.id)
+      const item = link ? await tx.get<{ workBriefId: string; goal: string }>('work-item', link.workItemId) : undefined
+      scopeMatchesSource = !!link && !!item && item.workBriefId === link.workBriefId && mandate.scope === item.goal
+    }
+    if (!scopeMatchesSource || !['local', 'remote', 'auto'].includes(mandate.environment)
+      || subscription.sourceInstanceId !== this.source.sourceInstanceId) return false
     if (!['explicit', 'inferred'].includes(mandate.strength) || decision.outcome !== 'accept') return false
     if (event.authorKind !== 'human' || !this.allowedRequesterIds.includes(event.authorId)) return false
-    return this.policyVersion() !== '' && trigger.source.sourceInstanceId === this.source.sourceInstanceId
+    return this.policyVersion() !== '' && (trigger.source.sourceInstanceId === this.source.sourceInstanceId
+      || trigger.deliveryOrigin?.source.sourceInstanceId === this.source.sourceInstanceId)
   }
 
   private async authorizedTicket(tx: AsyncTx, ticketId: string) {
     const ticket = await tx.get<Work['ticket']>('ticket', ticketId)
     const trigger = ticket && await tx.get<Work['trigger']>('trigger', ticket.triggerId)
     if (!ticket || !trigger) throw new CoreError('NOT_FOUND', 'The Ticket does not exist.')
-    if (trigger.source.sourceInstanceId !== this.source.sourceInstanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The Ticket belongs to a different source instance.')
+    if (trigger.source.sourceInstanceId !== this.source.sourceInstanceId
+      && trigger.deliveryOrigin?.source.sourceInstanceId !== this.source.sourceInstanceId) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The Ticket belongs to a different source instance.')
+    }
     return ticket
   }
 

@@ -1,4 +1,6 @@
-# Super-agent 架构重建规格 v2.1
+# Super-agent 早期规格 v2.1（已被 R5 取代）
+
+> 历史设计材料，不是当前产品行为或验收来源。当前以 [R5 规格](spec-r5.md) 和对应实施记录为准。
 
 - 日期：2026-11-03；整合已关闭 Wayfinder 地图的十二项决议。
 - 状态：实施前决策已汇总，可进入实施票拆分；功能与真实环境验收尚未完成。
@@ -6,6 +8,7 @@
 - 已确认测试接口：Domain Engine 公开命令与查询为主要测试入口；来源、存储与设备执行补契约测试，再做真实 DSH 集成及 Windows 验收。
 
 - v2.1：2026-11-03 补充官方资料覆盖审计 F01—F08 的明确行为与验收；保留既定架构、四目标和公开测试接口。
+- v2.1 补充：2026-11-12 增加 D20 产品 profile 与界面分叉；D01—D19 的领域行为不变。
 
 ## Problem Statement
 
@@ -399,6 +402,17 @@
 - 工作副本默认不实时双写；明确 Git commit 加未提交 patch/快照或显式同步，记录版本/校验结果，保留未跟踪文件和未提交修改并处理冲突。同步受授权和凭据边界约束。
 - 运行中 Shell/PTY、半个模型 turn、未确认 job 和未知外部写入不直接迁移；旧执行未隔离不启动冲突新执行。远端离线不自动把写操作切回本机，人工 stop/暂停/等待人工/撤权优先。
 - 已知缺能力、目录不符或无同步证据记 handoff-blocked；外部副作用是否发生不明记 unknown。对账或人工处置后按原身份处理，不把两类受阻混用。
+
+### D20. 产品 profile 与界面分叉
+
+- 新核心使用独立 DSH profile `ds-superagent`，与现有 `ds-bot` profile 并存。两个 profile 各自使用独立的 profile 目录、业务数据库和 Session 数据，不能同时消费同一输入。
+- `ds-superagent` profile 只通过 DSH 公开入口装配：`@deepseek-ai/dsh/profile-boot`、`dsh-app-boot`、bundle patch 和客户端 `dsh.client` 清单。不得修改 DSH 安装、依赖其内部文件或增加新的 DSH 源码补丁。
+- 产品接线只保留一条：现有 `ds-bot` 界面通过 `botExecutionAdapter` 把 prompt、stop、resume、question、delivery 和 chat 投影接到公开 Engine。`ds-superagent` profile 同时挂载 `ds-superagent` 和 `ds-bot`，不维护独立前端，也不创建第二套桌面壳。
+- 保留完整 `ds-bot` 界面，包括团队侧栏、设置、群聊、浏览器、日程、用量、密钥等页面。未来 UI 修改直接落在 `ds-bot/src/client/`，按现有 `npm run build` 生成 `ds-bot/client.js`；独立 `ds-superagent-ui` 和 `/api/superagent` 窄 UI host 已删除。
+- v1 的核心能力是单会话发起、确认、结果、Attention 回答、stop、resume、重连补读和证据展开。群聊、浏览器、附件、steer、记忆、日程、用量、密钥和团队管理入口仍显示；后端未接入的动作明确 fail-closed，不以删除页面的方式隐藏。
+- 新旧 profile 由应用启动配置显式选择。开发期使用 `DS_BOT_PROFILE=ds-superagent`，发布期再决定设置入口或独立安装包。切换 profile 不迁移在途工作，不重放旧队列，不读取用户自有 DSH 数据。
+- 不复制前端；不新增独立 UI 包。UI 生成文件只由 `ds-bot/src/client/` 构建，不手工编辑 `client.js`。
+- DSH 升级保护：只用公开 API；固定 DSH 版本；每次升级先跑 `ds-superagent` profile 启动和一条 mock 消息的 smoke，再跑旧插件回归。新增 DSH 内部深路径导入即失败。
 
 ## Testing Decisions
 

@@ -8,7 +8,7 @@ import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, textResponse, toolResponse } from '../dev/native-mock.mjs'
 
 async function runtimeFixture(t) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-retry-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-retry-'))
   let native, storage, sessions, engine
   t.after(async () => {
     await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
@@ -66,6 +66,38 @@ test('retry keeps the Ticket, Session and directory but creates a new Assignment
   assert.equal(final.reports[0].result, 'Second result.')
   assert.deepEqual(final.reportHistory.map(report => report.result), ['First result.', 'Second result.'])
   assert.equal(final.assignments[0].id, retried.assignments[0].id)
+})
+
+test('conversation history is isolated to its own Ticket', { timeout: 20000 }, async t => {
+  const { engine, storage } = await runtimeFixture(t)
+  const first = await engine.submit({ commandId: 'history-first', eventId: 'history-first-message', text: 'Produce the first history result.' })
+  for (let index = 0; index < 6; index++) await engine.effects.drain()
+  const second = await engine.submit({ commandId: 'history-second', eventId: 'history-second-message', text: 'Produce the second history result.' })
+  for (let index = 0; index < 6; index++) await engine.effects.drain()
+
+  const firstConversation = await engine.conversation(first.ticketId)
+  const secondConversation = await engine.conversation(second.ticketId)
+  assert.equal(firstConversation.reportHistory.length, 1)
+  assert.equal(secondConversation.reportHistory.length, 1)
+  assert.notEqual(firstConversation.reportHistory[0].id, secondConversation.reportHistory[0].id)
+
+  // A lower-bound cursor is not a prefix filter: another Ticket whose keys sort after
+  // this one's must never appear in its conversation history.
+  const foreign = 'zzzz-foreign-ticket'
+  await storage.transaction('private', async transaction => {
+    const assignment = { id: 'foreign-assignment', generation: 'foreign-generation', ticketId: foreign, sessionId: 'foreign-session',
+      state: 'ended', createdAt: Date.now() }
+    const stop = { id: 'foreign-stop', instanceId: 'private', ticketId: foreign, state: 'stopped', requestedAt: Date.now(),
+      requestedBy: 'user', reason: 'Foreign stop.', runtimeToken: 'foreign-runtime' }
+    await transaction.insert('assignment-history', `${JSON.stringify(['assignment-history', foreign])}:${assignment.id}`, assignment)
+    await transaction.insert('stop-history', `${JSON.stringify(['stop-history', foreign])}:${stop.id}`, stop)
+    await transaction.insert('resume-decision', `${JSON.stringify(['resume-decision', foreign])}:foreign-resume`,
+      { ticketId: foreign, stopId: stop.id, assignmentId: assignment.id, actorId: 'user', resumedAt: Date.now() })
+  })
+  const isolated = await engine.conversation(first.ticketId)
+  assert.equal(isolated.assignmentHistory.some(assignment => assignment.ticketId === foreign), false)
+  assert.equal(isolated.stopHistory.some(stop => stop.ticketId === foreign), false)
+  assert.equal(isolated.resumeHistory.some(decision => decision.ticketId === foreign), false)
 })
 
 test('retry refuses unknown effects, unconfirmed previous work, stops and waiting questions', { timeout: 25000 }, async t => {

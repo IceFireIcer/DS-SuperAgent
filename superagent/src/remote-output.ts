@@ -21,6 +21,12 @@ export function completeUtf8Length(buffer: Uint8Array) {
   return buffer.length - index >= needed ? buffer.length : index
 }
 
+function completeUtf8Start(buffer: Uint8Array) {
+  let index = 0
+  while (index < buffer.length && (buffer[index]! & 0xc0) === 0x80) index++
+  return index
+}
+
 /**
  * One bounded byte stream with whole-stream offsets. It never consumes a read, and a partial UTF-8
  * character at the end is held back until later bytes complete it.
@@ -64,7 +70,10 @@ export class BoundedOutput {
       throw new CoreError('INVALID_INPUT', 'Output offsets must address bytes already observed for this job.')
     }
     if (offset < this.base) {
-      return { text: this.buffer.toString('utf8'), nextOffset: this.total, lossy: true }
+      const start = completeUtf8Start(this.buffer)
+      const slice = this.buffer.subarray(start)
+      const safe = completeUtf8Length(slice)
+      return { text: slice.subarray(0, safe).toString('utf8'), nextOffset: this.base + start + safe, lossy: true }
     }
     const relativeOffset = offset - this.base
     if (relativeOffset > 0 && (this.buffer[relativeOffset]! & 0xc0) === 0x80) {

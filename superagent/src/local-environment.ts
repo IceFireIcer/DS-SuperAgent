@@ -4,17 +4,19 @@ import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import SkillRegistry, { isSkillName } from '@deepseek-ai/dsh-skill'
 import { FileSystemSkillProvider } from '@deepseek-ai/dsh-skill-filesystem'
 import type { FsTarget } from '@deepseek-ai/dsh-fs'
-import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
+import type { SubprocessHandle, SubprocessTerminalHandle } from '@deepseek-ai/dsh-subprocess'
 import { createHash, randomUUID } from 'node:crypto'
-import { mkdir, stat } from 'node:fs/promises'
+import { mkdir, open, stat } from 'node:fs/promises'
 import { isAbsolute, relative, resolve, matchesGlob, sep, parse } from 'node:path'
 import { CoreError, identifier } from './model.js'
 import type { EnvironmentConfig, ExecutionEnvironment, PreparedEnvironment } from './environment.js'
 import { protectedPath } from './path-safety.js'
+import { inspectWorkCopy } from './work-copy.js'
 import { sanitizeSecrets } from './sanitize.js'
 import type { RemoteJobRecovery } from './remote-protocol.js'
 import { defaultAssetPageBytes, environmentAssetGaps, environmentFingerprint, FileAssetStore, fileAssetId,
-  assetNamespace, assetPageOptions, assetReferenceFromArgs, attachmentToolInput, matchesEnvironment, maxAssetBytes, maxSpillBytes,
+  assetNamespace, assetPageOptions, assetReferenceFromArgs, attachmentToolInput, matchesEnvironment, maxAssetBytes,
+  maxProductAttachmentBytes, maxSpillBytes,
   pageOf, parseSpillAssetId,
   spillAssetId, UnsupportedEnvironmentCombination, unsupportedAssetCapabilities, type EnvironmentAssetCapabilities,
   type EnvironmentAssetPage, type EnvironmentAssetReference, type EnvironmentSkillSummary, type SpillStream } from './environment-assets.js'
@@ -88,6 +90,61 @@ class BoundLocalJob implements LocalJob {
   }
 }
 
+class BoundLocalTerminalJob implements LocalJob {
+  readonly done: Promise<LocalJobResult>
+  private text = ''
+  private lossy = false
+  private spillLost = false
+  private cancelled = false
+  private termination: Promise<boolean> | undefined
+
+  constructor(private readonly handle: SubprocessTerminalHandle, deadline: AbortSignal,
+    private readonly sanitize: (text: string) => string, readonly jobId: string,
+    private readonly retain: (id: string, data: Uint8Array) => Promise<void>) {
+    const chunks: Buffer[] = []
+    let bytes = 0
+    const output = (async () => {
+      for await (const chunk of handle.output) {
+        const buffer = Buffer.from(chunk)
+        const piece = buffer.toString('utf8')
+        if (Buffer.byteLength(this.text) + Buffer.byteLength(piece) > 8192) this.lossy = true
+        else this.text += piece
+        bytes += buffer.length
+        if (bytes > maxSpillBytes) this.spillLost = true
+        else chunks.push(buffer)
+      }
+    })()
+    deadline.addEventListener('abort', () => this.terminate(), { once: true })
+    this.done = (async () => {
+      let exitCode: number | null = null
+      try { exitCode = (await handle.done).exitCode }
+      catch { this.lossy = true }
+      await output.catch(() => { this.lossy = true; this.spillLost = true })
+      const settled = await this.quiet()
+      if (!this.spillLost && bytes) await this.retain(jobId, Buffer.concat(chunks)).catch(() => { this.spillLost = true })
+      return { exitCode, cancelled: this.cancelled || deadline.aborted, truncated: this.lossy, settled,
+        ...(exitCode === null || !settled ? { outcome: 'unknown' as const, reason: 'The terminal exit could not be confirmed.' } : {}) }
+    })()
+    void this.done.catch(() => {})
+  }
+
+  private quiet() {
+    return this.termination ??= this.handle.terminate().then(() => {
+      this.handle.output.destroy()
+      return true
+    }, () => false)
+  }
+
+  read() { return { stdout: { text: this.lossy ? '' : this.sanitize(this.text), lossy: this.lossy }, stderr: { text: '', lossy: false } } }
+  terminate() { this.cancelled = true; void this.quiet() }
+  async waitForExit(signal?: AbortSignal) {
+    const result = this.termination ?? this.done.then(outcome => outcome.settled, () => false)
+    if (!signal) return result
+    if (signal.aborted) return false
+    return Promise.race([result, new Promise<false>(resolve => signal.addEventListener('abort', () => resolve(false), { once: true }))])
+  }
+}
+
 export class LocalEnvironment implements ExecutionEnvironment {
   readonly kind = 'local' as const
   readonly config: Readonly<LocalEnvironmentConfig>
@@ -110,6 +167,9 @@ export class LocalEnvironment implements ExecutionEnvironment {
     if (!isAbsolute(config.root) || !Array.isArray(config.allowedActorIds) || !Array.isArray(config.permissions) || config.permissions.some(permission => !['read', 'write', 'search', 'command'].includes(permission))) throw new CoreError('INVALID_CONFIG', 'A local environment needs an absolute directory, explicit actors and supported permissions.')
     for (const actor of config.allowedActorIds) identifier(actor, 'allowedActorId')
     if (!config.commands || typeof config.commands !== 'object' || Object.keys(config.commands).length > 16) throw new CoreError('INVALID_CONFIG', 'Configure at most sixteen named commands.')
+    if (config.allowShell !== undefined && (typeof config.allowShell !== 'boolean' || config.allowShell && !config.permissions.includes('command'))) {
+      throw new CoreError('INVALID_CONFIG', 'The local shell requires explicit command permission.')
+    }
     for (const [name, command] of Object.entries(config.commands)) {
       identifier(name, 'command name')
       if (!Array.isArray(command.argv) || !command.argv[0] || command.argv.length > 64 || command.argv.some(value => typeof value !== 'string' || value.includes('\0') || Buffer.byteLength(value) > 16384) || !Number.isInteger(command.timeoutMs) || command.timeoutMs < 50 || command.timeoutMs > 10000) throw new CoreError('INVALID_CONFIG', 'Commands need bounded fixed argv and a 50–10000 ms deadline.')
@@ -188,7 +248,9 @@ export class LocalEnvironment implements ExecutionEnvironment {
       const observed = await stat(this.config.root, { bigint: true })
       const fingerprint = `${observed.dev}:${observed.ino}:${observed.birthtimeNs}`
       return { online: true, root: this.config.root, version: 'local-v1', fingerprint,
-        capabilities: [...this.config.permissions], capacity: 'available' as const }
+        capabilities: [...this.config.permissions], capacity: 'available' as const,
+        productCapabilities: { office: Boolean(this.config.skillsPath) && this.config.permissions.includes('command')
+          && Object.hasOwn(this.config.commands, 'office') } }
     } catch (error) {
       if (error instanceof CoreError) throw error
       throw new CoreError('SETUP_FAILED', 'The local Host working directory could not be inspected.')
@@ -255,7 +317,24 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
     return this.assetReference('attachment', saved)
   }
 
+  async saveProductAttachment(input: { name: string; data: Uint8Array; mediaType?: string }): Promise<EnvironmentAssetReference> {
+    this.permission('write')
+    const saved = await this.store().save(input, maxProductAttachmentBytes)
+    return this.assetReference('attachment', saved)
+  }
+
   async readAsset(reference: EnvironmentAssetReference, options: { offset?: number; maxBytes?: number } = {}): Promise<EnvironmentAssetPage> {
+    return this.readAssetPage(reference, options, true)
+  }
+
+  async readProductAsset(reference: EnvironmentAssetReference, options: { offset?: number; maxBytes?: number } = {}): Promise<EnvironmentAssetPage> {
+    if (reference.kind !== 'attachment' && reference.kind !== 'artifact') {
+      throw new CoreError('INVALID_INPUT', 'A product download needs an attachment or recorded artifact.')
+    }
+    return this.readAssetPage(reference, options, false)
+  }
+
+  private async readAssetPage(reference: EnvironmentAssetReference, options: { offset?: number; maxBytes?: number }, redact: boolean): Promise<EnvironmentAssetPage> {
     this.permission('read')
     if (!matchesEnvironment(reference, this.environmentIdentity())) {
       throw new CoreError('REFERENCE_STALE', 'The reference belongs to a different execution world; read it only through that Environment\'s original identity.')
@@ -271,7 +350,7 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
       if (!full || full.bytes !== reference.bytes || full.sha256 !== reference.sha256) {
         throw new CoreError('REFERENCE_STALE', 'The attachment reference no longer matches the stored object.')
       }
-      return pageOf(reference, read.data, offset, maxBytes, text => this.sanitize(text))
+      return pageOf(reference, read.data, offset, maxBytes, redact ? text => this.sanitize(text) : undefined)
     }
     if (reference.kind === 'spill') {
       const { jobId, stream } = parseSpillAssetId(reference.id)
@@ -286,7 +365,7 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
     }
     if (offset > reference.bytes) throw new CoreError('INVALID_INPUT', 'Asset offsets must address bytes already observed.')
     const window = await this.context.fs.readByteRange(target, { offset, length: Math.min(maxBytes, reference.bytes - offset) }, undefined)
-    return pageOf(reference, window, offset, maxBytes, text => this.sanitize(text))
+    return pageOf(reference, window, offset, maxBytes, redact ? text => this.sanitize(text) : undefined)
   }
 
   async listSkills(): Promise<EnvironmentSkillSummary[]> {
@@ -351,29 +430,108 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
   }
 
   sanitize(text: string) {
-    return sanitizeSecrets(text).split(this.cwd).join('<workdir>')
+    let safe = sanitizeSecrets(text)
+    for (const root of new Set([this.cwd, this.owner.config.root, resolve(this.owner.config.root)].filter(Boolean))) {
+      safe = safe.split(root).join('<workdir>')
+    }
+    return safe
+  }
+
+  async inspectWorkCopy(signal?: AbortSignal) {
+    this.permission('read')
+    signal?.throwIfAborted()
+    return inspectWorkCopy(this.cwd)
   }
 
   async artifact(path: string, signal?: AbortSignal): Promise<Artifact> {
     this.permission('read')
     const target = await this.target(path, signal)
-    const bytes = await this.context.fs.readBytes(target, signal, 65536)
+    const bytes = await this.context.fs.readBytes(target, signal, maxProductAttachmentBytes)
     const relativePath = relative(this.cwd, this.context.fs.processPath(target)).split(sep).join('/')
     const sha256 = createHash('sha256').update(bytes).digest('hex')
     return { path: relativePath, bytes: bytes.length, sha256,
       reference: this.assetReference('artifact', { id: fileAssetId(sha256), path: relativePath, bytes: bytes.length, sha256 }) }
   }
 
+  async stageAttachment(reference: EnvironmentAssetReference, path: string, signal?: AbortSignal) {
+    this.permission('read'); this.permission('write')
+    if (reference.kind !== 'attachment' || !matchesEnvironment(reference, this.environmentIdentity())
+      || reference.bytes > maxProductAttachmentBytes) throw new CoreError('REFERENCE_STALE', 'The attachment belongs to another execution world.')
+    if (!reference.name?.toLowerCase().endsWith('.docx') || !path?.toLowerCase().endsWith('.docx')) {
+      throw new CoreError('INVALID_INPUT', 'Stage a Word document at a new .docx path.')
+    }
+    const target = await this.target(path, signal)
+    const read = await this.store().read(reference.id, 0, reference.bytes)
+    if (read.bytes !== reference.bytes || read.sha256 !== reference.sha256 || read.data.length !== reference.bytes) {
+      throw new CoreError('REFERENCE_STALE', 'The original attachment bytes changed.')
+    }
+    signal?.throwIfAborted()
+    const handle = await open(this.context.fs.processPath(target), 'wx')
+    try { await handle.writeFile(read.data) } finally { await handle.close() }
+    return { path, bytes: reference.bytes, sha256: reference.sha256 }
+  }
+
+  async runOffice(args: Record<string, string>, signal?: AbortSignal) {
+    this.permission('read'); this.permission('command')
+    const configured = this.owner.config.commands.office
+    if (!configured || !this.owner.config.skillsPath) throw new CoreError('UNSUPPORTED_CAPABILITY', 'Office is unavailable in this Environment.')
+    if (Object.keys(args).some(key => !['operation', 'input', 'output', 'ops'].includes(key))) throw new CoreError('INVALID_INPUT', 'Office accepts an operation, input, output and edit operations only.')
+    const operation = args.operation
+    if (!operation || !['check', 'docx-read', 'docx-edit'].includes(operation) || !args.input?.toLowerCase().endsWith('.docx')) {
+      throw new CoreError('INVALID_INPUT', 'Choose check, docx-read or docx-edit with a .docx path.')
+    }
+    const input = this.context.fs.processPath(await this.target(args.input, signal))
+    if ((await this.context.fs.stat(await this.target(args.input, signal)))?.type !== 'file') throw new CoreError('NOT_FOUND', 'The Office input file is unavailable.')
+    if (operation !== 'docx-edit' && (args.output !== undefined || args.ops !== undefined)) throw new CoreError('INVALID_INPUT', 'This Office operation is read-only.')
+    let argv: string[]
+    if (operation === 'docx-edit') {
+      if (!args.output?.toLowerCase().endsWith('.docx') || !args.ops || Buffer.byteLength(args.ops) > 16384) throw new CoreError('INVALID_INPUT', 'A Word edit needs a new .docx path and bounded operations.')
+      let operations: unknown
+      try { operations = JSON.parse(args.ops) } catch { throw new CoreError('INVALID_INPUT', 'Word edit operations must be JSON.') }
+      if (!Array.isArray(operations) || !operations.length || operations.length > 20) throw new CoreError('INVALID_INPUT', 'Provide one to twenty Word edit operations.')
+      const target = await this.target(args.output!, signal)
+      const output = this.context.fs.processPath(target)
+      if (output === input || await this.context.fs.stat(target, signal)) throw new CoreError('PATH_DENIED', 'Write a new Office file inside this work directory.')
+      argv = ['docx', 'edit', input, '-o', output, '--ops', args.ops]
+    } else argv = operation === 'check' ? ['check', input] : ['docx', 'read', input]
+    const result = await this.runArgv([...configured.argv, ...argv, '--json'], configured.timeoutMs, signal)
+    if (result.cancelled || result.truncated || result.exitCode === null) throw new CoreError('COMMAND_UNKNOWN', 'Office completion could not be confirmed; inspect the original file before any retry.')
+    if (result.exitCode !== 0) throw new CoreError('OFFICE_CHECK_FAILED', 'Office reported an error or package findings; inspect the original command result.')
+    return { operation, input: args.input, ...(args.output ? { output: args.output } : {}), ...result }
+  }
+
   async command(name: string, signal?: AbortSignal) {
     this.permission('command')
     const configured = Object.hasOwn(this.owner.config.commands, name) ? this.owner.config.commands[name] : undefined
     if (!configured) throw new CoreError('UNSUPPORTED_CAPABILITY', 'Only configured command names can run; arbitrary argv, Shell, PTY and remote tools are not enabled.')
+    return this.runArgv(configured.argv, configured.timeoutMs, signal)
+  }
+
+  private async shellArgv(command: string, signal?: AbortSignal) {
+    this.permission('command')
+    if (!this.owner.config.allowShell) throw new CoreError('UNSUPPORTED_CAPABILITY', 'Shell commands are not enabled in this Environment.')
+    if (typeof command !== 'string' || !command.trim() || Buffer.byteLength(command) > 4096 || command.includes('\0')) {
+      throw new CoreError('INVALID_INPUT', 'Use one nonempty shell command of at most 4096 bytes.')
+    }
+    const terminal = await this.context.subprocess.terminalEnvironment(signal)
+    const shell = terminal.platform === 'windows' ? 'powershell.exe' : 'sh'
+    const executable = await this.context.subprocess.resolveExecutable(shell, {}, signal)
+    return terminal.platform === 'windows'
+      ? [executable, '-NoProfile', '-NonInteractive', '-Command', command]
+      : [executable, '-c', command]
+  }
+
+  async runShell(command: string, signal?: AbortSignal) {
+    return this.runArgv(await this.shellArgv(command, signal), 10000, signal)
+  }
+
+  private async runArgv(argv: readonly string[], timeoutMs: number, signal?: AbortSignal) {
     await this.target('.', signal)
-    const deadline = AbortSignal.timeout(configured.timeoutMs)
+    const deadline = AbortSignal.timeout(timeoutMs)
     const combined = signal ? AbortSignal.any([signal, deadline]) : deadline
-    const executable = await this.context.subprocess.resolveExecutable(configured.argv[0]!, {}, combined)
+    const executable = await this.context.subprocess.resolveExecutable(argv[0]!, {}, combined)
     const collect = this.owner.store ? { maxBytes: 8192, spill: { maxBytes: maxSpillBytes } } : { maxBytes: 8192 }
-    const handle = this.context.subprocess.spawn({ argv: [executable, ...configured.argv.slice(1)], cwd: this.cwd, stdio: { stdin: 'ignore', stdout: collect, stderr: collect }, graceMs: 250, signal: combined })
+    const handle = this.context.subprocess.spawn({ argv: [executable, ...argv.slice(1)], cwd: this.cwd, stdio: { stdin: 'ignore', stdout: collect, stderr: collect }, graceMs: 250, signal: combined })
     const operationKey = randomUUID()
     try {
       const outcome = await handle.done
@@ -402,14 +560,44 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
     const configured = Object.hasOwn(this.owner.config.commands, name) ? this.owner.config.commands[name] : undefined
     if (!configured) throw new CoreError('UNSUPPORTED_CAPABILITY', 'Only configured command names can run; arbitrary argv, Shell, PTY and remote tools are not enabled.')
     if (name === this.owner.config.setup) throw new CoreError('UNSUPPORTED_CAPABILITY', 'Setup is controlled by preparation and explicit retry, not model tools.')
+    return this.startArgv(configured.argv, configured.backgroundTimeoutMs ?? configured.timeoutMs, jobId)
+  }
+
+  async startShell(command: string, jobId = randomUUID()): Promise<LocalJob> {
+    return this.startArgv(await this.shellArgv(command), 3600000, jobId)
+  }
+
+  async startTerminal(command: string, jobId = randomUUID()): Promise<LocalJob> {
+    const argv = await this.shellArgv(command)
     await this.target('.')
-    const deadline = AbortSignal.timeout(configured.backgroundTimeoutMs ?? configured.timeoutMs)
-    const executable = await this.context.subprocess.resolveExecutable(configured.argv[0]!, {}, deadline)
-    const collect = this.owner.store ? { maxBytes: 8192, spill: { maxBytes: maxSpillBytes } } : { maxBytes: 8192 }
-    const handle = this.context.subprocess.spawn({ argv: [executable, ...configured.argv.slice(1)], cwd: this.cwd,
-      stdio: { stdin: 'ignore', stdout: collect, stderr: collect }, graceMs: 250, signal: deadline })
-    return new BoundLocalJob(handle, deadline, text => this.sanitize(text), jobId,
-      (key, stream, path) => this.retainStream(key, stream, path))
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 3600000)
+    timer.unref()
+    try {
+      const handle = await this.context.subprocess.spawnTerminal({ argv, cwd: this.cwd, rows: 24, cols: 100,
+        terminalType: 'xterm-256color', graceMs: 250, signal: controller.signal })
+      const job = new BoundLocalTerminalJob(handle, controller.signal, text => this.sanitize(text), jobId,
+        (id, data) => this.owner.store?.storeSpillBytes(id, 'stdout', data).then(() => undefined) ?? Promise.resolve())
+      void job.done.finally(() => clearTimeout(timer)).catch(() => {})
+      return job
+    } catch (error) { clearTimeout(timer); throw error }
+  }
+
+  private async startArgv(argv: readonly string[], timeoutMs: number, jobId: string): Promise<LocalJob> {
+    await this.target('.')
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    timer.unref()
+    try {
+      const executable = await this.context.subprocess.resolveExecutable(argv[0]!, {}, controller.signal)
+      const collect = this.owner.store ? { maxBytes: 8192, spill: { maxBytes: maxSpillBytes } } : { maxBytes: 8192 }
+      const handle = this.context.subprocess.spawn({ argv: [executable, ...argv.slice(1)], cwd: this.cwd,
+        stdio: { stdin: 'ignore', stdout: collect, stderr: collect }, graceMs: 250, signal: controller.signal })
+      const job = new BoundLocalJob(handle, controller.signal, text => this.sanitize(text), jobId,
+        (key, stream, path) => this.retainStream(key, stream, path))
+      void job.done.finally(() => clearTimeout(timer)).catch(() => {})
+      return job
+    } catch (error) { clearTimeout(timer); throw error }
   }
 
   private async retainSpills(key: string, stdout: { spillPath?: string }, stderr: { spillPath?: string }) {
@@ -442,9 +630,11 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
 
   private async execute(name: string, args: Record<string, string>, signal?: AbortSignal): Promise<Record<string, unknown>> {
     signal?.throwIfAborted()
+    if (name === 'run_office') return this.runOffice(args, signal)
     if (name === 'save_attachment') return this.saveAttachmentTool(args)
     if (name === 'read_asset') return this.readAssetTool(args)
     if (name === 'list_skills') return { skills: await this.listSkills() }
+    if (name === 'run_shell') return this.runShell(args.command!, signal)
     if (name === 'run_command') {
       if (args.name === this.owner.config.setup) throw new CoreError('UNSUPPORTED_CAPABILITY', 'Setup is controlled by preparation and explicit retry, not model tools.')
       return this.command(args.name!, signal)

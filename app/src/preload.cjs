@@ -5,28 +5,41 @@
 // window does not have.
 const { contextBridge, ipcRenderer } = require('electron')
 
-const host = process.argv.find(value => value.startsWith('--ds-bot-origin='))?.slice('--ds-bot-origin='.length)
+const host = process.argv.find(value => value.startsWith('--ds-superagent-origin='))?.slice('--ds-superagent-origin='.length)
 if (host !== undefined && location.origin === host) {
-  // DS Bot's settings show and move the app's data location through this.
-  contextBridge.exposeInMainWorld('dsBotApp', {
-    dataLocation: () => ipcRenderer.invoke('ds-bot:data-location'),
-    moveData: (workspace) => ipcRenderer.invoke('ds-bot:move-data', typeof workspace === 'string' ? workspace : undefined),
-    teamWorkspaceChanged: (path) => { ipcRenderer.send('ds-bot:team-workspace', String(path)) },
-    // The Bot browsers, in the shape of DSH Desktop's browser bridge so that ds-bot drives both
+  // Product settings show and move the app's data location through this.
+  contextBridge.exposeInMainWorld('dsSuperagentApp', {
+    dataLocation: () => ipcRenderer.invoke('ds-superagent:data-location'),
+    moveData: (workspace) => ipcRenderer.invoke('ds-superagent:move-data', typeof workspace === 'string' ? workspace : undefined),
+    teamWorkspaceChanged: (path) => { ipcRenderer.send('ds-superagent:team-workspace', String(path)) },
+    // Product browsers, in the shape of DSH Desktop's browser bridge so the same client works in both
     // alike; `forget` clears a key's storage, which here outlives the app.
     browser: browserBridge(),
+    productClient: {
+      connect: connection => ipcRenderer.invoke('ds-superagent:client-connect', connection),
+      disconnect: () => ipcRenderer.invoke('ds-superagent:client-disconnect'),
+      status: () => ipcRenderer.invoke('ds-superagent:client-status'),
+      call: (endpoint, payload) => ipcRenderer.invoke('ds-superagent:client-call', endpoint, payload),
+      events: () => ipcRenderer.invoke('ds-superagent:client-events'),
+    },
     // The app's own updater, for the About row's state and buttons.
     updates: updatesBridge(),
+    backups: {
+      list: () => ipcRenderer.invoke('ds-superagent:backup-list'),
+      create: () => ipcRenderer.invoke('ds-superagent:backup-create'),
+      restore: id => ipcRenderer.invoke('ds-superagent:backup-restore', id),
+    },
+    diagnostics: () => ipcRenderer.invoke('ds-superagent:diagnostics-read'),
   })
-  const caption = process.argv.find(value => value.startsWith('--ds-bot-caption='))
+  const caption = process.argv.find(value => value.startsWith('--ds-superagent-caption='))
   if (caption !== undefined) {
-    ipcRenderer.on('ds-bot:fullscreen', (_event, fullscreen) => {
+    ipcRenderer.on('ds-superagent:fullscreen', (_event, fullscreen) => {
       const root = document.documentElement
       if (root === null) return
       if (fullscreen) root.dataset.fullscreen = 'true'
       else delete root.dataset.fullscreen
     })
-    const start = () => { frameless(caption.slice('--ds-bot-caption='.length), process.argv.includes('--ds-bot-mica')) }
+    const start = () => { frameless(caption.slice('--ds-superagent-caption='.length), process.argv.includes('--ds-superagent-mica')) }
     // A preload runs before the document root exists.
     if (document.readyState === 'loading') window.addEventListener('DOMContentLoaded', start, { once: true })
     else start()
@@ -36,39 +49,43 @@ if (host !== undefined && location.origin === host) {
 function browserBridge() {
   const listeners = new Map()
   const viewListeners = new Set()
-  ipcRenderer.on('ds-bot:browser-view-changed', (_event, change) => {
+  ipcRenderer.on('ds-superagent:browser-view-changed', (_event, change) => {
     for (const listener of [...viewListeners]) {
-      try { listener(change) } catch (error) { console.error('DS Bot: a browser view listener failed', error) }
+      try { listener(change) } catch (error) { console.error('DS SuperAgent: a browser view listener failed', error) }
     }
   })
-  ipcRenderer.on('ds-bot:browser-open-requested', (_event, request) => {
+  ipcRenderer.on('ds-superagent:browser-open-requested', (_event, request) => {
     if (typeof request?.lease !== 'string' || typeof request.url !== 'string') return
     for (const listener of [...(listeners.get(request.lease) ?? [])]) {
-      try { listener(request.url) } catch (error) { console.error('DS Bot: a browser link handler failed', error) }
+      try { listener(request.url) } catch (error) { console.error('DS SuperAgent: a browser link handler failed', error) }
     }
   })
   return {
-    acquire: key => ipcRenderer.invoke('ds-bot:browser-acquire', String(key)),
-    release: lease => ipcRenderer.invoke('ds-bot:browser-release', String(lease)),
-    forget: key => ipcRenderer.invoke('ds-bot:browser-forget', String(key)),
+    acquire: key => ipcRenderer.invoke('ds-superagent:browser-acquire', String(key)),
+    release: lease => ipcRenderer.invoke('ds-superagent:browser-release', String(lease)),
+    forget: key => ipcRenderer.invoke('ds-superagent:browser-forget', String(key)),
     views: {
-      create: (botId, tabId, url) => ipcRenderer.invoke('ds-bot:browser-view-create', String(botId), String(tabId), typeof url === 'string' ? url : undefined),
-      sync: botId => ipcRenderer.invoke('ds-bot:browser-view-sync', String(botId)),
-      place: (tabId, rect, visible) => ipcRenderer.invoke('ds-bot:browser-view-place', String(tabId), rect, visible === true),
-      navigate: (botId, tabId, url) => ipcRenderer.invoke('ds-bot:browser-view-navigate', String(botId), String(tabId), String(url)),
-      command: (botId, tabId, command) => ipcRenderer.invoke('ds-bot:browser-view-command', String(botId), String(tabId), String(command)),
-      focus: (botId, tabId) => ipcRenderer.invoke('ds-bot:browser-view-focus', String(botId), String(tabId)),
-      read: (botId, tabId, script) => ipcRenderer.invoke('ds-bot:browser-view-read', String(botId), String(tabId), String(script)),
-      close: (botId, tabId) => ipcRenderer.invoke('ds-bot:browser-view-close', String(botId), String(tabId)),
-      hold: (botId, held) => ipcRenderer.invoke('ds-bot:browser-view-hold', String(botId), held === true),
+      create: (botId, tabId, url) => ipcRenderer.invoke('ds-superagent:browser-view-create', String(botId), String(tabId), typeof url === 'string' ? url : undefined),
+      sync: botId => ipcRenderer.invoke('ds-superagent:browser-view-sync', String(botId)),
+      place: (tabId, rect, visible) => ipcRenderer.invoke('ds-superagent:browser-view-place', String(tabId), rect, visible === true),
+      navigate: (botId, tabId, url) => ipcRenderer.invoke('ds-superagent:browser-view-navigate', String(botId), String(tabId), String(url)),
+      command: (botId, tabId, command) => ipcRenderer.invoke('ds-superagent:browser-view-command', String(botId), String(tabId), String(command)),
+      focus: (botId, tabId) => ipcRenderer.invoke('ds-superagent:browser-view-focus', String(botId), String(tabId)),
+      read: (botId, tabId, script) => ipcRenderer.invoke('ds-superagent:browser-view-read', String(botId), String(tabId), String(script)),
+      close: (botId, tabId) => ipcRenderer.invoke('ds-superagent:browser-view-close', String(botId), String(tabId)),
+      hold: (botId, held) => ipcRenderer.invoke('ds-superagent:browser-view-hold', String(botId), held === true),
       subscribe(listener) { viewListeners.add(listener); return () => viewListeners.delete(listener) },
     },
     // Cookie imports, only in the app: sources and a two-step pick/harvest → preview → apply.
-    importSources: () => ipcRenderer.invoke('ds-bot:browser-import-sources'),
-    importPick: () => ipcRenderer.invoke('ds-bot:browser-import-pick'),
-    importLive: (source, close) => ipcRenderer.invoke('ds-bot:browser-import-live', String(source), close === true),
-    importApply: (key, pending) => ipcRenderer.invoke('ds-bot:browser-import-apply', String(key), String(pending)),
-    importCancel: (pending) => ipcRenderer.invoke('ds-bot:browser-import-cancel', String(pending)),
+    importSources: () => ipcRenderer.invoke('ds-superagent:browser-import-sources'),
+    importPick: () => ipcRenderer.invoke('ds-superagent:browser-import-pick'),
+    importLive: (source, close) => ipcRenderer.invoke('ds-superagent:browser-import-live', String(source), close === true),
+    importApply: (key, pending) => ipcRenderer.invoke('ds-superagent:browser-import-apply', String(key), String(pending)),
+    importCancel: (pending) => ipcRenderer.invoke('ds-superagent:browser-import-cancel', String(pending)),
+    credentialImport: {
+      pick: () => ipcRenderer.invoke('ds-superagent:credential-import-pick'),
+      cancel: pending => ipcRenderer.invoke('ds-superagent:credential-import-cancel', String(pending)),
+    },
     onOpenRequested(lease, listener) {
       const id = String(lease)
       let set = listeners.get(id)
@@ -84,16 +101,16 @@ function browserBridge() {
 
 function updatesBridge() {
   const listeners = new Set()
-  ipcRenderer.on('ds-bot:app-update-changed', (_event, state) => {
+  ipcRenderer.on('ds-superagent:app-update-changed', (_event, state) => {
     for (const listener of [...listeners]) {
-      try { listener(state) } catch (error) { console.error('DS Bot: an update state handler failed', error) }
+      try { listener(state) } catch (error) { console.error('DS SuperAgent: an update state handler failed', error) }
     }
   })
   return {
-    state: () => ipcRenderer.invoke('ds-bot:app-update-state'),
-    check: () => ipcRenderer.invoke('ds-bot:app-update-check'),
-    install: () => ipcRenderer.invoke('ds-bot:app-update-install'),
-    open: () => ipcRenderer.invoke('ds-bot:app-update-open'),
+    state: () => ipcRenderer.invoke('ds-superagent:app-update-state'),
+    check: () => ipcRenderer.invoke('ds-superagent:app-update-check'),
+    install: () => ipcRenderer.invoke('ds-superagent:app-update-install'),
+    open: () => ipcRenderer.invoke('ds-superagent:app-update-open'),
     subscribe(listener) {
       listeners.add(listener)
       return () => { listeners.delete(listener) }
@@ -113,7 +130,7 @@ function frameless(height, mica) {
     const value = root.getAttribute('data-ds-theme-source')
     if (value === null || value === theme) return
     theme = value
-    ipcRenderer.send('ds-bot:native-theme', value)
+    ipcRenderer.send('ds-superagent:native-theme', value)
   }
   new MutationObserver(sendTheme).observe(root, { attributeFilter: ['data-ds-theme-source'] })
   sendTheme()
@@ -184,7 +201,7 @@ function captionColors(mica) {
     const current = colors.join()
     if (current === sent) return
     sent = current
-    ipcRenderer.send('ds-bot:caption-colors', ...colors)
+    ipcRenderer.send('ds-superagent:caption-colors', ...colors)
   }
   // A dialog mounts anywhere in the page, which changes all the time; one look per frame.
   let queued = false

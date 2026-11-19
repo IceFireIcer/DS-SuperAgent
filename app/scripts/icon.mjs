@@ -1,4 +1,4 @@
-// Draws the app icon from the Main Bot's whale in ../ds-bot and writes assets/icon.svg,
+// Draws the app icon from the product's whale and writes assets/icon.svg,
 // assets/icon.png (1024 px), assets/icon.ico (Windows, 16 to 256 px) and the tray marks:
 // assets/tray.ico (Windows), assets/tray.png (Linux) and assets/trayTemplate.png with its
 // @2x (macOS).
@@ -8,7 +8,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { characterMarkup, MASK_ID } from '../../ds-bot/src/client/characters.js'
+import { characterMarkup, MASK_ID } from '../../superagent/dsh/src/client/characters.js'
 
 const here = fileURLToPath(import.meta.url)
 const assets = join(dirname(here), '..', 'assets')

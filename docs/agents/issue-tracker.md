@@ -11,12 +11,14 @@
 
 ## 当前规格
 
-- [Spec: Rebuild DS Bot around the Super-agent architecture](https://github.com/IceFireIcer/DS-SuperAgent/issues/1)
-- 本地正文：[Super-agent 架构重建规格 v2.1](../superagent/spec.md)。
+- [总体规格 #1（当前以 R5 正式规格为准）](https://github.com/IceFireIcer/DS-SuperAgent/issues/1)
+- 本地正文：[Super-agent 三层独立产品规格 R5](../superagent/spec-r5.md)；它显式替代 v2.1 的 D01、D17、D18、D20 冲突条款。
 - 标签：ready-for-agent、enhancement。
-- 实施结构为总规格 → G01—G14 功能父票 → T01—T53 实施子票；T54/T55 直接属于总规格。发布结果及原生关系以 [publication.json](../superagent/publication.json) 的回读验证记录为准。
-- 功能父票使用 enhancement 聚合；实施子票使用 ready-for-agent 和 enhancement。实施只从已满足具体 blockers 的子票开始，不能将功能父票或总体规格误作单张可一次完成的实现任务。
-- 每张实施票只有一个功能父票；跨功能依赖仍由子票的原生 blocked-by 表达，不新增整组阻塞。父票完成需子票证据及完整功能场景验收。
+- 当前 R5 使用总规格 → R5-01—R5-36 的直接原生子 Issue，不再创建功能聚合父票；具体前置用原生 blocked-by 表达。[拆分正文](../superagent/r5-tickets-draft.md)记录已批准的范围，[r5-publication.json](../superagent/r5-publication.json)记录发布映射与回读状态；只有 `verified: true` 才表示整批发布核对完成。
+- R5 实施票使用 ready-for-agent 和 enhancement；只从本批次已满足具体 blockers 的票开始，不能把总体规格当作单张可一次完成的实现任务。初始入口是 [R5-01 / #93](https://github.com/IceFireIcer/DS-SuperAgent/issues/93)。
+- 原 v2.1 的总规格 → G01—G14 → T01—T53、T54/T55 层级作为历史保留，[publication.json](../superagent/publication.json)仍是该批次原始发布记录，不覆盖为 R5 数据。
+- 维护者于 2026-11-14 批准这 36 张票，并明确要求先清理远端可关闭的旧 Issue、再发布新票。G01—G14（#15—#28）及旧 T56/#90 因被 R5 替代关闭为 not planned，原正文、子票和实现证据保留；关闭评论链接对应的新票，不将计划退休记作验收通过。
+- 总规格 #1、最终验收 T55/#83、真实托管及第二设备验收 T58/#92 保持开放；本轮不改其正文或既有阻塞关系。T55/T58 的旧前置全部关闭也不代表 R5 已具备验收条件，应按 R5 承接票和实际证据判断；暂缓的真实飞书验收不重新列为发布阻塞。
 
 ## Wayfinding operations
 

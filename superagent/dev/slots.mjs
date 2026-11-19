@@ -13,7 +13,7 @@ const workload = { normalSlots: 2, prioritySlots: 1, launchTickets: 6, workerTur
 const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
 const percentile = (samples, fraction) => [...samples].sort((left, right) => left - right)[Math.min(samples.length - 1, Math.floor(samples.length * fraction))]
 
-const directory = await mkdtemp(join(tmpdir(), 'ds-bot-slot-load-'))
+const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-slot-load-'))
 let context, storage, sessions, engine
 let running = 0
 let peak = 0

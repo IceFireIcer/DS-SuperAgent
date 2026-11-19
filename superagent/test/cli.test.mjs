@@ -32,17 +32,18 @@ test('real process exits before and after commit preserve the correct acceptance
   const databasePath = join(directory, 'state.sqlite')
   t.after(() => rm(directory, { recursive: true, force: true }))
   const fixture = fileURLToPath(new URL('./fixtures/crash.mjs', import.meta.url))
-  const config = { databasePath, instanceId: 'private', source: { sourceInstanceId: 'desktop-one', actorId: 'local-user', allowedActorIds: ['local-user'] } }
+  const config = { databasePath, instanceId: 'private', source: { sourceInstanceId: 'desktop-one', actorId: 'local-user', allowedActorIds: ['local-user'] },
+    host: { leaseMs: 20, now: () => Date.now() + 600000 } }
   await assert.rejects(execute(process.execPath, [fixture, databasePath, 'before'], { timeout: 10000 }), { code: 17 })
   const before = new Context()
-  await before.plugin(plugin, config)
+  await before.plugin(plugin.enginePlugin, config)
   try {
     assert.equal(await before.get('superagent').getReceipt('crash-command'), undefined)
     assert.deepEqual(await before.get('superagent').listTickets(), { items: [], hasMore: false })
   } finally { await before.fiber.dispose() }
   await assert.rejects(execute(process.execPath, [fixture, databasePath, 'after'], { timeout: 10000 }), { code: 18 })
   const after = new Context()
-  await after.plugin(plugin, config)
+  await after.plugin(plugin.enginePlugin, config)
   try {
     const receipt = await after.get('superagent').getReceipt('crash-command')
     assert.equal(receipt.status, 'pending')
@@ -52,7 +53,7 @@ test('real process exits before and after commit preserve the correct acceptance
 })
 
 test('the source CLI receives edits, queries history and refuses deleted content for new work', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-source-cli-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-source-cli-'))
   t.after(() => rm(directory, { recursive: true, force: true }))
   const config = ['--database', join(directory, 'state.sqlite'), '--instance', 'private', '--source', 'desktop-one', '--actor', 'user', '--allow-actor', 'user', '--allow-thread', 'room', '--version-order', 'sequence']
   const run = async args => JSON.parse((await execute(process.execPath, [cli, ...args, ...config], { timeout: 10000 })).stdout)

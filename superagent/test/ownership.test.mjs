@@ -9,7 +9,7 @@ import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, textResponse, toolResponse } from '../dev/native-mock.mjs'
 
 async function fixture(t, options = {}) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-ownership-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-ownership-'))
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
   const engine = new Engine(storage, 'private', {
@@ -54,7 +54,7 @@ test('an added Thread subscription applies only to later events and a Thread fan
 })
 
 test('all owners must hand back before manual requeue creates a new evaluation instead of reattaching the old Tickets', { timeout: 15000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-handback-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-handback-'))
   let native, storage, sessions, engine
   t.after(async () => {
     await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
@@ -175,7 +175,7 @@ test('unsubscribe keeps received ownership, required Threads stay bound, and cro
 })
 
 test('a Worker can add and later remove only its own non-required Thread subscription', { timeout: 15000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-worker-subscriptions-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-worker-subscriptions-'))
   let native, storage, sessions, engine
   t.after(async () => {
     await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
@@ -269,7 +269,7 @@ test('an authorized operator can dismiss an unavailable Eval while preserving it
 })
 
 test('manual requeue overrides only the prior automatic decision for the requested event', { timeout: 15000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-prior-requeue-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-prior-requeue-'))
   let native, storage, sessions, engine
   t.after(async () => {
     await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()

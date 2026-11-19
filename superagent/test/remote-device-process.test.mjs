@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import * as core from '../dist/index.js'
 
 test('a separate device process serves a paired host over the encrypted channel', { timeout: 20000 }, async context => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-remote-process-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-remote-process-'))
   const root = join(directory, 'device-work')
   await mkdir(root)
   const config = join(directory, 'device.json')

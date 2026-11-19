@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
-import { MessageId } from '@deepseek-ai/dsh-llm'
+import { MessageId, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { SessionId, type TurnEndReason } from '@deepseek-ai/dsh-session'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { Context } from '@deepseek-ai/cordis'
@@ -8,6 +8,7 @@ import { CoreError, identifier } from './model.js'
 import type { AsyncTx, Storage } from './storage.js'
 import type { NativeTool } from './native-sessions.js'
 import { BackgroundWork } from './background.js'
+import type { RoleModel } from './config.js'
 
 export type SubagentState = 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled' | 'unknown'
 export type SubagentCancelReason = 'human' | 'worker' | 'stop' | 'assignment-ended' | 'deadline'
@@ -24,6 +25,7 @@ export interface SubagentRecord {
   mandateId: string
   environmentId: string
   sessionId: string
+  configurationRevision?: number
   task: string
   state: SubagentState
   startedAt: number
@@ -40,6 +42,8 @@ export interface SubagentView {
   assignmentId: string
   generation: string
   mandateId: string
+  configurationRevision?: number
+  sessionId: string
   task: string
   state: SubagentState
   /** A completed, failed or cancelled child has finished; only `completed` succeeded. */
@@ -74,7 +78,9 @@ export interface SubagentScope {
   mandateId: string
   /** Tools that are safe to hand down. Router-only and delivery tools are never in this list. */
   tools: NativeTool[]
-  model: { provider: string; model: string }
+  model: RoleModel
+  configurationRevision: number
+  recordUse(sessionId: string): Promise<void>
   /** Read-only look at the durable facts, used before a subtask may start. */
   authorize(tx: AsyncTx): Promise<void>
   /** Re-checks, before every child tool call, that this subtask is still the live one. */
@@ -99,6 +105,8 @@ export interface SubagentHandlers {
 
 const prefix = (ticketId: string) => JSON.stringify(['subagent', ticketId])
 const key = (ticketId: string, id: string) => `${prefix(ticketId)}:${id}`
+const historyKey = (ticketId: string) => JSON.stringify(['subagent-history', ticketId])
+interface SubagentHistory { ticketId: string; ids: string[] }
 const settledStates: SubagentState[] = ['completed', 'failed', 'cancelled']
 
 /**
@@ -117,6 +125,8 @@ export class Subagents {
   private readonly running = new Map<string, { record: SubagentRecord; handle?: AgentHandle; created: Promise<void> }>()
   /** Ids whose record committed but whose child Agent is still being created or stopped. */
   private readonly claimed = new Set<string>()
+  /** Ids whose stop has been observed but whose terminal fact has not committed yet. */
+  private readonly stops = new Set<string>()
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>()
   private readonly index: BackgroundWork
   private handlers: SubagentHandlers | undefined
@@ -147,9 +157,10 @@ export class Subagents {
     identifier(request.id, 'subagentId')
     const record: SubagentRecord = { id: request.id, ticketId: request.ticketId, assignmentId: request.assignmentId,
       generation: request.generation, mandateId: request.mandateId, environmentId: request.scope.environmentId, sessionId: `subagent-${randomUUID()}`,
-      task: request.task, state: 'running', startedAt: this.now(), runtimeToken: this.runtimeToken }
+      configurationRevision: request.scope.configurationRevision, task: request.task, state: 'running', startedAt: this.now(), runtimeToken: this.runtimeToken }
     await tx.insert('subagent', key(record.ticketId, record.id), record)
     await this.index.add(tx, record.ticketId, { id: record.id, assignmentId: record.assignmentId })
+    await this.remember(tx, record.ticketId, record.id)
     // The claim starts with the record, not with the child: a read between commit and creation must not call it lost.
     this.claimed.add(record.id)
     // `attach` replaces this placeholder with the real creation promise; a start abandoned first never attaches.
@@ -177,6 +188,7 @@ export class Subagents {
   /** Ends a start whose record did not commit; nothing was launched yet, so there is nothing to stop. */
   abandon(id: string) {
     this.claimed.delete(id)
+    this.stops.delete(id)
     this.running.delete(id)
     this.releaseTimer(id)
   }
@@ -248,7 +260,10 @@ export class Subagents {
    */
   async stopChildren(ids: string[]): Promise<string[]> {
     const stopped: string[] = []
-    for (const id of ids) this.claimed.add(id)
+    for (const id of ids) {
+      this.stops.add(id)
+      this.claimed.add(id)
+    }
     // One deadline covers the whole stop, so waiting for creation and for quiescence never adds up past the budget.
     const deadline = AbortSignal.timeout(this.cleanupMs)
     await Promise.all(ids.map(async id => {
@@ -273,6 +288,7 @@ export class Subagents {
       const entry = this.running.get(id)
       this.running.delete(id)
       this.claimed.delete(id)
+      this.stops.delete(id)
       this.releaseTimer(id)
       await this.disposeBounded(entry?.handle)
     }
@@ -285,6 +301,7 @@ export class Subagents {
     const handles = [...this.running.values()].map(entry => entry.handle).filter(handle => handle !== undefined)
     this.running.clear()
     this.claimed.clear()
+    this.stops.clear()
     await Promise.all(handles.map(handle => this.disposeBounded(handle)))
   }
 
@@ -303,7 +320,8 @@ export class Subagents {
         sessionId: SessionId(record.sessionId),
         parentAgent: scope.parent,
         meta: { cwd: scope.cwd, origin: 'subagent', delegationDepth: 1, parentSession: scope.parent.id },
-        agentOptions: scope.model,
+        agentOptions: { provider: scope.model.provider, model: scope.model.model,
+          ...(scope.model.effort ? { reasoningEffort: ReasoningEffortId(scope.model.effort) } : {}) },
         setup: scoped => {
           // The child inherits only the parent's already-authorised work tools; a fresh scope, never a global one.
           scoped.tools.restrict({ allow: [] })
@@ -318,7 +336,8 @@ export class Subagents {
       created()
       const current = await this.storage.transaction(this.instanceId, tx => this.get(tx, record.ticketId, record.id))
       // A stop or cancel that landed while the child was starting must not be overtaken by this turn.
-      if (!current || current.state !== 'running') { await this.close(record.id); return }
+      if (!current || current.state !== 'running') { await this.close(record.id, this.stops.has(record.id)); return }
+      await scope.recordUse(record.sessionId)
       handle.agent.followup({ id: MessageId(randomUUID()), role: 'user', content: [{ type: 'text', text: record.task }], source: { kind: 'user' } })
       await handle.agent.whenIdle()
       if (!await this.context.sessions.flush(handle.agent.session)) throw new CoreError('PERSISTENCE_REQUIRED', 'No persistence provider confirmed the child Session flush.')
@@ -326,10 +345,10 @@ export class Subagents {
       const result = boundedResult(agent, this.maxResultBytes)
       const outcome = turnOutcome(agent)
       settled = await this.storage.transaction(this.instanceId, tx => this.settle(tx, record, result, outcome))
-      await this.close(record.id)
+      await this.close(record.id, this.stops.has(record.id))
     } catch (error) {
       created()
-      await this.close(record.id)
+      await this.close(record.id, this.stops.has(record.id))
       const reason = error instanceof CoreError ? error.message : 'The child Agent did not finish its subtask.'
       settled = await this.storage.transaction(this.instanceId, tx => this.fail(tx, record, reason)).catch(() => undefined)
     }
@@ -337,10 +356,10 @@ export class Subagents {
     if (settled) this.handlers?.settled(settled)
   }
 
-  private async close(id: string) {
+  private async close(id: string, keepClaim = false) {
     const entry = this.running.get(id)
     this.running.delete(id)
-    this.claimed.delete(id)
+    if (!keepClaim) this.claimed.delete(id)
     this.releaseTimer(id)
     await this.disposeBounded(entry?.handle)
   }
@@ -409,25 +428,60 @@ export class Subagents {
 
   /** Every known subtask of the Ticket, bounded to the newest records so history never breaks the query. */
   async listIn(tx: AsyncTx, ticketId: string) {
+    const history = await tx.get<SubagentHistory>('background', historyKey(ticketId))
+    // An index below the display capacity cannot be assumed complete: it may predate a record written by another
+    // runtime or imported outside this class. Rebuild it from the durable records before trusting it.
+    if (history && history.ids.length >= this.maxRecords) {
+      const records: SubagentRecord[] = []
+      for (const id of history.ids) {
+        const record = await tx.get<SubagentRecord>('subagent', key(ticketId, id))
+        if (record) records.push(await this.reconcile(tx, record))
+      }
+      return records.sort((left, right) => left.startedAt - right.startedAt || left.id.localeCompare(right.id)).slice(-this.maxRecords)
+    }
+    const ordered = this.order(await this.scanIn(tx, ticketId))
+    await this.writeHistory(tx, ticketId, ordered.map(record => record.id))
+    const records: SubagentRecord[] = []
+    for (const record of ordered) records.push(await this.reconcile(tx, record))
+    return records
+  }
+
+  private async scanIn(tx: AsyncTx, ticketId: string) {
     const items: SubagentRecord[] = []
     const recordPrefix = `${prefix(ticketId)}:`
     let cursor = recordPrefix
-    for (let pageCount = 0; pageCount < 10; pageCount++) {
+    for (;;) {
       const page = await tx.scan<SubagentRecord>('subagent', { limit: 100, after: cursor })
       for (const item of page.items) {
         // The cursor is a lower bound, not a prefix filter; another Ticket's key can sort inside this range.
         if (!item.id.startsWith(recordPrefix)) continue
-        items.push(await this.reconcile(tx, item.value))
+        items.push(item.value)
       }
       if (!page.cursor || !page.cursor.startsWith(recordPrefix)) break
       cursor = page.cursor
     }
-    return items.sort((left, right) => left.startedAt - right.startedAt || left.id.localeCompare(right.id)).slice(-this.maxRecords)
+    return items
+  }
+
+  private async remember(tx: AsyncTx, ticketId: string, ...ids: string[]) {
+    const history = await tx.get<SubagentHistory>('background', historyKey(ticketId))
+    const existing = history?.ids ?? this.order(await this.scanIn(tx, ticketId)).map(record => record.id)
+    await this.writeHistory(tx, ticketId, existing, ids)
+  }
+
+  private async writeHistory(tx: AsyncTx, ticketId: string, existing: string[], appended: string[] = []) {
+    const next: SubagentHistory = { ticketId, ids: [...existing.filter(id => !appended.includes(id)), ...appended].slice(-this.maxRecords) }
+    if (!await tx.replace('background', historyKey(ticketId), next)) await tx.insert('background', historyKey(ticketId), next)
+  }
+
+  private order(records: SubagentRecord[]) {
+    return records.sort((left, right) => left.startedAt - right.startedAt || left.id.localeCompare(right.id)).slice(-this.maxRecords)
   }
 
   private viewOf(record: SubagentRecord): SubagentView {
     return { id: record.id, ticketId: record.ticketId, assignmentId: record.assignmentId, generation: record.generation,
-      mandateId: record.mandateId, task: record.task, state: record.state,
+      mandateId: record.mandateId, ...(record.configurationRevision === undefined ? {} : { configurationRevision: record.configurationRevision }), sessionId: record.sessionId,
+      task: record.task, state: record.state,
       settled: settledStates.includes(record.state), succeeded: record.state === 'completed',
       startedAt: record.startedAt, ...(record.finishedAt === undefined ? {} : { finishedAt: record.finishedAt }),
       ...(record.result ? { result: record.result } : {}), ...(record.cancelReason ? { cancelReason: record.cancelReason } : {}),

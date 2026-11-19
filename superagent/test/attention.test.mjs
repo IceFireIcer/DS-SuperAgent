@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -8,7 +9,7 @@ import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, textResponse, toolResponse } from '../dev/native-mock.mjs'
 
 async function runtimeFixture(t) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-attention-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-attention-'))
   let native, storage, sessions, engine
   t.after(async () => {
     await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
@@ -101,7 +102,7 @@ test('the chat preview exposes and accepts an inline authorized Attention answer
 })
 
 test('waiting-human survives ordinary follow-ups, rejects unauthorized answers, and leaves unrelated work independent', { timeout: 15000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-attention-isolation-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-attention-isolation-'))
   let native, storage, sessions, engine
   t.after(async () => {
     await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
@@ -162,7 +163,7 @@ test('waiting-human survives ordinary follow-ups, rejects unauthorized answers, 
 })
 
 test('a newer question supersedes the old one and rejects an answer intended for stale work', { timeout: 15000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-attention-supersede-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-attention-supersede-'))
   let native, storage, sessions, engine
   t.after(async () => {
     await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
@@ -210,7 +211,7 @@ test('a newer question supersedes the old one and rejects an answer intended for
 })
 
 test('a source-event answer must come from the addressed human and current source', { timeout: 15000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-attention-actor-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-attention-actor-'))
   let native, storage, sessions, engine
   t.after(async () => {
     await engine?.effects.stop(); await sessions?.close(); await native?.fiber.dispose(); await storage?.close()
@@ -285,7 +286,7 @@ test('answering before a question Outbox is delivered records a confirmed stale 
   assert.equal(dropped?.delivery, 'dropped')
 })
 
-test('a waiting-human question survives stop but cannot be bypassed by resume', { timeout: 15000 }, async t => {
+test('an explicit stop retires a waiting-human question and rejects its late answer', { timeout: 15000 }, async t => {
   const { engine } = await runtimeFixture(t)
   const receipt = await engine.submit({ commandId: 'stopped-question', eventId: 'stopped-question-message', text: 'Request a human decision.' })
   for (let index = 0; index < 6; index++) await engine.effects.drain()
@@ -293,11 +294,33 @@ test('a waiting-human question survives stop but cannot be bypassed by resume', 
   const stopped = await engine.stopTicket({ commandId: 'stop-question', ticketId: receipt.ticketId, reason: 'Pause all work.' })
   assert.equal(stopped.status, 'stopped')
   assert.equal(stopped.stop?.previousConstraint?.kind, 'waiting-human')
-  await assert.rejects(engine.resumeTicket({ commandId: 'resume-question', ticketId: receipt.ticketId }), { code: 'WAITING_HUMAN' })
-  const answered = await engine.answerAttention({ commandId: 'answer-stopped-question', attentionId: stopped.attention.id, text: 'Use the blue option.' })
-  assert.equal(answered.attention.status, 'answered')
+  assert.equal(stopped.attention?.status, 'superseded')
+  await assert.rejects(engine.answerAttention({ commandId: 'answer-stopped-question', attentionId: stopped.attention.id, text: 'Use the blue option.' }),
+    { code: 'TICKET_STOPPED' })
   assert.equal((await engine.getTicketDirection(receipt.ticketId)).constraint?.kind, 'stopped')
-  await engine.resumeTicket({ commandId: 'resume-after-answer', ticketId: receipt.ticketId })
-  for (let index = 0; index < 6; index++) await engine.effects.drain()
-  assert.equal((await engine.conversation(receipt.ticketId)).status, 'ready')
+  await engine.resumeTicket({ commandId: 'resume-after-stop', ticketId: receipt.ticketId })
+  const resumed = await engine.conversation(receipt.ticketId)
+  assert.equal(resumed.lifecycle, 'open')
+  assert.equal(resumed.attention?.status, 'superseded')
+  assert.equal((await engine.getTicketDirection(receipt.ticketId)).constraint, undefined)
+})
+
+test('Attention history keeps paging after the first page instead of treating its last ID as the prefix', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-attention-history-'))
+  const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
+  const engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'], versionOrder: 'sequence' })
+  const ticketId = 'history-ticket'
+  const prefix = `${JSON.stringify(['attention', createHash('sha256').update(ticketId).digest('hex')])}:`
+  await storage.transaction('private', async tx => {
+    for (let sequence = 1; sequence <= 250; sequence++) {
+      const id = `${prefix}${String(sequence).padStart(6, '0')}`
+      await tx.insert('attention', id, { id, instanceId: 'private', ticketId, assignmentId: 'assignment', sessionId: 'session',
+        question: `Question ${sequence}`, options: [], destination: { sourceInstanceId: 'desktop', actorId: 'user', eventId: 'event' },
+        status: 'answered', sequence, createdAt: sequence })
+    }
+  })
+  const { history } = await engine.getTicketAttention(ticketId)
+  assert.equal(history.length, 250)
+  assert.deepEqual(history.map(attention => attention.sequence), Array.from({ length: 250 }, (_value, index) => index + 1))
 })

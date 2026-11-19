@@ -33,7 +33,7 @@ async function main(args: string[]) {
   }
   const versionOrder = sourceAction ? required('version-order') : undefined
   if (versionOrder !== undefined && versionOrder !== 'sequence' && versionOrder !== 'opaque') throw new CoreError('INVALID_INPUT', 'Use sequence or opaque native version ordering.')
-  const config: plugin.Config = {
+  const config: plugin.EngineConfig = {
     databasePath: required('database'), instanceId: required('instance'),
     source: { sourceInstanceId: required('source'), actorId: required('actor'), allowedActorIds: [required('allow-actor')],
       ...(versionOrder ? { versionOrder, allowedThreadIds: [required('allow-thread')] } : {}) },
@@ -41,7 +41,7 @@ async function main(args: string[]) {
   for (const key of extra) required(key)
   const ctx = new Context()
   try {
-    await ctx.plugin(plugin, config)
+    await ctx.plugin(plugin.enginePlugin, config)
     const engine = ctx.get('superagent')
     if (!engine) throw new CoreError('SETUP_FAILED', 'The Super-agent plugin did not start.')
     const ref = sourceAction && action !== 'source-receipt' ? { threadId: required('thread'), objectId: required('object') } : undefined

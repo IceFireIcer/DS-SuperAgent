@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { CoreError, identifier } from './model.js'
 import type { AsyncTx, Storage } from './storage.js'
-import type { SourceEvents } from './source-events.js'
+import type { SourceEvent, SourceEvents } from './source-events.js'
 
 export type DeliveryConditionKind = 'pr'
 export type DeliveryConditionState = 'open' | 'draft' | 'merged' | 'closed'
@@ -28,7 +28,7 @@ export interface DeliveryTarget {
   instanceId: string
   ticketId: string
   purpose: 'result' | 'answer'
-  destination: { sourceInstanceId: string; threadId: string; objectId: string }
+  destination: { sourceInstanceId: string; actorId: string; threadId: string; objectId: string }
   evidence: string
   evidenceEventId?: string
   authorizedBy: string
@@ -63,25 +63,25 @@ export class DeliveryState {
   }
 
   async reconcileFromSource(tx: AsyncTx, ticketId: string, event: { sourceInstanceId: string; text?: string }): Promise<DeliveryCondition[] | undefined> {
-    const match = event.text?.match(/(?:pull request|PR)\s*#?(\d+)/iu) ?? (event.text ?? '').match(/pull_request\\?[":s]*(\d+)/iu)
-    const number = match ? Number(match[1]) : undefined
-    if (!number) return undefined
+    // Only the adapter's structured header changes a condition; free text stays delivery evidence.
+    const match = /^Pull request #([1-9]\d*) (created|edited|closed|merged|deleted)(?: \((open|draft|closed|merged)\))?\./u.exec(event.text ?? '')
+    if (!match) return undefined
+    const number = Number(match[1])
+    const state = nativeConditionState(match[2], match[3])
+    if (!Number.isSafeInteger(number) || !state) return undefined
     const id = `${conditionPrefix(ticketId)}${conditionKey(ticketId, event.sourceInstanceId, number)}`
     const condition = await tx.get<DeliveryCondition>('delivery-condition', id)
     if (!condition) return undefined
     const text = event.text ?? ''
-    const state: DeliveryConditionState = /merged/iu.test(text) ? 'merged'
-      : /reopen/iu.test(text) ? 'open'
-        : /close|closed/iu.test(text) ? 'closed'
-          : /\(draft\)/iu.test(text) ? 'draft' : 'open'
     await this.updateState(tx, condition, state, text)
     return this.list(tx, ticketId)
   }
 
   async updateState(tx: AsyncTx, condition: DeliveryCondition, state: DeliveryConditionState, evidence: string) {
-    // result is intentionally omitted for open/draft.
-    const stored: DeliveryCondition = { ...condition, state, updatedAt: this.now(),
-      ...(state === 'merged' || state === 'closed' ? { result: state === 'merged' ? 'merged' : 'dropped', reason: evidence.slice(0, 1024) } : {}) }
+    const { result: _result, reason: _reason, ...current } = condition
+    const stored: DeliveryCondition = state === 'merged' || state === 'closed'
+      ? { ...current, state, updatedAt: this.now(), result: state === 'merged' ? 'merged' : 'dropped', reason: evidence.slice(0, 1024) }
+      : { ...current, state, updatedAt: this.now() }
     await tx.replace('delivery-condition', condition.id, stored)
     const historyKey = `${JSON.stringify(['delivery-condition-history', condition.ticketId])}:${condition.id}:${this.now()}`
     if (!await tx.replace('delivery-condition-history', historyKey, stored)) await tx.insert('delivery-condition-history', historyKey, stored)
@@ -105,22 +105,34 @@ export class DeliveryState {
     throw new CoreError('DELIVERY_BUDGET', 'The Ticket delivery-condition history exceeds its 1000-record budget.')
   }
 
-  async setTarget(tx: AsyncTx, request: { ticketId: string; purpose: 'result' | 'answer'; sourceInstanceId: string; threadId: string; objectId: string; evidence: string; evidenceEventId?: string; authorizedBy: string }): Promise<DeliveryTarget> {
+  async setTarget(tx: AsyncTx, request: { ticketId: string; purpose: 'result' | 'answer'; sourceInstanceId: string; actorId: string; threadId: string; objectId: string; evidence: string; evidenceEventId?: string; authorizedBy: string }): Promise<DeliveryTarget> {
     identifier(request.ticketId, 'ticketId'); identifier(request.sourceInstanceId, 'sourceInstanceId')
-    identifier(request.threadId, 'threadId'); identifier(request.objectId, 'objectId')
+    identifier(request.actorId, 'actorId'); identifier(request.threadId, 'threadId'); identifier(request.objectId, 'objectId')
     if (!request.evidence.trim() || Buffer.byteLength(request.evidence) > 4096) throw new CoreError('INVALID_INPUT', 'A delivery-target change needs bounded evidence.')
     identifier(request.authorizedBy, 'authorizedBy')
     const target: DeliveryTarget = { id: `${targetPrefix(request.ticketId)}${request.purpose}`, instanceId: this.instanceId, ticketId: request.ticketId,
-      purpose: request.purpose, destination: { sourceInstanceId: request.sourceInstanceId, threadId: request.threadId, objectId: request.objectId },
+      purpose: request.purpose, destination: { sourceInstanceId: request.sourceInstanceId, actorId: request.actorId,
+        threadId: request.threadId, objectId: request.objectId },
       evidence: request.evidence, ...(request.evidenceEventId ? { evidenceEventId: request.evidenceEventId } : {}), authorizedBy: request.authorizedBy, createdAt: this.now() }
     if (!await tx.replace('delivery-target', target.id, target)) await tx.insert('delivery-target', target.id, target)
-    const decisionKey = `${JSON.stringify(['delivery-target-decision', request.ticketId])}:${createHash('sha256').update(JSON.stringify([request.purpose, request.threadId, request.objectId, request.evidence])).digest('hex')}`
+    const decisionKey = `${JSON.stringify(['delivery-target-decision', request.ticketId])}:${createHash('sha256').update(JSON.stringify([request.purpose, request.sourceInstanceId, request.actorId, request.threadId, request.objectId, request.evidence])).digest('hex')}`
     if (!await tx.get('delivery-target-decision', decisionKey)) await tx.insert('delivery-target-decision', decisionKey, { ...target, recordedAt: this.now() })
     return target
   }
 
   async target(tx: AsyncTx, ticketId: string, purpose: 'result' | 'answer'): Promise<DeliveryTarget | undefined> {
     identifier(ticketId, 'ticketId')
-    return tx.get('delivery-target', `${targetPrefix(ticketId)}${purpose}`)
+    const target = await tx.get<DeliveryTarget>('delivery-target', `${targetPrefix(ticketId)}${purpose}`)
+    if (!target || target.destination.actorId) return target
+    const event = target.evidenceEventId ? await tx.get<SourceEvent>('source-event', target.evidenceEventId) : undefined
+    if (!event?.authorId) throw new CoreError('INCOMPLETE_STATE', 'A stored delivery target is missing its evidence author identity.')
+    const migrated: DeliveryTarget = { ...target, destination: { ...target.destination, actorId: event.authorId } }
+    await tx.replace('delivery-target', target.id, migrated)
+    return migrated
   }
+}
+
+function nativeConditionState(action: string | undefined, state: string | undefined): DeliveryConditionState | undefined {
+  if (action === 'deleted') return 'closed'
+  return state === 'open' || state === 'draft' || state === 'closed' || state === 'merged' ? state : undefined
 }

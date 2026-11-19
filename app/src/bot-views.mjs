@@ -47,6 +47,8 @@ export class BotViews {
   #saved = {}
   #active = new Map()
   #held = new Set()
+  #productProfiles = new Set()
+  #productControls = new Map()
   // The tabs whose view waits for a window to belong to.
   #waiting = new Set()
 
@@ -104,6 +106,7 @@ export class BotViews {
   }
 
   create(botId, { url = 'about:blank', createdByBot = false, openerId, tabId: requestedTabId } = {}) {
+    if (this.#productProfiles.has(botId) && !this.#held.has(botId)) throw new Error('Take over the product browser before opening its view')
     const tabId = requestedTabId ?? randomUUID()
     const existing = this.#views.get(tabId)
     if (existing) {
@@ -118,7 +121,9 @@ export class BotViews {
         webviewTag: false, plugins: false, navigateOnDragDrop: false, disableDialogs: true, devTools: this.#devTools,
       },
     })
-    const entry = { tabId, botId, view, createdByBot, openerId, sessions: new Map(), sessionMaps: new Map(), downloads: new Map(), downloadPath: this.#downloadPaths.get(botId), mainFrameId: undefined }
+    const entry = { tabId, botId, view, createdByBot, openerId,
+      ...(this.#productProfiles.has(botId) ? { controlId: this.#productControls.get(botId)?.id } : {}),
+      sessions: new Map(), sessionMaps: new Map(), downloads: new Map(), downloadPath: this.#downloadPaths.get(botId), mainFrameId: undefined }
     this.#views.set(tabId, entry)
     const owner = this.#window()
     if (owner !== undefined && owner !== null) owner.contentView.addChildView(view)
@@ -129,6 +134,7 @@ export class BotViews {
     const contents = view.webContents
     const clients = this.#clients.get(botId) ?? []
     for (const client of clients) {
+      if (!client.active) continue
       if (client.discover) this.#send(client.socket, { method: 'Target.targetCreated', params: { targetInfo: this.#targetInfo(entry) } })
       if (client.autoAttach) client.attach(entry)
     }
@@ -253,6 +259,12 @@ export class BotViews {
   place(tabId, rect, visible = rect !== null) {
     const entry = this.#views.get(tabId)
     if (!entry) return false
+    if (visible && this.#productProfiles.has(entry.botId) && !this.#held.has(entry.botId)) {
+      throw new Error('The product browser has been returned')
+    }
+    if (visible && this.#productProfiles.has(entry.botId) && entry.controlId !== this.#productControls.get(entry.botId)?.id) {
+      throw new Error('The product browser control changed')
+    }
     if (rect !== null) entry.view.setBounds(rectOf(rect))
     entry.view.setVisible(visible === true)
     if (visible === true) {
@@ -264,7 +276,11 @@ export class BotViews {
   }
 
   async operate(botId, action, payload = {}) {
+    if (action !== 'close' && this.#productProfiles.has(botId) && !this.#held.has(botId)) throw new Error('The product browser has been returned')
     const entry = this.#owned(botId, payload.tabId)
+    if (action !== 'close' && this.#productProfiles.has(botId) && entry.controlId !== this.#productControls.get(botId)?.id) {
+      throw new Error('The product browser control changed')
+    }
     const contents = entry.view.webContents
     switch (action) {
       case 'navigate': {
@@ -305,6 +321,7 @@ export class BotViews {
   }
 
   async forget(botId) {
+    this.#revokeClients(botId)
     for (const entry of [...this.#views.values()]) if (entry.botId === botId) await this.close(botId, entry.tabId)
     for (const [token, id] of this.#tokens) if (id === botId) this.#tokens.delete(token)
     this.#downloadPaths.delete(botId)
@@ -380,7 +397,17 @@ export class BotViews {
     this.#server.close()
   }
 
-  async hold(botId, held) {
+  async hold(botId, held, product = false, controlId) {
+    if (product) {
+      if (!controlId) throw new Error('Product browser control requires the original control ID')
+      const prior = this.#productControls.get(botId)
+      if (prior?.id === controlId && prior.returned && held) throw new Error('The product browser control was returned')
+      if (prior?.id !== controlId && !held) throw new Error('The product browser control changed')
+      if (prior?.id !== controlId && prior && !prior.returned) throw new Error('The product browser is already held')
+      this.#productProfiles.add(botId)
+      this.#productControls.set(botId, { id: controlId, returned: !held })
+    }
+    if (!product && this.#productProfiles.has(botId)) throw new Error('Only the product Host may change browser control')
     if (!held) {
       this.#held.delete(botId)
       return true
@@ -500,16 +527,25 @@ export class BotViews {
   }
 
   #broadcast(botId, message) {
-    for (const client of this.#clients.get(botId) ?? []) this.#send(client.socket, message)
+    for (const client of this.#clients.get(botId) ?? []) if (client.active) this.#send(client.socket, message)
   }
 
   #send(socket, message) {
     if (socket.readyState === 1) socket.send(JSON.stringify(message))
   }
 
+  #revokeClients(botId) {
+    for (const client of this.#clients.get(botId) ?? []) {
+      client.active = false
+      client.sessions.clear()
+      client.socket.close()
+      client.socket.terminate()
+    }
+  }
+
   #connect(socket, botId) {
     const sessions = new Map()
-    const clientState = { socket, botId, autoAttach: false, discover: false, attach: undefined, sessions }
+    const clientState = { socket, botId, active: true, autoAttach: false, discover: false, attach: undefined, sessions }
     const clients = this.#clients.get(botId) ?? new Set()
     clients.add(clientState)
     this.#clients.set(botId, clients)
@@ -530,6 +566,7 @@ export class BotViews {
     let commandQueue = Promise.resolve()
     socket.on('message', raw => {
       commandQueue = commandQueue.then(async () => {
+        if (!clientState.active) return
         let request
         try { request = JSON.parse(raw.toString()) } catch { return }
         const { id, method, params = {}, sessionId } = request
@@ -615,7 +652,7 @@ export class BotViews {
       }
       sessions.clear()
       clients.delete(clientState)
-      if (clients.size === 0) this.#clients.delete(botId)
+      if (clients.size === 0 && this.#clients.get(botId) === clients) this.#clients.delete(botId)
     })
   }
 

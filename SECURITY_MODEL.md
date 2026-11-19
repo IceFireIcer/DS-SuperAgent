@@ -1,67 +1,94 @@
-# DS Bot security model
+# DS SuperAgent security model
 
-The threat model that security reviews and scans of this repository start from. Infrastructure is `docker/` and `docker-compose.yml` in this repository.
+The baseline for security reviews and repository scans. Infrastructure is in `docker/`.
 
 ## System overview and trust boundaries
 
-DS Bot is a team of long-lived LLM Bots built as a plugin on DeepSeek Harness (DSH). It runs in three ways:
+DS SuperAgent runs on DeepSeek Harness (DSH) as one product profile:
 
-- **DSH Desktop / DSH Web** with the `ds-bot` plugin, on the user's own computer.
-- **Desktop app** (`app/`, Electron) that runs a pinned DSH with the plugin in its own `DSH_HOME`, and imports a team from `~/.dsh` (read only).
-- **Docker** (`docker/`, `docker-compose.yml`): `dsh web` on `0.0.0.0:3080` (published as `0.0.0.0:13080`), `DSH_PERMISSION_MODE=danger-full-access`, approval `never`. The container is the sandbox boundary.
+- Main owns the user conversation and source intake.
+- Router creates durable Tickets from accepted work.
+- Workers execute an Assignment in a local or paired remote Environment.
+
+The desktop app starts the pinned DSH in its own `DSH_HOME`. The Docker image runs DSH Web in a container; the
+container is the host-filesystem and process sandbox.
 
 Trust boundaries:
-1. Untrusted content -> model -> Bot tools. Web pages, files, search results, connector/MCP results and messages from other Bots reach the model; the model's tool calls run with the Bot's permission preset.
-2. Ordinary Bot -> Main Bot rights (create/change/stop Bots, groups, folders), enforced in `ds-bot/src/host/tools.js` via `rt.isMain`.
-3. Model/tool output -> outbound model requests (secret redaction in `ds-bot/src/host/secrets.js`).
-4. Browser renderer -> host: `POST /api/bot` channel (`ds-bot/src/host/channel.js`, `ROUTE` in `constants.js`) and Electron IPC (`app/src/main.mjs`, `preload.cjs`).
-5. Bot-produced HTML widgets -> app page (`ds-bot/src/client/widget-html.js`, `sandbox="allow-scripts"` iframe without same-origin).
-6. Bot browser pages -> app (`app/src/bot-browser.mjs`, `bot-views.mjs`: sandboxed, contextIsolation, own partition).
+
+1. Untrusted web, file, GitHub, Feishu, MCP, connector and Worker content can reach a model; model output cannot grant
+   authority or bypass Engine policy.
+2. User/client commands -> `POST /api/product` or the authenticated client Gateway -> `superagentProduct`.
+3. Source identity and actor allowlists are fixed by trusted Host configuration. Request objects cannot replace them.
+4. Main/Router/Worker native Sessions run through the public DSH Agent loop and persistent Session provider.
+5. Credentials stay in DSH credential records or the Electron main process; business projections contain references,
+   never secret values or private keys.
+6. Desktop browser pages and imports cross isolated Electron IPC; cookie and credential values stay in the trusted
+   main process until the exact authorized write.
+7. A local or remote Environment is selected by explicit policy and capability probe; the core does not fall back to
+   another execution world silently.
 
 ## Components
 
-- **host** — plugin server side: `ds-bot/index.js`, `ds-bot/src/host/` (roster, tools, turns/delivery, groups, parts, memory, schedules, permissions, connectors, providers).
-- **secrets** — `ds-bot/src/host/secrets.js` (secrets.json mode 600, `$DSH_SECRET_<NAME>`, redactor) and API keys/providers (`providers.js`, `models.js`).
-- **client** — browser UI: `ds-bot/src/client/` (incl. widget-html, read-page, connectors UI) and generated `ds-bot/client.js`.
-- **browser** — Bot browser bridge and browser plugins: `ds-bot/src/host/browser.js`, `browser-plugins.js`, `src/host/browser/`, `browser-plugins/`.
-- **desktop-app** — Electron app: `app/src/` (main, preload, IPC, cookie import, updates, import from `~/.dsh`, move-data), `app/engine/`.
-- **web-search** — `ds-bot/web-search.js`.
-- **docker** — `docker/Dockerfile`, `entrypoint.sh`, `docker.patch.yml`, `docker-compose.yml`.
+- **engine/host** — `superagent/src/`: Engine commands, durable TTL/Receipts, Host lease/fencing, execution,
+  Sources, Effects, delivery, client access and product Host.
+- **client** — `superagent/dsh/src/client/`: the existing DSH UI for Main, work cards and settings; generated
+  `superagent/dsh/client.js`.
+- **product bridge** — `superagent/src/profile.ts`, `superagent/src/product-http.ts`: `/api/product`, native Session refusal and
+  `superagentProduct` dependency.
+- **retained capability adapters** — memory, browser resources, MCP, credentials, schedules, Office, attachments,
+  remote devices, PostgreSQL Session persistence, Watchdog and Supervisor under `superagent/src/`.
+- **desktop app** — `app/src/`: one profile, data isolation, lifecycle, credential/cookie import, browser guest IPC,
+  updates and packaging.
+- **web search** — `superagent/dsh/web-search.js`.
+- **Docker** — `docker/`: DSH Web plus the one product stack; the container is the sandbox boundary.
 
 ## Entry points and who reaches them
 
-- Chat input from the user (trusted).
-- Content the Bot reads: web pages (Bot browser, `read_browser`, web search), files in the work folder, connector/MCP tool results, messages from other Bots and group chats, scheduled-task prompts. **Attacker-controlled.**
-- `/api/bot` HTTP endpoints and DSH Web UI: the local user; in Docker, anyone who can reach port 13080 (DSH trusted-host list + launch token).
-- Electron IPC from the app window.
+- User chat/commands are trusted only within the configured Instance and actor allowlist.
+- `/api/product` is same-origin and Host-scoped. Client Gateway commands require an enrolled client capability grant.
+- External sources are attacker-controlled until authorization and current-source checks pass.
+- Native `/api/session/*` and `/api/session.export` are unavailable to the browser product surface.
+- Electron IPC validates the sender window and exact pending operation.
+- Remote device RPC requires the paired device identity, Environment grant and current Host epoch.
 
-## Assets (maintainer-ranked)
+## Assets
 
-1. **Critical: API keys and Bot secrets** — provider keys, `secrets.json`, `$DSH_SECRET_*`, connector tokens. Must not leak to the model, logs, tool results, other Bots outside the secret's scope, or outbound requests.
-2. **Critical: files on the user's computer** — outside the Bot's work folder; `~/.dsh` must never be written by the app.
-3. Other: imported cookies / browser login state, conversations and memory.
+1. **Critical: credentials, provider keys and remote Host private keys.** These must not enter business records,
+   prompts, logs, UI projections, telemetry or another role's tool world.
+2. **Critical: user files and DSH data.** The app never writes `~/.dsh`; product state and workspace paths must not
+   overlap DSH or the product core. Remote work must stay in its authorized root.
+3. **Critical: work authority.** Ticket/Assignment/Session generations, stop/waiting-human state and Host leases
+   prevent an old process or callback from acting as current.
+4. **High: browser sessions, attachments, memory and outbound delivery.** They can contain private user data and
+   must retain scope, revocation and deletion evidence.
 
 ## Attacker profiles
 
-- **Primary (maintainer-confirmed): prompt injection** in web pages, files or messages that makes a Bot exceed its rights — exfiltrate keys/secrets, read or write user files outside its scope, gain Main Bot rights, change other Bots, bypass the permission preset or redaction.
-- Lower concern (not chosen by the maintainer): LAN users reaching the Docker web UI, malicious browser plugins or connectors, a rogue ordinary Bot acting by itself.
+- **Primary:** prompt injection in a source, file, page or tool result causes a role to exceed its authority.
+- **Primary:** a stale Host, Assignment, Session writer, command replay or client tries to act after replacement or
+  revocation.
+- **Secondary:** a compromised remote Device or MCP/browser resource returns stale, forged or unknown results.
+- **Secondary:** a Docker/LAN user reaches the Web UI without the intended host/network boundary.
 
-## Existing controls
+## Controls
 
-- Main-Bot checks in `tools.js` (`rt.isMain`, `rt.isAdminOf`).
-- Per-Bot permission presets (`permissions.js`), set on every Session.
-- Secrets: scoped per Bot (`canUse`), redacted from tool results and outbound model requests (`redactor`, JSON/URL-encoded forms).
-- Connectors refuse non-HTTPS addresses (`connectors.js`).
-- HTML widgets in `sandbox="allow-scripts"` iframes; Electron webviews sandboxed with contextIsolation and own partitions; IPC handlers call `assertWindow(event)`.
-- Cookie values stay in the Electron main process (`cookie-import.mjs`).
-- Launch token redacted from host logs (`host-process.mjs`).
+- Source actor and Instance authorization are checked inside Engine transactions.
+- Host lease, Assignment generation and Session writer epoch fence old work.
+- Command IDs are stable; same-ID/different-input is `IDENTITY_CONFLICT`; unknown outcomes stay visible for
+  reconciliation.
+- Stop, waiting-human, revocation and unknown side effects block automatic retry or reassignment.
+- Credential values are redacted and scoped; remote private keys live in DSH credential records.
+- Browser operations are resource/grant/lease scoped; write operations require the capability path and human control
+  where declared.
+- Product native Session list is empty and all other native Session browser access is refused.
+- Electron browser guests use isolated partitions with `contextIsolation`; cookie and credential imports are
+  value-free until the trusted apply/read step.
+- Docker mounts only `/data` and `/workspace`; the container itself is the full-access boundary.
 
-## Out of scope / accepted risk (maintainer)
+## Accepted risk
 
-- **Docker edition: Bots have full access inside the container by design** (`danger-full-access`, approval `never`). A Bot changing or reading files inside the container is not a finding; escaping the container or leaking keys/secrets still is.
-- DSH itself is upstream; not explicitly ruled out, but fixes belong upstream (hard rule: never patch DSH).
-
-## Open questions
-
-- Is the Docker web UI expected to be reachable only on a trusted LAN?
-- Should a secret scoped to one Bot be treated as hidden from Main Bots too?
+- Docker runs the full-access permission preset because the container is the boundary. A compromise inside it is an
+  issue; by itself, changing files mounted into `/workspace` is intended.
+- DSH is upstream software and is updated or reported upstream; this repository never patches it.
+- Real model judgement, real Feishu tenants, second-device networks and hosted combinations require their separate
+  environment gates; mock success is not a security acceptance claim.

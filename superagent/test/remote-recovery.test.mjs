@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
+import { existsSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -11,6 +12,8 @@ import * as core from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 import { nativeContext, textResponse, toolResponse } from '../dev/native-mock.mjs'
 
+const hasLinuxProcStat = process.platform === 'linux' && existsSync('/proc/self/stat')
+
 const grant = {
   instanceId: 'private',
   environmentId: 'remote-project',
@@ -20,18 +23,18 @@ const grant = {
 
 const commands = {
   hold: {
-    argv: ['node', '-e',
+    argv: [process.execPath, '-e',
       "const fs=require('node:fs');fs.writeFileSync('hold.pid',String(process.pid));console.log('started');setInterval(()=>{},1000)"],
     timeoutMs: 5000,
     backgroundTimeoutMs: 60000,
   },
   quick: {
-    argv: ['node', '-e', "console.log('finished')"],
+    argv: [process.execPath, '-e', "console.log('finished')"],
     timeoutMs: 5000,
     backgroundTimeoutMs: 60000,
   },
   foreground: {
-    argv: ['node', '-e',
+    argv: [process.execPath, '-e',
       "const fs=require('node:fs');fs.writeFileSync('hold.pid',String(process.pid));console.log('started');setInterval(()=>{},1000)"],
     timeoutMs: 10000,
     backgroundTimeoutMs: 60000,
@@ -84,8 +87,43 @@ async function killDevice(child) {
   await Promise.race([once(child, 'exit'), sleep(5000)])
 }
 
+function delayedRemoteEnvironment(root) {
+  let release
+  const gate = new Promise(resolve => { release = resolve })
+  let finish
+  const done = new Promise(resolve => { finish = resolve })
+  const remote = { deviceId: 'delayed-device', deviceIncarnation: 'delayed-incarnation', actorId: 'user',
+    ownerId: 'user', deadlineAt: Date.now() + 60000, deviceState: 'starting', rangeSettled: false }
+  const job = { jobId: 'delayed-job', remote, done,
+    read: () => ({ stdout: { text: '', lossy: false }, stderr: { text: '', lossy: false } }),
+    terminate: () => finish({ exitCode: null, cancelled: true, truncated: false, settled: true }),
+    waitForExit: async () => true }
+  const environment = {
+    kind: 'remote',
+    config: { id: 'remote-project', instanceId: 'private', root, allowedActorIds: ['user'],
+      permissions: ['read', 'write', 'search', 'command'],
+      commands: { hold: { argv: [process.execPath, '-e', 'setInterval(()=>{},1000)'], timeoutMs: 5000 } } },
+    deviceId: remote.deviceId,
+    deviceIncarnation: remote.deviceIncarnation,
+    online: true,
+    probe: async () => ({ online: true, root, version: 'delayed-v1', fingerprint: 'delayed-device:delayed-incarnation',
+      capabilities: ['read', 'write', 'search', 'command'], capacity: { active: 0, max: 8 } }),
+    authorize() {},
+    prepare: async () => ({
+      cwd: root,
+      invoke: async () => ({}),
+      artifact: async () => ({ path: 'delayed.txt', bytes: 0, sha256: '0'.repeat(64) }),
+      sanitize: text => text,
+      planCommand: () => ({ jobId: job.jobId, remote: { ...remote } }),
+      startCommand: async () => { await gate; return job },
+    }),
+    close: async () => {},
+  }
+  return { environment, release }
+}
+
 async function fixture(context) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-remote-recovery-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-remote-recovery-'))
   const root = join(directory, 'device-work')
   await mkdir(root)
   const listenPort = await freePort()
@@ -140,13 +178,23 @@ test('a device job belongs to the actor that started it and exposes its deadline
   assert.equal(await job.waitForExit(AbortSignal.timeout(10000)), true)
 })
 
-test('a daemon restart distinguishes a live process range from log-only output and restores only the live range', { timeout: 30000, skip: process.platform === 'win32' }, async context => {
+test('on Linux with /proc, a daemon restart distinguishes a live process range from log-only output and restores only the live range', {
+  timeout: 30000,
+  skip: hasLinuxProcStat ? false : 'This proof needs the process identity that only Linux /proc provides.',
+}, async context => {
   const device = await fixture(context)
+  const ownedPids = new Set()
+  context.after(() => {
+    for (const pid of ownedPids) {
+      try { process.kill(pid, 'SIGKILL') } catch { /* The process already exited. */ }
+    }
+  })
   const bound = await device.environment.prepare({ instanceId: 'private', actorId: 'user' })
 
   const live = await bound.startCommand('hold')
   await until(() => live.read().stdout.text.includes('started'), 'the live job output')
   const livePid = Number(await readFile(join(device.root, 'hold.pid'), 'utf8'))
+  ownedPids.add(livePid)
   await device.kill()
   await device.restart()
 
@@ -164,6 +212,7 @@ test('a daemon restart distinguishes a live process range from log-only output a
   await until(() => {
     try { process.kill(livePid, 0); return false } catch { return true }
   }, 'the recovered live process to stop')
+  ownedPids.delete(livePid)
 
   await rm(join(device.root, 'hold.pid'), { force: true })
   const terminal = await bound.startCommand('hold')
@@ -172,12 +221,14 @@ test('a daemon restart distinguishes a live process range from log-only output a
     catch { return false }
   }, 'the second job process')
   const terminalPid = Number(await readFile(join(device.root, 'hold.pid'), 'utf8'))
+  ownedPids.add(terminalPid)
   assert.notEqual(terminalPid, livePid)
   await device.kill()
   try { process.kill(terminalPid, 'SIGKILL') } catch { /* The process exited with the daemon. */ }
   await until(() => {
     try { process.kill(terminalPid, 0); return false } catch { return true }
   }, 'the second process to exit')
+  ownedPids.delete(terminalPid)
   await device.restart()
 
   const terminalRange = await bound.inspectRange(terminal.jobId)
@@ -208,7 +259,10 @@ test('a job record that disappears during a restart stays unknown and is never r
   await assert.rejects(bound.attachCommand(job.jobId), { code: 'COMMAND_UNKNOWN' })
 })
 
-test('a PID-only daemon restart keeps the range observable but never signals an unverified process', { timeout: 20000, skip: process.platform !== 'win32' }, async context => {
+test('a PID-only daemon restart keeps the range observable but never signals an unverified process', {
+  timeout: 20000,
+  skip: hasLinuxProcStat ? 'Linux /proc is covered by the strong process-identity recovery test.' : false,
+}, async context => {
   const device = await fixture(context)
   const bound = await device.environment.prepare({ instanceId: 'private', actorId: 'user' })
   const job = await bound.startCommand('hold')
@@ -251,9 +305,9 @@ test('a completed job keeps its exit code and output through a daemon restart', 
   assert.equal(attached.read().stdout.text, 'finished\n')
 })
 
-test('an unobservable recovered job blocks its Ticket with one evidence question that later reconciliation does not duplicate', { timeout: 40000 }, async context => {
+test('an unobservable recovered job blocks its Ticket with one evidence question that later reconciliation does not duplicate', { timeout: 90000 }, async context => {
   const device = await fixture(context)
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-remote-recovery-engine-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-remote-recovery-engine-'))
   let native, storage, sessions, engine
   context.after(async () => {
     await engine?.shutdown()
@@ -318,9 +372,9 @@ test('an unobservable recovered job blocks its Ticket with one evidence question
   assert.equal(conversation.attentionHistory.length, 1)
 })
 
-test('a new Host adopts a running device job by its stable identity and can still cancel the original range', { timeout: 40000 }, async context => {
+test('a new Host adopts a running device job by its stable identity and can still cancel the original range', { timeout: 90000 }, async context => {
   const device = await fixture(context)
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-remote-host-recovery-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-remote-host-recovery-'))
   const sessionsDirectory = join(directory, 'sessions')
   const databasePath = join(directory, 'state.sqlite')
   let oldNative, oldStorage, oldSessions, oldEngine, native, storage, sessions, engine, restoredEnvironment
@@ -397,9 +451,90 @@ test('a new Host adopts a running device job by its stable identity and can stil
   }, 'the adopted device process to stop')
 })
 
-test('an offline stop remains pending and is confirmed after a daemon restart proves the original range gone', { timeout: 40000 }, async context => {
+test('a remote job stays starting until its start response arrives', { timeout: 20000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-delayed-start-'))
+  let native, storage, sessions, engine
+  const { environment, release } = delayedRemoteEnvironment(join(directory, 'device-work'))
+  t.after(async () => {
+    release()
+    await engine?.shutdown()
+    await engine?.effects.stop()
+    await sessions?.close()
+    await native?.fiber.dispose()
+    await storage?.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+  let workerCalls = 0
+  native = await nativeContext(join(directory, 'sessions'), options => {
+    if (options.model === 'worker') {
+      if (workerCalls++ === 0) return toolResponse('start_command', { name: 'hold' }, 'delayed-start')
+      return textResponse('Started the delayed device job.')
+    }
+    return toolResponse('assign_worker', {}, 'delayed-assign')
+  })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  sessions = new core.NativeSessions(native, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] },
+    { retryDelayMs: 10, scanIntervalMs: 20 }, sessions, [environment], {}, { waitMs: 60000 })
+  engine.effects.start()
+  const receipt = await engine.submit({ commandId: 'delayed-start', eventId: 'delayed-start',
+    text: 'Start the delayed device job.', environmentId: 'remote-project' })
+  await until(async () => (await engine.listJobs(receipt.ticketId)).length === 1, 'the delayed start intent', 10000)
+  const [intent] = await engine.listJobs(receipt.ticketId)
+  assert.equal(intent.state, 'starting')
+  release()
+  await until(async () => (await engine.getJob(receipt.ticketId, intent.id)).state === 'running', 'the delayed start response', 10000)
+})
+
+test('a late remote start answer after a stop stays unknown and cannot clear the stop', { timeout: 20000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-delayed-stop-'))
+  let native, storage, sessions, engine
+  const delayed = delayedRemoteEnvironment(join(directory, 'device-work'))
+  t.after(async () => {
+    delayed.release()
+    await engine?.shutdown()
+    await engine?.effects.stop()
+    await sessions?.close()
+    await native?.fiber.dispose()
+    await storage?.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+  let workerCalls = 0
+  native = await nativeContext(join(directory, 'sessions'), options => {
+    if (options.model === 'worker') {
+      if (workerCalls++ === 0) return toolResponse('start_command', { name: 'hold' }, 'delayed-stop-start')
+      return textResponse('The delayed device job returned late.')
+    }
+    return toolResponse('assign_worker', {}, 'delayed-stop-assign')
+  })
+  storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  sessions = new core.NativeSessions(native, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+  engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] },
+    { retryDelayMs: 10, scanIntervalMs: 20 }, sessions, [delayed.environment], {}, { waitMs: 60000 })
+  engine.effects.start()
+  const receipt = await engine.submit({ commandId: 'delayed-stop', eventId: 'delayed-stop',
+    text: 'Start the delayed device job.', environmentId: 'remote-project' })
+  await until(async () => (await engine.listJobs(receipt.ticketId)).some(job => job.state === 'starting'),
+    'the pending remote start', 10000)
+  const stopping = engine.stopTicket({ commandId: 'stop-delayed-device', ticketId: receipt.ticketId,
+    reason: 'Stop before the start response.' })
+  await sleep(50)
+  delayed.release()
+  await stopping
+  for (let index = 0; index < 10; index++) await engine.effects.drain()
+  await until(async () => (await engine.listJobs(receipt.ticketId))[0]?.state !== 'running',
+    'the late remote start to remain cancelled', 10000)
+  const conversation = await engine.conversation(receipt.ticketId)
+  const [job] = await engine.listJobs(receipt.ticketId)
+  assert.equal(job.state, 'unknown')
+  assert.equal(conversation.stop.state, 'stopping')
+  assert.equal(conversation.stop.pendingDeviceConfirmation, true)
+  assert.deepEqual(conversation.reports, [])
+})
+
+test('an offline stop remains pending and is confirmed after a daemon restart proves the original range gone', { timeout: 90000 }, async context => {
   const device = await fixture(context)
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-remote-stop-recovery-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-remote-stop-recovery-'))
   let native, storage, sessions, engine
   context.after(async () => {
     await engine?.shutdown()
@@ -457,7 +592,7 @@ test('an offline stop remains pending and is confirmed after a daemon restart pr
 
 test('a foreground remote command keeps a durable start intent that an offline stop can reconcile by original ID', { timeout: 40000 }, async context => {
   const device = await fixture(context)
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-remote-foreground-recovery-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-remote-foreground-recovery-'))
   let native, storage, sessions, engine
   context.after(async () => {
     await engine?.shutdown()

@@ -10,7 +10,7 @@ import { nativeContext, routerResponse, textResponse, toolResponse } from '../de
 const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
 
 async function runtime(t, { slots, respond, source = {} } = {}) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-concurrency-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-concurrency-'))
   let native, storage, sessions, engine
   // A Worker turn that waits must never hold the run open, so every gate is released at cleanup.
   const gates = []
@@ -268,7 +268,7 @@ test('the same-process loopback preview exposes slot budgets and the status comm
 })
 
 test('slots belong to one Assignment, survive a query and do not leak across runtimes', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-slots-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-slots-'))
   let storage
   t.after(async () => { await storage?.close(); await rm(directory, { recursive: true, force: true }) })
   storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
@@ -294,7 +294,7 @@ test('slots belong to one Assignment, survive a query and do not leak across run
 })
 
 test('a background job wake is automatic input and never takes the extra slot reserved for a person', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-slots-job-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-slots-job-'))
   let storage
   t.after(async () => { await storage?.close(); await rm(directory, { recursive: true, force: true }) })
   storage = await SqliteStorage.open(join(directory, 'state.sqlite'))

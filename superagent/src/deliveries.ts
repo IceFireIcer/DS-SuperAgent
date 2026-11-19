@@ -2,9 +2,10 @@ import { createHash } from 'node:crypto'
 import { CoreError, identifier } from './model.js'
 import type { AsyncTx, Storage } from './storage.js'
 import type { Effect, Effects } from './effects.js'
+import { readGitHubDeliveryReceipt } from './github-delivery.js'
 
 export type DeliveryPurpose = 'acknowledgement' | 'answer' | 'result' | 'attention' | 'policy'
-export type DeliveryState = 'pending' | 'sent' | 'dropped'
+export type DeliveryState = 'pending' | 'sent' | 'dropped' | 'unknown'
 
 export interface DeliveryDestination {
   sourceInstanceId: string
@@ -36,6 +37,7 @@ export interface Delivery {
 
 export interface DeliveryView extends Delivery {
   state: DeliveryState
+  reconcileRequired: boolean
   reason?: string
   attempts?: number
   reportId?: string
@@ -43,6 +45,7 @@ export interface DeliveryView extends Delivery {
   directionVersion?: number
   attentionId?: string
   policyRevision?: number
+  platformReceipt?: { messageId: string; url: string }
 }
 
 export type DeliveryResult = { type: 'success' } | { type: 'transient' | 'permanent' | 'unknown' | 'not-applied'; reason: string }
@@ -107,11 +110,12 @@ export class Deliveries {
   async list(transaction: AsyncTx, ticketId: string): Promise<DeliveryView[]> {
     identifier(ticketId, 'ticketId')
     const items: Delivery[] = []
-    let cursor = historyPrefix(ticketId)
+    const prefix = historyPrefix(ticketId)
+    let cursor = prefix
     for (let pageCount = 0; pageCount < 10; pageCount++) {
       const page = await transaction.scan<Delivery>('delivery-history', { limit: 100, after: cursor })
       items.push(...page.items.map(item => item.value).filter(item => item.ticketId === ticketId))
-      if (!page.cursor || !page.cursor.startsWith(cursor)) {
+      if (!page.cursor || !page.cursor.startsWith(`${prefix}:`)) {
         return Promise.all(items.sort((left, right) => left.sequence - right.sequence || left.id.localeCompare(right.id)).map(item => this.view(transaction, item)))
       }
       cursor = page.cursor
@@ -128,7 +132,12 @@ export class Deliveries {
   async view(transaction: AsyncTx, delivery: Delivery): Promise<DeliveryView> {
     const receipt = await this.effects.receiptInTransaction(transaction, delivery.effectId, delivery.effectGeneration)
     const state: DeliveryState = receipt?.delivery ?? 'pending'
-    return { ...delivery, state, ...(receipt?.reason ? { reason: receipt.reason } : {}), ...(receipt?.attempts === undefined ? {} : { attempts: receipt.attempts }),
+    const platform = state === 'sent' && delivery.destination.sourceInstanceId.startsWith('github:')
+      ? await readGitHubDeliveryReceipt(transaction, JSON.stringify([delivery.effectId, delivery.effectGeneration])) : undefined
+    const receiptMatches = platform?.sourceInstanceId === delivery.destination.sourceInstanceId && platform.threadId === delivery.destination.threadId
+    return { ...delivery, state, reconcileRequired: state === 'unknown',
+      ...(receiptMatches ? { platformReceipt: { messageId: platform.messageId, url: platform.url } } : {}),
+      ...(receipt?.reason ? { reason: receipt.reason } : {}), ...(receipt?.attempts === undefined ? {} : { attempts: receipt.attempts }),
       ...(delivery.basis.kind === 'ready-report' ? { reportId: delivery.basis.reportId, directionVersion: delivery.basis.directionVersion } : {}),
       ...(delivery.basis.kind === 'waiting-attention' ? { attentionId: delivery.basis.attentionId } : {}),
       ...(delivery.basis.kind === 'policy-update' ? { policyRevision: delivery.basis.revision } : {}) }

@@ -1,0 +1,47 @@
+import * as Profile from '../../dist/profile.js'
+import { nativeContext, textResponse } from '../../dev/native-mock.mjs'
+
+const args = process.argv.slice(2)
+const argument = name => args[args.indexOf(`--${name}`) + 1]
+const home = argument('home')
+const sessionsPath = argument('sessions')
+if (!home || !sessionsPath) throw new Error('Pass isolated --home and --sessions directories.')
+process.env.DSH_HOME = home
+let native
+try {
+  native = await nativeContext(sessionsPath, function* (request) {
+    if (request.model !== 'main') throw new Error('Ordinary chat must call Main.')
+    yield* textResponse('Hello from the independent Main.')
+  })
+  await native.plugin(Profile, {
+    main: { provider: 'mock', model: 'main' },
+    router: { provider: 'mock', model: 'router' },
+    worker: { provider: 'mock', model: 'worker' },
+  })
+  const product = native.get('superagentProduct')
+  const binding = await product.dispatch('open')
+  const otherWindow = await product.dispatch('open')
+  await product.dispatch('send', { instanceId: binding.instanceId, commandId: 'profile-message', text: 'Hello Main.' })
+  const history = await product.dispatch('history', { instanceId: binding.instanceId })
+  const latest = await product.dispatch('history', { instanceId: binding.instanceId, limit: 1 })
+  const earlier = await product.dispatch('history', { instanceId: binding.instanceId, limit: 1, before: latest.cursor })
+  let directionConflictDenied = false
+  try { await product.dispatch('history', { instanceId: binding.instanceId, after: 0, before: 2 }) }
+  catch (error) { directionConflictDenied = error.code === 'INVALID_INPUT' }
+  const observations = await product.dispatch('observe-list', { instanceId: binding.instanceId, limit: 10 })
+  let crossInstanceDenied = false
+  try { await product.dispatch('history', { instanceId: 'another-private-scope' }) }
+  catch (error) { crossInstanceDenied = error.code === 'SOURCE_NOT_AUTHORIZED' }
+  let observationWriteDenied = false
+  try { await product.dispatch('observe-read', { instanceId: binding.instanceId, observationId: 'guessed', text: 'write' }) }
+  catch (error) { observationWriteDenied = error.code === 'INVALID_INPUT' }
+  let unknownCommandDenied = false
+  try { await product.dispatch('send-from-observation', { instanceId: binding.instanceId }) }
+  catch (error) { unknownCommandDenied = error.code === 'UNAVAILABLE' }
+  console.log(JSON.stringify({ mainId: binding.mainId, sameMain: otherWindow.mainId === binding.mainId,
+    userMessages: history.messages.filter(message => message.role === 'user').length,
+    mainMessages: history.messages.filter(message => message.role === 'main').length,
+    latestRole: latest.messages[0]?.role, earlierRole: earlier.messages[0]?.role, directionConflictDenied,
+    observationItems: observations.items.length, observationWriteDenied, unknownCommandDenied,
+    legacyAdapter: native.get('botExecutionAdapter') !== undefined, crossInstanceDenied }))
+} finally { await native?.fiber.dispose() }

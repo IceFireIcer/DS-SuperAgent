@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { isAbsolute } from 'node:path'
+import { posix, win32 } from 'node:path'
 import { canonicalJson } from './commands.js'
 import { CoreError, identifier } from './model.js'
 import type { Artifact, LocalJob, LocalJobOutput, LocalJobResult } from './local-environment.js'
@@ -10,6 +10,7 @@ import { deriveSharedKey, exchangeKeyPair, exportPublicKey, importPrivateKey, im
   type RemoteJobRecovery, type RemotePermission, type RemoteRequest } from './remote-protocol.js'
 import { RemoteSubprocess, type RemoteCommandTransport, type RemoteJobHandle } from './remote-subprocess.js'
 import { sanitizeSecrets } from './sanitize.js'
+import { workCopySnapshotValue, type WorkCopySnapshot } from './work-copy.js'
 import { defaultAssetPageBytes, environmentAssetGaps, environmentFingerprint, fileAssetId, matchesEnvironment,
   assertReferenceShape, assetPageOptions, assetReferenceFromArgs, attachmentToolInput, maxAssetBytes, maxAssetPageBytes, pageOf,
   parseSpillAssetId, spillAssetId,
@@ -51,6 +52,10 @@ export interface RemoteEnvironmentState {
   skills?: { supported: true } | null
 }
 
+export interface PersistedRemoteEnvironmentState extends Omit<RemoteEnvironmentState, 'hostExchangePrivate'> {
+  hostExchangePrivateReference: string
+}
+
 interface PairResponse {
   v: number
   pairingId: string
@@ -82,6 +87,10 @@ function endpointUrl(value: string) {
     throw new CoreError('INVALID_CONFIG', 'The device endpoint cannot carry credentials, a query or a fragment.')
   }
   return url.origin + url.pathname.replace(/\/+$/u, '')
+}
+
+function isDeviceAbsolutePath(value: string) {
+  return posix.isAbsolute(value) || win32.isAbsolute(value)
 }
 
 async function responseError(response: Response, fallback: string): Promise<CoreError> {
@@ -166,6 +175,8 @@ export class RemoteEnvironment implements ExecutionEnvironment {
   private skillsState: { supported: true } | undefined
   private readonly requestTimeoutMs: number
   private revokedState = false
+  private revokingState = false
+  private revokeSentState = false
   private closed = false
   private onlineState = true
 
@@ -251,7 +262,7 @@ export class RemoteEnvironment implements ExecutionEnvironment {
     }
     const pairing = sealed as unknown as SealedPairing
     if (pairing.deviceId !== paired.deviceId || pairing.instanceId !== options.instanceId || pairing.environmentId !== options.id
-      || !isAbsolute(pairing.root) || !sameSet(pairing.allowedActorIds, options.allowedActorIds) || !sameSet(pairing.permissions, options.permissions)) {
+      || !isDeviceAbsolutePath(pairing.root) || !sameSet(pairing.allowedActorIds, options.allowedActorIds) || !sameSet(pairing.permissions, options.permissions)) {
       throw new CoreError('GRANT_DENIED', 'The device granted a different Instance, Environment or permission set.')
     }
     const commands = commandSpecsValue(pairing.commands)
@@ -274,7 +285,7 @@ export class RemoteEnvironment implements ExecutionEnvironment {
       || typeof state.deviceId !== 'string' || typeof state.deviceIncarnation !== 'string' || typeof state.deviceKeyFingerprint !== 'string'
       || typeof state.deviceExchangeKey !== 'string' || typeof state.pairingId !== 'string' || typeof state.hostExchangePrivate !== 'string'
       || typeof state.hostExchangePublic !== 'string' || typeof state.hostNonce !== 'string' || typeof state.root !== 'string'
-      || !isAbsolute(state.root) || !state.allowedActorIds.length || !state.permissions.length
+      || !isDeviceAbsolutePath(state.root) || !state.allowedActorIds.length || !state.permissions.length
       || !/^[a-f0-9]{64}$/u.test(state.deviceKeyFingerprint)
       || state.permissions.some(permission => !['read', 'write', 'search', 'command'].includes(permission))) {
       throw new CoreError('INVALID_CONFIG', 'The saved remote connection is malformed.')
@@ -300,9 +311,17 @@ export class RemoteEnvironment implements ExecutionEnvironment {
       ...(assets ? { assets } : {}), ...(skills ? { skills } : {}), identity, key })
   }
 
+  static restorePersisted(state: PersistedRemoteEnvironmentState, hostExchangePrivate: string): RemoteEnvironment {
+    if (!state || typeof state.hostExchangePrivateReference !== 'string' || !state.hostExchangePrivateReference) {
+      throw new CoreError('INVALID_CONFIG', 'The saved remote connection is missing its credential reference.')
+    }
+    const { hostExchangePrivateReference: _hostExchangePrivateReference, ...restored } = state
+    return RemoteEnvironment.restore({ ...restored, hostExchangePrivate })
+  }
+
   snapshot(): RemoteEnvironmentState {
     if (this.closed) throw new CoreError('ENVIRONMENT_CLOSED', 'The remote Environment is closed.')
-    if (this.revokedState) throw new CoreError('DEVICE_REVOKED', 'A revoked device connection cannot be exported again.')
+    if (this.revoked) throw new CoreError('DEVICE_REVOKED', 'A revoked device connection cannot be exported again.')
     return { version: 3, id: this.config.id, instanceId: this.config.instanceId, allowedActorIds: [...this.config.allowedActorIds],
       permissions: [...this.config.permissions] as RemoteEnvironmentPermission[], endpoint: this.endpoint, deviceId: this.deviceId,
       deviceIncarnation: this.deviceIncarnation, deviceKeyFingerprint: this.deviceKeyFingerprint,
@@ -313,8 +332,16 @@ export class RemoteEnvironment implements ExecutionEnvironment {
       ...(this.skillsState ? { skills: { ...this.skillsState } } : {}) }
   }
 
-  get revoked() { return this.revokedState }
-  get online() { return this.onlineState && !this.revokedState && !this.closed }
+  persistedSnapshot(hostExchangePrivateReference: string): PersistedRemoteEnvironmentState {
+    if (typeof hostExchangePrivateReference !== 'string' || !hostExchangePrivateReference) {
+      throw new CoreError('INVALID_CONFIG', 'A remote Environment needs a durable credential reference.')
+    }
+    const { hostExchangePrivate: _hostExchangePrivate, ...state } = this.snapshot()
+    return { ...state, hostExchangePrivateReference }
+  }
+
+  get revoked() { return this.revokedState || this.revokingState }
+  get online() { return this.onlineState && !this.revoked && !this.closed }
   get assetSupport() {
     return { attachments: Boolean(this.assetsState), spill: Boolean(this.assetsState), skills: Boolean(this.skillsState) }
   }
@@ -322,6 +349,7 @@ export class RemoteEnvironment implements ExecutionEnvironment {
   authorize(identity: { instanceId: string; actorId: string }) {
     if (this.closed) throw new CoreError('ENVIRONMENT_CLOSED', 'The remote Environment is closed.')
     if (this.revokedState) throw new CoreError('DEVICE_REVOKED', 'This device connection was revoked.')
+    if (this.revokingState) throw new CoreError('DEVICE_REVOKING', 'This device connection is being revoked.')
     if (identity.instanceId !== this.config.instanceId || !this.config.allowedActorIds.includes(identity.actorId)) {
       throw new CoreError('ENVIRONMENT_DENIED', 'This actor or Instance cannot use the remote Environment.')
     }
@@ -370,7 +398,15 @@ export class RemoteEnvironment implements ExecutionEnvironment {
     return { online: true, root: this.config.root, version: `remote-v${remoteProtocolVersion}`,
       fingerprint: `${this.deviceId}:${this.deviceIncarnation}:${this.deviceKeyFingerprint}`,
       capabilities: [...this.config.permissions],
-      capacity: { active: observedCapacity.active, max: observedCapacity.max } }
+      capacity: { active: observedCapacity.active, max: observedCapacity.max },
+      productCapabilities: { browser: false, mcp: false, office: false } }
+  }
+
+  async inspectWorkCopy(identity: { instanceId: string; actorId: string }, signal?: AbortSignal): Promise<WorkCopySnapshot> {
+    this.authorize(identity)
+    if (!this.config.permissions.includes('read')) throw new CoreError('PERMISSION_DENIED', 'Work-copy inspection needs read permission.')
+    return workCopySnapshotValue(await this.call({ instanceId: identity.instanceId, environmentId: this.config.id, actorId: identity.actorId,
+      operation: 'workcopy.inspect', args: {} }, signal))
   }
 
   async assetCapabilities(identity: { instanceId: string; actorId: string }): Promise<EnvironmentAssetCapabilities> {
@@ -395,14 +431,23 @@ export class RemoteEnvironment implements ExecutionEnvironment {
 
   async revoke(signal?: AbortSignal) {
     if (this.closed) throw new CoreError('ENVIRONMENT_CLOSED', 'The remote Environment is closed.')
-    if (this.revokedState) return
+    if (this.revokedState) throw new CoreError('DEVICE_REVOKED', 'The earlier device revocation cannot be confirmed again.')
+    if (this.revokeSentState) throw new CoreError('REVOKE_PENDING', 'The earlier device revocation is still pending.')
+    this.beginRevocation()
+    this.revokeSentState = true
     try {
       await this.call({ instanceId: this.config.instanceId, environmentId: this.config.id, actorId: this.config.allowedActorIds[0]!, operation: 'revoke', args: {} }, signal, true)
     } finally {
       // The host side stops using the connection even when the device acknowledgement is lost.
+      this.revokingState = false
       this.revokedState = true
       this.onlineState = false
     }
+  }
+
+  beginRevocation() {
+    this.revokingState = true
+    this.onlineState = false
   }
 
   async close() {
@@ -413,7 +458,7 @@ export class RemoteEnvironment implements ExecutionEnvironment {
   async call(request: RemoteRequest,
     signal?: AbortSignal, permitRevoke = false): Promise<unknown> {
     if (this.closed) throw new CoreError('ENVIRONMENT_CLOSED', 'The remote Environment is closed.')
-    if (this.revokedState && !permitRevoke) throw new CoreError('DEVICE_REVOKED', 'This device connection was revoked.')
+    if (this.revoked && !permitRevoke) throw new CoreError('DEVICE_REVOKED', 'This device connection was revoked.')
     const requestId = randomToken(18)
     const at = Date.now()
     let response: Response
@@ -487,6 +532,10 @@ class RemoteBoundEnvironment implements PreparedEnvironment {
       return this.call(name === 'glob' ? 'file.glob' : 'file.grep', { pattern: args.pattern }, signal)
     }
     throw new CoreError('UNSUPPORTED_CAPABILITY', 'This remote tool combination is not enabled.')
+  }
+
+  async inspectWorkCopy(signal?: AbortSignal): Promise<WorkCopySnapshot> {
+    return this.owner.inspectWorkCopy(this.identity, signal)
   }
 
   private async saveAttachmentTool(args: Record<string, string>, signal?: AbortSignal): Promise<Record<string, unknown>> {
@@ -617,6 +666,18 @@ class RemoteBoundEnvironment implements PreparedEnvironment {
   }
 
   async readAsset(reference: EnvironmentAssetReference, options: { offset?: number; maxBytes?: number } = {}, signal?: AbortSignal): Promise<EnvironmentAssetPage> {
+    return this.readAssetPage(reference, options, signal, false)
+  }
+
+  async readProductAsset(reference: EnvironmentAssetReference, options: { offset?: number; maxBytes?: number } = {}, signal?: AbortSignal): Promise<EnvironmentAssetPage> {
+    if (reference.kind !== 'attachment' && reference.kind !== 'artifact') {
+      throw new CoreError('INVALID_INPUT', 'A product download needs an attachment or recorded artifact.')
+    }
+    return this.readAssetPage(reference, options, signal, true)
+  }
+
+  private async readAssetPage(reference: EnvironmentAssetReference, options: { offset?: number; maxBytes?: number },
+    signal: AbortSignal | undefined, original: boolean): Promise<EnvironmentAssetPage> {
     this.owner.authorize(this.identity)
     this.permission('read')
     assertReferenceShape(reference)
@@ -644,7 +705,7 @@ class RemoteBoundEnvironment implements PreparedEnvironment {
       }
       const window = Buffer.from(result.data, 'base64')
       if (window.length !== result.nextOffset - offset) throw new CoreError('DEVICE_FAILED', 'The device attachment page has an invalid length.')
-      return pageOf(reference, window, offset, maxBytes, text => this.owner.sanitize(text))
+      return pageOf(reference, window, offset, maxBytes, original ? undefined : text => this.owner.sanitize(text))
     }
     if (reference.kind === 'spill') {
       const { jobId, stream } = parseSpillAssetId(reference.id)
@@ -659,7 +720,7 @@ class RemoteBoundEnvironment implements PreparedEnvironment {
       }
       const window = Buffer.from(result.data, 'base64')
       if (window.length !== result.nextOffset - offset) throw new CoreError('DEVICE_FAILED', 'The device spill page has an invalid length.')
-      return pageOf(reference, window, offset, maxBytes, text => this.owner.sanitize(text))
+      return pageOf(reference, window, offset, maxBytes)
     }
     if (!reference.path) throw new CoreError('INVALID_INPUT', 'An artifact reference needs its working-directory-relative path.')
     const result = await this.call('file.readRange', { path: reference.path, offset: String(offset), length: String(maxBytes),
@@ -671,7 +732,7 @@ class RemoteBoundEnvironment implements PreparedEnvironment {
     }
     const window = Buffer.from(result.data, 'base64')
     if (window.length !== result.nextOffset - offset) throw new CoreError('DEVICE_FAILED', 'The device artifact page has an invalid length.')
-    return pageOf(reference, window, offset, maxBytes, text => this.owner.sanitize(text))
+    return pageOf(reference, window, offset, maxBytes, original ? undefined : text => this.owner.sanitize(text))
   }
 
   async listSkills(signal?: AbortSignal): Promise<EnvironmentSkillSummary[]> {

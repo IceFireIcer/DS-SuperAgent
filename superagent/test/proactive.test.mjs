@@ -18,7 +18,7 @@ const rules = (overrides = {}) => [
 ]
 
 async function fixture(t, prepare) {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-proactive-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-proactive-'))
   const root = join(directory, 'proactive-root')
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
@@ -96,6 +96,53 @@ test('observe never executes, auto prepares inside an isolated budget and never 
   assert.deepEqual(createdAt, createdAt.slice().sort((left, right) => left - right))
 })
 
+test('rule-scoped run scans never include another rule history', { timeout: 20000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-proactive-scope-'))
+  const root = join(directory, 'proactive-root')
+  const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
+  const proactive = new core.Proactive(storage, 'private', { rootDirectory: root, prepare: async () => ({ summary: 'Prepared.' }) })
+  const rule = id => ({ id, name: id, mode: 'auto', match: { actorKinds: ['human'], addressing: ['direct'], textPattern: id },
+    communication: 'silent', budget: { maxRuns: 1, windowMs: 3600000 }, enabled: true })
+  await storage.transaction('private', tx => proactive.setRules(tx, 1, [rule('alpha'), rule('beta')]))
+  const foreignId = `${JSON.stringify(['proactive-run', 'beta'])}:${'0'.repeat(64)}`
+  await storage.transaction('private', tx => tx.insert('proactive-run', foreignId, { id: foreignId, instanceId: 'private', ruleId: 'beta',
+    ruleRevision: 2, eventId: 'beta-event', sourceInstanceId: 'desktop', mode: 'auto', state: 'prepared', text: 'alpha', authorId: 'user',
+    authorKind: 'human', addressing: 'direct', communication: 'silent', createdAt: Date.now() }))
+  const runs = await proactive.evaluate({ sourceInstanceId: 'desktop', eventId: 'alpha-event', threadId: 'room', objectId: 'alpha-object',
+    text: 'alpha', authorId: 'user', authorKind: 'human', addressing: 'direct' })
+  assert.equal(runs[0].state, 'prepared')
+  assert.equal((await proactive.listRuns('alpha')).some(run => run.ruleId === 'beta'), false)
+})
+
+test('a rule budget counts its complete history beyond the first thousand records', { timeout: 30000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-proactive-history-'))
+  const root = join(directory, 'proactive-root')
+  const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
+  const proactive = new core.Proactive(storage, 'private', { rootDirectory: root })
+  await storage.transaction('private', tx => proactive.setRules(tx, 1, [{ id: 'deep', name: 'Deep', mode: 'auto',
+    match: { actorKinds: ['human'], addressing: ['direct'], textPattern: 'deep' }, communication: 'silent',
+    budget: { maxRuns: 1, windowMs: 3600000 }, enabled: true }]))
+  const prefix = `${JSON.stringify(['proactive-run', 'deep'])}:`
+  const now = Date.now()
+  await storage.transaction('private', async tx => {
+    for (let index = 0; index < 1000; index++) {
+      const id = `${prefix}${index.toString(16).padStart(63, '0')}`
+      await tx.insert('proactive-run', id, { id, instanceId: 'private', ruleId: 'deep', ruleRevision: 2, eventId: `old-${index}`,
+        sourceInstanceId: 'desktop', mode: 'auto', state: 'observed', text: 'old', authorId: 'user', authorKind: 'human',
+        addressing: 'direct', communication: 'silent', createdAt: now - 7200000 })
+    }
+    const id = `${prefix}${'f'.repeat(64)}`
+    await tx.insert('proactive-run', id, { id, instanceId: 'private', ruleId: 'deep', ruleRevision: 2, eventId: 'prepared-event',
+      sourceInstanceId: 'desktop', mode: 'auto', state: 'prepared', text: 'deep work', authorId: 'user', authorKind: 'human',
+      addressing: 'direct', communication: 'silent', createdAt: now })
+  })
+  const runs = await proactive.evaluate({ sourceInstanceId: 'desktop', eventId: 'deep-event', threadId: 'room', objectId: 'deep-object',
+    text: 'deep work', authorId: 'user', authorKind: 'human', addressing: 'direct' })
+  assert.equal(runs[0].state, 'budget-exhausted')
+})
+
 test('prepared artifacts are verified inside the isolated directory', { timeout: 20000 }, async t => {
   let mode = 'valid'
   const content = 'x'.repeat(2048)
@@ -134,7 +181,7 @@ test('prepared artifacts are verified inside the isolated directory', { timeout:
 })
 
 test('a scheduled occurrence can trigger an authorized auto preparation', { timeout: 20000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'ds-bot-proactive-schedule-'))
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-proactive-schedule-'))
   const root = join(directory, 'proactive-root')
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   t.after(async () => { await storage.close(); await rm(directory, { recursive: true, force: true }) })
@@ -162,4 +209,65 @@ test('a scheduled occurrence can trigger an authorized auto preparation', { time
   assert.equal(prepared.length, 1)
   assert.equal(calls, 1)
   assert.equal(prepared[0].summary, 'Prepared: Prepare the nightly review.')
+})
+
+test('a rule revision or explicit stop invalidates a late preparation result', { timeout: 20000 }, async t => {
+  const releases = []
+  const { engine } = await fixture(t, async () => new Promise(resolve => releases.push(resolve)))
+  const rule = { id: 'guarded', name: 'Guarded', mode: 'auto', match: { actorKinds: ['human'], addressing: ['direct'] },
+    communication: 'notify', budget: { maxRuns: 3, windowMs: 3600000 }, enabled: true }
+  await engine.updateProactiveRules({ commandId: 'guard-rule', expectedRevision: 1, rules: [rule] })
+  const running = async objectId => {
+    const receipt = await engine.receiveSource({ commandId: `guard-${objectId}`, threadId: 'room', objectId,
+      type: 'created', version: '1', text: 'Prepare a review.', authorId: 'user' })
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const run = (await engine.listProactiveRuns()).find(item => item.eventId === receipt.eventId)
+      if (run?.state === 'running' && releases.length) return run
+      await new Promise(resolve => setTimeout(resolve, 10))
+    }
+    throw new Error('The preparation did not start.')
+  }
+  const first = await running('rule-change')
+  await engine.updateProactiveRules({ commandId: 'revise-rule', expectedRevision: 2, rules: [rule] })
+  releases.shift()({ summary: 'This must not become ready.' })
+  for (let attempt = 0; attempt < 50; attempt++) {
+    if ((await engine.getProactiveRun(first.id)).state === 'suppressed') break
+    await new Promise(resolve => setTimeout(resolve, 10))
+  }
+  assert.equal((await engine.getProactiveRun(first.id)).reason, 'RULE_CHANGED')
+  const second = await running('manual-stop')
+  assert.equal((await engine.stopProactiveRun({ commandId: 'stop-guarded', runId: second.id, reason: 'Stopped by user.' })).state, 'stopped')
+  releases.shift()({ summary: 'This must not become ready either.' })
+  await new Promise(resolve => setTimeout(resolve, 25))
+  assert.equal((await engine.getProactiveRun(second.id)).state, 'stopped')
+  assert.equal((await engine.stopProactiveRun({ commandId: 'stop-guarded', runId: second.id, reason: 'Stopped by user.' })).state, 'stopped')
+  await assert.rejects(engine.stopProactiveRun({ commandId: 'stop-guarded', runId: second.id, reason: 'Different stop.' }), { code: 'IDENTITY_CONFLICT' })
+  assert.deepEqual((await engine.effects.list()).items, [])
+})
+
+test('a persisted candidate is consumed once by a replacement Engine after reception', { timeout: 20000 }, async t => {
+  let calls = 0
+  const prepare = async () => { calls++; return { summary: 'Recovered preparation.', evidence: 'The original source event is current.' } }
+  const { storage, root, engine } = await fixture(t, prepare)
+  const receipt = await engine.receiveSource({ commandId: 'early-source', threadId: 'room', objectId: 'early',
+    type: 'created', version: '1', text: 'Review the observation.', authorId: 'user' })
+  const rule = { id: 'recovery', name: 'Recovery', mode: 'auto', match: { actorKinds: ['human'], addressing: ['direct'] },
+    communication: 'notify', budget: { maxRuns: 2, windowMs: 3600000 }, enabled: true }
+  await engine.updateProactiveRules({ commandId: 'enable-recovery', expectedRevision: 1, rules: [rule] })
+  const candidate = { sourceInstanceId: 'desktop', eventId: receipt.eventId, threadId: 'room', objectId: 'early',
+    text: 'Review the observation.', authorId: 'user', authorKind: 'human', addressing: 'direct' }
+  const queue = new core.Proactive(storage, 'private', { rootDirectory: root })
+  await storage.transaction('private', tx => queue.enqueue(tx, candidate))
+  assert.equal((await queue.pending('desktop')).length, 1)
+  await engine.shutdown()
+  const replacement = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user',
+    allowedActorIds: ['user'], allowedThreadIds: ['room'], versionOrder: 'sequence' }, {}, undefined, [], {}, {}, {}, {},
+  { hostId: 'proactive-host', leaseMs: 30000 }, { rootDirectory: root, prepare })
+  try {
+    assert.equal(await replacement.reconcileProactiveCandidates(), 1)
+    assert.equal(await replacement.reconcileProactiveCandidates(), 0)
+    assert.equal(calls, 1)
+    assert.equal((await replacement.getRecentProactiveNotices())[0].summary, 'Recovered preparation.')
+    assert.deepEqual(await queue.pending('desktop'), [])
+  } finally { await replacement.shutdown() }
 })

@@ -1,10 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { CoreError, identifier, type Work } from './model.js'
+import { CoreError, identifier, triggerDeliveryTarget, type Work } from './model.js'
 import type { AsyncTx, Storage } from './storage.js'
 import type { SourceEvent, SourceEvents } from './source-events.js'
 import type { Effects } from './effects.js'
 import type { WorkInput, WorkInputs } from './work-inputs.js'
 import type { Deliveries } from './deliveries.js'
+import type { ProductViewAnswer, ProductViewCard } from './product-views.js'
 
 export interface Attention {
   id: string
@@ -22,6 +23,8 @@ export interface Attention {
   answeredAt?: number
   answeredBy?: string
   answerText?: string
+  view?: ProductViewCard
+  answerView?: ProductViewAnswer
   answerCommandId?: string
   answerSourceEventId?: string
   supersededAt?: number
@@ -44,7 +47,15 @@ export class Attentions {
     private readonly now: () => number = Date.now,
   ) {}
 
-  async ask(tx: AsyncTx, request: { ticketId: string; assignmentId: string; sessionId: string; question: string; options: string[]; input?: WorkInput }) {
+  ask(tx: AsyncTx, request: { ticketId: string; assignmentId: string; sessionId: string; question: string; options: string[]; input?: WorkInput }) {
+    return this.create(tx, request)
+  }
+
+  askView(tx: AsyncTx, request: { ticketId: string; assignmentId: string; sessionId: string; title: string; view: ProductViewCard; input?: WorkInput }) {
+    return this.create(tx, { ...request, question: request.title ? `View: ${request.title}` : 'View card', options: [], view: request.view })
+  }
+
+  private async create(tx: AsyncTx, request: { ticketId: string; assignmentId: string; sessionId: string; question: string; options: string[]; input?: WorkInput; view?: ProductViewCard }) {
     identifier(request.ticketId, 'ticketId'); identifier(request.assignmentId, 'assignmentId'); identifier(request.sessionId, 'sessionId')
     if (!request.question.trim() || Buffer.byteLength(request.question) > 4096) throw new CoreError('INVALID_INPUT', 'A human question needs bounded nonempty text.')
     if (!Array.isArray(request.options) || request.options.length > 10 || request.options.some(option => !option.trim() || Buffer.byteLength(option) > 512)) throw new CoreError('INVALID_ATTENTION', 'Attention options must contain at most ten bounded labels.')
@@ -55,11 +66,13 @@ export class Attentions {
     if (ticket.constraint?.kind === 'stopped') throw new CoreError('TICKET_STOPPED', 'A stopped Ticket cannot ask another question.')
     const previousHead = await tx.get<AttentionHead>('attention-head', headKey(request.ticketId))
     const inputEvent = request.input && await tx.get<SourceEvent>('source-event', request.input.sourceEventId)
-    const originalEvent = !inputEvent && trigger.threadId ? await this.sources.candidate(tx, { threadId: trigger.threadId, objectId: trigger.eventId }) : undefined
+    const defaultTarget = triggerDeliveryTarget(trigger)
+    const originalEvent = !inputEvent && trigger.deliveryOrigin ? await tx.get<SourceEvent>('source-event', trigger.deliveryOrigin.sourceEventId)
+      : !inputEvent && trigger.threadId ? await this.sources.candidate(tx, { threadId: trigger.threadId, objectId: trigger.eventId }) : undefined
     const destination = inputEvent
       ? { sourceInstanceId: inputEvent.source.sourceInstanceId, actorId: inputEvent.authorId, eventId: inputEvent.objectId, ...(inputEvent.threadId ? { threadId: inputEvent.threadId } : {}) }
-      : { sourceInstanceId: originalEvent?.source.sourceInstanceId ?? trigger.source.sourceInstanceId, actorId: originalEvent?.authorId ?? trigger.source.actorId,
-        eventId: originalEvent?.objectId ?? trigger.eventId, ...(trigger.threadId ? { threadId: trigger.threadId } : {}) }
+      : { sourceInstanceId: originalEvent?.source.sourceInstanceId ?? defaultTarget.source.sourceInstanceId, actorId: originalEvent?.authorId ?? defaultTarget.source.actorId,
+        eventId: originalEvent?.objectId ?? defaultTarget.eventId, ...(defaultTarget.threadId ? { threadId: defaultTarget.threadId } : {}) }
     const id = `${historyPrefix(request.ticketId)}:${randomUUID()}`
     const sequenceKey = JSON.stringify(['attention-meta', request.ticketId])
     const sequence = (await tx.get<number>('attention-meta', sequenceKey) ?? 0) + 1
@@ -69,7 +82,8 @@ export class Attentions {
       const previous = await tx.get<Attention>('attention', previousHead.attentionId)
       const options = [...new Set(request.options.map(option => option.trim()).filter(Boolean))]
       if (previous?.status === 'waiting' && previous.question.trim() === request.question.trim()
-        && previous.options.length === options.length && previous.options.every((option, index) => option === options[index])) {
+        && previous.options.length === options.length && previous.options.every((option, index) => option === options[index])
+        && JSON.stringify(previous.view ?? null) === JSON.stringify(request.view ?? null)) {
         return previous
       }
       if (previous?.status === 'waiting') await tx.replace('attention', previous.id, { ...previous, status: 'superseded', supersededAt: this.now(), supersededBy: id })
@@ -77,6 +91,7 @@ export class Attentions {
     const attention: Attention = { id, instanceId: this.instanceId, ticketId: request.ticketId, assignmentId: request.assignmentId, sessionId: request.sessionId,
       question: request.question, options: [...new Set(request.options.map(option => option.trim()).filter(Boolean))], destination,
       ...(inputEvent || originalEvent ? { questionSourceEventId: inputEvent?.id ?? originalEvent!.id } : {}), status: 'waiting', sequence, createdAt: this.now() }
+    if (request.view) attention.view = structuredClone(request.view)
     await tx.insert('attention', id, attention)
     if (!await tx.replace('attention-head', headKey(request.ticketId), { attentionId: id })) await tx.insert('attention-head', headKey(request.ticketId), { attentionId: id })
     await tx.replace('ticket', ticket.id, { ...ticket, constraint: { kind: 'waiting-human', attentionId: id, reason: request.question } })
@@ -89,7 +104,8 @@ export class Attentions {
     return attention
   }
 
-  async answer(tx: AsyncTx, request: { ticketId: string; attentionId: string; text: string; commandId: string; actorId: string; sourceEventId?: string }) {
+  async answer(tx: AsyncTx, request: { ticketId: string; attentionId: string; text: string; commandId: string; actorId: string;
+    sourceEventId?: string; expectedGeneration?: string; expectedVersion?: number; viewAnswer?: ProductViewAnswer }) {
     identifier(request.ticketId, 'ticketId'); identifier(request.attentionId, 'attentionId'); identifier(request.commandId, 'commandId'); identifier(request.actorId, 'actorId')
     if (!request.text.trim() || Buffer.byteLength(request.text) > 65536) throw new CoreError('INVALID_INPUT', 'An Attention answer needs bounded nonempty text.')
     const attention = await tx.get<Attention>('attention', request.attentionId)
@@ -97,25 +113,37 @@ export class Attentions {
     const ticket = await tx.get<Work['ticket']>('ticket', request.ticketId)
     if (!attention || !head || !ticket) throw new CoreError('NOT_FOUND', 'The Attention does not exist.')
     const waitingCurrent = ticket.constraint?.kind === 'waiting-human' && ticket.constraint.attentionId === attention.id
-    const stopped = ticket.constraint?.kind === 'stopped'
-    if (attention.ticketId !== request.ticketId || head.attentionId !== attention.id || !waitingCurrent && !stopped) {
+    if (ticket.constraint?.kind === 'stopped') throw new CoreError('TICKET_STOPPED', 'A stopped work item cannot receive an Attention answer.')
+    if (attention.ticketId !== request.ticketId || head.attentionId !== attention.id || !waitingCurrent) {
       throw new CoreError('ATTENTION_STALE', 'This question is no longer the current waiting-human constraint.')
+    }
+    const assignment = request.expectedGeneration === undefined ? undefined
+      : await tx.get<{ id: string; generation: string }>('assignment', request.ticketId)
+    if (request.expectedGeneration !== undefined && (!assignment || assignment.generation !== request.expectedGeneration
+      || attention.assignmentId !== assignment.id)
+      || request.expectedVersion !== undefined && attention.sequence !== request.expectedVersion) {
+      throw new CoreError('ATTENTION_STALE', 'This question version no longer matches the work card.')
     }
     if (attention.status !== 'waiting') throw new CoreError('ATTENTION_STALE', 'This question has already been answered or superseded.')
     const answerEventId = request.sourceEventId ?? JSON.stringify(['attention-answer', attention.id, request.commandId])
     const input = await this.inputs.attachSyntheticInput(tx, { ticketId: request.ticketId, sourceEventId: answerEventId,
-      threadId: attention.destination.threadId ?? '__attention__', text: request.text, authorId: request.actorId, reason: `Answer to ${attention.id}`, dispatch: !stopped })
+      threadId: attention.destination.threadId ?? '__attention__', text: request.text, authorId: request.actorId,
+      reason: `Answer to ${attention.id}`, dispatch: true })
     const answeredAt = this.now()
     const answered: Attention = { ...attention, status: 'answered', answeredAt, answeredBy: request.actorId, answerText: request.text,
-      answerCommandId: request.commandId, answerSourceEventId: answerEventId }
+      answerCommandId: request.commandId, answerSourceEventId: answerEventId,
+      ...(request.viewAnswer ? { answerView: structuredClone(request.viewAnswer) } : {}) }
     await tx.replace('attention', attention.id, answered)
     const updatedTicket = (await tx.get<Work['ticket']>('ticket', request.ticketId))!
-    if (stopped) await tx.replace('ticket', ticket.id, { ...updatedTicket, state: 'open' })
-    else {
-      const { constraint: _constraint, ...openTicket } = updatedTicket
-      await tx.replace('ticket', ticket.id, { ...openTicket, state: 'open' })
-    }
+    const { constraint: _constraint, ...openTicket } = updatedTicket
+    await tx.replace('ticket', ticket.id, { ...openTicket, state: 'open' })
     return { attention: answered, input }
+  }
+
+  async supersedeForStop(tx: AsyncTx, ticketId: string) {
+    const current = await this.current(tx, ticketId)
+    if (current?.status !== 'waiting') return
+    await tx.replace('attention', current.id, { ...current, status: 'superseded', supersededAt: this.now(), supersededBy: 'human-stop' })
   }
 
   async current(tx: AsyncTx, ticketId: string) {
@@ -125,15 +153,21 @@ export class Attentions {
 
   async history(tx: AsyncTx, ticketId: string) {
     const items: Attention[] = []
-    let cursor = `${historyPrefix(ticketId)}:`
+    const prefix = `${historyPrefix(ticketId)}:`
+    let cursor = prefix
     for (let pageCount = 0; pageCount < 10; pageCount++) {
       const page = await tx.scan<Attention>('attention', { limit: 100, after: cursor })
-      items.push(...page.items.map(item => item.value).filter(item => item.ticketId === ticketId))
-      if (!page.cursor || !page.cursor.startsWith(cursor)) return items.sort((left, right) => left.sequence - right.sequence)
+      for (const item of page.items) {
+        if (!item.id.startsWith(prefix)) break
+        if (item.value.ticketId === ticketId) items.push(item.value)
+      }
+      if (!page.cursor || !page.cursor.startsWith(prefix)) return items.sort((left, right) => left.sequence - right.sequence)
       cursor = page.cursor
       if (pageCount === 9) {
         const confirmation = await tx.scan<Attention>('attention', { limit: 1, after: cursor })
-        if (!confirmation.items[0]?.value || confirmation.items[0].value.ticketId !== ticketId) return items.sort((left, right) => left.sequence - right.sequence)
+        if (!confirmation.items[0]?.id.startsWith(prefix) || confirmation.items[0].value.ticketId !== ticketId) {
+          return items.sort((left, right) => left.sequence - right.sequence)
+        }
       }
     }
     throw new CoreError('ATTENTION_BUDGET', 'The Ticket Attention history exceeds its 1000-record budget.')

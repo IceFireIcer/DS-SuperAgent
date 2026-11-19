@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1
 
-# Build: installs dsh and packs the plugin, then initializes a template DSH_HOME
-# (the web profile with ds-bot installed) that the entrypoint copies into /data
+# Build: installs dsh and packs the one product package, then initializes a
+# template DSH_HOME that the entrypoint copies into /data
 # on first start. Build context is the repository root:
-#   docker build -f docker/Dockerfile -t ds-bot:local .
+#   docker build -f docker/Dockerfile -t ds-superagent:local .
 FROM node:24-bookworm-slim AS build
 
 ARG NPM_REGISTRY=https://registry.npmjs.org/
-ARG DSH_VERSION=0.2.0-rc.2
+ARG DSH_VERSION=0.2.1-rc.4
 
 RUN corepack enable \
     && npm config set registry "$NPM_REGISTRY" --global \
@@ -15,14 +15,23 @@ RUN corepack enable \
     && npm install -g "@deepseek-ai/dsh@${DSH_VERSION}" \
         --allow-scripts=@deepseek-ai/dsh-subprocess-local,node-pty,koffi,@google/genai,protobufjs
 
-COPY ds-bot/ /src/ds-bot/
+COPY superagent/ /src/superagent/
 
-# ds-bot has no build step at install (client.js is committed), so pack it as-is
-# and let `dsh plugin add` set up the web profile from dsh's own template.
-RUN cd /src/ds-bot \
+# The client and Office bundles are committed. Build the package, then let
+# `dsh plugin add` install its host, client and search provider together.
+RUN cd /src/superagent \
+    && npm ci --ignore-scripts --no-fund --no-audit \
+    && npm run build
+
+# pnpm 11 refuses lifecycle scripts until the exact dependency identities are
+# allowed. These are the native runtime dependencies required by the package.
+RUN DSH_HOME=/opt/dsh-template dsh plugin --profile web list \
+    && printf '\nallowBuilds:\n  "@deepseek-ai/dsh-subprocess-local@%s": true\n  "koffi@3.1.1": true\n  "node-pty@1.2.0-beta.15": true\n' "$DSH_VERSION" \
+        >> /opt/dsh-template/profiles/web/pnpm-workspace.yaml
+RUN cd /src/superagent \
     && npm pack --pack-destination /tmp \
-    && mv /tmp/ds-bot-*.tgz /tmp/ds-bot.tgz \
-    && DSH_HOME=/opt/dsh-template dsh plugin --profile web add /tmp/ds-bot.tgz
+    && mv /tmp/ds-superagent-*.tgz /tmp/ds-superagent.tgz \
+    && DSH_HOME=/opt/dsh-template dsh plugin --profile web add /tmp/ds-superagent.tgz
 
 FROM node:24-bookworm-slim
 
@@ -37,16 +46,17 @@ RUN apt-get update \
 COPY --from=build /usr/local/ /usr/local/
 COPY --from=build /opt/dsh-template /opt/dsh-template
 COPY --chmod=0755 docker/entrypoint.sh /usr/local/bin/entrypoint.sh
-COPY docker/docker.patch.yml /opt/ds-bot/docker.patch.yml
+COPY docker/docker.patch.yml /opt/ds-superagent/docker.patch.yml
 
 ENV DSH_HOME=/data \
-    DSH_PERMISSION_MODE=danger-full-access
+    DSH_PERMISSION_MODE=danger-full-access \
+    DS_SUPERAGENT_WORKSPACE=/workspace
 
 WORKDIR /workspace
 EXPOSE 3080
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
-LABEL org.opencontainers.image.title="DS Bot" \
-      org.opencontainers.image.description="A team of long-lived Bots on DeepSeek Harness, served by dsh web" \
-      org.opencontainers.image.source="https://github.com/Fei2411/DS-Bot" \
+LABEL org.opencontainers.image.title="DS SuperAgent" \
+      org.opencontainers.image.description="DS SuperAgent Main, Router and Workers served by dsh web" \
+      org.opencontainers.image.source="https://github.com/IceFireIcer/DS-SuperAgent" \
       org.opencontainers.image.licenses="Apache-2.0"

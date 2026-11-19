@@ -1,6 +1,8 @@
 import type { Artifact, LocalCommand, LocalJob, LocalPermission, RemoteJobObservation } from './local-environment.js'
 import type { RemoteJobRecovery } from './remote-protocol.js'
 import type { EnvironmentAssetCapabilities, EnvironmentAssetPage, EnvironmentAssetReference, EnvironmentAssetSupport, EnvironmentSkillSummary, SpillStream } from './environment-assets.js'
+import type { CapabilityId } from './capability-locations.js'
+import type { WorkCopySnapshot } from './work-copy.js'
 
 export type EnvironmentKind = 'local' | 'remote'
 
@@ -11,6 +13,8 @@ export interface EnvironmentConfig {
   allowedActorIds: string[]
   permissions: LocalPermission[]
   commands: Record<string, LocalCommand>
+  /** Explicitly permits Worker-owned shell and PTY commands in this local execution world. */
+  allowShell?: boolean
   /** Names of device-side commands whose argv never leaves the device. */
   commandNames?: readonly string[]
   /** Deployment-owned verbatim asset store; it must live outside the exposed working directory. */
@@ -37,6 +41,8 @@ export interface EnvironmentProbe {
   fingerprint: string
   capabilities: LocalPermission[]
   capacity: 'available' | 'unknown' | { active: number; max: number }
+  /** Product capabilities this exact execution world can serve. Absent means undeclared, not available. */
+  productCapabilities?: Partial<Record<CapabilityId, boolean>>
   reason?: string
 }
 
@@ -44,14 +50,23 @@ export interface PreparedEnvironment {
   readonly cwd: string
   invoke(name: string, args: Record<string, string>, signal?: AbortSignal): Promise<Record<string, unknown>>
   artifact(path: string, signal?: AbortSignal): Promise<Artifact>
+  stageAttachment?(reference: EnvironmentAssetReference, path: string, signal?: AbortSignal): Promise<{ path: string; bytes: number; sha256: string }>
   assetCapabilities?(signal?: AbortSignal): Promise<EnvironmentAssetCapabilities>
   saveAttachment?(input: { name: string; data: Uint8Array; mediaType?: string }, signal?: AbortSignal): Promise<EnvironmentAssetReference>
+  /** Trusted product admission; Worker tools keep their smaller attachment limit. */
+  saveProductAttachment?(input: { name: string; data: Uint8Array; mediaType?: string }, signal?: AbortSignal): Promise<EnvironmentAssetReference>
   readAsset?(reference: EnvironmentAssetReference, options?: { offset?: number; maxBytes?: number }, signal?: AbortSignal): Promise<EnvironmentAssetPage>
+  /** Trusted product download returns original bytes, after the caller checks ownership. */
+  readProductAsset?(reference: EnvironmentAssetReference, options?: { offset?: number; maxBytes?: number }, signal?: AbortSignal): Promise<EnvironmentAssetPage>
   spillReference?(jobId: string, stream: SpillStream, signal?: AbortSignal): Promise<EnvironmentAssetReference>
   listSkills?(signal?: AbortSignal): Promise<EnvironmentSkillSummary[]>
   sanitize(text: string): string
+  /** Host-side preflight view of the bound worktree; it never mutates the Environment. */
+  inspectWorkCopy?(signal?: AbortSignal): Promise<WorkCopySnapshot>
   planCommand?(name: string, mode?: 'foreground' | 'background'): { jobId: string; remote: RemoteJobObservation }
   startCommand?(name: string, jobId?: string): Promise<LocalJob>
+  startShell?(command: string, jobId?: string): Promise<LocalJob>
+  startTerminal?(command: string, jobId?: string): Promise<LocalJob>
   attachCommand?(jobId: string): Promise<LocalJob>
   inspectRange?(jobId: string): Promise<{ jobId: string; state: string; settled: boolean; cancelled: boolean
     ownerId: string | null; deadlineAt: number | null; recovery?: RemoteJobRecovery
@@ -86,7 +101,7 @@ export function environmentCommandNames(environment: ExecutionEnvironment): stri
 
 export function environmentHasCommand(environment: ExecutionEnvironment | undefined): boolean {
   if (!environment || !environment.config.permissions.includes('command')) return false
-  return environmentCommandNames(environment).some(name => name !== environment.config.setup)
+  return environment.config.allowShell === true || environmentCommandNames(environment).some(name => name !== environment.config.setup)
 }
 
 export function sameEnvironment(location: EnvironmentLocation | undefined, environment: ExecutionEnvironment) {

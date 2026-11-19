@@ -12,15 +12,17 @@ export interface Effect extends EffectRequest {
   queueKey: string
   state: 'pending' | 'running' | 'unknown' | 'failed'
   attempts: number
+  reconcileAttempts?: number
   availableAt: number
   token?: string
   leaseUntil?: number
   reason?: string
+  owner?: string
 }
 export interface EffectGate {
   paused(transaction: AsyncTx): Promise<boolean>
 }
-export interface EffectReceipt { id: string; generation: string; state: 'pending' | 'done' | 'failed' | 'unknown' | 'superseded'; delivery?: 'pending' | 'sent' | 'dropped'; transient?: boolean; reason?: string; attempts?: number }
+export interface EffectReceipt { id: string; generation: string; state: 'pending' | 'done' | 'failed' | 'unknown' | 'superseded'; delivery?: 'pending' | 'sent' | 'dropped' | 'unknown'; transient?: boolean; reason?: string; attempts?: number }
 export type EffectResult = { type: 'success' } | { type: 'transient' | 'permanent' | 'unknown' | 'defer' | 'not-applied'; reason: string }
 export interface EffectHandler {
   execute(effect: Effect, context: { idempotencyKey: string; signal: AbortSignal }): Promise<EffectResult>
@@ -35,6 +37,9 @@ export interface EffectsOptions {
   scanIntervalMs?: number
   maxQueuedEffects?: number
   now?: () => number
+  owner?: string
+  claimUnowned?: boolean
+  streamOwners?: Partial<Record<EffectStream, string>>
 }
 
 export class Effects {
@@ -45,6 +50,9 @@ export class Effects {
   private readonly scanIntervalMs: number
   private readonly capacity: number
   private readonly now: () => number
+  private readonly owner: string | undefined
+  private readonly claimUnowned: boolean
+  private readonly streamOwners: Partial<Record<EffectStream, string>>
   private timer: ReturnType<typeof setInterval> | undefined
   private readonly passes = new Set<Promise<unknown>>()
   private readonly activeLanes = new Map<string, Promise<number>>()
@@ -88,6 +96,9 @@ export class Effects {
     this.scanIntervalMs = options.scanIntervalMs ?? 1000
     this.capacity = options.maxQueuedEffects ?? 1000
     this.now = options.now ?? Date.now
+    this.owner = options.owner
+    this.claimUnowned = options.claimUnowned !== false
+    this.streamOwners = options.streamOwners ?? {}
     for (const [value, maximum] of [[this.maxAttempts, 10], [this.retryDelayMs, 60000], [this.timeoutMs, 60000], [this.scanIntervalMs, 60000], [this.capacity, 1000]]) {
       if (!Number.isInteger(value) || value! < 1 || value! > maximum!) throw new CoreError('INVALID_CONFIG', 'Invalid bounded effects budget.')
     }
@@ -106,9 +117,10 @@ export class Effects {
     request = { key: request.key, scope: request.scope, stream: request.stream, payload: JSON.parse(payload) }
     const key = this.key(request)
     const index = await transaction.get<{ queueKey: string; completed?: Effect }>('effect-key', key)
-    if (index?.completed && JSON.stringify(index.completed.payload) === payload) return index.completed
+    // JSONB does not preserve object key order, so a stored payload is compared in its canonical form too.
+    if (index?.completed && canonicalJson(index.completed.payload) === payload) return index.completed
     const previous = index ? await transaction.get<Effect>('effect', index.queueKey) : undefined
-    if (previous && JSON.stringify(previous.payload) === payload) return previous
+    if (previous && canonicalJson(previous.payload) === payload) return previous
     let queueKey = previous?.queueKey
     if (!queueKey) {
       const count = await transaction.get<number>('effect-meta', 'count') ?? 0
@@ -119,10 +131,12 @@ export class Effects {
       if (!await transaction.replace('effect-meta', 'sequence', sequence)) await transaction.insert('effect-meta', 'sequence', sequence)
       queueKey = String(sequence).padStart(16, '0')
     }
+    const owner = this.streamOwners[request.stream] ?? this.owner
     const effect: Effect = {
       key: request.key, stream: request.stream, scope: request.scope, payload: JSON.parse(payload),
       id: previous?.id ?? randomUUID(), generation: randomUUID(), queueKey,
       state: 'pending', attempts: 0, availableAt: this.now(),
+      ...(owner ? { owner } : {}),
     }
     if (previous) {
       await this.writeReceipt(transaction, previous, 'superseded')
@@ -186,11 +200,12 @@ export class Effects {
     return this.storage.transaction(this.instanceId, transaction => this.hasUnknownScopeInTransaction(transaction, ticketId))
   }
 
-  async hasUnknownScopeInTransaction(transaction: AsyncTx, ticketId: string) {
+  async hasUnknownScopeInTransaction(transaction: AsyncTx, ticketId: string, stream?: EffectStream) {
     let cursor: string | undefined
     for (let pageCount = 0; pageCount < 10; pageCount++) {
       const page = await transaction.scan<Effect>('effect', { limit: 100, ...(cursor ? { after: cursor } : {}) })
-      if (page.items.some(item => item.value.state === 'unknown' && (item.value.scope === ticketId || item.value.payload.ticketId === ticketId))) return true
+      if (page.items.some(item => item.value.state === 'unknown' && (!stream || item.value.stream === stream)
+        && (item.value.scope === ticketId || item.value.payload.ticketId === ticketId))) return true
       if (!page.cursor) return false
       cursor = page.cursor
       if (pageCount === 9) throw new CoreError('QUEUE_FULL', 'The unknown outcome scan exceeded its bounded effect budget.')
@@ -218,6 +233,20 @@ export class Effects {
     })
   }
 
+  async status() {
+    const counts = { pending: 0, running: 0, unknown: 0, failed: 0 }
+    return this.storage.transaction(this.instanceId, async tx => {
+      let after: string | undefined
+      for (let index = 0; index < 10; index++) {
+        const page = await tx.scan<Effect>('effect', { limit: 100, ...(after === undefined ? {} : { after }) })
+        for (const { value } of page.items) counts[value.state]++
+        if (!page.cursor) return { ...counts, partial: false }
+        after = page.cursor
+      }
+      return { ...counts, partial: true }
+    })
+  }
+
   receipt(id: string, generation: string): Promise<EffectReceipt | undefined> {
     identifier(id, 'effect ID')
     identifier(generation, 'effect generation')
@@ -230,11 +259,43 @@ export class Effects {
     return transaction.get<EffectReceipt>('effect-receipt', this.receiptKey(id, generation))
   }
 
+  /** Reconcile one unknown external outcome under its original Effect identity and idempotency key. */
+  async reconcile(id: string, generation: string, options: { allowPending?: boolean } = {}): Promise<boolean> {
+    identifier(id, 'effect ID')
+    identifier(generation, 'effect generation')
+    let queueKey: string | undefined
+    let cursor: string | undefined
+    for (let pageCount = 0; pageCount < 10 && queueKey === undefined; pageCount++) {
+      const page = await this.list(cursor)
+      const match = page.items.find(effect => effect.id === id && effect.generation === generation
+        && (effect.state === 'unknown' || options.allowPending && effect.state === 'pending' && effect.attempts > 0))
+      if (match) queueKey = match.queueKey
+      else if (page.cursor === undefined) break
+      else cursor = page.cursor
+    }
+    if (queueKey === undefined) return false
+    const claimed = await this.storage.transaction(this.instanceId, async transaction => {
+      const current = await transaction.get<Effect>('effect', queueKey!)
+      if (!current || current.id !== id || current.generation !== generation
+        || (current.state !== 'unknown' && !(options.allowPending && current.state === 'pending' && current.attempts > 0))) return undefined
+      if (current.availableAt > this.now()) {
+        current.availableAt = this.now()
+        await transaction.replace('effect', queueKey!, current)
+      }
+      return this.claim(transaction, queueKey!)
+    })
+    if (!claimed || claimed.id !== id || claimed.generation !== generation) return false
+    const result = await this.invoke(claimed)
+    await this.settle(claimed, result)
+    return (await this.receipt(id, generation))?.state === 'done'
+  }
+
   private async writeReceipt(transaction: AsyncTx, effect: Effect, state: EffectReceipt['state'], reason?: string, transient = false) {
     const receipt: EffectReceipt = { id: effect.id, generation: effect.generation, state, attempts: effect.attempts,
       ...(transient ? { transient: true } : {}), ...(reason === undefined ? {} : { reason }) }
     if (effect.stream === 'outbox') {
-      receipt.delivery = state === 'done' ? 'sent' : state === 'superseded' || state === 'failed' && !transient ? 'dropped' : 'pending'
+      receipt.delivery = state === 'done' ? 'sent' : state === 'unknown' ? 'unknown'
+        : state === 'superseded' || state === 'failed' && !transient ? 'dropped' : 'pending'
     }
     const key = this.receiptKey(effect.id, effect.generation)
     if (!await transaction.replace('effect-receipt', key, receipt)) await transaction.insert('effect-receipt', key, receipt)
@@ -263,6 +324,8 @@ export class Effects {
     if (this.paused || await this.gate?.paused(transaction)) return undefined
     const effect = await transaction.get<Effect>('effect', queueKey)
     if (!effect || effect.state === 'failed' || effect.availableAt > this.now()) return undefined
+    if (effect.owner && effect.owner !== this.owner) return undefined
+    if (!effect.owner && !this.claimUnowned) return undefined
     if (!this.handlers[effect.stream]) return undefined
     if (await this.hasEarlier(transaction, effect, batchKeys)) return undefined
     if (effect.state === 'running' && effect.leaseUntil! > this.now()) return undefined
@@ -274,7 +337,7 @@ export class Effects {
       await this.writeReceipt(transaction, effect, 'unknown', effect.reason)
       return undefined
     }
-    if (effect.attempts >= this.maxAttempts) {
+    if ((!recovering && effect.attempts >= this.maxAttempts) || (recovering && (effect.reconcileAttempts ?? 0) >= this.maxAttempts)) {
       effect.state = recovering ? 'unknown' : 'failed'
       effect.reason = 'The effect attempt budget was exhausted.'
       await transaction.replace('effect', queueKey, effect)
@@ -283,6 +346,7 @@ export class Effects {
     }
     effect.state = recovering ? 'unknown' : 'running'
     effect.attempts++
+    if (recovering) effect.reconcileAttempts = (effect.reconcileAttempts ?? 0) + 1
     effect.token = randomUUID()
     effect.leaseUntil = this.now() + this.timeoutMs + 1000
     effect.availableAt = effect.leaseUntil
@@ -423,7 +487,10 @@ export class Effects {
     for (const effect of effects) {
       if (this.stopped || this.paused) break
       const batch = await this.claimBatch(effect.queueKey)
-      if (!batch?.length) break
+      if (!batch?.length) {
+        if (effect.state === 'failed') continue
+        break
+      }
       const results = await this.invokeBatch(batch)
       let released = true
       for (const [index, claimed] of batch.entries()) {
