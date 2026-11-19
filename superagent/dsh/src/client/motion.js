@@ -1,6 +1,8 @@
 import { createElement as h, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
+export const MOTION_LEVELS = ['quiet', 'normal', 'lively']
 export const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
+export const mascotInteraction = () => !reducedMotion() && document.body?.dataset.btMotion !== 'quiet'
 // Touch devices never hover: controls revealed on hover need a tap path instead.
 export const noHover = () => window.matchMedia?.('(hover: none)').matches === true
 

@@ -1,10 +1,28 @@
-// Interface copy follows the DSH language. Keys are the English text; `zh` maps them.
+// Interface copy follows the DSH language. Keys are the English fallback text.
 // Copy is looked up at render time and every slot outlet re-renders on a language
 // switch, so nothing caches a translated string.
+
+import de from './locales/de.js'
+import es from './locales/es.js'
+import fr from './locales/fr.js'
+import ja from './locales/ja.js'
+import ko from './locales/ko.js'
+import zhTW from './locales/zh-tw.js'
 
 export const NAMESPACE = 'ds-superagent'
 
 const ZH = {
+  Roles: '角色', 'Agent presets': '智能体预设', 'Built-in plugins': '内置插件',
+  'Connections and capabilities': '连接与能力', IM: '即时通信', Phone: '手机',
+  'Browser plugin': '浏览器插件', 'Computer control': '电脑操控', 'Capability library': '能力库',
+  SuperAgent: 'SuperAgent', Calendar: '日程', 'Remote clients': '远程客户端', Help: '帮助',
+  'Plugin version': '插件版本', License: '许可协议', 'Project on GitHub': '在 GitHub 查看项目',
+  'Loading settings…': '正在加载设置…', 'This setting is unavailable here.': '此处暂不可用。',
+  'Could not load this setting.': '无法加载此设置。',
+  'Content font size': '内容字号', 'Display appearance': '显示外观', 'Color mode': '颜色模式',
+  'Light mode': '浅色模式', 'Dark mode': '深色模式', 'Follow system': '跟随系统',
+  'View activity': '查看活动', 'Open Main': '打开主对话', 'Search commands': '搜索命令', 'Close search': '关闭搜索',
+  'A new reply is waiting': '有一条新回复',
   'Proactive preparation': '主动准备',
   'Pause proactive preparation': '暂停主动准备',
   'Paused preparations cannot submit a result. Existing work continues.': '暂停后准备结果无法提交，已有工作继续。',
@@ -2161,6 +2179,14 @@ const HOST_ZH = {
 }
 Object.assign(ZH, HOST_ZH)
 
+const ADDITIONAL_LANGUAGES = [
+  { id: 'ko', label: '한국어', fallback: 'en' },
+  { id: 'zh-TW', label: '繁體中文', fallback: 'zh' },
+]
+
+export const DICTIONARY = { zh: ZH, 'zh-TW': zhTW, de, es, fr, ja, ko }
+const DATE_LOCALES = { zh: 'zh-CN', 'zh-tw': 'zh-TW', de: 'de-DE', es: 'es-ES', fr: 'fr-FR', ja: 'ja-JP', ko: 'ko-KR' }
+
 const fill = (text, params) => (params
   ? text.replace(/\{(\w+)\}/g, (match, name) => (name in params ? String(params[name]) : match))
   : text)
@@ -2171,12 +2197,28 @@ let bound = null
 // `locale` is the DSH locale service; without one, copy stays English.
 export function installLocale(locale) {
   if (!locale || typeof locale.register !== 'function' || typeof locale.bind !== 'function') return () => {}
+  const disposers = []
+  const add = (dispose) => { if (typeof dispose === 'function') disposers.push(dispose) }
+  const disposeAll = () => { for (const dispose of disposers.splice(0).reverse()) dispose() }
+  let translate
+  try {
+    for (const [id, dictionary] of Object.entries(DICTIONARY)) add(locale.register(NAMESPACE, id, dictionary))
+    if (typeof locale.addLanguage === 'function') {
+      const existing = new Set((locale.getLocale?.()?.locales ?? []).map(({ id }) => id.toLowerCase()))
+      for (const definition of ADDITIONAL_LANGUAGES) {
+        if (!existing.has(definition.id.toLowerCase())) add(locale.addLanguage(definition))
+      }
+    }
+    translate = locale.bind(NAMESPACE)
+  } catch (error) {
+    disposeAll()
+    throw error
+  }
   service = locale
-  bound = locale.bind(NAMESPACE)
-  const off = locale.register(NAMESPACE, 'zh', ZH)
+  bound = translate
   return () => {
     if (service === locale) { service = null; bound = null }
-    if (typeof off === 'function') off()
+    disposeAll()
   }
 }
 
@@ -2196,11 +2238,11 @@ export function hostText(message) {
 
 // The active DSH language tag, for dates and times.
 export function language() {
-  const active = service?.getLocale?.().active
+  const active = service?.getLocale?.()?.active
   return typeof active === 'string' ? active : 'en'
 }
 
-export const dateLocale = () => (language().startsWith('zh') ? 'zh-CN' : 'en-US')
-
-// Translations for the tests: the Chinese dictionary itself.
-export const DICTIONARY = { zh: ZH }
+export function dateLocale() {
+  const active = language().toLowerCase()
+  return Object.hasOwn(DATE_LOCALES, active) ? DATE_LOCALES[active] : 'en-US'
+}

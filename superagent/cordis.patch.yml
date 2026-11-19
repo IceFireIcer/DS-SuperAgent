@@ -28,3 +28,6 @@
 - id: session-controller
   isolate:
     sessionController: product-native-session
+
+- id: ui-settings-general
+  disabled: true

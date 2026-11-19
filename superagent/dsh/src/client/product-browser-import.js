@@ -204,11 +204,11 @@ export function ProductBrowserImport({ binding, call, browserBridge, directoryOp
 }
 
 export const PRODUCT_BROWSER_IMPORT_CSS = `
-.bt-product-browser-import{display:flex;flex-direction:column;gap:8px;margin:14px 0;padding:12px;border:1px solid var(--bt-line);border-radius:8px}
-.bt-product-browser-import h3,.bt-product-browser-import h4{margin:0;font-size:13px}
-.bt-product-browser-import p{margin:3px 0;color:var(--bt-ink-2);font-size:12px;line-height:18px}
-.bt-product-browser-import-preview{padding:10px;border:1px solid var(--bt-line);border-radius:8px}
-.bt-product-browser-import-preview ul{padding-left:18px;margin:6px 0;font-size:12px}
+.bt-product-browser-import{display:flex;flex-direction:column;gap:8px}
+.bt-product-browser-import h3,.bt-product-browser-import h4{margin:0;font-size:var(--bt-ps-text)}
+.bt-product-browser-import p{margin:3px 0;color:var(--bt-ink-2);font-size:var(--bt-ps-small);line-height:18px}
+.bt-product-browser-import-preview{padding:10px;border:1px solid var(--bt-line);border-radius:var(--bt-ps-radius-control)}
+.bt-product-browser-import-preview ul{padding-left:18px;margin:6px 0;font-size:var(--bt-ps-small)}
 .bt-product-browser-import-history{display:flex;flex-direction:column;gap:6px}
 .bt-product-browser-import-row{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--bt-line)}
 .bt-product-browser-import button:focus-visible,.bt-product-browser-import select:focus-visible,.bt-product-browser-import input:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}

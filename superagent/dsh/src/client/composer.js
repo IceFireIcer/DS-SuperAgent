@@ -102,7 +102,7 @@ export function MainComposer({ onSend, onStop, busy, stopping, readOnly = false,
           onChange: event => { const files = [...(event.target.files ?? [])]; event.target.value = ''; if (files.length) onFiles(files) } }),
         h('button', { type: 'button', className: 'bt-soft', disabled: busy || uploading,
           'aria-label': t('Add files'), title: t('Add files'), onClick: () => fileInput.current?.click() }, h(PaperclipIcon))) : null,
-      busy && onStop && !readOnly ? h('button', { className: 'bt-soft', type: 'button', disabled: stopping, onClick: onStop },
+      busy && onStop && !readOnly ? h('button', { className: 'bt-soft', type: 'button', 'data-action': 'stop-main', disabled: stopping, onClick: onStop },
         stopping ? t('Stopping…') : t('Stop reply')) : null,
       h('button', { className: 'bt-soft', type: 'submit', disabled: busy || uploading || voiceState !== 'idle' || dictation.listening || readOnly || !hasContent },
         readOnly ? t('Read-only') : uploading ? t('Uploading…') : busy ? t('Sending…') : t('Send'))))

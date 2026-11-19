@@ -5,28 +5,20 @@ import {
 import { paintCss } from './inks.js'
 import { BotMark } from './mark.js'
 import { t } from './i18n.js'
+import { FieldRow } from './product-settings-components.js'
+
+export { SectionCard as Card } from './product-settings-components.js'
 
 const capitalize = word => word[0].toUpperCase() + word.slice(1)
 
 export function Row({ label, hint, stack = false, children }) {
-  return h('label', { className: stack ? 'bt-set-row bt-bs-row bt-bs-stack' : 'bt-set-row bt-bs-row' },
-    h('span', { className: 'bt-set-copy' }, h('span', { className: 'bt-bs-label' }, label),
-      hint ? h('span', { className: 'bt-set-hint' }, hint) : null),
-    children)
-}
-
-export function Card({ title, children }) {
-  return h('section', { className: 'bt-set-section' }, title ? h('h3', null, title) : null,
-    h('div', { className: 'bt-set-card' }, children))
+  return h(FieldRow, { label, hint, layout: stack ? 'stack' : undefined, control: children })
 }
 
 export function SwitchRow({ label, hint, on, disabled, onChange }) {
-  return h('div', { className: 'bt-set-row bt-bs-row' },
-    h('span', { className: 'bt-set-copy' }, h('span', { className: 'bt-bs-label' }, label),
-      hint ? h('span', { className: 'bt-set-hint' }, hint) : null),
-    h('button', { type: 'button', role: 'switch', className: 'bt-switch', 'aria-checked': on,
+  return h(FieldRow, { label, hint, control: h('button', { type: 'button', role: 'switch', className: 'bt-switch', 'aria-checked': on,
       'aria-label': label, disabled, onClick: () => onChange(!on) },
-    h('span', { className: 'bt-switch-knob', 'aria-hidden': true })))
+    h('span', { className: 'bt-switch-knob', 'aria-hidden': true })) })
 }
 
 function ShapeRing({ shape, size }) {

@@ -33,9 +33,2094 @@ module.exports = __toCommonJS(index_exports);
 // src/client/dsh-primitives.js
 var import_dsh_client_ui_primitives = require("@deepseek-ai/dsh-client-ui-primitives");
 
+// src/client/locales/de.js
+var de_default = {
+  "Dark mode": "Dunkel",
+  "Follow system": "System",
+  "Light mode": "Hell",
+  "A new reply is waiting": "Eine neue Antwort wartet auf dich",
+  "About": "Über",
+  "Accent": "Akzentfarbe",
+  "Acorn": "Eichel",
+  "Activity": "Aktivität",
+  "Add files": "Dateien hinzufügen",
+  "Allowed": "Erlaubt",
+  "Appearance": "Darstellung",
+  "Approve": "Freigeben",
+  "Arguments": "Argumente",
+  "Aurora": "Polarlicht",
+  "Back": "Zurück",
+  "Back to chat": "Zurück zum Chat",
+  "Beacon": "Leuchtfeuer",
+  "Black": "Schwarz",
+  "Blocked": "Blockiert",
+  "Blossom": "Blüte",
+  "Blue": "Blau",
+  "Brown": "Braun",
+  "Browse folders…": "Ordner durchsuchen…",
+  "Bull": "Stier",
+  "Bunny": "Hase",
+  "Cancel": "Abbrechen",
+  "Cancelled": "Abgebrochen",
+  "Capabilities": "Fähigkeiten",
+  "Character color": "Farbe",
+  "Character shape": "Form",
+  "Charcoal": "Anthrazit",
+  "Check for updates": "Nach Updates suchen",
+  "Choose a PNG, JPEG, WebP, or GIF image": "Wähle ein PNG-, JPEG-, WebP- oder GIF-Bild",
+  "Choose a folder…": "Ordner auswählen…",
+  "Choose an image smaller than 25 MB": "Wähle ein Bild, das kleiner als 25 MB ist",
+  "Clear search": "Suche löschen",
+  "Click again to delete": "Zum Löschen erneut klicken",
+  "Click again to remove": "Zum Entfernen erneut klicken",
+  "Close settings": "Einstellungen schließen",
+  "Cobalt": "Kobaltblau",
+  "Color mode": "Farbmodus",
+  "Commands": "Befehle",
+  "Connect": "Verbinden",
+  "Connecting…": "Wird verbunden…",
+  "Connection": "Verbindung",
+  "Connectors": "Konnektoren",
+  "Content font size": "Schriftgröße der Unterhaltung",
+  "Copied": "Kopiert",
+  "Copy": "Kopieren",
+  "Couldn't hear that": "Konnte nichts verstehen",
+  "Couldn't start dictation": "Diktat konnte nicht gestartet werden",
+  "Create task": "Aufgabe erstellen",
+  "Creating…": "Wird erstellt…",
+  "Cushion": "Kissen",
+  "Custom accent": "Eigene Akzentfarbe",
+  "Date and time": "Datum und Uhrzeit",
+  "Days": "Wochentage",
+  "Decline": "Ablehnen",
+  "Deepseek": "DeepSeek-Blau",
+  "Delete": "Löschen",
+  "Delete task": "Aufgabe löschen",
+  "Deleted": "Gelöscht",
+  "Diagnostics": "Diagnosedaten",
+  "Dictation is not available in this browser": "Diktieren wird in diesem Browser nicht unterstützt",
+  "Disconnect": "Trennen",
+  "Dismiss": "Schließen",
+  "Display appearance": "Darstellung",
+  "Download": "Herunterladen",
+  "Each Bot's own folder": "Eigener Ordner jedes Bots",
+  "Enter a path…": "Pfad eingeben…",
+  "Environment": "Umgebungsvariablen",
+  "Every": "Alle",
+  "Every day": "Jeden Tag",
+  "Every day at {time}": "Täglich um {time}",
+  "Every hour": "Jede Stunde",
+  "Every week": "Jede Woche",
+  "Every weekday at {time}": "An Werktagen um {time}",
+  "Every weekend at {time}": "Am Wochenende um {time}",
+  "Every {count} days": "Alle {count} Tage",
+  "Every {count} hours": "Alle {count} Stunden",
+  "Every {count} minutes": "Alle {count} Minuten",
+  "Every {days} at {time}": "Jeden {days} um {time}",
+  "Evidence": "Nachweis",
+  "Failed": "Fehlgeschlagen",
+  "Finished": "Abgeschlossen",
+  "Folder path": "Ordnerpfad",
+  "Folders": "Ordner",
+  "Footnotes": "Fußnoten",
+  "From": "Von",
+  "Full path of a folder": "Vollständiger Pfad eines Ordners",
+  "Gem": "Edelstein",
+  "General": "Allgemein",
+  "Graphite": "Graphit",
+  "Gray": "Grau",
+  "Green": "Grün",
+  "Gumdrop": "Fruchtgummi",
+  "Importing…": "Wird importiert…",
+  "Input": "Eingabe",
+  "Install and restart": "Installieren und neu starten",
+  "Instructions": "Anweisungen",
+  "Kitty": "Kätzchen",
+  "Lively": "Lebhaft",
+  "Load more": "Mehr laden",
+  "Loading…": "Wird geladen…",
+  "Memory": "Gedächtnis",
+  "Microphone access is blocked": "Mikrofonzugriff ist blockiert",
+  "Mode": "Modus",
+  "Model": "Modell",
+  "Models": "Modelle",
+  "Mono": "Monochrom",
+  "Moon": "Mond",
+  "Moonlight": "Mondlicht",
+  "New task": "Neue Aufgabe",
+  "Next: {time}": "Nächste Ausführung: {time}",
+  "No folders inside.": "Keine Unterordner vorhanden.",
+  "No results": "Keine Ergebnisse",
+  "No scheduled tasks yet.": "Noch keine geplanten Aufgaben.",
+  "No usage yet.": "Noch keine Nutzung.",
+  "Nothing saved yet": "Noch nichts gespeichert",
+  "Off": "Aus",
+  "On the schedule {expression}": "Nach Zeitplan {expression}",
+  "Once": "Einmalig",
+  "Once, {time}": "Einmalig, {time}",
+  "Open": "Öffnen",
+  "Paper": "Papier",
+  "Paused": "Pausiert",
+  "Peanut": "Erdnuss",
+  "Pebbles": "Kiesel",
+  "Permissions": "Berechtigungen",
+  "Phone": "Telefon",
+  "Pick a time in the future": "Wähle einen Zeitpunkt in der Zukunft",
+  "Profile": "Profil",
+  "Quiet": "Ruhig",
+  "Read-only": "Nur lesen",
+  "Ready": "Bereit",
+  "Red": "Rot",
+  "Reject": "Ablehnen",
+  "Remove from memory": "Aus dem Gedächtnis löschen",
+  "Remove key": "Schlüssel entfernen",
+  "Remove photo": "Foto entfernen",
+  "Remove {name}": "{name} entfernen",
+  "Repeat": "Wiederholen",
+  "Results": "Ergebnisse",
+  "Retry": "Erneut versuchen",
+  "Retrying…": "Wird erneut versucht…",
+  "Revoke": "Widerrufen",
+  "Rose": "Rosé",
+  "Running": "Läuft",
+  "Saucer": "Untertasse",
+  "Save": "Speichern",
+  "Save key": "Schlüssel speichern",
+  "Saving…": "Wird gespeichert…",
+  "Scheduled tasks": "Geplante Aufgaben",
+  "Search": "Suchen",
+  "Secrets": "Geheimnisse",
+  "Selected": "Ausgewählt",
+  "Send": "Senden",
+  "Send to": "Senden an",
+  "Sending…": "Wird gesendet…",
+  "Settings": "Einstellungen",
+  "Settings pages": "Einstellungsseiten",
+  "Sky": "Himmelblau",
+  "Some folders are not shown.": "Einige Ordner werden nicht angezeigt.",
+  "Star": "Stern",
+  "Stop dictation": "Diktat beenden",
+  "Stopped": "Gestoppt",
+  "Tangerine": "Mandarine",
+  "Team workspace": "Team-Arbeitsbereich",
+  "That image is too large": "Dieses Bild ist zu groß",
+  "Theme": "Design",
+  "Theme accent": "Design-Akzentfarbe",
+  "Time": "Uhrzeit",
+  "Try again": "Erneut versuchen",
+  "Unknown": "Unbekannt",
+  "Unread activity": "Ungelesene Aktivität",
+  "Up one level": "Eine Ebene nach oben",
+  "Up to date": "Auf dem neuesten Stand",
+  "Updates come with the DS SuperAgent app.": "Updates erfolgen über die DS SuperAgent-App.",
+  "Usage": "Nutzung",
+  "Use this folder": "Diesen Ordner verwenden",
+  "Violet": "Violett",
+  "Waiting for your answer": "Wartet auf deine Antwort",
+  "Wave": "Welle",
+  "Whale": "Wal",
+  "What to do": "Aufgabe",
+  "When": "Wann",
+  "Work": "Arbeit",
+  "Working folder": "Arbeitsordner",
+  "Yellow": "Gelb",
+  "You": "Du",
+  "by you": "von dir",
+  "by {name}": "von {name}",
+  "failed": "fehlgeschlagen",
+  "minutes": "Minuten",
+  "none": "keine",
+  "{count} models": "{count} Modelle",
+  "{provider} API key": "{provider}-API-Schlüssel"
+};
+
+// src/client/locales/es.js
+var es_default = {
+  "Dark mode": "Oscuro",
+  "Follow system": "Sistema",
+  "Light mode": "Claro",
+  "A new reply is waiting": "Tienes una nueva respuesta",
+  "About": "Acerca de",
+  "Accent": "Color de acento",
+  "Acorn": "Bellota",
+  "Activity": "Actividad",
+  "Add files": "Añadir archivos",
+  "Allowed": "Permitido",
+  "Animation": "Animación",
+  "Appearance": "Apariencia",
+  "Approve": "Aprobar",
+  "Arguments": "Argumentos",
+  "Back": "Atrás",
+  "Back to chat": "Volver al chat",
+  "Beacon": "Faro",
+  "Black": "Negro",
+  "Blocked": "Bloqueada",
+  "Blossom": "Flor",
+  "Blue": "Azul",
+  "Brown": "Marrón",
+  "Browse folders…": "Explorar carpetas…",
+  "Browser": "Navegador",
+  "Bull": "Toro",
+  "Bunny": "Conejo",
+  "Cancel": "Cancelar",
+  "Cancelled": "Cancelado",
+  "Capabilities": "Capacidades",
+  "Character color": "Color del personaje",
+  "Character shape": "Forma del personaje",
+  "Charcoal": "Carbón",
+  "Check for updates": "Buscar actualizaciones",
+  "Choose a PNG, JPEG, WebP, or GIF image": "Elige una imagen PNG, JPEG, WebP o GIF",
+  "Choose a folder…": "Elegir una carpeta…",
+  "Choose an image smaller than 25 MB": "Elige una imagen de menos de 25 MB",
+  "Clear search": "Borrar búsqueda",
+  "Click again to delete": "Haz clic de nuevo para eliminar",
+  "Click again to remove": "Haz clic de nuevo para quitar",
+  "Close settings": "Cerrar ajustes",
+  "Cobalt": "Cobalto",
+  "Color mode": "Modo de color",
+  "Commands": "Comandos",
+  "Connect": "Conectar",
+  "Connecting…": "Conectando…",
+  "Connection": "Conexión",
+  "Connectors": "Conectores",
+  "Content font size": "Tamaño del texto de la conversación",
+  "Copied": "Copiado",
+  "Copy": "Copiar",
+  "Couldn't hear that": "No se pudo escuchar",
+  "Couldn't start dictation": "No se pudo iniciar el dictado",
+  "Create task": "Crear tarea",
+  "Creating…": "Creando…",
+  "Cushion": "Cojín",
+  "Custom accent": "Acento personalizado",
+  "Cyan": "Cian",
+  "Date and time": "Fecha y hora",
+  "Days": "Días",
+  "Decline": "Rechazar",
+  "Deepseek": "Azul DeepSeek",
+  "Delete": "Eliminar",
+  "Delete task": "Eliminar tarea",
+  "Deleted": "Eliminado",
+  "Diagnostics": "Diagnóstico",
+  "Dictation is not available in this browser": "El dictado no está disponible en este navegador",
+  "Disconnect": "Desconectar",
+  "Dismiss": "Descartar",
+  "Display appearance": "Apariencia",
+  "Download": "Descargar",
+  "Each Bot's own folder": "Carpeta propia de cada Bot",
+  "Enter a path…": "Introducir una ruta…",
+  "Environment": "Entorno",
+  "Every": "Cada",
+  "Every day": "Cada día",
+  "Every day at {time}": "Cada día a las {time}",
+  "Every hour": "Cada hora",
+  "Every week": "Cada semana",
+  "Every weekday at {time}": "Cada día laborable a las {time}",
+  "Every weekend at {time}": "Cada fin de semana a las {time}",
+  "Every {count} days": "Cada {count} días",
+  "Every {count} hours": "Cada {count} horas",
+  "Every {count} minutes": "Cada {count} minutos",
+  "Every {days} at {time}": "Cada {days} a las {time}",
+  "Evidence": "Evidencia",
+  "Failed": "Falló",
+  "Feedback": "Comentarios",
+  "Finished": "Finalizada",
+  "Folder path": "Ruta de la carpeta",
+  "Folders": "Carpetas",
+  "Footnotes": "Notas al pie",
+  "From": "De",
+  "Full path of a folder": "Ruta completa de una carpeta",
+  "Gem": "Gema",
+  "Graphite": "Grafito",
+  "Gray": "Gris",
+  "Green": "Verde",
+  "Gumdrop": "Gominola",
+  "Importing…": "Importando…",
+  "Input": "Entrada",
+  "Install and restart": "Instalar y reiniciar",
+  "Instructions": "Instrucciones",
+  "Kitty": "Gatito",
+  "Lively": "Animada",
+  "Load more": "Cargar más",
+  "Loading…": "Cargando…",
+  "Magnet": "Imán",
+  "Memory": "Memoria",
+  "Microphone access is blocked": "El acceso al micrófono está bloqueado",
+  "Mode": "Modo",
+  "Model": "Modelo",
+  "Models": "Modelos",
+  "Moon": "Luna",
+  "Moonlight": "Luz de luna",
+  "Name": "Nombre",
+  "New task": "Nueva tarea",
+  "Next: {time}": "Siguiente: {time}",
+  "No folders inside.": "No hay carpetas dentro.",
+  "No results": "Sin resultados",
+  "No scheduled tasks yet.": "Aún no hay tareas programadas.",
+  "No usage yet.": "Aún no hay uso.",
+  "Nothing saved yet": "Aún no se ha guardado nada",
+  "Off": "Desactivado",
+  "On the schedule {expression}": "Según la programación {expression}",
+  "Once": "Una vez",
+  "Once, {time}": "Una vez, {time}",
+  "Open": "Abrir",
+  "Orange": "Naranja",
+  "Paper": "Papel",
+  "Paused": "En pausa",
+  "Peanut": "Cacahuete",
+  "Pebbles": "Guijarros",
+  "Permissions": "Permisos",
+  "Phone": "Teléfono",
+  "Pick a time in the future": "Elige una hora en el futuro",
+  "Plus": "Más",
+  "Profile": "Perfil",
+  "Quiet": "Discreta",
+  "Read-only": "Solo lectura",
+  "Ready": "Listo",
+  "Red": "Rojo",
+  "Reject": "Rechazar",
+  "Remove from memory": "Quitar de la memoria",
+  "Remove key": "Quitar clave",
+  "Remove photo": "Quitar foto",
+  "Remove {name}": "Quitar a {name}",
+  "Repeat": "Repetir",
+  "Results": "Resultados",
+  "Retry": "Reintentar",
+  "Retrying…": "Reintentando…",
+  "Revoke": "Revocar",
+  "Ring": "Anillo",
+  "Rose": "Rosa",
+  "Running": "En ejecución",
+  "Saucer": "Platillo",
+  "Save": "Guardar",
+  "Save key": "Guardar clave",
+  "Saving…": "Guardando…",
+  "Scheduled tasks": "Tareas programadas",
+  "Search": "Buscar",
+  "Secrets": "Secretos",
+  "Selected": "Seleccionado",
+  "Send": "Enviar",
+  "Send to": "Enviar a",
+  "Sending…": "Enviando…",
+  "Settings": "Ajustes",
+  "Settings pages": "Páginas de ajustes",
+  "Sky": "Cielo",
+  "Some folders are not shown.": "Algunas carpetas no se muestran.",
+  "Squircle": "Cuadrículo",
+  "Star": "Estrella",
+  "Stop dictation": "Detener dictado",
+  "Stopped": "Detenido",
+  "Tangerine": "Mandarina",
+  "Team workspace": "Espacio de trabajo del equipo",
+  "That image is too large": "Esa imagen es demasiado grande",
+  "Theme": "Tema",
+  "Theme accent": "Acento del tema",
+  "Time": "Hora",
+  "Try again": "Intentar de nuevo",
+  "Unknown": "Desconocido",
+  "Unread activity": "Actividad sin leer",
+  "Up one level": "Subir un nivel",
+  "Up to date": "Actualizado",
+  "Updates": "Actualizaciones",
+  "Updates come with the DS SuperAgent app.": "Las actualizaciones llegan con la aplicación DS SuperAgent.",
+  "Usage": "Uso",
+  "Use this folder": "Usar esta carpeta",
+  "Violet": "Violeta",
+  "Waiting for your answer": "Esperando tu respuesta",
+  "Wave": "Onda",
+  "Whale": "Ballena",
+  "What to do": "Qué hacer",
+  "When": "Cuándo",
+  "Work": "Trabajo",
+  "Working folder": "Carpeta de trabajo",
+  "Yellow": "Amarillo",
+  "You": "Tú",
+  "by you": "por ti",
+  "by {name}": "por {name}",
+  "failed": "falló",
+  "minutes": "minutos",
+  "none": "ninguno",
+  "{count} models": "{count} modelos",
+  "{provider} API key": "Clave API de {provider}"
+};
+
+// src/client/locales/fr.js
+var fr_default = {
+  "Dark mode": "Sombre",
+  "Follow system": "Système",
+  "Light mode": "Clair",
+  "A new reply is waiting": "Une nouvelle réponse vous attend",
+  "About": "À propos",
+  "Accent": "Couleur d’accentuation",
+  "Acorn": "Gland",
+  "Activity": "Activité",
+  "Add files": "Ajouter des fichiers",
+  "Allowed": "Autorisé",
+  "Appearance": "Apparence",
+  "Approve": "Approuver",
+  "Aurora": "Aurore",
+  "Back": "Précédent",
+  "Back to chat": "Retour à la discussion",
+  "Beacon": "Phare",
+  "Black": "Noir",
+  "Blocked": "Bloquée",
+  "Blossom": "Fleur",
+  "Blue": "Bleu",
+  "Brown": "Marron",
+  "Browse folders…": "Parcourir les dossiers…",
+  "Browser": "Navigateur",
+  "Bull": "Taureau",
+  "Bunny": "Lapin",
+  "Cancel": "Annuler",
+  "Cancelled": "Annulé",
+  "Capabilities": "Capacités",
+  "Character color": "Couleur",
+  "Character shape": "Forme",
+  "Charcoal": "Anthracite",
+  "Check for updates": "Vérifier les mises à jour",
+  "Choose a PNG, JPEG, WebP, or GIF image": "Choisissez une image PNG, JPEG, WebP ou GIF",
+  "Choose a folder…": "Choisir un dossier…",
+  "Choose an image smaller than 25 MB": "Choisissez une image de moins de 25 Mo",
+  "Clear search": "Effacer la recherche",
+  "Click again to delete": "Cliquez à nouveau pour supprimer",
+  "Click again to remove": "Cliquez à nouveau pour supprimer",
+  "Close settings": "Fermer les paramètres",
+  "Color mode": "Mode de couleur",
+  "Commands": "Commandes",
+  "Connect": "Connecter",
+  "Connecting…": "Connexion…",
+  "Connection": "Connexion",
+  "Connectors": "Connecteurs",
+  "Content font size": "Taille du texte de la conversation",
+  "Copied": "Copié",
+  "Copy": "Copier",
+  "Couldn't hear that": "Rien n’a été entendu",
+  "Couldn't start dictation": "Impossible de démarrer la dictée",
+  "Create task": "Créer la tâche",
+  "Creating…": "Création…",
+  "Cushion": "Coussin",
+  "Custom accent": "Accent personnalisé",
+  "Date and time": "Date et heure",
+  "Days": "Jours",
+  "Decline": "Refuser",
+  "Deepseek": "Bleu DeepSeek",
+  "Delete": "Supprimer",
+  "Delete task": "Supprimer la tâche",
+  "Deleted": "Supprimé",
+  "Dictation is not available in this browser": "La dictée n’est pas disponible dans ce navigateur",
+  "Disconnect": "Déconnecter",
+  "Dismiss": "Fermer",
+  "Display appearance": "Apparence",
+  "Download": "Télécharger",
+  "Each Bot's own folder": "Dossier propre à chaque Bot",
+  "Enter a path…": "Saisir un chemin…",
+  "Environment": "Environnement",
+  "Every": "Tous les",
+  "Every day": "Tous les jours",
+  "Every day at {time}": "Tous les jours à {time}",
+  "Every hour": "Toutes les heures",
+  "Every week": "Toutes les semaines",
+  "Every weekday at {time}": "Chaque jour ouvré à {time}",
+  "Every weekend at {time}": "Chaque week-end à {time}",
+  "Every {count} days": "Tous les {count} jours",
+  "Every {count} hours": "Toutes les {count} heures",
+  "Every {count} minutes": "Toutes les {count} minutes",
+  "Every {days} at {time}": "Chaque {days} à {time}",
+  "Evidence": "Preuve",
+  "Failed": "Échec",
+  "Feedback": "Retours",
+  "Finished": "Terminé",
+  "Folder path": "Chemin du dossier",
+  "Folders": "Dossiers",
+  "Footnotes": "Notes de bas de page",
+  "From": "De",
+  "Full path of a folder": "Chemin complet d’un dossier",
+  "Gem": "Gemme",
+  "General": "Général",
+  "Gray": "Gris",
+  "Green": "Vert",
+  "Gumdrop": "Bonbon",
+  "Importing…": "Importation…",
+  "Input": "Entrée",
+  "Install and restart": "Installer et redémarrer",
+  "Kitty": "Chaton",
+  "Lively": "Vif",
+  "Load more": "Charger plus",
+  "Loading…": "Chargement…",
+  "Magnet": "Aimant",
+  "Memory": "Mémoire",
+  "Microphone access is blocked": "L’accès au microphone est bloqué",
+  "Model": "Modèle",
+  "Models": "Modèles",
+  "Moon": "Lune",
+  "Moonlight": "Clair de lune",
+  "Name": "Nom",
+  "New task": "Nouvelle tâche",
+  "Next: {time}": "Prochaine : {time}",
+  "No folders inside.": "Aucun sous-dossier.",
+  "No results": "Aucun résultat",
+  "No scheduled tasks yet.": "Aucune tâche planifiée pour le moment.",
+  "No usage yet.": "Aucune utilisation pour le moment.",
+  "Nothing saved yet": "Rien d’enregistré pour le moment",
+  "Off": "Désactivé",
+  "On the schedule {expression}": "Selon la planification {expression}",
+  "Once": "Une fois",
+  "Once, {time}": "Une fois, {time}",
+  "Open": "Ouvrir",
+  "Paper": "Papier",
+  "Paused": "En pause",
+  "Peanut": "Cacahuète",
+  "Pebbles": "Galets",
+  "Permissions": "Autorisations",
+  "Phone": "Téléphone",
+  "Pick a time in the future": "Choisissez un moment dans le futur",
+  "Profile": "Profil",
+  "Quiet": "Calme",
+  "Read-only": "Lecture seule",
+  "Ready": "Prêt",
+  "Red": "Rouge",
+  "Reject": "Refuser",
+  "Remove from memory": "Supprimer de la mémoire",
+  "Remove key": "Supprimer la clé",
+  "Remove photo": "Supprimer la photo",
+  "Remove {name}": "Retirer {name}",
+  "Repeat": "Répéter",
+  "Results": "Résultats",
+  "Retry": "Réessayer",
+  "Retrying…": "Nouvelle tentative…",
+  "Revoke": "Révoquer",
+  "Ring": "Anneau",
+  "Running": "En cours",
+  "Saucer": "Soucoupe",
+  "Save": "Enregistrer",
+  "Save key": "Enregistrer la clé",
+  "Saving…": "Enregistrement…",
+  "Scheduled tasks": "Tâches planifiées",
+  "Search": "Rechercher",
+  "Selected": "Sélectionné",
+  "Send": "Envoyer",
+  "Send to": "Envoyer à",
+  "Sending…": "Envoi…",
+  "Settings": "Paramètres",
+  "Settings pages": "Pages de paramètres",
+  "Sky": "Ciel",
+  "Some folders are not shown.": "Certains dossiers ne sont pas affichés.",
+  "Star": "Étoile",
+  "Stop dictation": "Arrêter la dictée",
+  "Stopped": "Arrêté",
+  "Tangerine": "Mandarine",
+  "Team workspace": "Espace de travail de l’équipe",
+  "That image is too large": "Cette image est trop volumineuse",
+  "Theme": "Thème",
+  "Theme accent": "Accent du thème",
+  "Time": "Heure",
+  "Try again": "Réessayer",
+  "Unknown": "Inconnu",
+  "Unread activity": "Activité non lue",
+  "Up one level": "Dossier parent",
+  "Up to date": "À jour",
+  "Updates": "Mises à jour",
+  "Updates come with the DS SuperAgent app.": "Les mises à jour sont incluses avec l’application DS SuperAgent.",
+  "Usage": "Utilisation",
+  "Use this folder": "Utiliser ce dossier",
+  "Waiting for your answer": "Attend votre réponse",
+  "Wave": "Onde",
+  "Whale": "Baleine",
+  "What to do": "Que faire",
+  "When": "Quand",
+  "Work": "Travail",
+  "Working folder": "Dossier de travail",
+  "Yellow": "Jaune",
+  "You": "Vous",
+  "by you": "par vous",
+  "by {name}": "par {name}",
+  "failed": "échec",
+  "none": "aucun",
+  "{count} models": "{count} modèles",
+  "{provider} API key": "Clé API {provider}"
+};
+
+// src/client/locales/ja.js
+var ja_default = {
+  "Dark mode": "ダーク",
+  "Follow system": "システム設定に従う",
+  "Light mode": "ライト",
+  "A new reply is waiting": "新しい返信があります",
+  "About": "概要",
+  "Accent": "アクセントカラー",
+  "Acorn": "どんぐり",
+  "Activity": "アクティビティ",
+  "Add files": "ファイルを追加",
+  "Allowed": "許可済み",
+  "Animation": "アニメーション",
+  "Appearance": "外観",
+  "Approve": "承認",
+  "Arguments": "引数",
+  "Aurora": "オーロラ",
+  "Back": "戻る",
+  "Back to chat": "チャットに戻る",
+  "Beacon": "灯台",
+  "Black": "ブラック",
+  "Blocked": "ブロック中",
+  "Blossom": "花",
+  "Blue": "ブルー",
+  "Brown": "ブラウン",
+  "Browse folders…": "フォルダを参照…",
+  "Browser": "ブラウザ",
+  "Bull": "ツノ",
+  "Bunny": "ウサギ",
+  "Cancel": "キャンセル",
+  "Cancelled": "キャンセル済み",
+  "Capabilities": "機能",
+  "Character color": "色",
+  "Character shape": "形",
+  "Charcoal": "チャコール",
+  "Check for updates": "アップデートを確認",
+  "Choose a PNG, JPEG, WebP, or GIF image": "PNG、JPEG、WebP、または GIF 画像を選択してください",
+  "Choose a folder…": "フォルダを選択…",
+  "Choose an image smaller than 25 MB": "25 MB 未満の画像を選択してください",
+  "Clear search": "検索をクリア",
+  "Click again to delete": "もう一度クリックすると削除します",
+  "Click again to remove": "もう一度クリックすると削除します",
+  "Close settings": "設定を閉じる",
+  "Cobalt": "コバルト",
+  "Color mode": "カラーモード",
+  "Commands": "コマンド",
+  "Connect": "接続",
+  "Connecting…": "接続中…",
+  "Connection": "接続方式",
+  "Connectors": "コネクタ",
+  "Content font size": "会話の文字サイズ",
+  "Copied": "コピーしました",
+  "Copy": "コピー",
+  "Couldn't hear that": "聞き取れませんでした",
+  "Couldn't start dictation": "音声入力を開始できませんでした",
+  "Create task": "タスクを作成",
+  "Creating…": "作成中…",
+  "Cushion": "クッション",
+  "Custom accent": "カスタムアクセント",
+  "Cyan": "シアン",
+  "Date and time": "日時",
+  "Days": "曜日",
+  "Decline": "却下",
+  "Deepseek": "DeepSeek ブルー",
+  "Delete": "削除",
+  "Delete task": "タスクを削除",
+  "Deleted": "削除済み",
+  "Diagnostics": "診断情報",
+  "Dictation is not available in this browser": "このブラウザでは音声入力を利用できません",
+  "Disconnect": "切断",
+  "Dismiss": "閉じる",
+  "Display appearance": "外観",
+  "Download": "ダウンロード",
+  "Each Bot's own folder": "各 Bot の個別フォルダ",
+  "Enter a path…": "パスを入力…",
+  "Environment": "環境変数",
+  "Every": "間隔",
+  "Every day": "毎日",
+  "Every day at {time}": "毎日 {time}",
+  "Every hour": "毎時",
+  "Every week": "毎週",
+  "Every weekday at {time}": "平日 {time}",
+  "Every weekend at {time}": "週末 {time}",
+  "Every {count} days": "{count} 日ごと",
+  "Every {count} hours": "{count} 時間ごと",
+  "Every {count} minutes": "{count} 分ごと",
+  "Every {days} at {time}": "毎週{days} {time}",
+  "Evidence": "根拠",
+  "Failed": "失敗",
+  "Feedback": "フィードバック",
+  "Finished": "完了",
+  "Folder path": "フォルダのパス",
+  "Folders": "フォルダ",
+  "Footnotes": "脚注",
+  "From": "差出人",
+  "Full path of a folder": "フォルダのフルパス",
+  "Gem": "宝石",
+  "General": "一般",
+  "Graphite": "グラファイト",
+  "Gray": "グレー",
+  "Green": "グリーン",
+  "Gumdrop": "ドロップ",
+  "Importing…": "インポート中…",
+  "Input": "入力",
+  "Install and restart": "インストールして再起動",
+  "Instructions": "指示",
+  "Kitty": "ネコ",
+  "Lively": "活発",
+  "Load more": "さらに読み込む",
+  "Loading…": "読み込み中…",
+  "Magenta": "マゼンタ",
+  "Magnet": "マグネット",
+  "Memory": "メモリ",
+  "Microphone access is blocked": "マイクへのアクセスがブロックされています",
+  "Mode": "モード",
+  "Model": "モデル",
+  "Models": "モデル",
+  "Mono": "モノクロ",
+  "Moon": "月",
+  "Moonlight": "ムーンライト",
+  "Name": "名前",
+  "New task": "新しいタスク",
+  "Next: {time}": "次回: {time}",
+  "No folders inside.": "中にフォルダはありません。",
+  "No results": "結果がありません",
+  "No scheduled tasks yet.": "定期タスクはまだありません。",
+  "No usage yet.": "まだ使用量がありません。",
+  "Normal": "標準",
+  "Nothing saved yet": "まだ何も保存されていません",
+  "Off": "オフ",
+  "On the schedule {expression}": "スケジュール {expression}",
+  "Once": "1 回のみ",
+  "Once, {time}": "1 回のみ、{time}",
+  "Open": "開く",
+  "Orange": "オレンジ",
+  "Paper": "ペーパー",
+  "Paused": "一時停止中",
+  "Peanut": "ピーナッツ",
+  "Pebbles": "小石",
+  "Permissions": "権限",
+  "Phone": "スマートフォン",
+  "Pick a time in the future": "未来の日時を選択してください",
+  "Plus": "プラス",
+  "Profile": "プロフィール",
+  "Quiet": "控えめ",
+  "Read-only": "読み取り専用",
+  "Ready": "準備完了",
+  "Red": "レッド",
+  "Reject": "拒否",
+  "Remove from memory": "メモリから削除",
+  "Remove key": "キーを削除",
+  "Remove photo": "写真を削除",
+  "Remove {name}": "{name} を外す",
+  "Repeat": "繰り返し",
+  "Results": "検索結果",
+  "Retry": "再試行",
+  "Retrying…": "再試行中…",
+  "Revoke": "取り消す",
+  "Ring": "リング",
+  "Rose": "ローズ",
+  "Running": "実行中",
+  "Saucer": "UFO",
+  "Save": "保存",
+  "Save key": "シークレットを保存",
+  "Saving…": "保存中…",
+  "Scheduled tasks": "定期タスク",
+  "Search": "検索",
+  "Secrets": "シークレット",
+  "Selected": "選択済み",
+  "Send": "送信",
+  "Send to": "送信先",
+  "Sending…": "送信中…",
+  "Settings": "設定",
+  "Settings pages": "設定ページ",
+  "Sky": "スカイ",
+  "Some folders are not shown.": "一部のフォルダは表示されていません。",
+  "Squircle": "スクワークル",
+  "Star": "星",
+  "Stop dictation": "音声入力を停止",
+  "Stopped": "停止済み",
+  "Tangerine": "タンジェリン",
+  "Team workspace": "チームワークスペース",
+  "That image is too large": "画像サイズが大きすぎます",
+  "Theme": "テーマ",
+  "Theme accent": "テーマのアクセント",
+  "Time": "時刻",
+  "Try again": "再試行",
+  "Unknown": "不明",
+  "Unread activity": "未読あり",
+  "Up one level": "1 つ上の階層へ",
+  "Up to date": "最新バージョンです",
+  "Updates": "アップデート",
+  "Updates come with the DS SuperAgent app.": "DS SuperAgent アプリのアップデートに含まれます。",
+  "Usage": "使用量",
+  "Use this folder": "このフォルダを使用",
+  "Violet": "バイオレット",
+  "Waiting for your answer": "回答待ち",
+  "Wave": "ウェーブ",
+  "Whale": "クジラ",
+  "What to do": "実行する内容",
+  "When": "実行タイミング",
+  "Work": "業務・タスク",
+  "Working folder": "作業フォルダ",
+  "Yellow": "イエロー",
+  "You": "あなた",
+  "by you": "あなたが追加",
+  "by {name}": "{name} が追加",
+  "failed": "失敗",
+  "minutes": "分",
+  "none": "なし",
+  "{count} models": "{count} 個のモデル",
+  "{provider} API key": "{provider} API キー"
+};
+
+// src/client/locales/ko.js
+var ko_default = {
+  "Dark mode": "다크",
+  "Follow system": "시스템 설정 따르기",
+  "Light mode": "라이트",
+  "A new reply is waiting": "새 답변이 도착했습니다",
+  "About": "소개",
+  "Accent": "강조 색상",
+  "Acorn": "도토리",
+  "Activity": "활동",
+  "Add files": "파일 추가",
+  "Allowed": "허용됨",
+  "Animation": "애니메이션",
+  "Appearance": "모양",
+  "Approve": "승인",
+  "Arguments": "인수",
+  "Aurora": "오로라",
+  "Back": "뒤로",
+  "Back to chat": "대화로 돌아가기",
+  "Beacon": "등대",
+  "Black": "검정",
+  "Blocked": "막힘",
+  "Blossom": "꽃",
+  "Blue": "파랑",
+  "Brown": "갈색",
+  "Browse folders…": "폴더 찾아보기…",
+  "Browser": "브라우저",
+  "Bull": "뿔",
+  "Bunny": "토끼",
+  "Cancel": "취소",
+  "Cancelled": "취소됨",
+  "Capabilities": "기능",
+  "Character color": "색상",
+  "Character shape": "모양",
+  "Charcoal": "차콜",
+  "Check for updates": "업데이트 확인",
+  "Choose a PNG, JPEG, WebP, or GIF image": "PNG, JPEG, WebP 또는 GIF 이미지를 선택하세요",
+  "Choose a folder…": "폴더 선택…",
+  "Choose an image smaller than 25 MB": "25MB 미만의 이미지를 선택하세요",
+  "Clear search": "검색 지우기",
+  "Click again to delete": "삭제하려면 한 번 더 클릭하세요",
+  "Click again to remove": "삭제하려면 한 번 더 클릭하세요",
+  "Close settings": "설정 닫기",
+  "Cobalt": "코발트",
+  "Color mode": "색상 모드",
+  "Commands": "명령어",
+  "Connect": "연결",
+  "Connecting…": "연결 중…",
+  "Connection": "연결 방식",
+  "Connectors": "커넥터",
+  "Content font size": "대화 글자 크기",
+  "Copied": "복사됨",
+  "Copy": "복사",
+  "Couldn't hear that": "음성을 인식하지 못했습니다",
+  "Couldn't start dictation": "받아쓰기를 시작할 수 없습니다",
+  "Create task": "작업 만들기",
+  "Creating…": "생성 중…",
+  "Cushion": "쿠션",
+  "Custom accent": "사용자 지정 강조 색상",
+  "Cyan": "청록",
+  "Date and time": "날짜 및 시간",
+  "Days": "요일",
+  "Decline": "거절",
+  "Deepseek": "DeepSeek 블루",
+  "Delete": "삭제",
+  "Delete task": "작업 삭제",
+  "Deleted": "삭제됨",
+  "Diagnostics": "진단 정보",
+  "Dictation is not available in this browser": "이 브라우저는 받아쓰기를 지원하지 않습니다",
+  "Disconnect": "연결 해제",
+  "Dismiss": "닫기",
+  "Display appearance": "모양",
+  "Download": "다운로드",
+  "Each Bot's own folder": "각 Bot의 개별 폴더",
+  "Enter a path…": "경로 직접 입력…",
+  "Environment": "환경 변수",
+  "Every": "반복 주기",
+  "Every day": "매일",
+  "Every day at {time}": "매일 {time}",
+  "Every hour": "매시간",
+  "Every week": "매주",
+  "Every weekday at {time}": "평일 매일 {time}",
+  "Every weekend at {time}": "주말마다 {time}",
+  "Every {count} days": "{count}일마다",
+  "Every {count} hours": "{count}시간마다",
+  "Every {count} minutes": "{count}분마다",
+  "Every {days} at {time}": "매주 {days} {time}",
+  "Evidence": "근거",
+  "Failed": "실패",
+  "Feedback": "피드백",
+  "Finished": "완료됨",
+  "Folder path": "폴더 경로",
+  "Folders": "폴더",
+  "Footnotes": "각주",
+  "From": "보내는 사람",
+  "Full path of a folder": "폴더의 전체 경로",
+  "Gem": "보석",
+  "General": "일반",
+  "Graphite": "그래파이트",
+  "Gray": "회색",
+  "Green": "초록",
+  "Gumdrop": "젤리",
+  "Importing…": "가져오는 중…",
+  "Input": "입력",
+  "Install and restart": "설치 및 재시작",
+  "Instructions": "지침",
+  "Kitty": "고양이",
+  "Lively": "활발함",
+  "Load more": "더 불러오기",
+  "Loading…": "불러오는 중…",
+  "Magenta": "마젠타",
+  "Magnet": "자석",
+  "Memory": "메모리",
+  "Microphone access is blocked": "마이크 접근 권한이 차단되었습니다",
+  "Mode": "모드",
+  "Model": "모델",
+  "Models": "모델",
+  "Mono": "모노",
+  "Moon": "달",
+  "Moonlight": "문라이트",
+  "Name": "이름",
+  "New task": "새 작업",
+  "Next: {time}": "다음: {time}",
+  "No folders inside.": "하위 폴더가 없습니다.",
+  "No results": "결과 없음",
+  "No scheduled tasks yet.": "아직 예약 작업이 없습니다.",
+  "No usage yet.": "아직 사용량이 없습니다.",
+  "Normal": "보통",
+  "Nothing saved yet": "아직 저장된 내용 없음",
+  "Off": "끔",
+  "On the schedule {expression}": "일정({expression})에 따라",
+  "Once": "한 번",
+  "Once, {time}": "한 번, {time}",
+  "Open": "열기",
+  "Orange": "주황",
+  "Paper": "페이퍼",
+  "Paused": "일시 중지됨",
+  "Peanut": "땅콩",
+  "Pebbles": "조약돌",
+  "Permissions": "권한",
+  "Phone": "휴대폰",
+  "Pick a time in the future": "미래의 시간을 선택하세요",
+  "Plus": "플러스",
+  "Profile": "프로필",
+  "Quiet": "차분함",
+  "Read-only": "읽기 전용",
+  "Ready": "준비됨",
+  "Red": "빨강",
+  "Reject": "거절",
+  "Remove from memory": "메모리에서 삭제",
+  "Remove key": "키 삭제",
+  "Remove photo": "사진 제거",
+  "Remove {name}": "{name} 제거",
+  "Repeat": "반복",
+  "Results": "검색 결과",
+  "Retry": "재시도",
+  "Retrying…": "재시도 중…",
+  "Revoke": "철회",
+  "Ring": "링",
+  "Rose": "로즈",
+  "Running": "실행 중",
+  "Saucer": "비행접시",
+  "Save": "저장",
+  "Save key": "시크릿 저장",
+  "Saving…": "저장 중…",
+  "Scheduled tasks": "예약 작업",
+  "Search": "검색",
+  "Secrets": "시크릿",
+  "Selected": "선택됨",
+  "Send": "보내기",
+  "Send to": "받는 대상",
+  "Sending…": "전송 중…",
+  "Settings": "설정",
+  "Settings pages": "설정 페이지",
+  "Sky": "스카이",
+  "Some folders are not shown.": "일부 폴더가 표시되지 않았습니다.",
+  "Squircle": "둥근 사각형",
+  "Star": "별",
+  "Stop dictation": "받아쓰기 중지",
+  "Stopped": "중지됨",
+  "Tangerine": "탠저린",
+  "Team workspace": "팀 작업 공간",
+  "That image is too large": "이미지가 너무 큽니다",
+  "Theme": "테마",
+  "Theme accent": "테마 강조 색상",
+  "Time": "시간",
+  "Try again": "재시도",
+  "Unknown": "알 수 없음",
+  "Unread activity": "읽지 않은 활동",
+  "Up one level": "상위 폴더로",
+  "Up to date": "최신 버전입니다",
+  "Updates": "업데이트",
+  "Updates come with the DS SuperAgent app.": "DS SuperAgent 앱과 함께 업데이트됩니다.",
+  "Usage": "사용량",
+  "Use this folder": "이 폴더 사용",
+  "Violet": "보라",
+  "Waiting for your answer": "답변 대기 중",
+  "Wave": "파동",
+  "Whale": "고래",
+  "What to do": "할 일",
+  "When": "실행 시점",
+  "Work": "업무",
+  "Working folder": "작업 폴더",
+  "Yellow": "노랑",
+  "You": "나",
+  "by you": "사용자 추가",
+  "by {name}": "{name} 추가",
+  "failed": "실패",
+  "minutes": "분",
+  "none": "없음",
+  "{count} models": "모델 {count}개",
+  "{provider} API key": "{provider} API 키"
+};
+
+// src/client/locales/zh-tw.js
+var zh_tw_default = {
+  "A name for the explicit copy you provide.": "為你提供的副本指定一個標識。",
+  "A new reply is waiting": "有一條新回覆",
+  "A newer Worker assignment makes the previous report stale.": "新的 Worker 執行安排使舊報告失效。",
+  "A person controls this browser. Worker browser calls wait for explicit return.": "當前由人工控制瀏覽器；Worker 的瀏覽器呼叫會等待明確歸還。",
+  "A prepared work-copy file conflicts with the target.": "已準備的工作副本文件與目標內容衝突。",
+  "A verified result already ended this Assignment.": "已核驗結果已經結束此工作分配。",
+  "Abandon uncertain pairing": "放棄結果未知的配對",
+  "About": "簡介",
+  "Accent": "強調色",
+  "Acceptance criteria": "驗收標準",
+  "Accepted by work": "已進入原工作",
+  "Acknowledgement": "確認",
+  "Action": "動作",
+  "Activity": "活躍度",
+  "Actor events": "執行者事件",
+  "Agent presets": "智能體預設",
+  "Allowed": "已允許",
+  "Animation": "動畫",
+  "Answer the current work question before handing off.": "交接前請先回答當前工作問題。",
+  "Answer this view to continue the same work.": "請答覆此視圖以繼續同一工作。",
+  "Answer this work question": "回答這個工作問題",
+  "Apply preset": "應用預設",
+  "Apply to": "應用到",
+  "Approve request": "批准請求",
+  "Arguments": "參數",
+  "Artifact byte budget": "文件字節預算",
+  "Ask about saved memory": "查詢已保存的記憶",
+  "Assignment": "執行安排",
+  "Attach at most ten files.": "最多添加十個文件。",
+  "Aurora": "極光",
+  "Authorization recorded.": "授權記錄已保存。",
+  "Authorization request cancelled.": "授權請求已取消。",
+  "Authorization request recorded.": "授權請求已記錄。",
+  "Authorization revoked.": "授權已復原。",
+  "Authorized clients": "已授權客戶端",
+  "Auto": "自動",
+  "Back": "後退",
+  "Back to chat": "返回對話",
+  "Backups": "備份",
+  "Backups could not be listed.": "無法列出備份。",
+  "Base version": "基線版本",
+  "Beacon": "燈塔",
+  "Blue": "藍",
+  "Bound Environment": "綁定執行環境",
+  "Browse folders…": "瀏覽資料夾…",
+  "Browser": "瀏覽器",
+  "Browser Environment": "執行環境",
+  "Browser access granted.": "已授權瀏覽器訪問。",
+  "Browser access revoked.": "已復原此工作的瀏覽器訪問。",
+  "Browser address": "瀏覽器地址",
+  "Browser change confirmed.": "瀏覽器更改已確認。",
+  "Browser control returned.": "已歸還瀏覽器。",
+  "Browser control taken.": "已接管瀏覽器。",
+  "Browser data imported into a new isolated resource.": "瀏覽器數據已導入新的隔離資源。",
+  "Browser data previewed. Review the source and target before importing.": "瀏覽器數據已預覽。導入前請核對來源和目標。",
+  "Browser import cancelled.": "瀏覽器數據導入已取消。",
+  "Browser import is already complete.": "瀏覽器數據導入已經完成。",
+  "Browser import needs another retry.": "瀏覽器數據導入需要再次重試。",
+  "Browser import preview cancelled.": "瀏覽器數據導入預覽已取消。",
+  "Browser name": "瀏覽器名稱",
+  "Browser operation checked": "瀏覽器操作已核查",
+  "Browser operation checked.": "瀏覽器操作已核查。",
+  "Browser owner": "瀏覽器當前佔用",
+  "Browser page was closed": "瀏覽器頁面已關閉",
+  "Browser plugin": "瀏覽器外掛",
+  "Browser resource created.": "瀏覽器資源已創建。",
+  "Browser resource revoked.": "瀏覽器資源已復原。",
+  "Browser resources": "瀏覽器資源",
+  "Browser work access": "瀏覽器工作授權",
+  "Browser work item": "工作項",
+  "Budget exhausted": "預算用盡",
+  "Built-in plugins": "內置外掛",
+  "Business state and DSH Sessions are backed up separately. Restores refuse changed authority or unresolved external effects.": "業務狀態與 DSH Sessions 分開備份；授權事實變化或外部副作用未對賬時拒絕恢復。",
+  "Called {tool}.": "呼叫了 {tool}。",
+  "Cancel browser import": "取消瀏覽器導入",
+  "Cancel import": "取消導入",
+  "Cancel preview": "取消預覽",
+  "Cancel request": "取消請求",
+  "Cancelled authorization request": "已取消授權請求",
+  "Capabilities could not be read. Check this Environment before assigning work.": "無法讀取能力資訊；分配工作前請檢查此執行環境。",
+  "Capabilities unavailable": "能力資訊不可用",
+  "Capability library": "能力庫",
+  "Change browser grant for {workItemId}": "更改工作 {workItemId} 的瀏覽器授權",
+  "Changed files": "變更文件",
+  "Character color": "顏色",
+  "Character shape": "形狀",
+  "Check browser operation {operationId}": "核查瀏覽器操作 {operationId}",
+  "Check device stop": "核查設備停止狀態",
+  "Check for updates": "檢查更新",
+  "Check pairing status": "檢查配對狀態",
+  "Check rotation": "核查輪換",
+  "Check the Feishu connection settings.": "檢查飛書連接設定。",
+  "Checking device stop…": "正在核查設備停止狀態…",
+  "Checking for updates": "正在檢查更新",
+  "Choose Environment": "選擇執行環境",
+  "Choose Local or Remote only before adding files.": "添加文件前請選擇本機或僅遠端。",
+  "Choose a PNG, JPEG, WebP, or GIF image": "請選擇 PNG、JPEG、WebP 或 GIF 圖片",
+  "Choose a different target Environment.": "請選擇其他目標執行環境。",
+  "Choose a folder…": "選擇資料夾…",
+  "Choose a new resource name, role, purpose, and exact scope before importing.": "導入前請明確選擇新資源名稱、角色、用途和精確範圍。",
+  "Choose a nonempty file smaller than 8 MB.": "請選擇小於 8 MB 的非空文件。",
+  "Choose a resource": "選擇資源",
+  "Choose a target Environment and prepare the work copy.": "請選擇目標執行環境並準備工作副本。",
+  "Choose a target for every selected item.": "請為每個選中項選擇目標。",
+  "Choose a work directory before adding files.": "添加文件前請先選擇工作目錄。",
+  "Choose a work item or Environment for a tool grant.": "工具授權必須選擇工作項或執行環境。",
+  "Choose an authorized Environment for this execution target.": "請為該執行目標選擇已授權的執行環境。",
+  "Choose an authorized local Environment": "選擇已授權的本機執行環境",
+  "Choose an authorized remote Environment": "選擇已授權的遠端執行環境",
+  "Choose an authorized work item.": "請選擇已授權的工作項。",
+  "Choose an image smaller than 25 MB": "請選擇小於 25 MB 的圖片",
+  "Choose character": "選擇形象",
+  "Choose cookie export": "選擇 cookie 導出文件",
+  "Choose credential export": "選擇憑據導出文件",
+  "Choose memory export": "選擇記憶導出文件",
+  "Choose purpose": "選擇用途",
+  "Choose saved import": "選擇已保存的導入",
+  "Choose shared recipients": "選擇共享範圍",
+  "Choose target": "選擇目標",
+  "Choose target role": "選擇目標角色",
+  "Choose the exact source Instance for this authorization.": "來源或外發授權必須選擇精確來源 Instance。",
+  "Choose the observed browser state": "選擇實際觀察到的瀏覽器狀態",
+  "Choose work": "選擇工作",
+  "Clear Feishu selection": "清除飛書資源選擇",
+  "Clear GitHub selection": "清除 GitHub 資源選擇",
+  "Clear credential preview": "清除憑據預覽",
+  "Clear search": "清除搜尋",
+  "Click again to delete": "再點一次刪除",
+  "Click again to remove": "再點一次刪除",
+  "Client": "客戶端",
+  "Client access": "客戶端權限",
+  "Client credential": "客戶端憑據",
+  "Client name": "客戶端名稱",
+  "Close connection": "關閉連接視窗",
+  "Close search": "關閉搜尋",
+  "Close settings": "關閉設定",
+  "Close the retained preview before handing off.": "交接前請關閉保留的預覽。",
+  "Close the selected browser briefly to copy its cookies, then reopen it with your tabs?": "需要短暫關閉所選瀏覽器以複製 cookie，之後重新打開並恢復標簽頁嗎？",
+  "Cobalt": "鈷藍",
+  "Color mode": "色彩模式",
+  "Comma-separated skill names": "用逗號分隔技能名稱",
+  "Command access": "命令權限",
+  "Command running": "命令運行中",
+  "Complete evidence": "完整證據",
+  "Computer control": "電腦操控",
+  "Configuration v{revision} is active for new turns.": "配置 v{revision} 已對新回合生效。",
+  "Configure a source to enable preparation rules.": "配置來源後才能啟用準備規則。",
+  "Confirm abandon pairing": "確認放棄該配對",
+  "Confirm delete rule": "再次點擊刪除規則",
+  "Confirm restore": "確認恢復",
+  "Confirm revoke device": "再次點擊復原設備",
+  "Conflicts with": "衝突於",
+  "Connect": "連接",
+  "Connect to Host": "連接 Host",
+  "Connecting…": "正在連接…",
+  "Connection": "連接方式",
+  "Connections and capabilities": "連接與能力",
+  "Connectors": "連接器",
+  "Constraints": "約束",
+  "Content font size": "對話文字大小",
+  "Continue in the new execution Environment.": "在新的執行環境中繼續這項工作。",
+  "Copied": "已複製",
+  "Copy": "複製",
+  "Copy credential": "複製憑據",
+  "Copy details": "複製詳情",
+  "Copy failed": "複製失敗",
+  "Copy identity": "副本標識",
+  "Copy loaded detail": "複製已加載詳情",
+  "Cost": "費用",
+  "Cost unavailable": "費用不可用",
+  "Could not copy the credential.": "無法複製憑據。",
+  "Could not load this setting.": "無法加載此設定。",
+  "Could not reach Main. Check that the app is running.": "無法連接 Main，請檢查應用是否仍在運行。",
+  "Could not read Feishu status. Check the app connection.": "無法讀取飛書狀態，請檢查應用連接。",
+  "Could not refresh role settings.": "無法重新整理角色設定。",
+  "Couldn't hear that": "沒聽清",
+  "Couldn't start dictation": "無法開始聽寫",
+  "Coverage": "覆蓋情況",
+  "Create backup": "創建備份",
+  "Create browser in {environment}": "在 {environment} 中創建瀏覽器",
+  "Create browser resource": "創建瀏覽器資源",
+  "Create preset": "創建預設",
+  "Create resource and grant": "創建資源並授權",
+  "Create task": "創建任務",
+  "Creating…": "創建中…",
+  "Credential cleanup completed.": "憑據清理已完成。",
+  "Credential cleanup is pending for a device operation.": "設備操作仍有憑據清理待完成。",
+  "Credential cleanup is still pending. Retry after the credential service recovers.": "憑據清理仍未完成；憑據服務恢復後再重試。",
+  "Credential export import is available only in the desktop app.": "憑據導入僅在桌面應用中可用。",
+  "Credential export must be at most 1 MiB.": "憑據導出文件不能超過 1 MiB。",
+  "Credential import completed": "已導入",
+  "Credential import conflict": "衝突",
+  "Credential import in progress": "正在導入",
+  "Credential import pending": "待處理",
+  "Credential import result unknown": "結果待確認",
+  "Credential import status unavailable": "導入狀態不可用",
+  "Credential imported with a new authorization.": "憑據已導入並使用新授權。",
+  "Credential resource saved.": "憑據資源已保存。",
+  "Credential resources": "憑據資源",
+  "Credential rotated.": "憑據已輪換。",
+  "Credential rotated; old record cleanup pending.": "憑據已輪換，舊記錄等待清理。",
+  "Credential type": "憑據類型",
+  "Credential value": "憑據內容",
+  "Current access revoked": "當前授權已復原",
+  "Current generation": "當前代次",
+  "Cushion": "靠墊",
+  "Custom accent": "自訂強調色",
+  "Dark mode": "深色模式",
+  "Date and time": "日期和時間",
+  "Decline": "拒絕",
+  "Deepseek": "DeepSeek 藍",
+  "Default target": "預設目標",
+  "Delegated to Main": "已交給 Main",
+  "Delete": "刪除",
+  "Delete resource": "刪除資源",
+  "Delete rule": "刪除規則",
+  "Delete task": "刪除任務",
+  "Delete this credential resource and all its grants?": "刪除此憑據資源及全部授權？",
+  "Deleted": "已刪除",
+  "Delivery dropped": "投遞已丟棄",
+  "Delivery failed": "投遞失敗",
+  "Delivery needs reconciliation": "投遞結果待核查",
+  "Delivery pending": "投遞等待中",
+  "Delivery receipts": "投遞回執",
+  "Delivery sent": "已投遞",
+  "Device": "設備",
+  "Device ID": "設備 ID",
+  "Device endpoint": "設備端點",
+  "Device key fingerprint": "設備金鑰指纹",
+  "Device name": "設備名稱",
+  "Device paired.": "設備已配對。",
+  "Device permissions": "設備權限",
+  "Device revoked.": "設備已復原。",
+  "Device revoked; credential cleanup is pending.": "設備已復原；憑據清理尚未完成。",
+  "Devices and Environments": "設備與執行環境",
+  "Diagnostics": "診斷資訊",
+  "Diagnostics could not be loaded.": "無法讀取診斷。",
+  "Dictation is not available in this browser": "這個瀏覽器不支持聽寫",
+  "Direction blocked by stop": "方向變更被停止約束阻止",
+  "Direction completed": "方向變更已完成",
+  "Direction handed back": "方向變更已交回",
+  "Direction waiting": "方向變更等待中",
+  "Directory": "目錄",
+  "Disable rule": "停用規則",
+  "Disconnect": "斷開",
+  "Dismiss": "關閉",
+  "Display appearance": "顯示外觀",
+  "Download": "下載",
+  "Download diagnostic summary": "下載診斷摘要",
+  "Downloading update": "正在下載更新",
+  "Dropped": "已丟棄",
+  "Each Bot's own folder": "各 Bot 自己的資料夾",
+  "Each browser keeps an isolated profile. A local Worker needs an exact work-item grant before navigation or a read-only snapshot.": "每個瀏覽器使用獨立 profile；本地 Worker 必須獲得精確工作項授權，才能導航或讀取唯讀快照。",
+  "Earlier import": "較早的導入",
+  "Edit rule": "編輯規則",
+  "Eligible": "符合條件",
+  "Enable rule": "啟用規則",
+  "Ended": "已結束",
+  "Ended quietly": "靜默結束",
+  "Enter a path…": "輸入路徑…",
+  "Enter an HTTP or HTTPS address.": "請輸入 HTTP 或 HTTPS 地址。",
+  "Environment": "環境變量",
+  "Environment ID": "執行環境 ID",
+  "Environment capacity is unknown": "執行環境容量未知",
+  "Environment fingerprint is unverified": "執行環境指纹尚未核驗",
+  "Environment is offline": "執行環境離線",
+  "Environment is offline: {reason}": "執行環境離線：{reason}",
+  "Environment setup failed": "環境設定失敗",
+  "Environment version is unverified": "執行環境版本尚未核驗",
+  "Event actors": "事件傳送者",
+  "Every hour": "每小時",
+  "Every weekday at {time}": "每個工作日 {time}",
+  "Every weekend at {time}": "每個周末 {time}",
+  "Every {count} hours": "每 {count} 小時",
+  "Every {count} minutes": "每 {count} 分鐘",
+  "Evidence": "證據",
+  "Exact Environment": "指定執行環境",
+  "Execution Environment handoff": "執行環境交接",
+  "Execution capacity is full ({count}).": "執行容量已滿（{count}）。",
+  "Execution policy": "執行策略",
+  "Execution policy saved.": "執行策略已保存。",
+  "Execution target": "執行目標",
+  "Execution targets": "執行目標",
+  "Execution version": "執行版本",
+  "Expires": "過期時間",
+  "Explicit mandate": "明確授權",
+  "Explicitly shared": "明確共享",
+  "Failed": "失敗",
+  "Feedback": "反饋",
+  "Feishu": "飛書",
+  "Feishu connecting": "飛書連接中",
+  "Feishu connection": "飛書連接",
+  "Feishu credential selection saved.": "飛書資源選擇已保存。",
+  "Feishu did not respond. Check the connection and reconnect.": "飛書沒有響應，請檢查連接後重連。",
+  "Feishu needs attention. Check the connection settings and reconnect.": "飛書連接需要處理，請檢查設定後重連。",
+  "Feishu receiving": "飛書接收中",
+  "Feishu request": "飛書請求",
+  "Feishu setup failed. Check the connection settings and reconnect.": "飛書連接初始化失敗，請檢查設定後重連。",
+  "Feishu source Instance": "飛書來源 Instance",
+  "Feishu source request": "飛書來源請求",
+  "Feishu stopped": "飛書已停止",
+  "Feishu unavailable": "飛書不可用",
+  "Feishu uses an explicit legacy Host secret. Remove it and restart the Host to select a managed resource.": "飛書目前使用 Host 顯式配置的舊金鑰。移除該配置並重啟 Host 後可選擇受管資源。",
+  "Find activity": "查找活動",
+  "Finished": "已結束",
+  "Flushing source Session": "正在重新整理源 Session",
+  "Folder path": "資料夾路徑",
+  "Folders": "資料夾",
+  "Follow system": "跟隨系統",
+  "Follow-up delivery expired": "跟進投遞已過期",
+  "Follow-up delivery started": "跟進開始投遞",
+  "Follow-up history": "跟進記錄",
+  "Follow-up persisted": "跟進已持久寫入",
+  "Follow-up queued": "跟進已排隊",
+  "Footnotes": "腳注",
+  "From": "來源",
+  "Full detail": "完整詳情",
+  "Full path of a folder": "資料夾的完整路徑",
+  "Gem": "寶石",
+  "Generation ended": "代次已結束",
+  "GitHub credential selection saved.": "GitHub 資源選擇已保存。",
+  "GitHub request": "GitHub 請求",
+  "GitHub source Instance": "GitHub 來源 Instance",
+  "GitHub source request": "GitHub 來源請求",
+  "Give browser back": "歸還瀏覽器",
+  "Grant Main/source and Router/outbound for this exact source Instance, then reconnect.": "請為該精確來源 Instance 分別授權 Main/source 與 Router/outbound，然後重新連接。",
+  "Grant Main/source for this exact GitHub source Instance, then reconnect.": "請為該 GitHub 來源 Instance 授予 Main/source 權限，然後重新連接。",
+  "Grant Worker access": "授權 Worker 讀取",
+  "Grant Worker/tool for the intended work item or Environment in Credential resources. The MCP endpoint is checked when work calls it.": "請在憑據資源中為目標工作項或執行環境授權 Worker/tool。工作呼叫工具時才檢查 MCP 服務。",
+  "Grant browser to this work": "授權此工作使用瀏覽器",
+  "Granted authorization request": "已批准授權請求",
+  "Green": "綠",
+  "Gumdrop": "軟糖",
+  "Hand off from the Main work card.": "從 Main 工作卡交接。",
+  "Handoff available": "可準備交接",
+  "Handoff copy verified": "交接副本已核驗",
+  "Handoff prepared": "交接副本已準備",
+  "Handoff requested": "已請求交接",
+  "Handoff status": "交接狀態",
+  "Handoff target": "交接目標",
+  "Help": "幫助",
+  "Hide review": "收起審閱",
+  "Historical generation": "歷史代次",
+  "Host connection": "Host 連接",
+  "Host only; remote execution unsupported.": "僅在 Host 本地運行；暫不支持遠端執行。",
+  "Host revoked this device; confirmation was unavailable.": "Host 已復原該設備，但設備確認不可用。",
+  "I inspected the page without recording its contents": "已人工檢查頁面，但沒有記錄頁面內容",
+  "IM": "即時通信",
+  "Impact": "影響",
+  "Import accepts a controlled ds-superagent-credential-export version 1 JSON file. DSH does not provide a safe way to browse old vault records; if you do not have an export, create a new resource manually. Old grants are never copied.": "導入僅接受受控的 ds-superagent-credential-export v1 JSON。DSH 沒有安全瀏覽舊憑據庫記錄的公開接口；如果沒有此類導出，請手動新建資源。不會複製舊授權。",
+  "Import applied": "導入已完成",
+  "Import browser data": "導入瀏覽器數據",
+  "Import cleanup pending.": "導入資源清理尚未完成。",
+  "Import conflict": "衝突",
+  "Import conflict: {reason}. Review the source and preset again.": "導入衝突：{reason}。請重新審閱來源與預設。",
+  "Import credential resources": "導入憑據資源",
+  "Import into new browser": "導入為新瀏覽器",
+  "Import item": "導入項",
+  "Import item completed": "已導入",
+  "Import item rejected": "已拒絕",
+  "Import memory": "導入記憶",
+  "Import needs retry": "導入需要重試",
+  "Import pending": "導入待確認",
+  "Import selected": "導入選中項",
+  "Import skipped.": "已跳過導入。",
+  "Import status": "導入狀態",
+  "Imported from": "導入自",
+  "Imported resource": "導入後的資源",
+  "Imported to": "已導入至",
+  "Importing": "導入中",
+  "Importing…": "正在導入…",
+  "Included Sessions read": "已讀取纳入的 Session",
+  "Independent Watchdog is not configured for this Host.": "此 Host 尚未配置獨立看護進程。",
+  "Inferred mandate": "推斷授權",
+  "Input": "輸入",
+  "Input not yet persisted": "輸入尚未持久寫入",
+  "Input persisted": "輸入已持久寫入",
+  "Inspect now": "立即巡檢",
+  "Inspection budget": "巡檢預算",
+  "Inspection budget exhausted": "巡檢預算已耗盡",
+  "Inspection complete": "巡檢完成",
+  "Inspection failed": "巡檢失敗",
+  "Install and restart": "安裝並重啟",
+  "Installed browser profile": "本機瀏覽器資料",
+  "Installed version": "已安裝版本",
+  "Instance": "工作空間",
+  "Instance default": "實例預設目錄",
+  "Instance default directory": "實例預設工作目錄",
+  "Isolated browser profile": "隔離瀏覽器 profile",
+  "Issue credential": "簽發憑據",
+  "Issued client credential": "已簽發的客戶端憑據",
+  "Kept with the model route and recorded in configuration uses.": "隨模型路由保存，並記錄在配置使用歷史中。",
+  "Kitty": "小貓",
+  "Last checked {time}": "最近檢查：{time}",
+  "Learning approved and saved.": "學习已批准並保存。",
+  "Learning declined.": "學习提案已拒絕。",
+  "Learning proposal": "學习提案",
+  "Learning proposal expired or lost authorization.": "學习提案已過期或失去授權。",
+  "Learning proposals": "學习提案",
+  "Legacy role ID": "舊角色 ID",
+  "Legacy role configuration": "舊角色配置",
+  "License": "許可協議",
+  "Light mode": "淺色模式",
+  "Limits: {roles} role uses · {sessions} Sessions · {events} events per Session": "上限：{roles} 條角色使用 · {sessions} 個 Session · 每個 Session {events} 個事件",
+  "Lively": "活潑",
+  "Load earlier messages": "加載更早訊息",
+  "Load earlier occurrences": "加載更早發生記錄",
+  "Load earlier preparations": "加載更早的準備記錄",
+  "Load earlier receipts": "加載更早回執",
+  "Load more": "加載更多",
+  "Load more activity": "加載更多活動",
+  "Load more detail": "加載更多詳情",
+  "Load more evidence": "加載更多證據",
+  "Load more history": "加載更多歷史",
+  "Load more requests": "加載更多請求",
+  "Loading history…": "正在加載歷史…",
+  "Loading settings…": "正在加載設定…",
+  "Loading…": "加載中…",
+  "Local": "本機",
+  "Local Environment": "本機執行環境",
+  "Local browser": "本地瀏覽器",
+  "MCP change pending confirmation. Retry the same command.": "MCP 設定結果待確認，請用同一命令重試。",
+  "MCP credential resource": "MCP 憑據資源",
+  "MCP setting saved.": "MCP 設定已保存。",
+  "MCP state": "MCP 狀態",
+  "Magenta": "品紅",
+  "Magnet": "磁鐵",
+  "Main could not finish this reply. Your message is saved.": "Main 未能完成回覆，你的訊息已保存。",
+  "Main degraded": "Main 異常",
+  "Main is replying…": "Main 正在回覆…",
+  "Main is unavailable.": "Main 暫不可用。",
+  "Main model failed. Ask the Host operator to check the model and provider configuration.": "Main 模型呼叫失敗。請聯系 Host 管理員檢查模型和供應商配置。",
+  "Main model failed. Check the model and provider credentials in Settings.": "Main 模型呼叫失敗。請在設定中檢查模型和供應商憑據。",
+  "Main ready": "Main 就緒",
+  "Main request": "主對話請求",
+  "Main running": "Main 處理中",
+  "Main source failed": "Main 來源處理失敗",
+  "Main, work private, and explicitly shared memories have separate readers. Searching does not save new memory.": "Main、工作私有與明確共享記憶各有讀取範圍；搜尋不會自動保存新記憶。",
+  "Managed Feishu and GitHub source credentials use separate grants. Feishu delivery and Worker MCP tools need their own grants.": "受管飛書和 GitHub 來源分別授權；飛書外發與 Worker MCP 工具各需單獨授權。",
+  "Mandate": "授權",
+  "Manual browser": "人工瀏覽器",
+  "Manual browser control: {label}": "人工控制瀏覽器：{label}",
+  "Max file bytes": "文件字節上限",
+  "Memory": "記憶",
+  "Memory export must be at most 512 KiB.": "記憶導出文件不能超過 512 KiB。",
+  "Memory export previewed. Choose each item and target explicitly.": "記憶導出文件已預覽。請逐項選擇目標和內容。",
+  "Memory forgotten.": "記憶已遗忘。",
+  "Memory import cancelled.": "記憶導入已取消。",
+  "Memory import completed.": "記憶導入已完成。",
+  "Memory import is ready to continue.": "記憶導入已恢復，可以繼續。",
+  "Memory import preview": "記憶導入預覽",
+  "Memory import saved. Review remaining or conflicting items.": "記憶已導入。請檢查剩餘項或衝突項。",
+  "Memory saved.": "記憶已保存。",
+  "Memory sharing updated.": "記憶共享範圍已更新。",
+  "Memory text": "記憶內容",
+  "Memory was already forgotten.": "該記憶已遗忘。",
+  "Message Main": "與 Main 對話",
+  "Microphone access is blocked": "麥克風權限被阻止了",
+  "Minutes": "分鐘",
+  "Missed": "已錯過",
+  "Model provider": "模型供應商",
+  "Model steps": "模型步數",
+  "New authorization": "新授權",
+  "New authorization purpose": "新授權用途",
+  "New authorization role": "新授權角色",
+  "New credential value": "新的憑據值",
+  "New preset": "新建預設",
+  "New resource name": "新的資源名稱",
+  "New rule": "新建規則",
+  "New task": "新建任務",
+  "New work starts here unless you choose a work directory in Main.": "新工作預設從這裡開始，也可在 Main 中為本次工作選擇目錄。",
+  "New work uses this Environment. Active work keeps its original binding.": "新工作使用此執行環境；已有工作保留原綁定。",
+  "Newer settings exist. Rebase only your changed fields, then review and save.": "已有更新的設定。請只把你的修改重接到新版本上，檢查後再保存。",
+  "No Feishu resource selected": "尚未選擇飛書資源",
+  "No GitHub resource selected": "尚未選擇 GitHub 資源",
+  "No Router or Worker activity yet.": "還沒有 Router 或 Worker 活動。",
+  "No accepted work item is available in this Environment.": "該執行環境沒有可授權的已接收工作。",
+  "No attributed work usage.": "沒有歸屬到工作的用量。",
+  "No backups yet.": "還沒有備份。",
+  "No browser operations yet.": "暫無瀏覽器操作。",
+  "No browser resources yet.": "暫無瀏覽器資源。",
+  "No credential resources yet.": "暫無憑據資源。",
+  "No execution history has been recorded yet.": "還沒有記錄執行歷史。",
+  "No folders inside.": "裡面沒有資料夾。",
+  "No inspection recorded": "暫無檢查記錄",
+  "No learning proposals are waiting for review.": "暫無待審閱的學习提案。",
+  "No local Environment": "沒有可用的本地執行環境",
+  "No model calls.": "沒有模型呼叫。",
+  "No model price catalog is configured for this work.": "當前工作沒有可用的模型价格目錄。",
+  "No models are available. Configure a provider in DSH settings, then reopen this panel to select the role models.": "沒有可用模型。請在 DSH 設定中配置供應商，再重新打開此面板為各角色選擇模型。",
+  "No occurrences yet.": "尚無發生記錄。",
+  "No other Environment is available for handoff.": "沒有其他可用於交接的執行環境。",
+  "No preference": "不設首選",
+  "No preparations yet.": "暫無準備記錄。",
+  "No preset activity yet.": "還沒有預設記錄。",
+  "No provider catalog is available. Configure providers in DSH settings.": "沒有可用的供應商目錄。請在 DSH 設定中配置供應商。",
+  "No readers": "暫無讀取者",
+  "No ready report yet.": "尚無就緒報告。",
+  "No remote Environment is available. This work will wait for an eligible device.": "當前沒有遠端執行環境；這項工作會等待符合條件的設備。",
+  "No reserved skills": "沒有保留技能",
+  "No results": "沒有結果",
+  "No role presets yet.": "還沒有角色預設。",
+  "No role turn has recorded a configuration version yet.": "還沒有角色回合記錄配置版本。",
+  "No scheduled tasks yet.": "還沒有定時任務。",
+  "No supervision proposals.": "沒有监督提案。",
+  "No usage yet.": "還沒有用量。",
+  "Not eligible": "不符合條件",
+  "Not selected": "未選擇",
+  "Nothing saved yet": "還沒有保存內容",
+  "Notify Main for useful results": "有用結果通知 Main",
+  "Observation history": "觀察歷史",
+  "Observe": "觀察",
+  "Observed browser state": "實際觀察到的瀏覽器狀態",
+  "Occurrence history ({count})": "發生記錄（{count}）",
+  "Off": "關閉",
+  "Offline": "離線",
+  "On the schedule {expression}": "按計划 {expression}",
+  "One lasting fact": "一條長期有效的事實",
+  "Open": "打開",
+  "Open Main": "打開主對話",
+  "Open Settings to select models for Main, Router and Worker.": "請打開設定，為 Main、Router 和 Worker 選擇模型。",
+  "Open download page": "打開下載頁",
+  "Open import": "打開導入",
+  "Open role settings": "打開角色設定",
+  "Open role settings to load its current revision.": "請打開角色設定以加載當前版本。",
+  "Open supervision": "打開监督",
+  "Original owner": "原歸屬者",
+  "Original request evidence": "原始請求證據",
+  "Original scope": "原歸屬範圍",
+  "Outcome unknown": "結果未確認",
+  "Owner": "歸屬",
+  "PRESET_CONTENT_CONFLICT": "預設內容已變化",
+  "Page stayed on the original view": "頁面停留在原視圖",
+  "Page visibly changed": "頁面已經明顯變化",
+  "Pair a device": "配對設備",
+  "Pair device": "配對該設備",
+  "Pairing abandoned": "配對已放棄",
+  "Pairing code": "配對碼",
+  "Pairing completed": "配對已完成",
+  "Pairing running": "配對運行中",
+  "Pairing state abandoned. Check the device before pairing again.": "配對狀態已放棄；再次配對前請檢查設備。",
+  "Pairing state abandoned; credential cleanup is pending.": "配對狀態已放棄；憑據清理尚未完成。",
+  "Pairing status": "配對狀態",
+  "Pairing unknown": "配對結果待確認",
+  "Paper": "紙張",
+  "Partial evidence": "部分證據",
+  "Partial inspection": "部分巡檢",
+  "Paste a legacy role profile copy. Only the selected configuration fields are reviewed.": "貼上舊角色配置副本；僅審閱選定的配置字段。",
+  "Paste a new key": "貼上新的金鑰",
+  "Pause proactive preparation": "暫停主動準備",
+  "Pause work": "暫停工作",
+  "Paused": "已暫停",
+  "Paused preparations cannot submit a result. Existing work continues.": "暫停後準備結果無法提交，已有工作繼續。",
+  "Pending": "等待確認",
+  "Pending authorization request": "待處理授權請求",
+  "Pending delivery": "等待投遞",
+  "Pending execution": "等待執行",
+  "Pending start": "等待開始",
+  "Pending work": "等待執行",
+  "Permissions": "權限",
+  "Phone": "手機",
+  "Pick a time in the future": "選一個將來的時間",
+  "Planning usage": "規划用量",
+  "Plugin version": "外掛版本",
+  "Plus": "加號",
+  "Policy default": "策略預設值",
+  "Preferred Environment": "首選執行環境",
+  "Preparation": "準備",
+  "Preparation directory": "隔離目錄",
+  "Preparation failed": "準備失敗",
+  "Preparation history": "準備記錄",
+  "Preparation review": "準備結果審閱",
+  "Preparation scope": "準備範圍",
+  "Prepare and verify a work copy before handing off.": "交接前請準備並核驗工作副本。",
+  "Prepare handoff": "準備交接",
+  "Prepared review": "待審閱的準備結果",
+  "Prepared work-copy files": "已準備工作副本文件",
+  "Preparing": "準備中",
+  "Preparing handoff…": "正在準備交接…",
+  "Preparing to install update": "正在備份並準備安裝更新",
+  "Preset": "預設",
+  "Preset ID": "預設 ID",
+  "Preset activity": "預設記錄",
+  "Preset activity is unavailable.": "預設記錄暫不可用。",
+  "Preset appearance": "預設形象",
+  "Preset created.": "預設已創建。",
+  "Preset profile": "預設配置",
+  "Preset selected from the reviewed copy.": "已從審閱的副本選用預設。",
+  "Preview": "預覽",
+  "Preview a cookie export or installed browser profile before creating a new isolated browser.": "創建新的隔離瀏覽器前，先預覽 cookie 導出或本機瀏覽器資料。",
+  "Preview a portable JSON memory copy before importing selected items.": "導入選中項前，先預覽可移植的 JSON 記憶副本。",
+  "Preview installed profile": "預覽本機資料",
+  "Privacy scope": "隱私範圍",
+  "Proactive preparation": "主動準備",
+  "Processing": "處理狀態",
+  "Processing is paused, so a handoff cannot start.": "處理已暫停，無法開始交接。",
+  "Product health": "產品健康狀態",
+  "Profile": "配置檔",
+  "Project on GitHub": "在 GitHub 查看項目",
+  "Provider default": "供應商預設",
+  "Provider key removed.": "供應商金鑰已移除。",
+  "Provider key saved.": "供應商金鑰已保存。",
+  "Provider usage was not reported.": "模型服務未報告用量。",
+  "Providers": "供應商",
+  "Pull request closed": "Pull Request 已關閉",
+  "Pull request conditions": "Pull Request 條件",
+  "Pull request merged": "Pull Request 已合並",
+  "Pull request open": "Pull Request 打開",
+  "Question": "問題",
+  "Question version": "問題版本",
+  "Quiet": "安靜",
+  "Read access": "讀取權限",
+  "Read aloud": "朗讀",
+  "Read and command": "可讀取和操作",
+  "Read file": "讀取文件",
+  "Read verified file": "讀取核驗文件",
+  "Read-only": "唯讀",
+  "Read-only connection": "唯讀連接",
+  "Read-only work activity": "唯讀工作活動",
+  "Reader": "讀取角色",
+  "Reading export…": "正在讀取導出文件…",
+  "Ready": "就緒",
+  "Ready for review": "待審閱",
+  "Ready to import": "待處理",
+  "Receipt": "路由回執",
+  "Recent browser imports": "最近的瀏覽器導入",
+  "Recent browser operations": "最近瀏覽器操作",
+  "Recent operational events": "近期運行事件",
+  "Recommendation": "建議",
+  "Reconcile an external result before handing off.": "交接前請先對賬外部結果。",
+  "Reconcile delivery": "核查投遞結果",
+  "Reconnect Feishu": "重連飛書來源",
+  "Reconnect Feishu with this resource": "使用此資源重連飛書",
+  "Reconnect GitHub with this resource": "用此資源重連 GitHub",
+  "Reconnect browser control": "重連瀏覽器控制",
+  "Record authorization": "記錄授權",
+  "Record browser check": "記錄瀏覽器核查",
+  "Red": "紅",
+  "Refresh browser resources": "重新整理瀏覽器資源",
+  "Refresh status and usage": "重新整理狀態與用量",
+  "Reject": "拒絕",
+  "Rejected item content is not retained.": "被拒絕項的內容未保留。",
+  "Reload settings": "重新加載設定",
+  "Remote": "遠端",
+  "Remote Environment": "遠端執行環境",
+  "Remote Host": "遠程 Host",
+  "Remote clients": "遠程客戶端",
+  "Remote only": "僅遠端",
+  "Remove attached files before changing Environments.": "更改執行環境前請移除附件。",
+  "Remove attached files before changing directories.": "切換工作目錄前請先移除已附文件。",
+  "Remove attached files before changing execution targets.": "更改執行目標前請移除附件。",
+  "Remove attached files before using automatic target selection.": "使用自動選擇目標前請移除附件。",
+  "Remove from memory": "從記憶中刪除",
+  "Remove key": "移除金鑰",
+  "Remove photo": "移除圖片",
+  "Rename resource": "重命名資源",
+  "Repeat": "重複",
+  "Replace only this source binding; the earlier preset stays available.": "只替換此來源綁定；先前的預設仍可使用。",
+  "Replace source binding": "替換此來源綁定",
+  "Request authorization": "申請授權",
+  "Research browser": "調研瀏覽器",
+  "Resolve the current handoff blocker.": "請先解決當前交接阻塞項。",
+  "Resource deletion recorded.": "資源刪除已記錄。",
+  "Resource name": "資源名稱",
+  "Resource name changed.": "資源名稱已更新。",
+  "Response": "回覆",
+  "Responsible": "責任方",
+  "Restart inspection": "重新巡檢",
+  "Restore": "恢復",
+  "Restore the business and Session snapshot from {time}? The Host will restart.": "恢復 {time} 的業務與 Session 快照？Host 將重新啟動。",
+  "Restore this backup": "恢復此備份",
+  "Result": "結果",
+  "Results": "結果",
+  "Resume work": "恢復工作",
+  "Resuming…": "正在恢復…",
+  "Retry": "重試",
+  "Retry cleanup": "重試清理",
+  "Retry credential cleanup": "重試憑據清理",
+  "Retry import": "重試導入",
+  "Retry pending browser change": "重試待確認的瀏覽器更改",
+  "Retry pending change": "重試待確認的更改",
+  "Retry request list": "重新加載請求列表",
+  "Retry requested from the Main work card.": "從 Main 工作卡請求重試。",
+  "Retry rotation": "重試輪換",
+  "Retry work": "重試工作",
+  "Retry {action}": "重試：{action}",
+  "Retrying…": "正在重試…",
+  "Review": "審閱",
+  "Review again": "重新審閱",
+  "Review old configuration": "審閱舊配置",
+  "Review source and target": "核對來源與目標",
+  "Review the handoff state.": "請檢查交接狀態。",
+  "Revoke": "復原",
+  "Revoke Worker access": "復原 Worker 讀取權",
+  "Revoke authorization": "復原授權",
+  "Revoke browser from this work": "復原此工作的瀏覽器權限",
+  "Revoke browser resource": "復原整個瀏覽器資源",
+  "Revoke browser {resourceId}": "復原瀏覽器 {resourceId}",
+  "Revoke device": "復原設備",
+  "Revoke this browser resource and all of its work grants?": "復原整個瀏覽器資源及全部工作授權？",
+  "Revoke this client’s access now?": "現在復原此客戶端的訪問權？",
+  "Revoke tool approval": "復原工具審批",
+  "Revoked": "已復原",
+  "Ring": "圓環",
+  "Role presets": "角色預設",
+  "Role presets are unavailable.": "角色預設暫不可用。",
+  "Role prompts are versioned. Router keeps {{goal}}; Worker keeps {{goal}} and {{constraints}}.": "角色提示詞會版本化。Router 保留 {{goal}}；Worker 保留 {{goal}} 和 {{constraints}}。",
+  "Role settings changed. Reload settings before applying a preset.": "角色設定已變化，請重新加載後再應用預設。",
+  "Rotate credential": "輪換憑據",
+  "Rotation command saved. Check its status before starting another rotation.": "輪換命令已保留。開始新輪換前請先核查。",
+  "Rotation is pending. Retry with the same value and command, or check its status.": "輪換尚未確認。請用相同值和命令重試，或核查狀態。",
+  "Rotation pending. Retry with the same value or check its status.": "輪換待確認。請用相同值重試或核查狀態。",
+  "Rotation result is unknown. Keep this command and check again.": "輪換結果未知。請保留當前命令並再次核查。",
+  "Rotation was not applied. Refresh the resource before starting another rotation.": "輪換未生效。重新整理資源後可重新發起。",
+  "Router is routing": "Router 正在協調",
+  "Routing work": "協調中",
+  "Rule run budget": "規則運行預算",
+  "Rule version": "規則版本",
+  "Rules changed elsewhere. Review the latest version and save again.": "規則已在別處修改，請核對最新版本後重新保存。",
+  "Rules use an authenticated source event. Preparation cannot send messages, create PRs or merge changes.": "規則依據已驗證的來源事件；準備過程不能發信、創建 PR 或合並。",
+  "Run budget": "運行預算",
+  "Running": "運行中",
+  "Running work": "執行中",
+  "Runs per hour": "每小時運行次數",
+  "SOURCE_CONTENT_CONFLICT": "同一來源項的內容與較早預覽不同",
+  "Saucer": "飛碟",
+  "Save MCP resource": "保存 MCP 資源",
+  "Save execution policy": "保存執行策略",
+  "Save key": "保存金鑰",
+  "Save memory": "保存記憶",
+  "Save resource": "保存資源",
+  "Save rule": "保存規則",
+  "Saved device can be restored after Host restart": "重啟 Host 後可恢復已保存設備",
+  "Saved memory": "已保存的記憶",
+  "Saved memory import opened.": "已打開保存的記憶導入。",
+  "Saved memory imports": "已保存的記憶導入",
+  "Schedule source": "日程來源",
+  "Scheduled occurrence": "日程發生點",
+  "Scheduled tasks": "定時任務",
+  "Scheduled tasks are paused; existing work continues.": "定時任務已暫停，現有工作繼續運行。",
+  "Search": "搜尋",
+  "Search Router and Worker history": "搜尋 Router 與 Worker 歷史",
+  "Search access": "搜尋權限",
+  "Search commands": "搜尋命令",
+  "Search memory": "搜尋記憶",
+  "Secrets": "金鑰",
+  "Select an available model for each role before saving.": "請為每個角色選擇可用的模型，再保存。",
+  "Select at least one memory item.": "請至少選擇一個記憶項。",
+  "Select preset": "選用預設",
+  "Selected": "已選",
+  "Selected Feishu resource": "已選飛書資源",
+  "Selected GitHub resource": "已選 GitHub 資源",
+  "Selection basis": "選擇依據",
+  "Selection issues": "選擇問題",
+  "Semantic inspection": "語義巡檢",
+  "Send": "傳送",
+  "Send to": "發給",
+  "Send to Main": "發給 Main",
+  "Sending…": "正在傳送…",
+  "Sessions over the read limit": "超出讀取上限的 Session",
+  "Sessions with conflicting roles": "角色歸屬衝突的 Session",
+  "Set outside this product": "在此產品之外設定",
+  "Settings": "設定",
+  "Settings pages": "設定頁面",
+  "Share with Main": "共享給 Main",
+  "Share with work": "共享給工作",
+  "Side query": "側邊查詢",
+  "Skip import": "跳過導入",
+  "Sky": "天藍",
+  "Some folders are not shown.": "還有一些資料夾沒有顯示。",
+  "Some work records were outside the attribution limits.": "部分工作記錄超出歸屬統計範圍。",
+  "Source": "來源",
+  "Source Instance ID": "來源 Instance ID",
+  "Source binding replaced; the earlier preset remains available.": "來源綁定已替換，先前的預設仍可使用。",
+  "Source cursor": "來源游標",
+  "Source digest": "來源摘要",
+  "Source ownership": "來源歸屬",
+  "Squircle": "圓角方",
+  "Stage": "階段",
+  "Start dictation": "開始聽寫",
+  "State": "狀態",
+  "Status": "狀態",
+  "Status and usage": "狀態與用量",
+  "Status unavailable": "狀態不可用",
+  "Step budgets": "步數預算",
+  "Stop Feishu": "停止飛書來源",
+  "Stop browser work": "停止瀏覽器工作",
+  "Stop dictation": "停止聽寫",
+  "Stop preparation": "停止準備",
+  "Stop reading": "停止朗讀",
+  "Stop reply": "停止本輪回覆",
+  "Stopped from the Main work card.": "從 Main 工作卡停止。",
+  "Stopped · cancellation confirmation is unavailable.": "已停止 · 無法確認取消範圍已靜止。",
+  "Stopped · execution cancellation confirmed.": "已停止 · 已確認執行取消。",
+  "Stopping this Main reply…": "正在停止本輪 Main 回覆…",
+  "Stopping · waiting for device cancellation confirmation.": "正在停止 · 等待設備確認取消。",
+  "Stopping · waiting for the current execution to become quiet.": "正在停止 · 等待當前執行靜止。",
+  "Stored cookies": "已存儲 cookie",
+  "Super-agent settings": "Super-agent 設定",
+  "Switching execution Environment": "正在切換執行環境",
+  "Synchronize the prepared changes to the target, then verify the copy.": "請將已準備變更同步到目標，然後核驗副本。",
+  "System fact": "系統事實",
+  "System work fact": "系統工作事實",
+  "Take over browser": "接管瀏覽器",
+  "Target": "目標",
+  "Target Environment ID": "目標執行環境 ID",
+  "Target instance": "目標 Instance",
+  "Target role": "目標角色",
+  "Target source Instance ID": "目標來源 Instance ID",
+  "Target work": "目標工作",
+  "Target work item ID": "目標工作項 ID",
+  "Team workspace": "總工作區",
+  "That image is too large": "圖片太大了",
+  "The Feishu account cannot access the configured tenant or chat.": "飛書帳戶無法訪問配置的租戶或會話。",
+  "The Host is reconciling the original execution before switching generations.": "Host 正在對賬原執行範圍，之後再切換執行代次。",
+  "The Session history is missing. Durable work facts remain available.": "Session 歷史缺失，持久工作事實仍可查看。",
+  "The appearance stays with the preset, not role permissions.": "形象僅保存在預設中，不改變角色權限。",
+  "The assigned Session has not started.": "分配的執行 Session 尚未開始。",
+  "The authorization decision was not confirmed.": "授權決定尚未確認。",
+  "The authorization request was not confirmed.": "授權請求尚未確認。",
+  "The browser export could not be read.": "無法讀取該瀏覽器導出文件。",
+  "The browser preview is unavailable.": "瀏覽器預覽不可用。",
+  "The configuration changed elsewhere. Your edits are still here.": "配置已在別處更新。你的修改仍保留在這裡。",
+  "The copied work is verified. Hand off the same work when ready.": "工作副本已核驗；準備好後交接同一項工作。",
+  "The copy has no selected role configuration.": "副本中沒有選定的角色配置。",
+  "The created preset does not match your draft.": "創建結果與草稿不一致。",
+  "The credential export could not be read.": "無法讀取憑據導出文件。",
+  "The credential resource list exceeds its bounded limit.": "憑據資源數量超過本頁可讀取的上限。",
+  "The import decision does not match this review.": "導入決定與本次審閱不一致。",
+  "The import decision does not match your choice.": "導入決定與所選操作不一致。",
+  "The import decision was not confirmed.": "無法確認導入決定。",
+  "The interrupted handoff could not be reconciled.": "無法對賬被中斷的交接。",
+  "The local Host has no CDP browser bridge. Browser work remains unavailable.": "本地 Host 沒有 CDP 瀏覽器桥；瀏覽器工作當前不可用。",
+  "The new browser starts with no work grants.": "新瀏覽器初始不授予任何工作訪問權。",
+  "The preset operation failed.": "預設操作失敗，請重試。",
+  "The preset was not confirmed.": "無法確認預設已保存。",
+  "The preview does not match the selected source and target.": "預覽的來源或目標與選擇不一致。",
+  "The preview was not confirmed.": "無法確認預覽結果。",
+  "The provider and model this role uses. New turns use the saved version.": "這個角色使用的供應商和模型。新回合使用已保存的版本。",
+  "The recording is too long.": "錄音過長。",
+  "The remote Environment credential record is unavailable.": "遠端執行環境的憑據記錄不可用。",
+  "The remote Host connection is unavailable.": "遠程 Host 連接不可用。",
+  "The role configuration revision was not confirmed.": "無法確認角色配置版本。",
+  "The schedule source is paused. Resume it to continue.": "日程來源已暫停，恢復後才能繼續。",
+  "The selected browser profile could not be copied.": "無法複製所選瀏覽器資料。",
+  "The selected preset does not match your review.": "已選預設與審閱內容不一致。",
+  "The selected preset was not confirmed.": "無法確認已選預設。",
+  "The source Assignment is not running.": "源工作分配未在運行。",
+  "The source Assignment was replaced before recovery.": "恢復前源工作分配已被替換。",
+  "The source Environment changed after the work copy was prepared.": "準備工作副本後，源執行環境發生變化。",
+  "The source Session could not be flushed.": "無法重新整理源 Session。",
+  "The source request is no longer current.": "來源請求已不再有效。",
+  "The source work copy changed after preparation.": "準備工作副本後，源內容發生變化。",
+  "The source workspace setup failed.": "源工作區初始化失敗。",
+  "The speech provider is not ready.": "語音服務尚未就緒。",
+  "The target Environment changed after the work copy was prepared.": "準備工作副本後，目標執行環境發生變化。",
+  "The target Environment is not eligible for this handoff.": "目標執行環境不符合交接條件。",
+  "The target already has a different change at {path}.": "目標在 {path} 已有不同變更。",
+  "The target content at {path} does not match the prepared copy.": "目標在 {path} 的內容與已準備副本不符。",
+  "The target has an unlisted change at {path}; it will not be overwritten.": "目標在 {path} 有未列入清單的變更，系統不會覆蓋。",
+  "The target is missing a prepared work-copy file.": "目標缺少一個已準備的工作副本文件。",
+  "The target or work copy could not be revalidated after flush.": "重新整理後無法重新核驗目標或工作副本。",
+  "The target repository version differs from the source.": "目標倉庫版本與源版本不同。",
+  "The work Assignment changed during the handoff.": "交接期間工作分配發生變化。",
+  "The work copy belongs to another execution generation or Environment.": "工作副本屬於其他執行代次或執行環境。",
+  "The work copy could not be inspected safely.": "無法安全檢查工作副本。",
+  "The work copy has not been verified.": "工作副本尚未核驗。",
+  "The work generation changed during the handoff.": "交接期間工作執行代次發生變化。",
+  "The work has an active stop request.": "工作存在有效的停止請求。",
+  "The work has ended.": "工作已結束。",
+  "The work has no active Assignment.": "工作沒有有效分配。",
+  "The work is stopped or waiting for a person.": "工作已停止或正在等待人工處理。",
+  "The {kind} Environment is excluded by the Ticket execution target {target}.": "{target} 工作目標排除了{kind}執行環境。",
+  "Theme": "主題",
+  "Theme accent": "主題強調色",
+  "Thinking effort": "思考強度",
+  "This Environment is not authorized for the current Instance.": "此執行環境未獲當前 Instance 授權。",
+  "This credential is shown once. Transfer it to the desktop client securely.": "憑據僅顯示一次，請安全傳給桌面客戶端。",
+  "This enrollment already completed. Its credential cannot be shown again; revoke it and create a new client.": "此簽發已完成，憑據不能再次顯示；請復原並新建客戶端。",
+  "This handoff step is blocked.": "此交接步驟受阻。",
+  "This import decision was already recorded.": "這項導入決定已記錄。",
+  "This policy chooses a target for new work. Active assignments keep their original Environment.": "此策略決定新工作的目標；進行中的 Assignment 保留原執行環境。",
+  "This product capability is not connected yet.": "這個產品能力還沒有接通。",
+  "This question is no longer active.": "這個問題已不再有效。",
+  "This resource has more than 100 grants. No new grant can be added until stored grants are cleaned up.": "此資源已有超過 100 條授權；清理已存授權前不能新增授權。",
+  "This schedule no longer has access to the work.": "此日程已無權訪問該工作。",
+  "This scheduled delivery could not complete. Check the work status.": "定時投遞未完成，請檢查工作狀態。",
+  "This setting is unavailable here.": "此處暫不可用。",
+  "This task was cancelled.": "此定時任務已取消。",
+  "This view is no longer active.": "此視圖已不再有效。",
+  "This work chooses an eligible Environment when its Ticket starts. Attachments need an exact target.": "工作開始時才會選擇合格執行環境；附件需要明確目標。",
+  "This work is stopped. Resume it before scheduling more work.": "工作已停止，請先明確恢復再安排後續工作。",
+  "Ticket": "工作項",
+  "Ticket version": "工作項版本",
+  "Ticket {id}": "工作項 {id}",
+  "Tickets inspected": "已巡檢工作數",
+  "Time": "時間",
+  "Time zone": "時區",
+  "Tool call": "工具呼叫",
+  "Tool call completed.": "工具呼叫完成。",
+  "Tool call failed.": "工具呼叫失敗。",
+  "Tool result": "工具結果",
+  "Total": "合計",
+  "Totals cover recent Main, Router and Worker Sessions. Supervisor, subagent and preparation calls outside those Sessions are excluded.": "僅統計近期 Main、Router、Worker 會話。會話外的监督、子代理和準備呼叫未計入。",
+  "Try again": "重試",
+  "Turn ended: {reason}.": "回合結束：{reason}。",
+  "Type an answer…": "輸入回答…",
+  "Unattributed usage": "未歸屬用量",
+  "Unavailable remote devices": "不可用的遠端設備",
+  "Unavailable resource": "資源不可用",
+  "Unknown original scope": "原歸屬未知",
+  "Unread activity": "有未讀",
+  "Unreadable Sessions": "無法讀取的 Session",
+  "Unresolved external effects prevent restoring this backup.": "尚未對賬的外部副作用阻止恢復此備份。",
+  "Up one level": "上一級",
+  "Update check failed": "更新檢查失敗",
+  "Update download failed": "更新下載失敗",
+  "Update installation failed": "更新安裝失敗",
+  "Update ready": "更新已就緒",
+  "Update sharing": "更新共享範圍",
+  "Update status unavailable": "更新狀態不可用",
+  "Updates come with the DS SuperAgent app.": "隨 DS SuperAgent 應用一起更新。",
+  "Upload image": "上傳圖片",
+  "Uploading…": "上傳中…",
+  "Usage coverage": "用量覆蓋",
+  "Use HTTPS or an authorized local SSH tunnel. The credential stays in this app process until disconnect or quit.": "請使用 HTTPS 或已授權的本地 SSH 隧道。憑據僅保留在本應用進程中，斷開或退出時清除。",
+  "Use for Feishu": "用於飛書",
+  "Use for GitHub": "用於 GitHub",
+  "Use preview to retry": "用當前預覽重試",
+  "Use this folder": "使用這個資料夾",
+  "Vault cleanup pending.": "憑據庫清理尚未完成。",
+  "Verification": "驗證證據",
+  "Verified files": "已核驗文件",
+  "Verified report recorded": "已記錄核驗報告",
+  "Verify handoff copy": "核驗交接副本",
+  "Verify the prepared work copy before handing off.": "交接前請先核驗已準備的工作副本。",
+  "Verifying handoff copy…": "正在核驗交接副本…",
+  "View activity": "查看活動",
+  "View full detail": "查看完整詳情",
+  "View history": "查看歷史",
+  "View original request": "查看原始請求",
+  "View tool facts": "查看工具事實",
+  "View version": "視圖版本",
+  "View work for Ticket {id}": "查看工作項 {id}",
+  "Wait for the Worker turn to reach a safe boundary.": "請等待 Worker 回合到達安全邊界。",
+  "Wait for the background job to settle.": "請等待後台作業靜止。",
+  "Wait for the child Agent to settle.": "請等待子 Agent 靜止。",
+  "Waiting for an eligible Environment": "等待符合條件的執行環境",
+  "Waiting for an execution environment": "等待執行環境",
+  "Waiting for background work": "等待後台工作",
+  "Watchdog": "看護進程",
+  "Watchdog has not inspected yet.": "看護進程尚未完成巡檢。",
+  "Watchdog history": "看護進程歷史",
+  "Wave": "聲波",
+  "Whale": "鯨魚",
+  "What to do": "要做什麼",
+  "What would you like to discuss?": "想聊些什麼？",
+  "When": "什麼時候",
+  "Work activity": "工作活動",
+  "Work complete": "已驗證完成",
+  "Work declined": "未接單",
+  "Work directories": "工作目錄",
+  "Work directory": "工作目錄",
+  "Work failed": "失敗",
+  "Work item ID": "工作項 ID",
+  "Work memory access": "工作記憶授權",
+  "Work memory access granted.": "工作記憶讀取權已授權。",
+  "Work memory access revoked.": "工作記憶讀取權已復原。",
+  "Work navigation": "工作導航",
+  "Work receipt": "接單回執",
+  "Work result unknown": "結果待確認",
+  "Work stop requested.": "已請求停止工作。",
+  "Worker": "執行角色",
+  "Worker activity is unavailable.": "Worker 活動暫時不可用。",
+  "Worker assignments included": "已纳入的 Worker 執行安排",
+  "Worker ended without a verified report": "Worker 已結束，但沒有核驗報告",
+  "Worker idle": "Worker 空閒",
+  "Worker is executing": "Worker 正在執行",
+  "Worker memory access is off until you grant it for this work. Revoking blocks later reads and proposals.": "你為當前工作授權後，Worker 才能讀取記憶。撤權會阻止後續讀取和提案。",
+  "Worker report": "Worker 報告",
+  "Worker running": "Worker 執行中",
+  "Worker turn": "Worker 當前回合",
+  "Working folder": "工作資料夾",
+  "Working…": "處理中…",
+  "Would prepare": "僅觀察：會準備",
+  "Write access": "寫入權限",
+  "Yellow": "黃",
+  "Your changed fields were applied over configuration v{revision}. Review and save.": "你的改動已重接到配置 v{revision} 上，請檢查後保存。",
+  "bytes": "字節",
+  "conflict": "衝突",
+  "deleted": "已刪除",
+  "duplicate": "已記錄的重複操作",
+  "failed": "失敗",
+  "minutes": "分鐘",
+  "none": "無",
+  "off": "已斷開",
+  "outbound": "外發",
+  "pending": "等待執行",
+  "pending confirmation. Retry the same command.": "待確認，請用同一命令重試。",
+  "ready": "已啟用",
+  "rejected": "未接單",
+  "replaced": "已替換來源綁定",
+  "routing": "協調中",
+  "running": "執行中",
+  "selected": "已選用",
+  "skipped": "已跳過",
+  "source": "來源",
+  "target {target} excludes {kind} Environments": "{target} 目標排除了{kind}執行環境",
+  "unknown": "待確認",
+  "{count} Session reads unavailable": "{count} 個 Session 讀取不可用",
+  "{count} inputs queued": "{count} 條輸入排隊中",
+  "{count} models": "{count} 個模型",
+  "{records} records · {sessions} Sessions · {size}": "{records} 條記錄 · {sessions} 個 Session · {size}",
+  "{role} thinking effort": "{role} 思考強度",
+  "{tokens} tok · {reported} of {calls} calls reported": "{tokens} tok · {reported}/{calls} 次呼叫有報告",
+  "{tokens} tokens · {reported} of {calls} calls reported": "{tokens} tokens · {reported}/{calls} 次呼叫有報告",
+  "{uses} role uses · {sessions} Sessions · at least {events} events": "{uses} 條角色使用 · {sessions} 個 Session · 至少 {events} 個事件"
+};
+
 // src/client/i18n.js
 var NAMESPACE = "ds-superagent";
 var ZH = {
+  Roles: "角色",
+  "Agent presets": "智能体预设",
+  "Built-in plugins": "内置插件",
+  "Connections and capabilities": "连接与能力",
+  IM: "即时通信",
+  Phone: "手机",
+  "Browser plugin": "浏览器插件",
+  "Computer control": "电脑操控",
+  "Capability library": "能力库",
+  SuperAgent: "SuperAgent",
+  Calendar: "日程",
+  "Remote clients": "远程客户端",
+  Help: "帮助",
+  "Plugin version": "插件版本",
+  License: "许可协议",
+  "Project on GitHub": "在 GitHub 查看项目",
+  "Loading settings…": "正在加载设置…",
+  "This setting is unavailable here.": "此处暂不可用。",
+  "Could not load this setting.": "无法加载此设置。",
+  "Content font size": "内容字号",
+  "Display appearance": "显示外观",
+  "Color mode": "颜色模式",
+  "Light mode": "浅色模式",
+  "Dark mode": "深色模式",
+  "Follow system": "跟随系统",
+  "View activity": "查看活动",
+  "Open Main": "打开主对话",
+  "Search commands": "搜索命令",
+  "Close search": "关闭搜索",
+  "A new reply is waiting": "有一条新回复",
   "Proactive preparation": "主动准备",
   "Pause proactive preparation": "暂停主动准备",
   "Paused preparations cannot submit a result. Existing work continues.": "暂停后准备结果无法提交，已有工作继续。",
@@ -2346,21 +4431,47 @@ var HOST_ZH = {
   "Review the prompt requirements for the selected role.": "请检查目标角色的指令要求。"
 };
 Object.assign(ZH, HOST_ZH);
+var ADDITIONAL_LANGUAGES = [
+  { id: "ko", label: "한국어", fallback: "en" },
+  { id: "zh-TW", label: "繁體中文", fallback: "zh" }
+];
+var DICTIONARY = { zh: ZH, "zh-TW": zh_tw_default, de: de_default, es: es_default, fr: fr_default, ja: ja_default, ko: ko_default };
+var DATE_LOCALES = { zh: "zh-CN", "zh-tw": "zh-TW", de: "de-DE", es: "es-ES", fr: "fr-FR", ja: "ja-JP", ko: "ko-KR" };
 var fill = (text, params) => params ? text.replace(/\{(\w+)\}/g, (match, name) => name in params ? String(params[name]) : match) : text;
 var service = null;
 var bound = null;
 function installLocale(locale) {
   if (!locale || typeof locale.register !== "function" || typeof locale.bind !== "function") return () => {
   };
+  const disposers = [];
+  const add = (dispose) => {
+    if (typeof dispose === "function") disposers.push(dispose);
+  };
+  const disposeAll = () => {
+    for (const dispose of disposers.splice(0).reverse()) dispose();
+  };
+  let translate;
+  try {
+    for (const [id, dictionary] of Object.entries(DICTIONARY)) add(locale.register(NAMESPACE, id, dictionary));
+    if (typeof locale.addLanguage === "function") {
+      const existing = new Set((locale.getLocale?.()?.locales ?? []).map(({ id }) => id.toLowerCase()));
+      for (const definition of ADDITIONAL_LANGUAGES) {
+        if (!existing.has(definition.id.toLowerCase())) add(locale.addLanguage(definition));
+      }
+    }
+    translate = locale.bind(NAMESPACE);
+  } catch (error) {
+    disposeAll();
+    throw error;
+  }
   service = locale;
-  bound = locale.bind(NAMESPACE);
-  const off = locale.register(NAMESPACE, "zh", ZH);
+  bound = translate;
   return () => {
     if (service === locale) {
       service = null;
       bound = null;
     }
-    if (typeof off === "function") off();
+    disposeAll();
   };
 }
 function t(key, params) {
@@ -2375,11 +4486,13 @@ function hostText(message) {
   return message;
 }
 function language() {
-  const active = service?.getLocale?.().active;
+  const active = service?.getLocale?.()?.active;
   return typeof active === "string" ? active : "en";
 }
-var dateLocale = () => language().startsWith("zh") ? "zh-CN" : "en-US";
-var DICTIONARY = { zh: ZH };
+function dateLocale() {
+  const active = language().toLowerCase();
+  return Object.hasOwn(DATE_LOCALES, active) ? DATE_LOCALES[active] : "en-US";
+}
 
 // src/client/product-chat.js
 var import_react = require("react");
@@ -2861,7 +4974,7 @@ function MainComposer({
       ) : null,
       busy && onStop && !readOnly ? (0, import_react3.createElement)(
         "button",
-        { className: "bt-soft", type: "button", disabled: stopping, onClick: onStop },
+        { className: "bt-soft", type: "button", "data-action": "stop-main", disabled: stopping, onClick: onStop },
         stopping ? t("Stopping…") : t("Stop reply")
       ) : null,
       (0, import_react3.createElement)(
@@ -2976,7 +5089,7 @@ async function uploadFingerprint(payload, environmentId) {
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
-async function uploadWithRetry(call, store, instanceId, environmentId, payload) {
+async function uploadWithRetry(call2, store, instanceId, environmentId, payload) {
   const fingerprint = await uploadFingerprint(payload, environmentId);
   const key = `superagent:pending-upload:${instanceId}:${fingerprint}`;
   let commandId = pendingUploads.get(key);
@@ -2992,7 +5105,7 @@ async function uploadWithRetry(call, store, instanceId, environmentId, payload) 
     } catch {
     }
   }
-  const result = await call("attachment-upload", { instanceId, commandId, environmentId, ...payload });
+  const result = await call2("attachment-upload", { instanceId, commandId, environmentId, ...payload });
   pendingUploads.delete(key);
   try {
     store.removeItem(key);
@@ -3000,11 +5113,11 @@ async function uploadWithRetry(call, store, instanceId, environmentId, payload) 
   }
   return result;
 }
-async function readPages(call, endpoint, request) {
+async function readPages(call2, endpoint, request) {
   const chunks = [];
   let offset = 0;
   for (let pageCount = 0; pageCount < 2048; pageCount++) {
-    const page = await call(endpoint, { ...request, offset, maxBytes: 8192 });
+    const page = await call2(endpoint, { ...request, offset, maxBytes: 8192 });
     if (page.encoding !== "utf8" && page.encoding !== "base64") throw new Error("The attachment page encoding is unavailable.");
     const bytes = page.encoding === "base64" ? Uint8Array.from(atob(page.text), (character) => character.charCodeAt(0)) : new TextEncoder().encode(page.text);
     if (page.offset !== offset || page.nextOffset !== offset + bytes.length || page.totalBytes > MAX_UPLOAD_BYTES) {
@@ -3017,8 +5130,8 @@ async function readPages(call, endpoint, request) {
   }
   throw new Error("The attachment exceeded the bounded page limit.");
 }
-var readProductAttachment = (call, instanceId, id) => readPages(call, "attachment-read", { instanceId, id });
-var readProductArtifact = (call, instanceId, workItemId, path) => readPages(call, "artifact-read", { instanceId, workItemId, path });
+var readProductAttachment = (call2, instanceId, id) => readPages(call2, "attachment-read", { instanceId, id });
+var readProductArtifact = (call2, instanceId, workItemId, path) => readPages(call2, "artifact-read", { instanceId, workItemId, path });
 
 // src/client/product-feishu.js
 var import_react4 = require("react");
@@ -3034,14 +5147,14 @@ var failureText = (code) => ({
   SOURCE_TIMEOUT: "Feishu did not respond. Check the connection and reconnect.",
   FEISHU_SETUP_FAILED: "Feishu setup failed. Check the connection settings and reconnect."
 })[code] ?? "Feishu needs attention. Check the connection settings and reconnect.";
-function FeishuSourceStatus({ instanceId, call }) {
+function FeishuSourceStatus({ instanceId, call: call2 }) {
   const [status, setStatus] = (0, import_react4.useState)(null);
   const [busy, setBusy] = (0, import_react4.useState)(false);
   const [error, setError] = (0, import_react4.useState)(null);
   (0, import_react4.useEffect)(() => {
     if (!instanceId) return void 0;
     let active = true;
-    const refresh = () => call("feishu-status", { instanceId }).then((result) => {
+    const refresh = () => call2("feishu-status", { instanceId }).then((result) => {
       if (active) setStatus(result);
     }).catch(() => {
       if (active) setStatus({ configured: false, state: "unavailable", readFailed: true });
@@ -3054,7 +5167,7 @@ function FeishuSourceStatus({ instanceId, call }) {
       active = false;
       clearInterval(timer);
     };
-  }, [instanceId, call]);
+  }, [instanceId, call2]);
   if (!status?.configured && status?.state !== "failed" && !status?.readFailed) return null;
   const running = status.state === "polling" || status.state === "setup";
   const control = async () => {
@@ -3062,7 +5175,7 @@ function FeishuSourceStatus({ instanceId, call }) {
     setBusy(true);
     setError(null);
     try {
-      setStatus(await call(running ? "feishu-stop" : "feishu-start", { instanceId }));
+      setStatus(await call2(running ? "feishu-stop" : "feishu-start", { instanceId }));
     } catch (failure) {
       setError(failure.message);
     } finally {
@@ -3199,8 +5312,8 @@ function bodyOf(def, paint, flat = false) {
     return "";
   }
 }
-var eyeMarkup = ([cx, cy, w, h27, tilt]) => `<g transform="translate(${cx} ${cy}) rotate(${tilt})"><rect class="bt-eye" x="${-w / 2}" y="${-h27 / 2}" width="${w}" height="${h27}" rx="${w / 2}"/></g>`;
-var happyEyeMarkup = ([cx, cy, w, h27, tilt]) => `<g transform="translate(${cx} ${cy}) rotate(${tilt})"><path class="bt-eye-happy" opacity="0" d="M${-w * 0.62} ${h27 * 0.14}Q0 ${-h27 * 0.42} ${w * 0.62} ${h27 * 0.14}" fill="none" stroke="#000" stroke-width="${w * 0.5}" stroke-linecap="round"/></g>`;
+var eyeMarkup = ([cx, cy, w, h35, tilt]) => `<g transform="translate(${cx} ${cy}) rotate(${tilt})"><rect class="bt-eye" x="${-w / 2}" y="${-h35 / 2}" width="${w}" height="${h35}" rx="${w / 2}"/></g>`;
+var happyEyeMarkup = ([cx, cy, w, h35, tilt]) => `<g transform="translate(${cx} ${cy}) rotate(${tilt})"><path class="bt-eye-happy" opacity="0" d="M${-w * 0.62} ${h35 * 0.14}Q0 ${-h35 * 0.42} ${w * 0.62} ${h35 * 0.14}" fill="none" stroke="#000" stroke-width="${w * 0.5}" stroke-linecap="round"/></g>`;
 var maskBox = (size) => `maskUnits="userSpaceOnUse" x="${-size}" y="${-size}" width="${size * 3}" height="${size * 3}"`;
 var holes = (def, eyes) => `<rect x="${-def.size}" y="${-def.size}" width="${def.size * 3}" height="${def.size * 3}" fill="#fff"/>${eyes}`;
 var MASK_ID = "%MASK%";
@@ -3235,187 +5348,16 @@ function maskOf(shape) {
 }
 var DEFAULT_MASK = maskOf(FALLBACK_SHAPE);
 
-// src/client/mark.js
-var import_react5 = require("react");
-var STATES = ["idle", "thinking", "searching", "working", "sending", "orbit", "waiting", "alert", "done"];
-function useGaze(ref, enabled) {
-  (0, import_react5.useEffect)(() => {
-    if (!enabled) return void 0;
-    let frame = 0;
-    let point = null;
-    const place = () => {
-      frame = 0;
-      const node = ref.current;
-      if (!node || !point) return;
-      const box = node.getBoundingClientRect();
-      const clamp = (value) => Math.max(-1, Math.min(1, value));
-      node.style.setProperty("--bt-gx", clamp((point.x - box.left - box.width / 2) / 160).toFixed(2));
-      node.style.setProperty("--bt-gy", clamp((point.y - box.top - box.height / 2) / 160).toFixed(2));
-    };
-    const onMove = (event) => {
-      point = { x: event.clientX, y: event.clientY };
-      if (!frame) frame = requestAnimationFrame(place);
-    };
-    const onLeave = () => {
-      point = null;
-      ref.current?.style.setProperty("--bt-gx", "0");
-      ref.current?.style.setProperty("--bt-gy", "0");
-    };
-    window.addEventListener("pointermove", onMove, { passive: true });
-    document.documentElement.addEventListener("pointerleave", onLeave);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("pointermove", onMove);
-      document.documentElement.removeEventListener("pointerleave", onLeave);
-    };
-  }, [enabled]);
-}
-var FIDGETS = ["hop", "sway", "stretch", "look"];
-function BotMark({ bot, look: given, size = 36, state = "idle", live = false, gaze = false, pokeable = false, label }) {
-  const look = given ?? lookOf(bot);
-  const ref = (0, import_react5.useRef)(null);
-  const maskId = (0, import_react5.useRef)("");
-  if (maskId.current === "") maskId.current = `bt-mark-${nextMarkSerial()}`;
-  const [poked, setPoked] = (0, import_react5.useState)(false);
-  const [broken, setBroken] = (0, import_react5.useState)("");
-  const image = look.image && look.image !== broken ? look.image : void 0;
-  useGaze(ref, gaze);
-  const common = {
-    ref,
-    className: poked ? "bt-mark bt-mark-poke" : "bt-mark",
-    "data-shape": image ? "image" : shapeId(look.shape),
-    "data-state": STATES.includes(state) ? state : "idle",
-    "data-live": live ? "" : void 0,
-    "data-fidget": live ? FIDGETS[fnv1a(`${bot?.id ?? ""}:fidget`) % FIDGETS.length] : void 0,
-    "data-gaze": gaze ? "" : void 0,
-    "data-poke": pokeable ? "" : void 0,
-    style: { width: size, height: size, ...live ? { "--bt-delay": `${-(fnv1a(String(bot?.id ?? "")) % 5e3) / 1e3}s`, "--bt-fidget-delay": `${-(fnv1a(`${bot?.id ?? ""}:when`) % 9e3) / 1e3}s` } : {} },
-    role: label ? "img" : void 0,
-    "aria-label": label,
-    "aria-hidden": label ? void 0 : true,
-    onClick: pokeable ? () => setPoked(true) : void 0,
-    onAnimationEnd: poked ? (event) => {
-      if (/^bt-poke/.test(event.animationName)) setPoked(false);
-    } : void 0
-  };
-  if (image) return (0, import_react5.createElement)("span", common, (0, import_react5.createElement)("img", { className: "bt-mark-img", src: image, alt: "", draggable: false, onError: () => setBroken(image) }));
-  const box = shapeOf(look.shape).size;
-  return (0, import_react5.createElement)("span", common, (0, import_react5.createElement)("svg", { viewBox: `0 0 ${box} ${box}`, dangerouslySetInnerHTML: { __html: characterMarkup(look.shape, look.color).replaceAll(MASK_ID, maskId.current) } }));
-}
-
-// src/client/product-brand.js
-var import_react6 = require("react");
-function ProductBrandMark({ size = 24 }) {
-  return (0, import_react6.createElement)("span", { className: "bt-brand-whale" }, (0, import_react6.createElement)(BotMark, { look: MAIN_LOOK, size }));
-}
-
-// src/client/product-card.js
-var import_react7 = require("react");
-var capitalize = (word) => word[0].toUpperCase() + word.slice(1);
-function Row({ label, hint, stack = false, children }) {
-  return (0, import_react7.createElement)(
-    "label",
-    { className: stack ? "bt-set-row bt-bs-row bt-bs-stack" : "bt-set-row bt-bs-row" },
-    (0, import_react7.createElement)(
-      "span",
-      { className: "bt-set-copy" },
-      (0, import_react7.createElement)("span", { className: "bt-bs-label" }, label),
-      hint ? (0, import_react7.createElement)("span", { className: "bt-set-hint" }, hint) : null
-    ),
-    children
-  );
-}
-function Card({ title, children }) {
-  return (0, import_react7.createElement)(
-    "section",
-    { className: "bt-set-section" },
-    title ? (0, import_react7.createElement)("h3", null, title) : null,
-    (0, import_react7.createElement)("div", { className: "bt-set-card" }, children)
-  );
-}
-function SwitchRow({ label, hint, on, disabled, onChange }) {
-  return (0, import_react7.createElement)(
-    "div",
-    { className: "bt-set-row bt-bs-row" },
-    (0, import_react7.createElement)(
-      "span",
-      { className: "bt-set-copy" },
-      (0, import_react7.createElement)("span", { className: "bt-bs-label" }, label),
-      hint ? (0, import_react7.createElement)("span", { className: "bt-set-hint" }, hint) : null
-    ),
-    (0, import_react7.createElement)(
-      "button",
-      {
-        type: "button",
-        role: "switch",
-        className: "bt-switch",
-        "aria-checked": on,
-        "aria-label": label,
-        disabled,
-        onClick: () => onChange(!on)
-      },
-      (0, import_react7.createElement)("span", { className: "bt-switch-knob", "aria-hidden": true })
-    )
-  );
-}
-function ShapeRing({ shape, size }) {
-  const maskId = (0, import_react7.useRef)("");
-  if (maskId.current === "") maskId.current = `bt-product-ring-${crypto.randomUUID()}`;
-  const def = shapeOf(shape);
-  const unit = def.size / size;
-  const markup = `<defs><mask id="${maskId.current}" ${maskBox(def.size)}>${holes(def, `<g stroke="#000" stroke-width="${6 * unit}" stroke-linejoin="round">${bodyOf(def, "#000", true)}</g>`)}</mask></defs><g mask="url(#${maskId.current})" stroke="currentColor" stroke-width="${8 * unit}" stroke-linejoin="round">${bodyOf(def, "currentColor", true)}</g>`;
-  return (0, import_react7.createElement)("svg", {
-    className: "bt-ring",
-    viewBox: `0 0 ${def.size} ${def.size}`,
-    "aria-hidden": true,
-    dangerouslySetInnerHTML: { __html: markup }
-  });
-}
-function CharacterGrid({ look, hasPhoto = false, onShape, onColor }) {
-  const shapes = [...PICKER_SHAPES, ...Object.keys(SHAPES).filter((id) => !Object.hasOwn(CHARACTERS, id))];
-  if (!shapes.includes(look.shape)) shapes.push(look.shape);
-  const rows2 = [];
-  for (let index = 0; index < shapes.length; index += PICKER_COLUMNS) rows2.push(shapes.slice(index, index + PICKER_COLUMNS));
-  return (0, import_react7.createElement)(
-    import_react7.Fragment,
-    null,
-    (0, import_react7.createElement)(
-      "div",
-      { className: "bt-shapes", role: "group", "aria-label": t("Character shape") },
-      rows2.map((row, index) => (0, import_react7.createElement)("div", { key: index, className: "bt-shape-row" }, row.map((id) => (0, import_react7.createElement)("button", {
-        key: id,
-        type: "button",
-        className: "bt-shape",
-        "aria-label": t(shapeOf(id).label),
-        title: t(shapeOf(id).label),
-        "aria-pressed": !hasPhoto && look.shape === id,
-        onClick: () => onShape(id)
-      }, (0, import_react7.createElement)(ShapeRing, { shape: id, size: 36 }), (0, import_react7.createElement)(BotMark, { look: { shape: id, color: look.color }, size: 36 })))))
-    ),
-    (0, import_react7.createElement)(
-      "div",
-      { className: "bt-colors", role: "group", "aria-label": t("Character color") },
-      CHARACTER_COLORS.map((color) => (0, import_react7.createElement)("button", {
-        key: color,
-        type: "button",
-        className: "bt-color",
-        "aria-label": t(capitalize(color)),
-        title: t(capitalize(color)),
-        "aria-pressed": look.color === color,
-        onClick: () => onColor(color)
-      }, (0, import_react7.createElement)("span", { style: { background: paintCss(color) } })))
-    )
-  );
-}
-
 // src/client/motion.js
-var import_react8 = require("react");
+var import_react5 = require("react");
+var MOTION_LEVELS = ["quiet", "normal", "lively"];
 var reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+var mascotInteraction = () => !reducedMotion() && document.body?.dataset.btMotion !== "quiet";
 var noHover = () => window.matchMedia?.("(hover: none)").matches === true;
 var viewBottom = () => window.visualViewport ? window.visualViewport.height + window.visualViewport.offsetTop : window.innerHeight;
 function useViewport() {
-  const [tick, setTick] = (0, import_react8.useState)(0);
-  (0, import_react8.useEffect)(() => {
+  const [tick, setTick] = (0, import_react5.useState)(0);
+  (0, import_react5.useEffect)(() => {
     const viewport = window.visualViewport;
     if (!viewport) return void 0;
     const bump = () => setTick((value) => value + 1);
@@ -3459,12 +5401,12 @@ function liveSprings(apply2) {
     const dt = Math.min(0.5, Math.max(1e-3, (now - last) / 1e3));
     last = now;
     const steps = Math.ceil(dt * 240);
-    const h27 = dt / steps;
+    const h35 = dt / steps;
     let moving = false;
     for (const value of values.values()) {
       for (let index = 0; index < steps; index += 1) {
-        value.v += (-value.k * (value.x - value.to) - value.c * value.v) * h27;
-        value.x += value.v * h27;
+        value.v += (-value.k * (value.x - value.to) - value.c * value.v) * h35;
+        value.x += value.v * h35;
       }
       if (Math.abs(value.x - value.to) < 0.05 && Math.abs(value.v) < 1) {
         value.x = value.to;
@@ -3499,10 +5441,10 @@ function liveSprings(apply2) {
 }
 var CHOSEN = '[aria-pressed="true"],[aria-selected="true"],[aria-current="page"]';
 function useGlide(key, { axis = "x", selector = CHOSEN, lead = SPRING_LEAD, trail = SPRING_TRAIL, box: given } = {}) {
-  const ownBox = (0, import_react8.useRef)(null);
+  const ownBox = (0, import_react5.useRef)(null);
   const box = given ?? ownBox;
-  const thumb = (0, import_react8.useRef)(null);
-  const own = (0, import_react8.useRef)(null);
+  const thumb = (0, import_react5.useRef)(null);
+  const own = (0, import_react5.useRef)(null);
   if (own.current === null) {
     own.current = {
       key: void 0,
@@ -3536,7 +5478,7 @@ function useGlide(key, { axis = "x", selector = CHOSEN, lead = SPRING_LEAD, trai
     springs.set({ start, end }, forward ? { start: trail, end: lead } : { start: lead, end: trail }, jump || hidden || before === null || reducedMotion());
     container.dataset.glide = "";
   };
-  (0, import_react8.useLayoutEffect)(() => {
+  (0, import_react5.useLayoutEffect)(() => {
     const state = own.current;
     const node = box.current;
     if (node === state.node && key === state.key) return;
@@ -3550,7 +5492,7 @@ function useGlide(key, { axis = "x", selector = CHOSEN, lead = SPRING_LEAD, trai
     }
     place(fresh);
   });
-  (0, import_react8.useEffect)(() => () => {
+  (0, import_react5.useEffect)(() => () => {
     own.current.observer?.disconnect();
     own.current.springs.stop();
   }, []);
@@ -3558,16 +5500,16 @@ function useGlide(key, { axis = "x", selector = CHOSEN, lead = SPRING_LEAD, trai
 }
 function Segmented({ label, value, className, children }) {
   const glide = useGlide(value);
-  return (0, import_react8.createElement)(
+  return (0, import_react5.createElement)(
     "div",
     { ref: glide.box, className: className ? `bt-seg ${className}` : "bt-seg", role: "group", "aria-label": label },
-    (0, import_react8.createElement)("span", { ref: glide.thumb, className: "bt-thumb", "aria-hidden": true }),
+    (0, import_react5.createElement)("span", { ref: glide.thumb, className: "bt-thumb", "aria-hidden": true }),
     children
   );
 }
 function useFlip(list, key, selector, id = (node) => node.dataset.flip) {
-  const tops = (0, import_react8.useRef)(null);
-  (0, import_react8.useLayoutEffect)(() => {
+  const tops = (0, import_react5.useRef)(null);
+  (0, import_react5.useLayoutEffect)(() => {
     const container = list.current;
     if (!container) return;
     const next = /* @__PURE__ */ new Map();
@@ -3588,8 +5530,8 @@ function useFlip(list, key, selector, id = (node) => node.dataset.flip) {
   }, [key]);
 }
 function useMorph(box, key) {
-  const last = (0, import_react8.useRef)({ key, height: null, node: null, observer: null });
-  (0, import_react8.useLayoutEffect)(() => {
+  const last = (0, import_react5.useRef)({ key, height: null, node: null, observer: null });
+  (0, import_react5.useLayoutEffect)(() => {
     const node = box.current;
     const state = last.current;
     if (node !== state.node) {
@@ -3618,11 +5560,11 @@ function useMorph(box, key) {
       if (!node.getAnimations().some((other) => other.id === "bt-morph" && other !== animation)) delete node.dataset.morph;
     };
   });
-  (0, import_react8.useEffect)(() => () => last.current.observer?.disconnect(), []);
+  (0, import_react5.useEffect)(() => () => last.current.observer?.disconnect(), []);
 }
 function useLinger(value, ms) {
-  const [kept, setKept] = (0, import_react8.useState)(value);
-  (0, import_react8.useEffect)(() => {
+  const [kept, setKept] = (0, import_react5.useState)(value);
+  (0, import_react5.useEffect)(() => {
     if (value) {
       setKept(value);
       return void 0;
@@ -3631,6 +5573,254 @@ function useLinger(value, ms) {
     return () => clearTimeout(timer);
   }, [value]);
   return [value || kept, !value && Boolean(kept)];
+}
+
+// src/client/mark.js
+var import_react6 = require("react");
+var STATES = ["idle", "thinking", "searching", "working", "sending", "orbit", "waiting", "alert", "done"];
+function useGaze(ref, enabled) {
+  (0, import_react6.useEffect)(() => {
+    if (!enabled) return void 0;
+    let frame = 0;
+    let point = null;
+    const place = () => {
+      frame = 0;
+      const node = ref.current;
+      if (!node || !point || !mascotInteraction()) return;
+      const box = node.getBoundingClientRect();
+      const clamp = (value) => Math.max(-1, Math.min(1, value));
+      node.style.setProperty("--bt-gx", clamp((point.x - box.left - box.width / 2) / 160).toFixed(2));
+      node.style.setProperty("--bt-gy", clamp((point.y - box.top - box.height / 2) / 160).toFixed(2));
+    };
+    const onMove = (event) => {
+      if (!mascotInteraction()) return;
+      point = { x: event.clientX, y: event.clientY };
+      if (!frame) frame = requestAnimationFrame(place);
+    };
+    const onLeave = () => {
+      point = null;
+      ref.current?.style.setProperty("--bt-gx", "0");
+      ref.current?.style.setProperty("--bt-gy", "0");
+    };
+    window.addEventListener("pointermove", onMove, { passive: true });
+    document.documentElement.addEventListener("pointerleave", onLeave);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("pointermove", onMove);
+      document.documentElement.removeEventListener("pointerleave", onLeave);
+    };
+  }, [enabled]);
+}
+var FIDGETS = ["hop", "sway", "stretch", "look"];
+function BotMark({ bot, look: given, size = 36, state = "idle", live = false, gaze = false, pokeable = false, label }) {
+  const look = given ?? lookOf(bot);
+  const ref = (0, import_react6.useRef)(null);
+  const maskId = (0, import_react6.useRef)("");
+  if (maskId.current === "") maskId.current = `bt-mark-${nextMarkSerial()}`;
+  const [poked, setPoked] = (0, import_react6.useState)(false);
+  (0, import_react6.useEffect)(() => {
+    if (!poked) return void 0;
+    const node = ref.current;
+    const reset = (event) => {
+      if (event.animationName.startsWith("bt-poke")) setPoked(false);
+    };
+    node?.addEventListener("animationcancel", reset);
+    return () => node?.removeEventListener("animationcancel", reset);
+  }, [poked]);
+  const [broken, setBroken] = (0, import_react6.useState)("");
+  const image = look.image && look.image !== broken ? look.image : void 0;
+  useGaze(ref, gaze);
+  const common = {
+    ref,
+    className: poked ? "bt-mark bt-mark-poke" : "bt-mark",
+    "data-shape": image ? "image" : shapeId(look.shape),
+    "data-state": STATES.includes(state) ? state : "idle",
+    "data-live": live ? "" : void 0,
+    "data-fidget": live ? FIDGETS[fnv1a(`${bot?.id ?? ""}:fidget`) % FIDGETS.length] : void 0,
+    "data-gaze": gaze ? "" : void 0,
+    "data-poke": pokeable ? "" : void 0,
+    style: { width: size, height: size, ...live ? { "--bt-delay": `${-(fnv1a(String(bot?.id ?? "")) % 5e3) / 1e3}s`, "--bt-fidget-delay": `${-(fnv1a(`${bot?.id ?? ""}:when`) % 9e3) / 1e3}s` } : {} },
+    role: label ? "img" : void 0,
+    "aria-label": label,
+    "aria-hidden": label ? void 0 : true,
+    onClick: pokeable ? () => {
+      if (mascotInteraction()) setPoked(true);
+    } : void 0,
+    onAnimationEnd: poked ? (event) => {
+      if (event.animationName.startsWith("bt-poke")) setPoked(false);
+    } : void 0
+  };
+  if (image) return (0, import_react6.createElement)("span", common, (0, import_react6.createElement)("img", { className: "bt-mark-img", src: image, alt: "", draggable: false, onError: () => setBroken(image) }));
+  const box = shapeOf(look.shape).size;
+  return (0, import_react6.createElement)("span", common, (0, import_react6.createElement)("svg", { viewBox: `0 0 ${box} ${box}`, dangerouslySetInnerHTML: { __html: characterMarkup(look.shape, look.color).replaceAll(MASK_ID, maskId.current) } }));
+}
+
+// src/client/product-settings-components.js
+var import_react7 = require("react");
+function SettingsPage({ title, actions, children, scrollRef, tabs }) {
+  return (0, import_react7.createElement)(
+    "div",
+    { className: "bt-settings-main bt-ps-page" },
+    (0, import_react7.createElement)(
+      "header",
+      { className: "bt-settings-head" },
+      (0, import_react7.createElement)("h2", null, title),
+      actions ? (0, import_react7.createElement)("div", { className: "bt-ps-actions" }, actions) : null
+    ),
+    tabs,
+    (0, import_react7.createElement)("div", { ref: scrollRef, className: "bt-settings-scroll bt-settings-page" }, children)
+  );
+}
+function SectionCard({ title, description, children }) {
+  return (0, import_react7.createElement)(
+    "section",
+    { className: "bt-set-section bt-ps-section" },
+    title ? (0, import_react7.createElement)("h3", null, title) : null,
+    description ? (0, import_react7.createElement)("p", { className: "bt-ps-description" }, description) : null,
+    (0, import_react7.createElement)("div", { className: "bt-set-card bt-ps-card" }, children)
+  );
+}
+function FieldRow({ label, hint, control, layout }) {
+  const id = (0, import_react7.useId)();
+  const nativeField = (0, import_react7.isValidElement)(control) && ["input", "select", "textarea"].includes(control.type);
+  const field = nativeField && hint ? (0, import_react7.cloneElement)(control, {
+    "aria-labelledby": control.props["aria-label"] || control.props["aria-labelledby"] ? control.props["aria-labelledby"] : `${id}-label`,
+    "aria-describedby": [control.props["aria-describedby"], `${id}-hint`].filter(Boolean).join(" ")
+  }) : control;
+  return (0, import_react7.createElement)(
+    nativeField ? "label" : "div",
+    {
+      className: `bt-set-row bt-ps-row${layout === "stack" ? " bt-ps-stack" : ""}`
+    },
+    (0, import_react7.createElement)(
+      "span",
+      { className: "bt-set-copy" },
+      (0, import_react7.createElement)("span", { className: "bt-ps-label", id: `${id}-label` }, label),
+      hint ? (0, import_react7.createElement)("span", { className: "bt-set-hint bt-ps-hint", id: `${id}-hint` }, hint) : null
+    ),
+    (0, import_react7.createElement)(nativeField ? "span" : "div", { className: "bt-set-control bt-ps-control" }, field)
+  );
+}
+function EmptyState({ title, detail, action }) {
+  return (0, import_react7.createElement)(
+    "div",
+    { className: "bt-ps-empty" },
+    (0, import_react7.createElement)("p", null, title),
+    detail ? (0, import_react7.createElement)("p", { className: "bt-ps-description" }, detail) : null,
+    action
+  );
+}
+function StatGrid({ items, columns: columns2 = 4 }) {
+  return (0, import_react7.createElement)(
+    "dl",
+    { className: "bt-ps-stats", style: { "--bt-ps-columns": columns2 } },
+    items.map(({ label, value, detail }) => (0, import_react7.createElement)(
+      "div",
+      { className: "bt-ps-stat", key: label },
+      (0, import_react7.createElement)("dt", null, label),
+      (0, import_react7.createElement)("dd", null, value),
+      detail ? (0, import_react7.createElement)("dd", { className: "bt-ps-description" }, detail) : null
+    ))
+  );
+}
+function StatusChip({ tone = "neutral", children }) {
+  return (0, import_react7.createElement)("span", { className: "bt-ps-chip", "data-tone": tone }, children);
+}
+function InlineNotice({ tone = "accent", title, children, action }) {
+  return (0, import_react7.createElement)(
+    "div",
+    { className: "bt-ps-notice", "data-tone": tone, role: tone === "danger" ? "alert" : "status" },
+    (0, import_react7.createElement)(
+      "div",
+      { className: "bt-ps-notice-copy" },
+      title ? (0, import_react7.createElement)("strong", null, title) : null,
+      children ? (0, import_react7.createElement)("div", { className: "bt-ps-description" }, children) : null
+    ),
+    action ? (0, import_react7.createElement)("div", { className: "bt-ps-actions" }, action) : null
+  );
+}
+function DetailList({ items }) {
+  return (0, import_react7.createElement)(
+    "dl",
+    { className: "bt-ps-details" },
+    items.map(({ label, value, mono }) => (0, import_react7.createElement)(
+      "div",
+      { className: "bt-ps-detail", key: label },
+      (0, import_react7.createElement)("dt", null, label),
+      (0, import_react7.createElement)("dd", null, mono ? (0, import_react7.createElement)("code", null, value) : value)
+    ))
+  );
+}
+
+// src/client/product-card.js
+var import_react8 = require("react");
+var capitalize = (word) => word[0].toUpperCase() + word.slice(1);
+function Row({ label, hint, stack = false, children }) {
+  return (0, import_react8.createElement)(FieldRow, { label, hint, layout: stack ? "stack" : void 0, control: children });
+}
+function SwitchRow({ label, hint, on, disabled, onChange }) {
+  return (0, import_react8.createElement)(FieldRow, { label, hint, control: (0, import_react8.createElement)(
+    "button",
+    {
+      type: "button",
+      role: "switch",
+      className: "bt-switch",
+      "aria-checked": on,
+      "aria-label": label,
+      disabled,
+      onClick: () => onChange(!on)
+    },
+    (0, import_react8.createElement)("span", { className: "bt-switch-knob", "aria-hidden": true })
+  ) });
+}
+function ShapeRing({ shape, size }) {
+  const maskId = (0, import_react8.useRef)("");
+  if (maskId.current === "") maskId.current = `bt-product-ring-${crypto.randomUUID()}`;
+  const def = shapeOf(shape);
+  const unit = def.size / size;
+  const markup = `<defs><mask id="${maskId.current}" ${maskBox(def.size)}>${holes(def, `<g stroke="#000" stroke-width="${6 * unit}" stroke-linejoin="round">${bodyOf(def, "#000", true)}</g>`)}</mask></defs><g mask="url(#${maskId.current})" stroke="currentColor" stroke-width="${8 * unit}" stroke-linejoin="round">${bodyOf(def, "currentColor", true)}</g>`;
+  return (0, import_react8.createElement)("svg", {
+    className: "bt-ring",
+    viewBox: `0 0 ${def.size} ${def.size}`,
+    "aria-hidden": true,
+    dangerouslySetInnerHTML: { __html: markup }
+  });
+}
+function CharacterGrid({ look, hasPhoto = false, onShape, onColor }) {
+  const shapes = [...PICKER_SHAPES, ...Object.keys(SHAPES).filter((id) => !Object.hasOwn(CHARACTERS, id))];
+  if (!shapes.includes(look.shape)) shapes.push(look.shape);
+  const rows2 = [];
+  for (let index = 0; index < shapes.length; index += PICKER_COLUMNS) rows2.push(shapes.slice(index, index + PICKER_COLUMNS));
+  return (0, import_react8.createElement)(
+    import_react8.Fragment,
+    null,
+    (0, import_react8.createElement)(
+      "div",
+      { className: "bt-shapes", role: "group", "aria-label": t("Character shape") },
+      rows2.map((row, index) => (0, import_react8.createElement)("div", { key: index, className: "bt-shape-row" }, row.map((id) => (0, import_react8.createElement)("button", {
+        key: id,
+        type: "button",
+        className: "bt-shape",
+        "aria-label": t(shapeOf(id).label),
+        title: t(shapeOf(id).label),
+        "aria-pressed": !hasPhoto && look.shape === id,
+        onClick: () => onShape(id)
+      }, (0, import_react8.createElement)(ShapeRing, { shape: id, size: 36 }), (0, import_react8.createElement)(BotMark, { look: { shape: id, color: look.color }, size: 36 })))))
+    ),
+    (0, import_react8.createElement)(
+      "div",
+      { className: "bt-colors", role: "group", "aria-label": t("Character color") },
+      CHARACTER_COLORS.map((color) => (0, import_react8.createElement)("button", {
+        key: color,
+        type: "button",
+        className: "bt-color",
+        "aria-label": t(capitalize(color)),
+        title: t(capitalize(color)),
+        "aria-pressed": look.color === color,
+        onClick: () => onColor(color)
+      }, (0, import_react8.createElement)("span", { style: { background: paintCss(color) } })))
+    )
+  );
 }
 
 // src/client/product-schedules.js
@@ -3755,7 +5945,7 @@ function occurrenceHistory(occurrences, visibleOccurrences, loadEarlier, onViewW
     loadEarlierButton
   );
 }
-function ProductScheduleSettings({ binding, works, call, onViewWork }) {
+function ProductScheduleSettings({ binding, works, call: call2, onViewWork }) {
   const [rules, setRules] = (0, import_react9.useState)(null);
   const [sourceEnabled, setSourceEnabled] = (0, import_react9.useState)(true);
   const [details, setDetails] = (0, import_react9.useState)({});
@@ -3777,12 +5967,12 @@ function ProductScheduleSettings({ binding, works, call, onViewWork }) {
   const refresh = async () => {
     try {
       const [list, source] = await Promise.all([
-        call("schedule-list", { instanceId: binding.instanceId }),
-        call("schedule-source-read", { instanceId: binding.instanceId })
+        call2("schedule-list", { instanceId: binding.instanceId }),
+        call2("schedule-source-read", { instanceId: binding.instanceId })
       ]);
       const rows2 = await Promise.all(list.items.map(async (rule) => {
         try {
-          return [rule.ruleId, await call("schedule-read", { instanceId: binding.instanceId, ruleId: rule.ruleId })];
+          return [rule.ruleId, await call2("schedule-read", { instanceId: binding.instanceId, ruleId: rule.ruleId })];
         } catch {
           return [rule.ruleId, null];
         }
@@ -3823,7 +6013,7 @@ function ProductScheduleSettings({ binding, works, call, onViewWork }) {
     setBusy(true);
     setError("");
     try {
-      await call("schedule-create", { ...request, commandId: pending.current.commandId });
+      await call2("schedule-create", { ...request, commandId: pending.current.commandId });
       pending.current = null;
       setAdding(false);
       setTitle("");
@@ -3843,7 +6033,7 @@ function ProductScheduleSettings({ binding, works, call, onViewWork }) {
     setBusy(true);
     setError("");
     try {
-      await call("schedule-cancel", { instanceId: binding.instanceId, commandId: `cancel:${ruleId}`, ruleId });
+      await call2("schedule-cancel", { instanceId: binding.instanceId, commandId: `cancel:${ruleId}`, ruleId });
       setConfirming(null);
       await refresh();
     } catch (failure) {
@@ -3856,7 +6046,7 @@ function ProductScheduleSettings({ binding, works, call, onViewWork }) {
     setBusy(true);
     setError("");
     try {
-      await call("schedule-source-set", { instanceId: binding.instanceId, commandId: crypto.randomUUID(), enabled });
+      await call2("schedule-source-set", { instanceId: binding.instanceId, commandId: crypto.randomUUID(), enabled });
       setSourceEnabled(enabled);
       await refresh();
     } catch (failure) {
@@ -3867,8 +6057,8 @@ function ProductScheduleSettings({ binding, works, call, onViewWork }) {
   };
   return (0, import_react9.createElement)(
     "section",
-    { className: "bt-product-schedules", "aria-label": t("Scheduled tasks") },
-    (0, import_react9.createElement)("div", { className: "bt-set-card" }, (0, import_react9.createElement)(SwitchRow, {
+    { className: "bt-ps-content bt-product-schedules", "aria-label": t("Scheduled tasks") },
+    (0, import_react9.createElement)(SectionCard, null, (0, import_react9.createElement)(SwitchRow, {
       label: t("Schedule source"),
       hint: sourceEnabled ? null : t("Scheduled tasks are paused; existing work continues."),
       on: sourceEnabled,
@@ -3885,36 +6075,32 @@ function ProductScheduleSettings({ binding, works, call, onViewWork }) {
     adding ? (0, import_react9.createElement)(
       "form",
       { className: "bt-set-card bt-task-form", onSubmit: submit },
-      (0, import_react9.createElement)(
-        "label",
-        { className: "bt-set-row bt-bs-row" },
-        (0, import_react9.createElement)("span", { className: "bt-set-copy" }, t("Send to")),
-        (0, import_react9.createElement)(
-          "select",
-          { className: "bt-select bt-task-bot", value: targetId, "aria-label": t("Send to"), onChange: (event) => setTargetId(event.target.value) },
-          (0, import_react9.createElement)("option", { value: "main" }, "Main"),
-          available.map((work) => (0, import_react9.createElement)("option", { key: work.brief.workItemId, value: work.brief.workItemId }, work.brief.goal))
-        )
-      ),
-      (0, import_react9.createElement)(
-        "label",
-        { className: "bt-set-row bt-bs-row" },
-        (0, import_react9.createElement)("span", { className: "bt-set-copy" }, t("Name")),
-        (0, import_react9.createElement)("input", { className: "bt-bs-input", value: title, maxLength: 120, required: true, onChange: (event) => setTitle(event.target.value) })
-      ),
-      (0, import_react9.createElement)(
-        "label",
-        { className: "bt-set-row bt-bs-row bt-bs-stack" },
-        (0, import_react9.createElement)("span", { className: "bt-set-copy" }, t("What to do")),
-        (0, import_react9.createElement)("textarea", {
-          className: "bt-bs-input bt-bs-area",
-          value: text,
-          maxLength: 32768,
-          required: true,
-          rows: 3,
-          onChange: (event) => setText(event.target.value)
-        })
-      ),
+      (0, import_react9.createElement)(FieldRow, { label: t("Send to"), control: (0, import_react9.createElement)(
+        "select",
+        {
+          className: "bt-select bt-task-bot",
+          value: targetId,
+          "aria-label": t("Send to"),
+          onChange: (event) => setTargetId(event.target.value)
+        },
+        (0, import_react9.createElement)("option", { value: "main" }, "Main"),
+        available.map((work) => (0, import_react9.createElement)("option", { key: work.brief.workItemId, value: work.brief.workItemId }, work.brief.goal))
+      ) }),
+      (0, import_react9.createElement)(FieldRow, { label: t("Name"), control: (0, import_react9.createElement)("input", {
+        className: "bt-bs-input",
+        value: title,
+        maxLength: 120,
+        required: true,
+        onChange: (event) => setTitle(event.target.value)
+      }) }),
+      (0, import_react9.createElement)(FieldRow, { label: t("What to do"), layout: "stack", control: (0, import_react9.createElement)("textarea", {
+        className: "bt-bs-input bt-bs-area",
+        value: text,
+        maxLength: 32768,
+        required: true,
+        rows: 3,
+        onChange: (event) => setText(event.target.value)
+      }) }),
       (0, import_react9.createElement)(
         "div",
         { className: "bt-set-row bt-bs-row bt-bs-stack" },
@@ -3978,8 +6164,8 @@ function ProductScheduleSettings({ binding, works, call, onViewWork }) {
         (0, import_react9.createElement)("button", { type: "submit", className: "bt-send bt-soft-sm", disabled: busy || !title.trim() || !text.trim() || kind === "weekly" && weekdays.length === 0 }, busy ? t("Creating…") : t("Create task"))
       )
     ) : null,
-    error ? (0, import_react9.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
-    !rules ? (0, import_react9.createElement)("p", { className: "bt-main-status", role: "status" }, t("Loading…")) : rules.length === 0 ? (0, import_react9.createElement)("p", { className: "bt-main-status" }, t("No scheduled tasks yet.")) : (0, import_react9.createElement)("div", { className: "bt-set-card" }, rules.map((rule) => {
+    error ? (0, import_react9.createElement)(InlineNotice, { tone: "danger" }, error) : null,
+    !rules ? !error && (0, import_react9.createElement)(InlineNotice, { tone: "neutral" }, t("Loading…")) : rules.length === 0 ? (0, import_react9.createElement)(SectionCard, null, (0, import_react9.createElement)(EmptyState, { title: t("No scheduled tasks yet.") })) : (0, import_react9.createElement)(SectionCard, null, rules.map((rule) => {
       const occurrences = [...details[rule.ruleId]?.occurrences ?? []].sort((left, right) => left.dueAt - right.dueAt);
       const last = occurrences.at(-1);
       const visibleCount = Math.min(occurrences.length, historyCounts[rule.ruleId] ?? 20);
@@ -4018,7 +6204,7 @@ function ProductScheduleSettings({ binding, works, call, onViewWork }) {
           ) : null
         ),
         history,
-        (0, import_react9.createElement)("span", { className: "bt-task-next" }, rule.status === "active" && rule.nextAt ? t("Next: {time}", { time: new Date(rule.nextAt).toLocaleString() }) : t(rule.status === "cancelled" ? "Cancelled" : "Finished")),
+        (0, import_react9.createElement)(StatusChip, { tone: rule.status === "active" ? "accent" : "neutral" }, rule.status === "active" && rule.nextAt ? t("Next: {time}", { time: new Date(rule.nextAt).toLocaleString() }) : t(rule.status === "cancelled" ? "Cancelled" : "Finished")),
         rule.status === "active" ? (0, import_react9.createElement)("button", {
           type: "button",
           className: "bt-mini bt-task-remove",
@@ -4034,14 +6220,6 @@ function ProductScheduleSettings({ binding, works, call, onViewWork }) {
   );
 }
 var PRODUCT_SCHEDULE_CSS = `
-.bt-product-schedules{display:flex;flex-direction:column;gap:12px}
-.bt-product-schedules .bt-switch{position:relative;flex:none;width:36px;height:20px;padding:0;border:0;border-radius:999px;background:var(--bt-line-2);cursor:pointer;transition:background-color .2s ease}
-.bt-product-schedules .bt-switch[aria-checked=true]{background:var(--bt-accent)}
-.bt-product-schedules .bt-switch:disabled{opacity:.45;cursor:default}
-.bt-product-schedules .bt-switch-knob{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:999px;background:var(--bt-main);box-shadow:0 1px 2px rgba(0,0,0,.2);transition:${spring(SPRING_SHAPE, "transform")},${spring(SPRING_TAP, "width")}}
-.bt-product-schedules .bt-switch[aria-checked=true] .bt-switch-knob{transform:translateX(16px)}
-.bt-product-schedules .bt-switch:active:not(:disabled) .bt-switch-knob{width:21px}
-.bt-product-schedules .bt-switch[aria-checked=true]:active:not(:disabled) .bt-switch-knob{transform:translateX(11px)}
 .bt-product-schedule-row{gap:10px;align-items:flex-start;flex-wrap:wrap}
 .bt-product-schedule-row>svg{width:18px;height:18px;flex:none;color:var(--bt-ink-2)}
 .bt-product-schedule-row .bt-set-copy{min-width:0;display:flex;flex-direction:column;gap:4px}
@@ -4051,11 +6229,7 @@ var PRODUCT_SCHEDULE_CSS = `
 .bt-product-schedule-history-list{padding-left:12px}
 .bt-product-schedule-occurrence{padding:8px 0;border-top:1px solid var(--bt-line-2)}
 .bt-product-schedule-occurrence p{overflow-wrap:anywhere}
-.bt-product-schedule-row .bt-task-next{white-space:normal;max-width:180px;text-align:right}
-.bt-product-schedules button:focus-visible,.bt-product-schedules input:focus-visible,.bt-product-schedules textarea:focus-visible,
-.bt-product-schedules select:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
-@media(max-width:640px){.bt-product-schedule-row .bt-task-next{max-width:none;text-align:left}}
-@media(prefers-reduced-motion:reduce){.bt-product-schedules .bt-task-form{animation:none}.bt-product-schedules .bt-switch,.bt-product-schedules .bt-switch-knob{transition:none}}
+@media(prefers-reduced-motion:reduce){.bt-product-schedules .bt-task-form{animation:none}}
 `;
 
 // src/client/product-proactive.js
@@ -4101,10 +6275,10 @@ function usageLine(label, usage) {
     reported: usage?.reportedCalls ?? 0,
     calls: usage?.calls ?? 0
   });
-  const unavailable = usage?.unavailableSessions ? ` · ${t("{count} Session reads unavailable", { count: usage.unavailableSessions })}` : "";
-  return (0, import_react10.createElement)("li", { key: label }, (0, import_react10.createElement)("span", null, t(label)), (0, import_react10.createElement)("span", null, detail + unavailable));
+  const unavailable2 = usage?.unavailableSessions ? ` · ${t("{count} Session reads unavailable", { count: usage.unavailableSessions })}` : "";
+  return (0, import_react10.createElement)("li", { key: label }, (0, import_react10.createElement)("span", null, t(label)), (0, import_react10.createElement)("span", null, detail + unavailable2));
 }
-function ProactiveReview({ runId, instanceId, call, remote = false, canStop = true, onStopped }) {
+function ProactiveReview({ runId, instanceId, call: call2, remote = false, canStop = true, onStopped }) {
   const [run2, setRun] = (0, import_react10.useState)(null);
   const [error, setError] = (0, import_react10.useState)("");
   const [artifact, setArtifact] = (0, import_react10.useState)(null);
@@ -4114,7 +6288,7 @@ function ProactiveReview({ runId, instanceId, call, remote = false, canStop = tr
     let live = true;
     setRun(null);
     setArtifact(null);
-    const refresh = () => call("proactive-read", { instanceId, runId }).then((value) => {
+    const refresh = () => call2("proactive-read", { instanceId, runId }).then((value) => {
       if (live) setRun(value);
     }).catch((failure) => {
       if (live) setError(failure.message);
@@ -4127,7 +6301,7 @@ function ProactiveReview({ runId, instanceId, call, remote = false, canStop = tr
       live = false;
       clearInterval(timer);
     };
-  }, [runId, instanceId, call]);
+  }, [runId, instanceId, call2]);
   (0, import_react10.useEffect)(() => {
     setWorkArtifact(null);
   }, [run2?.work?.report?.id]);
@@ -4137,7 +6311,7 @@ function ProactiveReview({ runId, instanceId, call, remote = false, canStop = tr
     try {
       let text = "", offset = 0, hasMore = true;
       for (let page = 0; page < 16 && hasMore; page++) {
-        const result = await call("proactive-artifact", { instanceId, runId, path, offset, maxBytes: 8192 });
+        const result = await call2("proactive-artifact", { instanceId, runId, path, offset, maxBytes: 8192 });
         text += result.text;
         offset = result.nextOffset;
         hasMore = result.hasMore;
@@ -4153,7 +6327,7 @@ function ProactiveReview({ runId, instanceId, call, remote = false, canStop = tr
     setBusy(true);
     setError("");
     try {
-      const stopped = await call("proactive-stop", {
+      const stopped = await call2("proactive-stop", {
         instanceId,
         runId,
         commandId: `stop-preparation:${runId}`,
@@ -4173,7 +6347,7 @@ function ProactiveReview({ runId, instanceId, call, remote = false, canStop = tr
     try {
       let text = "", offset = 0, hasMore = true;
       for (let page = 0; page < 16 && hasMore; page++) {
-        const result = await call("proactive-work-artifact", { instanceId, runId, path, offset, maxBytes: 8192 });
+        const result = await call2("proactive-work-artifact", { instanceId, runId, path, offset, maxBytes: 8192 });
         text += result.text;
         offset = result.nextOffset;
         hasMore = result.hasMore;
@@ -4295,7 +6469,7 @@ function ProactiveReview({ runId, instanceId, call, remote = false, canStop = tr
     error ? (0, import_react10.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null
   );
 }
-function ProductProactiveSettings({ binding, call }) {
+function ProductProactiveSettings({ binding, call: call2 }) {
   const [snapshot, setSnapshot] = (0, import_react10.useState)(null);
   const [runs, setRuns] = (0, import_react10.useState)([]);
   const [before, setBefore] = (0, import_react10.useState)(null);
@@ -4306,8 +6480,8 @@ function ProductProactiveSettings({ binding, call }) {
   const [error, setError] = (0, import_react10.useState)("");
   const refresh = async () => {
     const [rules, history] = await Promise.all([
-      call("proactive-rules", { instanceId: binding.instanceId }),
-      call("proactive-list", { instanceId: binding.instanceId })
+      call2("proactive-rules", { instanceId: binding.instanceId }),
+      call2("proactive-list", { instanceId: binding.instanceId })
     ]);
     setSnapshot(rules);
     setRuns((current) => [...new Map([...current, ...history.items].map((run2) => [run2.id, run2])).values()].sort((left, right) => right.createdAt - left.createdAt || right.id.localeCompare(left.id)));
@@ -4318,7 +6492,7 @@ function ProductProactiveSettings({ binding, call }) {
     if (!before || busy) return;
     setBusy(true);
     try {
-      const history = await call("proactive-list", { instanceId: binding.instanceId, before });
+      const history = await call2("proactive-list", { instanceId: binding.instanceId, before });
       setRuns((current) => [...current, ...history.items]);
       setBefore(history.before ?? null);
     } catch (failure) {
@@ -4345,7 +6519,7 @@ function ProductProactiveSettings({ binding, call }) {
     setBusy(true);
     setError("");
     try {
-      await call("proactive-save", {
+      await call2("proactive-save", {
         instanceId: binding.instanceId,
         commandId: crypto.randomUUID(),
         expectedRevision: snapshot.revision,
@@ -4365,7 +6539,7 @@ function ProductProactiveSettings({ binding, call }) {
     setBusy(true);
     setError("");
     try {
-      await call("proactive-pause", { instanceId: binding.instanceId, commandId: crypto.randomUUID(), paused });
+      await call2("proactive-pause", { instanceId: binding.instanceId, commandId: crypto.randomUUID(), paused });
       await refresh();
     } catch (failure) {
       setError(failure.message);
@@ -4416,9 +6590,9 @@ function ProductProactiveSettings({ binding, call }) {
   };
   return (0, import_react10.createElement)(
     "section",
-    { className: "bt-product-preparations", "aria-label": t("Proactive preparation") },
+    { className: "bt-ps-content bt-product-preparations", "aria-label": t("Proactive preparation") },
     (0, import_react10.createElement)(
-      Card,
+      SectionCard,
       { title: t("Proactive preparation") },
       (0, import_react10.createElement)(SwitchRow, {
         label: t("Pause proactive preparation"),
@@ -4435,14 +6609,17 @@ function ProductProactiveSettings({ binding, call }) {
         className: "bt-soft bt-soft-sm",
         disabled: busy,
         onClick: () => edit(null)
-      }, t("New rule")) : (0, import_react10.createElement)("p", null, t("Configure a source to enable preparation rules."))
+      }, t("New rule")) : snapshot ? (0, import_react10.createElement)(InlineNotice, { tone: "warn" }, t("Configure a source to enable preparation rules.")) : null
     ),
-    error ? (0, import_react10.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+    error ? (0, import_react10.createElement)(InlineNotice, { tone: "danger" }, error) : !snapshot ? (0, import_react10.createElement)(InlineNotice, { tone: "neutral" }, t("Loading…")) : null,
     snapshot?.rules.map((rule) => (0, import_react10.createElement)(
-      Card,
+      SectionCard,
       { key: rule.id, title: rule.name },
-      (0, import_react10.createElement)("p", null, `${rule.enabled ? t(rule.mode === "auto" ? "Auto" : "Observe") : t("Off")} · ${rule.match.sourceInstanceIds?.join(", ") ?? ""}`),
-      (0, import_react10.createElement)("p", null, `${t("Run budget")}: ${rule.budget.maxRuns} / ${rule.budget.windowMs / 36e5} h`),
+      (0, import_react10.createElement)(FieldRow, {
+        label: rule.match.sourceInstanceIds?.join(", "),
+        control: (0, import_react10.createElement)(StatusChip, { tone: rule.enabled ? "accent" : "neutral" }, rule.enabled ? t(rule.mode === "auto" ? "Auto" : "Observe") : t("Off"))
+      }),
+      (0, import_react10.createElement)(FieldRow, { label: t("Run budget"), control: `${rule.budget.maxRuns} / ${rule.budget.windowMs / 36e5} h` }),
       (0, import_react10.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", disabled: busy, onClick: () => edit(rule) }, t("Edit rule")),
       (0, import_react10.createElement)(
         "button",
@@ -4558,7 +6735,7 @@ function ProductProactiveSettings({ binding, call }) {
       )
     ) : null,
     (0, import_react10.createElement)(
-      Card,
+      SectionCard,
       { title: t("Preparation history") },
       runs.length ? runs.map((run2) => (0, import_react10.createElement)(
         "div",
@@ -4566,7 +6743,7 @@ function ProductProactiveSettings({ binding, call }) {
         (0, import_react10.createElement)("strong", null, `${run2.ruleId} · ${t(stateText[run2.state] ?? run2.state)}`),
         (0, import_react10.createElement)("span", null, run2.summary || run2.reason || run2.eventId),
         (0, import_react10.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: () => setSelected(run2.id) }, t("Review"))
-      )) : (0, import_react10.createElement)("p", null, t("No preparations yet.")),
+      )) : snapshot ? (0, import_react10.createElement)(EmptyState, { title: t("No preparations yet.") }) : null,
       before ? (0, import_react10.createElement)("button", {
         type: "button",
         className: "bt-soft bt-soft-sm",
@@ -4579,7 +6756,7 @@ function ProductProactiveSettings({ binding, call }) {
         key: selected,
         runId: selected,
         instanceId: binding.instanceId,
-        call,
+        call: call2,
         onStopped: () => {
           void refresh();
         }
@@ -4588,17 +6765,16 @@ function ProductProactiveSettings({ binding, call }) {
   );
 }
 var PRODUCT_PROACTIVE_CSS = `
-.bt-product-preparations{display:grid;gap:12px}
-.bt-product-preparations p{margin:8px 0;font-size:13px;line-height:18px}
+.bt-product-preparations p{font-size:var(--bt-ps-text);line-height:18px}
 .bt-product-preparation-form{display:grid;gap:12px}
-.bt-product-preparation-form label{display:grid;gap:6px;font-size:13px}
+.bt-product-preparation-form label{display:grid;gap:6px;font-size:var(--bt-ps-text)}
 .bt-product-preparation-form fieldset{border:1px solid var(--bt-line);display:flex;gap:12px;flex-wrap:wrap}
 .bt-product-preparation-form fieldset label{display:flex;align-items:center}
-.bt-product-preparation-row{display:grid;gap:4px;padding:12px 0;border-top:1px solid var(--bt-line);font-size:13px;overflow-wrap:anywhere}
+.bt-product-preparation-row{display:grid;gap:4px;overflow-wrap:anywhere}
 .bt-product-preparation-row button{justify-self:start}
-.bt-product-preparation-detail{border-top:1px solid var(--bt-line);padding-top:12px;overflow-wrap:anywhere;font-size:13px}
+.bt-product-preparation-detail{border-top:1px solid var(--bt-line);padding-top:12px;overflow-wrap:anywhere;font-size:var(--bt-ps-text)}
 .bt-product-preparation-file{white-space:pre-wrap;overflow-wrap:anywhere;max-height:280px;overflow:auto}
-.bt-product-preparation-work{margin:14px 0;padding:12px;border:1px solid var(--bt-line);border-radius:12px}
+.bt-product-preparation-work{margin:14px 0;padding:12px;border:1px solid var(--bt-line);border-radius:var(--bt-ps-radius-card)}
 .bt-product-preparation-usage{display:grid;gap:6px;padding:0;list-style:none}
 .bt-product-preparation-usage li{display:flex;justify-content:space-between;gap:12px}
 .bt-product-preparation-hint{color:var(--bt-muted)}
@@ -4665,7 +6841,7 @@ function draftFromPreview(record) {
   };
 }
 function toPreset(draft) {
-  const appearance = draft.appearance;
+  const appearance2 = draft.appearance;
   return {
     id: draft.id.trim(),
     name: draft.name.trim(),
@@ -4676,7 +6852,7 @@ function toPreset(draft) {
     },
     instructions: draft.instructions,
     skills: draft.skills.split(/[\n,]/u).map((skill) => skill.trim()).filter(Boolean),
-    ...Object.keys(appearance).length ? { appearance } : {}
+    ...Object.keys(appearance2).length ? { appearance: appearance2 } : {}
   };
 }
 function requireList(result) {
@@ -4707,14 +6883,14 @@ function requireDecision(result) {
 function DraftFields({ draft, onChange, onUploading, busy }) {
   const [showCharacters, setShowCharacters] = (0, import_react11.useState)(false);
   const patch = (change) => onChange((current) => ({ ...current, ...change }));
-  const appearance = (change) => onChange((current) => ({ ...current, appearance: { ...current.appearance, ...change } }));
+  const appearance2 = (change) => onChange((current) => ({ ...current, appearance: { ...current.appearance, ...change } }));
   const upload = async (event) => {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
     onUploading(true);
     try {
-      appearance({ image: await productAvatarImage(file) });
+      appearance2({ image: await productAvatarImage(file) });
     } catch (failure) {
       onChange((current) => current, failure.message);
     } finally {
@@ -4742,7 +6918,7 @@ function DraftFields({ draft, onChange, onUploading, busy }) {
     })
   );
   return (0, import_react11.createElement)(
-    Card,
+    SectionCard,
     { title: t("Preset profile") },
     field("Preset ID", "id", { required: true, maxLength: 128 }),
     field("Name", "name", { required: true, maxLength: 128 }),
@@ -4779,7 +6955,7 @@ function DraftFields({ draft, onChange, onUploading, busy }) {
           const { image, ...rest } = current.appearance;
           return { ...current, appearance: { ...rest, shape } };
         }),
-        onColor: (color) => appearance({ color })
+        onColor: (color) => appearance2({ color })
       }),
       (0, import_react11.createElement)("label", null, t("Upload image"), (0, import_react11.createElement)("input", {
         type: "file",
@@ -4801,7 +6977,7 @@ function DraftFields({ draft, onChange, onUploading, busy }) {
     ) : null
   );
 }
-function ProductPresetSettings({ binding, call, settingsRevision, roleSettings, onApplied, onReload }) {
+function ProductPresetSettings({ binding, call: call2, settingsRevision, roleSettings, onApplied, onReload }) {
   const instanceId = binding.instanceId;
   const [items, setItems] = (0, import_react11.useState)(null);
   const [cursor, setCursor] = (0, import_react11.useState)(null);
@@ -4832,7 +7008,7 @@ function ProductPresetSettings({ binding, call, settingsRevision, roleSettings, 
   const refresh = (0, import_react11.useCallback)(async (after, append = false) => {
     const own = ++request.current;
     try {
-      const page = requireList(await call("preset-list", { instanceId, limit: 50, ...after ? { after } : {} }));
+      const page = requireList(await call2("preset-list", { instanceId, limit: 50, ...after ? { after } : {} }));
       if (own !== request.current) return;
       setItems((previous) => append ? [...previous ?? [], ...page.items] : page.items);
       setCursor(page.cursor ?? null);
@@ -4840,7 +7016,7 @@ function ProductPresetSettings({ binding, call, settingsRevision, roleSettings, 
     } catch (failure) {
       if (own === request.current) setListError(failure.message);
     }
-  }, [call, instanceId]);
+  }, [call2, instanceId]);
   (0, import_react11.useEffect)(() => {
     setItems(null);
     setMode(null);
@@ -4874,13 +7050,13 @@ function ProductPresetSettings({ binding, call, settingsRevision, roleSettings, 
     setNotice("");
     const id = commandId(kind, payload);
     try {
-      const result = await call(endpoint, { instanceId, commandId: id, ...payload });
+      const result = await call2(endpoint, { instanceId, commandId: id, ...payload });
       await receive(result);
       delete commands.current[kind];
     } catch (failure) {
       if (kind === "apply" && (failure?.code === "COMMIT_UNKNOWN" || failure?.code === "CLIENT_JOURNAL_UNAVAILABLE")) {
         try {
-          const recorded = await call("preset-application-read", { instanceId, commandId: id });
+          const recorded = await call2("preset-application-read", { instanceId, commandId: id });
           if (recorded?.presetId === payload.presetId && recorded.targetRole === payload.targetRole && recorded.revision > payload.expectedRevision) {
             await receive(recorded);
             delete commands.current[kind];
@@ -4901,12 +7077,12 @@ function ProductPresetSettings({ binding, call, settingsRevision, roleSettings, 
     setActivityError("");
     try {
       const [imports, applications] = await Promise.all([
-        previous?.importsCursor === null ? { items: [] } : call("preset-imports", {
+        previous?.importsCursor === null ? { items: [] } : call2("preset-imports", {
           instanceId,
           limit: 50,
           ...previous?.importsCursor ? { after: previous.importsCursor } : {}
         }),
-        previous?.applicationsCursor === null ? { items: [] } : call("preset-applications", {
+        previous?.applicationsCursor === null ? { items: [] } : call2("preset-applications", {
           instanceId,
           limit: 50,
           ...previous?.applicationsCursor ? { after: previous.applicationsCursor } : {}
@@ -5019,9 +7195,9 @@ function ProductPresetSettings({ binding, call, settingsRevision, roleSettings, 
   };
   return (0, import_react11.createElement)(
     "section",
-    { className: "bt-product-presets", "aria-label": t("Role presets") },
+    { className: "bt-ps-content bt-product-presets", "aria-label": t("Role presets") },
     (0, import_react11.createElement)(
-      Card,
+      SectionCard,
       { title: t("Role presets") },
       (0, import_react11.createElement)(
         "div",
@@ -5048,16 +7224,11 @@ function ProductPresetSettings({ binding, call, settingsRevision, roleSettings, 
           }
         }, t("Review old configuration"))
       ),
-      listError ? (0, import_react11.createElement)(
-        "div",
-        { className: "bt-set-row" },
-        (0, import_react11.createElement)("p", { className: "bt-main-error", role: "alert" }, listError),
-        (0, import_react11.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: () => {
-          void refresh();
-        } }, t("Retry"))
-      ) : null,
+      listError ? (0, import_react11.createElement)(InlineNotice, { tone: "danger", action: (0, import_react11.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: () => {
+        void refresh();
+      } }, t("Retry")) }, listError) : null,
       items === null && !listError ? (0, import_react11.createElement)("p", { className: "bt-set-row bt-main-status", role: "status" }, t("Loading…")) : null,
-      items?.length === 0 ? (0, import_react11.createElement)("p", { className: "bt-set-row bt-main-status" }, t("No role presets yet.")) : null,
+      items?.length === 0 ? (0, import_react11.createElement)(EmptyState, { title: t("No role presets yet.") }) : null,
       items?.length ? (0, import_react11.createElement)(
         "div",
         { className: "bt-set-row bt-product-preset-target" },
@@ -5090,7 +7261,7 @@ function ProductPresetSettings({ binding, call, settingsRevision, roleSettings, 
           className: "bt-soft bt-soft-sm",
           disabled: Boolean(busy) || Boolean(listError) || stale || !Number.isSafeInteger(revision),
           onClick: () => apply2(entry.id)
-        }, t("Apply preset")) : (0, import_react11.createElement)("span", { className: "bt-set-hint" }, t("Deleted"))
+        }, t("Apply preset")) : (0, import_react11.createElement)(StatusChip, null, t("Deleted"))
       )),
       cursor ? (0, import_react11.createElement)("button", {
         type: "button",
@@ -5109,9 +7280,9 @@ function ProductPresetSettings({ binding, call, settingsRevision, roleSettings, 
         }
       }, t("Preset activity"))
     ),
-    activityError ? (0, import_react11.createElement)("p", { role: "alert", className: "bt-main-error" }, activityError) : null,
+    activityError ? (0, import_react11.createElement)(InlineNotice, { tone: "danger" }, activityError) : null,
     activity ? (0, import_react11.createElement)(
-      Card,
+      SectionCard,
       { title: t("Preset activity") },
       activity.imports.map((item) => (0, import_react11.createElement)(
         "p",
@@ -5123,7 +7294,7 @@ function ProductPresetSettings({ binding, call, settingsRevision, roleSettings, 
         { key: `${item.sourceInstanceId}:${item.actorId}:${item.commandId}`, className: "bt-set-row bt-set-hint" },
         `${item.presetId} v${item.presetRevision} → ${item.targetRole}: ${t("Configuration")} v${item.revision}`
       )),
-      !activity.imports.length && !activity.applications.length ? (0, import_react11.createElement)("p", { className: "bt-set-row bt-set-hint" }, t("No preset activity yet.")) : null,
+      !activity.imports.length && !activity.applications.length ? (0, import_react11.createElement)(EmptyState, { title: t("No preset activity yet.") }) : null,
       activity.importsCursor || activity.applicationsCursor ? (0, import_react11.createElement)("button", {
         type: "button",
         className: "bt-soft bt-soft-sm",
@@ -5146,13 +7317,13 @@ function ProductPresetSettings({ binding, call, settingsRevision, roleSettings, 
         }
       }, t("Reload settings")) : null
     ) : null,
-    error ? (0, import_react11.createElement)("p", { role: "alert", className: "bt-main-error" }, error) : null,
+    error ? (0, import_react11.createElement)(InlineNotice, { tone: "danger" }, error) : null,
     notice ? (0, import_react11.createElement)("p", { role: "status", className: "bt-main-status" }, notice) : null,
     mode === "import" && !preview ? (0, import_react11.createElement)(
       "form",
       { className: "bt-product-preset-form", onSubmit: prepare },
       (0, import_react11.createElement)(
-        Card,
+        SectionCard,
         { title: t("Review old configuration") },
         (0, import_react11.createElement)(
           Row,
@@ -5231,7 +7402,7 @@ function ProductPresetSettings({ binding, call, settingsRevision, roleSettings, 
       "div",
       { className: "bt-product-preset-form" },
       (0, import_react11.createElement)(
-        Card,
+        SectionCard,
         { title: t("Review source and target") },
         (0, import_react11.createElement)("p", { className: "bt-set-row" }, `${preview.preview.source.identity} / ${preview.preview.source.botId} → ${preview.preview.targetRole}`),
         (0, import_react11.createElement)("p", { className: "bt-set-row bt-set-hint" }, `${t("Source digest")}: ${preview.preview.source.digest}`),
@@ -5328,7 +7499,6 @@ function ProductPresetSettings({ binding, call, settingsRevision, roleSettings, 
   );
 }
 var PRODUCT_PRESET_CSS = `
-.bt-product-presets{display:flex;flex-direction:column;gap:16px}
 .bt-product-presets .bt-set-row{min-width:0;overflow-wrap:anywhere}
 .bt-product-preset-actions,.bt-product-preset-target,.bt-product-preset-appearance{display:flex;align-items:center;flex-wrap:wrap;gap:12px}
 .bt-product-preset-target label{display:flex;align-items:center;gap:8px}
@@ -5354,7 +7524,7 @@ var credentialImportStatusText = (status) => t({
   conflict: "Credential import conflict",
   cancelled: "Credential import cancelled"
 }[status] ?? "Credential import status unavailable");
-function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
+function ProductCredentialSettings({ binding, call: call2, credentialImportBridge }) {
   const [resources, setResources] = (0, import_react12.useState)(null);
   const [requests, setRequests] = (0, import_react12.useState)([]);
   const [requestCursor, setRequestCursor] = (0, import_react12.useState)(null);
@@ -5408,7 +7578,7 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
     const items = [];
     let after;
     for (let pageNumber = 0; pageNumber < 10; pageNumber++) {
-      const page = await call(endpoint, { instanceId, limit: 100, ...after ? { after } : {} });
+      const page = await call2(endpoint, { instanceId, limit: 100, ...after ? { after } : {} });
       items.push(...page.items);
       if (!page.cursor) return items;
       after = page.cursor;
@@ -5418,7 +7588,7 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
   const load = () => loadPages("resource-list", "The credential resource list exceeds its bounded limit.");
   const readRequests = async () => {
     try {
-      const page = await call("resource-request-list", { instanceId, limit: 100 });
+      const page = await call2("resource-request-list", { instanceId, limit: 100 });
       return { items: page.items, cursor: page.cursor ?? null, available: true };
     } catch (failure) {
       return { items: [], cursor: null, available: false, error: failure.message };
@@ -5426,7 +7596,7 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
   };
   const readCredentialImports = async () => {
     try {
-      const result = await call("credential-import-list", { instanceId, limit: 100 });
+      const result = await call2("credential-import-list", { instanceId, limit: 100 });
       setCredentialImports(result.items);
       return true;
     } catch (failure) {
@@ -5441,8 +7611,8 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
     setRequestCursor(requestResult.cursor);
     setRequestError(requestResult.error ?? null);
     const [status, githubStatus] = await Promise.all([
-      call("feishu-status", { instanceId }).catch(() => null),
-      call("github-status", { instanceId }).catch(() => null)
+      call2("feishu-status", { instanceId }).catch(() => null),
+      call2("github-status", { instanceId }).catch(() => null)
     ]);
     setFeishu(status);
     setGithub(githubStatus);
@@ -5464,7 +7634,7 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
         const attempt = { commandId: stored.commandId, resourceId: stored.resourceId, expectedRevision: stored.expectedRevision };
         pendingRotation.current = attempt;
         setRotationAttempt(attempt);
-        void call("resource-rotation-read", { instanceId, commandId: attempt.commandId }).then((result) => {
+        void call2("resource-rotation-read", { instanceId, commandId: attempt.commandId }).then((result) => {
           if (live) setRotationResult(result);
         }).catch(() => {
         });
@@ -5488,9 +7658,9 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
     Promise.all([
       load(),
       readRequests(),
-      call("feishu-status", { instanceId }).catch(() => null),
-      call("github-status", { instanceId }).catch(() => null),
-      call("credential-import-list", { instanceId, limit: 100 }).catch(() => null)
+      call2("feishu-status", { instanceId }).catch(() => null),
+      call2("github-status", { instanceId }).catch(() => null),
+      call2("credential-import-list", { instanceId, limit: 100 }).catch(() => null)
     ]).then(
       ([items, requestResult, status, githubStatus, importResult]) => {
         if (!live) return;
@@ -5515,7 +7685,7 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
     return () => {
       live = false;
     };
-  }, [call, instanceId]);
+  }, [call2, instanceId]);
   (0, import_react12.useEffect)(() => () => {
     const pendingId = pendingCredentialPreview.current;
     pendingCredentialPreview.current = null;
@@ -5527,7 +7697,7 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
     setBusy("requests");
     setRequestError(null);
     try {
-      const page = await call("resource-request-list", { instanceId, limit: 100, after: requestCursor });
+      const page = await call2("resource-request-list", { instanceId, limit: 100, after: requestCursor });
       setRequests((current) => {
         const seen = new Set(current.map((request) => request.id));
         return [...current, ...page.items.filter((request) => !seen.has(request.id))];
@@ -5563,7 +7733,7 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
     if (!label.trim() || !value.trim() || busy) return;
     void run2("create", async () => {
       pendingCreate.current ??= crypto.randomUUID();
-      await call("resource-create", { instanceId, commandId: pendingCreate.current, label: label.trim(), value });
+      await call2("resource-create", { instanceId, commandId: pendingCreate.current, label: label.trim(), value });
       pendingCreate.current = null;
       setLabel("");
       setValue("");
@@ -5597,7 +7767,7 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
     setError(null);
     setNotice(null);
     try {
-      finishRotation(await call("resource-rotation-read", { instanceId, commandId: attempt.commandId }));
+      finishRotation(await call2("resource-rotation-read", { instanceId, commandId: attempt.commandId }));
       await refresh().catch(() => {
       });
     } catch {
@@ -5621,11 +7791,11 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
     setRotationResult(null);
     void (async () => {
       try {
-        const result = await call("resource-rotate", { instanceId, ...attempt, value: rotationValue });
+        const result = await call2("resource-rotate", { instanceId, ...attempt, value: rotationValue });
         finishRotation(result);
       } catch {
         try {
-          finishRotation(await call("resource-rotation-read", { instanceId, commandId: attempt.commandId }));
+          finishRotation(await call2("resource-rotation-read", { instanceId, commandId: attempt.commandId }));
         } catch {
           setError(t("Rotation result is unknown. Keep this command and check again."));
         }
@@ -5647,7 +7817,7 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
       ...environmentId.trim() ? { environmentId: environmentId.trim() } : {},
       ...sourceInstanceId.trim() ? { sourceInstanceId: sourceInstanceId.trim() } : {}
     };
-    void run2("grant", () => call("resource-grant", {
+    void run2("grant", () => call2("resource-grant", {
       instanceId,
       commandId: crypto.randomUUID(),
       resourceId: selected.id,
@@ -5669,7 +7839,7 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
     if (JSON.stringify(pendingRequest.current?.payload) !== fingerprint) rememberRequest({ payload, commandId: crypto.randomUUID() });
     const commandId = pendingRequest.current.commandId;
     void run2("request", async () => {
-      const result = await call("resource-request", { ...payload, commandId });
+      const result = await call2("resource-request", { ...payload, commandId });
       if (result?.status !== "pending" || result.resourceId !== selected.id) throw new Error(t("The authorization request was not confirmed."));
       return result;
     }, "Authorization request recorded.", (result) => {
@@ -5687,7 +7857,7 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
     const attempt = pendingDecisions.current.get(key);
     void run2(key, async () => {
       try {
-        const result = approve ? await call("resource-grant", {
+        const result = approve ? await call2("resource-grant", {
           instanceId,
           commandId: attempt.commandId,
           resourceId: selected.id,
@@ -5695,7 +7865,7 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
           scope: request.scope,
           purposes: [request.purpose],
           requestId: request.id
-        }) : await call("resource-cancel", { instanceId, commandId: attempt.commandId, requestId: request.id });
+        }) : await call2("resource-cancel", { instanceId, commandId: attempt.commandId, requestId: request.id });
         if (approve ? !Number.isSafeInteger(result?.revision) || result.revision <= attempt.expectedRevision : result?.status !== "cancelled" || result?.id !== request.id) {
           throw new Error(t("The authorization decision was not confirmed."));
         }
@@ -5712,7 +7882,7 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
   };
   const remove = (resource) => {
     if (busy || resource.status !== "deleted" && !window.confirm(t("Delete this credential resource and all its grants?"))) return;
-    void run2("delete", () => resource.status === "deleted" ? call("resource-cleanup", { instanceId, resourceId: resource.id }) : call("resource-delete", {
+    void run2("delete", () => resource.status === "deleted" ? call2("resource-cleanup", { instanceId, resourceId: resource.id }) : call2("resource-delete", {
       instanceId,
       commandId: crypto.randomUUID(),
       resourceId: resource.id,
@@ -5723,7 +7893,7 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
     if (busy) return;
     void run2(
       "select-feishu",
-      () => call("resource-select-feishu", { instanceId, commandId: crypto.randomUUID(), resourceId }),
+      () => call2("resource-select-feishu", { instanceId, commandId: crypto.randomUUID(), resourceId }),
       "Feishu credential selection saved."
     );
   };
@@ -5732,7 +7902,7 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
     if (resourceId && github?.sourceInstanceId) setSourceInstanceId(github.sourceInstanceId);
     void run2(
       "select-github",
-      () => call("resource-select-github", { instanceId, commandId: crypto.randomUUID(), resourceId }),
+      () => call2("resource-select-github", { instanceId, commandId: crypto.randomUUID(), resourceId }),
       "GitHub credential selection saved."
     );
   };
@@ -5745,7 +7915,7 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
       picked = await credentialImportBridge.pick();
       if (picked.canceled) return;
       if (picked.error) throw new Error(t(picked.error === "too-large" ? "Credential export must be at most 1 MiB." : "The credential export could not be read."));
-      const saved = await call("credential-import-preview", { instanceId, pendingId: picked.id, preview: picked.preview });
+      const saved = await call2("credential-import-preview", { instanceId, pendingId: picked.id, preview: picked.preview });
       if (pendingCredentialPreview.current && pendingCredentialPreview.current !== picked.id) {
         await credentialImportBridge.cancel(pendingCredentialPreview.current);
       }
@@ -5799,7 +7969,7 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
     setCredentialImportBusy(true);
     setCredentialImportError(null);
     try {
-      await call("credential-import-commit", {
+      await call2("credential-import-commit", {
         instanceId,
         commandId: crypto.randomUUID(),
         pendingId: credentialImportBatch.pendingId,
@@ -5808,7 +7978,7 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
         target: { label: target.label.trim(), purpose: target.purpose, scope }
       });
       setNotice(t("Credential imported with a new authorization."));
-      const [items, imports] = await Promise.all([load(), call("credential-import-list", { instanceId, limit: 100 })]);
+      const [items, imports] = await Promise.all([load(), call2("credential-import-list", { instanceId, limit: 100 })]);
       setResources(items);
       setCredentialImports(imports.items);
       setCredentialImportBatch((current) => current ? {
@@ -5827,7 +7997,7 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
     setCredentialImportBusy(true);
     setCredentialImportError(null);
     try {
-      const result = await call("credential-import-cancel", {
+      const result = await call2("credential-import-cancel", {
         instanceId,
         commandId: crypto.randomUUID(),
         sourceRef: item.sourceRef,
@@ -5842,7 +8012,7 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
     }
   };
   return (0, import_react12.createElement)(
-    Card,
+    SectionCard,
     { title: t("Credential resources") },
     (0, import_react12.createElement)("p", { className: "bt-product-resource-note" }, t("Managed Feishu and GitHub source credentials use separate grants. Feishu delivery and Worker MCP tools need their own grants.")),
     (0, import_react12.createElement)(
@@ -6006,7 +8176,7 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
       (0, import_react12.createElement)("p", { role: "status" }, `${t("Selected GitHub resource")}: ${github.resourceId ? resources?.find((item) => item.id === github.resourceId)?.label ?? t("Unavailable resource") : t("No GitHub resource selected")} · ${github.state}${github.lastError ? ` · ${github.lastError}` : ""}`),
       github.resourceId ? (0, import_react12.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy), onClick: () => selectGithub(null) }, t("Clear GitHub selection")) : null
     ) : null,
-    error ? (0, import_react12.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+    error ? (0, import_react12.createElement)(InlineNotice, { tone: "danger" }, error) : null,
     notice ? (0, import_react12.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
     requestError ? (0, import_react12.createElement)(
       "div",
@@ -6103,7 +8273,7 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
         { onSubmit: (event) => {
           event.preventDefault();
           if (!rename.trim() || busy) return;
-          void run2("rename", () => call("resource-rename", {
+          void run2("rename", () => call2("resource-rename", {
             instanceId,
             commandId: crypto.randomUUID(),
             resourceId: selected.id,
@@ -6222,7 +8392,7 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
           grant2.scope.sourceInstanceId ? `${t("Source Instance ID")}: ${grant2.scope.sourceInstanceId}` : null
         ].filter(Boolean).join(" · ")),
         (0, import_react12.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy), onClick: () => {
-          void run2("revoke", () => call("resource-revoke", {
+          void run2("revoke", () => call2("resource-revoke", {
             instanceId,
             commandId: crypto.randomUUID(),
             resourceId: selected.id,
@@ -6235,19 +8405,19 @@ function ProductCredentialSettings({ binding, call, credentialImportBridge }) {
   );
 }
 var PRODUCT_CREDENTIAL_CSS = `
-.bt-product-resource-note{margin:0 0 10px;color:var(--bt-ink-2);font-size:12px;line-height:18px}
+.bt-product-resource-note{margin:0 0 10px;color:var(--bt-ink-2);font-size:var(--bt-ps-small);line-height:18px}
 .bt-product-resource-create,.bt-product-resource-selected{display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin:12px 0}
 .bt-product-resource-list{display:flex;flex-direction:column;gap:6px;margin:12px 0;max-height:220px;overflow:auto}
-.bt-product-resource-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:6px 0;border-bottom:1px solid var(--bt-line-2);font-size:12px}
+.bt-product-resource-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:6px 0;border-bottom:1px solid var(--bt-line-2);font-size:var(--bt-ps-small)}
 .bt-product-resource-row>span{min-width:0;overflow-wrap:anywhere;color:var(--bt-ink-2)}
 .bt-product-resource-grant{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%}
-.bt-product-resource-grant label{display:flex;flex-direction:column;gap:4px;min-width:0;font-size:12px;color:var(--bt-ink-2)}
-.bt-product-resource-grant input,.bt-product-resource-grant select{height:32px;min-width:0;box-sizing:border-box;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-main);color:var(--bt-ink);font:inherit;padding:0 8px}
+.bt-product-resource-grant label{display:flex;flex-direction:column;gap:4px;min-width:0;font-size:var(--bt-ps-small);color:var(--bt-ink-2)}
+.bt-product-resource-grant input,.bt-product-resource-grant select{height:32px;min-width:0;box-sizing:border-box;border:1px solid var(--bt-line);border-radius:var(--bt-ps-radius-control);background:var(--bt-card);color:var(--bt-ink);font:inherit;padding:0 8px}
 .bt-product-resource-grant button{justify-self:start}.bt-product-resource-create button:focus-visible,.bt-product-resource-row button:focus-visible,.bt-product-resource-selected button:focus-visible,.bt-product-resource-grant button:focus-visible,.bt-product-resource-create input:focus-visible,.bt-product-resource-selected input:focus-visible,.bt-product-resource-grant input:focus-visible,.bt-product-resource-grant select:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 .bt-product-resource-request-actions{display:flex;flex-wrap:wrap;gap:8px}
 .bt-product-credential-import{display:flex;flex-direction:column;gap:8px;margin:14px 0;padding:10px 0;border-top:1px solid var(--bt-line-2)}
 .bt-product-credential-import>button:focus-visible,.bt-product-credential-import-preview>button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
-.bt-product-credential-import h3{margin:0;font-size:13px}
+.bt-product-credential-import h3{margin:0;font-size:var(--bt-ps-text)}
 .bt-product-credential-import-preview{display:flex;flex-direction:column;gap:6px;margin-top:8px}
 .bt-product-credential-import-item{padding:8px 0;border-top:1px solid var(--bt-line-2)}
 @media(max-width:640px){.bt-product-resource-grant{grid-template-columns:minmax(0,1fr)}}
@@ -6335,7 +8505,7 @@ function ProductMemoryProposalCard({ proposal, onAnswer }) {
     )
   );
 }
-function ProductMemorySettings({ binding, works, call }) {
+function ProductMemorySettings({ binding, works, call: call2 }) {
   const instanceId = binding.instanceId;
   const workItems = works.filter((work) => work.brief?.workItemId && work.receipt?.status === "accepted").map((work) => ({ id: work.brief.workItemId, goal: work.brief.goal }));
   const [items, setItems] = (0, import_react13.useState)([]);
@@ -6370,9 +8540,9 @@ function ProductMemorySettings({ binding, works, call }) {
   const importPending = (0, import_react13.useRef)(null);
   const reload = async (search2 = query) => {
     const [page, pendingProposals, savedImports] = await Promise.all([
-      call("memory-list", { instanceId, limit: 50, ...search2 ? { query: search2 } : {} }),
-      call("memory-proposals", { instanceId }),
-      call("memory-import-list", { instanceId, limit: 20 })
+      call2("memory-list", { instanceId, limit: 50, ...search2 ? { query: search2 } : {} }),
+      call2("memory-proposals", { instanceId }),
+      call2("memory-import-list", { instanceId, limit: 20 })
     ]);
     setItems(page.items);
     setCursor(page.cursor ?? null);
@@ -6393,7 +8563,7 @@ function ProductMemorySettings({ binding, works, call }) {
   (0, import_react13.useEffect)(() => {
     let live = true;
     setAccess(null);
-    if (workId) void call("memory-access-read", { instanceId, workItemId: workId }).then((value) => {
+    if (workId) void call2("memory-access-read", { instanceId, workItemId: workId }).then((value) => {
       if (live) setAccess(value);
     }, (failure) => {
       if (live) setError(failure.message);
@@ -6429,7 +8599,7 @@ function ProductMemorySettings({ binding, works, call }) {
     void run2(async () => {
       const key = JSON.stringify(input);
       if (pending.current?.key !== key) pending.current = { key, commandId: crypto.randomUUID() };
-      const result = await call("memory-save", { instanceId, commandId: pending.current.commandId, ...input });
+      const result = await call2("memory-save", { instanceId, commandId: pending.current.commandId, ...input });
       if (result.status !== "saved") throw new Error(t("Memory was already forgotten."));
       pending.current = null;
       setText("");
@@ -6442,7 +8612,7 @@ function ProductMemorySettings({ binding, works, call }) {
     setMainReader(entry.scope.kind === "shared" ? entry.scope.main : entry.scope.kind === "main");
     setRecipients(entry.scope.kind === "shared" ? entry.scope.workItemIds : entry.scope.kind === "work" ? [entry.scope.workItemId] : []);
     try {
-      setFull(await call("memory-read", { instanceId, id: entry.id, maxBytes: 4096 }));
+      setFull(await call2("memory-read", { instanceId, id: entry.id, maxBytes: 4096 }));
     } catch (failure) {
       setError(failure.message);
     }
@@ -6450,7 +8620,7 @@ function ProductMemorySettings({ binding, works, call }) {
   const moreText = async () => {
     if (!full?.pagination.cursor || !selected) return;
     try {
-      const next = await call("memory-read", { instanceId, id: selected.id, after: full.pagination.cursor, maxBytes: 4096 });
+      const next = await call2("memory-read", { instanceId, id: selected.id, after: full.pagination.cursor, maxBytes: 4096 });
       setFull((current) => current && current.id === next.id ? { ...next, text: current.text + next.text } : next);
     } catch (failure) {
       setError(failure.message);
@@ -6461,7 +8631,7 @@ function ProductMemorySettings({ binding, works, call }) {
     setBusy(true);
     setError("");
     try {
-      await call("memory-forget", { instanceId, commandId: crypto.randomUUID(), id: entry.id, expectedRevision: entry.revision });
+      await call2("memory-forget", { instanceId, commandId: crypto.randomUUID(), id: entry.id, expectedRevision: entry.revision });
       sideGeneration.current++;
       setSideMatches([]);
       setSideSelected(null);
@@ -6483,7 +8653,7 @@ function ProductMemorySettings({ binding, works, call }) {
   const share = () => {
     if (!selected || busy) return;
     void run2(async () => {
-      const result = await call("memory-share", {
+      const result = await call2("memory-share", {
         instanceId,
         commandId: crypto.randomUUID(),
         id: selected.id,
@@ -6497,7 +8667,7 @@ function ProductMemorySettings({ binding, works, call }) {
   const toggleAccess = () => {
     if (!workId || !access || busy) return;
     void run2(async () => {
-      const result = await call("memory-grant", {
+      const result = await call2("memory-grant", {
         instanceId,
         commandId: crypto.randomUUID(),
         workItemId: workId,
@@ -6510,7 +8680,7 @@ function ProductMemorySettings({ binding, works, call }) {
   const decide = async (proposal, approve) => {
     setError("");
     setNotice("");
-    const result = await call("memory-decide", { instanceId, commandId: crypto.randomUUID(), proposalId: proposal.id, approve });
+    const result = await call2("memory-decide", { instanceId, commandId: crypto.randomUUID(), proposalId: proposal.id, approve });
     await reload();
     setNotice(t(result.status === "stale" ? "Learning proposal expired or lost authorization." : result.status === "approved" ? "Learning approved and saved." : "Learning declined."));
   };
@@ -6521,7 +8691,7 @@ function ProductMemorySettings({ binding, works, call }) {
   const loadMore = async () => {
     if (!cursor) return;
     try {
-      const page = await call("memory-list", { instanceId, limit: 50, after: cursor, ...query ? { query } : {} });
+      const page = await call2("memory-list", { instanceId, limit: 50, after: cursor, ...query ? { query } : {} });
       setItems((current) => [...current, ...page.items]);
       setCursor(page.cursor ?? null);
     } catch (failure) {
@@ -6547,7 +8717,7 @@ function ProductMemorySettings({ binding, works, call }) {
     setSideFull(null);
     setSideMatches([]);
     try {
-      const matches = await call("memory-side-query", { instanceId, target: sideTarget(), query: sideQuery.trim() });
+      const matches = await call2("memory-side-query", { instanceId, target: sideTarget(), query: sideQuery.trim() });
       if (generation === sideGeneration.current) setSideMatches(matches);
     } catch (failure) {
       if (generation === sideGeneration.current) setError(failure.message);
@@ -6561,7 +8731,7 @@ function ProductMemorySettings({ binding, works, call }) {
     setSideFull(null);
     setError("");
     try {
-      const page = await call("memory-side-read", { instanceId, target: sideTarget(), id: match.id, maxBytes: 4096 });
+      const page = await call2("memory-side-read", { instanceId, target: sideTarget(), id: match.id, maxBytes: 4096 });
       if (generation === sideGeneration.current) setSideFull(page);
     } catch (failure) {
       if (generation === sideGeneration.current) {
@@ -6574,7 +8744,7 @@ function ProductMemorySettings({ binding, works, call }) {
     if (!sideFull?.pagination.cursor || !sideSelected) return;
     const generation = sideGeneration.current;
     try {
-      const page = await call("memory-side-read", {
+      const page = await call2("memory-side-read", {
         instanceId,
         target: sideTarget(),
         id: sideSelected.id,
@@ -6610,7 +8780,7 @@ function ProductMemorySettings({ binding, works, call }) {
       const dataBase64 = await fileBase64(file);
       const key = `${file.name}\0${dataBase64}`;
       if (importPending.current?.key !== key) importPending.current = { key, commandId: crypto.randomUUID() };
-      const batch = await call("memory-import-preview", {
+      const batch = await call2("memory-import-preview", {
         instanceId,
         commandId: importPending.current.commandId,
         sourceName: file.name,
@@ -6652,7 +8822,7 @@ function ProductMemorySettings({ binding, works, call }) {
     setError("");
     setNotice("");
     try {
-      const batch = await call("memory-import-commit", {
+      const batch = await call2("memory-import-commit", {
         instanceId,
         commandId: crypto.randomUUID(),
         batchId: importBatch.id,
@@ -6673,7 +8843,7 @@ function ProductMemorySettings({ binding, works, call }) {
     setError("");
     setNotice("");
     try {
-      const batch = await call(
+      const batch = await call2(
         retry ? "memory-import-retry" : "memory-import-cancel",
         { instanceId, commandId: crypto.randomUUID(), batchId: importBatch.id }
       );
@@ -6691,7 +8861,7 @@ function ProductMemorySettings({ binding, works, call }) {
     setError("");
     setNotice("");
     try {
-      acceptImportBatch(await call("memory-import-read", { instanceId, batchId: savedImportId }));
+      acceptImportBatch(await call2("memory-import-read", { instanceId, batchId: savedImportId }));
       setNotice(t("Saved memory import opened."));
     } catch (failure) {
       setError(failure.message);
@@ -6701,11 +8871,11 @@ function ProductMemorySettings({ binding, works, call }) {
   };
   return (0, import_react13.createElement)(
     "div",
-    { className: "bt-product-memory" },
-    error ? (0, import_react13.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
-    notice ? (0, import_react13.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
+    { className: "bt-ps-content bt-product-memory" },
+    error ? (0, import_react13.createElement)(InlineNotice, { tone: "danger" }, error) : null,
+    notice ? (0, import_react13.createElement)(InlineNotice, { tone: "success" }, notice) : null,
     (0, import_react13.createElement)(
-      Card,
+      SectionCard,
       { title: t("Side query") },
       (0, import_react13.createElement)(
         "form",
@@ -6760,7 +8930,7 @@ function ProductMemorySettings({ binding, works, call }) {
       ) : null
     ),
     (0, import_react13.createElement)(
-      Card,
+      SectionCard,
       { title: t("Saved memory") },
       (0, import_react13.createElement)("p", null, t("Main, work private, and explicitly shared memories have separate readers. Searching does not save new memory.")),
       (0, import_react13.createElement)(
@@ -6780,7 +8950,7 @@ function ProductMemorySettings({ binding, works, call }) {
         entry: { ...entry, source: "memory panel" },
         open,
         remove
-      }))) : (0, import_react13.createElement)("p", null, t("Nothing saved yet")),
+      }))) : (0, import_react13.createElement)(EmptyState, { title: t("Nothing saved yet") }),
       cursor ? (0, import_react13.createElement)("button", { type: "button", className: "bt-soft", onClick: () => void loadMore() }, t("Load more")) : null,
       selected ? (0, import_react13.createElement)(
         "section",
@@ -6803,7 +8973,7 @@ function ProductMemorySettings({ binding, works, call }) {
       ) : null
     ),
     (0, import_react13.createElement)(
-      Card,
+      SectionCard,
       { title: t("Import memory") },
       (0, import_react13.createElement)("p", null, t("Preview a portable JSON memory copy before importing selected items.")),
       importBatches.length ? (0, import_react13.createElement)(
@@ -6874,8 +9044,8 @@ function ProductMemorySettings({ binding, works, call }) {
               (0, import_react13.createElement)("strong", null, item.sourceId),
               (0, import_react13.createElement)("span", null, `${t("Original scope")}: ${originalScopeLabel(item.originalScope)}`),
               (0, import_react13.createElement)(
-                "span",
-                { className: `bt-product-memory-import-status is-${item.status}` },
+                StatusChip,
+                { tone: ["conflict", "rejected"].includes(item.status) ? "danger" : "neutral" },
                 importStatusLabel(item.status),
                 item.reason ? ` · ${t(item.reason)}` : ""
               )
@@ -6969,7 +9139,7 @@ function ProductMemorySettings({ binding, works, call }) {
       ) : null
     ),
     (0, import_react13.createElement)(
-      Card,
+      SectionCard,
       { title: t("Save memory") },
       (0, import_react13.createElement)(
         "form",
@@ -7008,7 +9178,7 @@ function ProductMemorySettings({ binding, works, call }) {
       )
     ),
     (0, import_react13.createElement)(
-      Card,
+      SectionCard,
       { title: t("Work memory access") },
       (0, import_react13.createElement)("p", null, t("Worker memory access is off until you grant it for this work. Revoking blocks later reads and proposals.")),
       (0, import_react13.createElement)(
@@ -7023,58 +9193,55 @@ function ProductMemorySettings({ binding, works, call }) {
         t(access.enabled ? "Revoke Worker access" : "Grant Worker access")
       ) : null
     ),
-    (0, import_react13.createElement)(Card, { title: t("Learning proposals") }, proposals.length ? proposals.map((proposal) => (0, import_react13.createElement)(ProductMemoryProposalCard, { key: proposal.id, proposal, onAnswer: decide })) : (0, import_react13.createElement)("p", null, t("No learning proposals are waiting for review.")))
+    (0, import_react13.createElement)(SectionCard, { title: t("Learning proposals") }, proposals.length ? proposals.map((proposal) => (0, import_react13.createElement)(ProductMemoryProposalCard, { key: proposal.id, proposal, onAnswer: decide })) : (0, import_react13.createElement)(EmptyState, { title: t("No learning proposals are waiting for review.") }))
   );
 }
 var PRODUCT_MEMORY_CSS = `
-.bt-product-memory{display:flex;flex-direction:column;gap:12px}
-.bt-product-memory p{font-size:12px;line-height:18px;color:var(--bt-ink-2)}
+.bt-product-memory p:not(.bt-ps-empty p){font-size:var(--bt-ps-small);line-height:18px;color:var(--bt-ink-2)}
 .bt-product-memory-form{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0}
-.bt-product-memory-form label{display:inline-flex;align-items:center;gap:5px;font-size:12px;overflow-wrap:anywhere}
-.bt-product-memory select,.bt-product-memory input[type=search],.bt-product-memory textarea{min-width:0;max-width:100%;box-sizing:border-box;padding:7px;border:1px solid var(--bt-line);border-radius:6px;background:var(--bt-main);color:var(--bt-ink);font:inherit}
+.bt-product-memory-form label:not(.bt-ps-row){display:inline-flex;align-items:center;gap:5px;font-size:var(--bt-ps-small);overflow-wrap:anywhere}
+.bt-product-memory select,.bt-product-memory input[type=search],.bt-product-memory textarea{min-width:0;max-width:100%;box-sizing:border-box;padding:7px;border:1px solid var(--bt-line);border-radius:var(--bt-ps-radius-control);background:var(--bt-card);color:var(--bt-ink);font:inherit}
 .bt-product-memory textarea{width:100%;min-height:72px;resize:vertical}
-.bt-product-memory-detail{padding:10px 0;border-top:1px solid var(--bt-line-2);font-size:12px}
+.bt-product-memory-detail{padding:10px 0;border-top:1px solid var(--bt-line-2);font-size:var(--bt-ps-small)}
 .bt-product-memory-detail pre{max-height:240px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
 .bt-product-memory-list{display:flex;flex-direction:column;gap:7px;margin:0;padding:0;list-style:none}
-.bt-product-memory-entry{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:9px;border:1px solid var(--bt-line);border-radius:6px}
+.bt-product-memory-entry{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:9px;border:1px solid var(--bt-line);border-radius:var(--bt-ps-radius-small)}
 .bt-product-memory-entry>div{flex:1;min-width:180px;display:flex;flex-direction:column;gap:3px}
-.bt-product-memory-entry-text{font-size:12px;line-height:17px;overflow-wrap:anywhere}
-.bt-product-memory-entry-meta{font-size:11px;color:var(--bt-ink-3)}
-.bt-product-memory-proposal{display:flex;flex-direction:column;gap:7px;padding:10px;border:1px solid var(--bt-line);border-radius:6px}
+.bt-product-memory-entry-text{font-size:var(--bt-ps-small);line-height:17px;overflow-wrap:anywhere}
+.bt-product-memory-entry-meta{font-size:var(--bt-ps-caption);color:var(--bt-ink-2)}
+.bt-product-memory-proposal{display:flex;flex-direction:column;gap:7px;padding:10px}
 .bt-product-memory-proposal h4,.bt-product-memory-proposal p{margin:0}
-.bt-product-memory-proposal pre{max-height:240px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:7px;border-radius:6px;background:var(--bt-hover);font-size:12px}
+.bt-product-memory-proposal pre{max-height:240px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:7px;border-radius:var(--bt-ps-radius-small);background:var(--bt-hover);font-size:var(--bt-ps-small)}
 .bt-product-memory-error{color:var(--bt-danger)}
-.bt-product-memory-import-file{display:flex;flex-direction:column;gap:6px;font-size:12px}
+.bt-product-memory-import-file{display:flex;flex-direction:column;gap:6px;font-size:var(--bt-ps-small)}
 .bt-product-memory-import{display:flex;flex-direction:column;gap:10px;margin-top:10px}
-.bt-product-memory-import-meta{display:flex;flex-direction:column;gap:4px;padding:9px;border:1px solid var(--bt-line);border-radius:6px;font-size:12px;overflow-wrap:anywhere}
+.bt-product-memory-import-meta{display:flex;flex-direction:column;gap:4px;padding:9px;border:1px solid var(--bt-line);border-radius:var(--bt-ps-radius-small);font-size:var(--bt-ps-small);overflow-wrap:anywhere}
 .bt-product-memory-import-items{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
-.bt-product-memory-import-items>li{padding:10px;border:1px solid var(--bt-line);border-radius:6px}
-.bt-product-memory-import-head{display:flex;flex-wrap:wrap;align-items:center;gap:7px;font-size:12px}
+.bt-product-memory-import-items>li{padding:10px;border:1px solid var(--bt-line);border-radius:var(--bt-ps-radius-small)}
+.bt-product-memory-import-head{display:flex;flex-wrap:wrap;align-items:center;gap:7px;font-size:var(--bt-ps-small)}
 .bt-product-memory-import-head pre{width:100%;max-height:180px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin:2px 0}
-.bt-product-memory-import-sharing{display:flex;flex-wrap:wrap;gap:7px;margin:0;padding:7px;border:1px solid var(--bt-line);border-radius:6px}
-.bt-product-memory-import-sharing legend{padding:0 4px;font-size:12px}
-.bt-product-memory-import-sharing label{display:inline-flex;align-items:center;gap:4px;font-size:12px}
-.bt-product-memory-import-status{padding:2px 6px;border-radius:999px;background:var(--bt-line-2)}
-.bt-product-memory-import-status.is-conflict,.bt-product-memory-import-status.is-rejected{color:var(--bt-danger)}
+.bt-product-memory-import-sharing{display:flex;flex-wrap:wrap;gap:7px;margin:0;padding:7px;border:1px solid var(--bt-line);border-radius:var(--bt-ps-radius-small)}
+.bt-product-memory-import-sharing legend{padding:0 4px;font-size:var(--bt-ps-small)}
+.bt-product-memory-import-sharing label{display:inline-flex;align-items:center;gap:4px;font-size:var(--bt-ps-small)}
 .bt-product-memory button:focus-visible,.bt-product-memory select:focus-visible,.bt-product-memory input:focus-visible,.bt-product-memory textarea:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 `;
 
 // src/client/product-supervision.js
 var import_react14 = require("react");
 var inspectionStatus = (run2) => run2.status === "completed" && !run2.partial ? "Inspection complete" : run2.status === "budget-exhausted" ? "Inspection budget exhausted" : run2.status === "partial" || run2.partial && run2.status !== "failed" ? "Partial inspection" : "Inspection failed";
-function ProductSupervisionSettings({ binding, call }) {
+function ProductSupervisionSettings({ binding, call: call2 }) {
   const [state, setState] = (0, import_react14.useState)(null);
   const [selected, setSelected] = (0, import_react14.useState)(null);
   const [busy, setBusy] = (0, import_react14.useState)(false);
   const [error, setError] = (0, import_react14.useState)(null);
   const requiresRestart = state?.run?.last?.partial && (state.run.last.status === "completed" && !state.run.checkpoint || state.run.last.status === "failed" && ["INVALID_INPUT", "INCOMPLETE_STATE"].includes(state.run.last.error));
   const load = async (ticketId) => {
-    const next = await call("supervision", { instanceId: binding.instanceId, ...ticketId ? { ticketId } : {} });
+    const next = await call2("supervision", { instanceId: binding.instanceId, ...ticketId ? { ticketId } : {} });
     setState(next);
   };
   (0, import_react14.useEffect)(() => {
     let live = true;
-    const refresh = () => call("supervision", {
+    const refresh = () => call2("supervision", {
       instanceId: binding.instanceId,
       ...selected ? { ticketId: selected } : {}
     }).then((value) => {
@@ -7104,7 +9271,7 @@ function ProductSupervisionSettings({ binding, call }) {
     setBusy(true);
     setError(null);
     try {
-      await call("supervision-inspect", {
+      await call2("supervision-inspect", {
         instanceId: binding.instanceId,
         ...requiresRestart ? { restart: true } : {}
       });
@@ -7119,7 +9286,7 @@ function ProductSupervisionSettings({ binding, call }) {
     setBusy(true);
     setError(null);
     try {
-      await call("supervision-decide", {
+      await call2("supervision-decide", {
         instanceId: binding.instanceId,
         commandId: crypto.randomUUID(),
         proposalId: proposal.id,
@@ -7137,37 +9304,29 @@ function ProductSupervisionSettings({ binding, call }) {
   };
   return (0, import_react14.createElement)(
     "section",
-    { className: "bt-product-supervision", "aria-label": t("Supervision") },
-    (0, import_react14.createElement)(
-      "div",
-      { className: "bt-product-supervision-head" },
-      (0, import_react14.createElement)("h3", null, t("Supervision")),
-      (0, import_react14.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", disabled: busy, onClick: () => {
-        void inspect();
-      } }, t(requiresRestart ? "Restart inspection" : "Inspect now"))
-    ),
-    error ? (0, import_react14.createElement)("p", { role: "alert", className: "bt-main-error" }, error) : null,
+    { className: "bt-ps-content bt-product-supervision", "aria-label": t("Supervision") },
+    (0, import_react14.createElement)(SectionCard, null, (0, import_react14.createElement)(FieldRow, { label: t("Semantic inspection"), control: (0, import_react14.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", disabled: busy, onClick: () => {
+      void inspect();
+    } }, t(requiresRestart ? "Restart inspection" : "Inspect now")) })),
+    error ? (0, import_react14.createElement)(InlineNotice, { tone: "danger" }, error) : null,
     (0, import_react14.createElement)("p", { className: "bt-main-status" }, state?.watchdogConfigured ? state.watchdog?.last ? `${t("Watchdog")}: ${state.watchdog.last.kind} · ${new Date(state.watchdog.last.at).toLocaleString()}` : t("Watchdog has not inspected yet.") : t("Independent Watchdog is not configured for this Host.")),
     state?.run?.last ? (0, import_react14.createElement)("p", { className: "bt-main-status" }, `${t("Semantic inspection")}: ${t(inspectionStatus(state.run.last))}${state.run.last.error && state.run.last.status === "failed" ? ` · ${state.run.last.error}` : ""} · ${new Date(state.run.last.at).toLocaleString()} · ${t("Tickets inspected")} ${state.run.last.coverage?.inspected ?? state.run.last.inspectionBudget?.inspected ?? 0} · ${t("Inspection budget")} ${state.run.last.budget.used}/${state.run.last.budget.max}`) : null,
     state?.proposals?.length ? (0, import_react14.createElement)(
       "div",
       { className: "bt-product-supervision-list" },
       state.proposals.slice(0, 30).map((proposal) => (0, import_react14.createElement)(
-        "article",
-        { key: proposal.id, className: "bt-product-supervision-item" },
-        (0, import_react14.createElement)(
-          "div",
-          { className: "bt-product-supervision-head" },
-          (0, import_react14.createElement)("strong", null, `${proposal.kind === "pause" ? t("Pause work") : t("Correct direction")} · ${proposal.status}`),
-          (0, import_react14.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: () => {
-            void choose(proposal.ticketId);
-          } }, t("View history"))
-        ),
-        (0, import_react14.createElement)("p", null, `${t("Work")}: ${proposal.ticketId}`),
-        (0, import_react14.createElement)("p", null, `${t("Reason")}: ${proposal.evidence.assessment.reason}`),
-        (0, import_react14.createElement)("p", null, `${t("Recommendation")}: ${proposal.recommendation}`),
-        (0, import_react14.createElement)("p", null, `${t("Impact")}: ${proposal.impact.summary}`),
-        (0, import_react14.createElement)("p", { className: "bt-main-status" }, `${t("Configuration")}: ${proposal.version} · ${new Date(proposal.createdAt).toLocaleString()}`),
+        SectionCard,
+        { key: proposal.id, title: proposal.kind === "pause" ? t("Pause work") : t("Correct direction") },
+        (0, import_react14.createElement)(FieldRow, { label: (0, import_react14.createElement)(StatusChip, { tone: proposal.status === "proposed" ? "warn" : "neutral" }, t(proposal.status)), control: (0, import_react14.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: () => {
+          void choose(proposal.ticketId);
+        } }, t("View history")) }),
+        (0, import_react14.createElement)(DetailList, { items: [
+          { label: t("Work"), value: proposal.ticketId, mono: true },
+          { label: t("Reason"), value: proposal.evidence.assessment.reason },
+          { label: t("Recommendation"), value: proposal.recommendation },
+          { label: t("Impact"), value: proposal.impact.summary },
+          { label: t("Configuration"), value: `${proposal.version} · ${new Date(proposal.createdAt).toLocaleString()}` }
+        ] }),
         proposal.action ? (0, import_react14.createElement)("p", { role: "status" }, `${t("Action")}: ${proposal.action.status}${proposal.action.error ? ` · ${proposal.action.error}` : ""}`) : null,
         proposal.status === "proposed" ? (0, import_react14.createElement)(
           "div",
@@ -7180,7 +9339,7 @@ function ProductSupervisionSettings({ binding, call }) {
           } }, t("Approve"))
         ) : null
       ))
-    ) : (0, import_react14.createElement)("p", { className: "bt-main-status" }, t("No supervision proposals.")),
+    ) : state ? (0, import_react14.createElement)(SectionCard, null, (0, import_react14.createElement)(EmptyState, { title: t("No supervision proposals.") })) : null,
     selected && state?.observation ? (0, import_react14.createElement)(
       "section",
       { "aria-label": t("Observation history") },
@@ -7204,15 +9363,8 @@ function ProductSupervisionSettings({ binding, call }) {
   );
 }
 var PRODUCT_SUPERVISION_CSS = `
-.bt-product-supervision{display:flex;flex-direction:column;gap:10px;min-width:0;padding:12px 0;border-top:1px solid var(--bt-line)}
-.bt-product-supervision-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
-.bt-product-supervision h3,.bt-product-supervision h4{margin:0;font-size:14px}
-.bt-product-supervision p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:18px}
+.bt-product-supervision p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
 .bt-product-supervision-list{display:flex;flex-direction:column;gap:12px}
-.bt-product-supervision-item{display:flex;flex-direction:column;gap:6px;padding:12px;border:1px solid var(--bt-line);border-radius:8px}
-.bt-product-supervision-item .bt-actions{display:flex;justify-content:flex-end;gap:8px}
-.bt-product-supervision button:focus-visible,.bt-product-supervision summary:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
-@media(prefers-reduced-motion:reduce){.bt-product-supervision *{transition:none}}
 `;
 
 // src/client/folder-menu.js
@@ -7513,6 +9665,39 @@ function mergeMessages(existing, incoming) {
   for (const message of incoming) byId.set(message.id, message);
   return [...byId.values()].sort((left, right) => left.sequence - right.sequence);
 }
+function projectTurnCards({ messages, works, sources, preparations }) {
+  const visible = new Set(messages.map((message) => message.id));
+  const sourceMessages = /* @__PURE__ */ new Map();
+  const sourcesByMessage = /* @__PURE__ */ new Map();
+  const byMessage = /* @__PURE__ */ new Map();
+  const empty = () => ({ works: [], sources: [], preparations: [] });
+  const unplaced = empty();
+  const place = (kind, card, messageId) => {
+    if (!visible.has(messageId)) {
+      unplaced[kind].push(card);
+      return;
+    }
+    if (!byMessage.has(messageId)) byMessage.set(messageId, empty());
+    byMessage.get(messageId)[kind].push(card);
+  };
+  for (const source of sources) {
+    const reply = `source-reply:${source.id}`;
+    const target = visible.has(reply) ? reply : source.mainMessageId;
+    sourceMessages.set(JSON.stringify([source.sourceInstanceId, source.sourceEventId]), target);
+    if (source.mainMessageId) sourcesByMessage.set(source.mainMessageId, target);
+    place("sources", source, target);
+  }
+  for (const work of works) {
+    const original = work.brief.mainMessageId;
+    const reply = `reply:${original}`;
+    place("works", work, sourcesByMessage.get(original) ?? (visible.has(reply) ? reply : original));
+  }
+  for (const preparation of preparations) {
+    const target = sourceMessages.get(JSON.stringify([preparation.sourceInstanceId, preparation.eventId]));
+    place("preparations", preparation, target);
+  }
+  return { byMessage, unplaced };
+}
 function rebaseRoleDraft(base, draft, latest) {
   const merged = JSON.parse(JSON.stringify(latest));
   for (const role of ["main", "router", "worker"]) {
@@ -7565,6 +9750,7 @@ function themeVars(mode, dark, accent = mode.accent) {
     "--bt-card": mode.card,
     "--bt-line": rgba(mode.text, 0.08),
     "--bt-line-2": rgba(mode.text, 0.15),
+    "--bt-line-weak": rgba(mode.text, 0.1),
     "--bt-hover": dark ? "rgba(160,160,160,.12)" : "rgba(119,119,119,.09)",
     "--bt-active": dark ? "rgba(160,160,160,.2)" : "rgba(119,119,119,.17)",
     "--bt-accent": accent,
@@ -7572,7 +9758,23 @@ function themeVars(mode, dark, accent = mode.accent) {
     "--bt-user": mode.user,
     "--bt-user-ink": mode.userText,
     "--bt-tag-bg": rgba(mode.text, dark ? 0.09 : 0.06),
-    "--bt-tag-ink": rgba(mode.text, 0.58)
+    "--bt-tag-ink": rgba(mode.text, 0.58),
+    "--bt-warn": dark ? "#f0b84a" : "#8a5a00",
+    "--bt-glass-bg": `color-mix(in srgb,var(--bt-main) ${dark ? 74 : 78}%,transparent)`,
+    "--bt-glass-border": dark ? "rgba(255,255,255,.13)" : "rgba(255,255,255,.72)",
+    "--bt-glass-rim": dark ? "rgba(255,255,255,.11)" : "rgba(20,20,20,.09)",
+    "--bt-glass-shadow": dark ? "0 12px 32px -6px rgba(0,0,0,.42),0 2px 8px -1px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.12)" : "0 8px 28px -6px rgba(0,0,0,.08),0 2px 6px -1px rgba(0,0,0,.04),inset 0 1px 0 rgba(255,255,255,.82)",
+    "--bt-dialog-shadow": dark ? "0 24px 70px rgba(0,0,0,.55),0 2px 8px rgba(0,0,0,.3)" : "0 24px 70px rgba(0,0,0,.18),0 2px 8px rgba(0,0,0,.06)",
+    "--bt-card-shadow": dark ? "0 1px 2px rgba(0,0,0,.35)" : "0 1px 2px rgba(0,0,0,.03)",
+    "--bt-nav-thumb-bg": "color-mix(in srgb,var(--bt-card) 82%,var(--bt-active))",
+    "--bt-nav-thumb-shadow": dark ? "0 1px 3px rgba(0,0,0,.28)" : "0 1px 3px rgba(0,0,0,.08)",
+    "--bt-accent-soft": `color-mix(in srgb,var(--bt-accent) ${dark ? 18 : 14}%,transparent)`,
+    "--bt-danger-soft": `color-mix(in srgb,var(--bt-danger) ${dark ? 18 : 14}%,transparent)`,
+    "--bt-danger-glow": `color-mix(in srgb,var(--bt-danger) ${dark ? 28 : 24}%,transparent)`,
+    "--bt-q-edge": rgba(mode.text, dark ? 0.16 : 0.1),
+    "--bt-q-rule": rgba(mode.text, dark ? 0.12 : 0.08),
+    "--bt-q-rule-2": rgba(mode.text, dark ? 0.08 : 0.05),
+    ...Object.fromEntries(Object.entries(INKS).map(([id, colors]) => [`--bt-ink-${id}`, colors[Number(dark)]]))
   };
 }
 var declarations = (vars) => Object.entries(vars).map(([name, value]) => `${name}:${value}`).join(";");
@@ -7580,9 +9782,60 @@ var darkAccent = (accent) => {
   const ink = ACCENT_INKS.find((id) => INKS[id][0] === accent);
   return ink === void 0 ? accent : INKS[ink][1];
 };
-var themeCss = (theme, accent) => `html body{${declarations(themeVars(theme.light, false, accent ?? theme.light.accent))}}
-html body[data-ds-dark-theme]{${declarations(themeVars(theme.dark, true, darkAccent(accent) ?? theme.dark.accent))}}
+var DARK_ROOT = ":root:has(> body[data-ds-dark-theme])";
+var themeCss = (theme, accent, { fallback = false } = {}) => {
+  const selected = isHex(accent) ? accent : void 0;
+  const selector = (root) => fallback ? `:where(${root})` : root;
+  return `${selector(":root")}{${declarations(themeVars(theme.light, false, selected))}}
+${selector(DARK_ROOT)}{${declarations(themeVars(theme.dark, true, darkAccent(selected)))}}
 ${theme.css ?? ""}`;
+};
+var FOUNDATION_TOKENS_CSS = `
+:root{
+  --bt-danger:#e02135;
+  --bt-green:#00c972;
+  --bt-star:#ff9800;
+  --bt-knob:#ffffff;
+  --bt-static-light:#ffffff;
+  --bt-recording:#ff3e51;
+  --bt-recording-ring:color-mix(in srgb,var(--bt-recording) 35%,transparent);
+  --bt-hairline:rgba(228,228,228,.04);
+  --bt-shadow-ink:#000;
+  --bt-scrim:rgba(0,0,0,.32);
+  --bt-font-fallback:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --bt-font:var(--dsw-font-family,var(--bt-font-fallback));
+  --bt-font-hidden:0;
+  --bt-font-badge:8.5px;
+  --bt-font-caption:11px;
+  --bt-font-small:12px;
+  --bt-font-body:13px;
+  --bt-font-control:14px;
+  --bt-font-heading:15px;
+  --bt-font-large:16px;
+  --bt-font-title:17px;
+  --bt-font-display:18px;
+  --bt-line-caption:16px;
+  --bt-line-body:18px;
+  --bt-line-heading:20px;
+  --bt-line-control:22px;
+  --bt-radius-none:0;
+  --bt-radius-hairline:1px;
+  --bt-radius-tag:4px;
+  --bt-radius-menu-item:6px;
+  --bt-radius-input:8px;
+  --bt-radius-row:10px;
+  --bt-radius-card:12px;
+  --bt-radius-popover:16px;
+  --bt-radius-bubble:18px;
+  --bt-radius-dialog:20px;
+  --bt-radius-composer:22px;
+  --bt-radius-pill:999px;
+  --bt-radius-round:50%;
+  --bt-msg-w:.8;
+  --bt-flat-w:1;
+}
+${DARK_ROOT}{--bt-scrim:rgba(0,0,0,.5)}
+${themeCss(THEMES.deepseek, void 0, { fallback: true })}`;
 var shellTokens = ({ light, dark }) => ({
   "--dsw-alias-bg-base": { light: light.bg, dark: dark.bg },
   "--dsw-specific-sidebar-fill": { light: light.sidebar, dark: dark.sidebar },
@@ -7640,15 +9893,13 @@ var allThemes = () => ({ ...THEMES, ...customThemes });
 
 // src/client/styles.js
 var SHELL_CSS = `
-body{--bt-ink:#141414;--bt-danger:#e02135;--bt-ink-2:rgba(20,20,20,.6);--bt-ink-3:rgba(20,20,20,.36);--bt-bubble:#eeeeee;--bt-sidebar:#f7f7f7;--bt-main:#fcfcfc;--bt-line:rgba(20,20,20,.08);--bt-line-2:rgba(20,20,20,.15);--bt-line-weak:rgba(20,20,20,.1);--bt-hover:rgba(119,119,119,.09);--bt-active:rgba(119,119,119,.17);--bt-card:#ffffff;--bt-accent:#4d6bfe;--bt-green:#00c972;--bt-star:#ff9800;--bt-user:#070707;--bt-user-ink:#fcfcfc;--bt-tag-bg:rgba(20,20,20,.06);--bt-tag-ink:rgba(20,20,20,.56);--bt-knob:#ffffff;-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;--bt-font:var(--dsw-font-family,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif)}
+${FOUNDATION_TOKENS_CSS}
+body{-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;--bt-font:var(--dsw-font-family,var(--bt-font-fallback))}
 /* iOS waits out a double-tap zoom on buttons; the plugin's own controls never zoom. */
 :is(.bt-tool,.bt-uaction,.bt-menu button,.bt-menu-item,.bt-icon-btn,.bt-round,.bt-pill,.bt-account,.bt-set-row,.bt-settings-item,.bt-react-strip button,.bt-palette-row,.bt-palette-clear,.bt-tab,.bt-ptab,.bt-ptab-x,.bt-bcard-x,.bt-plus,.bt-q-btn,.bt-q-x,.bt-x,.bt-nc-send,.bt-send,.bt-soft,.bt-mini,.bt-shape,.bt-swatch,.bt-color,.bt-newchat,.bt-task-day,.bt-task-remove,.bt-fb-btn){touch-action:manipulation}
-body[data-ds-dark-theme]{--bt-ink:#f2f2f2;--bt-ink-2:rgba(242,242,242,.6);--bt-ink-3:rgba(242,242,242,.36);--bt-bubble:#262626;--bt-sidebar:#1b1b1b;--bt-main:#141414;--bt-line:rgba(255,255,255,.08);--bt-line-2:rgba(255,255,255,.15);--bt-line-weak:rgba(255,255,255,.1);--bt-hover:rgba(160,160,160,.12);--bt-active:rgba(160,160,160,.2);--bt-card:#1f1f1f;--bt-user:#f2f2f2;--bt-user-ink:#141414;--bt-tag-bg:rgba(255,255,255,.09);--bt-tag-ink:rgba(242,242,242,.62)}
-${Object.entries(INKS).map(([name, [light]]) => `body{--bt-ink-${name}:${light}}`).join("")}
-${Object.entries(INKS).map(([name, [, dark]]) => `body[data-ds-dark-theme]{--bt-ink-${name}:${dark}}`).join("")}
 .bt-mark{display:inline-block;flex:none;position:relative;line-height:0}
 .bt-mark svg{width:100%;height:100%;overflow:visible}
-.bt-mark-img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;box-shadow:inset 0 0 0 1px var(--bt-line)}
+.bt-mark-img{width:100%;height:100%;border-radius:var(--bt-radius-round);object-fit:cover;display:block;box-shadow:inset 0 0 0 1px var(--bt-line)}
 .bt-mark .bt-b,.bt-mark .bt-eye,.bt-mark .bt-eyes,.bt-mark .bt-gaze{transform-box:fill-box}
 .bt-mark .bt-b{transform-origin:50% 100%}
 .bt-mark .bt-eye,.bt-mark .bt-eyes{transform-origin:center}
@@ -7671,7 +9922,7 @@ body[data-bt-motion=lively] :is(.bt-row,.bt-tile)>.bt-mark:hover .bt-badge-alert
 /* Petting: with the pointer on a sidebar avatar or just around it (a ring a fifth of its
    size wide), a resting mark leans into the pointer and keeps nuzzling it, its eyes
    closed in a happy arc, and springs back when the pointer leaves. */
-:is(.bt-row,.bt-tile)>:is(.bt-mark,.bt-cluster)::before{content:'';position:absolute;inset:-20%;border-radius:50%}
+:is(.bt-row,.bt-tile)>:is(.bt-mark,.bt-cluster)::before{content:'';position:absolute;inset:-20%;border-radius:var(--bt-radius-round)}
 .bt-mark[data-live] .bt-b,.bt-mark[data-live] .bt-mark-img{transition:rotate .5s cubic-bezier(.34,1.56,.64,1),translate .5s cubic-bezier(.34,1.56,.64,1),scale .3s ease-out}
 .bt-mark[data-live] .bt-eye{transition:scale .14s ease-in}
 .bt-mark[data-live] .bt-eye-happy{transition:opacity .12s ease-out}
@@ -7725,28 +9976,28 @@ body[data-bt-motion=quiet] .bt-mark[data-poke]{cursor:default}
 /* Idle clip: two .26s blinks (lid to 3%, then a 6% overshoot) at 1.48s and 3.46s. */
 @keyframes bt-blink-idle{0%,29.6%,35%,69.2%,74.6%,100%{transform:scaleY(1)}32.2%,71.8%{transform:scaleY(.03)}33.8%,73.4%{transform:scaleY(1.06)}}
 @keyframes bt-blink{0%,42%,50%,100%{transform:scaleY(1)}46%{transform:scaleY(.03)}48%{transform:scaleY(1.06)}}
-@media (prefers-reduced-motion:reduce){.bt-mark *{animation:none!important;transition:none!important}}
-.bt-badge{position:absolute;right:0;bottom:0;width:12px;height:12px;border-radius:50%;corner-shape:round;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 1.5px var(--bt-sidebar)}
+@media (prefers-reduced-motion:reduce){.bt-mark *{animation:none!important;transition:none!important}.bt-mark[data-gaze] .bt-b{translate:none}.bt-mark[data-gaze] .bt-gaze{transform:none}}
+.bt-badge{position:absolute;right:0;bottom:0;width:12px;height:12px;border-radius:var(--bt-radius-round);corner-shape:round;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 1.5px var(--bt-sidebar)}
 .bt-badge-admin{background:color-mix(in srgb,var(--bt-star) 82%,var(--bt-sidebar))}
 .bt-badge-admin svg{width:7px;height:7px}
-.bt-badge-main{right:calc(var(--bt-size,36px) * -.07);bottom:calc(var(--bt-size,36px) * -.07);width:clamp(14px,calc(var(--bt-size,36px) * .36),22px);height:clamp(14px,calc(var(--bt-size,36px) * .36),22px);border-radius:0;box-shadow:none}
+.bt-badge-main{right:calc(var(--bt-size,36px) * -.07);bottom:calc(var(--bt-size,36px) * -.07);width:clamp(14px,calc(var(--bt-size,36px) * .36),22px);height:clamp(14px,calc(var(--bt-size,36px) * .36),22px);border-radius:var(--bt-radius-none);box-shadow:none}
 .bt-badge-main svg{width:100%;height:100%;overflow:visible}
 .bt-badge-main path{fill:var(--bt-star);stroke:var(--bt-sidebar);stroke-width:2.6;stroke-linejoin:round;paint-order:stroke}
-.bt-badge-alert{background:color-mix(in srgb,var(--bt-accent) 78%,var(--bt-sidebar));color:var(--bt-accent-ink,#fff);font-size:8.5px;line-height:12px;font-weight:600;font-family:var(--bt-font)}
+.bt-badge-alert{background:color-mix(in srgb,var(--bt-accent) 78%,var(--bt-sidebar));color:var(--bt-accent-ink);font-size:var(--bt-font-badge);line-height:12px;font-weight:600;font-family:var(--bt-font)}
 .bt-badge-working{background:color-mix(in srgb,var(--bt-green) 82%,var(--bt-sidebar));width:8px;height:8px;right:1px;bottom:1px}
 .bt-cluster{position:relative;display:inline-block;flex:none;line-height:0}
 .bt-cluster>*{position:absolute}
-.bt-cluster-more,.bt-cluster-you{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:var(--bt-active);color:var(--bt-ink-3);font-family:var(--bt-font);font-weight:500;line-height:1;font-variant-numeric:tabular-nums}
+.bt-cluster-more,.bt-cluster-you{display:inline-flex;align-items:center;justify-content:center;border-radius:var(--bt-radius-round);background:var(--bt-active);color:var(--bt-ink-3);font-family:var(--bt-font);font-weight:500;line-height:1;font-variant-numeric:tabular-nums}
 .bt-cluster-you{background:color-mix(in srgb,var(--bt-ink) 12%,transparent)}
 .bt-stack{display:inline-flex;align-items:center;flex:none;line-height:0}
 .bt-stack>*+*{margin-left:calc(var(--bt-stack-size) * -.3)}
-.bt-stack-more{font-size:11px;line-height:16px;color:var(--bt-ink-3);margin-left:3px!important}
+.bt-stack-more{font-size:var(--bt-font-caption);line-height:16px;color:var(--bt-ink-3);margin-left:3px!important}
 
 .bt-side{display:flex;flex-direction:column;min-height:0;flex:1 1 auto;gap:2px;padding:0 12px 8px 0;color:var(--bt-ink);font-family:var(--bt-font)}
 .bt-side-top{display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:6px 5px 0 0}
-.bt-brand{display:inline-flex;align-items:center;gap:6px;margin-right:auto;padding:4px 8px 4px 4px;border:0;border-radius:8px;background:none;cursor:pointer;font-family:inherit;font-size:15px;line-height:20px;font-weight:600;letter-spacing:-.01em;color:var(--bt-ink);white-space:nowrap}
+.bt-brand{display:inline-flex;align-items:center;gap:6px;margin-right:auto;padding:4px 8px 4px 4px;border:0;border-radius:var(--bt-radius-input);background:none;cursor:pointer;font-family:inherit;font-size:var(--bt-font-heading);line-height:20px;font-weight:600;letter-spacing:-.01em;color:var(--bt-ink);white-space:nowrap}
 .bt-brand-whale{display:inline-flex;color:var(--bt-accent)}
-.bt-round{width:36px;height:36px;border-radius:50%;border:1px solid var(--bt-line);background:var(--bt-main);color:var(--bt-ink);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:background-color .12s ease,transform .12s ease}
+.bt-round{width:36px;height:36px;border-radius:var(--bt-radius-round);border:1px solid var(--bt-line);background:var(--bt-main);color:var(--bt-ink);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:background-color .12s ease,transform .12s ease}
 .bt-round:hover{background:var(--bt-hover)}
 .bt-round:active{transform:scale(.94)}
 .bt-list{display:flex;flex-direction:column;gap:3px;overflow-y:auto;min-height:0;flex:1 1 auto}
@@ -7754,23 +10005,23 @@ body[data-bt-motion=quiet] .bt-mark[data-poke]{cursor:default}
 .bt-side:not(.bt-rail)>.bt-list{margin-right:-12px;scrollbar-gutter:stable;scrollbar-width:auto;scrollbar-color:auto}
 .bt-side:not(.bt-rail)>.bt-list::-webkit-scrollbar{width:12px}
 .bt-side:not(.bt-rail)>.bt-list::-webkit-scrollbar-track{background:transparent}
-.bt-side:not(.bt-rail)>.bt-list::-webkit-scrollbar-thumb{border:4px solid transparent;border-radius:6px;background:color-mix(in srgb,var(--bt-ink) 16%,transparent) padding-box}
+.bt-side:not(.bt-rail)>.bt-list::-webkit-scrollbar-thumb{border:4px solid transparent;border-radius:var(--bt-radius-menu-item);background:color-mix(in srgb,var(--bt-ink) 16%,transparent) padding-box}
 .bt-side:not(.bt-rail)>.bt-list:hover::-webkit-scrollbar-thumb{background-color:color-mix(in srgb,var(--bt-ink) 30%,transparent)}
 .bt-tile-wrap{display:flex;justify-content:center;padding:20px 0 15px}
-.bt-tile{display:flex;flex-direction:column;align-items:center;gap:4px;width:95px;padding:6px 8px 4px;border-radius:12px;border:0;background:transparent;color:var(--bt-ink);cursor:pointer;font-family:inherit;transition:background-color .12s ease}
+.bt-tile{display:flex;flex-direction:column;align-items:center;gap:4px;width:95px;padding:6px 8px 4px;border-radius:var(--bt-radius-card);border:0;background:transparent;color:var(--bt-ink);cursor:pointer;font-family:inherit;transition:background-color .12s ease}
 .bt-tile:hover{background:var(--bt-hover)}
 .bt-tile[aria-current=page]{background:var(--bt-active)}
-.bt-tile-name{font-size:13px;line-height:18px;font-weight:400;max-width:84px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bt-chip{font-size:11px;line-height:16px;padding:1px 4px;border-radius:4px;background:var(--bt-hover);border:1px solid var(--bt-line);color:var(--bt-ink-2);white-space:nowrap;max-width:84px;overflow:hidden;text-overflow:ellipsis}
-.bt-row{display:flex;align-items:center;gap:8px;min-height:54px;padding:8px;border:0;border-radius:10px;background:transparent;color:var(--bt-ink);text-align:left;cursor:pointer;width:100%;box-sizing:border-box;font-family:inherit;transition:background-color .12s ease}
+.bt-tile-name{font-size:var(--bt-font-body);line-height:18px;font-weight:400;max-width:84px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-chip{font-size:var(--bt-font-caption);line-height:16px;padding:1px 4px;border-radius:var(--bt-radius-tag);background:var(--bt-hover);border:1px solid var(--bt-line);color:var(--bt-ink-2);white-space:nowrap;max-width:84px;overflow:hidden;text-overflow:ellipsis}
+.bt-row{display:flex;align-items:center;gap:8px;min-height:54px;padding:8px;border:0;border-radius:var(--bt-radius-row);background:transparent;color:var(--bt-ink);text-align:left;cursor:pointer;width:100%;box-sizing:border-box;font-family:inherit;transition:background-color .12s ease}
 .bt-row:hover{background:var(--bt-hover)}
 .bt-row[aria-current=page]{background:var(--bt-active)}
 .bt-row-body{display:flex;flex-direction:column;min-width:0;flex:1 1 auto}
-.bt-row-name{display:flex;align-items:center;gap:6px;min-width:0;font-size:14px;line-height:20px;font-weight:400}
+.bt-row-name{display:flex;align-items:center;gap:6px;min-width:0;font-size:var(--bt-font-control);line-height:20px;font-weight:400}
 .bt-row-title{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bt-tag{flex:none;max-width:96px;font-size:12px;line-height:16px;font-weight:400;padding:1px 6px;border-radius:4px;background:var(--bt-tag-bg);color:var(--bt-tag-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bt-row-preview{font-size:13px;line-height:18px;color:var(--bt-ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bt-unread{width:8px;height:8px;border-radius:50%;background:var(--bt-accent);flex:none;margin-right:2px;animation:bt-fade .13s cubic-bezier(.22,1,.36,1)}
+.bt-tag{flex:none;max-width:96px;font-size:var(--bt-font-small);line-height:16px;font-weight:400;padding:1px 6px;border-radius:var(--bt-radius-tag);background:var(--bt-tag-bg);color:var(--bt-tag-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bt-row-preview{font-size:var(--bt-font-body);line-height:18px;color:var(--bt-ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bt-unread{width:8px;height:8px;border-radius:var(--bt-radius-round);background:var(--bt-accent);flex:none;margin-right:2px;animation:bt-fade .13s cubic-bezier(.22,1,.36,1)}
 .bt-unread-wait{background:var(--bt-star)}
 /* Our own left column, portalled over the shell's collapsed sidebar. It reaches
    the window's top edge so the title band and the column share one fill (under
@@ -7786,11 +10037,11 @@ html[data-windows-titlebar] .bt-leftcol,html[data-platform=darwin] .bt-leftcol{b
    own geometry). Our own collapse of it lands without the shell's slide. */
 [class*="_frame"][data-sidebar-collapsed][data-rightbar-collapsed]:has(>[class*="_sidebarCol"]){grid-template-columns:0px minmax(0,1fr) 0px!important}
 html[data-bt-collapsing] [class*="_frame"]:has(>[class*="_sidebarCol"]){transition:none!important}
-.bt-leftcol[data-left=drawer]{background:var(--bt-sidebar);box-shadow:8px 0 24px rgba(0,0,0,.14)}
+.bt-leftcol[data-left=drawer]{background:var(--bt-sidebar);box-shadow:8px 0 24px color-mix(in srgb,var(--bt-shadow-ink) 14%,transparent)}
 .bt-leftcol>.bt-side{width:100%}
 .bt-leftcol-foot{display:flex;align-items:center;gap:9px;padding-top:8px;flex:none}
 .bt-rail{align-items:center;padding:0}
-.bt-rail .bt-row{justify-content:center;width:56px;height:56px;min-height:56px;padding:0;border-radius:16px}
+.bt-rail .bt-row{justify-content:center;width:56px;height:56px;min-height:56px;padding:0;border-radius:var(--bt-radius-popover)}
 .bt-rail-top{display:flex;flex-direction:column;align-items:center;gap:6px;padding-bottom:8px}
 .bt-rail-sep{width:24px;height:1px;flex:none;background:var(--bt-line)}
 .bt-rail .bt-agent-ava{width:44px;height:44px}
@@ -7804,18 +10055,18 @@ html[data-bt-collapsing] [class*="_frame"]:has(>[class*="_sidebarCol"]){transiti
 .bt-leftcol[data-folding]{overflow:hidden;transition:width ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing}}
 .bt-leftcol[data-folding]>.bt-side{flex:none;width:calc(var(--bt-lc-w) - 24px)}
 .bt-leftcol[data-left=rail][data-folding]>.bt-side{width:var(--bt-lc-w);margin-inline:auto}
-.bt-dot{position:absolute;top:4px;right:8px;width:8px;height:8px;border-radius:50%;background:var(--bt-accent);box-shadow:0 0 0 1.5px var(--bt-sidebar)}
+.bt-dot{position:absolute;top:4px;right:8px;width:8px;height:8px;border-radius:var(--bt-radius-round);background:var(--bt-accent);box-shadow:0 0 0 1.5px var(--bt-sidebar)}
 .bt-dot-wait{background:var(--bt-star)}
 .bt-side-foot{display:flex;padding-top:8px}
 
 .bt-head{position:relative;display:flex;justify-content:center;align-items:center;height:40px;flex:none;pointer-events:none}
-.bt-pill{pointer-events:auto;display:inline-flex;align-items:center;gap:8px;height:40px;padding:7.5px 13.5px 7.5px 7.5px;border-radius:999px;background:var(--bt-main);border:.5px solid var(--bt-line-2);box-shadow:0 2px 8px -1px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);color:var(--bt-ink);font-family:inherit;font-size:14px;line-height:20px;cursor:pointer;max-width:70%;box-sizing:border-box;transition:background-color .12s ease,transform ${SPRING_TAP.duration}ms ${SPRING_TAP.easing}}
-.bt-pill:hover{background:color-mix(in srgb,var(--bt-main),#777 9%)}
+.bt-pill{pointer-events:auto;display:inline-flex;align-items:center;gap:8px;height:40px;padding:7.5px 13.5px 7.5px 7.5px;border-radius:var(--bt-radius-pill);background:var(--bt-main);border:.5px solid var(--bt-line-2);box-shadow:0 2px 8px -1px color-mix(in srgb,var(--bt-shadow-ink) 6%,transparent),0 1px 2px color-mix(in srgb,var(--bt-shadow-ink) 4%,transparent);color:var(--bt-ink);font-family:inherit;font-size:var(--bt-font-control);line-height:20px;cursor:pointer;max-width:70%;box-sizing:border-box;transition:background-color .12s ease,transform ${SPRING_TAP.duration}ms ${SPRING_TAP.easing}}
+.bt-pill:hover{background:color-mix(in srgb,var(--bt-main),var(--bt-ink-3) 25%)}
 .bt-pill:active{transform:scale(.965)}
 .bt-pill-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
 .bt-pill-mem{flex:none;display:inline-flex;width:0;margin-left:-8px;overflow:hidden;transition:${spring(SPRING_SHAPE, "width", "margin-left")}}
 .bt-pill[data-memory=updated] .bt-pill-mem{width:var(--bt-mem-w);margin-left:0;transition:${spring(SPRING_STRETCH, "width", "margin-left")}}
-.bt-pill-mem-in{flex:none;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;color:var(--bt-ink-2);font-size:13px;font-weight:500;opacity:0;filter:blur(6px);transform:translateX(-8px);transition:opacity .14s ease,filter .18s ease,${spring(SPRING_SHAPE, "transform")}}
+.bt-pill-mem-in{flex:none;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;color:var(--bt-ink-2);font-size:var(--bt-font-body);font-weight:500;opacity:0;filter:blur(6px);transform:translateX(-8px);transition:opacity .14s ease,filter .18s ease,${spring(SPRING_SHAPE, "transform")}}
 .bt-pill-mem-in::before{content:"";flex:none;width:1px;height:14px;margin-right:4px;background:var(--bt-line-2)}
 .bt-pill[data-memory=updated] .bt-pill-mem-in{opacity:1;filter:none;transform:none;transition-delay:70ms}
 .bt-pill-mem-ico{flex:none;display:inline-flex;width:16px;height:16px;color:var(--bt-accent)}
@@ -7824,7 +10075,7 @@ html[data-bt-collapsing] [class*="_frame"]:has(>[class*="_sidebarCol"]){transiti
 @keyframes bt-mem-pop{from{transform:scale(.4) rotate(-14deg)}to{transform:none}}
 .bt-sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 @media (prefers-reduced-motion:reduce){.bt-pill-mem,.bt-pill-mem-in{transition:none!important}.bt-pill-mem-in{filter:none;transform:none}.bt-pill[data-memory=updated] .bt-pill-mem-ico{animation:none}}
-.bt-swap{color:var(--bt-ink-3);font-size:12px}
+.bt-swap{color:var(--bt-ink-3);font-size:var(--bt-font-small)}
 .bt-pill-go{flex:none;display:inline-flex;align-items:center;justify-content:flex-end;width:0;margin-left:-8px;overflow:hidden;opacity:0;filter:blur(6px);transform:translateX(-6px);color:var(--bt-ink-2);transition:width ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing},margin-left ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing},transform ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing},opacity .18s ease,filter .18s ease}
 .bt-pill-go svg{flex:none;transition:transform ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing}}
 .bt-pill:hover .bt-pill-go,.bt-pill:focus-visible .bt-pill-go,.bt-pill[aria-expanded=true] .bt-pill-go{width:18px;margin-left:0;opacity:1;filter:none;transform:none}
@@ -7833,11 +10084,10 @@ html[data-bt-collapsing] [class*="_frame"]:has(>[class*="_sidebarCol"]){transiti
 @media (prefers-reduced-motion:reduce){.bt-pill,.bt-pill-go,.bt-pill-go svg{transition:none!important}.bt-pill-go{filter:none}.bt-pill:active{transform:none}}
 
 /* The width settings: the share of the column a bubble may take, and the flat text. */
-body{--bt-msg-w:.8;--bt-flat-w:1}
 .bt-astack{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin:0}
-.bt-bubble{max-width:min(calc(var(--bt-msg-w) * 100%),calc(100% - 82px));background:var(--bt-bubble);color:var(--bt-ink);border-radius:18px;padding:7px 12px;font-size:var(--dsh-content-font-size,14px);line-height:calc(var(--dsh-content-font-size,14px) + 10px);box-sizing:border-box;overflow-wrap:anywhere;text-wrap:pretty;text-autospace:normal}
-.bt-msg:not(:first-child)>.bt-msg-line>.bt-bubble{border-start-start-radius:6px}
-.bt-msg:not(:last-child)>.bt-msg-line>.bt-bubble{border-end-start-radius:6px}
+.bt-bubble{max-width:min(calc(var(--bt-msg-w) * 100%),calc(100% - 82px));background:var(--bt-bubble);color:var(--bt-ink);border-radius:var(--bt-radius-bubble);padding:7px 12px;font-size:var(--dsh-content-font-size,var(--bt-font-control));line-height:calc(var(--dsh-content-font-size,var(--bt-font-control)) + 10px);box-sizing:border-box;overflow-wrap:anywhere;text-wrap:pretty;text-autospace:normal}
+.bt-msg:not(:first-child)>.bt-msg-line>.bt-bubble{border-start-start-radius:var(--bt-radius-menu-item)}
+.bt-msg:not(:last-child)>.bt-msg-line>.bt-bubble{border-end-start-radius:var(--bt-radius-menu-item)}
 .bt-bubble [class*="_markdown"]>*+*{margin-top:10px}
 .bt-bubble [class*="_markdown"]{color:inherit!important;font-size:inherit!important;line-height:inherit!important}
 .bt-bubble p{margin:0}
@@ -7854,27 +10104,26 @@ body{--bt-msg-w:.8;--bt-flat-w:1}
 button.bt-lead{border:0;background:none;padding:0;cursor:pointer}
 /* Rows without the avatar start where the bubble beside it starts: 22px avatar + 8px gap. */
 .bt-astack[data-lead]>.bt-msg:not(:last-child)>.bt-msg-line,.bt-astack[data-lead] .bt-reacts{margin-left:30px}
-.bt-group-name{font-size:12px;line-height:16px;font-weight:500;margin-left:42px}
-.bt-group-name:has(>.bt-lead){display:flex;align-items:center;margin:0 0 2px;font-size:13px;line-height:22px;font-weight:600;color:var(--bt-ink)}
+.bt-group-name{font-size:var(--bt-font-small);line-height:16px;font-weight:500;margin-left:42px}
+.bt-group-name:has(>.bt-lead){display:flex;align-items:center;margin:0 0 2px;font-size:var(--bt-font-body);line-height:22px;font-weight:600;color:var(--bt-ink)}
 .bt-group-name>.bt-lead{margin:0 8px 0 0}
-.bt-group-time,.bt-group-took{margin-left:6px;font-size:11px;line-height:16px;font-weight:400;color:var(--bt-ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
-.bt-x{border:0;background:none;color:var(--bt-ink-2);cursor:pointer;width:24px;height:24px;border-radius:6px;font-size:16px;line-height:24px;padding:0;transition:background-color .12s ease,color .12s ease,${spring(SPRING_TAP, "scale")}}
+.bt-group-time,.bt-group-took{margin-left:6px;font-size:var(--bt-font-caption);line-height:16px;font-weight:400;color:var(--bt-ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.bt-x{border:0;background:none;color:var(--bt-ink-2);cursor:pointer;width:24px;height:24px;border-radius:var(--bt-radius-menu-item);font-size:var(--bt-font-large);line-height:24px;padding:0;transition:background-color .12s ease,color .12s ease,${spring(SPRING_TAP, "scale")}}
 .bt-x:hover{background:var(--bt-hover);color:var(--bt-ink)}
 
-.bt-q{margin:0 auto 8px;width:100%;max-width:var(--dsh-chat-content-width,748px);display:flex;flex-direction:column;gap:12px;--bt-q-edge:color-mix(in srgb,var(--bt-ink) 10%,transparent);--bt-q-rule:color-mix(in srgb,var(--bt-ink) 8%,transparent);--bt-q-rule-2:color-mix(in srgb,var(--bt-ink) 5%,transparent);background:var(--bt-card);box-shadow:0 1px 3px rgba(20,20,20,.04),inset 0 0 0 1px var(--bt-q-edge);border-radius:16px;padding:14px 16px;box-sizing:border-box;color:var(--bt-ink);font-family:var(--bt-font);animation:bt-q-in ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing} backwards,bt-veil-in .2s ease-out backwards}
-body[data-ds-dark-theme] .bt-q{--bt-q-edge:rgba(255,255,255,.16);--bt-q-rule:rgba(255,255,255,.12);--bt-q-rule-2:rgba(255,255,255,.08)}
+.bt-q{margin:0 auto 8px;width:100%;max-width:var(--dsh-chat-content-width,748px);display:flex;flex-direction:column;gap:12px;background:var(--bt-card);box-shadow:var(--bt-card-shadow),inset 0 0 0 1px var(--bt-q-edge);border-radius:var(--bt-radius-popover);padding:14px 16px;box-sizing:border-box;color:var(--bt-ink);font-family:var(--bt-font);animation:bt-q-in ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing} backwards,bt-veil-in .2s ease-out backwards}
 @keyframes bt-q-in{from{transform:translateY(10px) scale(.97)}}
 .bt-q-settled{animation:none}
 .bt-q-head{display:flex;align-items:flex-start;gap:8px;min-width:0}
 .bt-q-text{flex:1 1 0;min-width:0;display:flex;flex-direction:column}
-.bt-q-title{margin:0;font-size:15px;line-height:22px;font-weight:600;overflow-wrap:anywhere}
-.bt-q-detail{font-size:13px;line-height:18px;color:var(--bt-ink-2)}
-.bt-q-x{flex:none;width:20px;height:20px;border:0;padding:0;border-radius:6px;background:none;color:var(--bt-ink-2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background-color .12s ease,color .12s ease,${spring(SPRING_TAP, "scale")}}
+.bt-q-title{margin:0;font-size:var(--bt-font-heading);line-height:22px;font-weight:600;overflow-wrap:anywhere}
+.bt-q-detail{font-size:var(--bt-font-body);line-height:18px;color:var(--bt-ink-2)}
+.bt-q-x{flex:none;width:20px;height:20px;border:0;padding:0;border-radius:var(--bt-radius-menu-item);background:none;color:var(--bt-ink-2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background-color .12s ease,color .12s ease,${spring(SPRING_TAP, "scale")}}
 .bt-q-x svg{width:14px;height:14px}
 .bt-q-x:hover{background:var(--bt-hover);color:var(--bt-ink)}
 .bt-q-x:focus-visible,.bt-q-opt:focus-visible{outline:2px solid var(--bt-accent);outline-offset:-2px}
 .bt-q-list{display:flex;flex-direction:column;gap:1px;min-width:0;box-sizing:border-box;margin:0 -8px}
-.bt-q-opt{position:relative;display:flex;align-items:flex-start;gap:16px;width:100%;min-width:0;box-sizing:border-box;margin:0;border:0;border-radius:12px;background:transparent;padding:10px 8px;font:inherit;color:var(--bt-ink);text-align:start;cursor:pointer;transition:background-color .12s ease}
+.bt-q-opt{position:relative;display:flex;align-items:flex-start;gap:16px;width:100%;min-width:0;box-sizing:border-box;margin:0;border:0;border-radius:var(--bt-radius-card);background:transparent;padding:10px 8px;font:inherit;color:var(--bt-ink);text-align:start;cursor:pointer;transition:background-color .12s ease}
 .bt-q:not(.bt-q-raised)>.bt-q-head:has(+.bt-q-list){padding-bottom:12px;border-bottom:1px solid var(--bt-q-rule)}
 .bt-q:not(.bt-q-raised)>.bt-q-head+.bt-q-list{margin-top:-6px}
 .bt-q-opt+.bt-q-opt::before{content:"";position:absolute;left:calc(var(--bt-key,24px) + 24px);right:8px;top:-1px;height:1px;background:var(--bt-q-rule-2);transition:opacity .12s ease;pointer-events:none}
@@ -7884,14 +10133,14 @@ button.bt-q-opt:hover{background:var(--bt-hover)}
 button.bt-q-opt:active{background:var(--bt-active)}
 .bt-q-opt[aria-pressed=true]{background:var(--bt-active)}
 .bt-q:not(.bt-q-raised) :is(button.bt-q-opt:hover,.bt-q-opt[aria-pressed=true]) .bt-key{background:var(--bt-card);color:var(--bt-ink)}
-.bt-key{flex:none;box-sizing:border-box;width:var(--bt-key,24px);height:var(--bt-key,24px);border-radius:8px;background:var(--bt-hover);color:var(--bt-ink-2);font-size:12px;line-height:var(--bt-key,24px);font-weight:500;text-align:center;font-variant-numeric:tabular-nums;transition:background-color .12s ease,color .12s ease}
+.bt-key{flex:none;box-sizing:border-box;width:var(--bt-key,24px);height:var(--bt-key,24px);border-radius:var(--bt-radius-input);background:var(--bt-hover);color:var(--bt-ink-2);font-size:var(--bt-font-small);line-height:var(--bt-key,24px);font-weight:500;text-align:center;font-variant-numeric:tabular-nums;transition:background-color .12s ease,color .12s ease}
 .bt-q-body{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px;padding-top:2px}
 /* With a description the key spans the two text lines less 2px above and below. */
 .bt-q-opt:has(.bt-q-desc){--bt-key:34px}
-.bt-q-opt:has(.bt-q-desc) .bt-key{margin-top:2px;border-radius:10px;font-size:13px}
+.bt-q-opt:has(.bt-q-desc) .bt-key{margin-top:2px;border-radius:var(--bt-radius-row);font-size:var(--bt-font-body)}
 .bt-q-opt:has(.bt-q-desc) .bt-q-body{padding-top:0}
-.bt-q-label{font-size:14px;line-height:20px;font-weight:500;white-space:normal;overflow-wrap:anywhere}
-.bt-q-desc{font-size:12px;line-height:17px;color:var(--bt-ink-2);overflow-wrap:anywhere}
+.bt-q-label{font-size:var(--bt-font-control);line-height:20px;font-weight:500;white-space:normal;overflow-wrap:anywhere}
+.bt-q-desc{font-size:var(--bt-font-small);line-height:17px;color:var(--bt-ink-2);overflow-wrap:anywhere}
 .bt-q-check{flex:none;display:inline-flex;align-items:center;color:var(--bt-ink-2);animation:bt-check-pop ${SPRING_POP.duration}ms ${SPRING_POP.easing} backwards}
 .bt-q-settled .bt-q-check{animation:none}
 .bt-q-check svg{width:16px;height:16px}
@@ -7899,19 +10148,19 @@ button.bt-q-opt:active{background:var(--bt-active)}
 .bt-q-settled .bt-q-label{color:color-mix(in srgb,var(--bt-ink) 45%,transparent)}
 .bt-q-dismissed .bt-q-title{color:var(--bt-ink-2)}
 .bt-q.bt-q-settled{gap:6px;padding:12px 16px}
-.bt-q-settled .bt-q-title{font-size:14px;line-height:20px;font-weight:500}
+.bt-q-settled .bt-q-title{font-size:var(--bt-font-control);line-height:20px;font-weight:500}
 .bt-q.bt-q-settled>.bt-q-head:has(+.bt-q-list){padding-bottom:0;border-bottom:0}
 .bt-q.bt-q-settled>.bt-q-head+.bt-q-list{margin-top:0}
 .bt-q-settled .bt-q-opt{padding:4px 8px}
-.bt-q-badge{flex:none;height:20px;padding:0 7px;border-radius:999px;border:1px dotted var(--bt-line-2);color:var(--bt-ink-2);font-size:12px;line-height:18px;box-sizing:border-box}
+.bt-q-badge{flex:none;height:20px;padding:0 7px;border-radius:var(--bt-radius-pill);border:1px dotted var(--bt-line-2);color:var(--bt-ink-2);font-size:var(--bt-font-small);line-height:18px;box-sizing:border-box}
 .bt-q-custom{display:flex;align-items:flex-start;gap:8px;width:100%;min-width:0}
-.bt-q-field{flex:1 1 0;min-width:0;display:flex;box-sizing:border-box;min-height:32px;padding:5px 11px;border-radius:8px;border:.5px solid var(--bt-line-2);background:none;cursor:text;transition:border-color .12s ease}
+.bt-q-field{flex:1 1 0;min-width:0;display:flex;box-sizing:border-box;min-height:32px;padding:5px 11px;border-radius:var(--bt-radius-input);border:.5px solid var(--bt-line-2);background:none;cursor:text;transition:border-color .12s ease}
 .bt-q-field:focus-within{border-color:color-mix(in srgb,var(--bt-ink) 30%,transparent)}
-.bt-q-input{flex:1;width:100%;min-width:0;max-height:120px;margin:0;padding:0;border:0;outline:none;background:transparent;color:var(--bt-ink);font:inherit;font-size:14px;line-height:20px;resize:none;overflow-y:hidden;white-space:pre-wrap;overflow-wrap:anywhere}
+.bt-q-input{flex:1;width:100%;min-width:0;max-height:120px;margin:0;padding:0;border:0;outline:none;background:transparent;color:var(--bt-ink);font:inherit;font-size:var(--bt-font-control);line-height:20px;resize:none;overflow-y:hidden;white-space:pre-wrap;overflow-wrap:anywhere}
 .bt-q-input:not(:placeholder-shown){field-sizing:content}
 .bt-q-input::placeholder{color:var(--bt-ink-3)}
-.bt-q-submit,.bt-q-btn{flex:none;height:36px;padding:0 14px;border:0;border-radius:999px;font:inherit;font-size:14px;font-weight:500;cursor:pointer;transition:opacity .12s ease,background-color .12s ease,${spring(SPRING_TAP, "scale")}}
-.bt-q-submit{background:var(--bt-accent);color:var(--bt-accent-ink,#fff);animation:bt-q-submit-in ${SPRING_TAP.duration}ms ${SPRING_TAP.easing} backwards,bt-veil-in .16s ease-out backwards}
+.bt-q-submit,.bt-q-btn{flex:none;height:36px;padding:0 14px;border:0;border-radius:var(--bt-radius-pill);font:inherit;font-size:var(--bt-font-control);font-weight:500;cursor:pointer;transition:opacity .12s ease,background-color .12s ease,${spring(SPRING_TAP, "scale")}}
+.bt-q-submit{background:var(--bt-accent);color:var(--bt-accent-ink);animation:bt-q-submit-in ${SPRING_TAP.duration}ms ${SPRING_TAP.easing} backwards,bt-veil-in .16s ease-out backwards}
 @keyframes bt-q-submit-in{from{transform:translateX(8px) scale(.9)}}
 .bt-q-submit:hover:not(:disabled){opacity:.86}
 .bt-q-submit:disabled{opacity:.4;cursor:default}
@@ -7919,11 +10168,11 @@ button.bt-q-opt:active{background:var(--bt-active)}
 .bt-q-btn:hover{background:var(--bt-active)}
 .bt-q-submit:focus-visible,.bt-q-btn:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 .bt-q-foot{display:flex;justify-content:flex-end;gap:8px}
-.bt-q-raised{width:calc(var(--dsh-chat-content-width,748px) - 32px);max-width:calc(100% - 32px);gap:0;padding:0;box-shadow:0 2px 8px rgba(20,20,20,.035),inset 0 0 0 .5px color-mix(in srgb,var(--bt-ink) 5%,transparent)}
+.bt-q-raised{width:calc(var(--dsh-chat-content-width,748px) - 32px);max-width:calc(100% - 32px);gap:0;padding:0;box-shadow:0 2px 8px color-mix(in srgb,var(--bt-shadow-ink) 3.5%,transparent),inset 0 0 0 .5px color-mix(in srgb,var(--bt-ink) 5%,transparent)}
 .bt-q-raised .bt-q-head{padding:14px 16px 4px 20px}
 .bt-q-raised .bt-q-head:last-child{padding-bottom:16px}
 .bt-q-raised .bt-q-list{gap:1px;margin:0;padding:8px}
-.bt-q-raised .bt-q-opt{gap:4px;padding:7px;border-radius:16px;color:var(--bt-ink-2)}
+.bt-q-raised .bt-q-opt{gap:4px;padding:7px;border-radius:var(--bt-radius-popover);color:var(--bt-ink-2)}
 .bt-q-raised button.bt-q-opt:hover{color:var(--bt-ink)}
 .bt-q-raised .bt-q-opt[aria-pressed=true]{background:transparent;color:var(--bt-ink)}
 .bt-q-raised .bt-q-opt[aria-pressed=true]:hover{background:var(--bt-hover)}
@@ -7936,48 +10185,48 @@ button.bt-q-opt:active{background:var(--bt-active)}
 @media (prefers-reduced-motion:reduce){.bt-q{animation:bt-fade .12s ease-out backwards}.bt-q-settled{animation:none}.bt-q-submit{animation:none}}
 
 .bt-newchat{flex:1;display:flex;flex-direction:column;min-width:0;position:relative;animation:bt-veil-in .18s ease-out}
-.bt-to{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-height:48px;padding:6px 12px;border-bottom:1px solid var(--bt-line);font-size:14px;box-sizing:border-box}
+.bt-to{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-height:48px;padding:6px 12px;border-bottom:1px solid var(--bt-line);font-size:var(--bt-font-control);box-sizing:border-box}
 .bt-to-label{color:var(--bt-ink-2)}
-.bt-to input{flex:1;min-width:120px;border:0;outline:none;background:none;color:var(--bt-ink);font-size:14px;height:26px}
-.bt-token{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 6px 0 4px;border-radius:999px;background:var(--bt-hover);font-size:13px;animation:bt-check-pop ${SPRING_POP.duration}ms ${SPRING_POP.easing}}
+.bt-to input{flex:1;min-width:120px;border:0;outline:none;background:none;color:var(--bt-ink);font-size:var(--bt-font-control);height:26px}
+.bt-token{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 6px 0 4px;border-radius:var(--bt-radius-pill);background:var(--bt-hover);font-size:var(--bt-font-body);animation:bt-check-pop ${SPRING_POP.duration}ms ${SPRING_POP.easing}}
 .bt-token button{border:0;background:none;color:var(--bt-ink-2);cursor:pointer;padding:0 2px}
-.bt-admin-star{flex:none;display:inline-flex;align-items:center;justify-content:center;width:12px;height:12px;border-radius:50%;corner-shape:round;background:color-mix(in srgb,var(--bt-star) 82%,var(--bt-sidebar));vertical-align:-1px}
+.bt-admin-star{flex:none;display:inline-flex;align-items:center;justify-content:center;width:12px;height:12px;border-radius:var(--bt-radius-round);corner-shape:round;background:color-mix(in srgb,var(--bt-star) 82%,var(--bt-sidebar));vertical-align:-1px}
 .bt-to-star{display:inline-flex;margin-right:-2px;animation:bt-check-pop ${SPRING_POP.duration}ms ${SPRING_POP.easing}}
-.bt-to .bt-to-create{flex:none;height:28px;padding:0 12px;font-size:13px;animation:bt-q-submit-in ${SPRING_TAP.duration}ms ${SPRING_TAP.easing},bt-veil-in .16s ease-out}
-.bt-drop{position:absolute;top:48px;left:32px;width:min(550px,calc(100% - 64px));display:flex;flex-direction:column;padding:6px;max-height:min(420px,60vh);overflow-y:auto;background:var(--bt-card);border:1px solid var(--bt-line-2);border-radius:12px;box-shadow:0 6px 20px -4px rgba(0,0,0,.12);box-sizing:border-box;z-index:1;transform-origin:24px 0;animation:bt-pop-drop ${SPRING_TAP.duration}ms ${SPRING_TAP.easing},bt-veil-in .14s ease-out}
-.bt-option{display:flex;align-items:center;gap:10px;border:0;background:none;border-radius:8px;padding:7px 8px;min-height:36px;box-sizing:border-box;font-size:13px;line-height:18px;color:var(--bt-ink);cursor:pointer;text-align:left;width:100%}
+.bt-to .bt-to-create{flex:none;height:28px;padding:0 12px;font-size:var(--bt-font-body);animation:bt-q-submit-in ${SPRING_TAP.duration}ms ${SPRING_TAP.easing},bt-veil-in .16s ease-out}
+.bt-drop{position:absolute;top:48px;left:32px;width:min(550px,calc(100% - 64px));display:flex;flex-direction:column;padding:6px;max-height:min(420px,60vh);overflow-y:auto;background:var(--bt-card);border:1px solid var(--bt-line-2);border-radius:var(--bt-radius-card);box-shadow:0 6px 20px -4px color-mix(in srgb,var(--bt-shadow-ink) 12%,transparent);box-sizing:border-box;z-index:1;transform-origin:24px 0;animation:bt-pop-drop ${SPRING_TAP.duration}ms ${SPRING_TAP.easing},bt-veil-in .14s ease-out}
+.bt-option{display:flex;align-items:center;gap:10px;border:0;background:none;border-radius:var(--bt-radius-input);padding:7px 8px;min-height:36px;box-sizing:border-box;font-size:var(--bt-font-body);line-height:18px;color:var(--bt-ink);cursor:pointer;text-align:left;width:100%}
 .bt-option[aria-selected=true]{background:var(--bt-active)}
 .bt-drop-list>.bt-option:not([aria-selected=true]):hover{background:var(--bt-hover)}
 .bt-option-label{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bt-option-hint{font-size:11px;color:var(--bt-ink-2);flex:none;animation:bt-veil-in .16s ease-out}
-.bt-option-icon{width:22px;height:22px;border-radius:50%;background:var(--bt-hover);color:var(--bt-ink-2);display:inline-flex;align-items:center;justify-content:center;flex:none}
-.bt-hint{padding:14px;text-align:center;font-size:13px;color:var(--bt-ink-2)}
+.bt-option-hint{font-size:var(--bt-font-caption);color:var(--bt-ink-2);flex:none;animation:bt-veil-in .16s ease-out}
+.bt-option-icon{width:22px;height:22px;border-radius:var(--bt-radius-round);background:var(--bt-hover);color:var(--bt-ink-2);display:inline-flex;align-items:center;justify-content:center;flex:none}
+.bt-hint{padding:14px;text-align:center;font-size:var(--bt-font-body);color:var(--bt-ink-2)}
 .bt-nc-spacer{flex:1}
 .bt-nc-compose{padding:0 16px 14px;display:flex;justify-content:center}
-.bt-nc-card{display:flex;align-items:flex-end;gap:6px;width:100%;max-width:var(--dsh-chat-content-width,748px);min-height:44px;padding:4px 6px;border-radius:22px;border:1px solid var(--bt-line-2);background:var(--bt-main);box-shadow:0 2px 8px -2px rgba(0,0,0,.06);box-sizing:border-box}
-.bt-nc-plus{width:34px;height:34px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:var(--bt-ink-2);background:var(--bt-hover);flex:none}
-.bt-nc-card textarea{flex:1;resize:none;border:0;outline:none;background:none;color:var(--bt-ink);font:inherit;font-size:14px;line-height:20px;padding:7px 4px;min-height:34px;max-height:140px;box-sizing:border-box}
-.bt-nc-send{width:34px;height:34px;border-radius:50%;border:0;background:var(--bt-accent);color:var(--bt-accent-ink,#fff);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex:none}
+.bt-nc-card{display:flex;align-items:flex-end;gap:6px;width:100%;max-width:var(--dsh-chat-content-width,748px);min-height:44px;padding:4px 6px;border-radius:var(--bt-radius-composer);border:1px solid var(--bt-line-2);background:var(--bt-main);box-shadow:0 2px 8px -2px color-mix(in srgb,var(--bt-shadow-ink) 6%,transparent);box-sizing:border-box}
+.bt-nc-plus{width:34px;height:34px;border-radius:var(--bt-radius-round);display:inline-flex;align-items:center;justify-content:center;color:var(--bt-ink-2);background:var(--bt-hover);flex:none}
+.bt-nc-card textarea{flex:1;resize:none;border:0;outline:none;background:none;color:var(--bt-ink);font:inherit;font-size:var(--bt-font-control);line-height:20px;padding:7px 4px;min-height:34px;max-height:140px;box-sizing:border-box}
+.bt-nc-send{width:34px;height:34px;border-radius:var(--bt-radius-round);border:0;background:var(--bt-accent);color:var(--bt-accent-ink);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex:none}
 .bt-nc-send:disabled{opacity:.3;cursor:default}
 .bt-create{flex:1;display:flex;flex-direction:column;min-width:0}
 .bt-create-head{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:48px;padding:6px 12px;border-bottom:1px solid var(--bt-line);box-sizing:border-box}
 .bt-create-gap{width:28px}
-.bt-create-title{font-size:14px;line-height:20px;font-weight:500}
+.bt-create-title{font-size:var(--bt-font-control);line-height:20px;font-weight:500}
 .bt-create-body{flex:1;overflow-y:auto;padding:28px 16px 32px;display:flex;justify-content:center}
 .bt-create-card{width:100%;max-width:400px;display:flex;flex-direction:column;gap:18px;animation:bt-q-in ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing} both,bt-veil-in .22s ease-out both}
 .bt-create-preview{display:flex;flex-direction:column;align-items:center;gap:10px}
 .bt-create-pop{display:inline-flex;animation:bt-create-pop ${SPRING_POP.duration}ms ${SPRING_POP.easing} both}
 @keyframes bt-create-pop{from{transform:scale(.72);opacity:.4}}
-.bt-create-name{font-size:17px;line-height:24px;font-weight:500;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bt-create-step{font-size:12px;line-height:16px;color:var(--bt-ink-2);margin-bottom:-10px}
-.bt-create-looks{display:flex;flex-direction:column;gap:10px;padding:10px;border:1px solid var(--bt-line);border-radius:12px;background:var(--bt-card)}
+.bt-create-name{font-size:var(--bt-font-title);line-height:24px;font-weight:500;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-create-step{font-size:var(--bt-font-small);line-height:16px;color:var(--bt-ink-2);margin-bottom:-10px}
+.bt-create-looks{display:flex;flex-direction:column;gap:10px;padding:10px;border:1px solid var(--bt-line);border-radius:var(--bt-radius-card);background:var(--bt-card)}
 .bt-create-lookbar{justify-content:center}
 .bt-create-foot{display:flex;justify-content:flex-end;gap:8px;padding-top:4px}
 .bt-create-go{height:36px;padding:0 20px}
 @media (prefers-reduced-motion:reduce){.bt-create-card,.bt-create-pop{animation:none}}
-.bt-send{height:40px;min-width:40px;border-radius:999px;border:0;background:var(--bt-accent);color:var(--bt-accent-ink,#fff);font-size:14px;padding:0 14px;cursor:pointer;flex:none;white-space:nowrap}
+.bt-send{height:40px;min-width:40px;border-radius:var(--bt-radius-pill);border:0;background:var(--bt-accent);color:var(--bt-accent-ink);font-size:var(--bt-font-control);padding:0 14px;cursor:pointer;flex:none;white-space:nowrap}
 .bt-send:disabled{opacity:.35;cursor:default}
-.bt-error{padding:0 14px 10px;color:var(--bt-danger);font-size:12px}
+.bt-error{padding:0 14px 10px;color:var(--bt-danger);font-size:var(--bt-font-small)}
 
 /* Side panels keep their content clear of the Windows caption buttons. A host may set the
    chrome top to 0 so that dialog masks also cover the caption band; the panel then reaches
@@ -8002,10 +10251,10 @@ html[data-windows-titlebar]:not([data-fullscreen]) :is(.bt-pane,.bt-panel)::befo
 .bt-fold-code>.bt-tool{position:absolute;right:6px;bottom:6px}
 /* The part of a cut code block the preview keeps, drawn by DS SuperAgent so the host's
    Markdown draws no copy control of its own for it. */
-.bt-fold-code>.bt-fold-pre{margin:0;padding:10px 12px;border-radius:10px;background:color-mix(in srgb,currentColor 6%,transparent);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;line-height:20px;overflow-x:auto}
+.bt-fold-code>.bt-fold-pre{margin:0;padding:10px 12px;border-radius:var(--bt-radius-row);background:color-mix(in srgb,currentColor 6%,transparent);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:var(--bt-font-body);line-height:20px;overflow-x:auto}
 .bt-fold-code>*+.bt-fold-pre{margin-top:6px}
-.bt-fold-note{font-size:12px;line-height:16px;color:var(--bt-ink-3)}
-[data-folded] .bt-fold-body{-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 40px),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - 40px),transparent)}
+.bt-fold-note{font-size:var(--bt-font-small);line-height:16px;color:var(--bt-ink-3)}
+[data-folded] .bt-fold-body{-webkit-mask-image:linear-gradient(to bottom,var(--bt-shadow-ink) calc(100% - 40px),transparent);mask-image:linear-gradient(to bottom,var(--bt-shadow-ink) calc(100% - 40px),transparent)}
 .bt-ubody .bt-fold .bt-more,.bt-ububble .bt-fold .bt-more,.bt-ubody .bt-fold-note,.bt-ububble .bt-fold-note{color:inherit;opacity:.7}
 .bt-ubody .bt-fold .bt-more:hover,.bt-ububble .bt-fold .bt-more:hover{opacity:1}
 .bt-ubody .bt-fold-code>.bt-tool,.bt-ububble .bt-fold-code>.bt-tool{color:inherit;opacity:.7}
@@ -8016,9 +10265,9 @@ html[data-windows-titlebar]:not([data-fullscreen]) :is(.bt-pane,.bt-panel)::befo
 @keyframes bt-foot-in{from{opacity:0;transform:translateY(6px)}}
 @keyframes bt-foot-out{to{opacity:0;transform:translateY(6px)}}
 @media (prefers-reduced-motion:reduce){.bt-exchange,.bt-exchange .bt-dialog-foot{animation-duration:.01s}}
-.bt-soft{height:36px;border-radius:999px;border:0;background:var(--bt-hover);color:var(--bt-ink);padding:0 16px;font-size:14px;cursor:pointer;flex:none;white-space:nowrap}
+.bt-soft{height:36px;border-radius:var(--bt-radius-pill);border:0;background:var(--bt-hover);color:var(--bt-ink);padding:0 16px;font-size:var(--bt-font-control);cursor:pointer;flex:none;white-space:nowrap}
 .bt-soft:hover{background:var(--bt-active)}
-.bt-time{display:block;text-align:center;font-size:12px;line-height:16px;color:var(--bt-ink-2);padding:6px 0}
+.bt-time{display:block;text-align:center;font-size:var(--bt-font-small);line-height:16px;color:var(--bt-ink-2);padding:6px 0}
 
 .bt-panel{position:fixed;top:var(--dsh-frame-chrome-top,0px);right:0;bottom:0;width:var(--bt-panel-w,320px);pointer-events:auto;z-index:40;background:var(--bt-main);border-left:.5px solid var(--bt-line-2);display:flex;flex-direction:column;color:var(--bt-ink);font-family:var(--bt-font);box-sizing:border-box;animation:bt-pane-in .3s cubic-bezier(.2,0,0,1);transition:width ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing}}
 .bt-panel[data-leaving]{transform:translateX(100%);transition:transform .3s cubic-bezier(.2,0,0,1);pointer-events:none}
@@ -8035,80 +10284,80 @@ html[data-windows-titlebar]:not([data-fullscreen]) :is(.bt-pane,.bt-panel)::befo
 .bt-drawer-id{display:flex;flex-direction:column;align-items:center;padding:14px 16px 0}
 .bt-drawer-id>.bt-mark,.bt-drawer-id>.bt-cluster,.bt-drawer-id>.bt-pile{margin-bottom:16px}
 .bt-pile{display:flex;align-items:center;justify-content:center;line-height:0}
-.bt-pile-face{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:none;width:44px;height:44px;border-radius:50%;background:var(--bt-main);box-shadow:0 0 0 3px var(--bt-main);animation:bt-pile-in .36s cubic-bezier(.34,1.56,.64,1) backwards}
+.bt-pile-face{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:none;width:44px;height:44px;border-radius:var(--bt-radius-round);background:var(--bt-main);box-shadow:0 0 0 3px var(--bt-main);animation:bt-pile-in .36s cubic-bezier(.34,1.56,.64,1) backwards}
 .bt-pile-face+.bt-pile-face{margin-left:-10px}
-.bt-pile-more{background:var(--bt-hover);color:var(--bt-ink-2);font-size:13px;line-height:1;font-weight:500;font-variant-numeric:tabular-nums}
+.bt-pile-more{background:var(--bt-hover);color:var(--bt-ink-2);font-size:var(--bt-font-body);line-height:1;font-weight:500;font-variant-numeric:tabular-nums}
 @keyframes bt-pile-in{from{opacity:0;transform:translateY(6px) scale(.85)}}
 @media (prefers-reduced-motion:reduce){.bt-pile-face{animation:none}}
-.bt-drawer-name{font-size:17px;line-height:24px;font-weight:500;border:0;background:none;color:inherit;cursor:text;padding:0 6px;border-radius:6px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-drawer-name{font-size:var(--bt-font-title);line-height:24px;font-weight:500;border:0;background:none;color:inherit;cursor:text;padding:0 6px;border-radius:var(--bt-radius-menu-item);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bt-drawer-name:hover{background:var(--bt-hover)}
-.bt-drawer-name-input{font-size:17px;line-height:24px;text-align:center;border:.5px solid var(--bt-line-2);border-radius:6px;padding:0 6px;background:var(--bt-main);color:var(--bt-ink);outline:none;font-weight:500}
-.bt-drawer-role{font-size:12px;line-height:16px;color:var(--bt-ink-3);margin-top:6px;text-align:center}
+.bt-drawer-name-input{font-size:var(--bt-font-title);line-height:24px;text-align:center;border:.5px solid var(--bt-line-2);border-radius:var(--bt-radius-menu-item);padding:0 6px;background:var(--bt-main);color:var(--bt-ink);outline:none;font-weight:500}
+.bt-drawer-role{font-size:var(--bt-font-small);line-height:16px;color:var(--bt-ink-3);margin-top:6px;text-align:center}
 .bt-tabs{position:relative;display:flex;justify-content:center;gap:2px;margin:16px 16px 0}
-.bt-tab{position:relative;z-index:1;border:0;background:none;border-radius:9999px;padding:4px 8px;font-size:13px;line-height:20px;color:var(--bt-ink-2);cursor:pointer;white-space:nowrap}
+.bt-tab{position:relative;z-index:1;border:0;background:none;border-radius:var(--bt-radius-pill);padding:4px 8px;font-size:var(--bt-font-body);line-height:20px;color:var(--bt-ink-2);cursor:pointer;white-space:nowrap}
 .bt-tab:hover{color:var(--bt-ink)}
 .bt-tab[aria-selected=true]{background:var(--bt-hover);color:var(--bt-ink)}
-.bt-tabs>.bt-thumb{top:0;bottom:0;border-radius:9999px;background:var(--bt-hover)}
+.bt-tabs>.bt-thumb{top:0;bottom:0;border-radius:var(--bt-radius-pill);background:var(--bt-hover)}
 .bt-tabs[data-glide] .bt-tab[aria-selected=true]{background:transparent}
-.bt-drawer-body{flex:1;overflow-y:auto;padding:20px 16px 16px;font-size:13px;line-height:18px;display:flex;flex-direction:column;gap:16px}
-.bt-empty{text-align:center;color:var(--bt-ink-3);font-size:13px;line-height:18px;padding:8px 12px}
-.bt-section-title{font-size:12px;color:var(--bt-ink-2);margin-bottom:6px}
+.bt-drawer-body{flex:1;overflow-y:auto;padding:20px 16px 16px;font-size:var(--bt-font-body);line-height:18px;display:flex;flex-direction:column;gap:16px}
+.bt-empty{text-align:center;color:var(--bt-ink-3);font-size:var(--bt-font-body);line-height:18px;padding:8px 12px}
+.bt-section-title{font-size:var(--bt-font-small);color:var(--bt-ink-2);margin-bottom:6px}
 .bt-muted{color:var(--bt-ink-2)}
 .bt-swatches{display:flex;flex-wrap:wrap;gap:6px}
-.bt-swatch{width:22px;height:22px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;box-shadow:inset 0 0 0 1px var(--bt-line-2)}
+.bt-swatch{width:22px;height:22px;border-radius:var(--bt-radius-round);border:2px solid transparent;cursor:pointer;padding:0;box-shadow:inset 0 0 0 1px var(--bt-line-2)}
 .bt-swatch[aria-pressed=true]{border-color:var(--bt-ink)}
-.bt-textarea{width:100%;box-sizing:border-box;min-height:120px;border:1px solid var(--bt-line);border-radius:8px;padding:8px;background:var(--bt-card);color:var(--bt-ink);font:inherit;resize:vertical}
+.bt-textarea{width:100%;box-sizing:border-box;min-height:120px;border:1px solid var(--bt-line);border-radius:var(--bt-radius-input);padding:8px;background:var(--bt-card);color:var(--bt-ink);font:inherit;resize:vertical}
 .bt-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.bt-kv{display:flex;justify-content:space-between;gap:8px;font-size:12px;line-height:20px;color:var(--bt-ink-2)}
+.bt-kv{display:flex;justify-content:space-between;gap:8px;font-size:var(--bt-font-small);line-height:20px;color:var(--bt-ink-2)}
 .bt-kv span:last-child{color:var(--bt-ink);font-variant-numeric:tabular-nums}
-.bt-run-stats{display:flex;flex-wrap:wrap;justify-content:center;gap:0 6px;margin-top:-6px;font-size:12px;line-height:18px;color:var(--bt-ink-2);font-variant-numeric:tabular-nums}
+.bt-run-stats{display:flex;flex-wrap:wrap;justify-content:center;gap:0 6px;margin-top:-6px;font-size:var(--bt-font-small);line-height:18px;color:var(--bt-ink-2);font-variant-numeric:tabular-nums}
 .bt-run-sep{color:var(--bt-ink-3)}
 .bt-danger{color:var(--bt-danger)}
 
 /* Bot settings: fields, the avatar editor popover, and the details-pane sub-view. */
 .bt-field{display:flex;flex-direction:column;gap:6px}
-.bt-field-label{font-size:13px;line-height:18px;font-weight:500}
-.bt-input{width:100%;box-sizing:border-box;height:36px;border:1px solid var(--bt-line);border-radius:8px;padding:0 10px;background:var(--bt-card);color:var(--bt-ink);font:inherit;font-size:13px;outline:none}
+.bt-field-label{font-size:var(--bt-font-body);line-height:18px;font-weight:500}
+.bt-input{width:100%;box-sizing:border-box;height:36px;border:1px solid var(--bt-line);border-radius:var(--bt-radius-input);padding:0 10px;background:var(--bt-card);color:var(--bt-ink);font:inherit;font-size:var(--bt-font-body);outline:none}
 .bt-input:focus{border-color:var(--bt-line-2)}
 .bt-input-area{height:auto;min-height:96px;padding:8px 10px;line-height:18px;resize:vertical}
-.bt-note{font-size:12px;line-height:16px;color:var(--bt-ink-3)}
-.bt-soft-sm{height:28px;padding:0 12px;font-size:12px}
+.bt-note{font-size:var(--bt-font-small);line-height:16px;color:var(--bt-ink-3)}
+.bt-soft-sm{height:28px;padding:0 12px;font-size:var(--bt-font-small)}
 .bt-set-avatar{display:flex;justify-content:center;padding:4px 0}
 .bt-avatar-anchor{position:relative}
-.bt-avatar-trigger{position:relative;width:64px;height:64px;border:0;border-radius:50%;background:none;cursor:pointer;padding:0}
-.bt-avatar-pencil{position:absolute;right:-2px;bottom:-2px;width:22px;height:22px;border-radius:50%;background:var(--bt-main);border:1px solid var(--bt-line-2);color:var(--bt-ink-2);display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.12)}
-.bt-avedit{position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);width:300px;background:var(--bt-main);border:1px solid var(--bt-line);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.18);padding:10px;z-index:70;display:flex;flex-direction:column;gap:10px;color:var(--bt-ink);transform-origin:top center;animation:bt-pop-drop ${SPRING_TAP.duration}ms ${SPRING_TAP.easing},bt-veil-in .16s ease-out}
+.bt-avatar-trigger{position:relative;width:64px;height:64px;border:0;border-radius:var(--bt-radius-round);background:none;cursor:pointer;padding:0}
+.bt-avatar-pencil{position:absolute;right:-2px;bottom:-2px;width:22px;height:22px;border-radius:var(--bt-radius-round);background:var(--bt-main);border:1px solid var(--bt-line-2);color:var(--bt-ink-2);display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px color-mix(in srgb,var(--bt-shadow-ink) 12%,transparent)}
+.bt-avedit{position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);width:300px;background:var(--bt-main);border:1px solid var(--bt-line);border-radius:var(--bt-radius-card);box-shadow:0 12px 40px color-mix(in srgb,var(--bt-shadow-ink) 18%,transparent);padding:10px;z-index:70;display:flex;flex-direction:column;gap:10px;color:var(--bt-ink);transform-origin:top center;animation:bt-pop-drop ${SPRING_TAP.duration}ms ${SPRING_TAP.easing},bt-veil-in .16s ease-out}
 .bt-bs .bt-avedit{transform-origin:32px 0}
 .bt-avedit-top{display:flex;align-items:center;justify-content:space-between}
-.bt-avedit-tabs{position:relative;display:flex;gap:2px;background:var(--bt-hover);border-radius:999px;padding:2px}
-.bt-avedit-tab{position:relative;z-index:1;border:0;background:none;border-radius:999px;padding:3px 10px;font-size:12px;line-height:16px;color:var(--bt-ink-2);cursor:pointer}
+.bt-avedit-tabs{position:relative;display:flex;gap:2px;background:var(--bt-hover);border-radius:var(--bt-radius-pill);padding:2px}
+.bt-avedit-tab{position:relative;z-index:1;border:0;background:none;border-radius:var(--bt-radius-pill);padding:3px 10px;font-size:var(--bt-font-small);line-height:16px;color:var(--bt-ink-2);cursor:pointer}
 .bt-avedit-tab[aria-selected=true]{background:var(--bt-main);color:var(--bt-ink)}
-.bt-avedit-tabs>.bt-thumb{top:2px;bottom:2px;border-radius:999px;background:var(--bt-main);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.bt-avedit-tabs>.bt-thumb{top:2px;bottom:2px;border-radius:var(--bt-radius-pill);background:var(--bt-main);box-shadow:0 1px 2px color-mix(in srgb,var(--bt-shadow-ink) 6%,transparent)}
 .bt-avedit-tabs[data-glide] .bt-avedit-tab[aria-selected=true]{background:transparent}
 .bt-avedit-reset{color:var(--bt-ink-3)}
 .bt-avedit-reset:hover{color:var(--bt-ink)}
 .bt-shapes{display:flex;flex-direction:column;gap:2px}
 .bt-shape-row{display:grid;grid-template-columns:repeat(6,1fr);gap:2px}
-.bt-shape{position:relative;aspect-ratio:1;border:0;border-radius:8px;background:none;color:var(--bt-ink);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.bt-shape{position:relative;aspect-ratio:1;border:0;border-radius:var(--bt-radius-input);background:none;color:var(--bt-ink);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
 .bt-shape:hover{background:var(--bt-hover)}
 .bt-shape .bt-ring{position:absolute;left:50%;top:50%;width:36px;height:36px;translate:-50% -50%;overflow:visible;opacity:0;scale:.82;pointer-events:none;transition:opacity .14s ease,${spring(SPRING_POP, "scale")}}
 .bt-shape[aria-pressed=true] .bt-ring{opacity:1;scale:1}
 .bt-colors{display:flex;justify-content:space-between}
-.bt-color{width:22px;height:22px;border-radius:50%;border:2px solid transparent;padding:2px;background:none;cursor:pointer;box-sizing:border-box;transition:border-color .14s ease,${spring(SPRING_TAP, "scale")}}
+.bt-color{width:22px;height:22px;border-radius:var(--bt-radius-round);border:2px solid transparent;padding:2px;background:none;cursor:pointer;box-sizing:border-box;transition:border-color .14s ease,${spring(SPRING_TAP, "scale")}}
 .bt-color[aria-pressed=true] span{animation:bt-check-pop ${SPRING_POP.duration}ms ${SPRING_POP.easing}}
-.bt-color span{display:block;width:100%;height:100%;border-radius:50%}
+.bt-color span{display:block;width:100%;height:100%;border-radius:var(--bt-radius-round)}
 .bt-color[aria-pressed=true]{border-color:var(--bt-ink)}
-.bt-dropzone{border:1.5px dashed var(--bt-line-2);border-radius:10px;padding:18px 12px;display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--bt-ink-2);font-size:12px;line-height:16px;text-align:center}
+.bt-dropzone{border:1.5px dashed var(--bt-line-2);border-radius:var(--bt-radius-row);padding:18px 12px;display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--bt-ink-2);font-size:var(--bt-font-small);line-height:16px;text-align:center}
 .bt-dropzone[data-over]{border-color:var(--bt-accent);color:var(--bt-ink)}
-.bt-dropzone img{width:64px;height:64px;border-radius:50%;object-fit:cover}
+.bt-dropzone img{width:64px;height:64px;border-radius:var(--bt-radius-round);object-fit:cover}
 .bt-set-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .bt-about{white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}
 .bt-about[data-open]{display:block;-webkit-line-clamp:unset}
-.bt-more{border:0;background:none;color:var(--bt-ink-3);font-size:12px;line-height:16px;cursor:pointer;padding:2px 0}
+.bt-more{border:0;background:none;color:var(--bt-ink-3);font-size:var(--bt-font-small);line-height:16px;cursor:pointer;padding:2px 0}
 .bt-more:hover{color:var(--bt-ink)}
 .bt-subhead{display:flex;align-items:center;gap:4px;padding:10px 12px 4px}
-.bt-subhead-title{flex:1;font-size:15px;line-height:24px;font-weight:600;padding-left:4px}
-.bt-icon-btn{width:28px;height:28px;border-radius:50%;border:0;background:none;color:var(--bt-ink-2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+.bt-subhead-title{flex:1;font-size:var(--bt-font-heading);line-height:24px;font-weight:600;padding-left:4px}
+.bt-icon-btn{width:28px;height:28px;border-radius:var(--bt-radius-round);border:0;background:none;color:var(--bt-ink-2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
 .bt-icon-btn:hover{background:var(--bt-hover);color:var(--bt-ink)}
 .bt-set-body{gap:20px}
 .bt-drawer-model{display:flex;flex-direction:column}
@@ -8118,9 +10367,8 @@ html[data-windows-titlebar]:not([data-fullscreen]) :is(.bt-pane,.bt-panel)::befo
 
 /* Settings dialog: a 198px page list beside the page. */
 .bt-settings-layer{position:fixed;inset:var(--dsh-frame-chrome-top,0px) 0 0;z-index:60;display:flex;align-items:center;justify-content:center;font-family:var(--bt-font)}
-.bt-scrim{position:absolute;inset:0;background:rgba(0,0,0,.32);animation:bt-fade .22s ease-out}
-body[data-ds-dark-theme] .bt-scrim{background:rgba(0,0,0,.5)}
-.bt-settings{--bt-set-w:min(1100px,calc(100vw - 48px));--bt-set-h:min(780px,calc(100vh - 2*max(32px,var(--dsh-frame-overlay-top,32px))));position:relative;width:var(--bt-set-w);height:var(--bt-set-h);background:var(--bt-main);border-radius:16px;border:.5px solid var(--bt-line-2);box-shadow:0 24px 80px rgba(0,0,0,.24);display:flex;overflow:hidden;color:var(--bt-ink);animation:bt-dialog-rise ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing},bt-veil-in .2s ease-out}
+.bt-scrim{position:absolute;inset:0;background:var(--bt-scrim);animation:bt-fade .22s ease-out}
+.bt-settings{--bt-set-w:min(1100px,calc(100vw - 48px));--bt-set-h:min(780px,calc(100vh - 2*max(32px,var(--dsh-frame-overlay-top,32px))));position:relative;width:var(--bt-set-w);height:var(--bt-set-h);background:var(--bt-main);border-radius:var(--bt-radius-dialog);border:.5px solid var(--bt-glass-rim);box-shadow:var(--bt-dialog-shadow);display:flex;overflow:hidden;color:var(--bt-ink);animation:bt-dialog-rise ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing},bt-veil-in .2s ease-out}
 :is(.bt-settings-layer,.bt-mem-layer)[data-leaving]{pointer-events:none}
 :is(.bt-settings-layer,.bt-mem-layer)[data-leaving] .bt-scrim{opacity:0;transition:opacity .16s ease-in}
 :is(.bt-settings-layer,.bt-mem-layer)[data-leaving]>[role=dialog]{animation:bt-dialog-sink .16s cubic-bezier(.4,0,1,1) forwards}
@@ -8128,10 +10376,10 @@ body[data-ds-dark-theme] .bt-scrim{background:rgba(0,0,0,.5)}
 @keyframes bt-dialog-sink{to{opacity:0;transform:translateY(6px) scale(.975);filter:blur(3px)}}
 @media (prefers-reduced-motion:reduce){.bt-settings,.bt-scrim,.bt-settings-page>*{animation:bt-fade .12s ease-out!important}}
 .bt-settings-nav{position:relative;width:198px;flex:none;padding:16px 8px;border-right:.5px solid var(--bt-line);display:flex;flex-direction:column;gap:2px;background:var(--bt-sidebar);box-sizing:border-box}
-.bt-settings-item{position:relative;z-index:1;display:flex;align-items:center;gap:8px;padding:6px 8px;border:0;border-radius:8px;background:none;color:var(--bt-ink-2);font:inherit;font-size:13px;line-height:20px;cursor:pointer;text-align:left;transition:background-color .12s ease,color .12s ease}
+.bt-settings-item{position:relative;z-index:1;display:flex;align-items:center;gap:8px;padding:6px 8px;border:0;border-radius:var(--bt-radius-input);background:none;color:var(--bt-ink-2);font:inherit;font-size:var(--bt-font-body);line-height:20px;cursor:pointer;text-align:left;transition:background-color .12s ease,color .12s ease}
 .bt-settings-item:hover{color:var(--bt-ink);background:var(--bt-hover)}
-.bt-settings-item[aria-current=page]{background:var(--bt-active);color:var(--bt-ink)}
-.bt-settings-nav>.bt-thumb{left:8px;right:8px;border-radius:8px;background:var(--bt-active)}
+.bt-settings-item[aria-current=page]{background:var(--bt-nav-thumb-bg);box-shadow:var(--bt-nav-thumb-shadow);color:var(--bt-ink)}
+.bt-settings-nav>.bt-thumb{left:8px;right:8px;border-radius:var(--bt-radius-input);background:var(--bt-nav-thumb-bg);box-shadow:var(--bt-nav-thumb-shadow)}
 .bt-settings-nav[data-glide] .bt-settings-item[aria-current=page]{background:transparent}
 .bt-settings-shell{margin-top:auto}
 /* Usage while another page is open: out of the flow, so it keeps its layout, and not
@@ -8139,7 +10387,7 @@ body[data-ds-dark-theme] .bt-scrim{background:rgba(0,0,0,.5)}
 .bt-settings-usage[data-off]{position:absolute;top:0;left:198px;width:calc(var(--bt-set-w) - 198px);height:100%;box-sizing:border-box;content-visibility:hidden;pointer-events:none}
 .bt-settings-main{flex:none;display:flex;flex-direction:column;min-width:0;width:calc(var(--bt-set-w) - 198px);height:var(--bt-set-h)}
 .bt-settings-head{display:flex;align-items:center;gap:6px;padding:16px 56px 4px 20px}
-.bt-settings-head h2{margin:0;font-size:15px;line-height:24px;font-weight:600;animation:bt-veil-in .2s ease-out}
+.bt-settings-head h2{margin:0;font-size:var(--bt-font-heading);line-height:24px;font-weight:600;animation:bt-veil-in .2s ease-out}
 .bt-settings-head>.bt-icon-btn{animation:bt-back-in ${SPRING_TAP.duration}ms ${SPRING_TAP.easing},bt-veil-in .16s ease-out}
 @keyframes bt-back-in{from{translate:6px 0;scale:.8}}
 .bt-settings-scroll{flex:1;overflow-y:auto;padding:12px 20px 24px;display:flex;flex-direction:column;gap:20px;scrollbar-width:thin}
@@ -8153,37 +10401,41 @@ body[data-ds-dark-theme] .bt-scrim{background:rgba(0,0,0,.5)}
 @keyframes bt-page-up{from{transform:translateY(10px)}}
 @keyframes bt-page-in{from{transform:translateX(18px)}}
 @keyframes bt-page-out{from{transform:translateX(-18px)}}
-.bt-settings-close{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;border:0;background:var(--bt-hover);color:var(--bt-ink-2);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+.bt-settings-close{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:var(--bt-radius-round);border:0;background:var(--bt-hover);color:var(--bt-ink-2);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
 .bt-settings-close:hover{background:var(--bt-active);color:var(--bt-ink)}
 .bt-settings-form{display:flex;flex-direction:column;gap:16px}
-.bt-set-section h3{font-size:13px;line-height:18px;font-weight:600;margin:0 0 8px;padding:0 4px}
-.bt-set-card{border:1px solid var(--bt-line);border-radius:12px;background:var(--bt-card);display:flex;flex-direction:column}
+.bt-set-section h3{font-size:var(--bt-font-body);line-height:18px;font-weight:600;margin:0 0 8px;padding:0 4px}
+.bt-set-card{border:.5px solid var(--bt-glass-rim);border-radius:var(--bt-radius-card);background:var(--bt-card);box-shadow:var(--bt-card-shadow);display:flex;flex-direction:column}
 .bt-set-card>*+*{border-top:.5px solid var(--bt-line)}
-.bt-set-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border:0;background:none;color:var(--bt-ink);font:inherit;font-size:13px;line-height:18px;text-align:left;width:100%;box-sizing:border-box;border-radius:0}
+.bt-set-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border:0;background:none;color:var(--bt-ink);font:inherit;font-size:var(--bt-font-body);line-height:18px;text-align:left;width:100%;box-sizing:border-box;border-radius:var(--bt-radius-none)}
 button.bt-set-row{cursor:pointer}
 button.bt-set-row:hover{background:var(--bt-hover)}
 .bt-set-card>.bt-set-row+.bt-set-row{border-top:.5px solid var(--bt-line)}
-.bt-set-row:first-child{border-top-left-radius:12px;border-top-right-radius:12px}
-.bt-set-row:last-child{border-bottom-left-radius:12px;border-bottom-right-radius:12px}
+.bt-set-row:first-child{border-top-left-radius:var(--bt-radius-card);border-top-right-radius:var(--bt-radius-card)}
+.bt-set-row:last-child{border-bottom-left-radius:var(--bt-radius-card);border-bottom-right-radius:var(--bt-radius-card)}
 .bt-set-copy{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
-.bt-set-hint{font-size:12px;line-height:16px;color:color-mix(in srgb,var(--bt-ink-2) 50%,var(--bt-ink-3))}
+.bt-appearance .bt-select{width:216px;max-width:100%}
+.bt-appearance .bt-range{max-width:100%}
+.bt-appearance .bt-swatches{flex-wrap:wrap}
+.bt-appearance :is(button,select,input):focus-visible,.bt-appearance .bt-swatch-custom:focus-within{outline:2px solid var(--bt-accent);outline-offset:2px}
+.bt-set-hint{font-size:var(--bt-font-small);line-height:16px;color:color-mix(in srgb,var(--bt-ink-2) 50%,var(--bt-ink-3))}
 .bt-set-control{flex:none;display:flex;align-items:center;gap:6px}
 .bt-set-places .bt-set-control{flex:0 1 auto;max-width:50%;min-width:0}
 .bt-set-places .bt-set-hint{overflow-wrap:anywhere}
-.bt-set-value{font-size:13px;color:var(--bt-ink-2);text-align:right}
+.bt-set-value{font-size:var(--bt-font-body);color:var(--bt-ink-2);text-align:right}
 .bt-set-bot{flex:1;display:flex;align-items:center;gap:8px;min-width:0}
-.bt-browser-note{margin:0;padding:10px 12px;color:var(--bt-ink-2);font-size:12px;line-height:17px}
+.bt-browser-note{margin:0;padding:10px 12px;color:var(--bt-ink-2);font-size:var(--bt-font-small);line-height:17px}
 .bt-browser-grant{display:flex;align-items:center;gap:12px;padding:10px 12px}
 .bt-browser-grant+.bt-browser-grant{border-top:.5px solid var(--bt-line)}
-.bt-browser-grant-who{display:flex;align-items:center;gap:8px;flex:0 0 150px;min-width:0;font-size:13px}
+.bt-browser-grant-who{display:flex;align-items:center;gap:8px;flex:0 0 150px;min-width:0;font-size:var(--bt-font-body)}
 .bt-browser-grant-who>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bt-browser-grant-meta{display:flex;flex:1;flex-direction:column;gap:4px;min-width:0}
-.bt-browser-grant-site{font-size:13px;overflow-wrap:anywhere}
+.bt-browser-grant-site{font-size:var(--bt-font-body);overflow-wrap:anywhere}
 .bt-browser-grant-kinds{display:flex;gap:4px;flex-wrap:wrap}
 .bt-browser-grant-expired{opacity:.5}
 .bt-browser-action-list,.bt-browser-duration{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.bt-browser-action-choice{display:inline-flex;align-items:center;gap:4px;font-size:12px;white-space:nowrap}
-.bt-browser-duration-choice{border:1px solid var(--bt-line);border-radius:8px;padding:5px 8px;background:var(--bt-card);color:var(--bt-ink-2);font:inherit;font-size:12px;cursor:pointer}
+.bt-browser-action-choice{display:inline-flex;align-items:center;gap:4px;font-size:var(--bt-font-small);white-space:nowrap}
+.bt-browser-duration-choice{border:1px solid var(--bt-line);border-radius:var(--bt-radius-input);padding:5px 8px;background:var(--bt-card);color:var(--bt-ink-2);font:inherit;font-size:var(--bt-font-small);cursor:pointer}
 .bt-browser-duration-choice[aria-pressed=true]{background:var(--bt-hover);color:var(--bt-ink)}
 .bt-browser-form>.bt-set-row>.bt-set-control{flex:1;min-width:0}
 .bt-browser-form>.bt-set-row+.bt-set-row{border-top:.5px solid var(--bt-line)}
@@ -8196,17 +10448,17 @@ button.bt-set-row:hover{background:var(--bt-hover)}
 /* Settings → Connectors. */
 .bt-connector{display:flex;flex-direction:column;gap:10px;padding:12px}
 .bt-connector-head{display:flex;align-items:center;gap:12px;min-width:0}
-.bt-connector-mark{flex:none;width:36px;height:36px;border-radius:10px;background:var(--bt-card);border:.5px solid var(--bt-line);display:flex;align-items:center;justify-content:center;color:var(--bt-ink)}
+.bt-connector-mark{flex:none;width:36px;height:36px;border-radius:var(--bt-radius-row);background:var(--bt-card);border:.5px solid var(--bt-line);display:flex;align-items:center;justify-content:center;color:var(--bt-ink)}
 .bt-connector-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.bt-connector-name{font-size:14px;line-height:20px;font-weight:500}
-.bt-connector-status{font-size:12px;line-height:16px;color:var(--bt-ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-connector-name{font-size:var(--bt-font-control);line-height:20px;font-weight:500}
+.bt-connector-status{font-size:var(--bt-font-small);line-height:16px;color:var(--bt-ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bt-connector[data-state=ready] .bt-connector-status{color:var(--bt-ink-2)}
 .bt-connector[data-state=error] .bt-connector-status{color:var(--bt-danger);white-space:normal}
 .bt-connector-actions{flex:none;display:flex;gap:6px}
 .bt-connector-form{display:flex;flex-direction:column;gap:8px;padding-left:48px;animation:bt-q-in ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing},bt-veil-in .2s ease-out}
 .bt-connector-form-row{display:flex;align-items:center;gap:6px}
-.bt-connector-link{flex:1;font-size:12px;color:var(--bt-ink-2)}
-.bt-connector-error{padding-left:48px;font-size:12px;line-height:16px;color:var(--bt-danger)}
+.bt-connector-link{flex:1;font-size:var(--bt-font-small);color:var(--bt-ink-2)}
+.bt-connector-error{padding-left:48px;font-size:var(--bt-font-small);line-height:16px;color:var(--bt-danger)}
 
 /* Shell chrome reshaped for the team view. Selectors use stable data attributes where the
    shell offers them and CSS-module name suffixes elsewhere. */
@@ -8221,7 +10473,7 @@ html[data-windows-titlebar] .bt-side-collapse{display:none}
    toggle expands the shell sidebar first, and pulling it back afterwards is a
    visible flash of the shell's column. */
 html[data-windows-titlebar] [class*="_logoRow"]>[class*="_toggle"]{display:none!important}
-html[data-windows-titlebar] .bt-title-toggle{position:fixed;left:12px;top:calc((var(--dsh-windows-titlebar-height,0px) - 28px) / 2);width:28px;height:28px;z-index:30;-webkit-app-region:no-drag;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:6px;padding:0;background:transparent;color:var(--bt-ink);cursor:pointer;font-family:var(--bt-font)}
+html[data-windows-titlebar] .bt-title-toggle{position:fixed;left:12px;top:calc((var(--dsh-windows-titlebar-height,0px) - 28px) / 2);width:28px;height:28px;z-index:30;-webkit-app-region:no-drag;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:var(--bt-radius-menu-item);padding:0;background:transparent;color:var(--bt-ink);cursor:pointer;font-family:var(--bt-font)}
 html[data-windows-titlebar] .bt-title-toggle:hover{background:var(--bt-hover)}
 /* Elsewhere the switch shows only while the column is hidden, where the column's
    own top row had it. */
@@ -8236,33 +10488,33 @@ html:not([data-windows-titlebar]) [class*="_footArea"],:not([class*="_collapsed"
 [class*="_footArea"]>[class*="_footerActions"],[class*="_footArea"]>[class*="_footerActions"]>div{display:contents!important}
 [class*="_footArea"]>[class*="_footerActions"]>div>*{grid-column:1/-1}
 [class*="_footArea"]>[class*="_settingsArea"]{grid-column:1;order:1;width:auto!important}
-[class*="_footArea"] button[aria-label="Settings"]{width:auto!important;padding:0!important;background:none!important;border-radius:50%!important;height:auto!important}
+[class*="_footArea"] button[aria-label="Settings"]{width:auto!important;padding:0!important;background:none!important;border-radius:var(--bt-radius-round)!important;height:auto!important}
 [class*="_widthHandle"]{display:none!important}
 
 .bt-voice-pane{flex-direction:column;align-items:center;justify-content:center;animation:bt-fade .2s ease-out}
 .bt-voice-stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:24px;max-width:560px;text-align:center}
 .bt-voice-orb{position:relative;width:200px;height:200px;display:grid;place-items:center;margin-bottom:8px}
-.bt-voice-ring{position:absolute;inset:34px;border-radius:50%;background:var(--bt-hover);transform:scale(calc(1 + var(--bt-level,0) * .55));transition:transform .08s linear}
+.bt-voice-ring{position:absolute;inset:34px;border-radius:var(--bt-radius-round);background:var(--bt-hover);transform:scale(calc(1 + var(--bt-level,0) * .55));transition:transform .08s linear}
 .bt-voice-ring-2{inset:14px;background:none;box-shadow:inset 0 0 0 1px var(--bt-line-2);transform:scale(calc(.94 + var(--bt-level,0) * .3));opacity:.8}
 .bt-voice-stage[data-phase=thinking] .bt-voice-ring{animation:bt-voice-breathe 1.6s ease-in-out infinite}
 .bt-voice-stage[data-phase=speaking] .bt-voice-ring{animation:bt-voice-speak .9s ease-in-out infinite}
 @keyframes bt-voice-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
 @keyframes bt-voice-speak{0%,100%{transform:scale(1.04)}30%{transform:scale(1.2)}60%{transform:scale(1.1)}}
 .bt-voice-orb>.bt-mark{position:relative}
-.bt-voice-name{font-size:16px;line-height:22px;font-weight:500}
-.bt-voice-status{font-size:13px;line-height:18px;color:var(--bt-ink-2);min-height:18px}
-.bt-voice-caption{min-height:44px;font-size:15px;line-height:22px;color:var(--bt-ink);animation:bt-blur-in .25s ease-out;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
-.bt-voice-note{font-size:12px;color:var(--bt-danger)}
-.bt-voice-setup{height:32px;padding:0 14px;border-radius:16px;border:0;background:var(--bt-hover);color:var(--bt-ink);font:inherit;font-size:13px;cursor:pointer;transition:background-color .15s ease}
+.bt-voice-name{font-size:var(--bt-font-large);line-height:22px;font-weight:500}
+.bt-voice-status{font-size:var(--bt-font-body);line-height:18px;color:var(--bt-ink-2);min-height:18px}
+.bt-voice-caption{min-height:44px;font-size:var(--bt-font-heading);line-height:22px;color:var(--bt-ink);animation:bt-blur-in .25s ease-out;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.bt-voice-note{font-size:var(--bt-font-small);color:var(--bt-danger)}
+.bt-voice-setup{height:32px;padding:0 14px;border-radius:var(--bt-radius-popover);border:0;background:var(--bt-hover);color:var(--bt-ink);font:inherit;font-size:var(--bt-font-body);cursor:pointer;transition:background-color .15s ease}
 .bt-voice-setup:hover{background:var(--bt-active)}
 .bt-voice-bar{display:flex;gap:16px;padding:0 0 32px}
-.bt-voice-btn{position:relative;width:52px;height:52px;border-radius:50%;border:0;background:var(--bt-hover);color:var(--bt-ink);display:grid;place-items:center;cursor:pointer;transition:background-color .15s ease,transform .12s ease}
+.bt-voice-btn{position:relative;width:52px;height:52px;border-radius:var(--bt-radius-round);border:0;background:var(--bt-hover);color:var(--bt-ink);display:grid;place-items:center;cursor:pointer;transition:background-color .15s ease,transform .12s ease}
 .bt-voice-btn:hover{background:var(--bt-active)}
 .bt-voice-btn:active{transform:scale(.94)}
 .bt-voice-btn[aria-pressed=true]{background:var(--bt-user);color:var(--bt-user-ink)}
-.bt-voice-slash{position:absolute;width:24px;height:2px;border-radius:1px;background:currentColor;transform:rotate(-45deg)}
-.bt-voice-end{background:#ff3e51;color:#fff}
-.bt-voice-end:hover{background:#e02135}
+.bt-voice-slash{position:absolute;width:24px;height:2px;border-radius:var(--bt-radius-hairline);background:currentColor;transform:rotate(-45deg)}
+.bt-voice-end{background:var(--bt-recording);color:var(--bt-static-light)}
+.bt-voice-end:hover{background:var(--bt-danger)}
 @keyframes bt-fade{from{opacity:0}to{opacity:1}}
 @keyframes bt-blur-in{from{opacity:0;filter:blur(2px)}to{opacity:1;filter:blur(0)}}
 @media (prefers-reduced-motion:reduce){.bt-voice-pane,.bt-voice-caption,.bt-voice-ring{animation:none!important}}
@@ -8285,15 +10537,15 @@ html:not([data-windows-titlebar]) [class*="_footArea"],:not([class*="_collapsed"
    (the whole of it unless set). The toolbar floats over the message's top right. */
 body[data-bt-layout=flat] .bt-astack{align-items:stretch;gap:10px}
 body[data-bt-layout=flat] .bt-msg,body[data-bt-layout=flat] .bt-astack[data-lead]>.bt-msg{align-items:stretch;max-width:calc(var(--bt-flat-w) * 100%)}
-body[data-bt-layout=flat] .bt-bubble{background:none;padding:0;border-radius:0}
-body[data-bt-layout=flat] .bt-tools{top:-14px;right:0;left:auto;margin-left:0;transform:none;padding:2px;border-radius:999px;background:var(--bt-card);box-shadow:inset 0 0 0 .5px var(--bt-line-2),0 4px 14px rgba(0,0,0,.14)}
+body[data-bt-layout=flat] .bt-bubble{background:none;padding:0;border-radius:var(--bt-radius-none)}
+body[data-bt-layout=flat] .bt-tools{top:-14px;right:0;left:auto;margin-left:0;transform:none;padding:2px;border-radius:var(--bt-radius-pill);background:var(--bt-card);box-shadow:inset 0 0 0 .5px var(--bt-line-2),0 4px 14px color-mix(in srgb,var(--bt-shadow-ink) 14%,transparent)}
 body[data-bt-layout=flat] .bt-tools::after{display:none}
-.bt-tool{width:24px;height:24px;border:0;padding:0;border-radius:6px;background:none;color:var(--bt-ink-2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background-color .12s ease,color .12s ease}
+.bt-tool{width:24px;height:24px;border:0;padding:0;border-radius:var(--bt-radius-menu-item);background:none;color:var(--bt-ink-2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background-color .12s ease,color .12s ease}
 .bt-tool:hover,.bt-tool[aria-expanded=true]{background:var(--bt-hover);color:var(--bt-ink)}
 .bt-tool:active{background:var(--bt-active)}
 .bt-tool:focus-visible{outline:2px solid var(--bt-accent);outline-offset:-2px}
-.bt-react-strip{position:fixed;z-index:60;pointer-events:auto;display:flex;gap:2px;padding:4px;border-radius:999px;background:var(--bt-main);border:.5px solid var(--bt-line-2);box-shadow:0 10px 20px -3px rgba(0,0,0,.08),0 4px 6px -4px rgba(0,0,0,.06);transform:translate(-50%,-100%);transform-origin:bottom center;animation:bt-pop-lift ${SPRING_TAP.duration}ms ${SPRING_TAP.easing},bt-veil-in .14s ease-out}
-.bt-react-strip button{width:32px;height:32px;border:0;border-radius:50%;background:none;font-size:18px;line-height:1;cursor:pointer;transition:background-color .12s ease,${spring(SPRING_POP, "transform")};animation:bt-check-pop ${SPRING_POP.duration}ms ${SPRING_POP.easing} backwards}
+.bt-react-strip{position:fixed;z-index:60;pointer-events:auto;display:flex;gap:2px;padding:4px;border-radius:var(--bt-radius-pill);background:var(--bt-main);border:.5px solid var(--bt-line-2);box-shadow:0 10px 20px -3px color-mix(in srgb,var(--bt-shadow-ink) 8%,transparent),0 4px 6px -4px color-mix(in srgb,var(--bt-shadow-ink) 6%,transparent);transform:translate(-50%,-100%);transform-origin:bottom center;animation:bt-pop-lift ${SPRING_TAP.duration}ms ${SPRING_TAP.easing},bt-veil-in .14s ease-out}
+.bt-react-strip button{width:32px;height:32px;border:0;border-radius:var(--bt-radius-round);background:none;font-size:var(--bt-font-display);line-height:1;cursor:pointer;transition:background-color .12s ease,${spring(SPRING_POP, "transform")};animation:bt-check-pop ${SPRING_POP.duration}ms ${SPRING_POP.easing} backwards}
 .bt-react-strip button:nth-child(2){animation-delay:20ms}
 .bt-react-strip button:nth-child(3){animation-delay:40ms}
 .bt-react-strip button:nth-child(4){animation-delay:60ms}
@@ -8301,16 +10553,16 @@ body[data-bt-layout=flat] .bt-tools::after{display:none}
 .bt-react-strip button:hover{background:var(--bt-hover);transform:scale(1.15)}
 .bt-react-strip button:active{transform:scale(.92)}
 .bt-reacts{display:flex;gap:4px;margin-top:4px}
-.bt-react{height:22px;min-width:30px;padding:0 6px;border-radius:999px;border:.5px solid var(--bt-line-2);background:var(--bt-main);font-size:13px;line-height:20px;cursor:pointer;animation:bt-react-pop ${SPRING_POP.duration}ms ${SPRING_POP.easing};transition:background-color .12s ease,${spring(SPRING_TAP, "scale")}}
+.bt-react{height:22px;min-width:30px;padding:0 6px;border-radius:var(--bt-radius-pill);border:.5px solid var(--bt-line-2);background:var(--bt-main);font-size:var(--bt-font-body);line-height:20px;cursor:pointer;animation:bt-react-pop ${SPRING_POP.duration}ms ${SPRING_POP.easing};transition:background-color .12s ease,${spring(SPRING_TAP, "scale")}}
 .bt-react:hover{background:var(--bt-hover)}
 .bt-react:active{scale:.92}
 @keyframes bt-react-pop{from{transform:scale(.6);opacity:0}}
-.bt-you{width:36px;height:36px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bt-ink) 5%,var(--bt-sidebar));color:var(--bt-ink-2);box-shadow:inset 0 0 0 1px var(--bt-line);transition:background-color .12s ease}
+.bt-you{width:36px;height:36px;border-radius:var(--bt-radius-round);display:inline-flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bt-ink) 5%,var(--bt-sidebar));color:var(--bt-ink-2);box-shadow:inset 0 0 0 1px var(--bt-line);transition:background-color .12s ease}
 button:hover .bt-you{background:color-mix(in srgb,var(--bt-ink) 9%,var(--bt-sidebar))}
 .bt-you-wrap{display:inline-flex;padding:0}
 
-.bt-menu{position:fixed;pointer-events:auto;z-index:60;min-width:200px;padding:6px;border-radius:12px;background:var(--bt-main);border:.5px solid var(--bt-line-2);box-shadow:0 10px 20px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1),0 0 0 1px rgba(228,228,228,.04);display:flex;flex-direction:column;gap:2px;transform-origin:var(--bt-origin,top left);animation:bt-pop-drop ${SPRING_TAP.duration}ms ${SPRING_TAP.easing},bt-veil-in .14s ease-out;font-family:var(--bt-font);box-sizing:border-box}
-.bt-menu button{display:flex;align-items:center;gap:4px;width:100%;min-height:30px;text-align:left;border:0;background:none;border-radius:6px;padding:6px 8px;font:inherit;font-size:13px;line-height:18px;color:var(--bt-ink);cursor:pointer;box-sizing:border-box}
+.bt-menu{position:fixed;pointer-events:auto;z-index:60;min-width:200px;padding:6px;border-radius:var(--bt-radius-card);background:var(--bt-main);border:.5px solid var(--bt-line-2);box-shadow:0 10px 20px -3px color-mix(in srgb,var(--bt-shadow-ink) 10%,transparent),0 4px 6px -4px color-mix(in srgb,var(--bt-shadow-ink) 10%,transparent),0 0 0 1px var(--bt-hairline);display:flex;flex-direction:column;gap:2px;transform-origin:var(--bt-origin,top left);animation:bt-pop-drop ${SPRING_TAP.duration}ms ${SPRING_TAP.easing},bt-veil-in .14s ease-out;font-family:var(--bt-font);box-sizing:border-box}
+.bt-menu button{display:flex;align-items:center;gap:4px;width:100%;min-height:30px;text-align:left;border:0;background:none;border-radius:var(--bt-radius-menu-item);padding:6px 8px;font:inherit;font-size:var(--bt-font-body);line-height:18px;color:var(--bt-ink);cursor:pointer;box-sizing:border-box}
 .bt-menu button:hover{background:var(--bt-hover)}
 .bt-menu button svg{flex:none;width:16px;height:16px;margin:0 1px}
 .bt-menu .bt-danger{color:var(--bt-danger)}
@@ -8318,46 +10570,46 @@ button:hover .bt-you{background:color-mix(in srgb,var(--bt-ink) 9%,var(--bt-side
 .bt-menu-up{--bt-origin:bottom left;animation-name:bt-pop-lift,bt-veil-in}
 .bt-menu[data-leaving]{pointer-events:none;animation:bt-pop-out .12s cubic-bezier(.4,0,1,1) forwards}
 .bt-menu-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bt-menu-hint{flex:none;color:var(--bt-ink-3);font-size:12px;font-variant-numeric:tabular-nums}
+.bt-menu-hint{flex:none;color:var(--bt-ink-3);font-size:var(--bt-font-small);font-variant-numeric:tabular-nums}
 .bt-palette-layer{position:fixed;inset:var(--dsh-frame-chrome-top,0px) 0 0;z-index:70;pointer-events:auto;font-family:var(--bt-font)}
-.bt-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.46);animation:bt-fade .22s ease-out}
-.bt-palette{position:absolute;top:50%;left:50%;width:min(560px,92vw);transform:translate(-50%,-50%);display:flex;flex-direction:column;border-radius:12px;background:var(--bt-main);border:1px solid var(--bt-line-2);box-shadow:0 24px 48px -12px rgba(0,0,0,.25);overflow:hidden;color:var(--bt-ink);animation:bt-palette-in ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing},bt-veil-in .2s ease-out}
+.bt-backdrop{position:absolute;inset:0;background:color-mix(in srgb,var(--bt-shadow-ink) 46%,transparent);animation:bt-fade .22s ease-out}
+.bt-palette{position:absolute;top:50%;left:50%;width:min(560px,92vw);transform:translate(-50%,-50%);display:flex;flex-direction:column;border-radius:var(--bt-radius-card);background:var(--bt-main);border:1px solid var(--bt-line-2);box-shadow:0 24px 48px -12px color-mix(in srgb,var(--bt-shadow-ink) 25%,transparent);overflow:hidden;color:var(--bt-ink);animation:bt-palette-in ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing},bt-veil-in .2s ease-out}
 .bt-palette-layer[data-leaving]{pointer-events:none}
 .bt-palette-layer[data-leaving] .bt-backdrop{opacity:0;transition:opacity .16s ease-in}
 .bt-palette-layer[data-leaving] .bt-palette{animation:bt-dialog-sink .16s cubic-bezier(.4,0,1,1) forwards}
 @keyframes bt-palette-in{from{translate:0 -10px;scale:.96}}
 .bt-palette-head{display:flex;align-items:center;gap:4px;padding:14px 10px 14px 14px;border-bottom:.5px solid var(--bt-line-2)}
 .bt-palette-glyph{display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;color:var(--bt-ink-3);margin-right:4px}
-.bt-palette-head input{flex:1;min-width:0;border:0;outline:none;background:none;color:var(--bt-ink);font:inherit;font-size:15px;line-height:22px;padding:0}
+.bt-palette-head input{flex:1;min-width:0;border:0;outline:none;background:none;color:var(--bt-ink);font:inherit;font-size:var(--bt-font-heading);line-height:22px;padding:0}
 .bt-palette-head input::placeholder{color:var(--bt-ink-3)}
-.bt-palette-clear{width:18px;height:18px;border:0;padding:0;border-radius:6px;background:none;color:var(--bt-ink-3);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.bt-palette-clear{width:18px;height:18px;border:0;padding:0;border-radius:var(--bt-radius-menu-item);background:none;color:var(--bt-ink-3);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
 .bt-palette-clear:hover{color:var(--bt-ink)}
 .bt-palette-clear svg{width:12px;height:12px}
 .bt-palette-list{position:relative;height:402px;height:min(402px,54vh);height:min(402px,54dvh);overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:2px;box-sizing:border-box}
-.bt-palette-list>.bt-thumb,.bt-drop-list>.bt-thumb{left:0;right:0;border-radius:8px;background:var(--bt-active)}
+.bt-palette-list>.bt-thumb,.bt-drop-list>.bt-thumb{left:0;right:0;border-radius:var(--bt-radius-input);background:var(--bt-active)}
 .bt-palette-list>.bt-thumb{left:8px;right:8px}
 :is(.bt-palette-list,.bt-drop-list)[data-glide] [aria-selected=true]{background:transparent}
 :is(.bt-palette-row,.bt-palette-section,.bt-drop-list>.bt-option){position:relative;z-index:1}
-.bt-palette-section{padding:8px 8px 4px;font-size:12px;line-height:16px;color:var(--bt-ink-3);flex:none}
+.bt-palette-section{padding:8px 8px 4px;font-size:var(--bt-font-small);line-height:16px;color:var(--bt-ink-3);flex:none}
 .bt-palette-section:first-of-type{padding-top:0}
-.bt-palette-row{flex:none;display:flex;align-items:center;gap:8px;height:49px;padding:6px 10px 6px 8px;border:0;border-radius:8px;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;box-sizing:border-box;width:100%}
+.bt-palette-row{flex:none;display:flex;align-items:center;gap:8px;height:49px;padding:6px 10px 6px 8px;border:0;border-radius:var(--bt-radius-input);background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;box-sizing:border-box;width:100%}
 .bt-palette-row[aria-selected=true]{background:var(--bt-active)}
 .bt-palette-lead{flex:none;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center}
-.bt-palette-cmd{width:24px;height:24px;border-radius:50%;background:var(--bt-hover);display:inline-flex;align-items:center;justify-content:center;color:var(--bt-ink-2)}
+.bt-palette-cmd{width:24px;height:24px;border-radius:var(--bt-radius-round);background:var(--bt-hover);display:inline-flex;align-items:center;justify-content:center;color:var(--bt-ink-2)}
 .bt-palette-cmd svg{width:14px;height:14px}
-.bt-palette-agent{width:24px;height:24px;border-radius:50%;background:var(--bt-hover);display:inline-flex;align-items:center;justify-content:center;color:var(--bt-ink)}
+.bt-palette-agent{width:24px;height:24px;border-radius:var(--bt-radius-round);background:var(--bt-hover);display:inline-flex;align-items:center;justify-content:center;color:var(--bt-ink)}
 .bt-palette-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
-.bt-palette-title{font-size:14px;line-height:20px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bt-palette-sub{font-size:12px;line-height:16px;color:var(--bt-ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bt-palette-badge{flex:none;font-size:11px;line-height:16px;padding:0 6px;border-radius:4px;background:var(--bt-tag-bg);color:var(--bt-tag-ink)}
+.bt-palette-title{font-size:var(--bt-font-control);line-height:20px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-palette-sub{font-size:var(--bt-font-small);line-height:16px;color:var(--bt-ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-palette-badge{flex:none;font-size:var(--bt-font-caption);line-height:16px;padding:0 6px;border-radius:var(--bt-radius-tag);background:var(--bt-tag-bg);color:var(--bt-tag-ink)}
 .bt-palette-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 16px;text-align:center;animation:bt-veil-in .22s ease-out}
 .bt-palette-empty-icon{color:var(--bt-line-2)}
 .bt-palette-empty-icon svg{width:32px;height:32px}
-.bt-palette-empty-label{font-size:14px;font-weight:500;color:var(--bt-ink-2)}
-.bt-palette-empty-hint{font-size:13px;line-height:16px;color:var(--bt-ink-3)}
+.bt-palette-empty-label{font-size:var(--bt-font-control);font-weight:500;color:var(--bt-ink-2)}
+.bt-palette-empty-hint{font-size:var(--bt-font-body);line-height:16px;color:var(--bt-ink-3)}
 @media (prefers-reduced-motion:reduce){.bt-palette{animation:bt-fade .1s ease-out}}
 .bt-account-menu{width:224px}
-.bt-account{flex:none;width:36px;height:36px;border:0;padding:0;background:none;border-radius:50%;cursor:pointer;display:inline-flex}
+.bt-account{flex:none;width:36px;height:36px;border:0;padding:0;background:none;border-radius:var(--bt-radius-round);cursor:pointer;display:inline-flex}
 .bt-account:hover .bt-you,.bt-account[aria-expanded=true] .bt-you{background:color-mix(in srgb,var(--bt-ink) 9%,var(--bt-sidebar))}
 /* Popover keyframes move translate and scale, which compose with a transform the popover
    already has. */
@@ -8370,79 +10622,79 @@ button:hover .bt-you{background:color-mix(in srgb,var(--bt-ink) 9%,var(--bt-side
 .bt-brand:hover{background:var(--bt-hover)}
 .bt-drop-list{position:relative;display:flex;flex-direction:column;gap:2px}
 .bt-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
-.bt-pick{display:flex;flex-direction:column;align-items:center;gap:4px;padding:7px 2px 6px;border-radius:10px;border:1px solid transparent;background:none;color:var(--bt-ink);cursor:pointer;font:inherit;font-size:11px;line-height:14px;min-width:0}
+.bt-pick{display:flex;flex-direction:column;align-items:center;gap:4px;padding:7px 2px 6px;border-radius:var(--bt-radius-row);border:1px solid transparent;background:none;color:var(--bt-ink);cursor:pointer;font:inherit;font-size:var(--bt-font-caption);line-height:14px;min-width:0}
 .bt-pick:hover{background:var(--bt-hover)}
 .bt-pick[aria-pressed=true]{border-color:var(--bt-line-2);background:var(--bt-hover)}
 .bt-pick>span:last-child:not(.bt-mark){max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bt-pick:hover .bt-mark[data-state=idle] .bt-eye{animation:bt-blink .5s linear 1}
-.bt-select{width:100%;height:34px;box-sizing:border-box;border-radius:8px;border:1px solid var(--bt-line);background:var(--bt-card);color:var(--bt-ink);padding:0 8px;font:inherit;font-size:13px}
-.bt-note{font-size:12px;line-height:16px;color:var(--bt-ink-2);margin-top:6px}
+.bt-select{width:100%;height:34px;box-sizing:border-box;border-radius:var(--bt-radius-input);border:1px solid var(--bt-line);background:var(--bt-card);color:var(--bt-ink);padding:0 8px;font:inherit;font-size:var(--bt-font-body)}
+.bt-note{font-size:var(--bt-font-small);line-height:16px;color:var(--bt-ink-2);margin-top:6px}
 .bt-swatch-sep{width:1px;height:22px;background:var(--bt-line-2);margin:0 2px}
-.bt-swatch-custom{position:relative;overflow:hidden;background:conic-gradient(#ff3e51,#ffaf38,#00c972,#1cc3b0,#2a92fe,#a97efe,#ff5eb1,#ff3e51);box-sizing:border-box}
+.bt-swatch-custom{position:relative;overflow:hidden;background:conic-gradient(var(--bt-ink-red),var(--bt-ink-yellow),var(--bt-ink-green),var(--bt-ink-cyan),var(--bt-ink-blue),var(--bt-ink-violet),var(--bt-ink-magenta),var(--bt-ink-red));box-sizing:border-box}
 .bt-swatch-custom[data-on=true]{border-color:var(--bt-ink)}
 .bt-swatch-custom input{position:absolute;inset:-4px;width:calc(100% + 8px);height:calc(100% + 8px);opacity:0;cursor:pointer;border:0;padding:0}
 .bt-swatch-default{background:linear-gradient(135deg,var(--bt-card) 0 46%,var(--bt-line-2) 46% 54%,var(--bt-card) 54%);box-shadow:inset 0 0 0 1px var(--bt-line-2)}
 .bt-states{display:flex;flex-wrap:wrap;gap:4px}
-.bt-state{border:1px solid var(--bt-line);background:none;border-radius:999px;font:inherit;font-size:11px;line-height:16px;padding:2px 8px;color:var(--bt-ink-2);cursor:pointer}
+.bt-state{border:1px solid var(--bt-line);background:none;border-radius:var(--bt-radius-pill);font:inherit;font-size:var(--bt-font-caption);line-height:16px;padding:2px 8px;color:var(--bt-ink-2);cursor:pointer}
 .bt-state:hover{color:var(--bt-ink)}
 .bt-state[aria-pressed=true]{background:var(--bt-active);border-color:var(--bt-line-2);color:var(--bt-ink)}
-.bt-theme-chip{position:relative;width:46px;height:30px;border-radius:8px;box-shadow:inset 0 0 0 1px var(--bt-line-2);background:linear-gradient(90deg,var(--ls) 0 36%,var(--lb) 36%);overflow:hidden}
-.bt-theme-chip i{position:absolute;right:7px;bottom:7px;width:10px;height:10px;border-radius:50%;background:var(--la)}
+.bt-theme-chip{position:relative;width:46px;height:30px;border-radius:var(--bt-radius-input);box-shadow:inset 0 0 0 1px var(--bt-line-2);background:linear-gradient(90deg,var(--ls) 0 36%,var(--lb) 36%);overflow:hidden}
+.bt-theme-chip i{position:absolute;right:7px;bottom:7px;width:10px;height:10px;border-radius:var(--bt-radius-round);background:var(--la)}
 body[data-ds-dark-theme] .bt-theme-chip{background:linear-gradient(90deg,var(--ds) 0 36%,var(--db) 36%)}
 body[data-ds-dark-theme] .bt-theme-chip i{background:var(--da)}
 .bt-tabs{flex-wrap:wrap}
 .bt-soft:disabled{opacity:.4;cursor:default}
-.bt-group-role{margin-left:6px;font-size:11px;line-height:14px;padding:1px 5px;border-radius:4px;background:var(--bt-tag-bg);color:var(--bt-tag-ink);vertical-align:1px}
-.bt-mini{flex:none;border:0;background:none;border-radius:6px;padding:2px 6px;font:inherit;font-size:12px;line-height:18px;color:var(--bt-ink-2);cursor:pointer}
+.bt-group-role{margin-left:6px;font-size:var(--bt-font-caption);line-height:14px;padding:1px 5px;border-radius:var(--bt-radius-tag);background:var(--bt-tag-bg);color:var(--bt-tag-ink);vertical-align:1px}
+.bt-mini{flex:none;border:0;background:none;border-radius:var(--bt-radius-menu-item);padding:2px 6px;font:inherit;font-size:var(--bt-font-small);line-height:18px;color:var(--bt-ink-2);cursor:pointer}
 .bt-mini:hover{background:var(--bt-active);color:var(--bt-ink)}
 .bt-add{color:var(--bt-ink-2);margin-top:2px}
 .bt-add:hover,.bt-addlist .bt-option:hover{background:var(--bt-hover);color:var(--bt-ink)}
-.bt-addlist{display:flex;flex-direction:column;margin-top:4px;padding:4px;border:1px solid var(--bt-line);border-radius:10px;background:var(--bt-card);animation:bt-rise .16s ease-out}
-.bt-seg{position:relative;display:flex;gap:2px;padding:2px;border-radius:10px;background:var(--bt-hover)}
+.bt-addlist{display:flex;flex-direction:column;margin-top:4px;padding:4px;border:1px solid var(--bt-line);border-radius:var(--bt-radius-row);background:var(--bt-card);animation:bt-rise .16s ease-out}
+.bt-seg{position:relative;display:flex;gap:2px;padding:2px;border-radius:var(--bt-radius-row);background:var(--bt-hover)}
 .bt-motion-seg,.bt-look-seg{width:216px}
 /* A range input: the track fills with the accent up to the thumb (--bt-fill). */
 .bt-range{display:flex;align-items:center;gap:10px;width:216px}
 .bt-range input{flex:1;min-width:0;height:20px;margin:0;background:none;-webkit-appearance:none;appearance:none;cursor:pointer}
-.bt-range input::-webkit-slider-runnable-track{height:4px;border-radius:999px;background:linear-gradient(to right,var(--bt-accent) var(--bt-fill),var(--bt-active) var(--bt-fill))}
-.bt-range input::-moz-range-track{height:4px;border-radius:999px;background:linear-gradient(to right,var(--bt-accent) var(--bt-fill),var(--bt-active) var(--bt-fill))}
-.bt-range input::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;margin-top:-6px;border:0;border-radius:50%;corner-shape:round;background:var(--bt-card);box-shadow:inset 0 0 0 .5px var(--bt-line-2),0 1px 3px rgba(0,0,0,.08);transition:${spring(SPRING_TAP, "scale")}}
-.bt-range input::-moz-range-thumb{width:16px;height:16px;border:0;border-radius:50%;background:var(--bt-card);box-shadow:inset 0 0 0 .5px var(--bt-line-2),0 1px 3px rgba(0,0,0,.08)}
+.bt-range input::-webkit-slider-runnable-track{height:4px;border-radius:var(--bt-radius-pill);background:linear-gradient(to right,var(--bt-accent) var(--bt-fill),var(--bt-active) var(--bt-fill))}
+.bt-range input::-moz-range-track{height:4px;border-radius:var(--bt-radius-pill);background:linear-gradient(to right,var(--bt-accent) var(--bt-fill),var(--bt-active) var(--bt-fill))}
+.bt-range input::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;margin-top:-6px;border:0;border-radius:var(--bt-radius-round);corner-shape:round;background:var(--bt-card);box-shadow:inset 0 0 0 .5px var(--bt-line-2),0 1px 3px color-mix(in srgb,var(--bt-shadow-ink) 8%,transparent);transition:${spring(SPRING_TAP, "scale")}}
+.bt-range input::-moz-range-thumb{width:16px;height:16px;border:0;border-radius:var(--bt-radius-round);background:var(--bt-card);box-shadow:inset 0 0 0 .5px var(--bt-line-2),0 1px 3px color-mix(in srgb,var(--bt-shadow-ink) 8%,transparent)}
 .bt-range input:active::-webkit-slider-thumb{scale:1.15}
-.bt-range input:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px;border-radius:999px}
-.bt-range output{flex:none;width:38px;text-align:right;font-size:13px;color:var(--bt-ink-2);font-variant-numeric:tabular-nums}
-.bt-seg button{position:relative;z-index:1;flex:1;height:30px;border:0;border-radius:8px;background:none;font:inherit;font-size:13px;color:var(--bt-ink-2);cursor:pointer;transition:background-color .15s ease,color .15s ease,box-shadow .15s ease,${spring(SPRING_TAP, "scale")}}
-.bt-seg button[aria-pressed=true]{background:var(--bt-card);color:var(--bt-ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.bt-range input:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px;border-radius:var(--bt-radius-pill)}
+.bt-range output{flex:none;width:38px;text-align:right;font-size:var(--bt-font-body);color:var(--bt-ink-2);font-variant-numeric:tabular-nums}
+.bt-seg button{position:relative;z-index:1;flex:1;height:30px;border:0;border-radius:var(--bt-radius-input);background:none;font:inherit;font-size:var(--bt-font-body);color:var(--bt-ink-2);cursor:pointer;transition:background-color .15s ease,color .15s ease,box-shadow .15s ease,${spring(SPRING_TAP, "scale")}}
+.bt-seg button[aria-pressed=true]{background:var(--bt-card);color:var(--bt-ink);box-shadow:0 1px 3px color-mix(in srgb,var(--bt-shadow-ink) 8%,transparent)}
 .bt-seg button:disabled{opacity:.4;cursor:default}
 .bt-seg button:active:not(:disabled){scale:.96}
-.bt-seg>.bt-thumb{top:2px;bottom:2px;border-radius:8px;background:var(--bt-card);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.bt-seg>.bt-thumb{top:2px;bottom:2px;border-radius:var(--bt-radius-input);background:var(--bt-card);box-shadow:0 1px 3px color-mix(in srgb,var(--bt-shadow-ink) 8%,transparent)}
 .bt-seg[data-glide] button[aria-pressed=true]{background:transparent;box-shadow:none}
 @keyframes bt-rise{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.bt-addlist{animation:none}}
 
 /* Memory dialog: a summary of every entry, the entries behind the menu, "Ask or update" below. */
-.bt-mem-row{display:flex;align-items:center;gap:8px;width:100%;height:36px;padding:0 8px 0 10px;border:.5px solid var(--bt-line-2);border-radius:10px;background:var(--bt-card);color:var(--bt-ink);font:inherit;font-size:13px;cursor:pointer;box-sizing:border-box;transition:background-color .12s ease}
+.bt-mem-row{display:flex;align-items:center;gap:8px;width:100%;height:36px;padding:0 8px 0 10px;border:.5px solid var(--bt-line-2);border-radius:var(--bt-radius-row);background:var(--bt-card);color:var(--bt-ink);font:inherit;font-size:var(--bt-font-body);cursor:pointer;box-sizing:border-box;transition:background-color .12s ease}
 .bt-mem-row:hover{background:var(--bt-hover)}
 .bt-mem-row>svg{flex:none;color:var(--bt-ink-2)}
 .bt-mem-row-copy{flex:1;text-align:left}
-.bt-mem-row-go{display:inline-flex;align-items:center;gap:2px;color:var(--bt-ink-3);font-size:12px;flex:none;white-space:nowrap}
+.bt-mem-row-go{display:inline-flex;align-items:center;gap:2px;color:var(--bt-ink-3);font-size:var(--bt-font-small);flex:none;white-space:nowrap}
 .bt-mem-layer{position:fixed;inset:var(--dsh-frame-chrome-top,0px) 0 0;z-index:61;display:flex;align-items:center;justify-content:center;font-family:var(--bt-font)}
 .bt-mem-scrim{animation:bt-fade .2s ease-out}
-.bt-mem{position:relative;width:min(680px,calc(100vw - 48px));height:min(760px,calc(100vh - 2*max(32px,var(--dsh-frame-overlay-top,32px))));background:var(--bt-main);border-radius:20px;border:.5px solid var(--bt-line-2);box-shadow:0 24px 80px rgba(0,0,0,.24);display:flex;flex-direction:column;overflow:hidden;color:var(--bt-ink);animation:bt-dialog-rise ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing},bt-veil-in .2s ease-out}
+.bt-mem{position:relative;width:min(680px,calc(100vw - 48px));height:min(760px,calc(100vh - 2*max(32px,var(--dsh-frame-overlay-top,32px))));background:var(--bt-main);border-radius:var(--bt-radius-dialog);border:.5px solid var(--bt-line-2);box-shadow:0 24px 80px color-mix(in srgb,var(--bt-shadow-ink) 24%,transparent);display:flex;flex-direction:column;overflow:hidden;color:var(--bt-ink);animation:bt-dialog-rise ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing},bt-veil-in .2s ease-out}
 .bt-mem-head{position:relative;display:flex;align-items:center;gap:8px;height:60px;flex:none;padding:0 14px 0 24px;border-bottom:.5px solid var(--bt-line);box-sizing:border-box}
 .bt-mem-head .bt-icon-btn{width:32px;height:32px;flex:none}
 .bt-mem-head [aria-haspopup] svg{width:18px;height:18px;stroke-width:2.6}
 .bt-mem-head>.bt-icon-btn:first-child{margin-left:-10px}
-.bt-mem-head h2{margin:0;font-size:17px;line-height:24px;font-weight:600;white-space:nowrap}
-.bt-mem-status{font-size:13px;line-height:18px;color:var(--bt-ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;font-variant-numeric:tabular-nums}
+.bt-mem-head h2{margin:0;font-size:var(--bt-font-title);line-height:24px;font-weight:600;white-space:nowrap}
+.bt-mem-status{font-size:var(--bt-font-body);line-height:18px;color:var(--bt-ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;font-variant-numeric:tabular-nums}
 .bt-mem-head-gap{flex:1}
 .bt-mem-menu{position:absolute;top:52px;right:50px;min-width:220px;--bt-origin:top right}
 .bt-mem-menu button:disabled{opacity:.4;cursor:default;background:none}
 .bt-mem-body{flex:1;overflow-y:auto;padding:22px 28px 24px;scrollbar-width:thin;display:flex;flex-direction:column;gap:12px}
 .bt-mem-summary{transition:opacity .3s ease}
 .bt-mem-summary[data-stale]{opacity:.55}
-.bt-mem-summary h3{margin:20px 0 6px;font-size:17px;line-height:26px;font-weight:600}
+.bt-mem-summary h3{margin:20px 0 6px;font-size:var(--bt-font-title);line-height:26px;font-weight:600}
 .bt-mem-summary h3:first-child{margin-top:0}
-.bt-mem-summary p{margin:0;font-size:15px;line-height:26px}
+.bt-mem-summary p{margin:0;font-size:var(--bt-font-heading);line-height:26px}
 .bt-mem-summary>*{animation:bt-mem-line .45s cubic-bezier(.16,1,.3,1) both}
 .bt-mem-summary>:nth-child(2){animation-delay:.03s}
 .bt-mem-summary>:nth-child(3){animation-delay:.06s}
@@ -8453,56 +10705,56 @@ body[data-ds-dark-theme] .bt-theme-chip i{background:var(--da)}
 @keyframes bt-mem-line{from{opacity:0;transform:translateY(4px)}}
 .bt-mem-skel{display:flex;flex-direction:column;gap:24px}
 .bt-mem-skel-block{display:flex;flex-direction:column;gap:10px}
-.bt-mem-skel-block span{display:block;height:12px;border-radius:6px;background:linear-gradient(90deg,var(--bt-hover) 25%,var(--bt-active) 50%,var(--bt-hover) 75%);background-size:200% 100%;animation:bt-mem-skel 1.4s ease-in-out infinite}
+.bt-mem-skel-block span{display:block;height:12px;border-radius:var(--bt-radius-menu-item);background:linear-gradient(90deg,var(--bt-hover) 25%,var(--bt-active) 50%,var(--bt-hover) 75%);background-size:200% 100%;animation:bt-mem-skel 1.4s ease-in-out infinite}
 .bt-mem-skel-block .bt-mem-skel-head{width:30%;height:16px;margin-bottom:2px}
 @keyframes bt-mem-skel{from{background-position:150% 0}to{background-position:-50% 0}}
-.bt-mem-skel-label{font-size:13px;line-height:18px;color:var(--bt-ink-3)}
+.bt-mem-skel-label{font-size:var(--bt-font-body);line-height:18px;color:var(--bt-ink-3)}
 .bt-mem-empty{margin:auto;max-width:400px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;padding:24px 0;animation:bt-mem-line .45s cubic-bezier(.16,1,.3,1) both}
-.bt-mem-empty-mark{width:48px;height:48px;border-radius:50%;background:var(--bt-hover);display:flex;align-items:center;justify-content:center;color:var(--bt-ink-2);margin-bottom:4px}
+.bt-mem-empty-mark{width:48px;height:48px;border-radius:var(--bt-radius-round);background:var(--bt-hover);display:flex;align-items:center;justify-content:center;color:var(--bt-ink-2);margin-bottom:4px}
 .bt-mem-empty-mark svg{width:22px;height:22px}
-.bt-mem-empty-title{font-size:15px;line-height:22px;font-weight:600}
-.bt-mem-empty-text{font-size:13px;line-height:20px;color:var(--bt-ink-2)}
-.bt-mem-failed{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;background:var(--bt-hover);font-size:13px;line-height:18px;color:var(--bt-ink-2)}
+.bt-mem-empty-title{font-size:var(--bt-font-heading);line-height:22px;font-weight:600}
+.bt-mem-empty-text{font-size:var(--bt-font-body);line-height:20px;color:var(--bt-ink-2)}
+.bt-mem-failed{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:var(--bt-radius-card);background:var(--bt-hover);font-size:var(--bt-font-body);line-height:18px;color:var(--bt-ink-2)}
 .bt-mem-failed>span{flex:1;min-width:0;overflow-wrap:anywhere}
 .bt-mem-entries{display:flex;flex-direction:column;gap:28px;animation:bt-page-in ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing},bt-veil-in .22s ease-out}
 .bt-mem-section-head{display:flex;align-items:baseline;gap:8px;margin-bottom:4px}
-.bt-mem-section-head h3{margin:0;font-size:15px;line-height:22px;font-weight:600}
-.bt-mem-section-head span{font-size:12px;line-height:16px;color:var(--bt-ink-3)}
+.bt-mem-section-head h3{margin:0;font-size:var(--bt-font-heading);line-height:22px;font-weight:600}
+.bt-mem-section-head span{font-size:var(--bt-font-small);line-height:16px;color:var(--bt-ink-3)}
 .bt-mem-section-head .bt-mem-size{margin-left:auto;font-variant-numeric:tabular-nums;white-space:nowrap}
-.bt-mem-topic{font-size:12px;line-height:16px;color:var(--bt-ink-2);margin:14px 0 2px 4px;font-weight:500}
+.bt-mem-topic{font-size:var(--bt-font-small);line-height:16px;color:var(--bt-ink-2);margin:14px 0 2px 4px;font-weight:500}
 .bt-mem-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
 .bt-mem-entry{display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:.5px solid var(--bt-line);transition:opacity .2s ease}
 .bt-mem-entry[data-busy]{opacity:.4}
 .bt-mem-entry-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.bt-mem-entry-text{font-size:14px;line-height:20px;overflow-wrap:anywhere}
-.bt-mem-entry-meta{font-size:12px;line-height:16px;color:var(--bt-ink-3);font-variant-numeric:tabular-nums}
-.bt-mem-remove{flex:none;height:28px;min-width:28px;border-radius:999px;border:0;background:none;color:var(--bt-ink-3);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0 6px;font:inherit;font-size:12px;opacity:0;transition:opacity .12s ease,background-color .12s ease,color .12s ease}
+.bt-mem-entry-text{font-size:var(--bt-font-control);line-height:20px;overflow-wrap:anywhere}
+.bt-mem-entry-meta{font-size:var(--bt-font-small);line-height:16px;color:var(--bt-ink-3);font-variant-numeric:tabular-nums}
+.bt-mem-remove{flex:none;height:28px;min-width:28px;border-radius:var(--bt-radius-pill);border:0;background:none;color:var(--bt-ink-3);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0 6px;font:inherit;font-size:var(--bt-font-small);opacity:0;transition:opacity .12s ease,background-color .12s ease,color .12s ease}
 .bt-mem-entry:hover .bt-mem-remove,.bt-mem-remove:focus-visible,.bt-mem-remove[data-confirm]{opacity:1}
 .bt-mem-remove:hover{background:var(--bt-hover);color:var(--bt-ink)}
 .bt-mem-remove[data-confirm]{background:color-mix(in srgb,var(--bt-danger) 10%,transparent);color:var(--bt-danger);padding:0 10px}
 @media (hover:none){.bt-mem-remove{opacity:1}}
-.bt-mem-none{font-size:13px;line-height:18px;color:var(--bt-ink-3);padding:8px 4px}
+.bt-mem-none{font-size:var(--bt-font-body);line-height:18px;color:var(--bt-ink-3);padding:8px 4px}
 .bt-mem-foot{flex:none;padding:8px 20px 20px;display:flex;flex-direction:column;gap:10px}
-.bt-mem-reply{border-radius:16px;background:var(--bt-hover);padding:8px 8px 12px 16px;display:flex;flex-direction:column;gap:6px;max-height:36vh;max-height:36dvh;overflow-y:auto;scrollbar-width:thin;transform-origin:50% 100%;animation:bt-pop-lift ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing},bt-veil-in .2s ease-out}
+.bt-mem-reply{border-radius:var(--bt-radius-popover);background:var(--bt-hover);padding:8px 8px 12px 16px;display:flex;flex-direction:column;gap:6px;max-height:36vh;max-height:36dvh;overflow-y:auto;scrollbar-width:thin;transform-origin:50% 100%;animation:bt-pop-lift ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing},bt-veil-in .2s ease-out}
 .bt-mem-reply-head{display:flex;align-items:center;gap:8px;min-height:24px}
-.bt-mem-reply-asked{flex:1;min-width:0;font-size:12px;line-height:16px;color:var(--bt-ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-mem-reply-asked{flex:1;min-width:0;font-size:var(--bt-font-small);line-height:16px;color:var(--bt-ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bt-mem-reply .bt-icon-btn{width:24px;height:24px;flex:none}
-.bt-mem-reply-text{font-size:14px;line-height:21px;padding-right:8px;overflow-wrap:anywhere}
+.bt-mem-reply-text{font-size:var(--bt-font-control);line-height:21px;padding-right:8px;overflow-wrap:anywhere}
 .bt-mem-changes{list-style:none;margin:2px 0 0;padding:0 8px 0 0;display:flex;flex-direction:column;gap:4px}
-.bt-mem-changes li{display:flex;align-items:flex-start;gap:6px;font-size:13px;line-height:18px;color:var(--bt-ink-2);overflow-wrap:anywhere}
+.bt-mem-changes li{display:flex;align-items:flex-start;gap:6px;font-size:var(--bt-font-body);line-height:18px;color:var(--bt-ink-2);overflow-wrap:anywhere}
 .bt-mem-changes li svg{flex:none;margin-top:1px;color:var(--bt-danger);animation:bt-check-pop ${SPRING_POP.duration}ms ${SPRING_POP.easing} .12s backwards}
 .bt-mem-changes li[data-ok] svg{color:var(--bt-green)}
-.bt-mem-ask{display:flex;align-items:center;gap:8px;height:52px;padding:0 8px 0 22px;border-radius:999px;border:.5px solid var(--bt-line-2);background:var(--bt-card);box-shadow:0 4px 16px rgba(0,0,0,.06);box-sizing:border-box;transition:border-color .15s ease,box-shadow .15s ease}
-.bt-mem-ask:focus-within{border-color:var(--bt-ink-3);box-shadow:0 4px 20px rgba(0,0,0,.1)}
-.bt-mem-input{flex:1;min-width:0;border:0;background:none;outline:none;color:var(--bt-ink);font:inherit;font-size:15px;line-height:22px;padding:0}
+.bt-mem-ask{display:flex;align-items:center;gap:8px;height:52px;padding:0 8px 0 22px;border-radius:var(--bt-radius-pill);border:.5px solid var(--bt-line-2);background:var(--bt-card);box-shadow:0 4px 16px color-mix(in srgb,var(--bt-shadow-ink) 6%,transparent);box-sizing:border-box;transition:border-color .15s ease,box-shadow .15s ease}
+.bt-mem-ask:focus-within{border-color:var(--bt-ink-3);box-shadow:0 4px 20px color-mix(in srgb,var(--bt-shadow-ink) 10%,transparent)}
+.bt-mem-input{flex:1;min-width:0;border:0;background:none;outline:none;color:var(--bt-ink);font:inherit;font-size:var(--bt-font-heading);line-height:22px;padding:0}
 .bt-mem-input::placeholder{color:var(--bt-ink-3)}
-.bt-mem-send{flex:none;width:36px;height:36px;border-radius:50%;border:0;background:var(--bt-ink);color:var(--bt-main);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:opacity .15s ease,${spring(SPRING_TAP, "scale")}}
+.bt-mem-send{flex:none;width:36px;height:36px;border-radius:var(--bt-radius-round);border:0;background:var(--bt-ink);color:var(--bt-main);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:opacity .15s ease,${spring(SPRING_TAP, "scale")}}
 .bt-mem-send:disabled{opacity:.22;cursor:default}
 .bt-mem-send:not(:disabled):active{scale:.92}
 .bt-mem-send>*{animation:bt-check-pop ${SPRING_POP.duration}ms ${SPRING_POP.easing}}
-.bt-mem-spin{width:14px;height:14px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;box-sizing:border-box;animation:bt-mem-spin .7s linear infinite}
+.bt-mem-spin{width:14px;height:14px;border-radius:var(--bt-radius-round);border:2px solid currentColor;border-right-color:transparent;box-sizing:border-box;animation:bt-mem-spin .7s linear infinite}
 @keyframes bt-mem-spin{to{transform:rotate(360deg)}}
-@media (max-width:640px){.bt-mem{width:100vw;height:100%;border-radius:0;border:0}.bt-mem-body{padding:18px 18px 20px}.bt-mem-foot{padding:8px 12px 12px}}
+@media (max-width:640px){.bt-mem{width:100vw;height:100%;border-radius:var(--bt-radius-none);border:0}.bt-mem-body{padding:18px 18px 20px}.bt-mem-foot{padding:8px 12px 12px}}
 @media (prefers-reduced-motion:reduce){.bt-mem,.bt-mem-scrim,.bt-mem-summary>*,.bt-mem-empty,.bt-mem-reply,.bt-mem-skel-block span,.bt-mem-entries,.bt-mem-send>*,.bt-mem-changes li svg{animation:none}}
 
 .bt-thumb{position:absolute;left:0;top:0;z-index:0;pointer-events:none;transition:opacity .14s ease}
@@ -8512,7 +10764,7 @@ body[data-ds-dark-theme] .bt-theme-chip i{background:var(--da)}
 .bt-with-icon{display:inline-flex;align-items:center;gap:4px}
 .bt-with-icon svg{width:14px;height:14px}
 .bt-tag-admin{display:inline-flex;align-items:center;gap:4px}
-.bt-create-inline{padding:18px 16px;border:1px solid var(--bt-line);border-radius:12px;background:var(--bt-card)}
+.bt-create-inline{padding:18px 16px;border:1px solid var(--bt-line);border-radius:var(--bt-radius-card);background:var(--bt-card)}
 .bt-create-inline .bt-create-card{max-width:none}
 .bt-panel-view>[data-move=in]{animation:bt-page-in ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing} backwards,bt-veil-in .2s ease-out backwards}
 .bt-panel-view>[data-move=out]{animation:bt-page-out ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing} backwards,bt-veil-in .2s ease-out backwards}
@@ -8531,7 +10783,7 @@ body[data-ds-dark-theme] .bt-theme-chip i{background:var(--da)}
    the base column widths below would otherwise win the cascade back. */
 @media (max-width:640px){
   .bt-settings-layer{align-items:stretch;justify-content:stretch}
-  .bt-settings{--bt-set-w:100vw;--bt-set-h:100vh;width:100vw;height:100vh;height:100dvh;border-radius:0;border-width:0;flex-direction:column}
+  .bt-settings{--bt-set-w:100vw;--bt-set-h:100vh;width:100vw;height:100vh;height:100dvh;border-radius:var(--bt-radius-none);border-width:0;flex-direction:column}
   /* Right padding is not honored inside a scrolling flex row; a transparent
      right border keeps the last tab clear of the close button. */
   .bt-settings-nav{width:100%;flex:none;flex-direction:row;align-items:center;overflow-x:auto;padding:8px;border:0;border-right:52px solid transparent;border-bottom:.5px solid var(--bt-line);scrollbar-width:thin;box-sizing:border-box}
@@ -8557,11 +10809,11 @@ body[data-ds-dark-theme] .bt-theme-chip i{background:var(--da)}
 .bt-exchange .bt-dialog-foot{padding-bottom:calc(28px + env(safe-area-inset-bottom,0px))}
 /* iOS zooms the whole page on focused inputs under 16px. */
 @media (max-width:640px) and (pointer:coarse){
-  .bt-input,.bt-bs-input,.bt-browser-address input,.bt-folder-input,.bt-secret-input,.bt-q-input,.bt-to input,.bt-palette-head input,.bt-mem-input{font-size:16px}
+  .bt-input,.bt-bs-input,.bt-browser-address input,.bt-folder-input,.bt-secret-input,.bt-q-input,.bt-to input,.bt-palette-head input,.bt-mem-input{font-size:var(--bt-font-large)}
 }
 `;
 var CONVERSATION_CSS = `
-.bt-think{font-size:13px;line-height:18px;color:var(--bt-ink-2);margin:2px 0 4px;max-width:calc(var(--bt-msg-w) * 100%)}
+.bt-think{font-size:var(--bt-font-body);line-height:18px;color:var(--bt-ink-2);margin:2px 0 4px;max-width:calc(var(--bt-msg-w) * 100%)}
 body[data-bt-layout=flat] .bt-think{max-width:calc(var(--bt-flat-w) * 100%)}
 .bt-think summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px}
 .bt-think summary::-webkit-details-marker{display:none}
@@ -8569,12 +10821,12 @@ body[data-bt-layout=flat] .bt-think{max-width:calc(var(--bt-flat-w) * 100%)}
 /* Five lines of the 18px line height; the rest scrolls inside the box. */
 .bt-think-text{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:6px;padding-left:10px;border-left:2px solid var(--bt-line-2);max-height:90px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;outline:none}
 .bt-think-text:focus-visible{border-left-color:var(--bt-ink-2)}
-.bt-think-text[data-fade=top]{mask-image:linear-gradient(to bottom,transparent,#000 18px)}
-.bt-think-text[data-fade=bottom]{mask-image:linear-gradient(to top,transparent,#000 18px)}
-.bt-think-text[data-fade=both]{mask-image:linear-gradient(to bottom,transparent,#000 18px,#000 calc(100% - 18px),transparent)}
-.bt-event{display:flex;justify-content:center;align-items:center;gap:2px;min-height:24px;margin:2px 0;font-size:12px;line-height:16px;color:var(--bt-ink-2);flex-wrap:wrap}
+.bt-think-text[data-fade=top]{mask-image:linear-gradient(to bottom,transparent,var(--bt-shadow-ink) 18px)}
+.bt-think-text[data-fade=bottom]{mask-image:linear-gradient(to top,transparent,var(--bt-shadow-ink) 18px)}
+.bt-think-text[data-fade=both]{mask-image:linear-gradient(to bottom,transparent,var(--bt-shadow-ink) 18px,var(--bt-shadow-ink) calc(100% - 18px),transparent)}
+.bt-event{display:flex;justify-content:center;align-items:center;gap:2px;min-height:24px;margin:2px 0;font-size:var(--bt-font-small);line-height:16px;color:var(--bt-ink-2);flex-wrap:wrap}
 .bt-event>span{padding:0 2px}
-.bt-event button:not(.bt-soft){border:0;background:none;color:inherit;font:inherit;display:inline-flex;align-items:center;gap:4px;cursor:pointer;height:24px;padding:4px 6px 4px 4px;border-radius:999px;box-sizing:border-box;transition:background-color .12s ease}
+.bt-event button:not(.bt-soft){border:0;background:none;color:inherit;font:inherit;display:inline-flex;align-items:center;gap:4px;cursor:pointer;height:24px;padding:4px 6px 4px 4px;border-radius:var(--bt-radius-pill);box-sizing:border-box;transition:background-color .12s ease}
 .bt-event button:not(.bt-soft):hover{background:var(--bt-hover)}
 .bt-event button:not(.bt-soft):active{background:var(--bt-active)}
 .bt-event .bt-soft{margin-left:6px}
@@ -8583,9 +10835,9 @@ body[data-bt-layout=flat] .bt-think{max-width:calc(var(--bt-flat-w) * 100%)}
 .bt-event-whole>span:first-child{margin-right:2px}
 /* One button cannot wrap like separate parts, so a long name is cut to fit the chat. */
 .bt-event-whole>.bt-event-name{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bt-time-sep{display:flex;justify-content:center;align-items:center;height:28px;margin:14px 0 8px;font-size:12px;line-height:16px;color:var(--bt-ink-2);white-space:nowrap}
-[class*="_scroll"]>[class*="_column"]::before{content:var(--bt-first-sep,none);display:block;flex:none;height:28px;margin:17px 0 12px;font-size:12px;line-height:28px;text-align:center;color:var(--bt-ink-2);white-space:nowrap}
-.bt-activity{display:flex;align-items:center;gap:10px;margin:8px 0 4px 2px;font-size:14px;color:var(--bt-ink-2)}
+.bt-time-sep{display:flex;justify-content:center;align-items:center;height:28px;margin:14px 0 8px;font-size:var(--bt-font-small);line-height:16px;color:var(--bt-ink-2);white-space:nowrap}
+[class*="_scroll"]>[class*="_column"]::before{content:var(--bt-first-sep,none);display:block;flex:none;height:28px;margin:17px 0 12px;font-size:var(--bt-font-small);line-height:28px;text-align:center;color:var(--bt-ink-2);white-space:nowrap}
+.bt-activity{display:flex;align-items:center;gap:10px;margin:8px 0 4px 2px;font-size:var(--bt-font-control);color:var(--bt-ink-2)}
 .bt-group-replies{display:contents}
 /* A Bot chat is flat in every work-details mode, without changing the user's mode
    (it is a DSH-wide setting): step groups lose their header and stay open, and what a
@@ -8642,13 +10894,13 @@ html[data-platform=darwin] header[class*="_header"]:has(.bt-head) :is(a,button,i
 .bt-typing[data-exiting]{animation:bt-typing-out .14s cubic-bezier(.22,1,.36,1) forwards}
 .bt-typing>.bt-mark,.bt-typing>.bt-cluster{flex-shrink:0}
 .bt-typing>.bt-mark{cursor:pointer;transition:filter .16s ease-out}
-.bt-typing>.bt-mark:hover{filter:drop-shadow(0 2px 4px rgba(0,0,0,.18))}
+.bt-typing>.bt-mark:hover{filter:drop-shadow(0 2px 4px color-mix(in srgb,var(--bt-shadow-ink) 18%,transparent))}
 .bt-typing>.bt-mark .bt-eyes{transition:scale .28s cubic-bezier(.4,.06,.18,1)}
 .bt-typing>.bt-mark:hover .bt-eyes{scale:1.18}
 .bt-typing-text{display:flex;align-items:center;flex:1 1 auto;min-width:0;animation:bt-typing-label .22s ease-out .2s backwards}
 .bt-typing-label{display:inline-flex;align-items:center;gap:6px;min-width:0;animation:bt-typing-label .22s ease-out backwards}
-.bt-typing-label>.bt-shimmer{font-size:14px;line-height:22px;font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bt-typing-time{flex-shrink:0;margin-left:6px;font-size:12px;line-height:22px;color:var(--bt-ink-3);font-variant-numeric:tabular-nums;white-space:nowrap}
+.bt-typing-label>.bt-shimmer{font-size:var(--bt-font-control);line-height:22px;font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-typing-time{flex-shrink:0;margin-left:6px;font-size:var(--bt-font-small);line-height:22px;color:var(--bt-ink-3);font-variant-numeric:tabular-nums;white-space:nowrap}
 @keyframes bt-typing-in{from{opacity:0;transform:scale(.9)}}
 @keyframes bt-typing-out{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.92);filter:blur(3px)}}
 @keyframes bt-typing-label{from{opacity:0;filter:blur(5px);transform:translateY(3px)}}
@@ -8670,9 +10922,9 @@ html[data-platform=darwin] header[class*="_header"]:has(.bt-head) :is(a,button,i
 }
 @keyframes bt-fade-in{from{opacity:0}to{opacity:1}}
 @keyframes bt-fade-out{from{opacity:1}to{opacity:0}}
-[data-composer-card]{display:flex!important;flex-direction:row!important;flex-wrap:wrap!important;align-items:center!important;gap:0!important;min-height:44px!important;border-radius:22px!important;padding:7.5px!important;box-sizing:border-box;background:var(--bt-main)!important;border:.5px solid var(--bt-line-2)!important;box-shadow:0 2px 8px -1px rgba(0,0,0,.05),0 1px 2px rgba(0,0,0,.03),0 0 0 1px rgba(228,228,228,.04)!important;transition:border-color .15s ease,background-color .15s ease,${spring(SPRING_SHAPE, "border-radius")}!important}
+[data-composer-card]{display:flex!important;flex-direction:row!important;flex-wrap:wrap!important;align-items:center!important;gap:0!important;min-height:44px!important;border-radius:var(--bt-radius-composer)!important;padding:7.5px!important;box-sizing:border-box;background:var(--bt-main)!important;border:.5px solid var(--bt-line-2)!important;box-shadow:0 2px 8px -1px color-mix(in srgb,var(--bt-shadow-ink) 5%,transparent),0 1px 2px color-mix(in srgb,var(--bt-shadow-ink) 3%,transparent),0 0 0 1px var(--bt-hairline)!important;transition:border-color .15s ease,background-color .15s ease,${spring(SPRING_SHAPE, "border-radius")}!important}
 [data-composer-card]:hover,[data-composer-card]:focus-within{border-color:color-mix(in srgb,var(--bt-ink) 30%,transparent)!important}
-[data-composer-card]:has(> [data-slot="conversation.input.attachments"] *),[data-composer-card]:has([data-composer-input] br + *),[data-composer-card]:has([data-composer-input] > :nth-child(2)){border-radius:18px!important}
+[data-composer-card]:has(> [data-slot="conversation.input.attachments"] *),[data-composer-card]:has([data-composer-input] br + *),[data-composer-card]:has([data-composer-input] > :nth-child(2)){border-radius:var(--bt-radius-bubble)!important}
 [class*="_root"]:has(> [data-composer-card]){padding:0 11px 13px 16px!important}
 [class*="_root"]:has(> [data-composer-card])>[data-composer-card]{max-width:min(992px,100%)!important}
 [data-composer-card]>[class*="_row"]{display:contents!important}
@@ -8686,12 +10938,12 @@ html[data-platform=darwin] header[class*="_header"]:has(.bt-head) :is(a,button,i
 [data-composer-card]:has(> [data-slot="conversation.input.attachments"] > [class*="_rail"]) [class*="_trailing"]{margin-left:auto!important}
 [data-composer-card] [data-composer-input]{min-height:24px!important;padding:2px 0!important}
 [data-composer-card] [data-composer-placeholder]{left:0!important;top:2px!important}
-[data-composer-placeholder]{font-size:0!important;line-height:0!important}
+[data-composer-placeholder]{font-size:var(--bt-font-hidden)!important;line-height:0!important}
 /* The name sits on ::before so that ::after stays free for other composer skins. */
-[data-composer-placeholder]::before{content:var(--bt-placeholder,"Message")!important;display:block!important;font-size:14px!important;line-height:24px!important;color:color-mix(in srgb,var(--bt-ink) 36%,transparent)!important}
+[data-composer-placeholder]::before{content:var(--bt-placeholder,"Message")!important;display:block!important;font-size:var(--bt-font-control)!important;line-height:24px!important;color:color-mix(in srgb,var(--bt-ink) 36%,transparent)!important}
 /* The team's "+" (ComposerPlus) takes the seat of the shell's command-menu button. */
 [data-composer-card] button[class*="_add"]{display:none!important}
-.bt-plus{flex:none;width:28px;height:28px;padding:0;border:0;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bt-ink) 5%,transparent);box-shadow:inset 0 0 0 .5px var(--bt-line);color:var(--bt-ink-2);cursor:pointer;transition:background-color .15s ease,color .15s ease,${spring(SPRING_TAP, "scale")}}
+.bt-plus{flex:none;width:28px;height:28px;padding:0;border:0;border-radius:var(--bt-radius-round);display:inline-flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bt-ink) 5%,transparent);box-shadow:inset 0 0 0 .5px var(--bt-line);color:var(--bt-ink-2);cursor:pointer;transition:background-color .15s ease,color .15s ease,${spring(SPRING_TAP, "scale")}}
 .bt-plus:hover,.bt-plus[aria-expanded=true]{background:color-mix(in srgb,var(--bt-ink) 10%,transparent);color:var(--bt-ink)}
 .bt-plus:active{scale:.9}
 .bt-plus svg{width:14px;height:14px;transition:${spring(SPRING_POP, "rotate")}}
@@ -8703,25 +10955,25 @@ html[data-platform=darwin] header[class*="_header"]:has(.bt-head) :is(a,button,i
 [data-composer-card] [class*="_trailing"]{gap:8px!important}
 /* No display here: DSH hides these controls with [hidden] while the Bot works. */
 [data-composer-card] [class*="_standardControls"]{align-items:center!important;gap:8px!important}
-[data-composer-card] button[class*="_primary"]{width:28px!important;height:28px!important;background:var(--bt-accent)!important;color:var(--bt-accent-ink,#fff)!important;border-radius:50%!important;transition:opacity .15s ease,${spring(SPRING_TAP, "scale")};animation:bt-icon-swap ${SPRING_POP.duration}ms ${SPRING_POP.easing}}
+[data-composer-card] button[class*="_primary"]{width:28px!important;height:28px!important;background:var(--bt-accent)!important;color:var(--bt-accent-ink)!important;border-radius:var(--bt-radius-round)!important;transition:opacity .15s ease,${spring(SPRING_TAP, "scale")};animation:bt-icon-swap ${SPRING_POP.duration}ms ${SPRING_POP.easing}}
 [data-composer-card] button[class*="_primary"]:hover:not(:disabled){opacity:.9}
 [data-composer-card] button[class*="_primary"]:active:not(:disabled){scale:.9}
 @keyframes bt-icon-swap{from{opacity:0;transform:scale(.5) rotate(-30deg)}}
 [data-composer-card] button[class*="_primary"] svg{width:14px;height:14px}
 [data-composer-card] button[class*="_primary"]:disabled{display:none!important}
 [data-composer-dock]{display:none!important}
-.bt-mic,.bt-voice{flex:none;width:28px;height:28px;border-radius:50%;border:0;padding:0;display:inline-grid;place-items:center;cursor:pointer;transition:background-color .15s ease,color .15s ease,${spring(SPRING_TAP, "scale")}}
+.bt-mic,.bt-voice{flex:none;width:28px;height:28px;border-radius:var(--bt-radius-round);border:0;padding:0;display:inline-grid;place-items:center;cursor:pointer;transition:background-color .15s ease,color .15s ease,${spring(SPRING_TAP, "scale")}}
 .bt-mic{background:color-mix(in srgb,var(--bt-ink) 5%,transparent);box-shadow:inset 0 0 0 .5px var(--bt-line);color:var(--bt-ink-2)}
 .bt-mic:hover{background:color-mix(in srgb,var(--bt-ink) 10%,transparent);color:var(--bt-ink)}
-.bt-mic[aria-pressed=true]{background:#ff3e51;color:#fff;animation:bt-mic-pulse 1.4s ease-in-out infinite}
-@keyframes bt-mic-pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,62,81,.35)}50%{box-shadow:0 0 0 5px rgba(255,62,81,0)}}
-.bt-voice{display:none;background:var(--bt-accent);color:var(--bt-accent-ink,#fff);animation:bt-icon-swap ${SPRING_POP.duration}ms ${SPRING_POP.easing}}
+.bt-mic[aria-pressed=true]{background:var(--bt-recording);color:var(--bt-static-light);animation:bt-mic-pulse 1.4s ease-in-out infinite}
+@keyframes bt-mic-pulse{0%,100%{box-shadow:0 0 0 0 var(--bt-recording-ring)}50%{box-shadow:0 0 0 5px transparent}}
+.bt-voice{display:none;background:var(--bt-accent);color:var(--bt-accent-ink);animation:bt-icon-swap ${SPRING_POP.duration}ms ${SPRING_POP.easing}}
 .bt-voice:hover{opacity:.9}
 .bt-mic:active,.bt-voice:active{scale:.9}
 /* Touch devices never hover: tap-open toolbars (data-open on the message), always
    visible icon buttons and 44px targets replace the hover affordances. */
 @media (hover:none){
-  .bt-tools{left:auto;right:4px;margin-left:0;border-radius:999px;padding:2px;background:var(--bt-card);box-shadow:inset 0 0 0 .5px var(--bt-line-2),0 4px 14px rgba(0,0,0,.14)}
+  .bt-tools{left:auto;right:4px;margin-left:0;border-radius:var(--bt-radius-pill);padding:2px;background:var(--bt-card);box-shadow:inset 0 0 0 .5px var(--bt-line-2),0 4px 14px color-mix(in srgb,var(--bt-shadow-ink) 14%,transparent)}
   .bt-tools::after{display:none}
   .bt-tool{width:44px;height:44px}
   .bt-menu button,.bt-menu [role=menuitem],.bt-react-strip button{min-height:44px}
@@ -8731,15 +10983,15 @@ html[data-platform=darwin] header[class*="_header"]:has(.bt-head) :is(a,button,i
 }
 [data-composer-card]:has(button[class*="_primary"]:disabled) .bt-voice{display:inline-grid}
 body[data-bt-room] .bt-voice{display:none!important}
-body[data-bt-room] [data-composer-card]:has(button[class*="_primary"]:disabled) .bt-mic:not([aria-pressed=true]){background:var(--bt-accent);color:var(--bt-accent-ink,#fff)}
-.bt-mic-note{position:absolute;right:12px;bottom:calc(100% + 8px);padding:5px 10px;border-radius:8px;background:var(--bt-user);color:var(--bt-user-ink);font-size:12px;line-height:16px;white-space:nowrap;pointer-events:none;animation:bt-rise .16s ease-out}
+body[data-bt-room] [data-composer-card]:has(button[class*="_primary"]:disabled) .bt-mic:not([aria-pressed=true]){background:var(--bt-accent);color:var(--bt-accent-ink)}
+.bt-mic-note{position:absolute;right:12px;bottom:calc(100% + 8px);padding:5px 10px;border-radius:var(--bt-radius-input);background:var(--bt-user);color:var(--bt-user-ink);font-size:var(--bt-font-small);line-height:16px;white-space:nowrap;pointer-events:none;animation:bt-rise .16s ease-out}
 [data-chain-overlay-fallback="conversation.composer"]:has(~ .bt-q){display:block!important;order:2}
 .bt-q{order:1}
 div:has(> nav [class*="_marks"]){display:none!important}
 /* Every user-side bubble (sent, steering mid-turn, not yet admitted, question replies)
    takes its surface and its text from the one --bt-user pair: a skin that repaints
    the host's bubble surface alone would otherwise leave the text unreadable. */
-[class*="_userRow"] [class*="_bubble"],[data-chat-flow-kind=question-reply] [class*="_bubble"],[data-chat-flow-kind=command-input] [class*="_bubble"]{background:var(--bt-user)!important;color:var(--bt-user-ink)!important;border-radius:18px!important;padding:7px 12px!important;font-size:var(--dsh-content-font-size,14px)!important;line-height:calc(var(--dsh-content-font-size,14px) + 8px)!important}
+[class*="_userRow"] [class*="_bubble"],[data-chat-flow-kind=question-reply] [class*="_bubble"],[data-chat-flow-kind=command-input] [class*="_bubble"]{background:var(--bt-user)!important;color:var(--bt-user-ink)!important;border-radius:var(--bt-radius-bubble)!important;padding:7px 12px!important;font-size:var(--dsh-content-font-size,var(--bt-font-control))!important;line-height:calc(var(--dsh-content-font-size,var(--bt-font-control)) + 8px)!important}
 [class*="_userRow"] [class*="_bubble"] [class*="_markdown"],[class*="_userRow"] [class*="_bubble"] a{color:inherit}
 /* Sent messages get the hover toolbar below; steering and unsent bubbles keep none. */
 [class*="_userRow"] [class*="_actions"]{display:none!important}
@@ -8747,13 +10999,13 @@ div:has(> nav [class*="_marks"]){display:none!important}
    its bubble's right edge; --bt-steer-unread is set per window (header.js), and
    the none fallback means no English can leak into a Chinese window. */
 [data-pending-steering]{flex-wrap:wrap}
-[data-pending-steering]::after{content:var(--bt-steer-unread,none);display:block;flex-basis:100%;width:100%;order:99;margin-top:4px;font-size:11px;line-height:14px;color:var(--bt-ink-3);font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+[data-pending-steering]::after{content:var(--bt-steer-unread,none);display:block;flex-basis:100%;width:100%;order:99;margin-top:4px;font-size:var(--bt-font-caption);line-height:14px;color:var(--bt-ink-3);font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
 [data-chat-flow-kind=user] [class*="_userRow"]{flex-direction:row-reverse;align-items:center;justify-content:flex-start}
 [data-chat-flow-kind=user] [class*="_actions"]{display:flex!important;height:24px!important;gap:2px!important;opacity:0!important;visibility:hidden;transition:opacity .12s ease,visibility .12s!important;flex:none}
 [data-chat-flow-kind=user] [class*="_userRow"]:hover [class*="_actions"],[data-chat-flow-kind=user] [class*="_userRow"]:focus-within [class*="_actions"]{opacity:1!important;visibility:visible}
 @media (hover:none){[data-chat-flow-kind=user] [class*="_actions"]{opacity:1!important;visibility:visible}}
 [data-chat-flow-kind=user] [class*="_actions"] [class*="_timeStart"]{display:none}
-[data-chat-flow-kind=user] [class*="_actions"] button{width:24px;height:24px;border-radius:6px;color:var(--bt-ink-2)}
+[data-chat-flow-kind=user] [class*="_actions"] button{width:24px;height:24px;border-radius:var(--bt-radius-menu-item);color:var(--bt-ink-2)}
 [data-chat-flow-kind=user] [class*="_actions"] button:hover{background:var(--bt-hover);color:var(--bt-ink)}
 [data-chat-flow-kind=user] [class*="_actions"] svg{width:15px;height:15px}
 .bt-q-inline{display:flex;margin:4px 0 6px}
@@ -8764,25 +11016,25 @@ div:has(> nav [class*="_marks"]){display:none!important}
 .bt-q-dock .bt-q{margin:0 auto 8px}
 [class*="_toBottomSlot"]{justify-content:center!important;padding-right:0!important}
 [data-conversation-scroll] [class*="_toBottomSlot"]{bottom:calc(var(--dsh-composer-height,152px) + 8px)!important}
-[class*="_toBottomSlot"]>button{width:36px!important;height:36px!important;margin-top:-36px!important;background:var(--bt-main)!important;color:var(--bt-ink)!important;box-shadow:0 0 0 .5px var(--bt-line-2),0 2px 8px -2px rgba(0,0,0,.12)!important;animation:bt-tobottom-in ${SPRING_TAP.duration}ms ${SPRING_TAP.easing},bt-veil-in .16s ease-out;transition:background-color .12s ease,${spring(SPRING_TAP, "scale")}}
+[class*="_toBottomSlot"]>button{width:36px!important;height:36px!important;margin-top:-36px!important;background:var(--bt-main)!important;color:var(--bt-ink)!important;box-shadow:0 0 0 .5px var(--bt-line-2),0 2px 8px -2px color-mix(in srgb,var(--bt-shadow-ink) 12%,transparent)!important;animation:bt-tobottom-in ${SPRING_TAP.duration}ms ${SPRING_TAP.easing},bt-veil-in .16s ease-out;transition:background-color .12s ease,${spring(SPRING_TAP, "scale")}}
 [class*="_toBottomSlot"]>button:active{scale:.9}
 [class*="_toBottomSlot"]>button:hover{background:color-mix(in srgb,var(--bt-ink) 4%,var(--bt-main))!important}
 [class*="_toBottomSlot"]>button svg{display:none}
 [class*="_toBottomSlot"]>button::before{content:"";width:20px;height:20px;background:currentColor;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 4v12M5 11l5 5 5-5'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 4v12M5 11l5 5 5-5'/%3E%3C/svg%3E") center/contain no-repeat}
 @keyframes bt-tobottom-in{from{translate:0 8px;scale:.8}}
 [data-bt-news] [class*="_toBottomSlot"]>button{visibility:hidden!important;pointer-events:none!important}
-.bt-news{position:fixed;z-index:30;transform:translateX(-50%);display:inline-flex;align-items:center;overflow:hidden;border-radius:999px;background:var(--bt-accent);color:var(--bt-accent-ink);box-shadow:inset 0 0 0 1px rgba(20,20,20,.05),0 1px 3px 0 rgba(0,0,0,.12);font-family:var(--bt-font);animation:bt-news-in ${SPRING_TAP.duration}ms ${SPRING_TAP.easing},bt-veil-in .16s ease-out}
+.bt-news{position:fixed;z-index:30;transform:translateX(-50%);display:inline-flex;align-items:center;overflow:hidden;border-radius:var(--bt-radius-pill);background:var(--bt-accent);color:var(--bt-accent-ink);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--bt-shadow-ink) 5%,transparent),0 1px 3px 0 color-mix(in srgb,var(--bt-shadow-ink) 12%,transparent);font-family:var(--bt-font);animation:bt-news-in ${SPRING_TAP.duration}ms ${SPRING_TAP.easing},bt-veil-in .16s ease-out}
 @keyframes bt-news-in{from{translate:0 8px;scale:.9}}
 .bt-news[data-direction=up]{animation-name:bt-news-in-up,bt-veil-in}
 @keyframes bt-news-in-up{from{translate:0 -8px;scale:.9}}
-.bt-news-jump{display:inline-flex;align-items:center;gap:2px;margin:0;padding:4px 26px 4px 4px;border:0;border-radius:0;background:transparent;color:inherit;font:inherit;font-size:13px;line-height:18px;white-space:nowrap;cursor:pointer;outline:none}
+.bt-news-jump{display:inline-flex;align-items:center;gap:2px;margin:0;padding:4px 26px 4px 4px;border:0;border-radius:var(--bt-radius-none);background:transparent;color:inherit;font:inherit;font-size:var(--bt-font-body);line-height:18px;white-space:nowrap;cursor:pointer;outline:none}
 .bt-news-ico{flex:none;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px}
 .bt-news-ico svg{width:16px;height:16px}
-.bt-news-x{position:absolute;right:4px;top:50%;z-index:1;transform:translateY(-50%);width:20px;height:20px;padding:0;border:0;border-radius:999px;background:transparent;color:inherit;opacity:.75;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.bt-news-x{position:absolute;right:4px;top:50%;z-index:1;transform:translateY(-50%);width:20px;height:20px;padding:0;border:0;border-radius:var(--bt-radius-pill);background:transparent;color:inherit;opacity:.75;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
 .bt-news-x svg{width:12px;height:12px}
-.bt-news-x:hover{opacity:1;background:rgba(20,20,20,.5)}
+.bt-news-x:hover{opacity:1;background:color-mix(in srgb,var(--bt-shadow-ink) 50%,transparent)}
 @media (prefers-reduced-motion:reduce){.bt-news,[class*="_toBottomSlot"]>button{animation:none}}
-.bt-new-sep{display:flex;align-items:center;gap:8px;margin:14px 0 8px;padding:2px 0;font-size:11px;line-height:14px;font-weight:500;letter-spacing:.02em;text-transform:uppercase;color:var(--bt-accent);font-family:var(--bt-font)}
+.bt-new-sep{display:flex;align-items:center;gap:8px;margin:14px 0 8px;padding:2px 0;font-size:var(--bt-font-caption);line-height:14px;font-weight:500;letter-spacing:.02em;text-transform:uppercase;color:var(--bt-accent);font-family:var(--bt-font)}
 .bt-new-sep::before,.bt-new-sep::after{content:"";flex:1;height:1px;background:color-mix(in srgb,var(--bt-accent) 20%,transparent)}
 .bt-open-new{display:flex;flex-direction:column}
 .bt-open-new .bt-new-sep{margin:18px 0 0}
@@ -8790,44 +11042,44 @@ div:has(> nav [class*="_marks"]){display:none!important}
 .bt-earlier{display:flex;flex-direction:column;gap:6px}
 .bt-earlier-top{display:flex;justify-content:center;align-items:center;height:34px;flex:none}
 .bt-earlier-top:empty{display:none}
-.bt-earlier-top .bt-soft{height:28px;font-size:12px;padding:0 12px}
+.bt-earlier-top .bt-soft{height:28px;font-size:var(--bt-font-small);padding:0 12px}
 .bt-urow{display:flex;justify-content:flex-end}
-.bt-ububble{max-width:calc(var(--bt-msg-w) * 100%);background:var(--bt-user);color:var(--bt-user-ink);border-radius:18px;padding:7px 12px;font-size:14px;line-height:24px;box-sizing:border-box;overflow-wrap:anywhere;text-wrap:pretty;text-autospace:normal}
+.bt-ububble{max-width:calc(var(--bt-msg-w) * 100%);background:var(--bt-user);color:var(--bt-user-ink);border-radius:var(--bt-radius-bubble);padding:7px 12px;font-size:var(--bt-font-control);line-height:24px;box-sizing:border-box;overflow-wrap:anywhere;text-wrap:pretty;text-autospace:normal}
 .bt-ububble [class*="_markdown"],.bt-ububble a{color:inherit!important}
 .bt-ububble p{margin:0;line-height:24px}
-.bt-uimages{display:block;font-size:12px;opacity:.7}
-.bt-utime{margin-top:-4px;font-size:11px;line-height:14px;color:var(--bt-ink-3);font-variant-numeric:tabular-nums;white-space:nowrap}
+.bt-uimages{display:block;font-size:var(--bt-font-small);opacity:.7}
+.bt-utime{margin-top:-4px;font-size:var(--bt-font-caption);line-height:14px;color:var(--bt-ink-3);font-variant-numeric:tabular-nums;white-space:nowrap}
 .bt-earlier .bt-event{margin:4px 0}
-.bt-part-line{display:flex;align-items:center;gap:10px;margin:10px 0 6px;font-size:11px;line-height:14px;color:var(--bt-ink-3)}
+.bt-part-line{display:flex;align-items:center;gap:10px;margin:10px 0 6px;font-size:var(--bt-font-caption);line-height:14px;color:var(--bt-ink-3)}
 .bt-part-line::before,.bt-part-line::after{content:"";flex:1;height:1px;background:var(--bt-line)}
 /* The dock wrapper also holds the context meter, so it stays hidden until a side question is in it. */
 [data-composer-dock]:has(.bt-btw){display:flex!important;flex-direction:column;align-items:center;width:100%;max-width:var(--dsh-composer-card-max-width,748px)}
 [data-composer-dock]:has(.bt-btw)>:not([data-slot="conversation.composer.dock"]){display:none!important}
 .bt-btw-dock,.bt-btw-stack{display:flex;flex-direction:column;gap:6px;width:100%;max-width:var(--dsh-composer-card-max-width,748px)}
-.bt-btw{box-sizing:border-box;width:100%;margin:6px auto;padding:8px 12px;border:1px solid var(--bt-line);border-radius:12px;background:var(--bt-card);color:var(--bt-ink)}
+.bt-btw{box-sizing:border-box;width:100%;margin:6px auto;padding:8px 12px;border:1px solid var(--bt-line);border-radius:var(--bt-radius-card);background:var(--bt-card);color:var(--bt-ink)}
 .bt-btw-dock .bt-btw,.bt-btw-stack .bt-btw{margin:0}
 .bt-btw-compact{padding:6px 10px}
 .bt-btw-head{display:flex;align-items:center;gap:8px;min-width:0}
 .bt-btw-toggle{display:flex;align-items:center;gap:8px;flex:1;min-width:0;margin:0;padding:0;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
 .bt-btw-chevron{flex:none;width:7px;height:7px;border-right:1.5px solid var(--bt-ink-3);border-bottom:1.5px solid var(--bt-ink-3);transform:rotate(-45deg)}
 .bt-btw[data-open] .bt-btw-chevron{transform:rotate(45deg)}
-.bt-btw-q{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;line-height:18px}
+.bt-btw-q{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--bt-font-body);line-height:18px}
 .bt-btw[data-open] .bt-btw-q{white-space:normal}
-.bt-btw-time,.bt-btw-status{flex:none;color:var(--bt-ink-3);font-size:11px;line-height:14px;font-variant-numeric:tabular-nums}
+.bt-btw-time,.bt-btw-status{flex:none;color:var(--bt-ink-3);font-size:var(--bt-font-caption);line-height:14px;font-variant-numeric:tabular-nums}
 .bt-btw-cancel{margin-left:auto}
 .bt-btw-cancel:disabled{opacity:.55;cursor:default}
 .bt-btw-delete{flex:none;margin:-4px}
-.bt-btw-note{margin:4px 0 0;color:var(--bt-ink-3);font-size:12px;line-height:16px}
+.bt-btw-note{margin:4px 0 0;color:var(--bt-ink-3);font-size:var(--bt-font-small);line-height:16px}
 .bt-btw-body{margin-top:6px}
-.bt-btw-answer{font-size:14px;line-height:20px}
+.bt-btw-answer{font-size:var(--bt-font-control);line-height:20px}
 .bt-btw-answer p{margin:0}
-.bt-btw-fail{margin:0 0 6px;color:var(--bt-danger);font-size:13px;line-height:18px}
+.bt-btw-fail{margin:0 0 6px;color:var(--bt-danger);font-size:var(--bt-font-body);line-height:18px}
 @media (prefers-reduced-motion:reduce){.bt-btw-chevron{transition:none}}
 `;
 var PLUGIN_ID = "ds-superagent";
 function installStyles(text, tag) {
   const style = document.createElement("style");
-  style.dataset.dshBot = tag;
+  style.dataset.dshSuperagent = tag;
   style.dataset.plugin = PLUGIN_ID;
   style.textContent = text;
   document.head.appendChild(style);
@@ -8869,7 +11121,7 @@ function installCompiledStyles(text, tag) {
     if (!style.isConnected) document.head.appendChild(style);
     const names = /* @__PURE__ */ new Set();
     for (const sheet of document.styleSheets) {
-      if (sheet.ownerNode?.dataset?.dshBot) continue;
+      if (sheet.ownerNode?.dataset?.dshSuperagent !== void 0) continue;
       let list = cache.get(sheet);
       if (!list) {
         list = sheetClassNames(sheet);
@@ -8889,7 +11141,7 @@ function installCompiledStyles(text, tag) {
   const onLoad = (event) => {
     if (event.target instanceof HTMLLinkElement) schedule();
   };
-  const shell = (node) => node.dataset?.dshBot === void 0;
+  const shell = (node) => node.dataset?.dshSuperagent === void 0;
   const observer = new MutationObserver((records) => {
     if (records.some((record) => [...record.removedNodes].includes(style))) render();
     if (records.some((record) => [...record.addedNodes, ...record.removedNodes].some(shell))) schedule();
@@ -8905,27 +11157,1153 @@ function installCompiledStyles(text, tag) {
   };
 }
 
-// src/client/product-mcp-settings.js
+// src/client/appearance.js
 var import_react16 = require("react");
-function ProductMcpSettings({ binding, call }) {
+var STORAGE_KEY = "ds-superagent:appearance";
+var CONTENT_SIZE = { min: 12, max: 18 };
+var MODE_LABELS = { light: "Light mode", dark: "Dark mode", system: "Follow system" };
+var MOTION_LABELS = { quiet: "Quiet", normal: "Normal", lively: "Lively" };
+var DEFAULTS = { theme: "deepseek", accent: null, motion: "normal" };
+var appearance = createSource(DEFAULTS);
+var mountedTheme;
+function getAppearance() {
+  return { ...appearance.getSnapshot(), ...mountedTheme ? { fontSize: mountedTheme.getTheme().fontSizes.text } : {} };
+}
+function normalizeAppearance(prefs) {
+  const { theme, accent, motion } = prefs ?? {};
+  return {
+    theme: Object.hasOwn(allThemes(), theme) ? theme : DEFAULTS.theme,
+    accent: isHex(accent) ? accent : null,
+    motion: MOTION_LEVELS.includes(motion) ? motion : DEFAULTS.motion
+  };
+}
+function readAppearance(value) {
+  try {
+    return normalizeAppearance(JSON.parse(value()));
+  } catch {
+    return DEFAULTS;
+  }
+}
+function setAppearance(patch) {
+  if (Object.hasOwn(patch, "fontSize")) mountedTheme?.setFontSize("text", patch.fontSize);
+  const next = normalizeAppearance({ ...appearance.getSnapshot(), ...patch });
+  appearance.set(next);
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  } catch {
+  }
+}
+function installAppearance(hostTheme) {
+  mountedTheme = hostTheme;
+  appearance.set(readAppearance(() => window.localStorage.getItem(STORAGE_KEY)));
+  const style = installStyles("", "appearance");
+  const body = document.body;
+  const previousMotion = body.getAttribute("data-bt-motion");
+  let activeTheme;
+  let releaseTokens;
+  const render = () => {
+    const { theme, accent, motion } = appearance.getSnapshot();
+    const themes = allThemes();
+    const palette = themes[theme] ?? themes.deepseek;
+    const next = themeCss(palette, accent);
+    if (style.textContent !== next) style.textContent = next;
+    body.dataset.btMotion = motion;
+    if (palette !== activeTheme) {
+      const releasePrevious = releaseTokens;
+      releaseTokens = hostTheme?.overrideTokens("ds-superagent", shellTokens(palette));
+      releasePrevious?.();
+      activeTheme = palette;
+    }
+  };
+  const syncStorage = (event) => {
+    if (event.key === STORAGE_KEY || event.key === null) appearance.set(readAppearance(() => window.localStorage.getItem(STORAGE_KEY)));
+  };
+  render();
+  const stop = appearance.subscribe(render);
+  const stopRegistry = registry.subscribe(render);
+  window.addEventListener("storage", syncStorage);
+  return () => {
+    stop();
+    stopRegistry();
+    window.removeEventListener("storage", syncStorage);
+    style.remove();
+    if (previousMotion === null) body.removeAttribute("data-bt-motion");
+    else body.setAttribute("data-bt-motion", previousMotion);
+    releaseTokens?.();
+    if (mountedTheme === hostTheme) mountedTheme = void 0;
+  };
+}
+function AppearanceRow({ label, children }) {
+  return (0, import_react16.createElement)(
+    "div",
+    { className: "bt-set-row" },
+    (0, import_react16.createElement)("div", { className: "bt-set-copy" }, (0, import_react16.createElement)("span", { className: "bt-set-label" }, label)),
+    children
+  );
+}
+function useHostTheme(ctx) {
+  const service2 = ctx.get("theme");
+  const subscribe = (0, import_react16.useCallback)((listener) => ctx.on("theme/change", listener), [ctx]);
+  const getSnapshot = (0, import_react16.useCallback)(() => service2.getTheme(), [service2]);
+  return [service2, (0, import_react16.useSyncExternalStore)(subscribe, getSnapshot)];
+}
+function ChoiceRow({ label, value, labels, onChange }) {
+  return (0, import_react16.createElement)(AppearanceRow, { label }, (0, import_react16.createElement)(
+    Segmented,
+    { label, value },
+    Object.entries(labels).map(([id, text]) => (0, import_react16.createElement)("button", {
+      key: id,
+      type: "button",
+      "data-choice": id,
+      "aria-pressed": value === id,
+      onClick: () => onChange(id)
+    }, t(text)))
+  ));
+}
+function FontSizeRow({ service: service2, size }) {
+  const { min, max } = CONTENT_SIZE;
+  const value = Math.max(min, Math.min(max, size));
+  const label = t("Content font size");
+  return (0, import_react16.createElement)(AppearanceRow, { label }, (0, import_react16.createElement)(
+    "div",
+    { className: "bt-range", style: { "--bt-fill": `${(value - min) / (max - min) * 100}%` } },
+    (0, import_react16.createElement)("input", {
+      type: "range",
+      min,
+      max,
+      step: 1,
+      value,
+      "aria-label": label,
+      "aria-valuetext": `${size}px`,
+      onChange: (event) => service2.setFontSize("text", Number(event.target.value))
+    }),
+    (0, import_react16.createElement)("output", null, `${size}px`)
+  ));
+}
+function AppearanceSettings({ ctx }) {
+  const [hostTheme, hostSnapshot] = useHostTheme(ctx);
+  const prefs = (0, import_react16.useSyncExternalStore)(appearance.subscribe, appearance.getSnapshot);
+  (0, import_react16.useSyncExternalStore)(registry.subscribe, registry.getSnapshot);
+  const themes = allThemes();
+  const theme = Object.hasOwn(themes, prefs.theme) ? prefs.theme : DEFAULTS.theme;
+  const custom = prefs.accent !== null && !ACCENT_INKS.some((ink) => INKS[ink][0] === prefs.accent);
+  const accentButton = (color, label, ink) => (0, import_react16.createElement)("button", {
+    key: label,
+    type: "button",
+    className: ink ? "bt-swatch" : "bt-swatch bt-swatch-default",
+    title: label,
+    "aria-label": label,
+    "aria-pressed": prefs.accent === color,
+    style: ink ? { background: inkFill(ink) } : void 0,
+    onClick: () => setAppearance({ accent: color })
+  });
+  return (0, import_react16.createElement)(
+    "section",
+    { className: "bt-set-section bt-appearance" },
+    (0, import_react16.createElement)("h3", null, t("Display appearance")),
+    (0, import_react16.createElement)(
+      "div",
+      { className: "bt-set-card" },
+      (0, import_react16.createElement)(ChoiceRow, { label: t("Color mode"), value: hostSnapshot.preference, labels: MODE_LABELS, onChange: (id) => hostTheme.setTheme(id) }),
+      (0, import_react16.createElement)(AppearanceRow, { label: t("Theme") }, (0, import_react16.createElement)("select", {
+        className: "bt-select",
+        value: theme,
+        "aria-label": t("Theme"),
+        onChange: (event) => setAppearance({ theme: event.target.value })
+      }, Object.entries(themes).map(([id, palette]) => (0, import_react16.createElement)("option", { key: id, value: id }, t(palette.label))))),
+      (0, import_react16.createElement)(AppearanceRow, { label: t("Accent") }, (0, import_react16.createElement)(
+        "div",
+        { className: "bt-swatches", role: "group", "aria-label": t("Accent") },
+        accentButton(null, t("Theme accent")),
+        ACCENT_INKS.map((ink) => accentButton(INKS[ink][0], t(ink === "deepseek" ? "DeepSeek" : ink[0].toUpperCase() + ink.slice(1)), ink)),
+        (0, import_react16.createElement)(
+          "label",
+          { className: "bt-swatch bt-swatch-custom", title: t("Custom accent"), "data-on": custom },
+          (0, import_react16.createElement)("input", {
+            type: "color",
+            value: prefs.accent ?? themes[theme].light.accent,
+            "aria-label": t("Custom accent"),
+            onChange: (event) => setAppearance({ accent: event.target.value })
+          })
+        )
+      )),
+      (0, import_react16.createElement)(ChoiceRow, { label: t("Animation"), value: prefs.motion, labels: MOTION_LABELS, onChange: (motion) => setAppearance({ motion }) }),
+      (0, import_react16.createElement)(FontSizeRow, { service: hostTheme, size: hostSnapshot.fontSizes.text })
+    )
+  );
+}
+
+// ../package.json
+var package_default = {
+  name: "ds-superagent",
+  version: "0.2.5",
+  type: "module",
+  main: "./dist/index.js",
+  description: "The DS SuperAgent production engine plus its existing DSH host and client",
+  keywords: [
+    "dsh-plugin",
+    "deepseek-harness",
+    "dsh",
+    "deepseek",
+    "superagent",
+    "main",
+    "worker"
+  ],
+  homepage: "https://github.com/IceFireIcer/DS-SuperAgent#readme",
+  bugs: {
+    url: "https://github.com/IceFireIcer/DS-SuperAgent/issues"
+  },
+  repository: {
+    type: "git",
+    url: "git+https://github.com/IceFireIcer/DS-SuperAgent.git",
+    directory: "superagent"
+  },
+  license: "Apache-2.0",
+  engines: {
+    node: ">=24.9.0"
+  },
+  exports: {
+    ".": {
+      types: "./dist/index.d.ts",
+      default: "./dist/index.js"
+    },
+    "./storage": {
+      types: "./dist/storage.d.ts",
+      default: "./dist/storage.js"
+    },
+    "./postgres-storage": {
+      types: "./dist/postgres-storage.d.ts",
+      default: "./dist/postgres-storage.js"
+    },
+    "./session-persistence": {
+      types: "./dist/session-persistence.d.ts",
+      default: "./dist/session-persistence.js"
+    },
+    "./session-persistence-postgres": {
+      types: "./dist/session-persistence-postgres.d.ts",
+      default: "./dist/session-persistence-postgres.js"
+    },
+    "./client-access": {
+      types: "./dist/client-access.d.ts",
+      default: "./dist/client-access.js"
+    },
+    "./client-gateway": {
+      types: "./dist/client-gateway.d.ts",
+      default: "./dist/client-gateway.js"
+    },
+    "./profile": {
+      types: "./dist/profile.d.ts",
+      default: "./dist/profile.js"
+    },
+    "./watchdog": {
+      types: "./dist/watchdog.d.ts",
+      default: "./dist/watchdog.js"
+    },
+    "./watchdog-process": {
+      types: "./dist/watchdog-process.d.ts",
+      default: "./dist/watchdog-process.js"
+    },
+    "./supervisor": {
+      types: "./dist/supervisor.d.ts",
+      default: "./dist/supervisor.js"
+    },
+    "./supervisor-session": {
+      types: "./dist/supervisor-session.d.ts",
+      default: "./dist/supervisor-session.js"
+    },
+    "./config-instructions": {
+      types: "./dist/config-instructions.d.ts",
+      default: "./dist/config-instructions.js"
+    },
+    "./client": "./dsh/client.js",
+    "./web-search": "./dsh/web-search.js",
+    "./package.json": "./package.json"
+  },
+  scripts: {
+    build: "node scripts/build.mjs && node dsh/scripts/build-client.mjs",
+    typecheck: "tsc --noEmit",
+    test: 'npm run build && node scripts/test.mjs && node --import ./dsh/test/harness-resolve.mjs --test "dsh/test/*.test.js"',
+    "test:server": "node scripts/test.mjs",
+    "test:client": 'node --import ./dsh/test/harness-resolve.mjs --test "dsh/test/*.test.js"',
+    "test:stress": "node scripts/stress.mjs",
+    lint: "oxlint -c .oxlintrc.json src test scripts dev dsh/src dsh/test dsh/scripts dsh/dev",
+    "style-debt": "node dsh/scripts/style-debt.mjs",
+    mock: "npm run build && node dev/mock.mjs",
+    "acceptance:t57:env": "node dev/t57-env-check.mjs",
+    "acceptance:t57:model": "node dev/t57-model-acceptance.mjs",
+    "acceptance:t57:proactive": "node dev/proactive-model-acceptance.mjs",
+    "acceptance:t57:github": "node dev/github-acceptance.mjs"
+  },
+  bin: {
+    "ds-superagent-watchdog": "dist/watchdog-cli.js"
+  },
+  dsh: {
+    client: {
+      platform: "web"
+    },
+    bundle: {
+      patch: "./cordis.patch.yml"
+    }
+  },
+  files: [
+    "dist/",
+    "dsh/client.js",
+    "dsh/office.js",
+    "dsh/web-search.js",
+    "dsh/src/office/",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  peerDependencies: {
+    "@deepseek-ai/cordis": "4.1.0",
+    "@deepseek-ai/dsh-agent": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-attachment": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-llm": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-scope": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-session": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-session-persistence": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-tools": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-web": "0.2.2-rc.1"
+  },
+  dependencies: {
+    "@deepseek-ai/dsh-fs-local": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-home-paths": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-skill": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-skill-filesystem": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-subprocess-local": "0.2.2-rc.1",
+    "@modelcontextprotocol/client": "2.2.0",
+    "deep-view": "0.1.0",
+    "node-pty": "1.2.0-beta.15",
+    pg: "8.23.1",
+    playwright: "1.61.1"
+  },
+  devDependencies: {
+    "@deepseek-ai/cordis": "4.1.0",
+    "@deepseek-ai/dsh": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-agent": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-agent-loop": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-attachment": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-attachment-local": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-credentials-local": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-fs": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-fs-local": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-llm": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-session": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-session-persistence-jsonl": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-session-projection": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-subprocess": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-subprocess-local": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-system-prompt": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-tool-executor-native": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-tools": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-web": "0.2.2-rc.1",
+    "@types/node": "24.19.2",
+    "@types/pg": "8.23.1",
+    "@xmldom/xmldom": "0.9.12",
+    "embedded-postgres": "17.11.0-beta.19",
+    esbuild: "0.28.2",
+    jsdom: "29.1.1",
+    oxlint: "1.76.0",
+    react: "19.3.0",
+    "react-dom": "19.3.0",
+    typescript: "6.0.3"
+  },
+  allowScripts: {
+    "@deepseek-ai/dsh-subprocess-local@0.2.2-rc.1": true,
+    "esbuild@0.28.2": true,
+    "koffi@3.1.1": true,
+    "node-pty@1.2.0-beta.15": true
+  }
+};
+
+// src/client/settings-about.js
+var import_react17 = require("react");
+function AboutSettings() {
+  return (0, import_react17.createElement)(
+    SectionCard,
+    { title: "DS SuperAgent" },
+    (0, import_react17.createElement)(FieldRow, { label: t("Plugin version"), control: (0, import_react17.createElement)("span", null, package_default.version) }),
+    (0, import_react17.createElement)(FieldRow, { label: t("License"), control: (0, import_react17.createElement)("span", null, package_default.license) }),
+    (0, import_react17.createElement)(
+      "div",
+      { className: "bt-set-row" },
+      (0, import_react17.createElement)("a", { href: package_default.homepage, target: "_blank", rel: "noopener noreferrer" }, t("Project on GitHub"))
+    )
+  );
+}
+var ABOUT_SETTINGS_SECTION = { render: () => (0, import_react17.createElement)(AboutSettings) };
+
+// src/client/settings-navigation.js
+var SETTINGS_GROUPS = [
+  { id: "general", label: "General", pages: [
+    { id: "general", label: "General" }
+  ] },
+  { id: "models", label: "Models", pages: [
+    { id: "models", label: "Models" },
+    { id: "roles", label: "Roles" },
+    { id: "presets", label: "Agent presets" },
+    { id: "built-in-plugins", label: "Built-in plugins" }
+  ] },
+  { id: "connections", label: "Connections and capabilities", pages: [
+    { id: "connectors", label: "Connectors" },
+    { id: "im", label: "IM" },
+    { id: "phone", label: "Phone" },
+    { id: "browser", label: "Browser", tabs: [
+      { id: "browser-resources", label: "Browser resources" },
+      { id: "browser-plugin", label: "Browser plugin" }
+    ] },
+    { id: "computer", label: "Computer control" },
+    { id: "capabilities", label: "Capability library" }
+  ] },
+  { id: "superagent", label: "SuperAgent", pages: [
+    { id: "execution", label: "Execution policy" },
+    { id: "schedules", label: "Scheduled tasks", tabs: [
+      { id: "calendar", label: "Calendar" },
+      { id: "scheduled-tasks", label: "Scheduled tasks" }
+    ] },
+    { id: "preparations", label: "Proactive preparation" },
+    { id: "supervision", label: "Supervision" },
+    { id: "memory", label: "Memory" },
+    { id: "usage", label: "Usage", tabs: [
+      { id: "usage-overview", label: "Usage" },
+      { id: "status", label: "Status" }
+    ] },
+    { id: "secrets", label: "Secrets", tabs: [
+      { id: "chat-secrets", label: "Secrets" },
+      { id: "credential-resources", label: "Credential resources" }
+    ] },
+    { id: "remote-clients", label: "Remote clients" }
+  ] },
+  { id: "help", label: "Help", pages: [
+    { id: "feedback", label: "Feedback" },
+    { id: "about", label: "About" }
+  ] }
+];
+var pages = SETTINGS_GROUPS.flatMap((group) => group.pages);
+var SETTINGS_SECTIONS = pages.flatMap((page) => page.tabs ?? [page]);
+function settingsTarget(id) {
+  for (const page of pages) {
+    if (page.id === id) return { page, section: page.tabs?.[0] ?? page };
+    const tab = page.tabs?.find((section) => section.id === id);
+    if (tab) return { page, section: tab };
+  }
+  return null;
+}
+
+// src/client/settings-sections.js
+var import_react18 = require("react");
+var SETTINGS_SECTION_SLOT = "settings.section";
+var SettingsSectionContext = (0, import_react18.createContext)(null);
+var statusCopy = /* @__PURE__ */ new Map([
+  ["loading", "Loading settings…"],
+  ["unavailable", "This setting is unavailable here."],
+  ["error", "Could not load this setting."]
+]);
+function SettingsSectionState({ status = "unavailable", message }) {
+  return (0, import_react18.createElement)(
+    "p",
+    {
+      role: status === "error" ? "alert" : "status",
+      className: status === "error" ? "bt-main-error" : "bt-main-status"
+    },
+    t(statusCopy.get(status) ?? statusCopy.get("unavailable")),
+    typeof message === "string" && message ? ` ${message}` : null
+  );
+}
+var SettingsSectionBoundary = class extends import_react18.Component {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    return this.state.failed ? (0, import_react18.createElement)(SettingsSectionState, { status: "error" }) : this.props.children;
+  }
+};
+function SettingsSectionContent({ section, close, navigate }) {
+  if (section?.status !== void 0 && section.status !== "ready") {
+    return (0, import_react18.createElement)(SettingsSectionState, { status: section.status, message: section.message });
+  }
+  if (typeof section?.render !== "function") return (0, import_react18.createElement)(SettingsSectionState);
+  return section.render({ close, navigate }) ?? (0, import_react18.createElement)(SettingsSectionState);
+}
+function SettingsSectionOutlet({ id, section, renderSlot, close, navigate }) {
+  return (0, import_react18.createElement)(SettingsSectionBoundary, { key: id }, renderSlot ? (0, import_react18.createElement)(SettingsSlotContent, { id, renderSlot, close }) : (0, import_react18.createElement)(SettingsSectionContent, { section, close, navigate }));
+}
+function SettingsSlotContent({ id, renderSlot, close }) {
+  return renderSlot(SETTINGS_SECTION_SLOT, { close }, { only: productSettingsSlotId(id), fallback: (0, import_react18.createElement)(SettingsSectionState) });
+}
+var productSettingsSlotId = (id) => `superagent-${id}`;
+function installSettingsSections(slots) {
+  return slots.inject(SETTINGS_SECTION_SLOT, () => {
+    const disposers = SETTINGS_SECTIONS.map(({ id, label }, order) => slots.register({
+      name: SETTINGS_SECTION_SLOT,
+      id: productSettingsSlotId(id),
+      order,
+      label: () => t(label)
+    }, function ProductSettingsSection({ close }) {
+      const context = (0, import_react18.useContext)(SettingsSectionContext);
+      const section = context?.sections && Object.hasOwn(context.sections, id) ? context.sections[id] : void 0;
+      return (0, import_react18.createElement)(SettingsSectionContent, { section, close, navigate: context?.navigate });
+    }));
+    return () => {
+      for (const dispose of disposers.reverse()) dispose();
+    };
+  });
+}
+
+// src/client/settings-shell.js
+var import_react19 = require("react");
+var import_react_dom2 = require("react-dom");
+var SETTINGS_CHILDREN = {
+  [SETTINGS_SECTION_SLOT]: { kind: "list", scope: "root" }
+};
+var pageIcons = {
+  general: GearIcon,
+  models: SlidersIcon,
+  roles: PeopleIcon,
+  presets: MemoryIcon,
+  "built-in-plugins": PlugIcon,
+  connectors: ConnectorIcon,
+  im: SideIcon,
+  phone: ConnectorIcon,
+  browser: GlobeIcon,
+  computer: TerminalIcon,
+  capabilities: FolderIcon,
+  execution: SlidersIcon,
+  schedules: CalendarIcon,
+  preparations: ClockIcon,
+  supervision: GaugeIcon,
+  memory: MemoryIcon,
+  usage: GaugeIcon,
+  secrets: GearIcon,
+  "remote-clients": ConnectorIcon,
+  feedback: SideIcon,
+  about: InfoIcon
+};
+function SettingsTabs({ page, section, navigate, id }) {
+  const tabId = (tab) => `${id}-tab-${tab.id}`;
+  const onKeyDown = (event) => {
+    const index = page.tabs.indexOf(section);
+    const last = page.tabs.length - 1;
+    const moves = { ArrowLeft: index === 0 ? last : index - 1, ArrowRight: index === last ? 0 : index + 1, Home: 0, End: last };
+    if (!Object.hasOwn(moves, event.key)) return;
+    event.preventDefault();
+    const next = page.tabs[moves[event.key]];
+    navigate(next.id);
+    event.currentTarget.ownerDocument.getElementById(tabId(next))?.focus();
+  };
+  return (0, import_react19.createElement)(
+    "div",
+    { className: "bt-seg bt-settings-tabs", role: "tablist", "aria-label": t(page.label), onKeyDown },
+    page.tabs.map((tab) => (0, import_react19.createElement)("button", {
+      key: tab.id,
+      type: "button",
+      role: "tab",
+      id: tabId(tab),
+      "aria-selected": tab === section,
+      "aria-controls": `${id}-panel-${tab.id}`,
+      tabIndex: tab === section ? 0 : -1,
+      onClick: () => navigate(tab.id)
+    }, t(tab.label)))
+  );
+}
+function keepFocusInDialog(event) {
+  const dialog = event.currentTarget;
+  const candidates = [...dialog.querySelectorAll("a[href], button, input, select, textarea, [tabindex]")].filter((node) => node.tabIndex >= 0 && !node.matches(":disabled, input[type=hidden]") && !node.closest("[hidden], [inert]"));
+  const first = candidates[0];
+  const last = candidates.at(-1);
+  const active = dialog.ownerDocument.activeElement;
+  if (event.shiftKey ? active === first || active === dialog : active === last) {
+    event.preventDefault();
+    const next = event.shiftKey ? last : first;
+    next?.focus();
+  }
+}
+function SettingsDialog({ sections, renderSlot, initialPage, onClose, leaving }) {
+  const [target, setTarget] = (0, import_react19.useState)(() => settingsTarget(initialPage) ?? settingsTarget("general"));
+  const { page, section } = target;
+  const id = (0, import_react19.useId)();
+  const dialog = (0, import_react19.useRef)(null);
+  const scroll = (0, import_react19.useRef)(null);
+  (0, import_react19.useEffect)(() => {
+    const previous = dialog.current.ownerDocument.activeElement;
+    dialog.current.focus();
+    return () => {
+      if (previous?.isConnected) previous.focus();
+    };
+  }, []);
+  (0, import_react19.useEffect)(() => {
+    if (scroll.current) scroll.current.scrollTop = 0;
+  }, [section.id]);
+  const close = () => {
+    if (!leaving) onClose();
+  };
+  const navigate = (targetId) => {
+    const next = settingsTarget(targetId);
+    if (!leaving && next) setTarget(next);
+  };
+  const navigateFromSection = (targetId) => {
+    if (leaving || !settingsTarget(targetId)) return;
+    dialog.current?.focus();
+    navigate(targetId);
+  };
+  const onKeyDown = (event) => {
+    if (event.defaultPrevented || leaving) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+    }
+    if (event.key === "Tab") keepFocusInDialog(event);
+  };
+  const content = (0, import_react19.createElement)(SettingsSectionOutlet, {
+    key: section.id,
+    id: section.id,
+    section: Object.hasOwn(sections, section.id) ? sections[section.id] : void 0,
+    renderSlot,
+    close,
+    navigate: navigateFromSection
+  });
+  return (0, import_react19.createElement)(
+    SettingsSectionContext.Provider,
+    { value: { sections, navigate: navigateFromSection } },
+    (0, import_react19.createElement)(
+      "div",
+      { className: "bt-settings-layer", "data-leaving": leaving ? "" : void 0, inert: leaving },
+      (0, import_react19.createElement)("div", { className: "bt-scrim", onClick: close }),
+      (0, import_react19.createElement)(
+        "div",
+        {
+          ref: dialog,
+          className: "bt-settings bt-superagent-settings",
+          role: "dialog",
+          tabIndex: -1,
+          "aria-modal": true,
+          "aria-label": t("Super-agent settings"),
+          onKeyDown
+        },
+        (0, import_react19.createElement)(
+          "nav",
+          { className: "bt-settings-nav", "aria-label": t("Settings pages") },
+          SETTINGS_GROUPS.map((group) => (0, import_react19.createElement)(
+            "div",
+            { key: group.id, className: "bt-settings-group", role: "group", "aria-labelledby": `${id}-${group.id}` },
+            (0, import_react19.createElement)("span", { id: `${id}-${group.id}`, className: "bt-settings-group-label" }, t(group.label)),
+            group.pages.map((item) => (0, import_react19.createElement)(
+              "button",
+              {
+                key: item.id,
+                className: "bt-settings-item",
+                type: "button",
+                "aria-current": item === page ? "page" : void 0,
+                onClick: () => {
+                  if (item !== page) navigate(item.id);
+                }
+              },
+              (0, import_react19.createElement)(pageIcons[item.id]),
+              t(item.label)
+            ))
+          ))
+        ),
+        (0, import_react19.createElement)(SettingsPage, {
+          title: t(page.label),
+          scrollRef: scroll,
+          tabs: page.tabs ? (0, import_react19.createElement)(SettingsTabs, { page, section, navigate, id }) : null
+        }, page.tabs ? page.tabs.map((tab) => (0, import_react19.createElement)(
+          "div",
+          {
+            key: tab.id,
+            role: "tabpanel",
+            id: `${id}-panel-${tab.id}`,
+            "aria-labelledby": `${id}-tab-${tab.id}`,
+            tabIndex: tab === section ? 0 : -1,
+            hidden: tab !== section
+          },
+          tab === section ? content : null
+        )) : content),
+        (0, import_react19.createElement)("button", { type: "button", className: "bt-settings-close", "aria-label": t("Close settings"), onClick: close }, (0, import_react19.createElement)(CloseIcon))
+      )
+    )
+  );
+}
+function SettingsShell({ open = true, onClose, sections, renderSlot, initialPage }) {
+  const [kept, leaving] = useLinger(open, 160);
+  if (!kept) return null;
+  return (0, import_react_dom2.createPortal)((0, import_react19.createElement)(SettingsDialog, {
+    onClose,
+    sections: { about: ABOUT_SETTINGS_SECTION, ...sections },
+    renderSlot,
+    initialPage,
+    leaving
+  }), document.body);
+}
+var SETTINGS_SHELL_CSS = `
+.bt-superagent-settings{border-radius:20px}
+.bt-superagent-settings>.bt-settings-nav{overflow-y:auto;scrollbar-width:thin;overscroll-behavior:contain}
+.bt-settings-group{display:flex;flex-direction:column;gap:2px}
+.bt-settings-group+.bt-settings-group{margin-top:12px}
+.bt-settings-group-label{padding:0 8px 4px;color:var(--bt-ink-2);font-size:var(--bt-font-small,12px);line-height:16px;font-weight:600}
+.bt-settings-group .bt-settings-item{min-height:32px}
+.bt-settings-group .bt-settings-item svg{flex:none}
+.bt-settings-tabs{align-self:flex-start;margin:4px 20px 0;max-width:calc(100% - 40px)}
+.bt-settings-tabs button{height:auto;min-height:28px;padding:4px 12px}
+.bt-settings-tabs button[aria-selected=true]{background:var(--bt-card);color:var(--bt-ink)}
+.bt-superagent-settings :is(.bt-settings-item,.bt-settings-close,[role=tab],[role=tabpanel]):focus-visible{outline:2px solid var(--bt-accent);outline-offset:-2px}
+.bt-superagent-settings:focus{outline:none}
+.bt-superagent-settings [role=tabpanel][hidden]{display:none}
+.bt-superagent-settings [role=tabpanel]:not([hidden]){display:flex;flex-direction:column;gap:20px}
+@media(max-width:640px){
+  .bt-superagent-settings{border-radius:0}
+  .bt-superagent-settings>.bt-settings-nav{align-items:flex-start;overflow-y:hidden}
+  .bt-settings-group{flex:none;display:grid;grid-auto-flow:column;grid-template-rows:auto auto}
+  .bt-settings-group+.bt-settings-group{margin:0 0 0 12px}
+  .bt-settings-group-label{grid-column:1/-1}
+  .bt-settings-group .bt-settings-item{grid-row:2}
+}
+`;
+
+// src/client/product-brand.js
+var import_react20 = require("react");
+function ProductBrandMark({ size = 24 }) {
+  return (0, import_react20.createElement)("span", { className: "bt-brand-whale" }, (0, import_react20.createElement)(BotMark, { look: MAIN_LOOK, size }));
+}
+
+// src/client/shell-palette.js
+var import_react21 = require("react");
+var PALETTE_EXIT_MS = 160;
+function ShellPalette({ actions, connectLabel, settingsAvailable, onClose, reportError }) {
+  const [query, setQuery] = (0, import_react21.useState)("");
+  const [cursor, setCursor] = (0, import_react21.useState)(0);
+  const [leaving, setLeaving] = (0, import_react21.useState)(false);
+  const dialog = (0, import_react21.useRef)(null);
+  const input = (0, import_react21.useRef)(null);
+  const timer = (0, import_react21.useRef)(null);
+  const listId = (0, import_react21.useId)();
+  const quiet = document.body.dataset.btMotion === "quiet";
+  const wanted = query.trim().toLowerCase();
+  const rows2 = [
+    { key: "main", title: t("Main"), avatar: (0, import_react21.createElement)(ProductBrandMark), run: actions.openMain },
+    { key: "activity", title: t("Activity"), icon: (0, import_react21.createElement)(GaugeIcon), run: actions.openActivity },
+    connectLabel ? { key: "connection", title: connectLabel, icon: (0, import_react21.createElement)(GlobeIcon), run: actions.openConnection } : null,
+    settingsAvailable !== false && actions.openSettings ? { key: "settings", title: t("Settings"), icon: (0, import_react21.createElement)(GearIcon), run: () => actions.openSettings("general") } : null
+  ].filter((row) => row?.run && row.title.toLowerCase().includes(wanted));
+  const active = Math.min(cursor, Math.max(rows2.length - 1, 0));
+  const shown = rows2.map((row) => row.key).join("\n");
+  const glide = useGlide(`${active}
+${shown}`, { axis: "y", ...QUICK_EDGES });
+  const listRef = glide.box;
+  useFlip(listRef, shown, "[data-flip]");
+  (0, import_react21.useEffect)(() => {
+    const element = dialog.current;
+    const previous = document.activeElement;
+    element.showModal();
+    input.current?.focus();
+    return () => {
+      clearTimeout(timer.current);
+      if (element.open) element.close();
+      if (document.activeElement === document.body && previous?.isConnected) previous.focus();
+    };
+  }, []);
+  (0, import_react21.useEffect)(() => {
+    dialog.current?.querySelector("[aria-selected=true]")?.scrollIntoView({ block: "nearest" });
+  }, [active, query, shown]);
+  const close = (run2) => {
+    if (timer.current !== null) return;
+    setLeaving(true);
+    timer.current = setTimeout(() => {
+      dialog.current?.close();
+      onClose();
+      if (run2) void Promise.resolve().then(run2).catch(reportError);
+    }, quiet || reducedMotion() ? 0 : PALETTE_EXIT_MS);
+  };
+  const choose = (row) => {
+    if (row) close(row.run);
+  };
+  return (0, import_react21.createElement)(
+    "dialog",
+    {
+      ref: dialog,
+      className: "bt-palette-layer bt-product-palette-layer",
+      "data-leaving": leaving || void 0,
+      "aria-label": t("Search"),
+      "aria-modal": true,
+      onCancel: (event) => {
+        event.preventDefault();
+        close();
+      }
+    },
+    (0, import_react21.createElement)("div", { className: "bt-backdrop", onMouseDown: () => close(), "aria-hidden": true }),
+    (0, import_react21.createElement)(
+      "div",
+      { className: "bt-palette bt-product-palette" },
+      (0, import_react21.createElement)(
+        "div",
+        { className: "bt-palette-head" },
+        (0, import_react21.createElement)("span", { className: "bt-palette-glyph", "aria-hidden": true }, (0, import_react21.createElement)(SearchIcon)),
+        (0, import_react21.createElement)("input", {
+          ref: input,
+          value: query,
+          placeholder: t("Search commands"),
+          "aria-label": t("Search commands"),
+          role: "combobox",
+          "aria-expanded": true,
+          "aria-controls": listId,
+          "aria-autocomplete": "list",
+          "aria-activedescendant": rows2.length ? `${listId}-${rows2[active].key}` : void 0,
+          onChange: (event) => {
+            setQuery(event.target.value);
+            setCursor(0);
+          },
+          onKeyDown: (event) => {
+            if (event.nativeEvent.isComposing) return;
+            if (event.key === "ArrowDown") {
+              event.preventDefault();
+              setCursor(Math.min(active + 1, Math.max(0, rows2.length - 1)));
+            } else if (event.key === "ArrowUp") {
+              event.preventDefault();
+              setCursor(Math.max(active - 1, 0));
+            } else if (event.key === "Enter") {
+              event.preventDefault();
+              choose(rows2[active]);
+            }
+          }
+        }),
+        (0, import_react21.createElement)("button", {
+          type: "button",
+          className: "bt-palette-clear",
+          "aria-label": query ? t("Clear search") : t("Close search"),
+          onClick: () => {
+            if (!query) {
+              close();
+              return;
+            }
+            setQuery("");
+            setCursor(0);
+            input.current?.focus();
+          }
+        }, (0, import_react21.createElement)(CloseIcon))
+      ),
+      (0, import_react21.createElement)(
+        "div",
+        { ref: quiet ? void 0 : listRef, id: listId, className: "bt-palette-list", role: "listbox", "aria-label": t("Results") },
+        (0, import_react21.createElement)("span", { ref: glide.thumb, className: "bt-thumb", "aria-hidden": true }),
+        rows2.length === 0 ? (0, import_react21.createElement)(
+          "div",
+          { className: "bt-palette-empty", role: "status" },
+          (0, import_react21.createElement)("span", { className: "bt-palette-empty-icon", "aria-hidden": true }, (0, import_react21.createElement)(SearchIcon)),
+          (0, import_react21.createElement)("span", { className: "bt-palette-empty-label" }, t("No results"))
+        ) : (0, import_react21.createElement)(
+          import_react21.Fragment,
+          null,
+          (0, import_react21.createElement)("div", { className: "bt-palette-section", role: "presentation", "data-flip": "section:commands" }, t("Commands")),
+          rows2.map((row, index) => (0, import_react21.createElement)(
+            "button",
+            {
+              key: row.key,
+              id: `${listId}-${row.key}`,
+              type: "button",
+              tabIndex: -1,
+              role: "option",
+              className: "bt-palette-row",
+              "aria-selected": index === active,
+              "data-flip": row.key,
+              onMouseDown: (event) => event.preventDefault(),
+              onMouseMove: () => {
+                if (cursor !== index) setCursor(index);
+              },
+              onClick: () => choose(row)
+            },
+            (0, import_react21.createElement)("span", { className: "bt-palette-lead" }, row.avatar ?? (0, import_react21.createElement)("span", { className: "bt-palette-cmd" }, row.icon)),
+            (0, import_react21.createElement)("span", { className: "bt-palette-text" }, (0, import_react21.createElement)("span", { className: "bt-palette-title" }, row.title))
+          ))
+        )
+      )
+    )
+  );
+}
+
+// src/client/shell-notifications.js
+var import_react22 = require("react");
+var NOTIFY_KEY = "ds-superagent:notify";
+var TOAST_MS = 5200;
+var bridge = () => window.dsSuperagentApp;
+function notificationsEnabled() {
+  try {
+    return JSON.parse(window.localStorage.getItem(NOTIFY_KEY))?.enabled !== false;
+  } catch {
+    return true;
+  }
+}
+function shellNoticeKind({ before, after, viewing, focused, enabled }) {
+  if (!before || !after || !enabled || viewing && focused) return void 0;
+  if (after.pending && after.pending !== before.pending) return "question";
+  if (after.unread && after.unread !== before.unread) return "reply";
+  return void 0;
+}
+function ShellNotificationWatcher({ useShell, onOpenMain, showNotice }) {
+  const { notificationScope, unread, pending, activity } = useShell();
+  const previous = (0, import_react22.useRef)(null);
+  (0, import_react22.useEffect)(() => {
+    const dispose = bridge()?.onOpenSession?.((id) => {
+      if (id === "main") onOpenMain();
+    });
+    return typeof dispose === "function" ? dispose : void 0;
+  }, [onOpenMain]);
+  (0, import_react22.useEffect)(() => {
+    const current = notificationScope ? { notificationScope, unread, pending } : null;
+    const before = previous.current;
+    previous.current = current;
+    const kind = shellNoticeKind({
+      before: current?.notificationScope === before?.notificationScope ? before : null,
+      after: current,
+      viewing: !activity,
+      focused: document.hasFocus() && document.visibilityState !== "hidden",
+      enabled: notificationsEnabled()
+    });
+    const shell = bridge();
+    if (kind) {
+      const body = t(kind === "question" ? "Waiting for your answer" : "A new reply is waiting");
+      if (shell?.notify) {
+        void Promise.resolve().then(() => shell.notify({ sessionId: "main", title: "DS SuperAgent", body })).catch(() => showNotice(body));
+      } else {
+        showNotice(body);
+      }
+    }
+    shell?.setBadge?.(current && (unread || pending) ? 1 : 0);
+  }, [notificationScope, unread, pending, activity, showNotice]);
+  (0, import_react22.useEffect)(() => () => bridge()?.setBadge?.(0), []);
+  return null;
+}
+function ShellToast({ toast, onDismiss, onOpenMain }) {
+  const [leaving, setLeaving] = (0, import_react22.useState)(false);
+  const dismiss = (0, import_react22.useRef)(onDismiss);
+  dismiss.current = onDismiss;
+  (0, import_react22.useEffect)(() => {
+    setLeaving(false);
+    const fade = setTimeout(() => setLeaving(true), TOAST_MS);
+    const gone = setTimeout(() => dismiss.current(), TOAST_MS + 200);
+    return () => {
+      clearTimeout(fade);
+      clearTimeout(gone);
+    };
+  }, [toast]);
+  const notice = toast.tone === "notice";
+  return (0, import_react22.createElement)(
+    "div",
+    { className: "bt-toast", role: notice ? "status" : "alert", "data-tone": toast.tone, "data-leaving": leaving || void 0 },
+    (0, import_react22.createElement)("span", { className: "bt-toast-text" }, toast.text),
+    notice ? (0, import_react22.createElement)("button", { type: "button", className: "bt-toast-link", onClick: () => {
+      onDismiss();
+      onOpenMain();
+    } }, t("Open Main")) : null,
+    (0, import_react22.createElement)("button", { type: "button", className: "bt-icon-btn bt-toast-close", "aria-label": t("Dismiss"), onClick: onDismiss }, (0, import_react22.createElement)(CloseIcon))
+  );
+}
+
+// src/client/product-shell.js
+var import_react23 = require("react");
+var import_react_dom3 = require("react-dom");
+var BRAND = "DS SuperAgent";
+var ShellBrandName = () => (0, import_react23.createElement)("span", { className: "bt-product-brand-name" }, BRAND);
+var MainMark = ({ state = "idle", size }) => (0, import_react23.createElement)(BotMark, { look: MAIN_LOOK, size, state, live: true });
+var GoArrow = () => (0, import_react23.createElement)("svg", {
+  width: 14,
+  height: 14,
+  viewBox: "-12 -12 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 2.2,
+  strokeLinecap: "round",
+  strokeLinejoin: "round",
+  "aria-hidden": true
+}, (0, import_react23.createElement)("path", { d: "M-7 0H7M2 -5L7 0L2 5" }));
+function ProductShellHeader({ activity = false, markState, onMain, onActivity, children }) {
+  const action = activity ? onMain : onActivity;
+  const label = activity ? t("Back to chat") : t("Main");
+  const contents = (0, import_react23.createElement)(
+    import_react23.Fragment,
+    null,
+    (0, import_react23.createElement)(MainMark, { size: 24, state: markState }),
+    (0, import_react23.createElement)("span", { className: "bt-pill-name" }, label),
+    action ? (0, import_react23.createElement)("span", { className: "bt-pill-go", "aria-hidden": true }, (0, import_react23.createElement)(GoArrow)) : null
+  );
+  return (0, import_react23.createElement)(
+    "div",
+    { className: "bt-head bt-product-head" },
+    action ? (0, import_react23.createElement)("button", {
+      type: "button",
+      className: "bt-pill",
+      "aria-label": activity ? label : t("View activity"),
+      onClick: action
+    }, contents) : (0, import_react23.createElement)("span", { className: "bt-pill" }, contents),
+    children
+  );
+}
+function ShellSidebar({ wide = true, useShell, actions, openPalette }) {
+  const { activity, markState, preview, pending, unread, connectLabel, settingsAvailable } = useShell();
+  const mainLabel = [t("Main"), pending ? t("Waiting for your answer") : unread ? t("Unread activity") : ""].filter(Boolean).join(", ");
+  const row = (label, icon, onClick, selected) => (0, import_react23.createElement)("button", {
+    type: "button",
+    className: "bt-row",
+    "aria-current": selected ? "page" : void 0,
+    "aria-label": label,
+    title: wide ? void 0 : label,
+    onClick
+  }, icon, wide ? (0, import_react23.createElement)(
+    "span",
+    { className: "bt-row-body" },
+    (0, import_react23.createElement)("span", { className: "bt-row-name" }, (0, import_react23.createElement)("span", { className: "bt-row-title" }, label))
+  ) : null);
+  return (0, import_react23.createElement)(
+    "nav",
+    { className: `bt-side bt-product-side${wide ? "" : " bt-rail"}`, "aria-label": t("Work navigation") },
+    (0, import_react23.createElement)(
+      "div",
+      { className: wide ? "bt-side-top" : "bt-rail-top" },
+      (0, import_react23.createElement)("button", {
+        type: "button",
+        className: "bt-round",
+        title: t("Search"),
+        "aria-label": t("Search"),
+        "aria-keyshortcuts": "Control+k Meta+k",
+        onClick: openPalette
+      }, (0, import_react23.createElement)(SearchIcon))
+    ),
+    (0, import_react23.createElement)(
+      "div",
+      { className: "bt-list" },
+      wide ? (0, import_react23.createElement)("div", { className: "bt-tile-wrap" }, (0, import_react23.createElement)(
+        "button",
+        {
+          type: "button",
+          className: "bt-tile",
+          "aria-current": activity ? void 0 : "page",
+          "aria-label": mainLabel,
+          title: preview || t("Main"),
+          onClick: actions.openMain
+        },
+        (0, import_react23.createElement)(MainMark, { size: 60, state: markState }),
+        (0, import_react23.createElement)("span", { className: "bt-tile-name" }, t("Main")),
+        (pending || unread) && activity ? (0, import_react23.createElement)("span", { className: "bt-dot", "aria-hidden": true }) : null
+      )) : row(mainLabel, (0, import_react23.createElement)(MainMark, { size: 36, state: markState }), actions.openMain, !activity),
+      actions.openActivity ? row(t("Activity"), (0, import_react23.createElement)(GaugeIcon), actions.openActivity, activity) : null,
+      actions.openConnection && connectLabel ? row(connectLabel, (0, import_react23.createElement)(GlobeIcon), actions.openConnection) : null,
+      actions.openSettings && settingsAvailable !== false ? row(t("Settings"), (0, import_react23.createElement)(GearIcon), () => actions.openSettings("general")) : null
+    )
+  );
+}
+function installProductShell(ctx, { useShell, actions, Overlay, overlayChildren, settingsInSidebar = true, nativeHeader = false }) {
+  const palette = createSource(false);
+  const toast = createSource(null);
+  const openPalette = () => palette.set(true);
+  const reportError = (error) => toast.set({ text: error instanceof Error ? error.message : String(error) });
+  const showNotice = (text) => toast.set({ text, tone: "notice" });
+  const shellActions = settingsInSidebar ? actions : { ...actions, openSettings: void 0 };
+  const Sidebar = (props) => (0, import_react23.createElement)(ShellSidebar, { ...props, useShell, actions: shellActions, openPalette });
+  const Header = (props) => {
+    const state = useShell();
+    return (0, import_react23.createElement)(ProductShellHeader, {
+      activity: state.activity,
+      markState: state.markState,
+      onMain: actions.openMain,
+      onActivity: actions.openActivity,
+      ...props
+    });
+  };
+  const Overlays = ({ renderSlot }) => {
+    const { connectLabel, modalOpen, settingsAvailable } = useShell();
+    const searchOpen = (0, import_react23.useSyncExternalStore)(palette.subscribe, palette.getSnapshot);
+    const currentToast = (0, import_react23.useSyncExternalStore)(toast.subscribe, toast.getSnapshot);
+    (0, import_react23.useEffect)(() => {
+      if (modalOpen) palette.set(false);
+      const onKeyDown = (event) => {
+        if (event.defaultPrevented || event.repeat || event.isComposing || event.shiftKey || event.altKey || !(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "k") return;
+        if (modalOpen || document.querySelector('[aria-modal="true"]') || event.target?.closest?.(".xterm")) return;
+        event.preventDefault();
+        event.stopPropagation();
+        openPalette();
+      };
+      document.addEventListener("keydown", onKeyDown, true);
+      return () => document.removeEventListener("keydown", onKeyDown, true);
+    }, [modalOpen]);
+    return (0, import_react23.createElement)(
+      import_react23.Fragment,
+      null,
+      (0, import_react23.createElement)(ShellNotificationWatcher, { useShell, onOpenMain: actions.openMain, showNotice }),
+      Overlay ? (0, import_react_dom3.createPortal)((0, import_react23.createElement)(Overlay, { renderSlot }), document.body) : null,
+      searchOpen && !modalOpen ? (0, import_react_dom3.createPortal)((0, import_react23.createElement)(ShellPalette, {
+        actions,
+        connectLabel,
+        settingsAvailable,
+        onClose: () => palette.set(false),
+        reportError
+      }), document.body) : null,
+      currentToast ? (0, import_react_dom3.createPortal)((0, import_react23.createElement)(ShellToast, { toast: currentToast, onOpenMain: actions.openMain, onDismiss: () => {
+        toast.set((value) => value === currentToast ? null : value);
+      } }), document.body) : null
+    );
+  };
+  const register = (name, component, options = { priority: -200 }) => ctx.slots.inject(name, () => ctx.slots.register({ name, ...options }, component));
+  ctx.effect(() => installCompiledStyles(PRODUCT_SHELL_CSS, "product-shell"), "superagent: product shell styles");
+  register("sidebar.workspaces", Sidebar);
+  register("sidebar.brand.mark", ProductBrandMark);
+  register("sidebar.brand.name", ShellBrandName);
+  if (nativeHeader) register("conversation.session.header", ({ hideChrome }) => hideChrome ? null : (0, import_react23.createElement)(Header));
+  register("shell.overlay", Overlays, { id: "superagent-shell", order: 50, ...overlayChildren ? { children: overlayChildren } : {} });
+  return { Header, openPalette, reportError };
+}
+var PRODUCT_SHELL_CSS = `
+.bt-product-brand-name{font-weight:600;font-size:14px}
+.bt-product-side{height:100%;box-sizing:border-box;padding-inline:var(--dsh-sidebar-inline-padding,8px);padding-bottom:8px}
+.bt-product-side>.bt-side-top{justify-content:flex-end}
+.bt-product-side:not(.bt-rail)>.bt-list{margin:0;scrollbar-gutter:auto}
+.bt-product-side .bt-tile{position:relative}
+.bt-product-side.bt-rail{width:auto;padding-inline:0}
+.bt-product-side.bt-rail .bt-row{width:100%}
+.bt-product-side .bt-row>svg{flex:none}
+.bt-product-head>.bt-pill:is(span){cursor:default;pointer-events:none}
+.bt-product-head{gap:8px}
+.bt-product-head>button,.bt-product-head>a{pointer-events:auto}
+.bt-product-side button:focus-visible,.bt-product-head button:focus-visible,.bt-product-palette button:focus-visible,.bt-toast button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:-2px}
+.bt-product-palette-layer{max-width:none;max-height:none;width:auto;height:auto;margin:0;padding:0;border:0;background:transparent;color:inherit}
+.bt-product-palette-layer::backdrop{background:transparent}
+.bt-product-palette{max-height:calc(100% - 24px)}
+.bt-toast{position:fixed;left:50%;bottom:calc(28px + env(safe-area-inset-bottom,0px));z-index:1000;display:flex;align-items:center;gap:8px;max-width:min(560px,calc(100vw - 32px));padding:8px 8px 8px 14px;border-radius:12px;background:var(--bt-card);color:var(--bt-ink);border:1px solid var(--bt-line-2);box-shadow:var(--bt-glass-shadow);font:13px/18px var(--bt-font);transform:translateX(-50%);animation:bt-toast-in .2s ease-out}
+.bt-toast[data-leaving]{opacity:0;transition:opacity .18s ease-in}
+.bt-toast-text{flex:1;min-width:0;overflow-wrap:anywhere}
+.bt-toast-text::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--bt-danger);margin:0 8px 1px 0}
+.bt-toast[data-tone=notice] .bt-toast-text::before{background:var(--bt-accent)}
+.bt-toast-link{flex:none;border:0;background:none;color:var(--bt-ink);font:inherit;cursor:pointer;padding:4px 6px;border-radius:6px}
+.bt-toast-link:hover{background:var(--bt-hover)}
+.bt-toast-close{flex:none}
+@keyframes bt-toast-in{from{opacity:0}}
+body[data-bt-motion=quiet] :is(.bt-product-palette-layer,.bt-product-palette-layer *, .bt-product-head *, .bt-toast){animation:none!important;transition:none!important}
+@media(prefers-reduced-motion:reduce){:is(.bt-product-palette-layer,.bt-product-palette-layer *, .bt-toast){animation:none!important;transition:none!important}}
+`;
+
+// src/client/product-mcp-settings.js
+var import_react24 = require("react");
+function ProductMcpSettings({ binding, call: call2 }) {
   const instanceId = binding.instanceId;
-  const [status, setStatus] = (0, import_react16.useState)(null);
-  const [resources, setResources] = (0, import_react16.useState)([]);
-  const [resourceId, setResourceId] = (0, import_react16.useState)("");
-  const [pending, setPending] = (0, import_react16.useState)(null);
-  const [busy, setBusy] = (0, import_react16.useState)(false);
-  const [error, setError] = (0, import_react16.useState)(null);
-  const [notice, setNotice] = (0, import_react16.useState)(null);
-  const inFlight = (0, import_react16.useRef)(null);
+  const [status, setStatus] = (0, import_react24.useState)(null);
+  const [resources, setResources] = (0, import_react24.useState)([]);
+  const [resourceId, setResourceId] = (0, import_react24.useState)("");
+  const [pending, setPending] = (0, import_react24.useState)(null);
+  const [busy, setBusy] = (0, import_react24.useState)(false);
+  const [error, setError] = (0, import_react24.useState)(null);
+  const [notice, setNotice] = (0, import_react24.useState)(null);
+  const inFlight = (0, import_react24.useRef)(null);
   const storageKey = `product-mcp-command:${instanceId}`;
   const refresh = async () => {
-    const next = await call("mcp-status", { instanceId });
+    const next = await call2("mcp-status", { instanceId });
     setStatus(next);
     if (!next.configured) return next;
     const items = [];
     let after;
     for (let page = 0; page < 10; page++) {
-      const result = await call("resource-list", { instanceId, limit: 100, ...after ? { after } : {} });
+      const result = await call2("resource-list", { instanceId, limit: 100, ...after ? { after } : {} });
       items.push(...result.items.filter((item) => item.status === "active"));
       if (!result.cursor) {
         setResources(items);
@@ -8936,7 +12314,7 @@ function ProductMcpSettings({ binding, call }) {
     }
     throw new Error(t("The credential resource list exceeds its bounded limit."));
   };
-  (0, import_react16.useEffect)(() => {
+  (0, import_react24.useEffect)(() => {
     let live = true;
     try {
       const saved = JSON.parse(window.sessionStorage.getItem(storageKey));
@@ -8961,7 +12339,7 @@ function ProductMcpSettings({ binding, call }) {
     return () => {
       live = false;
     };
-  }, [call, instanceId]);
+  }, [call2, instanceId]);
   const remember = (attempt) => {
     inFlight.current = attempt;
     setPending(attempt);
@@ -8985,7 +12363,7 @@ function ProductMcpSettings({ binding, call }) {
     setError(null);
     setNotice(null);
     try {
-      await call(attempt.endpoint, {
+      await call2(attempt.endpoint, {
         instanceId,
         commandId: attempt.commandId,
         expectedRevision: attempt.expectedRevision,
@@ -9012,16 +12390,16 @@ function ProductMcpSettings({ binding, call }) {
       setBusy(false);
     }
   };
-  return (0, import_react16.createElement)(
-    Card,
+  return (0, import_react24.createElement)(
+    SectionCard,
     { title: t("MCP tools") },
-    !status ? (0, import_react16.createElement)("p", { role: "status" }, t("Loading…")) : !status.configured ? (0, import_react16.createElement)("p", { className: "bt-product-resource-note" }, t("No trusted Host MCP tool is configured.")) : (0, import_react16.createElement)(
+    !status ? (0, import_react24.createElement)("p", { role: "status" }, t("Loading…")) : !status.configured ? (0, import_react24.createElement)("p", { className: "bt-product-resource-note" }, t("No trusted Host MCP tool is configured.")) : (0, import_react24.createElement)(
       "div",
       { className: "bt-product-resource-selected" },
-      (0, import_react16.createElement)("p", { className: "bt-product-resource-note" }, `${status.serverName} / ${status.toolName} · ${t("Host only; remote execution unsupported.")}`),
-      (0, import_react16.createElement)("p", { className: "bt-product-resource-note" }, t("Grant Worker/tool for the intended work item or Environment in Credential resources. The MCP endpoint is checked when work calls it.")),
-      (0, import_react16.createElement)("p", { role: "status" }, `${t("MCP state")}: ${t(status.state)}${status.error ? ` · ${status.error}` : ""} · v${status.revision}`),
-      (0, import_react16.createElement)(Row, { label: t("MCP credential resource") }, (0, import_react16.createElement)(
+      (0, import_react24.createElement)("p", { className: "bt-product-resource-note" }, `${status.serverName} / ${status.toolName} · ${t("Host only; remote execution unsupported.")}`),
+      (0, import_react24.createElement)("p", { className: "bt-product-resource-note" }, t("Grant Worker/tool for the intended work item or Environment in Credential resources. The MCP endpoint is checked when work calls it.")),
+      (0, import_react24.createElement)("p", { role: "status" }, `${t("MCP state")}: ${t(status.state)}${status.error ? ` · ${status.error}` : ""} · v${status.revision}`),
+      (0, import_react24.createElement)(Row, { label: t("MCP credential resource") }, (0, import_react24.createElement)(
         "select",
         {
           className: "bt-bs-input",
@@ -9029,19 +12407,19 @@ function ProductMcpSettings({ binding, call }) {
           disabled: busy || Boolean(pending),
           onChange: (event) => setResourceId(event.target.value)
         },
-        (0, import_react16.createElement)("option", { value: "" }, t("Choose a resource")),
-        resources.map((item) => (0, import_react16.createElement)("option", { key: item.id, value: item.id }, item.label))
+        (0, import_react24.createElement)("option", { value: "" }, t("Choose a resource")),
+        resources.map((item) => (0, import_react24.createElement)("option", { key: item.id, value: item.id }, item.label))
       )),
-      (0, import_react16.createElement)(
+      (0, import_react24.createElement)(
         "div",
         { className: "bt-product-resource-row" },
-        (0, import_react16.createElement)("button", {
+        (0, import_react24.createElement)("button", {
           type: "button",
           className: "bt-soft",
           disabled: busy || Boolean(pending) || !resourceId,
           onClick: () => void execute("mcp-save", { resourceId })
         }, t("Save MCP resource")),
-        (0, import_react16.createElement)(
+        (0, import_react24.createElement)(
           "button",
           {
             type: "button",
@@ -9051,43 +12429,43 @@ function ProductMcpSettings({ binding, call }) {
           },
           t(status.approved ? "Revoke tool approval" : "Approve tool")
         ),
-        status.connected ? (0, import_react16.createElement)("button", {
+        status.connected ? (0, import_react24.createElement)("button", {
           type: "button",
           className: "bt-soft",
           disabled: busy || Boolean(pending),
           onClick: () => void execute("mcp-disconnect")
-        }, t("Disconnect")) : (0, import_react16.createElement)("button", {
+        }, t("Disconnect")) : (0, import_react24.createElement)("button", {
           type: "button",
           className: "bt-soft",
           disabled: busy || Boolean(pending) || !status.approved || status.state === "error",
           onClick: () => void execute("mcp-connect")
         }, t("Connect")),
-        (0, import_react16.createElement)("button", {
+        (0, import_react24.createElement)("button", {
           type: "button",
           className: "bt-soft",
           disabled: busy || Boolean(pending) || !status.approved || status.state === "error",
           onClick: () => void execute("mcp-retry")
         }, t("Try again"))
       ),
-      pending ? (0, import_react16.createElement)(
+      pending ? (0, import_react24.createElement)(
         "div",
         { className: "bt-product-resource-row", role: "status" },
-        (0, import_react16.createElement)("span", null, t("MCP change pending confirmation. Retry the same command.")),
-        (0, import_react16.createElement)("button", {
+        (0, import_react24.createElement)("span", null, t("MCP change pending confirmation. Retry the same command.")),
+        (0, import_react24.createElement)("button", {
           type: "button",
           className: "bt-soft",
           disabled: busy,
           onClick: () => void execute(pending.endpoint, {}, true)
         }, t("Retry pending change"))
       ) : null,
-      error ? (0, import_react16.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
-      notice ? (0, import_react16.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null
+      error ? (0, import_react24.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+      notice ? (0, import_react24.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null
     )
   );
 }
 
 // src/client/product-browser-import.js
-var import_react17 = require("react");
+var import_react25 = require("react");
 var IMPORT_STATES = {
   pending: "Import pending",
   unknown: "Import needs retry",
@@ -9095,20 +12473,20 @@ var IMPORT_STATES = {
   cancelled: "Import cancelled"
 };
 var previewText = (preview) => `${preview.source.label} · ${preview.format ?? preview.source.kind} · ${preview.cookies} cookies`;
-function ProductBrowserImport({ binding, call, browserBridge, directoryOptions, onChanged }) {
+function ProductBrowserImport({ binding, call: call2, browserBridge, directoryOptions, onChanged }) {
   const instanceId = binding.instanceId;
   const storageKey = `product-browser-import:${instanceId}`;
   const directories = directoryOptions?.directories ?? [];
-  const [pending, setPending] = (0, import_react17.useState)(null);
-  const [batches, setBatches] = (0, import_react17.useState)([]);
-  const [sources, setSources] = (0, import_react17.useState)([]);
-  const [sourceId, setSourceId] = (0, import_react17.useState)("");
-  const [environmentId, setEnvironmentId] = (0, import_react17.useState)("");
-  const [label, setLabel] = (0, import_react17.useState)("");
-  const [busy, setBusy] = (0, import_react17.useState)(false);
-  const [error, setError] = (0, import_react17.useState)(null);
-  const [notice, setNotice] = (0, import_react17.useState)(null);
-  const generation = (0, import_react17.useRef)(0);
+  const [pending, setPending] = (0, import_react25.useState)(null);
+  const [batches, setBatches] = (0, import_react25.useState)([]);
+  const [sources, setSources] = (0, import_react25.useState)([]);
+  const [sourceId, setSourceId] = (0, import_react25.useState)("");
+  const [environmentId, setEnvironmentId] = (0, import_react25.useState)("");
+  const [label, setLabel] = (0, import_react25.useState)("");
+  const [busy, setBusy] = (0, import_react25.useState)(false);
+  const [error, setError] = (0, import_react25.useState)(null);
+  const [notice, setNotice] = (0, import_react25.useState)(null);
+  const generation = (0, import_react25.useRef)(0);
   const persist = (value) => {
     setPending(value);
     try {
@@ -9121,7 +12499,7 @@ function ProductBrowserImport({ binding, call, browserBridge, directoryOptions, 
     const current = ++generation.current;
     try {
       const [imports, available] = await Promise.all([
-        call("browser-import-list", { instanceId, limit: 20 }),
+        call2("browser-import-list", { instanceId, limit: 20 }),
         browserBridge?.importSources ? browserBridge.importSources() : Promise.resolve([])
       ]);
       if (current !== generation.current) return;
@@ -9132,7 +12510,7 @@ function ProductBrowserImport({ binding, call, browserBridge, directoryOptions, 
       if (current === generation.current) setError(failure.message);
     }
   };
-  (0, import_react17.useEffect)(() => {
+  (0, import_react25.useEffect)(() => {
     try {
       const saved = JSON.parse(window.sessionStorage.getItem(storageKey));
       if (saved && typeof saved.id === "string" && typeof saved.sourceRef === "string" && saved.preview && typeof saved.commandId === "string") {
@@ -9146,8 +12524,8 @@ function ProductBrowserImport({ binding, call, browserBridge, directoryOptions, 
     return () => {
       generation.current += 1;
     };
-  }, [call, instanceId]);
-  (0, import_react17.useEffect)(() => {
+  }, [call2, instanceId]);
+  (0, import_react25.useEffect)(() => {
     if (!pending?.targetLocked && !directories.some((directory) => directory.id === environmentId)) {
       setEnvironmentId("");
     }
@@ -9221,7 +12599,7 @@ function ProductBrowserImport({ binding, call, browserBridge, directoryOptions, 
     setError(null);
     setNotice(null);
     try {
-      const result = await call("browser-import", {
+      const result = await call2("browser-import", {
         instanceId,
         commandId: next.commandId,
         sourceRef: next.sourceRef,
@@ -9267,7 +12645,7 @@ function ProductBrowserImport({ binding, call, browserBridge, directoryOptions, 
     setBusy(true);
     setError(null);
     try {
-      const result = await call("browser-import-cancel", { instanceId, commandId: crypto.randomUUID(), importId: batch.id });
+      const result = await call2("browser-import-cancel", { instanceId, commandId: crypto.randomUUID(), importId: batch.id });
       if (pending?.sourceRef === batch.sourceRef) {
         try {
           await browserBridge?.importCancel?.(pending.id);
@@ -9283,28 +12661,28 @@ function ProductBrowserImport({ binding, call, browserBridge, directoryOptions, 
       setBusy(false);
     }
   };
-  return (0, import_react17.createElement)(
+  return (0, import_react25.createElement)(
     "section",
     { className: "bt-product-browser-import", "aria-label": t("Import browser data") },
-    (0, import_react17.createElement)("h3", null, t("Import browser data")),
-    (0, import_react17.createElement)(
+    (0, import_react25.createElement)("h3", null, t("Import browser data")),
+    (0, import_react25.createElement)(
       "p",
       { className: "bt-product-resource-note" },
       t("Preview a cookie export or installed browser profile before creating a new isolated browser.")
     ),
-    browserBridge?.importPick ? (0, import_react17.createElement)(
+    browserBridge?.importPick ? (0, import_react25.createElement)(
       "div",
       { className: "bt-product-resource-row" },
-      (0, import_react17.createElement)(
+      (0, import_react25.createElement)(
         "button",
         { type: "button", className: "bt-soft", disabled: busy, onClick: () => void chooseFile() },
         t("Choose cookie export")
       )
     ) : null,
-    sources.length ? (0, import_react17.createElement)(
+    sources.length ? (0, import_react25.createElement)(
       "div",
       { className: "bt-product-resource-row" },
-      (0, import_react17.createElement)(
+      (0, import_react25.createElement)(
         "select",
         {
           className: "bt-bs-input",
@@ -9313,24 +12691,24 @@ function ProductBrowserImport({ binding, call, browserBridge, directoryOptions, 
           disabled: busy,
           onChange: (event) => setSourceId(event.target.value)
         },
-        sources.map((source) => (0, import_react17.createElement)("option", { key: source.id, value: source.id }, source.label))
+        sources.map((source) => (0, import_react25.createElement)("option", { key: source.id, value: source.id }, source.label))
       ),
-      (0, import_react17.createElement)("button", {
+      (0, import_react25.createElement)("button", {
         type: "button",
         className: "bt-soft",
         disabled: busy || !sourceId,
         onClick: () => void chooseLive()
       }, t("Preview installed profile"))
     ) : null,
-    pending ? (0, import_react17.createElement)(
+    pending ? (0, import_react25.createElement)(
       "div",
       { className: "bt-product-browser-import-preview" },
-      (0, import_react17.createElement)("strong", null, pending.preview.source.label),
-      (0, import_react17.createElement)("p", null, previewText(pending.preview)),
-      (0, import_react17.createElement)("p", null, `${t("Source ownership")}: ${pending.preview.source.kind} · ${t("Privacy scope")}: ${t("Isolated browser profile")}`),
-      (0, import_react17.createElement)("p", null, `${t("Target instance")}: ${instanceId} · ${t("Target role")}: ${t("Local browser")} · ${t("The new browser starts with no work grants.")}`),
-      pending.preview.sites?.length ? (0, import_react17.createElement)("ul", null, pending.preview.sites.slice(0, 20).map((site) => (0, import_react17.createElement)("li", { key: site.site }, `${site.site} · ${site.cookies} cookies · ${site.httpOnly} HTTP-only`))) : null,
-      (0, import_react17.createElement)(Row, { label: t("Browser Environment") }, (0, import_react17.createElement)("select", {
+      (0, import_react25.createElement)("strong", null, pending.preview.source.label),
+      (0, import_react25.createElement)("p", null, previewText(pending.preview)),
+      (0, import_react25.createElement)("p", null, `${t("Source ownership")}: ${pending.preview.source.kind} · ${t("Privacy scope")}: ${t("Isolated browser profile")}`),
+      (0, import_react25.createElement)("p", null, `${t("Target instance")}: ${instanceId} · ${t("Target role")}: ${t("Local browser")} · ${t("The new browser starts with no work grants.")}`),
+      pending.preview.sites?.length ? (0, import_react25.createElement)("ul", null, pending.preview.sites.slice(0, 20).map((site) => (0, import_react25.createElement)("li", { key: site.site }, `${site.site} · ${site.cookies} cookies · ${site.httpOnly} HTTP-only`))) : null,
+      (0, import_react25.createElement)(Row, { label: t("Browser Environment") }, (0, import_react25.createElement)("select", {
         className: "bt-bs-input",
         value: environmentId,
         disabled: busy || pending.targetLocked || directories.length === 0,
@@ -9339,12 +12717,12 @@ function ProductBrowserImport({ binding, call, browserBridge, directoryOptions, 
           setEnvironmentId(value);
           persist({ ...pending, environmentId: value, label: label.trim() || pending.label });
         }
-      }, (0, import_react17.createElement)("option", { value: "" }, t("Choose Environment")), directories.map((directory) => (0, import_react17.createElement)(
+      }, (0, import_react25.createElement)("option", { value: "" }, t("Choose Environment")), directories.map((directory) => (0, import_react25.createElement)(
         "option",
         { key: directory.id, value: directory.id },
         directory.title ?? directory.id
       )))),
-      (0, import_react17.createElement)(Row, { label: t("Browser name") }, (0, import_react17.createElement)("input", {
+      (0, import_react25.createElement)(Row, { label: t("Browser name") }, (0, import_react25.createElement)("input", {
         className: "bt-bs-input",
         value: label,
         maxLength: 128,
@@ -9354,16 +12732,16 @@ function ProductBrowserImport({ binding, call, browserBridge, directoryOptions, 
           persist({ ...pending, environmentId, label: event.target.value });
         }
       })),
-      (0, import_react17.createElement)(
+      (0, import_react25.createElement)(
         "div",
         { className: "bt-product-resource-row" },
-        (0, import_react17.createElement)("button", {
+        (0, import_react25.createElement)("button", {
           type: "button",
           className: "bt-soft",
           disabled: busy || !environmentId || !label.trim(),
           onClick: () => void commit()
         }, busy ? t("Importing…") : t("Import into new browser")),
-        (0, import_react17.createElement)("button", {
+        (0, import_react25.createElement)("button", {
           type: "button",
           className: "bt-soft",
           disabled: busy,
@@ -9371,35 +12749,35 @@ function ProductBrowserImport({ binding, call, browserBridge, directoryOptions, 
         }, t("Cancel preview"))
       )
     ) : null,
-    error ? (0, import_react17.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
-    notice ? (0, import_react17.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
-    batches.length ? (0, import_react17.createElement)(
+    error ? (0, import_react25.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+    notice ? (0, import_react25.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
+    batches.length ? (0, import_react25.createElement)(
       "div",
       { className: "bt-product-browser-import-history" },
-      (0, import_react17.createElement)("h4", null, t("Recent browser imports")),
-      batches.map((batch) => (0, import_react17.createElement)(
+      (0, import_react25.createElement)("h4", null, t("Recent browser imports")),
+      batches.map((batch) => (0, import_react25.createElement)(
         "div",
         { key: batch.id, className: "bt-product-browser-import-row" },
-        (0, import_react17.createElement)(
+        (0, import_react25.createElement)(
           "div",
           null,
-          (0, import_react17.createElement)("strong", null, batch.label),
-          (0, import_react17.createElement)("p", null, `${previewText(batch.preview)} · ${t(IMPORT_STATES[batch.status] ?? batch.status)}`),
-          batch.report ? (0, import_react17.createElement)("p", null, `${t("Stored cookies")}: ${batch.report.stored} · ${t("Dropped")}: ${batch.report.droppedCount} · ${t("Failed")}: ${batch.report.failedCount}`) : null
+          (0, import_react25.createElement)("strong", null, batch.label),
+          (0, import_react25.createElement)("p", null, `${previewText(batch.preview)} · ${t(IMPORT_STATES[batch.status] ?? batch.status)}`),
+          batch.report ? (0, import_react25.createElement)("p", null, `${t("Stored cookies")}: ${batch.report.stored} · ${t("Dropped")}: ${batch.report.droppedCount} · ${t("Failed")}: ${batch.report.failedCount}`) : null
         ),
-        (0, import_react17.createElement)(
+        (0, import_react25.createElement)(
           "div",
           { className: "bt-product-resource-row" },
-          batch.status === "pending" || batch.status === "unknown" ? (0, import_react17.createElement)(
-            import_react17.Fragment,
+          batch.status === "pending" || batch.status === "unknown" ? (0, import_react25.createElement)(
+            import_react25.Fragment,
             null,
-            pending ? (0, import_react17.createElement)("button", {
+            pending ? (0, import_react25.createElement)("button", {
               type: "button",
               className: "bt-soft",
               disabled: busy,
               onClick: () => retryBatch(batch)
             }, t("Use preview to retry")) : null,
-            (0, import_react17.createElement)("button", {
+            (0, import_react25.createElement)("button", {
               type: "button",
               className: "bt-soft",
               disabled: busy,
@@ -9412,11 +12790,11 @@ function ProductBrowserImport({ binding, call, browserBridge, directoryOptions, 
   );
 }
 var PRODUCT_BROWSER_IMPORT_CSS = `
-.bt-product-browser-import{display:flex;flex-direction:column;gap:8px;margin:14px 0;padding:12px;border:1px solid var(--bt-line);border-radius:8px}
-.bt-product-browser-import h3,.bt-product-browser-import h4{margin:0;font-size:13px}
-.bt-product-browser-import p{margin:3px 0;color:var(--bt-ink-2);font-size:12px;line-height:18px}
-.bt-product-browser-import-preview{padding:10px;border:1px solid var(--bt-line);border-radius:8px}
-.bt-product-browser-import-preview ul{padding-left:18px;margin:6px 0;font-size:12px}
+.bt-product-browser-import{display:flex;flex-direction:column;gap:8px}
+.bt-product-browser-import h3,.bt-product-browser-import h4{margin:0;font-size:var(--bt-ps-text)}
+.bt-product-browser-import p{margin:3px 0;color:var(--bt-ink-2);font-size:var(--bt-ps-small);line-height:18px}
+.bt-product-browser-import-preview{padding:10px;border:1px solid var(--bt-line);border-radius:var(--bt-ps-radius-control)}
+.bt-product-browser-import-preview ul{padding-left:18px;margin:6px 0;font-size:var(--bt-ps-small)}
 .bt-product-browser-import-history{display:flex;flex-direction:column;gap:6px}
 .bt-product-browser-import-row{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--bt-line)}
 .bt-product-browser-import button:focus-visible,.bt-product-browser-import select:focus-visible,.bt-product-browser-import input:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
@@ -9424,7 +12802,7 @@ var PRODUCT_BROWSER_IMPORT_CSS = `
 `;
 
 // src/client/product-browser-settings.js
-var import_react18 = require("react");
+var import_react26 = require("react");
 var BROWSER_STATES = {
   available: "Available",
   busy: "In use",
@@ -9458,25 +12836,25 @@ var DETERMINISTIC = /* @__PURE__ */ new Set([
   "NOT_FOUND",
   "UNAVAILABLE"
 ]);
-function ProductBrowserSettings({ binding, works = [], directoryOptions, call, browserBridge }) {
+function ProductBrowserSettings({ binding, works = [], directoryOptions, call: call2, browserBridge }) {
   const instanceId = binding.instanceId;
   const storageKey = `product-browser-command:${instanceId}`;
   const acceptedWorks = works.filter((work) => work.receipt?.status === "accepted" && work.brief?.workItemId);
   const directories = directoryOptions?.directories ?? [];
-  const [resources, setResources] = (0, import_react18.useState)(null);
-  const [selectedId, setSelectedId] = (0, import_react18.useState)("");
-  const [workItemId, setWorkItemId] = (0, import_react18.useState)("");
-  const [environmentId, setEnvironmentId] = (0, import_react18.useState)(directories[0]?.id ?? "");
-  const [label, setLabel] = (0, import_react18.useState)("");
-  const [reasons, setReasons] = (0, import_react18.useState)({});
-  const [pending, setPending] = (0, import_react18.useState)({});
-  const [busy, setBusy] = (0, import_react18.useState)(false);
-  const [unavailable, setUnavailable] = (0, import_react18.useState)(false);
-  const [error, setError] = (0, import_react18.useState)(null);
-  const [notice, setNotice] = (0, import_react18.useState)(null);
-  const [manual, setManual] = (0, import_react18.useState)(null);
-  const inFlight = (0, import_react18.useRef)({});
-  const refreshGeneration = (0, import_react18.useRef)(0);
+  const [resources, setResources] = (0, import_react26.useState)(null);
+  const [selectedId, setSelectedId] = (0, import_react26.useState)("");
+  const [workItemId, setWorkItemId] = (0, import_react26.useState)("");
+  const [environmentId, setEnvironmentId] = (0, import_react26.useState)(directories[0]?.id ?? "");
+  const [label, setLabel] = (0, import_react26.useState)("");
+  const [reasons, setReasons] = (0, import_react26.useState)({});
+  const [pending, setPending] = (0, import_react26.useState)({});
+  const [busy, setBusy] = (0, import_react26.useState)(false);
+  const [unavailable2, setUnavailable] = (0, import_react26.useState)(false);
+  const [error, setError] = (0, import_react26.useState)(null);
+  const [notice, setNotice] = (0, import_react26.useState)(null);
+  const [manual, setManual] = (0, import_react26.useState)(null);
+  const inFlight = (0, import_react26.useRef)({});
+  const refreshGeneration = (0, import_react26.useRef)(0);
   const selected = resources?.find((resource) => resource.id === selectedId);
   const selectedWorks = acceptedWorks.filter((work) => !selected?.environmentId || !work.brief.environmentId || work.brief.environmentId === selected.environmentId);
   const activeGrant = selected?.grants?.find((grant) => grant.workItemId === workItemId && grant.active);
@@ -9497,7 +12875,7 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call, b
   const refresh = async () => {
     const generation = ++refreshGeneration.current;
     try {
-      const items = await call("browser-list", { instanceId });
+      const items = await call2("browser-list", { instanceId });
       if (generation !== refreshGeneration.current) return items;
       setResources(items);
       setSelectedId((current) => items.some((resource) => resource.id === current) ? current : items[0]?.id ?? "");
@@ -9514,7 +12892,7 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call, b
       return [];
     }
   };
-  (0, import_react18.useEffect)(() => {
+  (0, import_react26.useEffect)(() => {
     let live = true;
     try {
       const saved = JSON.parse(window.sessionStorage.getItem(storageKey));
@@ -9536,18 +12914,18 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call, b
       refreshGeneration.current += 1;
       window.clearInterval(timer);
     };
-  }, [call, instanceId]);
-  (0, import_react18.useEffect)(() => {
+  }, [call2, instanceId]);
+  (0, import_react26.useEffect)(() => {
     if (!directories.some((directory) => directory.id === environmentId)) setEnvironmentId(directories[0]?.id ?? "");
   }, [directoryOptions]);
-  (0, import_react18.useEffect)(() => {
+  (0, import_react26.useEffect)(() => {
     if (!selectedWorks.some((work) => work.brief.workItemId === workItemId)) setWorkItemId(selectedWorks[0]?.brief?.workItemId ?? "");
   }, [selectedId, resources, workItemId]);
-  (0, import_react18.useEffect)(() => {
+  (0, import_react26.useEffect)(() => {
     let live = true;
     const control = selected?.control;
     if (control?.state === "held" && browserBridge) {
-      void call("browser-control-view", { instanceId, resourceId: selected.id, controlId: control.id }).then((result) => {
+      void call2("browser-control-view", { instanceId, resourceId: selected.id, controlId: control.id }).then((result) => {
         if (live) setManual({ resourceId: selected.id, controlId: control.id, profile: result.profileKey });
       }).catch((failure) => {
         if (live) setError(failure.message);
@@ -9556,7 +12934,7 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call, b
     return () => {
       live = false;
     };
-  }, [selected?.id, selected?.control?.id, selected?.control?.state, browserBridge, call, instanceId]);
+  }, [selected?.id, selected?.control?.id, selected?.control?.state, browserBridge, call2, instanceId]);
   const execute = async (endpoint, input, success, retry = false, explicit = null) => {
     const key = actionKey(endpoint, input);
     if (busy || inFlight.current[key] && !retry) return;
@@ -9568,7 +12946,7 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call, b
     setError(null);
     setNotice(null);
     try {
-      const result = await call(endpoint, { instanceId, commandId: attempt.commandId, ...attempt.input });
+      const result = await call2(endpoint, { instanceId, commandId: attempt.commandId, ...attempt.input });
       remember(null, key);
       await refresh();
       setNotice(t(success));
@@ -9628,7 +13006,7 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call, b
     if (!selected?.control || busy) return;
     setBusy(true);
     setError(null);
-    void call("browser-reconcile-take", { instanceId, resourceId: selected.id, controlId: selected.control.id }).then(
+    void call2("browser-reconcile-take", { instanceId, resourceId: selected.id, controlId: selected.control.id }).then(
       async () => {
         remember(null, actionKey("browser-take", { resourceId: selected.id }));
         await refresh();
@@ -9657,32 +13035,32 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call, b
       reason: "Stopped by the user during browser control."
     }, "Work stop requested.");
   };
-  if (unavailable) return (0, import_react18.createElement)(
-    Card,
+  if (unavailable2) return (0, import_react26.createElement)(
+    SectionCard,
     { title: t("Browser resources") },
-    (0, import_react18.createElement)("p", { className: "bt-product-resource-note" }, t("The local Host has no CDP browser bridge. Browser work remains unavailable."))
+    (0, import_react26.createElement)(InlineNotice, { tone: "warn" }, t("The local Host has no CDP browser bridge. Browser work remains unavailable."))
   );
-  return (0, import_react18.createElement)(
-    import_react18.Fragment,
+  return (0, import_react26.createElement)(
+    import_react26.Fragment,
     null,
-    (0, import_react18.createElement)(
-      Card,
+    (0, import_react26.createElement)(
+      SectionCard,
       { title: t("Browser resources") },
-      (0, import_react18.createElement)(
+      (0, import_react26.createElement)(
         "p",
         { className: "bt-product-resource-note" },
         t("Each browser keeps an isolated profile. A local Worker needs an exact work-item grant before navigation or a read-only snapshot.")
       ),
-      browserBridge ? (0, import_react18.createElement)(ProductBrowserImport, {
+      browserBridge ? (0, import_react26.createElement)(ProductBrowserImport, {
         binding,
-        call,
+        call: call2,
         browserBridge,
         directoryOptions,
         onChanged: () => {
           void refresh();
         }
       }) : null,
-      (0, import_react18.createElement)("button", {
+      (0, import_react26.createElement)("button", {
         type: "button",
         className: "bt-product-browser-refresh bt-soft bt-soft-sm",
         disabled: Boolean(busy),
@@ -9690,28 +13068,32 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call, b
           void refresh();
         }
       }, t("Refresh browser resources")),
-      !resources ? (0, import_react18.createElement)("p", { role: "status" }, t("Loading…")) : resources.length === 0 ? (0, import_react18.createElement)("p", { className: "bt-main-status" }, t("No browser resources yet.")) : (0, import_react18.createElement)("div", { className: "bt-product-resource-list" }, resources.map((resource) => (0, import_react18.createElement)(
+      !resources ? (0, import_react26.createElement)("p", { role: "status" }, t("Loading…")) : resources.length === 0 ? (0, import_react26.createElement)(EmptyState, { title: t("No browser resources yet.") }) : (0, import_react26.createElement)("div", { className: "bt-product-resource-list" }, resources.map((resource) => (0, import_react26.createElement)(
         "div",
         {
           key: resource.id,
           className: "bt-product-browser-resource"
         },
-        (0, import_react18.createElement)("button", {
+        (0, import_react26.createElement)("button", {
           type: "button",
           className: "bt-soft",
           disabled: Boolean(busy),
           "aria-pressed": selectedId === resource.id,
           onClick: () => setSelectedId(resource.id)
         }, resource.label),
-        (0, import_react18.createElement)("span", { role: "status" }, `${t(BROWSER_STATES[resource.state] ?? "Unavailable")} · v${resource.revision} · ${resource.environmentId}`)
+        (0, import_react26.createElement)(
+          StatusChip,
+          { tone: BROWSER_STATES[resource.state] ? "neutral" : "warn" },
+          `${t(BROWSER_STATES[resource.state] ?? "Unavailable")} · v${resource.revision} · ${resource.environmentId}`
+        )
       ))),
-      error ? (0, import_react18.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
-      notice ? (0, import_react18.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
-      Object.values(pending).map((attempt) => (0, import_react18.createElement)(
+      error ? (0, import_react26.createElement)(InlineNotice, { tone: "danger" }, error) : null,
+      notice ? (0, import_react26.createElement)(InlineNotice, { tone: "success" }, notice) : null,
+      Object.values(pending).map((attempt) => (0, import_react26.createElement)(
         "div",
         { key: attempt.commandId, className: "bt-product-resource-row", role: "status" },
-        (0, import_react18.createElement)("span", null, `${actionLabel(attempt)} · ${t("pending confirmation. Retry the same command.")}`),
-        (0, import_react18.createElement)(
+        (0, import_react26.createElement)("span", null, `${actionLabel(attempt)} · ${t("pending confirmation. Retry the same command.")}`),
+        (0, import_react26.createElement)(
           "button",
           {
             className: "bt-soft",
@@ -9723,10 +13105,10 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call, b
           t("Retry pending browser change")
         )
       )),
-      (0, import_react18.createElement)(
+      (0, import_react26.createElement)(
         "form",
         { className: "bt-product-browser-create", onSubmit: create },
-        (0, import_react18.createElement)(Row, { label: t("Browser name") }, (0, import_react18.createElement)("input", {
+        (0, import_react26.createElement)(Row, { label: t("Browser name") }, (0, import_react26.createElement)("input", {
           className: "bt-bs-input",
           value: label,
           maxLength: 128,
@@ -9734,7 +13116,7 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call, b
           placeholder: t("Research browser"),
           onChange: (event) => setLabel(event.target.value)
         })),
-        (0, import_react18.createElement)(Row, { label: t("Browser Environment") }, (0, import_react18.createElement)(
+        (0, import_react26.createElement)(Row, { label: t("Browser Environment") }, (0, import_react26.createElement)(
           "select",
           {
             className: "bt-bs-input",
@@ -9742,65 +13124,65 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call, b
             disabled: Boolean(busy) || directories.length === 0,
             onChange: (event) => setEnvironmentId(event.target.value)
           },
-          directories.length === 0 ? (0, import_react18.createElement)("option", { value: "" }, t("No local Environment")) : null,
-          directories.map((directory) => (0, import_react18.createElement)(
+          directories.length === 0 ? (0, import_react26.createElement)("option", { value: "" }, t("No local Environment")) : null,
+          directories.map((directory) => (0, import_react26.createElement)(
             "option",
             { key: directory.id, value: directory.id },
             directory.title ?? directory.id
           ))
         )),
-        (0, import_react18.createElement)(
+        (0, import_react26.createElement)(
           "button",
           { className: "bt-soft", type: "submit", disabled: Boolean(busy) || Boolean(pending[actionKey("browser-create", { environmentId })]) || !label.trim() || !environmentId },
           busy ? t("Saving…") : t("Create browser resource")
         )
       )
     ),
-    selected ? (0, import_react18.createElement)(
-      Card,
+    selected ? (0, import_react26.createElement)(
+      SectionCard,
       { title: t("Browser work access") },
-      (0, import_react18.createElement)(
+      (0, import_react26.createElement)(
         "div",
         { className: "bt-product-resource-selected" },
-        (0, import_react18.createElement)("h3", null, selected.label),
-        (0, import_react18.createElement)("p", { role: "status" }, `${t(BROWSER_STATES[selected.state] ?? "Unavailable")} · v${selected.revision}`),
-        selected.owner ? (0, import_react18.createElement)(
+        (0, import_react26.createElement)("h3", null, selected.label),
+        (0, import_react26.createElement)("p", { role: "status" }, `${t(BROWSER_STATES[selected.state] ?? "Unavailable")} · v${selected.revision}`),
+        selected.owner ? (0, import_react26.createElement)(
           "p",
           { className: "bt-product-resource-note" },
           `${t("Browser owner")}: ${selected.owner.ticketId} · ${selected.owner.generation}`
         ) : null,
-        selected.control ? (0, import_react18.createElement)(
+        selected.control ? (0, import_react26.createElement)(
           "div",
           { className: "bt-product-browser-control", role: "status" },
-          (0, import_react18.createElement)("p", null, t("A person controls this browser. Worker browser calls wait for explicit return.")),
-          selected.control.state === "held" && manual?.controlId === selected.control.id && manual.profile && browserBridge ? (0, import_react18.createElement)(ManualBrowserView, { browserBridge, profile: manual.profile, label: selected.label }) : null,
-          selected.control.state === "held" || selected.control.state === "returning" ? (0, import_react18.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy) || Boolean(pending[actionKey("browser-return", { resourceId: selected.id })]), onClick: giveBack }, t("Give browser back")) : null,
-          selected.control.state === "taking" ? (0, import_react18.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy), onClick: reconcileTake }, t("Reconnect browser control")) : null
-        ) : selectedWorks.length > 0 && browserBridge ? (0, import_react18.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy) || selected.state === "revoked" || !workItemId || !activeGrant || Boolean(pending[actionKey("browser-take", { resourceId: selected.id })]), onClick: take }, t("Take over browser")) : null,
-        selected.control && works.some((item) => item.brief?.workItemId === selected.control.workItemId && item.control?.assignment && item.control.stop?.state !== "stopped") ? (0, import_react18.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy), onClick: stop }, t("Stop browser work")) : null,
-        (0, import_react18.createElement)(
+          (0, import_react26.createElement)("p", null, t("A person controls this browser. Worker browser calls wait for explicit return.")),
+          selected.control.state === "held" && manual?.controlId === selected.control.id && manual.profile && browserBridge ? (0, import_react26.createElement)(ManualBrowserView, { browserBridge, profile: manual.profile, label: selected.label }) : null,
+          selected.control.state === "held" || selected.control.state === "returning" ? (0, import_react26.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy) || Boolean(pending[actionKey("browser-return", { resourceId: selected.id })]), onClick: giveBack }, t("Give browser back")) : null,
+          selected.control.state === "taking" ? (0, import_react26.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy), onClick: reconcileTake }, t("Reconnect browser control")) : null
+        ) : selectedWorks.length > 0 && browserBridge ? (0, import_react26.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy) || selected.state === "revoked" || !workItemId || !activeGrant || Boolean(pending[actionKey("browser-take", { resourceId: selected.id })]), onClick: take }, t("Take over browser")) : null,
+        selected.control && works.some((item) => item.brief?.workItemId === selected.control.workItemId && item.control?.assignment && item.control.stop?.state !== "stopped") ? (0, import_react26.createElement)("button", { className: "bt-soft", type: "button", disabled: Boolean(busy), onClick: stop }, t("Stop browser work")) : null,
+        (0, import_react26.createElement)(
           "div",
           { className: "bt-product-resource-row" },
-          (0, import_react18.createElement)("button", {
+          (0, import_react26.createElement)("button", {
             className: "bt-soft",
             type: "button",
             disabled: Boolean(busy) || Boolean(pending[actionKey("browser-revoke", { resourceId: selected.id })]) || selected.state === "importing" || selected.state === "revoked",
             onClick: revoke
           }, t("Revoke browser resource"))
         ),
-        selected.grantsTruncated ? (0, import_react18.createElement)(
+        selected.grantsTruncated ? (0, import_react26.createElement)(
           "p",
           { className: "bt-product-resource-note", role: "status" },
           t("This resource has more than 100 grants. No new grant can be added until stored grants are cleaned up.")
         ) : null,
-        selectedWorks.length === 0 ? (0, import_react18.createElement)(
+        selectedWorks.length === 0 ? (0, import_react26.createElement)(
           "p",
           { className: "bt-main-status" },
           t("No accepted work item is available in this Environment.")
-        ) : (0, import_react18.createElement)(
-          import_react18.Fragment,
+        ) : (0, import_react26.createElement)(
+          import_react26.Fragment,
           null,
-          (0, import_react18.createElement)(Row, { label: t("Browser work item") }, (0, import_react18.createElement)(
+          (0, import_react26.createElement)(Row, { label: t("Browser work item") }, (0, import_react26.createElement)(
             "select",
             {
               className: "bt-bs-input",
@@ -9808,49 +13190,49 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call, b
               disabled: Boolean(busy) || selected.state === "revoked",
               onChange: (event) => setWorkItemId(event.target.value)
             },
-            selectedWorks.map((work) => (0, import_react18.createElement)("option", { key: work.brief.workItemId, value: work.brief.workItemId }, work.brief.goal))
+            selectedWorks.map((work) => (0, import_react26.createElement)("option", { key: work.brief.workItemId, value: work.brief.workItemId }, work.brief.goal))
           )),
-          (0, import_react18.createElement)(
+          (0, import_react26.createElement)(
             "div",
             { className: "bt-product-resource-row" },
-            (0, import_react18.createElement)(
+            (0, import_react26.createElement)(
               "button",
               { className: "bt-soft", type: "button", disabled: Boolean(busy) || Boolean(selected && pending[actionKey("browser-grant", { resourceId: selected.id, workItemId })]) || selected.state === "revoked" || !workItemId, onClick: () => setGrant(!activeGrant) },
               t(activeGrant ? "Revoke browser from this work" : "Grant browser to this work")
             )
           )
         ),
-        selected.grants?.length ? (0, import_react18.createElement)(
+        selected.grants?.length ? (0, import_react26.createElement)(
           "div",
           { className: "bt-product-resource-list" },
-          selected.grants.map((grant) => (0, import_react18.createElement)(
+          selected.grants.map((grant) => (0, import_react26.createElement)(
             "div",
             { key: grant.workItemId, className: "bt-product-resource-row" },
-            (0, import_react18.createElement)("span", null, `${grant.workItemId} · ${t(grant.active ? "Allowed" : "Revoked")}`)
+            (0, import_react26.createElement)("span", null, `${grant.workItemId} · ${t(grant.active ? "Allowed" : "Revoked")}`)
           ))
         ) : null,
-        (0, import_react18.createElement)(
+        (0, import_react26.createElement)(
           "details",
           { className: "bt-product-browser-operations", open: selected.state === "unknown" || void 0 },
-          (0, import_react18.createElement)("summary", null, t("Recent browser operations")),
-          selected.operations?.length ? selected.operations.slice().reverse().map((operation) => (0, import_react18.createElement)(
+          (0, import_react26.createElement)("summary", null, t("Recent browser operations")),
+          selected.operations?.length ? selected.operations.slice().reverse().map((operation) => (0, import_react26.createElement)(
             "div",
             {
               key: operation.id,
               className: "bt-product-browser-operation"
             },
-            (0, import_react18.createElement)("p", null, `${operation.action} · ${t(OPERATION_STATES[operation.state] ?? operation.state)} · ${new Date(operation.createdAt).toLocaleString()}`),
-            (0, import_react18.createElement)("span", { className: "bt-set-hint" }, operation.id),
-            operation.code ? (0, import_react18.createElement)("p", { className: "bt-main-error" }, operation.code) : null,
-            operation.resolution ? (0, import_react18.createElement)(
+            (0, import_react26.createElement)("p", null, `${operation.action} · ${t(OPERATION_STATES[operation.state] ?? operation.state)} · ${new Date(operation.createdAt).toLocaleString()}`),
+            (0, import_react26.createElement)("span", { className: "bt-set-hint" }, operation.id),
+            operation.code ? (0, import_react26.createElement)("p", { className: "bt-main-error" }, operation.code) : null,
+            operation.resolution ? (0, import_react26.createElement)(
               "p",
               { className: "bt-set-hint" },
               t(OBSERVATIONS[operation.resolution] ?? "Browser operation checked")
             ) : null,
-            operation.state === "unknown" || selected.state === "unknown" && operation.state === "pending" ? (0, import_react18.createElement)(
+            operation.state === "unknown" || selected.state === "unknown" && operation.state === "pending" ? (0, import_react26.createElement)(
               "div",
               { className: "bt-product-browser-resolve" },
-              (0, import_react18.createElement)(
+              (0, import_react26.createElement)(
                 "select",
                 {
                   className: "bt-bs-input",
@@ -9859,28 +13241,28 @@ function ProductBrowserSettings({ binding, works = [], directoryOptions, call, b
                   disabled: Boolean(busy),
                   onChange: (event) => setReasons((current) => ({ ...current, [operation.id]: event.target.value }))
                 },
-                (0, import_react18.createElement)("option", { value: "" }, t("Choose the observed browser state")),
-                Object.entries(OBSERVATIONS).map(([value, label2]) => (0, import_react18.createElement)("option", { key: value, value }, t(label2)))
+                (0, import_react26.createElement)("option", { value: "" }, t("Choose the observed browser state")),
+                Object.entries(OBSERVATIONS).map(([value, label2]) => (0, import_react26.createElement)("option", { key: value, value }, t(label2)))
               ),
-              (0, import_react18.createElement)(
+              (0, import_react26.createElement)(
                 "button",
                 { className: "bt-soft", type: "button", disabled: Boolean(busy) || Boolean(pending[actionKey("browser-resolve", { resourceId: selected.id, operationId: operation.id })]) || !(reasons[operation.id] ?? "").trim(), onClick: () => resolve2(operation) },
                 t("Record browser check")
               )
             ) : null
-          )) : (0, import_react18.createElement)("p", { className: "bt-set-hint" }, t("No browser operations yet."))
+          )) : (0, import_react26.createElement)("p", { className: "bt-set-hint" }, t("No browser operations yet."))
         )
       )
     ) : null
   );
 }
 function ManualBrowserView({ browserBridge, profile, label }) {
-  const frame = (0, import_react18.useRef)(null);
-  const tabId = (0, import_react18.useRef)(null);
+  const frame = (0, import_react26.useRef)(null);
+  const tabId = (0, import_react26.useRef)(null);
   if (!tabId.current) tabId.current = crypto.randomUUID();
-  const [address, setAddress] = (0, import_react18.useState)("");
-  const [error, setError] = (0, import_react18.useState)(null);
-  (0, import_react18.useEffect)(() => {
+  const [address, setAddress] = (0, import_react26.useState)("");
+  const [error, setError] = (0, import_react26.useState)(null);
+  (0, import_react26.useEffect)(() => {
     let live = true;
     const tab = tabId.current;
     const place = () => {
@@ -9918,38 +13300,37 @@ function ManualBrowserView({ browserBridge, profile, label }) {
     setError(null);
     void browserBridge.views.navigate(profile, tabId.current, url).catch((failure) => setError(failure.message));
   };
-  return (0, import_react18.createElement)(
+  return (0, import_react26.createElement)(
     "div",
     { className: "bt-product-manual-browser" },
-    (0, import_react18.createElement)("p", { className: "bt-product-resource-note" }, t("Manual browser control: {label}", { label })),
-    (0, import_react18.createElement)(
+    (0, import_react26.createElement)("p", { className: "bt-product-resource-note" }, t("Manual browser control: {label}", { label })),
+    (0, import_react26.createElement)(
       "form",
       { onSubmit: open, className: "bt-product-manual-browser-form" },
-      (0, import_react18.createElement)("input", {
+      (0, import_react26.createElement)("input", {
         className: "bt-bs-input",
         value: address,
         "aria-label": t("Browser address"),
         onChange: (event) => setAddress(event.target.value)
       }),
-      (0, import_react18.createElement)("button", { className: "bt-soft", type: "submit" }, t("Open"))
+      (0, import_react26.createElement)("button", { className: "bt-soft", type: "submit" }, t("Open"))
     ),
-    error ? (0, import_react18.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
-    (0, import_react18.createElement)("div", { ref: frame, className: "bt-product-manual-browser-frame", role: "region", "aria-label": t("Manual browser") })
+    error ? (0, import_react26.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+    (0, import_react26.createElement)("div", { ref: frame, className: "bt-product-manual-browser-frame", role: "region", "aria-label": t("Manual browser") })
   );
 }
 var PRODUCT_BROWSER_CSS = PRODUCT_BROWSER_IMPORT_CSS + `
 .bt-product-browser-resource{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.bt-product-browser-control{margin-top:10px;padding:10px;border:1px solid var(--bt-line-2);border-radius:8px;background:var(--bt-hover)}
-.bt-product-browser-control>p{margin:0 0 8px;font-size:12px;color:var(--bt-ink-2)}
+.bt-product-browser-control{margin-top:10px;padding:10px;border:1px solid var(--bt-line-2);border-radius:var(--bt-ps-radius-control);background:var(--bt-hover)}
+.bt-product-browser-control>p{margin:0 0 8px;font-size:var(--bt-ps-small);color:var(--bt-ink-2)}
 .bt-product-manual-browser{margin:10px 0}
 .bt-product-manual-browser-form{display:flex;gap:6px;margin-bottom:8px}
 .bt-product-manual-browser-form input{flex:1;min-width:0}
-.bt-product-manual-browser-frame{height:280px;min-height:160px;border:1px solid var(--bt-line-2);border-radius:8px;overflow:hidden;background:var(--bt-main)}
-.bt-product-browser-resource>span{color:var(--bt-ink-2);font-size:12px}
+.bt-product-manual-browser-frame{height:280px;min-height:160px;border:1px solid var(--bt-line-2);border-radius:var(--bt-ps-radius-control);overflow:hidden;background:var(--bt-main)}
 .bt-product-browser-create{display:flex;flex-direction:column;align-items:stretch;gap:8px;margin-top:12px}
 .bt-product-browser-operations{margin-top:12px}
-.bt-product-browser-operations summary{cursor:pointer;font-size:12px;color:var(--bt-ink-2)}
-.bt-product-browser-operation{padding:9px 0;border-top:1px solid var(--bt-line-2);font-size:12px}
+.bt-product-browser-operations summary{cursor:pointer;font-size:var(--bt-ps-small);color:var(--bt-ink-2)}
+.bt-product-browser-operation{padding:9px 0;border-top:1px solid var(--bt-line-2);font-size:var(--bt-ps-small)}
 .bt-product-browser-operation>p{margin:3px 0;overflow-wrap:anywhere}
 .bt-product-browser-resolve{display:flex;gap:8px;align-items:center;margin-top:8px}
 .bt-product-browser-resolve input{flex:1;min-width:0}
@@ -9959,7 +13340,7 @@ var PRODUCT_BROWSER_CSS = PRODUCT_BROWSER_IMPORT_CSS + `
 `;
 
 // src/client/product-execution.js
-var import_react19 = require("react");
+var import_react27 = require("react");
 var targets = [["local", "Local"], ["remote-only", "Remote only"], ["auto", "Auto"]];
 var permissions = ["read", "write", "search", "command"];
 var permissionLabels = {
@@ -10015,24 +13396,24 @@ function pairingStatusCopy(status) {
     abandoned: t("Pairing abandoned")
   }[status] ?? t("Unknown");
 }
-function ProductExecutionSettings({ binding, call, onChanged }) {
-  const [snapshot, setSnapshot] = (0, import_react19.useState)(null);
-  const [draft, setDraft] = (0, import_react19.useState)(null);
-  const [pairing, setPairing] = (0, import_react19.useState)(null);
-  const [pairIssue, setPairIssue] = (0, import_react19.useState)(null);
-  const [confirmPairAbandon, setConfirmPairAbandon] = (0, import_react19.useState)(false);
-  const [revocation, setRevocation] = (0, import_react19.useState)(null);
-  const [cleanup, setCleanup] = (0, import_react19.useState)(null);
-  const [busy, setBusy] = (0, import_react19.useState)(false);
-  const [error, setError] = (0, import_react19.useState)("");
-  const [notice, setNotice] = (0, import_react19.useState)("");
+function ProductExecutionSettings({ binding, call: call2, onChanged }) {
+  const [snapshot, setSnapshot] = (0, import_react27.useState)(null);
+  const [draft, setDraft] = (0, import_react27.useState)(null);
+  const [pairing, setPairing] = (0, import_react27.useState)(null);
+  const [pairIssue, setPairIssue] = (0, import_react27.useState)(null);
+  const [confirmPairAbandon, setConfirmPairAbandon] = (0, import_react27.useState)(false);
+  const [revocation, setRevocation] = (0, import_react27.useState)(null);
+  const [cleanup, setCleanup] = (0, import_react27.useState)(null);
+  const [busy, setBusy] = (0, import_react27.useState)(false);
+  const [error, setError] = (0, import_react27.useState)("");
+  const [notice, setNotice] = (0, import_react27.useState)("");
   const load = async () => {
-    const value = await call("execution-options", { instanceId: binding.instanceId });
+    const value = await call2("execution-options", { instanceId: binding.instanceId });
     setSnapshot(value);
     setDraft((current) => current ?? { ...value.policy, requiredPermissions: [...value.policy.requiredPermissions] });
     return value;
   };
-  (0, import_react19.useEffect)(() => {
+  (0, import_react27.useEffect)(() => {
     let live = true;
     setSnapshot(null);
     setDraft(null);
@@ -10057,7 +13438,7 @@ function ProductExecutionSettings({ binding, call, onChanged }) {
     }
   };
   const savePolicy = () => run2(async () => {
-    await call("execution-policy-save", {
+    await call2("execution-policy-save", {
       instanceId: binding.instanceId,
       commandId: crypto.randomUUID(),
       expectedRevision: snapshot.policy.revision,
@@ -10086,7 +13467,7 @@ function ProductExecutionSettings({ binding, call, onChanged }) {
     });
   };
   const checkPairing = async () => {
-    const result = await call("remote-environment-pair-read", {
+    const result = await call2("remote-environment-pair-read", {
       instanceId: binding.instanceId,
       commandId: pairing.commandId
     });
@@ -10097,7 +13478,7 @@ function ProductExecutionSettings({ binding, call, onChanged }) {
     event.preventDefault();
     void run2(async () => {
       try {
-        await call("remote-environment-pair", {
+        await call2("remote-environment-pair", {
           instanceId: binding.instanceId,
           commandId: pairing.commandId,
           environmentId: pairing.environmentId,
@@ -10129,7 +13510,7 @@ function ProductExecutionSettings({ binding, call, onChanged }) {
     }
     setConfirmPairAbandon(false);
     void run2(async () => {
-      const result = await call("remote-environment-pair-abandon", {
+      const result = await call2("remote-environment-pair-abandon", {
         instanceId: binding.instanceId,
         commandId: pairing.commandId
       });
@@ -10149,7 +13530,7 @@ function ProductExecutionSettings({ binding, call, onChanged }) {
       return;
     }
     void run2(async () => {
-      const result = await call("remote-environment-revoke", {
+      const result = await call2("remote-environment-revoke", {
         instanceId: binding.instanceId,
         commandId: revocation.commandId,
         environmentId
@@ -10166,7 +13547,7 @@ function ProductExecutionSettings({ binding, call, onChanged }) {
   const retryCleanup = () => {
     if (!cleanup) return;
     void run2(async () => {
-      const result = cleanup.kind === "pair" ? await call("remote-environment-pair-abandon", { instanceId: binding.instanceId, commandId: cleanup.commandId }) : await call("remote-environment-revoke", {
+      const result = cleanup.kind === "pair" ? await call2("remote-environment-pair-abandon", { instanceId: binding.instanceId, commandId: cleanup.commandId }) : await call2("remote-environment-revoke", {
         instanceId: binding.instanceId,
         commandId: cleanup.commandId,
         environmentId: cleanup.environmentId
@@ -10186,58 +13567,57 @@ function ProductExecutionSettings({ binding, call, onChanged }) {
     target[path.at(-1)] = value;
     return next;
   });
-  if (!snapshot || !draft) return (0, import_react19.createElement)("p", { role: "status" }, error || t("Loading…"));
-  return (0, import_react19.createElement)(
+  if (!snapshot || !draft) return (0, import_react27.createElement)(InlineNotice, { tone: error ? "danger" : "neutral" }, error || t("Loading…"));
+  return (0, import_react27.createElement)(
     "section",
-    { className: "bt-product-execution", "aria-label": t("Execution targets") },
-    error ? (0, import_react19.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
-    notice ? (0, import_react19.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
-    cleanup ? (0, import_react19.createElement)(
+    { className: "bt-ps-content bt-product-execution", "aria-label": t("Execution targets") },
+    error ? (0, import_react27.createElement)(InlineNotice, { tone: "danger" }, error) : null,
+    notice ? (0, import_react27.createElement)(InlineNotice, { tone: "success" }, notice) : null,
+    cleanup ? (0, import_react27.createElement)(
       "div",
       { className: "bt-product-execution-cleanup" },
-      (0, import_react19.createElement)("p", { className: "bt-main-error" }, t("Credential cleanup is pending for a device operation.")),
-      (0, import_react19.createElement)(
+      (0, import_react27.createElement)("p", { className: "bt-main-error" }, t("Credential cleanup is pending for a device operation.")),
+      (0, import_react27.createElement)(
         "button",
         { type: "button", className: "bt-soft bt-danger", disabled: busy, onClick: retryCleanup },
         t("Retry credential cleanup")
       )
     ) : null,
-    snapshot.remoteLoadErrors?.length ? (0, import_react19.createElement)(
-      Card,
+    snapshot.remoteLoadErrors?.length ? (0, import_react27.createElement)(
+      SectionCard,
       { title: t("Unavailable remote devices") },
-      snapshot.remoteLoadErrors.map((item) => (0, import_react19.createElement)(
+      snapshot.remoteLoadErrors.map((item) => (0, import_react27.createElement)(
         "p",
         { key: item.id, className: "bt-main-error" },
         `${item.id}: ${capabilityReadErrorCopy(item.reason)}`
       ))
     ) : null,
-    (0, import_react19.createElement)(
-      Card,
-      { title: t("Execution policy") },
-      (0, import_react19.createElement)("p", null, t("This policy chooses a target for new work. Active assignments keep their original Environment.")),
-      (0, import_react19.createElement)("label", null, t("Default target"), (0, import_react19.createElement)("select", {
+    (0, import_react27.createElement)(
+      SectionCard,
+      { title: t("Execution policy"), description: t("This policy chooses a target for new work. Active assignments keep their original Environment.") },
+      (0, import_react27.createElement)(FieldRow, { label: t("Default target"), control: (0, import_react27.createElement)("select", {
         className: "bt-select",
         value: draft.defaultTarget,
         onChange: (event) => update(["defaultTarget"], event.target.value)
-      }, targets.map(([value, label]) => (0, import_react19.createElement)("option", { key: value, value }, t(label))))),
-      (0, import_react19.createElement)("label", null, t("Preferred Environment"), (0, import_react19.createElement)(
+      }, targets.map(([value, label]) => (0, import_react27.createElement)("option", { key: value, value }, t(label)))) }),
+      (0, import_react27.createElement)(FieldRow, { label: t("Preferred Environment"), control: (0, import_react27.createElement)(
         "select",
         {
           className: "bt-select",
           value: draft.preferredEnvironmentId ?? "",
           onChange: (event) => update(["preferredEnvironmentId"], event.target.value || void 0)
         },
-        (0, import_react19.createElement)("option", { value: "" }, t("No preference")),
-        snapshot.environments.map((environment) => (0, import_react19.createElement)("option", { key: environment.id, value: environment.id }, environmentLabel(environment)))
-      )),
-      (0, import_react19.createElement)(
+        (0, import_react27.createElement)("option", { value: "" }, t("No preference")),
+        snapshot.environments.map((environment) => (0, import_react27.createElement)("option", { key: environment.id, value: environment.id }, environmentLabel(environment)))
+      ) }),
+      (0, import_react27.createElement)(
         "fieldset",
         null,
-        (0, import_react19.createElement)("legend", null, t("Required capabilities")),
-        permissions.map((permission) => (0, import_react19.createElement)(
+        (0, import_react27.createElement)("legend", null, t("Required capabilities")),
+        permissions.map((permission) => (0, import_react27.createElement)(
           "label",
           { key: permission },
-          (0, import_react19.createElement)("input", {
+          (0, import_react27.createElement)("input", {
             type: "checkbox",
             checked: draft.requiredPermissions.includes(permission),
             onChange: (event) => update(["requiredPermissions"], event.target.checked ? [...draft.requiredPermissions, permission] : draft.requiredPermissions.filter((item) => item !== permission))
@@ -10245,59 +13625,63 @@ function ProductExecutionSettings({ binding, call, onChanged }) {
           permissionLabel(permission)
         ))
       ),
-      (0, import_react19.createElement)("button", {
+      (0, import_react27.createElement)("button", {
         type: "button",
         className: "bt-soft",
         disabled: busy || !draft.requiredPermissions.length,
         onClick: savePolicy
       }, t("Save execution policy"))
     ),
-    (0, import_react19.createElement)(
-      Card,
+    (0, import_react27.createElement)(
+      SectionCard,
       { title: t("Devices and Environments") },
-      snapshot.environments.map((environment) => (0, import_react19.createElement)(
+      snapshot.environments.map((environment) => (0, import_react27.createElement)(
         "article",
         { key: environment.id, className: "bt-product-execution-row" },
-        (0, import_react19.createElement)("strong", null, environmentLabel(environment)),
-        (0, import_react19.createElement)("p", null, `${t("Status")}: ${environment.kind === "remote" ? environment.online === false ? t("Offline") : t("Configured") : t("Local")} · ${t("Permissions")}: ${permissionCopy(environment.permissions)}`),
-        (0, import_react19.createElement)("p", null, `${t("Device")}: ${environment.deviceId ?? t("This Host")} · ${t("Directory")}: ${environment.root}`),
-        environment.reasons?.length ? (0, import_react19.createElement)(
+        (0, import_react27.createElement)("strong", null, environmentLabel(environment)),
+        (0, import_react27.createElement)(StatusChip, { tone: environment.online === false ? "warn" : "neutral" }, environment.kind === "remote" ? t(environment.online === false ? "Offline" : "Configured") : t("Local")),
+        (0, import_react27.createElement)(DetailList, { items: [
+          { label: t("Permissions"), value: permissionCopy(environment.permissions) },
+          { label: t("Device"), value: environment.deviceId ?? t("This Host") },
+          { label: t("Directory"), value: environment.root, mono: true }
+        ] }),
+        environment.reasons?.length ? (0, import_react27.createElement)(
           "p",
           { className: "bt-main-work-detail" },
           `${t("Selection issues")}: ${environment.reasons.map(candidateReasonCopy).join("; ")}`
         ) : null,
-        environment.capabilities?.unavailable ? (0, import_react19.createElement)(
+        environment.capabilities?.unavailable ? (0, import_react27.createElement)(
           "p",
           { className: "bt-main-error" },
           `${t("Capabilities unavailable")}: ${capabilityReadErrorCopy(environment.capabilities.reason)}`
-        ) : (0, import_react19.createElement)(
+        ) : (0, import_react27.createElement)(
           "p",
           null,
           `${t("Attachments")}: ${environment.capabilities?.attachments?.supported ? t("Available") : t("Unavailable")} · ${t("Skills")}: ${environment.capabilities?.skills?.supported ? t("Available") : t("Unavailable")}`
         ),
-        environment.kind === "remote" ? (0, import_react19.createElement)("button", {
+        environment.kind === "remote" ? (0, import_react27.createElement)("button", {
           type: "button",
           className: `bt-soft bt-soft-sm${revocation?.environmentId === environment.id ? " bt-danger" : ""}`,
           disabled: busy,
           onClick: () => revoke(environment.id)
         }, t(revocation?.environmentId === environment.id ? "Confirm revoke device" : "Revoke device")) : null
       )),
-      pairing ? (0, import_react19.createElement)(
+      pairing ? (0, import_react27.createElement)(
         "form",
         { className: "bt-product-execution-form", onSubmit: pair },
-        pairIssue ? (0, import_react19.createElement)(
+        pairIssue ? (0, import_react27.createElement)(
           "section",
           { className: "bt-product-execution-pair-issue" },
-          (0, import_react19.createElement)("p", { role: "status" }, `${t("Pairing status")}: ${pairingStatusCopy(pairIssue.status)}${pairIssue.active ? ` · ${t("Command running")}` : ""}${pairIssue.recoverable ? ` · ${t("Saved device can be restored after Host restart")}` : ""}`),
-          (0, import_react19.createElement)(
+          (0, import_react27.createElement)("p", { role: "status" }, `${t("Pairing status")}: ${pairingStatusCopy(pairIssue.status)}${pairIssue.active ? ` · ${t("Command running")}` : ""}${pairIssue.recoverable ? ` · ${t("Saved device can be restored after Host restart")}` : ""}`),
+          (0, import_react27.createElement)(
             "div",
             { className: "bt-actions" },
-            (0, import_react19.createElement)(
+            (0, import_react27.createElement)(
               "button",
               { type: "button", className: "bt-soft", disabled: busy, onClick: () => void run2(checkPairing) },
               t("Check pairing status")
             ),
-            pairIssue.canAbandon ? (0, import_react19.createElement)("button", {
+            pairIssue.canAbandon ? (0, import_react27.createElement)("button", {
               type: "button",
               className: "bt-soft bt-danger",
               disabled: busy,
@@ -10305,20 +13689,20 @@ function ProductExecutionSettings({ binding, call, onChanged }) {
             }, t(confirmPairAbandon ? "Confirm abandon pairing" : "Abandon uncertain pairing")) : null
           )
         ) : null,
-        (0, import_react19.createElement)("label", null, t("Device name"), (0, import_react19.createElement)("input", {
+        (0, import_react27.createElement)("label", null, t("Device name"), (0, import_react27.createElement)("input", {
           className: "bt-bs-input",
           required: true,
           maxLength: 128,
           value: pairing.label,
           onChange: (event) => setPairing((current) => ({ ...current, label: event.target.value }))
         })),
-        (0, import_react19.createElement)("label", null, t("Environment ID"), (0, import_react19.createElement)("input", {
+        (0, import_react27.createElement)("label", null, t("Environment ID"), (0, import_react27.createElement)("input", {
           className: "bt-bs-input",
           required: true,
           value: pairing.environmentId,
           onChange: (event) => setPairing((current) => ({ ...current, environmentId: event.target.value }))
         })),
-        (0, import_react19.createElement)("label", null, t("Device endpoint"), (0, import_react19.createElement)("input", {
+        (0, import_react27.createElement)("label", null, t("Device endpoint"), (0, import_react27.createElement)("input", {
           className: "bt-bs-input",
           required: true,
           inputMode: "url",
@@ -10326,20 +13710,20 @@ function ProductExecutionSettings({ binding, call, onChanged }) {
           value: pairing.endpoint,
           onChange: (event) => setPairing((current) => ({ ...current, endpoint: event.target.value }))
         })),
-        (0, import_react19.createElement)("label", null, t("Device ID"), (0, import_react19.createElement)("input", {
+        (0, import_react27.createElement)("label", null, t("Device ID"), (0, import_react27.createElement)("input", {
           className: "bt-bs-input",
           required: true,
           value: pairing.deviceId,
           onChange: (event) => setPairing((current) => ({ ...current, deviceId: event.target.value }))
         })),
-        (0, import_react19.createElement)("label", null, t("Device key fingerprint"), (0, import_react19.createElement)("input", {
+        (0, import_react27.createElement)("label", null, t("Device key fingerprint"), (0, import_react27.createElement)("input", {
           className: "bt-bs-input",
           required: true,
           pattern: "[a-f0-9]{64}",
           value: pairing.deviceKey,
           onChange: (event) => setPairing((current) => ({ ...current, deviceKey: event.target.value }))
         })),
-        (0, import_react19.createElement)("label", null, t("Pairing code"), (0, import_react19.createElement)("input", {
+        (0, import_react27.createElement)("label", null, t("Pairing code"), (0, import_react27.createElement)("input", {
           className: "bt-bs-input",
           required: true,
           type: "password",
@@ -10347,14 +13731,14 @@ function ProductExecutionSettings({ binding, call, onChanged }) {
           value: pairing.pairingCode,
           onChange: (event) => setPairing((current) => ({ ...current, pairingCode: event.target.value }))
         })),
-        (0, import_react19.createElement)(
+        (0, import_react27.createElement)(
           "fieldset",
           null,
-          (0, import_react19.createElement)("legend", null, t("Device permissions")),
-          permissions.map((permission) => (0, import_react19.createElement)(
+          (0, import_react27.createElement)("legend", null, t("Device permissions")),
+          permissions.map((permission) => (0, import_react27.createElement)(
             "label",
             { key: permission },
-            (0, import_react19.createElement)("input", {
+            (0, import_react27.createElement)("input", {
               type: "checkbox",
               checked: pairing.permissions.includes(permission),
               onChange: (event) => setPairing((current) => ({ ...current, permissions: event.target.checked ? [...current.permissions, permission] : current.permissions.filter((item) => item !== permission) }))
@@ -10362,38 +13746,37 @@ function ProductExecutionSettings({ binding, call, onChanged }) {
             permissionLabel(permission)
           ))
         ),
-        (0, import_react19.createElement)(
+        (0, import_react27.createElement)(
           "div",
           { className: "bt-actions" },
-          (0, import_react19.createElement)("button", { type: "submit", className: "bt-soft", disabled: busy || !pairing.permissions.length }, t("Pair device")),
-          (0, import_react19.createElement)("button", { type: "button", className: "bt-soft", onClick: () => setPairing(null) }, t("Cancel"))
+          (0, import_react27.createElement)("button", { type: "submit", className: "bt-soft", disabled: busy || !pairing.permissions.length }, t("Pair device")),
+          (0, import_react27.createElement)("button", { type: "button", className: "bt-soft", onClick: () => setPairing(null) }, t("Cancel"))
         )
-      ) : (0, import_react19.createElement)("button", { type: "button", className: "bt-soft", onClick: openPairing }, t("Pair a device"))
+      ) : (0, import_react27.createElement)("button", { type: "button", className: "bt-soft", onClick: openPairing }, t("Pair a device"))
     )
   );
 }
 var PRODUCT_EXECUTION_CSS = `
-.bt-product-execution{display:grid;gap:12px}
-.bt-product-execution label{display:grid;gap:6px;font-size:13px}
-.bt-product-execution fieldset{display:flex;gap:12px;flex-wrap:wrap;border:1px solid var(--bt-line);border-radius:12px}
+.bt-product-execution label:not(.bt-ps-row){display:grid;gap:6px}
+.bt-product-execution fieldset{display:flex;gap:12px;flex-wrap:wrap;border:1px solid var(--bt-line);border-radius:var(--bt-ps-radius-control);margin:8px 16px}
 .bt-product-execution fieldset label{display:flex;align-items:center;gap:6px}
 .bt-product-execution-row{display:grid;gap:5px;padding:12px 0;border-top:1px solid var(--bt-line);overflow-wrap:anywhere}
 .bt-product-execution-row button{justify-self:start}
 .bt-product-execution-form{display:grid;gap:12px}
-.bt-product-execution-pair-issue{display:grid;gap:8px;padding:10px 12px;border:1px solid var(--bt-line);border-radius:12px}
+.bt-product-execution-pair-issue{display:grid;gap:8px;padding:10px 12px;border:1px solid var(--bt-line);border-radius:var(--bt-ps-radius-card)}
 .bt-product-execution-cleanup{display:grid;gap:8px;justify-items:start}
 `;
 
 // node_modules/deep-view/src/react/ui.js
-var import_react20 = require("react");
-var FallbackMarkdown = ({ text }) => (0, import_react20.createElement)("span", null, String(text ?? ""));
-var ViewUi = (0, import_react20.createContext)({ t: (key) => key, Markdown: FallbackMarkdown });
-var useViewUi = () => (0, import_react20.useContext)(ViewUi);
+var import_react28 = require("react");
+var FallbackMarkdown = ({ text }) => (0, import_react28.createElement)("span", null, String(text ?? ""));
+var ViewUi = (0, import_react28.createContext)({ t: (key) => key, Markdown: FallbackMarkdown });
+var useViewUi = () => (0, import_react28.useContext)(ViewUi);
 var lineIcon2 = (paths) => function LineIcon() {
-  return (0, import_react20.createElement)(
+  return (0, import_react28.createElement)(
     "svg",
     { width: 15, height: 15, viewBox: "0 0 20 20", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true },
-    paths.map((d, index) => (0, import_react20.createElement)("path", { key: index, d }))
+    paths.map((d, index) => (0, import_react28.createElement)("path", { key: index, d }))
   );
 };
 var DotsIcon2 = lineIcon2(["M5 10h.01M10 10h.01M15 10h.01"]);
@@ -10402,10 +13785,10 @@ var DownloadIcon2 = lineIcon2(["M10 3.5v9", "M6.5 9.5L10 13l3.5-3.5", "M4 16h12"
 var CopyIcon2 = lineIcon2(["M8.5 7h6A1.5 1.5 0 0 1 16 8.5v6a1.5 1.5 0 0 1-1.5 1.5h-6A1.5 1.5 0 0 1 7 14.5v-6A1.5 1.5 0 0 1 8.5 7z", "M4 12.5V5.5A1.5 1.5 0 0 1 5.5 4H13"]);
 var InfoIcon2 = lineIcon2(["M10 3.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13z", "M10 9.25v4", "M10 6.6h.01"]);
 function CloseIcon2() {
-  return (0, import_react20.createElement)("svg", { width: 16, height: 16, viewBox: "0 0 20 20", "aria-hidden": true }, (0, import_react20.createElement)("path", { d: "M5 5l10 10M15 5L5 15", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" }));
+  return (0, import_react28.createElement)("svg", { width: 16, height: 16, viewBox: "0 0 20 20", "aria-hidden": true }, (0, import_react28.createElement)("path", { d: "M5 5l10 10M15 5L5 15", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" }));
 }
 function Segmented2({ label, value, className, children }) {
-  return (0, import_react20.createElement)("div", { className: className ? `dv-seg ${className}` : "dv-seg", role: "group", "aria-label": label, "data-active": value }, children);
+  return (0, import_react28.createElement)("div", { className: className ? `dv-seg ${className}` : "dv-seg", role: "group", "aria-label": label, "data-active": value }, children);
 }
 var keyLetter = (index) => String.fromCharCode(65 + index);
 var isTypingTarget = (node) => node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement || node instanceof HTMLSelectElement || node instanceof HTMLElement && node.isContentEditable;
@@ -10422,10 +13805,10 @@ var keyCards = /* @__PURE__ */ (() => {
   };
 })();
 function useOptionKeys(count, onPick, ownRef) {
-  const pick = (0, import_react20.useRef)(onPick);
+  const pick = (0, import_react28.useRef)(onPick);
   pick.current = onPick;
-  const listening = (0, import_react20.useSyncExternalStore)(keyCards.subscribe, keyCards.getSnapshot);
-  (0, import_react20.useEffect)(() => {
+  const listening = (0, import_react28.useSyncExternalStore)(keyCards.subscribe, keyCards.getSnapshot);
+  (0, import_react28.useEffect)(() => {
     if (count === 0) return void 0;
     keyCards.set((value) => value + 1);
     const onKey = (event) => {
@@ -11353,7 +14736,7 @@ function validateForm(node, values) {
 }
 
 // node_modules/deep-view/src/react/chart.js
-var import_react21 = require("react");
+var import_react29 = require("react");
 var PALETTE = ["var(--dv-accent)", "var(--dv-ink-tangerine)", "var(--dv-ink-green)", "var(--dv-ink-violet)", "var(--dv-ink-sky)", "var(--dv-ink-rose)", "var(--dv-ink-yellow)", "var(--dv-ink-cyan)", "var(--dv-ink-magenta)"];
 var colorAt = (index) => PALETTE[index % PALETTE.length];
 var TICK = 10;
@@ -11432,13 +14815,13 @@ function columns({ categories, series, unit, kind }, width, active, shown) {
   const band = plot.w / categories.length;
   const parts = [];
   for (const tick of ticks) {
-    parts.push((0, import_react21.createElement)("line", { key: `g${tick}`, className: "dv-chart-grid", x1: plot.x, x2: plot.x + plot.w, y1: y(tick), y2: y(tick) }));
-    parts.push((0, import_react21.createElement)("text", { key: `t${tick}`, className: "dv-chart-tick", x: plot.x - 8, y: y(tick) + 3, textAnchor: "end" }, withUnit(tick, unit)));
+    parts.push((0, import_react29.createElement)("line", { key: `g${tick}`, className: "dv-chart-grid", x1: plot.x, x2: plot.x + plot.w, y1: y(tick), y2: y(tick) }));
+    parts.push((0, import_react29.createElement)("text", { key: `t${tick}`, className: "dv-chart-tick", x: plot.x - 8, y: y(tick) + 3, textAnchor: "end" }, withUnit(tick, unit)));
   }
   const points = [];
   categories.forEach((label, at) => {
     const cx = plot.x + band * at + band / 2;
-    parts.push((0, import_react21.createElement)("text", { key: `c${at}`, className: "dv-chart-label", x: cx, y: height - 7, textAnchor: "middle" }, fit(label, band - 4, LABEL)));
+    parts.push((0, import_react29.createElement)("text", { key: `c${at}`, className: "dv-chart-label", x: cx, y: height - 7, textAnchor: "middle" }, fit(label, band - 4, LABEL)));
     points.push({ x: cx, y: y(Math.max(...visible.map((item) => item.values[at]), lo)) });
   });
   if (kind === "bar") {
@@ -11455,7 +14838,7 @@ function columns({ categories, series, unit, kind }, width, active, shown) {
         const r = Math.min(4, barW / 2, tall);
         const up = value >= 0;
         const d = up ? `M${x},${top2 + tall}V${top2 + r}q0,-${r} ${r},-${r}h${barW - 2 * r}q${r},0 ${r},${r}V${top2 + tall}z` : `M${x},${top2}V${top2 + tall - r}q0,${r} ${r},${r}h${barW - 2 * r}q${r},0 ${r},-${r}V${top2}z`;
-        parts.push((0, import_react21.createElement)("path", { key: `b${at}-${row}`, className: "dv-chart-mark", "data-dim": active !== null && active !== at ? "" : void 0, d, style: { fill: item.color } }));
+        parts.push((0, import_react29.createElement)("path", { key: `b${at}-${row}`, className: "dv-chart-mark", "data-dim": active !== null && active !== at ? "" : void 0, d, style: { fill: item.color } }));
       });
     });
   } else {
@@ -11464,14 +14847,14 @@ function columns({ categories, series, unit, kind }, width, active, shown) {
       const line = item.values.map((value, at) => `${at === 0 ? "M" : "L"}${xs[at]},${y(value)}`).join("");
       if (kind === "area") {
         const base = y(Math.max(lo, Math.min(0, hi)));
-        parts.push((0, import_react21.createElement)("path", { key: `a${row}`, className: "dv-chart-area", d: `${line}L${xs.at(-1)},${base}L${xs[0]},${base}z`, style: { fill: item.color } }));
+        parts.push((0, import_react29.createElement)("path", { key: `a${row}`, className: "dv-chart-area", d: `${line}L${xs.at(-1)},${base}L${xs[0]},${base}z`, style: { fill: item.color } }));
       }
-      parts.push((0, import_react21.createElement)("path", { key: `l${row}`, className: "dv-chart-line", d: line, style: { stroke: item.color } }));
+      parts.push((0, import_react29.createElement)("path", { key: `l${row}`, className: "dv-chart-line", d: line, style: { stroke: item.color } }));
       item.values.forEach((value, at) => {
-        parts.push((0, import_react21.createElement)("circle", { key: `p${row}-${at}`, className: "dv-chart-dot", cx: xs[at], cy: y(value), r: active === at ? 4 : 2.5, style: { fill: item.color } }));
+        parts.push((0, import_react29.createElement)("circle", { key: `p${row}-${at}`, className: "dv-chart-dot", cx: xs[at], cy: y(value), r: active === at ? 4 : 2.5, style: { fill: item.color } }));
       });
     });
-    if (active !== null) parts.unshift((0, import_react21.createElement)("line", { key: "guide", className: "dv-chart-guide", x1: xs[active], x2: xs[active], y1: plot.y, y2: plot.y + plot.h }));
+    if (active !== null) parts.unshift((0, import_react29.createElement)("line", { key: "guide", className: "dv-chart-guide", x1: xs[active], x2: xs[active], y1: plot.y, y2: plot.y + plot.h }));
   }
   const hits = categories.map((_, at) => ({ x: plot.x + band * at, y: plot.y, w: band, h: plot.h }));
   return { parts, height, points, hits };
@@ -11491,21 +14874,21 @@ function rows({ categories, series, unit }, width, active, shown) {
   const x = (value) => plot.x + (value - lo) / (hi - lo) * plot.w;
   const parts = [];
   for (const tick of ticks) {
-    parts.push((0, import_react21.createElement)("line", { key: `g${tick}`, className: "dv-chart-grid", x1: x(tick), x2: x(tick), y1: plot.y, y2: plot.y + plot.h }));
-    parts.push((0, import_react21.createElement)("text", { key: `t${tick}`, className: "dv-chart-tick", x: x(tick), y: height - 6, textAnchor: "middle" }, withUnit(tick, unit)));
+    parts.push((0, import_react29.createElement)("line", { key: `g${tick}`, className: "dv-chart-grid", x1: x(tick), x2: x(tick), y1: plot.y, y2: plot.y + plot.h }));
+    parts.push((0, import_react29.createElement)("text", { key: `t${tick}`, className: "dv-chart-tick", x: x(tick), y: height - 6, textAnchor: "middle" }, withUnit(tick, unit)));
   }
   const points = [];
   const zero = x(Math.max(lo, Math.min(0, hi)));
   categories.forEach((label, at) => {
     const rowY = plot.y + rowH * at + 5;
-    parts.push((0, import_react21.createElement)("text", { key: `c${at}`, className: "dv-chart-label", x: labelW - 10, y: rowY + (rowH - 10) / 2 + 4, textAnchor: "end" }, fit(label, labelW - 12, LABEL)));
+    parts.push((0, import_react29.createElement)("text", { key: `c${at}`, className: "dv-chart-label", x: labelW - 10, y: rowY + (rowH - 10) / 2 + 4, textAnchor: "end" }, fit(label, labelW - 12, LABEL)));
     visible.forEach((item, row) => {
       const value = item.values[at];
       const by = rowY + row * (barH + 2);
       const left = Math.min(x(value), zero);
       const long = Math.max(1, Math.abs(x(value) - zero));
-      parts.push((0, import_react21.createElement)("rect", { key: `b${at}-${row}`, className: "dv-chart-mark", "data-dim": active !== null && active !== at ? "" : void 0, x: left, y: by, width: long, height: barH, rx: Math.min(4, long / 2), style: { fill: item.color } }));
-      parts.push((0, import_react21.createElement)("text", { key: `v${at}-${row}`, className: "dv-chart-value", x: left + long + 6, y: by + barH - 3 }, withUnit(value, unit)));
+      parts.push((0, import_react29.createElement)("rect", { key: `b${at}-${row}`, className: "dv-chart-mark", "data-dim": active !== null && active !== at ? "" : void 0, x: left, y: by, width: long, height: barH, rx: Math.min(4, long / 2), style: { fill: item.color } }));
+      parts.push((0, import_react29.createElement)("text", { key: `v${at}-${row}`, className: "dv-chart-value", x: left + long + 6, y: by + barH - 3 }, withUnit(value, unit)));
     });
     points.push({ x: Math.max(...visible.map((item) => x(item.values[at])), zero), y: rowY });
   });
@@ -11533,15 +14916,15 @@ function donut({ categories, series }, width, active, hover) {
       const full = sweep >= Math.PI * 2 - 1e-6;
       const p = (radius, theta) => `${cx + Math.cos(theta) * radius},${cy + Math.sin(theta) * radius}`;
       const d = full ? `M${p(r, angle)}A${r},${r} 0 1 1 ${p(r, angle + Math.PI)}A${r},${r} 0 1 1 ${p(r, angle)}M${p(inner, angle)}A${inner},${inner} 0 1 0 ${p(inner, angle + Math.PI)}A${inner},${inner} 0 1 0 ${p(inner, angle)}z` : `M${p(r, angle)}A${r},${r} 0 ${large} 1 ${p(r, end)}L${p(inner, end)}A${inner},${inner} 0 ${large} 0 ${p(inner, angle)}z`;
-      parts.push((0, import_react21.createElement)("path", { key: `s${at}`, className: "dv-chart-mark", "data-dim": active !== null && active !== at ? "" : void 0, d, fillRule: "evenodd", style: { fill: colorAt(at) }, onPointerEnter: () => hover(at) }));
+      parts.push((0, import_react29.createElement)("path", { key: `s${at}`, className: "dv-chart-mark", "data-dim": active !== null && active !== at ? "" : void 0, d, fillRule: "evenodd", style: { fill: colorAt(at) }, onPointerEnter: () => hover(at) }));
     }
     angle = end;
   });
   return { parts, height: size, size, points, total, values, categories };
 }
 function useWidth(box, initial) {
-  const [width, setWidth] = (0, import_react21.useState)(initial);
-  (0, import_react21.useLayoutEffect)(() => {
+  const [width, setWidth] = (0, import_react29.useState)(initial);
+  (0, import_react29.useLayoutEffect)(() => {
     const node = box.current;
     if (!node || typeof ResizeObserver !== "function") return void 0;
     const measure = () => {
@@ -11595,28 +14978,28 @@ function saveImage(svg, name) {
   image.onerror = () => URL.revokeObjectURL(url);
   image.src = url;
 }
-var TableIcon = () => (0, import_react21.createElement)(
+var TableIcon = () => (0, import_react29.createElement)(
   "svg",
   { width: 16, height: 16, viewBox: "0 0 20 20", fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true },
-  (0, import_react21.createElement)("path", { d: "M4.5 4h11A1.5 1.5 0 0 1 17 5.5v9a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 14.5v-9A1.5 1.5 0 0 1 4.5 4z" }),
-  (0, import_react21.createElement)("path", { d: "M3 8.5h14M8 8.5V16" })
+  (0, import_react29.createElement)("path", { d: "M4.5 4h11A1.5 1.5 0 0 1 17 5.5v9a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 14.5v-9A1.5 1.5 0 0 1 4.5 4z" }),
+  (0, import_react29.createElement)("path", { d: "M3 8.5h14M8 8.5V16" })
 );
 function ChartTable({ data }) {
   const ui = useViewUi();
   const { categories, series, unit } = data;
   const heads = series.map((item, index) => item.name || (series.length === 1 ? unit || ui.t("Value") : `${ui.t("Series")} ${index + 1}`));
-  return (0, import_react21.createElement)(
+  return (0, import_react29.createElement)(
     "div",
     { className: "dv-widget-table" },
-    (0, import_react21.createElement)(
+    (0, import_react29.createElement)(
       "table",
       null,
-      (0, import_react21.createElement)("thead", null, (0, import_react21.createElement)("tr", null, (0, import_react21.createElement)("th", { scope: "col" }), heads.map((head, index) => (0, import_react21.createElement)("th", { key: index, scope: "col", className: "dv-num" }, head)))),
-      (0, import_react21.createElement)("tbody", null, categories.map((label, at) => (0, import_react21.createElement)(
+      (0, import_react29.createElement)("thead", null, (0, import_react29.createElement)("tr", null, (0, import_react29.createElement)("th", { scope: "col" }), heads.map((head, index) => (0, import_react29.createElement)("th", { key: index, scope: "col", className: "dv-num" }, head)))),
+      (0, import_react29.createElement)("tbody", null, categories.map((label, at) => (0, import_react29.createElement)(
         "tr",
         { key: at },
-        (0, import_react21.createElement)("th", { scope: "row" }, label),
-        series.map((item, index) => (0, import_react21.createElement)("td", { key: index, className: "dv-num" }, withUnit(item.values[at], series.length === 1 && !item.name ? "" : unit)))
+        (0, import_react29.createElement)("th", { scope: "row" }, label),
+        series.map((item, index) => (0, import_react29.createElement)("td", { key: index, className: "dv-num" }, withUnit(item.values[at], series.length === 1 && !item.name ? "" : unit)))
       )))
     )
   );
@@ -11625,16 +15008,16 @@ function WidgetChart({ node, lookup, registerChart, refreshCharts }) {
   const ui = useViewUi();
   const data = chartData(node, lookup);
   const { kind, categories, series, unit } = data;
-  const box = (0, import_react21.useRef)(null);
-  const svg = (0, import_react21.useRef)(null);
+  const box = (0, import_react29.useRef)(null);
+  const svg = (0, import_react29.useRef)(null);
   const width = useWidth(box, 520);
-  const [active, setActive] = (0, import_react21.useState)(null);
-  const [hidden, setHidden] = (0, import_react21.useState)([]);
-  const [asTable, setAsTable] = (0, import_react21.useState)(false);
-  const [copied, setCopied] = (0, import_react21.useState)(false);
-  const labelId = (0, import_react21.useId)();
-  const menuKey = (0, import_react21.useId)();
-  const table = (0, import_react21.useRef)(asTable);
+  const [active, setActive] = (0, import_react29.useState)(null);
+  const [hidden, setHidden] = (0, import_react29.useState)([]);
+  const [asTable, setAsTable] = (0, import_react29.useState)(false);
+  const [copied, setCopied] = (0, import_react29.useState)(false);
+  const labelId = (0, import_react29.useId)();
+  const menuKey = (0, import_react29.useId)();
+  const table = (0, import_react29.useRef)(asTable);
   table.current = asTable;
   const shown = series.map((_, index) => !hidden.includes(index));
   const toggle = (index) => {
@@ -11670,11 +15053,11 @@ function WidgetChart({ node, lookup, registerChart, refreshCharts }) {
     setAsTable(table.current);
   };
   const menuLabel = typeof node.caption === "string" && node.caption !== "" ? node.caption : null;
-  const action = (0, import_react21.useRef)(null);
+  const action = (0, import_react29.useRef)(null);
   action.current = { label: menuLabel, copy, save: () => {
     if (svg.current) saveImage(svg.current, "chart.png");
   }, toggleTable };
-  (0, import_react21.useEffect)(() => registerChart?.(menuKey, {
+  (0, import_react29.useEffect)(() => registerChart?.(menuKey, {
     get label() {
       return action.current.label;
     },
@@ -11685,8 +15068,8 @@ function WidgetChart({ node, lookup, registerChart, refreshCharts }) {
     copy: () => action.current.copy(),
     save: () => action.current.save()
   }), [registerChart, menuKey]);
-  (0, import_react21.useEffect)(() => refreshCharts?.(), [refreshCharts, asTable, menuLabel]);
-  const legend = isDonut ? (0, import_react21.createElement)("div", { className: "dv-chart-legend dv-chart-legend-list" }, categories.map((name, at) => (0, import_react21.createElement)(
+  (0, import_react29.useEffect)(() => refreshCharts?.(), [refreshCharts, asTable, menuLabel]);
+  const legend = isDonut ? (0, import_react29.createElement)("div", { className: "dv-chart-legend dv-chart-legend-list" }, categories.map((name, at) => (0, import_react29.createElement)(
     "div",
     {
       key: at,
@@ -11695,20 +15078,20 @@ function WidgetChart({ node, lookup, registerChart, refreshCharts }) {
       onPointerEnter: () => setActive(at),
       onPointerLeave: () => setActive(null)
     },
-    (0, import_react21.createElement)("i", { style: { background: colorAt(at) } }),
-    (0, import_react21.createElement)("span", { className: "dv-chart-key-name" }, name),
-    (0, import_react21.createElement)("span", { className: "dv-chart-key-value" }, share(at))
-  ))) : series.length > 1 ? (0, import_react21.createElement)("div", { className: "dv-chart-legend" }, series.map((item, index) => (0, import_react21.createElement)("button", {
+    (0, import_react29.createElement)("i", { style: { background: colorAt(at) } }),
+    (0, import_react29.createElement)("span", { className: "dv-chart-key-name" }, name),
+    (0, import_react29.createElement)("span", { className: "dv-chart-key-value" }, share(at))
+  ))) : series.length > 1 ? (0, import_react29.createElement)("div", { className: "dv-chart-legend" }, series.map((item, index) => (0, import_react29.createElement)("button", {
     key: index,
     type: "button",
     className: "dv-chart-key",
     "aria-pressed": shown[index],
     onClick: () => toggle(index)
-  }, (0, import_react21.createElement)("i", { style: { background: item.color } }), item.name || `${ui.t("Series")} ${index + 1}`))) : null;
-  const plot = (0, import_react21.createElement)(
+  }, (0, import_react29.createElement)("i", { style: { background: item.color } }), item.name || `${ui.t("Series")} ${index + 1}`))) : null;
+  const plot = (0, import_react29.createElement)(
     "div",
     { className: "dv-chart-plot", style: isDonut ? { width: svgWidth } : void 0 },
-    (0, import_react21.createElement)(
+    (0, import_react29.createElement)(
       "svg",
       {
         ref: svg,
@@ -11724,30 +15107,30 @@ function WidgetChart({ node, lookup, registerChart, refreshCharts }) {
         onPointerLeave: () => setActive(null)
       },
       drawn.parts,
-      isDonut ? active === null ? (0, import_react21.createElement)("text", { className: "dv-chart-center", x: svgWidth / 2, y: drawn.height / 2 + 5, textAnchor: "middle" }, unit === "%" ? "" : withUnit(drawn.total, unit)) : (0, import_react21.createElement)(
-        import_react21.Fragment,
+      isDonut ? active === null ? (0, import_react29.createElement)("text", { className: "dv-chart-center", x: svgWidth / 2, y: drawn.height / 2 + 5, textAnchor: "middle" }, unit === "%" ? "" : withUnit(drawn.total, unit)) : (0, import_react29.createElement)(
+        import_react29.Fragment,
         null,
-        (0, import_react21.createElement)("text", { className: "dv-chart-center-name", x: svgWidth / 2, y: drawn.height / 2 - 4, textAnchor: "middle" }, fit(categories[active], drawn.size * 0.56, LABEL)),
-        (0, import_react21.createElement)("text", { className: "dv-chart-center", x: svgWidth / 2, y: drawn.height / 2 + 14, textAnchor: "middle" }, share(active))
-      ) : drawn.hits.map((hit, at) => (0, import_react21.createElement)("rect", { key: `h${at}`, className: "dv-chart-hit", x: hit.x, y: hit.y, width: hit.w, height: hit.h, onPointerEnter: () => setActive(at) }))
+        (0, import_react29.createElement)("text", { className: "dv-chart-center-name", x: svgWidth / 2, y: drawn.height / 2 - 4, textAnchor: "middle" }, fit(categories[active], drawn.size * 0.56, LABEL)),
+        (0, import_react29.createElement)("text", { className: "dv-chart-center", x: svgWidth / 2, y: drawn.height / 2 + 14, textAnchor: "middle" }, share(active))
+      ) : drawn.hits.map((hit, at) => (0, import_react29.createElement)("rect", { key: `h${at}`, className: "dv-chart-hit", x: hit.x, y: hit.y, width: hit.w, height: hit.h, onPointerEnter: () => setActive(at) }))
     ),
-    point && !asTable && !isDonut ? (0, import_react21.createElement)(
+    point && !asTable && !isDonut ? (0, import_react29.createElement)(
       "div",
       { className: "dv-chart-tip", role: "status", style: { left: point.x, top: point.y } },
-      (0, import_react21.createElement)("b", null, categories[active]),
-      tipRows.map((row, index) => (0, import_react21.createElement)("span", { key: index }, (0, import_react21.createElement)("i", { style: { background: row.color } }), row.name ? `${row.name}  ` : "", row.value))
+      (0, import_react29.createElement)("b", null, categories[active]),
+      tipRows.map((row, index) => (0, import_react29.createElement)("span", { key: index }, (0, import_react29.createElement)("i", { style: { background: row.color } }), row.name ? `${row.name}  ` : "", row.value))
     ) : null
   );
-  const body = asTable ? (0, import_react21.createElement)(ChartTable, { data }) : isDonut ? (0, import_react21.createElement)("div", { className: legendBeside ? "dv-chart-donut dv-chart-donut-beside" : "dv-chart-donut", onPointerLeave: () => setActive(null) }, plot, legend) : (0, import_react21.createElement)(import_react21.Fragment, null, legend, plot);
-  return (0, import_react21.createElement)(
+  const body = asTable ? (0, import_react29.createElement)(ChartTable, { data }) : isDonut ? (0, import_react29.createElement)("div", { className: legendBeside ? "dv-chart-donut dv-chart-donut-beside" : "dv-chart-donut", onPointerLeave: () => setActive(null) }, plot, legend) : (0, import_react29.createElement)(import_react29.Fragment, null, legend, plot);
+  return (0, import_react29.createElement)(
     "figure",
     { ref: box, className: "dv-chart", "data-kind": kind },
-    (0, import_react21.createElement)("span", { id: labelId, hidden: true }, label),
+    (0, import_react29.createElement)("span", { id: labelId, hidden: true }, label),
     body,
     // The SVG stays mounted under the table, so the image can still be saved from it.
-    asTable ? (0, import_react21.createElement)("div", { hidden: true }, plot) : null,
-    copied ? (0, import_react21.createElement)("span", { className: "dv-chart-copied", role: "status" }, ui.t("Copied")) : null,
-    typeof node.caption === "string" && node.caption !== "" ? (0, import_react21.createElement)("figcaption", { className: "dv-view-caption" }, node.caption) : null
+    asTable ? (0, import_react29.createElement)("div", { hidden: true }, plot) : null,
+    copied ? (0, import_react29.createElement)("span", { className: "dv-chart-copied", role: "status" }, ui.t("Copied")) : null,
+    typeof node.caption === "string" && node.caption !== "" ? (0, import_react29.createElement)("figcaption", { className: "dv-view-caption" }, node.caption) : null
   );
 }
 var CHART_CSS = `
@@ -11792,7 +15175,7 @@ var CHART_CSS = `
 `;
 
 // node_modules/deep-view/src/react/frame.js
-var import_react22 = require("react");
+var import_react30 = require("react");
 var THEME_VARS = [
   ["--view-ink", "--bt-ink", "--dv-ink"],
   ["--view-ink-2", "--bt-ink-2", "--dv-ink-2"],
@@ -11833,12 +15216,12 @@ function frameDocument(html, vars = {}) {
 }
 function HtmlFrame({ node }) {
   const ui = useViewUi();
-  const frame = (0, import_react22.useRef)(null);
-  const loads = (0, import_react22.useRef)(0);
-  const [height, setHeight] = (0, import_react22.useState)(Number.isFinite(node.height) ? node.height : 120);
-  const [stopped, setStopped] = (0, import_react22.useState)(false);
-  const doc = (0, import_react22.useMemo)(() => frameDocument(String(node.html ?? ""), themeVars2()), [node.html]);
-  (0, import_react22.useEffect)(() => {
+  const frame = (0, import_react30.useRef)(null);
+  const loads = (0, import_react30.useRef)(0);
+  const [height, setHeight] = (0, import_react30.useState)(Number.isFinite(node.height) ? node.height : 120);
+  const [stopped, setStopped] = (0, import_react30.useState)(false);
+  const doc = (0, import_react30.useMemo)(() => frameDocument(String(node.html ?? ""), themeVars2()), [node.html]);
+  (0, import_react30.useEffect)(() => {
     const onMessage = (event) => {
       if (event.source !== frame.current?.contentWindow || event.data?.type !== HEIGHT) return;
       const next = Number(event.data.height);
@@ -11853,8 +15236,8 @@ function HtmlFrame({ node }) {
       observer?.disconnect();
     };
   }, []);
-  if (stopped) return (0, import_react22.createElement)("p", { className: "dv-view-frame-stopped" }, ui.t("This view tried to open a page and was stopped."));
-  return (0, import_react22.createElement)("iframe", {
+  if (stopped) return (0, import_react30.createElement)("p", { className: "dv-view-frame-stopped" }, ui.t("This view tried to open a page and was stopped."));
+  return (0, import_react30.createElement)("iframe", {
     ref: frame,
     className: "dv-view-frame",
     title: String(node.summary ?? ""),
@@ -11874,7 +15257,7 @@ var HTML_CSS = `
 `;
 
 // node_modules/deep-view/src/react/card.js
-var import_react23 = require("react");
+var import_react31 = require("react");
 var mdLabels = (ui) => ({ code: { copyLabel: ui.t("Copy"), copiedLabel: ui.t("Copied") }, footnotes: ui.t("Footnotes") });
 var TONES2 = ["good", "warn", "bad"];
 var CALLOUT_TONES2 = ["info", "good", "warn", "bad"];
@@ -11896,7 +15279,7 @@ var hasControls = (node) => {
 var answerValues = (answer, node) => answer?.action === node.id ? answer.values : void 0;
 function OptionsInput({ node, onSubmit, keys, busy = false }) {
   const ui = useViewUi();
-  const [picked, setPicked] = (0, import_react23.useState)([]);
+  const [picked, setPicked] = (0, import_react31.useState)([]);
   const options = optionsOf(node);
   const multi = node.multi === true;
   const choose = (label) => {
@@ -11910,14 +15293,14 @@ function OptionsInput({ node, onSubmit, keys, busy = false }) {
   const submit = () => {
     if (!busy && picked.length > 0) onSubmit?.(node.id, { selected: picked });
   };
-  const ownRef = (0, import_react23.useRef)(null);
+  const ownRef = (0, import_react31.useRef)(null);
   const hints = useOptionKeys(busy || !keys ? 0 : options.length, (index) => choose(options[index].label), ownRef);
-  return (0, import_react23.createElement)(
-    import_react23.Fragment,
+  return (0, import_react31.createElement)(
+    import_react31.Fragment,
     null,
-    (0, import_react23.createElement)("div", { className: "dv-q-list", role: "group" }, options.map((option, index) => {
+    (0, import_react31.createElement)("div", { className: "dv-q-list", role: "group" }, options.map((option, index) => {
       const selected = multi && picked.includes(option.label);
-      return (0, import_react23.createElement)(
+      return (0, import_react31.createElement)(
         "button",
         {
           key: option.label,
@@ -11928,20 +15311,20 @@ function OptionsInput({ node, onSubmit, keys, busy = false }) {
           "aria-keyshortcuts": hints ? keyLetter(index).toLowerCase() : void 0,
           onClick: () => choose(option.label)
         },
-        hints ? (0, import_react23.createElement)("span", { className: "dv-key", "aria-hidden": true }, keyLetter(index)) : null,
-        (0, import_react23.createElement)(
+        hints ? (0, import_react31.createElement)("span", { className: "dv-key", "aria-hidden": true }, keyLetter(index)) : null,
+        (0, import_react31.createElement)(
           "span",
           { className: "dv-q-body" },
-          (0, import_react23.createElement)("span", { className: "dv-q-label" }, option.label),
-          option.description ? (0, import_react23.createElement)("span", { className: "dv-q-desc" }, option.description) : null
+          (0, import_react31.createElement)("span", { className: "dv-q-label" }, option.label),
+          option.description ? (0, import_react31.createElement)("span", { className: "dv-q-desc" }, option.description) : null
         ),
-        selected ? (0, import_react23.createElement)("span", { className: "dv-q-check", title: ui.t("Selected") }, (0, import_react23.createElement)(CheckIcon2)) : null
+        selected ? (0, import_react31.createElement)("span", { className: "dv-q-check", title: ui.t("Selected") }, (0, import_react31.createElement)(CheckIcon2)) : null
       );
     })),
-    multi ? (0, import_react23.createElement)(
+    multi ? (0, import_react31.createElement)(
       "div",
       { className: "dv-q-foot" },
-      (0, import_react23.createElement)("button", { type: "button", className: "dv-q-submit", disabled: busy || picked.length === 0, onClick: submit }, ui.t("Submit"))
+      (0, import_react31.createElement)("button", { type: "button", className: "dv-q-submit", disabled: busy || picked.length === 0, onClick: submit }, ui.t("Submit"))
     ) : null
   );
 }
@@ -11949,53 +15332,53 @@ function SettledOptions({ node, answer }) {
   const ui = useViewUi();
   const selected = answerValues(answer, node)?.selected;
   const chosen = Array.isArray(selected) ? selected : [];
-  return (0, import_react23.createElement)(
+  return (0, import_react31.createElement)(
     "div",
     { className: "dv-q-list", role: "group", "aria-label": ui.t("Your answer") },
-    optionsOf(node).map((option) => (0, import_react23.createElement)(
+    optionsOf(node).map((option) => (0, import_react31.createElement)(
       "div",
       { key: option.label, className: "dv-q-opt" },
-      (0, import_react23.createElement)(
+      (0, import_react31.createElement)(
         "span",
         { className: "dv-q-body" },
-        (0, import_react23.createElement)("span", { className: "dv-q-label" }, option.label),
-        option.description ? (0, import_react23.createElement)("span", { className: "dv-q-desc" }, option.description) : null
+        (0, import_react31.createElement)("span", { className: "dv-q-label" }, option.label),
+        option.description ? (0, import_react31.createElement)("span", { className: "dv-q-desc" }, option.description) : null
       ),
-      chosen.includes(option.label) ? (0, import_react23.createElement)("span", { className: "dv-q-check", title: ui.t("Selected") }, (0, import_react23.createElement)(CheckIcon2)) : null
+      chosen.includes(option.label) ? (0, import_react31.createElement)("span", { className: "dv-q-check", title: ui.t("Selected") }, (0, import_react31.createElement)(CheckIcon2)) : null
     ))
   );
 }
 function ConfirmInput({ node, onSubmit, busy = false }) {
   const ui = useViewUi();
-  return (0, import_react23.createElement)(
+  return (0, import_react31.createElement)(
     "div",
     { className: "dv-q-foot" },
-    (0, import_react23.createElement)("button", { type: "button", className: "dv-q-btn", disabled: busy, onClick: () => onSubmit?.(node.id, { confirmed: false }) }, node.cancelLabel ?? ui.t("Cancel")),
-    (0, import_react23.createElement)("button", { type: "button", className: "dv-q-submit", disabled: busy, onClick: () => onSubmit?.(node.id, { confirmed: true }) }, node.confirmLabel ?? ui.t("Confirm"))
+    (0, import_react31.createElement)("button", { type: "button", className: "dv-q-btn", disabled: busy, onClick: () => onSubmit?.(node.id, { confirmed: false }) }, node.cancelLabel ?? ui.t("Cancel")),
+    (0, import_react31.createElement)("button", { type: "button", className: "dv-q-submit", disabled: busy, onClick: () => onSubmit?.(node.id, { confirmed: true }) }, node.confirmLabel ?? ui.t("Confirm"))
   );
 }
 function SettledConfirm({ node, answer }) {
   const ui = useViewUi();
   const confirmed = answerValues(answer, node)?.confirmed;
   if (confirmed !== true && confirmed !== false) {
-    return (0, import_react23.createElement)(
+    return (0, import_react31.createElement)(
       "div",
       { className: "dv-q-foot" },
-      (0, import_react23.createElement)("button", { type: "button", className: "dv-q-btn", disabled: true }, node.cancelLabel ?? ui.t("Cancel")),
-      (0, import_react23.createElement)("button", { type: "button", className: "dv-q-submit", disabled: true }, node.confirmLabel ?? ui.t("Confirm"))
+      (0, import_react31.createElement)("button", { type: "button", className: "dv-q-btn", disabled: true }, node.cancelLabel ?? ui.t("Cancel")),
+      (0, import_react31.createElement)("button", { type: "button", className: "dv-q-submit", disabled: true }, node.confirmLabel ?? ui.t("Confirm"))
     );
   }
   const label = confirmed ? node.confirmLabel ?? ui.t("Confirm") : node.cancelLabel ?? ui.t("Cancel");
-  return (0, import_react23.createElement)("span", { className: "dv-q-badge" }, label);
+  return (0, import_react31.createElement)("span", { className: "dv-q-badge" }, label);
 }
 function FormInput({ node, onSubmit, busy = false }) {
   const ui = useViewUi();
   const fields = fieldsOf(node);
-  const [draft, setDraft] = (0, import_react23.useState)({});
+  const [draft, setDraft] = (0, import_react31.useState)({});
   const submit = () => {
     if (!busy) onSubmit?.(node.id, { fields: Object.fromEntries(fields.map((field) => [field.id, draft[field.id] ?? ""])) });
   };
-  return (0, import_react23.createElement)(
+  return (0, import_react31.createElement)(
     "form",
     {
       className: "dv-widget-form",
@@ -12004,14 +15387,14 @@ function FormInput({ node, onSubmit, busy = false }) {
         submit();
       }
     },
-    fields.map((field) => (0, import_react23.createElement)(
+    fields.map((field) => (0, import_react31.createElement)(
       "label",
       { key: field.id, className: "dv-widget-field" },
-      (0, import_react23.createElement)("span", { className: "dv-widget-field-label" }, field.label),
-      (0, import_react23.createElement)(
+      (0, import_react31.createElement)("span", { className: "dv-widget-field-label" }, field.label),
+      (0, import_react31.createElement)(
         "span",
         { className: "dv-q-field" },
-        (0, import_react23.createElement)("input", {
+        (0, import_react31.createElement)("input", {
           className: "dv-q-input",
           type: "text",
           value: draft[field.id] ?? "",
@@ -12031,23 +15414,23 @@ function FormInput({ node, onSubmit, busy = false }) {
         })
       )
     )),
-    (0, import_react23.createElement)("div", { className: "dv-q-foot" }, (0, import_react23.createElement)("button", { type: "submit", className: "dv-q-submit", disabled: busy }, node.submitLabel ?? ui.t("Submit")))
+    (0, import_react31.createElement)("div", { className: "dv-q-foot" }, (0, import_react31.createElement)("button", { type: "submit", className: "dv-q-submit", disabled: busy }, node.submitLabel ?? ui.t("Submit")))
   );
 }
 function SettledForm({ node, answer }) {
   const fields = answerValues(answer, node)?.fields;
   const values = fields !== null && typeof fields === "object" ? fields : {};
-  return (0, import_react23.createElement)(
+  return (0, import_react31.createElement)(
     "div",
     { className: "dv-widget-form" },
-    fieldsOf(node).map((field) => (0, import_react23.createElement)(
+    fieldsOf(node).map((field) => (0, import_react31.createElement)(
       "label",
       { key: field.id, className: "dv-widget-field" },
-      (0, import_react23.createElement)("span", { className: "dv-widget-field-label" }, field.label),
-      (0, import_react23.createElement)(
+      (0, import_react31.createElement)("span", { className: "dv-widget-field-label" }, field.label),
+      (0, import_react31.createElement)(
         "span",
         { className: "dv-q-field" },
-        (0, import_react23.createElement)("input", { className: "dv-q-input", type: "text", value: values[field.id] ?? "", disabled: true, readOnly: true, "aria-label": field.label })
+        (0, import_react31.createElement)("input", { className: "dv-q-input", type: "text", value: values[field.id] ?? "", disabled: true, readOnly: true, "aria-label": field.label })
       )
     ))
   );
@@ -12055,10 +15438,10 @@ function SettledForm({ node, answer }) {
 function SubmitInput({ node, ctx }) {
   const ui = useViewUi();
   if (ctx.settled) return null;
-  return (0, import_react23.createElement)(
+  return (0, import_react31.createElement)(
     "div",
     { className: "dv-q-foot" },
-    (0, import_react23.createElement)("button", { type: "button", className: "dv-q-submit", disabled: ctx.busy, onClick: () => ctx.onSubmit?.(node.id, {}) }, node.label || ui.t("Send"))
+    (0, import_react31.createElement)("button", { type: "button", className: "dv-q-submit", disabled: ctx.busy, onClick: () => ctx.onSubmit?.(node.id, {}) }, node.label || ui.t("Send"))
   );
 }
 function WidgetTable({ node, lookup }) {
@@ -12068,17 +15451,17 @@ function WidgetTable({ node, lookup }) {
     const cells = rows2.map((row) => row[index]).filter((cell) => cell !== void 0 && cell !== "");
     return cells.length > 0 && cells.every((cell) => typeof cell === "number" || typeof cell === "string" && NUMERIC_CELL.test(cell.trim()));
   });
-  return (0, import_react23.createElement)(
+  return (0, import_react31.createElement)(
     "div",
     { className: "dv-widget-table" },
-    (0, import_react23.createElement)(
+    (0, import_react31.createElement)(
       "table",
       null,
-      (0, import_react23.createElement)("thead", null, (0, import_react23.createElement)("tr", null, columns2.map((column, index) => (0, import_react23.createElement)("th", { key: column.key ?? index, scope: "col", className: numeric2[index] ? "dv-num" : void 0 }, column.label)))),
-      (0, import_react23.createElement)("tbody", null, rows2.map((row, rowIndex) => (0, import_react23.createElement)(
+      (0, import_react31.createElement)("thead", null, (0, import_react31.createElement)("tr", null, columns2.map((column, index) => (0, import_react31.createElement)("th", { key: column.key ?? index, scope: "col", className: numeric2[index] ? "dv-num" : void 0 }, column.label)))),
+      (0, import_react31.createElement)("tbody", null, rows2.map((row, rowIndex) => (0, import_react31.createElement)(
         "tr",
         { key: rowIndex },
-        columns2.map((column, columnIndex) => (0, import_react23.createElement)("td", { key: column.key ?? columnIndex, className: numeric2[columnIndex] ? "dv-num" : void 0 }, cellText2(row[columnIndex])))
+        columns2.map((column, columnIndex) => (0, import_react31.createElement)("td", { key: column.key ?? columnIndex, className: numeric2[columnIndex] ? "dv-num" : void 0 }, cellText2(row[columnIndex])))
       )))
     )
   );
@@ -12094,11 +15477,11 @@ function WidgetProgress({ node, lookup }) {
   percent = Math.max(0, Math.min(100, Number.isFinite(percent) ? percent : 0));
   const tone = resolve(node.tone, lookup);
   const right = node.valueLabel !== void 0 ? asText(resolve(node.valueLabel, lookup, "")) : `${Math.round(percent)}%`;
-  return (0, import_react23.createElement)(
+  return (0, import_react31.createElement)(
     "div",
     { className: "dv-widget-progress", "data-tone": TONES2.includes(tone) ? tone : void 0 },
-    (0, import_react23.createElement)("span", { className: "dv-widget-progress-label" }, (0, import_react23.createElement)("span", { className: "dv-widget-progress-name" }, node.label), (0, import_react23.createElement)("span", null, right)),
-    (0, import_react23.createElement)("div", {
+    (0, import_react31.createElement)("span", { className: "dv-widget-progress-label" }, (0, import_react31.createElement)("span", { className: "dv-widget-progress-name" }, node.label), (0, import_react31.createElement)("span", null, right)),
+    (0, import_react31.createElement)("div", {
       className: "dv-widget-progress-track",
       role: "progressbar",
       "aria-valuenow": Math.round(percent),
@@ -12106,65 +15489,65 @@ function WidgetProgress({ node, lookup }) {
       "aria-valuemax": 100,
       "aria-label": node.label ?? ui.t("Progress"),
       "aria-valuetext": right
-    }, (0, import_react23.createElement)("div", { className: "dv-widget-progress-fill", style: { width: `${percent}%` } }))
+    }, (0, import_react31.createElement)("div", { className: "dv-widget-progress-fill", style: { width: `${percent}%` } }))
   );
 }
 function WidgetMetric({ node, lookup }) {
   const tone = resolve(node.tone, lookup);
   const caption = node.caption === void 0 ? "" : asText(resolve(node.caption, lookup, ""));
-  return (0, import_react23.createElement)(
+  return (0, import_react31.createElement)(
     "div",
     { className: "dv-widget-metric", "data-tone": TONES2.includes(tone) ? tone : void 0 },
-    (0, import_react23.createElement)("span", { className: "dv-widget-metric-label" }, node.label),
-    (0, import_react23.createElement)("span", { className: "dv-widget-metric-value" }, asText(resolve(node.value, lookup, "—"))),
-    caption !== "" ? (0, import_react23.createElement)("span", { className: "dv-view-caption" }, caption) : null
+    (0, import_react31.createElement)("span", { className: "dv-widget-metric-label" }, node.label),
+    (0, import_react31.createElement)("span", { className: "dv-widget-metric-value" }, asText(resolve(node.value, lookup, "—"))),
+    caption !== "" ? (0, import_react31.createElement)("span", { className: "dv-view-caption" }, caption) : null
   );
 }
 function WidgetCallout({ node, lookup }) {
   const ui = useViewUi();
   const tone = resolve(node.tone, lookup);
-  return (0, import_react23.createElement)(
+  return (0, import_react31.createElement)(
     "div",
     { className: "dv-view-callout", "data-tone": CALLOUT_TONES2.includes(tone) ? tone : "info" },
-    (0, import_react23.createElement)("span", { className: "dv-view-callout-icon", "aria-hidden": true }, (0, import_react23.createElement)(InfoIcon2)),
-    (0, import_react23.createElement)("div", { className: "dv-view-callout-text" }, (0, import_react23.createElement)(ui.Markdown, { text: asText(resolve(node.text, lookup, "")), labels: mdLabels(ui), variant: "compact" }))
+    (0, import_react31.createElement)("span", { className: "dv-view-callout-icon", "aria-hidden": true }, (0, import_react31.createElement)(InfoIcon2)),
+    (0, import_react31.createElement)("div", { className: "dv-view-callout-text" }, (0, import_react31.createElement)(ui.Markdown, { text: asText(resolve(node.text, lookup, "")), labels: mdLabels(ui), variant: "compact" }))
   );
 }
-var LinkIcon = () => (0, import_react23.createElement)(
+var LinkIcon = () => (0, import_react31.createElement)(
   "svg",
   { width: 12, height: 12, viewBox: "0 0 20 20", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true },
-  (0, import_react23.createElement)("path", { d: "M8.5 11.5l3-3" }),
-  (0, import_react23.createElement)("path", { d: "M7 9.5L5.5 11a2.5 2.5 0 0 0 3.5 3.5L10.5 13" }),
-  (0, import_react23.createElement)("path", { d: "M13 10.5l1.5-1.5A2.5 2.5 0 0 0 11 5.5L9.5 7" })
+  (0, import_react31.createElement)("path", { d: "M8.5 11.5l3-3" }),
+  (0, import_react31.createElement)("path", { d: "M7 9.5L5.5 11a2.5 2.5 0 0 0 3.5 3.5L10.5 13" }),
+  (0, import_react31.createElement)("path", { d: "M13 10.5l1.5-1.5A2.5 2.5 0 0 0 11 5.5L9.5 7" })
 );
 function WidgetSources({ node }) {
   const ui = useViewUi();
   const items = (Array.isArray(node.items) ? node.items : []).filter((item) => typeof item?.url === "string" && /^https?:\/\//i.test(item.url));
-  return (0, import_react23.createElement)(
+  return (0, import_react31.createElement)(
     "div",
     { className: "dv-view-sources", role: "list", "aria-label": ui.t("Sources") },
-    items.map((item, index) => (0, import_react23.createElement)("a", { key: index, role: "listitem", className: "dv-view-source", href: item.url, target: "_blank", rel: "noopener noreferrer", title: item.url }, (0, import_react23.createElement)(LinkIcon), item.label))
+    items.map((item, index) => (0, import_react31.createElement)("a", { key: index, role: "listitem", className: "dv-view-source", href: item.url, target: "_blank", rel: "noopener noreferrer", title: item.url }, (0, import_react31.createElement)(LinkIcon), item.label))
   );
 }
 function InputHead({ id, label, value }) {
-  return (0, import_react23.createElement)(
+  return (0, import_react31.createElement)(
     "div",
     { className: "dv-view-input-head" },
-    (0, import_react23.createElement)("label", { htmlFor: id, className: "dv-view-input-label" }, label),
-    value !== void 0 ? (0, import_react23.createElement)("output", { htmlFor: id, className: "dv-view-input-value" }, value) : null
+    (0, import_react31.createElement)("label", { htmlFor: id, className: "dv-view-input-label" }, label),
+    value !== void 0 ? (0, import_react31.createElement)("output", { htmlFor: id, className: "dv-view-input-value" }, value) : null
   );
 }
 var withUnit2 = (value, unit) => `${asText(value)}${unit ? ` ${unit}` : ""}`;
 var grouped2 = (value) => typeof value === "number" && Number.isFinite(value) ? value.toLocaleString("en-US", { maximumFractionDigits: 6 }) : asText(value);
 function SliderInput({ node, ctx }) {
-  const id = (0, import_react23.useId)();
+  const id = (0, import_react31.useId)();
   const value = Number(ctx.values[node.id]);
   const percent = node.max > node.min ? (value - node.min) / (node.max - node.min) * 100 : 0;
-  return (0, import_react23.createElement)(
+  return (0, import_react31.createElement)(
     "div",
     { className: "dv-view-input" },
-    (0, import_react23.createElement)(InputHead, { id, label: node.label, value: withUnit2(grouped2(value), node.unit) }),
-    (0, import_react23.createElement)("input", {
+    (0, import_react31.createElement)(InputHead, { id, label: node.label, value: withUnit2(grouped2(value), node.unit) }),
+    (0, import_react31.createElement)("input", {
       id,
       type: "range",
       className: "dv-view-range",
@@ -12179,8 +15562,8 @@ function SliderInput({ node, ctx }) {
   );
 }
 function NumberInput({ node, ctx }) {
-  const id = (0, import_react23.useId)();
-  const [draft, setDraft] = (0, import_react23.useState)(null);
+  const id = (0, import_react31.useId)();
+  const [draft, setDraft] = (0, import_react31.useState)(null);
   const value = ctx.values[node.id];
   const accept = (raw) => {
     setDraft(raw);
@@ -12189,14 +15572,14 @@ function NumberInput({ node, ctx }) {
     if (node.min !== void 0 && next < node.min || node.max !== void 0 && next > node.max) return;
     ctx.setInput(node.id, next);
   };
-  return (0, import_react23.createElement)(
+  return (0, import_react31.createElement)(
     "div",
     { className: "dv-view-input" },
-    (0, import_react23.createElement)(InputHead, { id, label: node.label }),
-    (0, import_react23.createElement)(
+    (0, import_react31.createElement)(InputHead, { id, label: node.label }),
+    (0, import_react31.createElement)(
       "span",
       { className: "dv-q-field dv-view-number" },
-      (0, import_react23.createElement)("input", {
+      (0, import_react31.createElement)("input", {
         id,
         className: "dv-q-input",
         type: "number",
@@ -12209,30 +15592,30 @@ function NumberInput({ node, ctx }) {
         onChange: (event) => accept(event.target.value),
         onBlur: () => setDraft(null)
       }),
-      node.unit ? (0, import_react23.createElement)("span", { className: "dv-view-unit" }, node.unit) : null
+      node.unit ? (0, import_react31.createElement)("span", { className: "dv-view-unit" }, node.unit) : null
     )
   );
 }
 function ChoiceInput({ node, ctx }) {
-  const labelId = (0, import_react23.useId)();
+  const labelId = (0, import_react31.useId)();
   const options = optionsOf(node);
   const current = ctx.values[node.id];
   const side = options.length <= 4 && options.every((option) => [...option.label].length <= 14);
   const pick = (option) => () => {
     if (!ctx.locked) ctx.setInput(node.id, choiceValue(option));
   };
-  return (0, import_react23.createElement)(
+  return (0, import_react31.createElement)(
     "div",
     { className: "dv-view-input" },
-    (0, import_react23.createElement)("span", { className: "dv-view-input-label", id: labelId }, node.label),
-    side ? (0, import_react23.createElement)(
+    (0, import_react31.createElement)("span", { className: "dv-view-input-label", id: labelId }, node.label),
+    side ? (0, import_react31.createElement)(
       Segmented2,
       { label: node.label, value: options.findIndex((option) => choiceValue(option) === current), className: "dv-view-seg" },
-      options.map((option) => (0, import_react23.createElement)("button", { key: option.label, type: "button", "aria-pressed": choiceValue(option) === current, disabled: ctx.locked, onClick: pick(option) }, option.label))
-    ) : (0, import_react23.createElement)(
+      options.map((option) => (0, import_react31.createElement)("button", { key: option.label, type: "button", "aria-pressed": choiceValue(option) === current, disabled: ctx.locked, onClick: pick(option) }, option.label))
+    ) : (0, import_react31.createElement)(
       "div",
       { className: "dv-view-radios", role: "radiogroup", "aria-labelledby": labelId },
-      options.map((option) => (0, import_react23.createElement)("button", {
+      options.map((option) => (0, import_react31.createElement)("button", {
         key: option.label,
         type: "button",
         role: "radio",
@@ -12240,20 +15623,20 @@ function ChoiceInput({ node, ctx }) {
         "aria-checked": choiceValue(option) === current,
         disabled: ctx.locked,
         onClick: pick(option)
-      }, (0, import_react23.createElement)("span", { className: "dv-view-radio-dot", "aria-hidden": true }), option.label))
+      }, (0, import_react31.createElement)("span", { className: "dv-view-radio-dot", "aria-hidden": true }), option.label))
     )
   );
 }
 function ToggleInput({ node, ctx }) {
   const on = ctx.values[node.id] === true;
-  return (0, import_react23.createElement)(
+  return (0, import_react31.createElement)(
     "div",
     { className: "dv-view-toggle" },
-    (0, import_react23.createElement)("span", { className: "dv-view-input-label" }, node.label),
-    (0, import_react23.createElement)(
+    (0, import_react31.createElement)("span", { className: "dv-view-input-label" }, node.label),
+    (0, import_react31.createElement)(
       "button",
       { type: "button", role: "switch", className: "dv-switch", "aria-checked": on, "aria-label": node.label, disabled: ctx.locked, onClick: () => ctx.setInput(node.id, !on) },
-      (0, import_react23.createElement)("span", { className: "dv-switch-knob", "aria-hidden": true })
+      (0, import_react31.createElement)("span", { className: "dv-switch-knob", "aria-hidden": true })
     )
   );
 }
@@ -12265,53 +15648,53 @@ function WidgetNode({ node, ctx }) {
     case "stack":
     case "row": {
       const children = Array.isArray(node.children) ? node.children : [];
-      return (0, import_react23.createElement)(
+      return (0, import_react31.createElement)(
         "div",
         { className: node.type === "row" ? "dv-view-row" : "dv-widget-stack" },
-        children.map((child, index) => (0, import_react23.createElement)(WidgetNode, { key: child?.id ?? index, node: child, ctx }))
+        children.map((child, index) => (0, import_react31.createElement)(WidgetNode, { key: child?.id ?? index, node: child, ctx }))
       );
     }
     case "text": {
-      const text = (0, import_react23.createElement)(ui.Markdown, { text: asText(resolve(node.text, lookup, "")), labels: mdLabels(ui), variant: "compact" });
-      return node.tone === "muted" ? (0, import_react23.createElement)("div", { className: "dv-view-muted" }, text) : text;
+      const text = (0, import_react31.createElement)(ui.Markdown, { text: asText(resolve(node.text, lookup, "")), labels: mdLabels(ui), variant: "compact" });
+      return node.tone === "muted" ? (0, import_react31.createElement)("div", { className: "dv-view-muted" }, text) : text;
     }
     case "metric":
-      return (0, import_react23.createElement)(WidgetMetric, { node, lookup });
+      return (0, import_react31.createElement)(WidgetMetric, { node, lookup });
     case "table":
-      return (0, import_react23.createElement)(WidgetTable, { node, lookup });
+      return (0, import_react31.createElement)(WidgetTable, { node, lookup });
     case "chart":
-      return (0, import_react23.createElement)(WidgetChart, { node, lookup, registerChart: ctx.registerChart, refreshCharts: ctx.refreshCharts });
+      return (0, import_react31.createElement)(WidgetChart, { node, lookup, registerChart: ctx.registerChart, refreshCharts: ctx.refreshCharts });
     case "progress":
-      return (0, import_react23.createElement)(WidgetProgress, { node, lookup });
+      return (0, import_react31.createElement)(WidgetProgress, { node, lookup });
     case "callout":
-      return (0, import_react23.createElement)(WidgetCallout, { node, lookup });
+      return (0, import_react31.createElement)(WidgetCallout, { node, lookup });
     case "sources":
-      return (0, import_react23.createElement)(WidgetSources, { node });
+      return (0, import_react31.createElement)(WidgetSources, { node });
     case "html":
-      return (0, import_react23.createElement)(HtmlFrame, { node });
+      return (0, import_react31.createElement)(HtmlFrame, { node });
     case "slider":
-      return (0, import_react23.createElement)(SliderInput, { node, ctx });
+      return (0, import_react31.createElement)(SliderInput, { node, ctx });
     case "number":
-      return (0, import_react23.createElement)(NumberInput, { node, ctx });
+      return (0, import_react31.createElement)(NumberInput, { node, ctx });
     case "choice":
-      return (0, import_react23.createElement)(ChoiceInput, { node, ctx });
+      return (0, import_react31.createElement)(ChoiceInput, { node, ctx });
     case "toggle":
-      return (0, import_react23.createElement)(ToggleInput, { node, ctx });
+      return (0, import_react31.createElement)(ToggleInput, { node, ctx });
     case "submit":
-      return (0, import_react23.createElement)(SubmitInput, { node, ctx });
+      return (0, import_react31.createElement)(SubmitInput, { node, ctx });
     case "options":
-      return ctx.settled ? (0, import_react23.createElement)(SettledOptions, { node, answer: ctx.answer }) : (0, import_react23.createElement)(OptionsInput, { node, onSubmit: ctx.onSubmit, keys: ctx.keys, busy: ctx.busy });
+      return ctx.settled ? (0, import_react31.createElement)(SettledOptions, { node, answer: ctx.answer }) : (0, import_react31.createElement)(OptionsInput, { node, onSubmit: ctx.onSubmit, keys: ctx.keys, busy: ctx.busy });
     case "confirm":
-      return ctx.settled ? (0, import_react23.createElement)(SettledConfirm, { node, answer: ctx.answer }) : (0, import_react23.createElement)(ConfirmInput, { node, onSubmit: ctx.onSubmit, busy: ctx.busy });
+      return ctx.settled ? (0, import_react31.createElement)(SettledConfirm, { node, answer: ctx.answer }) : (0, import_react31.createElement)(ConfirmInput, { node, onSubmit: ctx.onSubmit, busy: ctx.busy });
     case "form":
-      return ctx.settled ? (0, import_react23.createElement)(SettledForm, { node, answer: ctx.answer }) : (0, import_react23.createElement)(FormInput, { node, onSubmit: ctx.onSubmit, busy: ctx.busy });
+      return ctx.settled ? (0, import_react31.createElement)(SettledForm, { node, answer: ctx.answer }) : (0, import_react31.createElement)(FormInput, { node, onSubmit: ctx.onSubmit, busy: ctx.busy });
     default:
       return null;
   }
 }
 function WidgetView({ view, onSubmit, settled = false, answer = null, busy = false, registerChart, refreshCharts }) {
   const inputs = viewInputs(view);
-  const [values, setValues] = (0, import_react23.useState)(() => Object.fromEntries(inputs.map((node) => [node.id, inputDefault(node)])));
+  const [values, setValues] = (0, import_react31.useState)(() => Object.fromEntries(inputs.map((node) => [node.id, inputDefault(node)])));
   const sent = answer?.values?.inputs;
   const current = settled && sent !== null && typeof sent === "object" ? { ...values, ...sent } : values;
   const submit = (action, extra) => onSubmit?.(action, inputs.length > 0 ? { ...extra, inputs: current } : extra);
@@ -12328,12 +15711,12 @@ function WidgetView({ view, onSubmit, settled = false, answer = null, busy = fal
     registerChart,
     refreshCharts
   };
-  return (0, import_react23.createElement)(WidgetNode, { node: view, ctx });
+  return (0, import_react31.createElement)(WidgetNode, { node: view, ctx });
 }
 function useChartHandles() {
-  const [, bump] = (0, import_react23.useState)(0);
-  const charts = (0, import_react23.useRef)(/* @__PURE__ */ new Map());
-  const fns = (0, import_react23.useRef)(null);
+  const [, bump] = (0, import_react31.useState)(0);
+  const charts = (0, import_react31.useRef)(/* @__PURE__ */ new Map());
+  const fns = (0, import_react31.useRef)(null);
   if (fns.current === null) {
     const refresh = () => bump((value) => value + 1);
     fns.current = {
@@ -12352,29 +15735,29 @@ function useChartHandles() {
 }
 function ViewMenuList({ charts, pick }) {
   const ui = useViewUi();
-  return (0, import_react23.createElement)(
+  return (0, import_react31.createElement)(
     "div",
     { className: "dv-menu dv-view-menu", role: "menu" },
-    charts.map((chart, index) => (0, import_react23.createElement)(
-      import_react23.Fragment,
+    charts.map((chart, index) => (0, import_react31.createElement)(
+      import_react31.Fragment,
       { key: index },
-      charts.length > 1 ? (0, import_react23.createElement)(
-        import_react23.Fragment,
+      charts.length > 1 ? (0, import_react31.createElement)(
+        import_react31.Fragment,
         null,
-        index > 0 ? (0, import_react23.createElement)("div", { className: "dv-menu-sep", role: "separator" }) : null,
-        (0, import_react23.createElement)("div", { className: "dv-view-menu-label" }, chart.label ?? ui.t("Chart {n}", { n: index + 1 }))
+        index > 0 ? (0, import_react31.createElement)("div", { className: "dv-menu-sep", role: "separator" }) : null,
+        (0, import_react31.createElement)("div", { className: "dv-view-menu-label" }, chart.label ?? ui.t("Chart {n}", { n: index + 1 }))
       ) : null,
-      (0, import_react23.createElement)("button", { type: "button", role: "menuitem", onClick: pick(chart.toggleTable) }, (0, import_react23.createElement)(TableIcon), chart.asTable ? ui.t("View as chart") : ui.t("View as table")),
-      (0, import_react23.createElement)("button", { type: "button", role: "menuitem", onClick: pick(chart.copy) }, (0, import_react23.createElement)(CopyIcon2), ui.t("Copy data")),
-      (0, import_react23.createElement)("button", { type: "button", role: "menuitem", onClick: pick(chart.save) }, (0, import_react23.createElement)(DownloadIcon2), ui.t("Download image"))
+      (0, import_react31.createElement)("button", { type: "button", role: "menuitem", onClick: pick(chart.toggleTable) }, (0, import_react31.createElement)(TableIcon), chart.asTable ? ui.t("View as chart") : ui.t("View as table")),
+      (0, import_react31.createElement)("button", { type: "button", role: "menuitem", onClick: pick(chart.copy) }, (0, import_react31.createElement)(CopyIcon2), ui.t("Copy data")),
+      (0, import_react31.createElement)("button", { type: "button", role: "menuitem", onClick: pick(chart.save) }, (0, import_react31.createElement)(DownloadIcon2), ui.t("Download image"))
     ))
   );
 }
 function ViewMenu({ charts }) {
   const ui = useViewUi();
-  const [open, setOpen] = (0, import_react23.useState)(false);
-  const root = (0, import_react23.useRef)(null);
-  (0, import_react23.useEffect)(() => {
+  const [open, setOpen] = (0, import_react31.useState)(false);
+  const root = (0, import_react31.useRef)(null);
+  (0, import_react31.useEffect)(() => {
     if (!open) return void 0;
     const away = (event) => {
       if (!root.current?.contains(event.target)) setOpen(false);
@@ -12393,27 +15776,27 @@ function ViewMenu({ charts }) {
     setOpen(false);
     run2();
   };
-  return (0, import_react23.createElement)(
+  return (0, import_react31.createElement)(
     "div",
     { ref: root, className: "dv-view-tools", "data-open": open ? "" : void 0 },
-    (0, import_react23.createElement)("button", { type: "button", className: "dv-view-more", "aria-label": ui.t("Chart options"), "aria-haspopup": "menu", "aria-expanded": open, onClick: () => setOpen((value) => !value) }, (0, import_react23.createElement)(DotsIcon2)),
-    open ? (0, import_react23.createElement)(ViewMenuList, { charts, pick }) : null
+    (0, import_react31.createElement)("button", { type: "button", className: "dv-view-more", "aria-label": ui.t("Chart options"), "aria-haspopup": "menu", "aria-expanded": open, onClick: () => setOpen((value) => !value) }, (0, import_react31.createElement)(DotsIcon2)),
+    open ? (0, import_react31.createElement)(ViewMenuList, { charts, pick }) : null
   );
 }
 function WidgetCard({ title, view, onSubmit, onDismiss, busy = false, raised = false, settled = false, answer = null }) {
   const ui = useViewUi();
-  const titleId = (0, import_react23.useId)();
+  const titleId = (0, import_react31.useId)();
   const { charts, registerChart, refreshCharts } = useChartHandles();
   const framed = raised || hasControls(view);
   const className = ["dv-view", framed ? "dv-q" : "dv-view-bare", settled ? "dv-q-settled" : "", raised ? "dv-q-raised" : ""].filter(Boolean).join(" ");
-  const head = title || onDismiss || countType(view, "chart") > 0 ? (0, import_react23.createElement)(
+  const head = title || onDismiss || countType(view, "chart") > 0 ? (0, import_react31.createElement)(
     "div",
     { className: "dv-view-head" },
-    title ? (0, import_react23.createElement)("p", { className: "dv-view-title", id: titleId }, title) : (0, import_react23.createElement)("span", { className: "dv-view-title" }),
-    countType(view, "chart") > 0 ? (0, import_react23.createElement)(ViewMenu, { charts }) : null,
-    onDismiss ? (0, import_react23.createElement)("button", { type: "button", className: "dv-q-x", "aria-label": ui.t("Dismiss view"), title: ui.t("Dismiss"), onClick: onDismiss, disabled: busy }, (0, import_react23.createElement)(CloseIcon2)) : null
+    title ? (0, import_react31.createElement)("p", { className: "dv-view-title", id: titleId }, title) : (0, import_react31.createElement)("span", { className: "dv-view-title" }),
+    countType(view, "chart") > 0 ? (0, import_react31.createElement)(ViewMenu, { charts }) : null,
+    onDismiss ? (0, import_react31.createElement)("button", { type: "button", className: "dv-q-x", "aria-label": ui.t("Dismiss view"), title: ui.t("Dismiss"), onClick: onDismiss, disabled: busy }, (0, import_react31.createElement)(CloseIcon2)) : null
   ) : null;
-  return (0, import_react23.createElement)(
+  return (0, import_react31.createElement)(
     "div",
     {
       className,
@@ -12423,7 +15806,7 @@ function WidgetCard({ title, view, onSubmit, onDismiss, busy = false, raised = f
       "aria-busy": busy || void 0
     },
     head,
-    (0, import_react23.createElement)("div", { className: "dv-view-body" }, (0, import_react23.createElement)(WidgetView, { view, onSubmit, settled, answer, busy, registerChart, refreshCharts }))
+    (0, import_react31.createElement)("div", { className: "dv-view-body" }, (0, import_react31.createElement)(WidgetView, { view, onSubmit, settled, answer, busy, registerChart, refreshCharts }))
   );
 }
 function AnsweredView({ node }) {
@@ -12442,7 +15825,7 @@ function AnsweredView({ node }) {
   if (view === null || typeof view !== "object" || view.view === void 0) return null;
   const answers = Array.isArray(payload.answers) ? payload.answers : [];
   const answer = answers.find((entry) => entry?.id === view.id) ?? answers[0] ?? null;
-  return (0, import_react23.createElement)("div", { className: "dv-q-inline" }, (0, import_react23.createElement)(WidgetCard, { title: view.title ?? "", view: view.view, settled: true, answer }));
+  return (0, import_react31.createElement)("div", { className: "dv-q-inline" }, (0, import_react31.createElement)(WidgetCard, { title: view.title ?? "", view: view.view, settled: true, answer }));
 }
 var WIDGET_CSS = `
 .dv-view{min-width:0}
@@ -12643,20 +16026,20 @@ button.dv-q-opt:active{background:var(--dv-active)}
 var DEEP_VIEW_CSS = THEME_CSS + QUESTION_CSS + WIDGET_CSS;
 
 // src/client/product-work-view.js
-var import_react24 = require("react");
+var import_react32 = require("react");
 var viewT = (key, params) => key === "Send" ? t("Send to Main") : t(key, params);
 var VIEW_UI = { t: viewT, Markdown: import_dsh_client_ui_primitives.MarkdownText };
-var Card2 = (props) => (0, import_react24.createElement)(ViewUi.Provider, { value: VIEW_UI }, (0, import_react24.createElement)(WidgetCard, props));
+var Card = (props) => (0, import_react32.createElement)(ViewUi.Provider, { value: VIEW_UI }, (0, import_react32.createElement)(WidgetCard, props));
 function ProductWorkView({ title, view, answer, onSubmit, busy = false }) {
-  return (0, import_react24.createElement)(
+  return (0, import_react32.createElement)(
     "div",
     { className: "bt-main-work-view" },
-    (0, import_react24.createElement)(Card2, { title, view, ...onSubmit ? { onSubmit, busy } : { settled: true, answer } })
+    (0, import_react32.createElement)(Card, { title, view, ...onSubmit ? { onSubmit, busy } : { settled: true, answer } })
   );
 }
 
 // src/client/product-operations.js
-var import_react26 = require("react");
+var import_react34 = require("react");
 var number = (value) => Number(value ?? 0).toLocaleString();
 var byteCount = (value) => {
   const bytes = Number(value ?? 0);
@@ -12686,30 +16069,34 @@ var usageLine2 = (value) => value?.status === "none" ? t("No model calls.") : va
   calls: number(value?.calls)
 });
 function UsageItems({ title, items }) {
-  return (0, import_react26.createElement)(Card, { title }, items?.length ? (0, import_react26.createElement)("ul", { className: "bt-product-operations-list" }, items.map((item) => (0, import_react26.createElement)(
+  return (0, import_react34.createElement)(SectionCard, { title }, items?.length ? (0, import_react34.createElement)("ul", { className: "bt-product-operations-list" }, items.map((item) => (0, import_react34.createElement)(
     "li",
     { key: item.id },
-    (0, import_react26.createElement)("span", null, item.title),
-    (0, import_react26.createElement)("strong", null, usageLine2(item.total))
-  ))) : (0, import_react26.createElement)("p", { className: "bt-product-operations-note" }, t("No attributed work usage.")));
+    (0, import_react34.createElement)("span", null, item.title),
+    (0, import_react34.createElement)("strong", null, usageLine2(item.total))
+  ))) : (0, import_react34.createElement)(EmptyState, { title: t("No attributed work usage.") }));
 }
-function ProductOperationsSettings({ binding, call, onNavigate, app = globalThis.window?.dsSuperagentApp }) {
-  const [status, setStatus] = (0, import_react26.useState)(null);
-  const [usage, setUsage] = (0, import_react26.useState)(null);
-  const [updates, setUpdates] = (0, import_react26.useState)(null);
-  const [backups, setBackups] = (0, import_react26.useState)([]);
-  const [diagnostics, setDiagnostics] = (0, import_react26.useState)(null);
-  const [error, setError] = (0, import_react26.useState)(null);
-  const [busy, setBusy] = (0, import_react26.useState)(false);
-  const request = (0, import_react26.useRef)(0);
-  const working = (0, import_react26.useRef)(false);
+function ProductOperationsSettings({ binding, call: call2, onNavigate, section = "combined", app = globalThis.window?.dsSuperagentApp }) {
+  const showStatus = section !== "usage";
+  const showUsage = section !== "status";
+  const [status, setStatus] = (0, import_react34.useState)(null);
+  const [usage, setUsage] = (0, import_react34.useState)(null);
+  const [updates, setUpdates] = (0, import_react34.useState)(null);
+  const [backups, setBackups] = (0, import_react34.useState)([]);
+  const [diagnostics, setDiagnostics] = (0, import_react34.useState)(null);
+  const [error, setError] = (0, import_react34.useState)(null);
+  const [busy, setBusy] = (0, import_react34.useState)(false);
+  const [checkedAt, setCheckedAt] = (0, import_react34.useState)(null);
+  const [confirm2, setConfirm] = (0, import_react34.useState)(null);
+  const request = (0, import_react34.useRef)(0);
+  const working = (0, import_react34.useRef)(false);
   const refresh = async () => {
     const current = ++request.current;
     const results = await Promise.allSettled([
-      call("product-status", { instanceId: binding.instanceId }),
-      call("product-usage", { instanceId: binding.instanceId }),
-      app?.backups?.list?.() ?? Promise.resolve([]),
-      app?.diagnostics?.() ?? Promise.resolve(null)
+      showStatus ? call2("product-status", { instanceId: binding.instanceId }) : null,
+      showUsage ? call2("product-usage", { instanceId: binding.instanceId }) : null,
+      showStatus ? app?.backups?.list?.() ?? [] : [],
+      showStatus ? app?.diagnostics?.() ?? null : null
     ]);
     if (current !== request.current) return;
     if (results[0].status === "fulfilled") setStatus(results[0].value);
@@ -12720,29 +16107,36 @@ function ProductOperationsSettings({ binding, call, onNavigate, app = globalThis
     else setError(t("Backups could not be listed."));
     if (results[3].status === "fulfilled") setDiagnostics(results[3].value);
     else setError(t("Diagnostics could not be loaded."));
+    if (showStatus && results[0].status === "fulfilled" || showUsage && results[1].status === "fulfilled") {
+      setCheckedAt(Date.now());
+    }
   };
-  (0, import_react26.useEffect)(() => {
+  (0, import_react34.useEffect)(() => {
+    setError(null);
+    setCheckedAt(null);
+    setConfirm(null);
     void refresh();
     return () => {
       request.current++;
     };
-  }, [binding.instanceId]);
-  (0, import_react26.useEffect)(() => {
+  }, [binding.instanceId, showStatus, showUsage]);
+  (0, import_react34.useEffect)(() => {
+    if (!showStatus) return;
     let current = true;
-    let changed = false;
+    let changed2 = false;
     const off = app?.updates?.subscribe?.((value) => {
-      changed = true;
+      changed2 = true;
       setUpdates(value);
     });
     void app?.updates?.state?.().then((value) => {
-      if (current && !changed) setUpdates(value);
+      if (current && !changed2) setUpdates(value);
     }).catch(() => {
     });
     return () => {
       current = false;
       off?.();
     };
-  }, [app]);
+  }, [app, showStatus]);
   const run2 = async (operation) => {
     if (working.current) return;
     working.current = true;
@@ -12758,13 +16152,13 @@ function ProductOperationsSettings({ binding, call, onNavigate, app = globalThis
       setBusy(false);
     }
   };
-  const [confirm2, setConfirm] = (0, import_react26.useState)(null);
   const downloadDiagnostics = async () => {
+    const extraUsage = showUsage ? usage : await call2("product-usage", { instanceId: binding.instanceId }).catch(() => null);
     const diagnostic = {
       generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
       ...diagnostics,
       status,
-      usageCoverage: usage?.coverage
+      usageCoverage: extraUsage?.coverage
     };
     const url = URL.createObjectURL(new Blob([`${JSON.stringify(diagnostic, null, 2)}
 `], { type: "application/json" }));
@@ -12782,14 +16176,14 @@ function ProductOperationsSettings({ binding, call, onNavigate, app = globalThis
   ] : [];
   const coverage = usage?.coverage;
   const updateError = updates?.failure === "install_failed" ? "Update installation failed" : updates?.failure === "download_failed" ? "Update download failed" : null;
-  return (0, import_react26.createElement)(
+  return (0, import_react34.createElement)(
     "section",
-    { className: "bt-product-operations", "aria-label": t("Status and usage") },
-    (0, import_react26.createElement)(
+    { className: "bt-ps-content bt-product-operations", "aria-label": t(showStatus && showUsage ? "Status and usage" : showStatus ? "Status" : "Usage") },
+    (0, import_react34.createElement)(
       "div",
       { className: "bt-product-operations-toolbar" },
-      (0, import_react26.createElement)("span", { role: "status" }, busy ? t("Working…") : status ? t("Last checked {time}", { time: new Date(usage?.createdAt ?? Date.now()).toLocaleTimeString() }) : ""),
-      (0, import_react26.createElement)("button", {
+      (0, import_react34.createElement)("span", { role: "status" }, busy ? t("Working…") : checkedAt ? t("Last checked {time}", { time: new Date(checkedAt).toLocaleTimeString() }) : ""),
+      (0, import_react34.createElement)("button", {
         type: "button",
         className: "bt-soft bt-soft-sm",
         disabled: busy,
@@ -12798,170 +16192,837 @@ function ProductOperationsSettings({ binding, call, onNavigate, app = globalThis
         }
       }, t("Refresh status and usage"))
     ),
-    error ? (0, import_react26.createElement)("p", { role: "alert", className: "bt-main-error" }, error) : null,
-    (0, import_react26.createElement)(
-      Card,
+    error ? (0, import_react34.createElement)(InlineNotice, { tone: "danger" }, error) : null,
+    showStatus ? (0, import_react34.createElement)(
+      SectionCard,
       { title: t("Product health") },
-      statusRows.length ? statusRows.map(([label, value]) => (0, import_react26.createElement)(Row, { key: label, label }, value)) : t("Status unavailable"),
-      (0, import_react26.createElement)(
+      statusRows.length ? (0, import_react34.createElement)(DetailList, { items: statusRows.map(([label, value]) => ({ label, value })) }) : (0, import_react34.createElement)(EmptyState, { title: error ? t("Status unavailable") : t("Loading…") }),
+      (0, import_react34.createElement)(
         "div",
         { className: "bt-product-operations-actions" },
-        (0, import_react26.createElement)("button", { type: "button", className: "bt-soft", onClick: () => onNavigate("supervision") }, t("Open supervision")),
-        (0, import_react26.createElement)("button", { type: "button", className: "bt-soft", onClick: () => onNavigate("roles") }, t("Open role settings"))
+        (0, import_react34.createElement)("button", { type: "button", className: "bt-soft", onClick: () => onNavigate("supervision") }, t("Open supervision")),
+        (0, import_react34.createElement)("button", { type: "button", className: "bt-soft", onClick: () => onNavigate("roles") }, t("Open role settings"))
       )
-    ),
-    usage ? (0, import_react26.createElement)(
-      Card,
-      { title: t("Token usage by role") },
-      [["main", "Main"], ["router", "Router"], ["worker", "Worker"]].map(([role, label]) => (0, import_react26.createElement)(Row, { key: role, label: t(label) }, usageLine2(usage.roles?.[role])))
     ) : null,
-    usage ? (0, import_react26.createElement)(UsageItems, { title: t("Work usage"), items: usage.works }) : null,
-    usage ? (0, import_react26.createElement)(UsageItems, { title: t("Planning usage"), items: usage.planning }) : null,
-    coverage ? (0, import_react26.createElement)(
-      Card,
+    showUsage && !usage && !showStatus ? (0, import_react34.createElement)(InlineNotice, { tone: "neutral" }, t(error ? "Usage unavailable." : "Loading…")) : null,
+    showUsage && usage ? (0, import_react34.createElement)(
+      "section",
+      { className: "bt-set-section bt-ps-section" },
+      (0, import_react34.createElement)("h3", null, t("Token usage by role")),
+      (0, import_react34.createElement)(StatGrid, { columns: 3, items: ["Main", "Router", "Worker"].map((label) => {
+        const total = usage.roles?.[label.toLowerCase()];
+        return { label: t(label), value: total?.totalTokens == null ? "—" : number(total.totalTokens), detail: usageLine2(total) };
+      }) })
+    ) : null,
+    showUsage && usage ? (0, import_react34.createElement)(UsageItems, { title: t("Work usage"), items: usage.works }) : null,
+    showUsage && usage ? (0, import_react34.createElement)(UsageItems, { title: t("Planning usage"), items: usage.planning }) : null,
+    showUsage && coverage ? (0, import_react34.createElement)(
+      SectionCard,
       { title: t("Usage coverage") },
-      (0, import_react26.createElement)(Row, { label: t("Coverage") }, t(coverageCopy(coverage.status))),
-      (0, import_react26.createElement)("p", { className: "bt-product-operations-note" }, t("Totals cover recent Main, Router and Worker Sessions. Supervisor, subagent and preparation calls outside those Sessions are excluded.")),
-      (0, import_react26.createElement)(Row, { label: t("Sessions included") }, t("{included} of {known}", {
+      (0, import_react34.createElement)(Row, { label: t("Coverage") }, t(coverageCopy(coverage.status))),
+      (0, import_react34.createElement)("p", { className: "bt-product-operations-note" }, t("Totals cover recent Main, Router and Worker Sessions. Supervisor, subagent and preparation calls outside those Sessions are excluded.")),
+      (0, import_react34.createElement)(Row, { label: t("Sessions included") }, t("{included} of {known}", {
         included: number(coverage.includedSessions),
         known: number(coverage.knownSessions)
       })),
-      (0, import_react26.createElement)(Row, { label: t("Omitted") }, t("{uses} role uses · {sessions} Sessions · at least {events} events", {
+      (0, import_react34.createElement)(Row, { label: t("Omitted") }, t("{uses} role uses · {sessions} Sessions · at least {events} events", {
         uses: number(coverage.omittedRoleUses),
         sessions: number(coverage.omittedSessions),
         events: number(coverage.omittedEvents)
       })),
-      coverage.missingSessions ? (0, import_react26.createElement)(Row, { label: t("Unreadable Sessions") }, number(coverage.missingSessions)) : null,
-      coverage.overBudgetSessions ? (0, import_react26.createElement)(Row, { label: t("Sessions over the read limit") }, number(coverage.overBudgetSessions)) : null,
-      coverage.conflictingSessions ? (0, import_react26.createElement)(Row, { label: t("Sessions with conflicting roles") }, number(coverage.conflictingSessions)) : null,
-      coverage.workRecordsTruncated ? (0, import_react26.createElement)("p", null, t("Some work records were outside the attribution limits.")) : null,
-      (0, import_react26.createElement)(Row, { label: t("Unattributed usage") }, usageLine2(usage.unattributed)),
-      (0, import_react26.createElement)(Row, { label: t("Cost") }, t(usage.cost.reason)),
-      (0, import_react26.createElement)("p", { className: "bt-product-operations-note" }, t("Limits: {roles} role uses · {sessions} Sessions · {events} events per Session", {
+      coverage.missingSessions ? (0, import_react34.createElement)(Row, { label: t("Unreadable Sessions") }, number(coverage.missingSessions)) : null,
+      coverage.overBudgetSessions ? (0, import_react34.createElement)(Row, { label: t("Sessions over the read limit") }, number(coverage.overBudgetSessions)) : null,
+      coverage.conflictingSessions ? (0, import_react34.createElement)(Row, { label: t("Sessions with conflicting roles") }, number(coverage.conflictingSessions)) : null,
+      coverage.workRecordsTruncated ? (0, import_react34.createElement)("p", null, t("Some work records were outside the attribution limits.")) : null,
+      (0, import_react34.createElement)(Row, { label: t("Unattributed usage") }, usageLine2(usage.unattributed)),
+      (0, import_react34.createElement)(Row, { label: t("Cost") }, t(usage.cost.reason)),
+      (0, import_react34.createElement)("p", { className: "bt-product-operations-note" }, t("Limits: {roles} role uses · {sessions} Sessions · {events} events per Session", {
         roles: number(coverage.limits.roleUses),
         sessions: number(coverage.limits.sessions),
         events: number(coverage.limits.eventsPerSession)
       }))
     ) : null,
-    (0, import_react26.createElement)(
-      Card,
-      { title: t("Updates") },
-      (0, import_react26.createElement)(Row, { label: t("DS SuperAgent") }, t(updateCopy(updates?.phase))),
-      diagnostics?.appVersion ? (0, import_react26.createElement)(Row, { label: t("Installed version") }, diagnostics.appVersion) : null,
-      diagnostics?.dshVersion ? (0, import_react26.createElement)(Row, { label: "DSH" }, diagnostics.dshVersion) : null,
-      updates?.version ? (0, import_react26.createElement)(Row, { label: t("Version") }, updates.version) : null,
-      updateError ? (0, import_react26.createElement)("p", { role: "alert", className: "bt-main-error" }, t(updateError)) : null,
-      updates?.phase === "downloaded" ? (0, import_react26.createElement)("button", {
-        type: "button",
-        className: "bt-soft",
-        disabled: busy,
-        onClick: () => {
-          void run2(() => app?.updates?.install?.());
-        }
-      }, t("Install and restart")) : null,
-      ["failed", "current", "available"].includes(updates?.phase) ? (0, import_react26.createElement)("button", {
-        type: "button",
-        className: "bt-soft",
-        disabled: busy,
-        onClick: () => {
-          void run2(() => app.updates.check());
-        }
-      }, t("Check for updates")) : null,
-      updates?.phase === "available" ? (0, import_react26.createElement)("button", {
-        type: "button",
-        className: "bt-soft",
-        disabled: busy,
-        onClick: () => {
-          void run2(() => app.updates.open());
-        }
-      }, t("Open download page")) : null,
-      updates === null ? (0, import_react26.createElement)("p", { className: "bt-product-operations-note" }, t("Updates come with the DS SuperAgent app.")) : null
-    ),
-    diagnostics?.backupsAvailable ? (0, import_react26.createElement)(
-      Card,
-      { title: t("Backups") },
-      (0, import_react26.createElement)("p", { className: "bt-product-operations-note" }, t("Business state and DSH Sessions are backed up separately. Restores refuse changed authority or unresolved external effects.")),
-      (0, import_react26.createElement)(
-        "div",
-        { className: "bt-product-operations-actions" },
-        (0, import_react26.createElement)("button", {
+    showStatus ? (0, import_react34.createElement)(
+      import_react34.Fragment,
+      null,
+      (0, import_react34.createElement)(
+        SectionCard,
+        { title: t("Updates") },
+        (0, import_react34.createElement)(Row, { label: t("DS SuperAgent") }, t(updateCopy(updates?.phase))),
+        diagnostics?.appVersion ? (0, import_react34.createElement)(Row, { label: t("Installed version") }, diagnostics.appVersion) : null,
+        diagnostics?.dshVersion ? (0, import_react34.createElement)(Row, { label: "DSH" }, diagnostics.dshVersion) : null,
+        updates?.version ? (0, import_react34.createElement)(Row, { label: t("Version") }, updates.version) : null,
+        updateError ? (0, import_react34.createElement)(InlineNotice, { tone: "danger" }, t(updateError)) : null,
+        updates?.phase === "downloaded" ? (0, import_react34.createElement)("button", {
           type: "button",
           className: "bt-soft",
           disabled: busy,
           onClick: () => {
-            void run2(() => app.backups.create());
+            void run2(() => app?.updates?.install?.());
           }
-        }, t("Create backup"))
-      ),
-      confirm2 ? (0, import_react26.createElement)(
-        "div",
-        { className: "bt-product-operations-actions", role: "group", "aria-label": t("Restore this backup") },
-        (0, import_react26.createElement)("p", null, t("Restore the business and Session snapshot from {time}? The Host will restart.", { time: new Date(confirm2.createdAt).toLocaleString() })),
-        (0, import_react26.createElement)("button", { type: "button", className: "bt-soft bt-danger", disabled: busy, onClick: () => {
-          void run2(() => app.backups.restore(confirm2.id));
-          setConfirm(null);
-        } }, t("Confirm restore")),
-        (0, import_react26.createElement)("button", { type: "button", className: "bt-soft", onClick: () => setConfirm(null) }, t("Cancel"))
-      ) : null,
-      backups.length ? (0, import_react26.createElement)("ul", { className: "bt-product-operations-list" }, backups.slice(0, 10).map((backup) => (0, import_react26.createElement)(
-        "li",
-        { key: backup.id },
-        (0, import_react26.createElement)(
-          "div",
-          null,
-          (0, import_react26.createElement)("strong", null, new Date(backup.createdAt).toLocaleString()),
-          (0, import_react26.createElement)("span", null, t("{records} records · {sessions} Sessions · {size}", {
-            records: number(backup.business.recordCount),
-            sessions: number(backup.sessions.sessionCount ?? backup.sessions.fileCount),
-            size: byteCount(backup.business.sizeBytes + backup.sessions.totalBytes)
-          }))
-        ),
-        (0, import_react26.createElement)("button", {
+        }, t("Install and restart")) : null,
+        ["failed", "current", "available"].includes(updates?.phase) ? (0, import_react34.createElement)("button", {
           type: "button",
-          className: "bt-soft bt-soft-sm",
-          disabled: busy || !backup.restorable,
-          title: backup.restorable ? t("Restore this backup") : t("Unresolved external effects prevent restoring this backup."),
-          onClick: () => setConfirm(backup)
-        }, t("Restore"))
-      ))) : (0, import_react26.createElement)("p", { className: "bt-product-operations-note" }, t("No backups yet."))
-    ) : null,
-    (0, import_react26.createElement)(
-      Card,
-      { title: t("Diagnostics") },
-      diagnostics?.events?.length ? (0, import_react26.createElement)(
-        "details",
-        null,
-        (0, import_react26.createElement)("summary", null, t("Recent operational events")),
-        (0, import_react26.createElement)("ul", { className: "bt-product-operations-list" }, diagnostics.events.map((event, index) => (0, import_react26.createElement)(
+          className: "bt-soft",
+          disabled: busy,
+          onClick: () => {
+            void run2(() => app.updates.check());
+          }
+        }, t("Check for updates")) : null,
+        updates?.phase === "available" ? (0, import_react34.createElement)("button", {
+          type: "button",
+          className: "bt-soft",
+          disabled: busy,
+          onClick: () => {
+            void run2(() => app.updates.open());
+          }
+        }, t("Open download page")) : null,
+        updates === null ? (0, import_react34.createElement)("p", { className: "bt-product-operations-note" }, t("Updates come with the DS SuperAgent app.")) : null
+      ),
+      diagnostics?.backupsAvailable ? (0, import_react34.createElement)(
+        SectionCard,
+        { title: t("Backups") },
+        (0, import_react34.createElement)("p", { className: "bt-product-operations-note" }, t("Business state and DSH Sessions are backed up separately. Restores refuse changed authority or unresolved external effects.")),
+        (0, import_react34.createElement)(
+          "div",
+          { className: "bt-product-operations-actions" },
+          (0, import_react34.createElement)("button", {
+            type: "button",
+            className: "bt-soft",
+            disabled: busy,
+            onClick: () => {
+              void run2(() => app.backups.create());
+            }
+          }, t("Create backup"))
+        ),
+        confirm2 ? (0, import_react34.createElement)(
+          "div",
+          { className: "bt-product-operations-actions", role: "group", "aria-label": t("Restore this backup") },
+          (0, import_react34.createElement)("p", null, t("Restore the business and Session snapshot from {time}? The Host will restart.", { time: new Date(confirm2.createdAt).toLocaleString() })),
+          (0, import_react34.createElement)("button", { type: "button", className: "bt-soft bt-danger", disabled: busy, onClick: () => {
+            void run2(() => app.backups.restore(confirm2.id));
+            setConfirm(null);
+          } }, t("Confirm restore")),
+          (0, import_react34.createElement)("button", { type: "button", className: "bt-soft", onClick: () => setConfirm(null) }, t("Cancel"))
+        ) : null,
+        backups.length ? (0, import_react34.createElement)("ul", { className: "bt-product-operations-list" }, backups.slice(0, 10).map((backup) => (0, import_react34.createElement)(
           "li",
-          { key: index },
-          (0, import_react26.createElement)("time", { dateTime: new Date(event.at).toISOString() }, new Date(event.at).toLocaleString()),
-          (0, import_react26.createElement)("span", null, `${event.code}${event.version ? ` · ${event.version}` : ""}`)
-        )))
+          { key: backup.id },
+          (0, import_react34.createElement)(
+            "div",
+            null,
+            (0, import_react34.createElement)("strong", null, new Date(backup.createdAt).toLocaleString()),
+            (0, import_react34.createElement)("span", null, t("{records} records · {sessions} Sessions · {size}", {
+              records: number(backup.business.recordCount),
+              sessions: number(backup.sessions.sessionCount ?? backup.sessions.fileCount),
+              size: byteCount(backup.business.sizeBytes + backup.sessions.totalBytes)
+            }))
+          ),
+          (0, import_react34.createElement)("button", {
+            type: "button",
+            className: "bt-soft bt-soft-sm",
+            disabled: busy || !backup.restorable,
+            title: backup.restorable ? t("Restore this backup") : t("Unresolved external effects prevent restoring this backup."),
+            onClick: () => setConfirm(backup)
+          }, t("Restore"))
+        ))) : (0, import_react34.createElement)(EmptyState, { title: t("No backups yet.") })
       ) : null,
-      (0, import_react26.createElement)("button", { type: "button", className: "bt-soft", onClick: () => {
-        void downloadDiagnostics();
-      } }, t("Download diagnostic summary"))
-    )
+      (0, import_react34.createElement)(
+        SectionCard,
+        { title: t("Diagnostics") },
+        diagnostics?.events?.length ? (0, import_react34.createElement)(
+          "details",
+          null,
+          (0, import_react34.createElement)("summary", null, t("Recent operational events")),
+          (0, import_react34.createElement)("ul", { className: "bt-product-operations-list" }, diagnostics.events.map((event, index) => (0, import_react34.createElement)(
+            "li",
+            { key: index },
+            (0, import_react34.createElement)("time", { dateTime: new Date(event.at).toISOString() }, new Date(event.at).toLocaleString()),
+            (0, import_react34.createElement)("span", null, `${event.code}${event.version ? ` · ${event.version}` : ""}`)
+          )))
+        ) : null,
+        (0, import_react34.createElement)("button", { type: "button", className: "bt-soft", onClick: () => {
+          void downloadDiagnostics();
+        } }, t("Download diagnostic summary"))
+      )
+    ) : null
   );
 }
 var PRODUCT_OPERATIONS_CSS = `
-.bt-product-operations{display:grid;gap:12px;min-width:0}
-.bt-product-operations-toolbar{display:flex;align-items:center;justify-content:space-between;min-height:32px;color:var(--bt-ink-2);font-size:12px}
+.bt-product-operations-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;min-height:32px;color:var(--bt-ink-2);font-size:var(--bt-ps-small)}
 .bt-product-operations-list{display:grid;gap:9px;margin:0;padding:0;list-style:none}
 .bt-product-operations-list li{display:flex;justify-content:space-between;align-items:center;gap:12px;min-width:0}
 .bt-product-operations-list li>div{display:grid;gap:3px;min-width:0}
-.bt-product-operations-list li span{color:var(--bt-ink-2);font-size:12px;overflow-wrap:anywhere}
+.bt-product-operations-list li span{color:var(--bt-ink-2);font-size:var(--bt-ps-small);overflow-wrap:anywhere}
 .bt-product-operations-list li strong{overflow-wrap:anywhere}
 .bt-product-operations-actions{display:flex;flex-wrap:wrap;gap:8px}
-.bt-product-operations-note{margin:0;color:var(--bt-ink-2);font-size:12px;line-height:18px;overflow-wrap:anywhere}
+.bt-product-operations-note{margin:0;color:var(--bt-ink-2);font-size:var(--bt-ps-small);line-height:18px;overflow-wrap:anywhere}
 @media(max-width:640px){.bt-product-operations-list li{align-items:flex-start;flex-wrap:wrap}.bt-product-operations-list li>button{margin-left:auto}}
 `;
 
+// src/client/product-settings-css.js
+var PRODUCT_SETTINGS_CSS = `
+:root {
+  --bt-ps-text: var(--bt-font-body);
+  --bt-ps-small: var(--bt-font-small);
+  --bt-ps-caption: var(--bt-font-caption);
+  --bt-ps-title: var(--bt-font-title);
+  --bt-ps-stat: 22px;
+  --bt-ps-radius-card: var(--bt-radius-card);
+  --bt-ps-radius-control: var(--bt-radius-input);
+  --bt-ps-radius-small: var(--bt-radius-menu-item);
+  --bt-ps-radius-pill: var(--bt-radius-pill);
+  --bt-ps-gap: 22px;
+}
+.bt-ps-page { min-height: 0; color: var(--bt-ink); font-family: var(--bt-font); }
+.bt-ps-page > .bt-settings-head { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 20px 56px 8px 28px; }
+.bt-ps-page > .bt-settings-head h2 { flex: 1; margin: 0; font-size: var(--bt-ps-title); line-height: 24px; overflow-wrap: anywhere; }
+.bt-ps-page > .bt-settings-scroll { min-height: 0; padding: 12px 28px 28px; gap: var(--bt-ps-gap); }
+:is(.bt-ps-page, .bt-superagent-settings) .bt-settings-scroll { container: bt-settings-content / inline-size; }
+.bt-ps-content { display: grid; align-content: start; gap: var(--bt-ps-gap); min-width: 0; }
+.bt-ps-section, .bt-ps-content { font-size: var(--bt-ps-text); line-height: 18px; }
+.bt-ps-section > h3 { font-size: inherit; }
+.bt-ps-card {
+  min-width: 0;
+  background: var(--bt-card);
+  border: .5px solid var(--bt-glass-rim, var(--bt-line));
+  border-radius: var(--bt-ps-radius-card);
+  box-shadow: var(--bt-card-shadow, none);
+}
+.bt-ps-card > :not(.bt-set-row, .bt-ps-empty, .bt-ps-details, .bt-ps-notice) { padding: 12px 16px; }
+.bt-ps-card > p { margin: 0; }
+.bt-ps-card > button.bt-soft { margin: 8px 16px; align-self: flex-start; padding: 0 16px; }
+.bt-ps-row.bt-set-row { gap: 16px; min-height: 48px; padding: 12px 16px; overflow-wrap: anywhere; }
+.bt-ps-row.bt-ps-stack { align-items: stretch; flex-direction: column; gap: 8px; }
+.bt-ps-label { font-weight: 500; }
+.bt-ps-hint, .bt-ps-description { font-size: var(--bt-ps-small); line-height: 17px; color: var(--bt-ink-2); overflow-wrap: anywhere; }
+.bt-ps-section > .bt-ps-description { margin: -4px 4px 8px; }
+.bt-ps-control, .bt-ps-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; max-width: 100%; }
+.bt-ps-row .bt-ps-control { flex: 0 1 auto; width: fit-content; }
+.bt-ps-stack .bt-ps-control { width: 100%; }
+.bt-ps-stack .bt-ps-control > :is(input:not([type=checkbox]), textarea) { flex: 1 1 auto; }
+.bt-ps-control > :is(input, select, textarea) { min-width: 0; max-width: 100%; }
+.bt-ps-control > .bt-switch { position: relative; flex: none; width: 36px; height: 20px; padding: 0; border: 0;
+  border-radius: var(--bt-ps-radius-pill); background: var(--bt-line-2); cursor: pointer; transition: background-color .12s ease; }
+.bt-ps-control > .bt-switch[aria-checked=true] { background: var(--bt-accent); }
+.bt-ps-control > .bt-switch:disabled { opacity: .45; cursor: default; }
+.bt-ps-control .bt-switch-knob { position: absolute; inset: 2px auto auto 2px; width: 16px; height: 16px;
+  border-radius: var(--bt-ps-radius-pill); background: var(--bt-knob);
+  transition: ${spring(SPRING_SHAPE, "transform")}, ${spring(SPRING_TAP, "width")}; }
+.bt-ps-control > .bt-switch[aria-checked=true] .bt-switch-knob { transform: translateX(16px); }
+.bt-ps-control > .bt-switch:active:not(:disabled) .bt-switch-knob { width: 21px; }
+.bt-ps-control > .bt-switch[aria-checked=true]:active:not(:disabled) .bt-switch-knob { transform: translateX(11px); }
+:is(.bt-ps-page, .bt-ps-content, .bt-ps-card) .bt-bs-input {
+  box-sizing: border-box; min-width: 0; max-width: 100%; min-height: 34px; padding: 0 10px;
+  border: .5px solid var(--bt-line-2); border-radius: var(--bt-ps-radius-control);
+  background: var(--bt-card); color: var(--bt-ink); font: inherit;
+}
+:is(.bt-ps-page, .bt-ps-content, .bt-ps-card) textarea.bt-bs-input { padding: 8px 10px; resize: vertical; }
+:is(.bt-ps-page, .bt-ps-content, .bt-ps-card) :is(button, input, select, textarea, summary, a[href]):focus-visible {
+  outline: 2px solid var(--bt-accent); outline-offset: 2px;
+}
+.bt-ps-empty { padding: 18px 12px; text-align: center; color: var(--bt-ink-3); font-size: var(--bt-ps-text); line-height: 18px; }
+.bt-ps-empty p { margin: 0; }
+.bt-ps-empty > * + * { margin-top: 8px; }
+.bt-ps-stats { display: grid; grid-template-columns: repeat(var(--bt-ps-columns), minmax(0, 1fr)); gap: 1px; margin: 0;
+  border: 1px solid var(--bt-line); border-radius: var(--bt-ps-radius-card); background: var(--bt-main); overflow: hidden; }
+.bt-ps-stat { display: flex; flex-direction: column; gap: 6px; padding: 16px 18px; background: var(--bt-card);
+  box-shadow: 0 0 0 1px var(--bt-line); overflow-wrap: anywhere; }
+.bt-ps-stat dt { order: 1; font-size: var(--bt-ps-small); line-height: 16px; color: var(--bt-ink-2); }
+.bt-ps-stat dd { margin: 0; font-size: var(--bt-ps-stat); line-height: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.bt-ps-stat dd.bt-ps-description { order: 2; font: inherit; font-size: var(--bt-ps-small); }
+.bt-ps-chip { display: inline-flex; align-items: center; align-self: flex-start; padding: 1px 7px; border-radius: var(--bt-ps-radius-pill);
+  font-size: var(--bt-ps-caption); line-height: 16px; background: var(--bt-tag-bg); color: var(--bt-tag-ink); }
+.bt-ps-chip[data-tone=accent] { background: var(--bt-accent-soft, var(--bt-tag-bg)); color: var(--bt-ink); }
+.bt-ps-chip[data-tone=success] { background: color-mix(in srgb, var(--bt-green) 16%, transparent); color: var(--bt-ink); }
+.bt-ps-chip[data-tone=warn] { background: color-mix(in srgb, var(--bt-star) 16%, transparent); color: var(--bt-warn, var(--bt-ink)); }
+.bt-ps-chip[data-tone=danger] { background: color-mix(in srgb, var(--bt-danger) 10%, transparent); color: var(--bt-ink); }
+.bt-ps-notice { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 10px; padding: 12px 14px;
+  border: .5px solid var(--bt-line-2); border-radius: var(--bt-ps-radius-card); color: var(--bt-ink); background: var(--bt-tag-bg); }
+.bt-ps-card > .bt-ps-notice { margin: 8px; }
+.bt-ps-notice[data-tone=accent] { background: var(--bt-accent-soft, color-mix(in srgb, var(--bt-accent) 10%, transparent)); }
+.bt-ps-notice[data-tone=warn] { background: color-mix(in srgb, var(--bt-star) 10%, transparent); }
+.bt-ps-notice[data-tone=success] { background: color-mix(in srgb, var(--bt-green) 10%, transparent); }
+.bt-ps-notice[data-tone=danger] { background: var(--bt-danger-soft, color-mix(in srgb, var(--bt-danger) 10%, transparent)); }
+.bt-ps-notice-copy { flex: 1 1 180px; min-width: 0; }
+.bt-ps-notice-copy strong { display: block; margin-bottom: 2px; font-size: var(--bt-ps-text); line-height: 18px; }
+.bt-ps-details { margin: 0; }
+.bt-ps-detail { display: flex; align-items: baseline; gap: 12px; padding: 9px 16px; font-size: var(--bt-ps-text); overflow-wrap: anywhere; }
+.bt-ps-detail + .bt-ps-detail { border-top: .5px solid var(--bt-line); }
+.bt-ps-detail dt { flex: 1; min-width: 0; }
+.bt-ps-detail dd { margin: 0; max-width: 70%; text-align: end; font-size: var(--bt-ps-small); line-height: 16px; color: var(--bt-ink-2); }
+@container bt-settings-content (max-width: 520px) {
+  .bt-ps-row.bt-set-row { align-items: stretch; flex-direction: column; gap: 8px; }
+  .bt-ps-row .bt-ps-control { width: 100%; }
+  .bt-ps-stats { grid-template-columns: repeat(min(var(--bt-ps-columns), 2), minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .bt-ps-page > .bt-settings-head { padding-inline-start: 16px; }
+  .bt-ps-page > .bt-settings-scroll { padding-inline: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bt-ps-control > .bt-switch, .bt-ps-control .bt-switch-knob { transition: none; }
+}
+`;
+
+// src/client/product-api-assets.js
+var pageBytes = 8192;
+var maxAssetBytes = 8 * 1024 * 1024;
+var imageExtensions = /* @__PURE__ */ new Map([["image/png", "png"], ["image/jpeg", "jpg"], ["image/gif", "gif"], ["image/webp", "webp"]]);
+function fail2(code, message) {
+  throw Object.assign(new Error(t(message)), { code });
+}
+var changed = () => fail2("bot/stale", "This file is no longer available.");
+async function readPage(request, endpoint, target, offset, version, maxBytes = pageBytes) {
+  const page = await request(endpoint, { ...target, offset, maxBytes });
+  if (page?.offset !== offset || !Number.isSafeInteger(page.totalBytes) || page.totalBytes < offset || page.totalBytes > maxAssetBytes || !page.reference || typeof page.sha256 !== "string" || version !== void 0 && page.sha256 !== version) changed();
+  let bytes;
+  if (page.encoding === "utf8") bytes = new TextEncoder().encode(page.text);
+  else if (page.encoding === "base64") bytes = Uint8Array.from(atob(page.text), (character) => character.charCodeAt(0));
+  else changed();
+  if (page.nextOffset !== offset + bytes.length || page.nextOffset > page.totalBytes || bytes.length > maxBytes || bytes.length === 0 && offset !== page.totalBytes) changed();
+  return { bytes, reference: page.reference, nextOffset: page.nextOffset, totalBytes: page.totalBytes, version: page.sha256 };
+}
+async function readAsset(request, endpoint, target, limit = maxAssetBytes) {
+  const chunks = [];
+  let offset = 0;
+  let version;
+  let totalBytes;
+  for (let pages2 = 0; offset < limit && pages2 < 2048; pages2++) {
+    const page = await readPage(request, endpoint, target, offset, version, Math.min(pageBytes, limit - offset));
+    if (totalBytes !== void 0 && totalBytes !== page.totalBytes) changed();
+    chunks.push(page.bytes);
+    offset = page.nextOffset;
+    version = page.version;
+    totalBytes = page.totalBytes;
+    if (offset === totalBytes || offset === limit) {
+      return { chunks, reference: page.reference, totalBytes, whole: offset === totalBytes };
+    }
+  }
+  return changed();
+}
+async function readAssetChunk(request, endpoint, target, offset, version) {
+  if (!Number.isSafeInteger(offset) || offset < 0 || version !== void 0 && typeof version !== "string") {
+    fail2("bot/invalid", "Use a valid file offset and version.");
+  }
+  const page = await readPage(request, endpoint, target, offset, version);
+  return {
+    name: page.reference.name ?? "file",
+    mime: page.reference.mediaType ?? "application/octet-stream",
+    bytes: btoa(String.fromCharCode(...page.bytes)),
+    size: page.totalBytes,
+    version: page.version,
+    nextOffset: page.nextOffset,
+    done: page.nextOffset === page.totalBytes
+  };
+}
+async function stageImage(input, binding, request, storage) {
+  const ext = imageExtensions.get(input.mediaType);
+  if (!ext || typeof input.data !== "string" || !input.data.length || input.data.length > Math.ceil(maxAssetBytes / 3) * 4 || !/^[A-Za-z0-9+/]+={0,2}$/u.test(input.data) || input.data.length % 4 !== 0) {
+    fail2("bot/invalid", "Choose a supported photo smaller than 8 MB.");
+  }
+  const options = await request("directory-options");
+  const environmentId = options.default?.environmentId ?? options.directories[0]?.id;
+  if (!environmentId) fail2("bot/refused", "Choose a work directory before attaching a photo.");
+  const payload = { kind: "image", name: `photo.${ext}`, mediaType: input.mediaType, data: input.data };
+  let store;
+  try {
+    store = storage();
+  } catch {
+  }
+  const result = await uploadWithRetry(request, store, binding.instanceId, environmentId, payload);
+  return { id: result.id };
+}
+
+// src/client/product-api-upstream.js
+var unavailable = "This product capability is not connected yet.";
+var prefsKey = "ds-superagent:prefs";
+var prefFields = new Map(Object.entries({
+  theme: (value) => ["deepseek", "mono", "paper", "moonlight"].includes(value),
+  accent: (value) => value === null || value === "" || typeof value === "string" && /^#[\da-f]{6}$/iu.test(value),
+  motion: (value) => [null, "quiet", "normal", "lively"].includes(value),
+  effects: (value) => [null, "full", "reduced", "off"].includes(value),
+  layout: (value) => [null, "bubble", "flat"].includes(value),
+  width: (value) => value === null || Number.isInteger(value) && value >= 50 && value <= 100,
+  flatWidth: (value) => value === null || Number.isInteger(value) && value >= 50 && value <= 100,
+  fontSize: (value) => Number.isInteger(value) && value >= 12 && value <= 18,
+  enterToSend: (value) => value === null || typeof value === "boolean",
+  thinking: (value) => value === null || typeof value === "boolean"
+}));
+var errorCodes = new Map(Object.entries({
+  UNAVAILABLE: "bot/refused",
+  NOT_FOUND: "bot/not-found",
+  INVALID_INPUT: "bot/invalid",
+  INVALID_CONFIG: "bot/invalid",
+  INVALID_VIEW: "bot/invalid",
+  SOURCE_NOT_AUTHORIZED: "bot/refused",
+  ENVIRONMENT_DENIED: "bot/refused",
+  PATH_DENIED: "bot/refused",
+  RUNTIME_CLOSED: "bot/refused",
+  CLIENT_REVOKED: "bot/refused",
+  CLIENT_UNAUTHORIZED: "bot/refused",
+  ATTENTION_STALE: "bot/stale",
+  STALE_ATTENTION: "bot/stale",
+  REFERENCE_STALE: "bot/stale",
+  NETWORK: "NETWORK"
+}));
+function fail3(code, message) {
+  throw Object.assign(new Error(t(message)), { code });
+}
+function nonempty(value) {
+  return typeof value === "string" && value.trim() !== "";
+}
+function requireId(value) {
+  if (!nonempty(value)) fail3("bot/invalid", "The request needs an identifier.");
+  return value;
+}
+function requireMain(value, expected2) {
+  if (value !== expected2) fail3("bot/not-found", "Only the current Main conversation is available.");
+}
+function hash(value) {
+  let result = 2166136261;
+  for (const character of JSON.stringify(value)) result = Math.imul(result ^ character.codePointAt(0), 16777619);
+  return (result >>> 0).toString(16).padStart(8, "0");
+}
+var refOf = (model) => model ? `${model.provider}/${model.model}` : null;
+function modelRows(settings) {
+  return settings.providers.flatMap((provider) => provider.models.map((model) => ({
+    id: model.model,
+    name: model.name,
+    ref: model.ref,
+    provider: provider.id,
+    providerName: provider.name,
+    ...provider.key?.configured === false ? { needsKey: true } : {}
+  })));
+}
+function providersView(settings) {
+  return { available: true, providers: settings.providers.map((provider) => ({
+    id: provider.id,
+    name: provider.name,
+    key: provider.key ?? null,
+    models: provider.models.map((model) => ({ id: model.model, name: model.name, ref: model.ref })),
+    refreshable: false,
+    removable: false,
+    declaredModels: []
+  })), addable: [], protocols: [] };
+}
+function attentionRows(history) {
+  return (history.works ?? []).flatMap(({ control }) => {
+    const attention = control?.attention;
+    if (attention?.status !== "waiting" || !control.permissions?.canAnswer || !control.assignment || control.assignment.id !== attention.assignmentId) return [];
+    return [{ control, attention }];
+  });
+}
+function chatItem(message) {
+  const common = { id: message.id, seq: message.sequence, time: message.createdAt, text: message.text };
+  if (message.role === "user") {
+    const attachments = message.attachments ?? [];
+    const imageRefs = attachments.filter((attachment) => attachment.kind === "image").map((attachment) => ({
+      attachmentId: attachment.id,
+      name: attachment.name,
+      mime: attachment.mediaType
+    }));
+    const files = attachments.filter((attachment) => attachment.kind === "file").map((attachment) => ({
+      attachmentId: attachment.id,
+      name: attachment.name,
+      bytes: attachment.bytes,
+      mediaType: attachment.mediaType
+    }));
+    return {
+      ...common,
+      kind: "user",
+      ...imageRefs.length ? { images: imageRefs.length, imageRefs } : {},
+      ...files.length ? { files } : {}
+    };
+  }
+  if (message.role === "main") return { ...common, kind: "bot" };
+  return { ...common, kind: "event" };
+}
+function beforeOf(cursor) {
+  if (cursor == null) return void 0;
+  if (!Number.isSafeInteger(cursor.beforeSeq) || cursor.beforeSeq < 1 || cursor.part !== void 0 && cursor.part !== 1) {
+    fail3("bot/invalid", "Use a cursor from the Main conversation.");
+  }
+  return cursor.beforeSeq;
+}
+function createUpstreamAdapter(productCall2, storage, appearance2) {
+  let prefs = {};
+  let snapshotKey;
+  let revision = 0;
+  let pendingOpen;
+  let pendingState;
+  let shownAttention;
+  const pendingSends = /* @__PURE__ */ new Map();
+  function readPrefs() {
+    let persisted = {};
+    try {
+      const json = storage()?.getItem(prefsKey);
+      if (json) persisted = Object.fromEntries(Object.entries(JSON.parse(json)).filter(([key, value]) => prefFields.get(key)?.(value)));
+    } catch {
+    }
+    return { ...persisted, ...prefs, ...appearance2?.read() };
+  }
+  function setPrefs(input) {
+    const entries = Object.entries(input);
+    if (entries.some(([key, value]) => !prefFields.get(key)?.(value))) fail3("bot/invalid", "Check the appearance and input preferences.");
+    prefs = { ...readPrefs(), ...input };
+    if (appearance2) {
+      const shared = Object.entries(appearance2.read()).filter(([key]) => Object.hasOwn(input, key));
+      if (shared.length) appearance2.write(Object.fromEntries(shared.map(([key]) => [key, input[key]])));
+      for (const key of Object.keys(appearance2.read())) delete prefs[key];
+    }
+    try {
+      storage()?.setItem(prefsKey, JSON.stringify(prefs));
+    } catch {
+    }
+    return readPrefs();
+  }
+  function open(signal) {
+    if (signal) return productCall2("open", {}, signal);
+    pendingOpen ??= productCall2("open").finally(() => {
+      pendingOpen = void 0;
+    });
+    return pendingOpen;
+  }
+  async function loadState(request) {
+    const [history, settings, status] = await Promise.all([
+      request("history", { limit: 1 }),
+      request("settings", { limit: 1 }),
+      request("product-status").catch((error) => {
+        if (error.code !== "SOURCE_NOT_AUTHORIZED") throw error;
+        return void 0;
+      })
+    ]);
+    return { history, settings, status };
+  }
+  function stateView(input, { request, signal }) {
+    const state = signal ? loadState(request) : pendingState ??= loadState(request).finally(() => {
+      pendingState = void 0;
+    });
+    return state.then(({ history, settings, status }) => {
+      const models = modelRows(settings);
+      const modelsKey = hash(models);
+      const { mainId, mainSessionId, generation, activeTurn, health } = history;
+      const running = activeTurn?.status === "running" || activeTurn?.status === "stopping";
+      const works = history.works ?? [];
+      const live = {
+        work: { bots: running ? { [mainId]: {} } : {}, rooms: {}, approvals: [], waiting: {}, turns: {}, steered: {} },
+        partsRunning: running ? { [mainSessionId]: true } : {},
+        works,
+        activeTurn: activeTurn ?? null,
+        health,
+        status
+      };
+      const liveKey = hash(live);
+      const localPrefs = readPrefs();
+      const main = settings.roles.main;
+      const key = hash([mainId, mainSessionId, generation, settings.revision, modelsKey, localPrefs, history.messages.at(-1)?.sequence, liveKey]);
+      if (key !== snapshotKey) {
+        snapshotKey = key;
+        revision++;
+      }
+      if (input.since === revision && (input.models === void 0 || input.models === modelsKey)) {
+        return { revision, unchanged: true, liveKey, ...input.live === liveKey ? {} : live };
+      }
+      const waiting = attentionRows(history)[0]?.attention;
+      shownAttention = waiting ? { instanceId: history.instanceId, id: waiting.id, version: waiting.version } : void 0;
+      return {
+        revision,
+        modelsKey,
+        liveKey,
+        mainBotId: mainId,
+        mainBotIds: [mainId],
+        bots: [{ id: mainId, sessionId: mainSessionId, name: main?.name ?? "Main", model: refOf(main?.model), avatar: main?.appearance }],
+        models,
+        defaultModel: refOf(main?.model),
+        profileDefaultModel: refOf(main?.model),
+        prefs: localPrefs,
+        rooms: [],
+        agents: [],
+        sections: [],
+        privateArchives: [],
+        permissions: null,
+        readOnly: null,
+        im: { connections: [], platforms: [] },
+        computer: { enabled: false },
+        browser: false,
+        questions: waiting && !waiting.view ? { [mainSessionId]: {
+          id: waiting.id,
+          question: waiting.question,
+          options: waiting.options,
+          freeText: waiting.freeText
+        } } : {},
+        views: waiting?.view ? { [mainSessionId]: { id: waiting.id, ...waiting.view } } : {},
+        closedCards: {},
+        btwCards: {},
+        sideChats: {},
+        ...live
+      };
+    });
+  }
+  async function historyPage(input, { binding, request }, earlier) {
+    requireMain(earlier ? input.sessionId : input.botId, earlier ? binding.mainSessionId : binding.mainId);
+    const before = beforeOf(input.cursor);
+    const page = await request("history", { limit: 50, ...before === void 0 ? {} : { before } });
+    return {
+      sessionId: page.mainSessionId,
+      items: page.messages.map(chatItem),
+      cursor: page.cursor === void 0 ? null : { part: 1, beforeSeq: page.cursor },
+      ...earlier ? { btw: [], startedAt: page.messages[0]?.createdAt ?? null } : {}
+    };
+  }
+  async function answer(input, { binding, request }, type) {
+    if (type !== "approval") requireMain(input.sessionId, binding.mainSessionId);
+    const key = requireId(type === "approval" ? input.id : type === "question" ? input.questionId : input.viewId);
+    const text = type === "approval" ? input.choice : input.answer;
+    if (type === "view") {
+      requireId(input.action);
+      if (!input.values || typeof input.values !== "object" || Array.isArray(input.values)) fail3("bot/invalid", "Check the answer fields.");
+    } else requireId(text);
+    const history = await request("history", { limit: 1 });
+    if (type !== "approval") requireMain(input.sessionId, history.mainSessionId);
+    const matches = attentionRows(history).filter(({ attention: attention2 }) => attention2.id === key);
+    if (matches.length !== 1) fail3("bot/stale", "This question is no longer open.");
+    const { control, attention } = matches[0];
+    if (shownAttention && shownAttention.instanceId === history.instanceId && shownAttention.id === key && shownAttention.version !== attention.version) {
+      fail3("bot/stale", "This question changed. Refresh Main before answering.");
+    }
+    const payload = {
+      workItemId: control.workItemId,
+      ticketId: control.ticketId,
+      expectedGeneration: control.assignment.generation,
+      attentionId: attention.id,
+      attentionVersion: attention.version,
+      commandId: crypto.randomUUID()
+    };
+    if (attention.view) {
+      if (type === "question") fail3("bot/invalid", "Use the controls on the open view to answer.");
+      await request("work-answer-view", {
+        ...payload,
+        action: type === "view" ? input.action : text,
+        values: type === "view" ? input.values : {}
+      });
+    } else {
+      if (type === "view") fail3("bot/stale", "This view is no longer open.");
+      await request("work-answer", { ...payload, text });
+    }
+    return true;
+  }
+  const actions = new Map(Object.entries({
+    state: stateView,
+    models: async (input, { request }) => ({ modelsKey: hash(modelRows(await request("settings", { limit: 1 }))) }),
+    efforts: (input, { request }) => {
+      const slash = typeof input.ref === "string" ? input.ref.indexOf("/") : -1;
+      if (slash < 1 || slash === input.ref.length - 1) return { efforts: [] };
+      return request("settings-efforts", { provider: input.ref.slice(0, slash), model: input.ref.slice(slash + 1) });
+    },
+    providers: async (input, { request }) => providersView(await request("settings", { limit: 1 })),
+    "provider-key": async (input, { request }) => {
+      requireId(input.provider);
+      if (input.value !== null && !nonempty(input.value)) fail3("bot/invalid", "Enter a provider key or clear the existing key.");
+      await request("provider-key", { provider: input.provider, value: input.value });
+      return providersView(await request("settings", { limit: 1 }));
+    },
+    "file-text": async (input, { request }) => {
+      const { chunks, whole } = await readAsset(request, "attachment-read", { id: requireId(input.file?.attachmentId) }, 64 * 1024);
+      const decoder = new TextDecoder();
+      let text = "";
+      for (const chunk of chunks) text += decoder.decode(chunk, { stream: true });
+      if (whole) text += decoder.decode();
+      return { text, whole };
+    },
+    earlier: (input, context) => historyPage(input, context, true),
+    chat: (input, context) => historyPage(input, context, false),
+    "stop-chat": async (input, { binding, request }) => {
+      requireMain(input.botId, binding.mainId);
+      const messageId = requireId(input.messageId);
+      const { activeTurn } = await request("history", { limit: 1 });
+      if (!activeTurn || activeTurn.messageId !== messageId || activeTurn.status === "stopped") return false;
+      await request("stop-main", { commandId: crypto.randomUUID(), messageId });
+      return true;
+    },
+    folders: async (input, { request }) => {
+      const { default: directory, picker, directories } = await request("directory-options");
+      return { team: directory?.root, picker, folders: directories.map(({ root, title }) => ({ path: root, title })) };
+    },
+    "folder-pick": (input, { request }) => request("directory-pick"),
+    "folder-list": (input, { request }) => {
+      if (input.path != null && typeof input.path !== "string") fail3("bot/invalid", "Choose a directory path.");
+      return request("directory-list", input.path ? { path: input.path } : {});
+    },
+    "approval-answer": (input, context) => answer(input, context, "approval"),
+    "answer-question": (input, context) => answer(input, context, "question"),
+    "view-reply": (input, context) => answer(input, context, "view"),
+    avatar: async (input, { binding, request }) => {
+      requireMain(input.botId, binding.mainId);
+      const { roles: roles2 } = await request("settings", { limit: 1 });
+      const image = roles2.main?.appearance?.image ?? null;
+      const digest = image ? await crypto.subtle.digest("SHA-256", new TextEncoder().encode(image)) : null;
+      const ref = digest ? Array.from(new Uint8Array(digest).subarray(0, 8), (byte) => byte.toString(16).padStart(2, "0")).join("") : null;
+      return { botId: binding.mainId, image, ref };
+    },
+    image: async (input, { binding, request }) => {
+      requireMain(input.sessionId, binding.mainSessionId);
+      const { chunks, reference } = await readAsset(request, "attachment-read", { id: requireId(input.attachmentId) });
+      if (!/^image\/(?:png|jpeg|gif|webp)$/u.test(reference.mediaType)) fail3("bot/invalid", "The attachment is not a supported image.");
+      return { mime: reference.mediaType, data: await assetBase64(chunks) };
+    },
+    "file-download": async (input, { binding, request }) => {
+      if (input.sessionId !== void 0) requireMain(input.sessionId, binding.mainSessionId);
+      const attachment = nonempty(input.attachmentId);
+      const endpoint = attachment ? "attachment-read" : "artifact-read";
+      const target = attachment ? { id: input.attachmentId } : { workItemId: requireId(input.workItemId), path: requireId(input.path) };
+      if (input.offset !== void 0) return readAssetChunk(request, endpoint, target, input.offset, input.version);
+      const { chunks, reference, totalBytes } = await readAsset(request, endpoint, target);
+      return {
+        bytes: await assetBase64(chunks),
+        size: totalBytes,
+        name: reference.name ?? "file",
+        mime: reference.mediaType ?? "application/octet-stream"
+      };
+    },
+    "stage-image": (input, { binding, request }) => stageImage(input, binding, request, storage),
+    send: async (input, { binding, request }) => {
+      requireMain(input.sessionId, binding.mainSessionId);
+      const text = typeof input.text === "string" ? input.text.trim() : "";
+      const attachments = input.images ?? [];
+      if (!Array.isArray(attachments) || attachments.some((id) => !nonempty(id)) || !text && !attachments.length) {
+        fail3("bot/invalid", "Write a message or attach an image.");
+      }
+      const key = JSON.stringify([binding.instanceId, binding.mainId, text, attachments]);
+      if (!pendingSends.has(key) && pendingSends.size >= 32) fail3("bot/refused", "Check Main for earlier messages before sending more.");
+      const commandId = pendingSends.get(key) ?? crypto.randomUUID();
+      pendingSends.set(key, commandId);
+      try {
+        await request("send", { commandId, text, ...attachments.length ? { attachments } : {} });
+      } catch (error) {
+        if (["INVALID_INPUT", "SOURCE_NOT_AUTHORIZED", "ENVIRONMENT_DENIED", "IDENTITY_CONFLICT"].includes(error.code)) pendingSends.delete(key);
+        throw error;
+      }
+      pendingSends.delete(key);
+      return true;
+    }
+  }));
+  return async function call2(endpoint, input = null, signal) {
+    signal?.throwIfAborted();
+    if (!actions.has(endpoint) && endpoint !== "set-prefs") fail3("bot/refused", unavailable);
+    if (input !== null && (typeof input !== "object" || Array.isArray(input))) fail3("bot/invalid", "Send a JSON object.");
+    if (endpoint === "set-prefs") return setPrefs(input ?? {});
+    try {
+      const binding = await open(signal);
+      if (!nonempty(binding?.instanceId) || !nonempty(binding.mainId) || !nonempty(binding.mainSessionId)) {
+        fail3("bot/refused", "Main is unavailable.");
+      }
+      const request = (name, payload) => productCall2(name, { ...payload, instanceId: binding.instanceId }, signal);
+      return await actions.get(endpoint)(input ?? {}, { binding, request, signal });
+    } catch (error) {
+      if (signal?.aborted || error?.name === "AbortError" || error?.code?.startsWith?.("bot/")) throw error;
+      throw Object.assign(
+        new Error(error?.message ?? t("Main is unavailable.")),
+        { code: errorCodes.get(error?.code) ?? (error?.code?.startsWith?.("HTTP_") ? error.code : "bot/internal") }
+      );
+    }
+  };
+}
+async function assetBase64(chunks) {
+  const bytes = new Uint8Array(await new Blob(chunks).arrayBuffer());
+  let binary2 = "";
+  for (let offset = 0; offset < bytes.length; offset += 8192) binary2 += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
+  return btoa(binary2);
+}
+
+// src/client/api.js
+var productEndpoints = new Set(`
+  open history send stop-main evidence observe-list observe-read observe-detail
+  work-stop work-reconcile-stop work-handoff-prepare work-handoff-verify work-handoff work-retry work-resume
+  work-answer work-answer-view supervision supervision-inspect supervision-decide
+  settings settings-save settings-efforts provider-key directory-options directory-pick directory-list
+  directory-register directory-default-save execution-options execution-policy-save
+  remote-environment-pair remote-environment-pair-read remote-environment-pair-abandon remote-environment-revoke
+  artifact-read attachment-read attachment-upload attachment-revoke product-status product-usage
+  clients-list client-enroll client-revoke feishu-status feishu-start feishu-stop github-status github-start github-stop
+  reconcile-delivery source-deliveries
+  browser-list browser-read browser-create browser-grant browser-revoke browser-resolve browser-take browser-return
+  browser-import-list browser-import-read browser-import browser-import-cancel browser-control-view browser-reconcile-take
+  credential-import-list credential-import-preview credential-import-commit credential-import-cancel
+  mcp-status mcp-save mcp-approve mcp-connect mcp-disconnect mcp-retry
+  resource-list resource-read resource-create resource-rename resource-rotate resource-delete resource-cleanup
+  resource-request resource-request-read resource-request-list resource-rotation-read resource-grant resource-revoke
+  resource-cancel resource-select-feishu resource-select-github
+  memory-list memory-read memory-side-query memory-side-read memory-import-list memory-import-preview memory-import-read
+  memory-import-commit memory-import-cancel memory-import-retry memory-save memory-share memory-forget
+  memory-access-read memory-grant memory-proposals memory-decide
+  preset-list preset-create preset-preview preset-select preset-apply preset-application-read preset-applications
+  preset-preview-read preset-imports preset-import-read
+  proactive-rules proactive-control proactive-list proactive-read proactive-artifact proactive-work-artifact
+  proactive-save proactive-pause proactive-stop schedule-list schedule-read schedule-create schedule-cancel
+  schedule-source-read schedule-source-set
+`.trim().split(/\s+/u));
+function createProductApi({
+  fetch: request = (...args) => globalThis.fetch(...args),
+  bridge: getBridge = () => globalThis.window?.dsSuperagentApp?.productClient,
+  storage = () => globalThis.window?.localStorage,
+  appearance: appearance2
+} = {}) {
+  let remote = false;
+  async function productCall2(endpoint, payload = {}, signal) {
+    signal?.throwIfAborted();
+    if (!productEndpoints.has(endpoint)) {
+      throw Object.assign(new Error(t("This product capability is not connected yet.")), { code: "UNAVAILABLE" });
+    }
+    const bridge2 = getBridge();
+    if (bridge2 && (remote || (await bridge2.status()).connected)) remote = true;
+    signal?.throwIfAborted();
+    if (remote) {
+      if (!bridge2) throw Object.assign(new Error(t("The remote Host connection is unavailable.")), { code: "NETWORK" });
+      try {
+        const value = await bridge2.call(endpoint, payload);
+        signal?.throwIfAborted();
+        return value;
+      } catch (error) {
+        signal?.throwIfAborted();
+        throw error;
+      }
+    }
+    let response;
+    try {
+      response = await request("api/product", {
+        method: "POST",
+        credentials: "same-origin",
+        redirect: "error",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ endpoint, payload }),
+        signal
+      });
+    } catch (error) {
+      signal?.throwIfAborted();
+      if (error?.name === "AbortError") throw error;
+      throw Object.assign(new Error(t("Could not reach Main. Check that the app is running.")), { code: "NETWORK" });
+    }
+    let result;
+    try {
+      result = await response.json();
+    } catch (error) {
+      signal?.throwIfAborted();
+      if (error?.name === "AbortError") throw error;
+      const code = response.ok ? "PRODUCT_UNAVAILABLE" : `HTTP_${response.status}`;
+      throw Object.assign(new Error(t("Could not reach Main. Check that the app is running.")), { code });
+    }
+    signal?.throwIfAborted();
+    if (response.ok && result?.ok === true && Object.hasOwn(result, "value")) return result.value;
+    const fault = result?.ok === false ? result.error : null;
+    throw Object.assign(
+      new Error(t(typeof fault?.message === "string" ? fault.message : "Main is unavailable.")),
+      { code: typeof fault?.code === "string" ? fault.code : response.ok ? "PRODUCT_UNAVAILABLE" : `HTTP_${response.status}` }
+    );
+  }
+  return { productCall: productCall2, call: createUpstreamAdapter(productCall2, storage, appearance2) };
+}
+var { productCall, call } = createProductApi({ appearance: { read: getAppearance, write: setAppearance } });
+
 // src/client/product.js
-var import_react27 = require("react");
+var import_react35 = require("react");
 var clientBridge = () => window.dsSuperagentApp?.productClient;
-var activeHost = "local";
 function offerDownload(data, name, mediaType = "application/octet-stream") {
   const url = URL.createObjectURL(new Blob([data], { type: mediaType }));
   const link = document.createElement("a");
@@ -12969,26 +17030,6 @@ function offerDownload(data, name, mediaType = "application/octet-stream") {
   link.download = name;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1e4);
-}
-async function productCall(endpoint, payload = {}) {
-  const bridge = clientBridge();
-  if (activeHost === "remote") {
-    if (!bridge) throw new Error(t("The remote Host connection is unavailable."));
-    return bridge.call(endpoint, payload);
-  }
-  if (bridge && (await bridge.status()).connected) {
-    activeHost = "remote";
-    return bridge.call(endpoint, payload);
-  }
-  const response = await fetch("api/product", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ endpoint, payload }) });
-  let result;
-  try {
-    result = await response.json();
-  } catch {
-    throw new Error(t("Could not reach Main. Check that the app is running."));
-  }
-  if (!response.ok || !result.ok) throw Object.assign(new Error(t(result.error?.message ?? "Main is unavailable.")), { code: result.error?.code });
-  return result.value;
 }
 var rolesNeedingModels = ({ roles: roles2, providers }) => ["main", "router", "worker"].filter((role) => {
   const model = roles2[role]?.model;
@@ -12999,6 +17040,7 @@ function applyProduct(ctx) {
   const view = createSource({
     binding: null,
     messages: [],
+    readReplyId: null,
     works: [],
     activeTurn: null,
     health: null,
@@ -13028,6 +17070,7 @@ function applyProduct(ctx) {
     activityLoading: false,
     activityError: null,
     settingsOpen: false,
+    settingsPage: null,
     connection: null,
     connectOpen: false,
     directoryOptions: null,
@@ -13038,7 +17081,7 @@ function applyProduct(ctx) {
     directoryBusy: false,
     directoryError: null
   });
-  const useView = () => (0, import_react27.useSyncExternalStore)(view.subscribe, view.getSnapshot);
+  const useView = () => (0, import_react35.useSyncExternalStore)(view.subscribe, view.getSnapshot);
   let stopped = false;
   let observationListRequest = 0;
   let observationRequest = 0;
@@ -13047,10 +17090,14 @@ function applyProduct(ctx) {
     try {
       const page = await productCall("history", { instanceId: binding.instanceId, limit: 100 });
       if (!stopped) view.set((state) => {
+        const messages = mergeMessages(state.messages, page.messages);
+        const lastReply = messages.findLast((message) => message.role === "main");
+        const reading = state.route === "main" && document.hasFocus() && document.visibilityState !== "hidden";
         return {
           ...state,
           binding,
-          messages: mergeMessages(state.messages, page.messages),
+          messages,
+          readReplyId: reading ? lastReply?.id ?? null : state.readReplyId,
           works: page.works ?? state.works,
           activeTurn: page.activeTurn ?? null,
           health: page.health ?? state.health,
@@ -13088,8 +17135,8 @@ function applyProduct(ctx) {
         folders: options.directories.map((directory) => ({ path: directory.root, title: directory.title }))
       };
     },
-    folderPick: () => productCall("directory-pick", { instanceId: binding.instanceId }),
-    folderList: (path) => productCall("directory-list", { instanceId: binding.instanceId, ...path ? { path } : {} })
+    folderPick: () => call("folder-pick"),
+    folderList: (path) => call("folder-list", { path })
   });
   const registerDirectory = (binding, path) => productCall("directory-register", {
     instanceId: binding.instanceId,
@@ -13246,19 +17293,18 @@ function applyProduct(ctx) {
   };
   const refresh = async () => {
     try {
-      const bridge = clientBridge();
-      const connection = bridge ? await bridge.status() : { connected: false };
+      const bridge2 = clientBridge();
+      const connection = bridge2 ? await bridge2.status() : { connected: false };
       const previous = view.getSnapshot().connection;
       if (previous && (previous.connected !== connection.connected || previous.connected && (previous.address !== connection.address || previous.instanceId !== connection.instanceId || previous.client.id !== connection.client.id))) {
         location.reload();
         return;
       }
-      if (connection.connected) activeHost = "remote";
       if (!stopped) view.set((state) => ({ ...state, connection }));
-      if (connection.connected) await bridge.events();
+      if (connection.connected) await bridge2.events();
       const current = view.getSnapshot();
       const binding = current.binding ?? await productCall("open");
-      if (current.route === "main") await refreshMain(binding);
+      await refreshMain(binding);
       if (!connection.connected && !current.binding) {
         void productCall("settings", { instanceId: binding.instanceId, limit: 1 }).then((snapshot) => {
           if (!stopped) view.set((state) => ({ ...state, modelsNeedSetup: state.modelsNeedSetup ?? rolesNeedingModels(snapshot).length > 0 }));
@@ -13289,7 +17335,7 @@ function applyProduct(ctx) {
       clearTimeout(timer);
     };
   }, "superagent: follow the shared Main");
-  const statusCopy = (status) => ({
+  const statusCopy2 = (status) => ({
     routing: t("Routing work"),
     pending: t("Pending work"),
     running: t("Running work"),
@@ -13463,51 +17509,51 @@ function applyProduct(ctx) {
     return messages[blocker.code] ?? t("This handoff step is blocked.");
   };
   function MainWorkHandoffPanel({ handoff, busy, canHandoff, onRun }) {
-    const [targetId, setTargetId] = (0, import_react27.useState)("");
+    const [targetId, setTargetId] = (0, import_react35.useState)("");
     const targets2 = handoff.targets ?? [];
     const copy = handoff.copy;
     const record = handoff.record;
     const selectedTarget = targets2.find((target) => target.id === targetId) ?? targets2[0];
     const active = ["requested", "flushing", "switching"].includes(handoff.status);
     const completed = record?.state === "completed";
-    return (0, import_react27.createElement)(
+    return (0, import_react35.createElement)(
       "section",
       {
         className: "bt-main-work-handoff",
         "aria-label": t("Execution Environment handoff")
       },
-      (0, import_react27.createElement)("h3", null, t("Execution Environment handoff")),
-      (0, import_react27.createElement)("p", { role: "status" }, `${t("Handoff status")}: ${handoffStatusCopy(handoff.status)}`),
-      (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, `${t("Responsible")}: ${handoffOwnerCopy(handoff.owner)}`),
-      (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${handoffNextStepCopy(handoff.nextStep)}`),
-      handoff.blockers?.length ? (0, import_react27.createElement)("ul", { className: "bt-main-work-handoff-blockers" }, handoff.blockers.map((blocker) => (0, import_react27.createElement)(
+      (0, import_react35.createElement)("h3", null, t("Execution Environment handoff")),
+      (0, import_react35.createElement)("p", { role: "status" }, `${t("Handoff status")}: ${handoffStatusCopy(handoff.status)}`),
+      (0, import_react35.createElement)("p", { className: "bt-main-work-detail" }, `${t("Responsible")}: ${handoffOwnerCopy(handoff.owner)}`),
+      (0, import_react35.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${handoffNextStepCopy(handoff.nextStep)}`),
+      handoff.blockers?.length ? (0, import_react35.createElement)("ul", { className: "bt-main-work-handoff-blockers" }, handoff.blockers.map((blocker) => (0, import_react35.createElement)(
         "li",
         { key: `${blocker.code}:${blocker.message}` },
         `${handoffBlockerCopy(blocker)} · ${t("Responsible")}: ${handoffOwnerCopy(blocker.nextOwner)}`
       ))) : null,
-      copy ? (0, import_react27.createElement)(
+      copy ? (0, import_react35.createElement)(
         "div",
         { className: "bt-main-work-handoff-copy" },
-        (0, import_react27.createElement)("p", null, `${t("Source")}: ${copy.source.id} · ${copy.source.root}`),
-        (0, import_react27.createElement)("p", null, `${t("Target")}: ${copy.target.id} · ${copy.target.root}`),
-        (0, import_react27.createElement)("p", null, `${t("Base version")}: ${copy.baseCommit.slice(0, 12)} · ${t("Changed files")}: ${copy.files.length} · ${copy.totalBytes} ${t("bytes")}`),
-        (0, import_react27.createElement)("ul", { "aria-label": t("Prepared work-copy files") }, copy.files.map((file) => (0, import_react27.createElement)("li", { key: file.path }, (0, import_react27.createElement)("code", null, file.path), ` · ${t(file.state)} · ${file.bytes} ${t("bytes")}`)))
+        (0, import_react35.createElement)("p", null, `${t("Source")}: ${copy.source.id} · ${copy.source.root}`),
+        (0, import_react35.createElement)("p", null, `${t("Target")}: ${copy.target.id} · ${copy.target.root}`),
+        (0, import_react35.createElement)("p", null, `${t("Base version")}: ${copy.baseCommit.slice(0, 12)} · ${t("Changed files")}: ${copy.files.length} · ${copy.totalBytes} ${t("bytes")}`),
+        (0, import_react35.createElement)("ul", { "aria-label": t("Prepared work-copy files") }, copy.files.map((file) => (0, import_react35.createElement)("li", { key: file.path }, (0, import_react35.createElement)("code", null, file.path), ` · ${t(file.state)} · ${file.bytes} ${t("bytes")}`)))
       ) : null,
-      canHandoff ? (0, import_react27.createElement)(
+      canHandoff ? (0, import_react35.createElement)(
         "div",
         { className: "bt-main-work-handoff-actions" },
-        targets2.length ? (0, import_react27.createElement)("label", null, t("Handoff target"), (0, import_react27.createElement)("select", {
+        targets2.length ? (0, import_react35.createElement)("label", null, t("Handoff target"), (0, import_react35.createElement)("select", {
           className: "bt-select",
           "aria-label": t("Handoff target"),
           value: selectedTarget?.id ?? "",
           disabled: busy,
           onChange: (event) => setTargetId(event.target.value)
-        }, targets2.map((target) => (0, import_react27.createElement)(
+        }, targets2.map((target) => (0, import_react35.createElement)(
           "option",
           { key: target.id, value: target.id },
           `${target.id} · ${target.kind === "remote" ? t("Remote") : t("Local")}${target.deviceId ? ` · ${t("Device")}: ${target.deviceId}` : ""}`
         )))) : null,
-        (0, import_react27.createElement)(
+        (0, import_react35.createElement)(
           "button",
           {
             type: "button",
@@ -13517,7 +17563,7 @@ function applyProduct(ctx) {
           },
           busy === "work-handoff-prepare" ? t("Preparing handoff…") : t("Prepare handoff")
         ),
-        copy && !active && !completed ? (0, import_react27.createElement)(
+        copy && !active && !completed ? (0, import_react35.createElement)(
           "button",
           {
             type: "button",
@@ -13527,13 +17573,13 @@ function applyProduct(ctx) {
           },
           busy === "work-handoff-verify" ? t("Verifying handoff copy…") : t("Verify handoff copy")
         ) : null,
-        copy?.status === "verified" && !active && !completed ? (0, import_react27.createElement)("button", {
+        copy?.status === "verified" && !active && !completed ? (0, import_react35.createElement)("button", {
           type: "button",
           className: "bt-soft",
           disabled: busy,
           onClick: () => void onRun("work-handoff", selectedTarget.id)
         }, busy === "work-handoff" ? t("Handing off…") : t("Hand off work")) : null,
-        !targets2.length ? (0, import_react27.createElement)(
+        !targets2.length ? (0, import_react35.createElement)(
           "p",
           { className: "bt-main-work-detail" },
           t("No other Environment is available for handoff.")
@@ -13544,15 +17590,15 @@ function applyProduct(ctx) {
   function MainWorkCard({ work, onEvidence }) {
     const state = useView();
     const canCommand = !state.connection?.connected || state.connection.capabilities.includes("command");
-    const [controlBusy, setControlBusy] = (0, import_react27.useState)(null);
-    const [controlError, setControlError] = (0, import_react27.useState)(null);
-    const [toolFactsBusy, setToolFactsBusy] = (0, import_react27.useState)(false);
-    const [toolFactsError, setToolFactsError] = (0, import_react27.useState)(null);
-    const [attentionDraft, setAttentionDraft] = (0, import_react27.useState)("");
+    const [controlBusy, setControlBusy] = (0, import_react35.useState)(null);
+    const [controlError, setControlError] = (0, import_react35.useState)(null);
+    const [toolFactsBusy, setToolFactsBusy] = (0, import_react35.useState)(false);
+    const [toolFactsError, setToolFactsError] = (0, import_react35.useState)(null);
+    const [attentionDraft, setAttentionDraft] = (0, import_react35.useState)("");
     const control = work.control;
-    const [artifactBusy, setArtifactBusy] = (0, import_react27.useState)(null);
-    const [artifactError, setArtifactError] = (0, import_react27.useState)(null);
-    const [viewError, setViewError] = (0, import_react27.useState)(null);
+    const [artifactBusy, setArtifactBusy] = (0, import_react35.useState)(null);
+    const [artifactError, setArtifactError] = (0, import_react35.useState)(null);
+    const [viewError, setViewError] = (0, import_react35.useState)(null);
     const downloadArtifact = async (artifact) => {
       if (!state.binding) return;
       setArtifactBusy(artifact.path);
@@ -13699,7 +17745,7 @@ function applyProduct(ctx) {
         setControlBusy(null);
       }
     };
-    return (0, import_react27.createElement)(
+    return (0, import_react35.createElement)(
       "article",
       {
         className: "bt-main-work",
@@ -13708,57 +17754,57 @@ function applyProduct(ctx) {
         "data-work-brief-id": work.brief.id,
         tabIndex: -1
       },
-      (0, import_react27.createElement)(
+      (0, import_react35.createElement)(
         "div",
         { className: "bt-main-work-head" },
-        (0, import_react27.createElement)(
+        (0, import_react35.createElement)(
           "div",
           { className: "bt-main-work-title" },
-          (0, import_react27.createElement)("span", { className: "bt-main-work-source" }, t("System work fact")),
-          (0, import_react27.createElement)("strong", null, work.brief.goal)
+          (0, import_react35.createElement)("span", { className: "bt-main-work-source" }, t("System work fact")),
+          (0, import_react35.createElement)("strong", null, work.brief.goal)
         ),
-        (0, import_react27.createElement)("span", { className: "bt-main-work-status", role: "status" }, statusCopy(work.status))
+        (0, import_react35.createElement)("span", { className: "bt-main-work-status", role: "status" }, statusCopy2(work.status))
       ),
-      (0, import_react27.createElement)("p", { className: "bt-main-work-id" }, `${t("Work brief")} ${work.brief.id}`),
-      work.brief.configurationRevision ? (0, import_react27.createElement)(
+      (0, import_react35.createElement)("p", { className: "bt-main-work-id" }, `${t("Work brief")} ${work.brief.id}`),
+      work.brief.configurationRevision ? (0, import_react35.createElement)(
         "p",
         { className: "bt-main-work-id" },
         `${t("Configuration version")} v${work.brief.configurationRevision}`
       ) : null,
-      work.brief.target ? (0, import_react27.createElement)(
+      work.brief.target ? (0, import_react35.createElement)(
         "p",
         { className: "bt-main-work-id" },
         `${t("Execution target")}: ${executionTargetCopy(work.brief.target)}`
       ) : null,
-      work.brief.capabilities?.length ? (0, import_react27.createElement)(
+      work.brief.capabilities?.length ? (0, import_react35.createElement)(
         "p",
         { className: "bt-main-work-id" },
         `${t("Required capabilities")}: ${permissionCopy2(work.brief.capabilities)}`
       ) : null,
-      work.brief.directory ? (0, import_react27.createElement)("p", { className: "bt-main-work-id" }, `${t("Work directory")}: ${work.brief.directory}`) : null,
-      work.executionLocation ? (0, import_react27.createElement)(
+      work.brief.directory ? (0, import_react35.createElement)("p", { className: "bt-main-work-id" }, `${t("Work directory")}: ${work.brief.directory}`) : null,
+      work.executionLocation ? (0, import_react35.createElement)(
         "p",
         { className: "bt-main-work-id" },
         `${t("Bound Environment")}: ${work.executionLocation.kind === "remote" ? t("Remote") : t("Local")}${work.executionLocation.deviceId ? ` · ${t("Device")}: ${work.executionLocation.deviceId}` : ""} · ${t("Directory")}: ${work.executionLocation.root}${work.executionLocation.version ? ` · ${t("Version")}: ${work.executionLocation.version}` : ""}`
       ) : null,
-      work.executionSelection ? (0, import_react27.createElement)(
+      work.executionSelection ? (0, import_react35.createElement)(
         "div",
         { className: "bt-main-work-detail" },
-        (0, import_react27.createElement)("p", null, `${t("Selection basis")}: ${executionSourceCopy(work.executionSelection.source)} · ${executionStatusCopy(work.executionSelection.status)}${work.executionSelection.reason ? ` · ${capabilityReasonCopy(work.executionSelection.reason)}` : ""}`),
-        work.executionSelection.candidates?.length ? (0, import_react27.createElement)("ul", null, work.executionSelection.candidates.slice(0, 8).map((candidate) => (0, import_react27.createElement)("li", { key: candidate.id }, `${candidate.kind === "remote" ? t("Remote") : t("Local")} · ${candidate.id}${candidate.deviceId ? ` · ${t("Device")}: ${candidate.deviceId}` : ""} · ${candidate.eligible ? t("Eligible") : t("Not eligible")}${candidate.permissions?.length ? ` · ${t("Capabilities")}: ${permissionCopy2(candidate.permissions)}` : ""}${candidate.reasons?.length ? ` · ${candidate.reasons.map(capabilityReasonCopy).join("; ")}` : ""}`))) : null
+        (0, import_react35.createElement)("p", null, `${t("Selection basis")}: ${executionSourceCopy(work.executionSelection.source)} · ${executionStatusCopy(work.executionSelection.status)}${work.executionSelection.reason ? ` · ${capabilityReasonCopy(work.executionSelection.reason)}` : ""}`),
+        work.executionSelection.candidates?.length ? (0, import_react35.createElement)("ul", null, work.executionSelection.candidates.slice(0, 8).map((candidate) => (0, import_react35.createElement)("li", { key: candidate.id }, `${candidate.kind === "remote" ? t("Remote") : t("Local")} · ${candidate.id}${candidate.deviceId ? ` · ${t("Device")}: ${candidate.deviceId}` : ""} · ${candidate.eligible ? t("Eligible") : t("Not eligible")}${candidate.permissions?.length ? ` · ${t("Capabilities")}: ${permissionCopy2(candidate.permissions)}` : ""}${candidate.reasons?.length ? ` · ${candidate.reasons.map(capabilityReasonCopy).join("; ")}` : ""}`))) : null
       ) : null,
-      (0, import_react27.createElement)("p", { className: "bt-main-work-id" }, `${t("Receipt")}: ${receiptCopy(work.receipt.status)}`),
-      work.receipt.ticketId ? (0, import_react27.createElement)("p", { className: "bt-main-work-id" }, `${t("Ticket")} ${work.receipt.ticketId}`) : null,
-      control ? (0, import_react27.createElement)("p", { className: "bt-main-work-id" }, `${t("Ticket version")}: ${control.ticketVersion}`) : null,
-      assignment ? (0, import_react27.createElement)("p", { className: "bt-main-work-id" }, `${t("Execution version")}: ${assignment.generation}`) : null,
-      control && canCommand && handoff ? (0, import_react27.createElement)(MainWorkHandoffPanel, {
+      (0, import_react35.createElement)("p", { className: "bt-main-work-id" }, `${t("Receipt")}: ${receiptCopy(work.receipt.status)}`),
+      work.receipt.ticketId ? (0, import_react35.createElement)("p", { className: "bt-main-work-id" }, `${t("Ticket")} ${work.receipt.ticketId}`) : null,
+      control ? (0, import_react35.createElement)("p", { className: "bt-main-work-id" }, `${t("Ticket version")}: ${control.ticketVersion}`) : null,
+      assignment ? (0, import_react35.createElement)("p", { className: "bt-main-work-id" }, `${t("Execution version")}: ${assignment.generation}`) : null,
+      control && canCommand && handoff ? (0, import_react35.createElement)(MainWorkHandoffPanel, {
         handoff,
         busy: controlBusy,
         canHandoff: control.permissions.canHandoff,
         onRun: runHandoff
       }) : null,
-      stop ? (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, stop.pendingDeviceConfirmation ? t("Stopping · waiting for device cancellation confirmation.") : stop.state === "stopping" ? t("Stopping · waiting for the current execution to become quiet.") : stop.cancellationConfirmedAt ? t("Stopped · execution cancellation confirmed.") : t("Stopped · cancellation confirmation is unavailable.")) : null,
-      stop?.pendingDeviceConfirmation && canCommand ? (0, import_react27.createElement)(
+      stop ? (0, import_react35.createElement)("p", { className: "bt-main-work-detail" }, stop.pendingDeviceConfirmation ? t("Stopping · waiting for device cancellation confirmation.") : stop.state === "stopping" ? t("Stopping · waiting for the current execution to become quiet.") : stop.cancellationConfirmedAt ? t("Stopped · execution cancellation confirmed.") : t("Stopped · cancellation confirmation is unavailable.")) : null,
+      stop?.pendingDeviceConfirmation && canCommand ? (0, import_react35.createElement)(
         "button",
         {
           type: "button",
@@ -13768,37 +17814,37 @@ function applyProduct(ctx) {
         },
         controlBusy === "work-reconcile-stop" ? t("Checking device stop…") : t("Check device stop")
       ) : null,
-      attention?.view ? (0, import_react27.createElement)(
+      attention?.view ? (0, import_react35.createElement)(
         "div",
         { className: "bt-main-work-attention" },
-        (0, import_react27.createElement)("p", { className: "bt-main-work-id" }, `${t("View version")} ${attention.version} · ${attention.status}`),
-        (0, import_react27.createElement)(ProductWorkView, {
+        (0, import_react35.createElement)("p", { className: "bt-main-work-id" }, `${t("View version")} ${attention.version} · ${attention.status}`),
+        (0, import_react35.createElement)(ProductWorkView, {
           title: attention.view.title,
           view: attention.view.view,
           answer: attention.answerView ?? null,
           busy: controlBusy === "work-answer-view",
           ...attention.status === "waiting" && canCommand && control.permissions.canAnswer && assignment ? { onSubmit: answerView } : {}
         }),
-        attention.status === "waiting" ? (0, import_react27.createElement)(
+        attention.status === "waiting" ? (0, import_react35.createElement)(
           "p",
           { className: "bt-main-work-detail" },
           t("Answer this view to continue the same work.")
-        ) : attention.status === "answered" ? (0, import_react27.createElement)(
+        ) : attention.status === "answered" ? (0, import_react35.createElement)(
           "p",
           { className: "bt-main-work-detail" },
           `${t("Answered by")} ${attention.answeredBy ?? control.permissions.actorId}`
-        ) : (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, t("This view is no longer active."))
-      ) : attention ? (0, import_react27.createElement)(
+        ) : (0, import_react35.createElement)("p", { className: "bt-main-work-detail" }, t("This view is no longer active."))
+      ) : attention ? (0, import_react35.createElement)(
         "div",
         { className: "bt-main-work-attention" },
-        (0, import_react27.createElement)("p", { className: "bt-main-work-id" }, `${t("Question version")} ${attention.version} · ${attention.status}`),
-        (0, import_react27.createElement)("p", null, attention.question),
-        attention.status === "waiting" && canCommand && control.permissions.canAnswer && assignment ? (0, import_react27.createElement)(
+        (0, import_react35.createElement)("p", { className: "bt-main-work-id" }, `${t("Question version")} ${attention.version} · ${attention.status}`),
+        (0, import_react35.createElement)("p", null, attention.question),
+        attention.status === "waiting" && canCommand && control.permissions.canAnswer && assignment ? (0, import_react35.createElement)(
           "form",
           { className: "bt-main-work-answer", onSubmit: answer },
-          attention.options.length ? (0, import_react27.createElement)("div", { className: "bt-main-work-options" }, attention.options.map((option) => (0, import_react27.createElement)("button", { key: option, type: "button", className: "bt-soft", onClick: () => setAttentionDraft(option) }, option))) : null,
-          (0, import_react27.createElement)("label", { htmlFor: `work-answer-${attention.id}` }, t("Answer this work question")),
-          (0, import_react27.createElement)("textarea", {
+          attention.options.length ? (0, import_react35.createElement)("div", { className: "bt-main-work-options" }, attention.options.map((option) => (0, import_react35.createElement)("button", { key: option, type: "button", className: "bt-soft", onClick: () => setAttentionDraft(option) }, option))) : null,
+          (0, import_react35.createElement)("label", { htmlFor: `work-answer-${attention.id}` }, t("Answer this work question")),
+          (0, import_react35.createElement)("textarea", {
             id: `work-answer-${attention.id}`,
             value: attentionDraft,
             maxLength: 65536,
@@ -13806,49 +17852,49 @@ function applyProduct(ctx) {
             placeholder: t("Type an answer…"),
             onChange: (event) => setAttentionDraft(event.currentTarget.value)
           }),
-          (0, import_react27.createElement)(
+          (0, import_react35.createElement)(
             "button",
             { type: "submit", className: "bt-soft", disabled: Boolean(controlBusy) || !attentionDraft.trim() },
             controlBusy === "work-answer" ? t("Sending answer…") : t("Send answer")
           )
-        ) : (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, attention.status === "answered" ? `${t("Answered by")} ${attention.answeredBy ?? control.permissions.actorId}${attention.answerText ? `: ${attention.answerText}` : ""}` : t("This question is no longer active."))
+        ) : (0, import_react35.createElement)("p", { className: "bt-main-work-detail" }, attention.status === "answered" ? `${t("Answered by")} ${attention.answeredBy ?? control.permissions.actorId}${attention.answerText ? `: ${attention.answerText}` : ""}` : t("This question is no longer active."))
       ) : null,
-      controlError ? (0, import_react27.createElement)("p", { className: "bt-main-error", role: "alert" }, controlError) : null,
-      viewError ? (0, import_react27.createElement)("p", { className: "bt-main-error", role: "alert" }, viewError) : null,
-      work.receipt.reason ? (0, import_react27.createElement)("p", { className: "bt-main-error" }, `${t("Work receipt")}: ${work.receipt.reason}`) : null,
-      work.receipt.status === "routing" ? (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${work.receipt.nextStep}`) : null,
-      (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, `${t("Constraints")}: ${work.brief.constraints}`),
-      (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, `${t("Acceptance criteria")}: ${work.brief.acceptanceCriteria}`),
-      work.followUps?.length ? (0, import_react27.createElement)(
+      controlError ? (0, import_react35.createElement)("p", { className: "bt-main-error", role: "alert" }, controlError) : null,
+      viewError ? (0, import_react35.createElement)("p", { className: "bt-main-error", role: "alert" }, viewError) : null,
+      work.receipt.reason ? (0, import_react35.createElement)("p", { className: "bt-main-error" }, `${t("Work receipt")}: ${work.receipt.reason}`) : null,
+      work.receipt.status === "routing" ? (0, import_react35.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${work.receipt.nextStep}`) : null,
+      (0, import_react35.createElement)("p", { className: "bt-main-work-detail" }, `${t("Constraints")}: ${work.brief.constraints}`),
+      (0, import_react35.createElement)("p", { className: "bt-main-work-detail" }, `${t("Acceptance criteria")}: ${work.brief.acceptanceCriteria}`),
+      work.followUps?.length ? (0, import_react35.createElement)(
         "div",
         { className: "bt-main-work-followups", "aria-label": t("Follow-up history") },
-        work.followUps.map((followUp) => (0, import_react27.createElement)(
+        work.followUps.map((followUp) => (0, import_react35.createElement)(
           "div",
           { key: followUp.id, className: "bt-main-work-followup" },
-          (0, import_react27.createElement)("p", null, `${t("Direction v{version}", { version: followUp.directionVersion })}: ${followUpCopy(followUp.status)}`),
-          (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, followUp.text),
-          (0, import_react27.createElement)(
+          (0, import_react35.createElement)("p", null, `${t("Direction v{version}", { version: followUp.directionVersion })}: ${followUpCopy(followUp.status)}`),
+          (0, import_react35.createElement)("p", { className: "bt-main-work-detail" }, followUp.text),
+          (0, import_react35.createElement)(
             "p",
             { className: "bt-main-work-detail" },
             `${followUp.persisted ? t("Input persisted") : t("Input not yet persisted")} · ${followUp.adopted ? t("Direction adopted by Worker") : t("Direction not yet adopted")}`
           ),
-          followUp.displayReason ? (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, `${t("Reason")}: ${followUp.displayReason}`) : null
+          followUp.displayReason ? (0, import_react35.createElement)("p", { className: "bt-main-work-detail" }, `${t("Reason")}: ${followUp.displayReason}`) : null
         ))
       ) : null,
-      work.outcome ? (0, import_react27.createElement)(
+      work.outcome ? (0, import_react35.createElement)(
         "div",
         { className: "bt-main-work-result" },
-        (0, import_react27.createElement)("p", null, work.outcome.summary),
-        (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, `${t("Verification")}: ${work.outcome.evidence}`),
-        (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${work.outcome.nextStep}`),
-        work.outcome.view ? (0, import_react27.createElement)(ProductWorkView, { title: work.outcome.view.title, view: work.outcome.view.view }) : null,
-        work.outcome.artifacts.map((artifact) => (0, import_react27.createElement)(
+        (0, import_react35.createElement)("p", null, work.outcome.summary),
+        (0, import_react35.createElement)("p", { className: "bt-main-work-detail" }, `${t("Verification")}: ${work.outcome.evidence}`),
+        (0, import_react35.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${work.outcome.nextStep}`),
+        work.outcome.view ? (0, import_react35.createElement)(ProductWorkView, { title: work.outcome.view.title, view: work.outcome.view.view }) : null,
+        work.outcome.artifacts.map((artifact) => (0, import_react35.createElement)(
           "p",
           { key: artifact.path, className: "bt-main-work-artifact" },
-          (0, import_react27.createElement)("code", null, artifact.path),
+          (0, import_react35.createElement)("code", null, artifact.path),
           " ",
-          (0, import_react27.createElement)("span", null, `${artifact.bytes} ${t("bytes")} · ${artifact.sha256.slice(0, 12)}`),
-          artifact.reference && !state.connection?.connected ? (0, import_react27.createElement)(
+          (0, import_react35.createElement)("span", null, `${artifact.bytes} ${t("bytes")} · ${artifact.sha256.slice(0, 12)}`),
+          artifact.reference && !state.connection?.connected ? (0, import_react35.createElement)(
             "button",
             {
               type: "button",
@@ -13860,12 +17906,12 @@ function applyProduct(ctx) {
           ) : null
         ))
       ) : null,
-      artifactError ? (0, import_react27.createElement)("p", { className: "bt-main-error", role: "alert" }, artifactError) : null,
-      toolFactsError ? (0, import_react27.createElement)("p", { className: "bt-main-error", role: "alert" }, toolFactsError) : null,
-      control && canCommand ? (0, import_react27.createElement)(
+      artifactError ? (0, import_react35.createElement)("p", { className: "bt-main-error", role: "alert" }, artifactError) : null,
+      toolFactsError ? (0, import_react35.createElement)("p", { className: "bt-main-error", role: "alert" }, toolFactsError) : null,
+      control && canCommand ? (0, import_react35.createElement)(
         "div",
         { className: "bt-main-work-controls" },
-        control.permissions.canStop ? (0, import_react27.createElement)(
+        control.permissions.canStop ? (0, import_react35.createElement)(
           "button",
           {
             type: "button",
@@ -13875,7 +17921,7 @@ function applyProduct(ctx) {
           },
           controlBusy === "work-stop" ? t("Stopping…") : t("Stop work")
         ) : null,
-        assignment && control.permissions.canResume ? (0, import_react27.createElement)(
+        assignment && control.permissions.canResume ? (0, import_react35.createElement)(
           "button",
           {
             type: "button",
@@ -13885,7 +17931,7 @@ function applyProduct(ctx) {
           },
           controlBusy === "work-resume" ? t("Resuming…") : t("Resume work")
         ) : null,
-        assignment && control.permissions.canRetry ? (0, import_react27.createElement)(
+        assignment && control.permissions.canRetry ? (0, import_react35.createElement)(
           "button",
           {
             type: "button",
@@ -13896,11 +17942,11 @@ function applyProduct(ctx) {
           controlBusy === "work-retry" ? t("Retrying…") : t("Retry work")
         ) : null
       ) : null,
-      work.receipt.status === "accepted" ? (0, import_react27.createElement)(
+      work.receipt.status === "accepted" ? (0, import_react35.createElement)(
         "div",
         { className: "bt-main-work-evidence-actions" },
-        (0, import_react27.createElement)("button", { type: "button", className: "bt-soft", onClick: () => onEvidence(work) }, t("View original request")),
-        (0, import_react27.createElement)(
+        (0, import_react35.createElement)("button", { type: "button", className: "bt-soft", onClick: () => onEvidence(work) }, t("View original request")),
+        (0, import_react35.createElement)(
           "button",
           { type: "button", className: "bt-soft", disabled: toolFactsBusy, onClick: () => void openToolFacts() },
           toolFactsBusy ? t("Loading…") : t("View tool facts")
@@ -13910,24 +17956,24 @@ function applyProduct(ctx) {
   }
   function MainPreparationCard({ preparation }) {
     const state = useView();
-    const [expanded, setExpanded] = (0, import_react27.useState)(false);
-    return (0, import_react27.createElement)(
+    const [expanded, setExpanded] = (0, import_react35.useState)(false);
+    return (0, import_react35.createElement)(
       "article",
       { className: "bt-main-work", "aria-label": t("Prepared review") },
-      (0, import_react27.createElement)(
+      (0, import_react35.createElement)(
         "div",
         { className: "bt-main-work-head" },
-        (0, import_react27.createElement)("strong", null, t("Prepared review")),
-        (0, import_react27.createElement)("span", { className: "bt-main-work-status" }, preparation.ruleId)
+        (0, import_react35.createElement)("strong", null, t("Prepared review")),
+        (0, import_react35.createElement)("span", { className: "bt-main-work-status" }, preparation.ruleId)
       ),
-      (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, preparation.summary),
-      (0, import_react27.createElement)("button", {
+      (0, import_react35.createElement)("p", { className: "bt-main-work-detail" }, preparation.summary),
+      (0, import_react35.createElement)("button", {
         type: "button",
         className: "bt-soft bt-soft-sm",
         "aria-expanded": expanded,
         onClick: () => setExpanded((value) => !value)
       }, t(expanded ? "Hide review" : "Review")),
-      expanded ? (0, import_react27.createElement)(ProactiveReview, {
+      expanded ? (0, import_react35.createElement)(ProactiveReview, {
         runId: preparation.id,
         instanceId: state.binding.instanceId,
         call: productCall,
@@ -13940,13 +17986,13 @@ function applyProduct(ctx) {
     );
   }
   function MainSourceCard({ source, instanceId, onRefresh, canCommand }) {
-    const [receipts, setReceipts] = (0, import_react27.useState)(source.deliveries ?? []);
-    const [receiptCursor, setReceiptCursor] = (0, import_react27.useState)(source.deliveryCursor ?? null);
-    const [receiptsBusy, setReceiptsBusy] = (0, import_react27.useState)(false);
-    const [receiptsError, setReceiptsError] = (0, import_react27.useState)(null);
-    const [reconciling, setReconciling] = (0, import_react27.useState)(null);
-    const receiptPagesLoaded = (0, import_react27.useRef)(false);
-    (0, import_react27.useEffect)(() => {
+    const [receipts, setReceipts] = (0, import_react35.useState)(source.deliveries ?? []);
+    const [receiptCursor, setReceiptCursor] = (0, import_react35.useState)(source.deliveryCursor ?? null);
+    const [receiptsBusy, setReceiptsBusy] = (0, import_react35.useState)(false);
+    const [receiptsError, setReceiptsError] = (0, import_react35.useState)(null);
+    const [reconciling, setReconciling] = (0, import_react35.useState)(null);
+    const receiptPagesLoaded = (0, import_react35.useRef)(false);
+    (0, import_react35.useEffect)(() => {
       setReceipts((current) => {
         const merged = new Map(current.map((receipt) => [`${receipt.ticketId}:${receipt.id}:${receipt.sequence}`, receipt]));
         for (const receipt of source.deliveries ?? []) merged.set(`${receipt.ticketId}:${receipt.id}:${receipt.sequence}`, receipt);
@@ -13993,31 +18039,31 @@ function applyProduct(ctx) {
     };
     const scheduled = source.sourceInstanceId.startsWith("schedule:");
     const feishu = source.sourceInstanceId.startsWith("feishu:");
-    return (0, import_react27.createElement)(
+    return (0, import_react35.createElement)(
       "article",
       { className: "bt-main-source", "aria-label": t(scheduled ? "Scheduled occurrence" : feishu ? "Feishu source request" : "GitHub source request") },
-      (0, import_react27.createElement)(
+      (0, import_react35.createElement)(
         "div",
         { className: "bt-main-work-head" },
-        (0, import_react27.createElement)("strong", null, t(scheduled ? "Scheduled occurrence" : feishu ? "Feishu request" : "GitHub request")),
-        (0, import_react27.createElement)("span", { className: "bt-main-work-status", role: "status" }, sourceStatusCopy(source.state))
+        (0, import_react35.createElement)("strong", null, t(scheduled ? "Scheduled occurrence" : feishu ? "Feishu request" : "GitHub request")),
+        (0, import_react35.createElement)("span", { className: "bt-main-work-status", role: "status" }, sourceStatusCopy(source.state))
       ),
-      (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, `${source.objectId} · @${source.authorId}`),
-      (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, source.text),
-      (0, import_react27.createElement)("code", { className: "bt-main-source-reference" }, source.reference),
-      source.lastError ? (0, import_react27.createElement)("p", { className: "bt-main-error", role: "status" }, `${t("Main source failed")}: ${source.lastError}`) : null,
-      receipts.length ? (0, import_react27.createElement)(
+      (0, import_react35.createElement)("p", { className: "bt-main-work-detail" }, `${source.objectId} · @${source.authorId}`),
+      (0, import_react35.createElement)("p", { className: "bt-main-work-detail" }, source.text),
+      (0, import_react35.createElement)("code", { className: "bt-main-source-reference" }, source.reference),
+      source.lastError ? (0, import_react35.createElement)("p", { className: "bt-main-error", role: "status" }, `${t("Main source failed")}: ${source.lastError}`) : null,
+      receipts.length ? (0, import_react35.createElement)(
         "div",
         { className: "bt-main-source-deliveries", "aria-label": t("Delivery receipts") },
-        receipts.map((delivery) => (0, import_react27.createElement)(
+        receipts.map((delivery) => (0, import_react35.createElement)(
           "div",
           {
             key: `${delivery.ticketId}:${delivery.id}:${delivery.sequence}`,
             className: delivery.state === "unknown" ? "bt-main-error" : "bt-main-work-detail"
           },
-          (0, import_react27.createElement)("p", null, `${deliveryPurposeCopy(delivery.purpose)}: ${deliveryCopy(delivery.state)}${delivery.reason ? ` · ${delivery.reason}` : ""}`),
-          (0, import_react27.createElement)("p", null, `${delivery.destination.sourceInstanceId} · ${delivery.destination.eventId}${delivery.destination.threadId ? ` · ${delivery.destination.threadId}` : ""} · @${delivery.destination.actorId}`),
-          canCommand && (delivery.state === "unknown" || delivery.state === "pending" && delivery.attempts > 0) ? (0, import_react27.createElement)(
+          (0, import_react35.createElement)("p", null, `${deliveryPurposeCopy(delivery.purpose)}: ${deliveryCopy(delivery.state)}${delivery.reason ? ` · ${delivery.reason}` : ""}`),
+          (0, import_react35.createElement)("p", null, `${delivery.destination.sourceInstanceId} · ${delivery.destination.eventId}${delivery.destination.threadId ? ` · ${delivery.destination.threadId}` : ""} · @${delivery.destination.actorId}`),
+          canCommand && (delivery.state === "unknown" || delivery.state === "pending" && delivery.attempts > 0) ? (0, import_react35.createElement)(
             "button",
             {
               type: "button",
@@ -14028,18 +18074,18 @@ function applyProduct(ctx) {
             reconciling === delivery.id ? t("Reconciling…") : t("Reconcile delivery")
           ) : null
         )),
-        receiptCursor ? (0, import_react27.createElement)("button", {
+        receiptCursor ? (0, import_react35.createElement)("button", {
           type: "button",
           className: "bt-soft",
           disabled: receiptsBusy,
           onClick: () => void loadEarlierReceipts()
         }, receiptsBusy ? t("Loading…") : t("Load earlier receipts")) : null,
-        receiptsError ? (0, import_react27.createElement)("p", { className: "bt-main-error", role: "status" }, receiptsError) : null
+        receiptsError ? (0, import_react35.createElement)("p", { className: "bt-main-error", role: "status" }, receiptsError) : null
       ) : null,
-      !feishu && source.conditions.length ? (0, import_react27.createElement)(
+      !feishu && source.conditions.length ? (0, import_react35.createElement)(
         "div",
         { className: "bt-main-source-deliveries", "aria-label": t("Pull request conditions") },
-        source.conditions.map((condition) => (0, import_react27.createElement)(
+        source.conditions.map((condition) => (0, import_react35.createElement)(
           "p",
           { key: `${condition.ticketId}:${condition.number}`, className: "bt-main-work-detail" },
           `#${condition.number}: ${conditionCopy(condition.state)}${condition.reason ? ` · ${condition.reason}` : ""}`
@@ -14050,17 +18096,47 @@ function applyProduct(ctx) {
   function MainConversation() {
     const state = useView();
     const canCommand = !state.connection?.connected || state.connection.capabilities.includes("command");
-    const [sending, setSending] = (0, import_react27.useState)(false);
-    const [sendError, setSendError] = (0, import_react27.useState)(null);
-    const [attachments, setAttachments] = (0, import_react27.useState)([]);
-    const [uploading, setUploading] = (0, import_react27.useState)(false);
-    const [speakingId, setSpeakingId] = (0, import_react27.useState)(null);
-    (0, import_react27.useEffect)(() => () => window.speechSynthesis?.cancel(), []);
-    const bottom = (0, import_react27.useRef)(null);
-    const pending = (0, import_react27.useRef)(null);
-    const scroll = (0, import_react27.useRef)(null);
-    const follow = (0, import_react27.useRef)(true);
-    const restoreHeight = (0, import_react27.useRef)(null);
+    const turnCards = projectTurnCards(state);
+    const renderCards = (cards) => cards ? (0, import_react35.createElement)(
+      import_react35.Fragment,
+      null,
+      cards.sources.map((source) => (0, import_react35.createElement)(MainSourceCard, { key: source.id, source, instanceId: state.binding?.instanceId, onRefresh: refresh, canCommand })),
+      cards.preparations.map((preparation) => (0, import_react35.createElement)(MainPreparationCard, { key: preparation.id, preparation })),
+      cards.works.map((work) => (0, import_react35.createElement)(MainWorkCard, {
+        key: work.brief.workItemId ?? work.brief.id,
+        work,
+        onEvidence: (selected) => {
+          if (state.binding) void loadMainEvidence(state.binding, selected);
+        }
+      }))
+    ) : null;
+    const [sending, setSending] = (0, import_react35.useState)(false);
+    const [sendError, setSendError] = (0, import_react35.useState)(null);
+    const [attachments, setAttachments] = (0, import_react35.useState)([]);
+    const [uploading, setUploading] = (0, import_react35.useState)(false);
+    const [speakingId, setSpeakingId] = (0, import_react35.useState)(null);
+    (0, import_react35.useEffect)(() => () => window.speechSynthesis?.cancel(), []);
+    (0, import_react35.useEffect)(() => {
+      const acknowledge = () => {
+        if (!document.hasFocus() || document.visibilityState === "hidden") return;
+        view.set((current) => {
+          const readReplyId = current.messages.findLast((message) => message.role === "main")?.id ?? null;
+          return current.readReplyId === readReplyId ? current : { ...current, readReplyId };
+        });
+      };
+      acknowledge();
+      window.addEventListener("focus", acknowledge);
+      document.addEventListener("visibilitychange", acknowledge);
+      return () => {
+        window.removeEventListener("focus", acknowledge);
+        document.removeEventListener("visibilitychange", acknowledge);
+      };
+    }, []);
+    const bottom = (0, import_react35.useRef)(null);
+    const pending = (0, import_react35.useRef)(null);
+    const scroll = (0, import_react35.useRef)(null);
+    const follow = (0, import_react35.useRef)(true);
+    const restoreHeight = (0, import_react35.useRef)(null);
     const execution = state.directoryOptions?.execution;
     const policyTarget = execution?.policy?.defaultTarget === "remote-only" ? "remote-only" : execution?.policy?.defaultTarget === "auto" ? "auto" : "local-only";
     const executionTarget = state.executionTarget ?? policyTarget;
@@ -14070,7 +18146,7 @@ function applyProduct(ctx) {
     const selectedLocalEnvironmentId = state.directoryOverride ?? state.directoryOptions?.default?.environmentId ?? state.localEnvironmentOverride ?? (state.connection?.connected ? localEnvironments[0]?.id : void 0);
     const selectedEnvironmentId = executionTarget === "remote-only" ? selectedRemoteEnvironment?.id : executionTarget === "local-only" ? selectedLocalEnvironmentId : void 0;
     const selectedEnvironment = execution?.environments?.find((environment) => environment.id === selectedEnvironmentId);
-    (0, import_react27.useEffect)(() => {
+    (0, import_react35.useEffect)(() => {
       if (restoreHeight.current !== null && scroll.current) {
         scroll.current.scrollTop += scroll.current.scrollHeight - restoreHeight.current;
         restoreHeight.current = null;
@@ -14203,10 +18279,9 @@ function applyProduct(ctx) {
     const stopping = state.activeTurn?.status === "stopping";
     const stop = async () => {
       if (!state.binding || !state.activeTurn) return;
-      const commandId = crypto.randomUUID();
       try {
         setSendError(null);
-        await productCall("stop-main", { instanceId: state.binding.instanceId, commandId, messageId: state.activeTurn.messageId });
+        await call("stop-chat", { botId: state.binding.mainId, messageId: state.activeTurn.messageId });
         await refreshMain(state.binding);
       } catch (error) {
         setSendError(error.message);
@@ -14238,11 +18313,11 @@ function applyProduct(ctx) {
       }
       view.set((current) => ({ ...current, executionTarget: value, localEnvironmentOverride: null, remoteEnvironmentOverride: null }));
     };
-    const targetControl = execution ? (0, import_react27.createElement)(
+    const targetControl = execution ? (0, import_react35.createElement)(
       "div",
       { className: "bt-main-directory" },
-      (0, import_react27.createElement)("span", { className: "bt-main-label" }, t("Execution target")),
-      (0, import_react27.createElement)(
+      (0, import_react35.createElement)("span", { className: "bt-main-label" }, t("Execution target")),
+      (0, import_react35.createElement)(
         "select",
         {
           className: "bt-select",
@@ -14251,11 +18326,11 @@ function applyProduct(ctx) {
           onChange: (event) => chooseTarget(event.target.value),
           disabled: busy
         },
-        (0, import_react27.createElement)("option", { value: "local-only" }, t("Local")),
-        (0, import_react27.createElement)("option", { value: "remote-only" }, t("Remote only")),
-        (0, import_react27.createElement)("option", { value: "auto" }, t("Auto"))
+        (0, import_react35.createElement)("option", { value: "local-only" }, t("Local")),
+        (0, import_react35.createElement)("option", { value: "remote-only" }, t("Remote only")),
+        (0, import_react35.createElement)("option", { value: "auto" }, t("Auto"))
       ),
-      executionTarget === "remote-only" ? (0, import_react27.createElement)(
+      executionTarget === "remote-only" ? (0, import_react35.createElement)(
         "select",
         {
           className: "bt-select",
@@ -14270,14 +18345,14 @@ function applyProduct(ctx) {
           },
           disabled: busy
         },
-        (0, import_react27.createElement)("option", { value: "" }, t("Choose an authorized remote Environment")),
-        remoteEnvironments.map((environment) => (0, import_react27.createElement)(
+        (0, import_react35.createElement)("option", { value: "" }, t("Choose an authorized remote Environment")),
+        remoteEnvironments.map((environment) => (0, import_react35.createElement)(
           "option",
           { key: environment.id, value: environment.id },
           `${environment.label || environment.title || environment.id} · ${environment.root}`
         ))
       ) : null,
-      state.connection?.connected && executionTarget === "local-only" ? (0, import_react27.createElement)(
+      state.connection?.connected && executionTarget === "local-only" ? (0, import_react35.createElement)(
         "select",
         {
           className: "bt-select",
@@ -14285,75 +18360,74 @@ function applyProduct(ctx) {
           value: selectedLocalEnvironmentId ?? "",
           onChange: (event) => view.set((current) => ({ ...current, localEnvironmentOverride: event.target.value || null }))
         },
-        (0, import_react27.createElement)("option", { value: "" }, t("Choose an authorized local Environment")),
-        localEnvironments.map((environment) => (0, import_react27.createElement)(
+        (0, import_react35.createElement)("option", { value: "" }, t("Choose an authorized local Environment")),
+        localEnvironments.map((environment) => (0, import_react35.createElement)(
           "option",
           { key: environment.id, value: environment.id },
           `${environment.title || environment.id} · ${environment.root}`
         ))
       ) : null,
-      selectedEnvironment ? (0, import_react27.createElement)(
+      selectedEnvironment ? (0, import_react35.createElement)(
         "span",
         { className: "bt-main-directory-note" },
         `${selectedEnvironment.eligible ? t("Eligible") : t("Not eligible")}${selectedEnvironment.version ? ` · ${t("Version")}: ${selectedEnvironment.version}` : ""}${selectedEnvironment.deviceId ? ` · ${t("Device")}: ${selectedEnvironment.deviceId}` : ""}${selectedEnvironment.reasons?.length ? ` · ${selectedEnvironment.reasons.map(capabilityReasonCopy).join("; ")}` : ""}`
       ) : null,
-      (0, import_react27.createElement)("span", { className: "bt-main-directory-note" }, executionTarget === "auto" ? t("This work chooses an eligible Environment when its Ticket starts. Attachments need an exact target.") : executionTarget === "remote-only" && !selectedEnvironmentId ? t("No remote Environment is available. This work will wait for an eligible device.") : t("New work uses this Environment. Active work keeps its original binding."))
+      (0, import_react35.createElement)("span", { className: "bt-main-directory-note" }, executionTarget === "auto" ? t("This work chooses an eligible Environment when its Ticket starts. Attachments need an exact target.") : executionTarget === "remote-only" && !selectedEnvironmentId ? t("No remote Environment is available. This work will wait for an eligible device.") : t("New work uses this Environment. Active work keeps its original binding."))
     ) : null;
-    return (0, import_react27.createElement)(
+    return (0, import_react35.createElement)(
       "section",
       { className: "bt-main-conversation", "aria-label": "Main" },
-      (0, import_react27.createElement)(
+      (0, import_react35.createElement)(
         "header",
         { className: "bt-main-header" },
-        (0, import_react27.createElement)(ProductBrandMark, { size: 28 }),
-        (0, import_react27.createElement)("span", null, "Main"),
-        (0, import_react27.createElement)(
+        (0, import_react35.createElement)(Header),
+        (0, import_react35.createElement)(
           "span",
           { className: `bt-main-health bt-main-health-${state.health?.state ?? "ready"}`, role: "status" },
           state.modelsNeedSetup && state.health?.state !== "running" ? t("Models need setup") : mainHealthCopy(state.health)
         ),
-        state.health?.queuedInputs ? (0, import_react27.createElement)(
+        state.health?.queuedInputs ? (0, import_react35.createElement)(
           "span",
           { className: "bt-main-health-detail" },
           t("{count} inputs queued", { count: state.health.queuedInputs })
         ) : null,
-        state.connection?.connected ? (0, import_react27.createElement)(
+        state.connection?.connected ? (0, import_react35.createElement)(
           "span",
           { className: "bt-main-remote", title: state.connection.address },
           `${t("Remote Host")} · ${state.connection.client.label}`
         ) : null,
-        clientBridge() ? (0, import_react27.createElement)(
+        clientBridge() ? (0, import_react35.createElement)(
           "button",
           { type: "button", className: "bt-soft", onClick: () => view.set((current) => ({ ...current, connectOpen: true })) },
           state.connection?.connected ? t("Connection") : t("Connect to Host")
         ) : null,
-        !state.connection?.connected ? (0, import_react27.createElement)("button", {
+        !state.connection?.connected ? (0, import_react35.createElement)("button", {
           type: "button",
           className: "bt-icon-btn bt-main-settings",
           title: t("Settings"),
           "aria-label": t("Settings"),
-          onClick: () => view.set((current) => ({ ...current, settingsOpen: true }))
-        }, (0, import_react27.createElement)(SlidersIcon)) : null
+          onClick: () => shellActions.openSettings()
+        }, (0, import_react35.createElement)(SlidersIcon)) : null
       ),
-      state.modelsNeedSetup ? (0, import_react27.createElement)(
+      state.modelsNeedSetup ? (0, import_react35.createElement)(
         "p",
         { className: "bt-main-health-warning", role: "alert" },
         t("Open Settings to select models for Main, Router and Worker.")
-      ) : state.health?.state === "degraded" ? (0, import_react27.createElement)(
+      ) : state.health?.state === "degraded" ? (0, import_react35.createElement)(
         "p",
         { className: "bt-main-health-warning", role: "alert" },
         t(state.connection?.connected ? "Main model failed. Ask the Host operator to check the model and provider configuration." : "Main model failed. Check the model and provider credentials in Settings.")
       ) : null,
-      (0, import_react27.createElement)(
+      (0, import_react35.createElement)(
         "div",
         { className: "bt-main-history", ref: scroll, onScroll: () => {
           const node = scroll.current;
           follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80;
         } },
-        (0, import_react27.createElement)(
+        (0, import_react35.createElement)(
           "div",
           { className: "bt-main-messages" },
-          !state.messagesComplete && state.messageBefore ? (0, import_react27.createElement)("button", {
+          !state.messagesComplete && state.messageBefore ? (0, import_react35.createElement)("button", {
             type: "button",
             className: "bt-soft bt-main-history-more",
             disabled: state.messagesLoading,
@@ -14363,33 +18437,33 @@ function applyProduct(ctx) {
               await loadEarlierMessages(state.binding);
             }
           }, state.messagesLoading ? t("Loading…") : t("Load earlier messages")) : null,
-          state.messages.length === 0 ? (0, import_react27.createElement)("p", { className: "bt-main-empty" }, t("What would you like to discuss?")) : null,
-          state.messages.map((message) => (0, import_react27.createElement)(
+          state.messages.length === 0 ? (0, import_react35.createElement)("p", { className: "bt-main-empty" }, t("What would you like to discuss?")) : null,
+          state.messages.map((message) => (0, import_react35.createElement)(
             "div",
             { key: message.id },
-            message.role === "system" ? (0, import_react27.createElement)(
+            message.role === "system" ? (0, import_react35.createElement)(
               "div",
               { className: "bt-main-system-fact", role: "status" },
-              (0, import_react27.createElement)("span", null, t("System fact")),
-              (0, import_react27.createElement)("p", null, message.text)
-            ) : (0, import_react27.createElement)(
+              (0, import_react35.createElement)("span", null, t("System fact")),
+              (0, import_react35.createElement)("p", null, message.text)
+            ) : (0, import_react35.createElement)(
               "div",
               null,
-              message.source ? (0, import_react27.createElement)(
+              message.source ? (0, import_react35.createElement)(
                 "p",
                 { className: "bt-main-source-label" },
                 message.source.kind === "client" ? `${t("Client")} · ${message.source.clientId}` : message.source.kind === "schedule" ? `${t("Scheduled occurrence")} · ${message.source.objectId}` : `${t(message.source.kind === "feishu" ? "Feishu" : "GitHub")} · @${message.source.authorId} · ${message.source.objectId}`
               ) : null,
-              (0, import_react27.createElement)(ProductChatRow, { kind: message.role === "main" ? "bot" : "user", text: message.text }),
-              message.role === "main" && message.text && window.speechSynthesis ? (0, import_react27.createElement)("button", {
+              (0, import_react35.createElement)(ProductChatRow, { kind: message.role === "main" ? "bot" : "user", text: message.text }),
+              message.role === "main" && message.text && window.speechSynthesis ? (0, import_react35.createElement)("button", {
                 type: "button",
                 className: "bt-soft bt-main-read-aloud",
                 onClick: () => speakReply(message)
               }, t(speakingId === message.id ? "Stop reading" : "Read aloud")) : null,
-              message.attachments?.length ? (0, import_react27.createElement)(
+              message.attachments?.length ? (0, import_react35.createElement)(
                 "div",
                 { className: "bt-main-message-attachments", "aria-label": t("Attached files") },
-                message.attachments.map((attachment) => (0, import_react27.createElement)(
+                message.attachments.map((attachment) => (0, import_react35.createElement)(
                   "button",
                   {
                     key: attachment.id,
@@ -14401,47 +18475,34 @@ function applyProduct(ctx) {
                   `${t("Download")} ${attachment.name} · ${attachment.bytes} ${t("bytes")}`
                 ))
               ) : null,
-              message.status === "failed" ? (0, import_react27.createElement)(
+              message.status === "failed" ? (0, import_react35.createElement)(
                 "p",
                 { className: "bt-main-error", role: "status" },
                 t("Main could not finish this reply. Your message is saved.")
               ) : null
-            )
+            ),
+            renderCards(turnCards.byMessage.get(message.id))
           )),
-          !state.connection?.connected ? (0, import_react27.createElement)(FeishuSourceStatus, { instanceId: state.binding?.instanceId, call: productCall }) : null,
-          state.sources.map((source) => (0, import_react27.createElement)(MainSourceCard, {
-            key: source.id,
-            source,
-            instanceId: state.binding?.instanceId,
-            onRefresh: refresh,
-            canCommand
-          })),
-          state.preparations.map((preparation) => (0, import_react27.createElement)(MainPreparationCard, { key: preparation.id, preparation })),
-          state.works.map((work) => (0, import_react27.createElement)(MainWorkCard, {
-            key: work.brief.workItemId ?? work.brief.id,
-            work,
-            onEvidence: (selected) => {
-              if (state.binding) void loadMainEvidence(state.binding, selected);
-            }
-          })),
-          state.mainEvidenceError && !state.mainEvidence ? (0, import_react27.createElement)("p", { role: "alert", className: "bt-main-error" }, state.mainEvidenceError) : null,
-          state.mainEvidence ? (0, import_react27.createElement)(
+          !state.connection?.connected ? (0, import_react35.createElement)(FeishuSourceStatus, { instanceId: state.binding?.instanceId, call: productCall }) : null,
+          renderCards(turnCards.unplaced),
+          state.mainEvidenceError && !state.mainEvidence ? (0, import_react35.createElement)("p", { role: "alert", className: "bt-main-error" }, state.mainEvidenceError) : null,
+          state.mainEvidence ? (0, import_react35.createElement)(
             "section",
             { className: "bt-main-evidence", "aria-label": t("Original request evidence") },
-            (0, import_react27.createElement)(
+            (0, import_react35.createElement)(
               "div",
               { className: "bt-main-evidence-head" },
-              (0, import_react27.createElement)(
+              (0, import_react35.createElement)(
                 "div",
                 null,
-                (0, import_react27.createElement)("strong", null, t("Original request evidence")),
-                (0, import_react27.createElement)("p", null, t(state.mainEvidence.goal))
+                (0, import_react35.createElement)("strong", null, t("Original request evidence")),
+                (0, import_react35.createElement)("p", null, t(state.mainEvidence.goal))
               ),
-              (0, import_react27.createElement)("span", null, t(state.mainEvidence.pagination.truncated ? "Partial evidence" : "Complete evidence"))
+              (0, import_react35.createElement)("span", null, t(state.mainEvidence.pagination.truncated ? "Partial evidence" : "Complete evidence"))
             ),
-            (0, import_react27.createElement)("pre", null, redactObservationText(state.mainEvidence.text)),
-            state.mainEvidenceError ? (0, import_react27.createElement)("p", { role: "alert", className: "bt-main-error" }, state.mainEvidenceError) : null,
-            state.mainEvidence.pagination.truncated ? (0, import_react27.createElement)(
+            (0, import_react35.createElement)("pre", null, redactObservationText(state.mainEvidence.text)),
+            state.mainEvidenceError ? (0, import_react35.createElement)("p", { role: "alert", className: "bt-main-error" }, state.mainEvidenceError) : null,
+            state.mainEvidence.pagination.truncated ? (0, import_react35.createElement)(
               "button",
               {
                 type: "button",
@@ -14458,11 +18519,11 @@ function applyProduct(ctx) {
               state.mainEvidenceLoading ? t("Loading…") : t("Load more evidence")
             ) : null
           ) : null,
-          stopping ? (0, import_react27.createElement)("p", { className: "bt-main-status", role: "status" }, t("Stopping this Main reply…")) : busy ? (0, import_react27.createElement)("p", { className: "bt-main-status", role: "status" }, t("Main is replying…")) : null,
-          (0, import_react27.createElement)("div", { ref: bottom })
+          stopping ? (0, import_react35.createElement)("p", { className: "bt-main-status", role: "status" }, t("Stopping this Main reply…")) : busy ? (0, import_react35.createElement)("p", { className: "bt-main-status", role: "status" }, t("Main is replying…")) : null,
+          (0, import_react35.createElement)("div", { ref: bottom })
         )
       ),
-      (0, import_react27.createElement)(MainComposer, {
+      (0, import_react35.createElement)(MainComposer, {
         onSend: send,
         onStop: canCommand && state.activeTurn ? stop : void 0,
         busy,
@@ -14476,15 +18537,15 @@ function applyProduct(ctx) {
         onRemoveAttachment: removeAttachment,
         speechRemote: () => ctx.get("remote.speech") ?? void 0,
         onFiles: !state.connection?.connected && executionTarget !== "auto" && selectedEnvironmentId ? (files) => void uploadFiles(files) : void 0,
-        directoryControl: execution ? (0, import_react27.createElement)(
+        directoryControl: execution ? (0, import_react35.createElement)(
           "div",
           { className: "bt-main-directory" },
           targetControl,
-          !state.connection?.connected && executionTarget === "local-only" && options?.default ? (0, import_react27.createElement)(
-            import_react27.Fragment,
+          !state.connection?.connected && executionTarget === "local-only" && options?.default ? (0, import_react35.createElement)(
+            import_react35.Fragment,
             null,
-            (0, import_react27.createElement)("span", { className: "bt-main-label" }, t("Work directory")),
-            (0, import_react27.createElement)(FolderMenu, {
+            (0, import_react35.createElement)("span", { className: "bt-main-label" }, t("Work directory")),
+            (0, import_react35.createElement)(FolderMenu, {
               value: override?.root,
               label: t("Work directory"),
               fallbackLabel: t("Instance default"),
@@ -14494,34 +18555,20 @@ function applyProduct(ctx) {
               disabled: busy || state.directoryBusy
             })
           ) : null,
-          state.directoryError ? (0, import_react27.createElement)("p", { className: "bt-main-error", role: "alert" }, state.directoryError) : null
+          state.directoryError ? (0, import_react35.createElement)("p", { className: "bt-main-error", role: "alert" }, state.directoryError) : null
         ) : null
       })
     );
   }
   function ObservationConversation() {
     const state = useView();
-    const [copyState, setCopyState] = (0, import_react27.useState)("idle");
-    const [detailCopyState, setDetailCopyState] = (0, import_react27.useState)("idle");
+    const [copyState, setCopyState] = (0, import_react35.useState)("idle");
+    const [detailCopyState, setDetailCopyState] = (0, import_react35.useState)("idle");
     const observation = state.observation;
     const openDetail = (detailId, append = false) => {
       if (state.binding && state.selectedObservation) {
         void loadObservationDetail(state.binding, state.selectedObservation, detailId, { append });
       }
-    };
-    const backToMain = () => {
-      view.set((current) => ({
-        ...current,
-        route: "main",
-        selectedObservation: null,
-        observationGeneration: null,
-        observation: null,
-        observationError: null,
-        observationDetail: null,
-        observationDetailError: null
-      }));
-      void refresh();
-      setTimeout(() => document.querySelector("#main-message, .bt-main-composer textarea")?.focus(), 0);
     };
     const copy = async () => {
       if (!observation || !state.binding) return;
@@ -14543,79 +18590,80 @@ function applyProduct(ctx) {
         setDetailCopyState("failed");
       }
     };
-    return (0, import_react27.createElement)(
+    return (0, import_react35.createElement)(
       "section",
       { className: "bt-observation", "aria-label": t("Read-only work activity") },
-      (0, import_react27.createElement)(
+      (0, import_react35.createElement)(
         "header",
         { className: "bt-observation-header" },
-        (0, import_react27.createElement)("button", { type: "button", className: "bt-soft", onClick: backToMain }, t("Back to Main")),
-        (0, import_react27.createElement)(
+        (0, import_react35.createElement)(Header),
+        (0, import_react35.createElement)(
           "div",
           { className: "bt-observation-heading" },
-          (0, import_react27.createElement)("span", { className: "bt-observation-role" }, observation?.role === "router" ? "Router" : "Worker"),
-          (0, import_react27.createElement)("strong", null, observation?.title ?? state.selectedObservation?.title ?? "")
+          (0, import_react35.createElement)("span", { className: "bt-observation-role" }, observation?.role === "router" ? "Router" : "Worker"),
+          (0, import_react35.createElement)("strong", null, observation?.title ?? state.selectedObservation?.title ?? "")
         ),
-        (0, import_react27.createElement)("span", { className: "bt-observation-readonly" }, t("Read-only")),
-        !state.connection?.connected ? (0, import_react27.createElement)("button", {
+        (0, import_react35.createElement)("span", { className: "bt-observation-readonly" }, t("Read-only")),
+        !state.connection?.connected ? (0, import_react35.createElement)("button", {
           type: "button",
           className: "bt-icon-btn",
           title: t("Settings"),
           "aria-label": t("Settings"),
-          onClick: () => view.set((current) => ({ ...current, settingsOpen: true }))
-        }, (0, import_react27.createElement)(SlidersIcon)) : null
+          onClick: () => shellActions.openSettings()
+        }, (0, import_react35.createElement)(SlidersIcon)) : null
       ),
-      (0, import_react27.createElement)(
+      (0, import_react35.createElement)(
         "div",
         { className: "bt-observation-body" },
-        state.observationLoading && !observation ? (0, import_react27.createElement)("p", { role: "status", className: "bt-main-status" }, t("Loading history…")) : null,
-        state.observationError ? (0, import_react27.createElement)("p", { role: "alert", className: "bt-main-error" }, state.observationError) : null,
-        observation ? (0, import_react27.createElement)(
+        (0, import_react35.createElement)(ActivityNavigation),
+        state.observationLoading && !observation ? (0, import_react35.createElement)("p", { role: "status", className: "bt-main-status" }, t("Loading history…")) : null,
+        state.observationError ? (0, import_react35.createElement)("p", { role: "alert", className: "bt-main-error" }, state.observationError) : null,
+        observation ? (0, import_react35.createElement)(
           "div",
           { className: "bt-observation-content" },
-          (0, import_react27.createElement)(
+          (0, import_react35.createElement)(
             "div",
             { className: "bt-observation-summary" },
-            (0, import_react27.createElement)(
+            (0, import_react35.createElement)(
               "div",
               null,
-              (0, import_react27.createElement)(
+              (0, import_react35.createElement)(
                 "p",
                 { className: "bt-observation-status", role: "status" },
-                `${statusCopy(observation.status)}${observation.generation && !observation.current ? ` · ${t("Historical generation")}` : ""}`
+                `${statusCopy2(observation.status)}${observation.generation && !observation.current ? ` · ${t("Historical generation")}` : ""}`
               ),
-              (0, import_react27.createElement)("p", null, t(observation.summary)),
-              (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${t(observation.nextStep)}`)
+              (0, import_react35.createElement)("p", null, t(observation.summary)),
+              (0, import_react35.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${t(observation.nextStep)}`)
             ),
-            observation.historyStatus === "missing" ? (0, import_react27.createElement)(
+            observation.historyStatus === "missing" ? (0, import_react35.createElement)(
               "p",
               { className: "bt-main-error", role: "alert" },
               t("The Session history is missing. Durable work facts remain available.")
             ) : null,
-            observation.historyStatus === "not-started" ? (0, import_react27.createElement)(
+            observation.historyStatus === "not-started" ? (0, import_react35.createElement)(
               "p",
               { className: "bt-main-status", role: "status" },
               t("The assigned Session has not started.")
             ) : null,
-            (0, import_react27.createElement)(
+            (0, import_react35.createElement)(
               "div",
               { className: "bt-observation-actions" },
-              (0, import_react27.createElement)(
+              (0, import_react35.createElement)(
                 "button",
                 { type: "button", className: "bt-soft", onClick: copy },
                 copyState === "copied" ? t("Copied") : copyState === "failed" ? t("Copy failed") : t("Copy details")
               )
             )
           ),
-          (0, import_react27.createElement)("dl", { className: "bt-observation-facts" }, observation.facts.map((fact, index) => (0, import_react27.createElement)(
+          (0, import_react35.createElement)("dl", { className: "bt-observation-facts" }, observation.facts.map((fact, index) => (0, import_react35.createElement)(
             "div",
             { key: `${fact.label}:${index}` },
-            (0, import_react27.createElement)("dt", null, t(fact.label)),
-            (0, import_react27.createElement)(
+            (0, import_react35.createElement)("dt", null, t(fact.label)),
+            (0, import_react35.createElement)(
               "dd",
               null,
-              (0, import_react27.createElement)("span", null, t(fact.value)),
-              fact.detailId ? (0, import_react27.createElement)(
+              (0, import_react35.createElement)("span", null, t(fact.value)),
+              fact.detailId ? (0, import_react35.createElement)(
                 "button",
                 {
                   type: "button",
@@ -14626,20 +18674,20 @@ function applyProduct(ctx) {
               ) : null
             )
           ))),
-          state.observationDetail ? (0, import_react27.createElement)(
+          state.observationDetail ? (0, import_react35.createElement)(
             "section",
             { className: "bt-observation-detail", "aria-label": t("Full detail") },
-            (0, import_react27.createElement)(
+            (0, import_react35.createElement)(
               "div",
               { className: "bt-observation-detail-head" },
-              (0, import_react27.createElement)("h2", null, t(state.observationDetail.label)),
-              (0, import_react27.createElement)("span", null, `${state.observationDetail.bytes} ${t("bytes")}`)
+              (0, import_react35.createElement)("h2", null, t(state.observationDetail.label)),
+              (0, import_react35.createElement)("span", null, `${state.observationDetail.bytes} ${t("bytes")}`)
             ),
-            (0, import_react27.createElement)("pre", null, redactObservationText(state.observationDetail.text)),
-            (0, import_react27.createElement)(
+            (0, import_react35.createElement)("pre", null, redactObservationText(state.observationDetail.text)),
+            (0, import_react35.createElement)(
               "div",
               { className: "bt-observation-detail-actions" },
-              state.observationDetail.hasMore ? (0, import_react27.createElement)(
+              state.observationDetail.hasMore ? (0, import_react35.createElement)(
                 "button",
                 {
                   type: "button",
@@ -14649,19 +18697,19 @@ function applyProduct(ctx) {
                 },
                 state.observationDetailLoading ? t("Loading…") : t("Load more detail")
               ) : null,
-              (0, import_react27.createElement)(
+              (0, import_react35.createElement)(
                 "button",
                 { type: "button", className: "bt-soft", onClick: copyDetail },
                 detailCopyState === "copied" ? t("Copied") : detailCopyState === "failed" ? t("Copy failed") : t("Copy loaded detail")
               )
             ),
-            state.observationDetailError ? (0, import_react27.createElement)("p", { role: "alert", className: "bt-main-error" }, state.observationDetailError) : null
+            state.observationDetailError ? (0, import_react35.createElement)("p", { role: "alert", className: "bt-main-error" }, state.observationDetailError) : null
           ) : null,
-          observation.generations.length > 1 ? (0, import_react27.createElement)(
+          observation.generations.length > 1 ? (0, import_react35.createElement)(
             "section",
             { className: "bt-observation-generations", "aria-label": t("Assignment generations") },
-            (0, import_react27.createElement)("h2", null, t("Assignment generations")),
-            observation.generations.map((generation) => (0, import_react27.createElement)(
+            (0, import_react35.createElement)("h2", null, t("Assignment generations")),
+            observation.generations.map((generation) => (0, import_react35.createElement)(
               "button",
               {
                 key: generation.assignmentId,
@@ -14681,31 +18729,31 @@ function applyProduct(ctx) {
                   void loadObservation(state.binding, state.selectedObservation, { reset: true });
                 }
               },
-              (0, import_react27.createElement)("span", null, generation.generation),
-              (0, import_react27.createElement)(
+              (0, import_react35.createElement)("span", null, generation.generation),
+              (0, import_react35.createElement)(
                 "span",
                 null,
                 `${generation.configurationRevision ? `${t("Configuration")} v${generation.configurationRevision} · ` : ""}${generation.current ? t("Current generation") : t("Historical generation")}`
               ),
-              (0, import_react27.createElement)("span", null, statusCopy(generation.state))
+              (0, import_react35.createElement)("span", null, statusCopy2(generation.state))
             ))
           ) : null,
-          (0, import_react27.createElement)(
+          (0, import_react35.createElement)(
             "section",
             { className: "bt-observation-history", "aria-label": t("Observation history") },
-            (0, import_react27.createElement)("h2", null, t("Observation history")),
-            observation.events.length ? observation.events.map((event) => (0, import_react27.createElement)(
+            (0, import_react35.createElement)("h2", null, t("Observation history")),
+            observation.events.length ? observation.events.map((event) => (0, import_react35.createElement)(
               "article",
               { key: event.seq, className: "bt-observation-event" },
-              (0, import_react27.createElement)(
+              (0, import_react35.createElement)(
                 "div",
                 { className: "bt-observation-event-head" },
-                (0, import_react27.createElement)("span", null, event.kind === "user-message" ? t("Input") : event.kind === "assistant-message" ? t("Response") : event.kind === "tool-call" ? t("Tool call") : event.kind === "tool-result" ? t("Tool result") : t("Turn")),
-                (0, import_react27.createElement)("time", null, event.time ? new Date(event.time).toLocaleTimeString() : "")
+                (0, import_react35.createElement)("span", null, event.kind === "user-message" ? t("Input") : event.kind === "assistant-message" ? t("Response") : event.kind === "tool-call" ? t("Tool call") : event.kind === "tool-result" ? t("Tool result") : t("Turn")),
+                (0, import_react35.createElement)("time", null, event.time ? new Date(event.time).toLocaleTimeString() : "")
               ),
-              (0, import_react27.createElement)("p", null, event.kind === "tool-call" ? t("Called {tool}.", { tool: event.tool ?? "tool" }) : event.kind === "tool-result" ? t(event.isError ? "Tool call failed." : "Tool call completed.") : event.kind === "turn" && event.reason ? t("Turn ended: {reason}.", { reason: event.reason }) : redactObservationText(event.text)),
-              event.detail ? (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, redactObservationText(event.detail)) : null,
-              event.detailId ? (0, import_react27.createElement)(
+              (0, import_react35.createElement)("p", null, event.kind === "tool-call" ? t("Called {tool}.", { tool: event.tool ?? "tool" }) : event.kind === "tool-result" ? t(event.isError ? "Tool call failed." : "Tool call completed.") : event.kind === "turn" && event.reason ? t("Turn ended: {reason}.", { reason: event.reason }) : redactObservationText(event.text)),
+              event.detail ? (0, import_react35.createElement)("p", { className: "bt-main-work-detail" }, redactObservationText(event.detail)) : null,
+              event.detailId ? (0, import_react35.createElement)(
                 "button",
                 {
                   type: "button",
@@ -14714,9 +18762,9 @@ function applyProduct(ctx) {
                 },
                 `${t("View full detail")}${event.detailBytes ? ` · ${event.detailBytes} ${t("bytes")}` : ""}`
               ) : null,
-              event.argumentKeys?.length ? (0, import_react27.createElement)("p", { className: "bt-main-work-detail" }, `${t("Arguments")}: ${event.argumentKeys.join(", ")}`) : null
-            )) : (0, import_react27.createElement)("p", { className: "bt-main-status" }, observation.historyStatus === "missing" ? t("The Session history is missing. Durable work facts remain available.") : observation.historyStatus === "not-started" ? t("The assigned Session has not started.") : t("No execution history has been recorded yet.")),
-            observation.hasMore ? (0, import_react27.createElement)("button", { type: "button", className: "bt-soft bt-observation-more", onClick: () => {
+              event.argumentKeys?.length ? (0, import_react35.createElement)("p", { className: "bt-main-work-detail" }, `${t("Arguments")}: ${event.argumentKeys.join(", ")}`) : null
+            )) : (0, import_react35.createElement)("p", { className: "bt-main-status" }, observation.historyStatus === "missing" ? t("The Session history is missing. Durable work facts remain available.") : observation.historyStatus === "not-started" ? t("The assigned Session has not started.") : t("No execution history has been recorded yet.")),
+            observation.hasMore ? (0, import_react35.createElement)("button", { type: "button", className: "bt-soft bt-observation-more", onClick: () => {
               if (state.binding && state.selectedObservation) void loadObservation(state.binding, state.selectedObservation, { older: true });
             } }, t("Load more history")) : null
           )
@@ -14724,11 +18772,11 @@ function applyProduct(ctx) {
       )
     );
   }
-  function MainNavigation() {
+  function ActivityNavigation() {
     const state = useView();
-    const [search, setSearch] = (0, import_react27.useState)(state.observationQuery);
-    const timer = (0, import_react27.useRef)(null);
-    (0, import_react27.useEffect)(() => () => clearTimeout(timer.current), []);
+    const [search, setSearch] = (0, import_react35.useState)(state.observationQuery);
+    const timer = (0, import_react35.useRef)(null);
+    (0, import_react35.useEffect)(() => () => clearTimeout(timer.current), []);
     const changeSearch = (value) => {
       setSearch(value);
       clearTimeout(timer.current);
@@ -14738,42 +18786,14 @@ function applyProduct(ctx) {
         void loadObservations(state.binding, { reset: true });
       }, 180);
     };
-    return (0, import_react27.createElement)(
+    return (0, import_react35.createElement)(
       "nav",
-      { className: "bt-main-nav", "aria-label": t("Work navigation") },
-      (0, import_react27.createElement)("button", {
-        type: "button",
-        className: "bt-soft",
-        "aria-current": state.route === "main" ? "page" : void 0,
-        onClick: () => {
-          view.set((current) => ({
-            ...current,
-            route: "main",
-            selectedObservation: null,
-            observationGeneration: null,
-            observation: null,
-            observationError: null,
-            observationDetail: null,
-            observationDetailError: null
-          }));
-          void refresh();
-          setTimeout(() => document.querySelector("#main-message, .bt-main-composer textarea")?.focus(), 0);
-        }
-      }, (0, import_react27.createElement)(ProductBrandMark, { size: 24 }), "Main"),
-      clientBridge() ? (0, import_react27.createElement)(
-        "button",
-        {
-          type: "button",
-          className: "bt-soft",
-          onClick: () => view.set((current) => ({ ...current, connectOpen: true }))
-        },
-        state.connection?.connected ? `${t("Remote Host")} · ${state.connection.client.label}` : t("Connect to Host")
-      ) : null,
-      (0, import_react27.createElement)(
+      { className: "bt-main-nav", "aria-label": t("Work activity") },
+      (0, import_react35.createElement)(
         "div",
         { className: "bt-observation-search" },
-        (0, import_react27.createElement)("label", { htmlFor: "work-observation-search" }, t("Find activity")),
-        (0, import_react27.createElement)("input", {
+        (0, import_react35.createElement)("label", { htmlFor: "work-observation-search" }, t("Find activity")),
+        (0, import_react35.createElement)("input", {
           id: "work-observation-search",
           type: "search",
           value: search,
@@ -14781,13 +18801,13 @@ function applyProduct(ctx) {
           onChange: (event) => changeSearch(event.currentTarget.value)
         })
       ),
-      (0, import_react27.createElement)(
+      (0, import_react35.createElement)(
         "div",
         { className: "bt-observation-nav-head" },
-        (0, import_react27.createElement)("span", null, t("Work activity")),
-        (0, import_react27.createElement)("span", null, t("Read-only"))
+        (0, import_react35.createElement)("span", null, t("Work activity")),
+        (0, import_react35.createElement)("span", null, t("Read-only"))
       ),
-      state.observations.length ? state.observations.map((item) => (0, import_react27.createElement)(
+      state.observations.length ? state.observations.map((item) => (0, import_react35.createElement)(
         "button",
         {
           key: item.id,
@@ -14808,11 +18828,11 @@ function applyProduct(ctx) {
             if (state.binding) void loadObservation(state.binding, item, { reset: true });
           }
         },
-        (0, import_react27.createElement)("span", { className: "bt-observation-role" }, item.role === "router" ? "Router" : "Worker"),
-        (0, import_react27.createElement)("span", { className: "bt-observation-nav-copy" }, (0, import_react27.createElement)("strong", null, item.title), (0, import_react27.createElement)("span", null, statusCopy(item.status)))
-      )) : (0, import_react27.createElement)("p", { className: "bt-observation-empty" }, t("No Router or Worker activity yet.")),
-      state.activityError ? (0, import_react27.createElement)("p", { role: "alert", className: "bt-main-error" }, state.activityError) : null,
-      state.observationCursor ? (0, import_react27.createElement)(
+        (0, import_react35.createElement)("span", { className: "bt-observation-role" }, item.role === "router" ? "Router" : "Worker"),
+        (0, import_react35.createElement)("span", { className: "bt-observation-nav-copy" }, (0, import_react35.createElement)("strong", null, item.title), (0, import_react35.createElement)("span", null, statusCopy2(item.status)))
+      )) : (0, import_react35.createElement)("p", { className: "bt-observation-empty" }, t("No Router or Worker activity yet.")),
+      state.activityError ? (0, import_react35.createElement)("p", { role: "alert", className: "bt-main-error" }, state.activityError) : null,
+      state.observationCursor ? (0, import_react35.createElement)(
         "button",
         {
           type: "button",
@@ -14827,15 +18847,15 @@ function applyProduct(ctx) {
     );
   }
   function ClientSettings({ binding }) {
-    const [clients, setClients] = (0, import_react27.useState)([]);
-    const [label, setLabel] = (0, import_react27.useState)("");
-    const [readOnly, setReadOnly] = (0, import_react27.useState)(false);
-    const [issued, setIssued] = (0, import_react27.useState)(null);
-    const [busy, setBusy] = (0, import_react27.useState)(false);
-    const [error, setError] = (0, import_react27.useState)(null);
-    const pending = (0, import_react27.useRef)(null);
+    const [clients, setClients] = (0, import_react35.useState)([]);
+    const [label, setLabel] = (0, import_react35.useState)("");
+    const [readOnly, setReadOnly] = (0, import_react35.useState)(false);
+    const [issued, setIssued] = (0, import_react35.useState)(null);
+    const [busy, setBusy] = (0, import_react35.useState)(false);
+    const [error, setError] = (0, import_react35.useState)(null);
+    const pending = (0, import_react35.useRef)(null);
     const load = async () => setClients(await productCall("clients-list", { instanceId: binding.instanceId }));
-    (0, import_react27.useEffect)(() => {
+    (0, import_react35.useEffect)(() => {
       void load().catch((failure) => setError(failure.message));
     }, [binding.instanceId]);
     const enroll = async (event) => {
@@ -14885,16 +18905,16 @@ function applyProduct(ctx) {
         setBusy(false);
       }
     };
-    return (0, import_react27.createElement)(
-      Card,
+    return (0, import_react35.createElement)(
+      SectionCard,
       { title: t("Authorized clients") },
-      (0, import_react27.createElement)(
+      (0, import_react35.createElement)(
         "form",
         { className: "bt-main-client-form", onSubmit: (event) => {
           void enroll(event);
         } },
-        (0, import_react27.createElement)("label", { htmlFor: "client-label" }, t("Client name")),
-        (0, import_react27.createElement)("input", {
+        (0, import_react35.createElement)("label", { htmlFor: "client-label" }, t("Client name")),
+        (0, import_react35.createElement)("input", {
           id: "client-label",
           className: "bt-bs-input",
           value: label,
@@ -14902,8 +18922,8 @@ function applyProduct(ctx) {
           required: true,
           onChange: (event) => setLabel(event.currentTarget.value)
         }),
-        (0, import_react27.createElement)("label", { htmlFor: "client-scope" }, t("Client access")),
-        (0, import_react27.createElement)(
+        (0, import_react35.createElement)("label", { htmlFor: "client-scope" }, t("Client access")),
+        (0, import_react35.createElement)(
           "select",
           {
             id: "client-scope",
@@ -14911,32 +18931,32 @@ function applyProduct(ctx) {
             value: readOnly ? "read" : "command",
             onChange: (event) => setReadOnly(event.currentTarget.value === "read")
           },
-          (0, import_react27.createElement)("option", { value: "command" }, t("Read and command")),
-          (0, import_react27.createElement)("option", { value: "read" }, t("Read-only"))
+          (0, import_react35.createElement)("option", { value: "command" }, t("Read and command")),
+          (0, import_react35.createElement)("option", { value: "read" }, t("Read-only"))
         ),
-        (0, import_react27.createElement)("button", { type: "submit", className: "bt-soft", disabled: busy || !label.trim() }, t("Issue credential"))
+        (0, import_react35.createElement)("button", { type: "submit", className: "bt-soft", disabled: busy || !label.trim() }, t("Issue credential"))
       ),
-      issued ? (0, import_react27.createElement)(
+      issued ? (0, import_react35.createElement)(
         "div",
         { className: "bt-main-client-issued", role: "status" },
-        (0, import_react27.createElement)("p", null, t("This credential is shown once. Transfer it to the desktop client securely.")),
-        (0, import_react27.createElement)("input", { type: "password", readOnly: true, value: issued, "aria-label": t("Issued client credential") }),
-        (0, import_react27.createElement)("button", { type: "button", className: "bt-soft", onClick: () => {
+        (0, import_react35.createElement)("p", null, t("This credential is shown once. Transfer it to the desktop client securely.")),
+        (0, import_react35.createElement)("input", { type: "password", readOnly: true, value: issued, "aria-label": t("Issued client credential") }),
+        (0, import_react35.createElement)("button", { type: "button", className: "bt-soft", onClick: () => {
           void navigator.clipboard.writeText(issued).catch(() => setError(t("Could not copy the credential.")));
         } }, t("Copy credential"))
       ) : null,
-      error ? (0, import_react27.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
-      clients.map((client) => (0, import_react27.createElement)(
+      error ? (0, import_react35.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+      clients.map((client) => (0, import_react35.createElement)(
         "div",
         { key: client.id, className: "bt-main-client-row" },
-        (0, import_react27.createElement)(
+        (0, import_react35.createElement)(
           "div",
           null,
-          (0, import_react27.createElement)("strong", null, client.label),
-          (0, import_react27.createElement)("span", null, client.id),
-          (0, import_react27.createElement)("span", null, client.revokedAt ? t("Revoked") : client.grants[0]?.capabilities.includes("command") ? t("Read and command") : t("Read-only"))
+          (0, import_react35.createElement)("strong", null, client.label),
+          (0, import_react35.createElement)("span", null, client.id),
+          (0, import_react35.createElement)("span", null, client.revokedAt ? t("Revoked") : client.grants[0]?.capabilities.includes("command") ? t("Read and command") : t("Read-only"))
         ),
-        client.revokedAt ? null : (0, import_react27.createElement)("button", {
+        client.revokedAt ? null : (0, import_react35.createElement)("button", {
           type: "button",
           className: "bt-soft",
           disabled: busy,
@@ -14947,27 +18967,26 @@ function applyProduct(ctx) {
       ))
     );
   }
-  function SettingsDialog({ binding, onClose }) {
-    const [page, setPage] = (0, import_react27.useState)("roles");
+  function SettingsDialog2({ binding, onClose, open, initialPage, renderSlot }) {
     const viewState = useView();
-    const [snapshot, setSnapshot] = (0, import_react27.useState)(null);
-    const [draft, setDraft] = (0, import_react27.useState)(null);
-    const [base, setBase] = (0, import_react27.useState)(null);
-    const [efforts, setEfforts] = (0, import_react27.useState)({});
-    const [keyDrafts, setKeyDrafts] = (0, import_react27.useState)({});
-    const [error, setError] = (0, import_react27.useState)(null);
-    const [notice, setNotice] = (0, import_react27.useState)(null);
-    const [conflict, setConflict] = (0, import_react27.useState)(false);
-    const [loading, setLoading] = (0, import_react27.useState)(true);
-    const [saving, setSaving] = (0, import_react27.useState)(false);
-    const draftRef = (0, import_react27.useRef)(draft);
-    const draftVersion = (0, import_react27.useRef)(0);
-    const savingRef = (0, import_react27.useRef)(false);
+    const [snapshot, setSnapshot] = (0, import_react35.useState)(null);
+    const [draft, setDraft] = (0, import_react35.useState)(null);
+    const [base, setBase] = (0, import_react35.useState)(null);
+    const [efforts, setEfforts] = (0, import_react35.useState)({});
+    const [keyDrafts, setKeyDrafts] = (0, import_react35.useState)({});
+    const [error, setError] = (0, import_react35.useState)(null);
+    const [notice, setNotice] = (0, import_react35.useState)(null);
+    const [conflict, setConflict] = (0, import_react35.useState)(false);
+    const [loading, setLoading] = (0, import_react35.useState)(true);
+    const [saving, setSaving] = (0, import_react35.useState)(false);
+    const draftRef = (0, import_react35.useRef)(draft);
+    const draftVersion = (0, import_react35.useRef)(0);
+    const savingRef = (0, import_react35.useRef)(false);
     const clone = (value) => JSON.parse(JSON.stringify(value));
     const roleRows = [["main", "Main"], ["router", "Router"], ["worker", "Worker"]];
-    const refOf = (model) => `${model.provider}/${model.model}`;
-    const loadEfforts = async (roles2) => {
-      const refs = [...new Set([roles2.main, roles2.router, roles2.worker].filter(Boolean).map((profile) => refOf(profile.model)))];
+    const refOf2 = (model) => `${model.provider}/${model.model}`;
+    const loadEfforts = async (roles3) => {
+      const refs = [...new Set([roles3.main, roles3.router, roles3.worker].filter(Boolean).map((profile) => refOf2(profile.model)))];
       const values = await Promise.all(refs.map(async (ref) => {
         const [provider, ...model] = ref.split("/");
         try {
@@ -15002,15 +19021,15 @@ function applyProduct(ctx) {
         setLoading(false);
       }
     };
-    (0, import_react27.useEffect)(() => {
+    (0, import_react35.useEffect)(() => {
       void load();
     }, [binding.instanceId]);
-    (0, import_react27.useEffect)(() => {
-      const close2 = (event) => {
+    (0, import_react35.useEffect)(() => {
+      const close = (event) => {
         if (event.key === "Escape") onClose();
       };
-      window.addEventListener("keydown", close2);
-      return () => window.removeEventListener("keydown", close2);
+      window.addEventListener("keydown", close);
+      return () => window.removeEventListener("keydown", close);
     }, [onClose]);
     const updateRole = (role, change) => {
       if (savingRef.current) return;
@@ -15152,40 +19171,7 @@ function applyProduct(ctx) {
         view.set((current) => ({ ...current, directoryBusy: false }));
       }
     };
-    const close = (0, import_react27.createElement)("button", { type: "button", className: "bt-settings-close", "aria-label": t("Close settings"), onClick: onClose }, (0, import_react27.createElement)(CloseIcon));
-    if (loading && !draft) return (0, import_react27.createElement)(
-      "div",
-      { className: "bt-settings-layer" },
-      (0, import_react27.createElement)("div", { className: "bt-scrim", onMouseDown: onClose }),
-      (0, import_react27.createElement)(
-        "div",
-        { className: "bt-settings bt-main-settings-dialog", role: "dialog", "aria-modal": true, "aria-label": t("Super-agent settings") },
-        (0, import_react27.createElement)(
-          "div",
-          { className: "bt-settings-main" },
-          (0, import_react27.createElement)("div", { className: "bt-settings-head" }, (0, import_react27.createElement)("h2", null, t("Super-agent settings"))),
-          (0, import_react27.createElement)("div", { className: "bt-settings-scroll" }, (0, import_react27.createElement)("p", { className: "bt-main-status", role: "status" }, t("Loading configuration…")))
-        ),
-        close
-      )
-    );
-    if (!draft) return (0, import_react27.createElement)(
-      "div",
-      { className: "bt-settings-layer" },
-      (0, import_react27.createElement)("div", { className: "bt-scrim", onMouseDown: onClose }),
-      (0, import_react27.createElement)(
-        "div",
-        { className: "bt-settings bt-main-settings-dialog", role: "dialog", "aria-modal": true, "aria-label": t("Super-agent settings") },
-        (0, import_react27.createElement)(
-          "div",
-          { className: "bt-settings-main" },
-          (0, import_react27.createElement)("div", { className: "bt-settings-head" }, (0, import_react27.createElement)("h2", null, t("Super-agent settings"))),
-          (0, import_react27.createElement)("div", { className: "bt-settings-scroll" }, (0, import_react27.createElement)("p", { className: "bt-main-error", role: "alert" }, error ?? t("Configuration is unavailable.")))
-        ),
-        close
-      )
-    );
-    const models = snapshot.providers.flatMap((provider) => provider.models);
+    const models = snapshot?.providers.flatMap((provider) => provider.models) ?? [];
     const viewWork = ({ ticketIds = [], workBriefId } = {}) => {
       onClose();
       view.set((current) => ({ ...current, route: "main" }));
@@ -15199,299 +19185,235 @@ function applyProduct(ctx) {
         });
       });
     };
-    return (0, import_react27.createElement)(
-      "div",
-      { className: "bt-settings-layer" },
-      (0, import_react27.createElement)("div", { className: "bt-scrim", onMouseDown: onClose }),
-      (0, import_react27.createElement)(
+    const loadingSettings = (0, import_react35.createElement)(SettingsSectionState, { status: loading ? "loading" : "error", message: error });
+    const roles2 = draft ? (0, import_react35.createElement)(
+      import_react35.Fragment,
+      null,
+      error ? (0, import_react35.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+      viewState.directoryError ? (0, import_react35.createElement)("p", { className: "bt-main-error", role: "alert" }, viewState.directoryError) : null,
+      conflict ? (0, import_react35.createElement)(
         "div",
-        { className: "bt-settings bt-main-settings-dialog", role: "dialog", "aria-modal": true, "aria-label": t("Super-agent settings") },
-        (0, import_react27.createElement)(
-          "nav",
-          { className: "bt-settings-nav", "aria-label": t("Settings pages") },
-          (0, import_react27.createElement)("button", {
-            type: "button",
-            className: "bt-settings-item bt-main-settings-nav-item",
-            "aria-current": page === "roles" ? "page" : void 0,
-            onClick: () => setPage("roles")
-          }, (0, import_react27.createElement)(SlidersIcon), t("Roles and providers")),
-          (0, import_react27.createElement)("button", {
-            type: "button",
-            className: "bt-settings-item bt-main-settings-nav-item",
-            "aria-current": page === "execution" ? "page" : void 0,
-            onClick: () => setPage("execution")
-          }, (0, import_react27.createElement)(GlobeIcon), t("Execution")),
-          (0, import_react27.createElement)("button", {
-            type: "button",
-            className: "bt-settings-item bt-main-settings-nav-item",
-            "aria-current": page === "schedules" ? "page" : void 0,
-            onClick: () => setPage("schedules")
-          }, (0, import_react27.createElement)(ClockIcon), t("Scheduled tasks")),
-          (0, import_react27.createElement)("button", {
-            type: "button",
-            className: "bt-settings-item bt-main-settings-nav-item",
-            "aria-current": page === "preparations" ? "page" : void 0,
-            onClick: () => setPage("preparations")
-          }, (0, import_react27.createElement)(ClockIcon), t("Proactive preparation")),
-          (0, import_react27.createElement)("button", {
-            type: "button",
-            className: "bt-settings-item bt-main-settings-nav-item",
-            "aria-current": page === "presets" ? "page" : void 0,
-            onClick: () => setPage("presets")
-          }, (0, import_react27.createElement)(SlidersIcon), t("Role presets")),
-          (0, import_react27.createElement)("button", {
-            type: "button",
-            className: "bt-settings-item bt-main-settings-nav-item",
-            "aria-current": page === "memory" ? "page" : void 0,
-            onClick: () => setPage("memory")
-          }, (0, import_react27.createElement)(MemoryIcon), t("Memory")),
-          !viewState.connection?.connected ? (0, import_react27.createElement)("button", {
-            type: "button",
-            className: "bt-settings-item bt-main-settings-nav-item",
-            "aria-current": page === "browser" ? "page" : void 0,
-            onClick: () => setPage("browser")
-          }, (0, import_react27.createElement)(GlobeIcon), t("Browser resources")) : null,
-          !viewState.connection?.connected ? (0, import_react27.createElement)("button", {
-            type: "button",
-            className: "bt-settings-item bt-main-settings-nav-item",
-            "aria-current": page === "supervision" ? "page" : void 0,
-            onClick: () => setPage("supervision")
-          }, (0, import_react27.createElement)(SlidersIcon), t("Supervision")) : null,
-          (0, import_react27.createElement)("button", {
-            type: "button",
-            className: "bt-settings-item bt-main-settings-nav-item",
-            "aria-current": page === "operations" ? "page" : void 0,
-            onClick: () => setPage("operations")
-          }, (0, import_react27.createElement)(GaugeIcon), t("Status and usage")),
-          (0, import_react27.createElement)("span", { className: "bt-main-settings-revision" }, `${t("Configuration")} v${snapshot.revision}`)
-        ),
-        (0, import_react27.createElement)(
-          "div",
-          { className: "bt-settings-main" },
-          (0, import_react27.createElement)("div", { className: "bt-settings-head" }, (0, import_react27.createElement)("h2", null, page === "execution" ? t("Execution") : page === "schedules" ? t("Scheduled tasks") : page === "presets" ? t("Role presets") : page === "preparations" ? t("Proactive preparation") : page === "memory" ? t("Memory") : page === "browser" ? t("Browser resources") : page === "supervision" ? t("Supervision") : page === "operations" ? t("Status and usage") : t("Super-agent settings"))),
-          (0, import_react27.createElement)(
-            "div",
-            { className: "bt-settings-scroll" },
-            page === "execution" ? (0, import_react27.createElement)(ProductExecutionSettings, {
-              binding,
-              call: productCall,
-              onChanged: () => {
-                void loadDirectories(binding);
-              }
-            }) : page === "schedules" ? (0, import_react27.createElement)(ProductScheduleSettings, {
-              binding,
-              works: view.getSnapshot().works,
-              call: productCall,
-              onViewWork: viewWork
-            }) : page === "preparations" ? (0, import_react27.createElement)(ProductProactiveSettings, { binding, call: productCall }) : page === "presets" ? (0, import_react27.createElement)(ProductPresetSettings, {
-              binding,
-              call: productCall,
-              settingsRevision: snapshot.revision,
-              roleSettings: snapshot,
-              onApplied: refreshAfterPreset,
-              onReload: refreshAfterPreset
-            }) : page === "memory" ? (0, import_react27.createElement)(ProductMemorySettings, { key: binding.instanceId, binding, works: view.getSnapshot().works, call: productCall }) : page === "browser" ? (0, import_react27.createElement)(ProductBrowserSettings, {
-              binding,
-              works: view.getSnapshot().works,
-              directoryOptions: viewState.directoryOptions,
-              call: productCall,
-              browserBridge: globalThis.dsSuperagentApp?.browser
-            }) : page === "supervision" ? (0, import_react27.createElement)(ProductSupervisionSettings, { binding, call: productCall }) : page === "operations" ? (0, import_react27.createElement)(ProductOperationsSettings, {
-              binding,
-              call: productCall,
-              onNavigate: (next) => setPage(next)
-            }) : (0, import_react27.createElement)(
-              import_react27.Fragment,
-              null,
-              error ? (0, import_react27.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
-              viewState.directoryError ? (0, import_react27.createElement)("p", { className: "bt-main-error", role: "alert" }, viewState.directoryError) : null,
-              conflict ? (0, import_react27.createElement)(
-                "div",
-                { className: "bt-main-settings-conflict", role: "status" },
-                (0, import_react27.createElement)("p", null, t("Newer settings exist. Rebase only your changed fields, then review and save.")),
-                (0, import_react27.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", disabled: saving, onClick: () => {
-                  void rebase();
-                } }, t("Rebase my edits"))
-              ) : null,
-              notice ? (0, import_react27.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
-              viewState.directoryOptions?.default ? (0, import_react27.createElement)(
-                Card,
-                { title: t("Work directories") },
-                (0, import_react27.createElement)(
-                  Row,
-                  { label: t("Instance default directory"), hint: t("New work starts here unless you choose a work directory in Main.") },
-                  (0, import_react27.createElement)(FolderMenu, {
-                    value: viewState.directoryOptions.default.root,
-                    team: true,
-                    label: t("Instance default directory"),
-                    actions: directoryActions(binding),
-                    run: (promise) => void Promise.resolve(promise).catch((failure) => view.set((current) => ({ ...current, directoryError: failure.message }))),
-                    onPick: chooseDefaultDirectory,
-                    disabled: viewState.directoryBusy
-                  })
-                )
-              ) : null,
-              models.length === 0 ? (0, import_react27.createElement)(
-                "p",
-                { className: "bt-main-health-warning", role: "alert" },
-                t("No models are available. Configure a provider in DSH settings, then reopen this panel to select the role models.")
-              ) : rolesNeedingModels({ roles: draft, providers: snapshot.providers }).length ? (0, import_react27.createElement)(
-                "p",
-                { className: "bt-main-health-warning", role: "alert" },
-                t("Select an available model for each role before saving.")
-              ) : null,
-              roleRows.map(([role, label]) => {
-                const profile = draft[role];
-                if (!profile) return null;
-                const ref = refOf(profile.model);
-                const reasoning = efforts[ref];
-                return (0, import_react27.createElement)(
-                  Card,
-                  { key: role, title: label },
-                  (0, import_react27.createElement)(
-                    Row,
-                    { label: t("Model"), hint: t("The provider and model this role uses. New turns use the saved version.") },
-                    (0, import_react27.createElement)(
-                      "select",
-                      {
-                        className: "bt-select bt-main-settings-select",
-                        "aria-label": t("{role} model", { role: label }),
-                        value: ref,
-                        disabled: saving,
-                        onChange: (event) => {
-                          void updateModel(role, event.target.value);
-                        }
-                      },
-                      !models.some((model) => model.ref === ref) ? (0, import_react27.createElement)("option", { value: ref }, ref) : null,
-                      snapshot.providers.map((provider) => (0, import_react27.createElement)(
-                        "optgroup",
-                        { key: provider.id, label: provider.name },
-                        provider.models.map((model) => (0, import_react27.createElement)("option", { key: model.ref, value: model.ref }, model.name))
-                      ))
-                    )
-                  ),
-                  reasoning?.efforts?.length ? (0, import_react27.createElement)(
-                    Row,
-                    { label: t("Thinking effort"), hint: t("Kept with the model route and recorded in configuration uses.") },
-                    (0, import_react27.createElement)(
-                      "select",
-                      {
-                        className: "bt-select bt-main-settings-select",
-                        "aria-label": t("{role} thinking effort", { role: label }),
-                        value: profile.model.effort ?? "",
-                        disabled: saving,
-                        onChange: (event) => updateEffort(role, event.target.value)
-                      },
-                      (0, import_react27.createElement)("option", { value: "" }, t("Provider default")),
-                      reasoning.efforts.map((effort) => (0, import_react27.createElement)("option", { key: effort.id, value: effort.id }, effort.name))
-                    )
-                  ) : null,
-                  (0, import_react27.createElement)(
-                    Row,
-                    { label: t("Instructions"), hint: t("Role prompts are versioned. Router keeps {{goal}}; Worker keeps {{goal}} and {{constraints}}."), stack: true },
-                    (0, import_react27.createElement)("textarea", {
-                      className: "bt-bs-input bt-bs-area bt-main-settings-prompt",
-                      value: profile.instructions,
-                      maxLength: 16384,
-                      spellCheck: false,
-                      disabled: saving,
-                      "aria-label": t("{role} instructions", { role: label }),
-                      onChange: (event) => updateRole(role, { instructions: event.target.value })
-                    })
-                  ),
-                  (0, import_react27.createElement)(
-                    Row,
-                    { label: t("Profile"), hint: `${profile.name} · ${profile.skills.length ? t("Skills: {skills}", { skills: profile.skills.join(", ") }) : t("No reserved skills")}` },
-                    (0, import_react27.createElement)("span", { className: "bt-main-settings-route" }, ref)
-                  )
-                );
-              }),
-              (0, import_react27.createElement)(
-                "div",
-                { className: "bt-actions bt-main-settings-save" },
-                (0, import_react27.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", disabled: saving, onClick: onClose }, t("Cancel")),
-                (0, import_react27.createElement)(
-                  "button",
-                  { type: "button", className: "bt-send bt-soft bt-soft-sm", disabled: saving, onClick: () => {
-                    void save();
-                  } },
-                  saving ? t("Saving…") : t("Save configuration")
-                )
-              ),
-              (0, import_react27.createElement)(
-                Card,
-                { title: t("Providers") },
-                snapshot.providers.length ? snapshot.providers.map((provider) => (0, import_react27.createElement)(
-                  "div",
-                  { key: provider.id, className: "bt-main-provider" },
-                  (0, import_react27.createElement)("div", { className: "bt-main-provider-copy" }, (0, import_react27.createElement)("strong", null, provider.name), (0, import_react27.createElement)("span", null, t("{count} models", { count: provider.models.length }))),
-                  provider.key ? (0, import_react27.createElement)(
-                    "div",
-                    { className: "bt-main-provider-key" },
-                    (0, import_react27.createElement)("span", { role: "status" }, provider.key.configured ? t("API key configured") : t("API key missing")),
-                    provider.key.writable ? (0, import_react27.createElement)(
-                      import_react27.Fragment,
-                      null,
-                      (0, import_react27.createElement)("input", {
-                        type: "password",
-                        value: keyDrafts[provider.id] ?? "",
-                        autoComplete: "off",
-                        "aria-label": t("{provider} API key", { provider: provider.name }),
-                        disabled: saving,
-                        placeholder: t("Paste a new key"),
-                        onChange: (event) => setKeyDrafts((current) => ({ ...current, [provider.id]: event.target.value }))
-                      }),
-                      (0, import_react27.createElement)("button", {
-                        type: "button",
-                        className: "bt-soft bt-soft-sm",
-                        disabled: saving || !(keyDrafts[provider.id] ?? "").trim(),
-                        onClick: () => {
-                          void saveKey(provider.id, keyDrafts[provider.id]);
-                        }
-                      }, t("Save key")),
-                      provider.key.configured ? (0, import_react27.createElement)("button", {
-                        type: "button",
-                        className: "bt-soft bt-soft-sm bt-bs-danger",
-                        disabled: saving,
-                        onClick: () => {
-                          void saveKey(provider.id, null);
-                        }
-                      }, t("Remove key")) : null
-                    ) : (0, import_react27.createElement)("span", null, t("Set outside this product"))
-                  ) : null
-                )) : (0, import_react27.createElement)("p", { className: "bt-main-status" }, t("No provider catalog is available. Configure providers in DSH settings."))
-              ),
-              (0, import_react27.createElement)(ProductCredentialSettings, { binding, call: productCall, credentialImportBridge: globalThis.dsSuperagentApp?.browser?.credentialImport }),
-              (0, import_react27.createElement)(ProductMcpSettings, { binding, call: productCall }),
-              (0, import_react27.createElement)(ClientSettings, { binding }),
-              (0, import_react27.createElement)(
-                Card,
-                { title: t("Recent configuration uses") },
-                snapshot.uses.length ? snapshot.uses.slice(0, 20).map((use) => (0, import_react27.createElement)(
-                  "div",
-                  { key: use.id, className: "bt-main-settings-use" },
-                  (0, import_react27.createElement)("span", { className: "bt-observation-role" }, use.role),
-                  (0, import_react27.createElement)("span", null, `${t("Configuration")} v${use.revision}`),
-                  (0, import_react27.createElement)("span", null, refOf(use[use.role] ?? use.worker ?? use.router)),
-                  (0, import_react27.createElement)("span", { className: "bt-main-settings-use-session", title: use.sessionId }, use.sessionId),
-                  (0, import_react27.createElement)("time", null, new Date(use.createdAt).toLocaleString())
-                )) : (0, import_react27.createElement)("p", { className: "bt-main-status" }, t("No role turn has recorded a configuration version yet."))
-              ),
-              (0, import_react27.createElement)("p", { className: "bt-main-status" }, t("Configuration versions apply at request boundaries. A turn already running keeps the version it started with."))
+        { className: "bt-main-settings-conflict", role: "status" },
+        (0, import_react35.createElement)("p", null, t("Newer settings exist. Rebase only your changed fields, then review and save.")),
+        (0, import_react35.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", disabled: saving, onClick: () => {
+          void rebase();
+        } }, t("Rebase my edits"))
+      ) : null,
+      notice ? (0, import_react35.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
+      models.length === 0 ? (0, import_react35.createElement)(
+        "p",
+        { className: "bt-main-health-warning", role: "alert" },
+        t("No models are available. Configure a provider in DSH settings, then reopen this panel to select the role models.")
+      ) : rolesNeedingModels({ roles: draft, providers: snapshot.providers }).length ? (0, import_react35.createElement)(
+        "p",
+        { className: "bt-main-health-warning", role: "alert" },
+        t("Select an available model for each role before saving.")
+      ) : null,
+      roleRows.map(([role, label]) => {
+        const profile = draft[role];
+        if (!profile) return null;
+        const ref = refOf2(profile.model);
+        const reasoning = efforts[ref];
+        return (0, import_react35.createElement)(
+          SectionCard,
+          { key: role, title: label },
+          (0, import_react35.createElement)(
+            Row,
+            { label: t("Model"), hint: t("The provider and model this role uses. New turns use the saved version.") },
+            (0, import_react35.createElement)(
+              "select",
+              {
+                className: "bt-select bt-main-settings-select",
+                "aria-label": t("{role} model", { role: label }),
+                value: ref,
+                disabled: saving,
+                onChange: (event) => {
+                  void updateModel(role, event.target.value);
+                }
+              },
+              !models.some((model) => model.ref === ref) ? (0, import_react35.createElement)("option", { value: ref }, ref) : null,
+              snapshot.providers.map((provider) => (0, import_react35.createElement)(
+                "optgroup",
+                { key: provider.id, label: provider.name },
+                provider.models.map((model) => (0, import_react35.createElement)("option", { key: model.ref, value: model.ref }, model.name))
+              ))
             )
           ),
-          close
+          reasoning?.efforts?.length ? (0, import_react35.createElement)(
+            Row,
+            { label: t("Thinking effort"), hint: t("Kept with the model route and recorded in configuration uses.") },
+            (0, import_react35.createElement)(
+              "select",
+              {
+                className: "bt-select bt-main-settings-select",
+                "aria-label": t("{role} thinking effort", { role: label }),
+                value: profile.model.effort ?? "",
+                disabled: saving,
+                onChange: (event) => updateEffort(role, event.target.value)
+              },
+              (0, import_react35.createElement)("option", { value: "" }, t("Provider default")),
+              reasoning.efforts.map((effort) => (0, import_react35.createElement)("option", { key: effort.id, value: effort.id }, effort.name))
+            )
+          ) : null,
+          (0, import_react35.createElement)(
+            Row,
+            { label: t("Instructions"), hint: t("Role prompts are versioned. Router keeps {{goal}}; Worker keeps {{goal}} and {{constraints}}."), stack: true },
+            (0, import_react35.createElement)("textarea", {
+              className: "bt-bs-input bt-bs-area bt-main-settings-prompt",
+              value: profile.instructions,
+              maxLength: 16384,
+              spellCheck: false,
+              disabled: saving,
+              "aria-label": t("{role} instructions", { role: label }),
+              onChange: (event) => updateRole(role, { instructions: event.target.value })
+            })
+          ),
+          (0, import_react35.createElement)(
+            Row,
+            { label: t("Profile"), hint: `${profile.name} · ${profile.skills.length ? t("Skills: {skills}", { skills: profile.skills.join(", ") }) : t("No reserved skills")}` },
+            (0, import_react35.createElement)("span", { className: "bt-main-settings-route" }, ref)
+          )
+        );
+      }),
+      (0, import_react35.createElement)(
+        "div",
+        { className: "bt-actions bt-main-settings-save" },
+        (0, import_react35.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", disabled: saving, onClick: onClose }, t("Cancel")),
+        (0, import_react35.createElement)(
+          "button",
+          { type: "button", className: "bt-send bt-soft bt-soft-sm", disabled: saving, onClick: () => {
+            void save();
+          } },
+          saving ? t("Saving…") : t("Save configuration")
         )
+      ),
+      (0, import_react35.createElement)(
+        SectionCard,
+        { title: t("Recent configuration uses") },
+        snapshot.uses.length ? snapshot.uses.slice(0, 20).map((use) => (0, import_react35.createElement)(
+          "div",
+          { key: use.id, className: "bt-main-settings-use" },
+          (0, import_react35.createElement)("span", { className: "bt-observation-role" }, use.role),
+          (0, import_react35.createElement)("span", null, `${t("Configuration")} v${use.revision}`),
+          (0, import_react35.createElement)("span", null, refOf2(use[use.role] ?? use.worker ?? use.router)),
+          (0, import_react35.createElement)("span", { className: "bt-main-settings-use-session", title: use.sessionId }, use.sessionId),
+          (0, import_react35.createElement)("time", null, new Date(use.createdAt).toLocaleString())
+        )) : (0, import_react35.createElement)("p", { className: "bt-main-status" }, t("No role turn has recorded a configuration version yet."))
       )
-    );
+    ) : loadingSettings;
+    const providers = snapshot ? (0, import_react35.createElement)(
+      import_react35.Fragment,
+      null,
+      error ? (0, import_react35.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+      notice ? (0, import_react35.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
+      (0, import_react35.createElement)(
+        SectionCard,
+        { title: t("Providers") },
+        snapshot.providers.length ? snapshot.providers.map((provider) => (0, import_react35.createElement)(
+          "div",
+          { key: provider.id, className: "bt-main-provider" },
+          (0, import_react35.createElement)("div", { className: "bt-main-provider-copy" }, (0, import_react35.createElement)("strong", null, provider.name), (0, import_react35.createElement)("span", null, t("{count} models", { count: provider.models.length }))),
+          provider.key ? (0, import_react35.createElement)(
+            "div",
+            { className: "bt-main-provider-key" },
+            (0, import_react35.createElement)("span", { role: "status" }, provider.key.configured ? t("API key configured") : t("API key missing")),
+            provider.key.writable ? (0, import_react35.createElement)(
+              import_react35.Fragment,
+              null,
+              (0, import_react35.createElement)("input", {
+                type: "password",
+                value: keyDrafts[provider.id] ?? "",
+                autoComplete: "off",
+                "aria-label": t("{provider} API key", { provider: provider.name }),
+                disabled: saving,
+                placeholder: t("Paste a new key"),
+                onChange: (event) => setKeyDrafts((current) => ({ ...current, [provider.id]: event.target.value }))
+              }),
+              (0, import_react35.createElement)("button", {
+                type: "button",
+                className: "bt-soft bt-soft-sm",
+                disabled: saving || !(keyDrafts[provider.id] ?? "").trim(),
+                onClick: () => {
+                  void saveKey(provider.id, keyDrafts[provider.id]);
+                }
+              }, t("Save key")),
+              provider.key.configured ? (0, import_react35.createElement)("button", {
+                type: "button",
+                className: "bt-soft bt-soft-sm bt-bs-danger",
+                disabled: saving,
+                onClick: () => {
+                  void saveKey(provider.id, null);
+                }
+              }, t("Remove key")) : null
+            ) : (0, import_react35.createElement)("span", null, t("Set outside this product"))
+          ) : null
+        )) : (0, import_react35.createElement)("p", { className: "bt-main-status" }, t("No provider catalog is available. Configure providers in DSH settings."))
+      )
+    ) : loadingSettings;
+    const pageProps = { binding, call: productCall };
+    const pages2 = {
+      general: (0, import_react35.createElement)(
+        import_react35.Fragment,
+        null,
+        (0, import_react35.createElement)(AppearanceSettings, { ctx }),
+        viewState.directoryError ? (0, import_react35.createElement)("p", { className: "bt-main-error", role: "alert" }, viewState.directoryError) : null,
+        viewState.directoryOptions?.default ? (0, import_react35.createElement)(
+          SectionCard,
+          { title: t("Work directories") },
+          (0, import_react35.createElement)(
+            Row,
+            { label: t("Instance default directory"), hint: t("New work starts here unless you choose a work directory in Main.") },
+            (0, import_react35.createElement)(FolderMenu, {
+              value: viewState.directoryOptions.default.root,
+              team: true,
+              label: t("Instance default directory"),
+              actions: directoryActions(binding),
+              run: (promise) => void Promise.resolve(promise).catch((failure) => view.set((current) => ({ ...current, directoryError: failure.message }))),
+              onPick: chooseDefaultDirectory,
+              disabled: viewState.directoryBusy
+            })
+          )
+        ) : null
+      ),
+      roles: roles2,
+      models: providers,
+      execution: (0, import_react35.createElement)(ProductExecutionSettings, { ...pageProps, onChanged: () => {
+        void loadDirectories(binding);
+      } }),
+      calendar: (0, import_react35.createElement)(ProductScheduleSettings, { ...pageProps, works: viewState.works, onViewWork: viewWork }),
+      preparations: (0, import_react35.createElement)(ProductProactiveSettings, pageProps),
+      presets: snapshot ? (0, import_react35.createElement)(ProductPresetSettings, {
+        ...pageProps,
+        settingsRevision: snapshot.revision,
+        roleSettings: snapshot,
+        onApplied: refreshAfterPreset,
+        onReload: refreshAfterPreset
+      }) : loadingSettings,
+      memory: (0, import_react35.createElement)(ProductMemorySettings, { ...pageProps, key: binding.instanceId, works: viewState.works }),
+      "browser-resources": (0, import_react35.createElement)(ProductBrowserSettings, {
+        ...pageProps,
+        works: viewState.works,
+        directoryOptions: viewState.directoryOptions,
+        browserBridge: globalThis.dsSuperagentApp?.browser
+      }),
+      supervision: (0, import_react35.createElement)(ProductSupervisionSettings, pageProps),
+      "credential-resources": (0, import_react35.createElement)(ProductCredentialSettings, { ...pageProps, credentialImportBridge: globalThis.dsSuperagentApp?.browser?.credentialImport }),
+      capabilities: (0, import_react35.createElement)(ProductMcpSettings, pageProps),
+      "remote-clients": (0, import_react35.createElement)(ClientSettings, { binding })
+    };
+    const sections = Object.fromEntries(Object.entries(pages2).map(([id, content]) => [id, { render: () => content }]));
+    sections["usage-overview"] = { render: ({ navigate }) => (0, import_react35.createElement)(ProductOperationsSettings, { ...pageProps, section: "usage", onNavigate: navigate }) };
+    sections.status = { render: ({ navigate }) => (0, import_react35.createElement)(ProductOperationsSettings, { ...pageProps, section: "status", onNavigate: navigate }) };
+    sections.about = ABOUT_SETTINGS_SECTION;
+    return (0, import_react35.createElement)(SettingsShell, { open, onClose, initialPage, renderSlot, sections });
   }
   function ConnectionDialog({ connection, onClose }) {
-    const [address, setAddress] = (0, import_react27.useState)("");
-    const [instanceId, setInstanceId] = (0, import_react27.useState)("personal");
-    const [credential, setCredential] = (0, import_react27.useState)("");
-    const [busy, setBusy] = (0, import_react27.useState)(false);
-    const [error, setError] = (0, import_react27.useState)(null);
-    (0, import_react27.useEffect)(() => {
+    const [address, setAddress] = (0, import_react35.useState)("");
+    const [instanceId, setInstanceId] = (0, import_react35.useState)("personal");
+    const [credential, setCredential] = (0, import_react35.useState)("");
+    const [busy, setBusy] = (0, import_react35.useState)(false);
+    const [error, setError] = (0, import_react35.useState)(null);
+    (0, import_react35.useEffect)(() => {
       document.getElementById("product-host-address")?.focus();
     }, []);
     const connect = async (event) => {
@@ -15520,11 +19442,11 @@ function applyProduct(ctx) {
         setBusy(false);
       }
     };
-    return (0, import_react27.createElement)(
+    return (0, import_react35.createElement)(
       "div",
       { className: "bt-settings-layer" },
-      (0, import_react27.createElement)("div", { className: "bt-scrim", onMouseDown: onClose }),
-      (0, import_react27.createElement)(
+      (0, import_react35.createElement)("div", { className: "bt-scrim", onMouseDown: onClose }),
+      (0, import_react35.createElement)(
         "div",
         {
           className: "bt-settings bt-main-connect-dialog",
@@ -15535,24 +19457,24 @@ function applyProduct(ctx) {
             if (event.key === "Escape") onClose();
           }
         },
-        (0, import_react27.createElement)(
+        (0, import_react35.createElement)(
           "div",
           { className: "bt-settings-main" },
-          (0, import_react27.createElement)("div", { className: "bt-settings-head" }, (0, import_react27.createElement)("h2", null, t("Host connection"))),
-          connection?.connected ? (0, import_react27.createElement)(
+          (0, import_react35.createElement)("div", { className: "bt-settings-head" }, (0, import_react35.createElement)("h2", null, t("Host connection"))),
+          connection?.connected ? (0, import_react35.createElement)(
             "div",
             { className: "bt-main-connect-body" },
-            (0, import_react27.createElement)("p", { role: "status" }, `${t("Remote Host")} · ${connection.address} · ${connection.instanceId}`),
-            (0, import_react27.createElement)("p", null, `${t("Client")} · ${connection.client.label} · ${connection.capabilities.includes("command") ? t("Read and command") : t("Read-only")}`),
-            error ? (0, import_react27.createElement)("p", { role: "alert", className: "bt-main-error" }, error) : null,
-            (0, import_react27.createElement)("button", { type: "button", className: "bt-soft", disabled: busy, onClick: () => void disconnect() }, t("Disconnect"))
-          ) : (0, import_react27.createElement)(
+            (0, import_react35.createElement)("p", { role: "status" }, `${t("Remote Host")} · ${connection.address} · ${connection.instanceId}`),
+            (0, import_react35.createElement)("p", null, `${t("Client")} · ${connection.client.label} · ${connection.capabilities.includes("command") ? t("Read and command") : t("Read-only")}`),
+            error ? (0, import_react35.createElement)("p", { role: "alert", className: "bt-main-error" }, error) : null,
+            (0, import_react35.createElement)("button", { type: "button", className: "bt-soft", disabled: busy, onClick: () => void disconnect() }, t("Disconnect"))
+          ) : (0, import_react35.createElement)(
             "form",
             { className: "bt-main-connect-body", onSubmit: (event) => {
               void connect(event);
             } },
-            (0, import_react27.createElement)("label", { htmlFor: "product-host-address" }, t("Host address")),
-            (0, import_react27.createElement)("input", {
+            (0, import_react35.createElement)("label", { htmlFor: "product-host-address" }, t("Host address")),
+            (0, import_react35.createElement)("input", {
               id: "product-host-address",
               type: "url",
               required: true,
@@ -15560,15 +19482,15 @@ function applyProduct(ctx) {
               placeholder: "https://host.example:8443",
               onChange: (event) => setAddress(event.currentTarget.value)
             }),
-            (0, import_react27.createElement)("label", { htmlFor: "product-host-instance" }, t("Instance")),
-            (0, import_react27.createElement)("input", {
+            (0, import_react35.createElement)("label", { htmlFor: "product-host-instance" }, t("Instance")),
+            (0, import_react35.createElement)("input", {
               id: "product-host-instance",
               required: true,
               value: instanceId,
               onChange: (event) => setInstanceId(event.currentTarget.value)
             }),
-            (0, import_react27.createElement)("label", { htmlFor: "product-host-credential" }, t("Client credential")),
-            (0, import_react27.createElement)("input", {
+            (0, import_react35.createElement)("label", { htmlFor: "product-host-credential" }, t("Client credential")),
+            (0, import_react35.createElement)("input", {
               id: "product-host-credential",
               type: "password",
               required: true,
@@ -15576,41 +19498,90 @@ function applyProduct(ctx) {
               value: credential,
               onChange: (event) => setCredential(event.currentTarget.value)
             }),
-            (0, import_react27.createElement)("p", { className: "bt-main-status" }, t("Use HTTPS or an authorized local SSH tunnel. The credential stays in this app process until disconnect or quit.")),
-            error ? (0, import_react27.createElement)("p", { role: "alert", className: "bt-main-error" }, error) : null,
-            (0, import_react27.createElement)("button", { type: "submit", className: "bt-soft", disabled: busy }, busy ? t("Connecting…") : t("Connect"))
+            (0, import_react35.createElement)("p", { className: "bt-main-status" }, t("Use HTTPS or an authorized local SSH tunnel. The credential stays in this app process until disconnect or quit.")),
+            error ? (0, import_react35.createElement)("p", { role: "alert", className: "bt-main-error" }, error) : null,
+            (0, import_react35.createElement)("button", { type: "submit", className: "bt-soft", disabled: busy }, busy ? t("Connecting…") : t("Connect"))
           )
         ),
-        (0, import_react27.createElement)("button", { type: "button", className: "bt-settings-close", "aria-label": t("Close connection"), onClick: onClose }, (0, import_react27.createElement)(CloseIcon))
+        (0, import_react35.createElement)("button", { type: "button", className: "bt-settings-close", "aria-label": t("Close connection"), onClick: onClose }, (0, import_react35.createElement)(CloseIcon))
       )
     );
   }
   function ProductSurface() {
     const state = useView();
-    return (0, import_react27.createElement)(
-      import_react27.Fragment,
+    return state.route === "observe" ? (0, import_react35.createElement)(ObservationConversation) : (0, import_react35.createElement)(MainConversation);
+  }
+  function Overlay({ renderSlot }) {
+    const state = useView();
+    return (0, import_react35.createElement)(
+      import_react35.Fragment,
       null,
-      state.route === "observe" ? (0, import_react27.createElement)(ObservationConversation) : (0, import_react27.createElement)(MainConversation),
-      state.settingsOpen && state.binding && !state.connection?.connected ? (0, import_react27.createElement)(SettingsDialog, {
+      state.binding && !state.connection?.connected && state.settingsPage ? (0, import_react35.createElement)(SettingsDialog2, {
         binding: state.binding,
+        open: state.settingsOpen,
+        initialPage: state.settingsPage,
+        renderSlot,
         onClose: () => view.set((current) => ({ ...current, settingsOpen: false }))
       }) : null,
-      state.connectOpen && clientBridge() ? (0, import_react27.createElement)(ConnectionDialog, {
+      state.connectOpen && clientBridge() ? (0, import_react35.createElement)(ConnectionDialog, {
         connection: state.connection,
         onClose: () => view.set((current) => ({ ...current, connectOpen: false }))
       }) : null
     );
   }
+  const shellActions = {
+    openMain() {
+      view.set((current) => ({
+        ...current,
+        route: "main",
+        selectedObservation: null,
+        observationGeneration: null,
+        observation: null,
+        observationError: null,
+        observationDetail: null,
+        observationDetailError: null
+      }));
+      void refresh();
+    },
+    openActivity() {
+      const { binding } = view.getSnapshot();
+      view.set((current) => ({ ...current, route: "observe" }));
+      if (binding) void loadObservations(binding, { reset: true });
+    },
+    openSettings(settingsPage = "general") {
+      const state = view.getSnapshot();
+      if (state.binding && !state.connection?.connected) view.set({ ...state, settingsOpen: true, settingsPage });
+    },
+    openConnection() {
+      if (clientBridge()) view.set((current) => ({ ...current, connectOpen: true }));
+    }
+  };
+  const { Header } = installProductShell(ctx, {
+    actions: shellActions,
+    Overlay,
+    overlayChildren: SETTINGS_CHILDREN,
+    useShell() {
+      const state = useView();
+      const lastReply = state.messages.findLast((message) => message.role === "main");
+      const question = state.works.find((work) => work.control?.attention?.status === "waiting");
+      return {
+        activity: state.route === "observe",
+        markState: state.activeTurn ? "run" : "idle",
+        preview: lastReply?.text,
+        unread: lastReply?.id === state.readReplyId ? void 0 : lastReply?.id,
+        pending: question?.control?.attention?.id,
+        notificationScope: state.binding?.instanceId,
+        connectLabel: clientBridge() ? state.connection?.connected ? t("Connection") : t("Connect to Host") : null,
+        settingsAvailable: Boolean(state.binding && !state.connection?.connected),
+        modalOpen: state.settingsOpen || state.connectOpen
+      };
+    }
+  });
+  installSettingsSections(ctx.slots);
   const shadow = (name, component) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200 }, component));
-  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_EXECUTION_CSS + PRODUCT_OPERATIONS_CSS, "main"), "superagent: existing chat styles");
-  ctx.effect(() => {
-    const style = installStyles(themeCss(allThemes().deepseek), "main-theme");
-    return () => style.remove();
-  }, "superagent: existing theme");
+  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SETTINGS_SHELL_CSS + PRODUCT_SETTINGS_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_EXECUTION_CSS + PRODUCT_OPERATIONS_CSS, "main"), "superagent: existing chat styles");
+  ctx.effect(() => installAppearance(ctx.get("theme")), "superagent: appearance");
   shadow("main.conversation", ProductSurface);
-  shadow("sidebar.workspaces", MainNavigation);
-  shadow("sidebar.brand.name", () => (0, import_react27.createElement)("span", null, "DS-SuperAgent"));
-  shadow("sidebar.brand.mark", ProductBrandMark);
 }
 function redactObservationText(value) {
   return String(value).replace(/\b(Bearer\s+)[A-Za-z0-9._~+\x2f-]+=*/giu, "$1[redacted]").replace(/\b(api[_-]?key|token|secret|password)(\s*[:=]\s*)[^\s,;]+/giu, "$1$2[redacted]");
@@ -15634,12 +19605,12 @@ var PRODUCT_CSS = `
 .bt-main-connect-body input:focus-visible{outline:2px solid var(--bt-accent);outline-offset:1px}
 .bt-main-connect-body p{margin:4px 0;overflow-wrap:anywhere}
 .bt-main-connect-body button{min-height:36px}
-.bt-main-client-form{display:flex;align-items:flex-end;flex-wrap:wrap;gap:8px;padding:10px 12px;font-size:12px}
+.bt-main-client-form{display:flex;align-items:flex-end;flex-wrap:wrap;gap:8px;padding:10px 12px;font-size:var(--bt-font-small)}
 .bt-main-client-form label{align-self:center;color:var(--bt-ink-2)}
 .bt-main-client-form input{max-width:190px}.bt-main-client-form select{max-width:170px}
-.bt-main-client-issued{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 12px;border-top:1px solid var(--bt-line);font-size:12px}
-.bt-main-client-issued p{width:100%;margin:0}.bt-main-client-issued input{max-width:300px;min-width:0;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card);color:var(--bt-ink);padding:8px}
-.bt-main-client-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border-top:1px solid var(--bt-line);font-size:12px}
+.bt-main-client-issued{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 12px;border-top:1px solid var(--bt-line);font-size:var(--bt-font-small)}
+.bt-main-client-issued p{width:100%;margin:0}.bt-main-client-issued input{max-width:300px;min-width:0;border:1px solid var(--bt-line);border-radius:var(--bt-radius-input);background:var(--bt-card);color:var(--bt-ink);padding:8px}
+.bt-main-client-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border-top:1px solid var(--bt-line);font-size:var(--bt-font-small)}
 .bt-main-client-row>div{min-width:0;display:flex;flex-direction:column;gap:2px}.bt-main-client-row span{color:var(--bt-ink-2);overflow-wrap:anywhere}
 .bt-main-health-warning{margin:0;padding:8px 24px;border-bottom:.5px solid var(--bt-line-2);background:var(--bt-card);color:var(--bt-danger);font-size:12px;line-height:18px}
 .bt-main-settings{margin-left:2px}

@@ -1,5 +1,6 @@
 import { createElement as h, useEffect, useId, useRef, useState } from 'react'
 import { Card, Row } from './product-card.js'
+import { EmptyState, InlineNotice, StatusChip } from './product-settings-components.js'
 import { t } from './i18n.js'
 
 const scopeLabel = scope => scope.kind === 'main' ? t('Main')
@@ -322,9 +323,9 @@ export function ProductMemorySettings({ binding, works, call }) {
     finally { setImportBusy(false) }
   }
 
-  return h('div', { className: 'bt-product-memory' },
-    error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
-    notice ? h('p', { className: 'bt-main-status', role: 'status' }, notice) : null,
+  return h('div', { className: 'bt-ps-content bt-product-memory' },
+    error ? h(InlineNotice, { tone: 'danger' }, error) : null,
+    notice ? h(InlineNotice, { tone: 'success' }, notice) : null,
     h(Card, { title: t('Side query') },
       h('form', { className: 'bt-product-memory-form', onSubmit: sideSearch },
         h('select', { value: sideKind, 'aria-label': t('Reader'), onChange: event => { setSideKind(event.target.value); clearSide() } },
@@ -351,7 +352,7 @@ export function ProductMemorySettings({ binding, works, call }) {
         h('button', { type: 'submit', className: 'bt-soft' }, t('Search'))),
       items.length ? h('ul', { className: 'bt-product-memory-list' }, items.map(entry => h(ProductMemoryEntryRow, {
         key: entry.id, entry: { ...entry, source: 'memory panel' }, open, remove,
-      }))) : h('p', null, t('Nothing saved yet')),
+      }))) : h(EmptyState, { title: t('Nothing saved yet') }),
       cursor ? h('button', { type: 'button', className: 'bt-soft', onClick: () => void loadMore() }, t('Load more')) : null,
       selected ? h('section', { className: 'bt-product-memory-detail', 'aria-label': t('Full detail') },
         h('strong', null, scopeLabel(selected.scope)),
@@ -395,7 +396,7 @@ export function ProductMemorySettings({ binding, works, call }) {
               onChange: event => updateImportChoice(item.sourceId, { checked: event.target.checked }) }),
             h('strong', null, item.sourceId),
             h('span', null, `${t('Original scope')}: ${originalScopeLabel(item.originalScope)}`),
-            h('span', { className: `bt-product-memory-import-status is-${item.status}` },
+            h(StatusChip, { tone: ['conflict', 'rejected'].includes(item.status) ? 'danger' : 'neutral' },
               importStatusLabel(item.status), item.reason ? ` · ${t(item.reason)}` : '')),
             item.text ? h('pre', null, item.text) : h('p', null, t('Rejected item content is not retained.')),
             item.status === 'imported' ? h('p', null, `${t('Imported to')}: ${scopeLabel(item.target)}`) : null,
@@ -459,38 +460,35 @@ export function ProductMemorySettings({ binding, works, call }) {
         t(access.enabled ? 'Revoke Worker access' : 'Grant Worker access')) : null),
     h(Card, { title: t('Learning proposals') }, proposals.length
       ? proposals.map(proposal => h(ProductMemoryProposalCard, { key: proposal.id, proposal, onAnswer: decide }))
-      : h('p', null, t('No learning proposals are waiting for review.'))))
+      : h(EmptyState, { title: t('No learning proposals are waiting for review.') })))
 }
 
 export const PRODUCT_MEMORY_CSS = `
-.bt-product-memory{display:flex;flex-direction:column;gap:12px}
-.bt-product-memory p{font-size:12px;line-height:18px;color:var(--bt-ink-2)}
+.bt-product-memory p:not(.bt-ps-empty p){font-size:var(--bt-ps-small);line-height:18px;color:var(--bt-ink-2)}
 .bt-product-memory-form{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0}
-.bt-product-memory-form label{display:inline-flex;align-items:center;gap:5px;font-size:12px;overflow-wrap:anywhere}
-.bt-product-memory select,.bt-product-memory input[type=search],.bt-product-memory textarea{min-width:0;max-width:100%;box-sizing:border-box;padding:7px;border:1px solid var(--bt-line);border-radius:6px;background:var(--bt-main);color:var(--bt-ink);font:inherit}
+.bt-product-memory-form label:not(.bt-ps-row){display:inline-flex;align-items:center;gap:5px;font-size:var(--bt-ps-small);overflow-wrap:anywhere}
+.bt-product-memory select,.bt-product-memory input[type=search],.bt-product-memory textarea{min-width:0;max-width:100%;box-sizing:border-box;padding:7px;border:1px solid var(--bt-line);border-radius:var(--bt-ps-radius-control);background:var(--bt-card);color:var(--bt-ink);font:inherit}
 .bt-product-memory textarea{width:100%;min-height:72px;resize:vertical}
-.bt-product-memory-detail{padding:10px 0;border-top:1px solid var(--bt-line-2);font-size:12px}
+.bt-product-memory-detail{padding:10px 0;border-top:1px solid var(--bt-line-2);font-size:var(--bt-ps-small)}
 .bt-product-memory-detail pre{max-height:240px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
 .bt-product-memory-list{display:flex;flex-direction:column;gap:7px;margin:0;padding:0;list-style:none}
-.bt-product-memory-entry{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:9px;border:1px solid var(--bt-line);border-radius:6px}
+.bt-product-memory-entry{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:9px;border:1px solid var(--bt-line);border-radius:var(--bt-ps-radius-small)}
 .bt-product-memory-entry>div{flex:1;min-width:180px;display:flex;flex-direction:column;gap:3px}
-.bt-product-memory-entry-text{font-size:12px;line-height:17px;overflow-wrap:anywhere}
-.bt-product-memory-entry-meta{font-size:11px;color:var(--bt-ink-3)}
-.bt-product-memory-proposal{display:flex;flex-direction:column;gap:7px;padding:10px;border:1px solid var(--bt-line);border-radius:6px}
+.bt-product-memory-entry-text{font-size:var(--bt-ps-small);line-height:17px;overflow-wrap:anywhere}
+.bt-product-memory-entry-meta{font-size:var(--bt-ps-caption);color:var(--bt-ink-2)}
+.bt-product-memory-proposal{display:flex;flex-direction:column;gap:7px;padding:10px}
 .bt-product-memory-proposal h4,.bt-product-memory-proposal p{margin:0}
-.bt-product-memory-proposal pre{max-height:240px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:7px;border-radius:6px;background:var(--bt-hover);font-size:12px}
+.bt-product-memory-proposal pre{max-height:240px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:7px;border-radius:var(--bt-ps-radius-small);background:var(--bt-hover);font-size:var(--bt-ps-small)}
 .bt-product-memory-error{color:var(--bt-danger)}
-.bt-product-memory-import-file{display:flex;flex-direction:column;gap:6px;font-size:12px}
+.bt-product-memory-import-file{display:flex;flex-direction:column;gap:6px;font-size:var(--bt-ps-small)}
 .bt-product-memory-import{display:flex;flex-direction:column;gap:10px;margin-top:10px}
-.bt-product-memory-import-meta{display:flex;flex-direction:column;gap:4px;padding:9px;border:1px solid var(--bt-line);border-radius:6px;font-size:12px;overflow-wrap:anywhere}
+.bt-product-memory-import-meta{display:flex;flex-direction:column;gap:4px;padding:9px;border:1px solid var(--bt-line);border-radius:var(--bt-ps-radius-small);font-size:var(--bt-ps-small);overflow-wrap:anywhere}
 .bt-product-memory-import-items{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
-.bt-product-memory-import-items>li{padding:10px;border:1px solid var(--bt-line);border-radius:6px}
-.bt-product-memory-import-head{display:flex;flex-wrap:wrap;align-items:center;gap:7px;font-size:12px}
+.bt-product-memory-import-items>li{padding:10px;border:1px solid var(--bt-line);border-radius:var(--bt-ps-radius-small)}
+.bt-product-memory-import-head{display:flex;flex-wrap:wrap;align-items:center;gap:7px;font-size:var(--bt-ps-small)}
 .bt-product-memory-import-head pre{width:100%;max-height:180px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin:2px 0}
-.bt-product-memory-import-sharing{display:flex;flex-wrap:wrap;gap:7px;margin:0;padding:7px;border:1px solid var(--bt-line);border-radius:6px}
-.bt-product-memory-import-sharing legend{padding:0 4px;font-size:12px}
-.bt-product-memory-import-sharing label{display:inline-flex;align-items:center;gap:4px;font-size:12px}
-.bt-product-memory-import-status{padding:2px 6px;border-radius:999px;background:var(--bt-line-2)}
-.bt-product-memory-import-status.is-conflict,.bt-product-memory-import-status.is-rejected{color:var(--bt-danger)}
+.bt-product-memory-import-sharing{display:flex;flex-wrap:wrap;gap:7px;margin:0;padding:7px;border:1px solid var(--bt-line);border-radius:var(--bt-ps-radius-small)}
+.bt-product-memory-import-sharing legend{padding:0 4px;font-size:var(--bt-ps-small)}
+.bt-product-memory-import-sharing label{display:inline-flex;align-items:center;gap:4px;font-size:var(--bt-ps-small)}
 .bt-product-memory button:focus-visible,.bt-product-memory select:focus-visible,.bt-product-memory input:focus-visible,.bt-product-memory textarea:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 `

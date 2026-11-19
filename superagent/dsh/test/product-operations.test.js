@@ -43,10 +43,11 @@ test('the existing operations page installs, backs up and restores without sendi
   }
   const call = async endpoint => { calls.push(endpoint); return endpoint === 'product-status' ? status : usage }
   const root = createRoot(dom.window.document.querySelector('#root'))
+  const render = async section => React.act(async () => root.render(React.createElement(module.exports.ProductOperationsSettings, {
+    binding: { instanceId: 'local' }, call, app, section, onNavigate() {},
+  })))
   try {
-    await React.act(async () => root.render(React.createElement(module.exports.ProductOperationsSettings, {
-      binding: { instanceId: 'local' }, call, app, onNavigate() {},
-    })))
+    await render()
     const button = label => [...dom.window.document.querySelectorAll('button')].find(item => item.textContent === label)
     await React.act(async () => button('Install and restart').click())
     await React.act(async () => button('Create backup').click())
@@ -57,6 +58,20 @@ test('the existing operations page installs, backs up and restores without sendi
     assert.deepEqual(backupCalls, ['install', 'create', 'restore:backup-1'])
     assert.deepEqual([...new Set(calls)].sort(), ['product-status', 'product-usage'])
     assert.match(dom.window.document.body.textContent, /recent Main, Router and Worker Sessions/u)
+
+    calls.length = 0
+    await render('usage')
+    assert.deepEqual(calls, ['product-usage'])
+    assert.match(dom.window.document.body.textContent, /Token usage by role/u)
+    assert.equal(button('Create backup'), undefined)
+    assert.equal(button('Install and restart'), undefined)
+
+    calls.length = 0
+    await render('status')
+    assert.deepEqual(calls, ['product-status'])
+    assert.doesNotMatch(dom.window.document.body.textContent, /Token usage by role/u)
+    assert.ok(button('Create backup'))
+    assert.ok(button('Download diagnostic summary'))
   } finally {
     await React.act(async () => root.unmount())
     dom.window.close()

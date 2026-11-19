@@ -64,6 +64,8 @@ try {
       if (request.model === 'main') {
         const user = request.messages.filter(message => message.role === 'user').at(-1)
         const text = user?.content?.filter(block => block.type === 'text').map(block => block.text).join('') ?? ''
+        if (text === 'Hello from the browser check.') { yield* textResponse('Main answered the browser check.'); return }
+        if (text === 'Wait for the browser to stop this reply.') await sleep(20000, undefined, { signal: request.signal })
         if (text.startsWith('[Work update]')) {
           const notification = JSON.parse(text.split('\n').at(-1))
           yield* textResponse(notification.outcome?.summary ?? notification.update.summary)
@@ -136,6 +138,10 @@ try {
   assert.deepEqual(history.works.map(work => work.outcome.artifacts[0].path).sort(), ['profile-alpha.txt', 'profile-beta.txt'], JSON.stringify({ works: history.works, modelCalls }, null, 2))
   assert.equal(await readFile(join(workspace, 'profile-alpha.txt'), 'utf8'), 'profile-alpha.txt written and verified\n')
   assert.equal(await readFile(join(workspace, 'profile-beta.txt'), 'utf8'), 'profile-beta.txt written and verified\n')
+  if (process.argv.includes('--check-ui')) {
+    const { checkProductUi } = await import('./check-superagent-ui.mjs')
+    await checkProductUi(ctx)
+  }
   const observations = await ctx.superagentProduct.dispatch('observe-list', { instanceId: binding.instanceId, limit: 10 })
   assert.equal(observations.items.length, 3, JSON.stringify({ observations, modelCalls }, null, 2))
   const workerObservation = observations.items.find(item => item.role === 'worker' && item.title.includes('alpha'))

@@ -4,9 +4,8 @@ import { MainComposer } from './composer.js'
 import { plainSpeech } from './product-speech.js'
 import { readProductArtifact, readProductAttachment, uploadPayload, uploadWithRetry } from './product-attachments.js'
 import { FeishuSourceStatus } from './product-feishu.js'
-import { ProductBrandMark } from './product-brand.js'
 import { Card, Row } from './product-card.js'
-import { ClockIcon, CloseIcon, GaugeIcon, GlobeIcon, MemoryIcon, SlidersIcon } from './icons.js'
+import { CloseIcon, SlidersIcon } from './icons.js'
 import { ProductScheduleSettings, PRODUCT_SCHEDULE_CSS } from './product-schedules.js'
 import { ProductProactiveSettings, ProactiveReview, PRODUCT_PROACTIVE_CSS } from './product-proactive.js'
 import { ProductPresetSettings, PRODUCT_PRESET_CSS } from './product-presets.js'
@@ -15,41 +14,30 @@ import { ProductMemorySettings, PRODUCT_MEMORY_CSS } from './product-memory.js'
 import { ProductSupervisionSettings, PRODUCT_SUPERVISION_CSS } from './product-supervision.js'
 import { FolderMenu, FOLDER_CSS } from './folder-menu.js'
 import { createSource } from './sources.js'
-import { mergeMessages, mergeObservationItems, rebaseRoleDraft } from './product-state.js'
+import { mergeMessages, mergeObservationItems, projectTurnCards, rebaseRoleDraft } from './product-state.js'
 import { installLocale, t } from './i18n.js'
-import { allThemes, themeCss } from './themes.js'
-import { SHELL_CSS, CONVERSATION_CSS, installCompiledStyles, installStyles } from './styles.js'
+import { AppearanceSettings, installAppearance } from './appearance.js'
+import { SettingsShell, SETTINGS_CHILDREN, SETTINGS_SHELL_CSS, installSettingsSections } from './settings-shell.js'
+import { SettingsSectionState } from './settings-sections.js'
+import { ABOUT_SETTINGS_SECTION } from './settings-about.js'
+import { installProductShell } from './product-shell.js'
+import { SHELL_CSS, CONVERSATION_CSS, installCompiledStyles } from './styles.js'
 import { ProductMcpSettings } from './product-mcp-settings.js'
 import { ProductBrowserSettings, PRODUCT_BROWSER_CSS } from './product-browser-settings.js'
 import { ProductExecutionSettings, PRODUCT_EXECUTION_CSS } from './product-execution.js'
 import { ProductWorkView } from './product-work-view.js'
 import { ProductOperationsSettings, PRODUCT_OPERATIONS_CSS } from './product-operations.js'
+import { PRODUCT_SETTINGS_CSS } from './product-settings-css.js'
+import { call, productCall } from './api.js'
+export { productCall } from './api.js'
 
 const clientBridge = () => window.dsSuperagentApp?.productClient
-let activeHost = 'local'
 
 function offerDownload(data, name, mediaType = 'application/octet-stream') {
   const url = URL.createObjectURL(new Blob([data], { type: mediaType }))
   const link = document.createElement('a')
   link.href = url; link.download = name; link.click()
   setTimeout(() => URL.revokeObjectURL(url), 10000)
-}
-
-export async function productCall(endpoint, payload = {}) {
-  const bridge = clientBridge()
-  if (activeHost === 'remote') {
-    if (!bridge) throw new Error(t('The remote Host connection is unavailable.'))
-    return bridge.call(endpoint, payload)
-  }
-  if (bridge && (await bridge.status()).connected) {
-    activeHost = 'remote'
-    return bridge.call(endpoint, payload)
-  }
-  const response = await fetch('api/product', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint, payload }) })
-  let result
-  try { result = await response.json() } catch { throw new Error(t('Could not reach Main. Check that the app is running.')) }
-  if (!response.ok || !result.ok) throw Object.assign(new Error(t(result.error?.message ?? 'Main is unavailable.')), { code: result.error?.code })
-  return result.value
 }
 
 const rolesNeedingModels = ({ roles, providers }) => ['main', 'router', 'worker'].filter(role => {
@@ -63,6 +51,7 @@ export function applyProduct(ctx) {
   const view = createSource({
     binding: null,
     messages: [],
+    readReplyId: null,
     works: [],
     activeTurn: null,
     health: null,
@@ -92,6 +81,7 @@ export function applyProduct(ctx) {
     activityLoading: false,
     activityError: null,
     settingsOpen: false,
+    settingsPage: null,
     connection: null,
     connectOpen: false,
     directoryOptions: null,
@@ -112,7 +102,10 @@ export function applyProduct(ctx) {
     try {
       const page = await productCall('history', { instanceId: binding.instanceId, limit: 100 })
       if (!stopped) view.set(state => {
-        return { ...state, binding, messages: mergeMessages(state.messages, page.messages),
+        const messages = mergeMessages(state.messages, page.messages)
+        const lastReply = messages.findLast(message => message.role === 'main')
+        const reading = state.route === 'main' && document.hasFocus() && document.visibilityState !== 'hidden'
+        return { ...state, binding, messages, readReplyId: reading ? lastReply?.id ?? null : state.readReplyId,
           works: page.works ?? state.works,
           activeTurn: page.activeTurn ?? null,
           health: page.health ?? state.health,
@@ -147,8 +140,8 @@ export function applyProduct(ctx) {
       return { team: options.default?.root ?? null, picker: options.picker,
         folders: options.directories.map(directory => ({ path: directory.root, title: directory.title })) }
     },
-    folderPick: () => productCall('directory-pick', { instanceId: binding.instanceId }),
-    folderList: path => productCall('directory-list', { instanceId: binding.instanceId, ...(path ? { path } : {}) }),
+    folderPick: () => call('folder-pick'),
+    folderList: path => call('folder-list', { path }),
   })
 
   const registerDirectory = (binding, path) => productCall('directory-register', {
@@ -276,12 +269,11 @@ export function applyProduct(ctx) {
       if (previous && (previous.connected !== connection.connected
         || previous.connected && (previous.address !== connection.address || previous.instanceId !== connection.instanceId
           || previous.client.id !== connection.client.id))) { location.reload(); return }
-      if (connection.connected) activeHost = 'remote'
       if (!stopped) view.set(state => ({ ...state, connection }))
       if (connection.connected) await bridge.events()
       const current = view.getSnapshot()
       const binding = current.binding ?? await productCall('open')
-      if (current.route === 'main') await refreshMain(binding)
+      await refreshMain(binding)
       if (!connection.connected && !current.binding) {
         void productCall('settings', { instanceId: binding.instanceId, limit: 1 }).then(snapshot => {
           if (!stopped) view.set(state => ({ ...state, modelsNeedSetup: state.modelsNeedSetup ?? (rolesNeedingModels(snapshot).length > 0) }))
@@ -767,12 +759,34 @@ export function applyProduct(ctx) {
   function MainConversation() {
     const state = useView()
     const canCommand = !state.connection?.connected || state.connection.capabilities.includes('command')
+    const turnCards = projectTurnCards(state)
+    const renderCards = cards => cards ? h(Fragment, null,
+      cards.sources.map(source => h(MainSourceCard, { key: source.id, source, instanceId: state.binding?.instanceId, onRefresh: refresh, canCommand })),
+      cards.preparations.map(preparation => h(MainPreparationCard, { key: preparation.id, preparation })),
+      cards.works.map(work => h(MainWorkCard, { key: work.brief.workItemId ?? work.brief.id, work,
+        onEvidence: selected => { if (state.binding) void loadMainEvidence(state.binding, selected) } }))) : null
     const [sending, setSending] = useState(false)
     const [sendError, setSendError] = useState(null)
     const [attachments, setAttachments] = useState([])
     const [uploading, setUploading] = useState(false)
     const [speakingId, setSpeakingId] = useState(null)
     useEffect(() => () => window.speechSynthesis?.cancel(), [])
+    useEffect(() => {
+      const acknowledge = () => {
+        if (!document.hasFocus() || document.visibilityState === 'hidden') return
+        view.set(current => {
+          const readReplyId = current.messages.findLast(message => message.role === 'main')?.id ?? null
+          return current.readReplyId === readReplyId ? current : { ...current, readReplyId }
+        })
+      }
+      acknowledge()
+      window.addEventListener('focus', acknowledge)
+      document.addEventListener('visibilitychange', acknowledge)
+      return () => {
+        window.removeEventListener('focus', acknowledge)
+        document.removeEventListener('visibilitychange', acknowledge)
+      }
+    }, [])
     const bottom = useRef(null)
     const pending = useRef(null)
     const scroll = useRef(null)
@@ -882,10 +896,9 @@ export function applyProduct(ctx) {
     const stopping = state.activeTurn?.status === 'stopping'
     const stop = async () => {
       if (!state.binding || !state.activeTurn) return
-      const commandId = crypto.randomUUID()
       try {
         setSendError(null)
-        await productCall('stop-main', { instanceId: state.binding.instanceId, commandId, messageId: state.activeTurn.messageId })
+        await call('stop-chat', { botId: state.binding.mainId, messageId: state.activeTurn.messageId })
         await refreshMain(state.binding)
       } catch (error) {
         setSendError(error.message)
@@ -940,7 +953,7 @@ export function applyProduct(ctx) {
           ? t('No remote Environment is available. This work will wait for an eligible device.')
           : t('New work uses this Environment. Active work keeps its original binding.'))) : null
     return h('section', { className: 'bt-main-conversation', 'aria-label': 'Main' },
-      h('header', { className: 'bt-main-header' }, h(ProductBrandMark, { size: 28 }), h('span', null, 'Main'),
+      h('header', { className: 'bt-main-header' }, h(Header),
         h('span', { className: `bt-main-health bt-main-health-${state.health?.state ?? 'ready'}`, role: 'status' },
           state.modelsNeedSetup && state.health?.state !== 'running' ? t('Models need setup') : mainHealthCopy(state.health)),
         state.health?.queuedInputs ? h('span', { className: 'bt-main-health-detail' },
@@ -950,7 +963,7 @@ export function applyProduct(ctx) {
         clientBridge() ? h('button', { type: 'button', className: 'bt-soft', onClick: () => view.set(current => ({ ...current, connectOpen: true })) },
           state.connection?.connected ? t('Connection') : t('Connect to Host')) : null,
         !state.connection?.connected ? h('button', { type: 'button', className: 'bt-icon-btn bt-main-settings', title: t('Settings'),
-          'aria-label': t('Settings'), onClick: () => view.set(current => ({ ...current, settingsOpen: true })) }, h(SlidersIcon)) : null),
+          'aria-label': t('Settings'), onClick: () => shellActions.openSettings() }, h(SlidersIcon)) : null),
       state.modelsNeedSetup ? h('p', { className: 'bt-main-health-warning', role: 'alert' },
         t('Open Settings to select models for Main, Router and Worker.'))
         : state.health?.state === 'degraded' ? h('p', { className: 'bt-main-health-warning', role: 'alert' },
@@ -983,13 +996,10 @@ export function applyProduct(ctx) {
                     disabled: Boolean(state.connection?.connected), onClick: () => void downloadAttachment(attachment) },
                   `${t('Download')} ${attachment.name} · ${attachment.bytes} ${t('bytes')}`))) : null,
                 message.status === 'failed' ? h('p', { className: 'bt-main-error', role: 'status' },
-                  t('Main could not finish this reply. Your message is saved.')) : null))),
+                  t('Main could not finish this reply. Your message is saved.')) : null),
+            renderCards(turnCards.byMessage.get(message.id)))),
           !state.connection?.connected ? h(FeishuSourceStatus, { instanceId: state.binding?.instanceId, call: productCall }) : null,
-          state.sources.map(source => h(MainSourceCard, { key: source.id, source, instanceId: state.binding?.instanceId,
-            onRefresh: refresh, canCommand })),
-          state.preparations.map(preparation => h(MainPreparationCard, { key: preparation.id, preparation })),
-          state.works.map(work => h(MainWorkCard, { key: work.brief.workItemId ?? work.brief.id, work,
-            onEvidence: selected => { if (state.binding) void loadMainEvidence(state.binding, selected) } })),
+          renderCards(turnCards.unplaced),
           state.mainEvidenceError && !state.mainEvidence
             ? h('p', { role: 'alert', className: 'bt-main-error' }, state.mainEvidenceError) : null,
           state.mainEvidence ? h('section', { className: 'bt-main-evidence', 'aria-label': t('Original request evidence') },
@@ -1033,12 +1043,6 @@ export function applyProduct(ctx) {
         void loadObservationDetail(state.binding, state.selectedObservation, detailId, { append })
       }
     }
-    const backToMain = () => {
-      view.set(current => ({ ...current, route: 'main', selectedObservation: null, observationGeneration: null,
-        observation: null, observationError: null, observationDetail: null, observationDetailError: null }))
-      void refresh()
-      setTimeout(() => document.querySelector('#main-message, .bt-main-composer textarea')?.focus(), 0)
-    }
     const copy = async () => {
       if (!observation || !state.binding) return
       try {
@@ -1061,14 +1065,15 @@ export function applyProduct(ctx) {
     }
     return h('section', { className: 'bt-observation', 'aria-label': t('Read-only work activity') },
       h('header', { className: 'bt-observation-header' },
-        h('button', { type: 'button', className: 'bt-soft', onClick: backToMain }, t('Back to Main')),
+        h(Header),
         h('div', { className: 'bt-observation-heading' },
           h('span', { className: 'bt-observation-role' }, observation?.role === 'router' ? 'Router' : 'Worker'),
           h('strong', null, observation?.title ?? state.selectedObservation?.title ?? '')),
         h('span', { className: 'bt-observation-readonly' }, t('Read-only')),
         !state.connection?.connected ? h('button', { type: 'button', className: 'bt-icon-btn', title: t('Settings'), 'aria-label': t('Settings'),
-          onClick: () => view.set(current => ({ ...current, settingsOpen: true })) }, h(SlidersIcon)) : null),
+          onClick: () => shellActions.openSettings() }, h(SlidersIcon)) : null),
       h('div', { className: 'bt-observation-body' },
+        h(ActivityNavigation),
         state.observationLoading && !observation ? h('p', { role: 'status', className: 'bt-main-status' }, t('Loading history…')) : null,
         state.observationError ? h('p', { role: 'alert', className: 'bt-main-error' }, state.observationError) : null,
         observation ? h('div', { className: 'bt-observation-content' },
@@ -1141,7 +1146,7 @@ export function applyProduct(ctx) {
             } }, t('Load more history')) : null)) : null))
   }
 
-  function MainNavigation() {
+  function ActivityNavigation() {
     const state = useView()
     const [search, setSearch] = useState(state.observationQuery)
     const timer = useRef(null)
@@ -1155,17 +1160,7 @@ export function applyProduct(ctx) {
         void loadObservations(state.binding, { reset: true })
       }, 180)
     }
-    return h('nav', { className: 'bt-main-nav', 'aria-label': t('Work navigation') },
-      h('button', { type: 'button', className: 'bt-soft', 'aria-current': state.route === 'main' ? 'page' : undefined,
-        onClick: () => {
-          view.set(current => ({ ...current, route: 'main', selectedObservation: null, observationGeneration: null,
-            observation: null, observationError: null, observationDetail: null, observationDetailError: null }))
-          void refresh()
-          setTimeout(() => document.querySelector('#main-message, .bt-main-composer textarea')?.focus(), 0)
-        } }, h(ProductBrandMark, { size: 24 }), 'Main'),
-      clientBridge() ? h('button', { type: 'button', className: 'bt-soft',
-        onClick: () => view.set(current => ({ ...current, connectOpen: true })) },
-        state.connection?.connected ? `${t('Remote Host')} · ${state.connection.client.label}` : t('Connect to Host')) : null,
+    return h('nav', { className: 'bt-main-nav', 'aria-label': t('Work activity') },
       h('div', { className: 'bt-observation-search' },
         h('label', { htmlFor: 'work-observation-search' }, t('Find activity')),
         h('input', { id: 'work-observation-search', type: 'search', value: search, placeholder: t('Search Router and Worker history'),
@@ -1255,8 +1250,7 @@ export function applyProduct(ctx) {
           onClick: () => { void revoke(client) } }, t('Revoke')))))
   }
 
-  function SettingsDialog({ binding, onClose }) {
-    const [page, setPage] = useState('roles')
+  function SettingsDialog({ binding, onClose, open, initialPage, renderSlot }) {
     const viewState = useView()
     const [snapshot, setSnapshot] = useState(null)
     const [draft, setDraft] = useState(null)
@@ -1420,20 +1414,7 @@ export function applyProduct(ctx) {
       } catch (failure) { view.set(current => ({ ...current, directoryError: failure.message })); await loadDirectories(binding).catch(() => {}) }
       finally { view.set(current => ({ ...current, directoryBusy: false })) }
     }
-    const close = h('button', { type: 'button', className: 'bt-settings-close', 'aria-label': t('Close settings'), onClick: onClose }, h(CloseIcon))
-    if (loading && !draft) return h('div', { className: 'bt-settings-layer' },
-      h('div', { className: 'bt-scrim', onMouseDown: onClose }),
-      h('div', { className: 'bt-settings bt-main-settings-dialog', role: 'dialog', 'aria-modal': true, 'aria-label': t('Super-agent settings') },
-        h('div', { className: 'bt-settings-main' }, h('div', { className: 'bt-settings-head' }, h('h2', null, t('Super-agent settings'))),
-          h('div', { className: 'bt-settings-scroll' }, h('p', { className: 'bt-main-status', role: 'status' }, t('Loading configuration…')))),
-        close))
-    if (!draft) return h('div', { className: 'bt-settings-layer' },
-      h('div', { className: 'bt-scrim', onMouseDown: onClose }),
-      h('div', { className: 'bt-settings bt-main-settings-dialog', role: 'dialog', 'aria-modal': true, 'aria-label': t('Super-agent settings') },
-        h('div', { className: 'bt-settings-main' }, h('div', { className: 'bt-settings-head' }, h('h2', null, t('Super-agent settings'))),
-          h('div', { className: 'bt-settings-scroll' }, h('p', { className: 'bt-main-error', role: 'alert' }, error ?? t('Configuration is unavailable.')))),
-        close))
-    const models = snapshot.providers.flatMap(provider => provider.models)
+    const models = snapshot?.providers.flatMap(provider => provider.models) ?? []
     const viewWork = ({ ticketIds = [], workBriefId } = {}) => {
       onClose()
       view.set(current => ({ ...current, route: 'main' }))
@@ -1448,62 +1429,14 @@ export function applyProduct(ctx) {
         })
       })
     }
-    return h('div', { className: 'bt-settings-layer' },
-      h('div', { className: 'bt-scrim', onMouseDown: onClose }),
-      h('div', { className: 'bt-settings bt-main-settings-dialog', role: 'dialog', 'aria-modal': true, 'aria-label': t('Super-agent settings') },
-        h('nav', { className: 'bt-settings-nav', 'aria-label': t('Settings pages') },
-          h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
-            'aria-current': page === 'roles' ? 'page' : undefined, onClick: () => setPage('roles') }, h(SlidersIcon), t('Roles and providers')),
-          h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
-            'aria-current': page === 'execution' ? 'page' : undefined, onClick: () => setPage('execution') }, h(GlobeIcon), t('Execution')),
-          h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
-            'aria-current': page === 'schedules' ? 'page' : undefined, onClick: () => setPage('schedules') }, h(ClockIcon), t('Scheduled tasks')),
-          h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
-            'aria-current': page === 'preparations' ? 'page' : undefined, onClick: () => setPage('preparations') }, h(ClockIcon), t('Proactive preparation')),
-          h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
-            'aria-current': page === 'presets' ? 'page' : undefined, onClick: () => setPage('presets') }, h(SlidersIcon), t('Role presets')),
-          h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
-            'aria-current': page === 'memory' ? 'page' : undefined, onClick: () => setPage('memory') }, h(MemoryIcon), t('Memory')),
-          !viewState.connection?.connected ? h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
-            'aria-current': page === 'browser' ? 'page' : undefined, onClick: () => setPage('browser') }, h(GlobeIcon), t('Browser resources')) : null,
-          !viewState.connection?.connected ? h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
-            'aria-current': page === 'supervision' ? 'page' : undefined, onClick: () => setPage('supervision') }, h(SlidersIcon), t('Supervision')) : null,
-          h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
-            'aria-current': page === 'operations' ? 'page' : undefined, onClick: () => setPage('operations') }, h(GaugeIcon), t('Status and usage')),
-          h('span', { className: 'bt-main-settings-revision' }, `${t('Configuration')} v${snapshot.revision}`)),
-        h('div', { className: 'bt-settings-main' },
-          h('div', { className: 'bt-settings-head' }, h('h2', null, page === 'execution' ? t('Execution')
-            : page === 'schedules' ? t('Scheduled tasks')
-            : page === 'presets' ? t('Role presets') : page === 'preparations' ? t('Proactive preparation')
-              : page === 'memory' ? t('Memory') : page === 'browser' ? t('Browser resources')
-                : page === 'supervision' ? t('Supervision') : page === 'operations' ? t('Status and usage') : t('Super-agent settings'))),
-          h('div', { className: 'bt-settings-scroll' },
-            page === 'execution' ? h(ProductExecutionSettings, { binding, call: productCall,
-              onChanged: () => { void loadDirectories(binding) } })
-              : page === 'schedules' ? h(ProductScheduleSettings, { binding, works: view.getSnapshot().works, call: productCall,
-              onViewWork: viewWork })
-              : page === 'preparations' ? h(ProductProactiveSettings, { binding, call: productCall })
-              : page === 'presets' ? h(ProductPresetSettings, { binding, call: productCall,
-                settingsRevision: snapshot.revision, roleSettings: snapshot, onApplied: refreshAfterPreset, onReload: refreshAfterPreset })
-                : page === 'memory' ? h(ProductMemorySettings, { key: binding.instanceId, binding, works: view.getSnapshot().works, call: productCall })
-                : page === 'browser' ? h(ProductBrowserSettings, { binding, works: view.getSnapshot().works,
-                  directoryOptions: viewState.directoryOptions, call: productCall, browserBridge: globalThis.dsSuperagentApp?.browser })
-                : page === 'supervision' ? h(ProductSupervisionSettings, { binding, call: productCall })
-                  : page === 'operations' ? h(ProductOperationsSettings, { binding, call: productCall,
-                    onNavigate: next => setPage(next) }) : h(Fragment, null,
+    const loadingSettings = h(SettingsSectionState, { status: loading ? 'loading' : 'error', message: error })
+    const roles = draft ? h(Fragment, null,
             error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
             viewState.directoryError ? h('p', { className: 'bt-main-error', role: 'alert' }, viewState.directoryError) : null,
             conflict ? h('div', { className: 'bt-main-settings-conflict', role: 'status' },
               h('p', null, t('Newer settings exist. Rebase only your changed fields, then review and save.')),
               h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: saving, onClick: () => { void rebase() } }, t('Rebase my edits'))) : null,
             notice ? h('p', { className: 'bt-main-status', role: 'status' }, notice) : null,
-            viewState.directoryOptions?.default ? h(Card, { title: t('Work directories') },
-              h(Row, { label: t('Instance default directory'), hint: t('New work starts here unless you choose a work directory in Main.') },
-                h(FolderMenu, { value: viewState.directoryOptions.default.root, team: true,
-                  label: t('Instance default directory'), actions: directoryActions(binding),
-                  run: promise => void Promise.resolve(promise).catch(failure =>
-                    view.set(current => ({ ...current, directoryError: failure.message }))),
-                  onPick: chooseDefaultDirectory, disabled: viewState.directoryBusy }))) : null,
             models.length === 0 ? h('p', { className: 'bt-main-health-warning', role: 'alert' },
               t('No models are available. Configure a provider in DSH settings, then reopen this panel to select the role models.'))
               : rolesNeedingModels({ roles: draft, providers: snapshot.providers }).length ? h('p', { className: 'bt-main-health-warning', role: 'alert' },
@@ -1537,6 +1470,16 @@ export function applyProduct(ctx) {
               h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: saving, onClick: onClose }, t('Cancel')),
               h('button', { type: 'button', className: 'bt-send bt-soft bt-soft-sm', disabled: saving, onClick: () => { void save() } },
                 saving ? t('Saving…') : t('Save configuration'))),
+            h(Card, { title: t('Recent configuration uses') },
+              snapshot.uses.length ? snapshot.uses.slice(0, 20).map(use => h('div', { key: use.id, className: 'bt-main-settings-use' },
+                h('span', { className: 'bt-observation-role' }, use.role),
+                h('span', null, `${t('Configuration')} v${use.revision}`),
+                h('span', null, refOf(use[use.role] ?? use.worker ?? use.router)),
+                h('span', { className: 'bt-main-settings-use-session', title: use.sessionId }, use.sessionId),
+                h('time', null, new Date(use.createdAt).toLocaleString()))) : h('p', { className: 'bt-main-status' }, t('No role turn has recorded a configuration version yet.')))) : loadingSettings
+    const providers = snapshot ? h(Fragment, null,
+            error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
+            notice ? h('p', { className: 'bt-main-status', role: 'status' }, notice) : null,
             h(Card, { title: t('Providers') },
               snapshot.providers.length ? snapshot.providers.map(provider => h('div', { key: provider.id, className: 'bt-main-provider' },
                 h('div', { className: 'bt-main-provider-copy' }, h('strong', null, provider.name), h('span', null, t('{count} models', { count: provider.models.length }))),
@@ -1549,19 +1492,38 @@ export function applyProduct(ctx) {
                       onClick: () => { void saveKey(provider.id, keyDrafts[provider.id]) } }, t('Save key')),
                     provider.key.configured ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm bt-bs-danger',
                       disabled: saving, onClick: () => { void saveKey(provider.id, null) } }, t('Remove key')) : null) : h('span', null, t('Set outside this product'))) : null))
-                : h('p', { className: 'bt-main-status' }, t('No provider catalog is available. Configure providers in DSH settings.'))),
-            h(ProductCredentialSettings, { binding, call: productCall, credentialImportBridge: globalThis.dsSuperagentApp?.browser?.credentialImport }),
-            h(ProductMcpSettings, { binding, call: productCall }),
-            h(ClientSettings, { binding }),
-            h(Card, { title: t('Recent configuration uses') },
-              snapshot.uses.length ? snapshot.uses.slice(0, 20).map(use => h('div', { key: use.id, className: 'bt-main-settings-use' },
-                h('span', { className: 'bt-observation-role' }, use.role),
-                h('span', null, `${t('Configuration')} v${use.revision}`),
-                h('span', null, refOf(use[use.role] ?? use.worker ?? use.router)),
-                h('span', { className: 'bt-main-settings-use-session', title: use.sessionId }, use.sessionId),
-                h('time', null, new Date(use.createdAt).toLocaleString()))) : h('p', { className: 'bt-main-status' }, t('No role turn has recorded a configuration version yet.'))),
-            h('p', { className: 'bt-main-status' }, t('Configuration versions apply at request boundaries. A turn already running keeps the version it started with.')))),
-          close)))
+                : h('p', { className: 'bt-main-status' }, t('No provider catalog is available. Configure providers in DSH settings.')))) : loadingSettings
+    const pageProps = { binding, call: productCall }
+    const pages = {
+      general: h(Fragment, null, h(AppearanceSettings, { ctx }),
+        viewState.directoryError ? h('p', { className: 'bt-main-error', role: 'alert' }, viewState.directoryError) : null,
+        viewState.directoryOptions?.default ? h(Card, { title: t('Work directories') },
+          h(Row, { label: t('Instance default directory'), hint: t('New work starts here unless you choose a work directory in Main.') },
+            h(FolderMenu, { value: viewState.directoryOptions.default.root, team: true,
+              label: t('Instance default directory'), actions: directoryActions(binding),
+              run: promise => void Promise.resolve(promise).catch(failure =>
+                view.set(current => ({ ...current, directoryError: failure.message }))),
+              onPick: chooseDefaultDirectory, disabled: viewState.directoryBusy }))) : null),
+      roles,
+      models: providers,
+      execution: h(ProductExecutionSettings, { ...pageProps, onChanged: () => { void loadDirectories(binding) } }),
+      calendar: h(ProductScheduleSettings, { ...pageProps, works: viewState.works, onViewWork: viewWork }),
+      preparations: h(ProductProactiveSettings, pageProps),
+      presets: snapshot ? h(ProductPresetSettings, { ...pageProps,
+        settingsRevision: snapshot.revision, roleSettings: snapshot, onApplied: refreshAfterPreset, onReload: refreshAfterPreset }) : loadingSettings,
+      memory: h(ProductMemorySettings, { ...pageProps, key: binding.instanceId, works: viewState.works }),
+      'browser-resources': h(ProductBrowserSettings, { ...pageProps, works: viewState.works,
+        directoryOptions: viewState.directoryOptions, browserBridge: globalThis.dsSuperagentApp?.browser }),
+      supervision: h(ProductSupervisionSettings, pageProps),
+      'credential-resources': h(ProductCredentialSettings, { ...pageProps, credentialImportBridge: globalThis.dsSuperagentApp?.browser?.credentialImport }),
+      capabilities: h(ProductMcpSettings, pageProps),
+      'remote-clients': h(ClientSettings, { binding }),
+    }
+    const sections = Object.fromEntries(Object.entries(pages).map(([id, content]) => [id, { render: () => content }]))
+    sections['usage-overview'] = { render: ({ navigate }) => h(ProductOperationsSettings, { ...pageProps, section: 'usage', onNavigate: navigate }) }
+    sections.status = { render: ({ navigate }) => h(ProductOperationsSettings, { ...pageProps, section: 'status', onNavigate: navigate }) }
+    sections.about = ABOUT_SETTINGS_SECTION
+    return h(SettingsShell, { open, onClose, initialPage, renderSlot, sections })
   }
 
   function ConnectionDialog({ connection, onClose }) {
@@ -1619,20 +1581,52 @@ export function applyProduct(ctx) {
 
   function ProductSurface() {
     const state = useView()
+    return state.route === 'observe' ? h(ObservationConversation) : h(MainConversation)
+  }
+
+  function Overlay({ renderSlot }) {
+    const state = useView()
     return h(Fragment, null,
-      state.route === 'observe' ? h(ObservationConversation) : h(MainConversation),
-      state.settingsOpen && state.binding && !state.connection?.connected ? h(SettingsDialog, { binding: state.binding,
+      state.binding && !state.connection?.connected && state.settingsPage ? h(SettingsDialog, { binding: state.binding,
+        open: state.settingsOpen, initialPage: state.settingsPage, renderSlot,
         onClose: () => view.set(current => ({ ...current, settingsOpen: false })) }) : null,
       state.connectOpen && clientBridge() ? h(ConnectionDialog, { connection: state.connection,
         onClose: () => view.set(current => ({ ...current, connectOpen: false })) }) : null)
   }
+  const shellActions = {
+    openMain() {
+      view.set(current => ({ ...current, route: 'main', selectedObservation: null, observationGeneration: null,
+        observation: null, observationError: null, observationDetail: null, observationDetailError: null }))
+      void refresh()
+    },
+    openActivity() {
+      const { binding } = view.getSnapshot()
+      view.set(current => ({ ...current, route: 'observe' }))
+      if (binding) void loadObservations(binding, { reset: true })
+    },
+    openSettings(settingsPage = 'general') {
+      const state = view.getSnapshot()
+      if (state.binding && !state.connection?.connected) view.set({ ...state, settingsOpen: true, settingsPage })
+    },
+    openConnection() { if (clientBridge()) view.set(current => ({ ...current, connectOpen: true })) },
+  }
+  const { Header } = installProductShell(ctx, { actions: shellActions, Overlay, overlayChildren: SETTINGS_CHILDREN,
+    useShell() {
+      const state = useView()
+      const lastReply = state.messages.findLast(message => message.role === 'main')
+      const question = state.works.find(work => work.control?.attention?.status === 'waiting')
+      return { activity: state.route === 'observe', markState: state.activeTurn ? 'run' : 'idle',
+        preview: lastReply?.text, unread: lastReply?.id === state.readReplyId ? undefined : lastReply?.id, pending: question?.control?.attention?.id,
+        notificationScope: state.binding?.instanceId,
+        connectLabel: clientBridge() ? (state.connection?.connected ? t('Connection') : t('Connect to Host')) : null,
+        settingsAvailable: Boolean(state.binding && !state.connection?.connected), modalOpen: state.settingsOpen || state.connectOpen }
+    },
+  })
+  installSettingsSections(ctx.slots)
   const shadow = (name, component) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200 }, component))
-  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_EXECUTION_CSS + PRODUCT_OPERATIONS_CSS, 'main'), 'superagent: existing chat styles')
-  ctx.effect(() => { const style = installStyles(themeCss(allThemes().deepseek), 'main-theme'); return () => style.remove() }, 'superagent: existing theme')
+  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SETTINGS_SHELL_CSS + PRODUCT_SETTINGS_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_EXECUTION_CSS + PRODUCT_OPERATIONS_CSS, 'main'), 'superagent: existing chat styles')
+  ctx.effect(() => installAppearance(ctx.get('theme')), 'superagent: appearance')
   shadow('main.conversation', ProductSurface)
-  shadow('sidebar.workspaces', MainNavigation)
-  shadow('sidebar.brand.name', () => h('span', null, 'DS-SuperAgent'))
-  shadow('sidebar.brand.mark', ProductBrandMark)
 }
 
 function redactObservationText(value) {
@@ -1659,12 +1653,12 @@ const PRODUCT_CSS = `
 .bt-main-connect-body input:focus-visible{outline:2px solid var(--bt-accent);outline-offset:1px}
 .bt-main-connect-body p{margin:4px 0;overflow-wrap:anywhere}
 .bt-main-connect-body button{min-height:36px}
-.bt-main-client-form{display:flex;align-items:flex-end;flex-wrap:wrap;gap:8px;padding:10px 12px;font-size:12px}
+.bt-main-client-form{display:flex;align-items:flex-end;flex-wrap:wrap;gap:8px;padding:10px 12px;font-size:var(--bt-font-small)}
 .bt-main-client-form label{align-self:center;color:var(--bt-ink-2)}
 .bt-main-client-form input{max-width:190px}.bt-main-client-form select{max-width:170px}
-.bt-main-client-issued{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 12px;border-top:1px solid var(--bt-line);font-size:12px}
-.bt-main-client-issued p{width:100%;margin:0}.bt-main-client-issued input{max-width:300px;min-width:0;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card);color:var(--bt-ink);padding:8px}
-.bt-main-client-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border-top:1px solid var(--bt-line);font-size:12px}
+.bt-main-client-issued{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 12px;border-top:1px solid var(--bt-line);font-size:var(--bt-font-small)}
+.bt-main-client-issued p{width:100%;margin:0}.bt-main-client-issued input{max-width:300px;min-width:0;border:1px solid var(--bt-line);border-radius:var(--bt-radius-input);background:var(--bt-card);color:var(--bt-ink);padding:8px}
+.bt-main-client-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border-top:1px solid var(--bt-line);font-size:var(--bt-font-small)}
 .bt-main-client-row>div{min-width:0;display:flex;flex-direction:column;gap:2px}.bt-main-client-row span{color:var(--bt-ink-2);overflow-wrap:anywhere}
 .bt-main-health-warning{margin:0;padding:8px 24px;border-bottom:.5px solid var(--bt-line-2);background:var(--bt-card);color:var(--bt-danger);font-size:12px;line-height:18px}
 .bt-main-settings{margin-left:2px}

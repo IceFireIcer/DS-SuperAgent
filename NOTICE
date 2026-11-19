@@ -79,6 +79,38 @@ Apache License, Version 2.0, Copyright (c) Microsoft Corporation
   The license is the same Apache License, Version 2.0 that covers this
   repository; see LICENSE for the text.
 
+DS Bot (https://github.com/Fei2411/DS-Bot)
+Copyright 2026 Fei2411 and the DS Bot contributors
+Apache License, Version 2.0 (see LICENSE)
+
+  The client sync inventory records the source of files derived from version
+  0.3.8, commit 5e9b7da8882da3b68d8a0624342708c2150a9156. The generated
+  superagent/dsh/src/client/upstream/ files carry per-file provenance. They
+  are modified for product naming, storage isolation and API integration.
+  Reference copies use a text extension and are excluded from runtime imports.
+  superagent/dsh/src/client/settings-shell.js adapts the settings slot and
+  dialog composition from ds-bot/src/client/settings-shell.js.
+  superagent/dsh/src/client/themes.js adapts theme tokens from
+  ds-bot/src/client/themes.js. The product shell, palette and notification
+  modules adapt ds-bot/src/client/sidebar.js, header.js, overlays.js,
+  palette.js, notifications.js, notify.js and feedback.js.
+  The runtime dictionaries in superagent/dsh/src/client/locales/ adapt
+  relevant strings from ds-bot/src/client/locales/.
+
+  Upstream attribution applicable to the synchronized client:
+
+  - connector-marks.js uses single-color brand paths from Simple Icons 16.36.0
+    (https://simpleicons.org), CC0 1.0 Universal, the Simple Icons contributors.
+  - connector-marks.js also uses the Context7 connector mark from
+    public/context7-icon.svg (https://github.com/upstash/context7),
+    MIT License, Copyright (c) Upstash.
+  - im-page.js and phone-page.js use qrcode-generator from npm
+    (https://github.com/kazuhikoarase/qrcode-generator),
+    MIT License, Copyright (c) 2009 Kazuhiko Arase.
+
+  The MIT terms above apply to Context7 and qrcode-generator with their
+  respective copyright lines.
+
 No other third-party code is copied into this repository. At run time the
 plugin uses the @deepseek-ai/* packages of the DeepSeek Harness install it
 runs in; they are not bundled. The bundled superagent/dsh/office.js includes

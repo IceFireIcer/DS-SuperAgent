@@ -117,7 +117,8 @@
     "dsh/src/office/",
     "cordis.patch.yml",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE"
   ],
   "peerDependencies": {
     "@deepseek-ai/cordis": "4.1.0",

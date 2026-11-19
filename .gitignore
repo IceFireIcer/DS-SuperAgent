@@ -10,6 +10,7 @@ node_modules/
 
 # A DeepSeek Harness checkout for the tests and the test bench.
 /deepseek-harness/
+/superagent/dsh/src/client/upstream/
 
 # Test bench, local DSH data and the screenshots of dev/check.sh.
 .dsh-test*/
