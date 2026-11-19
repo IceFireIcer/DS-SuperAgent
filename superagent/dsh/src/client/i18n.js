@@ -19,6 +19,8 @@ const ZH = {
   'Plugin version': '插件版本', License: '许可协议', 'Project on GitHub': '在 GitHub 查看项目',
   'Loading settings…': '正在加载设置…', 'This setting is unavailable here.': '此处暂不可用。',
   'Could not load this setting.': '无法加载此设置。',
+  'No built-in plugins are listed.': '暂无内置插件。',
+  Active: '运行中', Inactive: '未运行', Disabled: '已禁用', Unloading: '正在卸载',
   'Content font size': '内容字号', 'Display appearance': '显示外观', 'Color mode': '颜色模式',
   'Light mode': '浅色模式', 'Dark mode': '深色模式', 'Follow system': '跟随系统',
   'View activity': '查看活动', 'Open Main': '打开主对话', 'Search commands': '搜索命令', 'Close search': '关闭搜索',

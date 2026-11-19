@@ -46,7 +46,13 @@ test('the product HTTP boundary chats with Main and refuses cross-scope and unav
     },
     unset: async reference => { assert.equal(reference, 'MOCK_API_KEY'); providerKey = '' },
   })
-  native.provide('connection', { fetch: { register(route) { routes.set(route.path, route); return () => routes.delete(route.path) } } })
+  const browserPeer = {}
+  native.provide('connection', { browserPeer, fetch: { register(route) { routes.set(route.path, route); return () => routes.delete(route.path) } } })
+  native.provide('typertGateway', { async invoke(request) {
+    assert.deepEqual(request, { namespace: 'pluginInventory', method: 'list', args: {}, peer: browserPeer })
+    return { entries: [{ entryId: 'test-inventory', moduleName: '@deepseek-ai/test-plugin', enabled: true, fiberPhase: 'active', diagnostic: 'private diagnostic' },
+      { entryId: 'external', moduleName: '/a/local/path', enabled: true, fiberPhase: 'failed' }] }
+  } })
   await native.plugin(Profile, { main: { provider: 'mock', model: 'main' }, router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
   await native.plugin(productHttpPlugin)
   assert.deepEqual([...routes.keys()], ['/api/product'])
@@ -60,6 +66,10 @@ test('the product HTTP boundary chats with Main and refuses cross-scope and unav
   }
   const opened = await call('open')
   const instanceId = opened.value.instanceId
+  const inventory = await call('builtin-plugins', { instanceId })
+  assert.deepEqual(inventory.value, { entries: [{ id: 'test-inventory', name: '@deepseek-ai/test-plugin', enabled: true, phase: 'active' }] })
+  assert.equal((await call('builtin-plugins', { instanceId: 'another-private-scope' })).status, 403)
+  assert.equal((await call('builtin-plugins', { instanceId, diagnostic: true })).status, 400)
   assert.deepEqual((await call('open')).value, opened.value)
   assert.equal((await call('send', { instanceId, commandId: 'hello', text: 'Hello Main.' })).value.status, 'completed')
   const history = await call('history', { instanceId })

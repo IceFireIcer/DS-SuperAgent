@@ -20,6 +20,7 @@ import { AppearanceSettings, installAppearance } from './appearance.js'
 import { SettingsShell, SETTINGS_CHILDREN, SETTINGS_SHELL_CSS, installSettingsSections } from './settings-shell.js'
 import { SettingsSectionState } from './settings-sections.js'
 import { ABOUT_SETTINGS_SECTION } from './settings-about.js'
+import { BuiltinPluginSettings } from './settings-builtin-plugins.js'
 import { installProductShell } from './product-shell.js'
 import { SHELL_CSS, CONVERSATION_CSS, installCompiledStyles } from './styles.js'
 import { ProductMcpSettings } from './product-mcp-settings.js'
@@ -1506,6 +1507,7 @@ export function applyProduct(ctx) {
               onPick: chooseDefaultDirectory, disabled: viewState.directoryBusy }))) : null),
       roles,
       models: providers,
+      'built-in-plugins': h(BuiltinPluginSettings, pageProps),
       execution: h(ProductExecutionSettings, { ...pageProps, onChanged: () => { void loadDirectories(binding) } }),
       calendar: h(ProductScheduleSettings, { ...pageProps, works: viewState.works, onViewWork: viewWork }),
       preparations: h(ProductProactiveSettings, pageProps),

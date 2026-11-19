@@ -63,6 +63,8 @@ export async function checkProductUi(ctx) {
     }
     assert.equal(await settings.locator('.bt-settings-group').count(), 5)
     assert.equal(await settings.locator('.bt-settings-item').count(), 21)
+    await settings.getByRole('button', { name: /Built-in plugins|内置插件/u }).click()
+    await settings.locator('.bt-settings-page').getByText('ds-superagent', { exact: true }).waitFor()
     const groups = settings.locator('.bt-settings-item')
     for (let index = 0; index < await groups.count(); index++) {
       await groups.nth(index).click()

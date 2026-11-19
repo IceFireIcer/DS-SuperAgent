@@ -155,7 +155,29 @@ const memoryFields: Record<string, string[]> = {
   'memory-proposals': ['instanceId'],
   'memory-decide': ['instanceId', 'commandId', 'proposalId', 'approve'],
 }
-const statusFields: Record<string, string[]> = { 'product-usage': ['instanceId'], 'product-status': ['instanceId'] }
+const statusFields: Record<string, string[]> = { 'product-usage': ['instanceId'], 'product-status': ['instanceId'], 'builtin-plugins': ['instanceId'] }
+
+interface PluginInventoryRow {
+  entryId: string
+  moduleName: string
+  enabled: boolean
+  fiberPhase: 'pending' | 'loading' | 'active' | 'failed' | 'unloading' | null
+}
+
+async function builtinPlugins(context: Context) {
+  const peer = (context.get('connection') as { browserPeer?: object } | undefined)?.browserPeer
+  const gateway = context.get('typertGateway') as {
+    invoke(request: { namespace: string; method: string; args: Record<string, never>; peer: object }): Promise<{ entries: PluginInventoryRow[] }>
+  } | undefined
+  if (!gateway || !peer) throw new CoreError('UNAVAILABLE', 'The Host does not expose its plugin inventory.')
+  try {
+    const { entries } = await gateway.invoke({ namespace: 'pluginInventory', method: 'list', args: {}, peer })
+    return { entries: entries.filter(entry => entry.moduleName.startsWith('@deepseek-ai/') || entry.moduleName === 'ds-superagent')
+      .map(({ entryId, moduleName, enabled, fiberPhase }) => ({ id: entryId, name: moduleName, enabled, phase: fiberPhase })) }
+  } catch {
+    throw new CoreError('UNAVAILABLE', 'The Host does not expose its plugin inventory.')
+  }
+}
 
 export async function createProductHost(context: Context, config: ProductHostConfig): Promise<ProductHost> {
   const instanceId = config.instanceId ?? 'personal'
@@ -1470,6 +1492,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
           workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
           expectedGeneration: payload.expectedGeneration as string, reason: payload.reason as string })
         if (endpoint === 'settings') return roleSettings(payload.limit === undefined ? 50 : payload.limit as number)
+        if (endpoint === 'builtin-plugins') return builtinPlugins(context)
         if (endpoint === 'preset-list') return engine!.listRolePresets({ instanceId,
           ...(payload.after === undefined ? {} : { after: payload.after as string }),
           ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
