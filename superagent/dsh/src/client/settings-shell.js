@@ -123,11 +123,11 @@ export function SettingsShell({ open = true, onClose, sections, renderSlot, init
 }
 
 export const SETTINGS_SHELL_CSS = `
-.bt-superagent-settings{border-radius:20px}
+.bt-superagent-settings{border-radius:var(--bt-radius-dialog)}
 .bt-superagent-settings>.bt-settings-nav{overflow-y:auto;scrollbar-width:thin;overscroll-behavior:contain}
 .bt-settings-group{display:flex;flex-direction:column;gap:2px}
 .bt-settings-group+.bt-settings-group{margin-top:12px}
-.bt-settings-group-label{padding:0 8px 4px;color:var(--bt-ink-2);font-size:var(--bt-font-small,12px);line-height:16px;font-weight:600}
+.bt-settings-group-label{padding:0 8px 4px;color:var(--bt-ink-2);font-size:var(--bt-font-small);line-height:16px;font-weight:600}
 .bt-settings-group .bt-settings-item{min-height:32px}
 .bt-settings-group .bt-settings-item svg{flex:none}
 .bt-settings-tabs{align-self:flex-start;margin:4px 20px 0;max-width:calc(100% - 40px)}

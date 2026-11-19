@@ -18,4 +18,5 @@
 - Windows Node 24 上通过类型检查、构建、lint、命名和 UI 边界检查。客户端全量 197 项通过、1 项跳过。用 `PLAYWRIGHT_CHANNEL=msedge` 运行 `node app/scripts/check-superagent-profile.mjs --check-ui`，在真实浏览器验证单一 composer、发信、停止后 Host 记录为 `stopped`、刷新补读、四套主题的浅深切换、设置页和 Activity。隔离 profile 的原生 Gateway 操作拒绝断言通过。
 - 桌面全量用例 245 项通过、2 项失败、1 项跳过。托盘关闭问题在 #143 的旧版对照已复现。窗口与托盘启动用例在单独重跑时通过。
 - Windows 服务端全量 754 项通过、8 项失败、6 项跳过。失败发生在协作基准、5 个输入恢复阶段、PostgreSQL 工作计划和远端 PTY 就绪。协作基准、输入恢复首个阶段和远端 PTY 在 #143 有旧版对照。新增的内置插件目录通过产品 HTTP 定向测试和隔离 profile 浏览器检查。
+- [CI 定向分片](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/44528303963) 的 Main 委托用例返回 `QUEUE_FULL`，同一用例在本机单独运行时通过。
 - 规范和规格双轴审查覆盖 npm 归属、停止命令定位、通知投影、命名与运行时语言。修正后复验。`ui-deliverables` 仍在等待隔离的 `sessionController`。
