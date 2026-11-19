@@ -295,6 +295,44 @@ export class MainConversation {
     })
   }
 
+  async initializeSession(binding: MainBinding) {
+    if (!this.sessions) return
+    await this.sessions.initializeMainSession(binding.mainSessionId)
+    if (await this.sessions.mainSessionMode(binding.mainSessionId) === 'native') return
+    const canUpgrade = async (tx: AsyncTx, state: MainState) => {
+      if (state.activeCommand || (await tx.scan('main-reconcile-command', { limit: 1 })).items.length) return false
+      let after: string | undefined
+      for (let pageCount = 0; pageCount < 10; pageCount++) {
+        const page = await tx.scan<MainSourceCommand>('main-source-command', { limit: 100, ...(after === undefined ? {} : { after }) })
+        if (page.items.some(({ value }) => value.state !== 'completed'
+          && (value.sessionId === binding.mainSessionId || value.sessionId === undefined))) return false
+        if (!page.cursor) break
+        after = page.cursor
+        if (pageCount === 9) return false
+      }
+      after = undefined
+      for (let pageCount = 0; pageCount < 10; pageCount++) {
+        const updates: { items: { id: string; value: MainUpdateCommand }[]; cursor?: string } =
+          await tx.scan<MainUpdateCommand>('main-update-command', { limit: 100, ...(after === undefined ? {} : { after }) })
+        if (updates.items.some(({ value }) => value.state !== 'completed' && value.state !== 'discarded')) return false
+        if (!updates.cursor) return true
+        after = updates.cursor
+      }
+      return false
+    }
+    if (!await commandTransaction(this.storage, this.instanceId, async tx => canUpgrade(tx, await this.state(tx)))) return
+    try {
+      await this.sessions.upgradeLegacyMainSession(binding.mainSessionId, async childId => {
+        const record = await this.commitRollover(binding, childId, async () => {}, undefined, canUpgrade)
+        if (!record) throw new CoreError('MAIN_SESSION_UPGRADE_DEFERRED', 'Main changed before the upgrade could be published.')
+      })
+    } catch (error) {
+      if (error instanceof CoreError && ['MAIN_SESSION_UPGRADE_BUSY', 'MAIN_SESSION_UPGRADE_CONFLICT',
+        'MAIN_SESSION_UPGRADE_DEFERRED'].includes(error.code)) return
+      throw error
+    }
+  }
+
   async page(request: MainAddress & { after?: number; limit?: number }): Promise<MainPage> {
     this.authorize(request)
     const limit = request.limit ?? 50
@@ -1008,7 +1046,8 @@ export class MainConversation {
   }
 
   private async commitRollover(run: MainBinding, newSessionId: string,
-    settle: (tx: AsyncTx, record: MainSessionRollover) => Promise<void>, activeAfterSequence?: string) {
+    settle: (tx: AsyncTx, record: MainSessionRollover) => Promise<void>, activeAfterSequence?: string,
+    canCommit?: (tx: AsyncTx, state: MainState) => Promise<boolean>) {
     const rolloverId = `main-session-rollover:${newSessionId}`
     const existing = await commandTransaction(this.storage, this.instanceId, tx =>
       tx.get<MainSessionRollover>('main-session-rollover', rolloverId))
@@ -1022,6 +1061,7 @@ export class MainConversation {
       if (state.mainId !== run.mainId || state.mainSessionId !== run.mainSessionId || state.generation !== run.generation) {
         return undefined
       }
+      if (canCommit && !await canCommit(tx, state)) return undefined
       const unreadInputs: MainSessionRollover['unreadInputs'] = []
       let after: string | undefined
       for (let pageCount = 0; pageCount < 10; pageCount++) {

@@ -210,7 +210,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
     if (!value?.provider || !value.model) return { provider: 'unconfigured', model: 'unconfigured' }
     return { provider: value.provider, model: value.model }
   }
-  const sessions = new NativeSessions(context, { main: route(config.main), router: route(config.router), worker: route(config.worker), ...(config.timeoutMs === undefined ? {} : { timeoutMs: config.timeoutMs }) })
+  const sessions = new NativeSessions(context, { main: route(config.main), mainCwd: config.workspaceRoot ?? stateRoot,
+    router: route(config.router), worker: route(config.worker), ...(config.timeoutMs === undefined ? {} : { timeoutMs: config.timeoutMs }) })
   const storage = config.postgres
     ? await PostgresStorage.open(config.postgres)
     : await SqliteStorage.open(config.databasePath!)
@@ -571,7 +572,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
       environments, {}, {}, {}, { channel },
       { ...(config.hostId === undefined ? {} : { hostId: config.hostId }),
         ...(config.leaseMs === undefined ? {} : { leaseMs: config.leaseMs }) }, proactive, attachments)
-    await engine.acquireHost()
+    await engine.acquireHost({ initializeMain: true })
     workRouter = new ProactiveWork(storage, instanceId, engine, sessions, actorId)
     const records = credentialRecords as ProductCredentialRecords | undefined
     if (records && typeof records.readRecord === 'function' && typeof records.modifyRecord === 'function'
@@ -605,7 +606,6 @@ export async function createProductHost(context: Context, config: ProductHostCon
     await engine.recoverProactiveRuns()
     await workRouter.recover()
     await recoverCredentials()
-    await engine.openMain({ instanceId })
     supervision = createProductSupervision(engine, sessions, storage, instanceId,
       { watchdogConfigured: Boolean(config.watchdogStatusPath) })
     if (config.watchdogStatusPath) {
@@ -651,7 +651,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
         // The Host supplies identity; a window can only address this authorization scope.
         if (endpoint === 'open') {
           if (Object.keys(payload).length !== 0) throw new CoreError('INVALID_INPUT', 'Opening the product Main accepts no fields.')
-          return engine!.openMain({ instanceId })
+          const binding = await engine!.openMain({ instanceId })
+          return { ...binding, mainSessionMode: await sessions.mainSessionMode(binding.mainSessionId) }
         }
         if (payload.instanceId !== instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This request is outside the authorized Instance.')
         const fields = statusFields[endpoint] ?? memoryFields[endpoint] ?? resourceFields[endpoint] ?? credentialImportFields[endpoint] ?? browserFields[endpoint]
@@ -1137,7 +1138,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
           const rules = await engine!.getProactiveRules()
           const current = new Map(rules.rules.filter(rule => rule.enabled && rule.communication === 'notify').map(rule => [rule.id, rule]))
           const runs = current.size ? await engine!.getRecentProactiveNotices() : []
-          return { ...page, preparations: runs.filter(run => run.state === 'prepared' && run.ruleRevision === rules.revision
+          return { ...page, mainSessionMode: await sessions.mainSessionMode(page.mainSessionId),
+            preparations: runs.filter(run => run.state === 'prepared' && run.ruleRevision === rules.revision
             && current.has(run.ruleId)).map(run => ({ id: run.id, ruleId: run.ruleId,
               sourceInstanceId: run.sourceInstanceId, eventId: run.eventId, summary: run.summary, createdAt: run.createdAt })) }
         }

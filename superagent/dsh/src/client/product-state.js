@@ -41,6 +41,21 @@ export function projectTurnCards({ messages, works, sources, preparations }) {
   return { byMessage, unplaced }
 }
 
+export function projectNativeTurnCards({ works, sources, preparations }, messageIds, unmatched = false) {
+  const includes = id => unmatched ? !messageIds.has(id) : messageIds.has(id)
+  const matchedSources = sources.filter(source => includes(source.mainMessageId))
+  const matched = new Set(matchedSources.map(source => JSON.stringify([source.sourceInstanceId, source.sourceEventId])))
+  const sourceKeys = new Set(sources.map(source => JSON.stringify([source.sourceInstanceId, source.sourceEventId])))
+  return {
+    works: works.filter(work => includes(work.brief.mainMessageId)),
+    sources: matchedSources,
+    preparations: preparations.filter(preparation => {
+      const key = JSON.stringify([preparation.sourceInstanceId, preparation.eventId])
+      return matched.has(key) || unmatched && !sourceKeys.has(key)
+    }),
+  }
+}
+
 export function rebaseRoleDraft(base, draft, latest) {
   const merged = JSON.parse(JSON.stringify(latest))
   for (const role of ['main', 'router', 'worker']) {

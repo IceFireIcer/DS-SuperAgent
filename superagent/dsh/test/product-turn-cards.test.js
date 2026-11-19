@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { projectTurnCards } from '../src/client/product-state.js'
+import { projectNativeTurnCards, projectTurnCards } from '../src/client/product-state.js'
 
 test('cards follow their exact Main turn across interleaved messages and history paging', () => {
   const works = [{ brief: { mainMessageId: 'request', workItemId: 'work' } }]
@@ -18,4 +18,19 @@ test('cards follow their exact Main turn across interleaved messages and history
   assert.deepEqual(early.byMessage.get('request').works, works)
   assert.deepEqual(early.unplaced.sources, sources)
   assert.deepEqual(early.unplaced.preparations, preparations)
+})
+
+test('native tail associates work and sources with the originating input, and keeps unlinked preparation visible', () => {
+  const work = { brief: { mainMessageId: 'request' } }
+  const source = { sourceInstanceId: 'feed', sourceEventId: 'event', mainMessageId: 'inbound' }
+  const pending = { sourceInstanceId: 'feed', sourceEventId: 'pending' }
+  const preparation = { sourceInstanceId: 'feed', eventId: 'event' }
+  const unlinked = { sourceInstanceId: 'other-feed', eventId: 'event' }
+  const state = { works: [work], sources: [source, pending], preparations: [preparation, unlinked] }
+  assert.deepEqual(projectNativeTurnCards(state, new Set(['request'])), { works: [work], sources: [], preparations: [] })
+  assert.deepEqual(projectNativeTurnCards(state, new Set(['inbound'])), { works: [], sources: [source], preparations: [preparation] })
+  assert.deepEqual(projectNativeTurnCards(state, new Set(['request', 'inbound']), true),
+    { works: [], sources: [pending], preparations: [unlinked] })
+  assert.deepEqual(projectNativeTurnCards(state, new Set(['request']), true),
+    { works: [], sources: [source, pending], preparations: [preparation, unlinked] })
 })

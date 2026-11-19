@@ -3,6 +3,14 @@
 - insert:
     - id: superagent
       name: ds-superagent
+    - id: superagent-session-typert
+      name: '@deepseek-ai/dsh-typert-registry'
+      isolate:
+        typert: product-native-session
+    - id: superagent-session-reader
+      name: ds-superagent/session-reader
+      isolate:
+        sessionController: product-native-session
     # Web search with the current conversation route's own key, else a keyless
     # results-page fallback.
     - id: web-search-auto
@@ -28,6 +36,7 @@
 - id: session-controller
   isolate:
     sessionController: product-native-session
+    typert: product-native-session
 
 - id: ui-settings-general
   disabled: true

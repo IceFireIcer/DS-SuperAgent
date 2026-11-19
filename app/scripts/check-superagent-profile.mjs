@@ -64,8 +64,18 @@ try {
       if (request.model === 'main') {
         const user = request.messages.filter(message => message.role === 'user').at(-1)
         const text = user?.content?.filter(block => block.type === 'text').map(block => block.text).join('') ?? ''
-        if (text === 'Hello from the browser check.') { yield* textResponse('Main answered the browser check.'); return }
+        if (text === 'Hello from the browser check.') {
+          const reasoning = 'Consider the browser fixture.'
+          yield { type: 'block-start', index: 0, blockType: 'reasoning' }
+          yield { type: 'reasoning-delta', index: 0, text: reasoning }
+          yield { type: 'block-end', index: 0, block: { type: 'reasoning', text: reasoning } }
+          for (const chunk of textResponse('Main answered the browser check.')) {
+            yield 'index' in chunk ? { ...chunk, index: 1 } : chunk
+          }
+          return
+        }
         if (text === 'Wait for the browser to stop this reply.') await sleep(20000, undefined, { signal: request.signal })
+        if (text === 'Fail this browser fixture turn.') throw new Error('Browser fixture model failure.')
         if (text.startsWith('[Work update]')) {
           const notification = JSON.parse(text.split('\n').at(-1))
           yield* textResponse(notification.outcome?.summary ?? notification.update.summary)
@@ -82,6 +92,9 @@ try {
         } else if (text === 'Wait for a remote device.' && toolCalls === 0) {
           yield* toolResponse('delegate_work', { goal: 'Check the remote fixture.', constraints: 'Wait for the remote device.',
             acceptanceCriteria: 'Read the remote fixture.' })
+        } else if (text === 'Ask a browser fixture question.' && toolCalls === 0) {
+          yield* toolResponse('delegate_work', { goal: 'Ask which browser label to use.', constraints: 'Wait for the human answer.',
+            acceptanceCriteria: 'Record the selected label.' })
         } else yield* textResponse('The independent Main answered through the public DSH loop.', { inputTokens: 3, outputTokens: 2, totalTokens: 5 })
         return
       }
@@ -92,6 +105,14 @@ try {
       if (request.model !== 'worker') throw new Error(`Unexpected role route ${request.model}.`)
       const userIndex = request.messages.findLastIndex(message => message.role === 'user')
       const completed = request.messages.slice(userIndex + 1).filter(message => message.role === 'tool').length
+      const questionWork = request.messages.some(message => message.role === 'user'
+        && message.content.some(block => block.type === 'text' && block.text.includes('Ask which browser label to use.')))
+      const alreadyAsked = request.messages.some(message => message.role === 'assistant'
+        && message.content.some(block => block.type === 'tool-call' && block.id === 'browser-question'))
+      if (questionWork && !alreadyAsked) {
+        yield* toolResponse('ask_human', { question: 'Which browser label?', options: 'Blue\nGreen' }, 'browser-question')
+        return
+      }
       const userText = request.messages.filter(message => message.role === 'user')
         .flatMap(message => message.content?.filter(block => block.type === 'text').map(block => block.text) ?? [])
         .findLast(text => text.includes('Goal:\n') && text.includes('profile-')) ?? ''
@@ -112,16 +133,31 @@ try {
   }
   ctx.llm.registerAdapter(['mock'], new MockRoleAdapter())
   const binding = await ctx.superagentProduct.dispatch('open')
-  assert.equal(ctx.get('sessionController'), undefined, 'the native controller is isolated from the product Gateway')
+  assert.ok(ctx.get('sessionController'), 'the product Gateway exposes a Main Session reader')
   assert.equal(ctx.get('sessionReferenceResolver'), undefined, 'native Session discovery is unavailable')
   await assert.rejects(ctx.typertGateway.invoke({ namespace: 'session', method: 'prompt', args: {
     request: { requestId: 'forbidden-native', sessionId: binding.mainSessionId, mode: 'queue', content: [{ type: 'text', text: 'This must be refused.' }] },
-  }, peer: ctx.connection.browserPeer }), { code: 'gateway/service-unavailable' })
-  await assert.rejects(ctx.typertGateway.stream({ namespace: 'session', method: 'control', args: {}, peer: ctx.connection.browserPeer }), { code: 'gateway/service-unavailable' })
+  }, peer: ctx.connection.browserPeer }))
+  await assert.rejects(ctx.typertGateway.invoke({ namespace: 'session', method: 'create', args: {
+    request: { cwd: workspace },
+  }, peer: ctx.connection.browserPeer }))
+  await assert.rejects(ctx.typertGateway.invoke({ namespace: 'session', method: 'cancel', args: {
+    request: { sessionId: binding.mainSessionId },
+  }, peer: ctx.connection.browserPeer }))
+  await assert.rejects(ctx.typertGateway.invoke({ namespace: 'session', method: 'events', args: {
+    request: { address: { kind: 'session', sessionId: binding.routerSessionId } },
+  }, peer: ctx.connection.browserPeer }))
   const exportDenied = await ctx.connection.createSharedFetchHandler('/api').fetch(new Request(
     `http://localhost/api/session.export?sessionId=${binding.mainSessionId}`, { method: 'GET' }), ctx.connection.browserPeer)
   assert.equal(exportDenied.status, 404)
-  await ctx.superagentProduct.dispatch('send', { instanceId: binding.instanceId, commandId: 'profile-smoke', text: 'Hello Main.' })
+  const firstReply = await ctx.superagentProduct.dispatch('send', { instanceId: binding.instanceId, commandId: 'profile-smoke', text: 'Hello Main.' })
+  assert.equal(firstReply.status, 'completed')
+  const address = { kind: 'session', sessionId: binding.mainSessionId }
+  assert.ok(await ctx.sessionPersistence.stat(binding.mainSessionId), 'the product Main Session is persisted')
+  const nativeHistory = await ctx.typertGateway.invoke({ namespace: 'session', method: 'events', args: { request: { address } }, peer: ctx.connection.browserPeer })
+  assert.ok(nativeHistory.records.length > 0)
+  const nativeCatalog = await ctx.typertGateway.invoke({ namespace: 'session', method: 'list', args: { _request: {} }, peer: ctx.connection.browserPeer })
+  assert.deepEqual(nativeCatalog.items.map(item => item.sessionId), [binding.mainSessionId])
   let history = await ctx.superagentProduct.dispatch('history', { instanceId: binding.instanceId })
   if (history.messages.length !== 2 || history.messages[1].role !== 'main') throw new Error('Main did not produce a durable reply.')
   await ctx.superagentProduct.dispatch('send', { instanceId: binding.instanceId, commandId: 'profile-delegation', text: 'Create and verify two local notes independently.' })
@@ -138,10 +174,6 @@ try {
   assert.deepEqual(history.works.map(work => work.outcome.artifacts[0].path).sort(), ['profile-alpha.txt', 'profile-beta.txt'], JSON.stringify({ works: history.works, modelCalls }, null, 2))
   assert.equal(await readFile(join(workspace, 'profile-alpha.txt'), 'utf8'), 'profile-alpha.txt written and verified\n')
   assert.equal(await readFile(join(workspace, 'profile-beta.txt'), 'utf8'), 'profile-beta.txt written and verified\n')
-  if (process.argv.includes('--check-ui')) {
-    const { checkProductUi } = await import('./check-superagent-ui.mjs')
-    await checkProductUi(ctx)
-  }
   const observations = await ctx.superagentProduct.dispatch('observe-list', { instanceId: binding.instanceId, limit: 10 })
   assert.equal(observations.items.length, 3, JSON.stringify({ observations, modelCalls }, null, 2))
   const workerObservation = observations.items.find(item => item.role === 'worker' && item.title.includes('alpha'))
@@ -166,6 +198,10 @@ try {
     instanceId: binding.instanceId, observationId: workerObservation.id, detailId: 'guessed-detail', write: true,
   }), { code: 'INVALID_INPUT' })
   if (ctx.get('botExecutionAdapter') !== undefined) throw new Error('The old execution adapter must not mount in the product profile.')
+  if (process.argv.includes('--check-ui')) {
+    const { checkProductUi } = await import('./check-superagent-ui.mjs')
+    await checkProductUi(ctx)
+  }
   if (process.argv.includes('--check-upgrade')) {
     const { instanceId } = binding
     const call = (endpoint, payload = {}) => ctx.superagentProduct.dispatch(endpoint, { instanceId, ...payload })

@@ -1538,8 +1538,9 @@ export class Engine {
    * Explicitly acquires or renews the instance lease. Taking over another Host advances the epoch, then
    * reconciles every Assignment left by the previous runtime before new input is accepted.
    */
-  async acquireHost() {
+  async acquireHost({ initializeMain = false } = {}) {
     const acquired = await this.host.acquireWithPrevious()
+    if (initializeMain) await this.main.initializeSession(await this.openMain({ instanceId: this.instanceId }))
     if (!acquired.previous && !await this.storage.transaction(this.instanceId, transaction => this.hostTakeoverPending(transaction))) {
       return acquired.lease
     }

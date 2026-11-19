@@ -1295,6 +1295,10 @@ const ZH = {
   // Time and usage
   'Today {time}': '今天 {time}',
   'Yesterday {time}': '昨天 {time}',
+  'Technical details': '技术详情',
+  'Work, sources and preparations': '工作、来源与准备事项',
+  Queued: '排队中',
+  Interrupted: '已中断',
   'Ran for {duration}': '本次用时 {duration}',
   '{tokens} tok · Cache hit {hit}%': '{tokens} tok · 缓存命中 {hit}%',
   '1 turn': '1 轮',

@@ -3,6 +3,7 @@ import { createRequire } from 'node:module'
 import { dirname, join, sep } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { createProductHost, type ProductHostConfig } from './product-host.js'
+import { exposeMainSession } from './session-reader.js'
 import { CoreError } from './model.js'
 import type { PostgresOptions } from './postgres-storage.js'
 import { apply as applyProductHttp } from './product-http.js'
@@ -182,6 +183,7 @@ export async function apply(context: Context, config: SuperagentProfileConfig = 
     ...(postgres ? { postgres } : { databasePath: paths.databasePath }),
   })
   context.provide('superagentProduct', host)
+  exposeMainSession(context, host)
   context.effect(() => () => host.close())
   applyProductHttp(context)
 }

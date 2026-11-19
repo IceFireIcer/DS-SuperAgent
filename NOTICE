@@ -94,6 +94,11 @@ Apache License, Version 2.0 (see LICENSE)
   ds-bot/src/client/themes.js. The product shell, palette and notification
   modules adapt ds-bot/src/client/sidebar.js, header.js, overlays.js,
   palette.js, notifications.js, notify.js and feedback.js.
+  superagent/dsh/src/client/main-cells.js adapts the reasoning body, failure
+  copy and turn separators from ds-bot/src/client/cells.js, turn-error.js
+  and text.js.
+  superagent/dsh/src/client/main-question.js adapts the question presentation
+  from ds-bot/src/client/questions.js.
   The runtime dictionaries in superagent/dsh/src/client/locales/ adapt
   relevant strings from ds-bot/src/client/locales/.
 

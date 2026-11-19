@@ -1,10 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { ProductHost } from './product-host.js'
 
-interface NativeRequest {
-  url?: string
-  [Symbol.asyncIterator](): AsyncIterator<Uint8Array | string>
-}
+interface NativeRequest { url?: string }
 
 interface NativeResponse {
   statusCode: number
@@ -70,22 +67,7 @@ export function apply(context: Context) {
     productScope.effect(() => productScope.on('connection/request', async (request, response, next) => {
       const path = new URL(request.url ?? '/', 'http://localhost').pathname
       if (!path.startsWith('/api/session/') && path !== '/api/session.export') return next()
-      if (path === '/api/session/list') {
-        let text = ''
-        for await (const chunk of request) {
-          text += chunk.toString()
-          if (Buffer.byteLength(text) > 4096) {
-            response.statusCode = 413
-            response.end()
-            return
-          }
-        }
-        let rpcId: unknown
-        try { rpcId = JSON.parse(text)?.rpcId } catch { /* Invalid envelopes receive the same bounded refusal. */ }
-        response.setHeader('content-type', 'application/json')
-        response.end(JSON.stringify({ type: 'server-response', rpcId, result: { ok: true, value: { items: [] } } }))
-        return
-      }
+      if (path === '/api/session/list' || path === '/api/session/events') return next()
       response.statusCode = 403
       response.setHeader('content-type', 'application/json')
       response.end(JSON.stringify({ type: 'server-response', result: { ok: false, error: {
