@@ -69,6 +69,8 @@ test('opens every approved settings page in order and keeps each conflict inside
     assert.deepEqual(tabs.map(tab => tab.textContent), tabPages.get(label) ?? [])
     if (label === 'About') {
       assert.match(document.querySelector('.bt-settings-scroll').textContent, /DS SuperAgent/u)
+      assert.ok(document.querySelector('.bt-settings-scroll').textContent.includes(metadata.name))
+      assert.ok(document.querySelector('.bt-settings-scroll').textContent.includes(metadata.author))
       assert.ok(document.querySelector('.bt-settings-scroll').textContent.includes(metadata.version))
       assert.equal(document.querySelector('.bt-settings-scroll a').href, metadata.homepage)
       continue

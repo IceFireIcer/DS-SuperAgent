@@ -110,7 +110,7 @@ export class BotViews {
     const tabId = requestedTabId ?? randomUUID()
     const existing = this.#views.get(tabId)
     if (existing) {
-      if (existing.botId !== botId) throw new Error('Browser tab belongs to another Bot')
+      if (existing.botId !== botId) throw new Error('Browser tab belongs to another browser resource')
       return existing
     }
     const { partition } = this.#guests.storageFor(`bot:${botId}`)
@@ -428,7 +428,7 @@ export class BotViews {
 
   #owned(botId, tabId) {
     const entry = this.#views.get(tabId)
-    if (!entry || entry.botId !== botId) throw new Error('Browser tab does not belong to this Bot')
+    if (!entry || entry.botId !== botId) throw new Error('Browser tab does not belong to this browser resource')
     return entry
   }
 

@@ -5,7 +5,7 @@ import { SPRING_SHAPE, SPRING_TAP, SPRING_STRETCH, SPRING_POP, spring } from './
 // SPRING_POP; it closes on SPRING_SHAPE.
 
 // The base styles split the way the surface groups do. SHELL_CSS carries the marks,
-// the Bot sidebar, every overlay, and the shell chrome they reshape; markup shared
+// the product sidebar, every overlay, and the shell chrome they reshape; markup shared
 // with the overlays (the exchange dialog reuses bubbles, the Secrets page reuses
 // question-card fields) stays here so a plain view keeps it styled.
 // CONVERSATION_CSS re-skins the shell's own conversation DOM and styles what only
@@ -21,7 +21,7 @@ body{-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;--bt-
 .bt-mark .bt-b,.bt-mark .bt-eye,.bt-mark .bt-eyes,.bt-mark .bt-gaze{transform-box:fill-box}
 .bt-mark .bt-b{transform-origin:50% 100%}
 .bt-mark .bt-eye,.bt-mark .bt-eyes{transform-origin:center}
-/* Motion levels (Settings → Bots → Animation) set body[data-bt-motion]: quiet moves a
+/* Motion levels (Settings → General → Appearance) set body[data-bt-motion]: quiet moves a
    mark only for its state; normal, the default, adds petting, pokes and eyes that follow
    the pointer; lively adds blinks and fidgets at rest and a question riding on the head. */
 body[data-bt-motion=lively] .bt-mark[data-live]:is([data-state=idle],[data-state=alert]) .bt-eye{animation:bt-blink-idle 5s linear infinite;animation-delay:var(--bt-delay,0s)}
@@ -150,7 +150,7 @@ body[data-bt-motion=quiet] .bt-mark[data-poke]{cursor:default}
 html[data-windows-titlebar] .bt-leftcol,html[data-platform=darwin] .bt-leftcol{border-right:none}
 .bt-leftcol-grip{position:absolute;right:-4px;top:0;bottom:0;width:8px;cursor:col-resize;z-index:3;touch-action:none}
 .bt-leftcol-grip:hover,.bt-leftcol-grip:active{background:linear-gradient(to right,transparent 3px,var(--bt-line-2) 3px,var(--bt-line-2) 5px,transparent 5px)}
-/* The shell's collapsed sidebar keeps no track in the Bot view, so a hidden
+/* The shell's collapsed sidebar keeps no track in the product view, so a hidden
    column leaves nothing behind (the shell's right column, when open, keeps its
    own geometry). Our own collapse of it lands without the shell's slide. */
 [class*="_frame"][data-sidebar-collapsed][data-rightbar-collapsed]:has(>[class*="_sidebarCol"]){grid-template-columns:0px minmax(0,1fr) 0px!important}
@@ -391,7 +391,7 @@ html[data-windows-titlebar]:not([data-fullscreen]) :is(.bt-pane,.bt-panel)::befo
 .bt-panel[data-leaving]{transform:translateX(100%);transition:transform .3s cubic-bezier(.2,0,0,1);pointer-events:none}
 .bt-panel[data-instant]{transition:none}
 @keyframes bt-pane-in{from{transform:translateX(100%)}}
-/* The right margin glides with the Bot panel's slide; the left one lands at once,
+/* The right margin glides with the details panel's slide; the left one lands at once,
    as our left column appears, folds and hides without a slide of its own. */
 [class*="_centerCol"]{transition:margin-right ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing}}
 .bt-panel-grip{position:absolute;left:-5px;top:0;bottom:0;width:8px;cursor:col-resize;z-index:3;touch-action:none}
@@ -432,7 +432,7 @@ html[data-windows-titlebar]:not([data-fullscreen]) :is(.bt-pane,.bt-panel)::befo
 .bt-run-sep{color:var(--bt-ink-3)}
 .bt-danger{color:var(--bt-danger)}
 
-/* Bot settings: fields, the avatar editor popover, and the details-pane sub-view. */
+/* Role settings: fields, the avatar editor popover, and the details-pane sub-view. */
 .bt-field{display:flex;flex-direction:column;gap:6px}
 .bt-field-label{font-size:var(--bt-font-body);line-height:18px;font-weight:500}
 .bt-input{width:100%;box-sizing:border-box;height:36px;border:1px solid var(--bt-line);border-radius:var(--bt-radius-input);padding:0 10px;background:var(--bt-card);color:var(--bt-ink);font:inherit;font-size:var(--bt-font-body);outline:none}
@@ -596,9 +596,9 @@ html[data-windows-titlebar] .bt-title-toggle:hover{background:var(--bt-hover)}
 /* Elsewhere the switch shows only while the column is hidden, where the column's
    own top row had it. */
 html:not([data-windows-titlebar]) .bt-title-toggle{position:fixed;left:12px;top:calc(var(--dsh-frame-top-clearance,0px) + 6px);z-index:30}
-/* The footer ends in the Bot row: the whale's settings seat, then the account menu
+/* The footer ends in the identity row: the whale's settings seat, then the account menu
    when no plugin holds that seat. Every other plugin's entry takes a whole row above
-   it, in the shell's order, so none of them squeezes the Bot row. */
+   it, in the shell's order, so none of them squeezes the identity row. */
 [class*="_footArea"]{grid-template-columns:auto minmax(0,1fr);grid-auto-flow:row dense;align-items:center;gap:4px 9px;padding:8px 6px 6px!important}
 /* DSH hides the footer of a collapsed sidebar under a Windows title bar; the grid
    stays out of that one place. */
@@ -651,7 +651,7 @@ html:not([data-windows-titlebar]) [class*="_footArea"],:not([class*="_collapsed"
    blocks text selection and link clicks there. */
 .bt-tools::after{content:"";position:absolute;top:-8px;bottom:-8px;right:100%;width:10px;z-index:-1}
 .bt-msg:hover>.bt-msg-line>.bt-tools,.bt-msg:focus-within>.bt-msg-line>.bt-tools,.bt-tools[data-open]{opacity:1;visibility:visible}
-/* The flat layout: a Bot's text has no bubble and takes its own share of the column
+/* The flat layout: SuperAgent text has no bubble and takes its own share of the column
    (the whole of it unless set). The toolbar floats over the message's top right. */
 body[data-bt-layout=flat] .bt-astack{align-items:stretch;gap:10px}
 body[data-bt-layout=flat] .bt-msg,body[data-bt-layout=flat] .bt-astack[data-lead]>.bt-msg{align-items:stretch;max-width:calc(var(--bt-flat-w) * 100%)}
@@ -958,7 +958,7 @@ body[data-bt-layout=flat] .bt-think{max-width:calc(var(--bt-flat-w) * 100%)}
 [class*="_scroll"]>[class*="_column"]::before{content:var(--bt-first-sep,none);display:block;flex:none;height:28px;margin:17px 0 12px;font-size:var(--bt-font-small);line-height:28px;text-align:center;color:var(--bt-ink-2);white-space:nowrap}
 .bt-activity{display:flex;align-items:center;gap:10px;margin:8px 0 4px 2px;font-size:var(--bt-font-control);color:var(--bt-ink-2)}
 .bt-group-replies{display:contents}
-/* A Bot chat is flat in every work-details mode, without changing the user's mode
+/* A product chat is flat in every work-details mode, without changing the user's mode
    (it is a DSH-wide setting): step groups lose their header and stay open, and what a
    mode folds away in a finished turn stays shown. TurnProcessCell also opens that
    fold; these rules cover the first frame before it does. */
@@ -992,11 +992,11 @@ html[data-platform=darwin] header[class*="_header"]:has(.bt-head) :is(a,button,i
    group chat. Kept on the root alone, a write restyles one element. */
 @property --dsh-conversation-column-width{syntax:"*";inherits:false}
 @property --dsh-chat-user-width{syntax:"*";inherits:false}
-/* DSH's turn tail keeps what plugins put in it (delivered files, the Bot's separators),
+/* DSH's turn tail keeps what plugins put in it (delivered files, the product separators),
    without its copy and branch row; a tail with nothing in it takes no room. */
 [data-turn-tail]>:not([data-slot="conversation.chat.turnTail"]){display:none!important}
 [class*="_flowItem"][data-chat-flow-kind="turn-tail"]:not(:has([data-slot="conversation.chat.turnTail"]:not(:empty))){display:none!important}
-/* Every team Session belongs to a Bot or a group, so a blank one is an empty chat, not
+/* Every product Session belongs to a role or a group, so a blank one is an empty chat, not
    the shell's new-session hero: no headline, no workspace or mode picker, and the
    composer stays docked at the bottom. */
 [data-content-phase=hero] [class*="_scrollBody"]{justify-content:flex-end!important}
@@ -1072,7 +1072,7 @@ html[data-platform=darwin] header[class*="_header"]:has(.bt-head) :is(a,button,i
 [data-composer-card] [class*="_modes"]:empty{display:none!important}
 [data-composer-card] [class*="_activity"]:not(:has([data-slot] > *)){display:none!important}
 [data-composer-card] [class*="_trailing"]{gap:8px!important}
-/* No display here: DSH hides these controls with [hidden] while the Bot works. */
+/* No display here: DSH hides these controls with [hidden] while SuperAgent works. */
 [data-composer-card] [class*="_standardControls"]{align-items:center!important;gap:8px!important}
 [data-composer-card] button[class*="_primary"]{width:28px!important;height:28px!important;background:var(--bt-accent)!important;color:var(--bt-accent-ink)!important;border-radius:var(--bt-radius-round)!important;transition:opacity .15s ease,${spring(SPRING_TAP, 'scale')};animation:bt-icon-swap ${SPRING_POP.duration}ms ${SPRING_POP.easing}}
 [data-composer-card] button[class*="_primary"]:hover:not(:disabled){opacity:.9}
@@ -1114,7 +1114,7 @@ div:has(> nav [class*="_marks"]){display:none!important}
 [class*="_userRow"] [class*="_bubble"] [class*="_markdown"],[class*="_userRow"] [class*="_bubble"] a{color:inherit}
 /* Sent messages get the hover toolbar below; steering and unsent bubbles keep none. */
 [class*="_userRow"] [class*="_actions"]{display:none!important}
-/* A steering message the Bot has not read yet shows a small unread label under
+/* A steering message SuperAgent has not read yet shows a small unread label under
    its bubble's right edge; --bt-steer-unread is set per window (header.js), and
    the none fallback means no English can leak into a Chinese window. */
 [data-pending-steering]{flex-wrap:wrap}

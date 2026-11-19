@@ -58,8 +58,8 @@ export const folderName = path => String(path).replace(/[\\/]+$/, '').split(/[\\
 
 const Tick = ({ on }) => h('span', { className: 'bt-model-tick', 'aria-hidden': true }, on ? h(CheckIcon) : null)
 
-// Where a Bot, or every member of a group, works. `value` is the saved folder; without
-// one a Bot works in the team workspace and a group member in its own folder. `onPick`
+// Where a SuperAgent role, or every member of a group, works. `value` is the saved folder;
+// without one a role works in the SuperAgent workspace and a group member in its own folder. `onPick`
 // gets the chosen path, or '' for that default. `team` is the menu for the team workspace
 // itself, which has no default.
 export function FolderMenu({ value, group = false, team = false, actions, run, onPick, wide = false, disabled = false,
@@ -70,8 +70,8 @@ export function FolderMenu({ value, group = false, team = false, actions, run, o
   const [draft, setDraft] = useState('')
   const [listing, setListing] = useState(null)
   const [problem, setProblem] = useState('')
-  const fallback = fallbackLabel ?? (group ? t("Each Bot's own folder") : t('Team workspace'))
-  const menuLabel = label ?? (team ? t('Team workspace') : t('Working folder'))
+  const fallback = fallbackLabel ?? (group ? t("Each Worker's own folder") : t('SuperAgent workspace'))
+  const menuLabel = label ?? (team ? t('SuperAgent workspace') : t('Working folder'))
   const toggle = () => {
     if (isOpen) { close(); return }
     setView('list')

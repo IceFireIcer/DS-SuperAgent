@@ -138,7 +138,7 @@ function checkLocations(t, dataDir, workspace, { saved = false } = {}) {
 }
 
 /**
- * Where the app keeps its data and the Bots' files, asked at the first start.
+ * Where the app keeps its data and SuperAgent files, asked at the first start.
  * A run on throwaway folders (DS_SUPERAGENT_HOME, for development and tests) asks nothing and copies nothing.
  * @returns {Promise<{ dataDir: string, workspace?: string, quit?: true }>}
  */

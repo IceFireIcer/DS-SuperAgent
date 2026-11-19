@@ -9,6 +9,8 @@
 
 English | [中文](README.zh.md)
 
+Created and maintained by [IceFireIcer](https://github.com/IceFireIcer).
+
 ![version](https://img.shields.io/badge/version-R5_preview-blue) ![DSH](https://img.shields.io/badge/DSH-0.2.1--rc.4-4D6BFE) ![license](https://img.shields.io/badge/license-Apache_2.0-green)
 
 DS SuperAgent is a three-layer agent product for

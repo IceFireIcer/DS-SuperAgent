@@ -5,6 +5,8 @@ import { FieldRow, SectionCard } from './product-settings-components.js'
 
 function AboutSettings() {
   return h(SectionCard, { title: 'DS SuperAgent' },
+    h(FieldRow, { label: t('Package'), control: h('span', null, metadata.name) }),
+    h(FieldRow, { label: t('Author'), control: h('span', null, metadata.author) }),
     h(FieldRow, { label: t('Plugin version'), control: h('span', null, metadata.version) }),
     h(FieldRow, { label: t('License'), control: h('span', null, metadata.license) }),
     h('div', { className: 'bt-set-row' },

@@ -1,6 +1,8 @@
 {
   "name": "ds-superagent-mobile",
   "version": "0.1.0",
+  "description": "DS SuperAgent mobile client starter.",
+  "author": "IceFireIcer",
   "engines": {
     "node": ">=24.0.0"
   },

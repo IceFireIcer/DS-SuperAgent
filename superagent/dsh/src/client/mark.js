@@ -5,7 +5,7 @@ import { mascotInteraction } from './motion.js'
 export { lookOf } from './characters.js'
 
 // -------------------------------------------------------------------------
-// Bot mark: the Bot's character (or its uploaded photo), looked up by lookOf.
+// SuperAgent mark: the role's character (or its uploaded photo), looked up by lookOf.
 
 // Uploaded images only bob or hop because they have no character parts to move.
 const STATES = ['idle', 'thinking', 'searching', 'working', 'sending', 'orbit', 'waiting', 'alert', 'done']
@@ -42,7 +42,7 @@ function useGaze(ref, enabled) {
 }
 
 // A mark moves for its state. `live` marks (sidebar, header, details) also answer the
-// pointer, and at the lively motion level blink and fidget at rest (each Bot its own
+// pointer, and at the lively motion level blink and fidget at rest (each role its own
 // fidget and moment); transcript marks stay still so a long chat does not run dozens
 // of animations.
 const FIDGETS = ['hop', 'sway', 'stretch', 'look']

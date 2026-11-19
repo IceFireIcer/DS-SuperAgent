@@ -67,7 +67,7 @@ function themeVars(mode, dark, accent = mode.accent) {
 }
 const declarations = vars => Object.entries(vars).map(([name, value]) => `${name}:${value}`).join(';')
 // A preset accent is saved as its light value; in dark mode it takes the preset's dark
-// value, as Bot names do, so Charcoal does not vanish on a dark background. A custom
+// value, as role names do, so Charcoal does not vanish on a dark background. A custom
 // accent is the same in both modes. A preset is matched the way Settings marks it.
 const darkAccent = (accent) => {
   const ink = ACCENT_INKS.find(id => INKS[id][0] === accent)

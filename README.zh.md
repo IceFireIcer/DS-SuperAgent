@@ -9,6 +9,8 @@
 
 [English](README.md) | 中文
 
+作者与维护者：[IceFireIcer](https://github.com/IceFireIcer)。
+
 ![版本](https://img.shields.io/badge/版本-R5_预览-blue) ![DSH](https://img.shields.io/badge/DSH-0.2.1--rc.4-4D6BFE) ![许可](https://img.shields.io/badge/许可-Apache_2.0-green)
 
 DS SuperAgent 是面向 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的三层 Agent

@@ -290,7 +290,7 @@ function hostFailure(error) {
   void fail(error)
 }
 
-// A Host that the shell listens to: the Bot browser's endpoint and a failure both arrive here.
+// A Host that the shell listens to: the browser resource endpoint and a failure both arrive here.
 function wireHost(instance) {
   instance.onMessage(message => {
     if (message?.type === 'ds-superagent:credential-import-read' && typeof message.id === 'string'
@@ -483,7 +483,7 @@ async function start() {
   ipcMain.handle(IPC.browserViewClose, (event, botId, tabId) => { assertWindow(event); return botViews.operate(String(botId), 'close', { tabId: String(tabId) }) })
   ipcMain.handle(IPC.browserViewHold, (event, botId, held) => { assertWindow(event); return botViews.hold(String(botId), held === true) })
   // Cookie imports: a file or an installed browser's profile is parsed or harvested into a
-  // pending set first; only apply (the user's confirm) writes into the Bot's partition.
+  // pending set first; only apply (the user's confirm) writes into the resource partition.
   ipcMain.handle(IPC.browserImportSources, (event) => {
     assertWindow(event)
     return listSources()
@@ -521,7 +521,7 @@ async function start() {
   })
   ipcMain.handle(IPC.browserImportApply, async (event, key, id) => {
     assertWindow(event)
-    if (typeof key !== 'string' || !key.startsWith('bot:')) throw new Error(`${PRODUCT_NAME}: a Bot storage key is required`)
+    if (typeof key !== 'string' || !key.startsWith('bot:')) throw new Error(`${PRODUCT_NAME}: a browser resource storage key is required`)
     const pending = cookieImports.take(typeof id === 'string' ? id : '')
     if (!pending) throw new Error(`${PRODUCT_NAME}: this import is no longer pending`)
     const storage = session.fromPartition(partitionOf(key))
@@ -1062,7 +1062,7 @@ function openOutside(url) {
 }
 
 // The computer woke: the Host may have survived, or it may have to be replaced. A window that
-// was closed while the Bots worked loads what it missed.
+// was closed while SuperAgent worked loads what it missed.
 async function resumeHost() {
   suspended = false
   if (stopping || failed || host === undefined) return

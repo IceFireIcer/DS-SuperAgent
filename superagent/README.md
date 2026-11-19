@@ -1,5 +1,7 @@
 # DS SuperAgent package
 
+Author: IceFireIcer.
+
 This ESM package is the product's one DSH package. Its root exports the production profile and Host, `./client`
 provides the existing browser UI, and `./web-search` provides the `auto` search provider. The TypeScript Engine,
 `createProductHost`, Office tools and direct Cordis/CLI entry points ship in the same package.
@@ -258,7 +260,7 @@ The interpreter is constrained before the Engine applies anything:
 | Target | Allowed | Fixed |
 | --- | --- | --- |
 | Roles | prompt instructions and skills | role names, provider/model routes, tools and permissions |
-| Policy | intake `mode` and trigger `rules` | budgets, requester/bot allowlists, self actor ids and the assessor |
+| Policy | intake `mode` and trigger `rules` | budgets, requester/automation allowlists, self actor ids and the assessor |
 
 Router prompts must keep `{{goal}}`; Worker prompts must keep `{{goal}}` and `{{constraints}}`; the complete roles JSON is at most 64 KiB and individual names/instructions/skills reuse the `validateRoleConfig` limits. Policy changes are merged into the current policy and validated with `validateIntakePolicy`. Unknown fields, tools, allowlists, budgets, devices, publication rights, stop/pause/resume and config-write keys are rejected.
 
@@ -274,7 +276,7 @@ The config command never cancels a human stop, grants a device or publication pe
 
 R5-34 removes the old team runtime and its cutover products. The former archive, switchover, activation and reversal
 packages are no longer built or exported. Existing user files are left on disk; the product starts one
-`ds-superagent` profile and does not reconstruct, resume or expose the old roster, round, group, Bot-to-Bot or native
+`ds-superagent` profile and does not reconstruct, resume or expose the old roster, round, group, agent-to-agent or native
 Session history paths.
 
 ## Collaboration load comparison
@@ -340,9 +342,9 @@ These are core behaviors only: the isolated real-repository create/review/merge 
 
 ## Proactive rules
 
-`updateProactiveRules` stores revisioned observe/auto rules with actor/addressing/text matching, communication mode, an optional scope and a per-window run budget. Observe records `proactive-run` only. Auto acts only on the current recorded source event, suppresses repeated bot/CI text and ambient noise, reserves budget in a transaction, and prepares in an isolated directory outside that transaction through an injected callback; authorized system schedule occurrences can prepare. A useful summary is `prepared` with artifacts verified for containment, size, SHA-256 and a byte budget inside the isolated directory; no useful result is `silent`; errors/timeouts are `failed`; exhausted budget is visible and does not widen authority. Preparation never creates an Outbox, PR, message or merge permission. Pausing global processing skips evaluation.
+`updateProactiveRules` stores revisioned observe/auto rules with actor/addressing/text matching, communication mode, an optional scope and a per-window run budget. Observe records `proactive-run` only. Auto acts only on the current recorded source event, suppresses repeated automation/CI text and ambient noise, reserves budget in a transaction, and prepares in an isolated directory outside that transaction through an injected callback; authorized system schedule occurrences can prepare. A useful summary is `prepared` with artifacts verified for containment, size, SHA-256 and a byte budget inside the isolated directory; no useful result is `silent`; errors/timeouts are `failed`; exhausted budget is visible and does not widen authority. Preparation never creates an Outbox, PR, message or merge permission. Pausing global processing skips evaluation.
 
-Set `DS_SUPERAGENT_GITHUB_OWNER`, `DS_SUPERAGENT_GITHUB_REPO` and `DS_SUPERAGENT_GITHUB_ALLOWED_REQUESTER_IDS` to configure one repository and the comma-separated list of people whose requests can enter Main. An empty list allows observation only. Use `DS_SUPERAGENT_GITHUB_SELF_ACTOR_IDS` for bot accounts to ignore. In Settings, select a managed credential for the configured GitHub source and grant Main the `source` purpose for `github:owner/repo`. The Host uses `gh api` to read changes with the selected credential. Product preparation settings allow observe and auto rules for bot and CI events in that repository.
+Set `DS_SUPERAGENT_GITHUB_OWNER`, `DS_SUPERAGENT_GITHUB_REPO` and `DS_SUPERAGENT_GITHUB_ALLOWED_REQUESTER_IDS` to configure one repository and the comma-separated list of people whose requests can enter Main. An empty list allows observation only. Use `DS_SUPERAGENT_GITHUB_SELF_ACTOR_IDS` for automation accounts to ignore. In Settings, select a managed credential for the configured GitHub source and grant Main the `source` purpose for `github:owner/repo`. The Host uses `gh api` to read changes with the selected credential. Product preparation settings allow observe and auto rules for automation and CI events in that repository.
 
 To deliver to GitHub, set `DS_SUPERAGENT_GITHUB_POSTING_ACTOR_ID` to the credential account's exact GitHub login and grant Router the `outbound` purpose for the same source. Give the credential permission to comment on the test repository or the approved deployment repository. GitHub delivery history includes the verified comment ID and URL. If GitHub may have accepted a comment before a failure, the Outbox looks for that comment using the original delivery identity. A confirmed grant denial or unavailable destination appears in delivery history.
 
@@ -378,7 +380,7 @@ npm run build
 node dev/chat.mjs
 ```
 
-Open the printed loopback URL and ask `What is 2 + 2?`. The mock completes addition requests and deliberately leaves other requests unfinished. It supplies streaming provider chunks to actual DSH Router/Worker Sessions; it does not emulate the agent loop. The chat shows status, the acknowledgement, the result and expandable report/Session evidence. Requests keep their stable identity on retry; the tab remembers accepted conversations across refresh. The HTTP entry binds an available port on 127.0.0.1, checks Host/Origin, bounds JSON input and serves a nonce-based CSP. It is a single trusted local preview, not a multi-user deployment or replacement for the existing Bot UI.
+Open the printed loopback URL and ask `What is 2 + 2?`. The mock completes addition requests and deliberately leaves other requests unfinished. It supplies streaming provider chunks to actual DSH Router/Worker Sessions; it does not emulate the agent loop. The chat shows status, the acknowledgement, the result and expandable report/Session evidence. Requests keep their stable identity on retry; the tab remembers accepted conversations across refresh. The HTTP entry binds an available port on 127.0.0.1, checks Host/Origin, bounds JSON input and serves a nonce-based CSP. It is a single trusted local preview, not a multi-user deployment or replacement for the product UI.
 
 Press Ctrl+C to stop. The runner stops the server and Effects, disposes native agents/context, closes SQLite and removes its own temporary state. No credential or existing DSH data is used. The native adapter's SQLite Session persistence, restart recovery and writer fencing now live in session-persistence-sqlite (T15); this browser preview still uses the first-party JSONL provider configured to an isolated directory. Real external delivery remains with T16–T20 and later tickets. Code and UI are original, importing published DSH APIs rather than copying implementation.
 

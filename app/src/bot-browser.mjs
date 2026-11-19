@@ -100,7 +100,7 @@ export class BotBrowserGuests {
     }
   }
 
-  /** Close the key's guests and clear its storage, as when its Bot is deleted. */
+/** Close the key's guests and clear its storage, as when its browser resource is deleted. */
   async forget(owner, key) {
     const partition = partitionOf(keyOf(key))
     const own = [...this.#leases].filter(([, lease]) => lease.owner === owner && lease.partition === partition)

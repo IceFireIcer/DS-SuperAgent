@@ -149,7 +149,7 @@ destinations `/data` and `/workspace` unchanged when you rebuild or move the
 host directories; the product records those destinations, not the host paths.
 An existing `/data/profiles/web` from a pre-R5 image does not contain
 `ds-superagent`; the entrypoint refuses to start and asks for a new or archived
-`DATA_DIR` instead of silently running the removed Bot team.
+`DATA_DIR` instead of silently running the removed legacy team runtime.
 
 **Backup**: stop the container, then copy both `DATA_DIR` and `WORKSPACE_DIR`.
 Restore by putting both folders back and starting again.

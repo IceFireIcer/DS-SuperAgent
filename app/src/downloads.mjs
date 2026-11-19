@@ -1,5 +1,5 @@
 // A file the main window downloads asks where it should go first. Downloads from
-// any other contents (the sign-in child, a Bot browser guest) keep their own
+// any other contents (the sign-in child, a browser resource guest) keep their own
 // session's rules.
 import { join } from 'node:path'
 
