@@ -16,6 +16,8 @@
 
 ## 当前进展
 
+DSH `0.2.2-rc.1` 升级的版本矩阵、Windows 本地验证和已知限制见[基线记录](dsh-0.2.2-rc.1.md)（#143）。
+
 T55/#83 的 R5 本机四目标验收门槛已完成，包含权限/恢复、真实本机 Qwen3.5 9B 语义验收、真实 GitHub 回执及最新 Windows 原生升级与工作控制。T58/#92 的跨机和实体设备验收按维护者决定取消；真实飞书租户 deferred。[验收记录](t55-r5-local.md) · [真实模型报告](t55-r5-real-model-run.json) · [GitHub 外发](github-product-delivery.md)
 
 R5-28/#120 的[选择导入凭据引用并重新授权](r5-28.md)已完成代码验收：只读取用户明确选定的 JSON 导出；secret 留在 Electron main process 与 DSH credential record，业务库仅保存稳定来源引用和新授权目标；精确 scope、取消/重放/未知结果恢复均由 Host 和凭据资源管理器处理。[复核记录](reviews/r5-28.md)与定向验证已更新。真实飞书租户、用户 DSH profile、PostgreSQL 运行及全量 CI 未作为本票验收。

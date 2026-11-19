@@ -170,9 +170,8 @@ docker compose up -d
 
 A rebuild changes the image and the DSH it contains. An existing persisted
 profile is reused, and the entrypoint does not manage plugin upgrades. The
-image is built and tested with dsh `0.2.1-rc.4`, the version
-The product is verified with; a `DSH_VERSION` build arg exists, but other releases
-are untested and newer ones change how the server binds.
+image defaults to DSH `0.2.2-rc.1` to match the SuperAgent package. If you set
+the `DSH_VERSION` build argument, keep it aligned with that package's DSH peers.
 
 ## Prebuilt image
 

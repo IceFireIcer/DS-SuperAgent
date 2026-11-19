@@ -1,6 +1,6 @@
 # DS SuperAgent desktop app
 
-The Electron app for Windows, macOS and Linux. It installs a pinned DeepSeek Harness (DSH 0.2.1-rc.4), boots the
+The Electron app for Windows, macOS and Linux. It installs a pinned DeepSeek Harness (DSH 0.2.2-rc.1), boots the
 single `ds-superagent` profile through `@deepseek-ai/dsh/profile-boot`, and keeps its data in its own `DSH_HOME`. It
 never writes to `~/.dsh`. Its window shows DSH's existing Web front end with the single `ds-superagent` product
 surface. The design is in [docs/plans/2026-10-16-desktop-app.md](../docs/plans/2026-10-16-desktop-app.md).
@@ -33,7 +33,7 @@ The app starts with its own settings and leaves data from previous product insta
 
 ## Run from source (Windows)
 
-From the repository root, run in PowerShell (Node.js 24 or later and npm required):
+From the repository root, run in PowerShell (Node.js 24.9+ within the Node.js 24 series and npm required):
 
 ```powershell
 .\start.ps1

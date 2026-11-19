@@ -210,9 +210,10 @@ export class NativeSessions {
     const baseOptions = this.options[request.role]
     if (!baseOptions) throw new CoreError('ROLE_NOT_CONFIGURED', `The ${request.role} role has no Session options.`)
     const { reasoningEffort: _existingEffort, ...agentOptions } = baseOptions
+    const modelSelection = { provider: route.provider, model: route.model,
+      ...(route.effort ? { reasoningEffort: ReasoningEffortId(route.effort) } : {}) }
     const creation = {
-      sessionId: SessionId(request.sessionId), agentOptions: { ...agentOptions, provider: route.provider, model: route.model,
-        ...(route.effort ? { reasoningEffort: ReasoningEffortId(route.effort) } : {}) },
+      sessionId: SessionId(request.sessionId), agentOptions: { ...agentOptions, ...modelSelection },
       ...(request.cwd ? { meta: { cwd: request.cwd } } : {}),
       setup: ((scoped, agent) => {
         scoped.on('agent/request', async (_payload, next) => {
@@ -276,6 +277,7 @@ export class NativeSessions {
     try {
       request.signal?.throwIfAborted()
       await request.onBeforeModel?.()
+      if (persisted) handle.agent.model.select(modelSelection)
       await request.onDelivered?.()
       handle.agent.followup({ id: MessageId(messageId), role: 'user', content: request.content ?? [{ type: 'text', text: request.text }], source: { kind: 'user' } })
       await handle.agent.whenIdle()

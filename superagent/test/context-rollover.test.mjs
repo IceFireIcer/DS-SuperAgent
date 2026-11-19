@@ -100,12 +100,11 @@ test('a context rollover cancels the previous generation background work', { tim
     const completed = options.messages.slice(options.messages.lastIndexOf(user) + 1).filter(message => message.role === 'tool').length
     if (options.model === 'worker') {
       if (text.startsWith('Continue in a new Session after a context handoff.')) {
-        if (!completed) {
-          yield* toolResponse('read_file', { path: 'existing.txt' })
-          return
-        }
-        yield* toolResponse('report_ready', { result: 'Completed after handoff.', evidence: 'Read existing.txt after the handoff.',
-          artifacts: 'existing.txt' })
+        if (completed === 0) yield* toolResponse('read_file', { path: 'existing.txt' }, 'handoff-read')
+        else if (completed === 1) yield* toolResponse('run_command', { name: 'verify' }, 'handoff-verify')
+        else if (completed === 2) yield* toolResponse('report_ready', { result: 'Completed after handoff.',
+          evidence: 'Read and verified existing.txt after the handoff.', artifacts: 'existing.txt' }, 'handoff-ready')
+        else yield* textResponse('Recorded.')
         return
       }
       if (!completed) {
@@ -124,7 +123,10 @@ test('a context rollover cancels the previous generation background work', { tim
   })
   environment = await core.LocalEnvironment.open({ id: 'project', instanceId: 'private', root, allowedActorIds: ['user'],
     permissions: ['read', 'write', 'search', 'command'],
-    commands: { build: { argv: [process.execPath, '-e', 'setInterval(() => {}, 1000)'], timeoutMs: 5000, backgroundTimeoutMs: 120000 } } })
+    commands: {
+      build: { argv: [process.execPath, '-e', 'setInterval(() => {}, 1000)'], timeoutMs: 5000, backgroundTimeoutMs: 120000 },
+      verify: { argv: [process.execPath, '-e', 'if (require("node:fs").readFileSync("existing.txt", "utf8") !== "verified\n") process.exit(1)'], timeoutMs: 5000 },
+    } })
   storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   sessions = new core.NativeSessions(native, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
   engine = new core.Engine(storage, 'private', { sourceInstanceId: 'desktop', actorId: 'user', allowedActorIds: ['user'] },

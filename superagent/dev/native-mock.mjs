@@ -5,6 +5,7 @@ import LlmRuntime, { LlmAdapter } from '@deepseek-ai/dsh-llm'
 import { SessionStore } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import * as JsonlPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 
@@ -17,7 +18,8 @@ export async function nativeContext(directory, respond, options = {}) {
     await context.plugin(SessionProjectionRegistry)
     await context.plugin(AgentRegistry)
     await context.plugin(SystemPrompt, {})
-    await context.plugin(ToolRuntime, { mode: 'native' })
+    await context.plugin(ToolRuntime)
+    await context.plugin(NativeToolExecutor)
     await context.plugin(LlmRuntime)
     if (options.persistence !== false) await context.plugin(options.persistence ?? JsonlPersistence,
       options.persistenceConfig ?? { root: directory, compression: 'none' })

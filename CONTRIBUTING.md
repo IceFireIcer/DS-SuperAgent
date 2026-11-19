@@ -80,9 +80,9 @@ Keep one pull request to one issue. Split a large change into several pull reque
 
 You need:
 
-- Node.js `24` or later.
+- Node.js `24.9` or later within the Node.js 24 series.
 - Git.
-- For the product profile check only: pnpm `11` and a checkout of DeepSeek Harness at the tested version.
+- Optional for testing a DeepSeek Harness source checkout: pnpm `11`.
 
 ```sh
 git clone https://github.com/IceFireIcer/DS-SuperAgent.git ds-superagent
@@ -92,13 +92,13 @@ cd ds-superagent/superagent
 npm ci
 ```
 
-For the product profile check, add the DeepSeek Harness checkout next to `superagent/` (this folder is ignored by
-Git):
+The product profile check uses the app's installed DSH packages. For tests that resolve DSH from source, you can add a
+matching checkout next to `superagent/` (this folder is ignored by Git):
 
 ```sh
 cd ..
 git clone https://github.com/deepseek-ai/deepseek-harness.git
-git -C deepseek-harness checkout dsh-v0.2.1-rc.4
+git -C deepseek-harness checkout dsh-v0.2.2-rc.1
 (cd deepseek-harness && pnpm install)
 ```
 

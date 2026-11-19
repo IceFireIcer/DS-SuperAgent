@@ -79,9 +79,9 @@
 
 需要：
 
-- Node.js `24` 或更高。
+- Node.js 24 系列的 `24.9` 或更高版本。
 - Git。
-- 仅产品 profile 检查需要：pnpm `11`，以及受测 DSH 版本的 DeepSeek Harness 源码。
+- 从 DeepSeek Harness 源码运行测试时需要 pnpm `11`。
 
 ```sh
 git clone https://github.com/IceFireIcer/DS-SuperAgent.git ds-superagent
@@ -91,12 +91,12 @@ cd ds-superagent/superagent
 npm ci
 ```
 
-产品 profile 检查需要把 DeepSeek Harness 源码放在插件目录旁边（这个目录被 Git 忽略）：
+产品 profile 检查使用应用已安装的 DSH 包。需要从源码解析 DSH 的测试可在 `superagent/` 旁边检出对应版本（这个目录被 Git 忽略）：
 
 ```sh
 cd ..
 git clone https://github.com/deepseek-ai/deepseek-harness.git
-git -C deepseek-harness checkout dsh-v0.2.1-rc.4
+git -C deepseek-harness checkout dsh-v0.2.2-rc.1
 (cd deepseek-harness && pnpm install)
 ```
 

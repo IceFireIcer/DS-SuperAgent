@@ -37,7 +37,7 @@ DS SuperAgent 是面向 [DeepSeek Harness](https://github.com/deepseek-ai/deepse
 
 ## 从当前仓库运行
 
-使用 Node.js 24。应用从本仓库安装唯一的 `ds-superagent` 产品包：
+使用 Node.js 24 系列的 24.9 或更新版本。应用从本仓库安装唯一的 `ds-superagent` 产品包：
 
 ```powershell
 npm --prefix superagent ci

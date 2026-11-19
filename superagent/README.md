@@ -6,7 +6,7 @@ provides the existing browser UI, and `./web-search` provides the `auto` search 
 
 ## Requirements
 
-- Node.js 24 or newer.
+- Node.js 24.9 or later within the Node.js 24 series.
 - An explicitly configured, absolute, writable SQLite database path isolated for this instance.
 - An explicit instance ID and trusted desktop source configuration. `allowedActorIds` is a deployment-owned allowlist, not data from the submitted request.
 
@@ -356,7 +356,7 @@ This internal package is licensed Apache-2.0 as part of the repository. Its impl
 
 Router notices opt into a durable batch handler with at most seven items. Effects claims each group under one write transaction, retains individual identities and generations, and settles each outcome separately. An unhandled notice remains pending for bounded retry; unknown outcomes still require reconciliation. The Engine integration tests exercise this path through the real Effects dispatcher and DSH loop. Handlers without a batch adapter retain serial dispatch.
 
-T02 uses public `ctx.agents.create()` and `resume()`, the native DSH agent loop and tool pipeline, and the deployment's public Session persistence provider. It targets DSH 0.2.1-rc.4. `new NativeSessions(ctx, { router: { provider, model }, worker: { provider, model }, timeoutMs? })` binds explicit routes. Pass that adapter as `sessions` in the Cordis plugin config, or as the fifth `Engine` constructor argument. The host must already mount DSH agents, loop, LLM, tools, system prompt, Session registry, projections and persistence. Caller owns the adapter and its `close()` lifecycle; the plugin stops its Effects before closing business storage.
+T02 uses public `ctx.agents.create()` and `resume()`, the native DSH agent loop and tool pipeline, and the deployment's public Session persistence provider. The current package targets DSH 0.2.2-rc.1. `new NativeSessions(ctx, { router: { provider, model }, worker: { provider, model }, timeoutMs? })` binds explicit routes. Pass that adapter as `sessions` in the Cordis plugin config, or as the fifth `Engine` constructor argument. The host must already mount DSH agents, loop, LLM, tools, system prompt, Session registry, projections and persistence. Caller owns the adapter and its `close()` lifecycle; the plugin stops its Effects before closing business storage.
 
 The Router sees only assignment or current-report delivery tools. A Worker receives the original request text, `report_ready`, `ask_human`, protected add/remove tools for non-required Thread subscriptions, and `handback_input` during a source follow-up. The fixed Router Session is resumed for later notices in the same runtime; each Ticket has one Worker Assignment and its own Session. Native logs are persisted separately from business metadata and ready reports. Ordinary assistant text, an error or idle status cannot produce a result. A result must reference the current Assignment's ready report and goes through the same ordered Outbox as its acknowledgement, to the original message in the isolated conversation store. `engine.conversation(ticketId)` returns pending/running/waiting-human/ready, Attention, Assignment, reports and delivered messages. The native turn budget defaults to 15 s (configurable 100–60,000 ms) and eight model steps; the Effects deadline must exceed the turn budget and defaults to 60 s when native execution is enabled. Provider cancellation remains cooperative.
 

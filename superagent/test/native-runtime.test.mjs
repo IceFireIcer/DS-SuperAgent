@@ -269,7 +269,7 @@ test('a Session whose stored log ends with an open turn gets durable recovery cl
   await read.close()
 })
 
-test('a setup failure before publication leaves no stored Session and announces nothing', { timeout: 20000 }, async context => {
+test('a setup failure disposes the Session and allows creation to retry without publishing a failed Agent', { timeout: 20000 }, async context => {
   const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-native-rollback-sqlite-'))
   const sessionDatabase = join(directory, 'sessions.sqlite')
   let native
@@ -277,14 +277,16 @@ test('a setup failure before publication leaves no stored Session and announces 
   native = await nativeContext(directory, () => textResponse('Unused.'),
     { persistence: SqlitePersistence, persistenceConfig: { databasePath: sessionDatabase } })
   const persistence = native.get('sessionPersistence')
-  let announced = 0
-  native.on('session/created', () => { announced++ })
+  const lifecycle = []
+  native.on('session/created', () => { lifecycle.push('session/created') })
+  native.on('session/disposed', () => { lifecycle.push('session/disposed') })
+  native.on('agent/created', () => { lifecycle.push('agent/created') })
   await assert.rejects(native.agents.create({
     sessionId: 'rolled-back-session',
     agentOptions: { provider: 'mock', model: 'worker' },
     setup: () => { throw new Error('setup failed before publication') },
   }), /setup failed before publication/u)
-  assert.equal(announced, 0)
+  assert.deepEqual(lifecycle, ['session/created', 'session/disposed'])
   assert.equal(await persistence.stat('rolled-back-session'), undefined)
   assert.deepEqual(await persistence.list(), [])
   const handle = await native.agents.create({ sessionId: 'rolled-back-session', agentOptions: { provider: 'mock', model: 'worker' } })

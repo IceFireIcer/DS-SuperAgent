@@ -42,7 +42,7 @@ sending work. Data from previous product installs and personal DSH files stay in
 
 ## Run from this checkout
 
-Use Node.js 24. The app installs the single `ds-superagent` product package from this repository:
+Use Node.js 24.9 or later within the Node.js 24 series. The app installs the single `ds-superagent` product package from this repository:
 
 ```powershell
 npm --prefix superagent ci
