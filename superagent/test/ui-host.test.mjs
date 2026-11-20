@@ -82,6 +82,12 @@ test('the product HTTP boundary chats with Main and refuses cross-scope and unav
   assert.equal(usage.value.cost.status, 'unavailable')
   assert.equal(usage.value.coverage.status, 'available')
   assert.equal((await call('product-usage', { instanceId: 'another-private-scope' })).status, 403)
+  const breakdown = await call('usage-breakdown', { instanceId })
+  assert.deepEqual(breakdown.value.hourly.map(({ owner, model, kind, usage }) => [owner, model, kind, usage.totalTokens]),
+    [['main', 'main', 'conversation', 14]])
+  assert.equal((await call('usage-breakdown', { instanceId: 'another-private-scope' })).status, 403)
+  assert.equal((await call('browser-plugin', { instanceId, scope: { role: 'worker' } })).error.code, 'INVALID_INPUT')
+  assert.equal((await call('browser-plugin', { instanceId, scope: { role: 'main' } })).error.code, 'UNAVAILABLE')
   const status = await call('product-status', { instanceId })
   assert.equal(status.ok, true, JSON.stringify(status))
   assert.equal(status.value.main.state, 'ready')
@@ -92,6 +98,13 @@ test('the product HTTP boundary chats with Main and refuses cross-scope and unav
     timezone: 'UTC', when: { kind: 'at', at: Date.now() + 60_000 }, target: { kind: 'main' } })
   assert.equal(scheduled.ok, true, JSON.stringify(scheduled))
   const ruleId = scheduled.value.ruleId
+  const task = await call('scheduled-task-create', { instanceId, commandId: 'schedule-http', title: 'Check notes', text: 'Summarize the notes.',
+    timezone: 'UTC', when: { kind: 'at', at: Date.now() + 60_000 } })
+  assert.equal(task.ok, true)
+  assert.notEqual(task.value.ruleId, ruleId)
+  assert.deepEqual((await call('scheduled-task-list', { instanceId })).value.items.map(rule => rule.ruleId), [task.value.ruleId])
+  assert.equal((await call('scheduled-task-read', { instanceId, ruleId })).error.code, 'NOT_FOUND')
+  assert.equal((await call('scheduled-task-cancel', { instanceId, commandId: 'cancel-http', ruleId: task.value.ruleId })).value.status, 'cancelled')
   assert.deepEqual((await call('schedule-list', { instanceId })).value.items.map(rule => rule.ruleId), [ruleId])
   assert.deepEqual((await call('schedule-read', { instanceId, ruleId })).value.occurrences, [])
   assert.equal((await call('schedule-read', { instanceId: 'another-private-scope', ruleId })).status, 403)

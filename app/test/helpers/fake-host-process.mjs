@@ -64,6 +64,8 @@ export class HostProcess {
   receive(message) { for (const listener of this.#messageListeners) listener(message) }
 
   send(message) {
+    state.sent ??= []
+    state.sent.push(message)
     if (message?.type === 'ds-superagent:workspace-read') this.receive({ type: 'ds-superagent:workspace-read-result',
       id: message.id, path: state.workspace ?? this.#options.env.DS_SUPERAGENT_WORKSPACE })
   }

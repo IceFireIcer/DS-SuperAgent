@@ -60,6 +60,7 @@ function keepFocusInDialog(event) {
 
 function SettingsDialog({ sections, renderSlot, initialPage, onClose, leaving }) {
   const [target, setTarget] = useState(() => settingsTarget(initialPage) ?? settingsTarget('general'))
+  const [usageTabs, setUsageTabs] = useState(() => new Set())
   const { page, section } = target
   const id = useId()
   const dialog = useRef(null)
@@ -71,6 +72,9 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, leaving })
     return () => { if (previous?.isConnected) previous.focus() }
   }, [])
   useEffect(() => { if (scroll.current) scroll.current.scrollTop = 0 }, [section.id])
+  useEffect(() => {
+    if (page.id === 'usage') setUsageTabs(tabs => tabs.has(section.id) ? tabs : new Set([...tabs, section.id]))
+  }, [page.id, section.id])
 
   const close = () => { if (!leaving) onClose() }
   const navigate = targetId => {
@@ -91,8 +95,8 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, leaving })
     }
     if (event.key === 'Tab') keepFocusInDialog(event)
   }
-  const content = h(SettingsSectionOutlet, { key: section.id, id: section.id,
-    section: Object.hasOwn(sections, section.id) ? sections[section.id] : undefined,
+  const content = selected => h(SettingsSectionOutlet, { key: selected.id, id: selected.id,
+    section: Object.hasOwn(sections, selected.id) ? sections[selected.id] : undefined,
     renderSlot, close, navigate: navigateFromSection })
 
   return h(SettingsSectionContext.Provider, { value: { sections, navigate: navigateFromSection } },
@@ -110,8 +114,8 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, leaving })
         tabs: page.tabs ? h(SettingsTabs, { page, section, navigate, id }) : null }, page.tabs
           ? page.tabs.map(tab => h('div', { key: tab.id, role: 'tabpanel', id: `${id}-panel-${tab.id}`,
             'aria-labelledby': `${id}-tab-${tab.id}`, tabIndex: tab === section ? 0 : -1, hidden: tab !== section },
-          tab === section ? content : null))
-          : content),
+          tab === section || page.id === 'usage' && usageTabs.has(tab.id) ? content(tab) : null))
+          : content(section)),
       h('button', { type: 'button', className: 'bt-settings-close', 'aria-label': t('Close settings'), onClick: close }, h(CloseIcon)))))
 }
 

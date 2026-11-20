@@ -30,6 +30,8 @@ import { capabilityFields } from './capability-library.js'
 import { ProductConnectors, connectorFields, type ProductConnectorOptions } from './product-connectors/index.js'
 import { ImAccounts, type ImTransport } from './im-accounts/index.js'
 import { ImMainRelay, imMainBinding, imSource } from './im-main-relay.js'
+import { ProductPhone, phoneFields } from './product-phone.js'
+import { ProductComputer, computerFields, type ComputerAdapter } from './product-computer.js'
 import type { ProductCredentialManager } from './product-credential-manager.js'
 import { ProductCredentialImports, type CredentialImportAdapter } from './product-credential-imports.js'
 import { HostCredentialImportAdapter } from './credential-import-host.js'
@@ -60,6 +62,7 @@ export interface ProductHostConfig { databasePath?: string; postgres?: PostgresO
   workerMcpTool?: WorkerMcpConfig;
   /** Trusted Host seam; tests may supply a fake bridge without touching a user browser. */
   browserAdapter?: BrowserAdapter;
+  computerAdapter?: ComputerAdapter;
   /** Trusted local App bridge for one-item credential reads from an explicitly selected export. */
   credentialImportAdapter?: CredentialImportAdapter;
   connectors?: ProductConnectorOptions;
@@ -68,7 +71,8 @@ export interface ProductHostConfig { databasePath?: string; postgres?: PostgresO
   github?: Omit<GitHubRuntimeOptions, 'storage' | 'instanceId'>;
   githubConfigurationError?: 'INVALID_CONFIG' }
 export interface ProductHost {
-  dispatch(endpoint: string, payload?: Record<string, unknown>, client?: ClientIdentity): Promise<unknown>
+  dispatch(endpoint: string, payload?: Record<string, unknown>, client?: ClientIdentity,
+    authorizeMainSend?: (tx: import('./storage.js').AsyncTx) => Promise<void>): Promise<unknown>
   clients: ClientAccess
   clientGateway?: { url: string; secure: boolean }
   close(): Promise<void>
@@ -130,6 +134,7 @@ const credentialImportFields: Record<string, string[]> = {
 
 const browserFields: Record<string, string[]> = {
   'browser-list': ['instanceId'], 'browser-read': ['instanceId', 'resourceId'],
+  'browser-plugin': ['instanceId', 'scope'], 'browser-plugin-save': ['instanceId', 'scope', 'commandId', 'expectedRevision', 'mode'],
   'browser-import-list': ['instanceId', 'limit'], 'browser-import-read': ['instanceId', 'importId'],
   'browser-import': ['instanceId', 'commandId', 'sourceRef', 'pendingId', 'preview', 'environmentId', 'label'],
   'browser-import-cancel': ['instanceId', 'commandId', 'importId'],
@@ -161,11 +166,20 @@ const memoryFields: Record<string, string[]> = {
   'memory-proposals': ['instanceId'],
   'memory-decide': ['instanceId', 'commandId', 'proposalId', 'approve'],
 }
-const statusFields: Record<string, string[]> = { 'product-usage': ['instanceId'], 'product-status': ['instanceId'], 'builtin-plugins': ['instanceId'] }
+const statusFields: Record<string, string[]> = { 'product-usage': ['instanceId'], 'usage-breakdown': ['instanceId'],
+  'product-status': ['instanceId'], 'builtin-plugins': ['instanceId'] }
 const workBoardFields: Record<string, string[]> = {
   'work-board': ['instanceId', 'after', 'limit'],
   'work-members': ['instanceId'],
   'work-follow-up': ['instanceId', 'commandId', 'workItemId', 'ticketId', 'text'],
+}
+const scheduledTaskFields: Record<string, readonly string[]> = {
+  'scheduled-task-list': ['instanceId'],
+  'scheduled-task-read': ['instanceId', 'ruleId'],
+  'scheduled-task-create': ['instanceId', 'commandId', 'title', 'text', 'timezone', 'when'],
+  'scheduled-task-cancel': ['instanceId', 'commandId', 'ruleId'],
+  'scheduled-task-source-read': ['instanceId'],
+  'scheduled-task-source-set': ['instanceId', 'commandId', 'enabled'],
 }
 
 interface PluginInventoryRow {
@@ -208,6 +222,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
   const desktopIpc = process.env.DS_SUPERAGENT_APP === '1' && typeof process.send === 'function'
   const browserAdapter = config.browserAdapter ?? (desktopIpc
     ? new HostBrowserAdapter() : undefined)
+  const computerAdapter = () => config.computerAdapter ?? (desktopIpc
+    ? (globalThis as typeof globalThis & { [key: symbol]: ComputerAdapter | undefined })[Symbol.for('ds-superagent.computer-adapter')]
+    : undefined)
   const credentialImportAdapter = config.credentialImportAdapter
     ?? (desktopIpc ? new HostCredentialImportAdapter() : undefined)
   if (config.office && (![config.office.node, config.office.cli, config.office.skillsPath].every(isAbsolute)
@@ -243,6 +260,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
   let githubEngine: Engine | undefined
   let imEngine: Engine | undefined
   let imAccounts: ImAccounts | undefined
+  let phone: ProductPhone | undefined
+  let computer: ProductComputer | undefined
   let imMain: ImMainRelay | undefined
   let connectors: ProductConnectors | undefined
   let workRouter: ProactiveWork | undefined
@@ -443,7 +462,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
     engine?.abortProactiveRuns(); feishuEngine?.abortProactiveRuns(); githubEngine?.abortProactiveRuns()
     const failures: unknown[] = []
     for (const close of [() => supervision?.close(), () => statusPublisher?.close(), () => gateway?.close(),
-      () => connectors?.close(), () => imAccounts?.close(), () => feishuRuntime?.stop(), () => githubRuntime?.stop(), () => engine?.effects.stop(),
+      () => connectors?.close(), () => phone?.close(), () => computer?.close(), () => imAccounts?.close(),
+      () => feishuRuntime?.stop(), () => githubRuntime?.stop(), () => engine?.effects.stop(),
       () => feishuEngine?.effects.stop(), () => githubEngine?.effects.stop(), () => imEngine?.effects.stop(),
       () => engine?.shutdown(), () => feishuEngine?.shutdown(), () => githubEngine?.shutdown(), () => imEngine?.shutdown(),
       () => engine?.closeBrowserResources(), () => workRouter?.close(), () => sessions.close(),
@@ -603,6 +623,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
     await engine.acquireHost({ initializeMain: true })
     workRouter = new ProactiveWork(storage, instanceId, engine, sessions, actorId)
     const extensionStorage = engine.productExtensionStorage()
+    computer = new ProductComputer({ instanceId, storage: extensionStorage, adapter: computerAdapter })
+    if (computerAdapter()) engine.configureWorkerComputer(computer)
     const records = credentialRecords as ProductCredentialRecords | undefined
     if (records && typeof records.readRecord === 'function' && typeof records.modifyRecord === 'function'
       && typeof records.deleteRecord === 'function') {
@@ -691,7 +713,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
     const clients = engine.createClientAccess()
     const product: ProductHost = {
       clients,
-      async dispatch(endpoint, payload = {}, client) {
+      async dispatch(endpoint, payload = {}, client, authorizeMainSend) {
         if (closing) throw new CoreError('RUNTIME_CLOSED', 'The product Host is closed.')
         // The Host supplies identity; a window can only address this authorization scope.
         if (endpoint === 'open') {
@@ -703,9 +725,14 @@ export async function createProductHost(context: Context, config: ProductHostCon
         const capabilityEndpoint = Object.hasOwn(capabilityFields, endpoint) ? endpoint as keyof typeof capabilityFields : undefined
         const connectorEndpoint = Object.hasOwn(connectorFields, endpoint)
         const imEndpoint = endpoint === 'im-accounts'
+        const phoneEndpoint = Object.hasOwn(phoneFields, endpoint)
+        const computerEndpoint = Object.hasOwn(computerFields, endpoint) ? endpoint as keyof typeof computerFields : undefined
         const fields: readonly string[] | undefined = (capabilityEndpoint ? capabilityFields[capabilityEndpoint] : undefined)
           ?? (connectorEndpoint ? connectorFields[endpoint] : undefined)
           ?? (imEndpoint ? ['instanceId', 'operation', 'platform', 'credentials', 'proposalId', 'code'] : undefined)
+          ?? (phoneEndpoint ? phoneFields[endpoint] : undefined)
+          ?? (computerEndpoint ? computerFields[computerEndpoint] : undefined)
+          ?? (Object.hasOwn(scheduledTaskFields, endpoint) ? scheduledTaskFields[endpoint] : undefined)
           ?? workBoardFields[endpoint] ?? statusFields[endpoint] ?? memoryFields[endpoint] ?? resourceFields[endpoint] ?? credentialImportFields[endpoint] ?? browserFields[endpoint]
           ?? (endpoint === 'proactive-rules' || endpoint === 'proactive-control' ? ['instanceId']
           : endpoint === 'proactive-list' ? ['instanceId', 'before']
@@ -782,7 +809,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
                                         : undefined)
         if (!fields) throw new CoreError('UNAVAILABLE', 'This product capability is not connected yet.')
         if (Object.keys(payload).some(key => !fields.includes(key))) throw new CoreError('INVALID_INPUT', 'The product request contains unsupported fields.')
-        if (client && endpoint.startsWith('schedule-')) {
+        if (client && (endpoint.startsWith('schedule-') || endpoint.startsWith('scheduled-task-'))) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Schedule administration requires the local authorized product settings.')
         }
         if (client && (endpoint === 'execution-policy-save' || endpoint.startsWith('remote-environment-'))) {
@@ -820,6 +847,17 @@ export async function createProductHost(context: Context, config: ProductHostCon
           if (!imAccounts) throw new CoreError('UNAVAILABLE', 'Messaging accounts require the Host credential store.')
           return client ? imAccounts.statusSummary() : imAccounts.dispatch(payload)
         }
+        if (phoneEndpoint) {
+          if (client) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Phone management requires the local product window.')
+          if (!phone) throw new CoreError('UNAVAILABLE', 'Phone pairing requires the Host credential store.')
+          await engine!.assertProductAdmission()
+          return phone.dispatch(endpoint, payload)
+        }
+        if (computerEndpoint) {
+          if (client) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Computer control requires the local product window.')
+          await engine!.assertProductAdmission()
+          return computer!.dispatch(computerEndpoint, payload, false)
+        }
         if (client && endpoint.startsWith('browser-')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Browser resources require the local authorized product window.')
         }
@@ -856,6 +894,14 @@ export async function createProductHost(context: Context, config: ProductHostCon
             sourceRef: payload.sourceRef as string, ...(payload.pendingId === undefined ? {} : { pendingId: payload.pendingId as string }) })
         }
         if (endpoint.startsWith('browser-')) {
+          if (endpoint === 'browser-plugin' || endpoint === 'browser-plugin-save') {
+            const scope = payload.scope as { role?: unknown } | undefined
+            if (!scope || scope.role !== 'main' || Object.keys(scope).length !== 1) {
+              throw new CoreError('INVALID_INPUT', 'Browser plugin settings require Main scope.')
+            }
+            return endpoint === 'browser-plugin' ? engine!.getBrowserPlugin({ instanceId })
+              : engine!.setBrowserPlugin({ instanceId, commandId, expectedRevision: payload.expectedRevision as number, mode: payload.mode })
+          }
           if (endpoint === 'browser-list') return engine!.listBrowserResources({ instanceId })
           if (endpoint === 'browser-read') return engine!.readBrowserResource({ instanceId, resourceId: payload.resourceId as string })
           if (endpoint === 'browser-import-list') return engine!.listBrowserImports({ instanceId,
@@ -1125,6 +1171,16 @@ export async function createProductHost(context: Context, config: ProductHostCon
           if (endpoint === 'mcp-retry') return mcpConfiguration.connect(request, true)
         }
         if (endpoint === 'schedule-list') return engine!.listSchedules({ instanceId })
+        if (endpoint === 'scheduled-task-list') return engine!.listSchedules({ instanceId }, 'task')
+        if (endpoint === 'scheduled-task-read') return engine!.getSchedule({ instanceId, ruleId: payload.ruleId as string }, 'task')
+        if (endpoint === 'scheduled-task-source-read') return engine!.getScheduleSource({ instanceId }, 'task')
+        if (endpoint === 'scheduled-task-source-set') return engine!.setScheduleSource({ instanceId,
+          commandId, enabled: payload.enabled as boolean }, 'task')
+        if (endpoint === 'scheduled-task-create') return engine!.createSchedule({ instanceId, commandId,
+          title: payload.title as string, text: payload.text as string, timezone: payload.timezone as string,
+          when: payload.when as import('./product-schedules.js').ScheduleWhen, target: { kind: 'main' } }, 'task')
+        if (endpoint === 'scheduled-task-cancel') return engine!.cancelSchedule({ instanceId,
+          commandId, ruleId: payload.ruleId as string }, 'task')
         if (endpoint === 'supervision') return supervision!.state(payload.ticketId as string | undefined)
         if (endpoint === 'supervision-inspect') {
           if (payload.restart !== undefined && payload.restart !== true) throw new CoreError('INVALID_INPUT', 'Restarting an inspection requires an explicit true value.')
@@ -1527,7 +1583,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
           ...(payload.environmentId === undefined ? {} : { environmentId: payload.environmentId as string }),
           ...(payload.target === undefined ? {} : { target: payload.target as import('./execution-target.js').ExecutionTarget }),
           ...(payload.attachments === undefined ? {} : { attachments: payload.attachments as string[] }),
-          ...(client ? { clientId: client.id } : {}) })
+          ...(client ? { clientId: client.id } : {}) }, authorizeMainSend)
         if (endpoint === 'stop-main') return engine!.stopMainTurn({ instanceId, commandId, messageId: payload.messageId as string })
         if (endpoint === 'work-board') return engine!.listMainWork({ instanceId,
           ...(payload.after === undefined ? {} : { after: payload.after as string }),
@@ -1610,7 +1666,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
           return { efforts: (info?.reasoning?.efforts ?? []).map(effort => ({ id: effort.id, name: effort.name ?? effort.id,
             ...(effort.description ? { description: effort.description } : {}) })), ...(info?.reasoning?.defaultEffort ? { defaultEffort: info.reasoning.defaultEffort } : {}) }
         }
-        if (endpoint === 'product-usage') return engine!.getProductUsage({ instanceId })
+        if (endpoint === 'product-usage' || endpoint === 'usage-breakdown') return engine!.getProductUsage({ instanceId }, endpoint === 'usage-breakdown')
         if (endpoint === 'product-status') {
           const [status, inspection] = await Promise.all([engine!.getProductStatus({ instanceId }), supervision!.state()])
           const latest = inspection.run?.last
@@ -1653,6 +1709,10 @@ export async function createProductHost(context: Context, config: ProductHostCon
     if (config.clientGateway) {
       gateway = await createClientGateway(engine, clients, { ...config.clientGateway, product })
       product.clientGateway = { url: gateway.url, secure: gateway.secure }
+    }
+    if (remoteSecrets && records) {
+      phone = new ProductPhone(extensionStorage, instanceId, new ProductCredentialVault(records), product.dispatch)
+      await phone.restore().catch(() => {})
     }
     return product
   } catch (error) {

@@ -205,6 +205,7 @@ export const Notification = class extends EventEmitter {
 }
 
 export const powerMonitor = new EventEmitter()
+powerMonitor.getSystemIdleState = () => state.desktopIdleState ?? 'active'
 
 // The cookies of the browser: the Host's address keeps one after the launch URL was used.
 const cookieJar = {

@@ -2,6 +2,26 @@ import { createElement as h, Fragment, useEffect, useRef, useState } from 'react
 import { Card, Row } from './product-card.js'
 import { DetailList, EmptyState, InlineNotice, StatGrid } from './product-settings-components.js'
 import { t } from './i18n.js'
+import { UsageHeatmap } from './usage-heatmap.js'
+
+function UsageBreakdown({ report }) {
+  const [owner, setOwner] = useState('')
+  const [model, setModel] = useState('')
+  const [kind, setKind] = useState('')
+  const rows = report.hourly ?? []
+  const modelName = row => [row.provider, row.model].filter(Boolean).join('/') || 'Unknown model'
+  const models = [...new Set(rows.map(modelName))].sort()
+  const owners = { main: 'Main', router: 'Router', worker: 'Worker' }
+  const kinds = { conversation: 'Conversations', planning: 'Planning usage', execution: 'Work usage' }
+  const selected = rows.filter(row => (!owner || row.owner === owner) && (!model || modelName(row) === model) && (!kind || row.kind === kind))
+  const select = (label, value, onChange, entries) => h('label', { className: 'bt-set-copy' }, t(label),
+    h('select', { className: 'bt-select', value, onChange: event => onChange(event.target.value) },
+      h('option', { value: '' }, t('Any')), entries.map(([key, text]) => h('option', { value: key, key }, t(text)))))
+  return h('div', { className: 'bt-us bt-product-usage-heatmap' },
+    h('div', { className: 'bt-product-operations-actions', role: 'group', 'aria-label': t('Activity filters') }, select('Role', owner, setOwner, Object.entries(owners)),
+      select('Model', model, setModel, models.map(value => [value, value])), select('Kind', kind, setKind, Object.entries(kinds))),
+    h(UsageHeatmap, { now: report.createdAt, rows: selected }))
+}
 
 const number = value => Number(value ?? 0).toLocaleString()
 const byteCount = value => {
@@ -48,7 +68,7 @@ export function ProductOperationsSettings({ binding, call, onNavigate, section =
     const current = ++request.current
     const results = await Promise.allSettled([
       showStatus ? call('product-status', { instanceId: binding.instanceId }) : null,
-      showUsage ? call('product-usage', { instanceId: binding.instanceId }) : null,
+      showUsage ? call('usage-breakdown', { instanceId: binding.instanceId }) : null,
       showStatus ? app?.backups?.list?.() ?? [] : [],
       showStatus ? app?.diagnostics?.() ?? null : null,
     ])
@@ -123,7 +143,9 @@ export function ProductOperationsSettings({ binding, call, onNavigate, section =
           h('button', { type: 'button', className: 'bt-soft', onClick: () => onNavigate('supervision') }, t('Open supervision')),
           h('button', { type: 'button', className: 'bt-soft', onClick: () => onNavigate('roles') }, t('Open role settings')))) : null,
     showUsage && !usage && !showStatus ? h(InlineNotice, { tone: 'neutral' }, t(error ? 'Usage unavailable.' : 'Loading…')) : null,
+    showUsage && usage ? h(UsageBreakdown, { report: usage }) : null,
     showUsage && usage ? h('section', { className: 'bt-set-section bt-ps-section' }, h('h3', null, t('Token usage by role')),
+      h('p', { className: 'bt-product-operations-note' }, t('Totals across all included Sessions')),
       h(StatGrid, { columns: 3, items: ['Main', 'Router', 'Worker'].map(label => {
         const total = usage.roles?.[label.toLowerCase()]
         return { label: t(label), value: total?.totalTokens == null ? '—' : number(total.totalTokens), detail: usageLine(total) }

@@ -392,7 +392,7 @@ export class MainConversation {
     })
   }
 
-  async send(request: MainSend) {
+  async send(request: MainSend, authorize?: (tx: AsyncTx) => Promise<void>) {
     this.authorize(request)
     identifier(request.commandId, 'commandId')
     if (request.clientId !== undefined) identifier(request.clientId, 'clientId')
@@ -413,6 +413,7 @@ export class MainConversation {
       ...(request.target === undefined ? [] : [request.target]),
       ...(request.clientId === undefined ? [] : [request.clientId])])).digest('hex')
     await commandTransaction(this.storage, this.instanceId, async tx => {
+      await authorize?.(tx)
       const prior = await tx.get<MainCommand>('main-command', key)
       if (prior) {
         if (prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'This Main message identity was already used for different text.')

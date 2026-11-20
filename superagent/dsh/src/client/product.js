@@ -12,6 +12,7 @@ import { ProductScheduleSettings, PRODUCT_SCHEDULE_CSS } from './product-schedul
 import { ProductProactiveSettings, ProactiveReview, PRODUCT_PROACTIVE_CSS } from './product-proactive.js'
 import { ProductPresetSettings, PRODUCT_PRESET_CSS } from './product-presets.js'
 import { ProductCredentialSettings, PRODUCT_CREDENTIAL_CSS } from './product-credentials.js'
+import { ChatSecrets, CHAT_SECRET_CSS } from './chat-secrets.js'
 import { ProductMemorySettings, PRODUCT_MEMORY_CSS } from './product-memory.js'
 import { ProductSupervisionSettings, PRODUCT_SUPERVISION_CSS } from './product-supervision.js'
 import { FolderMenu, FOLDER_CSS } from './folder-menu.js'
@@ -29,11 +30,14 @@ import { ProductMcpSettings } from './product-mcp-settings.js'
 import { CapabilitySettings } from './capability-settings.js'
 import { ConnectorSettings } from './connector-settings.js'
 import { ProductImSettings } from './im-settings.js'
+import { ProductPhoneSettings } from './product-phone-settings.js'
+import { ProductComputerSettings, PRODUCT_COMPUTER_CSS } from './product-computer-settings.js'
 import { WorkBoard, WorkMemberDock, WORK_BOARD_CSS } from './work-board.js'
-import { ProductBrowserSettings, PRODUCT_BROWSER_CSS } from './product-browser-settings.js'
+import { ProductBrowserSettings, ProductBrowserPluginSettings, PRODUCT_BROWSER_CSS } from './product-browser-settings.js'
 import { ProductExecutionSettings, PRODUCT_EXECUTION_CSS } from './product-execution.js'
 import { ProductWorkView } from './product-work-view.js'
 import { ProductOperationsSettings, PRODUCT_OPERATIONS_CSS } from './product-operations.js'
+import { USAGE_HEATMAP_CSS } from './usage-heatmap.js'
 import { PRODUCT_SETTINGS_CSS } from './product-settings-css.js'
 import { call, productCall } from './api.js'
 export { productCall } from './api.js'
@@ -1093,6 +1097,7 @@ export function applyProduct(ctx) {
       const unplaced = projectNativeTurnCards(state, visible, true)
       return h('div', { className: 'bt-native-main-input' },
         h(FeishuSourceStatus, { instanceId: state.binding?.instanceId, call: productCall }),
+        state.binding && !state.connection?.connected ? h(ChatSecrets, { binding: state.binding, call: productCall }) : null,
         pending.map(message => h('details', { key: message.id, className: 'bt-main-status' },
           h('summary', null, `${t('Input')} · ${mainInputStatus(message.status)}`), h('p', null, message.text),
           message.attachments?.length ? h(MainAttachmentLinks, { attachments: message.attachments }) : null)),
@@ -1146,6 +1151,7 @@ export function applyProduct(ctx) {
                   t('Main could not finish this reply. Your message is saved.')) : null),
             renderCards(turnCards.byMessage.get(message.id)))),
           !state.connection?.connected ? h(FeishuSourceStatus, { instanceId: state.binding?.instanceId, call: productCall }) : null,
+          state.binding && !state.connection?.connected ? h(ChatSecrets, { binding: state.binding, call: productCall }) : null,
           renderCards(turnCards.unplaced),
           h(MainEvidence),
           stopping ? h('p', { className: 'bt-main-status', role: 'status' }, t('Stopping this Main reply…')) : busy
@@ -1630,16 +1636,21 @@ export function applyProduct(ctx) {
       'built-in-plugins': h(BuiltinPluginSettings, pageProps),
       execution: h(ProductExecutionSettings, { ...pageProps, onChanged: () => { void loadDirectories(binding) } }),
       calendar: h(ProductScheduleSettings, { ...pageProps, works: viewState.works, onViewWork: viewWork }),
+      'scheduled-tasks': h(ProductScheduleSettings, { ...pageProps, onViewWork: viewWork, taskMode: true }),
       preparations: h(ProductProactiveSettings, pageProps),
       presets: snapshot ? h(ProductPresetSettings, { ...pageProps,
         settingsRevision: snapshot.revision, roleSettings: snapshot, onApplied: refreshAfterPreset, onReload: refreshAfterPreset }) : loadingSettings,
       memory: h(ProductMemorySettings, { ...pageProps, key: binding.instanceId, works: viewState.works }),
       'browser-resources': h(ProductBrowserSettings, { ...pageProps, works: viewState.works,
         directoryOptions: viewState.directoryOptions, browserBridge: globalThis.dsSuperagentApp?.browser }),
+      'browser-plugin': h(ProductBrowserPluginSettings, pageProps),
       supervision: h(ProductSupervisionSettings, pageProps),
       'credential-resources': h(ProductCredentialSettings, { ...pageProps, credentialImportBridge: globalThis.dsSuperagentApp?.browser?.credentialImport }),
+      'chat-secrets': h(ChatSecrets, { ...pageProps, settings: true }),
       connectors: h(ConnectorSettings, pageProps),
       im: h(ProductImSettings, pageProps),
+      phone: h(ProductPhoneSettings, pageProps),
+      computer: h(ProductComputerSettings, pageProps),
       capabilities: h(Fragment, null, h(CapabilitySettings, { ...pageProps, works: viewState.boardItems,
         environments: viewState.directoryOptions?.execution?.environments }), h(ProductMcpSettings, pageProps)),
       'remote-clients': h(ClientSettings, { binding }),
@@ -1824,7 +1835,7 @@ export function applyProduct(ctx) {
   })
   installSettingsSections(ctx.slots)
   const register = (name, component, options = {}) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200, ...options }, component))
-  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SETTINGS_SHELL_CSS + PRODUCT_SETTINGS_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_EXECUTION_CSS + PRODUCT_OPERATIONS_CSS + WORK_BOARD_CSS, 'main'), 'superagent: existing chat styles')
+  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SETTINGS_SHELL_CSS + PRODUCT_SETTINGS_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + CHAT_SECRET_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_COMPUTER_CSS + PRODUCT_EXECUTION_CSS + PRODUCT_OPERATIONS_CSS + USAGE_HEATMAP_CSS + WORK_BOARD_CSS, 'main'), 'superagent: existing chat styles')
   ctx.effect(() => installAppearance(ctx.get('theme')), 'superagent: appearance')
   if (!nativeSession) register('main.conversation', ProductSurface)
   else {

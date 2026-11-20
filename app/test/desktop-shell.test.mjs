@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { randomUUID } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import { mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -78,18 +79,21 @@ test('the desktop hands off to the local Host and keeps native actions on that w
   invoke('badge', 0)
   assert.equal(process.platform === 'win32' ? state.badge.image === null : state.badgeCount === 0, true)
 
-  hostState.emit({ type: 'ds-superagent:computer-indicator', active: true })
+  const controlId = randomUUID()
+  hostState.emit({ type: 'ds-superagent:computer-indicator', id: randomUUID(), active: true, controlId })
   const indicator = state.windows.at(-1)
   await waitFor(() => indicator.visible, 'show the active control indicator')
   assert.equal(indicator.options.focusable, false)
   assert.equal(indicator.ignoresMouse, true)
   assert.equal(indicator.options.alwaysOnTop, true)
-  hostState.emit({ type: 'ds-superagent:computer-indicator', active: false })
+  hostState.emit({ type: 'ds-superagent:computer-indicator', active: false, controlId })
   assert.equal(indicator.isDestroyed(), true)
-  hostState.emit({ type: 'ds-superagent:computer-indicator', active: true })
+  const resumedControl = randomUUID()
+  hostState.emit({ type: 'ds-superagent:computer-indicator', id: randomUUID(), active: true, controlId: resumedControl })
   const resumed = state.windows.at(-1)
   powerMonitor.emit('suspend')
   assert.equal(resumed.isDestroyed(), true)
+  assert.ok(hostState.sent.some(message => message.type === 'ds-superagent:computer-stop' && message.controlId === resumedControl))
 
   const destination = join(root, 'preview.txt')
   state.saveAnswer = destination

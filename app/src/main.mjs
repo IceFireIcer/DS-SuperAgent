@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url'
 import { backupBeforeProfileChange, completeProductRestore, createProductBackup, listProductBackups, pendingProductRestore, recordProfileVersion,
   recoverInterruptedProductRestore, restoreProductBackup } from './product-backups.mjs'
 import { createOperationsLog } from './operations-log.mjs'
+import { createComputerCursor } from './computer-cursor.mjs'
 import electronUpdater from 'electron-updater'
 import { BotBrowserGuests, partitionOf } from './bot-browser.mjs'
 import { BotViews, isBotId } from './bot-views.mjs'
@@ -156,6 +157,10 @@ const note = (area, code, version) => void operationsLog.record(area, code, vers
 const managed = () => Boolean(process.env.DS_SUPERAGENT_POSTGRES?.trim())
 const language = () => app.getLocale().toLowerCase().startsWith('zh') ? 'zh' : 'en'
 const indicator = createComputerIndicator({ BrowserWindow, screen, icon: iconFile, lang: language, message: () => text().computerActive })
+const computerCursor = createComputerCursor({ BrowserWindow, screen, platform: process.platform })
+let activeComputer
+const computerApprovals = new Map()
+const computerControlId = value => typeof value === 'string' && /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/u.test(value)
 const notifications = createNativeNotifications({ Notification, icon: iconFile, onOpen: () => {
   shell.open()
   if (loadedWindows.has(mainWindow)) mainWindow.webContents.send(IPC.notificationOpen)
@@ -189,8 +194,9 @@ const shell = createShell({
     shell.open()
     void showLocations().catch(() => note('shell', 'LOCATIONS_UNAVAILABLE'))
   },
+  computerStop: { active: () => activeComputer !== undefined, run: () => clearComputer(true) },
   status: () => hostState,
-  onSuspend: () => { suspended = true; indicator.hide() },
+  onSuspend: () => { suspended = true; clearComputer(true) },
   onResume: () => resumeHost(),
   busy: () => choosing !== undefined || copying !== undefined,
   // Before the first run has chosen its places there is no window to show, and before the
@@ -201,7 +207,7 @@ const shell = createShell({
   fallback: { show: (options) => dialog.showMessageBox(options) },
 })
 // The tray icon goes away with the app, and a late answer to the close notice hides nothing.
-app.once('will-quit', () => { closeStartupWindow(); indicator.hide(); notifications.dispose(); shell.dispose(); botViews.dispose(); updates?.stop() })
+app.once('will-quit', () => { closeStartupWindow(); clearComputer(true); notifications.dispose(); shell.dispose(); botViews.dispose(); updates?.stop() })
 
 // A packaged app started through an 8.3 short path or a junction restarts once on the
 // canonical path: the lock below and every path the Host sees then agree with the long
@@ -272,7 +278,11 @@ if (identityError !== undefined) {
     if (stopping) { void (hostStop ?? Promise.resolve()).then(() => { app.quit() }, leave); return }
     void stopHost().then(() => { app.quit() }, leave)
   })
-  app.whenReady().then(async () => { shell.install(); await start() }).catch(fail)
+  app.whenReady().then(async () => {
+    shell.install()
+    powerMonitor.on('lock-screen', () => clearComputer(true))
+    await start()
+  }).catch(fail)
 }
 
 function lockProductData() {
@@ -288,7 +298,7 @@ function unlockProductData() {
 
 function stopHost({ forBackup = false, holdLock = forBackup } = {}) {
   stopping = true
-  indicator.hide()
+  clearComputer(true)
   const confirmedExit = () => {
     stopped = true
     hostState = HOST_STATE.stopped
@@ -315,7 +325,7 @@ function stopHost({ forBackup = false, holdLock = forBackup } = {}) {
 // The Host is gone while the computer sleeps: the app hears it when it wakes, and replaces it
 // then. Outside a sleep the failure is the user's now, with a chance to try again.
 function hostFailure(error) {
-  indicator.hide()
+  clearComputer(false)
   note('host', 'HOST_FAILED', app.getVersion())
   if (suspended) { deferredFailure = error; return }
   void fail(error)
@@ -325,11 +335,21 @@ function hostFailure(error) {
 function wireHost(instance) {
   instance.onMessage(message => {
     if (instance !== host || stopping) return
-    if (message?.type === 'ds-superagent:computer-indicator' && typeof message.active === 'boolean') {
-      if (!message.active || suspended || hostState !== HOST_STATE.running) indicator.hide()
-      else {
-        try { indicator.show() } catch { note('shell', 'COMPUTER_INDICATOR_UNAVAILABLE') }
-      }
+    if (message?.type === 'ds-superagent:computer-shell-cancel' && computerControlId(message.id)) {
+      computerApprovals.get(message.id)?.abort()
+      return
+    }
+    const indicatorRequest = message?.type === 'ds-superagent:computer-indicator'
+    if ((message?.type === 'ds-superagent:computer-shell' || indicatorRequest && message.active === true) && computerControlId(message.id)) {
+      void computerRequest(indicatorRequest ? { ...message, kind: 'indicator' } : message).catch(() => false).then(ok => {
+        if (instance === host && !stopping && instance.isRunning()) {
+          instance.send({ type: 'ds-superagent:computer-shell-response', id: message.id, ok })
+        }
+      }).catch(() => {})
+      return
+    }
+    if (indicatorRequest) {
+      if (message.active === false && message.controlId === activeComputer) clearComputer(false)
       return
     }
     if (message?.type === 'ds-superagent:credential-import-read' && typeof message.id === 'string'
@@ -391,6 +411,72 @@ function wireHost(instance) {
       instance.send({ type: 'ds-superagent:browser-endpoint-response', id: message.id, url })
     }).catch(() => instance.send({ type: 'ds-superagent:browser-endpoint-response', id: message.id, error: 'Could not create the browser endpoint.' }))
   })
+}
+
+function clearComputer(notify) {
+  const id = activeComputer
+  activeComputer = undefined
+  for (const approval of computerApprovals.values()) approval.abort()
+  indicator.hide()
+  computerCursor.clear()
+  if (id !== undefined) {
+    if (notify) {
+      try { host?.send({ type: 'ds-superagent:computer-stop', controlId: id }) } catch {}
+    }
+    shell.refresh()
+  }
+}
+
+async function computerRequest(message) {
+  if (suspended || hostState !== HOST_STATE.running || stopping || shell.isQuitting() || remoteProduct.status().connected) return false
+  const idle = powerMonitor.getSystemIdleState(3)
+  if (idle !== 'active' && idle !== 'idle') return false
+  if (message.kind === 'approve' || message.kind === 'reconcile') {
+    const reconcile = message.kind === 'reconcile'
+    if (!windowShown() || !reconcile && !shell.hasTray() || activeComputer || computerApprovals.size || busyWithData()) return false
+    const { app: target, level, workItemId, generation } = message.request ?? {}
+    if (!/^[\w-]{1,128}$/u.test(workItemId)) return false
+    if (reconcile) {
+      if (!computerControlId(message.request.operationId) || !/^app-[a-f0-9]{64}$/u.test(message.request.appId)
+        || typeof message.request.appName !== 'string' || !message.request.appName.length || message.request.appName.length > 100
+        || /[\p{C}]/u.test(message.request.appName)
+        || !['click', 'type', 'activate'].includes(message.request.action)) return false
+    } else if (!/^[\w-]{1,128}$/u.test(generation) || !/^app-[a-f0-9]{64}$/u.test(target?.id)
+      || typeof target.name !== 'string' || target.name.length > 100 || /[\p{C}]/u.test(target.name)
+      || !['view', 'background', 'foreground'].includes(level)) return false
+    const owner = mainWindow
+    const controller = new AbortController()
+    computerApprovals.set(message.id, controller)
+    const t = text()
+    try {
+      const { response } = await dialog.showMessageBox(owner, { type: 'warning', title: PRODUCT_NAME,
+        message: reconcile ? t.computerReconcile : t.computerApproval(target.name),
+        detail: reconcile ? t.computerReconcileDetail(message.request.appName, workItemId) : t.computerApprovalDetail(level, workItemId, generation),
+        buttons: reconcile ? [t.cancel, t.computerReviewed] : [t.computerDeny, t.computerAllow],
+        defaultId: 0, cancelId: 0, noLink: true, signal: controller.signal })
+      return response === 1 && !controller.signal.aborted && owner === mainWindow && windowShown() && !stopping && !suspended
+        && !shell.isQuitting() && !remoteProduct.status().connected
+    } finally { computerApprovals.delete(message.id) }
+  }
+  const id = message.controlId
+  if (!computerControlId(id)) return false
+  if (message.kind === 'indicator') {
+    if (activeComputer || !shell.hasTray()) return false
+    activeComputer = id
+    const shown = await indicator.show().catch(() => false)
+    if (!shown || activeComputer !== id || suspended || stopping) {
+      if (activeComputer === id) clearComputer(false)
+      note('shell', 'COMPUTER_INDICATOR_UNAVAILABLE')
+      return false
+    }
+    shell.refresh()
+    return true
+  }
+  if (activeComputer !== id) return false
+  if (message.kind === 'active') return true
+  if (message.kind === 'foreground') return idle === 'idle'
+  if (message.kind === 'cursor') return computerCursor.show(message.point)
+  return false
 }
 
 function busyWithData() { return choosing || copying || maintenance || startup || stopping || moveDialog }
@@ -555,7 +641,7 @@ async function start() {
     return fixed ? false : moveData(typeof workspace === 'string' && isAbsolute(workspace) ? workspace : places.workspace)
   })
   ipcMain.handle(IPC.directoryPick, pickWorkspace)
-  ipcMain.handle(IPC.productConnect, (event, connection) => { assertWindow(event); return remoteProduct.connect(connection) })
+  ipcMain.handle(IPC.productConnect, (event, connection) => { assertWindow(event); clearComputer(true); return remoteProduct.connect(connection) })
   ipcMain.handle(IPC.productDisconnect, (event) => { assertWindow(event); return remoteProduct.disconnect() })
   ipcMain.handle(IPC.productStatus, (event) => { assertWindow(event); return remoteProduct.status() })
   ipcMain.handle(IPC.productCall, (event, endpoint, payload) => { assertWindow(event); return remoteProduct.call(endpoint, payload) })

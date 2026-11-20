@@ -102,6 +102,20 @@ Apache License, Version 2.0 (see LICENSE)
   from ds-bot/src/client/questions.js.
   The runtime dictionaries in superagent/dsh/src/client/locales/ adapt
   relevant strings from ds-bot/src/client/locales/.
+  superagent/src/phone-link/ adapts link/src/ and link/server/ from the same
+  revision; product-phone-settings.js adapts the settings flow in
+  ds-bot/src/client/phone-page.js. DS SuperAgent uses a separate pairing
+  scheme, Noise prologue and Product Host command adapter.
+  superagent/dsh/src/client/usage-heatmap.js adapts the activity chart from
+  ds-bot/src/client/usage-page.js. The scheduled task and credential settings
+  adapt the timing and masked input components from ds-bot/src/client/schedules.js
+  and ds-bot/src/client/secret-card.js.
+  superagent/src/product-browser-plugins/ adapts browser-plugins/{refs,script,task}
+  and ds-bot/src/host/browser/session.js. The step tools use the SuperAgent
+  Browser resource and its existing desktop bridge.
+  superagent/src/product-computer.ts and app/src/computer-driver.mjs adapt
+  ds-bot/src/host/computer/{index,leases,catalog}.js. The computer settings and
+  cursor adapt ds-bot/src/client/computer.js and app/src/computer-cursor.mjs.
 
   Upstream attribution applicable to the synchronized client:
 
@@ -116,6 +130,15 @@ Apache License, Version 2.0 (see LICENSE)
 
   The MIT terms above apply to Context7 and qrcode-generator with their
   respective copyright lines.
+
+DSH Remote (https://github.com/liguobao/deepseek-harness-remote)
+MIT License, Copyright (c) 2026 DSH Remote contributors
+
+  The Noise IK, key utilities, message framing, relay and secure transports,
+  RPC client, relay server gateway and Host link in superagent/src/phone-link/
+  are derived from DSH Remote commit 4d888ad via DS Bot 0.3.8's link/.
+  The MIT terms printed under DeepSeek Harness apply with the DSH Remote
+  copyright line above.
 
 No other third-party code is copied into this repository. At run time the
 plugin uses the @deepseek-ai/* packages of the DeepSeek Harness install it

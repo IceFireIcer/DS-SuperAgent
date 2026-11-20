@@ -102,7 +102,8 @@ export const recordKinds = [...coreRecordKinds, 'main-state', 'main-message', 'm
   'product-memory', 'product-memory-command', 'product-memory-access', 'product-memory-proposal',
   'product-memory-import', 'product-memory-import-item', 'product-memory-import-source', 'product-credential-import',
   'product-credential-import-command', 'main-work-direction', 'capability-definition', 'capability-command',
-  'product-im-account', 'im-main-address', 'product-connectors-state', 'product-connectors-command', 'product-mailbox-reply'] as const
+  'product-im-account', 'im-main-address', 'product-connectors-state', 'product-connectors-command', 'product-mailbox-reply',
+  'phone-link-settings', 'browser-plugin-selection', 'computer-policy'] as const
 export type RecordKind = typeof recordKinds[number]
 
 export function identifier(value: unknown, label: string): asserts value is string {

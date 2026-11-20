@@ -13,6 +13,8 @@ const productEndpoints = new Set(`
   clients-list client-enroll client-revoke feishu-status feishu-start feishu-stop github-status github-start github-stop
   reconcile-delivery source-deliveries
   browser-list browser-read browser-create browser-grant browser-revoke browser-resolve browser-take browser-return
+  browser-plugin browser-plugin-save
+  computer-status computer-policy computer-control
   browser-import-list browser-import-read browser-import browser-import-cancel browser-control-view browser-reconcile-take
   credential-import-list credential-import-preview credential-import-commit credential-import-cancel
   mcp-status mcp-save mcp-approve mcp-connect mcp-disconnect mcp-retry
@@ -27,6 +29,9 @@ const productEndpoints = new Set(`
   proactive-rules proactive-control proactive-list proactive-read proactive-artifact proactive-work-artifact
   proactive-save proactive-pause proactive-stop schedule-list schedule-read schedule-create schedule-cancel
   schedule-source-read schedule-source-set
+  scheduled-task-list scheduled-task-read scheduled-task-create scheduled-task-cancel scheduled-task-source-read scheduled-task-source-set
+  usage-breakdown
+  phone-status phone-set phone-pair phone-pair-cancel phone-remove
   capability-list capability-resolve capability-save capability-delete capability-approve capability-bind
   connector-registry connector-save connector-auth connector-import mailbox-account mailbox-rule mailbox-reply im-accounts
 `.trim().split(/\s+/u))

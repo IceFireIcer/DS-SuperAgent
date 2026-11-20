@@ -3,7 +3,8 @@ import { ClockIcon, PlusIcon, TrashIcon } from './icons.js'
 import { Segmented } from './motion.js'
 import { SwitchRow } from './product-card.js'
 import { EmptyState, FieldRow, InlineNotice, SectionCard, StatusChip } from './product-settings-components.js'
-import { dateLocale, t } from './i18n.js'
+import { t } from './i18n.js'
+import { timingText } from './schedule-timing.js'
 
 const pad = value => String(value).padStart(2, '0')
 const nextHour = () => {
@@ -13,39 +14,6 @@ const nextHour = () => {
 }
 const localZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone
 const kinds = [['at', 'Once'], ['daily', 'Every day'], ['weekly', 'Every week'], ['every', 'Repeat']]
-const clock = value => String(value ?? '').slice(0, 5)
-const formatDate = (ms, options) => new Intl.DateTimeFormat(dateLocale(), options).format(ms)
-const dayAndTime = (ms) => {
-  const sameYear = new Date(ms).getFullYear() === new Date().getFullYear()
-  return formatDate(ms, { ...(sameYear ? {} : { year: 'numeric' }), month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit' })
-}
-const weekdayNames = days => days.map(day => formatDate(Date.UTC(2024, 0, day), {
-  weekday: 'short', timeZone: 'UTC',
-})).join(dateLocale().startsWith('zh') ? '、' : ', ')
-const everyText = (seconds) => {
-  if (seconds % 86400 === 0) return seconds === 86400 ? t('Every day') : t('Every {count} days', { count: seconds / 86400 })
-  if (seconds % 3600 === 0) return seconds === 3600 ? t('Every hour') : t('Every {count} hours', { count: seconds / 3600 })
-  return t('Every {count} minutes', { count: Math.round(seconds / 60) })
-}
-
-function timingText(task) {
-  const zone = task.timeZone && task.timeZone !== localZone() ? ` (${task.timeZone})` : ''
-  if (task.kind === 'after' || task.kind === 'at') return t('Once, {time}', { time: dayAndTime(Date.parse(task.scheduledAt)) })
-  if (task.kind === 'every') return everyText(task.everySeconds)
-  if (task.kind === 'daily') return `${t('Every day at {time}', { time: clock(task.time) })}${zone}`
-  if (task.kind === 'weekly') {
-    const days = (task.weekdays ?? []).join()
-    const text = days === '1,2,3,4,5' ? t('Every weekday at {time}', { time: clock(task.time) })
-      : days === '6,7' ? t('Every weekend at {time}', { time: clock(task.time) })
-        : days === '1,2,3,4,5,6,7' ? t('Every day at {time}', { time: clock(task.time) })
-          : t('Every {days} at {time}', { days: weekdayNames(task.weekdays ?? []), time: clock(task.time) })
-    return `${text}${zone}`
-  }
-  if (task.kind === 'cron') return `${t('On the schedule {expression}', { expression: task.expression })}${zone}`
-  return ''
-}
-
 function whenText(rule) {
   const when = rule.when
   return timingText({ kind: when.kind, scheduledAt: new Date(when.at ?? rule.nextAt ?? rule.createdAt).toISOString(),
@@ -92,7 +60,8 @@ function occurrenceHistory(occurrences, visibleOccurrences, loadEarlier, onViewW
     h('div', { className: 'bt-product-schedule-history-list' }, rows), loadEarlierButton)
 }
 
-export function ProductScheduleSettings({ binding, works, call, onViewWork }) {
+export function ProductScheduleSettings({ binding, works = [], call, onViewWork, taskMode = false }) {
+  const family = taskMode ? 'scheduled-task' : 'schedule'
   const [rules, setRules] = useState(null)
   const [sourceEnabled, setSourceEnabled] = useState(true)
   const [details, setDetails] = useState({})
@@ -114,10 +83,10 @@ export function ProductScheduleSettings({ binding, works, call, onViewWork }) {
   const refresh = async () => {
     try {
       const [list, source] = await Promise.all([
-        call('schedule-list', { instanceId: binding.instanceId }), call('schedule-source-read', { instanceId: binding.instanceId }),
+        call(`${family}-list`, { instanceId: binding.instanceId }), call(`${family}-source-read`, { instanceId: binding.instanceId }),
       ])
       const rows = await Promise.all(list.items.map(async rule => {
-        try { return [rule.ruleId, await call('schedule-read', { instanceId: binding.instanceId, ruleId: rule.ruleId })] }
+        try { return [rule.ruleId, await call(`${family}-read`, { instanceId: binding.instanceId, ruleId: rule.ruleId })] }
         catch { return [rule.ruleId, null] }
       }))
       setRules(list.items)
@@ -150,12 +119,12 @@ export function ProductScheduleSettings({ binding, works, call, onViewWork }) {
       setError(t(kind === 'at' ? 'Pick a time in the future' : 'Choose an authorized work item.'))
       return
     }
-    const request = { instanceId: binding.instanceId, title, text, timezone: localZone(), when, target }
+    const request = { instanceId: binding.instanceId, title, text, timezone: localZone(), when, ...(taskMode ? {} : { target }) }
     const fingerprint = JSON.stringify(request)
     if (pending.current?.fingerprint !== fingerprint) pending.current = { fingerprint, commandId: crypto.randomUUID() }
     setBusy(true); setError('')
     try {
-      await call('schedule-create', { ...request, commandId: pending.current.commandId })
+      await call(`${family}-create`, { ...request, commandId: pending.current.commandId })
       pending.current = null
       setAdding(false); setTitle(''); setText('')
       await refresh()
@@ -166,7 +135,7 @@ export function ProductScheduleSettings({ binding, works, call, onViewWork }) {
     if (confirming !== ruleId) { setConfirming(ruleId); return }
     setBusy(true); setError('')
     try {
-      await call('schedule-cancel', { instanceId: binding.instanceId, commandId: `cancel:${ruleId}`, ruleId })
+      await call(`${family}-cancel`, { instanceId: binding.instanceId, commandId: `cancel:${ruleId}`, ruleId })
       setConfirming(null)
       await refresh()
     } catch (failure) { setError(failure.message) }
@@ -175,7 +144,7 @@ export function ProductScheduleSettings({ binding, works, call, onViewWork }) {
   const setSource = async enabled => {
     setBusy(true); setError('')
     try {
-      await call('schedule-source-set', { instanceId: binding.instanceId, commandId: crypto.randomUUID(), enabled })
+      await call(`${family}-source-set`, { instanceId: binding.instanceId, commandId: crypto.randomUUID(), enabled })
       setSourceEnabled(enabled)
       await refresh()
     } catch (failure) { setError(failure.message) }
@@ -232,7 +201,7 @@ export function ProductScheduleSettings({ binding, works, call, onViewWork }) {
           return h('div', { key: rule.ruleId, className: 'bt-set-row bt-task bt-product-schedule-row' },
             h(ClockIcon), h('span', { className: 'bt-set-copy' },
               h('strong', { className: 'bt-task-title' }, rule.title),
-              h('span', { className: 'bt-set-hint' }, `${whenText(rule)} · ${rule.timezone} · ${rule.target.kind === 'main' ? 'Main' : work?.brief.goal ?? rule.target.ticketId}`),
+              h('span', { className: 'bt-set-hint' }, `${whenText(rule)} · ${rule.timezone} · ${rule.target.kind === 'main' ? t('Main') : work?.brief.goal ?? rule.target.ticketId}`),
               h('span', { className: 'bt-task-prompt' }, rule.text),
               last ? h('span', { className: 'bt-task-prompt', role: 'status' }, occurrenceText(last),
                 last.executionStatus ? ` · ${executionText(last.executionStatus)}` : null,

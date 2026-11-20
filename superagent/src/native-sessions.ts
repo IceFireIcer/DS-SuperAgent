@@ -43,6 +43,7 @@ export interface SessionUsageSnapshot {
   eventCount: number
   usage: SessionTokenUsage
   ranges: { id: string; usage: SessionTokenUsage }[]
+  buckets?: { at: number; provider: string; model: string; usage: SessionTokenUsage }[]
 }
 interface RouterTask { request: NativeSessionRequest; resolve: (value: NativeSessionResult) => void; reject: (error: unknown) => void }
 const maxCoalescedRouterTools = 7
@@ -441,7 +442,7 @@ export class NativeSessions {
     } finally { await handle.close() }
   }
 
-  async readUsageSnapshot(sessionId: string, options: { maxEvents?: number; ranges?: SessionUsageRange[] } = {}): Promise<SessionUsageSnapshot> {
+  async readUsageSnapshot(sessionId: string, options: { maxEvents?: number; ranges?: SessionUsageRange[]; hourly?: boolean } = {}): Promise<SessionUsageSnapshot> {
     const persistence = this.context.get('sessionPersistence')
     const ranges = options.ranges ?? []
     const maxEvents = options.maxEvents ?? 20_000
@@ -474,11 +475,29 @@ export class NativeSessions {
       const rangeTotals = new Map(ranges.map(range => [range.id, emptySessionUsage()]))
       const total = emptySessionUsage()
       const active = new Set<string>()
+      const hourly = new Map<string, NonNullable<SessionUsageSnapshot['buckets']>[number]>()
+      let route = { provider: '', model: '' }
       let start = 0, end = 0
       for (const raw of events) {
-        const event = raw as { type?: unknown; seq?: unknown; data?: { usage?: TokenUsage } }
+        const event = raw as { type?: unknown; seq?: unknown; time?: number; data?: {
+          usage?: TokenUsage; provider?: unknown; model?: unknown; header?: { config?: { provider?: unknown; model?: unknown } }
+        } }
+        if (options.hourly && (event.type === 'request/header' || event.type === 'request/context')) {
+          const model = event.type === 'request/header' ? event.data?.header?.config : event.data
+          if (typeof model?.provider === 'string' && typeof model.model === 'string') {
+            route = { provider: model.provider.slice(0, 120), model: model.model.slice(0, 160) }
+          }
+        }
         if (event.type !== 'assistant/message') continue
         addSessionUsage(total, event.data?.usage)
+        if (options.hourly && event.data?.usage && typeof event.time === 'number'
+          && Number.isFinite(event.time) && event.time > 0 && event.time <= 253402300799999) {
+          const at = Math.floor(event.time / 3_600_000) * 3_600_000
+          const key = JSON.stringify([at, route.provider, route.model])
+          const bucket = hourly.get(key) ?? { at, ...route, usage: emptySessionUsage() }
+          addSessionUsage(bucket.usage, event.data.usage)
+          hourly.set(key, bucket)
+        }
         if (!Number.isSafeInteger(event.seq)) continue
         const sequence = Number(event.seq)
         while (starts[start] && starts[start]!.startSeq <= sequence) active.add(starts[start++]!.id)
@@ -486,7 +505,8 @@ export class NativeSessions {
         if (active.size === 1) addSessionUsage(rangeTotals.get(active.values().next().value!)!, event.data?.usage)
       }
       return { status: 'available', eventCount: first + events.length, usage: total,
-        ranges: Array.from(rangeTotals, ([id, usage]) => ({ id, usage })) }
+        ranges: Array.from(rangeTotals, ([id, usage]) => ({ id, usage })),
+        ...(options.hourly ? { buckets: [...hourly.values()] } : {}) }
     } finally { await handle.close() }
   }
 

@@ -90,6 +90,19 @@ test('opens every approved settings page in order and keeps each conflict inside
   }
 }))
 
+test('switching between Usage and Status preserves the open usage filters', async () => withShell(async ({ document, click, render }) => {
+  await render({ initialPage: 'usage', sections: {
+    'usage-overview': { render: () => h('label', null, 'Model filter', h('input', { defaultValue: '' })) },
+    status: { render: () => h('span', null, 'Product health') },
+  } })
+  const model = document.querySelector('[role=tabpanel]:not([hidden]) input')
+  model.value = 'approved-model'
+  await click('Status', '[role=tablist]')
+  assert.equal(document.querySelector('[role=tabpanel]:not([hidden])').textContent, 'Product health')
+  await click('Usage', '[role=tablist]')
+  assert.equal(document.querySelector('[role=tabpanel]:not([hidden]) input').value, 'approved-model')
+}))
+
 test('routes through settings.section and leaves page chrome usable after section failure', async () => withShell(async ({ document, click, errors, render, keyDown }) => {
   const registered = new Map()
   const requests = []

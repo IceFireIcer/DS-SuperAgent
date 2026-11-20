@@ -8,7 +8,7 @@ import type { Effect, EffectHandler, EffectResult, Effects } from './effects.js'
 import type { InputDelivery, MainFollowUpAttachment, MainFollowUpAttachmentRequest, WorkInput, WorkOwnership } from './work-inputs.js'
 import type { MainSourceHandoff } from './main-source.js'
 import { isCurrentSourceEvent, type SourceEvent } from './source-events.js'
-import { authorizedScheduleEvent } from './product-schedules.js'
+import { authorizedScheduleEvent, scheduleSourceEnabled } from './product-schedules.js'
 import type { ContextCard, ContextRef, ContextRequest } from './context.js'
 import { assertReferenceShape, type EnvironmentAssetReference } from './environment-assets.js'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
@@ -776,14 +776,13 @@ export class WorkDelegation {
             const sourceEvent = await tx.get<SourceEvent>('source-event', current.sourceEventId)
             const policy = await tx.get<{ configuration: { allowedRequesterIds: string[] } }>('policy-state',
               JSON.stringify(['policy-state', current.sourceInstanceId]))
-            const scheduleSource = sourceEvent?.source.kind === 'schedule'
-              ? await tx.get<{ enabled: boolean }>('product-schedule-source', 'product-schedule-source') : undefined
+            const sourcePaused = sourceEvent?.source.kind === 'schedule' && !await scheduleSourceEnabled(tx, sourceEvent)
             const scheduled = sourceEvent?.source.kind === 'schedule'
-              ? await authorizedScheduleEvent(tx, sourceEvent, this.options.source.actorId, 'main').catch(() => undefined) : undefined
+              && !sourcePaused ? await authorizedScheduleEvent(tx, sourceEvent, this.options.source.actorId, 'main').catch(() => undefined) : undefined
             const staleReason = !sourceEvent ? 'SOURCE_EVENT_MISSING'
               : !await isCurrentSourceEvent(tx, sourceEvent) ? 'SOURCE_EVENT_SUPERSEDED'
               : sourceEvent.authorId !== current.authorId || sourceEvent.source.sourceInstanceId !== current.sourceInstanceId ? 'SOURCE_ACTOR_CHANGED'
-                : scheduleSource?.enabled === false ? 'SCHEDULE_SOURCE_CLOSED'
+                : sourcePaused ? 'SCHEDULE_SOURCE_CLOSED'
                   : sourceEvent.source.kind === 'im' && !await this.options.authorizeImSource?.(tx, sourceEvent) ? 'IM_PAIR_REVOKED'
                   : sourceEvent.type === 'deleted' || sourceEvent.addressing === 'ambient'
                     || (sourceEvent.source.kind === 'schedule' ? !scheduled : sourceEvent.authorKind !== 'human') ? 'SOURCE_NOT_AUTHORIZED'

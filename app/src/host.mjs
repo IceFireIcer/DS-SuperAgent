@@ -7,11 +7,13 @@ import { reconcileOfficeRuntime } from './office-patch.mjs'
 import { reconcileSearchSelector } from './search-patch.mjs'
 import { reconcileSuperagentProfile } from './superagent-patch.mjs'
 import { sessionInventory } from './product-backups.mjs'
+import { createDesktopComputer } from './computer-bridge.mjs'
 
 const send = message => new Promise((resolve, reject) => {
   if (!process.connected || process.send === undefined) { resolve(); return }
   process.send(message, error => { if (error === null) resolve(); else reject(error) })
 })
+const computerAdapter = Symbol.for('ds-superagent.computer-adapter')
 
 async function main() {
   const pnpm = process.argv[2]
@@ -20,6 +22,8 @@ async function main() {
   const office = reconcileOfficeRuntime(profile)
   const superagent = reconcileSuperagentProfile(profile, true)
   if (office.node !== undefined) process.env.DS_SUPERAGENT_OFFICE_NODE = office.node
+  const computer = process.env.DS_SUPERAGENT_APP === '1' && process.connected ? createDesktopComputer(send) : undefined
+  if (computer) globalThis[computerAdapter] = computer
   const application = runProfile({
     environment: loadLayeredEnv('dsh'),
     profile: SUPERAGENT_PROFILE,
@@ -34,6 +38,8 @@ async function main() {
   const stop = (forBackup = false) => stopping ??= (async () => {
     const running = await application.catch(() => undefined)
     let checkpoint
+    await computer?.close().catch(() => {})
+    if (globalThis[computerAdapter] === computer) delete globalThis[computerAdapter]
     if (forBackup && running) {
       try {
         const product = running.ctx.get('superagentProduct')

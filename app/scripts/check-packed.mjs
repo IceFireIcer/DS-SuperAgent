@@ -58,6 +58,7 @@ if (!existsSync(executable)) {
   const resources = process.platform === 'darwin' ? join(dirname(executable), '..', 'Resources') : join(dirname(executable), 'resources')
   const windows = process.platform === 'win32'
   const unpacked = process.platform === 'linux' ? 'app' : 'app.asar.unpacked'
+  const cuaPlatform = windows ? `win32-${process.arch}-msvc` : process.platform === 'linux' ? `linux-${process.arch}-gnu` : `darwin-${process.arch}`
   const required = [
     'primary-runtime/runtime.json',
     join('primary-runtime', 'dependencies', 'python', ...(windows ? ['python.exe'] : ['bin', 'python3'])),
@@ -65,6 +66,9 @@ if (!existsSync(executable)) {
     join('office-skills', 'office', 'SKILL.md'),
     join(unpacked, 'node_modules', '@deepseek-ai', 'libreoffice-kit', 'lib', 'cli.js'),
     join(unpacked, 'node_modules', 'ds-superagent', 'dsh', 'office.js'),
+    join('node_modules', '@trycua', 'cua-driver', 'dist', 'index.js'),
+    join('node_modules', '@trycua', `cua-driver-${cuaPlatform}`, 'package.json'),
+    join('node_modules', '@ubjs', 'node', 'package.json'),
   ]
   const missing = required.filter((entry) => !existsSync(join(resources, entry)))
   if (missing.length > 0) {

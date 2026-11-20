@@ -30,6 +30,7 @@ test('the existing operations page installs, backs up and restores without sendi
   const status = { main: { state: 'ready' }, processingPaused: false, supervision: {} }
   const usage = { createdAt: Date.now(), roles: { main: { status: 'none' }, router: { status: 'none' }, worker: { status: 'none' } },
     planning: [], works: [], unattributed: { status: 'none' }, cost: { reason: 'No price catalog.' },
+    hourly: [{ at: Date.now(), owner: 'worker', provider: 'mock', model: 'fixture', kind: 'execution', usage: { totalTokens: 54 } }],
     coverage: { status: 'available', includedSessions: 2, knownSessions: 2, omittedRoleUses: 0, omittedSessions: 0,
       omittedEvents: 0, limits: { roleUses: 100, sessions: 100, eventsPerSession: 20000 } } }
   const backup = { id: 'backup-1', createdAt: Date.now(), restorable: true,
@@ -56,13 +57,14 @@ test('the existing operations page installs, backs up and restores without sendi
     assert.match(button('Confirm restore').className, /bt-danger/u)
     await React.act(async () => button('Confirm restore').click())
     assert.deepEqual(backupCalls, ['install', 'create', 'restore:backup-1'])
-    assert.deepEqual([...new Set(calls)].sort(), ['product-status', 'product-usage'])
+    assert.deepEqual([...new Set(calls)].sort(), ['product-status', 'usage-breakdown'])
     assert.match(dom.window.document.body.textContent, /recent Main, Router and Worker Sessions/u)
 
     calls.length = 0
     await render('usage')
-    assert.deepEqual(calls, ['product-usage'])
+    assert.deepEqual(calls, ['usage-breakdown'])
     assert.match(dom.window.document.body.textContent, /Token usage by role/u)
+    assert.equal(dom.window.document.querySelector('[role=img]').getAttribute('aria-label'), 'Active on 1 day in the last year')
     assert.equal(button('Create backup'), undefined)
     assert.equal(button('Install and restart'), undefined)
 

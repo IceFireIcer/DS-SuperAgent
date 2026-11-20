@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { CoreError, identifier } from './model.js'
 import { canonicalJson, commandTransaction } from './commands.js'
 import { ProductCredentialVault, assertCredentialValue, type ProductCredentialRecords } from './product-credential-vault.js'
-import { ResourceCredentials, type CredentialPurpose, type CredentialResourceView, type CredentialScope, type CredentialUse } from './resource-credentials.js'
+import { ResourceCredentials, type CredentialApproval, type CredentialPurpose, type CredentialResourceView, type CredentialScope, type CredentialUse } from './resource-credentials.js'
 import type { Storage } from './storage.js'
 
 interface CreationIntent {
@@ -35,10 +35,11 @@ export class ProductCredentialManager {
     promise: Promise<{ status: 'committed'; resource: CredentialResourceView; cleanupPending: boolean }> }>()
   private rotationCursor: string | undefined
 
-  constructor(private readonly storage: Storage, private readonly instanceId: string, records: ProductCredentialRecords) {
+  constructor(private readonly storage: Storage, private readonly instanceId: string, records: ProductCredentialRecords,
+    notifyApproval?: CredentialApproval) {
     identifier(instanceId, 'instanceId')
     this.vault = new ProductCredentialVault(records)
-    this.resources = new ResourceCredentials(storage, instanceId, this.vault)
+    this.resources = new ResourceCredentials(storage, instanceId, this.vault, Date.now, notifyApproval)
   }
 
   async create(request: { instanceId: string; commandId: string; label: string; value: string }) {
@@ -153,8 +154,8 @@ export class ProductCredentialManager {
   get(request: { instanceId: string; resourceId: string }) { return this.resources.get(request) }
   getRequest(request: { instanceId: string; requestId: string }) { return this.resources.getRequest(request) }
   listRequests(request: { instanceId: string; after?: string; limit?: number }) { return this.resources.listRequests(request) }
-  request(request: { instanceId: string; commandId: string; resourceId: string; scope: CredentialScope; purpose: CredentialPurpose }) {
-    return this.resources.request(request)
+  request(request: Parameters<ResourceCredentials['request']>[0], assignment?: Parameters<ResourceCredentials['request']>[1]) {
+    return this.resources.request(request, assignment)
   }
   cancel(request: { instanceId: string; commandId: string; requestId: string }) { return this.resources.cancel(request) }
   grant(request: { instanceId: string; commandId: string; resourceId: string; expectedRevision: number;

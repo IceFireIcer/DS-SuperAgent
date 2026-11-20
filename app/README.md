@@ -191,8 +191,11 @@ The launch URL of the Host is good for one use only. When the first load never c
 
 New replies and questions can show a system notification and a desktop badge. A notification opens Main, and its text
 contains only the event type. Downloads from the product window ask for a save location. Settings exposes recent shell
-event codes alongside Host and update events for diagnostics. The computer-control indicator follows trusted Host
-activity and closes when control ends, the Host stops or the computer sleeps.
+event codes alongside Host and update events for diagnostics. Computer control starts off. The local user must enable
+it, allow a running application, then approve its exact current Worker in a native dialog. One 60-second lease can
+operate at a time. A screen indicator stays visible, and the tray can stop control. Take over to abort actions;
+release to allow a fresh request. Input already sent is not undone. The driver refuses unsupported systems or
+missing permissions. The settings page can show the last window snapshot while its lease is active.
 
 `scripts/check-lifecycle.mjs` (`npm run check-lifecycle`) checks this in a real Electron with a fake Host: no DSH, no model, no data of the user. It keeps its data in `app/.dsh-test-tray-lifecycle` and removes it afterwards. It checks that the Host keeps working while the window is hidden, that the window reads what it missed when it comes back, that a window that is gone is built anew against the same Host, the sleep status, and the explicit quit. It needs a desktop; the unit tests cover the same rules without one.
 

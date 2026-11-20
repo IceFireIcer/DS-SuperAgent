@@ -32,8 +32,8 @@ export function createComputerIndicator({ BrowserWindow, screen, icon, message, 
   }
   return {
     hide,
-    show() {
-      if (window) return
+    async show() {
+      if (window) return window.isVisible()
       const work = screen.getPrimaryDisplay().workArea
       const width = Math.min(320, work.width)
       const height = 54
@@ -43,9 +43,13 @@ export function createComputerIndicator({ BrowserWindow, screen, icon, message, 
       window = overlay
       overlay.once('closed', () => { if (window === overlay) window = undefined })
       overlay.setIgnoreMouseEvents(true)
-      void overlay.loadURL(statusPage(message(), { loading: false, lang: lang() })).then(() => {
-        if (window === overlay && !overlay.isDestroyed()) overlay.showInactive()
-      }).catch(() => { if (window === overlay) hide() })
+      overlay.setContentProtection?.(true)
+      try {
+        await overlay.loadURL(statusPage(message(), { loading: false, lang: lang() }))
+        if (window !== overlay || overlay.isDestroyed()) return false
+        overlay.showInactive()
+        return overlay.isVisible()
+      } catch { if (window === overlay) hide(); return false }
     },
   }
 }

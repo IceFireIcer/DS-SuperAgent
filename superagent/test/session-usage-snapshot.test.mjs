@@ -33,6 +33,11 @@ test('usage snapshots preserve provider reports, exact sequence attribution and 
   assert.equal(complete.usage.totalTokens, 14)
   assert.equal(complete.ranges[0].usage.totalTokens, 14)
   assert.equal(complete.ranges[0].usage.calls, 1)
+  const hourly = await sessions.readUsageSnapshot('usage-main', { hourly: true })
+  assert.equal(hourly.buckets.length, 1)
+  assert.equal(hourly.buckets[0].at, Math.floor(usageEvent.time / 3_600_000) * 3_600_000)
+  assert.equal(hourly.buckets[0].model, 'main')
+  assert.equal(hourly.buckets[0].usage.totalTokens, 14)
 
   const bounded = await sessions.readUsageSnapshot('usage-main', { maxEvents: 1, ranges: [range] })
   assert.equal(bounded.status, 'over-budget')

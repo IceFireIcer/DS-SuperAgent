@@ -64,6 +64,7 @@
     "@deepseek-ai/dsh-util-workspace-path": "0.2.2-rc.1",
     "@deepseek-ai/dsh-workflow": "0.2.2-rc.1",
     "@deepseek-ai/libreoffice-kit": "0.1.5",
+    "@trycua/cua-driver": "0.28.0",
     "deep-view": "0.1.0",
     "ds-superagent": "file:../superagent",
     "electron-updater": "6.8.10",
