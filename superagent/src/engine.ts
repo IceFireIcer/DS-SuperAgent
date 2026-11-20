@@ -29,6 +29,7 @@ import { ProductCredentialManager } from './product-credential-manager.js'
 import { ProductCredentialImports, type CredentialImportAdapter } from './product-credential-imports.js'
 import type { WorkerMcpBinding } from './worker-mcp-tool.js'
 import { ProductMcpConfiguration } from './product-mcp-configuration.js'
+import { CapabilityLibrary } from './capability-library.js'
 import type { WorkerMcpConfig } from './worker-mcp-tool.js'
 import { BrowserResources, type BrowserAdapter, type BrowserImportPreview } from './browser-resources.js'
 import type { ProductCredentialRecords } from './product-credential-vault.js'
@@ -52,7 +53,7 @@ import { compareWorkCopy, WorkCopyUnsupported, workCopyGaps,
   uniqueBlockers, type HandoffCopyView, type WorkCopyBlocker, type WorkCopyComparison, type WorkCopyFile, type WorkCopySnapshot } from './work-copy.js'
 import { MainConversation, type MainAddress, type MainSend } from './main-conversation.js'
 import { WorkDelegation, type MainEvidenceCard, type MainWorkCard, type MainWorkControl,
-  type MainWorkHandoffProjection, type MainWorkItem } from './work-delegation.js'
+  type MainWorkHandoffProjection, type MainWorkBrief, type MainWorkItem } from './work-delegation.js'
 import { WorkObservations } from './work-observations.js'
 import { MainSourceHandoffs, type MainSourceDeliveryPage, type MainSourceDeliveryView, type MainSourceHandoff, type MainSourceView } from './main-source.js'
 import { ProductSchedules, authorizedScheduleEvent, scheduledOccurrenceKey,
@@ -91,6 +92,8 @@ export class Engine {
   private readonly context: ContextReader
   private readonly sessions: NativeSessions | undefined
   private readonly roleConfig: RoleConfigStore
+  private capabilityLibrary: CapabilityLibrary | undefined
+  private imSourceAuthority: ((tx: AsyncTx, event: SourceEvent) => Promise<boolean>) | undefined
   private readonly productUsage: ProductUsage
   private readonly rolePresets: RolePresetStore
   private readonly executionPolicy: ExecutionPolicyStore
@@ -248,7 +251,8 @@ export class Engine {
       if (!config.roles.main) throw new CoreError('ROLE_NOT_CONFIGURED', 'Main needs its own role profile.')
       await storage.transaction(instanceId, tx => this.roleConfig.recordUse(tx, { sessionId, role: 'main', revision: config.revision,
         main: config.roles.main!.model, router: config.roles.router.model, worker: config.roles.worker.model }))
-      return { profile: structuredClone(config.roles.main), revision: config.revision }
+      const profile = structuredClone(config.roles.main)
+      return { profile: await this.capabilityLibrary?.profile(profile, { role: 'main' }) ?? profile, revision: config.revision }
     }, () => this.environments.some(candidate => candidate.kind === 'local' && candidate.config.instanceId === instanceId
       && candidate.config.allowedActorIds.includes(source.actorId) && candidate.config.permissions.includes('read')
       && candidate.config.permissions.includes('write')) ? this.workDelegation : undefined,
@@ -487,7 +491,10 @@ export class Engine {
             control }
         },
         routerProfile: async () => {
-          return this.roleConfig.currentView()
+          const config = await this.roleConfig.currentView()
+          if (!this.capabilityLibrary) return config
+          const router = await this.capabilityLibrary.profile(config.roles.router, { role: 'router' })
+          return { ...config, roles: { ...config.roles, router } }
         },
         recordRouterUse: async (sessionId, config) => {
           await storage.transaction(instanceId, tx => this.roleConfig.recordUse(tx, { sessionId, role: 'router', revision: config.revision,
@@ -495,6 +502,7 @@ export class Engine {
         },
         notifyMain: (notification, signal, isCurrent) => this.main.notify(notification, signal, isCurrent),
         notifyMainSource: (handoff, signal) => this.main.notifySource(handoff, signal),
+        authorizeImSource: async (tx, event) => await this.imSourceAuthority?.(tx, event) ?? false,
         applyFollowUp: (tx, request) => this.inputs.attachMainFollowUp(tx, request),
         readContext: request => this.context.read(request),
       })
@@ -835,6 +843,12 @@ export class Engine {
       const existing = await transaction.get<CommandRecord>('command', commandId)
       if (existing) return this.replay(existing, fingerprint, 'command')
       await this.assertHostAdmissionIn(transaction)
+      if (deliveryOrigin?.source.kind === 'im') {
+        const event = await transaction.get<SourceEvent>('source-event', deliveryOrigin.sourceEventId)
+        if (!event || !await this.imSourceAuthority?.(transaction, event)) {
+          throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The messaging conversation was unpaired before the Ticket could be established.')
+        }
+      }
       return this.accept(transaction, commandId, trigger, fingerprint, { mandateScope: item.goal,
         linkTicket: async (tx, receipt) => {
           await tx.insert('work-ticket', receipt.ticketId, { workBriefId: brief.id, workItemId: item.id, ticketId: receipt.ticketId })
@@ -1581,6 +1595,31 @@ export class Engine {
     await this.storage.transaction(this.instanceId, transaction => this.assertHostAdmissionIn(transaction))
   }
 
+  assertProductAdmission() {
+    return this.assertHostAdmission()
+  }
+
+  configureImSourceAuthority(authorize: (tx: AsyncTx, event: SourceEvent) => Promise<boolean>) {
+    this.imSourceAuthority = authorize
+  }
+
+  productExtensionStorage(): Storage {
+    const guard = (storage: Storage, ownsConnection: boolean): Storage => ({
+      transaction: (instanceId, operation) => {
+        if (instanceId !== this.instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The connection belongs to another Instance.')
+        return storage.transaction(instanceId, async tx => {
+          await this.assertHostAdmissionIn(tx)
+          return operation(tx)
+        })
+      },
+      reconnect: async () => guard(await storage.reconnect(), true),
+      close: async () => {
+        if (ownsConnection) await storage.close()
+      },
+    })
+    return guard(this.storage, false)
+  }
+
   /**
    * New work must be checked inside the transaction that would create it: a probe on its own connection would
    * turn a lost commit into a lost command identity instead of letting the original command reconcile.
@@ -1773,6 +1812,17 @@ export class Engine {
     }
     this.assertAuthoringActor()
     return new ProductMcpConfiguration(this.storage, this.instanceId, config, tx => this.assertHostAdmissionIn(tx))
+  }
+
+  configureCapabilityLibrary(credentials?: WorkerMcpBinding['credentials']) {
+    if ((this.source.kind ?? 'desktop') !== 'desktop' || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Capability settings require an authorized product actor.')
+    }
+    this.assertAuthoringActor()
+    if (this.capabilityLibrary) return this.capabilityLibrary
+    this.capabilityLibrary = new CapabilityLibrary(this.storage, this.instanceId, tx => this.assertHostAdmissionIn(tx), credentials)
+    this.execution?.configureCapabilities(this.capabilityLibrary)
+    return this.capabilityLibrary
   }
 
   /** Host-only configuration of one approved Worker tool; never part of the model command surface. */
@@ -2037,6 +2087,75 @@ export class Engine {
   }
   stopMainTurn(request: MainAddress & { commandId: string; messageId: string }) { return this.main.stop(request) }
   resumeMainInputs(request: MainAddress) { return this.main.resume(request) }
+  async directMainWork(request: import('./main-conversation.js').MainWorkDirection) {
+    await this.assertHostAdmission()
+    return this.main.directWork(request)
+  }
+
+  async listMainWork(request: MainAddress & { after?: string; limit?: number }) {
+    const { instanceId, after, limit } = request
+    const binding = await this.main.open({ instanceId })
+    const page = await this.workDelegation?.boardPage(binding.mainId, {
+      ...(after === undefined ? {} : { after }), ...(limit === undefined ? {} : { limit }),
+    })
+    if (!page) return { items: [] }
+    const items = await this.storage.transaction(instanceId, async tx => {
+      const records = []
+      for (const card of page.items) {
+        const ticketId = card.receipt.ticketId
+        const reportId = card.outcome?.reportId
+        const result = card.status === 'success' && ticketId && reportId
+          ? (await this.deliveries.list(tx, ticketId)).findLast(delivery =>
+            delivery.reportId === reportId && ['result', 'answer'].includes(delivery.purpose))
+          : undefined
+        const state = card.status === 'stopped' ? 'stopped'
+          : card.status === 'success' && result?.state === 'sent' ? 'delivered'
+            : card.status === 'success' && (!result || result.state === 'pending') ? 'waiting-delivery'
+              : ['running', 'routing', 'accepted', 'pending'].includes(card.status) ? 'running' : 'waiting-human'
+        const assignment = card.control?.assignment
+        const detail = assignment?.state === 'stopping' || card.control?.stop?.state === 'stopping' ? 'stopping'
+          : result?.state === 'unknown' || result?.state === 'dropped' ? result.state : card.status
+        records.push({ id: card.brief.workItemId, goal: card.brief.goal, createdAt: card.brief.createdAt,
+          summary: card.update?.summary ?? card.outcome?.summary ?? card.receipt.nextStep, state, detail,
+          ...(ticketId ? { ticketId } : {}),
+          ...(ticketId && card.control?.permissions.canStop ? { stop: { expectedTicketVersion: card.control.ticketVersion,
+            ...(assignment ? { expectedGeneration: assignment.generation } : {}) } } : {}),
+          ...(card.followUps?.length ? { notes: card.followUps.map(({ id, text }) => ({ id, text })) } : {}),
+        })
+      }
+      return records
+    })
+    return { items, ...(page.cursor ? { cursor: page.cursor } : {}) }
+  }
+
+  async mainWorkMembers(request: MainAddress) {
+    const binding = await this.main.open(request)
+    return this.storage.transaction(this.instanceId, async tx => {
+      const members = new Map<string, { sessionId: string; state: string; item?: { id: string; ticketId: string; goal: string;
+        stop: { expectedTicketVersion: number; expectedGeneration: string } } }>()
+      let after: string | undefined
+      do {
+        const page = await tx.scan<Assignment>('assignment', { limit: 100, ...(after ? { after } : {}) })
+        for (const { value: assignment } of page.items) {
+          if (assignment.state !== 'running' && assignment.state !== 'stopping') continue
+          const worker = { sessionId: assignment.sessionId, state: assignment.state }
+          const link = await tx.get<{ workBriefId: string; workItemId: string }>('work-ticket', assignment.ticketId)
+          const brief = link && await tx.get<MainWorkBrief>('work-brief', link.workBriefId)
+          const item = link && await tx.get<MainWorkItem>('work-item', link.workItemId)
+          const ticket = item && await tx.get<Work['ticket']>('ticket', assignment.ticketId)
+          const target = assignment.state === 'running' && brief?.mainId === binding.mainId
+            && item && ticket?.state === 'open' && !ticket.constraint ? {
+              id: item.id, goal: item.goal, ticketId: assignment.ticketId,
+              stop: { expectedTicketVersion: ticket.directionVersion ?? 1, expectedGeneration: assignment.generation },
+            } : undefined
+          if (!members.has(worker.sessionId) || target) members.set(worker.sessionId, { ...worker, ...(target ? { item: target } : {}) })
+        }
+        after = page.cursor
+      } while (after)
+      return { workers: [...members.values()] }
+    })
+  }
+
   async getMainConversation(request: MainAddress & { limit?: number; after?: number }) {
     const page = await this.main.page(request)
     return { ...page, works: this.workDelegation ? await this.workDelegation.list(page.mainId) : [] as MainWorkCard[],

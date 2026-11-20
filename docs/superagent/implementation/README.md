@@ -18,6 +18,8 @@
 
 DS Bot 0.3.8 迁移的客户端同步、视觉、协议、外壳、会话与设置切片见[实施记录](client-port-phase-one.md)（#144–#150）。
 
+#151–#155 在现有产品上实现 Work、桌面壳、连接器与邮箱、IM 和能力库。各张工单的实现与验收边界见[第二阶段记录](client-port-phase-two.md)。
+
 DSH `0.2.2-rc.1` 升级的版本矩阵、Windows 本地验证和已知限制见[基线记录](dsh-0.2.2-rc.1.md)（#143）。
 
 T55/#83 的 R5 本机四目标验收门槛已完成，包含权限/恢复、真实本机 Qwen3.5 9B 语义验收、真实 GitHub 回执及最新 Windows 原生升级与工作控制。T58/#92 的跨机和实体设备验收按维护者决定取消；真实飞书租户 deferred。[验收记录](t55-r5-local.md) · [真实模型报告](t55-r5-real-model-run.json) · [GitHub 外发](github-product-delivery.md)

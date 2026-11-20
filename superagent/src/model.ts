@@ -4,7 +4,7 @@ export class CoreError extends Error {
   constructor(public readonly code: string, message: string) { super(message); this.name = 'CoreError' }
 }
 
-export type SourceKind = 'desktop' | 'github' | 'feishu' | 'schedule'
+export type SourceKind = 'desktop' | 'github' | 'feishu' | 'schedule' | 'im'
 export interface Source {
   kind: SourceKind
   sourceInstanceId: string
@@ -101,7 +101,8 @@ export const recordKinds = [...coreRecordKinds, 'main-state', 'main-message', 'm
   'role-preset-import', 'role-preset-review', 'role-preset-source', 'role-preset-application', 'supervisor-run', 'supervisor-cursor-key',
   'product-memory', 'product-memory-command', 'product-memory-access', 'product-memory-proposal',
   'product-memory-import', 'product-memory-import-item', 'product-memory-import-source', 'product-credential-import',
-  'product-credential-import-command'] as const
+  'product-credential-import-command', 'main-work-direction', 'capability-definition', 'capability-command',
+  'product-im-account', 'im-main-address', 'product-connectors-state', 'product-connectors-command', 'product-mailbox-reply'] as const
 export type RecordKind = typeof recordKinds[number]
 
 export function identifier(value: unknown, label: string): asserts value is string {

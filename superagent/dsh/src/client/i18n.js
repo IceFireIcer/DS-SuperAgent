@@ -8,10 +8,29 @@ import fr from './locales/fr.js'
 import ja from './locales/ja.js'
 import ko from './locales/ko.js'
 import zhTW from './locales/zh-tw.js'
+import { CONNECTOR_ZH } from './connector-settings-zh.js'
+import { IM_ZH } from './im-settings-zh.js'
 
 export const NAMESPACE = 'ds-superagent'
 
 const ZH = {
+  ...CONNECTOR_ZH,
+  ...IM_ZH,
+  'Paired IM message': '已配对的 IM 消息',
+  'All work': '全部工作', 'Filter work': '筛选工作', 'Waiting for delivery': '等待交付',
+  'Waiting for a person': '等待人工', Delivered: '已交付', 'Work members': '工作成员', 'Worker stopping': 'Worker 正在停止',
+  'Confirm stop': '确认停止', 'Confirm stop for {goal}': '确认停止：{goal}', 'Stop work: {goal}': '停止工作：{goal}',
+  'Add note': '添加备注', 'Close note': '收起备注', 'Work follow-up': '工作跟进', 'Send follow-up': '发送跟进',
+  'Follow-up saved.': '跟进已保存。', 'No work in this group.': '此分组没有工作。', 'Could not refresh Work.': '无法刷新工作。',
+  Capability: '能力', 'Capability bundle': '能力包', 'New capability': '新建能力', Kind: '类型', 'MCP tool': 'MCP 工具',
+  'MCP server name': 'MCP 服务名称', 'MCP tool name': 'MCP 工具名称', 'MCP endpoint': 'MCP 地址', 'Bundle members': '能力包成员',
+  'Save capability': '保存能力', 'Confirm delete': '确认删除', 'Capability deleted.': '能力已删除。', 'Capability saved.': '能力已保存。',
+  'Execution bindings': '执行绑定', Approval: '审批', Approved: '已批准', 'Revoke approval': '撤销批准', Binding: '绑定',
+  'Bind capability': '绑定能力', Unbind: '解除绑定', Any: '不限', 'Work item': '工作项', 'Execution environment': '执行环境',
+  'The capability changed. Reload it before saving.': '能力已发生变化，请重新加载后再保存。',
+  'The capability library or execution scope has reached its limit.': '能力库或执行作用域已达到上限。',
+  'The work changed. Review its current state and try again.': '该工作已发生变化，请核对当前状态后重试。',
+  'Work follow-up is unavailable in this Host.': '此 Host 不支持工作跟进。',
   Roles: '角色', 'Agent presets': '智能体预设', 'Built-in plugins': '内置插件',
   'Connections and capabilities': '连接与能力', IM: '即时通信', Phone: '手机',
   'Browser plugin': '浏览器插件', 'Computer control': '电脑操控', 'Capability library': '能力库',

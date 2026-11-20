@@ -26,6 +26,10 @@ import { BuiltinPluginSettings } from './settings-builtin-plugins.js'
 import { installProductShell } from './product-shell.js'
 import { SHELL_CSS, CONVERSATION_CSS, installCompiledStyles } from './styles.js'
 import { ProductMcpSettings } from './product-mcp-settings.js'
+import { CapabilitySettings } from './capability-settings.js'
+import { ConnectorSettings } from './connector-settings.js'
+import { ProductImSettings } from './im-settings.js'
+import { WorkBoard, WorkMemberDock, WORK_BOARD_CSS } from './work-board.js'
 import { ProductBrowserSettings, PRODUCT_BROWSER_CSS } from './product-browser-settings.js'
 import { ProductExecutionSettings, PRODUCT_EXECUTION_CSS } from './product-execution.js'
 import { ProductWorkView } from './product-work-view.js'
@@ -57,6 +61,9 @@ export function applyProduct(ctx) {
     messages: [],
     readReplyId: null,
     works: [],
+    boardItems: null,
+    workerMembers: [],
+    boardError: '',
     activeTurn: null,
     health: null,
     modelsNeedSetup: null,
@@ -104,6 +111,70 @@ export function applyProduct(ctx) {
   let observationListRequest = 0
   let observationRequest = 0
   let observationDetailRequest = 0
+  let boardFlight
+  let nextBoardPoll = 0
+  let nextMemberPoll = 0
+  let memberRequest = 0
+
+  async function refreshMembers(binding) {
+    const request = ++memberRequest
+    nextMemberPoll = Number.POSITIVE_INFINITY
+    try {
+      const { workers } = await productCall('work-members', { instanceId: binding.instanceId })
+      if (!stopped && request === memberRequest) view.set(state => ({ ...state, workerMembers: workers }))
+    } catch { /* Hold the last confirmed membership until the next successful read. */ }
+    finally { if (request === memberRequest) nextMemberPoll = Date.now() + 2000 }
+  }
+
+  function refreshBoard(binding) {
+    if (boardFlight) return boardFlight
+    boardFlight = (async () => {
+      try {
+        const items = new Map()
+        const visited = new Set()
+        let after
+        do {
+          if (stopped) return
+          const page = await productCall('work-board', { instanceId: binding.instanceId, ...(after ? { after } : {}) })
+          for (const item of page.items) items.set(item.id, item)
+          after = page.cursor
+          if (after && visited.has(after)) throw new Error(t('Could not refresh Work.'))
+          if (after) visited.add(after)
+        } while (after)
+        if (!stopped) view.set(state => ({ ...state, boardItems: [...items.values()], boardError: '' }))
+      } catch (error) {
+        if (!stopped) view.set(state => ({ ...state, boardError: error.message }))
+      } finally {
+        boardFlight = undefined
+        nextBoardPoll = Date.now() + 2000
+      }
+    })()
+    return boardFlight
+  }
+
+  function BoardSurface({ dock = false }) {
+    const state = useView()
+    const instanceId = state.binding?.instanceId
+    useEffect(() => {
+      if (dock || !instanceId) return
+      view.set(current => ({ ...current, route: 'work' }))
+      void refreshBoard({ instanceId })
+      return () => view.set(current => current.route === 'work' ? { ...current, route: 'main' } : current)
+    }, [dock, instanceId])
+    const allowed = !state.connection?.connected || state.connection.capabilities.includes('command')
+    const execute = state.binding && allowed ? async (endpoint, input) => {
+      const result = await productCall(endpoint, { ...input, instanceId: state.binding.instanceId })
+      if (dock) await refreshMembers(state.binding)
+      else {
+        if (boardFlight) await boardFlight
+        await refreshBoard(state.binding)
+      }
+      return result
+    } : undefined
+    if (dock) return h(WorkMemberDock, { workers: state.workerMembers,
+      routing: state.works.some(work => work.receipt?.status === 'routing'), activeTurn: state.activeTurn, execute })
+    return h(WorkBoard, { items: state.boardItems, error: state.boardError, execute })
+  }
 
   const refreshMain = async binding => {
     try {
@@ -284,6 +355,8 @@ export function applyProduct(ctx) {
       if (connection.connected) await bridge.events()
       const current = view.getSnapshot()
       const binding = current.binding ?? await productCall('open')
+      if (Date.now() >= nextMemberPoll) void refreshMembers(binding)
+      if ((current.route === 'work' || current.settingsOpen) && !boardFlight && Date.now() >= nextBoardPoll) void refreshBoard(binding)
       await refreshMain(binding)
       if (!connection.connected && !current.binding) {
         void productCall('settings', { instanceId: binding.instanceId, limit: 1 }).then(snapshot => {
@@ -777,8 +850,9 @@ export function applyProduct(ctx) {
     }
     const scheduled = source.sourceInstanceId.startsWith('schedule:')
     const feishu = source.sourceInstanceId.startsWith('feishu:')
-    return h('article', { className: 'bt-main-source', 'aria-label': t(scheduled ? 'Scheduled occurrence' : feishu ? 'Feishu source request' : 'GitHub source request') },
-      h('div', { className: 'bt-main-work-head' }, h('strong', null, t(scheduled ? 'Scheduled occurrence' : feishu ? 'Feishu request' : 'GitHub request')),
+    const im = source.sourceInstanceId.startsWith('im:')
+    return h('article', { className: 'bt-main-source', 'aria-label': t(im ? 'Paired IM message' : scheduled ? 'Scheduled occurrence' : feishu ? 'Feishu source request' : 'GitHub source request') },
+      h('div', { className: 'bt-main-work-head' }, h('strong', null, t(im ? 'Paired IM message' : scheduled ? 'Scheduled occurrence' : feishu ? 'Feishu request' : 'GitHub request')),
         h('span', { className: 'bt-main-work-status', role: 'status' }, sourceStatusCopy(source.state))),
       h('p', { className: 'bt-main-work-detail' }, `${source.objectId} · @${source.authorId}`),
       h('p', { className: 'bt-main-work-detail' }, source.text),
@@ -1024,6 +1098,7 @@ export function applyProduct(ctx) {
           message.attachments?.length ? h(MainAttachmentLinks, { attachments: message.attachments }) : null)),
         unplaced.works.length || unplaced.sources.length || unplaced.preparations.length ? h('details', { className: 'bt-native-turn-cards' },
           h('summary', null, t('Work, sources and preparations')), renderCards(unplaced)) : null,
+        h(BoardSurface, { dock: true }),
         question ? h(MainWorkCard, { work: question, questionOnly: true, key: question.control.attention.id }) : composer)
     }
     return h('section', { className: 'bt-main-conversation', 'aria-label': 'Main' },
@@ -1034,6 +1109,7 @@ export function applyProduct(ctx) {
           t('{count} inputs queued', { count: state.health.queuedInputs })) : null,
         state.connection?.connected ? h('span', { className: 'bt-main-remote', title: state.connection.address },
           `${t('Remote Host')} · ${state.connection.client.label}`) : null,
+        h('button', { type: 'button', className: 'bt-soft', onClick: () => view.set(current => ({ ...current, route: 'work' })) }, t('Work')),
         clientBridge() ? h('button', { type: 'button', className: 'bt-soft', onClick: () => view.set(current => ({ ...current, connectOpen: true })) },
           state.connection?.connected ? t('Connection') : t('Connect to Host')) : null,
         !state.connection?.connected ? h('button', { type: 'button', className: 'bt-icon-btn bt-main-settings', title: t('Settings'),
@@ -1060,7 +1136,7 @@ export function applyProduct(ctx) {
                 message.source ? h('p', { className: 'bt-main-source-label' },
                   message.source.kind === 'client' ? `${t('Client')} · ${message.source.clientId}`
                     : message.source.kind === 'schedule' ? `${t('Scheduled occurrence')} · ${message.source.objectId}`
-                      : `${t(message.source.kind === 'feishu' ? 'Feishu' : 'GitHub')} · @${message.source.authorId} · ${message.source.objectId}`) : null,
+                      : `${t(message.source.kind === 'im' ? 'IM' : message.source.kind === 'feishu' ? 'Feishu' : 'GitHub')} · @${message.source.authorId} · ${message.source.objectId}`) : null,
                 h(ProductChatRow, { kind: message.role === 'main' ? 'bot' : 'user', text: message.text }),
                 message.role === 'main' && message.text && window.speechSynthesis
                   ? h('button', { type: 'button', className: 'bt-soft bt-main-read-aloud',
@@ -1075,7 +1151,7 @@ export function applyProduct(ctx) {
           stopping ? h('p', { className: 'bt-main-status', role: 'status' }, t('Stopping this Main reply…')) : busy
             ? h('p', { className: 'bt-main-status', role: 'status' }, t('Main is replying…')) : null,
           h('div', { ref: bottom }))),
-      composer)
+      h(BoardSurface, { dock: true }), composer)
   }
 
   function ObservationConversation({ onBack } = {}) {
@@ -1562,7 +1638,10 @@ export function applyProduct(ctx) {
         directoryOptions: viewState.directoryOptions, browserBridge: globalThis.dsSuperagentApp?.browser }),
       supervision: h(ProductSupervisionSettings, pageProps),
       'credential-resources': h(ProductCredentialSettings, { ...pageProps, credentialImportBridge: globalThis.dsSuperagentApp?.browser?.credentialImport }),
-      capabilities: h(ProductMcpSettings, pageProps),
+      connectors: h(ConnectorSettings, pageProps),
+      im: h(ProductImSettings, pageProps),
+      capabilities: h(Fragment, null, h(CapabilitySettings, { ...pageProps, works: viewState.boardItems,
+        environments: viewState.directoryOptions?.execution?.environments }), h(ProductMcpSettings, pageProps)),
       'remote-clients': h(ClientSettings, { binding }),
     }
     const sections = Object.fromEntries(Object.entries(pages).map(([id, content]) => [id, { render: () => content }]))
@@ -1627,6 +1706,10 @@ export function applyProduct(ctx) {
 
   function ProductSurface() {
     const state = useView()
+    if (state.route === 'work') return h('section', { className: 'bt-main-conversation' },
+      h('header', { className: 'bt-main-header' }, h(Header),
+        h('button', { type: 'button', className: 'bt-soft', onClick: shellActions.openMain }, t('Main'))),
+      h(BoardSurface))
     return state.route === 'observe' ? h(ObservationConversation) : h(MainConversation)
   }
 
@@ -1741,7 +1824,7 @@ export function applyProduct(ctx) {
   })
   installSettingsSections(ctx.slots)
   const register = (name, component, options = {}) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200, ...options }, component))
-  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SETTINGS_SHELL_CSS + PRODUCT_SETTINGS_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_EXECUTION_CSS + PRODUCT_OPERATIONS_CSS, 'main'), 'superagent: existing chat styles')
+  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SETTINGS_SHELL_CSS + PRODUCT_SETTINGS_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_EXECUTION_CSS + PRODUCT_OPERATIONS_CSS + WORK_BOARD_CSS, 'main'), 'superagent: existing chat styles')
   ctx.effect(() => installAppearance(ctx.get('theme')), 'superagent: appearance')
   if (!nativeSession) register('main.conversation', ProductSurface)
   else {
@@ -1753,6 +1836,7 @@ export function applyProduct(ctx) {
     } })
     register('conversation.chat.turnTail', NativeTurnCards, { id: 'superagent-cards', order: 900 })
     register('conversation.view', NativeActivity, { id: 'superagent-activity', order: 30, label: t('Activity') })
+    register('conversation.view', BoardSurface, { id: 'superagent-work', order: 31, label: t('Work') })
     register('main', () => h(ObservationConversation, { onBack: shellActions.openMain }), { key: 'superagent-activity' })
     ctx.effect(() => {
       let sessionId

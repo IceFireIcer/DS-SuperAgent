@@ -3,19 +3,17 @@ import { lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 const maxEntries = 200
-const areas = new Set(['host', 'update', 'backup', 'profile'])
+const areas = new Set(['host', 'update', 'backup', 'profile', 'shell'])
 const safeCode = /^[A-Z][A-Z0-9_]{0,79}$/u
 const safeVersion = version => version === undefined
   || typeof version === 'string' && version.length <= 64 && /^\d+\.\d+\.\d+(?:-[\da-z.-]+)?$/iu.test(version)
 
 export function createOperationsLog(path, { now = Date.now } = {}) {
   let entries = []
-  let loaded = false
+  let loading
   let writing = Promise.resolve()
 
-  const load = async () => {
-    if (loaded) return
-    loaded = true
+  const load = () => loading ??= (async () => {
     try {
       const info = await lstat(path)
       if (!info.isFile() || info.size > 64 * 1024) return
@@ -29,7 +27,7 @@ export function createOperationsLog(path, { now = Date.now } = {}) {
         } catch { return [] }
       })
     } catch (error) { if (error.code !== 'ENOENT') throw error }
-  }
+  })()
 
   const record = (area, code, version) => {
     if (!areas.has(area) || typeof code !== 'string' || !safeCode.test(code) || !safeVersion(version)) return Promise.resolve(false)

@@ -18,7 +18,7 @@ let workspace
 before(async () => { ({ home, workspace } = await startApp()) })
 
 test('the app starts with a window and a tray', async () => {
-  await waitFor(() => state.windows.length > 0, 'open the window')
+  await waitFor(() => window() !== undefined && hostState.options !== undefined, 'prepare the window')
   await waitFor(() => state.tray !== undefined, 'build the tray')
   assert.equal(hostState.options.env.DSH_HOME, profileHome(home))
   assert.equal(hostState.options.env.DS_SUPERAGENT_WORKSPACE, workspace)
@@ -38,7 +38,7 @@ test('a window that is gone for good is built anew and talks to the same Host', 
   const first = window()
   first.destroy()
   trayOpen().click()
-  await waitFor(() => state.windows.length === 2, 'build a new window')
+  await waitFor(() => window() !== first, 'build a new window')
   const second = window()
   await waitFor(() => second.loaded.some(url => url.startsWith('http://127.0.0.1:')), 'reach the Host')
   assert.equal(second.loaded.filter(url => url.includes('token=')).length, 0, 'the token is not used again')

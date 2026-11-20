@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, parse } from 'node:path'
 import { test } from 'node:test'
@@ -14,11 +14,12 @@ const write = (path, text) => {
 // The app's data with a team, a chat and a key, plus what stays behind: the engine's lock and
 // the temporary folders of a first-run copy and check that were cut short.
 function setup(t) {
-  const root = mkdtempSync(join(tmpdir(), 'ds-superagent-move-'))
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'ds-superagent-move-')))
   t.after(() => { rmSync(root, { recursive: true, force: true, maxRetries: 5 }) })
   const from = join(root, 'data')
   write(join(from, 'bot', 'state.json'), '{"bots":{"a":{}}}')
   write(join(from, 'bot', 'state.lock'), '{}')
+  write(join(from, 'superagent', 'host.lock'), '{}')
   write(join(from, 'sessions', 'g', 's1', 'log.jsonl'), 'chat')
   write(join(from, '.credentials.yaml'), 'key: test')
   write(join(from, '.import-12', 'bot', 'state.json'), '{}')
@@ -77,6 +78,16 @@ test('the data is copied whole, without the lock and the temporary folders, and 
   assert.deepEqual(files(from), before)
 })
 
+test('a failed location write removes its copy and leaves the source intact', async t => {
+  const { root, from } = setup(t)
+  const to = join(root, 'new')
+  const before = files(from)
+  await assert.rejects(copyData(from, to, undefined, () => { throw new Error('location write failed') }), /location write failed/u)
+  assert.deepEqual(files(from), before)
+  assert.equal(existsSync(to), false)
+  assert.deepEqual(readdirSync(root).filter(name => name.includes('.moving-')), [])
+})
+
 test('a copy that is stopped or fails leaves no new folder and no staging folder', async (t) => {
   const { root, from } = setup(t)
   const to = join(root, 'new')
@@ -95,12 +106,12 @@ test('a copy that is stopped or fails leaves no new folder and no staging folder
 
 test('only the staging folders of an earlier move go before the next copy', async (t) => {
   const { root, from } = setup(t)
-  write(join(root, '.new.moving-1', '.ds-bot-moving'), '')
+  write(join(root, '.new.moving-1', '.ds-superagent-moving'), '')
   write(join(root, '.new.moving-2', 'notes.txt'), 'mine')
   write(join(root, '.new.moving-backup', 'notes.txt'), 'mine')
   await copyData(from, join(root, 'new'))
   assert.deepEqual(readdirSync(root).sort(), ['.new.moving-2', '.new.moving-backup', 'data', 'new'])
-  assert.equal(existsSync(join(root, 'new', '.ds-bot-moving')), false)
+  assert.equal(existsSync(join(root, 'new', '.ds-superagent-moving')), false)
 })
 
 // Windows makes a junction without special rights; it always holds an absolute path.
@@ -113,6 +124,41 @@ test('a folder that a link leads into counts as that folder', (t) => {
   assert.equal(moveProblem({ from, to: join(root, 'dsh-link', 'data'), dshHome: join(root, 'dsh') }), 'dsh')
   symlinkSync(from, join(root, 'data-link'), folderLink)
   assert.equal(moveProblem({ from, to: join(root, 'data-link', 'inside'), dshHome: join(root, 'dsh') }), 'nested')
+})
+
+test('a move refuses a destination ancestor that changed after approval', async t => {
+  const { root, from } = setup(t)
+  const parent = join(root, 'chosen')
+  const privateData = join(root, 'protected')
+  const destination = join(parent, 'new')
+  write(join(privateData, 'sentinel'), 'unchanged')
+  symlinkSync(privateData, parent, folderLink)
+  await assert.rejects(copyData(from, destination), /location changed/u)
+  assert.deepEqual(files(privateData), ['sentinel'])
+})
+
+test('a move does not clean staging files through an ancestor that changed during copy', async t => {
+  const { root, from } = setup(t)
+  const parent = join(root, 'chosen')
+  const privateData = join(root, 'protected')
+  const relocated = join(root, 'renamed')
+  mkdirSync(parent)
+  mkdirSync(privateData)
+  let stage
+  const signal = {
+    throwIfAborted() {
+      if (stage) return
+      stage = readdirSync(parent).find(name => name.startsWith('.new.moving-'))
+      if (!stage) return
+      renameSync(parent, relocated)
+      symlinkSync(privateData, parent, folderLink)
+      write(join(privateData, stage, '.ds-superagent-moving'), '')
+      write(join(privateData, stage, 'sentinel'), 'unchanged')
+    },
+  }
+  await assert.rejects(copyData(from, join(parent, 'new'), signal), /location changed/u)
+  assert.equal(readFileSync(join(privateData, stage, 'sentinel'), 'utf8'), 'unchanged')
+  assert.equal(existsSync(join(privateData, 'new')), false)
 })
 
 test('a data folder that is itself a link moves with its contents', async (t) => {

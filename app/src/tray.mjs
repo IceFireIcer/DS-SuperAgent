@@ -16,7 +16,7 @@ import { PRODUCT_NAME } from './product.mjs'
  * }} options the mark, the tooltip and the two entries of the menu
  * @returns {{ tray: object, relabel: () => void, dispose: () => void }}
  */
-export function createTray({ Tray, Menu, platform, image, tooltip, status, open, quit, log = console }) {
+export function createTray({ Tray, Menu, platform, image, tooltip, status, open, locations, quit, log = console }) {
   const tray = new Tray(image)
   let disposed = false
   const relabel = () => {
@@ -27,6 +27,7 @@ export function createTray({ Tray, Menu, platform, image, tooltip, status, open,
       { label: current, enabled: false },
       { type: 'separator' },
       { label: open.label, click: () => { open.run() } },
+      ...(locations ? [{ label: locations.label, enabled: locations.enabled(), click: () => { locations.run() } }] : []),
       { type: 'separator' },
       { label: quit.label, click: () => { quit.run() } },
     ]))

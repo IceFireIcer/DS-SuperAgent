@@ -121,7 +121,7 @@ export function githubProfileConfig(env: NodeJS.ProcessEnv = process.env): Produ
 }
 
 export const name = 'ds-superagent'
-export const inject = ['sessionPersistence', 'agents', 'sessions']
+export const inject = ['sessionPersistence', 'agents', 'sessions', 'credentials']
 
 export async function apply(context: Context, config: SuperagentProfileConfig = {}) {
   const paths = profilePaths()

@@ -5,7 +5,7 @@ import { getAppearance, setAppearance } from './appearance.js'
 const productEndpoints = new Set(`
   open history send stop-main evidence observe-list observe-read observe-detail
   work-stop work-reconcile-stop work-handoff-prepare work-handoff-verify work-handoff work-retry work-resume
-  work-answer work-answer-view supervision supervision-inspect supervision-decide
+  work-answer work-answer-view work-board work-members work-follow-up supervision supervision-inspect supervision-decide
   settings settings-save settings-efforts provider-key builtin-plugins directory-options directory-pick directory-list
   directory-register directory-default-save execution-options execution-policy-save
   remote-environment-pair remote-environment-pair-read remote-environment-pair-abandon remote-environment-revoke
@@ -27,6 +27,8 @@ const productEndpoints = new Set(`
   proactive-rules proactive-control proactive-list proactive-read proactive-artifact proactive-work-artifact
   proactive-save proactive-pause proactive-stop schedule-list schedule-read schedule-create schedule-cancel
   schedule-source-read schedule-source-set
+  capability-list capability-resolve capability-save capability-delete capability-approve capability-bind
+  connector-registry connector-save connector-auth connector-import mailbox-account mailbox-rule mailbox-reply im-accounts
 `.trim().split(/\s+/u))
 
 export function createProductApi({ fetch: request = (...args) => globalThis.fetch(...args),

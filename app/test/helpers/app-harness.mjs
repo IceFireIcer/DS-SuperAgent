@@ -79,7 +79,7 @@ export const startEmptyUpdateFeed = async () => {
 }
 
 /** The window of the app: the last one it built. */
-export const window = () => state.windows.at(-1)
+export const window = () => state.windows.findLast(win => win.options.webPreferences?.preload)
 
 /** The entries of the tray's menu: the status, Open, Quit, with lines between them. */
 export const trayMenu = () => state.tray.menu.template

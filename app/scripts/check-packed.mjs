@@ -116,8 +116,14 @@ function checkSharp(app) {
   const script = `
     const assert = require('node:assert/strict')
     const { createRequire } = require('node:module')
+    const { readFileSync } = require('node:fs')
+    const { join } = require('node:path')
     ${linux ? "assert.equal(process.versions.electron, undefined, 'Linux image processing must not run in Electron')" : ''}
-    const appRequire = createRequire(${JSON.stringify(join(resources, linux ? 'app' : 'app.asar', 'package.json'))})
+    const appPath = ${JSON.stringify(join(resources, linux ? 'app' : 'app.asar'))}
+    const appRequire = createRequire(join(appPath, 'package.json'))
+    for (const asset of ['status-window.css', 'mica.css', 'fonts.css', 'preload.cjs']) {
+      assert.ok(readFileSync(join(appPath, 'src', asset)).length > 0, 'packaged desktop asset: ' + asset)
+    }
     const sharp = appRequire('sharp')
     ;(async () => {
       const image = await sharp({ create: { width: 4, height: 4, channels: 3, background: '#ff0000' } }).png().toBuffer()
@@ -244,13 +250,7 @@ function devtools(url, problems) {
 
 // mica.css styles DSH's own page, which can change with a DSH upgrade; every rule must still
 // find an element, on every platform, so the change shows here and not as a broken window.
-function micaRules() {
-  const css = readFileSync(join(root, 'src', 'mica.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//gu, '')
-  return [...css.matchAll(/([^{}]+)\{/gu)].map(([, selectors]) => selectors.split(',')
-    .map(selector => selector.trim().replace(/::(?:before|after)$/u, ''))
-    .filter(selector => selector !== '' && selector !== 'body'))
-    .filter(rule => rule.length > 0)
-}
+const micaCss = readFileSync(join(root, 'src', 'mica.css'), 'utf8')
 
 async function chat(cdp) {
   const evaluate = async expression => (await cdp.call('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })).result.value
@@ -268,7 +268,13 @@ async function chat(cdp) {
   await cdp.call('Runtime.enable')
   await cdp.call('Log.enable')
   await until("document.querySelector('#main-message')", 'the Main conversation')
-  const stale = await evaluate(`${JSON.stringify(micaRules())}.filter(rule => !rule.some(selector => document.querySelector(selector) !== null)).map(rule => rule.join(', '))`)
+  const stale = await evaluate(`(() => {
+    const sheet = new CSSStyleSheet()
+    sheet.replaceSync(${JSON.stringify(micaCss)})
+    const selectors = rules => Array.from(rules).flatMap(rule => rule.selectorText ? [rule.selectorText] : selectors(rule.cssRules ?? []))
+    return selectors(sheet.cssRules).filter(rule => !rule.split(',').some(selector =>
+      document.querySelector(selector.trim().replace(/::(?:before|after)$/, '')) !== null))
+  })()`)
   if (stale.length > 0) throw new Error(`src/mica.css no longer matches DSH's page: ${stale.join(' | ')}`)
   await dismissNotice()
   // Click the composer through the input pipeline. A bare focus() is not enough where no window

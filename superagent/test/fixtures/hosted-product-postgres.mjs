@@ -1,5 +1,6 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import LocalCredentials from '@deepseek-ai/dsh-credentials-local'
 import * as Profile from '../../dist/profile.js'
 import * as PostgresSessionPersistence from '../../dist/session-persistence-postgres.js'
 import {
@@ -94,6 +95,7 @@ try {
     persistence: PostgresSessionPersistence,
     persistenceConfig: postgres,
   })
+  await native.plugin(LocalCredentials, { path: join(home, 'fixture-credentials.yaml'), watch: false })
   await native.plugin(Profile, {
     instanceId: 'hosted-product',
     actorId: 'owner',

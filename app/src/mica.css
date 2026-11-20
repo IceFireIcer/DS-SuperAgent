@@ -37,3 +37,12 @@ div[class*="_rightbarCol"] {
   border-top: var(--dsh-windows-titlebar-height) solid var(--dsw-alias-bg-base) !important;
   background: var(--dsw-alias-bg-base) !important;
 }
+@media (forced-colors: active), (prefers-reduced-transparency: reduce) {
+  body,
+  div[class*="_sidebarCol"] {
+    background: var(--dsw-specific-sidebar-fill, Canvas) !important;
+  }
+  body {
+    --bt-leftcol-fill: var(--dsw-specific-sidebar-fill, Canvas);
+  }
+}

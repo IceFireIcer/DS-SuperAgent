@@ -7,6 +7,7 @@ import type { AsyncTx, Storage } from './storage.js'
 import type { RoleProfile } from './config.js'
 import type { ContextRef } from './context.js'
 import type { MainWorkCard, MainWorkHandoff, MainWorkIntent, MainWorkNotification, WorkDelegation } from './work-delegation.js'
+import type { MainWorkFollowUpView } from './work-delegation.js'
 import type { MainSourceHandoff, MainSourceView } from './main-source.js'
 import type { ProductAttachments, ProductAttachmentView } from './product-attachments.js'
 import { resolveProductAttachments } from './product-attachments.js'
@@ -20,7 +21,7 @@ export interface MainBinding { instanceId: string; mainId: string; mainSessionId
 interface MainState extends MainBinding { sequence: number; activeCommand?: string }
 export type MainMessageStatus = 'queued' | 'running' | 'stopping' | 'stopped' | 'completed' | 'interrupted' | 'failed'
 export interface MainExternalSource {
-  kind: 'github' | 'feishu' | 'schedule'
+  kind: 'github' | 'feishu' | 'schedule' | 'im'
   sourceInstanceId: string
   eventId: string
   objectId: string
@@ -127,6 +128,13 @@ export interface MainHealth {
 }
 export interface MainAddress { instanceId: string }
 export interface MainSend extends MainAddress { commandId: string; text: string; environmentId?: string; target?: ExecutionTarget; clientId?: string; attachments?: string[] }
+export interface MainWorkDirection extends MainAddress {
+  commandId: string
+  workItemId: string
+  ticketId: string
+  text: string
+  clientId?: string
+}
 export interface MainSessionRollover {
   id: string
   mainId: string
@@ -442,6 +450,42 @@ export class MainConversation {
       await tx.replace('main-state', 'main', { ...state, sequence })
     })
     return this.enqueue(binding, key, request.text)
+  }
+
+  async directWork(request: MainWorkDirection) {
+    this.authorize(request)
+    identifier(request.commandId, 'commandId')
+    identifier(request.workItemId, 'workItemId')
+    identifier(request.ticketId, 'ticketId')
+    if (request.clientId !== undefined) identifier(request.clientId, 'clientId')
+    if (typeof request.text !== 'string' || !request.text.trim() || Buffer.byteLength(request.text) > 32768) {
+      throw new CoreError('INVALID_INPUT', 'A work follow-up needs text within the Main message limit.')
+    }
+    const work = this.work?.()
+    if (!work) throw new CoreError('DELEGATION_UNAVAILABLE', 'Work follow-up is unavailable in this Host.')
+    await this.open(request)
+    const text = request.text.trim()
+    const key = createHash('sha256').update(canonicalJson([this.source.actorId, request.clientId ?? null,
+      request.commandId])).digest('hex')
+    const fingerprint = createHash('sha256').update(canonicalJson([request.workItemId, request.ticketId, text])).digest('hex')
+    return commandTransaction(this.storage, this.instanceId, async tx => {
+      const prior = await tx.get<{ fingerprint: string; receipt: MainWorkFollowUpView }>('main-work-direction', key)
+      if (prior) {
+        if (prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'This follow-up command already has different input.')
+        return prior.receipt
+      }
+      const state = await this.state(tx)
+      const sequence = state.sequence + 1
+      const messageId = `main-direction-${randomUUID()}`
+      await tx.insert<MainMessage>('main-message', messageKey(sequence), { id: messageId, sequence, role: 'user', text,
+        createdAt: Date.now(), status: 'completed', ...(request.clientId ? { source: { kind: 'client', clientId: request.clientId } } : {}) })
+      const receipt = await work.followUpIn(tx, { commandId: `work-direction:${key}`, mainId: state.mainId,
+        mainSessionId: state.mainSessionId, mainMessageId: messageId, originalUserText: text, workItemId: request.workItemId, text },
+      { sequence, ticketId: request.ticketId })
+      await tx.insert('main-work-direction', key, { fingerprint, receipt })
+      await tx.replace('main-state', 'main', { ...state, sequence })
+      return receipt
+    })
   }
 
   async resume(request: MainAddress) {
@@ -769,6 +813,8 @@ export class MainConversation {
         throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The source handoff belongs to another Main.')
       }
       const key = `main-source:${handoff.id}`
+      const fromIm = handoff.sourceInstanceId.startsWith('im:')
+      const sessionId = fromIm ? `im-${createHash('sha256').update(handoff.threadId).digest('hex')}` : binding.mainSessionId
       let prepared = await commandTransaction(this.storage, this.instanceId, async tx => {
         const prior = await tx.get<MainSourceCommand>('main-source-command', key)
         if (prior) return { ...prior, handoffId: prior.handoffId ?? handoff.id, turnMessageId: prior.turnMessageId ?? prior.messageId,
@@ -779,24 +825,24 @@ export class MainConversation {
         const admitted = await this.sourceAttachments(tx, handoff)
         await tx.insert<MainMessage>('main-message', messageKey(sequence), { id: messageId, sequence, role: 'user', text: handoff.text,
           createdAt: Date.now(), status: 'running', ...(admitted ? { attachments: admitted.views } : {}),
-          source: { kind: handoff.sourceInstanceId.startsWith('schedule:') ? 'schedule'
+          source: { kind: fromIm ? 'im' : handoff.sourceInstanceId.startsWith('schedule:') ? 'schedule'
             : handoff.sourceInstanceId.startsWith('feishu:') ? 'feishu' : 'github', sourceInstanceId: handoff.sourceInstanceId,
             eventId: handoff.sourceEventId, objectId: handoff.objectId, threadId: handoff.threadId, authorId: handoff.authorId, reference: handoff.reference } })
         await tx.replace('main-state', 'main', { ...state, sequence })
         const command: MainSourceCommand = { state: 'running', handoffId: handoff.id, messageId, turnMessageId: messageId, userSequence: sequence,
-          sessionId: binding.mainSessionId, sessionGeneration: binding.generation, attempt: 1 }
+          sessionId, sessionGeneration: binding.generation, attempt: 1 }
         await tx.insert('main-source-command', key, command)
         return command
       })
       if (prepared.state === 'completed') return
-      if (prepared.handoffId !== handoff.id || prepared.sessionId !== binding.mainSessionId
-        || prepared.sessionGeneration !== binding.generation) {
+      if (prepared.handoffId !== handoff.id || !fromIm && (prepared.sessionId !== binding.mainSessionId
+        || prepared.sessionGeneration !== binding.generation)) {
         throw new CoreError('INCOMPLETE_STATE', 'The source Main recovery state does not match the current Main Session generation.')
       }
       let answer: string | undefined
-      const persistedTurn = await this.sessions!.hasMessage(binding.mainSessionId, prepared.turnMessageId)
+      const persistedTurn = await this.sessions!.hasMessage(prepared.sessionId, prepared.turnMessageId)
       if (persistedTurn.found) {
-        answer = await this.readReply(binding, prepared.turnMessageId)
+        answer = await this.readReply({ ...binding, mainSessionId: prepared.sessionId }, prepared.turnMessageId)
       }
       if (!answer && persistedTurn.found) {
         prepared = await commandTransaction(this.storage, this.instanceId, async tx => {
@@ -820,8 +866,8 @@ export class MainConversation {
         prepared = await commandTransaction(this.storage, this.instanceId, async tx => {
           const current = await tx.get<MainSourceCommand>('main-source-command', key)
           if (!current || current.state === 'completed') throw new CoreError('MAIN_SOURCE_FAILED', 'The source recovery receipt disappeared.')
-          if (current.handoffId !== handoff.id || current.sessionId !== binding.mainSessionId
-            || current.sessionGeneration !== binding.generation) {
+          if (current.handoffId !== handoff.id || !fromIm && (current.sessionId !== binding.mainSessionId
+            || current.sessionGeneration !== binding.generation)) {
             throw new CoreError('INCOMPLETE_STATE', 'The source Main Session changed while its rollover was being prepared.')
           }
           if (current.attempt >= 10) throw new CoreError('MAIN_SOURCE_FAILED', 'The source Main recovery budget is exhausted.')
@@ -832,6 +878,7 @@ export class MainConversation {
           const command: MainSourceCommand = { ...current, state: 'running', sessionId: childSessionId,
             sessionGeneration, turnMessageId, attempt }
           await tx.replace('main-source-command', key, command)
+          if (fromIm) return command
           await tx.replace('main-state', 'main', { ...state, mainSessionId: childSessionId, generation: sessionGeneration })
           const rollover: MainSourceRollover = {
             id: `${JSON.stringify(['main-source-rollover', handoff.id])}:${childSessionId}`,
@@ -856,23 +903,23 @@ export class MainConversation {
         rolloverPrepared = true
       }
       if (!answer) {
-        const configured = await this.prepare?.(binding.mainSessionId)
+        const configured = await this.prepare?.(prepared.sessionId)
         const sourceContent = !persistedTurn.found ? await this.storage.transaction(this.instanceId, tx => this.sourceAttachments(tx, handoff)) : undefined
-        const prompt = `[${handoff.sourceInstanceId.startsWith('schedule:') ? 'Scheduled occurrence'
+        const prompt = `[${fromIm ? 'Paired IM message' : handoff.sourceInstanceId.startsWith('schedule:') ? 'Scheduled occurrence'
           : `${handoff.sourceInstanceId.startsWith('feishu:') ? 'Feishu' : 'GitHub'} request`}${prepared.attempt > 1 ? ' recovery' : ''}]\nThis is one authorized source handoff, not a private transcript. ${prepared.attempt > 1
             ? 'The previous Main turn ended without a reply. Continue the same durable request and produce one safe reply; do not repeat completed side effects. '
-            : 'When the request is actionable, use delegate_work and preserve the source reference. If no work is justified, give a brief answer to this requester only, suitable for the original Feishu thread. Do not include private Main context or other discussions.'}\n${JSON.stringify({
+            : 'When the request is actionable, use delegate_work and preserve the source reference. If no work is justified, give a brief answer to this requester only, suitable for the original conversation. Do not include private Main context or other discussions.'}\n${JSON.stringify({
               sourceEventId: handoff.sourceEventId, sourceInstanceId: handoff.sourceInstanceId, threadId: handoff.threadId, objectId: handoff.objectId,
               mainSessionGeneration: prepared.sessionGeneration,
               authorId: handoff.authorId, reference: handoff.reference, text: handoff.text,
               ...(handoff.attachments ? { attachments: handoff.attachments.map(({ id, name, kind }) => ({ id, name, kind })) } : {}),
             })}`
-        const result = await this.sessions!.run({ role: 'main', sessionId: binding.mainSessionId, messageId: prepared.turnMessageId, signal,
+        const result = await this.sessions!.run({ role: 'main', sessionId: prepared.sessionId, messageId: prepared.turnMessageId, signal,
           onForkPrepared: prepareFork,
           text: prompt,
           ...(sourceContent ? { content: [{ type: 'text' as const, text: prompt }, ...sourceContent.content],
             onDelivered: async () => { await this.storage.transaction(this.instanceId, tx => this.sourceAttachments(tx, handoff)) } } : {}),
-          tools: [this.sourceTool(binding, handoff, prepared.messageId, configured?.revision ?? 1), ...this.memoryTools(binding)],
+          tools: [this.sourceTool(binding, handoff, prepared.messageId, configured?.revision ?? 1), ...(fromIm ? [] : this.memoryTools(binding))],
           ...(configured ? { profile: configured.profile } : {}) })
         if (result.forkedSessionId) {
           if (!rolloverPrepared) await prepareFork(result.forkedSessionId)
@@ -900,7 +947,7 @@ export class MainConversation {
           const { lastError: _error, ...settled } = current
           await tx.replace('main-source-handoff', handoff.id,
             { ...settled, state: current.state === 'delegated' ? 'delegated' : 'presented', mainMessageId: prepared.messageId, updatedAt: Date.now() })
-          if (current.sourceInstanceId.startsWith('feishu:') && current.state !== 'delegated' && !current.workBriefId && this.enqueueEffect) {
+          if ((fromIm || current.sourceInstanceId.startsWith('feishu:')) && current.state !== 'delegated' && !current.workBriefId && this.enqueueEffect) {
             const replyId = `main-source-reply:${handoff.id}`
             const effect = await this.enqueueEffect(tx, { key: replyId, stream: 'outbox', scope: `main:${binding.mainId}`,
               payload: { type: 'main-source-reply', replyId } })

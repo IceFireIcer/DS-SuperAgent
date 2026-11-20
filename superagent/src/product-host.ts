@@ -25,7 +25,11 @@ import { ProductAttachments } from './product-attachments.js'
 import { productProactivePreparation } from './product-proactive.js'
 import { ProactiveWork } from './proactive-work.js'
 import type { ProactiveRule } from './proactive.js'
-import type { ProductCredentialRecords } from './product-credential-vault.js'
+import { ProductCredentialVault, type ProductCredentialRecords } from './product-credential-vault.js'
+import { capabilityFields } from './capability-library.js'
+import { ProductConnectors, connectorFields, type ProductConnectorOptions } from './product-connectors/index.js'
+import { ImAccounts, type ImTransport } from './im-accounts/index.js'
+import { ImMainRelay, imMainBinding, imSource } from './im-main-relay.js'
 import type { ProductCredentialManager } from './product-credential-manager.js'
 import { ProductCredentialImports, type CredentialImportAdapter } from './product-credential-imports.js'
 import { HostCredentialImportAdapter } from './credential-import-host.js'
@@ -58,6 +62,8 @@ export interface ProductHostConfig { databasePath?: string; postgres?: PostgresO
   browserAdapter?: BrowserAdapter;
   /** Trusted local App bridge for one-item credential reads from an explicitly selected export. */
   credentialImportAdapter?: CredentialImportAdapter;
+  connectors?: ProductConnectorOptions;
+  im?: ImTransport;
   feishuConfigurationError?: 'INVALID_CONFIG';
   github?: Omit<GitHubRuntimeOptions, 'storage' | 'instanceId'>;
   githubConfigurationError?: 'INVALID_CONFIG' }
@@ -156,6 +162,11 @@ const memoryFields: Record<string, string[]> = {
   'memory-decide': ['instanceId', 'commandId', 'proposalId', 'approve'],
 }
 const statusFields: Record<string, string[]> = { 'product-usage': ['instanceId'], 'product-status': ['instanceId'], 'builtin-plugins': ['instanceId'] }
+const workBoardFields: Record<string, string[]> = {
+  'work-board': ['instanceId', 'after', 'limit'],
+  'work-members': ['instanceId'],
+  'work-follow-up': ['instanceId', 'commandId', 'workItemId', 'ticketId', 'text'],
+}
 
 interface PluginInventoryRow {
   entryId: string
@@ -230,6 +241,10 @@ export async function createProductHost(context: Context, config: ProductHostCon
   let feishuEngine: Engine | undefined
   let githubRuntime: GitHubRuntime | undefined
   let githubEngine: Engine | undefined
+  let imEngine: Engine | undefined
+  let imAccounts: ImAccounts | undefined
+  let imMain: ImMainRelay | undefined
+  let connectors: ProductConnectors | undefined
   let workRouter: ProactiveWork | undefined
   let feishuLegacyConflict = false
   let feishuSelectionActive = false
@@ -245,6 +260,10 @@ export async function createProductHost(context: Context, config: ProductHostCon
     authorizeWork: async (tx: import('./storage.js').AsyncTx, run: import('./proactive.js').ProactiveRun) => {
       if (run.sourceInstanceId !== feishuRuntime?.sourceBinding.sourceInstanceId || config.feishu?.api.appSecret) return
       const selected = await tx.get<{ resourceId: string | null }>('product-feishu-credential', run.sourceInstanceId)
+      if (!selected?.resourceId && connectors && config.feishu) {
+        return connectors.assertAuthorizationIn(tx, { provider: 'feishu', appId: config.feishu.api.appId,
+          tenantKey: config.feishu.tenantKey, purpose: 'source' })
+      }
       const resource = selected?.resourceId ? await tx.get<{ status: string; grants: { scope: { role: string; workItemId?: string;
         environmentId?: string; sourceInstanceId?: string }; purposes: string[] }[] }>('resource-credential', selected.resourceId) : undefined
       if (resource?.status !== 'active' || !resource.grants.some(grant => grant.scope.role === 'main'
@@ -423,8 +442,10 @@ export async function createProductHost(context: Context, config: ProductHostCon
     if (statusTimer) clearInterval(statusTimer)
     engine?.abortProactiveRuns(); feishuEngine?.abortProactiveRuns(); githubEngine?.abortProactiveRuns()
     const failures: unknown[] = []
-    for (const close of [() => supervision?.close(), () => statusPublisher?.close(), () => gateway?.close(), () => feishuRuntime?.stop(), () => githubRuntime?.stop(), () => engine?.effects.stop(),
-      () => feishuEngine?.effects.stop(), () => githubEngine?.effects.stop(), () => engine?.shutdown(), () => feishuEngine?.shutdown(), () => githubEngine?.shutdown(),
+    for (const close of [() => supervision?.close(), () => statusPublisher?.close(), () => gateway?.close(),
+      () => connectors?.close(), () => imAccounts?.close(), () => feishuRuntime?.stop(), () => githubRuntime?.stop(), () => engine?.effects.stop(),
+      () => feishuEngine?.effects.stop(), () => githubEngine?.effects.stop(), () => imEngine?.effects.stop(),
+      () => engine?.shutdown(), () => feishuEngine?.shutdown(), () => githubEngine?.shutdown(), () => imEngine?.shutdown(),
       () => engine?.closeBrowserResources(), () => workRouter?.close(), () => sessions.close(),
       ...environments.map(environment => () => environment.close()), () => storage.close()]) {
       try { await close() } catch (error) { failures.push(error) }
@@ -506,11 +527,13 @@ export async function createProductHost(context: Context, config: ProductHostCon
         ...api, withCredential: async (purpose, consume) => {
           const manager = resourceManager
           const sourceInstanceId = feishuRuntime?.sourceBinding.sourceInstanceId
-          if (!manager || !sourceInstanceId) throw new CoreError('RESOURCE_UNAVAILABLE', 'No Feishu credential resource is available.')
-          const resourceId = await manager.selectedFeishuCredential(sourceInstanceId)
-          if (!resourceId) throw new CoreError('RESOURCE_UNAVAILABLE', 'Select a Feishu credential resource in product settings.')
-          return manager.use({ instanceId, resourceId, sourceInstanceId,
-            role: purpose === 'source' ? 'main' : 'router', purpose }, consume)
+          const resourceId = sourceInstanceId ? await manager?.selectedFeishuCredential(sourceInstanceId) : undefined
+          if (manager && sourceInstanceId && resourceId) {
+            return manager.use({ instanceId, resourceId, sourceInstanceId,
+              role: purpose === 'source' ? 'main' : 'router', purpose }, consume)
+          }
+          if (!connectors) throw new CoreError('RESOURCE_UNAVAILABLE', 'Authorize Feishu in Connectors settings.')
+          return connectors.withAuthorization({ provider: 'feishu', appId: api.appId, tenantKey: config.feishu!.tenantKey, purpose }, consume)
         },
       }, storage, instanceId, mainIntake: true,
       ...(attachments ? { attachmentIntake: { upload: (request: import('./product-attachments.js').ProductAttachmentUpload) => attachments.upload(request),
@@ -527,8 +550,11 @@ export async function createProductHost(context: Context, config: ProductHostCon
       const sourceInstanceId = `github:${owner}/${repo}`
       const withCredential: GitHubCredentialConsumer = async (purpose, consume) => {
         const manager = resourceManager
-        if (!manager) throw new CoreError('RESOURCE_UNAVAILABLE', 'No GitHub credential resource is available.')
-        return manager.useSelectedGitHubCredential(sourceInstanceId, purpose, consume)
+        if (manager && await manager.selectedGitHubCredential(sourceInstanceId)) {
+          return manager.useSelectedGitHubCredential(sourceInstanceId, purpose, consume)
+        }
+        if (!connectors) throw new CoreError('RESOURCE_UNAVAILABLE', 'Authorize GitHub in Connectors settings.')
+        return connectors.withAuthorization({ provider: 'github', owner, repo, purpose }, consume)
       }
       const githubCli = new GitHubCliTransport({ ...cli, withCredential })
       githubRuntime = new GitHubRuntime({ ...github, transport: trustedTransport ?? githubCli, storage, instanceId })
@@ -549,6 +575,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
       if (sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId) return feishuRuntime.channel
       if (sourceInstanceId === githubRuntime?.sourceBinding.sourceInstanceId) return githubDelivery
       if (sourceInstanceId === 'product-desktop') return localDeliveryChannel
+      if (sourceInstanceId === imSource && imMain) return { deliver: (delivery, context) => imMain!.deliver(delivery.destination, delivery.text, context) }
     }
     const channel: ProductDeliveryChannel = {
       deliver: async (delivery, context) => channelFor(delivery.destination.sourceInstanceId)?.deliver(delivery, context)
@@ -560,26 +587,44 @@ export async function createProductHost(context: Context, config: ProductHostCon
       },
       deliverSourceReply: (reply, context) => reply.destination.sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId
         ? feishuRuntime!.channel.deliverSourceReply(reply, context)
-        : Promise.resolve({ type: 'unknown', reason: 'DESTINATION_SOURCE_DISABLED' }),
+        : reply.destination.sourceInstanceId === imSource && imMain ? imMain.deliver(reply.destination, reply.text, context)
+          : Promise.resolve({ type: 'unknown', reason: 'DESTINATION_SOURCE_DISABLED' }),
       reconcileSourceReply: (reply, context) => reply.destination.sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId
         ? feishuRuntime!.channel.reconcileSourceReply(reply, context)
         : Promise.resolve({ type: 'unknown', reason: 'DESTINATION_SOURCE_DISABLED' }),
     }
     engine = new Engine(storage, instanceId, { sourceInstanceId: 'product-desktop', actorId, allowedActorIds: [actorId],
-      ...(config.workerMcpTool || browserAdapter ? { hostCapabilities: {
-        ...(config.workerMcpTool ? { mcp: true } : {}), ...(browserAdapter ? { browser: true } : {}),
+      ...(config.workerMcpTool || remoteSecrets || browserAdapter ? { hostCapabilities: {
+        ...(config.workerMcpTool || remoteSecrets ? { mcp: true } : {}), ...(browserAdapter ? { browser: true } : {}),
       } } : {}) }, {}, sessions,
       environments, {}, {}, {}, { channel },
       { ...(config.hostId === undefined ? {} : { hostId: config.hostId }),
         ...(config.leaseMs === undefined ? {} : { leaseMs: config.leaseMs }) }, proactive, attachments)
     await engine.acquireHost({ initializeMain: true })
     workRouter = new ProactiveWork(storage, instanceId, engine, sessions, actorId)
+    const extensionStorage = engine.productExtensionStorage()
     const records = credentialRecords as ProductCredentialRecords | undefined
     if (records && typeof records.readRecord === 'function' && typeof records.modifyRecord === 'function'
       && typeof records.deleteRecord === 'function') {
       resourceManager = engine.createProductCredentialManager(records)
       if (credentialImportAdapter) credentialImportManager = engine.createProductCredentialImports(records, credentialImportAdapter)
+      imEngine = new Engine(storage, instanceId, imMainBinding(actorId),
+        { claimUnowned: false, streamOwners: { notice: 'product-desktop', relay: 'product-desktop' } },
+        sessions, [], {}, {}, {}, {}, { ...(config.hostId ? { hostId: config.hostId } : {}), ...(config.leaseMs ? { leaseMs: config.leaseMs } : {}) })
+      imAccounts = new ImAccounts({ ...config.im, instanceId, storage: extensionStorage, vault: new ProductCredentialVault(records),
+        onMessage: message => imMain!.receive(message) })
+      imMain = new ImMainRelay(extensionStorage, instanceId, actorId, event => imEngine!.receiveSourceForMain(event), imAccounts)
+      engine.configureImSourceAuthority((tx, event) => event.source.sourceInstanceId === imSource
+        ? imMain!.authorizedIn(tx, event.threadId, event.objectId) : Promise.resolve(false))
+      await imAccounts.restore()
     }
+    connectors = new ProductConnectors({ ...config.connectors, instanceId, storage: extensionStorage,
+      sources: {
+        ...(config.github ? { github: { owner: config.github.owner, repo: config.github.repo } } : {}),
+        ...(config.feishu && !config.feishu.api.appSecret ? { feishu: { appId: config.feishu.api.appId, tenantKey: config.feishu.tenantKey } } : {}),
+      },
+      ...(remoteSecrets && records ? { records } : {}), ...(credentialImportAdapter ? { importAdapter: credentialImportAdapter } : {}) })
+    const capabilities = engine.configureCapabilityLibrary(resourceManager)
     if (config.workerMcpTool) {
       if (!resourceManager) throw new CoreError('UNAVAILABLE', 'The approved MCP tool requires a durable DSH record service.')
       mcpConfiguration = engine.createProductMcpConfiguration(config.workerMcpTool)
@@ -655,7 +700,13 @@ export async function createProductHost(context: Context, config: ProductHostCon
           return { ...binding, mainSessionMode: await sessions.mainSessionMode(binding.mainSessionId) }
         }
         if (payload.instanceId !== instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This request is outside the authorized Instance.')
-        const fields = statusFields[endpoint] ?? memoryFields[endpoint] ?? resourceFields[endpoint] ?? credentialImportFields[endpoint] ?? browserFields[endpoint]
+        const capabilityEndpoint = Object.hasOwn(capabilityFields, endpoint) ? endpoint as keyof typeof capabilityFields : undefined
+        const connectorEndpoint = Object.hasOwn(connectorFields, endpoint)
+        const imEndpoint = endpoint === 'im-accounts'
+        const fields: readonly string[] | undefined = (capabilityEndpoint ? capabilityFields[capabilityEndpoint] : undefined)
+          ?? (connectorEndpoint ? connectorFields[endpoint] : undefined)
+          ?? (imEndpoint ? ['instanceId', 'operation', 'platform', 'credentials', 'proposalId', 'code'] : undefined)
+          ?? workBoardFields[endpoint] ?? statusFields[endpoint] ?? memoryFields[endpoint] ?? resourceFields[endpoint] ?? credentialImportFields[endpoint] ?? browserFields[endpoint]
           ?? (endpoint === 'proactive-rules' || endpoint === 'proactive-control' ? ['instanceId']
           : endpoint === 'proactive-list' ? ['instanceId', 'before']
           : endpoint === 'proactive-read' ? ['instanceId', 'runId']
@@ -751,6 +802,23 @@ export async function createProductHost(context: Context, config: ProductHostCon
         }
         if (client && (endpoint.startsWith('resource-') || endpoint.startsWith('credential-import-') || endpoint.startsWith('mcp-'))) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Credential and MCP settings require the local authorized product settings.')
+        }
+        if (capabilityEndpoint) {
+          if (client && (client.revokedAt !== undefined || !client.grants.some(grant => grant.instanceId === instanceId && grant.capabilities.includes('read')))) {
+            throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This client cannot read capability settings.')
+          }
+          return capabilities.dispatch(capabilityEndpoint, payload, Boolean(client))
+        }
+        if (connectorEndpoint || imEndpoint) {
+          await engine!.assertProductAdmission()
+          if (connectorEndpoint) return connectors!.dispatch(endpoint, payload, client)
+          if (client && (client.revokedAt !== undefined || payload.operation !== 'list'
+            || Object.keys(payload).some(key => key !== 'instanceId' && key !== 'operation')
+            || !client.grants.some(grant => grant.instanceId === instanceId && grant.capabilities.includes('read')))) {
+            throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Messaging administration requires the local product window.')
+          }
+          if (!imAccounts) throw new CoreError('UNAVAILABLE', 'Messaging accounts require the Host credential store.')
+          return client ? imAccounts.statusSummary() : imAccounts.dispatch(payload)
         }
         if (client && endpoint.startsWith('browser-')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Browser resources require the local authorized product window.')
@@ -1461,6 +1529,13 @@ export async function createProductHost(context: Context, config: ProductHostCon
           ...(payload.attachments === undefined ? {} : { attachments: payload.attachments as string[] }),
           ...(client ? { clientId: client.id } : {}) })
         if (endpoint === 'stop-main') return engine!.stopMainTurn({ instanceId, commandId, messageId: payload.messageId as string })
+        if (endpoint === 'work-board') return engine!.listMainWork({ instanceId,
+          ...(payload.after === undefined ? {} : { after: payload.after as string }),
+          ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
+        if (endpoint === 'work-members') return engine!.mainWorkMembers({ instanceId })
+        if (endpoint === 'work-follow-up') return engine!.directMainWork({ instanceId, commandId,
+          workItemId: payload.workItemId as string, ticketId: payload.ticketId as string, text: payload.text as string,
+          ...(client ? { clientId: client.id } : {}) })
         if (endpoint === 'work-stop') return engine!.stopMainWork({ instanceId, commandId,
           workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
           ...(payload.expectedGeneration === undefined ? {} : { expectedGeneration: payload.expectedGeneration as string }),

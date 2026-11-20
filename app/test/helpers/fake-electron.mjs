@@ -66,6 +66,7 @@ export class FakeWindow extends EventEmitter {
   isFullScreen() { return this.fullScreen }
   setFullScreen(value) { this.fullScreen = value; if (!value) this.emit('leave-full-screen') }
   show() { this.visible = true; this.shown += 1; this.emit('show') }
+  showInactive() { this.show() }
   hide() { this.visible = false; this.emit('hide') }
   focus() { this.focused += 1 }
   restore() { this.minimized = false; this.visible = true; this.emit('restore') }
@@ -75,6 +76,8 @@ export class FakeWindow extends EventEmitter {
   setTitleBarOverlay() {}
   setProgressBar() {}
   setMinimumSize() {}
+  setOverlayIcon(image, description) { state.badge = { image, description } }
+  setIgnoreMouseEvents(value) { this.ignoresMouse = value }
   moveTop() {}
   getBounds() { return { x: 0, y: 0, width: 800, height: 600 } }
   async loadURL(url) {
@@ -100,12 +103,13 @@ class FakeWebContents extends EventEmitter {
   constructor(win) {
     super()
     this.win = win
-    this.session = new EventEmitter()
+    this.session = session.defaultSession
     this.mainFrame = {}
     this.isDestroyed = () => this.win.destroyed
     this.getURL = () => this.win.url
     this.getTitle = () => win.options?.title ?? ''
-    this.send = () => {}
+    this.messages = []
+    this.send = (...message) => this.messages.push(message)
     this.setWindowOpenHandler = () => {}
     this.insertCSS = async () => {}
     this.toggleDevTools = () => {}
@@ -124,6 +128,7 @@ class FakeApp extends EventEmitter {
     this.setPath = (name, value) => { state.paths[name] = value }
     this.setName = (name) => { this.name = name }
     this.setAppUserModelId = (id) => { state.appId = id }
+    this.setBadgeCount = (count) => { state.badgeCount = count }
     // The app starts a tick later, so that a test has its say before the app begins.
     this.whenReady = () => new Promise((done) => { setImmediate(done) })
     this.requestSingleInstanceLock = () => true
@@ -183,6 +188,7 @@ export const nativeImage = {
     empty: false,
     isEmpty: () => false,
     getSize: () => ({ width: 32, height: 32 }),
+    resize: () => nativeImage.createFromPath(),
     toPNG: () => Buffer.alloc(8),
     addRepresentation() {},
     setTemplateImage() {},
@@ -190,6 +196,13 @@ export const nativeImage = {
 }
 
 export const nativeTheme = { shouldUseDarkColors: false, themeSource: 'system' }
+export const screen = { getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1920, height: 1080 } }) }
+export const Notification = class extends EventEmitter {
+  static isSupported() { return state.notificationsUnavailable !== true }
+  constructor(options) { super(); this.options = options }
+  show() { state.notifications ??= []; state.notifications.push(this) }
+  close() { this.emit('close') }
+}
 
 export const powerMonitor = new EventEmitter()
 
@@ -221,6 +234,7 @@ export const dialog = {
     return typeof answer === 'function' ? answer(options) : answer
   },
   showErrorBox: (title, message) => { state.dialogs.push({ title, message }) },
+  showSaveDialogSync: (_owner, options) => { state.dialogs.push(options); return state.saveAnswer },
   showOpenDialog: async (...args) => {
     const options = args.length > 1 ? args[1] : args[0]
     state.dialogs.push(options)

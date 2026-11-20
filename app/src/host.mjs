@@ -57,6 +57,15 @@ async function main() {
   }
   const missing = ['superagentProduct', 'workspaceRegistry'].filter(name => ctx.get(name) === undefined)
   if (missing.length > 0) throw new Error(`The profile in ${profile.dir} did not start ${missing.join(', ')}; the engine log has the cause`)
+  const product = ctx.get('superagentProduct')
+  process.on('message', message => {
+    if (message?.type !== 'ds-superagent:workspace-read' || typeof message.id !== 'string' || !/^[\da-f-]{36}$/u.test(message.id)) return
+    void (async () => {
+      const { instanceId } = await product.dispatch('open')
+      const { default: directory } = await product.dispatch('directory-options', { instanceId })
+      return directory?.root ?? null
+    })().catch(() => null).then(path => send({ type: 'ds-superagent:workspace-read-result', id: message.id, path })).catch(() => {})
+  })
   const url = connection.authenticatedUrl(`http://127.0.0.1:${String(webServer.port)}`)
   await send({ type: 'ready', url, injections: webServer.collectIndexInjections() })
 }

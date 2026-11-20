@@ -15,7 +15,7 @@ before(async () => {
   updateFeed = await startEmptyUpdateFeed()
   await startApp()
   hostState.release()
-  await waitFor(() => state.windows.length > 0, 'open the window')
+  await waitFor(() => window()?.visible === true, 'open the window')
   if (process.platform !== 'win32') await waitFor(() => updateFeed.requests() > 0, 'check the update feed')
   win = window()
 })

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { paths, state } from './helpers/fake-electron.mjs'
@@ -13,9 +13,10 @@ test('a saved workspace that cannot be opened goes back to folder setup', async 
   const override = process.env.DS_SUPERAGENT_HOME
   delete process.env.DS_SUPERAGENT_HOME
   t.after(() => { if (override !== undefined) process.env.DS_SUPERAGENT_HOME = override })
-  const dataDir = join(paths.root, '.ds-superagent')
-  const blocked = join(paths.root, 'not-a-folder')
-  const workspace = join(paths.root, 'workspace')
+  const root = realpathSync.native(paths.root)
+  const dataDir = join(root, '.ds-superagent')
+  const blocked = join(root, 'not-a-folder')
+  const workspace = join(root, 'workspace')
   mkdirSync(join(dataDir, 'superagent'), { recursive: true })
   writeFileSync(blocked, 'do not overwrite')
   const locations = join(paths.userData, 'locations.json')

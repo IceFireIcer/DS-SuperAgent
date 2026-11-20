@@ -199,6 +199,8 @@ try {
   }), { code: 'INVALID_INPUT' })
   if (ctx.get('botExecutionAdapter') !== undefined) throw new Error('The old execution adapter must not mount in the product profile.')
   if (process.argv.includes('--check-ui')) {
+    const im = await ctx.superagentProduct.dispatch('im-accounts', { instanceId: binding.instanceId, operation: 'list' })
+    assert.equal(im.accounts.length, 8)
     const { checkProductUi } = await import('./check-superagent-ui.mjs')
     await checkProductUi(ctx)
   }

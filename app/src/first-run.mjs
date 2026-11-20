@@ -4,9 +4,10 @@ import { app, dialog } from 'electron'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join } from 'node:path'
-import { isolationProblem } from './copy-tree.mjs'
+import { isolationProblem, real, within } from './copy-tree.mjs'
 import { userDshHomes } from './dsh-home.mjs'
 import { installFolder } from './move-data.mjs'
+import { pickDirectory } from './native-place.mjs'
 import { DATA_DIRECTORY, PRODUCT_NAME, ensureWritableFolder, formerDataFolders } from './product.mjs'
 import { profileHome } from './profile.mjs'
 
@@ -25,6 +26,7 @@ const TEXT = {
     inDsh: 'Choose a folder outside personal DeepSeek Harness data.',
     inFormerData: 'Choose a folder outside data from previous product installs.',
     inProgram: 'Choose a folder outside the program folder: uninstalling removes it.',
+    inDesktopData: 'Choose a folder separate from the desktop settings and browser data.',
     pickMove: `New folder for ${PRODUCT_NAME} data`,
     moveDrive: 'Choose a folder, not a whole drive.',
     moveNested: 'Choose a folder outside the current data folder.',
@@ -35,6 +37,9 @@ const TEXT = {
     move: 'Move and restart', cancel: 'Cancel',
     moving: `Copying ${PRODUCT_NAME}'s data…`,
     starting: `Starting ${PRODUCT_NAME}…`,
+    computerActive: 'SuperAgent is controlling this computer',
+    unread: 'Unread SuperAgent activity',
+    locations: 'Desktop locations', closeLocations: 'Done', changeData: 'Move data…',
     moveInUse: 'Another DeepSeek Harness is using this data, so it was not moved. Close it, then try again.',
     moveFailed: message => `The data could not be copied: ${message}\n\n${PRODUCT_NAME} goes on with its data where it was.`,
     quit: 'Quit', tryAgain: 'Try again',
@@ -54,6 +59,7 @@ const TEXT = {
     inDsh: '请选择个人 DeepSeek Harness 数据以外的文件夹。',
     inFormerData: '请选择此前产品安装数据以外的文件夹。',
     inProgram: '请选择程序文件夹以外的位置：卸载时会删掉程序文件夹。',
+    inDesktopData: '请选择与桌面设置和浏览器数据分开的文件夹。',
     pickMove: `选择 ${PRODUCT_NAME} 数据的新文件夹`,
     moveDrive: '请选择一个文件夹，不要选整个磁盘。',
     moveNested: '请选择现在的数据文件夹以外的位置。',
@@ -64,6 +70,9 @@ const TEXT = {
     move: '移动并重启', cancel: '取消',
     moving: `正在复制 ${PRODUCT_NAME} 的数据…`,
     starting: `正在启动 ${PRODUCT_NAME}…`,
+    computerActive: 'SuperAgent 正在操控这台电脑',
+    unread: '未读的 SuperAgent 活动',
+    locations: '桌面数据位置', closeLocations: '完成', changeData: '移动数据…',
     moveInUse: '另一个 DeepSeek Harness 正在使用这份数据，所以没有移动。请先关掉它，再重试。',
     moveFailed: message => `数据没有复制成功：${message}\n\n${PRODUCT_NAME} 会继续使用原来位置的数据。`,
     quit: '退出', tryAgain: '重试',
@@ -78,19 +87,20 @@ const locationsFile = () => join(app.getPath('userData'), 'locations.json')
 // A quit request while a first-run dialog is open stops the first run right after that dialog.
 class Quit extends Error {}
 
-async function ask(options, signal) {
-  const { response } = await dialog.showMessageBox({ title: PRODUCT_NAME, noLink: true, ...options, signal })
+async function ask(options, signal, owner) {
+  const settings = { title: PRODUCT_NAME, noLink: true, ...options, signal }
+  const { response } = await (owner ? dialog.showMessageBox(owner, settings) : dialog.showMessageBox(settings))
   // A quit that arrived while a synchronous macOS box was open gets to run first.
   await new Promise(resolve => setImmediate(resolve))
   if (signal.aborted) throw new Quit()
   return response
 }
 
-async function pick(title, current, signal) {
-  const { canceled, filePaths } = await dialog.showOpenDialog({ title, defaultPath: existsSync(current) ? current : dirname(current), properties: ['openDirectory', 'createDirectory', 'promptToCreate'] })
+async function pick(title, current, signal, owner) {
+  const path = await pickDirectory(dialog, owner, { title, defaultPath: existsSync(current) ? current : dirname(current), create: true })
   await new Promise(resolve => setImmediate(resolve))
   if (signal.aborted) throw new Quit()
-  return canceled ? current : filePaths[0]
+  return path ?? current
 }
 
 export const programFolder = () => installFolder(app.getPath('exe'))
@@ -126,6 +136,8 @@ function checkLocations(t, dataDir, workspace, { saved = false } = {}) {
   try {
     const layoutProblem = placeProblem(t, dataDir, workspace, { layout: !saved })
     if (layoutProblem !== undefined) return layoutProblem
+    const shellData = real(app.getPath('userData'))
+    if ([dataDir, workspace].map(real).some(path => within(path, shellData) || within(shellData, path))) return t.inDesktopData
     const folders = [profileHome(dataDir), workspace]
     for (folder of folders) {
       const problem = placeProblem(t, folder)
@@ -142,7 +154,7 @@ function checkLocations(t, dataDir, workspace, { saved = false } = {}) {
  * A run on throwaway folders (DS_SUPERAGENT_HOME, for development and tests) asks nothing and copies nothing.
  * @returns {Promise<{ dataDir: string, workspace?: string, quit?: true }>}
  */
-export async function chooseLocations(signal) {
+export async function chooseLocations(signal, owner) {
   const home = process.env.DS_SUPERAGENT_HOME
   if (home) return { dataDir: home, workspace: process.env.DS_SUPERAGENT_WORKSPACE || undefined }
   const t = text()
@@ -164,11 +176,11 @@ export async function chooseLocations(signal) {
   try {
     for (;;) {
       const choice = await ask({ type: problem ? 'warning' : 'info', message: problem ?? t.welcome, detail: t.places(dataDir, workspace),
-        buttons: [t.start, t.change, t.quit], defaultId: problem ? 1 : 0, cancelId: 2 }, signal)
-      if (choice === 2) return { quit: true }
+        buttons: [t.start, t.change, t.quit], defaultId: problem ? 1 : 0, cancelId: 2 }, signal, owner)
+      if (choice !== 0 && choice !== 1) return { quit: true }
       if (choice === 1) {
-        dataDir = await pick(t.pickData, dataDir, signal)
-        workspace = await pick(t.pickWorkspace, workspace, signal)
+        dataDir = await pick(t.pickData, dataDir, signal, owner)
+        workspace = await pick(t.pickWorkspace, workspace, signal, owner)
         problem = undefined
         continue
       }

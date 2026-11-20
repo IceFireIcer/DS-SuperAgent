@@ -146,9 +146,13 @@
     "@deepseek-ai/dsh-typert-registry": "0.2.2-rc.1",
     "@modelcontextprotocol/client": "2.2.0",
     "deep-view": "0.1.0",
+    "imapflow": "2.12.1",
+    "mailparser": "3.14.5",
     "node-pty": "1.2.0-beta.15",
+    "nodemailer": "10.6.0",
     "pg": "8.23.1",
-    "playwright": "1.61.1"
+    "playwright": "1.61.1",
+    "qrcode": "1.5.4"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-api-session-controller": "0.2.2-rc.1",
@@ -173,7 +177,9 @@
     "@deepseek-ai/dsh-tools": "0.2.2-rc.1",
     "@deepseek-ai/dsh-web": "0.2.2-rc.1",
     "@types/node": "24.19.2",
+    "@types/nodemailer": "8.0.2",
     "@types/pg": "8.23.1",
+    "@types/qrcode": "1.5.5",
     "@xmldom/xmldom": "0.9.12",
     "embedded-postgres": "17.11.0-beta.19",
     "esbuild": "0.28.2",

@@ -160,4 +160,21 @@ test('Main delegates one durable local brief and reports only the Worker result 
   assert.deepEqual(afterRestart.map(message => message.text), ['Main confirmed checked-note.txt after reviewing the Worker evidence.'])
   assert.equal((await reopened.getMainConversation({ instanceId: 'personal' })).messages.filter(message =>
     message.text === 'Main confirmed checked-note.txt after reviewing the Worker evidence.').length, 1)
+
+  const first = await reopened.listMainWork({ instanceId: 'personal', limit: 1 })
+  assert.equal(first.items.length, 1)
+  assert.ok(first.cursor)
+  const second = await reopened.listMainWork({ instanceId: 'personal', limit: 1, after: first.cursor })
+  assert.deepEqual(Object.fromEntries([...first.items, ...second.items].map(item => [item.id, item.state])), {
+    [work.brief.workItemId]: 'delivered', [incomplete.brief.workItemId]: 'waiting-human',
+  })
+  const note = { instanceId: 'personal', commandId: 'board-direction', workItemId: work.brief.workItemId,
+    ticketId: work.receipt.ticketId, text: 'Keep the checked note and add a one-line summary.' }
+  await assert.rejects(reopened.directMainWork({ ...note, ticketId: 'different-ticket' }), { code: 'TICKET_VERSION_CONFLICT' })
+  const receipt = await reopened.directMainWork(note)
+  assert.equal(receipt.ticketId, note.ticketId)
+  assert.deepEqual(await reopened.directMainWork(note), receipt)
+  await assert.rejects(reopened.directMainWork({ ...note, text: 'Different direction' }), { code: 'IDENTITY_CONFLICT' })
+  assert.equal((await reopened.getMainConversation({ instanceId: 'personal' })).messages.filter(message => message.text === note.text).length, 1)
+  assert.equal((await reopened.listTickets()).items.length, 2)
 })
