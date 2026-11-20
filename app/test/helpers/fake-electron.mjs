@@ -24,6 +24,8 @@ export const state = {
   windows: [],
   menus: [],
   dialogs: [],
+  pickers: [],
+  notifications: [],
   quits: 0,
   relaunches: [],
   exits: [],
@@ -67,16 +69,29 @@ export class FakeWindow extends EventEmitter {
   setFullScreen(value) { this.fullScreen = value; if (!value) this.emit('leave-full-screen') }
   show() { this.visible = true; this.shown += 1; this.emit('show') }
   hide() { this.visible = false; this.emit('hide') }
+  setOpacity(value) { this.opacity = value }
   focus() { this.focused += 1 }
   restore() { this.minimized = false; this.visible = true; this.emit('restore') }
   minimize() { this.minimized = true }
   destroy() { this.destroyed = true; this.emit('closed') }
   close() { this.emit('close', { preventDefault: () => { this.prevented = true } }) }
   setTitleBarOverlay() {}
+  setVibrancy() {}
   setProgressBar() {}
   setMinimumSize() {}
   moveTop() {}
   getBounds() { return { x: 0, y: 0, width: 800, height: 600 } }
+  getNormalBounds() { return this.getBounds() }
+  getContentBounds() { return this.getBounds() }
+  setBounds() {}
+  setContentBounds() {}
+  setBackgroundColor() {}
+  setSkipTaskbar() {}
+  isFocused() { return this.focused > 0 }
+  showInactive() { this.visible = true; this.shown += 1; this.emit('show') }
+  moveAbove() {}
+  getMediaSourceId() { return 'window:1:0' }
+  flashFrame() {}
   async loadURL(url) {
     this.url = url
     this.webContents.mainFrame.url = url
@@ -88,12 +103,38 @@ export class FakeWindow extends EventEmitter {
       const token = parsed.searchParams.get('token')
       if (token !== null) state.cookies.push({ name: 'dsh-auth', value: token, domain: parsed.hostname, path: '/' })
     } catch { /* a page without an address of its own */ }
+    if (this.url.startsWith('http://127.0.0.1:')) {
+      setImmediate(() => {
+        const handler = state.ipc.get('ds-superagent:ready')
+        if (handler !== undefined) handler({ sender: this.webContents, senderFrame: this.webContents.mainFrame }, undefined)
+      })
+    }
     // The window is on the screen once its first page is there.
     if (!this.ready) {
       this.ready = true
       setImmediate(() => { if (!this.destroyed) this.emit('ready-to-show') })
     }
   }
+}
+
+function answerPicker(contents, request) {
+  state.pickers.push(request)
+  setImmediate(async () => {
+    const event = { sender: contents, senderFrame: contents.mainFrame }
+    const shown = state.ipc.get('ds-superagent:app-picker-shown')
+    if (shown !== undefined) shown(event, request.id)
+    const answer = typeof state.openAnswer === 'function' ? state.openAnswer(request) : (state.openAnswer ?? { canceled: true, filePaths: [] })
+    if (answer.canceled || answer.filePaths?.[0] === undefined) {
+      state.ipc.get('ds-superagent:app-picker-cancel')?.(event, request.id)
+      return
+    }
+    if (request.mode === 'folder') {
+      try { mkdirSync(answer.filePaths[0], { recursive: true }) } catch {}
+    }
+    const options = request.mode === 'save' ? { name: request.name } : undefined
+    const chosen = await state.ipc.get('ds-superagent:app-picker-choose')?.(event, request.id, answer.filePaths[0], options)
+    if (chosen?.error !== undefined) state.ipc.get('ds-superagent:app-picker-cancel')?.(event, request.id)
+  })
 }
 
 class FakeWebContents extends EventEmitter {
@@ -103,13 +144,19 @@ class FakeWebContents extends EventEmitter {
     this.session = new EventEmitter()
     this.mainFrame = {}
     this.isDestroyed = () => this.win.destroyed
+    this.isLoading = () => false
     this.getURL = () => this.win.url
     this.getTitle = () => win.options?.title ?? ''
-    this.send = () => {}
+    this.sent = []
+    this.send = (...args) => {
+      this.sent.push(args)
+      if (args[0] === 'ds-superagent:app-picker') answerPicker(this, args[1])
+    }
     this.setWindowOpenHandler = () => {}
     this.insertCSS = async () => {}
     this.toggleDevTools = () => {}
     this.loadURL = async url => { await this.win.loadURL(url) }
+    this.reload = () => {}
   }
 }
 
@@ -134,13 +181,16 @@ class FakeApp extends EventEmitter {
       let prevented = false
       this.emit('before-quit', { preventDefault: () => { prevented = true } })
       state.quitPrevented = prevented
-      if (!prevented) this.emit('will-quit')
+      if (prevented) return
+      this.emit('will-quit')
+      for (const win of state.windows) if (!win.destroyed) win.destroy()
     }
     this.show = () => { state.appShown = (state.appShown ?? 0) + 1 }
     this.hide = () => { state.appHidden = (state.appHidden ?? 0) + 1 }
     this.focus = () => {}
     this.setAboutPanelOptions = () => {}
     this.setAsDefaultProtocolClient = () => {}
+    this.setBadgeCount = (count) => { state.badge = count; return true }
   }
 
   get isPackaged() { return state.packaged === true }
@@ -189,9 +239,31 @@ export const nativeImage = {
   }),
 }
 
-export const nativeTheme = { shouldUseDarkColors: false, themeSource: 'system' }
+export const nativeTheme = Object.assign(new EventEmitter(), { shouldUseDarkColors: false, themeSource: 'system' })
 
-export const powerMonitor = new EventEmitter()
+const display = { workArea: { x: 0, y: 0, width: 1920, height: 1040 }, workAreaSize: { width: 1920, height: 1040 } }
+export const screen = {
+  getCursorScreenPoint: () => ({ x: 0, y: 0 }),
+  getDisplayNearestPoint: () => display,
+  getDisplayMatching: () => display,
+  getPrimaryDisplay: () => display,
+}
+
+export const systemPreferences = {
+  getAnimationSettings: () => ({ prefersReducedMotion: true }),
+  getNotificationSettings: () => ({ authorizationStatus: 'authorized' }),
+}
+
+export const Notification = class extends EventEmitter {
+  static isSupported() { return true }
+  constructor(options) { super(); this.options = options; state.notifications.push(this) }
+  show() { this.shown = true }
+  close() { this.closed = true; this.emit('close') }
+}
+
+export const clipboard = { writeText: () => {} }
+
+export const powerMonitor = Object.assign(new EventEmitter(), { getSystemIdleTime: () => 7 })
 
 // The cookies of the browser: the Host's address keeps one after the launch URL was used.
 const cookieJar = {

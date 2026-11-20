@@ -85,7 +85,7 @@ Copyright 2026 Fei2411 and the DS Bot contributors
 Apache License, Version 2.0 (see LICENSE)
 
   The client sync inventory records the source of files derived from version
-  0.3.8, commit 5e9b7da8882da3b68d8a0624342708c2150a9156. The generated
+  0.3.8, tag v0.3.8, commit 5e9b7da8882da3b68d8a0624342708c2150a9156. The generated
   superagent/dsh/src/client/upstream/ files carry per-file provenance. They
   are modified for product naming, storage isolation and API integration.
   Reference copies use a text extension and are excluded from runtime imports.
@@ -102,6 +102,23 @@ Apache License, Version 2.0 (see LICENSE)
   from ds-bot/src/client/questions.js.
   The runtime dictionaries in superagent/dsh/src/client/locales/ adapt
   relevant strings from ds-bot/src/client/locales/.
+
+  The desktop shell port is adapted from the same DS Bot v0.3.8 source:
+  app/src/main.mjs, app/src/preload.cjs, app/src/window-frame.mjs,
+  app/src/first-run.mjs, app/src/place.mjs, app/src/start-window.mjs,
+  app/src/start-frame.mjs, app/src/picker-host.mjs, app/src/folder-picker.mjs,
+  app/src/downloads.mjs, app/src/logs.mjs, app/src/notifications.mjs,
+  app/src/computer-indicator.mjs, app/src/computer-indicator-preload.cjs,
+  app/src/computer-cursor.mjs, app/src/material.css, app/src/page-card.css,
+  app/src/macos.css, app/src/start/start.html, app/src/start/start.css,
+  app/src/start/start.js, app/src/start/whale.js and app/src/start/text.mjs.
+  These adapt or port the startup window, place selection, picker, logging,
+  notifications, download handling, computer overlays and platform materials.
+  app/src/copy-tree.mjs reuses the Electron original-fs selection pattern.
+  app/scripts/dist.mjs, app/scripts/release-notes.mjs and
+  app/scripts/seed-electron-checksums.mjs adapt packaging and release helpers.
+  DS SuperAgent-specific data locations, profile ownership, IPC channels and
+  product identity remain its own; no DS Bot runtime or user data is migrated.
 
   Upstream attribution applicable to the synchronized client:
 

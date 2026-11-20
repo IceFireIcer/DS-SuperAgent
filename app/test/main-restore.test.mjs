@@ -3,9 +3,10 @@ import { mkdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { test } from 'node:test'
+import { START_ACT } from '../src/start-window.mjs'
 import { app, paths, state } from './helpers/fake-electron.mjs'
 import { state as hostState } from './helpers/fake-host-process.mjs'
-import { startApp, waitFor, window } from './helpers/app-harness.mjs'
+import { startApp, startWindows, waitFor, window } from './helpers/app-harness.mjs'
 import { installHooks } from './helpers/register.mjs'
 import { createProductBackup, restoreProductBackup } from '../src/product-backups.mjs'
 
@@ -15,12 +16,6 @@ test('a failed restore boot can undo the swap under the data lock and load the p
   let database
   const backupRoot = join(paths.userData, 'backups')
   hostState.fail = true
-  state.dialogAnswer = options => {
-    const rollback = options.buttons?.indexOf('Undo unfinished restore')
-    if (!(rollback >= 0)) return { response: 1 }
-    hostState.fail = false
-    return { response: rollback }
-  }
   await startApp({ packaged: false, async prepare(home) {
     await mkdir(join(home, 'core'))
     database = join(home, 'core', 'state.sqlite')
@@ -36,7 +31,16 @@ test('a failed restore boot can undo the swap under the data lock and load the p
   } })
   t.after(() => app.quit())
   hostState.release()
-  await waitFor(() => hostState.starts === 2 && window().loaded.some(url => url.includes('token=')), 'load the previous Host state')
+  await waitFor(() => startWindows().length === 1, 'open the startup window')
+  const start = startWindows()[0]
+  await waitFor(() => start.webContents.sent.some(([channel, snapshot]) =>
+    channel === 'ds-superagent:start-state' && snapshot.view === 'failed'
+    && snapshot.failure?.restoreRollback === true), 'offer the unfinished restore rollback')
+  hostState.fail = false
+  const event = { sender: start.webContents, senderFrame: start.webContents.mainFrame }
+  assert.equal(await state.ipc.get(START_ACT)(event, 'rollback'), true)
+  await waitFor(() => hostState.starts === 2 && window()?.loaded.some(url => url.includes('token=')) === true,
+    'load the previous Host state')
   using db = new DatabaseSync(database, { readOnly: true })
   assert.equal(JSON.parse(db.prepare('SELECT body FROM records').get().body).version, 2)
   const log = await readFile(join(paths.userData, 'logs', 'operations.jsonl'), 'utf8')

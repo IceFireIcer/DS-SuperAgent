@@ -1,0 +1,175 @@
+DS SuperAgent
+Author: IceFireIcer
+Copyright 2026 IceFireIcer and the DS SuperAgent contributors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+==============================================================================
+Third-party code in this repository
+==============================================================================
+
+DeepSeek Harness (https://github.com/deepseek-ai/deepseek-harness)
+MIT License, Copyright (c) 2026 DeepSeek
+
+  - superagent/dsh/dev/desktop-linux/launch.mts follows the steps of
+    apps/desktop/scripts/dev.ts in DeepSeek Harness and reuses a few of its
+    lines (the release record and the Electron launch arguments). It is a
+    developer script for screenshots on Linux and is not in the npm package.
+  - app/src/host.mjs and app/src/profile.mjs follow
+    apps/desktop-host/src/index.ts: the profile boot and the ready, fatal and
+    shutdown messages. app/src/office-patch.mjs follows
+    apps/desktop-host/src/office.ts: the workspace-dependencies and skill-office
+    plugin rows with the payload's Node and the unpacked LibreOffice Kit CLI.
+  - superagent/dsh/src/office/skills/office/SKILL.md adapts the office routing skill
+    (assets/office/SKILL.md in @deepseek-ai/dsh-skill-office): the routing body
+    is kept, with one added row that routes package checks and in-place edits
+    to office-tools.
+  - app/scripts/prepare-runtime.mjs and app/scripts/primary-runtime.lock.json are a
+    JavaScript port of scripts/primary-runtime/ (prepare.ts, prune-python-tests.ts
+    and lock.json): the pinned Python, Node and wheel downloads with checksum
+    verification, the wheel test pruning and the Office skill asset copy.
+  - app/src/host-process.mjs follows apps/desktop/src/host-process.ts: the
+    Host in Electron's Node mode and the shutdown escalation.
+  - app/src/main.mjs follows apps/desktop/src/main.ts for the Windows window
+    options (the caption-button overlay, its colors and the native theme). app/src/preload.cjs adapts
+    apps/desktop/src/preload-windows.ts, apps/desktop/src/preload-platform.ts
+    and apps/desktop/src/preload-theme.ts: the caption-band marks, the
+    fullscreen mark, the caption-color measure and the theme sync.
+  - app/src/shell.mjs, app/src/tray.mjs and app/src/background-notice.mjs follow
+    apps/desktop/src/tray.ts and apps/desktop/src/background-notice.ts: the
+    system tray with its menu, the window that hides instead of closing, and
+    the one-time confirmation before it hides.
+  - app/src/bot-browser.mjs adapts apps/desktop/src/browser-guests.ts, and
+    the browser part of app/src/preload.cjs follows
+    apps/desktop/src/preload-browser.ts: the webview leases, the attachment
+    checks and fixed guest preferences, the session policy and the new-window
+    requests.
+  - .agents/skills/record-browser-gif/ comes from the skill of the same name
+    in DeepSeek Harness (.agents/skills/record-browser-gif/): SKILL.md is
+    adapted and translated for this repository; scripts/encode_gif.py and
+    scripts/test_encode_gif.py are copied unchanged.
+
+  Full license text:
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+Microsoft Playwright (https://github.com/microsoft/playwright) and
+Playwright MCP (https://github.com/microsoft/playwright-mcp)
+Apache License, Version 2.0, Copyright (c) Microsoft Corporation
+
+  - The Super-agent browser Host uses the Playwright package at run time to
+    drive the app-owned CDP endpoint. No Playwright or Playwright MCP source
+    is copied into this repository.
+
+  The license is the same Apache License, Version 2.0 that covers this
+  repository; see LICENSE for the text.
+
+DS Bot (https://github.com/Fei2411/DS-Bot)
+Copyright 2026 Fei2411 and the DS Bot contributors
+Apache License, Version 2.0 (see LICENSE)
+
+  The client sync inventory records the source of files derived from version
+  0.3.8, tag v0.3.8, commit 5e9b7da8882da3b68d8a0624342708c2150a9156. The generated
+  superagent/dsh/src/client/upstream/ files carry per-file provenance. They
+  are modified for product naming, storage isolation and API integration.
+  Reference copies use a text extension and are excluded from runtime imports.
+  superagent/dsh/src/client/settings-shell.js adapts the settings slot and
+  dialog composition from ds-bot/src/client/settings-shell.js.
+  superagent/dsh/src/client/themes.js adapts theme tokens from
+  ds-bot/src/client/themes.js. The product shell, palette and notification
+  modules adapt ds-bot/src/client/sidebar.js, header.js, overlays.js,
+  palette.js, notifications.js, notify.js and feedback.js.
+  superagent/dsh/src/client/main-cells.js adapts the reasoning body, failure
+  copy and turn separators from ds-bot/src/client/cells.js, turn-error.js
+  and text.js.
+  superagent/dsh/src/client/main-question.js adapts the question presentation
+  from ds-bot/src/client/questions.js.
+  The runtime dictionaries in superagent/dsh/src/client/locales/ adapt
+  relevant strings from ds-bot/src/client/locales/.
+
+  The desktop shell port is adapted from the same DS Bot v0.3.8 source:
+  app/src/main.mjs, app/src/preload.cjs, app/src/window-frame.mjs,
+  app/src/first-run.mjs, app/src/place.mjs, app/src/start-window.mjs,
+  app/src/start-frame.mjs, app/src/picker-host.mjs, app/src/folder-picker.mjs,
+  app/src/downloads.mjs, app/src/logs.mjs, app/src/notifications.mjs,
+  app/src/computer-indicator.mjs, app/src/computer-indicator-preload.cjs,
+  app/src/computer-cursor.mjs, app/src/material.css, app/src/page-card.css,
+  app/src/macos.css, app/src/start/start.html, app/src/start/start.css,
+  app/src/start/start.js, app/src/start/whale.js and app/src/start/text.mjs.
+  These adapt or port the startup window, place selection, picker, logging,
+  notifications, download handling, computer overlays and platform materials.
+  app/src/copy-tree.mjs reuses the Electron original-fs selection pattern.
+  app/scripts/dist.mjs, app/scripts/release-notes.mjs and
+  app/scripts/seed-electron-checksums.mjs adapt packaging and release helpers.
+  DS SuperAgent-specific data locations, profile ownership, IPC channels and
+  product identity remain its own; no DS Bot runtime or user data is migrated.
+
+  Upstream attribution applicable to the synchronized client:
+
+  - connector-marks.js uses single-color brand paths from Simple Icons 16.36.0
+    (https://simpleicons.org), CC0 1.0 Universal, the Simple Icons contributors.
+  - connector-marks.js also uses the Context7 connector mark from
+    public/context7-icon.svg (https://github.com/upstash/context7),
+    MIT License, Copyright (c) Upstash.
+  - im-page.js and phone-page.js use qrcode-generator from npm
+    (https://github.com/kazuhikoarase/qrcode-generator),
+    MIT License, Copyright (c) 2009 Kazuhiko Arase.
+
+  The MIT terms above apply to Context7 and qrcode-generator with their
+  respective copyright lines.
+
+No other third-party code is copied into this repository. At run time the
+plugin uses the @deepseek-ai/* packages of the DeepSeek Harness install it
+runs in; they are not bundled. The bundled superagent/dsh/office.js includes
+@xmldom/xmldom (https://github.com/xmldom/xmldom, MIT License, Copyright (c)
+jindw and contributors) from npm. esbuild is a build tool only. The desktop app
+in app/ installs the pinned @deepseek-ai/* packages, Electron and pnpm from
+npm; they keep their own licenses. Its window uses DSH's existing Web front end
+and the `ds-superagent` client bundle; it does not ship a second renderer.
+
+==============================================================================
+Projects that gave us ideas (no code copied)
+==============================================================================
+
+We thank these projects for the designs they published. DS SuperAgent learned from
+their ideas; it does not contain their code.
+
+  - AgentMemoryRepo (https://github.com/AgentMemoryRepo/agentmemoryrepo), MIT:
+    the Markdown format of Bot memory (one entry per line with [key: value]
+    metadata, a MEMORY.md index that links topic files).
+  - OpenAI Codex (https://github.com/openai/codex), Apache-2.0:
+    keeping the user's messages next to the summary in a checkpoint, and
+    message anchors for searching earlier chat.
+  - OpenMausBot (https://github.com/milind-soni/OpenMausBot), Apache-2.0:
+    group chat rounds and @mention relays between Bots.
+  - Hermes Agent (https://github.com/NousResearch/hermes-agent) and
+    Hermes Bot Mode (https://github.com/NousResearch/Hermes-Bot-Mode), MIT:
+    one Session per member per group chat, and the list of earlier user
+    messages that the plugin, not the model, writes into the handoff.
+  - OpenCode (https://github.com/sst/opencode), MIT;
+    goose (https://github.com/block/goose), Apache-2.0;
+    pi (https://github.com/badlogic/pi-mono), MIT;
+    Gemini CLI (https://github.com/google-gemini/gemini-cli), Apache-2.0:
+    when to condense a long conversation, and what a handoff note holds.
+  - obelisk (https://github.com/tommy0103/obelisk), AGPL-3.0:
+    searching a Bot's own chat with a SQLite FTS5 index ranked by BM25.
+  - DeepSeek Harness Voice Input plugin
+    (packages/experimental/client-ui-voice-input), MIT: the voice chat
+    records with the same steps (record, resample to 16 kHz mono, PCM16 WAV)
+    before it calls the plugin's speech service.

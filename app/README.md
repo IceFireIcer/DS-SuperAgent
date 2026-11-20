@@ -50,9 +50,12 @@ Use `.\start.ps1 -DataRoot <folder>` for a different data root (relative paths a
 
 ## First start
 
-At its first start the app asks for a data location (`~/.ds-superagent` by default) and workspace (`~/DS SuperAgent`).
-It checks that both can be written and offers to change a location if it fails. The choices go into the app's own
-`locations.json`. Keep the folders outside each other, the program folder, personal DSH data and data from previous product installs.
+At its first start a separate startup window shows the boot phases and the default data location (`~/.ds-superagent`).
+Use its location row and app-owned folder picker to choose a different root; the product data and workspace folders
+are placed beneath that root. The app checks the paths against each other, the program folder, personal DSH data,
+OneDrive, and data from previous product installs. The accepted locations go into the app's own `locations.json`.
+The startup window hands off to the hidden product window after the Host view reports ready; if the view never reports,
+the startup window shows the failure and redacted log details.
 
 Both change later in DS SuperAgent's Settings > General > Locations. The app names the user's DSH data to the
 product (`DS_SUPERAGENT_USER_DSH_HOME`), so neither the workspace nor an execution directory can be set there. The data
@@ -62,9 +65,15 @@ staging folder beside the new one, renames it to the new folder once it is whole
 again. A failed or interrupted copy leaves the old location in use and removes the staging folder; the old folder
 always stays. A run on throwaway folders (`DS_SUPERAGENT_HOME`) keeps its data location.
 
-The app does not import or activate a legacy team runtime. Existing DSH files and data from previous product installs remain untouched.
-Optional browser, credential and memory import are product actions inside the running SuperAgent profile and use
-their own isolated import contracts.
+The app does not import or activate a legacy team runtime, and the startup window does not offer a legacy Bot team
+import. Existing DSH files and data from previous product installs remain untouched.
+Browser cookies and credential exports use the app-owned picker. Cookie data is parsed and previewed in the main
+process, then applied only to the selected isolated product browser resource. The source files are not changed.
+Memory import remains a product action inside the running SuperAgent profile and uses its own import contract.
+
+Main-window downloads are written to a private staging folder and moved to the destination selected in the app picker;
+cancelled downloads are removed. Main-process and Host output is kept in three rotated 2 MB log files under the app's
+own shell data, with launch tokens, common API-key forms, and the current user's home path redacted.
 
 The Host reads model settings through DSH. If a model call fails, Main points to Settings so you can check the role model and provider credentials. Settings shows when the provider has no models or a key is missing. Provider and credential files belong to the product's own DSH home.
 
@@ -197,20 +206,22 @@ stay where the Host keeps them; the profile file is the only file the upgrade re
 
 | File | What it does |
 |---|---|
-| `src/main.mjs` | Main process: one instance, the window, which loads the Host's loopback address as DSH Web does, and the sign-in page DSH opens, which goes to the system browser |
+| `src/main.mjs`, `src/start-window.mjs`, `src/start/` | Main process and startup window, which shows data/Host phases before handing off to the existing product window |
 | `src/shell.mjs`, `src/tray.mjs`, `src/background-notice.mjs` | The window and the tray: the window hides instead of closing, the tray opens it again and quits the app, and the one-time confirmation before the window hides |
 | `src/update-prompt.mjs` | An update prompt that waits for the window to be shown again |
 | `src/host-port.mjs` | The Host's port, kept between starts, since the page keeps its storage per address |
-| `src/preload.cjs` | Hands the product settings the data location and data move, and browser imports their isolated IPC. On Windows it marks the page for the frameless window and sends caption button colors |
+| `src/preload.cjs`, `src/picker-host.mjs`, `src/folder-picker.mjs` | Exposes the existing product bridge plus the app-owned folder, file, and save picker over sender-bound IPC |
 | `src/bot-browser.mjs` | Product browser resource webviews: only a leased one attaches, with fixed preferences; each resource's storage stays on disk until the resource is forgotten; pages cannot reach the Host |
 | `src/cookie-parse.mjs`, `src/cookie-import.mjs`, `src/browser-sources.mjs` | Cookie imports: the cookie-file parser (Cookie-Editor JSON, Netscape, Playwright storageState), the write into an authorized resource partition with read-back and flush, and the installed-browser profiles a source is cloned from — the source browser itself decrypts its own store over a CDP pipe; values never leave the main process |
-| `src/window-frame.mjs`, `src/mica.css` | The frameless Windows window: the caption band, when Mica is available (Windows 11 22H2 and later), and the stylesheet that lets Mica through the sidebar |
+| `src/window-frame.mjs`, `src/material.css`, `src/macos.css` | Windows Mica, macOS sidebar vibrancy, caption controls, and the existing DSH page's material styling |
 | `src/host-process.mjs` | Starts the Host in the bundled plain Node on Linux, Electron's Node mode elsewhere, and owns its exit |
 | `src/host.mjs` | Boots the single product profile with `runProfile()`, verifies its public services and reports the launch URL |
 | `src/profile.mjs` | The one `ds-superagent` profile, its bundles and retired-bundle cleanup |
 | `src/dsh-home.mjs` | Resolves the user's DSH home for read-only path isolation checks |
-| `src/first-run.mjs` | The first start's data and workspace dialogs plus data-move copy |
+| `src/first-run.mjs`, `src/place.mjs` | Isolated data/workspace paths, saved locations, and startup place information |
 | `src/move-data.mjs` | The move of the data location: which folders can take it, and the copy through a staging folder |
+| `src/downloads.mjs`, `src/logs.mjs`, `src/notifications.mjs` | Picker-based staged downloads, redacted rotating logs, and system notification/badge handling |
+| `src/computer-indicator.mjs`, `src/computer-cursor.mjs` | Main-process overlay surfaces for a product-provided computer-control lease; cursor visibility fails closed where foreground proof is unavailable |
 | `src/updates.mjs` | The self-updates (Windows installer, Linux AppImage) and the release-page checks (macOS, Linux deb) |
 | `test/` | `npm test`: the composition of the profile, the dependencies that the package needs, and the window and the tray (the main process runs there with the Electron parts as test doubles, in `test/helpers/`) |
 | `assets/` | The app icon: `icon.svg`, `icon.png` (1024 px) and `icon.ico` (Windows, 16 to 256 px), and the tray marks: `tray.ico` (Windows), `tray.png` (Linux) and `trayTemplate.png` with its `@2x` (macOS). `npm run icon` (`scripts/icon.mjs`) draws them again from the whale in `../superagent/dsh/src/client/characters.js` |
@@ -219,7 +230,10 @@ stay where the Host keeps them; the profile file is the only file the upgrade re
 | `scripts/check-update.mjs` | The check of a packaged app's update from a feed folder (Windows, AppImage) or a mocked release (macOS, deb) |
 | `scripts/check-lifecycle.mjs` | `npm run check-lifecycle`: the check of the window and the tray in a real Electron, with a fake Host |
 | `scripts/check-resident.mjs` | `npm run check-resident`: the check of the resident Host with the real app and the real DSH, on throwaway folders |
+| `scripts/dist.mjs`, `scripts/release-notes.mjs`, `scripts/seed-electron-checksums.mjs` | Retryable, non-publishing packaging wrapper, release asset notes, and Electron checksum cache preparation |
 
 The Host installs plugins with the app's own pnpm (`node_modules/pnpm`).
 
-Some files adapt code from DSH Desktop (MIT); see [NOTICE](../NOTICE).
+The desktop frame and Host lifecycle also adapt DSH Desktop (MIT). The startup shell and supporting
+desktop surfaces adapt DS Bot v0.3.8 by Fei2411 (Apache-2.0); `assets/LICENSE` and `assets/NOTICE`
+ship those terms and attributions with the installer. See [NOTICE](../NOTICE) for file-level provenance.
