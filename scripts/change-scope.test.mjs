@@ -39,6 +39,14 @@ test('documentation changes skip product jobs while code changes select their jo
   })
 })
 
+test('shared phone link source and dependencies select both SuperAgent and mobile checks', () => {
+  for (const path of ['superagent/src/phone-link/src/crypto.ts', 'superagent/package.json', 'superagent/package-lock.json']) {
+    assert.deepEqual(classifyChanges([path]), {
+      docsOnly: false, superagent: true, app: false, mobile: true, app_package: false, docker: false,
+    }, path)
+  }
+})
+
 test('workflow and unknown changes run daily checks without installation matrices', () => {
   for (const path of ['.github/workflows/test.yml', 'start.ps1', '.editorconfig']) {
     assert.deepEqual(classifyChanges([path]), {

@@ -7,6 +7,9 @@ import { parse } from 'yaml'
 import { UUID } from 'builder-util-runtime'
 import { configureIdentity } from '../src/product.mjs'
 
+const legacyHomeName = 'DS Bot'
+const legacyShellName = 'DeepSeek Bot'
+
 function fixture(testContext) {
   const root = mkdtempSync(join(tmpdir(), 'ds-superagent-identity-'))
   testContext.after(() => rmSync(root, { recursive: true, force: true }))
@@ -17,13 +20,13 @@ function fixture(testContext) {
     setName: name => { app.name = name },
     setAppUserModelId: id => { app.id = id },
   }
-  const env = { DSH_HOME: join(root, 'personal-dsh'), DS_BOT_HOME: join(root, 'DS Bot'), DS_BOT_SHELL_DATA: join(root, 'DeepSeek Bot') }
+  const env = { DSH_HOME: join(root, 'personal-dsh'), DS_BOT_HOME: join(root, legacyHomeName), DS_BOT_SHELL_DATA: join(root, legacyShellName) }
   return { root, paths, app, env }
 }
 
 test('the desktop opens its own shell storage with former product folders present', t => {
   const { root, paths, app, env } = fixture(t)
-  const legacyFiles = ['DS Bot', 'DeepSeek Bot'].map(name => {
+  const legacyFiles = [legacyHomeName, legacyShellName].map(name => {
     const dir = join(root, name)
     mkdirSync(dir)
     const file = join(dir, 'locations.json')
@@ -37,9 +40,9 @@ test('the desktop opens its own shell storage with former product folders presen
   assert.equal(app.name, 'DS SuperAgent')
   assert.equal(app.id, 'io.github.icefireicer.ds-superagent')
   assert.throws(() => readFileSync(join(settings, 'locations.json')), { code: 'ENOENT' })
-  assert.throws(() => configureIdentity(app, { env: { ...env, DS_SUPERAGENT_SHELL_DATA: join(root, 'DS Bot') } }), /previous product data/u)
+  assert.throws(() => configureIdentity(app, { env: { ...env, DS_SUPERAGENT_SHELL_DATA: join(root, legacyHomeName) } }), /previous product data/u)
   const alias = join(root, 'old-data-alias')
-  symlinkSync(join(root, 'DeepSeek Bot'), alias, process.platform === 'win32' ? 'junction' : 'dir')
+  symlinkSync(join(root, legacyShellName), alias, process.platform === 'win32' ? 'junction' : 'dir')
   assert.throws(() => configureIdentity(app, { env: { ...env, DS_SUPERAGENT_SHELL_DATA: join(alias, 'nested') } }), /previous product data/u)
   for (const file of legacyFiles) assert.equal(readFileSync(file, 'utf8'), 'sentinel')
 })

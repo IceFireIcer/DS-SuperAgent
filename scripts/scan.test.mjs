@@ -16,7 +16,8 @@ const scan = (text) => {
     mkdirSync(join(dir, 'superagent', 'dsh'), { recursive: true })
     writeFileSync(join(dir, 'superagent', 'LICENSE'), '')
     writeFileSync(join(dir, 'superagent', 'package.json'), JSON.stringify({
-      name: 'ds-superagent', files: ['LICENSE'], repository: 'fixture', homepage: 'fixture', bugs: 'fixture',
+      name: 'ds-superagent', author: 'IceFireIcer', description: 'DS SuperAgent fixture',
+      files: ['LICENSE'], repository: 'fixture', homepage: 'fixture', bugs: 'fixture',
       exports: { './client': './dsh/client.js', './web-search': './dsh/web-search.js' },
       dsh: { client: { platform: 'web' }, bundle: { patch: './cordis.patch.yml' } },
     }))

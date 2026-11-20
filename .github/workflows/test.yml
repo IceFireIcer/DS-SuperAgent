@@ -84,6 +84,8 @@ jobs:
         run: node --test scripts/*.test.mjs
       - name: Check implementation evidence records
         run: node scripts/check-implementation-records.mjs
+      - name: Check runtime product naming
+        run: node scripts/check-product-naming.mjs
       # Scan exactly the tracked files, as they would be published.
       - run: mkdir -p "$RUNNER_TEMP/tree" && git archive HEAD | tar -x -C "$RUNNER_TEMP/tree"
       - run: node scripts/scan.mjs "$RUNNER_TEMP/tree"
@@ -207,7 +209,11 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: mobile/package-lock.json
+          cache-dependency-path: |
+            mobile/package-lock.json
+            superagent/package-lock.json
+      - name: Install shared link dependencies
+        run: npm ci --prefix ../superagent --no-fund --no-audit
       - run: npm ci --no-fund --no-audit
       - run: npm run typecheck
 

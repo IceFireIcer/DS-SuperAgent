@@ -73,7 +73,7 @@ async function measureMode(name) {
     const duplicateNotifications = state.notifications.length - new Set(state.notifications.map(item => item.idempotencyKey)).size
     return {
       events: observedEvents.length, populationDigest: digest(observedEvents), totalMs,
-      acceptanceBoundary: state.engine ? 'receiveSource returns its durable receipt (includes follow-up fan-out)' : 'NativeSessions onMessagePersisted confirms the user/message flush; no business acceptance receipt',
+      acceptanceBoundary: state.engine ? 'receiveSource returns its durable receipt (includes follow-up fan-out)' : 'DSH confirms a Session flush and the exact user/message is readable before the first delta; no business acceptance receipt',
       responseBoundary: 'the scripted Worker emits its first text delta for this event',
       completionBoundary: 'NativeSessions is idle, persisted turn/end is completed, no Worker slot or active relay/outbox remains; turn completion, not Ticket ready/result',
       acceptanceMs: summarize(outcomes.map(outcome => outcome.acceptedAtMs - outcome.startedAtMs)),
@@ -126,7 +126,15 @@ function respond(state, options) {
       assert.ok(event, 'Worker received a noncanonical or rewritten input')
       const turn = { event, sessionId: options.sessionId, output: `Handled ${event.id}.` }
       state.turns.push(turn)
-      await admitted(state.admissions.get(event.id), options.signal)
+      if (state.engine) {
+        await admitted(state.admissions.get(event.id), options.signal)
+      } else {
+        const agent = state.sessions.agentOf(turn.sessionId)
+        assert.ok(agent, `No active Session for ${event.id}`)
+        assert.ok(await state.context.sessions.flush(agent.session), `No confirmed Session flush for ${event.id}`)
+        assert.ok((await state.sessions.hasMessage(turn.sessionId, event.id)).found, `No durable input for ${event.id} at first model call`)
+        turn.inputFlushedAt = performance.now()
+      }
       await sleep(workload.workerTurnMs, undefined, { signal: options.signal })
       turn.responseAt = performance.now()
       yield* textResponse(turn.output)
@@ -138,17 +146,17 @@ async function processEvent(state, event) {
   const started = performance.now()
   let acceptedAt
   let admit
-  state.admissions.set(event.id, new Promise(resolve => { admit = resolve }))
-  const accept = () => { acceptedAt = performance.now(); admit() }
+  if (state.engine) state.admissions.set(event.id, new Promise(resolve => { admit = resolve }))
   let route = 'session'
   if (!state.engine) {
     const result = await state.sessions.run({ sessionId: `${state.name}-session`, role: 'worker', text: event.text, messageId: event.id,
-      tools: [], onMessagePersisted: async () => { accept() } })
+      tools: [] })
     assert.equal(result.status, 'idle')
   } else {
     const forward = async () => {
       const received = await receive(state, event)
-      accept()
+      acceptedAt = performance.now()
+      admit()
       if (event.kind === 'initial') {
         const assessed = await assess(state, event, received)
         assert.ok(assessed.receipts[0]?.ticketId, 'Initial event was not accepted')
@@ -181,10 +189,12 @@ async function processEvent(state, event) {
     && candidate.type === 'assistant/message' && candidate.data?.message?.content?.some(block => block.type === 'text' && block.text === turn.output))
   assert.ok(output, `No durable Worker output for ${event.id}`)
   assert.ok(!state.sessions.agentOf(turn.sessionId), `Worker ${event.id} still active`)
+  const acceptanceAt = state.engine ? acceptedAt : turn.inputFlushedAt
+  assert.ok(Number.isFinite(acceptanceAt), `No acceptance measurement for ${event.id}`)
   return { eventId: event.id, threadId: event.threadId, inputDigest: digest(event), sessionId: turn.sessionId, route,
     ...(state.engine ? { ticketId: state.tickets.get(event.threadId) } : {}),
     status: 'completed', output: turn.output, persistedInputSeq: Number(input.seq), persistedOutputSeq: Number(output.seq), persistedTurnEndSeq: Number(end.seq),
-    startedAtMs: started - state.started, acceptedAtMs: acceptedAt - state.started, responseAtMs: turn.responseAt - state.started, completedAtMs: performance.now() - state.started }
+    startedAtMs: started - state.started, acceptedAtMs: acceptanceAt - state.started, responseAtMs: turn.responseAt - state.started, completedAtMs: performance.now() - state.started }
 }
 
 async function admitted(promise, signal) {
