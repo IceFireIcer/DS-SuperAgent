@@ -29,4 +29,11 @@
 - 客户端全套 **202 通过、1 跳过**，桌面全套 **254 通过、1 跳过**。类型检查、构建、lint、客户端生成检查、UI boundary 和仓库脚本检查通过。运行时命名扫描覆盖 278 个文件，非白名单命中 0。双语 README 补齐桌面使用与发布要求，包内 NOTICE 补充迁移来源。
 - GitHub 轮询修复前的 Windows x64 免安装构件为 0.2.5，DSH 0.2.2-rc.1，Electron 44.7.0。`app.asar` 的 SHA-256 为 `eebe0d9aaddfb0865153741ccbd51ab2f2655a8aba39f5a69fb451d3ae47c01b`。包内 58 个编译运行文件与隔离构建目录一致，客户端与仓库构建仅有 8 行 esbuild 来源路径注释不同，NOTICE 与源码一致。
 - 真机从仓库外用临时目录和模拟模型启动该构件。`--coexistence` 覆盖设置、桌面桥、旧存储键与目录夹具、Main 收发、隐藏唤回和退出码 0。`--controls` 在隔离脚本副本中用 `.bt-q button.bt-q-opt` 和 `.bt-q button[type=submit]` 定位当前问题卡，通过同一 Worker 的回答、独立停止 Main 回复、工作的停止确认与同 Ticket/Session 恢复。
-- 最终验收由 [#164](https://github.com/IceFireIcer/DS-SuperAgent/issues/164) 跟踪，仍需完整发布验证，原生依赖 [#163](https://github.com/IceFireIcer/DS-SuperAgent/issues/163) 暂缓。
+
+### 候选构件与发布检查
+
+- [`4045860b`](https://github.com/IceFireIcer/DS-SuperAgent/commit/4045860b) 的 Windows x64 免安装构件重跑共存和工作控制，均退出 0。`app.asar` SHA-256 为 `de2227e1dc6a076745c330a4af05f14823ce149ca18746bd799b6ac735112144`；包内 58 个编译运行文件与该构建一致。未安装到常用目录，未连接真实模型或读取真实旧版数据。
+- 最后一轮本机全量因并行误启动的构建清空 `dist`，出现 8 项模块缺失，不作为全量证据。确认构建完成后独立复跑受影响 7 个文件和轮询回归：**46 通过、0 失败、3 跳过**；不将两轮结果拼成一次全量通过。
+- [完整 CI](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/44777356955) 的 macOS arm64/x64 打包检查、桌面 profile、Docker、手机类型检查和发布扫描通过。Windows 新装启动通过，但安装版下载更新后未在时限内退出；Linux 在免安装包的 Main 发送/回复检查失败。两个 Windows 服务端分片分别在远端验证命令和 Main 跟进的初始结果上失败。
+- 同一次 CI 的客户端生成失败可在隔离的干净 npm 安装上复现：仅 esbuild 依赖路径注释和内部工厂标签受安装位置影响。构建脚本统一标签后，干净安装直接生成的 `client.js` 和 `office.js` 与 Git 中的产物逐字节一致。未手改或更新生成文件。
+- 最终验收由 [#164](https://github.com/IceFireIcer/DS-SuperAgent/issues/164) 跟踪；完整发布验证未通过，原生依赖 [#163](https://github.com/IceFireIcer/DS-SuperAgent/issues/163) 暂缓。未发布安装包或合并至 `main`。
