@@ -22,7 +22,7 @@ import { installLocale, t } from './i18n.js'
 import { AppearanceSettings, installAppearance } from './appearance.js'
 import { SettingsShell, SETTINGS_CHILDREN, SETTINGS_SHELL_CSS, installSettingsSections } from './settings-shell.js'
 import { SettingsSectionState } from './settings-sections.js'
-import { ABOUT_SETTINGS_SECTION } from './settings-about.js'
+import { FeedbackSettings } from './settings-feedback.js'
 import { BuiltinPluginSettings } from './settings-builtin-plugins.js'
 import { installProductShell } from './product-shell.js'
 import { SHELL_CSS, CONVERSATION_CSS, installCompiledStyles } from './styles.js'
@@ -1426,11 +1426,6 @@ export function applyProduct(ctx) {
       finally { setLoading(false) }
     }
     useEffect(() => { void load() }, [binding.instanceId])
-    useEffect(() => {
-      const close = event => { if (event.key === 'Escape') onClose() }
-      window.addEventListener('keydown', close)
-      return () => window.removeEventListener('keydown', close)
-    }, [onClose])
     const updateRole = (role, change) => {
       if (savingRef.current) return
       draftVersion.current += 1
@@ -1556,7 +1551,9 @@ export function applyProduct(ctx) {
         })
       })
     }
-    const loadingSettings = h(SettingsSectionState, { status: loading ? 'loading' : 'error', message: error })
+    const loadingSettings = loading ? h(SettingsSectionState, { status: 'loading' }) : h(Fragment, null,
+      h(SettingsSectionState, { status: 'error', message: error }),
+      h('button', { type: 'button', className: 'bt-soft', onClick: () => { void load() } }, t('Retry')))
     const roles = draft ? h(Fragment, null,
             error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
             viewState.directoryError ? h('p', { className: 'bt-main-error', role: 'alert' }, viewState.directoryError) : null,
@@ -1624,9 +1621,11 @@ export function applyProduct(ctx) {
     const pages = {
       general: h(Fragment, null, h(AppearanceSettings, { ctx }),
         viewState.directoryError ? h('p', { className: 'bt-main-error', role: 'alert' }, viewState.directoryError) : null,
-        viewState.directoryOptions?.default ? h(Card, { title: t('Work directories') },
+        viewState.directoryOptions ? h(Card, { title: t('Work directories') },
+          viewState.directoryOptions.default?.unavailable ? h('p', { role: 'alert', className: 'bt-main-error' },
+            t('The saved work directory is unavailable. Choose another directory.')) : null,
           h(Row, { label: t('Instance default directory'), hint: t('New work starts here unless you choose a work directory in Main.') },
-            h(FolderMenu, { value: viewState.directoryOptions.default.root, team: true,
+            h(FolderMenu, { value: viewState.directoryOptions.default?.root, team: true,
               label: t('Instance default directory'), actions: directoryActions(binding),
               run: promise => void Promise.resolve(promise).catch(failure =>
                 view.set(current => ({ ...current, directoryError: failure.message }))),
@@ -1658,7 +1657,8 @@ export function applyProduct(ctx) {
     const sections = Object.fromEntries(Object.entries(pages).map(([id, content]) => [id, { render: () => content }]))
     sections['usage-overview'] = { render: ({ navigate }) => h(ProductOperationsSettings, { ...pageProps, section: 'usage', onNavigate: navigate }) }
     sections.status = { render: ({ navigate }) => h(ProductOperationsSettings, { ...pageProps, section: 'status', onNavigate: navigate }) }
-    sections.about = ABOUT_SETTINGS_SECTION
+    sections.feedback = { render: ({ navigate }) => h(FeedbackSettings, { ...pageProps, onNavigate: navigate,
+      ...(viewState.connection?.connected ? { app: null } : {}) }) }
     return h(SettingsShell, { open, onClose, initialPage, renderSlot, sections })
   }
 

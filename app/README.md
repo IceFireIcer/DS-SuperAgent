@@ -29,7 +29,7 @@ npm installs `ds-superagent` from `../superagent` as a copy of its package files
 | `DS_SUPERAGENT_UPDATE_URL` | A test feed that overrides the GitHub release lookup (see [Updates](#updates)) | The newest DS SuperAgent release |
 
 Windows uses `%APPDATA%\DS SuperAgent` for shell settings. On macOS it is `~/Library/Application Support/DS SuperAgent`.
-The app starts with its own settings and leaves data from previous product installs, browser logins and saved locations in place.
+The app starts with its own settings and leaves data from previous product installs, browser logins and saved locations in place. Browser resources use only the product's own partition namespace; an older partition is not opened, migrated, or deleted, so it may be necessary to sign in again.
 
 ## Run from source (Windows)
 
@@ -125,6 +125,7 @@ npm run check-packed   # starts the packaged app on throwaway folders with the m
 macOS produces one zip per architecture. Build arm64 on an Apple chip Mac and x64 on an Intel Mac, or under Rosetta with an x64 Node that also ran `npm ci`. Do not cross-build: it packages native modules from `node_modules`; a combined build put 12 arm64-only native modules in its x64 app. `scripts/before-pack.mjs` stops a build whose architecture is not the one of the Node that runs it. The app is ad-hoc signed so downloaded copies are sealed. It ships as a zip, not a dmg: macOS 26 calls a downloaded unsigned dmg damaged and does not open it, and an ad-hoc signature on the dmg does not help (#351). Safari unzips the download. Move DS SuperAgent to Applications. On first open, use System Settings → Privacy & Security → Open Anyway. Do not disable Gatekeeper.
 
 `check-packed` takes another executable as its first argument, and a file for a screenshot of the window as its second. It runs an app that lies inside this checkout from a copy in its throwaway folder: from inside the checkout, Node would find a module that the package left out in the checkout's own `node_modules`.
+On Windows, use `node scripts/check-packed.mjs "dist-pack/win-unpacked/DS SuperAgent.exe" --coexistence` to check Settings and the desktop bridge while preserving synthetic former-product files and browser storage keys. This check does not install either product or access a real legacy profile.
 
 electron-builder packs only the packages that it finds through `dependencies` and `optionalDependencies`. The DSH packages ask for many packages as peers, which npm installs but electron-builder would leave out, so `package.json` lists them as dependencies. `npm test` fails when one is missing and names it.
 

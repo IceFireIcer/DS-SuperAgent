@@ -57,7 +57,7 @@ export class RpcClient {
     try {
       await this.transport.connect()
     } catch (error) {
-      this.unsubscribeTransport()
+      this.unsubscribeTransport?.()
       this.unsubscribeTransport = undefined
       this.unsubscribeClose?.()
       this.unsubscribeClose = undefined

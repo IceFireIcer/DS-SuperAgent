@@ -1,5 +1,6 @@
 // Derived from DS Bot 0.3.8 (Apache-2.0), 5e9b7da8882da3b68d8a0624342708c2150a9156:link/src/pairing.ts.
 import { deviceIdFor, randomToken } from './keys.js'
+import { parseRelayUrl } from './relay-url.js'
 
 /** What each side tells the other inside the encrypted handshake. */
 export interface HandshakeHello {
@@ -66,6 +67,7 @@ export function pairingUri(offer: PairingOffer): string {
 }
 
 export function parsePairingUri(uri: string): PairingOffer {
+  if (uri.length > 2048) throw new Error('The pairing link is too long.')
   const url = new URL(uri)
   if (url.protocol !== PAIRING_SCHEME || url.host !== 'pair' || url.searchParams.get('v') !== '1') {
     throw new Error('This is not a DS SuperAgent pairing code.')
@@ -75,15 +77,14 @@ export function parsePairingUri(uri: string): PairingOffer {
     if (value === null || value.length === 0) throw new Error(`The pairing code has no ${name}.`)
     return value
   }
-  const server = field('server')
-  if (!/^wss?:$/.test(new URL(server).protocol)) throw new Error('The pairing code names an invalid Server.')
   const offer: PairingOffer = {
-    server,
+    server: parseRelayUrl(field('server')),
     hostDeviceId: field('host'),
     hostKey: field('key'),
     code: field('code'),
     name: (url.searchParams.get('name') ?? '').slice(0, MAX_NAME),
   }
+  if (!/^[A-Za-z0-9_-]{24}$/u.test(offer.code)) throw new Error('The pairing code is invalid.')
   if (deviceIdFor(offer.hostKey) !== offer.hostDeviceId) throw new Error('The pairing code does not match its computer.')
   return offer
 }
@@ -131,8 +132,8 @@ export class DeviceRegistry {
 
   /** The check after the handshake: a paired device, or a new one that holds the open code. */
   authorize(deviceId: string, identityKey: string, hello: HandshakeHello): boolean {
-    if (this.matches(deviceId, identityKey)) return true
-    if (hello.pairingCode === undefined || !this.pairingOpen()) return false
+    if (hello.pairingCode === undefined) return this.matches(deviceId, identityKey)
+    if (!this.pairingOpen()) return false
     const pairing = this.pairing!
     if (!sameText(hello.pairingCode, pairing.code)) {
       pairing.misses += 1

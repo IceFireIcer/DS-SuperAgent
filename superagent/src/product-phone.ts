@@ -3,8 +3,10 @@ import { hostname } from 'node:os'
 import { toDataURL } from 'qrcode'
 import type { ClientIdentity } from './client-access.js'
 import { CoreError, identifier } from './model.js'
-import { DeviceRegistry, HostLink, LINK_PATH, deviceIdFor, generateKeyPair, pairingUri, randomToken,
+import { DeviceRegistry, HostLink, deviceIdFor, generateKeyPair, pairingUri, randomToken,
   type PairedDevice, type DeviceIdentity, type HandshakeHello } from './phone-link/src/index.js'
+import { parseRelayUrl } from './phone-link/src/relay-url.js'
+import type { MainMessage } from './main-conversation.js'
 import type { ProductCredentialVault } from './product-credential-vault.js'
 import type { AsyncTx, Storage } from './storage.js'
 
@@ -20,15 +22,24 @@ export const phoneFields: Record<string, readonly string[]> = {
 
 function relayUrl(value: unknown) {
   if (value === '') return ''
-  if (typeof value !== 'string' || value.length > 512) throw new CoreError('INVALID_INPUT', 'Enter a relay server URL.')
-  let parsed: URL
-  try { parsed = new URL(value.trim()) } catch { throw new CoreError('INVALID_INPUT', 'Enter a relay server URL.') }
-  const loopback = ['127.0.0.1', '[::1]', 'localhost'].includes(parsed.hostname)
-  if (parsed.protocol !== 'wss:' && !(parsed.protocol === 'ws:' && loopback) || parsed.username || parsed.password || parsed.search || parsed.hash) {
-    throw new CoreError('INVALID_INPUT', 'Use a WSS relay or a loopback WS relay.')
+  try { return parseRelayUrl(value) }
+  catch (failure) { throw new CoreError('INVALID_INPUT', failure instanceof Error ? failure.message : 'Enter a relay server URL.') }
+}
+
+function phoneProjection(endpoint: string, value: unknown, canSend: boolean) {
+  if (endpoint === 'open') return { instanceId: (value as { instanceId: string }).instanceId, canSend }
+  if (endpoint === 'history') {
+    const history = value as { messages: MainMessage[]; cursor?: number; health?: { state: string } }
+    return { messages: history.messages.map(({ id, sequence, role, text, createdAt, status }) =>
+      ({ id, sequence, role, text: text.slice(0, 16_384), createdAt, status })), before: history.cursor, mainState: history.health?.state ?? 'unknown' }
   }
-  if (parsed.pathname === '/') parsed.pathname = LINK_PATH
-  return parsed.href
+  if (endpoint === 'work-board') {
+    const board = value as { items: { id: string; goal: string; state: string; summary?: string }[]; cursor?: string }
+    return { items: board.items.map(({ id, goal, state, summary }) => ({ id, goal: goal.slice(0, 500), state, summary: summary?.slice(0, 1000) })),
+      after: board.cursor }
+  }
+  const result = value as { status: string; messageId?: string }
+  return { status: result.status, messageId: result.messageId }
 }
 
 export class ProductPhone {
@@ -87,14 +98,15 @@ export class ProductPhone {
     return this.serial(async () => {
       if (this.closed || !this.state.on) return false
       const existing = this.state.phones.find(phone => phone.deviceId === deviceId)
-      if (existing) return existing.identityKey === identityKey
-      if (this.state.phones.length >= 16 || !this.pairing || !this.registry.authorize(deviceId, identityKey, hello)) return false
+      if (hello.pairingCode === undefined) return existing?.identityKey === identityKey
+      if (existing && existing.identityKey !== identityKey || !existing && this.state.phones.length >= 16
+        || !this.pairing || !this.registry.authorize(deviceId, identityKey, hello)) return false
       const entry = this.registry.list().find(phone => phone.deviceId === deviceId)
       if (!entry) return false
       const command = this.pairing.command
       this.pairing = undefined
-      try { await this.save({ ...this.state, phones: [...this.state.phones, { ...entry, command }] }) }
-      catch { this.registry.revoke(deviceId); return false }
+      try { await this.save({ ...this.state, phones: [...this.state.phones.filter(phone => phone.deviceId !== deviceId), { ...entry, command }] }) }
+      catch { this.registry = new DeviceRegistry(this.state.phones); return false }
       return true
     })
   }
@@ -114,6 +126,10 @@ export class ProductPhone {
     if (endpoint === 'send' && Object.keys(payload).some(key => !['instanceId', 'commandId', 'text'].includes(key))) {
       throw new CoreError('SOURCE_NOT_AUTHORIZED', 'A phone message accepts text only.')
     }
+    if (endpoint === 'history' && Object.keys(payload).some(key => !['instanceId', 'before', 'limit'].includes(key))
+      || endpoint === 'work-board' && Object.keys(payload).some(key => !['instanceId', 'after', 'limit'].includes(key))) {
+      throw new CoreError('INVALID_INPUT', 'The phone request contains unsupported page fields.')
+    }
     await this.storage.transaction(this.instanceId, async () => {})
     signal.throwIfAborted()
     if (!this.state.on || !this.state.phones.includes(device)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The phone was revoked.')
@@ -127,9 +143,16 @@ export class ProductPhone {
       signal.throwIfAborted()
     }
     try {
-      return await this.call(endpoint, payload, { id: `phone:${id}`, label: device.name,
+      const request = endpoint === 'history' || endpoint === 'work-board' ? { ...payload, limit: payload.limit ?? 24 } : payload
+      if ((endpoint === 'history' || endpoint === 'work-board') && (typeof request.limit !== 'number'
+        || !Number.isInteger(request.limit) || request.limit < 1 || request.limit > 24)) {
+        throw new CoreError('INVALID_INPUT', 'Phone pages are limited to 24 items.')
+      }
+      const result = await this.call(endpoint, request, { id: `phone:${id}`, label: device.name,
         grants: [{ instanceId: this.instanceId, capabilities: device.command ? ['read', 'command'] : ['read'] }], createdAt: device.pairedAt },
       endpoint === 'send' ? authorizeSend : undefined)
+      signal.throwIfAborted()
+      return phoneProjection(endpoint, result, device.command)
     } catch (error) {
       if (error instanceof CoreError) throw error
       throw new CoreError('UNAVAILABLE', 'The Host could not complete this phone request.')
@@ -160,7 +183,6 @@ export class ProductPhone {
       } else if (endpoint === 'phone-pair') {
         if (payload.command !== undefined && typeof payload.command !== 'boolean') throw new CoreError('INVALID_INPUT', 'Choose the phone access level.')
         if (this.link?.status !== 'online' || !this.identity) throw new CoreError('UNAVAILABLE', 'Connect the Host to its relay first.')
-        if (this.state.phones.length >= 16) throw new CoreError('INVALID_INPUT', 'Remove a phone before pairing another one.')
         const { code, expiresAt } = this.registry.openPairing()
         const uri = pairingUri({ server: this.state.server, hostDeviceId: this.identity.deviceId,
           hostKey: this.identity.publicKey, code, name: hostname().slice(0, 64) })

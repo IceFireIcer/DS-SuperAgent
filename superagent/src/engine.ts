@@ -2076,7 +2076,11 @@ export class Engine {
     }
     const current = await this.storage.transaction(this.instanceId, transaction => this.instanceDirectoryIn(transaction))
     if (!current) throw new CoreError('DELEGATION_UNAVAILABLE', 'No authorized local work directory is configured.')
-    return { ...current, root: this.directoryEnvironment(current.environmentId).config.root }
+    try { return { ...current, root: this.directoryEnvironment(current.environmentId).config.root } }
+    catch (error) {
+      if (!(error instanceof CoreError) || error.code !== 'ENVIRONMENT_DENIED') throw error
+      return { ...current, root: null, unavailable: true as const }
+    }
   }
 
   async setInstanceDirectory(command: MainAddress & { commandId: string; expectedRevision: number; environmentId: string }) {

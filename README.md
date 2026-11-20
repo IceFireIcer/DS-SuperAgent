@@ -11,7 +11,7 @@ English | [中文](README.zh.md)
 
 Created and maintained by [IceFireIcer](https://github.com/IceFireIcer).
 
-![version](https://img.shields.io/badge/version-R5_preview-blue) ![DSH](https://img.shields.io/badge/DSH-0.2.1--rc.4-4D6BFE) ![license](https://img.shields.io/badge/license-Apache_2.0-green)
+![version](https://img.shields.io/badge/version-R5_preview-blue) ![DSH](https://img.shields.io/badge/DSH-0.2.2--rc.1-4D6BFE) ![license](https://img.shields.io/badge/license-Apache_2.0-green)
 
 DS SuperAgent is a three-layer agent product for
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH). One **Main** stays in the conversation and
@@ -29,6 +29,12 @@ tickets with verified results. The existing DSH client interface presents this p
   substitutes one world silently.
 - The app keeps one `ds-superagent` DSH profile, its own data root and an existing DSH Web front end. It never writes
   to the user's `~/.dsh`.
+
+## Connect a phone
+
+The [Expo companion](mobile/README.md) connects to Main through an encrypted relay. Pairing is read-only unless the
+computer explicitly grants message sending. The phone cannot manage desktop controls, credentials or files.
+Build the companion from source; this repository does not provide a mobile store release.
 
 ## Run the desktop app
 
@@ -83,6 +89,7 @@ gates. Mock UI or unit results do not replace those checks.
 |---|---|
 | `superagent/` | The single DSH package: Engine, durable business store, Host, product HTTP bridge, existing client UI, Office tools and web-search provider |
 | `app/` | Electron shell, single product profile, data isolation, process lifecycle and packaging |
+| `mobile/` | Expo companion for pairing, Main chat and read-only work status |
 | `docs/superagent/` | R5 specification, implementation records and environment evidence |
 
 R5-34 removed the former roster, group/round, peer-agent, team governance, native-history, activation/reversal and

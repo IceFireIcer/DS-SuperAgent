@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -17,7 +17,7 @@ function fixture(testContext) {
     setName: name => { app.name = name },
     setAppUserModelId: id => { app.id = id },
   }
-  const env = { DSH_HOME: join(root, 'personal-dsh') }
+  const env = { DSH_HOME: join(root, 'personal-dsh'), DS_BOT_HOME: join(root, 'DS Bot'), DS_BOT_SHELL_DATA: join(root, 'DeepSeek Bot') }
   return { root, paths, app, env }
 }
 
@@ -38,6 +38,9 @@ test('the desktop opens its own shell storage with former product folders presen
   assert.equal(app.id, 'io.github.icefireicer.ds-superagent')
   assert.throws(() => readFileSync(join(settings, 'locations.json')), { code: 'ENOENT' })
   assert.throws(() => configureIdentity(app, { env: { ...env, DS_SUPERAGENT_SHELL_DATA: join(root, 'DS Bot') } }), /previous product data/u)
+  const alias = join(root, 'old-data-alias')
+  symlinkSync(join(root, 'DeepSeek Bot'), alias, process.platform === 'win32' ? 'junction' : 'dir')
+  assert.throws(() => configureIdentity(app, { env: { ...env, DS_SUPERAGENT_SHELL_DATA: join(alias, 'nested') } }), /previous product data/u)
   for (const file of legacyFiles) assert.equal(readFileSync(file, 'utf8'), 'sentinel')
 })
 

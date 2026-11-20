@@ -145,10 +145,12 @@ export function ProductProactiveSettings({ binding, call }) {
   const [runs, setRuns] = useState([])
   const [before, setBefore] = useState(null)
   const [draft, setDraft] = useState(null)
+  const [draftRevision, setDraftRevision] = useState(null)
   const [selected, setSelected] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [readError, setReadError] = useState('')
   const refresh = async () => {
     const [rules, history] = await Promise.all([
       call('proactive-rules', { instanceId: binding.instanceId }), call('proactive-list', { instanceId: binding.instanceId }),
@@ -157,7 +159,7 @@ export function ProductProactiveSettings({ binding, call }) {
     setRuns(current => [...new Map([...current, ...history.items].map(run => [run.id, run])).values()]
       .sort((left, right) => right.createdAt - left.createdAt || right.id.localeCompare(left.id)))
     setBefore(current => current ?? history.before ?? null)
-    setError('')
+    setReadError('')
   }
   const loadOlder = async () => {
     if (!before || busy) return
@@ -170,15 +172,16 @@ export function ProductProactiveSettings({ binding, call }) {
   }
   useEffect(() => {
     let live = true
-    void refresh().catch(failure => { if (live) setError(failure.message) })
-    const timer = setInterval(() => { void refresh().catch(() => {}) }, 15_000)
+    const load = () => refresh().catch(failure => { if (live) setReadError(failure.message) })
+    void load()
+    const timer = setInterval(() => { void load() }, 15_000)
     return () => { live = false; clearInterval(timer) }
   }, [binding.instanceId])
-  const save = async rules => {
+  const save = async (rules, expectedRevision = snapshot.revision) => {
     setBusy(true); setError('')
     try {
       await call('proactive-save', { instanceId: binding.instanceId, commandId: crypto.randomUUID(),
-        expectedRevision: snapshot.revision, rules })
+        expectedRevision, rules })
       setDraft(null); await refresh()
     } catch (failure) {
       setError(failure.code === 'CONFIG_REVISION_CONFLICT' ? t('Rules changed elsewhere. Review the latest version and save again.') : failure.message)
@@ -199,12 +202,15 @@ export function ProductProactiveSettings({ binding, call }) {
     void save(snapshot.rules.filter(rule => rule.id !== ruleId))
   }
   const sourceFor = id => snapshot.sources.find(source => source.sourceInstanceId === id)
-  const edit = rule => setDraft(rule ? structuredClone(rule) : {
-    id: `review-${crypto.randomUUID().slice(0, 8)}`, name: '', mode: 'observe', enabled: true,
-    match: { actorKinds: snapshot.sources[0].kind === 'github' ? ['bot', 'ci'] : ['bot'],
-      addressing: ['direct', 'mention'], sourceInstanceIds: [snapshot.sources[0].sourceInstanceId] },
-    scope: '', communication: 'silent', budget: { maxRuns: 2, windowMs: 3_600_000, maxArtifactBytes: 65_536 },
-  })
+  const edit = rule => {
+    setDraftRevision(snapshot.revision)
+    setDraft(rule ? structuredClone(rule) : {
+      id: `review-${crypto.randomUUID().slice(0, 8)}`, name: '', mode: 'observe', enabled: true,
+      match: { actorKinds: snapshot.sources[0].kind === 'github' ? ['bot', 'ci'] : ['bot'],
+        addressing: ['direct', 'mention'], sourceInstanceIds: [snapshot.sources[0].sourceInstanceId] },
+      scope: '', communication: 'silent', budget: { maxRuns: 2, windowMs: 3_600_000, maxArtifactBytes: 65_536 },
+    })
+  }
   const update = (path, value) => setDraft(current => {
     const next = structuredClone(current)
     let part = next
@@ -217,8 +223,9 @@ export function ProductProactiveSettings({ binding, call }) {
     const next = { ...draft, name: draft.name.trim(), scope: draft.scope?.trim() || undefined,
       match: { ...draft.match, textPattern: draft.match.textPattern?.trim() || undefined } }
     const rules = snapshot.rules.filter(rule => rule.id !== next.id)
-    void save([...rules, next])
+    void save([...rules, next], draftRevision)
   }
+  const staleDraft = draft && draftRevision !== snapshot?.revision
   return h('section', { className: 'bt-ps-content bt-product-preparations', 'aria-label': t('Proactive preparation') },
     h(Card, { title: t('Proactive preparation') },
       h(SwitchRow, { label: t('Pause proactive preparation'), on: snapshot?.control.paused ?? false,
@@ -227,7 +234,9 @@ export function ProductProactiveSettings({ binding, call }) {
       h('p', null, t('Rules use an authenticated source event. Preparation cannot send messages, create PRs or merge changes.')),
       snapshot?.sources.length ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: busy,
         onClick: () => edit(null) }, t('New rule')) : snapshot ? h(InlineNotice, { tone: 'warn' }, t('Configure a source to enable preparation rules.')) : null),
-    error ? h(InlineNotice, { tone: 'danger' }, error) : !snapshot ? h(InlineNotice, { tone: 'neutral' }, t('Loading…')) : null,
+    error || readError ? h(InlineNotice, { tone: 'danger', action: readError ? h('button', { type: 'button', className: 'bt-soft',
+      onClick: () => { void refresh().catch(failure => setReadError(failure.message)) } }, t('Retry')) : null }, error || readError)
+      : !snapshot ? h(InlineNotice, { tone: 'neutral' }, t('Loading…')) : null,
     snapshot?.rules.map(rule => h(Card, { key: rule.id, title: rule.name },
       h(FieldRow, { label: rule.match.sourceInstanceIds?.join(', '),
         control: h(StatusChip, { tone: rule.enabled ? 'accent' : 'neutral' }, rule.enabled ? t(rule.mode === 'auto' ? 'Auto' : 'Observe') : t('Off')) }),
@@ -266,7 +275,8 @@ export function ProductProactiveSettings({ binding, call }) {
       h('label', null, t('Max file bytes'), h('input', { type: 'number', min: 1024, max: 10485760, required: true,
         className: 'bt-bs-input', value: draft.budget.maxArtifactBytes,
         onChange: event => update(['budget', 'maxArtifactBytes'], Number(event.target.value)) })),
-      h('div', { className: 'bt-actions' }, h('button', { type: 'submit', className: 'bt-soft', disabled: busy || !draft.match.actorKinds.length }, t('Save rule')),
+      staleDraft ? h(InlineNotice, { tone: 'warn' }, t('Rules changed elsewhere. Close this draft and reopen the rule before saving.')) : null,
+      h('div', { className: 'bt-actions' }, h('button', { type: 'submit', className: 'bt-soft', disabled: busy || staleDraft || !draft.match.actorKinds.length }, t('Save rule')),
         h('button', { type: 'button', className: 'bt-soft', onClick: () => setDraft(null) }, t('Cancel')))) : null,
     h(Card, { title: t('Preparation history') },
       runs.length ? runs.map(run => h('div', { key: run.id, className: 'bt-product-preparation-row' },

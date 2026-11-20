@@ -326,6 +326,15 @@ export async function createProductHost(context: Context, config: ProductHostCon
     } catch { return undefined }
   }
   const directoryId = (root: string) => `product-dir-${createHash('sha256').update(process.platform === 'win32' ? root.toLowerCase() : root).digest('hex').slice(0, 32)}`
+  const protectedDesktopPaths = (): string[] => {
+    const raw = process.env.DS_SUPERAGENT_PROTECTED_PATHS
+    if (raw === undefined) return []
+    try {
+      const paths: unknown = JSON.parse(raw)
+      if (Array.isArray(paths) && paths.length <= 16 && paths.every(path => typeof path === 'string' && isAbsolute(path))) return paths
+    } catch { /* An invalid protection list cannot authorize a directory. */ }
+    throw new CoreError('INVALID_CONFIG', 'The desktop protected directory list is invalid.')
+  }
   const directoryRoot = async (path: unknown) => {
     if (typeof path !== 'string' || !isAbsolute(path) || Buffer.byteLength(path) > 2048) {
       throw new CoreError('INVALID_INPUT', 'Choose an absolute working directory.')
@@ -337,14 +346,15 @@ export async function createProductHost(context: Context, config: ProductHostCon
     } catch { throw new CoreError('PATH_DENIED', 'The selected working directory does not exist or cannot be read.') }
     const core = await realpath(stateRoot)
     const configuredUserHome = process.env.DS_SUPERAGENT_USER_DSH_HOME?.trim()
-    const protectedRoots = await Promise.all([join(homedir(), '.dsh'), join(homedir(), '.ds-bot'), ...(configuredUserHome ? [configuredUserHome] : [])]
+    const protectedRoots = await Promise.all([join(homedir(), '.dsh'), join(homedir(), '.ds-bot'),
+      ...(configuredUserHome ? [configuredUserHome] : []), ...protectedDesktopPaths()]
       .map(path => realpath(path).catch(() => path)))
     const overlap = (left: string, right: string) => {
       const path = relative(left, right)
       return path === '' || path !== '..' && !path.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(path)
     }
     if ([core, ...protectedRoots].some(path => overlap(path, root) || overlap(root, path))) {
-      throw new CoreError('PATH_DENIED', 'Choose a directory outside the product state and personal DSH data.')
+      throw new CoreError('PATH_DENIED', 'Choose a directory outside protected product and personal data.')
     }
     return root
   }
@@ -484,11 +494,16 @@ export async function createProductHost(context: Context, config: ProductHostCon
       if (page === 9) throw new CoreError('DIRECTORY_BUDGET', 'The product directory registry exceeds 1000 entries.')
       after = slice.cursor
     }
-    const roots = [
-      ...(config.workspaceRoot ? [await directoryRoot(config.workspaceRoot)] : []),
-      ...saved.map(item => item.root),
-    ]
-    for (const root of new Set(roots)) environments.push(await openDirectory(root))
+    if (config.workspaceRoot) environments.push(await openDirectory(await directoryRoot(config.workspaceRoot)))
+    for (const item of saved) {
+      try {
+        const root = await directoryRoot(item.root)
+        if (directoryId(root) !== item.id) throw new CoreError('ENVIRONMENT_CHANGED', 'A saved working directory now resolves to a different location.')
+        if (!environments.some(environment => environment.config.id === item.id)) environments.push(await openDirectory(root))
+      } catch (error) {
+        if (!(error instanceof CoreError) || !['PATH_DENIED', 'ENVIRONMENT_CHANGED'].includes(error.code)) throw error
+      }
+    }
     const pendingRevocations = new Set<string>()
     let commandAfter: string | undefined
     for (let page = 0; page < 10; page++) {

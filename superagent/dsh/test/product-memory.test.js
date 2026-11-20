@@ -20,6 +20,8 @@ test('memory side query selects a role, searches, and reads bounded pages throug
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: dom.window.navigator })
   globalThis.HTMLElement = dom.window.HTMLElement
   globalThis.IS_REACT_ACT_ENVIRONMENT = true
+  dom.window.HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
+  dom.window.HTMLDialogElement.prototype.close = function () { this.removeAttribute('open') }
   try {
     const React = requireHarness('react')
     const { createRoot } = requireHarness('react-dom/client')
@@ -30,7 +32,7 @@ test('memory side query selects a role, searches, and reads bounded pages throug
     runInNewContext(outputFiles[0].text, { module, exports: module.exports,
       require: id => id === 'react' ? React : id === '@deepseek-ai/dsh-client-ui-primitives' ? {} : requireHarness(id),
       window: dom.window, document: dom.window.document, crypto: globalThis.crypto,
-      Intl, Date, setTimeout, clearTimeout, console })
+      Intl, Date, AbortController, setTimeout, clearTimeout, console })
     const calls = []
     let resolvePendingSideQuery
     const call = async (endpoint, payload) => {
@@ -65,6 +67,9 @@ test('memory side query selects a role, searches, and reads bounded pages throug
     try {
       await React.act(async () => root.render(React.createElement(module.exports.ProductMemorySettings,
         { binding: { instanceId: 'fictional-instance' }, works: [{ brief: { workItemId: 'item-a', goal: 'Fictional work' }, receipt: { status: 'accepted' } }], call })))
+      assert.equal(doc.querySelector('dialog[open]'), null)
+      await click('Open memory dialog')
+      assert.ok(doc.querySelector('dialog[open]'))
       await change('Reader', 'work')
       await change('Work', 'item-a')
       await change('Side query', 'fictional')
@@ -80,6 +85,13 @@ test('memory side query selects a role, searches, and reads bounded pages throug
       assert.equal(doc.querySelector('.bt-product-memory-detail pre')?.textContent, 'fictional note end')
       await change('Reader', 'main')
       assert.equal(doc.querySelector('.bt-product-memory-detail'), null)
+      await React.act(async () => {
+        doc.querySelector('dialog[open]').dispatchEvent(new dom.window.Event('cancel', { bubbles: true, cancelable: true }))
+      })
+      assert.equal(doc.querySelector('dialog')?.hasAttribute('data-leaving'), true)
+      await React.act(async () => { await new Promise(resolve => setTimeout(resolve, 170)) })
+      assert.equal(doc.querySelector('dialog[open]'), null)
+      await click('Open memory dialog')
       await change('Side query', 'stale')
       await click('Search')
       assert.ok(resolvePendingSideQuery)

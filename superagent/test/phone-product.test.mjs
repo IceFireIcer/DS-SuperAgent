@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { test } from 'node:test'
 import { setTimeout as sleep } from 'node:timers/promises'
 import LocalCredentials from '@deepseek-ai/dsh-credentials-local'
+import { build } from 'esbuild'
 import { nativeContext, textResponse } from '../dev/native-mock.mjs'
 import { createProductHost } from '../dist/index.js'
 import { RelayTransport, RpcClient, SecureTransport, deviceIdFor, generateKeyPair,
@@ -31,7 +33,7 @@ function phone(offer, name) {
       handshakeTimeoutMs: 1500, hello: { name, ...(pairingCode ? { pairingCode } : {}) },
     }), 1800)
   }
-  return { makeConnection, id: self.deviceId }
+  return { makeConnection, identity: { ...self, accessToken }, id: self.deviceId }
 }
 
 test('a paired phone reaches Main through encrypted link, with explicit send permission and revocation', { timeout: 30000 }, async t => {
@@ -50,6 +52,12 @@ test('a paired phone reaches Main through encrypted link, with explicit send per
     await native.fiber.dispose()
     await rm(root, { recursive: true, force: true })
   })
+  const fixtureClient = join(root, 'expo-link.mjs')
+  const { outputFiles } = await build({ absWorkingDir: resolve(import.meta.dirname, '..'), bundle: true, format: 'esm',
+    platform: 'node', write: false, tsconfigRaw: {}, entryPoints: ['../mobile/src/connection.ts'],
+    alias: { '@phone-link': './src/phone-link/src/mobile-client.ts' } })
+  await writeFile(fixtureClient, outputFiles[0].contents)
+  const { connectToComputer } = await import(pathToFileURL(fixtureClient).href)
   await native.plugin(LocalCredentials, { path: join(root, 'credentials.yaml'), watch: false })
   const instanceId = 'personal'
   const config = { instanceId, actorId: 'owner', workspaceRoot, databasePath: join(stateRoot, 'business.sqlite'),
@@ -74,12 +82,13 @@ test('a paired phone reaches Main through encrypted link, with explicit send per
   await local('phone-set', { server: relay.url, on: true })
   await link()
   const reader = await connect(false)
-  assert.equal((await rpc(reader.client, 'open')).instanceId, instanceId)
+  assert.deepEqual(await rpc(reader.client, 'open'), { instanceId, canSend: false })
   assert.equal((await local('phone-status')).phones.find(item => item.id === reader.id).command, false)
   const send = { instanceId, commandId: 'from-phone', text: 'Please acknowledge this phone message.' }
   await assert.rejects(rpc(reader.client, 'send', send), { code: 'SOURCE_NOT_AUTHORIZED' })
   await assert.rejects(rpc(reader.client, 'phone-status', { instanceId }), { code: 'SOURCE_NOT_AUTHORIZED' })
   await assert.rejects(rpc(reader.client, 'history', { instanceId: 'wrong' }), { code: 'SOURCE_NOT_AUTHORIZED' })
+  await assert.rejects(rpc(reader.client, 'history', { instanceId, limit: 25 }), { code: 'INVALID_INPUT' })
 
   const writer = await connect(true)
   await assert.rejects(rpc(writer.client, 'send', { ...send, attachments: ['local-ref'] }), { code: 'SOURCE_NOT_AUTHORIZED' })
@@ -90,6 +99,21 @@ test('a paired phone reaches Main through encrypted link, with explicit send per
   })
   assert.equal(history.messages.filter(item => item.text === send.text).length, 1)
   assert.ok((await rpc(writer.client, 'history', { instanceId })).messages.some(item => item.text === send.text))
+
+  const { pairing } = await local('phone-pair', { command: true })
+  const { code, ...computer } = parsePairingUri(pairing.uri)
+  const app = connectToComputer(computer, reader.identity, 'Expo fixture', code)
+  connections.push(app)
+  assert.deepEqual(await app.open(), { instanceId, canSend: true }, 'pairing again applies the new explicit grant')
+  const unreadable = await app.history()
+  assert.deepEqual(Object.keys(unreadable).sort(), ['mainState', 'messages'])
+  assert.ok(unreadable.messages.every(message => !Object.hasOwn(message, 'source') && !Object.hasOwn(message, 'attachments')))
+  assert.deepEqual(await app.work(), { items: [] })
+  const expoMessage = 'A message from the Expo client.'
+  assert.equal((await app.send(expoMessage, 'expo-fixture-send')).status, 'completed')
+  await app.send(expoMessage, 'expo-fixture-send')
+  assert.equal((await app.history()).messages.filter(message => message.text === expoMessage).length, 1)
+  await app.close()
 
   const closed = new Promise(resolve => writer.client.onClose(resolve))
   await local('phone-remove', { id: writer.id })
@@ -106,6 +130,6 @@ test('a paired phone reaches Main through encrypted link, with explicit send per
   const restored = reader.makeConnection()
   connections.push(restored)
   await restored.connect()
-  assert.equal((await rpc(restored, 'open')).instanceId, instanceId)
+  assert.deepEqual(await rpc(restored, 'open'), { instanceId, canSend: true })
   assert.deepEqual((await local('phone-status')).phones.map(item => item.id), [reader.id])
 })

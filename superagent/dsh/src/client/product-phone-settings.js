@@ -11,6 +11,7 @@ export function ProductPhoneSettings({ binding, call }) {
   const [error, setError] = useState('')
   const [statusError, setStatusError] = useState('')
   const [removing, setRemoving] = useState('')
+  const [copied, setCopied] = useState(false)
   const running = useRef(false)
   const revision = useRef(0)
   const invoke = (endpoint, payload = {}) => call(endpoint, { instanceId: binding.instanceId, ...payload })
@@ -37,7 +38,7 @@ export function ProductPhoneSettings({ binding, call }) {
     if (running.current) return
     running.current = true
     revision.current++
-    setBusy(true); setError('')
+    setBusy(true); setError(''); setCopied(false)
     try {
       const value = await invoke(endpoint, payload)
       setPhone(value); setStatusError(''); setRemoving('')
@@ -48,6 +49,11 @@ export function ProductPhoneSettings({ binding, call }) {
   const button = (label, onClick, disabled) => h('button', { className: 'bt-soft bt-soft-sm', type: 'button', onClick, disabled: busy || disabled }, t(label))
   const online = phone?.status === 'online'
   const pair = phone?.pairing?.expiresAt > Date.now() ? phone.pairing : null
+  const copy = async () => {
+    if (!pair?.uri || pair.expiresAt <= Date.now()) return
+    try { await navigator.clipboard.writeText(pair.uri); setCopied(true) }
+    catch { setError(t('Could not copy the pairing link.')) }
+  }
   return h('div', { className: 'bt-ps-content bt-phone' },
     error || statusError ? h(InlineNotice, { tone: 'danger' }, t(error || statusError)) : null,
     h(Card, { title: t('Connection') },
@@ -59,10 +65,12 @@ export function ProductPhoneSettings({ binding, call }) {
       h(Row, { label: t('Status') }, t(!phone ? statusError ? 'Unavailable' : 'Loading…' : online ? 'Connected'
         : !phone.on ? 'Off' : phone.status === 'connecting' ? 'Connecting…' : 'Relay not connected'))),
     h(Card, { title: t('Pair a phone') },
-      h(Row, { label: t('Phone app') }, t('Phone app not included')),
+      h(Row, { label: t('Phone app') }, h('a', { href: 'https://github.com/IceFireIcer/DS-SuperAgent/tree/dev/mobile',
+        target: '_blank', rel: 'noopener noreferrer' }, t('Mobile build instructions'))),
       pair ? h(Row, { label: t('Pairing QR code') }, h('div', null,
         h('img', { src: pair.qrImage, alt: t('Pairing QR code'), width: 192, height: 192 }),
         h('p', { className: 'bt-set-hint' }, t('The code works once. It stops working in {count} min.', { count: Math.ceil((pair.expiresAt - Date.now()) / 60_000) })),
+        button(copied ? 'Pairing link copied' : 'Copy pairing link', () => void copy(), !navigator.clipboard?.writeText),
         button('Cancel', () => run('phone-pair-cancel')))) : h('div', null,
         h(SwitchRow, { label: t('Allow this phone to send messages'), on: command, disabled: busy, onChange: setCommand }),
         h(Row, { label: t('Pairing QR code') }, button('Show', () => run('phone-pair', { command }), !online)))),

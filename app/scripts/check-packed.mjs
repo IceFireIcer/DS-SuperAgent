@@ -2,7 +2,7 @@
 // send a message, wait for the reply, then close the window the way a user does: the window hides
 // and the app goes on. The window comes back when the app is started again, and the app ends the
 // way the tray's Quit ends it. Fails on a page error or a non-zero exit.
-// Usage: node scripts/check-packed.mjs [app executable] [screenshot.png | --controls | --upgrade-to next executable | --upgrade-with NSIS installer]
+// Usage: node scripts/check-packed.mjs [app executable] [screenshot.png | --coexistence | --controls | --upgrade-to next executable | --upgrade-with NSIS installer]
 // The executable defaults to the one that `npm run pack` or `npm run dist` writes into dist-pack/.
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
@@ -22,9 +22,11 @@ const [given, option, nextExecutable] = process.argv.slice(2)
 const installUpgrade = option === '--upgrade-with'
 const upgrade = option === '--upgrade-to' || installUpgrade
 const controls = option === '--controls'
-const shotFile = upgrade || controls ? undefined : option
+const coexistence = option === '--coexistence'
+const shotFile = upgrade || controls || coexistence ? undefined : option
 const executable = given || packedExecutable()
 
+if (coexistence && process.platform !== 'win32') throw new Error('The coexistence check targets the Windows unpacked app.')
 if (upgrade && (!nextExecutable || !existsSync(nextExecutable))) {
   console.error('check-packed: the next build is missing')
   process.exit(2)
@@ -177,10 +179,11 @@ async function freePort() {
   return port
 }
 
-async function appPage(port, deadline, main = false) {
+async function appPage(port, deadline, main = false, child) {
   while (Date.now() < deadline) {
+    if (child && (child.exitCode !== null || child.signalCode !== null)) throw new Error('The app exited before its window appeared.')
     try {
-      const targets = await (await fetch(`http://127.0.0.1:${String(port)}/json/list`)).json()
+      const targets = await (await fetch(`http://127.0.0.1:${String(port)}/json/list`, { signal: AbortSignal.timeout(1000) })).json()
       const page = targets.find(target => main ? target.type === 'node' : target.type === 'page' && /^http:\/\/127\.0\.0\.1:\d+\//u.test(target.url))
       if (page) return page
     } catch {
@@ -255,6 +258,67 @@ function devtools(url, problems) {
 // mica.css styles DSH's own page, which can change with a DSH upgrade; every rule must still
 // find an element, on every platform, so the change shows here and not as a broken window.
 const micaCss = readFileSync(join(root, 'src', 'mica.css'), 'utf8')
+
+async function checkCoexistence(cdp) {
+  const evaluate = async expression => {
+    const result = await cdp.call('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })
+    if (result.exceptionDetails) throw new Error('The isolated product page did not complete its coexistence check.')
+    return result.result.value
+  }
+  const waitFor = async (expression, label) => {
+    const end = Date.now() + 30_000
+    while (Date.now() < end) {
+      if (await evaluate(`Boolean(${expression})`)) return
+      await sleep(200)
+    }
+    throw new Error(`The product page did not show ${label}.`)
+  }
+  await cdp.call('Runtime.enable')
+  await cdp.call('Log.enable')
+  await waitFor("document.querySelector('#main-message')", 'the Main conversation')
+  assert.equal(await evaluate(`(() => {
+    if (window !== window.top || !location.origin.startsWith('http://127.0.0.1:')) return false;
+    const keys = ['ds-bot:theme', 'ds-bot:appearance', 'ds-bot:prefs', 'ds-bot:notify'];
+    const get = Storage.prototype.getItem;
+    let accesses = 0;
+    for (const area of [localStorage, sessionStorage]) for (const key of keys) area.setItem(key, 'coexistence-sentinel');
+    for (const method of ['getItem', 'setItem', 'removeItem', 'clear']) {
+      const original = Storage.prototype[method];
+      Storage.prototype[method] = function (key, ...args) {
+        if (method === 'clear' || typeof key === 'string' && key.startsWith('ds-bot:')) accesses++;
+        return Reflect.apply(original, this, method === 'clear' ? [] : [key, ...args]);
+      };
+    }
+    window.__coexistenceProbe = () => ({ accesses, unchanged: [localStorage, sessionStorage]
+      .every(area => keys.every(key => get.call(area, key) === 'coexistence-sentinel')) });
+    return true;
+  })()`), true)
+  await evaluate("[...document.querySelectorAll('[role=dialog] button')].find(node => /^(Continue|继续)$/u.test(node.textContent.trim()))?.click()")
+  const settingsButton = `[...document.querySelectorAll('button[aria-label]')].find(button => !button.disabled
+    && /^(Settings|设置)$/u.test(button.getAttribute('aria-label')) && button.getClientRects().length)`
+  await waitFor(settingsButton, 'the Settings button')
+  await evaluate(`${settingsButton}?.click()`)
+  await waitFor("document.querySelector('.bt-superagent-settings[role=dialog]')", 'product Settings')
+  for (const [label, selector] of [
+    [/^(Memory|记忆)$/u, '.bt-product-memory'],
+    [/^(Agent presets|智能体预设)$/u, '.bt-product-presets'],
+    [/^(Proactive preparation|主动准备)$/u, '.bt-product-preparations'],
+    [/^(Supervision|监督)$/u, '.bt-product-supervision'],
+    [/^(Feedback|反馈)$/u, 'a[href$="/issues/new"]'],
+  ]) {
+    await evaluate(`[...document.querySelectorAll('.bt-superagent-settings nav button')].find(button => ${label}.test(button.textContent.trim()))?.click()`)
+    await waitFor(`document.querySelector(${JSON.stringify('.bt-superagent-settings ' + selector)})`, label.source)
+  }
+  await evaluate(`[...document.querySelectorAll('.bt-superagent-settings nav button')]
+    .find(button => /^(About|简介)$/u.test(button.textContent.trim()))?.click()`)
+  await waitFor("document.querySelector('.bt-superagent-settings')?.innerText.includes('DS SuperAgent')", 'product branding in About')
+  assert.deepEqual(await evaluate('window.__coexistenceProbe()'), { accesses: 0, unchanged: true })
+  assert.equal(await evaluate(`typeof window.dsSuperagentApp?.dataLocation === 'function'
+    && ['dsBotApp', 'dshDesktop', 'dshBot', 'dshBotQueue'].every(name => window[name] === undefined)`), true)
+  await evaluate("document.querySelector('.bt-settings-close')?.click()")
+  await waitFor("!document.querySelector('.bt-superagent-settings[role=dialog]')", 'Settings to close')
+  console.log('check-packed: product Settings, desktop bridge and legacy renderer storage isolation passed')
+}
 
 async function chat(cdp) {
   const evaluate = async expression => (await cdp.call('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })).result.value
@@ -528,32 +592,55 @@ try {
   const port = await freePort()
   const mainPort = await freePort()
   // A terminal inside an Electron-based editor may set ELECTRON_RUN_AS_NODE, which turns the app into plain Node.
-  const { ELECTRON_RUN_AS_NODE: _runAsNode, ...env } = process.env
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^ELECTRON_RUN_AS_NODE$/iu.test(key)
+    && (!coexistence || !/^(?:DS_SUPERAGENT_|DS_BOT_|DSH_|DEEPSEEK_|NODE_OPTIONS$|NODE_PATH$)/iu.test(key))))
   Object.assign(env, {
     DS_SUPERAGENT_HOME: join(work, 'home'), DS_SUPERAGENT_SHELL_DATA: join(work, 'shell'),
     DS_SUPERAGENT_WORKSPACE: join(work, 'workspace'),
     DSH_HOME: join(work, 'personal-dsh'),
     DEEPSEEK_BASE_URL: modelUrl, DEEPSEEK_API_KEY: 'mock-key',
   })
+  const former = join(work, 'former-product')
+  const oldShell = join(former, 'shell')
+  const oldSettings = join(oldShell, 'locations.json')
+  const sentinel = '{"fixture":"former-product"}\n'
+  if (coexistence) {
+    mkdirSync(oldShell, { recursive: true })
+    writeFileSync(oldSettings, sentinel)
+    Object.assign(env, { DS_BOT_HOME: former, DS_BOT_SHELL_DATA: oldShell, DS_BOT_WORKSPACE: join(former, 'workspace') })
+  }
   const app = spawn(packedApp, [`--remote-debugging-port=${String(port)}`, `--inspect=127.0.0.1:${String(mainPort)}`], { stdio: 'inherit', env })
   children.push(app)
   const exited = new Promise((done) => { app.once('exit', (code, signal) => { done({ code, signal }) }) })
-  const cdp = devtools((await appPage(port, Date.now() + 120_000)).webSocketDebuggerUrl, problems)
+  const cdp = devtools((await appPage(port, Date.now() + 120_000, false, app)).webSocketDebuggerUrl, problems)
   await cdp.opened
-  const main = devtools((await appPage(mainPort, Date.now() + 30_000, true)).webSocketDebuggerUrl, problems)
+  const main = devtools((await appPage(mainPort, Date.now() + 30_000, true, app)).webSocketDebuggerUrl, problems)
   await main.opened
   const windowState = async expression => {
     const answer = await main.call('Runtime.evaluate', {
-      expression: `(() => { const { BrowserWindow } = process.getBuiltinModule('module').createRequire(process.execPath)('electron'); const win = BrowserWindow.getAllWindows()[0]; return ${expression} })()`,
+      expression: `(() => { const { BrowserWindow } = process.getBuiltinModule('module').createRequire(process.execPath)('electron'); const win = BrowserWindow.getAllWindows().find(window => window.webContents.getURL().startsWith('http://127.0.0.1:')); return ${expression} })()`,
       returnByValue: true, awaitPromise: true,
     })
     if (answer.exceptionDetails) throw new Error(answer.exceptionDetails.exception?.description ?? answer.exceptionDetails.text)
     return answer.result?.value
   }
-  if (await windowState('win.getTitle()') !== PRODUCT_NAME) throw new Error('the window has the wrong product name')
+  const windowDeadline = Date.now() + 30_000
+  let title
+  do {
+    title = await windowState('win?.getTitle() ?? null')
+    if (title !== null) break
+    await sleep(200)
+  } while (Date.now() < windowDeadline)
+  if (title === null) throw new Error('the product window did not finish navigating to the Host')
+  if (title !== PRODUCT_NAME) throw new Error('the window has the wrong product name')
   if (!existsSync(join(work, 'home', 'superagent', 'core', 'state.sqlite'))) throw new Error('the product database did not open')
   if (existsSync(join(work, 'personal-dsh'))) throw new Error('the app wrote outside its own DSH home')
-  const chatError = await chat(cdp).then(() => undefined, error => error)
+  let chatError
+  if (coexistence) {
+    assert.equal(await windowState("process.getBuiltinModule('module').createRequire(process.execPath)('electron').app.getPath('sessionData')"), env.DS_SUPERAGENT_SHELL_DATA)
+    await checkCoexistence(cdp)
+  }
+  chatError = await chat(cdp).then(() => undefined, error => error)
   if (shotFile) {
     const { data } = await cdp.call('Page.captureScreenshot', { format: 'png' })
     writeFileSync(resolve(shotFile), Buffer.from(data, 'base64'))
@@ -599,6 +686,12 @@ try {
   if (outcome === undefined) throw new Error('the app did not exit after the quit')
   console.log(`check-packed: app exited (code ${String(outcome.code)}, signal ${String(outcome.signal)})`)
   if (outcome.code !== 0) throw new Error(`the app exited with code ${String(outcome.code)}`)
+  if (coexistence) {
+    assert.equal(readFileSync(oldSettings, 'utf8'), sentinel)
+    assert.equal(existsSync(join(former, 'superagent')), false)
+    assert.equal(existsSync(env.DS_BOT_WORKSPACE), false)
+    console.log('check-packed: retained former data fixtures and ignored old environment overrides')
+  }
   if (before) await checkColdUpgrade(before, env)
   console.log('check-packed: passed')
 } catch (error) {

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, readFile, realpath, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, realpath, rm, rmdir, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -14,10 +14,17 @@ test('the product directory picker saves a default and a work override across Ho
   const second = join(base, 'second')
   const core = join(base, 'core')
   const userDsh = join(base, 'user-dsh')
-  await Promise.all([mkdir(first), mkdir(second), mkdir(core), mkdir(userDsh)])
+  const formerShell = join(base, 'DS Bot')
+  const formerAlias = join(base, 'former-shell-alias')
+  await Promise.all([mkdir(first), mkdir(second), mkdir(core), mkdir(userDsh), mkdir(formerShell)])
+  const locations = join(formerShell, 'locations.json')
+  await writeFile(locations, 'former settings fixture')
+  await symlink(formerShell, formerAlias, process.platform === 'win32' ? 'junction' : 'dir')
   const [firstRoot, secondRoot, userDshRoot] = await Promise.all([realpath(first), realpath(second), realpath(userDsh)])
   const previousUserDsh = process.env.DS_SUPERAGENT_USER_DSH_HOME
+  const previousProtected = process.env.DS_SUPERAGENT_PROTECTED_PATHS
   process.env.DS_SUPERAGENT_USER_DSH_HOME = userDsh
+  process.env.DS_SUPERAGENT_PROTECTED_PATHS = JSON.stringify([formerShell])
   const native = await nativeContext(join(base, 'sessions'), function* () { yield* textResponse('Main is ready.') })
   native.provide('directoryPicker', { capability: () => ({ kind: 'native', pick: async () => second }) })
   let host
@@ -25,6 +32,8 @@ test('the product directory picker saves a default and a work override across Ho
     await host?.close(); await native.fiber.dispose(); await rm(base, { recursive: true, force: true })
     if (previousUserDsh === undefined) delete process.env.DS_SUPERAGENT_USER_DSH_HOME
     else process.env.DS_SUPERAGENT_USER_DSH_HOME = previousUserDsh
+    if (previousProtected === undefined) delete process.env.DS_SUPERAGENT_PROTECTED_PATHS
+    else process.env.DS_SUPERAGENT_PROTECTED_PATHS = previousProtected
   })
   const config = { databasePath: join(core, 'state.sqlite'), workspaceRoot: first, instanceId: 'personal', actorId: 'alice',
     main: { provider: 'mock', model: 'main' }, router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } }
@@ -39,6 +48,8 @@ test('the product directory picker saves a default and a work override across Ho
   assert.equal((await call('directory-register', { commandId: 'register-second', path: second })).id, chosen.id)
   await assert.rejects(call('directory-register', { commandId: 'register-second', path: core }), { code: 'PATH_DENIED' })
   await assert.rejects(call('directory-register', { commandId: 'personal-dsh', path: userDshRoot }), { code: 'PATH_DENIED' })
+  await assert.rejects(call('directory-register', { commandId: 'former-shell', path: formerAlias }), { code: 'PATH_DENIED' })
+  assert.equal(await readFile(locations, 'utf8'), 'former settings fixture')
   await assert.rejects(call('send', { commandId: 'untrusted', text: 'Hello.', environmentId: 'another-instance' }), { code: 'ENVIRONMENT_DENIED' })
   const saved = await call('directory-default-save', { commandId: 'default-second', expectedRevision: 0, environmentId: chosen.id })
   assert.equal(saved.root, secondRoot)
@@ -52,6 +63,18 @@ test('the product directory picker saves a default and a work override across Ho
   assert.equal(reopened.directories.some(entry => entry.id === initial.default.environmentId && entry.root === firstRoot), true)
   assert.equal(reopened.directories.some(entry => entry.id === chosen.id && entry.root === secondRoot), true)
   assert.equal((await call('history')).messages.filter(message => message.role === 'user').length, 1)
+  await host.close()
+  await rmdir(second)
+  host = await createProductHost(native, config)
+  const unavailable = await call('directory-options')
+  assert.equal(unavailable.default.environmentId, chosen.id)
+  assert.equal(unavailable.default.root, null)
+  assert.equal(unavailable.default.unavailable, true)
+  assert.equal(unavailable.directories.some(entry => entry.id === chosen.id), false)
+  assert.equal((await host.dispatch('open')).instanceId, 'personal')
+  const recovered = await call('directory-default-save', { commandId: 'restore-default', expectedRevision: unavailable.default.revision,
+    environmentId: initial.default.environmentId })
+  assert.equal(recovered.root, firstRoot)
 })
 
 test('a product with no initial workspace can select one and execute its first real Worker', { timeout: 30_000 }, async t => {

@@ -130,12 +130,15 @@ test('memory import previews source ownership and requires an explicit item targ
       assert.match(doc.body.textContent, /Memory import is ready to continue/)
 
       await click('Import item legacy-1')
-      await change('Target role legacy-1', 'shared')
-      await click('Share with Main legacy-1')
+      await click('Import selected')
+      assert.match(doc.body.textContent, /Choose a target for every selected item/)
+      assert.equal(calls.some(([endpoint]) => endpoint === 'memory-import-commit'), false)
+      await change('Target role legacy-1', 'worker')
+      await change('Target work legacy-1', 'item-a')
       await click('Import selected')
       const commit = calls.find(([endpoint]) => endpoint === 'memory-import-commit')
       assert.deepEqual(JSON.parse(JSON.stringify(commit?.[1].selections)),
-        [{ sourceId: 'legacy-1', scope: { kind: 'shared', main: true, workItemIds: [] } }])
+        [{ sourceId: 'legacy-1', scope: { kind: 'work', workItemId: 'item-a' } }])
       assert.ok(commit[1].commandId)
       assert.match(doc.body.textContent, /Imported to/)
     } finally { await React.act(async () => root.unmount()) }

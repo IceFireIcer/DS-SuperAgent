@@ -616,7 +616,8 @@ async function start() {
       entry: join(here, 'host.mjs'),
       cwd: profileDir,
       env: { ...process.env, DSH_HOME: hostHome, DS_SUPERAGENT_PORT: String(port), DS_SUPERAGENT_APP: '1',
-        DS_SUPERAGENT_RUNTIME_DIR: runtimeDir, DS_SUPERAGENT_USER_DSH_HOME: userDshHome(), DS_SUPERAGENT_WORKSPACE: places.workspace },
+        DS_SUPERAGENT_RUNTIME_DIR: runtimeDir, DS_SUPERAGENT_USER_DSH_HOME: userDshHome(), DS_SUPERAGENT_WORKSPACE: places.workspace,
+        DS_SUPERAGENT_PROTECTED_PATHS: JSON.stringify([app.getPath('userData'), ...formerDataFolders(app)]) },
       pnpm,
       onFailure: hostFailure,
     })
