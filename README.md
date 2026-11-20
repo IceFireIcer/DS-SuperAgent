@@ -46,7 +46,11 @@ The [desktop packages](app/README.md) install **DS SuperAgent** on Windows, macO
 
 The first start asks for a data location and workspace, defaulting to `~/.ds-superagent` and `~/DS SuperAgent`, then
 opens Main. In Settings, configure the provider credentials and select models for Main, Router and Worker before
-sending work. Data from previous product installs and personal DSH files stay in their original locations.
+sending work. The desktop app works independently of the phone companion and uses its own browser storage keys and
+data folders. Data from previous product installs and personal DSH files stay in their original locations.
+
+See the [release checklist](docs/dev/release-checklist.md) for desktop release requirements and the
+[desktop migration record](docs/superagent/implementation/dsbot-port-162-164.md) for the status of Windows verification.
 
 ## Run from this checkout
 

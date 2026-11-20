@@ -24,7 +24,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-This package includes client components and translations adapted from DS Bot 0.3.8
-(https://github.com/Fei2411/DS-Bot/tree/v0.3.8).
+This package includes client components, translations, browser plug-in and
+computer-control adapters, and phone link code adapted from DS Bot 0.3.8
+(https://github.com/Fei2411/DS-Bot/tree/v0.3.8, commit 5e9b7da8882da3b68d8a0624342708c2150a9156).
 Copyright 2026 Fei2411 and the DS Bot contributors.
 Licensed under the Apache License, Version 2.0 (see LICENSE).

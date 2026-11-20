@@ -227,10 +227,12 @@ test('PostgreSQL persists a split Main WorkPlan, every Ticket receipt and verifi
   let followed
   for (let attempt = 0; attempt < 500; attempt++) {
     followed = await engine.getMainConversation({ instanceId: 'postgres-work' })
-    if (followed.works.find(work => work.brief.workItemId === alpha.brief.workItemId)?.followUps?.at(-1)?.status === 'ready') break
+    const followUp = followed.works.find(work => work.brief.workItemId === alpha.brief.workItemId)?.followUps?.at(-1)
+    if (followUp?.status === 'ready' && followUp.persisted) break
     await new Promise(resolve => setTimeout(resolve, 20))
   }
   const followedAlpha = followed.works.find(work => work.brief.workItemId === alpha.brief.workItemId)
+  assert.equal(followedAlpha?.followUps?.at(-1)?.status, 'ready')
   assert.equal(followedAlpha?.followUps?.at(-1)?.persisted, true)
   assert.equal(followedAlpha?.followUps?.at(-1)?.adopted, true)
   assert.equal((await engine.conversation(alpha.receipt.ticketId)).assignments[0].sessionId, alphaSession)

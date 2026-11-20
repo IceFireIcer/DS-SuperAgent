@@ -1,8 +1,9 @@
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
+import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import { createHash, randomInt, randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { appendFile, lstat, mkdir, open, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { delimiter, dirname, extname, isAbsolute, join, relative, resolve, matchesGlob, sep } from 'node:path'
+import { promisify } from 'node:util'
 import { spawn as spawnPty, type IPty } from 'node-pty'
 import { Context } from '@deepseek-ai/cordis'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
@@ -168,6 +169,7 @@ interface DeviceJob {
   timer?: ReturnType<typeof setTimeout> | undefined
   killTimer?: ReturnType<typeof setTimeout> | undefined
   monitorTimer?: ReturnType<typeof setTimeout> | undefined
+  windowsStop?: Promise<void> | undefined
   writes: Promise<void>
   persisting: Promise<void>
 }
@@ -375,12 +377,14 @@ function groupAlive(pid: number) {
   }
 }
 
-function windowsProcesses(): Map<number, WindowsProcess> | undefined {
+const runWindowsUtility = promisify(execFile)
+
+async function windowsProcesses(): Promise<Map<number, WindowsProcess> | undefined> {
   const script = "[string]::Join(' ', @($_.ProcessId, $_.ParentProcessId, $_.CreationDate.ToFileTimeUtc()))"
-  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
-    `Get-CimInstance Win32_Process | ForEach-Object { ${script} }`],
-    { encoding: 'utf8', windowsHide: true, timeout: 5000, maxBuffer: 4 * 1024 * 1024 })
-  if (result.error || result.status !== 0 || typeof result.stdout !== 'string') return undefined
+  const result = await runWindowsUtility('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+    `Get-CimInstance Win32_Process -ErrorAction Stop | ForEach-Object { ${script} }`],
+    { encoding: 'utf8', windowsHide: true, timeout: 5000, maxBuffer: 4 * 1024 * 1024 }).catch(() => undefined)
+  if (!result) return undefined
   const table = new Map<number, WindowsProcess>()
   for (const line of result.stdout.split(/\r?\n/u)) {
     const match = /^(\d+)\s+(\d+)\s+(\d+)$/u.exec(line.trim())
@@ -413,9 +417,14 @@ function windowsDescendants(root: number, table: Map<number, WindowsProcess>) {
 }
 
 function windowsPidAlive(pid: number) {
-  const result = spawnSync('tasklist', ['/FI', `PID eq ${pid}`, '/NH', '/FO', 'CSV'], { encoding: 'utf8', windowsHide: true })
-  if (result.error || typeof result.stdout !== 'string') return undefined
-  return result.stdout.split(/\r?\n/u).some(line => line.match(/^\s*"[^"]*","([^"]*)"/u)?.[1] === String(pid))
+  try { process.kill(pid, 0); return true }
+  catch (error) { return (error as NodeJS.ErrnoException).code === 'ESRCH' ? false : undefined }
+}
+
+async function killWindowsTrees(pids: number[]) {
+  if (!pids.length) return
+  await runWindowsUtility('taskkill', [...pids.flatMap(pid => ['/PID', String(pid)]), '/T', '/F'],
+    { windowsHide: true, timeout: 5000 }).catch(() => {})
 }
 
 function isRecovery(value: unknown): value is RemoteJobRecovery {
@@ -1424,7 +1433,7 @@ export class RemoteDevice {
         const alive = windowsPidAlive(job.pid)
         if (alive !== false) return false
       }
-      const table = windowsProcesses()
+      const table = await windowsProcesses()
       if (!table) return false
       this.rememberWindowsDescendants(job, table)
       for (const [pid, startedAt] of job.descendants) {
@@ -1454,21 +1463,8 @@ export class RemoteDevice {
       return
     }
     if (process.platform === 'win32') {
-      if (!job.rootExited) {
-        const rootAlive = windowsPidAlive(job.pid)
-        if (rootAlive !== false) {
-          spawnSync('taskkill', ['/PID', String(job.pid), '/T', '/F'], { windowsHide: true })
-          return
-        }
-      }
-      const table = windowsProcesses()
-      if (!table) return
-      this.rememberWindowsDescendants(job, table)
-      for (const pid of job.descendants.keys()) {
-        if (table.get(pid)?.startedAt === job.descendants.get(pid)) {
-          spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true })
-        }
-      }
+      job.windowsStop ??= this.killWindowsRange(job, job.pid).finally(() => { job.windowsStop = undefined })
+      await job.windowsStop
       return
     }
     if (job.process?.kind === 'posix-proc') {
@@ -1481,6 +1477,18 @@ export class RemoteDevice {
     } catch {
       try { process.kill(job.pid, signal) } catch { /* The range is already gone. */ }
     }
+  }
+
+  private async killWindowsRange(job: DeviceJob, rootPid: number) {
+    if (!job.rootExited && windowsPidAlive(rootPid) !== false) {
+      await killWindowsTrees([rootPid])
+      return
+    }
+    const table = await windowsProcesses()
+    if (job.settled || !table) return
+    this.rememberWindowsDescendants(job, table)
+    const confirmed = [...job.descendants].filter(([pid, startedAt]) => table.get(pid)?.startedAt === startedAt)
+    await killWindowsTrees(confirmed.map(([pid]) => pid))
   }
 
   private async inspectJob(jobId: string, args: Record<string, string>) {
@@ -1577,9 +1585,12 @@ export class RemoteDevice {
       job.reason = reason
       void this.persistJob(job).catch(() => {})
     }
-    void this.killRange(job)
+    const stopping = this.killRange(job)
     if (!job.killTimer) {
-      job.killTimer = setTimeout(() => { if (!job.settled) void this.killRange(job, 'SIGKILL') }, 250)
+      job.killTimer = setTimeout(async () => {
+        if (process.platform === 'win32') await stopping
+        if (!job.settled) await this.killRange(job, 'SIGKILL')
+      }, 250)
       job.killTimer.unref()
     }
   }
@@ -1623,8 +1634,8 @@ export class RemoteDevice {
     if (requested.includes('/') || requested.includes('\\')) {
       throw new CoreError('UNSUPPORTED_CAPABILITY', 'Relative executable paths are not allowed on the device.')
     }
-    const extensions = process.platform === 'win32'
-      ? ['', ...(env.PATHEXT ?? '.COM;.EXE').split(';').map(value => value.toLowerCase()).filter(value => value === '.com' || value === '.exe')]
+    const extensions = process.platform === 'win32' && !['.com', '.exe'].includes(extname(requested).toLowerCase())
+      ? (env.PATHEXT ?? '.COM;.EXE').split(';').map(value => value.toLowerCase()).filter(value => value === '.com' || value === '.exe')
       : ['']
     for (const directory of (env.PATH ?? '').split(delimiter)) {
       if (!directory) continue

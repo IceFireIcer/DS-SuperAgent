@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { createServer, request as httpRequest } from 'node:http'
 import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { isAbsolute, join } from 'node:path'
+import { basename, delimiter, dirname, extname, isAbsolute, join } from 'node:path'
 import { test } from 'node:test'
 import * as core from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
@@ -321,6 +321,22 @@ test('the durable Engine job record uses the device-stable job identity', async 
     await storage.close()
     await rm(directory, { recursive: true, force: true })
   }
+})
+
+test('Windows devices skip extensionless shims when resolving a native command', { skip: process.platform !== 'win32', timeout: 20000 }, async context => {
+  const shimDirectory = await mkdtemp(join(tmpdir(), 'ds-superagent-command-shim-'))
+  context.after(() => rm(shimDirectory, { recursive: true, force: true }))
+  const name = basename(process.execPath, extname(process.execPath))
+  await writeFile(join(shimDirectory, name), '#!/bin/sh\nexit 1\n')
+  const quick = {
+    ...commands.quick, argv: [name, ...commands.quick.argv.slice(1)],
+    env: { PATH: [shimDirectory, dirname(process.execPath)].join(delimiter), PATHEXT: '.COM;.EXE' },
+  }
+  const { bound } = await fixture(context, { open: { commands: { quick } } })
+  assert.equal(await bound.resolveExecutable('quick'), await realpath(process.execPath))
+  const result = await bound.invoke('run_command', { name: 'quick' })
+  assert.equal(result.exitCode, 0)
+  assert.equal(result.stdout.trim(), 'quick-done')
 })
 
 test('a fresh paired client observes the same job by its stable ID after reconnecting', { timeout: 20000 }, async context => {
