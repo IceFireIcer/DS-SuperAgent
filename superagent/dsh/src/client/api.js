@@ -27,12 +27,6 @@ const productEndpoints = new Set(`
   proactive-rules proactive-control proactive-list proactive-read proactive-artifact proactive-work-artifact
   proactive-save proactive-pause proactive-stop schedule-list schedule-read schedule-create schedule-cancel
   schedule-source-read schedule-source-set
-  connector-list connector-save connector-remove connector-import-scan connector-import-commit
-  connector-credential-bind connector-token-save connector-oauth-start connector-oauth-status
-  connector-oauth-cancel connector-disconnect mail-account-list mail-account-save mail-account-remove
-  mail-rules mail-rule-save mail-search mail-read mail-reply mail-reply-send mail-reply-cancel
-  im-registry im-save im-pair im-login
-  capability-list capability-read capability-resolve capability-save capability-delete capability-approve capability-bind
 `.trim().split(/\s+/u))
 
 export function createProductApi({ fetch: request = (...args) => globalThis.fetch(...args),

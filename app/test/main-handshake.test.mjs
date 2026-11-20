@@ -1,42 +1,40 @@
-// A failed bootstrap consumes its one-use token. Retrying starts a new Host/token generation.
+// The handshake of the Host: the first window trades the launch URL for the Host's cookie,
+// and the token of that URL is good for one use only. When the first load never came
+// through, no window carries the token again.
 import assert from 'node:assert/strict'
 import { before, test } from 'node:test'
-import { START_ACT } from '../src/start-window.mjs'
 import { state } from './helpers/fake-electron.mjs'
 import { state as hostState } from './helpers/fake-host-process.mjs'
-import { startApp, startWindows, trayQuit, waitFor, window } from './helpers/app-harness.mjs'
+import { startApp, trayOpen, trayQuit, waitFor, window } from './helpers/app-harness.mjs'
 import { installHooks } from './helpers/register.mjs'
 
 await installHooks()
 
 before(async () => {
+  // No page of the browser comes through: the first load of the Host fails.
   state.rejectLoads = true
   await startApp()
 })
 
-test('failed bootstrap retries with a newly issued token', async () => {
-  await waitFor(() => window() !== undefined, 'open the product window')
+test('a first load that never came through does not carry the token again', async () => {
+  await waitFor(() => state.windows.length > 0, 'open the window')
+  await waitFor(() => state.tray !== undefined, 'build the tray')
   const first = window()
   hostState.release()
-  await waitFor(() => first.loaded.some(url => url.includes('token=')), 'try the first one-use token')
-  const firstUrl = first.loaded.find(url => url.includes('token='))
-  assert.equal(state.cookies.length, 0, 'failed navigation left no session cookie')
+  await waitFor(() => first.loaded.some(url => url.includes('token=')), 'try the Host')
+  assert.equal(state.cookies.length, 0, 'the Host left no cookie')
 
-  const start = startWindows()[0]
-  await waitFor(() => start.webContents.sent.some(([channel, snapshot]) =>
-    channel === 'ds-superagent:start-state' && snapshot.view === 'failed'), 'show the startup recovery page')
-  state.rejectLoads = false
-  const event = { sender: start.webContents, senderFrame: start.webContents.mainFrame }
-  assert.equal(await state.ipc.get(START_ACT)(event, 'retry'), true)
-  await waitFor(() => hostState.starts === 2, 'restart the Host after bootstrap failure')
-  await waitFor(() => first.loaded.filter(url => url.includes('token=')).length === 2, 'use the new Host token')
-  const tokens = first.loaded.filter(url => url.includes('token='))
-  assert.notEqual(tokens[0], tokens[1], 'the consumed launch URL is never reused')
-  await waitFor(() => start.destroyed, 'hand the startup window to the recovered product page')
-  assert.equal(state.cookies.length, 1, 'the second Host token establishes a session cookie')
+  // The window is gone for good; the tray builds a new one.
+  first.destroy()
+  trayOpen().click()
+  await waitFor(() => state.windows.length === 2, 'build a new window')
+  const second = window()
+  await waitFor(() => second.loaded.some(url => url.startsWith('http://127.0.0.1:')), 'reach the Host')
+  assert.equal(second.loaded.filter(url => url.includes('token=')).length, 0, 'the token is not used again')
+  assert.equal(hostState.starts, 1, 'no second Host was started')
 })
 
-test('the app ends through the tray', async () => {
+test('the app ends', async () => {
   trayQuit().click()
   await waitFor(() => state.quits > 0, 'end the app')
   await waitFor(() => state.tray.destroyed === true, 'take the tray away')

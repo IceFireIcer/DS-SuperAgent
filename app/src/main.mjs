@@ -1,11 +1,8 @@
-// Modified by DS SuperAgent from the DS Bot v0.3.8 Electron shell (Apache-2.0).
-// Electron main process: a start window while DS SuperAgent's Host boots, then one window served
-// by the app's own DSH Host.
+// Electron main process: one window for DS SuperAgent, served by the app's own DSH Host.
 // The window loads the Host's loopback address as DSH Web does: DSH's sign-in sends the page's
 // origin as the address the browser comes back to, and accepts only a loopback one.
-import { app, autoUpdater as nativeUpdater, BrowserWindow, clipboard, WebContentsView, dialog, ipcMain, Menu, nativeImage,
-  nativeTheme, Notification, powerMonitor, screen, session, shell as electronShell, systemPreferences, Tray } from 'electron'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { app, autoUpdater as nativeUpdater, BrowserWindow, WebContentsView, dialog, ipcMain, Menu, nativeImage, nativeTheme, powerMonitor, session, shell as electronShell, Tray } from 'electron'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { readFile, rm, stat } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { release } from 'node:os'
@@ -25,27 +22,18 @@ import { parseCookieFile } from './cookie-parse.mjs'
 import { userDshHome } from './dsh-home.mjs'
 import { downloadSaver } from './downloads.mjs'
 import { canonicalExecPath } from './canonical-path.mjs'
-import { checkPlaces, chooseLocations, lang, localeText, pickerLabels, pickRoot, placeProblem, programFolder,
-  saveLocations, text, tx } from './first-run.mjs'
+import { chooseLocations, localeText, placeProblem, programFolder, saveLocations, text } from './first-run.mjs'
 import { hostPort } from './host-port.mjs'
 import { assertHostLockFree, hostLockPath, releaseHostLock, writeHostLock } from './host-lock.mjs'
 import { HostProcess } from './host-process.mjs'
-import { badgeCount, createNotifications } from './notifications.mjs'
-import { captureStdio, LogFile } from './logs.mjs'
 import { copyData, moveProblem } from './move-data.mjs'
-import { Pickers } from './picker-host.mjs'
-import { freeSpace, pickFrom, placeOf, rootOf, runningLow } from './place.mjs'
 import { ARTIFACT_PREFIX, PRODUCT_NAME, configureIdentity } from './product.mjs'
 import { SUPERAGENT_PROFILE, assertLocalBackupProfile, profileHome } from './profile.mjs'
 import { RemoteProductClient } from './remote-product-client.mjs'
 import { createShell, SHELL_TEXT } from './shell.mjs'
-import { readStartFrame, writeStartFrame } from './start-frame.mjs'
-import { explainOf, StartWindow } from './start-window.mjs'
 import { UPDATE_TEXT, isNewer, watchReleases, watchUpdates } from './updates.mjs'
 import { createDeferredPrompt } from './update-prompt.mjs'
-import { createComputerCursor } from './computer-cursor.mjs'
-import { createComputerIndicator, indicatorHtml } from './computer-indicator.mjs'
-import { CAPTION_HEIGHT, cssColor, frameOptions, keepVibrancy, materialOf, nativeThemeSource } from './window-frame.mjs'
+import { CAPTION_HEIGHT, cssColor, micaAvailable, nativeThemeSource } from './window-frame.mjs'
 
 const IPC = {
   caption: 'ds-superagent:caption-colors', nativeTheme: 'ds-superagent:native-theme', fullscreen: 'ds-superagent:fullscreen',
@@ -63,12 +51,6 @@ const IPC = {
   appUpdateState: 'ds-superagent:app-update-state', appUpdateCheck: 'ds-superagent:app-update-check',
   appUpdateInstall: 'ds-superagent:app-update-install', appUpdateOpen: 'ds-superagent:app-update-open',
   appUpdateChanged: 'ds-superagent:app-update-changed',
-  ready: 'ds-superagent:ready', handoffReady: 'ds-superagent:handoff-ready',
-  motion: 'ds-superagent:motion', effects: 'ds-superagent:effects',
-  notify: 'ds-superagent:notify', notifyStatus: 'ds-superagent:notify-status',
-  badge: 'ds-superagent:badge', openSession: 'ds-superagent:open-session',
-  idleSeconds: 'ds-superagent:idle-seconds', computer: 'ds-superagent:computer',
-  computerAction: 'ds-superagent:computer-action', computerCursor: 'ds-superagent:computer-cursor',
   backupList: 'ds-superagent:backup-list', backupCreate: 'ds-superagent:backup-create',
   backupRestore: 'ds-superagent:backup-restore', diagnosticsRead: 'ds-superagent:diagnostics-read',
   productConnect: 'ds-superagent:client-connect', productDisconnect: 'ds-superagent:client-disconnect',
@@ -93,22 +75,13 @@ const iconFile = join(assets, process.platform === 'win32' ? 'icon.ico' : 'icon.
 // The tray icon of this platform: Windows takes the .ico, macOS the template and its @2x,
 // Linux the plain png.
 const trayIconFile = () => join(assets, process.platform === 'win32' ? 'tray.ico' : process.platform === 'darwin' ? 'trayTemplate.png' : 'tray.png')
-// Windows 11 draws Mica behind the page; macOS draws sidebar vibrancy. material.css lets it
-// through the sidebar.
-const material = materialOf(process.platform, release())
-let frameFile
+// Windows 11 draws Mica behind the page; mica.css lets it through the sidebar.
+const mica = micaAvailable(process.platform, release())
 let identityError
-try {
-  configureIdentity(app)
-  frameFile = join(app.getPath('userData'), 'start-frame.json')
-} catch (error) {
-  identityError = error
-}
+try { configureIdentity(app) }
+catch (error) { identityError = error }
 
 let mainWindow
-let mainCreated
-let startWindow
-let logs
 let host
 // The Host's loopback origin, which the window loads.
 let origin
@@ -153,14 +126,7 @@ let downloadsBound = false
 // no half team and no temporary copy.
 let choosing
 let copying
-let startPlaces
-let proposed
-let startSettling = false
 const copyAbort = new AbortController()
-const pickers = new Pickers({ ipcMain, getPath: name => app.getPath(name) })
-const notifications = createNotifications({ Notification, systemPreferences, platform: process.platform, log: console })
-let computerIndicator
-let computerCursor
 const browserGuests = new BotBrowserGuests({ session, origin: () => origin, devTools: !app.isPackaged })
 const botViews = new BotViews({
   window: () => mainWindow, WebContentsView, guests: browserGuests, origin: () => origin, devTools: !app.isPackaged,
@@ -175,10 +141,6 @@ const operationsLog = createOperationsLog(join(app.getPath('userData'), 'logs', 
 const productBackupRoot = join(app.getPath('userData'), 'backups')
 const note = (area, code, version) => void operationsLog.record(area, code, version).catch(() => {})
 const managed = () => Boolean(process.env.DS_SUPERAGENT_POSTGRES?.trim())
-logs = new LogFile({ dir: join(app.getPath('userData'), 'logs') })
-captureStdio(logs)
-app.once('will-quit', () => { logs?.flush(); logs?.close() })
-console.log(`${PRODUCT_NAME} ${app.getVersion()} (${process.platform} ${process.arch}), Electron ${process.versions.electron}`)
 
 function assertBackupLocation() {
   const problem = placeProblem(text(), productBackupRoot)
@@ -193,11 +155,9 @@ const shell = createShell({
   messages: () => localeText(SHELL_TEXT),
   trayImage: () => trayImage(),
   window: () => mainWindow,
-  // While the start window is up it is the way back: no hidden product window is built
-  // before the Host has a page to show.
-  build: () => (startWindow?.focus() ? undefined : rebuildWindow()),
+  build: () => rebuildWindow(),
   reveal: (target) => {
-    if (startWindow?.focus() || failed) return
+    if (failed) return
     // macOS: the application menu's Hide hides the app itself, so it comes back first.
     if (process.platform === 'darwin') app.show()
     target.show()
@@ -207,239 +167,16 @@ const shell = createShell({
   status: () => hostState,
   onSuspend: () => { suspended = true },
   onResume: () => resumeHost(),
-  busy: () => choosing !== undefined || copying !== undefined || startSettling,
+  busy: () => choosing !== undefined || copying !== undefined,
   // Before the first run has chosen its places there is no window to show, and before the
   // first load of the Host there is no address to load.
-  ready: () => startWindow !== undefined || (places !== undefined && origin !== undefined && bootstrap !== undefined),
+  ready: () => places !== undefined && origin !== undefined && bootstrap !== undefined,
   notice: { marker: () => join(app.getPath('userData'), 'tray-close-acknowledged'), show: (options) => dialog.showMessageBox(options) },
   // Without a tray the close asks whether the app should end.
   fallback: { show: (options) => dialog.showMessageBox(options) },
 })
 // The tray icon goes away with the app, and a late answer to the close notice hides nothing.
-app.once('will-quit', () => { shell.dispose(); botViews.dispose(); computerIndicator?.dispose(); computerCursor?.dispose(); updates?.stop() })
-
-const startKind = () => (process.env.DS_SUPERAGENT_HOME || existsSync(join(app.getPath('userData'), 'locations.json')) ? 'later' : 'first')
-
-function createStartWindow() {
-  const frame = readStartFrame(frameFile)
-  startWindow = new StartWindow({
-    electron: { BrowserWindow, ipcMain, screen, shell: electronShell, clipboard, nativeTheme, systemPreferences },
-    page: join(here, 'start', 'start.html'),
-    preload: join(here, 'preload.cjs'),
-    icon: iconFile,
-    material,
-    devTools: !app.isPackaged,
-    css: readFileSync(join(here, 'page-card.css'), 'utf8'),
-    lang,
-    motion: frame.motion,
-    effects: frame.effects,
-    version: app.getVersion(),
-    program: [dirname(process.execPath), process.resourcesPath, app.getAppPath()],
-    log: logs,
-    mainWindow: () => mainWindow,
-    saveAs: (win, name) => askPicker(win, { mode: 'save', title: tx('dialog.saveLog'), start: knownFolder('desktop'), name }),
-    onRetry: () => { retryStart().catch(error => { failed = false; fail(error) }) },
-    onReload: () => { mainWindow?.webContents.reload() },
-    onClose: () => { app.quit() },
-    onPick: () => { askStartPlace().catch(fail) },
-    onAnswer: value => { answerStart(value).catch(fail) },
-    canPick: () => startPlaces !== undefined && !process.env.DS_SUPERAGENT_HOME
-      && (startWindow.kind === 'first' || !existsSync(startPlaces.dataDir)),
-    onUpdate: name => { updateStart(name).catch(fail) },
-    onRollback: () => { retryStart({ rollback: true }).catch(error => { failed = false; fail(error) }) },
-  })
-  computerIndicator ??= createComputerIndicator({
-    BrowserWindow, screen, html: indicatorHtml, ipcMain,
-    preload: join(here, 'computer-indicator-preload.cjs'),
-    onAction: (kind, holderId) => { mainWindow?.webContents.send(IPC.computerAction, { kind, holderId }) },
-  })
-  computerCursor ??= createComputerCursor({ BrowserWindow, screen, platform: process.platform, log: console })
-}
-
-function knownFolder(name) {
-  try { return app.getPath(name) } catch { return undefined }
-}
-
-async function askPicker(target, request) {
-  const contents = target?.webContents ?? target
-  return await pickers.ask(contents, { ...request, labels: pickerLabels() })
-}
-
-async function askStartPlace() {
-  const fixed = Boolean(process.env.DS_SUPERAGENT_HOME)
-  if (fixed || startPlaces === undefined || startSettling || copying !== undefined) return false
-  const missingCurrentData = !existsSync(startPlaces.dataDir)
-  const picked = startWindow.kind === 'later'
-    ? await startWindow.asking(askPicker(startWindow.owner(), {
-      mode: 'folder', title: text().pickMove, start: pickFrom(startPlaces.dataDir),
-    }))
-    : await pickRoot(pickFrom(startPlaces.dataDir), undefined, {
-      asking: promise => startWindow.asking(promise),
-      pick: request => askPicker(startWindow.owner(), request),
-    })
-  if (typeof picked !== 'string') return false
-  if (missingCurrentData) {
-    const replacement = rootOf(picked, {
-      dshHome: userDshHome(),
-      program: app.isPackaged ? programFolder() : undefined,
-      current: startPlaces,
-    })
-    if (replacement.same === true) {
-      startWindow.card(undefined)
-      return false
-    }
-    if (replacement.reason !== undefined) {
-      startWindow.card({ kind: 'rejected', reason: replacement.reason, path: replacement.at })
-      return false
-    }
-    proposed = { ...replacement, newLocation: true }
-    startWindow.card({ kind: 'picked', path: replacement.root })
-    return true
-  }
-  if (startWindow.kind === 'later') {
-    const target = resolve(picked)
-    const isolation = placeProblem(text(), target)
-    const problem = isolation === undefined ? moveProblem({
-      from: startPlaces.dataDir,
-      to: target,
-      workspace: startPlaces.workspace,
-      dshHome: userDshHome(),
-      program: app.isPackaged ? programFolder() : undefined,
-    }) : undefined
-    if (isolation !== undefined || problem !== undefined) {
-      const reason = problem === 'dsh' ? 'dsh' : problem === 'program' ? 'program'
-        : problem === 'notEmpty' ? 'foreign' : problem === 'workspace' ? 'workspace'
-          : problem === 'drive' ? 'drive' : 'nested'
-      startWindow.card({ kind: 'rejected', reason, path: target })
-      return false
-    }
-    proposed = { dataDir: target, workspace: startPlaces.workspace }
-    startWindow.card({ kind: 'move', path: target, dataDir: startPlaces.dataDir })
-    return true
-  }
-  const result = rootOf(picked, {
-    dshHome: userDshHome(),
-    program: app.isPackaged ? programFolder() : undefined,
-    current: startPlaces,
-  })
-  if (result.same === true) {
-    startWindow.card(undefined)
-    return false
-  }
-  if (result.reason !== undefined) {
-    startWindow.card({ kind: 'rejected', reason: result.reason, path: result.at })
-    return false
-  }
-  const problem = placeProblem(tx, result.dataDir, result.workspace)
-  if (problem !== undefined) {
-    startWindow.card({ kind: 'rejected', reason: 'foreign', path: result.at })
-    return false
-  }
-  proposed = result
-  startWindow.card({ kind: 'picked', path: result.root })
-  return true
-}
-
-async function answerStart(value) {
-  if (proposed === undefined) {
-    startWindow.card(undefined)
-    return
-  }
-  if (value === 'cancel') {
-    proposed = undefined
-    startWindow.card(undefined)
-    return
-  }
-  if ((startWindow.kind !== 'later' || proposed.newLocation === true) && value === 'use') {
-    startSettling = true
-    saveLocations({ dataDir: proposed.dataDir, workspace: proposed.workspace })
-    app.relaunch()
-    app.quit()
-    return
-  }
-  if (startWindow.kind === 'later' && value === 'move') {
-    await moveFromStart(proposed.dataDir)
-  }
-}
-
-async function moveFromStart(to) {
-  if (copying !== undefined || startSettling) return
-  startSettling = true
-  startWindow.moving()
-  const signal = copyAbort.signal
-  copying = (async () => {
-    try {
-      if (host !== undefined) await stopHost()
-      await copyData(startPlaces.dataDir, to, signal)
-      saveLocations({ dataDir: to, workspace: startPlaces.workspace })
-      app.relaunch()
-    } catch (error) {
-      if (signal.aborted) return
-      startWindow.fail(error, 'moving')
-      return
-    } finally {
-      startSettling = false
-    }
-    app.quit()
-  })()
-  await copying
-  copying = undefined
-}
-
-async function retryStart({ rollback = false } = {}) {
-  if (places === undefined || hostFactory === undefined) {
-    await start()
-    return
-  }
-  if (host !== undefined && !stopped) {
-    await stopHost()
-    resetStoppedHost()
-  } else if (stopped) resetStoppedHost()
-  failed = false
-  stopped = false
-  stopping = false
-  hostReady = false
-  tokenSpent = false
-  launchUrl = undefined
-  bootstrap = undefined
-  hostState = HOST_STATE.starting
-  shell.refresh()
-  const ready = startProductHost(profileHome(places.dataDir), { rollback })
-  void ready.catch(fail)
-  bootstrap = connectBootstrap(ready)
-}
-
-async function connectBootstrap(ready) {
-  let url
-  try {
-    ({ url } = await ready)
-  } catch {
-    // The Host failure is reported by fail(), once, with its retry and rollback actions.
-    return false
-  }
-  try {
-    launchUrl = url
-    const win = mainWindow
-    if (win === undefined || win.isDestroyed()) return false
-    tokenSpent = true
-    startWindow.teamLoading()
-    await win.loadURL(url)
-    hostReady = true
-    return true
-  } catch (error) {
-    void fail(error)
-    return false
-  }
-}
-
-async function updateStart(name) {
-  const state = updates?.state()
-  if (name === 'manualDownload' || (state?.phase === 'available' && state.page)) {
-    await openUpdatePage()
-    return
-  }
-  if (state?.phase === 'downloaded') await installUpdate()
-}
+app.once('will-quit', () => { shell.dispose(); botViews.dispose(); updates?.stop() })
 
 // A packaged app started through an 8.3 short path or a junction restarts once on the
 // canonical path: the lock below and every path the Host sees then agree with the long
@@ -454,7 +191,7 @@ if (identityError !== undefined) {
 } else if (!app.requestSingleInstanceLock()) {
   app.exit(0)
 } else {
-  app.on('second-instance', () => { if (!startWindow?.focus()) shell.open() })
+  app.on('second-instance', () => { shell.open() })
   nativeUpdater?.on('before-quit-for-update', () => { updateLaunchPending = updates?.state().phase === 'installing' })
   app.on('before-quit', (event) => {
     if (updateLaunchPending && !updateExitAllowed) {
@@ -506,11 +243,7 @@ if (identityError !== undefined) {
     if (stopping) { void (hostStop ?? Promise.resolve()).then(() => { app.quit() }, leave); return }
     void stopHost().then(() => { app.quit() }, leave)
   })
-  app.whenReady().then(async () => {
-    shell.install()
-    createStartWindow()
-    await start()
-  }).catch(fail)
+  app.whenReady().then(async () => { shell.install(); await start() }).catch(fail)
 }
 
 function lockProductData() {
@@ -658,7 +391,6 @@ function startProductHost(home, { rollback = false } = {}) {
       await finishProfileStart(home)
       hostState = HOST_STATE.running
       shell.refresh()
-      startWindow?.done('engine')
       note('host', 'HOST_READY', app.getVersion())
     }
     return answer
@@ -667,34 +399,18 @@ function startProductHost(home, { rollback = false } = {}) {
 }
 
 async function start() {
-  setMenu()
-  nativeTheme.themeSource = readStartFrame(frameFile).themeSource
-  if (process.platform === 'darwin' && !app.isPackaged) app.dock?.setIcon(iconFile)
-  startWindow.open(startKind())
-  const where = chooseLocations()
+  choosing = new AbortController()
+  const where = await chooseLocations(choosing.signal).finally(() => { choosing = undefined })
+  if (where.quit) { app.exit(0); return }
   const hostHome = profileHome(where.dataDir)
   const workspace = where.workspace ?? join(hostHome, 'workspace')
-  places = { dataDir: where.dataDir, workspace }
-  startPlaces = places
-  const fixed = Boolean(process.env.DS_SUPERAGENT_HOME)
-  const free = freeSpace(places.dataDir)
-  const showPlace = !fixed && (startWindow.kind === 'first'
-    || runningLow(free, where.freeAtStart))
-  startWindow.explain(explainOf())
-  startWindow.place(showPlace ? placeOf(places.dataDir, { free, lang: lang() }) : undefined)
-  const placeError = checkPlaces({ dataDir: where.dataDir, workspace }, { saved: where.saved === true })
-  if (placeError instanceof Error) throw placeError
-  if (placeError !== undefined) throw new Error(placeError)
   // A link can be made after the first run's check: the folders the Host will write to are
   // checked again, as the file system has them, before anything starts.
-  const layoutError = placeProblem(text(), where.dataDir, workspace)
-  if (layoutError !== undefined) throw new Error(layoutError)
   for (const path of new Set([where.dataDir, hostHome, workspace])) {
     const problem = placeProblem(text(), path)
     if (problem !== undefined) throw new Error(problem)
   }
-  if (!fixed) saveLocations(places)
-  startWindow.done('data')
+  places = { dataDir: where.dataDir, workspace }
   const port = await hostPort(join(app.getPath('userData'), 'host-port.json'))
   hostPortNumber = port
   origin = `http://127.0.0.1:${String(port)}`
@@ -720,16 +436,10 @@ async function start() {
   updates = startUpdates()
   updates?.subscribe((state) => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(IPC.appUpdateChanged, state)
-    if (failed && startWindow !== undefined && !startWindow.revealed && ['available', 'downloading', 'downloaded', 'installing'].includes(state.phase)) {
-      startWindow.update({
-        state: state.phase === 'downloaded' ? 'installing' : state.phase,
-        version: state.version,
-        ...(state.page === undefined ? {} : { page: true }),
-        ...(state.percent === undefined ? {} : { percent: state.percent }),
-      })
-    }
     if (!['checking', 'installing'].includes(state.phase)) note('update', `UPDATE_${state.failure ?? state.phase}`.toUpperCase(), state.version)
   })
+  // A throwaway run (DS_SUPERAGENT_HOME) keeps its folders where it was told.
+  const fixed = Boolean(process.env.DS_SUPERAGENT_HOME)
   ipcMain.handle(IPC.dataLocation, (event) => {
     assertWindow(event)
     return { path: places.dataDir, fixed }
@@ -780,14 +490,16 @@ async function start() {
   })
   ipcMain.handle(IPC.browserImportPick, async (event) => {
     assertWindow(event)
-    const path = await askPicker(mainWindow, { mode: 'file', title: tx('dialog.pickCookies'),
-      start: knownFolder('downloads'), extensions: ['txt', 'json', 'cookies'] })
-    if (typeof path !== 'string') return { canceled: true }
-    const buffer = await readFile(path)
+    const picked = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      filters: [{ name: 'Cookie files', extensions: ['txt', 'json', 'cookies'] }, { name: 'All files', extensions: ['*'] }],
+    })
+    if (picked.canceled || !picked.filePaths[0]) return { canceled: true }
+    const buffer = await readFile(picked.filePaths[0])
     if (buffer.length > IMPORT_FILE_MAX) return { error: 'too-large' }
     const parsed = parseCookieFile(buffer)
     if (!parsed.ok) return { error: parsed.error ?? 'unreadable', format: parsed.format }
-    return cookieImports.store(parsed, { kind: 'file', label: basename(path) })
+    return cookieImports.store(parsed, { kind: 'file', label: basename(picked.filePaths[0]) })
   })
   ipcMain.handle(IPC.browserImportLive, async (event, sourceId, close) => {
     assertWindow(event)
@@ -821,15 +533,15 @@ async function start() {
   })
   ipcMain.handle(IPC.credentialImportPick, async event => {
     assertWindow(event)
-    const path = await askPicker(mainWindow, { mode: 'file',
-      title: lang() === 'zh' || lang() === 'zh-TW' ? '选择凭据导出文件' : 'Choose credential export',
-      start: knownFolder('downloads'), extensions: ['json'] })
-    if (typeof path !== 'string') return { canceled: true }
+    const picked = await dialog.showOpenDialog(mainWindow, { properties: ['openFile'],
+      filters: [{ name: 'Credential export', extensions: ['json'] }] })
+    if (picked.canceled || !picked.filePaths[0]) return { canceled: true }
     try {
+      const path = picked.filePaths[0]
       if ((await stat(path)).size > CREDENTIAL_IMPORT_FILE_MAX) return { error: 'too-large' }
       const bytes = await readFile(path)
       if (bytes.length > CREDENTIAL_IMPORT_FILE_MAX) return { error: 'too-large' }
-      const pending = credentialImports.store(bytes, basename(path))
+      const pending = credentialImports.store(bytes, basename(picked.filePaths[0]))
       return pending
     } catch {
       return { error: 'unreadable' }
@@ -874,53 +586,7 @@ async function start() {
   ipcMain.handle(IPC.diagnosticsRead, async event => {
     assertWindow(event)
     return { product: PRODUCT_NAME, appVersion: app.getVersion(), dshVersion, platform: process.platform, arch: process.arch,
-      hostState, backupsAvailable: !managed(), events: (await operationsLog.read()).slice(-50).reverse(),
-      log: { file: join(app.getPath('userData'), 'logs', 'main.log'), tail: logs.tail(80) } }
-  })
-  ipcMain.on(IPC.ready, (event, report) => {
-    if (fromWindow(event)) startWindow?.ready(report)
-  })
-  ipcMain.on(IPC.handoffReady, event => {
-    if (fromWindow(event)) startWindow?.teamReady()
-  })
-  ipcMain.on(IPC.motion, (event, value) => {
-    if (fromWindow(event) && ['quiet', 'normal', 'lively'].includes(value)) writeStartFrame(frameFile, { motion: value })
-  })
-  ipcMain.on(IPC.effects, (event, value) => {
-    if (fromWindow(event) && ['full', 'reduced', 'off'].includes(value)) writeStartFrame(frameFile, { effects: value })
-  })
-  ipcMain.handle(IPC.notifyStatus, event => {
-    assertWindow(event)
-    return notifications.status()
-  })
-  ipcMain.handle(IPC.notify, (event, notice) => {
-    assertWindow(event)
-    const sessionId = typeof notice?.sessionId === 'string' ? notice.sessionId.slice(0, 120) : undefined
-    return notifications.show({
-      title: String(notice?.title ?? ''),
-      body: String(notice?.body ?? ''),
-    }, {
-      focused: () => mainWindow?.isFocused?.() === true,
-      open: () => {
-        shell.open()
-        if (sessionId !== undefined) mainWindow?.webContents.send(IPC.openSession, sessionId)
-      },
-    })
-  })
-  ipcMain.on(IPC.badge, (event, count) => {
-    if (!fromWindow(event)) return
-    const value = badgeCount(count)
-    try { app.setBadgeCount?.(value) } catch {}
-  })
-  ipcMain.handle(IPC.idleSeconds, event => {
-    assertWindow(event)
-    return Math.max(0, Number(powerMonitor.getSystemIdleTime?.()) || 0)
-  })
-  ipcMain.on(IPC.computer, (event, entries) => {
-    if (fromWindow(event)) computerIndicator?.update(entries)
-  })
-  ipcMain.on(IPC.computerCursor, (event, cursor) => {
-    if (fromWindow(event)) void computerCursor?.update(cursor)
+      hostState, backupsAvailable: !managed(), events: (await operationsLog.read()).slice(-50).reverse() }
   })
   // The product keeps the workspace; the app remembers it for path and data-move checks.
   ipcMain.on(IPC.teamWorkspace, (event, path) => {
@@ -941,13 +607,25 @@ async function start() {
     })
   }
 
+  setMenu()
+  // A packaged app has the icon in its bundle; Electron's own run shows Electron's.
+  if (process.platform === 'darwin' && !app.isPackaged) app.dock?.setIcon(iconFile)
   createWindow()
   const ready = startProductHost(hostHome)
   void ready.catch(fail)
   // The launch URL trades its token for the Host's cookie and goes on to the page. The cookie
   // is there once that load came through. The token is good for one browser only: it is spent
   // as soon as a window carries it.
-  bootstrap = connectBootstrap(ready)
+  bootstrap = (async () => {
+    const { url } = await ready
+    launchUrl = url
+    const win = mainWindow
+    if (win === undefined) return false
+    tokenSpent = true
+    await win.loadURL(url)
+    hostReady = true
+    return true
+  })().catch(() => false)
 }
 
 // The data moves as a copy while the Host is stopped, and the app starts again on the new
@@ -956,9 +634,9 @@ async function moveData(workspace) {
   if (copying !== undefined || maintenance || stopping || mainWindow === undefined) return false
   const t = text()
   const owner = mainWindow
-  const picked = await askPicker(owner, { mode: 'folder', title: t.pickMove, start: dirname(places.dataDir) })
-  if (typeof picked !== 'string') return false
-  const to = resolve(picked)
+  const { canceled, filePaths } = await dialog.showOpenDialog(owner, { title: t.pickMove, defaultPath: dirname(places.dataDir), properties: ['openDirectory', 'createDirectory', 'promptToCreate'] })
+  if (canceled || filePaths[0] === undefined) return false
+  const to = resolve(filePaths[0])
   const dshHome = userDshHome()
   // The workspace can move while a dialog is open; the window tells the latest one.
   const refused = async () => {
@@ -1195,26 +873,31 @@ async function flushDeferredUpdate() {
 
 function createWindow() {
   const dark = nativeTheme.shouldUseDarkColors
-  const frameless = process.platform === 'win32' || process.platform === 'darwin'
-  const sidebarFill = () => (nativeTheme.shouldUseDarkColors ? '#1b1b1c' : '#f9fafb')
+  const win32 = process.platform === 'win32'
   const win = new BrowserWindow({
     // The window never squeezes the chat: RAIL_WIDTH + MIN_CHAT from the product client's
     // src/client/frame-layout.js is the avatar rail plus the smallest chat column.
     width: 1320, height: 860, minWidth: 508, minHeight: 480,
     title: PRODUCT_NAME, show: false, icon: iconFile,
-    backgroundColor: material ? '#00000000' : dark ? '#1b1b1c' : '#ffffff',
+    backgroundColor: mica ? '#00000000' : dark ? '#1b1b1c' : '#ffffff',
     // Frameless as in DSH Desktop: the caption buttons overlay the page's band. They keep the
     // sidebar's colors until the page sends the colors of the surface under them.
-    ...frameOptions(process.platform, material, { color: sidebarFill(), symbolColor: dark ? '#f9fafb' : '#0f1115' }),
+    ...(win32 ? {
+      titleBarStyle: 'hidden',
+      titleBarOverlay: { height: CAPTION_HEIGHT, color: dark ? '#1b1b1c' : '#f9fafb', symbolColor: dark ? '#f9fafb' : '#0f1115' },
+      ...(mica ? { backgroundMaterial: 'mica' } : {}),
+    } : {}),
     webPreferences: {
       preload: join(here, 'preload.cjs'), contextIsolation: true, sandbox: true, webviewTag: true,
-      additionalArguments: [`--ds-superagent-origin=${origin}`,
-        ...(frameless ? [`--ds-superagent-caption=${String(CAPTION_HEIGHT)}`, ...(material ? [`--ds-superagent-material=${material}`] : [])] : [])],
+      additionalArguments: [`--ds-superagent-origin=${origin}`, ...(win32 ? [`--ds-superagent-caption=${String(CAPTION_HEIGHT)}`, ...(mica ? ['--ds-superagent-mica'] : [])] : [])],
     },
   })
-  if (material === 'vibrancy') keepVibrancy(win, sidebarFill)
   mainWindow = win
-  startWindow?.placeMain(win)
+  // A window that the shell has hidden, or that the app is leaving, stays out of sight.
+  win.once('ready-to-show', () => {
+    if (win.isDestroyed() || shell.isQuitting() || shell.isHidden(win)) return
+    win.show()
+  })
   win.on('page-title-updated', (event) => { event.preventDefault() })
   win.on('closed', () => {
     if (mainWindow !== win) return
@@ -1231,15 +914,9 @@ function createWindow() {
   // The session is the same for every window of the app, so the handler is bound once.
   if (!downloadsBound) {
     downloadsBound = true
-    contents.session.on('will-download', downloadSaver({
-      window: () => mainWindow,
-      ask: (name, folder) => askPicker(mainWindow, { mode: 'save', title: tx('dialog.saveAs'), start: folder, name }),
-      staging: () => join(app.getPath('userData'), 'downloading'),
-      getPath: name => app.getPath(name),
-      log: console,
-    }))
+    contents.session.on('will-download', downloadSaver({ window: () => mainWindow, dialog, downloads: app.getPath('downloads') }))
   }
-  if (frameless) {
+  if (win32) {
     // Fullscreen hides the caption buttons, and the page drops its band meanwhile. A reload
     // registers the page's listener again, so the state goes out after every load too.
     const sendFullscreen = () => { if (mainWindow !== undefined) contents.send(IPC.fullscreen, win.isFullScreen()) }
@@ -1247,15 +924,12 @@ function createWindow() {
     win.on('leave-full-screen', sendFullscreen)
     contents.on('did-finish-load', sendFullscreen)
   }
-  for (const [on, file] of [[material !== undefined, 'material.css'], [process.platform === 'darwin', 'macos.css']]) {
-    if (!on) continue
-    const css = readFileSync(join(here, file), 'utf8')
+  if (mica) {
+    const css = readFileSync(join(here, 'mica.css'), 'utf8')
     contents.on('dom-ready', () => { void contents.insertCSS(css) })
   }
   const fonts = readFileSync(join(here, 'fonts.css'), 'utf8')
   contents.on('dom-ready', () => { void contents.insertCSS(fonts) })
-  const card = readFileSync(join(here, 'page-card.css'), 'utf8')
-  contents.on('dom-ready', () => { void contents.insertCSS(card) })
   contents.setWindowOpenHandler(({ url }) => {
     // DSH's sign-in opens a blank window during the click and sends it to the sign-in page later.
     if (url === 'about:blank') return { action: 'allow', overrideBrowserWindowOptions: { show: false, webPreferences: { sandbox: true, webviewTag: false } } }
@@ -1286,7 +960,6 @@ function createWindow() {
   // minimized asks for it when it comes back.
   win.on('show', () => { void flushDeferredUpdate().catch((error) => { console.error(error) }) })
   win.on('restore', () => { void flushDeferredUpdate().catch((error) => { console.error(error) }) })
-  win.on('focus', () => { notifications.clear() })
   void win.loadURL(notePage(text().starting)).catch(() => {})
   return win
 }
@@ -1479,22 +1152,6 @@ async function fail(error) {
   const throwaway = Boolean(process.env.DS_SUPERAGENT_HOME)
   const t = localeText(UPDATE_TEXT)
   const next = found ? `\n\n${found.page ? t.onFailurePage(found.version) : t.onFailure(found.version)}` : ''
-  const canRollback = !managed() && places !== undefined
-    && await pendingProductRestore({ home: profileHome(places.dataDir) }).catch(() => false)
-  if (startWindow !== undefined && !startWindow.revealed) {
-    startWindow.fail(error, startKind(), { restoreRollback: canRollback })
-    if (found) {
-      startWindow.update({ state: 'available', version: found.version, page: Boolean(found.page) })
-      if (!throwaway) {
-        void found.downloaded.then(done => {
-          if (done && startWindow !== undefined && !startWindow.revealed) {
-            startWindow.update({ state: 'downloading', version: found.version, percent: 100 })
-          }
-        }).catch(() => {})
-      }
-    }
-    return
-  }
   if (found?.page) {
     dialog.showErrorBox(PRODUCT_NAME, `${text().notStarted}\n\n${error instanceof Error ? error.message : String(error)}${next}`)
     if (!throwaway) await electronShell.openExternal(found.page)

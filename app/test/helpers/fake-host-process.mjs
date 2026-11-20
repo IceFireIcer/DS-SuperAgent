@@ -45,12 +45,11 @@ export class HostProcess {
 
   async start() {
     state.starts += 1
-    const generation = state.starts
     current = this
     if (state.held) await gate
     if (state.fail) { state.running = false; throw new Error('the Host did not start') }
     state.running = true
-    return { url: `http://127.0.0.1:${port()}/?token=test-token-${String(generation)}`, injections: [] }
+    return { url: `http://127.0.0.1:${port()}/?token=test-token`, injections: [] }
   }
 
   isRunning() { return state.running === true && current === this }

@@ -28,7 +28,7 @@ before(async () => {
 })
 
 test('the update waits for the window and is installed when the window comes back', async () => {
-  await waitFor(() => window() !== undefined, 'open the product window')
+  await waitFor(() => state.windows.length > 0, 'open the window')
   await waitFor(() => state.tray !== undefined, 'build the tray')
   const win = window()
   hostState.release()

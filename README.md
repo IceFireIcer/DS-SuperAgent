@@ -42,30 +42,6 @@ The first start asks for a data location and workspace, defaulting to `~/.ds-sup
 opens Main. In Settings, configure the provider credentials and select models for Main, Router and Worker before
 sending work. Data from previous product installs and personal DSH files stay in their original locations.
 
-### Connectors and mailbox
-
-GitHub and Feishu OAuth applications are Host configuration, not browser settings. Set these variables before starting
-the Host:
-
-```text
-DS_SUPERAGENT_GITHUB_OAUTH_CLIENT_ID
-DS_SUPERAGENT_GITHUB_OAUTH_CLIENT_SECRET
-DS_SUPERAGENT_FEISHU_OAUTH_CLIENT_ID
-DS_SUPERAGENT_FEISHU_OAUTH_CLIENT_SECRET
-```
-
-Register `http://127.0.0.1:38517/callback` exactly as the callback URL in each OAuth application. The callback listener
-binds only to `127.0.0.1`; one Host on a machine can use that fixed port at a time. A missing or incomplete application
-leaves sign-in disabled with a readable error, and remote clients only receive an opaque login ID and pending/error
-state, never the redirect URL, authorization code, PKCE state or token. GitHub can also use a personal access token,
-which the Host verifies with GitHub before storing in its credential vault. Feishu authorization uses an existing
-Feishu source identity; use the source button on the Connectors page to fill it from Feishu status.
-
-Mailbox accounts use IMAP and SMTP with an app password or authorization code. Presets cover QQ, 163, 126, Gmail and
-iCloud; another provider needs explicit server hosts, ports and TLS/STARTTLS settings. Credentials stay in the Host
-credential vault and are never returned by the product API. Real OAuth applications and live mailboxes remain separate
-environment checks; the mock contract tests do not replace them.
-
 ## Run from this checkout
 
 Use Node.js 24.9 or later within the Node.js 24 series. The app installs the single `ds-superagent` product package from this repository:

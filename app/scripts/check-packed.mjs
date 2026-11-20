@@ -242,10 +242,10 @@ function devtools(url, problems) {
   return { opened, call, close: () => { socket.close() } }
 }
 
-// material.css styles DSH's own page, which can change with a DSH upgrade; every rule must still
+// mica.css styles DSH's own page, which can change with a DSH upgrade; every rule must still
 // find an element, on every platform, so the change shows here and not as a broken window.
-function materialRules() {
-  const css = readFileSync(join(root, 'src', 'material.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//gu, '')
+function micaRules() {
+  const css = readFileSync(join(root, 'src', 'mica.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//gu, '')
   return [...css.matchAll(/([^{}]+)\{/gu)].map(([, selectors]) => selectors.split(',')
     .map(selector => selector.trim().replace(/::(?:before|after)$/u, ''))
     .filter(selector => selector !== '' && selector !== 'body'))
@@ -268,8 +268,8 @@ async function chat(cdp) {
   await cdp.call('Runtime.enable')
   await cdp.call('Log.enable')
   await until("document.querySelector('#main-message')", 'the Main conversation')
-  const stale = await evaluate(`${JSON.stringify(materialRules())}.filter(rule => !rule.some(selector => document.querySelector(selector) !== null)).map(rule => rule.join(', '))`)
-  if (stale.length > 0) throw new Error(`src/material.css no longer matches DSH's page: ${stale.join(' | ')}`)
+  const stale = await evaluate(`${JSON.stringify(micaRules())}.filter(rule => !rule.some(selector => document.querySelector(selector) !== null)).map(rule => rule.join(', '))`)
+  if (stale.length > 0) throw new Error(`src/mica.css no longer matches DSH's page: ${stale.join(' | ')}`)
   await dismissNotice()
   // Click the composer through the input pipeline. A bare focus() is not enough where no window
   // manager gives the window focus (xvfb in CI): the text and the Enter would go nowhere.

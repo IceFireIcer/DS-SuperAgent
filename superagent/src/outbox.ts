@@ -123,8 +123,7 @@ export class Outbox {
         || handoff.sourceInstanceId !== reply.destination.sourceInstanceId || handoff.authorId !== reply.destination.actorId
         || handoff.objectId !== reply.destination.eventId || handoff.threadId !== reply.destination.threadId
         || JSON.stringify(handoff.nativeVersion) !== JSON.stringify(reply.nativeVersion)
-        || !event || event.source.sourceInstanceId !== reply.destination.sourceInstanceId
-        || (event.source.kind !== 'feishu' && reply.destination.sourceInstanceId !== 'im')
+        || !event || event.source.kind !== 'feishu' || event.source.sourceInstanceId !== reply.destination.sourceInstanceId
         || event.authorId !== reply.destination.actorId || event.authorKind !== 'human' || event.addressing === 'ambient'
         || event.objectId !== reply.destination.eventId || event.threadId !== reply.destination.threadId
         || JSON.stringify(event.version) !== JSON.stringify(reply.nativeVersion) || !await isCurrentSourceEvent(tx, event)

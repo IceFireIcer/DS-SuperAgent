@@ -48,27 +48,6 @@ test('the app has the version of ds-superagent', () => {
   assert.equal(version('../package.json'), version('../../superagent/package.json'))
 })
 
-test('the desktop shell port retains Fei2411 Apache-2.0 provenance', () => {
-  const notice = readFileSync(new URL('../../NOTICE', import.meta.url), 'utf8')
-  const packagedNotice = readFileSync(new URL('../assets/NOTICE', import.meta.url), 'utf8')
-  const license = readFileSync(new URL('../../LICENSE', import.meta.url), 'utf8')
-  const packagedLicense = readFileSync(new URL('../assets/LICENSE', import.meta.url), 'utf8')
-  assert.equal(packagedNotice, notice, 'the installer carries the repository NOTICE')
-  assert.equal(packagedLicense, license, 'the installer carries the repository Apache license')
-  const builder = parse(readFileSync(new URL('../electron-builder.yml', import.meta.url), 'utf8'))
-  assert.ok(builder.files.includes('assets/**'), 'the license files are part of the packaged app')
-  assert.match(notice, /DS Bot \(https:\/\/github\.com\/Fei2411\/DS-Bot\)[\s\S]*Copyright 2026 Fei2411 and the DS Bot contributors[\s\S]*Apache License, Version 2\.0/u)
-  assert.match(notice, /tag v0\.3\.8, commit 5e9b7da8882da3b68d8a0624342708c2150a9156/u)
-  for (const file of [
-    'app/src/main.mjs', 'app/src/preload.cjs', 'app/src/first-run.mjs', 'app/src/start-window.mjs',
-    'app/src/place.mjs', 'app/src/picker-host.mjs', 'app/src/folder-picker.mjs', 'app/src/downloads.mjs',
-    'app/src/logs.mjs', 'app/src/notifications.mjs', 'app/src/computer-indicator.mjs',
-    'app/src/computer-cursor.mjs', 'app/src/material.css', 'app/src/page-card.css', 'app/src/macos.css',
-    'app/scripts/dist.mjs', 'app/scripts/release-notes.mjs', 'app/scripts/seed-electron-checksums.mjs',
-  ]) assert.ok(notice.includes(file), `${file} is included in the attribution inventory`)
-  assert.doesNotMatch(notice, /Feishu2411|Feishu/u)
-})
-
 // Tool processes (bash, scripts a Bot runs) connect to devices on the local network;
 // macOS blocks them outright when Info.plist has no NSLocalNetworkUsageDescription.
 test('the mac package asks macOS for local network access', () => {

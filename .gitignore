@@ -17,8 +17,6 @@ node_modules/
 .dsh-home/
 /shots/
 .playwright-mcp/
-# Interrupted capability runtime tests can leave isolated build folders behind.
-/superagent/.product-capability-runtime-*/
 
 # Extra patterns for scripts/scan.mjs that must not be named in the repository.
 .scan-extra

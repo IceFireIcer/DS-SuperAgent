@@ -1,12 +1,7 @@
-// Copying a folder of the user's whole, with its links, for the data move.
+// Copying a folder of the user's whole, with its links, for the first-run import and the data move.
 import { existsSync, realpathSync } from 'node:fs'
 import { cp, lstat, readlink, realpath, stat, symlink } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
-
-// Adapted by DS SuperAgent from DS Bot v0.3.8's Electron disk selection (Apache-2.0).
-// Electron treats every path ending in .asar as an archive. original-fs sees the disk as it is;
-// plain Node has no original-fs, so it uses node:fs.
-export const disk = process.getBuiltinModule('original-fs') ?? process.getBuiltinModule('node:fs')
 
 export const within = (inner, outer) => {
   const path = relative(resolve(outer), resolve(inner))
