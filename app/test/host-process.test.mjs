@@ -15,6 +15,20 @@ test('Linux uses the bundled plain Node, not Electron in Node mode', () => {
   }
 })
 
+test('the real desktop Host publishes a ready URL with the authenticated browser Peer', { timeout: 30_000 }, async t => {
+  const work = mkdtempSync(join(tmpdir(), 'ds-superagent-host-ready-'))
+  const app = dirname(dirname(fileURLToPath(import.meta.url)))
+  const failures = []
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(?:DSH_|DS_SUPERAGENT_|DEEPSEEK_)/iu.test(key)))
+  const child = new host.HostProcess({ entry: join(app, 'src', 'host.mjs'), cwd: work,
+    env: { ...env, DSH_HOME: join(work, 'home') }, onFailure: error => failures.push(error) }, 'win32')
+  t.after(async () => { await child.stop(); rmSync(work, { recursive: true, force: true }) })
+  const ready = await child.start()
+  assert.equal(new URL(ready.url).hostname, '127.0.0.1')
+  assert.equal(Array.isArray(ready.injections), true)
+  assert.deepEqual(failures, [])
+})
+
 test('the Linux Host loads sharp only in its plain Node child', { skip: process.platform === 'win32' }, async () => {
   const work = mkdtempSync(join(tmpdir(), 'ds-superagent-linux-image-'))
   const node = join(work, 'primary-runtime', 'dependencies', 'node', 'bin', 'node')

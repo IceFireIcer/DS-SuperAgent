@@ -73,7 +73,7 @@ async function main() {
     })().catch(() => null).then(path => send({ type: 'ds-superagent:workspace-read-result', id: message.id, path })).catch(() => {})
   })
   const url = connection.authenticatedUrl(`http://127.0.0.1:${String(webServer.port)}`)
-  await send({ type: 'ready', url, injections: webServer.collectIndexInjections() })
+  await send({ type: 'ready', url, injections: webServer.collectIndexInjections(connection.browserPeer) })
 }
 
 main().catch(async error => {
