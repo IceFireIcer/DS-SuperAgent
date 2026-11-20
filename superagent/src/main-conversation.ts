@@ -6,7 +6,8 @@ import type { NativeSessions, NativeTool } from './native-sessions.js'
 import type { AsyncTx, Storage } from './storage.js'
 import type { RoleProfile } from './config.js'
 import type { ContextRef } from './context.js'
-import type { MainWorkCard, MainWorkHandoff, MainWorkIntent, MainWorkNotification, WorkDelegation } from './work-delegation.js'
+import type { MainWorkCard, MainWorkFollowUpView, MainWorkHandoff, MainWorkIntent,
+  MainWorkNotification, WorkDelegation } from './work-delegation.js'
 import type { MainSourceHandoff, MainSourceView } from './main-source.js'
 import type { ProductAttachments, ProductAttachmentView } from './product-attachments.js'
 import { resolveProductAttachments } from './product-attachments.js'
@@ -20,7 +21,7 @@ export interface MainBinding { instanceId: string; mainId: string; mainSessionId
 interface MainState extends MainBinding { sequence: number; activeCommand?: string }
 export type MainMessageStatus = 'queued' | 'running' | 'stopping' | 'stopped' | 'completed' | 'interrupted' | 'failed'
 export interface MainExternalSource {
-  kind: 'github' | 'feishu' | 'schedule'
+  kind: 'github' | 'feishu' | 'im' | 'schedule'
   sourceInstanceId: string
   eventId: string
   objectId: string
@@ -63,6 +64,7 @@ interface MainCommand {
   assets?: EnvironmentAssetReference[]
   attachmentIds?: string[]
   clientId?: string
+  followUpReceipt?: MainWorkFollowUpView
   status: MainMessage['status']
   replySequence?: number
   attempts?: number
@@ -126,7 +128,15 @@ export interface MainHealth {
   errorCode?: string
 }
 export interface MainAddress { instanceId: string }
-export interface MainSend extends MainAddress { commandId: string; text: string; environmentId?: string; target?: ExecutionTarget; clientId?: string; attachments?: string[] }
+export interface MainSend extends MainAddress {
+  commandId: string
+  text: string
+  environmentId?: string
+  target?: ExecutionTarget
+  clientId?: string
+  attachments?: string[]
+  followUp?: { workItemId: string; ticketId: string }
+}
 export interface MainSessionRollover {
   id: string
   mainId: string
@@ -150,7 +160,7 @@ export interface MainPage extends MainBinding {
   sources?: MainSourceView[]
   mainRollover?: MainSessionRollover
 }
-export interface MainRunResult extends MainBinding { messageId: string; status: MainMessage['status'] }
+export interface MainRunResult extends MainBinding { messageId: string; status: MainMessage['status']; followUp?: MainWorkFollowUpView }
 interface MainEvent { type: string; data: { id?: string; message?: { content?: { type: string; text?: string }[] }; reason?: { kind?: string } } }
 const messageKey = (sequence: number) => String(sequence).padStart(16, '0')
 const sourceRecoveryMessageId = (handoffId: string, generation: number, attempt: number) =>
@@ -393,7 +403,20 @@ export class MainConversation {
       throw new CoreError('INVALID_INPUT', 'A Main message target is local-only, remote-only or auto.')
     }
     if (typeof request.text !== 'string' || Buffer.byteLength(request.text) > 32768
-      || !request.text.trim() && !request.attachments?.length) throw new CoreError('INVALID_INPUT', 'Send text or an authorized attachment within the Main message limit.')
+      || !request.text.trim() && !request.attachments?.length) {
+      throw new CoreError('INVALID_INPUT', 'Send text or an authorized attachment within the Main message limit.')
+    }
+    let followUp: MainSend['followUp']
+    if (request.followUp !== undefined) {
+      if (!request.followUp || typeof request.followUp !== 'object' || Array.isArray(request.followUp)
+        || Object.keys(request.followUp).some(key => key !== 'workItemId' && key !== 'ticketId')
+        || !request.text.trim() || request.attachments !== undefined || request.environmentId !== undefined || request.target !== undefined) {
+        throw new CoreError('INVALID_INPUT', 'A Main follow-up needs text and one accepted work item and Ticket, without a new execution target.')
+      }
+      identifier(request.followUp.workItemId, 'workItemId')
+      identifier(request.followUp.ticketId, 'ticketId')
+      followUp = { workItemId: request.followUp.workItemId, ticketId: request.followUp.ticketId }
+    }
     if (request.attachments !== undefined && (!Array.isArray(request.attachments) || request.attachments.length > 10
       || request.attachments.some(id => typeof id !== 'string'))) throw new CoreError('INVALID_INPUT', 'Choose at most ten attachment references.')
     const binding = await this.open(request)
@@ -403,17 +426,18 @@ export class MainConversation {
     const fingerprint = createHash('sha256').update(canonicalJson([request.instanceId, request.text, request.attachments ?? [],
       ...(request.environmentId === undefined ? [] : [request.environmentId]),
       ...(request.target === undefined ? [] : [request.target]),
-      ...(request.clientId === undefined ? [] : [request.clientId])])).digest('hex')
-    await commandTransaction(this.storage, this.instanceId, async tx => {
+      ...(request.clientId === undefined ? [] : [request.clientId]), ...(followUp ? [followUp] : [])])).digest('hex')
+    const admission = await commandTransaction(this.storage, this.instanceId, async tx => {
       const prior = await tx.get<MainCommand>('main-command', key)
       if (prior) {
         if (prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'This Main message identity was already used for different text.')
+        if (prior.followUpReceipt) return { messageId: prior.messageId, receipt: prior.followUpReceipt, replay: true }
         if (prior.status === 'queued' || prior.status === 'running') await this.activeCommand(tx, { ...prior, key })
         else if (prior.status === 'failed' || prior.status === 'interrupted') {
           const { error: _error, ...current } = prior
           await this.updateCommandIn(tx, key, { ...current, status: 'queued', updatedAt: Date.now() })
         }
-        return
+        return { messageId: prior.messageId }
       }
       const state = await this.state(tx)
       const sequence = state.sequence + 1
@@ -430,9 +454,19 @@ export class MainConversation {
       await tx.insert<MainMessage>('main-message', messageKey(sequence), { id: messageId, sequence, role: 'user', text: request.text,
         createdAt: Date.now(), status: 'queued', ...(references ? { attachments: references.views } : {}),
         ...(request.clientId ? { source: { kind: 'client', clientId: request.clientId } as const } : {}) })
+      let receipt: MainWorkFollowUpView | undefined
+      if (followUp) {
+        const work = this.work?.()
+        if (!work) throw new CoreError('DELEGATION_UNAVAILABLE', 'The existing work item cannot accept a follow-up.')
+        receipt = await work.followUp({ commandId: `main-follow-up:${messageId}`, mainId: state.mainId,
+          mainSessionId: state.mainSessionId, mainMessageId: messageId, originalUserText: request.text,
+          workItemId: followUp.workItemId, expectedTicketId: followUp.ticketId, text: request.text },
+        { transaction: tx, messageSequence: sequence })
+      }
       const command: MainCommand = { fingerprint, messageId, userSequence: sequence, status: 'queued', updatedAt: Date.now(),
         environmentId, target,
         ...(content ? { content, assets: references!.assets, attachmentIds: [...request.attachments!] } : {}),
+        ...(receipt ? { followUpReceipt: receipt } : {}),
         ...(request.clientId ? { clientId: request.clientId } : {}) }
       await tx.insert<MainCommand>('main-command', key, command)
       await tx.insert('main-message-command', messageId, { commandKey: key })
@@ -440,7 +474,12 @@ export class MainConversation {
       const health = await this.healthHead(tx)
       await this.saveHealthHead(tx, { ...health, queuedInputs: health.queuedInputs + 1, lastStatus: 'queued', updatedAt: Date.now() })
       await tx.replace('main-state', 'main', { ...state, sequence })
+      return { messageId, receipt }
     })
+    if (admission.receipt) {
+      if (!admission.replay) void this.enqueue(binding, key, request.text).catch(() => {})
+      return { ...binding, messageId: admission.messageId, status: 'queued' as const, followUp: admission.receipt }
+    }
     return this.enqueue(binding, key, request.text)
   }
 
@@ -574,7 +613,7 @@ export class MainConversation {
         ...(command.clientId ? { clientId: command.clientId } : {}),
         environmentId: command.environmentId ?? '', ids: command.attachmentIds! }))
     }
-    return [
+    const tools: NativeTool[] = [
       ...this.memoryTools(binding),
       { name: 'delegate_work', description: 'Create one durable WorkBrief for one to four independent items on the execution target selected by the user. Give every item a clear goal, strict constraints and observable acceptance criteria. When attachments are present, assign their exact IDs to each item with attachmentIds; an item without attachments uses an empty array. Set capabilities to browser, mcp or office when the request requires one. The Router cannot expand these grants. The Router decides and establishes the Tickets; this tool does not mean any Worker started or completed.'
           + (command.attachmentIds?.length ? ` Available attachments: ${JSON.stringify(command.attachmentIds.map((id, index) => ({ id, name: command.assets?.[index]?.name ?? '' })))}.` : ''),
@@ -687,6 +726,7 @@ export class MainConversation {
           }))
         } },
     ]
+    return command.followUpReceipt ? tools.filter(tool => tool.name !== 'delegate_work' && tool.name !== 'follow_up_work') : tools
   }
 
   private async sourceAttachments(tx: AsyncTx, handoff: MainSourceHandoff) {
@@ -780,7 +820,8 @@ export class MainConversation {
         await tx.insert<MainMessage>('main-message', messageKey(sequence), { id: messageId, sequence, role: 'user', text: handoff.text,
           createdAt: Date.now(), status: 'running', ...(admitted ? { attachments: admitted.views } : {}),
           source: { kind: handoff.sourceInstanceId.startsWith('schedule:') ? 'schedule'
-            : handoff.sourceInstanceId.startsWith('feishu:') ? 'feishu' : 'github', sourceInstanceId: handoff.sourceInstanceId,
+            : handoff.sourceInstanceId.startsWith('feishu:') ? 'feishu'
+              : handoff.sourceInstanceId === 'im' ? 'im' : 'github', sourceInstanceId: handoff.sourceInstanceId,
             eventId: handoff.sourceEventId, objectId: handoff.objectId, threadId: handoff.threadId, authorId: handoff.authorId, reference: handoff.reference } })
         await tx.replace('main-state', 'main', { ...state, sequence })
         const command: MainSourceCommand = { state: 'running', handoffId: handoff.id, messageId, turnMessageId: messageId, userSequence: sequence,
@@ -859,9 +900,10 @@ export class MainConversation {
         const configured = await this.prepare?.(binding.mainSessionId)
         const sourceContent = !persistedTurn.found ? await this.storage.transaction(this.instanceId, tx => this.sourceAttachments(tx, handoff)) : undefined
         const prompt = `[${handoff.sourceInstanceId.startsWith('schedule:') ? 'Scheduled occurrence'
-          : `${handoff.sourceInstanceId.startsWith('feishu:') ? 'Feishu' : 'GitHub'} request`}${prepared.attempt > 1 ? ' recovery' : ''}]\nThis is one authorized source handoff, not a private transcript. ${prepared.attempt > 1
+          : handoff.sourceInstanceId === 'im' ? 'IM message'
+            : `${handoff.sourceInstanceId.startsWith('feishu:') ? 'Feishu' : 'GitHub'} request`}${prepared.attempt > 1 ? ' recovery' : ''}]\nThis is one authorized source handoff, not a private transcript. ${prepared.attempt > 1
             ? 'The previous Main turn ended without a reply. Continue the same durable request and produce one safe reply; do not repeat completed side effects. '
-            : 'When the request is actionable, use delegate_work and preserve the source reference. If no work is justified, give a brief answer to this requester only, suitable for the original Feishu thread. Do not include private Main context or other discussions.'}\n${JSON.stringify({
+            : `When the request is actionable, use delegate_work and preserve the source reference. If no work is justified, give a brief answer to this requester only, suitable for the original ${handoff.sourceInstanceId === 'im' ? 'IM chat' : 'source thread'}. Do not include private Main context or other discussions.`}\n${JSON.stringify({
               sourceEventId: handoff.sourceEventId, sourceInstanceId: handoff.sourceInstanceId, threadId: handoff.threadId, objectId: handoff.objectId,
               mainSessionGeneration: prepared.sessionGeneration,
               authorId: handoff.authorId, reference: handoff.reference, text: handoff.text,
@@ -900,7 +942,8 @@ export class MainConversation {
           const { lastError: _error, ...settled } = current
           await tx.replace('main-source-handoff', handoff.id,
             { ...settled, state: current.state === 'delegated' ? 'delegated' : 'presented', mainMessageId: prepared.messageId, updatedAt: Date.now() })
-          if (current.sourceInstanceId.startsWith('feishu:') && current.state !== 'delegated' && !current.workBriefId && this.enqueueEffect) {
+          if ((current.sourceInstanceId.startsWith('feishu:') || current.sourceInstanceId === 'im')
+            && current.state !== 'delegated' && !current.workBriefId && this.enqueueEffect) {
             const replyId = `main-source-reply:${handoff.id}`
             const effect = await this.enqueueEffect(tx, { key: replyId, stream: 'outbox', scope: `main:${binding.mainId}`,
               payload: { type: 'main-source-reply', replyId } })

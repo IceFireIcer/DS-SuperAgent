@@ -218,6 +218,7 @@ export interface MainWorkFollowUpRequest {
   mainMessageId: string
   originalUserText: string
   workItemId: string
+  expectedTicketId?: string
   text: string
   reason?: string
 }
@@ -1185,15 +1186,15 @@ export class WorkDelegation {
       cursor = page.cursor
       if (pageCount === 9) throw new CoreError('WORK_LIST_BUDGET', 'The Main work list exceeds its 1000-record read budget.')
     }
-    const recent = briefs.sort((left, right) => right.createdAt - left.createdAt).slice(0, 20)
-    const sources = await Promise.all(recent.map(async brief => {
+    // The Work view aggregates every item within the bounded 1000-brief read budget.
+    const all = briefs.sort((left, right) => right.createdAt - left.createdAt)
+    const sources = await Promise.all(all.map(async brief => {
       const split = await this.readSplit(brief.id)
       return split?.items.map(item => ({ brief, item })) ?? [{ brief, item: this.legacyItem(brief) }]
     }))
     const cards = await Promise.all(sources.flat().map(({ brief, item }) => this.card(brief, item)))
     return cards.filter((card): card is MainWorkCard => !!card)
       .sort((left, right) => left.brief.createdAt - right.brief.createdAt || left.brief.position - right.brief.position)
-      .slice(-20)
   }
 
   async handoff(mainId: string): Promise<MainWorkHandoff> {
@@ -1339,9 +1340,10 @@ export class WorkDelegation {
     return this.card(brief, this.legacyItem(brief))
   }
 
-  async followUp(request: MainWorkFollowUpRequest): Promise<MainWorkFollowUpView> {
+  async followUp(request: MainWorkFollowUpRequest,
+    admitted?: { transaction: AsyncTx; messageSequence: number }): Promise<MainWorkFollowUpView> {
     if (!request || Object.keys(request).some(key => !['commandId', 'mainId', 'mainSessionId', 'mainMessageId',
-      'originalUserText', 'workItemId', 'text', 'reason'].includes(key))) {
+      'originalUserText', 'workItemId', 'expectedTicketId', 'text', 'reason'].includes(key))) {
       throw new CoreError('INVALID_INPUT', 'A Main follow-up accepts only its source and one exact work item.')
     }
     identifier(request.commandId, 'commandId')
@@ -1349,6 +1351,7 @@ export class WorkDelegation {
     identifier(request.mainSessionId, 'mainSessionId')
     identifier(request.mainMessageId, 'mainMessageId')
     identifier(request.workItemId, 'workItemId')
+    if (request.expectedTicketId !== undefined) identifier(request.expectedTicketId, 'expectedTicketId')
     if (!this.options.source.allowedActorIds.includes(this.options.source.actorId)) {
       throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This actor cannot follow up Main work.')
     }
@@ -1357,8 +1360,9 @@ export class WorkDelegation {
     const reason = request.reason === undefined ? 'The user explicitly directed this work item from its Main conversation.'
       : boundedText(request.reason, 'The Main follow-up reason', 2048)
     const key = commandKey(this.options.source, request.commandId)
-    return commandTransaction(this.options.storage, this.options.instanceId, async transaction => {
-      await this.verifyFollowUpSource(transaction, request, originalUserText)
+    const apply = async (transaction: AsyncTx) => {
+      if (transaction.instanceId !== this.options.instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The follow-up belongs to another Instance.')
+      await this.verifyFollowUpSource(transaction, request, originalUserText, admitted?.messageSequence)
       const { item, brief, ticketId } = await this.followUpTarget(transaction, request)
       const fingerprint = this.followUpFingerprint(request, originalUserText, item, ticketId, text, reason)
       const prior = await transaction.get<{ fingerprint: string; followUpId: string }>('work-follow-up-command', key)
@@ -1382,7 +1386,8 @@ export class WorkDelegation {
       await transaction.insert('work-follow-up', followUpKey(item.id, record.id), record)
       await transaction.insert('work-follow-up-command', key, { fingerprint, followUpId: record.id })
       return this.followUpView(transaction, record)
-    })
+    }
+    return admitted ? apply(admitted.transaction) : commandTransaction(this.options.storage, this.options.instanceId, apply)
   }
 
   async recordAttentionAnswer(event: { ticketId: string; attentionId: string; attentionVersion: number;
@@ -1441,22 +1446,25 @@ export class WorkDelegation {
     return fact
   }
 
-  private async verifyFollowUpSource(transaction: AsyncTx, request: MainWorkFollowUpRequest, originalUserText: string) {
+  private async verifyFollowUpSource(transaction: AsyncTx, request: MainWorkFollowUpRequest, originalUserText: string,
+    messageSequence?: number) {
     const mainState = await transaction.get<{ mainId: string; mainSessionId: string }>('main-state', 'main')
     if (mainState?.mainId !== request.mainId || mainState.mainSessionId !== request.mainSessionId) {
       throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The Main follow-up source does not belong to the current Main conversation.')
     }
-    let sourceMessage: { role: 'user' | 'main'; text: string } | undefined
+    type SourceMessage = { id: string; role: 'user' | 'main'; text: string }
+    let sourceMessage = messageSequence === undefined ? undefined : await transaction.get<SourceMessage>(
+      'main-message', String(messageSequence).padStart(16, '0'))
     let cursor: string | undefined
-    for (let pageCount = 0; pageCount < 10; pageCount++) {
-      const page = await transaction.scan<{ id: string; role: 'user' | 'main'; text: string }>('main-message',
+    for (let pageCount = 0; messageSequence === undefined && pageCount < 10; pageCount++) {
+      const page = await transaction.scan<SourceMessage>('main-message',
         { limit: 100, ...(cursor === undefined ? {} : { after: cursor }) })
       sourceMessage = page.items.find(entry => entry.value.id === request.mainMessageId)?.value
       if (sourceMessage || !page.cursor) break
       cursor = page.cursor
       if (pageCount === 9) throw new CoreError('MAIN_HISTORY_BUDGET', 'The Main follow-up source scan exceeded its 1000-message budget.')
     }
-    if (!sourceMessage || sourceMessage.role !== 'user' || sourceMessage.text.trim() !== originalUserText) {
+    if (sourceMessage?.id !== request.mainMessageId || sourceMessage.role !== 'user' || sourceMessage.text.trim() !== originalUserText) {
       throw new CoreError('SOURCE_NOT_AUTHORIZED', 'A Main follow-up must cite the exact current Main user message.')
     }
   }
@@ -1473,6 +1481,9 @@ export class WorkDelegation {
     const ticketId = receipt?.status === 'accepted' ? receipt.ticketId ?? ticketIndex?.ticketId : undefined
     if (!receipt || receipt.status !== 'accepted' || !ticketId) {
       throw new CoreError('WORK_NOT_ACCEPTED', 'Only accepted, established work can receive a Main follow-up.')
+    }
+    if (request.expectedTicketId !== undefined && request.expectedTicketId !== ticketId) {
+      throw new CoreError('TICKET_VERSION_CONFLICT', 'The accepted Ticket changed before the follow-up was saved.')
     }
     return { item, brief, ticketId }
   }

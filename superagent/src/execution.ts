@@ -29,13 +29,16 @@ import { assertHostTakeoverSettled, hostTakeoverKey, isHostTakeoverPending, load
 import { assertReferenceShape, type EnvironmentAssetReference } from './environment-assets.js'
 import { mainResultReply, type MainWorkBrief, type MainWorkItem } from './work-delegation.js'
 import { resolveProductAttachments } from './product-attachments.js'
-import { workerMcpName, workerMcpTool, type WorkerMcpBinding } from './worker-mcp-tool.js'
+import { workerMcpName, workerMcpTool, type WorkerMcpBinding, type WorkerMcpConfig } from './worker-mcp-tool.js'
 import { WorkerMcpCalls, mcpBlockIn, mcpCallPageIn } from './worker-mcp-calls.js'
+import type { CredentialUse } from './resource-credentials.js'
+import type { ProductCapabilityWorkerMcpBinding, ProductCapabilityWorkerMcpProvider } from './product-capabilities.js'
 import { BrowserOutcomeUnknown, BrowserResources, type BrowserWork } from './browser-resources.js'
 import { parseInteractiveView, parseReportView, sanitizeProductView, type ProductViewCard } from './product-views.js'
 
 const maxRecoveryAttempts = 3
 const maxDeliveryAttempts = 5
+const maxWorkerCapabilityMcpTools = 8
 
 /**
  * The completed job reaches its own Worker as a fact, with the confirmed exit and the bounded retained
@@ -190,6 +193,7 @@ export class Execution {
   private readonly executionPolicy: ExecutionPolicyStore
   private readonly mcpCalls: WorkerMcpCalls
   private workerMcp: WorkerMcpBinding | undefined
+  private workerCapabilities: ProductCapabilityWorkerMcpProvider | undefined
   private browser: BrowserResources | undefined
   constructor(private readonly storage: Storage, private readonly instanceId: string, private readonly effects: Effects, private readonly sessions: NativeSessions,
     private readonly inputs: WorkInputs, private readonly attentions: Attentions, private readonly sourceEvents: SourceEvents,
@@ -313,6 +317,14 @@ export class Execution {
     if (this.workerMcp) throw new CoreError('INVALID_CONFIG', 'The approved MCP tool is already configured.')
     workerMcpName(binding.config)
     this.workerMcp = binding
+  }
+
+  configureWorkerCapabilities(provider: ProductCapabilityWorkerMcpProvider) {
+    if (this.workerCapabilities) throw new CoreError('INVALID_CONFIG', 'Worker capabilities are already configured.')
+    if (typeof provider?.workerMcpBindings !== 'function' || typeof provider?.skillInstructions !== 'function') {
+      throw new CoreError('INVALID_CONFIG', 'The Worker capability provider must resolve MCP bindings and scoped skill instructions.')
+    }
+    this.workerCapabilities = provider
   }
 
   configureWorkerBrowser(browser: BrowserResources) {
@@ -959,8 +971,22 @@ export class Execution {
       instructions: [worker.instructions, botProfile.instructions].filter(text => text.trim()).join('\n\n'),
       skills: [...worker.skills, ...botProfile.skills.filter(skill => !worker.skills.includes(skill))],
     } } } : activeConfig
+    const workItem = await this.storage.transaction(this.instanceId,
+      transaction => transaction.get<{ workItemId: string }>('work-ticket', ticketId))
+    const capabilitySkills = this.workerCapabilities && workItem?.workItemId && assignment.environment
+      ? await this.workerCapabilities.skillInstructions({ instanceId: this.instanceId, scope: {
+        role: 'worker', workItemId: workItem.workItemId, environmentId: assignment.environment.id,
+      } })
+      : []
+    const workerConfiguration = capabilitySkills.length ? {
+      ...configuration,
+      roles: { ...configuration.roles, worker: { ...configuration.roles.worker,
+        instructions: [configuration.roles.worker.instructions, 'Bound capability skill instructions:', ...capabilitySkills]
+          .filter(Boolean).join('\n\n') } },
+    } : configuration
     try {
-      return await this.runTurn({ ticketId, assignment, trigger, environment, input, cause, status, job, subagent, configuration })
+      return await this.runTurn({ ticketId, assignment, trigger, environment, input, cause, status, job, subagent,
+        configuration: workerConfiguration })
     } catch (error) {
       await this.releaseSlot(ticketId, assignment.id)
       throw error
@@ -1216,7 +1242,8 @@ export class Execution {
       ...(allowed.has('read') && assets?.skills ? [listSkillsTool] : []),
       ...(commandNames.length ? [commandTool] : []),
     ] : []
-    const workScope = (this.workerMcp || this.browser) && bound && environment?.kind === 'local' && assignment.environment ? async (): Promise<BrowserWork> => {
+    const workScope = (this.workerMcp || this.workerCapabilities || this.browser) && bound
+      && environment?.kind === 'local' && assignment.environment ? async (): Promise<BrowserWork> => {
       if (reported || askedAttention) throw new CoreError('REPORT_SEALED', 'Tools are sealed after the report or a human question.')
       if (controller.signal.aborted) throw new CoreError('TICKET_BLOCKED', 'The Worker turn was stopped.')
       return this.storage.transaction(this.instanceId, async tx => {
@@ -1238,28 +1265,61 @@ export class Execution {
           generation: current.generation, environmentId: current.environment!.id }
       })
     } : undefined
-    const mcpScope = this.workerMcp && workScope ? async () => {
+    const mcpScopeFor = (config: WorkerMcpConfig) => workScope ? async (): Promise<CredentialUse> => {
       const work = await workScope()
-      return { instanceId: work.instanceId, resourceId: this.workerMcp!.config.resourceId,
+      return { instanceId: work.instanceId, resourceId: config.resourceId,
         role: 'worker' as const, purpose: 'tool' as const, workItemId: work.workItemId, environmentId: work.environmentId }
     } : undefined
-    const mcpTools: NativeTool[] = mcpScope ? (() => {
+    const capabilityMcp: ProductCapabilityWorkerMcpBinding[] = this.workerCapabilities && workScope
+      ? await (async () => {
+        const work = await workScope()
+        const bindings = await this.workerCapabilities!.workerMcpBindings({ instanceId: this.instanceId,
+          scope: { role: 'worker', workItemId: work.workItemId, environmentId: work.environmentId } })
+        if (bindings.length > maxWorkerCapabilityMcpTools) {
+          throw new CoreError('CAPABILITY_BUDGET',
+            `At most ${maxWorkerCapabilityMcpTools} capability MCP tools can run in one Worker turn.`)
+        }
+        return bindings
+      })()
+      : []
+    const mcpBindings: { binding: WorkerMcpBinding; capabilityId?: string }[] = [
+      ...(this.workerMcp ? [{ binding: this.workerMcp }] : []),
+      ...capabilityMcp.map(capability => ({
+        capabilityId: capability.capabilityId,
+        binding: { config: { ...capability.config },
+          credentials: { use: <T>(request: CredentialUse, consume: (secret: string) => Promise<T>) =>
+            capability.use(request, consume) } },
+      })),
+    ]
+    const mcpNames = new Set<string>()
+    for (const { binding } of mcpBindings) {
+      const name = workerMcpName(binding.config)
+      if (mcpNames.has(name)) throw new CoreError('CAPABILITY_TOOL_CONFLICT', `More than one Worker MCP tool defines ${name}.`)
+      mcpNames.add(name)
+    }
+    const makeMcpTool = (binding: WorkerMcpBinding,
+      record: (outcome: 'success' | 'failed', output: Record<string, unknown>) => void) => {
+      const mcpScope = mcpScopeFor(binding.config)
+      if (!mcpScope) return undefined
       const dispatch = {
-        begin: (use: import('./resource-credentials.js').CredentialUse, args: Record<string, unknown>) =>
-          this.mcpCalls.begin(ticketId, assignment, use, this.workerMcp!.config, args),
+        begin: (use: CredentialUse, args: Record<string, unknown>) =>
+          this.mcpCalls.begin(ticketId, assignment, use, binding.config, args),
         confirm: (call: import('./worker-mcp-calls.js').WorkerMcpCall, result: 'success' | 'failed', code?: string) =>
           this.mcpCalls.confirm(call, result, code),
         recordNotDispatched: (code: string) =>
-          this.mcpCalls.recordNotDispatched(ticketId, assignment, this.workerMcp!.config, code),
+          this.mcpCalls.recordNotDispatched(ticketId, assignment, binding.config, code),
       }
-      const tool = workerMcpTool(this.workerMcp!, mcpScope, (outcome, output) => {
-        toolFacts.push({ tool: workerMcpName(this.workerMcp!.config), outcome, output })
-      }, dispatch)
-      return [{ ...tool, execute: async (args, signal) => {
+      return workerMcpTool(binding, mcpScope, record, dispatch)
+    }
+    const mcpTools: NativeTool[] = mcpBindings.flatMap(({ binding }) => {
+      const tool = makeMcpTool(binding, (outcome, output) => {
+        toolFacts.push({ tool: workerMcpName(binding.config), outcome, output })
+      })
+      return tool ? [{ ...tool, execute: async (args, signal) => {
         if (toolFacts.length >= 24) throw new CoreError('TOOL_BUDGET', 'The Worker tool-call budget was exhausted.')
         return tool.execute(args, signal)
-      } }]
-    })() : []
+      } }] : []
+    })
     const browserTools: NativeTool[] = this.browser && workScope ? [{
       name: 'browser_resources', description: 'List browser resources explicitly granted to this Worker work item and their lease status.',
       parameters: {}, execute: async () => JSON.stringify(await this.browser!.forWorker(await workScope())),
@@ -1297,11 +1357,10 @@ export class Execution {
         if (tool.name === 'save_attachment') await recordSavedAsset(output)
         return JSON.stringify(output)
       },
-    })), ...(mcpScope ? [workerMcpTool(this.workerMcp!, mcpScope, () => {}, {
-      begin: (use, args) => this.mcpCalls.begin(ticketId, assignment, use, this.workerMcp!.config, args),
-      confirm: (call, result, code) => this.mcpCalls.confirm(call, result, code),
-      recordNotDispatched: code => this.mcpCalls.recordNotDispatched(ticketId, assignment, this.workerMcp!.config, code),
-    })] : []),
+    })), ...mcpBindings.flatMap(({ binding }) => {
+      const tool = makeMcpTool(binding, () => {})
+      return tool ? [tool] : []
+    }),
     ...(this.browser && workScope ? [{ name: 'browser_resources', description: browserTools[0]!.description,
       parameters: {}, execute: async () => JSON.stringify(await this.browser!.forWorker(await workScope())) },
     { name: 'browser_use', description: browserTools[1]!.description, parameters: browserTools[1]!.parameters,

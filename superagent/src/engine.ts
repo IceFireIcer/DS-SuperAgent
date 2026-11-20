@@ -30,6 +30,8 @@ import { ProductCredentialImports, type CredentialImportAdapter } from './produc
 import type { WorkerMcpBinding } from './worker-mcp-tool.js'
 import { ProductMcpConfiguration } from './product-mcp-configuration.js'
 import type { WorkerMcpConfig } from './worker-mcp-tool.js'
+import { createProductCapabilities, type ProductCapabilityCredentialConsumer,
+  type ProductCapabilityWorkerMcpProvider } from './product-capabilities.js'
 import { BrowserResources, type BrowserAdapter, type BrowserImportPreview } from './browser-resources.js'
 import type { ProductCredentialRecords } from './product-credential-vault.js'
 import type { ProductAttachments } from './product-attachments.js'
@@ -98,6 +100,7 @@ export class Engine {
   private readonly deliveryState: DeliveryState
   private browserResources: BrowserResources | undefined
   private productCredentialManager: ProductCredentialManager | undefined
+  private productCapabilities: ReturnType<typeof createProductCapabilities> | undefined
   private readonly proactive: Proactive | undefined
   private readonly membership: SourceMembership
   private roleConfigRevision = 1
@@ -248,7 +251,12 @@ export class Engine {
       if (!config.roles.main) throw new CoreError('ROLE_NOT_CONFIGURED', 'Main needs its own role profile.')
       await storage.transaction(instanceId, tx => this.roleConfig.recordUse(tx, { sessionId, role: 'main', revision: config.revision,
         main: config.roles.main!.model, router: config.roles.router.model, worker: config.roles.worker.model }))
-      return { profile: structuredClone(config.roles.main), revision: config.revision }
+      const profile = structuredClone(config.roles.main)
+      const skills = await this.productCapabilities?.skillInstructions({ instanceId,
+        scope: { role: 'main' } }) ?? []
+      if (skills.length) profile.instructions = [profile.instructions, 'Bound capability skill instructions:', ...skills]
+        .filter(Boolean).join('\n\n')
+      return { profile, revision: config.revision }
     }, () => this.environments.some(candidate => candidate.kind === 'local' && candidate.config.instanceId === instanceId
       && candidate.config.allowedActorIds.includes(source.actorId) && candidate.config.permissions.includes('read')
       && candidate.config.permissions.includes('write')) ? this.workDelegation : undefined,
@@ -487,7 +495,12 @@ export class Engine {
             control }
         },
         routerProfile: async () => {
-          return this.roleConfig.currentView()
+          const config = await this.roleConfig.currentView()
+          const skills = await this.productCapabilities?.skillInstructions({ instanceId, scope: { role: 'router' } }) ?? []
+          if (!skills.length) return config
+          return { ...config, roles: { ...config.roles, router: { ...config.roles.router,
+            instructions: [config.roles.router.instructions, 'Bound capability skill instructions:', ...skills]
+              .filter(Boolean).join('\n\n') } } }
         },
         recordRouterUse: async (sessionId, config) => {
           await storage.transaction(instanceId, tx => this.roleConfig.recordUse(tx, { sessionId, role: 'router', revision: config.revision,
@@ -1577,7 +1590,7 @@ export class Engine {
     return (await loadHostTakeover(transaction, this.instanceId, epoch))?.state === 'pending'
   }
 
-  private async assertHostAdmission() {
+  async assertHostAdmission() {
     await this.storage.transaction(this.instanceId, transaction => this.assertHostAdmissionIn(transaction))
   }
 
@@ -1773,6 +1786,27 @@ export class Engine {
     }
     this.assertAuthoringActor()
     return new ProductMcpConfiguration(this.storage, this.instanceId, config, tx => this.assertHostAdmissionIn(tx))
+  }
+
+  /** Host-only capability library. Runtime execution is configured separately. */
+  createProductCapabilities(credentials: ProductCapabilityCredentialConsumer) {
+    if ((this.source.kind ?? 'desktop') !== 'desktop' || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Only an authorized product actor can manage capabilities.')
+    }
+    this.assertAuthoringActor()
+    this.productCapabilities ??= createProductCapabilities({
+      storage: this.storage,
+      instanceId: this.instanceId,
+      authorize: tx => this.assertHostAdmissionIn(tx),
+      credentials,
+    })
+    return this.productCapabilities
+  }
+
+  /** Host-only Worker MCP provider. Main and Router never receive these tools. */
+  configureWorkerCapabilities(provider: ProductCapabilityWorkerMcpProvider) {
+    if (!this.execution) throw new CoreError('UNAVAILABLE', 'Worker Sessions are not configured.')
+    this.execution.configureWorkerCapabilities(provider)
   }
 
   /** Host-only configuration of one approved Worker tool; never part of the model command surface. */

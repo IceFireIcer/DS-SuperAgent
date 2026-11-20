@@ -37,6 +37,26 @@ DS SuperAgent 是面向 [DeepSeek Harness](https://github.com/deepseek-ai/deepse
 首次启动会询问数据目录和工作区，默认分别为 `~/.ds-superagent` 和 `~/DS SuperAgent`，随后打开 Main。
 发送工作前，在设置中配置服务商凭据，并为 Main、Router 和 Worker 选择模型。旧版产品资料和个人 DSH 文件保留在原处。
 
+### 连接器与邮箱
+
+GitHub 和飞书 OAuth 应用属于 Host 配置，不在浏览器设置中填写。启动 Host 前设置：
+
+```text
+DS_SUPERAGENT_GITHUB_OAUTH_CLIENT_ID
+DS_SUPERAGENT_GITHUB_OAUTH_CLIENT_SECRET
+DS_SUPERAGENT_FEISHU_OAUTH_CLIENT_ID
+DS_SUPERAGENT_FEISHU_OAUTH_CLIENT_SECRET
+```
+
+在两个 OAuth 应用中把回调地址准确登记为 `http://127.0.0.1:38517/callback`。回调监听只绑定 `127.0.0.1`；同一台机器
+同一时间只能有一个 Host 使用这个固定端口。应用缺失或不完整时，登录入口保持禁用并返回可读错误；远程客户端只拿到
+不透明的登录 ID 与等待/错误状态，不会收到跳转地址、授权码、PKCE state 或令牌。GitHub 也可使用个人访问令牌，
+Host 会先向 GitHub 验证再写入凭据库。飞书授权使用已有的飞书来源身份；可在连接器页点来源按钮，从飞书状态填入。
+
+邮箱账号通过 IMAP 和 SMTP 使用应用密码或授权码。预设覆盖 QQ、163、126、Gmail 和 iCloud；其他服务商需要明确填写
+服务器地址、端口和 TLS/STARTTLS。凭据只保存在 Host 凭据库，产品 API 不会返回。真实 OAuth 应用与在线邮箱仍需
+独立环境验收；mock 契约测试不能替代。
+
 ## 从当前仓库运行
 
 使用 Node.js 24 系列的 24.9 或更新版本。应用从本仓库安装唯一的 `ds-superagent` 产品包：

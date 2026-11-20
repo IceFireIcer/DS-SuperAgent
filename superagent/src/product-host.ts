@@ -41,6 +41,11 @@ import type { RoleConfig, RoleModel } from './config.js'
 import type { LegacyPresetCopy, PresetRole } from './role-presets.js'
 import { productStatusPublisher, productWatchdogProbe } from './product-watchdog.js'
 import { createProductSupervision } from './product-supervision.js'
+import { CONNECTOR_MAIL_ENDPOINT_FIELDS, connectorMailDispatchContext, createConfiguredHostConnectorMailProducts,
+  type HostConnectorMailOptions, type HostConnectorMailProducts } from './connectors/index.js'
+import { createImHost, IM_ENDPOINT_FIELDS, type ImHost, type ImHostOptions } from './im/index.js'
+import { imHostSourceBinding } from './im/main.js'
+import { dispatchProductCapabilityEndpoint, productCapabilityEndpointFields, type ProductCapabilities } from './product-capabilities.js'
 
 export interface ProductHostConfig { databasePath?: string; postgres?: PostgresOptions; stateRoot?: string;
   hostId?: string; leaseMs?: number; workspaceRoot?: string; instanceId?: string; actorId?: string;
@@ -58,6 +63,8 @@ export interface ProductHostConfig { databasePath?: string; postgres?: PostgresO
   browserAdapter?: BrowserAdapter;
   /** Trusted local App bridge for one-item credential reads from an explicitly selected export. */
   credentialImportAdapter?: CredentialImportAdapter;
+  connectorMail?: Omit<HostConnectorMailOptions, 'instanceId' | 'actorId' | 'context' | 'credentials' | 'storage'>;
+  im?: Omit<ImHostOptions, 'instanceId' | 'credentialRecords'>;
   feishuConfigurationError?: 'INVALID_CONFIG';
   github?: Omit<GitHubRuntimeOptions, 'storage' | 'instanceId'>;
   githubConfigurationError?: 'INVALID_CONFIG' }
@@ -92,6 +99,10 @@ interface DirectoryPicker {
   }>
 }
 type SettingsSection = ReturnType<PublicSettings['describe']>[number]
+
+const extensionFields: Record<string, readonly string[]> = {
+  ...CONNECTOR_MAIL_ENDPOINT_FIELDS, ...IM_ENDPOINT_FIELDS, ...productCapabilityEndpointFields,
+}
 
 const resourceFields: Record<string, string[]> = {
   'resource-list': ['instanceId', 'after', 'limit'], 'resource-read': ['instanceId', 'resourceId'],
@@ -230,6 +241,11 @@ export async function createProductHost(context: Context, config: ProductHostCon
   let feishuEngine: Engine | undefined
   let githubRuntime: GitHubRuntime | undefined
   let githubEngine: Engine | undefined
+  let imHost: ImHost | undefined
+  let imStart: ReturnType<ImHost['start']> | undefined
+  let imEngine: Engine | undefined
+  let connectorMail: HostConnectorMailProducts | undefined
+  let capabilityLibrary: ProductCapabilities | undefined
   let workRouter: ProactiveWork | undefined
   let feishuLegacyConflict = false
   let feishuSelectionActive = false
@@ -423,8 +439,10 @@ export async function createProductHost(context: Context, config: ProductHostCon
     if (statusTimer) clearInterval(statusTimer)
     engine?.abortProactiveRuns(); feishuEngine?.abortProactiveRuns(); githubEngine?.abortProactiveRuns()
     const failures: unknown[] = []
-    for (const close of [() => supervision?.close(), () => statusPublisher?.close(), () => gateway?.close(), () => feishuRuntime?.stop(), () => githubRuntime?.stop(), () => engine?.effects.stop(),
-      () => feishuEngine?.effects.stop(), () => githubEngine?.effects.stop(), () => engine?.shutdown(), () => feishuEngine?.shutdown(), () => githubEngine?.shutdown(),
+    for (const close of [() => supervision?.close(), () => statusPublisher?.close(), () => gateway?.close(),
+      () => connectorMail?.close(), () => imHost?.close(), () => feishuRuntime?.stop(), () => githubRuntime?.stop(),
+      () => imEngine?.effects.stop(), () => engine?.effects.stop(), () => feishuEngine?.effects.stop(), () => githubEngine?.effects.stop(),
+      () => imEngine?.shutdown(), () => engine?.shutdown(), () => feishuEngine?.shutdown(), () => githubEngine?.shutdown(),
       () => engine?.closeBrowserResources(), () => workRouter?.close(), () => sessions.close(),
       ...environments.map(environment => () => environment.close()), () => storage.close()]) {
       try { await close() } catch (error) { failures.push(error) }
@@ -541,6 +559,15 @@ export async function createProductHost(context: Context, config: ProductHostCon
         { claimUnowned: false, streamOwners: { notice: 'product-desktop', relay: 'product-desktop' } }, sessions, [], {}, {}, {}, {}, {}, proactive)
       githubRuntime.bind(githubEngine)
     }
+    const records = remoteSecrets ? credentialRecords as ProductCredentialRecords : undefined
+    if (records) {
+      imHost = createImHost({ ...config.im, instanceId, credentialRecords: records })
+      imEngine = new Engine(storage, instanceId, imHostSourceBinding(),
+        { claimUnowned: false, streamOwners: { notice: 'product-desktop', relay: 'product-desktop' } },
+        sessions, [], {}, {}, {}, { channel: imHost.deliveryChannel },
+        { ...(config.hostId ? { hostId: config.hostId } : {}), ...(config.leaseMs === undefined ? {} : { leaseMs: config.leaseMs }) })
+      imHost.bindEngine(imEngine)
+    }
     type ProductDeliveryChannel = DeliveryChannel & {
       deliverSourceReply?: (reply: FeishuSourceReply, context: Parameters<DeliveryChannel['deliver']>[1]) => ReturnType<DeliveryChannel['deliver']>
       reconcileSourceReply?: (reply: FeishuSourceReply, context: Parameters<DeliveryChannel['deliver']>[1]) => ReturnType<DeliveryChannel['deliver']>
@@ -548,6 +575,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
     const channelFor = (sourceInstanceId: string): DeliveryChannel | undefined => {
       if (sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId) return feishuRuntime.channel
       if (sourceInstanceId === githubRuntime?.sourceBinding.sourceInstanceId) return githubDelivery
+      if (sourceInstanceId === 'im') return imHost?.deliveryChannel
       if (sourceInstanceId === 'product-desktop') return localDeliveryChannel
     }
     const channel: ProductDeliveryChannel = {
@@ -560,25 +588,31 @@ export async function createProductHost(context: Context, config: ProductHostCon
       },
       deliverSourceReply: (reply, context) => reply.destination.sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId
         ? feishuRuntime!.channel.deliverSourceReply(reply, context)
+        : reply.destination.sourceInstanceId === 'im' && imHost
+          ? imHost.deliveryChannel.deliverSourceReply(reply, context)
         : Promise.resolve({ type: 'unknown', reason: 'DESTINATION_SOURCE_DISABLED' }),
       reconcileSourceReply: (reply, context) => reply.destination.sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId
         ? feishuRuntime!.channel.reconcileSourceReply(reply, context)
+        : reply.destination.sourceInstanceId === 'im' && imHost
+          ? imHost.deliveryChannel.reconcileSourceReply(reply, context)
         : Promise.resolve({ type: 'unknown', reason: 'DESTINATION_SOURCE_DISABLED' }),
     }
     engine = new Engine(storage, instanceId, { sourceInstanceId: 'product-desktop', actorId, allowedActorIds: [actorId],
-      ...(config.workerMcpTool || browserAdapter ? { hostCapabilities: {
-        ...(config.workerMcpTool ? { mcp: true } : {}), ...(browserAdapter ? { browser: true } : {}),
+      ...(config.workerMcpTool || records || browserAdapter ? { hostCapabilities: {
+        ...(config.workerMcpTool || records ? { mcp: true } : {}), ...(browserAdapter ? { browser: true } : {}),
       } } : {}) }, {}, sessions,
       environments, {}, {}, {}, { channel },
       { ...(config.hostId === undefined ? {} : { hostId: config.hostId }),
         ...(config.leaseMs === undefined ? {} : { leaseMs: config.leaseMs }) }, proactive, attachments)
     await engine.acquireHost({ initializeMain: true })
     workRouter = new ProactiveWork(storage, instanceId, engine, sessions, actorId)
-    const records = credentialRecords as ProductCredentialRecords | undefined
-    if (records && typeof records.readRecord === 'function' && typeof records.modifyRecord === 'function'
-      && typeof records.deleteRecord === 'function') {
+    if (records) {
       resourceManager = engine.createProductCredentialManager(records)
       if (credentialImportAdapter) credentialImportManager = engine.createProductCredentialImports(records, credentialImportAdapter)
+      connectorMail = await createConfiguredHostConnectorMailProducts({ ...config.connectorMail, instanceId, actorId,
+        context: { credentials: records }, credentials: resourceManager })
+      capabilityLibrary = engine.createProductCapabilities(resourceManager)
+      engine.configureWorkerCapabilities(capabilityLibrary)
     }
     if (config.workerMcpTool) {
       if (!resourceManager) throw new CoreError('UNAVAILABLE', 'The approved MCP tool requires a durable DSH record service.')
@@ -642,6 +676,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
     if (githubRuntime) void githubRuntime.start().catch(() => {
       /* Source health reports setup failures; the Host and other sources stay available. */
     })
+    imStart = imHost?.start()
+    void imStart?.catch(() => {})
     void engine.resumeMainInputs({ instanceId }).catch(() => { /* The persisted input and failed health remain visible for retry. */ })
     const clients = engine.createClientAccess()
     const product: ProductHost = {
@@ -655,7 +691,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
           return { ...binding, mainSessionMode: await sessions.mainSessionMode(binding.mainSessionId) }
         }
         if (payload.instanceId !== instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This request is outside the authorized Instance.')
-        const fields = statusFields[endpoint] ?? memoryFields[endpoint] ?? resourceFields[endpoint] ?? credentialImportFields[endpoint] ?? browserFields[endpoint]
+        const fields = (Object.hasOwn(extensionFields, endpoint) ? extensionFields[endpoint] : undefined)
+          ?? statusFields[endpoint] ?? memoryFields[endpoint] ?? resourceFields[endpoint] ?? credentialImportFields[endpoint] ?? browserFields[endpoint]
           ?? (endpoint === 'proactive-rules' || endpoint === 'proactive-control' ? ['instanceId']
           : endpoint === 'proactive-list' ? ['instanceId', 'before']
           : endpoint === 'proactive-read' ? ['instanceId', 'runId']
@@ -669,7 +706,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
             : endpoint === 'schedule-read' ? ['instanceId', 'ruleId']
               : endpoint === 'schedule-create' ? ['instanceId', 'commandId', 'title', 'text', 'timezone', 'when', 'target']
                 : endpoint === 'schedule-cancel' ? ['instanceId', 'commandId', 'ruleId']
-                : endpoint === 'send' ? ['instanceId', 'commandId', 'text', 'environmentId', 'target', 'attachments']
+                : endpoint === 'send' ? ['instanceId', 'commandId', 'text', 'environmentId', 'target', 'attachments', 'followUp']
                   : endpoint === 'execution-options' ? ['instanceId']
                     : endpoint === 'execution-policy-save' ? ['instanceId', 'commandId', 'expectedRevision', 'policy']
                       : endpoint === 'remote-environment-pair' ? ['instanceId', 'commandId', 'environmentId', 'label', 'endpoint',
@@ -775,6 +812,25 @@ export async function createProductHost(context: Context, config: ProductHostCon
         const commandId = client && payload.commandId !== undefined
           ? (() => { identifier(payload.commandId, 'commandId'); return `client:${client.id}:${createHash('sha256').update(payload.commandId).digest('hex')}` })()
           : payload.commandId as string
+        if (Object.hasOwn(CONNECTOR_MAIL_ENDPOINT_FIELDS, endpoint)) {
+          if (!connectorMail) throw new CoreError('CREDENTIAL_STORE_UNAVAILABLE', 'Connectors and mail require a Host credential store.')
+          await engine!.assertHostAdmission()
+          return connectorMail.dispatch(endpoint, commandId === undefined ? payload : { ...payload, commandId },
+            connectorMailDispatchContext(client, instanceId))
+        }
+        if (Object.hasOwn(IM_ENDPOINT_FIELDS, endpoint)) {
+          if (client) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'IM administration requires the local authorized product settings.')
+          if (!imHost) throw new CoreError('CREDENTIAL_STORE_UNAVAILABLE', 'IM requires a Host credential store.')
+          await engine!.assertHostAdmission()
+          await imStart?.catch(() => {
+            throw new CoreError('IM_RESTORE_FAILED', 'The Host could not restore the saved IM connections.')
+          })
+          return imHost.dispatch(endpoint, payload)
+        }
+        if (Object.hasOwn(productCapabilityEndpointFields, endpoint)) {
+          if (!capabilityLibrary) throw new CoreError('CREDENTIAL_STORE_UNAVAILABLE', 'The capability library requires a Host credential store.')
+          return dispatchProductCapabilityEndpoint(capabilityLibrary, endpoint, payload, client)
+        }
         if (endpoint.startsWith('credential-import-')) {
           if (!credentialImportManager) throw new CoreError('UNAVAILABLE', 'This Host has no secure credential export import bridge.')
           if (endpoint === 'credential-import-list') return credentialImportManager.list({ instanceId,
@@ -1459,6 +1515,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
           ...(payload.environmentId === undefined ? {} : { environmentId: payload.environmentId as string }),
           ...(payload.target === undefined ? {} : { target: payload.target as import('./execution-target.js').ExecutionTarget }),
           ...(payload.attachments === undefined ? {} : { attachments: payload.attachments as string[] }),
+          ...(payload.followUp === undefined ? {} : { followUp: payload.followUp as NonNullable<import('./main-conversation.js').MainSend['followUp']> }),
           ...(client ? { clientId: client.id } : {}) })
         if (endpoint === 'stop-main') return engine!.stopMainTurn({ instanceId, commandId, messageId: payload.messageId as string })
         if (endpoint === 'work-stop') return engine!.stopMainWork({ instanceId, commandId,

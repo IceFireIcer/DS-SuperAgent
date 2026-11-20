@@ -24,10 +24,12 @@ const commandRoutes = new Map<string, (engine: Engine, body: Record<string, unkn
   ['status', (engine, body) => engine.requestStatus(body as never)],
 ])
 const productReads = new Set(['open', 'history', 'observe-list', 'observe-read', 'observe-detail', 'evidence', 'source-deliveries',
-  'proactive-list', 'proactive-read', 'proactive-control', 'execution-options'])
+  'proactive-list', 'proactive-read', 'proactive-control', 'execution-options', 'connector-list',
+  'connector-oauth-status', 'mail-account-list', 'mail-rules', 'mail-search', 'mail-read'])
 const productCommands = new Set(['send', 'stop-main', 'work-stop', 'work-reconcile-stop',
   'work-handoff-prepare', 'work-handoff-verify', 'work-handoff', 'work-answer', 'work-answer-view',
-  'work-resume', 'work-retry', 'reconcile-delivery', 'proactive-stop'])
+  'work-resume', 'work-retry', 'reconcile-delivery', 'proactive-stop',
+  'mail-reply', 'mail-reply-send', 'mail-reply-cancel'])
 
 function statusOf(error: unknown) {
   if (error instanceof SyntaxError) return 400

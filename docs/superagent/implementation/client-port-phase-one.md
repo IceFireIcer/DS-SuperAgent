@@ -4,7 +4,7 @@
 
 | 工单 | 已落地 | 验收边界 |
 | --- | --- | --- |
-| [#144](https://github.com/IceFireIcer/DS-SuperAgent/issues/144) | 同步清单固定上游 `5e9b7da8`，覆盖 126 个客户端文件和 5 个共享依赖。生成副本逐文件标注来源，退役入口保存在文本参考中。npm 包包含 `NOTICE`。 | 同步和逐条命名门通过。命名门保留既有路径保护、分区、导入格式及应用升级常量的逐行白名单。完整参考树可在本地生成，产品包只分发实际使用的客户端。 |
+| [#144](https://github.com/IceFireIcer/DS-SuperAgent/issues/144) | 同步清单固定上游 `v0.3.8`，覆盖 126 个客户端文件和 5 个共享依赖。生成副本逐文件标注来源，退役入口保存在文本参考中。npm 包包含 `NOTICE`。 | 同步和逐条命名门通过。命名门保留既有路径保护、分区、导入格式及应用升级常量的逐行白名单。完整参考树可在本地生成，产品包只分发实际使用的客户端。 |
 | [#145](https://github.com/IceFireIcer/DS-SuperAgent/issues/145) | 四套主题的浅色、深色及跟随系统模式，7 个预设强调色、3 档动效、12–18px 会话字号。6 个上游语言字典随产品注册。 | 真实 profile 核对 8 套浅深主题的根节点 token。单独的 Chromium 夹具核对强调色、动效及字号边界。缺少译文时使用产品默认文案。 |
 | [#146](https://github.com/IceFireIcer/DS-SuperAgent/issues/146) | 21 个上游适配入口提供参数转换、响应投影和错误映射。产品 Main 和设置通过统一 `api.js` 访问 Host。停止命令绑定显示中的消息 ID，目录选择进入适配层。 | 浏览器请求使用 `/api/product`，上游未接线命令在传输前拒绝。桌面跨 Host 仍走现有认证网关 `/instances/:id/product/…`。上游页面尚未全部接入这些入口。 |
 | [#147](https://github.com/IceFireIcer/DS-SuperAgent/issues/147) | 侧栏、头部、品牌、命令面板与浮层接入 DSH slots。通知使用 Main 回复和产品问题事实。旧团队页面未进入产品导航。 | 基于上游形态适配产品会话。当前桌面桥缺少通知方法时使用页面通知。 |

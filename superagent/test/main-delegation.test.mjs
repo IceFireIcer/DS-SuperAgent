@@ -35,9 +35,15 @@ test('Main delegates one durable local brief and reports only the Worker result 
           failFirstMainUpdate = false
           throw new Error('Transient Main route failure.')
         }
+        const followUpUpdate = Array.isArray(notification.followUps) && notification.followUps.length > 0
         yield* textResponse(notification.outcome?.status === 'success'
-          ? 'Main confirmed checked-note.txt after reviewing the Worker evidence.'
+          ? (followUpUpdate ? 'Main acknowledged the follow-up direction.'
+            : 'Main confirmed checked-note.txt after reviewing the Worker evidence.')
           : notification.outcome?.summary ?? notification.update.summary)
+        return
+      }
+      if (lastUserText(options).startsWith('Change only this existing work item:')) {
+        yield* textResponse('The direction is attached to the existing work item.')
         return
       }
       if (calls === 0) yield* toolResponse('delegate_work', {
@@ -160,4 +166,21 @@ test('Main delegates one durable local brief and reports only the Worker result 
   assert.deepEqual(afterRestart.map(message => message.text), ['Main confirmed checked-note.txt after reviewing the Worker evidence.'])
   assert.equal((await reopened.getMainConversation({ instanceId: 'personal' })).messages.filter(message =>
     message.text === 'Main confirmed checked-note.txt after reviewing the Worker evidence.').length, 1)
+
+  const direction = 'Change only this existing work item: keep the heading, shorten the summary.'
+  const note = { instanceId: 'personal', commandId: 'work-board-note', text: direction,
+    followUp: { workItemId: work.brief.workItemId, ticketId: work.receipt.ticketId } }
+  const followedUp = await reopened.sendMainMessage(note)
+  assert.ok(followedUp.followUp.id)
+  assert.equal(followedUp.followUp.attachment, 'attached')
+  assert.equal(followedUp.followUp.workItemId, work.brief.workItemId)
+  assert.equal(followedUp.followUp.ticketId, work.receipt.ticketId)
+  assert.equal((await reopened.listTickets()).items.length, 2, 'an explicit note never creates another Ticket')
+  assert.deepEqual(await reopened.sendMainMessage(note), followedUp)
+  await assert.rejects(reopened.sendMainMessage({ instanceId: 'personal', commandId: 'stale-work-board-note', text: direction,
+    followUp: { workItemId: work.brief.workItemId, ticketId: 'another-ticket' } }),
+  { code: 'TICKET_VERSION_CONFLICT' })
+  const afterFollowUp = await reopened.getMainConversation({ instanceId: 'personal' })
+  assert.equal(afterFollowUp.works[0].followUps.filter(item => item.text === direction).length, 1)
+  assert.equal(afterFollowUp.messages.filter(message => message.role === 'user' && message.text === direction).length, 1)
 })
