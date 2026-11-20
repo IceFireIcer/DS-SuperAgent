@@ -21,4 +21,13 @@ In `mobile/`, run `npm run android` with the Android SDK and an emulator or a US
 3. Open the new pairing QR code. In the phone app, select **Pair computer** and scan it, or paste the one-time link. The app stores its key and the computer's verified public identity in Keychain or Keystore-backed storage, not in chat history or the old product's keys.
 4. Open **Main** to read history or send a message if authorized. **Work** shows read-only Main and work state. Unconfirmed messages are never resent automatically. Remove the phone on the computer to revoke its access. Show a new code to change its send permission.
 
-For an isolated Android development smoke test, `adb reverse` can expose a loopback relay to the development app. Use WSS for remote or production use. Do not copy the pairing link into logs, issue comments, or screenshots.
+## Verify on a physical Android phone
+
+Use the existing Android Studio SDK and an authorized USB-debugging phone. In `mobile/`, run `npm run android -- --device` and select the physical phone. If the Android project is already generated, you can also run its `app` configuration in Android Studio with the phone selected and `npm start` running for the debug build. Stop if the existing SDK cannot build the project; do not substitute an emulator for this check.
+
+1. Use an [isolated desktop profile with the mock model](../app/README.md#check-a-change). Start the relay at its default `127.0.0.1:8787`, run `adb -d reverse tcp:8787 tcp:8787`, and save `ws://127.0.0.1:8787/v1/link` in **Settings → Phone**. Use WSS outside this local USB check.
+2. Pair by scanning a read-only code. Confirm **Main** shows known test history without a composer and **Work** displays a known work state without command controls. Reopen the app and check that it remembers the computer.
+3. Pair again with **Allow this phone to send messages** enabled. Send one unique test message from the phone and confirm the desktop records it once and the reply appears on the phone.
+4. Remove the phone in desktop settings. Confirm the phone loses access and **Reconnect** shows a readable error. Remove the USB mapping with `adb -d reverse --remove tcp:8787` and stop the test relay.
+
+Record the device model, OS version, revision, and pass/fail results. Do not include pairing codes, links, or screenshots containing them.
