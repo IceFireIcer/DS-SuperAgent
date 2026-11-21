@@ -984,6 +984,12 @@ const ZH = {
   'Sign in to DeepSeek': '登录 DeepSeek 账号',
   'Enter a DeepSeek API key': '填入 DeepSeek API key',
   'Open settings to set up a custom model': '打开设置配置自定义模型',
+  'Open Models settings': '打开模型设置',
+  'Models and API keys': '模型与 API Key',
+  'I need a model before I can reply.': '配置模型后，我才能回复。',
+  'Could not save the API key.': '无法保存 API Key。',
+  'Could not check which models are available.': '无法检查可用的模型。',
+  'Provider key saved. Could not refresh model settings.': '密钥已保存，但无法刷新模型设置。',
   'DS SuperAgent': 'DS SuperAgent',
 
   // Header

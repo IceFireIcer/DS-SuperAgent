@@ -1,6 +1,86 @@
 import assert from 'node:assert/strict'
 import { chromium } from 'playwright'
 
+async function checkAccountOnboarding(page, settings, composer) {
+  const account = page.locator('.bt-product-side').getByRole('button', { name: /^(Account|账户|账号)$/u })
+  const menu = page.getByRole('menu', { name: /^(Account|账户|账号)$/u })
+  const connectors = page.locator('.bt-product-side').getByRole('button', { name: /^(Connectors|连接器)$/u })
+  await account.press('Enter', { timeout: 5000 }).catch(async () => {
+    const available = await page.locator('aside, nav').evaluateAll(elements => elements.map(element => ({
+      label: element.getAttribute('aria-label'),
+      buttons: [...element.querySelectorAll('button')].map(button => button.getAttribute('aria-label') ?? button.textContent),
+    })))
+    throw new Error(`Account trigger did not mount. ${JSON.stringify(available)}`)
+  })
+  await menu.getByRole('menuitem').first().waitFor()
+  await page.keyboard.press('Home')
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('Enter')
+  await settings.getByRole('tab', { name: /^(Scheduled tasks|定时任务)$/u, selected: true }).waitFor()
+  await page.keyboard.press('Escape')
+  await settings.waitFor({ state: 'hidden' })
+  await account.evaluate(element => { if (document.activeElement !== element) throw new Error('Account focus was not restored.') })
+  await connectors.click()
+  await settings.locator('[aria-current="page"]').getByText(/^(Connectors|连接器)$/u).waitFor()
+  await page.locator('.bt-settings-layer .bt-scrim').click({ position: { x: 3, y: 3 } })
+  await settings.waitFor({ state: 'hidden' })
+
+  let saved = false
+  const setupRoute = async route => {
+    const { endpoint, payload } = route.request().postDataJSON()
+    if (endpoint === 'provider-key') {
+      assert.ok(payload.provider === 'deepseek-official' && payload.value === 'fixture-provider-value')
+      saved = true
+      return route.fulfill({ json: { ok: true, value: { provider: payload.provider, configured: true } } })
+    }
+    if (endpoint !== 'settings') return route.continue()
+    const response = await route.fetch()
+    const body = await response.json()
+    if (body.ok) {
+      const provider = 'deepseek-official'
+      const model = 'fixture-model'
+      body.value.roles.main.model = { provider, model }
+      body.value.providers = [{ id: provider, name: 'DeepSeek', key: { configured: saved, writable: true },
+        models: [{ provider, model, ref: `${provider}/${model}`, name: 'Fixture model' }] }, ...body.value.providers]
+    }
+    return route.fulfill({ response, json: body })
+  }
+  await page.route('**/api/product', setupRoute)
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  try {
+    await page.reload()
+    const keyAction = page.getByRole('button', { name: /^(Enter a DeepSeek API key|填入 DeepSeek API key)$/u })
+    await keyAction.waitFor()
+    const login = page.locator('.bt-superagent-model-dock').getByRole('button', { name: /^(Sign in to DeepSeek|登录 DeepSeek 账号)$/u })
+    await login.waitFor({ timeout: 5000 })
+    await login.press('Enter')
+    const signInDialog = page.getByRole('dialog')
+    await signInDialog.waitFor({ timeout: 5000 })
+    await page.keyboard.press('Escape')
+    await signInDialog.waitFor({ state: 'hidden' })
+    assert.equal(await login.evaluate(element => document.activeElement === element), true)
+    const draft = 'Keep the draft across model setup.'
+    await composer.fill(draft)
+    await keyAction.press('Enter')
+    const keyField = page.locator('.bt-main-model-key input')
+    assert.equal(await keyField.evaluate(element => getComputedStyle(element.form).animationName), 'none')
+    await keyField.press('Escape')
+    await keyField.waitFor({ state: 'hidden' })
+    assert.equal(await keyAction.evaluate(element => document.activeElement === element), true)
+    await keyAction.press('Enter')
+    await keyField.fill('fixture-provider-value')
+    await keyField.press('Enter')
+    await keyAction.waitFor({ state: 'hidden' })
+    assert.equal(saved, true)
+    assert.equal(await composer.inputValue(), draft)
+    assert.equal(await composer.evaluate(element => document.activeElement === element), true)
+  } finally {
+    await page.unroute('**/api/product', setupRoute)
+  }
+}
+
 export async function checkProductUi(ctx) {
   const channel = process.env.PLAYWRIGHT_CHANNEL
   const browser = await chromium.launch(channel ? { channel } : {})
@@ -160,6 +240,7 @@ export async function checkProductUi(ctx) {
     await composer.fill('Fail this browser fixture turn.')
     await composer.press('Enter')
     await transcript.locator('[data-chat-flow-kind="turn-error"] .bt-main-system-fact').first().waitFor()
+    await checkAccountOnboarding(page, settings, composer)
     assert.deepEqual(errors.filter(error => !error.startsWith(
       '[session-controller] control stream failed: RemoteError: typert gateway: session/control: active Service "sessionController" is unavailable')), [])
     console.log('Product UI passed in Chromium.')

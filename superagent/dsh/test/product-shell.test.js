@@ -57,6 +57,7 @@ test('product shell offers Main and Activity in the sidebar, header and command 
       },
     }
     let state = { notificationScope: 'local', unread: 'cached-reply' }
+    const opened = []
     const listeners = new Set()
     const subscribe = listener => { listeners.add(listener); return () => listeners.delete(listener) }
     const snapshot = () => state
@@ -64,7 +65,7 @@ test('product shell offers Main and Activity in the sidebar, header and command 
     const actions = {
       openMain: () => update({ activity: false }),
       openActivity: () => update({ activity: true }),
-      openSettings: () => { throw new Error('Settings unavailable') },
+      openSettings: page => { opened.push(page); if (page === 'general') throw new Error('Settings unavailable') },
     }
     installProductShell(ctx, { actions, useShell: () => useSyncExternalStore(subscribe, snapshot), nativeHeader: true })
     assert.deepEqual([...slots.keys()], ['sidebar.workspaces', 'sidebar.brand.mark', 'sidebar.brand.name', 'conversation.session.header', 'shell.overlay'])
@@ -111,6 +112,27 @@ test('product shell offers Main and Activity in the sidebar, header and command 
     assert.match(document.querySelector('[role=alert]').textContent, /Settings unavailable/u)
     await act(async () => button('Dismiss').click())
     assert.equal(document.querySelector('[role=alert]'), null)
+
+    const account = button('Account')
+    await act(async () => account.click())
+    assert.equal(account.getAttribute('aria-expanded'), 'true')
+    const menu = document.getElementById(account.getAttribute('aria-controls'))
+    const menuItems = [...menu.querySelectorAll('[role=menuitem]')]
+    assert.deepEqual(menuItems.map(item => item.textContent), ['Usage', 'Models and API keys', 'Connectors', 'Automation tasks', 'Settings'])
+    assert.equal(document.activeElement, menuItems[0])
+    await act(async () => key(menuItems[0], 'ArrowDown'))
+    assert.equal(document.activeElement, menuItems[1])
+    await act(async () => key(menuItems[1], 'Escape'))
+    assert.equal(account.getAttribute('aria-expanded'), 'false')
+    assert.equal(document.activeElement, account)
+    await act(async () => account.click())
+    await act(async () => document.getElementById(account.getAttribute('aria-controls')).querySelectorAll('[role=menuitem]')[3].click())
+    assert.equal(opened.at(-1), 'scheduled-tasks')
+    await act(async () => button('Connectors').click())
+    assert.equal(opened.at(-1), 'connectors')
+    await act(async () => update({ settingsAvailable: false }))
+    assert.equal(button('Account'), undefined)
+    assert.equal(button('Connectors'), undefined)
 
     await act(async () => update({ unread: 'private reply identifier', pending: 'private question identifier' }))
     assert.equal(JSON.stringify(posted), JSON.stringify([{ sessionId: 'main', title: 'DS SuperAgent', body: 'Waiting for your answer' }]))

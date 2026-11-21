@@ -58,7 +58,7 @@ function keepFocusInDialog(event) {
   }
 }
 
-function SettingsDialog({ sections, renderSlot, initialPage, onClose, leaving }) {
+function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate, returnFocus, leaving }) {
   const [target, setTarget] = useState(() => settingsTarget(initialPage) ?? settingsTarget('general'))
   const [usageTabs, setUsageTabs] = useState(() => new Set())
   const { page, section } = target
@@ -69,7 +69,10 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, leaving })
   useEffect(() => {
     const previous = dialog.current.ownerDocument.activeElement
     dialog.current.focus()
-    return () => { if (previous?.isConnected) previous.focus() }
+    return () => {
+      if (returnFocus) returnFocus()
+      else if (previous?.isConnected) previous.focus()
+    }
   }, [])
   useEffect(() => { if (scroll.current) scroll.current.scrollTop = 0 }, [section.id])
   useEffect(() => {
@@ -79,7 +82,10 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, leaving })
   const close = () => { if (!leaving) onClose() }
   const navigate = targetId => {
     const next = settingsTarget(targetId)
-    if (!leaving && next) setTarget(next)
+    if (!leaving && next && next.section !== section) {
+      onNavigate?.(section.id)
+      setTarget(next)
+    }
   }
   const navigateFromSection = targetId => {
     if (leaving || !settingsTarget(targetId)) return
@@ -119,10 +125,10 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, leaving })
       h('button', { type: 'button', className: 'bt-settings-close', 'aria-label': t('Close settings'), onClick: close }, h(CloseIcon)))))
 }
 
-export function SettingsShell({ open = true, onClose, sections, renderSlot, initialPage }) {
+export function SettingsShell({ open = true, onClose, onNavigate, returnFocus, sections, renderSlot, initialPage }) {
   const [kept, leaving] = useLinger(open, 160)
   if (!kept) return null
-  return createPortal(h(SettingsDialog, { onClose, sections: { about: ABOUT_SETTINGS_SECTION, ...sections },
+  return createPortal(h(SettingsDialog, { onClose, onNavigate, returnFocus, sections: { about: ABOUT_SETTINGS_SECTION, ...sections },
     renderSlot, initialPage, leaving }), document.body)
 }
 

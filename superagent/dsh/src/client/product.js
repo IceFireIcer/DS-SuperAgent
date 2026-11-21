@@ -25,6 +25,7 @@ import { SettingsSectionState } from './settings-sections.js'
 import { FeedbackSettings } from './settings-feedback.js'
 import { BuiltinPluginSettings } from './settings-builtin-plugins.js'
 import { installProductShell } from './product-shell.js'
+import { DEEPSEEK_SIGN_IN_SLOT, mainModelSetup, MODEL_ONBOARDING_CSS, SuperagentModelChoice } from './product-model-onboarding.js'
 import { SHELL_CSS, CONVERSATION_CSS, installCompiledStyles } from './styles.js'
 import { ProductMcpSettings } from './product-mcp-settings.js'
 import { CapabilitySettings } from './capability-settings.js'
@@ -43,6 +44,8 @@ import { call, productCall } from './api.js'
 export { productCall } from './api.js'
 
 const clientBridge = () => window.dsSuperagentApp?.productClient
+const focusMainInput = () => document.getElementById('main-message')?.focus()
+const returnTo = trigger => { if (trigger?.isConnected) trigger.focus(); else focusMainInput() }
 
 function offerDownload(data, name, mediaType = 'application/octet-stream') {
   const url = URL.createObjectURL(new Blob([data], { type: mediaType }))
@@ -71,6 +74,8 @@ export function applyProduct(ctx) {
     activeTurn: null,
     health: null,
     modelsNeedSetup: null,
+    mainModelSetup: null,
+    modelSettingsError: false,
     sources: [],
     preparations: [],
     mainEvidence: null,
@@ -100,6 +105,8 @@ export function applyProduct(ctx) {
     activityError: null,
     settingsOpen: false,
     settingsPage: null,
+    nativeModelsOpen: false,
+    signInOpen: false,
     connection: null,
     connectOpen: false,
     directoryOptions: null,
@@ -111,7 +118,10 @@ export function applyProduct(ctx) {
     directoryError: null,
   })
   const useView = () => useSyncExternalStore(view.subscribe, view.getSnapshot)
+  let settingsTrigger
+  let signInTrigger
   let stopped = false
+  let modelSettingsRequest = 0
   let observationListRequest = 0
   let observationRequest = 0
   let observationDetailRequest = 0
@@ -347,6 +357,42 @@ export function applyProduct(ctx) {
     }
   }
 
+  const applyModelSettings = snapshot => {
+    const setup = mainModelSetup(snapshot)
+    if ((!setup || view.getSnapshot().modelSettingsError) && document.activeElement?.closest('.bt-superagent-model-dock')) focusMainInput()
+    view.set(state => ({ ...state, modelsNeedSetup: Boolean(setup) || rolesNeedingModels(snapshot).length > 0,
+      mainModelSetup: setup, modelSettingsError: false }))
+  }
+  const readModelSettings = async (binding, limit) => {
+    const request = ++modelSettingsRequest
+    const isCurrent = () => {
+      const state = view.getSnapshot()
+      return !stopped && request === modelSettingsRequest && !state.connection?.connected && state.binding?.instanceId === binding.instanceId
+    }
+    try {
+      const snapshot = await productCall('settings', { instanceId: binding.instanceId, limit })
+      if (isCurrent()) applyModelSettings(snapshot)
+      return snapshot
+    } catch (failure) {
+      if (isCurrent() && view.getSnapshot().modelsNeedSetup === null) view.set(state => ({ ...state, modelSettingsError: true }))
+      throw failure
+    }
+  }
+  const refreshModelSettings = async (binding = view.getSnapshot().binding) => {
+    if (!binding || view.getSnapshot().connection?.connected) return false
+    try {
+      await readModelSettings(binding, 1)
+      return true
+    } catch { return false }
+  }
+  const saveSetupKey = async (provider, value) => {
+    const state = view.getSnapshot()
+    if (!state.binding || state.connection?.connected || state.mainModelSetup?.keyProvider !== provider) {
+      throw new Error(t('This setting is unavailable here.'))
+    }
+    await productCall('provider-key', { instanceId: state.binding.instanceId, provider, value })
+  }
+
   const refresh = async () => {
     try {
       const bridge = clientBridge()
@@ -362,15 +408,11 @@ export function applyProduct(ctx) {
       if (Date.now() >= nextMemberPoll) void refreshMembers(binding)
       if ((current.route === 'work' || current.settingsOpen) && !boardFlight && Date.now() >= nextBoardPoll) void refreshBoard(binding)
       await refreshMain(binding)
-      if (!connection.connected && !current.binding) {
-        void productCall('settings', { instanceId: binding.instanceId, limit: 1 }).then(snapshot => {
-          if (!stopped) view.set(state => ({ ...state, modelsNeedSetup: state.modelsNeedSetup ?? (rolesNeedingModels(snapshot).length > 0) }))
-        }).catch(() => {})
-      }
+      if (!connection.connected && !current.binding) void refreshModelSettings(binding)
       if (!connection.connected && !view.getSnapshot().directoryOptions) await loadDirectories(binding)
       else if (connection.connected && !view.getSnapshot().directoryOptions?.execution) {
         const execution = await productCall('execution-options', { instanceId: binding.instanceId })
-        if (!stopped) view.set(state => ({ ...state, directoryOptions: { ...state.directoryOptions, execution } }))
+        if (!stopped) view.set(state => ({ ...state, directoryOptions: { directories: [], ...state.directoryOptions, execution } }))
       }
       await loadObservations(binding)
       const selected = view.getSnapshot().route === 'observe' ? view.getSnapshot().selectedObservation : null
@@ -880,6 +922,7 @@ export function applyProduct(ctx) {
   }
 
   function MainConversation({ composerOnly = false, question, sessionEvents } = {}) {
+    useModelSlots()
     const state = useView()
     const canCommand = !state.connection?.connected || state.connection.capabilities.includes('command')
     const turnCards = projectTurnCards(state)
@@ -1087,6 +1130,19 @@ export function applyProduct(ctx) {
               view.set(current => ({ ...current, directoryError: error.message }))), onPick: chooseWorkDirectory,
             disabled: busy || state.directoryBusy })) : null,
         state.directoryError ? h('p', { className: 'bt-main-error', role: 'alert' }, state.directoryError) : null) : null })
+    const showModelSetup = !question && state.binding && !state.connection?.connected
+    let modelChoice
+    if (showModelSetup && state.mainModelSetup) {
+      modelChoice = h(SuperagentModelChoice, { setup: state.mainModelSetup, saveKey: saveSetupKey,
+        refreshModels: refreshModelSettings, focusMain: focusMainInput,
+        signIn: canSignIn() ? openSignIn : undefined, openModels: () => shellActions.openSettings('models'),
+        openCustomModels: hasNativeSettings('models') ? openCustomModels : undefined,
+        openRoles: () => shellActions.openSettings('roles') })
+    } else if (showModelSetup && state.modelSettingsError) {
+      modelChoice = h('div', { className: 'bt-superagent-model-dock' },
+        h('p', { className: 'bt-main-error', role: 'alert' }, t('Could not check which models are available.')),
+        h('button', { className: 'bt-model-chip', type: 'button', onClick: () => { void refreshModelSettings() } }, t('Retry')))
+    }
     if (composerOnly) {
       const entries = sessionEvents?.entries ?? []
       const userEvents = entries.filter(({ event }) => event.type === 'user/message')
@@ -1104,6 +1160,7 @@ export function applyProduct(ctx) {
         unplaced.works.length || unplaced.sources.length || unplaced.preparations.length ? h('details', { className: 'bt-native-turn-cards' },
           h('summary', null, t('Work, sources and preparations')), renderCards(unplaced)) : null,
         h(BoardSurface, { dock: true }),
+        modelChoice,
         question ? h(MainWorkCard, { work: question, questionOnly: true, key: question.control.attention.id }) : composer)
     }
     return h('section', { className: 'bt-main-conversation', 'aria-label': 'Main' },
@@ -1157,7 +1214,7 @@ export function applyProduct(ctx) {
           stopping ? h('p', { className: 'bt-main-status', role: 'status' }, t('Stopping this Main reply…')) : busy
             ? h('p', { className: 'bt-main-status', role: 'status' }, t('Main is replying…')) : null,
           h('div', { ref: bottom }))),
-      h(BoardSurface, { dock: true }), composer)
+      h(BoardSurface, { dock: true }), modelChoice, composer)
   }
 
   function ObservationConversation({ onBack } = {}) {
@@ -1377,7 +1434,7 @@ export function applyProduct(ctx) {
           onClick: () => { void revoke(client) } }, t('Revoke')))))
   }
 
-  function SettingsDialog({ binding, onClose, open, initialPage, renderSlot }) {
+  function SettingsDialog({ binding, onClose, open, initialPage, renderSlot, returnFocus }) {
     const viewState = useView()
     const [snapshot, setSnapshot] = useState(null)
     const [draft, setDraft] = useState(null)
@@ -1392,6 +1449,7 @@ export function applyProduct(ctx) {
     const draftRef = useRef(draft)
     const draftVersion = useRef(0)
     const savingRef = useRef(false)
+    const loadRequest = useRef(0)
     const clone = value => JSON.parse(JSON.stringify(value))
     const roleRows = [['main', 'Main'], ['router', 'Router'], ['worker', 'Worker']]
     const refOf = model => `${model.provider}/${model.model}`
@@ -1406,7 +1464,6 @@ export function applyProduct(ctx) {
     }
     const applySnapshot = (value, preserve = false) => {
       setSnapshot(value)
-      view.set(current => ({ ...current, modelsNeedSetup: rolesNeedingModels(value).length > 0 }))
       if (!preserve) {
         const nextDraft = clone(value.roles)
         draftRef.current = nextDraft
@@ -1417,13 +1474,18 @@ export function applyProduct(ctx) {
       }
     }
     const load = async ({ preserve = false } = {}) => {
+      const request = ++loadRequest.current
       setLoading(true)
       try {
-        const value = await productCall('settings', { instanceId: binding.instanceId, limit: 50 })
+        const value = await readModelSettings(binding, 50)
+        if (request !== loadRequest.current) return
         applySnapshot(value, preserve)
         setError(null)
-      } catch (failure) { setError(failure.message) }
-      finally { setLoading(false) }
+      } catch (failure) {
+        if (request === loadRequest.current) setError(failure.message)
+      } finally {
+        if (request === loadRequest.current) setLoading(false)
+      }
     }
     useEffect(() => { void load() }, [binding.instanceId])
     const updateRole = (role, change) => {
@@ -1483,7 +1545,7 @@ export function applyProduct(ctx) {
         draftVersion.current += 1
         setConflict(false)
         setNotice(t('Configuration v{revision} is active for new turns.', { revision: value.revision }))
-        const latest = await productCall('settings', { instanceId: binding.instanceId, limit: 50 })
+        const latest = await readModelSettings(binding, 50)
         applySnapshot(latest, true)
       } catch (failure) {
         if (failure.code === 'CONFIG_REVISION_CONFLICT') {
@@ -1495,7 +1557,7 @@ export function applyProduct(ctx) {
     const rebase = async () => {
       setSaving(true); setError(null)
       try {
-        const latest = await productCall('settings', { instanceId: binding.instanceId, limit: 50 })
+        const latest = await readModelSettings(binding, 50)
         const merged = rebaseRoleDraft(base, draft, latest.roles)
         applySnapshot(latest)
         draftRef.current = merged
@@ -1506,7 +1568,7 @@ export function applyProduct(ctx) {
       finally { setSaving(false) }
     }
     const refreshAfterPreset = async () => {
-      const latest = await productCall('settings', { instanceId: binding.instanceId, limit: 50 })
+      const latest = await readModelSettings(binding, 50)
       applySnapshot(latest)
       setConflict(false)
       setError(null)
@@ -1520,6 +1582,7 @@ export function applyProduct(ctx) {
         setSnapshot(current => ({ ...current, providers: current.providers.map(item => item.id === provider
           ? { ...item, key: { ...item.key, configured: result.configured } } : item) }))
         setNotice(value === null ? t('Provider key removed.') : t('Provider key saved.'))
+        void refreshModelSettings(binding)
       } catch (failure) {
         setKeyDrafts(current => ({ ...current, [provider]: '' }))
         setError(failure.message)
@@ -1554,7 +1617,7 @@ export function applyProduct(ctx) {
     const loadingSettings = loading ? h(SettingsSectionState, { status: 'loading' }) : h(Fragment, null,
       h(SettingsSectionState, { status: 'error', message: error }),
       h('button', { type: 'button', className: 'bt-soft', onClick: () => { void load() } }, t('Retry')))
-    const roles = draft ? h(Fragment, null,
+    const roles = draft && !loading ? h(Fragment, null,
             error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
             viewState.directoryError ? h('p', { className: 'bt-main-error', role: 'alert' }, viewState.directoryError) : null,
             conflict ? h('div', { className: 'bt-main-settings-conflict', role: 'status' },
@@ -1655,11 +1718,15 @@ export function applyProduct(ctx) {
       'remote-clients': h(ClientSettings, { binding }),
     }
     const sections = Object.fromEntries(Object.entries(pages).map(([id, content]) => [id, { render: () => content }]))
+    const useNativeModels = viewState.nativeModelsOpen && renderSlot && hasNativeSettings('models')
+    if (useNativeModels) sections.models = { render: ({ close }) =>
+      renderSlot('settings.section', { close }, { only: 'models', fallback: providers }) }
     sections['usage-overview'] = { render: ({ navigate }) => h(ProductOperationsSettings, { ...pageProps, section: 'usage', onNavigate: navigate }) }
     sections.status = { render: ({ navigate }) => h(ProductOperationsSettings, { ...pageProps, section: 'status', onNavigate: navigate }) }
     sections.feedback = { render: ({ navigate }) => h(FeedbackSettings, { ...pageProps, onNavigate: navigate,
       ...(viewState.connection?.connected ? { app: null } : {}) }) }
-    return h(SettingsShell, { open, onClose, initialPage, renderSlot, sections })
+    return h(SettingsShell, { open, onClose, returnFocus, initialPage, renderSlot, sections,
+      onNavigate: useNativeModels ? previous => { if (previous === 'models') void load({ preserve: draft !== null }) } : undefined })
   }
 
   function ConnectionDialog({ connection, onClose }) {
@@ -1792,12 +1859,59 @@ export function applyProduct(ctx) {
         onClick: () => shellActions.openSettings() }, h(SlidersIcon)))
   }
 
+  const slotEntries = name => ctx.slots.entries?.(name) ?? []
+  const modelSlots = ['settings.section', DEEPSEEK_SIGN_IN_SLOT]
+  const subscribeModelSlots = listener => {
+    const subscriptions = modelSlots.map(name => ctx.slots.subscribe?.(name, listener))
+    return () => { for (const unsubscribe of subscriptions) unsubscribe?.() }
+  }
+  const modelSlotVersion = () => modelSlots.map(name => ctx.slots.getVersion?.(name) ?? 0).join(':')
+  const useModelSlots = () => useSyncExternalStore(subscribeModelSlots, modelSlotVersion)
+  const hasNativeSettings = id => slotEntries('settings.section').some(entry => entry.options?.id === id)
+  const canSignIn = () => slotEntries(DEEPSEEK_SIGN_IN_SLOT).length > 0 && !hasNativeSettings('account')
+  const openSignIn = () => {
+    const state = view.getSnapshot()
+    if (!state.binding || state.connection?.connected || !canSignIn()) return
+    signInTrigger = document.activeElement
+    view.set({ ...state, signInOpen: true })
+  }
+  const closeSignIn = () => {
+    view.set(state => ({ ...state, signInOpen: false }))
+    void refreshModelSettings()
+  }
+  const openCustomModels = () => shellActions.openSettings('models', { nativeModels: true })
+
+  function SignInDialog({ renderSlot }) {
+    useEffect(() => {
+      const trigger = signInTrigger
+      return () => { if (!view.getSnapshot().settingsOpen) returnTo(trigger) }
+    }, [])
+    return renderSlot(DEEPSEEK_SIGN_IN_SLOT, {
+      complete: closeSignIn,
+      useApiKey: () => {
+        shellActions.openSettings('models', { trigger: signInTrigger })
+        closeSignIn()
+      },
+    })
+  }
+
   function Overlay({ renderSlot }) {
+    useModelSlots()
     const state = useView()
+    const signInAvailable = slotEntries(DEEPSEEK_SIGN_IN_SLOT).length > 0
+    useEffect(() => {
+      if (state.signInOpen && (!signInAvailable || state.connection?.connected)) closeSignIn()
+    }, [state.signInOpen, signInAvailable, state.connection?.connected])
+    const trigger = settingsTrigger
     return h(Fragment, null,
       state.binding && !state.connection?.connected && state.settingsPage ? h(SettingsDialog, { binding: state.binding,
-        open: state.settingsOpen, initialPage: state.settingsPage, renderSlot,
-        onClose: () => view.set(current => ({ ...current, settingsOpen: false })) }) : null,
+        key: `${state.settingsPage}:${state.nativeModelsOpen}`, open: state.settingsOpen, initialPage: state.settingsPage, renderSlot,
+        returnFocus: () => returnTo(trigger),
+        onClose: () => {
+          view.set(current => ({ ...current, settingsOpen: false }))
+          void refreshModelSettings()
+        } }) : null,
+      state.signInOpen && signInAvailable && !state.connection?.connected && renderSlot ? h(SignInDialog, { renderSlot }) : null,
       state.connectOpen && clientBridge() ? h(ConnectionDialog, { connection: state.connection,
         onClose: () => view.set(current => ({ ...current, connectOpen: false })) }) : null)
   }
@@ -1815,14 +1929,18 @@ export function applyProduct(ctx) {
       if (nativeSession && !usesProductHistory(state)) ctx.layout.selectPanel('superagent-activity')
       if (state.binding) void loadObservations(state.binding, { reset: true })
     },
-    openSettings(settingsPage = 'general') {
+    openSettings(settingsPage = 'general', { nativeModels = false, trigger = document.activeElement } = {}) {
       const state = view.getSnapshot()
-      if (state.binding && !state.connection?.connected) view.set({ ...state, settingsOpen: true, settingsPage })
+      if (!state.binding || state.connection?.connected) return
+      settingsTrigger = trigger
+      view.set({ ...state, settingsOpen: true, settingsPage, nativeModelsOpen: nativeModels })
     },
     openConnection() { if (clientBridge()) view.set(current => ({ ...current, connectOpen: true })) },
   }
-  const { Header } = installProductShell(ctx, { actions: shellActions, Overlay, overlayChildren: SETTINGS_CHILDREN,
+  const { Header } = installProductShell(ctx, { actions: shellActions, Overlay,
+    overlayChildren: { ...SETTINGS_CHILDREN, [DEEPSEEK_SIGN_IN_SLOT]: { kind: 'single', scope: 'root' } },
     useShell() {
+      useModelSlots()
       const state = useView()
       const lastReply = state.messages.findLast(message => message.role === 'main')
       const question = state.works.find(work => work.control?.attention?.status === 'waiting')
@@ -1830,12 +1948,13 @@ export function applyProduct(ctx) {
         preview: lastReply?.text, unread: lastReply?.id === state.readReplyId ? undefined : lastReply?.id, pending: question?.control?.attention?.id,
         notificationScope: state.binding?.instanceId,
         connectLabel: clientBridge() ? (state.connection?.connected ? t('Connection') : t('Connect to Host')) : null,
-        settingsAvailable: Boolean(state.binding && !state.connection?.connected), modalOpen: state.settingsOpen || state.connectOpen }
+        settingsAvailable: Boolean(state.binding && !state.connection?.connected), signIn: canSignIn() ? openSignIn : undefined,
+        modalOpen: state.settingsOpen || state.connectOpen || state.signInOpen }
     },
   })
   installSettingsSections(ctx.slots)
   const register = (name, component, options = {}) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200, ...options }, component))
-  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SETTINGS_SHELL_CSS + PRODUCT_SETTINGS_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + CHAT_SECRET_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_COMPUTER_CSS + PRODUCT_EXECUTION_CSS + PRODUCT_OPERATIONS_CSS + USAGE_HEATMAP_CSS + WORK_BOARD_CSS, 'main'), 'superagent: existing chat styles')
+  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SETTINGS_SHELL_CSS + PRODUCT_SETTINGS_CSS + FOLDER_CSS + PRODUCT_CSS + MODEL_ONBOARDING_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + CHAT_SECRET_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_COMPUTER_CSS + PRODUCT_EXECUTION_CSS + PRODUCT_OPERATIONS_CSS + USAGE_HEATMAP_CSS + WORK_BOARD_CSS, 'main'), 'superagent: existing chat styles')
   ctx.effect(() => installAppearance(ctx.get('theme')), 'superagent: appearance')
   if (!nativeSession) register('main.conversation', ProductSurface)
   else {

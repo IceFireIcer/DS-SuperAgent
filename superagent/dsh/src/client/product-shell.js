@@ -4,11 +4,12 @@ import { createPortal } from 'react-dom'
 import { BotMark } from './mark.js'
 import { MAIN_LOOK } from './characters.js'
 import { ProductBrandMark } from './product-brand.js'
-import { GaugeIcon, GearIcon, GlobeIcon, SearchIcon } from './icons.js'
+import { GaugeIcon, GlobeIcon, SearchIcon } from './icons.js'
 import { t } from './i18n.js'
 import { createSource } from './sources.js'
 import { ShellPalette } from './shell-palette.js'
 import { ShellNotificationWatcher, ShellToast } from './shell-notifications.js'
+import { SuperagentAccountFooter } from './product-account.js'
 import { installCompiledStyles } from './styles.js'
 
 const BRAND = 'DS SuperAgent'
@@ -33,7 +34,7 @@ export function ProductShellHeader({ activity = false, markState, onMain, onActi
 }
 
 function ShellSidebar({ wide = true, useShell, actions, openPalette }) {
-  const { activity, markState, preview, pending, unread, connectLabel, settingsAvailable } = useShell()
+  const { activity, markState, preview, pending, unread, connectLabel, settingsAvailable, modalOpen, signIn } = useShell()
   const mainLabel = [t('Main'), pending ? t('Waiting for your answer') : unread ? t('Unread activity') : ''].filter(Boolean).join(', ')
   const row = (label, icon, onClick, selected) => h('button', {
     type: 'button', className: 'bt-row', 'aria-current': selected ? 'page' : undefined,
@@ -53,9 +54,9 @@ function ShellSidebar({ wide = true, useShell, actions, openPalette }) {
       (pending || unread) && activity ? h('span', { className: 'bt-dot', 'aria-hidden': true }) : null))
         : row(mainLabel, h(MainMark, { size: 36, state: markState }), actions.openMain, !activity),
       actions.openActivity ? row(t('Activity'), h(GaugeIcon), actions.openActivity, activity) : null,
-      actions.openConnection && connectLabel ? row(connectLabel, h(GlobeIcon), actions.openConnection) : null,
-      actions.openSettings && settingsAvailable !== false
-        ? row(t('Settings'), h(GearIcon), () => actions.openSettings('general')) : null))
+      actions.openConnection && connectLabel ? row(connectLabel, h(GlobeIcon), actions.openConnection) : null),
+    actions.openSettings && settingsAvailable !== false
+      ? h(SuperagentAccountFooter, { wide, modalOpen, signIn, openSettings: actions.openSettings }) : null)
 }
 
 export function installProductShell(ctx, { useShell, actions, Overlay, overlayChildren, settingsInSidebar = true, nativeHeader = false }) {
@@ -118,11 +119,14 @@ const PRODUCT_SHELL_CSS = `
 .bt-product-side .bt-tile{position:relative}
 .bt-product-side.bt-rail{width:auto;padding-inline:0}
 .bt-product-side.bt-rail .bt-row{width:100%}
+.bt-product-side .bt-leftcol-foot-rail{align-items:center}
 .bt-product-side .bt-row>svg{flex:none}
 .bt-product-head>.bt-pill:is(span){cursor:default;pointer-events:none}
 .bt-product-head{gap:8px}
 .bt-product-head>button,.bt-product-head>a{pointer-events:auto}
 .bt-product-side button:focus-visible,.bt-product-head button:focus-visible,.bt-product-palette button:focus-visible,.bt-toast button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:-2px}
+.bt-account-menu{min-width:0;overflow-y:auto}
+.bt-account-menu button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:-2px}
 .bt-product-palette-layer{max-width:none;max-height:none;width:auto;height:auto;margin:0;padding:0;border:0;background:transparent;color:inherit}
 .bt-product-palette-layer::backdrop{background:transparent}
 .bt-product-palette{max-height:calc(100% - 24px)}
@@ -135,6 +139,6 @@ const PRODUCT_SHELL_CSS = `
 .bt-toast-link:hover{background:var(--bt-hover)}
 .bt-toast-close{flex:none}
 @keyframes bt-toast-in{from{opacity:0}}
-body[data-bt-motion=quiet] :is(.bt-product-palette-layer,.bt-product-palette-layer *, .bt-product-head *, .bt-toast){animation:none!important;transition:none!important}
-@media(prefers-reduced-motion:reduce){:is(.bt-product-palette-layer,.bt-product-palette-layer *, .bt-toast){animation:none!important;transition:none!important}}
+body[data-bt-motion=quiet] :is(.bt-product-palette-layer,.bt-product-palette-layer *, .bt-product-head *, .bt-account-menu, .bt-toast){animation:none!important;transition:none!important}
+@media(prefers-reduced-motion:reduce){:is(.bt-product-palette-layer,.bt-product-palette-layer *, .bt-account-menu, .bt-toast){animation:none!important;transition:none!important}}
 `
