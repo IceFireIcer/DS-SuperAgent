@@ -55,10 +55,10 @@ function MemberState({ role, identity, goal, label, mark, children }) {
 
 export function WorkMemberDock({ workers, routing, activeTurn, mainHealth, execute }) {
   const mainStatus = activeTurn?.status
-  const mainLabel = mainStatus === 'running' ? 'Replying' : mainStatus === 'stopping' ? 'Stopping…'
-    : mainHealth?.state === 'degraded' ? 'Main degraded' : mainHealth?.queuedInputs ? 'Queued' : 'Ready'
-  const mainMark = mainStatus === 'running' ? 'thinking' : mainStatus === 'stopping' ? 'waiting'
-    : mainHealth?.state === 'degraded' ? 'alert' : mainHealth?.queuedInputs ? 'waiting' : 'idle'
+  const [mainLabel, mainMark] = mainStatus === 'running' ? ['Replying', 'thinking']
+    : mainStatus === 'stopping' ? ['Stopping…', 'waiting']
+      : mainHealth?.state === 'degraded' ? ['Main degraded', 'alert']
+        : mainHealth?.queuedInputs ? ['Queued', 'waiting'] : ['Ready', 'idle']
   return h('div', { className: 'bt-work-members', role: 'group', 'aria-label': t('Work members') },
     h(MemberState, { role: 'Main', identity: 'main', mark: mainMark, label: t(mainLabel) }),
     h(MemberState, { role: 'Router', identity: 'router', mark: routing ? 'orbit' : 'idle', label: t(routing ? 'Routing work' : 'Ready') }),

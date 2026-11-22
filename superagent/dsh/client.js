@@ -5891,7 +5891,7 @@ function createMainVoice({ speechRemote, readMain }) {
   };
 }
 var labels = { listening: "Listening", thinking: "Waiting for Main…", speaking: "Speaking", paused: "Paused" };
-function VoiceMode({ state, onPause, onResume, onClose, busy, onStop, stopping }) {
+function VoiceMode({ state, error, onPause, onResume, onClose, busy, onStop, stopping }) {
   const toggle = (0, import_react5.useRef)(null);
   (0, import_react5.useEffect)(() => {
     toggle.current?.focus();
@@ -5921,7 +5921,7 @@ function VoiceMode({ state, onPause, onResume, onClose, busy, onStop, stopping }
       ),
       (0, import_react5.createElement)("div", { className: "bt-voice-status", role: "status" }, t(labels[state.phase])),
       state.caption ? (0, import_react5.createElement)("div", { className: "bt-voice-caption" }, state.caption) : null,
-      state.note ? (0, import_react5.createElement)("div", { className: "bt-voice-note", role: "alert" }, state.note) : null
+      error || state.note ? (0, import_react5.createElement)("div", { className: "bt-voice-note", role: "alert" }, error ?? state.note) : null
     ),
     (0, import_react5.createElement)(
       "div",
@@ -5969,6 +5969,7 @@ function MainComposer({
   onStop,
   busy,
   stopping,
+  ready = true,
   readOnly = false,
   error,
   value,
@@ -6081,11 +6082,12 @@ function MainComposer({
   const showVoiceStart = onVoiceStart && !hasContent && !readOnly && !busy;
   const submit = async (event) => {
     event.preventDefault();
-    if (busy || directoryBusy || uploading || voiceState !== "idle" || dictation.listening || readOnly || !hasContent) return;
+    if (!ready || busy || directoryBusy || uploading || voiceState !== "idle" || dictation.listening || readOnly || !hasContent) return;
     if (await onSend(text)) setText("");
   };
   if (voiceOpen) return (0, import_react6.createElement)(VoiceMode, {
     state: voice,
+    error,
     onPause: onVoicePause,
     onResume: onVoiceResume,
     onClose: () => {
@@ -6098,7 +6100,7 @@ function MainComposer({
   });
   return (0, import_react6.createElement)(
     "form",
-    { className: "bt-main-composer", onSubmit: submit },
+    { className: "bt-main-composer", "data-main-input-ready": ready ? "" : void 0, onSubmit: submit },
     error ? (0, import_react6.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
     voiceError || dictation.note ? (0, import_react6.createElement)("p", { className: "bt-main-error", role: "status" }, voiceError ?? dictation.note) : null,
     (0, import_react6.createElement)("label", { className: "bt-main-label", htmlFor: "main-message" }, t("Message Main")),
@@ -6178,12 +6180,12 @@ function MainComposer({
         className: "bt-soft bt-main-voice-toggle",
         type: "button",
         ref: voiceStart,
-        disabled: directoryBusy || uploading || voiceState !== "idle" || dictation.listening,
+        disabled: !ready || directoryBusy || uploading || voiceState !== "idle" || dictation.listening,
         "aria-label": t("Start voice chat"),
         onClick: onVoiceStart
       }, (0, import_react6.createElement)(WaveIcon), t("Voice chat")) : (0, import_react6.createElement)(
         "button",
-        { className: "bt-soft", type: "submit", disabled: busy || directoryBusy || uploading || voiceState !== "idle" || dictation.listening || readOnly || !hasContent },
+        { className: "bt-soft", type: "submit", disabled: !ready || busy || directoryBusy || uploading || voiceState !== "idle" || dictation.listening || readOnly || !hasContent },
         readOnly ? t("Read-only") : uploading ? t("Uploading…") : busy ? t("Sending…") : t("Send")
       )
     )
@@ -10666,6 +10668,14 @@ function FolderMenu({
   }, [isOpen, Boolean(shownPlace), view, listing, info]);
   const onKeyDown = (event) => {
     if (event.defaultPrevented) return;
+    if (event.key === "Tab" && isOpen) {
+      if (view === "type" && menu.current?.contains(event.target)) {
+        const stops = [...menu.current.querySelectorAll("button:not(:disabled), input")];
+        if (event.target !== (event.shiftKey ? stops[0] : stops.at(-1))) return;
+      }
+      close();
+      return;
+    }
     if (event.key === "Escape" && isOpen) {
       event.preventDefault();
       event.stopPropagation();
@@ -15864,8 +15874,7 @@ function MemberState({ role, identity, goal, label, mark, children }) {
 }
 function WorkMemberDock({ workers, routing, activeTurn, mainHealth, execute }) {
   const mainStatus = activeTurn?.status;
-  const mainLabel = mainStatus === "running" ? "Replying" : mainStatus === "stopping" ? "Stopping…" : mainHealth?.state === "degraded" ? "Main degraded" : mainHealth?.queuedInputs ? "Queued" : "Ready";
-  const mainMark = mainStatus === "running" ? "thinking" : mainStatus === "stopping" ? "waiting" : mainHealth?.state === "degraded" ? "alert" : mainHealth?.queuedInputs ? "waiting" : "idle";
+  const [mainLabel, mainMark] = mainStatus === "running" ? ["Replying", "thinking"] : mainStatus === "stopping" ? ["Stopping…", "waiting"] : mainHealth?.state === "degraded" ? ["Main degraded", "alert"] : mainHealth?.queuedInputs ? ["Queued", "waiting"] : ["Ready", "idle"];
   return (0, import_react38.createElement)(
     "div",
     { className: "bt-work-members", role: "group", "aria-label": t("Work members") },
@@ -21787,7 +21796,7 @@ function applyProduct(ctx) {
       error: controlError
     }) : (0, import_react50.createElement)(
       "section",
-      { className: "bt-main-composer", "aria-label": t("Question") },
+      { className: "bt-main-composer", "data-main-question": "", "aria-label": t("Question") },
       questionView,
       viewError ? (0, import_react50.createElement)("p", { className: "bt-main-error", role: "alert" }, viewError) : null
     );
@@ -22356,6 +22365,7 @@ function applyProduct(ctx) {
     const latestSend = (0, import_react50.useRef)(send);
     latestSend.current = send;
     const startVoice = () => {
+      setSendError(null);
       if (speakingId) {
         window.speechSynthesis?.cancel();
         setSpeakingId(null);
@@ -22449,6 +22459,7 @@ function applyProduct(ctx) {
       busy,
       stopping,
       directoryBusy: state.directoryBusy,
+      ready: Boolean(state.binding && execution),
       readOnly: !canCommand,
       error: sendError ?? state.error,
       value: state.mainDraft,
@@ -23697,9 +23708,13 @@ function applyProduct(ctx) {
   }
   function NativeMainActions() {
     const state = useView();
+    const sessionState = (0, import_react50.useSyncExternalStore)(nativeStatus?.subscribe ?? noopSubscribe, nativeStatus?.getSnapshot ?? noEvents2);
     return (0, import_react50.createElement)(
       "div",
-      { className: "bt-native-main-actions" },
+      {
+        className: "bt-native-main-actions",
+        "data-native-main-question": sessionState?.get(state.binding?.mainSessionId)?.pendingInteraction ? "" : void 0
+      },
       (0, import_react50.createElement)("span", { role: "status" }, state.modelsNeedSetup ? t("Models need setup") : mainHealthCopy(state.health)),
       (0, import_react50.createElement)("button", {
         type: "button",

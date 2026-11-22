@@ -33,9 +33,14 @@ test('the desktop hands off to the local Host and keeps native actions on that w
   hostState.release()
   await waitFor(() => main.visible && startup.isDestroyed(), 'hand off the startup window')
   assert.equal(main.loaded.filter(url => url.includes('token=')).length, 1)
-  assert.equal(main.opacities?.[0], 0)
-  assert.ok(main.opacities?.some(opacity => opacity > 0 && opacity < 1))
-  assert.equal(main.opacities?.at(-1), 1)
+  if (process.platform === 'linux') {
+    assert.equal(main.opacities, undefined)
+    assert.ok(main.webContents.animations.some(animation => animation.finished && animation.visibleAtFinish))
+  } else {
+    assert.equal(main.opacities?.[0], 0)
+    assert.ok(main.opacities?.some(opacity => opacity > 0 && opacity < 1))
+    assert.equal(main.opacities?.at(-1), 1)
+  }
 
   const picker = state.ipc.get('ds-superagent:directory-pick')
   await assert.rejects(picker(eventFor(startup)), /unknown page/u)

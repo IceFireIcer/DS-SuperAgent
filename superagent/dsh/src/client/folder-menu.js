@@ -89,6 +89,14 @@ export function FolderMenu({ value, defaultPath, group = false, team = false, ac
   }, [isOpen, Boolean(shownPlace), view, listing, info])
   const onKeyDown = event => {
     if (event.defaultPrevented) return
+    if (event.key === 'Tab' && isOpen) {
+      if (view === 'type' && menu.current?.contains(event.target)) {
+        const stops = [...menu.current.querySelectorAll('button:not(:disabled), input')]
+        if (event.target !== (event.shiftKey ? stops[0] : stops.at(-1))) return
+      }
+      close()
+      return
+    }
     if (event.key === 'Escape' && isOpen) {
       event.preventDefault()
       event.stopPropagation()

@@ -63,6 +63,11 @@ test('Main and both sidebar widths share the directory for the next accepted inp
   await setWide(true)
   shows(second.root)
 
+  await click(sidebar())
+  await key(document.activeElement, 'Tab')
+  assert.equal(menu(), null)
+  assert.equal(document.activeElement, sidebar())
+
   pickerResult = null
   await click(sidebar())
   await click(findButton('Choose a folder…', menu()))
@@ -132,4 +137,23 @@ test('Main can send its first local input without assigning an instance default'
   assert.equal(requests.some(({ endpoint }) => endpoint === 'directory-default-save'), false)
   assert.equal(sidebar().getAttribute('aria-label'), 'Work directory: No directory selected')
   assert.equal(document.querySelector('.bt-main-composer button[aria-haspopup="menu"]').getAttribute('aria-label'), 'Work directory: No directory selected')
+})
+
+test('the desktop composer is ready when the authorized execution options arrive', async context => {
+  const catalog = Promise.withResolvers()
+  const { act, click, document, fill, requests } = await mountProduct(context, { responses: {
+    'directory-options': () => ({ default: { environmentId: first.id, root: first.root }, directories: [first] }),
+    'execution-options': () => catalog.promise,
+    send: () => ({ messageId: 'ready-input', status: 'completed' }),
+  } })
+  const composer = document.querySelector('.bt-main-composer')
+  assert.equal(composer.hasAttribute('data-main-input-ready'), false)
+  await fill(composer.querySelector('textarea'), 'Keep this draft while initializing.')
+  const send = composer.querySelector('button[type="submit"]')
+  assert.equal(send.disabled, true)
+  assert.equal(requests.some(request => request.endpoint === 'send'), false)
+  await act(async () => catalog.resolve({ policy: { defaultTarget: 'local-only' }, environments: [{ ...first, kind: 'local' }] }))
+  assert.equal(composer.hasAttribute('data-main-input-ready'), true)
+  await click(send)
+  assert.equal(requests.find(request => request.endpoint === 'send').payload.environmentId, first.id)
 })

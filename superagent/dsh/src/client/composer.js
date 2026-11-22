@@ -4,7 +4,7 @@ import { openCapture, speechCatalog, transcribeWave } from './speech.js'
 import { t } from './i18n.js'
 import { VoiceMode } from './main-voice.js'
 
-export function MainComposer({ onSend, onStop, busy, stopping, readOnly = false, error, value, onValueChange, directoryControl,
+export function MainComposer({ onSend, onStop, busy, stopping, ready = true, readOnly = false, error, value, onValueChange, directoryControl,
   directoryBusy = false, attachments = [], onFiles, onRemoveAttachment, uploading = false, speechRemote,
   voice, onVoiceStart, onVoicePause, onVoiceResume, onVoiceClose }) {
   const [draft, setDraft] = useState('')
@@ -87,13 +87,13 @@ export function MainComposer({ onSend, onStop, busy, stopping, readOnly = false,
   const showVoiceStart = onVoiceStart && !hasContent && !readOnly && !busy
   const submit = async event => {
     event.preventDefault()
-    if (busy || directoryBusy || uploading || voiceState !== 'idle' || dictation.listening || readOnly || !hasContent) return
+    if (!ready || busy || directoryBusy || uploading || voiceState !== 'idle' || dictation.listening || readOnly || !hasContent) return
     if (await onSend(text)) setText('')
   }
-  if (voiceOpen) return h(VoiceMode, { state: voice, onPause: onVoicePause, onResume: onVoiceResume,
+  if (voiceOpen) return h(VoiceMode, { state: voice, error, onPause: onVoicePause, onResume: onVoiceResume,
     onClose: () => { restoreFocus.current = true; onVoiceClose() }, busy: busy || directoryBusy || uploading, onStop, stopping })
 
-  return h('form', { className: 'bt-main-composer', onSubmit: submit },
+  return h('form', { className: 'bt-main-composer', 'data-main-input-ready': ready ? '' : undefined, onSubmit: submit },
     error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
     voiceError || dictation.note ? h('p', { className: 'bt-main-error', role: 'status' }, voiceError ?? dictation.note) : null,
     h('label', { className: 'bt-main-label', htmlFor: 'main-message' }, t('Message Main')),
@@ -121,9 +121,9 @@ export function MainComposer({ onSend, onStop, busy, stopping, readOnly = false,
       busy && onStop && !readOnly ? h('button', { className: 'bt-soft', type: 'button', 'data-action': 'stop-main', disabled: stopping, onClick: onStop },
         stopping ? t('Stopping…') : t('Stop reply')) : null,
       showVoiceStart ? h('button', { className: 'bt-soft bt-main-voice-toggle', type: 'button', ref: voiceStart,
-        disabled: directoryBusy || uploading || voiceState !== 'idle' || dictation.listening, 'aria-label': t('Start voice chat'),
+        disabled: !ready || directoryBusy || uploading || voiceState !== 'idle' || dictation.listening, 'aria-label': t('Start voice chat'),
         onClick: onVoiceStart }, h(WaveIcon), t('Voice chat'))
-        : h('button', { className: 'bt-soft', type: 'submit', disabled: busy || directoryBusy || uploading || voiceState !== 'idle' || dictation.listening || readOnly || !hasContent },
+        : h('button', { className: 'bt-soft', type: 'submit', disabled: !ready || busy || directoryBusy || uploading || voiceState !== 'idle' || dictation.listening || readOnly || !hasContent },
           readOnly ? t('Read-only') : uploading ? t('Uploading…') : busy ? t('Sending…') : t('Send'))))
 }
 

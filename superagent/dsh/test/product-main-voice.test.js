@@ -155,6 +155,7 @@ test('a Ticket question owns the input and interrupts speech until the user resu
 test('stopping a background Ticket leaves voice waiting, while stopping Main pauses it', async context => {
   const { recognitions, spoken, extensions } = voiceFixture()
   let activeTurn
+  let refuseStop = true
   let workers = [{ sessionId: 'worker', state: 'running', item: { id: 'item', ticketId: 'ticket', goal: 'Write a note',
     stop: { expectedTicketVersion: 1, expectedGeneration: 'generation' } } }]
   const { act, click, document, findButton, requests } = await mountProduct(context, {
@@ -164,7 +165,11 @@ test('stopping a background Ticket leaves voice waiting, while stopping Main pau
       history: () => ({ mainSessionId: 'main-fixture', messages: [], works: [], health: { state: 'ready' }, activeTurn }),
       'work-members': () => ({ workers }),
       'work-stop': () => { workers = []; return { state: 'stopped' } },
-      'stop-main': () => { activeTurn = undefined; return { state: 'stopped' } },
+      'stop-main': () => {
+        if (refuseStop) throw new Error('Main did not stop this reply.')
+        activeTurn = undefined
+        return { state: 'stopped' }
+      },
       'directory-options': voiceDirectory,
     },
   })
@@ -173,6 +178,9 @@ test('stopping a background Ticket leaves voice waiting, while stopping Main pau
   await click(findButton('Stop work: Write a note'))
   await click(findButton('Confirm stop for Write a note'))
   assert.match(document.querySelector('.bt-voice-status').textContent, /Waiting for Main/u)
+  await click(findButton('Stop reply'))
+  assert.match(document.querySelector('.bt-voice-note').textContent, /Main did not stop this reply/u)
+  refuseStop = false
   await click(findButton('Stop reply'))
   assert.match(document.querySelector('.bt-voice-status').textContent, /Paused/u)
   assert.equal(spoken.length, 0)

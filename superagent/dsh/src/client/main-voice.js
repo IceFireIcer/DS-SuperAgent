@@ -187,7 +187,7 @@ export function createMainVoice({ speechRemote, readMain }) {
 
 const labels = { listening: 'Listening', thinking: 'Waiting for Main…', speaking: 'Speaking', paused: 'Paused' }
 
-export function VoiceMode({ state, onPause, onResume, onClose, busy, onStop, stopping }) {
+export function VoiceMode({ state, error, onPause, onResume, onClose, busy, onStop, stopping }) {
   const toggle = useRef(null)
   useEffect(() => { toggle.current?.focus() }, [])
   const paused = state.phase === 'paused'
@@ -201,7 +201,7 @@ export function VoiceMode({ state, onPause, onResume, onClose, busy, onStop, sto
       h(BotMark, { size: 48, state: state.phase === 'thinking' ? 'thinking' : state.phase === 'speaking' ? 'sending' : 'idle' })),
     h('div', { className: 'bt-voice-status', role: 'status' }, t(labels[state.phase])),
     state.caption ? h('div', { className: 'bt-voice-caption' }, state.caption) : null,
-    state.note ? h('div', { className: 'bt-voice-note', role: 'alert' }, state.note) : null),
+    error || state.note ? h('div', { className: 'bt-voice-note', role: 'alert' }, error ?? state.note) : null),
   h('div', { className: 'bt-voice-bar' },
     h('button', { ref: toggle, type: 'button', className: 'bt-voice-btn', 'aria-pressed': paused, disabled: paused && busy,
       'aria-label': t(paused ? 'Resume voice chat' : 'Pause voice chat'), onClick: paused ? onResume : onPause },

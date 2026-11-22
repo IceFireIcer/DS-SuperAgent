@@ -5,6 +5,7 @@ import { EventEmitter } from 'node:events'
 import { mkdirSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { runInNewContext } from 'node:vm'
 
 // The data of the app in this process: a folder of its own, so that a test never writes
 // into the data of the user.
@@ -111,11 +112,24 @@ class FakeWebContents extends EventEmitter {
     this.getURL = () => this.win.url
     this.getTitle = () => win.options?.title ?? ''
     this.messages = []
+    this.animations = []
     this.send = (...message) => this.messages.push(message)
     this.setWindowOpenHandler = () => {}
     this.insertCSS = async () => {}
     this.focus = () => { this.focused = true }
-    this.executeJavaScript = async () => ({ ready: true, reducedMotion: state.reducedMotion === true })
+    this.executeJavaScript = async script => {
+      if (!script.includes('.animate(')) return { ready: true, reducedMotion: state.reducedMotion === true }
+      const animate = () => {
+        const animation = { finished: false, visibleAtFinish: false }
+        this.animations.push(animation)
+        return { finished: new Promise(resolve => setImmediate(() => {
+          animation.finished = true
+          animation.visibleAtFinish = this.win.isVisible()
+          resolve()
+        })) }
+      }
+      return runInNewContext(script, { document: { documentElement: { animate } } })
+    }
     this.toggleDevTools = () => {}
     this.loadURL = async url => { await this.win.loadURL(url) }
   }

@@ -796,7 +796,7 @@ export function applyProduct(ctx) {
     if (questionOnly) return canAnswer && !attention.view
       ? h(MainQuestion, { attention, goal: work.brief.goal, draft: attentionDraft, onDraft: setAttentionDraft, onSubmit: answer,
         busy: Boolean(controlBusy), error: controlError })
-      : h('section', { className: 'bt-main-composer', 'aria-label': t('Question') }, questionView,
+      : h('section', { className: 'bt-main-composer', 'data-main-question': '', 'aria-label': t('Question') }, questionView,
         viewError ? h('p', { className: 'bt-main-error', role: 'alert' }, viewError) : null)
     return h('article', { className: 'bt-main-work', 'aria-label': t('Work item: {goal}', { goal: work.brief.goal }),
       'data-ticket-id': control?.ticketId ?? work.receipt.ticketId, 'data-work-brief-id': work.brief.id, tabIndex: -1 },
@@ -1148,6 +1148,7 @@ export function applyProduct(ctx) {
     const latestSend = useRef(send)
     latestSend.current = send
     const startVoice = () => {
+      setSendError(null)
       if (speakingId) {
         window.speechSynthesis?.cancel()
         setSpeakingId(null)
@@ -1204,7 +1205,7 @@ export function applyProduct(ctx) {
           : t('New work uses this Environment. Active work keeps its original binding.'))) : null
     const composer = question ? h(MainWorkCard, { work: question, questionOnly: true, key: question.control.attention.id })
       : h(MainComposer, { onSend: sendText, onStop: canCommand && state.activeTurn ? stop : undefined, busy, stopping,
-      directoryBusy: state.directoryBusy, readOnly: !canCommand,
+      directoryBusy: state.directoryBusy, ready: Boolean(state.binding && execution), readOnly: !canCommand,
       error: sendError ?? state.error,
       value: state.mainDraft, onValueChange: mainDraft => view.set(current => ({ ...current, mainDraft })),
       voice: voiceState, onVoiceStart: state.binding ? startVoice : undefined,
@@ -1934,7 +1935,9 @@ export function applyProduct(ctx) {
 
   function NativeMainActions() {
     const state = useView()
-    return h('div', { className: 'bt-native-main-actions' },
+    const sessionState = useSyncExternalStore(nativeStatus?.subscribe ?? noopSubscribe, nativeStatus?.getSnapshot ?? noEvents)
+    return h('div', { className: 'bt-native-main-actions',
+      'data-native-main-question': sessionState?.get(state.binding?.mainSessionId)?.pendingInteraction ? '' : undefined },
       h('span', { role: 'status' }, state.modelsNeedSetup ? t('Models need setup') : mainHealthCopy(state.health)),
       h('button', { type: 'button', className: 'bt-icon-btn bt-main-settings', 'aria-label': t('Settings'),
         onClick: () => shellActions.openSettings() }, h(SlidersIcon)))
