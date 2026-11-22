@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { selectSuperagentTests, smokeTests } from './superagent-ci-tests.mjs'
+import { selectFullServerTests, selectSuperagentTests, smokeTests } from './superagent-ci-tests.mjs'
 
 const tests = new Map([
   ...smokeTests.map(name => [name, "import { Engine } from '../dist/index.js'"]),
@@ -38,4 +38,19 @@ test('central runtime and shared mock edits do not pull every reverse import int
 
 test('selection normalizes Windows paths, deduplicates and excludes removed files', () => {
   assert.deepEqual(selectSuperagentTests(['superagent\\src\\storage.ts', 'superagent/src/storage.ts', 'superagent/test/deleted.test.mjs'], tests), [...smokeTests].sort())
+})
+
+test('full Server allocation runs each discovered file exactly once across Windows and Linux', () => {
+  const terminal = 'test/product-terminal.test.mjs'
+  const files = [...tests.keys(), terminal]
+  const windows = selectFullServerTests(files, 'win32')
+  const linux = selectFullServerTests(files, 'linux')
+  assert.deepEqual(windows, [...tests.keys()].sort())
+  assert.deepEqual(linux, [terminal])
+  assert.deepEqual([...windows, ...linux].sort(), files.sort())
+})
+
+test('full Server allocation refuses a missing PTY fixture or unsupported platform', () => {
+  assert.throws(() => selectFullServerTests([...tests.keys()], 'win32'), /missing PTY fixture/u)
+  assert.throws(() => selectFullServerTests(['test/product-terminal.test.mjs'], 'darwin'), /unsupported platform/u)
 })

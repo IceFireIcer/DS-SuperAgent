@@ -147,16 +147,36 @@ jobs:
         env:
           CI_TEST_BASE: ${{ needs.changes.outputs.base }}
         run: node ../scripts/superagent-ci-tests.mjs
-      - name: Run every Server test for release validation
+      - name: Run the Windows Server shard for release validation
         if: needs.changes.outputs.full == 'true'
-        run: node scripts/test.mjs --test-shard=${{ matrix.shard }}/4
+        run: node ../scripts/superagent-ci-tests.mjs --full --test-shard=${{ matrix.shard }}/4
       - name: Run every product-client test for release validation
         if: needs.changes.outputs.full == 'true'
         run: npm run test:client -- --test-shard=${{ matrix.shard }}/4
 
+  superagent-pty:
+    name: Super-agent Server PTY lifecycle · Ubuntu
+    needs: changes
+    if: needs.changes.outputs.full == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: superagent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: superagent/package-lock.json
+      - run: npm ci --no-fund --no-audit
+      - name: Run the native Server PTY fixture through natural exit
+        run: node ../scripts/superagent-ci-tests.mjs --full
+
   superagent:
     name: Super-agent CI
-    needs: [changes, superagent-check, superagent-tests]
+    needs: [changes, superagent-check, superagent-tests, superagent-pty]
     if: always() && needs.changes.result == 'success' && needs.changes.outputs.superagent == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -164,9 +184,12 @@ jobs:
         env:
           CHECK_RESULT: ${{ needs.superagent-check.result }}
           TEST_RESULT: ${{ needs.superagent-tests.result }}
+          FULL: ${{ needs.changes.outputs.full }}
+          PTY_RESULT: ${{ needs.superagent-pty.result }}
         run: |
           test "$CHECK_RESULT" = success
           test "$TEST_RESULT" = success
+          if [ "$FULL" = true ]; then test "$PTY_RESULT" = success; fi
 
   app:
     name: Desktop app profile

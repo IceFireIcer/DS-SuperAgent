@@ -9,6 +9,15 @@ export const smokeTests = [
   't59-profile', 'work-observations',
 ].map(name => `test/${name}.test.mjs`)
 
+const terminalTest = 'test/product-terminal.test.mjs'
+
+export function selectFullServerTests(files, platform) {
+  if (platform !== 'win32' && platform !== 'linux') throw new Error(`Full Server tests: unsupported platform ${platform}.`)
+  if (!files.includes(terminalTest)) throw new Error(`Full Server tests: missing PTY fixture ${terminalTest}.`)
+  if (platform === 'linux') return [terminalTest]
+  return files.filter(file => file !== terminalTest).sort()
+}
+
 // Central runtime and shared fixture edits are exercised by the product smoke.
 // Reverse imports would select almost every integration suite, including slow
 // process/remote fixtures that belong to full release validation.
@@ -55,15 +64,25 @@ function main() {
   const directory = new URL('../superagent/test/', import.meta.url)
   const tests = new Map(readdirSync(directory).filter(name => name.endsWith('.test.mjs'))
     .map(name => [`test/${name}`, readFileSync(new URL(name, directory), 'utf8')]))
-  const base = process.env.CI_TEST_BASE
-  const paths = !base || /^0+$/u.test(base) ? [] : execFileSync('git', [
-    'diff', '--name-only', base, 'HEAD', '--', 'superagent/',
-  ], { cwd: root, encoding: 'utf8' }).trim().split(/\r?\n/u).filter(Boolean)
-  const selected = selectSuperagentTests(paths, tests)
-  if (!selected.length) throw new Error('No daily smoke tests exist. Refuse to pass an empty test selection.')
-  console.log(`Daily Super-agent CI: ${selected.length}/${tests.size} test files. Remaining suites run in full release validation.`)
+  const [mode, ...flags] = process.argv.slice(2)
+  let selected
+  if (mode === '--full') {
+    selected = selectFullServerTests([...tests.keys()], process.platform)
+    const correctFlags = process.platform === 'win32' ? flags.length === 1 && /^--test-shard=[1-4]\/4$/u.test(flags[0]) : !flags.length
+    if (!correctFlags) throw new Error('Full Server tests require one of four Windows shards or one unsharded Ubuntu PTY job.')
+    console.log(`Full Super-agent Server selection for ${process.platform}: ${selected.length}/${tests.size} test files${flags.length ? ` (${flags[0]})` : ''}.`)
+  } else {
+    if (mode !== undefined) throw new Error(`Unknown Server test selection mode ${mode}.`)
+    const base = process.env.CI_TEST_BASE
+    const paths = !base || /^0+$/u.test(base) ? [] : execFileSync('git', [
+      'diff', '--name-only', base, 'HEAD', '--', 'superagent/',
+    ], { cwd: root, encoding: 'utf8' }).trim().split(/\r?\n/u).filter(Boolean)
+    selected = selectSuperagentTests(paths, tests)
+    console.log(`Daily Super-agent CI: ${selected.length}/${tests.size} test files. Remaining suites run in full release validation.`)
+  }
+  if (!selected.length) throw new Error('Refuse to pass an empty Server test selection.')
   console.log(selected.join('\n'))
-  const result = spawnSync(process.execPath, ['scripts/test.mjs', ...selected], {
+  const result = spawnSync(process.execPath, ['scripts/test.mjs', ...flags, ...selected], {
     cwd: fileURLToPath(new URL('../superagent/', import.meta.url)), stdio: 'inherit',
   })
   if (result.error) throw result.error
