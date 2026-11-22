@@ -1,5 +1,8 @@
 import { createElement as h, useEffect, useRef, useState } from 'react'
 import { t } from './i18n.js'
+import { BotMark } from './mark.js'
+import { MAIN_LOOK } from './characters.js'
+import { workStatusCopy } from './work-feedback.js'
 
 const groups = [
   ['running', 'Running'],
@@ -44,19 +47,29 @@ function StopWork({ item, execute }) {
     error ? h('span', { className: 'bt-main-error', role: 'alert' }, error) : null)
 }
 
-export function WorkMemberDock({ workers, routing, activeTurn, execute }) {
-  return h('div', { className: 'bt-work-members', role: 'group', 'aria-label': t('Work members') },
-    h('span', { className: 'bt-work-member', 'data-active': activeTurn?.status === 'running' }, t('Main')),
-    h('span', { className: 'bt-work-member', 'data-active': routing }, t('Router')),
-    workers.map(({ sessionId, item, state }) => h('div', { className: 'bt-work-member', key: sessionId, 'data-active': true },
-      h('span', { title: item?.goal ?? sessionId }, t(state === 'stopping' ? 'Worker stopping' : 'Worker')),
-      execute && item ? h(StopWork, { item, execute }) : null)))
+function MemberState({ role, identity, goal, label, mark, children }) {
+  return h('div', { className: 'bt-work-member', 'data-active': mark !== 'idle' },
+    h(BotMark, { bot: { id: identity }, look: role === 'Main' ? MAIN_LOOK : undefined, size: 20, state: mark }),
+    h('span', null, t(role)), h('span', { 'data-role-status': '', title: goal }, label), children)
 }
 
-const details = { blocked: 'Blocked', failed: 'Work failed', rejected: 'Work declined', unknown: 'Work result unknown',
-  dropped: 'Delivery failed', stopping: 'Stopping' }
+export function WorkMemberDock({ workers, routing, activeTurn, mainHealth, execute }) {
+  const mainStatus = activeTurn?.status
+  const mainLabel = mainStatus === 'running' ? 'Replying' : mainStatus === 'stopping' ? 'Stopping…'
+    : mainHealth?.state === 'degraded' ? 'Main degraded' : mainHealth?.queuedInputs ? 'Queued' : 'Ready'
+  const mainMark = mainStatus === 'running' ? 'thinking' : mainStatus === 'stopping' ? 'waiting'
+    : mainHealth?.state === 'degraded' ? 'alert' : mainHealth?.queuedInputs ? 'waiting' : 'idle'
+  return h('div', { className: 'bt-work-members', role: 'group', 'aria-label': t('Work members') },
+    h(MemberState, { role: 'Main', identity: 'main', mark: mainMark, label: t(mainLabel) }),
+    h(MemberState, { role: 'Router', identity: 'router', mark: routing ? 'orbit' : 'idle', label: t(routing ? 'Routing work' : 'Ready') }),
+    workers.map(({ sessionId, item, state }) => h(MemberState, { key: sessionId, role: 'Worker', identity: sessionId, goal: item?.goal,
+      mark: state === 'waiting' ? 'alert' : state === 'stopping' ? 'waiting' : 'working', label: workStatusCopy(state) },
+      execute && item?.stop ? h(StopWork, { item, execute }) : null)))
+}
 
-export function WorkBoard({ items, error, execute }) {
+const deliveryDetails = { dropped: 'Delivery failed', unknown: 'Delivery needs reconciliation' }
+
+export function WorkBoard({ items, error, execute, members, renderQuestion }) {
   const [drafts, setDrafts] = useState({})
   const [filter, setFilter] = useState('')
   const requests = useRef(new Map())
@@ -81,6 +94,7 @@ export function WorkBoard({ items, error, execute }) {
 
   const sorted = (items ?? []).toSorted((first, second) => second.createdAt - first.createdAt || first.id.localeCompare(second.id))
   return h('div', { className: 'bt-work-board', 'aria-label': t('Work') },
+    members,
     h('label', { className: 'bt-field bt-work-filter' }, t('Filter work'),
       h('select', { className: 'bt-select', value: filter, onChange: event => setFilter(event.target.value) },
         h('option', { value: '' }, t('All work')),
@@ -93,9 +107,11 @@ export function WorkBoard({ items, error, execute }) {
         h('h3', null, `${t(label)} · ${matching.length}`),
         matching.length ? matching.map(item => {
           const draft = drafts[item.id] ?? {}
-          return h('article', { key: item.id, className: 'bt-work-board-item' },
-            h('h4', null, item.goal), details[item.detail] ? h('p', { role: 'status' }, t(details[item.detail])) : null,
-            h('p', null, item.summary),
+          const deliveryDetail = item.status === 'success' ? deliveryDetails[item.detail] : undefined
+          return h('article', { key: item.id, className: 'bt-work-board-item', 'data-ticket-id': item.ticketId },
+            h('h4', null, item.goal), h('p', { role: 'status' }, workStatusCopy(item.status ?? item.detail)),
+            deliveryDetail ? h('p', null, t(deliveryDetail)) : null,
+            h('p', null, item.summary), renderQuestion?.(item),
             item.notes?.length ? h('ul', null, item.notes.map(note => h('li', { key: note.id }, note.text))) : null,
             execute && item.ticketId && state !== 'stopped' ? h('div', { className: 'bt-work-actions' },
               item.stop ? h(StopWork, { item, execute }) : null,
@@ -116,8 +132,11 @@ export function WorkBoard({ items, error, execute }) {
 export const WORK_BOARD_CSS = `
 .bt-work-members,.bt-work-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .bt-work-members{padding:4px 12px;color:var(--bt-ink-2);font-size:var(--bt-font-small)}
-.bt-work-member{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid var(--bt-line);border-radius:var(--bt-radius-pill)}
+.bt-work-member{display:inline-flex;align-items:center;flex-wrap:wrap;gap:6px;padding:3px 8px;border:1px solid var(--bt-line);border-radius:var(--bt-radius-pill)}
 .bt-work-member[data-active="true"]{color:var(--bt-ink);border-color:var(--bt-accent)}
+.bt-work-member [data-role-status]{color:var(--bt-ink-2)}
+.bt-work-board-item .bt-q-dock{margin:0;width:100%;max-width:none}
+body[data-bt-motion=quiet] .bt-work-member .bt-mark *{animation:none}
 .bt-work-board{overflow:auto;padding:16px;display:grid;gap:16px;align-content:start;min-width:0;color:var(--bt-ink)}
 .bt-work-filter{max-width:240px}
 .bt-work-group{display:grid;gap:8px;min-width:0}

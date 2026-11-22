@@ -35,6 +35,7 @@ import { ProductImSettings } from './im-settings.js'
 import { ProductPhoneSettings } from './product-phone-settings.js'
 import { ProductComputerSettings, PRODUCT_COMPUTER_CSS } from './product-computer-settings.js'
 import { WorkBoard, WorkMemberDock, WORK_BOARD_CSS } from './work-board.js'
+import { workStatusCopy as statusCopy } from './work-feedback.js'
 import { ProductBrowserSettings, ProductBrowserPluginSettings, PRODUCT_BROWSER_CSS } from './product-browser-settings.js'
 import { ProductExecutionSettings, PRODUCT_EXECUTION_CSS } from './product-execution.js'
 import { ProductWorkView } from './product-work-view.js'
@@ -183,13 +184,28 @@ export function applyProduct(ctx) {
       if (dock) await refreshMembers(state.binding)
       else {
         if (boardFlight) await boardFlight
-        await refreshBoard(state.binding)
+        await Promise.all([refreshMain(state.binding), refreshBoard(state.binding), refreshMembers(state.binding)])
       }
       return result
     } : undefined
-    if (dock) return h(WorkMemberDock, { workers: state.workerMembers,
-      routing: state.works.some(work => work.receipt?.status === 'routing'), activeTurn: state.activeTurn, execute })
-    return h(WorkBoard, { items: state.boardItems, error: state.boardError, execute })
+    const workers = new Map(state.workerMembers.map(worker => [worker.sessionId, worker]))
+    const questions = dock ? state.works.map(work => ({ goal: work.brief.goal, question: work.control })) : state.boardItems ?? []
+    for (const { goal, question } of questions) {
+      const attention = question?.attention
+      if (attention?.status === 'waiting' && attention.sessionId && !workers.get(attention.sessionId)?.item?.stop) {
+        workers.set(attention.sessionId, { sessionId: attention.sessionId, state: 'waiting', item: { goal } })
+      }
+    }
+    const members = h(WorkMemberDock, { workers: [...workers.values()], mainHealth: state.health,
+      routing: state.works.some(work => work.receipt?.status === 'routing'), activeTurn: state.activeTurn,
+      execute: dock ? execute : undefined })
+    if (dock) return members
+    return h(WorkBoard, { items: state.boardItems, error: state.boardError, execute, members, renderQuestion: item => item.question
+      && h(MainWorkCard, { key: `${item.question.attention.id}:${item.question.attention.version}`, questionOnly: true,
+        work: { brief: { goal: item.goal }, control: item.question }, onQuestionSettled: async () => {
+          if (boardFlight) await boardFlight
+          await Promise.all([refreshBoard(state.binding), refreshMembers(state.binding)])
+        } }) })
   }
 
   const refreshMain = async binding => {
@@ -493,10 +509,6 @@ export function applyProduct(ctx) {
     return () => { stopped = true; clearTimeout(timer) }
   }, 'superagent: follow the shared Main')
 
-  const statusCopy = status => ({ routing: t('Routing work'), pending: t('Pending work'), running: t('Running work'),
-    waiting: t('Waiting for an answer'), blocked: t('Blocked work'), stopped: t('Stopped work'), success: t('Work complete'),
-    failed: t('Work failed'), rejected: t('Work declined'), accepted: t('Accepted by Router'), ended: t('Generation ended'),
-    unknown: t('Work result unknown') })[status] ?? status
   const followUpCopy = status => ({ queued: t('Follow-up queued'), persisted: t('Follow-up persisted'),
     delivering: t('Follow-up delivery started'), ready: t('Direction completed'), waiting: t('Direction waiting'),
     'handed-back': t('Direction handed back'), stopped: t('Direction blocked by stop'),
@@ -644,7 +656,7 @@ export function applyProduct(ctx) {
         !targets.length ? h('p', { className: 'bt-main-work-detail' },
           t('No other Environment is available for handoff.')) : null) : null)
   }
-  function MainWorkCard({ work, onEvidence, questionOnly = false, questionInComposer = false, showEvidence = false }) {
+  function MainWorkCard({ work, onEvidence, questionOnly = false, questionInComposer = false, showEvidence = false, onQuestionSettled }) {
     const state = useView()
     const canCommand = !state.connection?.connected || state.connection.capabilities.includes('command')
     const [controlBusy, setControlBusy] = useState(null)
@@ -741,6 +753,7 @@ export function applyProduct(ctx) {
         setControlError(error.message)
         await refreshMain(state.binding)
       } finally {
+        await onQuestionSettled?.()
         setControlBusy(null)
       }
     }
@@ -757,6 +770,7 @@ export function applyProduct(ctx) {
         setViewError(error.message)
         await refreshMain(state.binding)
       } finally {
+        await onQuestionSettled?.()
         setControlBusy(null)
       }
     }
@@ -779,8 +793,8 @@ export function applyProduct(ctx) {
           `${t('Answered by')} ${attention.answeredBy ?? control.permissions.actorId}${attention.answerText ? `: ${attention.answerText}` : ''}`)
           : attention.status === 'waiting' && attention.view ? h('p', { className: 'bt-main-work-detail' }, t('Answer this view to continue the same work.'))
             : attention.status !== 'waiting' ? h('p', { className: 'bt-main-work-detail' }, t('This question is no longer active.')) : null) : null
-    if (questionOnly) return attention && !attention.view
-      ? h(MainQuestion, { attention, draft: attentionDraft, onDraft: setAttentionDraft, onSubmit: answer,
+    if (questionOnly) return canAnswer && !attention.view
+      ? h(MainQuestion, { attention, goal: work.brief.goal, draft: attentionDraft, onDraft: setAttentionDraft, onSubmit: answer,
         busy: Boolean(controlBusy), error: controlError })
       : h('section', { className: 'bt-main-composer', 'aria-label': t('Question') }, questionView,
         viewError ? h('p', { className: 'bt-main-error', role: 'alert' }, viewError) : null)

@@ -3,7 +3,7 @@ import { createElement as h, useId } from 'react'
 import { CheckIcon } from './icons.js'
 import { t } from './i18n.js'
 
-export function MainQuestion({ attention, draft = '', onDraft, onSubmit, busy = false, error }) {
+export function MainQuestion({ attention, goal, draft = '', onDraft, onSubmit, busy = false, error }) {
   const titleId = useId()
   const options = attention.options ?? []
   const allowText = attention.freeText !== false
@@ -19,7 +19,8 @@ export function MainQuestion({ attention, draft = '', onDraft, onSubmit, busy = 
       },
     },
     h('div', { className: 'bt-q-head' },
-      h('div', { className: 'bt-q-text' }, h('p', { className: 'bt-q-title', id: titleId }, attention.question))),
+      h('div', { className: 'bt-q-text' }, goal ? h('p', { className: 'bt-main-work-detail' }, goal) : null,
+        h('p', { className: 'bt-q-title', id: titleId }, attention.question))),
     options.length ? h('div', { className: 'bt-q-list', role: 'group', 'aria-labelledby': titleId }, options.map(option => {
       const selected = answer === option
       return h('button', {

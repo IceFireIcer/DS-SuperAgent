@@ -343,6 +343,13 @@ test('a Main work card answers only the exact current Attention and records the 
   assert.equal(control?.attention?.version, 1)
   const assignment = control.assignment
   const attention = control.attention
+  const board = async () => (await engine.listMainWork({ instanceId: 'personal' })).items
+    .find(item => item.ticketId === waiting.receipt.ticketId)
+  const boardWaiting = await board()
+  assert.equal(boardWaiting.status, waiting.status)
+  assert.equal(boardWaiting.question.attention.question, 'Continue beta?')
+  assert.equal(boardWaiting.question.assignment.generation, assignment.generation)
+  assert.equal(boardWaiting.question.permissions.canAnswer, true)
   const command = { instanceId: 'personal', commandId: 'answer-card-yes', workItemId: waiting.brief.workItemId,
     ticketId: waiting.receipt.ticketId, expectedGeneration: assignment.generation, attentionId: attention.id,
     attentionVersion: attention.version, text: 'Yes' }
@@ -371,6 +378,10 @@ test('a Main work card answers only the exact current Attention and records the 
   assert.equal(final?.control?.attention?.status, 'answered')
   assert.equal(final?.control?.attention?.answerText, 'Yes')
   assert.equal(final?.control?.permissions.canAnswer, false)
+  const boardAnswered = await board()
+  assert.equal(boardAnswered.status, final.status)
+  assert.equal(boardAnswered.question.attention.answerText, 'Yes')
+  assert.equal(boardAnswered.question.permissions.canAnswer, false)
   assert.match(final?.update?.summary ?? '', /Authorized answer v1/u)
   await engine.retryMainWork({ instanceId: 'personal', commandId: 'answer-card-rollover', workItemId: waiting.brief.workItemId,
     ticketId: waiting.receipt.ticketId, expectedGeneration: assignment.generation, reason: 'Advance the answered Assignment.' })

@@ -2162,8 +2162,11 @@ export class Engine {
         const detail = assignment?.state === 'stopping' || card.control?.stop?.state === 'stopping' ? 'stopping'
           : result?.state === 'unknown' || result?.state === 'dropped' ? result.state : card.status
         records.push({ id: card.brief.workItemId, goal: card.brief.goal, createdAt: card.brief.createdAt,
-          summary: card.update?.summary ?? card.outcome?.summary ?? card.receipt.nextStep, state, detail,
+          summary: card.update?.summary ?? card.outcome?.summary ?? card.receipt.nextStep, state, detail, status: card.status,
           ...(ticketId ? { ticketId } : {}),
+          ...(card.control?.attention ? { question: { workItemId: card.control.workItemId, ticketId: card.control.ticketId,
+            assignment: card.control.assignment, attention: card.control.attention,
+            permissions: { actorId: card.control.permissions.actorId, canAnswer: card.control.permissions.canAnswer } } } : {}),
           ...(ticketId && card.control?.permissions.canStop ? { stop: { expectedTicketVersion: card.control.ticketVersion,
             ...(assignment ? { expectedGeneration: assignment.generation } : {}) } } : {}),
           ...(card.followUps?.length ? { notes: card.followUps.map(({ id, text }) => ({ id, text })) } : {}),

@@ -67,6 +67,11 @@ test('Main work cards keep an answerable view separate from a read-only result v
       requests.push([endpoint, payload])
       const value = endpoint === 'open' ? { instanceId: 'private' }
         : endpoint === 'history' ? structuredClone(history)
+          : endpoint === 'work-board' ? { items: history.works.map(work => ({
+            id: work.brief.workItemId, ticketId: work.receipt.ticketId, goal: work.brief.goal, createdAt: 1,
+            state: work.status === 'success' ? 'delivered' : 'waiting-human', status: work.status,
+            question: work.control?.attention ? work.control : undefined,
+          })) }
           : endpoint === 'directory-options' ? { default: { environmentId: 'local', root: '/work' }, directories: [] }
             : endpoint === 'execution-options' ? { policy: { defaultTarget: 'local-only', requiredPermissions: [] }, environments: [] }
               : endpoint === 'observe-list' ? { items: [] }
@@ -101,16 +106,25 @@ test('Main work cards keep an answerable view separate from a read-only result v
     assert.match(readOnly?.querySelector('.bt-main-work-view')?.innerHTML ?? '', /dv-q-settled/u)
     assert.equal(readOnly?.querySelectorAll('.bt-main-work-view button').length, 0,
       'a waiting view without answer permission is read-only')
-    const answer = [...dom.window.document.querySelectorAll('button')].find(button => button.textContent.includes('Detailed'))
-    assert.ok(answer, 'the interactive work view must expose its submitted option')
+    const findButton = label => [...dom.window.document.querySelectorAll('.bt-main-header > button')].find(button => button.textContent === label)
+    const mainStatus = dom.window.document.querySelector('[data-ticket-id="ticket-view"] [role=status]').textContent
+    await React.act(async () => findButton('Work').click())
+    const boardTicket = dom.window.document.querySelector('.bt-work-board-item[data-ticket-id="ticket-view"]')
+    assert.equal(boardTicket?.querySelector('[role=status]')?.textContent, mainStatus)
+    const answer = [...boardTicket.querySelectorAll('button')].find(button => button.textContent.includes('Detailed'))
+    assert.ok(answer, 'the Work view exposes the same Ticket question')
     await React.act(async () => answer.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })))
     const request = requests.find(([endpoint]) => endpoint === 'work-answer-view')?.[1]
     assert.deepEqual(request?.values, { selected: ['Detailed'] })
     assert.equal(request?.attentionId, 'attention-view')
     assert.equal(request?.expectedGeneration, 'generation-view')
     assert.equal(request?.commandId.length > 0, true)
-    assert.equal([...dom.window.document.querySelectorAll('button')]
-      .some(button => button.textContent.includes('Detailed')), false, 'an answered view is read-only')
+    assert.equal(dom.window.document.querySelector('.bt-work-board-item[data-ticket-id="ticket-view"] [role=status]')?.textContent,
+      'Work complete')
+    await React.act(async () => findButton('Main').click())
+    assert.equal(dom.window.document.querySelector('[data-ticket-id="ticket-view"] [role=status]')?.textContent, 'Work complete')
+    assert.equal([...dom.window.document.querySelectorAll('button')].some(button => button.textContent.includes('Detailed')), false,
+      'an answered view is read-only in Main as well')
   } finally {
     cleanup?.()
     if (root) await requireHarness('react').act(async () => root.unmount())

@@ -607,6 +607,7 @@ const ZH = {
   'This question is no longer active.': '这个问题已不再有效。',
   'What would you like to discuss?': '想聊些什么？',
   'Main is replying…': 'Main 正在回复…',
+  Replying: '正在回复',
   'Main ready': 'Main 就绪',
   'Main running': 'Main 处理中',
   'Main degraded': 'Main 异常',

@@ -3107,6 +3107,7 @@ var ZH = {
   "This question is no longer active.": "这个问题已不再有效。",
   "What would you like to discuss?": "想聊些什么？",
   "Main is replying…": "Main 正在回复…",
+  Replying: "正在回复",
   "Main ready": "Main 就绪",
   "Main running": "Main 处理中",
   "Main degraded": "Main 异常",
@@ -6367,7 +6368,7 @@ function installMainCells(ctx) {
 
 // src/client/main-question.js
 var import_react8 = require("react");
-function MainQuestion({ attention, draft = "", onDraft, onSubmit, busy = false, error }) {
+function MainQuestion({ attention, goal, draft = "", onDraft, onSubmit, busy = false, error }) {
   const titleId = (0, import_react8.useId)();
   const options = attention.options ?? [];
   const allowText = attention.freeText !== false;
@@ -6389,7 +6390,12 @@ function MainQuestion({ attention, draft = "", onDraft, onSubmit, busy = false, 
       (0, import_react8.createElement)(
         "div",
         { className: "bt-q-head" },
-        (0, import_react8.createElement)("div", { className: "bt-q-text" }, (0, import_react8.createElement)("p", { className: "bt-q-title", id: titleId }, attention.question))
+        (0, import_react8.createElement)(
+          "div",
+          { className: "bt-q-text" },
+          goal ? (0, import_react8.createElement)("p", { className: "bt-main-work-detail" }, goal) : null,
+          (0, import_react8.createElement)("p", { className: "bt-q-title", id: titleId }, attention.question)
+        )
       ),
       options.length ? (0, import_react8.createElement)("div", { className: "bt-q-list", role: "group", "aria-labelledby": titleId }, options.map((option) => {
         const selected = answer === option;
@@ -6861,7 +6867,7 @@ function ProductScheduleSettings({ binding, works = [], call: call2, onViewWork,
   const family = taskMode ? "scheduled-task" : "schedule";
   const [rules, setRules] = (0, import_react12.useState)(null);
   const [sourceEnabled, setSourceEnabled] = (0, import_react12.useState)(true);
-  const [details2, setDetails] = (0, import_react12.useState)({});
+  const [details, setDetails] = (0, import_react12.useState)({});
   const [historyCounts, setHistoryCounts] = (0, import_react12.useState)({});
   const [adding, setAdding] = (0, import_react12.useState)(false);
   const [title, setTitle] = (0, import_react12.useState)("");
@@ -7079,7 +7085,7 @@ function ProductScheduleSettings({ binding, works = [], call: call2, onViewWork,
     ) : null,
     error ? (0, import_react12.createElement)(InlineNotice, { tone: "danger" }, error) : null,
     !rules ? !error && (0, import_react12.createElement)(InlineNotice, { tone: "neutral" }, t("Loading…")) : rules.length === 0 ? (0, import_react12.createElement)(SectionCard, null, (0, import_react12.createElement)(EmptyState, { title: t("No scheduled tasks yet.") })) : (0, import_react12.createElement)(SectionCard, null, rules.map((rule) => {
-      const occurrences = [...details2[rule.ruleId]?.occurrences ?? []].sort((left, right) => left.dueAt - right.dueAt);
+      const occurrences = [...details[rule.ruleId]?.occurrences ?? []].sort((left, right) => left.dueAt - right.dueAt);
       const last = occurrences.at(-1);
       const visibleCount = Math.min(occurrences.length, historyCounts[rule.ruleId] ?? 20);
       const visibleOccurrences = occurrences.slice(-visibleCount);
@@ -15758,6 +15764,26 @@ function ProductComputerSettings({ binding, call: call2 }) {
 }
 var PRODUCT_COMPUTER_CSS = `.bt-computer-shot{display:block;max-inline-size:100%;block-size:auto;object-fit:contain}`;
 
+// src/client/work-feedback.js
+var workStatuses = {
+  routing: "Routing work",
+  pending: "Pending work",
+  running: "Running work",
+  waiting: "Waiting for an answer",
+  blocked: "Blocked work",
+  stopped: "Stopped work",
+  stopping: "Stopping…",
+  success: "Work complete",
+  failed: "Work failed",
+  rejected: "Work declined",
+  accepted: "Accepted by Router",
+  ended: "Generation ended",
+  unknown: "Work result unknown"
+};
+function workStatusCopy(status) {
+  return Object.hasOwn(workStatuses, status) ? t(workStatuses[status]) : status;
+}
+
 // src/client/work-board.js
 var import_react38 = require("react");
 var groups = [
@@ -15826,29 +15852,41 @@ function StopWork({ item, execute }) {
     error ? (0, import_react38.createElement)("span", { className: "bt-main-error", role: "alert" }, error) : null
   );
 }
-function WorkMemberDock({ workers, routing, activeTurn, execute }) {
+function MemberState({ role, identity, goal, label, mark, children }) {
+  return (0, import_react38.createElement)(
+    "div",
+    { className: "bt-work-member", "data-active": mark !== "idle" },
+    (0, import_react38.createElement)(BotMark, { bot: { id: identity }, look: role === "Main" ? MAIN_LOOK : void 0, size: 20, state: mark }),
+    (0, import_react38.createElement)("span", null, t(role)),
+    (0, import_react38.createElement)("span", { "data-role-status": "", title: goal }, label),
+    children
+  );
+}
+function WorkMemberDock({ workers, routing, activeTurn, mainHealth, execute }) {
+  const mainStatus = activeTurn?.status;
+  const mainLabel = mainStatus === "running" ? "Replying" : mainStatus === "stopping" ? "Stopping…" : mainHealth?.state === "degraded" ? "Main degraded" : mainHealth?.queuedInputs ? "Queued" : "Ready";
+  const mainMark = mainStatus === "running" ? "thinking" : mainStatus === "stopping" ? "waiting" : mainHealth?.state === "degraded" ? "alert" : mainHealth?.queuedInputs ? "waiting" : "idle";
   return (0, import_react38.createElement)(
     "div",
     { className: "bt-work-members", role: "group", "aria-label": t("Work members") },
-    (0, import_react38.createElement)("span", { className: "bt-work-member", "data-active": activeTurn?.status === "running" }, t("Main")),
-    (0, import_react38.createElement)("span", { className: "bt-work-member", "data-active": routing }, t("Router")),
+    (0, import_react38.createElement)(MemberState, { role: "Main", identity: "main", mark: mainMark, label: t(mainLabel) }),
+    (0, import_react38.createElement)(MemberState, { role: "Router", identity: "router", mark: routing ? "orbit" : "idle", label: t(routing ? "Routing work" : "Ready") }),
     workers.map(({ sessionId, item, state }) => (0, import_react38.createElement)(
-      "div",
-      { className: "bt-work-member", key: sessionId, "data-active": true },
-      (0, import_react38.createElement)("span", { title: item?.goal ?? sessionId }, t(state === "stopping" ? "Worker stopping" : "Worker")),
-      execute && item ? (0, import_react38.createElement)(StopWork, { item, execute }) : null
+      MemberState,
+      {
+        key: sessionId,
+        role: "Worker",
+        identity: sessionId,
+        goal: item?.goal,
+        mark: state === "waiting" ? "alert" : state === "stopping" ? "waiting" : "working",
+        label: workStatusCopy(state)
+      },
+      execute && item?.stop ? (0, import_react38.createElement)(StopWork, { item, execute }) : null
     ))
   );
 }
-var details = {
-  blocked: "Blocked",
-  failed: "Work failed",
-  rejected: "Work declined",
-  unknown: "Work result unknown",
-  dropped: "Delivery failed",
-  stopping: "Stopping"
-};
-function WorkBoard({ items, error, execute }) {
+var deliveryDetails = { dropped: "Delivery failed", unknown: "Delivery needs reconciliation" };
+function WorkBoard({ items, error, execute, members, renderQuestion }) {
   const [drafts, setDrafts] = (0, import_react38.useState)({});
   const [filter, setFilter] = (0, import_react38.useState)("");
   const requests = (0, import_react38.useRef)(/* @__PURE__ */ new Map());
@@ -15873,6 +15911,7 @@ function WorkBoard({ items, error, execute }) {
   return (0, import_react38.createElement)(
     "div",
     { className: "bt-work-board", "aria-label": t("Work") },
+    members,
     (0, import_react38.createElement)(
       "label",
       { className: "bt-field bt-work-filter" },
@@ -15894,12 +15933,15 @@ function WorkBoard({ items, error, execute }) {
         (0, import_react38.createElement)("h3", null, `${t(label)} · ${matching.length}`),
         matching.length ? matching.map((item) => {
           const draft = drafts[item.id] ?? {};
+          const deliveryDetail = item.status === "success" ? deliveryDetails[item.detail] : void 0;
           return (0, import_react38.createElement)(
             "article",
-            { key: item.id, className: "bt-work-board-item" },
+            { key: item.id, className: "bt-work-board-item", "data-ticket-id": item.ticketId },
             (0, import_react38.createElement)("h4", null, item.goal),
-            details[item.detail] ? (0, import_react38.createElement)("p", { role: "status" }, t(details[item.detail])) : null,
+            (0, import_react38.createElement)("p", { role: "status" }, workStatusCopy(item.status ?? item.detail)),
+            deliveryDetail ? (0, import_react38.createElement)("p", null, t(deliveryDetail)) : null,
             (0, import_react38.createElement)("p", null, item.summary),
+            renderQuestion?.(item),
             item.notes?.length ? (0, import_react38.createElement)("ul", null, item.notes.map((note) => (0, import_react38.createElement)("li", { key: note.id }, note.text))) : null,
             execute && item.ticketId && state !== "stopped" ? (0, import_react38.createElement)(
               "div",
@@ -15948,8 +15990,11 @@ function WorkBoard({ items, error, execute }) {
 var WORK_BOARD_CSS = `
 .bt-work-members,.bt-work-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .bt-work-members{padding:4px 12px;color:var(--bt-ink-2);font-size:var(--bt-font-small)}
-.bt-work-member{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid var(--bt-line);border-radius:var(--bt-radius-pill)}
+.bt-work-member{display:inline-flex;align-items:center;flex-wrap:wrap;gap:6px;padding:3px 8px;border:1px solid var(--bt-line);border-radius:var(--bt-radius-pill)}
 .bt-work-member[data-active="true"]{color:var(--bt-ink);border-color:var(--bt-accent)}
+.bt-work-member [data-role-status]{color:var(--bt-ink-2)}
+.bt-work-board-item .bt-q-dock{margin:0;width:100%;max-width:none}
+body[data-bt-motion=quiet] .bt-work-member .bt-mark *{animation:none}
 .bt-work-board{overflow:auto;padding:16px;display:grid;gap:16px;align-content:start;min-width:0;color:var(--bt-ink)}
 .bt-work-filter{max-width:240px}
 .bt-work-group{display:grid;gap:8px;min-width:0}
@@ -20895,17 +20940,35 @@ function applyProduct(ctx) {
       if (dock) await refreshMembers(state.binding);
       else {
         if (boardFlight) await boardFlight;
-        await refreshBoard(state.binding);
+        await Promise.all([refreshMain(state.binding), refreshBoard(state.binding), refreshMembers(state.binding)]);
       }
       return result;
     } : void 0;
-    if (dock) return (0, import_react50.createElement)(WorkMemberDock, {
-      workers: state.workerMembers,
+    const workers = new Map(state.workerMembers.map((worker) => [worker.sessionId, worker]));
+    const questions = dock ? state.works.map((work) => ({ goal: work.brief.goal, question: work.control })) : state.boardItems ?? [];
+    for (const { goal, question } of questions) {
+      const attention = question?.attention;
+      if (attention?.status === "waiting" && attention.sessionId && !workers.get(attention.sessionId)?.item?.stop) {
+        workers.set(attention.sessionId, { sessionId: attention.sessionId, state: "waiting", item: { goal } });
+      }
+    }
+    const members = (0, import_react50.createElement)(WorkMemberDock, {
+      workers: [...workers.values()],
+      mainHealth: state.health,
       routing: state.works.some((work) => work.receipt?.status === "routing"),
       activeTurn: state.activeTurn,
-      execute
+      execute: dock ? execute : void 0
     });
-    return (0, import_react50.createElement)(WorkBoard, { items: state.boardItems, error: state.boardError, execute });
+    if (dock) return members;
+    return (0, import_react50.createElement)(WorkBoard, { items: state.boardItems, error: state.boardError, execute, members, renderQuestion: (item) => item.question && (0, import_react50.createElement)(MainWorkCard, {
+      key: `${item.question.attention.id}:${item.question.attention.version}`,
+      questionOnly: true,
+      work: { brief: { goal: item.goal }, control: item.question },
+      onQuestionSettled: async () => {
+        if (boardFlight) await boardFlight;
+        await Promise.all([refreshBoard(state.binding), refreshMembers(state.binding)]);
+      }
+    }) });
   }
   const refreshMain = async (binding) => {
     try {
@@ -21278,20 +21341,6 @@ function applyProduct(ctx) {
       clearTimeout(timer);
     };
   }, "superagent: follow the shared Main");
-  const statusCopy2 = (status) => ({
-    routing: t("Routing work"),
-    pending: t("Pending work"),
-    running: t("Running work"),
-    waiting: t("Waiting for an answer"),
-    blocked: t("Blocked work"),
-    stopped: t("Stopped work"),
-    success: t("Work complete"),
-    failed: t("Work failed"),
-    rejected: t("Work declined"),
-    accepted: t("Accepted by Router"),
-    ended: t("Generation ended"),
-    unknown: t("Work result unknown")
-  })[status] ?? status;
   const followUpCopy = (status) => ({
     queued: t("Follow-up queued"),
     persisted: t("Follow-up persisted"),
@@ -21530,7 +21579,7 @@ function applyProduct(ctx) {
       ) : null
     );
   }
-  function MainWorkCard({ work, onEvidence, questionOnly = false, questionInComposer = false, showEvidence = false }) {
+  function MainWorkCard({ work, onEvidence, questionOnly = false, questionInComposer = false, showEvidence = false, onQuestionSettled }) {
     const state = useView();
     const canCommand = !state.connection?.connected || state.connection.capabilities.includes("command");
     const [controlBusy, setControlBusy] = (0, import_react50.useState)(null);
@@ -21661,6 +21710,7 @@ function applyProduct(ctx) {
         setControlError(error.message);
         await refreshMain(state.binding);
       } finally {
+        await onQuestionSettled?.();
         setControlBusy(null);
       }
     };
@@ -21685,6 +21735,7 @@ function applyProduct(ctx) {
         setViewError(error.message);
         await refreshMain(state.binding);
       } finally {
+        await onQuestionSettled?.();
         setControlBusy(null);
       }
     };
@@ -21726,8 +21777,9 @@ function applyProduct(ctx) {
         `${t("Answered by")} ${attention.answeredBy ?? control.permissions.actorId}${attention.answerText ? `: ${attention.answerText}` : ""}`
       ) : attention.status === "waiting" && attention.view ? (0, import_react50.createElement)("p", { className: "bt-main-work-detail" }, t("Answer this view to continue the same work.")) : attention.status !== "waiting" ? (0, import_react50.createElement)("p", { className: "bt-main-work-detail" }, t("This question is no longer active.")) : null
     ) : null;
-    if (questionOnly) return attention && !attention.view ? (0, import_react50.createElement)(MainQuestion, {
+    if (questionOnly) return canAnswer && !attention.view ? (0, import_react50.createElement)(MainQuestion, {
       attention,
+      goal: work.brief.goal,
       draft: attentionDraft,
       onDraft: setAttentionDraft,
       onSubmit: answer,
@@ -21757,7 +21809,7 @@ function applyProduct(ctx) {
           (0, import_react50.createElement)("span", { className: "bt-main-work-source" }, t("System work fact")),
           (0, import_react50.createElement)("strong", null, work.brief.goal)
         ),
-        (0, import_react50.createElement)("span", { className: "bt-main-work-status", role: "status" }, statusCopy2(work.status))
+        (0, import_react50.createElement)("span", { className: "bt-main-work-status", role: "status" }, workStatusCopy(work.status))
       ),
       (0, import_react50.createElement)("p", { className: "bt-main-work-id" }, `${t("Work brief")} ${work.brief.id}`),
       work.brief.configurationRevision ? (0, import_react50.createElement)(
@@ -22650,7 +22702,7 @@ function applyProduct(ctx) {
               (0, import_react50.createElement)(
                 "p",
                 { className: "bt-observation-status", role: "status" },
-                `${statusCopy2(observation.status)}${observation.generation && !observation.current ? ` · ${t("Historical generation")}` : ""}`
+                `${workStatusCopy(observation.status)}${observation.generation && !observation.current ? ` · ${t("Historical generation")}` : ""}`
               ),
               (0, import_react50.createElement)("p", null, t(observation.summary)),
               (0, import_react50.createElement)("p", { className: "bt-main-work-detail" }, `${t("Next step")}: ${t(observation.nextStep)}`)
@@ -22755,7 +22807,7 @@ function applyProduct(ctx) {
                 null,
                 `${generation.configurationRevision ? `${t("Configuration")} v${generation.configurationRevision} · ` : ""}${generation.current ? t("Current generation") : t("Historical generation")}`
               ),
-              (0, import_react50.createElement)("span", null, statusCopy2(generation.state))
+              (0, import_react50.createElement)("span", null, workStatusCopy(generation.state))
             ))
           ) : null,
           (0, import_react50.createElement)(
@@ -22849,7 +22901,7 @@ function applyProduct(ctx) {
           }
         },
         (0, import_react50.createElement)("span", { className: "bt-observation-role" }, item.role === "router" ? "Router" : "Worker"),
-        (0, import_react50.createElement)("span", { className: "bt-observation-nav-copy" }, (0, import_react50.createElement)("strong", null, item.title), (0, import_react50.createElement)("span", null, statusCopy2(item.status)))
+        (0, import_react50.createElement)("span", { className: "bt-observation-nav-copy" }, (0, import_react50.createElement)("strong", null, item.title), (0, import_react50.createElement)("span", null, workStatusCopy(item.status)))
       )) : (0, import_react50.createElement)("p", { className: "bt-observation-empty" }, t("No Router or Worker activity yet.")),
       state.activityError ? (0, import_react50.createElement)("p", { role: "alert", className: "bt-main-error" }, state.activityError) : null,
       state.observationCursor ? (0, import_react50.createElement)(
