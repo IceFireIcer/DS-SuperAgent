@@ -96,6 +96,7 @@ export class Engine {
   private capabilityLibrary: CapabilityLibrary | undefined
   private imSourceAuthority: ((tx: AsyncTx, event: SourceEvent) => Promise<boolean>) | undefined
   private readonly productUsage: ProductUsage
+  private readonly initialWorkDirectoryId: string | undefined
   private readonly rolePresets: RolePresetStore
   private readonly executionPolicy: ExecutionPolicyStore
   private readonly hostCapabilities: HostCapabilities
@@ -364,9 +365,11 @@ export class Engine {
     }
     const environment = this.environments.find(candidate => candidate.kind === 'local' && candidate.config.instanceId === instanceId
       && candidate.config.allowedActorIds.includes(source.actorId) && candidate.config.permissions.includes('read') && candidate.config.permissions.includes('write'))
+    this.initialWorkDirectoryId = hostOptions.initialWorkDirectoryId === undefined ? environment?.config.id
+      : hostOptions.initialWorkDirectoryId ?? undefined
     if (sessions?.mainRoute && this.execution) {
       this.workDelegation = new WorkDelegation({ storage, instanceId, source, sessions, effects: this.effects,
-        environmentId: environment?.config.id ?? 'unconfigured',
+        environmentId: this.initialWorkDirectoryId ?? 'unconfigured',
         defaultEnvironmentId: async transaction => (await this.instanceDirectoryIn(transaction))?.environmentId,
         environmentRoot: id => this.environments.find(candidate => candidate.config.id === id
           && candidate.config.instanceId === instanceId && candidate.config.allowedActorIds.includes(source.actorId)
@@ -1998,10 +2001,7 @@ export class Engine {
   private async instanceDirectoryIn(transaction: AsyncTx) {
     const current = await transaction.get<{ revision: number; environmentId: string; updatedAt: number }>('instance-directory', 'default')
     if (current) return current
-    const first = this.environments.find(candidate => candidate.kind === 'local' && candidate.config.instanceId === this.instanceId
-      && candidate.config.allowedActorIds.includes(this.source.actorId) && candidate.config.permissions.includes('read')
-      && candidate.config.permissions.includes('write'))
-    return first ? { revision: 0, environmentId: first.config.id, updatedAt: 0 } : undefined
+    return this.initialWorkDirectoryId ? { revision: 0, environmentId: this.initialWorkDirectoryId, updatedAt: 0 } : undefined
   }
 
   private directoryEnvironment(id: string) {
@@ -2103,7 +2103,7 @@ export class Engine {
         return prior.value
       }
       const current = await this.instanceDirectoryIn(transaction)
-      if (current?.revision !== command.expectedRevision) throw new CoreError('DIRECTORY_REVISION_CONFLICT', 'The default work directory changed; refresh before saving.')
+      if ((current?.revision ?? 0) !== command.expectedRevision) throw new CoreError('DIRECTORY_REVISION_CONFLICT', 'The default work directory changed; refresh before saving.')
       const value = { revision: command.expectedRevision + 1, environmentId: environment.config.id, updatedAt: Date.now() }
       if (!await transaction.replace('instance-directory', 'default', value)) await transaction.insert('instance-directory', 'default', value)
       await transaction.insert('instance-directory-command', key, { fingerprint, value })

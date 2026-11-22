@@ -1972,6 +1972,7 @@ const ZH = {
   'Work directory': '工作目录',
   'Work directories': '工作目录',
   'Instance default': '实例默认目录',
+  'No directory selected': '未选择工作目录',
   'Instance default directory': '实例默认工作目录',
   'New work starts here unless you choose a work directory in Main.': '新工作默认从这里开始，也可在 Main 中为本次工作选择目录。',
   'New work uses this directory. Active work keeps its own directory.': '新工作使用此目录，在途工作继续使用各自的目录。',

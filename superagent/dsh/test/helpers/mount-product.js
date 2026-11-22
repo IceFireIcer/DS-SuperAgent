@@ -1,0 +1,128 @@
+import { createRequire } from 'node:module'
+import { fileURLToPath } from 'node:url'
+import { runInNewContext } from 'node:vm'
+import { build } from 'esbuild'
+import { createElement as h } from 'react'
+import { JSDOM } from 'jsdom'
+
+export const official = { id: 'deepseek-official', key: { configured: false, writable: true }, models: [{ model: 'chat' }] }
+export const main = { model: { provider: official.id, model: 'chat' } }
+const require = createRequire(import.meta.url)
+
+export async function mountProduct(context, { connection = { connected: false }, settings, extensions, responses: overrides, remotes = {} } = {}) {
+  const dom = new JSDOM('<main></main>', { url: 'http://localhost/', pretendToBeVisual: true })
+  const { window } = dom
+  const { document } = window
+  const globals = { window, document, IS_REACT_ACT_ENVIRONMENT: true }
+  const previous = Object.keys(globals).map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)])
+  Object.assign(globalThis, globals)
+  window.matchMedia = query => ({ matches: query === '(prefers-reduced-motion: reduce)' })
+  window.HTMLElement.prototype.scrollIntoView = () => {}
+  window.Blob.prototype.arrayBuffer ??= function () {
+    return new Promise((resolve, reject) => {
+      const reader = new window.FileReader()
+      reader.onload = () => resolve(reader.result)
+      reader.onerror = () => reject(reader.error)
+      reader.readAsArrayBuffer(this)
+    })
+  }
+  extensions?.(window)
+  const { createRoot } = require('react-dom/client')
+  const { act } = require('react')
+  const root = createRoot(document.querySelector('main'))
+  const cleanups = []
+  context.after(async () => {
+    await act(async () => root.unmount())
+    for (const cleanup of cleanups.reverse()) cleanup?.()
+    dom.window.close()
+    for (const [name, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, name, descriptor)
+      else delete globalThis[name]
+    }
+  })
+
+  const requests = []
+  const sessionId = 'main-fixture'
+  const role = { ...main, name: 'Main', instructions: '', skills: [] }
+  const snapshot = { revision: 1, roles: { main: role, router: role, worker: role }, uses: [], history: [],
+    providers: [{ ...official, name: 'DeepSeek', models: [{ ...official.models[0], name: 'Chat', ref: 'deepseek-official/chat' }] }] }
+  const responses = {
+    open: () => ({ instanceId: 'fixture', mainId: 'main', mainSessionId: sessionId }),
+    history: () => ({ mainSessionId: sessionId, messages: [], works: [], health: { state: 'ready' } }),
+    settings: () => settings ? settings(snapshot) : snapshot,
+    'work-members': () => ({ workers: [] }),
+    'work-board': () => ({ items: [] }),
+    'feishu-status': () => ({ configured: false, state: 'unavailable' }),
+    'scheduled-task-list': () => ({ items: [] }),
+    'scheduled-task-source-read': () => ({ enabled: true }),
+    'connector-registry': () => ({ items: [], canStoreCredentials: true }),
+    'directory-options': () => ({ directories: [] }),
+    'execution-options': () => ({ policy: { defaultTarget: 'local-only', requiredPermissions: [] }, environments: [] }),
+    'observe-list': () => ({ items: [] }),
+    'settings-efforts': () => ({ efforts: [] }),
+    ...overrides,
+  }
+  const call = async (endpoint, payload) => {
+    requests.push({ endpoint, payload })
+    if (!Object.hasOwn(responses, endpoint)) throw new Error(`Unexpected endpoint: ${endpoint}`)
+    return structuredClone(await responses[endpoint](payload))
+  }
+  const fetch = async (_url, options) => {
+    const { endpoint, payload } = JSON.parse(options.body)
+    try {
+      const value = await call(endpoint, payload)
+      return { ok: true, json: async () => ({ ok: true, value }) }
+    } catch (error) {
+      return { ok: false, json: async () => ({ ok: false, error: { message: error.message } }) }
+    }
+  }
+  window.dsSuperagentApp = { productClient: { status: async () => connection, call, events: async () => [] } }
+  const { outputFiles } = await build({ entryPoints: [fileURLToPath(new URL('../../src/client/product.js', import.meta.url))],
+    bundle: true, format: 'cjs', platform: 'browser', write: false, external: ['react', 'react-dom', '@deepseek-ai/*'] })
+  const module = { exports: {} }
+  runInNewContext(outputFiles[0].text, { module, exports: module.exports,
+    require: name => name.startsWith('@deepseek-ai/') ? { MarkdownText: ({ text }) => h('p', null, text) } : require(name),
+    window, document, fetch, console, crypto: globalThis.crypto, sessionStorage: window.sessionStorage,
+    setTimeout, clearTimeout, setInterval, clearInterval, structuredClone, AbortController, btoa, TextEncoder,
+    navigator: window.navigator, MutationObserver: window.MutationObserver, requestAnimationFrame: window.requestAnimationFrame,
+    cancelAnimationFrame: window.cancelAnimationFrame, performance: window.performance })
+
+  const entries = new Map()
+  const versions = new Map()
+  const listeners = new Set()
+  const slots = {
+    entries: name => entries.get(name) ?? [],
+    getVersion: name => versions.get(name) ?? 0,
+    subscribe(_name, listener) { listeners.add(listener); return () => listeners.delete(listener) },
+    inject(_name, install) { cleanups.push(install()) },
+    register(options, component) {
+      entries.set(options.name, [...slots.entries(options.name), { options, component }])
+      versions.set(options.name, slots.getVersion(options.name) + 1)
+      for (const listener of listeners) listener()
+      return () => entries.set(options.name, slots.entries(options.name).filter(entry => entry.component !== component))
+    },
+  }
+  const renderSlot = (name, props, options) => {
+    const entry = slots.entries(name).find(item => !options?.only || item.options.id === options.only)
+    return entry ? h(entry.component, { ...props, renderSlot }) : options?.fallback
+  }
+  const render = wide => root.render(h('div', null, renderSlot('sidebar.workspaces', { wide }),
+    renderSlot('main.conversation'), renderSlot('shell.overlay')))
+  await act(async () => {
+    module.exports.applyProduct({ get: name => remotes[name], effect: effect => cleanups.push(effect()), slots })
+    render(true)
+  })
+
+  const findButton = (name, within = document) => [...within.querySelectorAll('button')].find(button =>
+    (button.getAttribute('aria-label') ?? button.textContent) === name && !button.closest('[inert], [hidden]'))
+  const click = target => act(async () => { target.focus(); target.click() })
+  const key = (target, value) => act(async () => target.dispatchEvent(new window.KeyboardEvent('keydown', {
+    key: value, bubbles: true, cancelable: true,
+  })))
+  const fill = (target, value) => act(async () => {
+    Object.getOwnPropertyDescriptor(Object.getPrototypeOf(target), 'value').set.call(target, value)
+    target.dispatchEvent(new window.Event('input', { bubbles: true }))
+  })
+  const setWide = wide => act(async () => render(wide))
+  return { act, click, document, fill, findButton, key, requests, responses, setWide, slots, snapshot, window }
+}

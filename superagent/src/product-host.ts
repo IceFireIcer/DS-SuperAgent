@@ -494,7 +494,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
       if (page === 9) throw new CoreError('DIRECTORY_BUDGET', 'The product directory registry exceeds 1000 entries.')
       after = slice.cursor
     }
-    if (config.workspaceRoot) environments.push(await openDirectory(await directoryRoot(config.workspaceRoot)))
+    const initialWorkDirectory = config.workspaceRoot ? await openDirectory(await directoryRoot(config.workspaceRoot)) : null
+    if (initialWorkDirectory) environments.push(initialWorkDirectory)
     for (const item of saved) {
       try {
         const root = await directoryRoot(item.root)
@@ -633,7 +634,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
         ...(config.workerMcpTool || remoteSecrets ? { mcp: true } : {}), ...(browserAdapter ? { browser: true } : {}),
       } } : {}) }, {}, sessions,
       environments, {}, {}, {}, { channel },
-      { ...(config.hostId === undefined ? {} : { hostId: config.hostId }),
+      { initialWorkDirectoryId: initialWorkDirectory?.config.id ?? null,
+        ...(config.hostId === undefined ? {} : { hostId: config.hostId }),
         ...(config.leaseMs === undefined ? {} : { leaseMs: config.leaseMs }) }, proactive, attachments)
     await engine.acquireHost({ initializeMain: true })
     workRouter = new ProactiveWork(storage, instanceId, engine, sessions, actorId)
@@ -678,8 +680,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
       } })
     }
     if (browserAdapter) engine.configureWorkerBrowser(browserAdapter)
-    if (environments[0] && config.workspaceRoot) await engine.addWorkDirectory({ instanceId,
-      commandId: `bootstrap:${environments[0].config.id}`, environment: environments[0] })
+    if (initialWorkDirectory) await engine.addWorkDirectory({ instanceId,
+      commandId: `bootstrap:${initialWorkDirectory.config.id}`, environment: initialWorkDirectory })
     if (feishuRuntime && config.feishu?.api.appSecret) {
       const selected = await storage.transaction(instanceId, tx => tx.get<{ resourceId: string | null }>(
         'product-feishu-credential', feishuRuntime!.sourceBinding.sourceInstanceId))

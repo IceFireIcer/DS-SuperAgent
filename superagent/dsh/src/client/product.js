@@ -86,6 +86,7 @@ export function applyProduct(ctx) {
     mainDraft: '',
     mainAttachments: [],
     mainUploading: false,
+    mainSending: false,
     messageBefore: null,
     messagesComplete: false,
     messagesLoading: false,
@@ -234,13 +235,52 @@ export function applyProduct(ctx) {
       return { team: options.default?.root ?? null, picker: options.picker,
         folders: options.directories.map(directory => ({ path: directory.root, title: directory.title })) }
     },
-    folderPick: () => call('folder-pick'),
-    folderList: path => call('folder-list', { path }),
+    folderPick: () => productCall('directory-pick', { instanceId: binding.instanceId }),
+    folderList: path => productCall('directory-list', { instanceId: binding.instanceId, ...(path ? { path } : {}) }),
   })
 
   const registerDirectory = (binding, path) => productCall('directory-register', {
     instanceId: binding.instanceId, commandId: crypto.randomUUID(), path,
   })
+
+  const effectiveTarget = state => {
+    const target = state.directoryOptions?.execution?.policy?.defaultTarget
+    return state.executionTarget ?? (target === 'remote-only' || target === 'auto' ? target : 'local-only')
+  }
+  const mainBusy = state => state.mainSending || Boolean(state.activeTurn)
+    || state.messages.some(message => ['queued', 'running', 'stopping'].includes(message.status))
+  const directoryError = error => view.set(current => ({ ...current, directoryError: error ? t(error.message) : null }))
+  const changeWorkDirectory = async pick => {
+    const state = view.getSnapshot()
+    if (!state.binding || state.connection?.connected || effectiveTarget(state) !== 'local-only'
+      || state.directoryBusy || state.mainUploading || mainBusy(state)) return
+    view.set(current => ({ ...current, directoryBusy: true, directoryError: null }))
+    try {
+      const path = await pick(state.binding)
+      if (path === null || path === undefined || path === state.directoryOverride?.root) return
+      if (view.getSnapshot().mainAttachments.length) throw new Error('Remove attached files before changing directories.')
+      const selected = path ? await registerDirectory(state.binding, path) : null
+      await loadDirectories(state.binding)
+      view.set(current => ({ ...current, directoryOverride: selected }))
+    } catch (error) { directoryError(error) }
+    finally { view.set(current => ({ ...current, directoryBusy: false })) }
+  }
+
+  function MainWorkDirectory({ sidebar = false, wide = true }) {
+    const state = useView()
+    if (!state.binding || !state.directoryOptions || state.connection?.connected || effectiveTarget(state) !== 'local-only') return null
+    const actions = directoryActions(state.binding)
+    const fallback = state.directoryOptions.default?.root
+    return h('div', { className: sidebar ? 'bt-sidebar-directory' : 'bt-main-directory' },
+      sidebar ? null : h('span', { className: 'bt-main-label' }, t('Work directory')),
+      h(FolderMenu, { value: state.directoryOverride?.root, defaultPath: fallback,
+        label: t('Work directory'), fallbackLabel: t(fallback ? 'Instance default' : 'No directory selected'),
+        actions, onNativePick: () => changeWorkDirectory(() => actions.folderPick()),
+        onPick: path => changeWorkDirectory(() => path), compact: sidebar && !wide,
+        dismiss: state.settingsOpen || state.connectOpen || state.signInOpen,
+        disabled: mainBusy(state) || state.directoryBusy || state.mainUploading }),
+      state.directoryError ? h('p', { className: 'bt-main-error', role: 'alert' }, state.directoryError) : null)
+  }
 
   const loadEarlierMessages = async binding => {
     const current = view.getSnapshot()
@@ -932,7 +972,6 @@ export function applyProduct(ctx) {
       cards.works.map(work => h(MainWorkCard, { key: work.brief.workItemId ?? work.brief.id, work,
         questionInComposer: composerOnly && work === question,
         onEvidence: selected => { if (state.binding) void loadMainEvidence(state.binding, selected) } }))) : null
-    const [sending, setSending] = useState(false)
     const [sendError, setSendError] = useState(null)
     const { mainAttachments: attachments, mainUploading: uploading } = state
     const setAttachments = update => view.set(current => ({ ...current,
@@ -962,14 +1001,12 @@ export function applyProduct(ctx) {
     const follow = useRef(true)
     const restoreHeight = useRef(null)
     const execution = state.directoryOptions?.execution
-    const policyTarget = execution?.policy?.defaultTarget === 'remote-only' ? 'remote-only'
-      : execution?.policy?.defaultTarget === 'auto' ? 'auto' : 'local-only'
-    const executionTarget = state.executionTarget ?? policyTarget
+    const executionTarget = effectiveTarget(state)
     const localEnvironments = execution?.environments?.filter(environment => environment.kind === 'local') ?? []
     const remoteEnvironments = execution?.environments?.filter(environment => environment.kind === 'remote') ?? []
     const selectedRemoteEnvironment = remoteEnvironments.find(environment =>
       environment.id === state.remoteEnvironmentOverride) ?? remoteEnvironments[0]
-    const selectedLocalEnvironmentId = state.directoryOverride ?? state.directoryOptions?.default?.environmentId
+    const selectedLocalEnvironmentId = state.directoryOverride?.id ?? state.directoryOptions?.default?.environmentId
       ?? state.localEnvironmentOverride ?? (state.connection?.connected ? localEnvironments[0]?.id : undefined)
     const selectedEnvironmentId = executionTarget === 'remote-only' ? selectedRemoteEnvironment?.id
       : executionTarget === 'local-only' ? selectedLocalEnvironmentId : undefined
@@ -981,6 +1018,7 @@ export function applyProduct(ctx) {
       } else if (follow.current) bottom.current?.scrollIntoView({ block: 'end', behavior: 'instant' })
     }, [state.messages.length])
     const uploadFiles = async files => {
+      if (view.getSnapshot().directoryBusy) return
       if (executionTarget === 'auto') { setSendError(t('Choose Local or Remote only before adding files.')); return }
       const environmentId = selectedEnvironmentId
       if (!state.binding || !environmentId) { setSendError(t('Choose a work directory before adding files.')); return }
@@ -1018,7 +1056,8 @@ export function applyProduct(ctx) {
       setSpeakingId(message.id)
     }
     const send = async text => {
-      if (!state.binding) return false
+      const current = view.getSnapshot()
+      if (!state.binding || current.directoryBusy || current.mainSending) return false
       const attachmentIds = attachments.map(attachment => attachment.id)
       const environmentId = attachments[0]?.environmentId ?? selectedEnvironmentId
       if (executionTarget === 'local-only' && !environmentId || attachmentIds.length && !environmentId) {
@@ -1030,7 +1069,7 @@ export function applyProduct(ctx) {
       const storageKey = `superagent:pending:${state.connection?.connected
         ? `${state.connection.address}:${state.connection.client.id}` : 'local'}:${state.binding.instanceId}`
       try {
-        setSending(true); setSendError(null)
+        view.set(current => ({ ...current, mainSending: true })); setSendError(null)
         if (!pending.current) {
           try { pending.current = JSON.parse(sessionStorage.getItem(storageKey) ?? 'null') } catch { /* Draft storage is optional. */ }
         }
@@ -1046,15 +1085,16 @@ export function applyProduct(ctx) {
         const result = await productCall('send', { instanceId: state.binding.instanceId, ...pending.current })
         pending.current = null
         try { sessionStorage.removeItem(storageKey) } catch { /* Draft storage is optional. */ }
-        await refreshMain(state.binding)
         setAttachments([])
-        view.set(current => ({ ...current, directoryOverride: null, localEnvironmentOverride: null, remoteEnvironmentOverride: null }))
+        view.set(current => ({ ...current, ...(executionTarget === 'local-only' ? { directoryOverride: null } : {}),
+          localEnvironmentOverride: null, remoteEnvironmentOverride: null, directoryError: null }))
+        await refreshMain(state.binding)
         if (result.status === 'failed') { setSendError(t('Main could not finish this reply. Your message is saved.')); return false }
         return true
       } catch (error) { setSendError(error.message); await refreshMain(state.binding); return false }
-      finally { setSending(false) }
+      finally { view.set(current => ({ ...current, mainSending: false })) }
     }
-    const busy = sending || Boolean(state.activeTurn) || state.messages.some(message => ['queued', 'running', 'stopping'].includes(message.status))
+    const busy = mainBusy(state)
     const stopping = state.activeTurn?.status === 'stopping'
     const stop = async () => {
       if (!state.binding || !state.activeTurn) return
@@ -1066,19 +1106,6 @@ export function applyProduct(ctx) {
         setSendError(error.message)
       }
     }
-    const options = state.directoryOptions
-    const override = options?.directories.find(directory => directory.id === state.directoryOverride)
-    const chooseWorkDirectory = async path => {
-      if (!state.binding) return
-      if (attachments.length) { setSendError(t('Remove attached files before changing directories.')); return }
-      view.set(current => ({ ...current, directoryBusy: true, directoryError: null }))
-      try {
-        const selected = path ? await registerDirectory(state.binding, path) : null
-        await loadDirectories(state.binding)
-        view.set(current => ({ ...current, directoryOverride: selected?.id ?? null }))
-      } catch (error) { view.set(current => ({ ...current, directoryError: error.message })) }
-      finally { view.set(current => ({ ...current, directoryBusy: false })) }
-    }
     const chooseTarget = value => {
       if (attachments.length) { setSendError(t('Remove attached files before changing execution targets.')); return }
       view.set(current => ({ ...current, executionTarget: value, localEnvironmentOverride: null, remoteEnvironmentOverride: null }))
@@ -1086,7 +1113,7 @@ export function applyProduct(ctx) {
     const targetControl = execution ? h('div', { className: 'bt-main-directory' },
       h('span', { className: 'bt-main-label' }, t('Execution target')),
       h('select', { className: 'bt-select', 'aria-label': t('Execution target'), value: executionTarget,
-        onChange: event => chooseTarget(event.target.value), disabled: busy },
+        onChange: event => chooseTarget(event.target.value), disabled: busy || state.directoryBusy },
       h('option', { value: 'local-only' }, t('Local')),
       h('option', { value: 'remote-only' }, t('Remote only')),
       h('option', { value: 'auto' }, t('Auto'))),
@@ -1114,7 +1141,8 @@ export function applyProduct(ctx) {
         : executionTarget === 'remote-only' && !selectedEnvironmentId
           ? t('No remote Environment is available. This work will wait for an eligible device.')
           : t('New work uses this Environment. Active work keeps its original binding.'))) : null
-    const composer = h(MainComposer, { onSend: send, onStop: canCommand && state.activeTurn ? stop : undefined, busy, stopping, readOnly: !canCommand,
+    const composer = h(MainComposer, { onSend: send, onStop: canCommand && state.activeTurn ? stop : undefined, busy, stopping,
+      directoryBusy: state.directoryBusy, readOnly: !canCommand,
       error: sendError ?? state.error,
       value: state.mainDraft, onValueChange: mainDraft => view.set(current => ({ ...current, mainDraft })),
       attachments, uploading, onRemoveAttachment: removeAttachment,
@@ -1122,14 +1150,7 @@ export function applyProduct(ctx) {
       onFiles: !state.connection?.connected && executionTarget !== 'auto' && selectedEnvironmentId
         ? files => void uploadFiles(files) : undefined,
       directoryControl: execution ? h('div', { className: 'bt-main-directory' },
-        targetControl,
-        !state.connection?.connected && executionTarget === 'local-only' && options?.default ? h(Fragment, null,
-          h('span', { className: 'bt-main-label' }, t('Work directory')),
-          h(FolderMenu, { value: override?.root, label: t('Work directory'), fallbackLabel: t('Instance default'),
-            actions: directoryActions(state.binding), run: promise => void Promise.resolve(promise).catch(error =>
-              view.set(current => ({ ...current, directoryError: error.message }))), onPick: chooseWorkDirectory,
-            disabled: busy || state.directoryBusy })) : null,
-        state.directoryError ? h('p', { className: 'bt-main-error', role: 'alert' }, state.directoryError) : null) : null })
+        targetControl, h(MainWorkDirectory)) : null })
     const showModelSetup = !question && state.binding && !state.connection?.connected
     let modelChoice
     if (showModelSetup && state.mainModelSetup) {
@@ -1938,6 +1959,7 @@ export function applyProduct(ctx) {
     openConnection() { if (clientBridge()) view.set(current => ({ ...current, connectOpen: true })) },
   }
   const { Header } = installProductShell(ctx, { actions: shellActions, Overlay,
+    WorkDirectory: ({ wide }) => h(MainWorkDirectory, { sidebar: true, wide }),
     overlayChildren: { ...SETTINGS_CHILDREN, [DEEPSEEK_SIGN_IN_SLOT]: { kind: 'single', scope: 'root' } },
     useShell() {
       useModelSlots()

@@ -33,7 +33,7 @@ export function ProductShellHeader({ activity = false, markState, onMain, onActi
     children)
 }
 
-function ShellSidebar({ wide = true, useShell, actions, openPalette }) {
+function ShellSidebar({ wide = true, useShell, actions, openPalette, WorkDirectory }) {
   const { activity, markState, preview, pending, unread, connectLabel, settingsAvailable, modalOpen, signIn } = useShell()
   const mainLabel = [t('Main'), pending ? t('Waiting for your answer') : unread ? t('Unread activity') : ''].filter(Boolean).join(', ')
   const row = (label, icon, onClick, selected) => h('button', {
@@ -44,6 +44,7 @@ function ShellSidebar({ wide = true, useShell, actions, openPalette }) {
 
   return h('nav', { className: `bt-side bt-product-side${wide ? '' : ' bt-rail'}`, 'aria-label': t('Work navigation') },
     h('div', { className: wide ? 'bt-side-top' : 'bt-rail-top' },
+      WorkDirectory ? h(WorkDirectory, { wide }) : null,
       h('button', { type: 'button', className: 'bt-round', title: t('Search'), 'aria-label': t('Search'),
         'aria-keyshortcuts': 'Control+k Meta+k', onClick: openPalette }, h(SearchIcon))),
     h('div', { className: 'bt-list' },
@@ -59,7 +60,7 @@ function ShellSidebar({ wide = true, useShell, actions, openPalette }) {
       ? h(SuperagentAccountFooter, { wide, modalOpen, signIn, openSettings: actions.openSettings }) : null)
 }
 
-export function installProductShell(ctx, { useShell, actions, Overlay, overlayChildren, settingsInSidebar = true, nativeHeader = false }) {
+export function installProductShell(ctx, { useShell, actions, Overlay, overlayChildren, WorkDirectory, settingsInSidebar = true, nativeHeader = false }) {
   const palette = createSource(false)
   const toast = createSource(null)
   const openPalette = () => palette.set(true)
@@ -67,7 +68,7 @@ export function installProductShell(ctx, { useShell, actions, Overlay, overlayCh
   const showNotice = text => toast.set({ text, tone: 'notice' })
   const shellActions = settingsInSidebar ? actions : { ...actions, openSettings: undefined }
 
-  const Sidebar = props => h(ShellSidebar, { ...props, useShell, actions: shellActions, openPalette })
+  const Sidebar = props => h(ShellSidebar, { ...props, useShell, actions: shellActions, openPalette, WorkDirectory })
   const Header = props => {
     const state = useShell()
     return h(ProductShellHeader, { activity: state.activity, markState: state.markState,
@@ -115,6 +116,9 @@ const PRODUCT_SHELL_CSS = `
 .bt-product-brand-name{font-weight:600;font-size:14px}
 .bt-product-side{height:100%;box-sizing:border-box;padding-inline:var(--dsh-sidebar-inline-padding,8px);padding-bottom:8px}
 .bt-product-side>.bt-side-top{justify-content:flex-end}
+.bt-sidebar-directory{position:relative;min-width:0}
+.bt-sidebar-directory+.bt-round{flex:none}
+.bt-sidebar-directory>.bt-main-error{position:absolute;top:100%;left:0;z-index:59;width:max-content;max-width:min(240px,calc(100vw - 24px));margin:4px 0 0;padding:6px 8px;border-radius:var(--bt-radius-input);background:var(--bt-card);box-shadow:var(--bt-glass-shadow)}
 .bt-product-side:not(.bt-rail)>.bt-list{margin:0;scrollbar-gutter:auto}
 .bt-product-side .bt-tile{position:relative}
 .bt-product-side.bt-rail{width:auto;padding-inline:0}

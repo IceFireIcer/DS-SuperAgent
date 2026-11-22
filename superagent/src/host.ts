@@ -8,6 +8,7 @@ export interface HostOptions {
   hostId?: string
   leaseMs?: number
   now?: () => number
+  initialWorkDirectoryId?: string | null
 }
 
 export interface HostLeaseRecord {

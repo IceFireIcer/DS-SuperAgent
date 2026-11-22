@@ -77,40 +77,81 @@ test('the product directory picker saves a default and a work override across Ho
   assert.equal(recovered.root, firstRoot)
 })
 
-test('a product with no initial workspace can select one and execute its first real Worker', { timeout: 30_000 }, async t => {
+test('directory overrides bind new work without changing an original Ticket or its follow-up', { timeout: 30_000 }, async t => {
   const base = await mkdtemp(join(tmpdir(), 'r5-first-directory-'))
-  const root = join(base, 'work')
+  const first = join(base, 'first')
+  const second = join(base, 'second')
   const core = join(base, 'core')
-  await Promise.all([mkdir(root), mkdir(core)])
-  const native = await nativeContext(join(base, 'sessions'), function* (options) {
+  await Promise.all([mkdir(first), mkdir(second), mkdir(core)])
+  const firstWorker = Promise.withResolvers()
+  const releaseFirstWorker = Promise.withResolvers()
+  const native = await nativeContext(join(base, 'sessions'), async function* (options) {
     const count = completedToolCount(options)
+    const text = lastUserText(options)
     if (options.model === 'main') {
-      if (lastUserText(options).startsWith('[Work update]')) { yield* textResponse('Work delivered.'); return }
-      if (count === 0) yield* toolResponse('delegate_work', { goal: 'Write first.txt.', constraints: 'Use the selected work directory.',
-        acceptanceCriteria: 'Verify the file and report it.' })
+      if (text.startsWith('[Work update]')) { yield* textResponse('Work delivered.'); return }
+      if (count === 0) yield* toolResponse('delegate_work', { goal: text, constraints: 'Use the selected work directory.',
+        acceptanceCriteria: 'Write note.txt, verify the file and report it.' })
       else yield* textResponse('Delegated.')
       return
     }
     if (options.model === 'router') { yield* routerResponse(options); return }
-    if (count === 0) yield* toolResponse('write_file', { path: 'first.txt', text: 'first work\n' })
+    if (count === 0) {
+      if (text.includes('Write the first note.')) {
+        firstWorker.resolve()
+        await releaseFirstWorker.promise
+      }
+      const note = text.includes('Write the second note.') ? 'second work\n'
+        : text.includes('Use the revised first note.') ? 'revised first work\n' : 'first work\n'
+      yield* toolResponse('write_file', { path: 'note.txt', text: note })
+    }
     else if (count === 1) yield* toolResponse('run_shell', { command: process.platform === 'win32' ? 'Write-Output verified' : 'printf verified' })
-    else if (count === 2) yield* toolResponse('report_ready', { result: 'First work complete.', evidence: 'Shell verification passed.', artifacts: 'first.txt' })
+    else if (count === 2) yield* toolResponse('report_ready', { result: 'Work complete.', evidence: 'Shell verification passed.', artifacts: 'note.txt' })
     else yield* textResponse('No further actions.')
   })
-  let host = await createProductHost(native, { databasePath: join(core, 'state.sqlite'), instanceId: 'personal', actorId: 'alice',
+  const host = await createProductHost(native, { databasePath: join(core, 'state.sqlite'), instanceId: 'personal', actorId: 'alice',
     main: { provider: 'mock', model: 'main' }, router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
-  t.after(async () => { await host.close(); await native.fiber.dispose(); await rm(base, { recursive: true, force: true }) })
+  t.after(async () => {
+    releaseFirstWorker.resolve()
+    await host.close(); await native.fiber.dispose(); await rm(base, { recursive: true, force: true })
+  })
   const call = (endpoint, payload = {}) => host.dispatch(endpoint, { instanceId: 'personal', ...payload })
-  assert.equal((await call('directory-options')).default, null)
-  const directory = await call('directory-register', { commandId: 'initial-workspace', path: root })
-  assert.equal((await call('directory-default-save', { commandId: 'initial-default', expectedRevision: 0,
-    environmentId: directory.id })).revision, 1)
-  await call('send', { commandId: 'first-work', text: 'Write the first note.' })
-  const deadline = Date.now() + 20_000
-  while (Date.now() < deadline) {
-    if ((await call('history')).works[0]?.outcome?.status === 'success') break
-    await sleep(20)
+  const findWork = async goal => (await call('history')).works.find(work => work.brief.goal === goal)
+  const until = async check => {
+    const deadline = Date.now() + 10_000
+    while (Date.now() < deadline) {
+      if (await check()) return
+      await sleep(20)
+    }
+    assert.fail('Work did not reach its expected state.')
   }
-  assert.equal((await call('history')).works[0]?.outcome?.status, 'success')
-  assert.equal(await readFile(join(root, 'first.txt'), 'utf8'), 'first work\n')
+  assert.equal((await call('directory-options')).default, null)
+  const directoryA = await call('directory-register', { commandId: 'register-a', path: first })
+  const firstGoal = 'Write the first note.'
+  const secondGoal = 'Write the second note.'
+  await call('send', { commandId: 'first-work', text: firstGoal, environmentId: directoryA.id })
+  await Promise.race([firstWorker.promise, sleep(10_000, undefined, { ref: false }).then(() => assert.fail('First Worker did not start.'))])
+  const original = await findWork(firstGoal)
+  assert.equal(original.control.assignment.environment.id, directoryA.id)
+
+  const directoryB = await call('directory-register', { commandId: 'register-b', path: second })
+  await call('send', { commandId: 'second-work', text: secondGoal, environmentId: directoryB.id })
+  const stillRunning = await findWork(firstGoal)
+  assert.equal(stillRunning.control.assignment.id, original.control.assignment.id)
+  assert.equal(stillRunning.control.assignment.environment.id, directoryA.id)
+  releaseFirstWorker.resolve()
+
+  await until(async () => (await findWork(firstGoal))?.outcome?.status === 'success'
+    && (await findWork(secondGoal))?.outcome?.status === 'success')
+  assert.equal(await readFile(join(first, 'note.txt'), 'utf8'), 'first work\n')
+  assert.equal(await readFile(join(second, 'note.txt'), 'utf8'), 'second work\n')
+  await call('work-follow-up', { commandId: 'first-follow-up', workItemId: original.brief.workItemId,
+    ticketId: original.receipt.ticketId, text: 'Use the revised first note.' })
+  await until(async () => (await findWork(firstGoal))?.followUps?.some(followUp => followUp.status === 'ready'))
+  const followedUp = await findWork(firstGoal)
+  assert.equal(followedUp.receipt.ticketId, original.receipt.ticketId)
+  assert.equal(followedUp.control.assignment.environment.id, directoryA.id)
+  assert.equal(await readFile(join(first, 'note.txt'), 'utf8'), 'revised first work\n')
+  assert.equal(await readFile(join(second, 'note.txt'), 'utf8'), 'second work\n')
+  assert.equal((await call('directory-options')).default, null)
 })

@@ -4488,6 +4488,7 @@ var ZH = {
   "Work directory": "工作目录",
   "Work directories": "工作目录",
   "Instance default": "实例默认目录",
+  "No directory selected": "未选择工作目录",
   "Instance default directory": "实例默认工作目录",
   "New work starts here unless you choose a work directory in Main.": "新工作默认从这里开始，也可在 Main 中为本次工作选择目录。",
   "New work uses this directory. Active work keeps its own directory.": "新工作使用此目录，在途工作继续使用各自的目录。",
@@ -5131,6 +5132,7 @@ function MainComposer({
   value,
   onValueChange,
   directoryControl,
+  directoryBusy = false,
   attachments = [],
   onFiles,
   onRemoveAttachment,
@@ -5221,7 +5223,7 @@ function MainComposer({
   const hasContent = Boolean(text.trim() || attachments.length);
   const submit = async (event) => {
     event.preventDefault();
-    if (busy || uploading || voiceState !== "idle" || dictation.listening || readOnly || !hasContent) return;
+    if (busy || directoryBusy || uploading || voiceState !== "idle" || dictation.listening || readOnly || !hasContent) return;
     if (await onSend(text)) setText("");
   };
   return (0, import_react3.createElement)(
@@ -5290,7 +5292,7 @@ function MainComposer({
         (0, import_react3.createElement)("button", {
           type: "button",
           className: "bt-soft",
-          disabled: busy || uploading,
+          disabled: busy || directoryBusy || uploading,
           "aria-label": t("Add files"),
           title: t("Add files"),
           onClick: () => fileInput.current?.click()
@@ -5303,7 +5305,7 @@ function MainComposer({
       ) : null,
       (0, import_react3.createElement)(
         "button",
-        { className: "bt-soft", type: "submit", disabled: busy || uploading || voiceState !== "idle" || dictation.listening || readOnly || !hasContent },
+        { className: "bt-soft", type: "submit", disabled: busy || directoryBusy || uploading || voiceState !== "idle" || dictation.listening || readOnly || !hasContent },
         readOnly ? t("Read-only") : uploading ? t("Uploading…") : busy ? t("Sending…") : t("Send")
       )
     )
@@ -10146,81 +10148,130 @@ var Caret = () => (0, import_react18.createElement)("svg", {
   strokeLinejoin: "round",
   "aria-hidden": true
 }, (0, import_react18.createElement)("path", { d: "M5.5 8l4.5 4.5L14.5 8" }));
-function useAnchoredMenu() {
-  const [anchor, setAnchor] = (0, import_react18.useState)(null);
+function useAnchoredMenu(compact, dismiss) {
+  const [isOpen, setOpen] = (0, import_react18.useState)(false);
   const [place, setPlace] = (0, import_react18.useState)(null);
-  const [shownPlace, leaving] = useLinger(place, MENU_EXIT_MS);
+  const [kept, leaving] = useLinger(isOpen && place, MENU_EXIT_MS);
+  const shownPlace = reducedMotion() || document.body?.dataset.btMotion === "quiet" ? isOpen && place : kept;
   const button2 = (0, import_react18.useRef)(null);
   const menu = (0, import_react18.useRef)(null);
   const tick = useViewport();
-  const close = () => {
-    setAnchor(null);
+  const open = () => {
     setPlace(null);
+    setOpen(true);
   };
-  (0, import_react18.useEffect)(() => {
-    if (place === null) return void 0;
-    const onDown = (event) => {
-      if (menu.current?.contains(event.target) || button2.current?.contains(event.target)) return;
-      close();
-    };
-    const onKey = (event) => {
-      if (event.key !== "Escape") return;
-      event.stopPropagation();
-      close();
-      button2.current?.focus();
-    };
-    const onScroll = (event) => {
-      if (!menu.current?.contains(event.target)) close();
-    };
-    window.addEventListener("mousedown", onDown);
-    window.addEventListener("keydown", onKey, true);
-    window.addEventListener("scroll", onScroll, true);
-    return () => {
-      window.removeEventListener("mousedown", onDown);
-      window.removeEventListener("keydown", onKey, true);
-      window.removeEventListener("scroll", onScroll, true);
-    };
-  }, [place]);
-  (0, import_react18.useLayoutEffect)(() => {
-    if (anchor === null || !button2.current) return;
+  const close = () => {
+    setOpen(false);
+    button2.current?.focus();
+  };
+  const anchor = () => {
+    if (!button2.current) return;
     const rect = button2.current.getBoundingClientRect();
-    const width = Math.max(240, rect.width);
-    const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8));
-    const below = viewBottom() - rect.bottom;
-    setPlace(below >= 260 || below >= rect.top ? { left, width, top: rect.bottom + 4, maxHeight: below - 16, "--bt-origin": "top right" } : { left, width, bottom: viewBottom() - rect.top + 4, maxHeight: rect.top - 16, "--bt-origin": "bottom right" });
-  }, [anchor, tick]);
-  return { isOpen: place !== null, shownPlace, leaving, button: button2, menu, open: () => setAnchor({}), close };
+    const viewport = window.visualViewport;
+    const viewLeft = viewport?.offsetLeft ?? 0;
+    const viewWidth = viewport?.width ?? window.innerWidth;
+    const width = Math.min(Math.max(240, rect.width), viewWidth - 16);
+    const left = Math.max(viewLeft + 8, Math.min(rect.right - width, viewLeft + viewWidth - width - 8));
+    const below = viewBottom() - rect.bottom - 4;
+    const above = rect.top - (viewport?.offsetTop ?? 0) - 4;
+    setPlace(below >= 260 || below >= above ? { left, width, top: rect.bottom + 4, maxHeight: Math.max(0, below - 8), "--bt-origin": "top right" } : { left, width, bottom: window.innerHeight - rect.top + 4, maxHeight: Math.max(0, above - 8), "--bt-origin": "bottom right" });
+  };
+  (0, import_react18.useLayoutEffect)(() => {
+    if (isOpen) anchor();
+  }, [isOpen, compact, tick]);
+  (0, import_react18.useEffect)(() => {
+    if (dismiss) setOpen(false);
+  }, [dismiss]);
+  (0, import_react18.useEffect)(() => {
+    if (!isOpen) return void 0;
+    const outside = (event) => {
+      if (menu.current?.contains(event.target) || button2.current?.contains(event.target)) return;
+      const active = document.activeElement;
+      if (active === document.body || menu.current?.contains(active)) close();
+      else setOpen(false);
+    };
+    const scroll = (event) => {
+      if (!menu.current?.contains(event.target)) anchor();
+    };
+    window.addEventListener("click", outside);
+    window.addEventListener("resize", anchor);
+    window.addEventListener("scroll", scroll, true);
+    return () => {
+      window.removeEventListener("click", outside);
+      window.removeEventListener("resize", anchor);
+      window.removeEventListener("scroll", scroll, true);
+    };
+  }, [isOpen]);
+  return { isOpen, shownPlace, leaving, button: button2, menu, open, close };
 }
 var folderName = (path) => String(path).replace(/[\\/]+$/, "").split(/[\\/]/).pop() || String(path);
 var Tick = ({ on }) => (0, import_react18.createElement)("span", { className: "bt-model-tick", "aria-hidden": true }, on ? (0, import_react18.createElement)(CheckIcon) : null);
 function FolderMenu({
   value,
+  defaultPath,
   group = false,
   team = false,
   actions: actions2,
   run: run2,
   onPick,
+  onNativePick,
   wide = false,
+  compact = false,
   disabled = false,
+  dismiss = false,
   fallbackLabel,
   label
 }) {
-  const { isOpen, shownPlace, leaving, button: button2, menu, open, close } = useAnchoredMenu();
+  const { isOpen, shownPlace, leaving, button: button2, menu, open, close } = useAnchoredMenu(compact, dismiss || disabled);
+  const id = (0, import_react18.useId)();
   const [info, setInfo] = (0, import_react18.useState)(null);
   const [view, setView] = (0, import_react18.useState)("list");
   const [draft, setDraft] = (0, import_react18.useState)("");
   const [listing, setListing] = (0, import_react18.useState)(null);
   const [problem, setProblem] = (0, import_react18.useState)("");
+  const [loading, setLoading] = (0, import_react18.useState)(false);
+  const currentPath = value ?? defaultPath;
   const fallback = fallbackLabel ?? (group ? t("Each Worker's own folder") : t("SuperAgent workspace"));
   const menuLabel = label ?? (team ? t("SuperAgent workspace") : t("Working folder"));
+  const menuItems = () => [...menu.current?.querySelectorAll('button[role^="menuitem"]:not(:disabled)') ?? []];
+  const showProblem = (reason) => setProblem(reason?.message ?? String(reason));
+  (0, import_react18.useLayoutEffect)(() => {
+    if (!isOpen || !shownPlace || menu.current?.contains(document.activeElement)) return;
+    const selected = menu.current?.querySelector("[aria-checked=true]") ?? menuItems()[0];
+    (selected ?? menu.current)?.focus();
+  }, [isOpen, Boolean(shownPlace), view, listing, info]);
+  const onKeyDown = (event) => {
+    if (event.defaultPrevented) return;
+    if (event.key === "Escape" && isOpen) {
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+      return;
+    }
+    if (event.target.tagName === "INPUT") return;
+    const items = menuItems();
+    const current = items.indexOf(event.target);
+    const last = items.length - 1;
+    const targets2 = {
+      Home: 0,
+      End: last,
+      ArrowDown: current < last ? current + 1 : 0,
+      ArrowUp: current > 0 ? current - 1 : last
+    };
+    if (!Object.hasOwn(targets2, event.key)) return;
+    event.preventDefault();
+    items[targets2[event.key]]?.focus();
+  };
   const toggle = () => {
+    if (disabled || dismiss) return;
     if (isOpen) {
       close();
       return;
     }
     setView("list");
     setProblem("");
-    void Promise.resolve(actions2.folders()).then(setInfo).catch(() => setInfo((last) => last ?? { team: null, picker: null, folders: [] }));
+    setLoading(true);
+    void Promise.resolve(actions2.folders()).then(setInfo).catch(showProblem).finally(() => setLoading(false));
     open();
   };
   const choose = (path) => {
@@ -10236,42 +10287,56 @@ function FolderMenu({
   };
   const pickNative = () => {
     close();
-    void run2(Promise.resolve(actions2.folderPick()).then((path) => path ? onPick(path) : void 0));
+    if (onNativePick) void onNativePick();
+    else void run2(Promise.resolve(actions2.folderPick()).then((path) => path ? onPick(path) : void 0));
   };
   const typed = () => {
     const path = draft.trim();
     if (path !== "") choose(path);
   };
-  const known = info?.folders ?? [];
+  const known = (info?.folders ?? []).filter((folder) => team || folder.path !== defaultPath || folder.path === value);
   const folders = value && !known.some((folder) => folder.path === value) ? [{ path: value, title: folderName(value) }, ...known] : known;
   const listView = (0, import_react18.createElement)(
     "div",
     { key: "list", className: "bt-folder-view" },
     team ? null : (0, import_react18.createElement)(
       "button",
-      { type: "button", role: "menuitemradio", "aria-checked": !value, title: group ? void 0 : info?.team ?? void 0, onClick: () => choose("") },
-      (0, import_react18.createElement)("span", { className: "bt-menu-label" }, fallback),
+      {
+        type: "button",
+        role: "menuitemradio",
+        tabIndex: -1,
+        "aria-checked": !value,
+        title: group ? void 0 : defaultPath ?? info?.team ?? void 0,
+        onClick: () => choose("")
+      },
+      (0, import_react18.createElement)(
+        "span",
+        { className: "bt-folder-copy" },
+        (0, import_react18.createElement)("span", { className: "bt-menu-label" }, fallback),
+        defaultPath ? (0, import_react18.createElement)("span", { className: "bt-folder-path" }, defaultPath) : null
+      ),
       (0, import_react18.createElement)(Tick, { on: !value })
     ),
     folders.length > 0 ? (0, import_react18.createElement)("div", { className: "bt-model-group", role: "presentation" }, t("Folders")) : null,
     folders.map((folder) => (0, import_react18.createElement)(
       "button",
-      { key: folder.path, type: "button", role: "menuitemradio", "aria-checked": folder.path === value, title: folder.path, onClick: () => choose(folder.path) },
+      { key: folder.path, type: "button", role: "menuitemradio", tabIndex: -1, "aria-checked": folder.path === value, title: folder.path, onClick: () => choose(folder.path) },
       (0, import_react18.createElement)("span", { className: "bt-folder-copy" }, (0, import_react18.createElement)("span", { className: "bt-menu-label" }, folder.title), (0, import_react18.createElement)("span", { className: "bt-folder-path" }, folder.path)),
       (0, import_react18.createElement)(Tick, { on: folder.path === value })
     )),
     (0, import_react18.createElement)("div", { className: "bt-menu-sep", role: "separator" }),
-    info?.picker === "native" ? (0, import_react18.createElement)("button", { type: "button", role: "menuitem", onClick: pickNative }, (0, import_react18.createElement)(FolderIcon), (0, import_react18.createElement)("span", { className: "bt-menu-label" }, t("Choose a folder…"))) : null,
-    info?.picker === "browse" ? (0, import_react18.createElement)("button", { type: "button", role: "menuitem", onClick: () => browse(value) }, (0, import_react18.createElement)(FolderIcon), (0, import_react18.createElement)("span", { className: "bt-menu-label" }, t("Browse folders…"))) : null,
-    (0, import_react18.createElement)("button", { type: "button", role: "menuitem", onClick: () => {
-      setDraft(value ?? "");
+    loading ? (0, import_react18.createElement)("div", { className: "bt-model-none", role: "status" }, t("Loading…")) : null,
+    info?.picker === "native" ? (0, import_react18.createElement)("button", { type: "button", role: "menuitem", tabIndex: -1, onClick: pickNative }, (0, import_react18.createElement)(FolderIcon), (0, import_react18.createElement)("span", { className: "bt-menu-label" }, t("Choose a folder…"))) : null,
+    info?.picker === "browse" ? (0, import_react18.createElement)("button", { type: "button", role: "menuitem", tabIndex: -1, onClick: () => browse(currentPath) }, (0, import_react18.createElement)(FolderIcon), (0, import_react18.createElement)("span", { className: "bt-menu-label" }, t("Browse folders…"))) : null,
+    (0, import_react18.createElement)("button", { type: "button", role: "menuitem", tabIndex: -1, onClick: () => {
+      setDraft(currentPath ?? "");
       setView("type");
     } }, (0, import_react18.createElement)(PencilIcon), (0, import_react18.createElement)("span", { className: "bt-menu-label" }, t("Enter a path…")))
   );
   const typeView = (0, import_react18.createElement)(
     "div",
     { key: "type", className: "bt-folder-view" },
-    (0, import_react18.createElement)("button", { type: "button", className: "bt-folder-back", onClick: () => setView("list") }, (0, import_react18.createElement)(ChevronLeftIcon), (0, import_react18.createElement)("span", { className: "bt-menu-label" }, t("Back"))),
+    (0, import_react18.createElement)("button", { type: "button", role: "menuitem", className: "bt-folder-back", onClick: () => setView("list") }, (0, import_react18.createElement)(ChevronLeftIcon), (0, import_react18.createElement)("span", { className: "bt-menu-label" }, t("Back"))),
     (0, import_react18.createElement)("input", {
       className: "bt-folder-input",
       autoFocus: true,
@@ -10284,14 +10349,14 @@ function FolderMenu({
         if (event.key === "Enter" && !event.nativeEvent.isComposing) typed();
       }
     }),
-    (0, import_react18.createElement)("button", { type: "button", className: "bt-folder-use", disabled: draft.trim() === "", onClick: typed }, t("Use this folder"))
+    (0, import_react18.createElement)("button", { type: "button", role: "menuitem", className: "bt-folder-use", disabled: draft.trim() === "", onClick: typed }, t("Use this folder"))
   );
   const parent = listing?.crumbs?.length > 1 ? listing.crumbs.at(-2) : void 0;
   const inside = listing?.entries?.filter((entry) => !entry.hidden) ?? [];
   const browseView = listing ? (0, import_react18.createElement)(
     "div",
     { key: `browse:${listing.path}`, className: "bt-folder-view" },
-    (0, import_react18.createElement)("button", { type: "button", className: "bt-folder-back", onClick: () => setView("list") }, (0, import_react18.createElement)(ChevronLeftIcon), (0, import_react18.createElement)("span", { className: "bt-menu-label" }, t("Back"))),
+    (0, import_react18.createElement)("button", { type: "button", role: "menuitem", className: "bt-folder-back", onClick: () => setView("list") }, (0, import_react18.createElement)(ChevronLeftIcon), (0, import_react18.createElement)("span", { className: "bt-menu-label" }, t("Back"))),
     (0, import_react18.createElement)("div", { className: "bt-folder-path bt-folder-here" }, listing.path),
     parent ? (0, import_react18.createElement)("button", { type: "button", role: "menuitem", title: parent.path, onClick: () => browse(parent.path) }, (0, import_react18.createElement)(FolderIcon), (0, import_react18.createElement)("span", { className: "bt-menu-label" }, t("Up one level"))) : null,
     inside.map((entry) => (0, import_react18.createElement)(
@@ -10304,7 +10369,7 @@ function FolderMenu({
     inside.length === 0 ? (0, import_react18.createElement)("div", { className: "bt-model-none" }, t("No folders inside.")) : null,
     listing.truncated ? (0, import_react18.createElement)("div", { className: "bt-folder-path bt-folder-here" }, t("Some folders are not shown.")) : null,
     (0, import_react18.createElement)("div", { className: "bt-menu-sep", role: "separator" }),
-    (0, import_react18.createElement)("button", { type: "button", className: "bt-folder-use", onClick: () => choose(listing.path) }, t("Use this folder"))
+    (0, import_react18.createElement)("button", { type: "button", role: "menuitem", className: "bt-folder-use", onClick: () => choose(listing.path) }, t("Use this folder"))
   ) : null;
   const shownView = view === "type" ? typeView : view === "browse" && browseView ? browseView : listView;
   return (0, import_react18.createElement)(
@@ -10315,34 +10380,60 @@ function FolderMenu({
       {
         ref: button2,
         type: "button",
-        className: "bt-model-trigger",
+        className: compact ? "bt-round bt-folder-trigger" : "bt-model-trigger bt-folder-trigger",
         "data-wide": wide || void 0,
         "aria-haspopup": "menu",
         "aria-expanded": isOpen,
-        "aria-label": `${menuLabel}: ${value ?? (team ? "" : fallback)}`,
-        title: value,
+        "aria-controls": isOpen ? id : void 0,
+        "aria-label": `${menuLabel}: ${currentPath ?? fallback}`,
+        "aria-disabled": disabled || void 0,
+        title: currentPath ?? menuLabel,
         onClick: toggle,
-        disabled
+        onKeyDown: (event) => {
+          if (!isOpen && !disabled && !dismiss && ["ArrowDown", "ArrowUp"].includes(event.key)) {
+            event.preventDefault();
+            toggle();
+          } else if (isOpen) onKeyDown(event);
+        }
       },
-      (0, import_react18.createElement)(
+      compact ? (0, import_react18.createElement)(FolderIcon) : (0, import_react18.createElement)(import_react18.Fragment, null, (0, import_react18.createElement)(
         "span",
         { className: "bt-model-copy" },
-        (0, import_react18.createElement)("span", { className: "bt-model-name" }, value ? folderName(value) : fallback),
-        value ? (0, import_react18.createElement)("span", { className: "bt-model-provider" }, value) : null
-      ),
-      (0, import_react18.createElement)(Caret)
+        (0, import_react18.createElement)("span", { className: "bt-model-name" }, currentPath ? folderName(currentPath) : fallback),
+        currentPath ? (0, import_react18.createElement)("span", { className: "bt-model-provider" }, currentPath) : null
+      ), (0, import_react18.createElement)(Caret))
     ),
     shownPlace ? (0, import_react_dom.createPortal)((0, import_react18.createElement)(
       "div",
-      { ref: menu, className: `bt-menu bt-model-menu bt-folder-menu${shownPlace.bottom !== void 0 ? " bt-menu-up" : ""}`, role: "menu", "aria-label": menuLabel, style: shownPlace, "data-leaving": leaving || void 0 },
+      {
+        ref: menu,
+        id,
+        className: `bt-menu bt-folder-menu${shownPlace.bottom !== void 0 ? " bt-menu-up" : ""}`,
+        role: "menu",
+        tabIndex: -1,
+        "aria-label": menuLabel,
+        style: shownPlace,
+        "data-leaving": leaving || void 0,
+        "aria-hidden": leaving || void 0,
+        inert: leaving,
+        onKeyDown
+      },
       shownView,
       problem ? (0, import_react18.createElement)("div", { className: "bt-folder-error", role: "alert" }, problem) : null
     ), document.body) : null
   );
 }
 var FOLDER_CSS = `
+.bt-model-trigger{display:inline-flex;align-items:center;gap:8px;max-width:100%;min-width:0;min-height:32px;padding:4px 8px 4px 10px;border:0;border-radius:var(--bt-radius-input);background:var(--bt-hover);color:var(--bt-ink);font:inherit;text-align:left;cursor:pointer;transition:background-color .12s ease}
+.bt-model-trigger:hover,.bt-model-trigger[aria-expanded=true]{background:var(--bt-active)}
+.bt-model-trigger[data-wide]{width:100%;justify-content:space-between}
+.bt-model-copy{display:flex;flex-direction:column;min-width:0}
+.bt-model-name{font-size:var(--bt-font-body);line-height:18px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-model-provider{font-size:var(--bt-font-small);line-height:14px;color:var(--bt-ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-menu.bt-folder-menu{min-width:0;overflow:auto;scrollbar-width:thin}
+.bt-folder-trigger:focus-visible,.bt-menu.bt-folder-menu :is(button,input):focus-visible{outline:2px solid var(--bt-accent);outline-offset:-2px}
 .bt-folder-view{display:flex;flex-direction:column;gap:2px;animation:bt-veil-in .14s ease-out}
-.bt-model-caret{flex:none;color:var(--bt-ink-3);transition:transform .12s ease}
+.bt-model-caret{flex:none;color:var(--bt-ink-3);transition:${spring(SPRING_SHAPE, "transform")}}
 [aria-expanded=true]>.bt-model-caret{transform:rotate(180deg)}
 .bt-model-group{flex:none;padding:8px 8px 2px;font-size:11px;line-height:14px;font-weight:500;color:var(--bt-ink-3)}
 .bt-model-group:first-child{padding-top:2px}
@@ -10357,9 +10448,10 @@ var FOLDER_CSS = `
 .bt-folder-input:focus{border-color:var(--bt-accent)}
 .bt-menu .bt-folder-use{justify-content:center;font-weight:500;color:var(--bt-accent)}
 .bt-menu .bt-folder-use:disabled{color:var(--bt-ink-3);cursor:default;background:none}
-.bt-model-trigger:disabled{opacity:.6;cursor:default}
+.bt-folder-trigger[aria-disabled=true]{opacity:.6;cursor:default}
 .bt-folder-error{padding:4px 8px;font-size:12px;line-height:16px;color:var(--bt-danger);overflow-wrap:anywhere}
-@media (prefers-reduced-motion:reduce){.bt-folder-view{animation:none}}
+body[data-bt-motion=quiet] :is(.bt-folder-menu,.bt-folder-view,.bt-folder-trigger,.bt-folder-trigger .bt-model-caret){animation:none!important;transition:none!important}
+@media (prefers-reduced-motion:reduce){:is(.bt-folder-menu,.bt-folder-view,.bt-folder-trigger,.bt-folder-trigger .bt-model-caret){animation:none!important;transition:none!important}}
 `;
 
 // src/client/sources.js
@@ -13299,7 +13391,7 @@ function ProductShellHeader({ activity = false, markState, onMain, onActivity, c
     children
   );
 }
-function ShellSidebar({ wide = true, useShell, actions: actions2, openPalette }) {
+function ShellSidebar({ wide = true, useShell, actions: actions2, openPalette, WorkDirectory }) {
   const { activity, markState, preview, pending, unread, connectLabel, settingsAvailable, modalOpen, signIn } = useShell();
   const mainLabel = [t("Main"), pending ? t("Waiting for your answer") : unread ? t("Unread activity") : ""].filter(Boolean).join(", ");
   const row2 = (label, icon, onClick, selected) => (0, import_react29.createElement)("button", {
@@ -13320,6 +13412,7 @@ function ShellSidebar({ wide = true, useShell, actions: actions2, openPalette })
     (0, import_react29.createElement)(
       "div",
       { className: wide ? "bt-side-top" : "bt-rail-top" },
+      WorkDirectory ? (0, import_react29.createElement)(WorkDirectory, { wide }) : null,
       (0, import_react29.createElement)("button", {
         type: "button",
         className: "bt-round",
@@ -13352,14 +13445,14 @@ function ShellSidebar({ wide = true, useShell, actions: actions2, openPalette })
     actions2.openSettings && settingsAvailable !== false ? (0, import_react29.createElement)(SuperagentAccountFooter, { wide, modalOpen, signIn, openSettings: actions2.openSettings }) : null
   );
 }
-function installProductShell(ctx, { useShell, actions: actions2, Overlay, overlayChildren, settingsInSidebar = true, nativeHeader = false }) {
+function installProductShell(ctx, { useShell, actions: actions2, Overlay, overlayChildren, WorkDirectory, settingsInSidebar = true, nativeHeader = false }) {
   const palette = createSource(false);
   const toast = createSource(null);
   const openPalette = () => palette.set(true);
   const reportError = (error) => toast.set({ text: error instanceof Error ? error.message : String(error) });
   const showNotice = (text) => toast.set({ text, tone: "notice" });
   const shellActions = settingsInSidebar ? actions2 : { ...actions2, openSettings: void 0 };
-  const Sidebar = (props) => (0, import_react29.createElement)(ShellSidebar, { ...props, useShell, actions: shellActions, openPalette });
+  const Sidebar = (props) => (0, import_react29.createElement)(ShellSidebar, { ...props, useShell, actions: shellActions, openPalette, WorkDirectory });
   const Header = (props) => {
     const state = useShell();
     return (0, import_react29.createElement)(ProductShellHeader, {
@@ -13416,6 +13509,9 @@ var PRODUCT_SHELL_CSS = `
 .bt-product-brand-name{font-weight:600;font-size:14px}
 .bt-product-side{height:100%;box-sizing:border-box;padding-inline:var(--dsh-sidebar-inline-padding,8px);padding-bottom:8px}
 .bt-product-side>.bt-side-top{justify-content:flex-end}
+.bt-sidebar-directory{position:relative;min-width:0}
+.bt-sidebar-directory+.bt-round{flex:none}
+.bt-sidebar-directory>.bt-main-error{position:absolute;top:100%;left:0;z-index:59;width:max-content;max-width:min(240px,calc(100vw - 24px));margin:4px 0 0;padding:6px 8px;border-radius:var(--bt-radius-input);background:var(--bt-card);box-shadow:var(--bt-glass-shadow)}
 .bt-product-side:not(.bt-rail)>.bt-list{margin:0;scrollbar-gutter:auto}
 .bt-product-side .bt-tile{position:relative}
 .bt-product-side.bt-rail{width:auto;padding-inline:0}
@@ -20341,6 +20437,7 @@ function applyProduct(ctx) {
     mainDraft: "",
     mainAttachments: [],
     mainUploading: false,
+    mainSending: false,
     messageBefore: null,
     messagesComplete: false,
     messagesLoading: false,
@@ -20502,14 +20599,61 @@ function applyProduct(ctx) {
         folders: options.directories.map((directory) => ({ path: directory.root, title: directory.title }))
       };
     },
-    folderPick: () => call("folder-pick"),
-    folderList: (path) => call("folder-list", { path })
+    folderPick: () => productCall("directory-pick", { instanceId: binding.instanceId }),
+    folderList: (path) => productCall("directory-list", { instanceId: binding.instanceId, ...path ? { path } : {} })
   });
   const registerDirectory = (binding, path) => productCall("directory-register", {
     instanceId: binding.instanceId,
     commandId: crypto.randomUUID(),
     path
   });
+  const effectiveTarget = (state) => {
+    const target = state.directoryOptions?.execution?.policy?.defaultTarget;
+    return state.executionTarget ?? (target === "remote-only" || target === "auto" ? target : "local-only");
+  };
+  const mainBusy = (state) => state.mainSending || Boolean(state.activeTurn) || state.messages.some((message) => ["queued", "running", "stopping"].includes(message.status));
+  const directoryError = (error) => view.set((current) => ({ ...current, directoryError: error ? t(error.message) : null }));
+  const changeWorkDirectory = async (pick) => {
+    const state = view.getSnapshot();
+    if (!state.binding || state.connection?.connected || effectiveTarget(state) !== "local-only" || state.directoryBusy || state.mainUploading || mainBusy(state)) return;
+    view.set((current) => ({ ...current, directoryBusy: true, directoryError: null }));
+    try {
+      const path = await pick(state.binding);
+      if (path === null || path === void 0 || path === state.directoryOverride?.root) return;
+      if (view.getSnapshot().mainAttachments.length) throw new Error("Remove attached files before changing directories.");
+      const selected = path ? await registerDirectory(state.binding, path) : null;
+      await loadDirectories(state.binding);
+      view.set((current) => ({ ...current, directoryOverride: selected }));
+    } catch (error) {
+      directoryError(error);
+    } finally {
+      view.set((current) => ({ ...current, directoryBusy: false }));
+    }
+  };
+  function MainWorkDirectory({ sidebar = false, wide = true }) {
+    const state = useView();
+    if (!state.binding || !state.directoryOptions || state.connection?.connected || effectiveTarget(state) !== "local-only") return null;
+    const actions2 = directoryActions(state.binding);
+    const fallback = state.directoryOptions.default?.root;
+    return (0, import_react49.createElement)(
+      "div",
+      { className: sidebar ? "bt-sidebar-directory" : "bt-main-directory" },
+      sidebar ? null : (0, import_react49.createElement)("span", { className: "bt-main-label" }, t("Work directory")),
+      (0, import_react49.createElement)(FolderMenu, {
+        value: state.directoryOverride?.root,
+        defaultPath: fallback,
+        label: t("Work directory"),
+        fallbackLabel: t(fallback ? "Instance default" : "No directory selected"),
+        actions: actions2,
+        onNativePick: () => changeWorkDirectory(() => actions2.folderPick()),
+        onPick: (path) => changeWorkDirectory(() => path),
+        compact: sidebar && !wide,
+        dismiss: state.settingsOpen || state.connectOpen || state.signInOpen,
+        disabled: mainBusy(state) || state.directoryBusy || state.mainUploading
+      }),
+      state.directoryError ? (0, import_react49.createElement)("p", { className: "bt-main-error", role: "alert" }, state.directoryError) : null
+    );
+  }
   const loadEarlierMessages = async (binding) => {
     const current = view.getSnapshot();
     if (!current.messageBefore || current.messagesLoading) return;
@@ -21593,7 +21737,6 @@ function applyProduct(ctx) {
         }
       }))
     ) : null;
-    const [sending, setSending] = (0, import_react49.useState)(false);
     const [sendError, setSendError] = (0, import_react49.useState)(null);
     const { mainAttachments: attachments, mainUploading: uploading } = state;
     const setAttachments = (update) => view.set((current) => ({
@@ -21625,12 +21768,11 @@ function applyProduct(ctx) {
     const follow = (0, import_react49.useRef)(true);
     const restoreHeight = (0, import_react49.useRef)(null);
     const execution = state.directoryOptions?.execution;
-    const policyTarget = execution?.policy?.defaultTarget === "remote-only" ? "remote-only" : execution?.policy?.defaultTarget === "auto" ? "auto" : "local-only";
-    const executionTarget = state.executionTarget ?? policyTarget;
+    const executionTarget = effectiveTarget(state);
     const localEnvironments = execution?.environments?.filter((environment) => environment.kind === "local") ?? [];
     const remoteEnvironments = execution?.environments?.filter((environment) => environment.kind === "remote") ?? [];
     const selectedRemoteEnvironment = remoteEnvironments.find((environment) => environment.id === state.remoteEnvironmentOverride) ?? remoteEnvironments[0];
-    const selectedLocalEnvironmentId = state.directoryOverride ?? state.directoryOptions?.default?.environmentId ?? state.localEnvironmentOverride ?? (state.connection?.connected ? localEnvironments[0]?.id : void 0);
+    const selectedLocalEnvironmentId = state.directoryOverride?.id ?? state.directoryOptions?.default?.environmentId ?? state.localEnvironmentOverride ?? (state.connection?.connected ? localEnvironments[0]?.id : void 0);
     const selectedEnvironmentId = executionTarget === "remote-only" ? selectedRemoteEnvironment?.id : executionTarget === "local-only" ? selectedLocalEnvironmentId : void 0;
     const selectedEnvironment = execution?.environments?.find((environment) => environment.id === selectedEnvironmentId);
     (0, import_react49.useEffect)(() => {
@@ -21640,6 +21782,7 @@ function applyProduct(ctx) {
       } else if (follow.current) bottom.current?.scrollIntoView({ block: "end", behavior: "instant" });
     }, [state.messages.length]);
     const uploadFiles = async (files) => {
+      if (view.getSnapshot().directoryBusy) return;
       if (executionTarget === "auto") {
         setSendError(t("Choose Local or Remote only before adding files."));
         return;
@@ -21697,7 +21840,8 @@ function applyProduct(ctx) {
       setSpeakingId(message.id);
     };
     const send = async (text) => {
-      if (!state.binding) return false;
+      const current = view.getSnapshot();
+      if (!state.binding || current.directoryBusy || current.mainSending) return false;
       const attachmentIds = attachments.map((attachment) => attachment.id);
       const environmentId = attachments[0]?.environmentId ?? selectedEnvironmentId;
       if (executionTarget === "local-only" && !environmentId || attachmentIds.length && !environmentId) {
@@ -21710,7 +21854,7 @@ function applyProduct(ctx) {
       }
       const storageKey = `superagent:pending:${state.connection?.connected ? `${state.connection.address}:${state.connection.client.id}` : "local"}:${state.binding.instanceId}`;
       try {
-        setSending(true);
+        view.set((current2) => ({ ...current2, mainSending: true }));
         setSendError(null);
         if (!pending.current) {
           try {
@@ -21737,9 +21881,15 @@ function applyProduct(ctx) {
           sessionStorage.removeItem(storageKey);
         } catch {
         }
-        await refreshMain(state.binding);
         setAttachments([]);
-        view.set((current) => ({ ...current, directoryOverride: null, localEnvironmentOverride: null, remoteEnvironmentOverride: null }));
+        view.set((current2) => ({
+          ...current2,
+          ...executionTarget === "local-only" ? { directoryOverride: null } : {},
+          localEnvironmentOverride: null,
+          remoteEnvironmentOverride: null,
+          directoryError: null
+        }));
+        await refreshMain(state.binding);
         if (result.status === "failed") {
           setSendError(t("Main could not finish this reply. Your message is saved."));
           return false;
@@ -21750,10 +21900,10 @@ function applyProduct(ctx) {
         await refreshMain(state.binding);
         return false;
       } finally {
-        setSending(false);
+        view.set((current2) => ({ ...current2, mainSending: false }));
       }
     };
-    const busy = sending || Boolean(state.activeTurn) || state.messages.some((message) => ["queued", "running", "stopping"].includes(message.status));
+    const busy = mainBusy(state);
     const stopping = state.activeTurn?.status === "stopping";
     const stop = async () => {
       if (!state.binding || !state.activeTurn) return;
@@ -21763,25 +21913,6 @@ function applyProduct(ctx) {
         await refreshMain(state.binding);
       } catch (error) {
         setSendError(error.message);
-      }
-    };
-    const options = state.directoryOptions;
-    const override = options?.directories.find((directory) => directory.id === state.directoryOverride);
-    const chooseWorkDirectory = async (path) => {
-      if (!state.binding) return;
-      if (attachments.length) {
-        setSendError(t("Remove attached files before changing directories."));
-        return;
-      }
-      view.set((current) => ({ ...current, directoryBusy: true, directoryError: null }));
-      try {
-        const selected = path ? await registerDirectory(state.binding, path) : null;
-        await loadDirectories(state.binding);
-        view.set((current) => ({ ...current, directoryOverride: selected?.id ?? null }));
-      } catch (error) {
-        view.set((current) => ({ ...current, directoryError: error.message }));
-      } finally {
-        view.set((current) => ({ ...current, directoryBusy: false }));
       }
     };
     const chooseTarget = (value) => {
@@ -21802,7 +21933,7 @@ function applyProduct(ctx) {
           "aria-label": t("Execution target"),
           value: executionTarget,
           onChange: (event) => chooseTarget(event.target.value),
-          disabled: busy
+          disabled: busy || state.directoryBusy
         },
         (0, import_react49.createElement)("option", { value: "local-only" }, t("Local")),
         (0, import_react49.createElement)("option", { value: "remote-only" }, t("Remote only")),
@@ -21857,6 +21988,7 @@ function applyProduct(ctx) {
       onStop: canCommand && state.activeTurn ? stop : void 0,
       busy,
       stopping,
+      directoryBusy: state.directoryBusy,
       readOnly: !canCommand,
       error: sendError ?? state.error,
       value: state.mainDraft,
@@ -21870,21 +22002,7 @@ function applyProduct(ctx) {
         "div",
         { className: "bt-main-directory" },
         targetControl,
-        !state.connection?.connected && executionTarget === "local-only" && options?.default ? (0, import_react49.createElement)(
-          import_react49.Fragment,
-          null,
-          (0, import_react49.createElement)("span", { className: "bt-main-label" }, t("Work directory")),
-          (0, import_react49.createElement)(FolderMenu, {
-            value: override?.root,
-            label: t("Work directory"),
-            fallbackLabel: t("Instance default"),
-            actions: directoryActions(state.binding),
-            run: (promise) => void Promise.resolve(promise).catch((error) => view.set((current) => ({ ...current, directoryError: error.message }))),
-            onPick: chooseWorkDirectory,
-            disabled: busy || state.directoryBusy
-          })
-        ) : null,
-        state.directoryError ? (0, import_react49.createElement)("p", { className: "bt-main-error", role: "alert" }, state.directoryError) : null
+        (0, import_react49.createElement)(MainWorkDirectory)
       ) : null
     });
     const showModelSetup = !question && state.binding && !state.connection?.connected;
@@ -23230,6 +23348,7 @@ function applyProduct(ctx) {
   const { Header } = installProductShell(ctx, {
     actions: shellActions,
     Overlay,
+    WorkDirectory: ({ wide }) => (0, import_react49.createElement)(MainWorkDirectory, { sidebar: true, wide }),
     overlayChildren: { ...SETTINGS_CHILDREN, [DEEPSEEK_SIGN_IN_SLOT]: { kind: "single", scope: "root" } },
     useShell() {
       useModelSlots();
