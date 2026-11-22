@@ -48,7 +48,8 @@ async function inspectVerificationJobs(jobsPath) {
 }
 
 test('the product pairs a device and binds remote-only work to its own filesystem across Host restart', { timeout: 120000 }, async t => {
-  const windowsObservationAllowanceMs = process.platform === 'win32' ? 2_000 : 0
+  const verificationDeadlineMs = process.platform === 'win32' ? 10_000 : 5_000
+  const reportDeadlineMs = process.platform === 'win32' ? verificationDeadlineMs + 10_000 : 8_000
   const directory = await mkdtemp(join(tmpdir(), 'r5-product-execution-'))
   const workspace = join(directory, 'workspace')
   const deviceRootPath = join(directory, 'device-work')
@@ -68,7 +69,7 @@ test('the product pairs a device and binds remote-only work to its own filesyste
     jobsPath, statePath: join(directory, 'device-state.json'),
     commands: { verify: { argv: [process.execPath, '-e',
       "const fs=require('node:fs');if(fs.readFileSync('remote-result.txt','utf8')!=='remote execution\\n')process.exit(1)"],
-    timeoutMs: 5_000 + windowsObservationAllowanceMs } } })
+    timeoutMs: verificationDeadlineMs } } })
   const endpoint = await device.start()
   const mainToolResults = []
   const workerToolNames = []
@@ -152,10 +153,11 @@ test('the product pairs a device and binds remote-only work to its own filesyste
     await until(async () => {
       lastHistory = await call('history', { limit: 100 })
       work = lastHistory.works?.[0]
+      if (work?.status === 'failed') throw new Error('Remote Work failed before producing a verified report.')
       if (work?.status !== 'success') return false
       verificationJobs = await inspectVerificationJobs(jobsPath)
       return verificationJobs.some(job => job.settled)
-    }, 'a successful remote work report and settled verification', 8_000 + windowsObservationAllowanceMs)
+    }, 'a successful remote work report and settled verification', reportDeadlineMs)
   } catch (error) {
     const lastVerificationJobs = await inspectVerificationJobs(jobsPath).catch(failure => ({ error: failure.message }))
     const observations = work?.receipt?.ticketId

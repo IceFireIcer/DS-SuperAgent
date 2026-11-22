@@ -57,3 +57,5 @@ MCP 测试改用一个只读 SQLite 连接检查持久记录，避免测试的�
 PostgreSQL 恢复夹具固定在旧 Host 持有首轮 Worker 投递租约时中断。等待预算覆盖实际租约到期以及后续执行。回归验证三个原 Session、答复只写入原 Worker Session 一次、可验证结果回到原 Main，并要求替换 Host 和测试进程以 `0` 自然退出。Windows Node `24.22.3` 下定向用例通过。[PostgreSQL 恢复夹具](../../../superagent/test/hosted-product-postgres.test.mjs) · [远端定向恢复](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45007533861/job/137162387191#step:5:1)
 
 远端前台命令在既有总期限内等待设备确认进程范围静止。Windows 用一次查询核实 PID、父 PID 和创建时间。定向回归确认根进程退出后仍等待存活后代、调用方取消后回收原进程范围，以及故意让首轮 Windows 查询超时后仍能获得真实的结算证据。6 项定向测试自然退出。[远端命令夹具](../../../superagent/test/remote-command.test.mjs) · [原分片失败](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45002104539/job/137145733320#step:6:1)
+
+候选 `d67881ec217264733e51a2e99a43f3c5c86acc28` 的定向 CI 通过 86 项。全量运行中，PostgreSQL、MCP、调用方取消及其他远端进程用例通过。远端文件验证的退出码为 `0`，设备在 7 秒期限后约 80 毫秒返回已结算的取消结果。Windows 文件验证夹具使用设备现有的 10 秒期限上限，成功断言仍要求 `exited`、`settled` 且未取消。该用例本机通过并自然退出。[定向 CI](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45008545148/job/137165502546#step:5:1) · [全量分片 1](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45008975216/job/137166854933#step:6:1)
