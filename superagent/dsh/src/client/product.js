@@ -4,6 +4,7 @@ import { MainComposer } from './composer.js'
 import { installMainCells } from './main-cells.js'
 import { MainQuestion } from './main-question.js'
 import { plainSpeech } from './product-speech.js'
+import { createMainVoice, MAIN_VOICE_CSS } from './main-voice.js'
 import { readProductArtifact, readProductAttachment, uploadPayload, uploadWithRetry } from './product-attachments.js'
 import { FeishuSourceStatus } from './product-feishu.js'
 import { Card, Row } from './product-card.js'
@@ -249,6 +250,29 @@ export function applyProduct(ctx) {
   }
   const mainBusy = state => state.mainSending || Boolean(state.activeTurn)
     || state.messages.some(message => ['queued', 'running', 'stopping'].includes(message.status))
+  const pendingQuestion = state => state.works.find(work => work.control?.assignment && work.control.permissions?.canAnswer
+    && work.control.attention?.status === 'waiting')
+  const nativeStatus = ctx.uiSession?.sessionStatus
+  const nativeQuestion = state => nativeStatus?.getSnapshot().get(state.binding?.mainSessionId)?.pendingInteraction
+  const mainVoice = createMainVoice({ speechRemote: () => ctx.get('remote.speech'), readMain: () => {
+    const state = view.getSnapshot()
+    return { messages: state.messages, question: nativeQuestion(state) || pendingQuestion(state),
+      active: state.route === 'main' && (!state.connection?.connected || state.connection.capabilities.includes('command')),
+      busy: mainBusy(state) || state.directoryBusy || state.mainUploading }
+  } })
+  ctx.effect(() => {
+    const stopView = view.subscribe(mainVoice.sync)
+    const stopNative = nativeStatus?.subscribe(mainVoice.sync)
+    document.addEventListener('visibilitychange', mainVoice.sync)
+    window.addEventListener('pagehide', mainVoice.close)
+    return () => {
+      stopView()
+      stopNative?.()
+      document.removeEventListener('visibilitychange', mainVoice.sync)
+      window.removeEventListener('pagehide', mainVoice.close)
+      mainVoice.close()
+    }
+  }, 'superagent: Main voice lifecycle')
   const directoryError = error => view.set(current => ({ ...current, directoryError: error ? t(error.message) : null }))
   const changeWorkDirectory = async pick => {
     const state = view.getSnapshot()
@@ -961,16 +985,18 @@ export function applyProduct(ctx) {
           `#${condition.number}: ${conditionCopy(condition.state)}${condition.reason ? ` · ${condition.reason}` : ''}`))) : null)
   }
 
-  function MainConversation({ composerOnly = false, question, sessionEvents } = {}) {
+  function MainConversation({ composerOnly = false, sessionEvents } = {}) {
     useModelSlots()
     const state = useView()
     const canCommand = !state.connection?.connected || state.connection.capabilities.includes('command')
+    const question = canCommand && pendingQuestion(state)
+    const voiceState = useSyncExternalStore(mainVoice.subscribe, mainVoice.getSnapshot)
     const turnCards = projectTurnCards(state)
     const renderCards = cards => cards ? h(Fragment, null,
       cards.sources.map(source => h(MainSourceCard, { key: source.id, source, instanceId: state.binding?.instanceId, onRefresh: refresh, canCommand })),
       cards.preparations.map(preparation => h(MainPreparationCard, { key: preparation.id, preparation })),
       cards.works.map(work => h(MainWorkCard, { key: work.brief.workItemId ?? work.brief.id, work,
-        questionInComposer: composerOnly && work === question,
+        questionInComposer: work === question,
         onEvidence: selected => { if (state.binding) void loadMainEvidence(state.binding, selected) } }))) : null
     const [sendError, setSendError] = useState(null)
     const { mainAttachments: attachments, mainUploading: uploading } = state
@@ -978,7 +1004,11 @@ export function applyProduct(ctx) {
       mainAttachments: typeof update === 'function' ? update(current.mainAttachments) : update }))
     const setUploading = mainUploading => view.set(current => ({ ...current, mainUploading }))
     const [speakingId, setSpeakingId] = useState(null)
-    useEffect(() => () => window.speechSynthesis?.cancel(), [])
+    useEffect(() => () => {
+      if (composerOnly && nativeQuestion(view.getSnapshot())) mainVoice.pause()
+      else mainVoice.close()
+      window.speechSynthesis?.cancel()
+    }, [composerOnly, state.binding?.mainSessionId])
     useEffect(() => {
       const acknowledge = () => {
         if (!document.hasFocus() || document.visibilityState === 'hidden') return
@@ -1057,14 +1087,15 @@ export function applyProduct(ctx) {
     }
     const send = async text => {
       const current = view.getSnapshot()
-      if (!state.binding || current.directoryBusy || current.mainSending) return false
+      if (!state.binding) throw new Error(t('Main is unavailable.'))
+      if (current.directoryBusy || current.mainSending) throw new Error(t('Wait for the current action before sending.'))
       const attachmentIds = attachments.map(attachment => attachment.id)
       const environmentId = attachments[0]?.environmentId ?? selectedEnvironmentId
       if (executionTarget === 'local-only' && !environmentId || attachmentIds.length && !environmentId) {
-        setSendError(t('Choose an authorized Environment for this execution target.')); return false
+        throw new Error(t('Choose an authorized Environment for this execution target.'))
       }
       if (executionTarget === 'auto' && attachmentIds.length) {
-        setSendError(t('Remove attached files before using automatic target selection.')); return false
+        throw new Error(t('Remove attached files before using automatic target selection.'))
       }
       const storageKey = `superagent:pending:${state.connection?.connected
         ? `${state.connection.address}:${state.connection.client.id}` : 'local'}:${state.binding.instanceId}`
@@ -1089,15 +1120,31 @@ export function applyProduct(ctx) {
         view.set(current => ({ ...current, ...(executionTarget === 'local-only' ? { directoryOverride: null } : {}),
           localEnvironmentOverride: null, remoteEnvironmentOverride: null, directoryError: null }))
         await refreshMain(state.binding)
-        if (result.status === 'failed') { setSendError(t('Main could not finish this reply. Your message is saved.')); return false }
-        return true
-      } catch (error) { setSendError(error.message); await refreshMain(state.binding); return false }
+        return result
+      } catch (error) { await refreshMain(state.binding); throw error }
       finally { view.set(current => ({ ...current, mainSending: false })) }
+    }
+    const sendText = async text => {
+      try {
+        const receipt = await send(text)
+        if (receipt.status === 'failed') throw new Error(t('Main could not finish this reply. Your message is saved.'))
+        return true
+      } catch (error) { setSendError(error.message); return false }
+    }
+    const latestSend = useRef(send)
+    latestSend.current = send
+    const startVoice = () => {
+      if (speakingId) {
+        window.speechSynthesis?.cancel()
+        setSpeakingId(null)
+      }
+      mainVoice.start(text => latestSend.current(text))
     }
     const busy = mainBusy(state)
     const stopping = state.activeTurn?.status === 'stopping'
     const stop = async () => {
       if (!state.binding || !state.activeTurn) return
+      mainVoice.pause()
       try {
         setSendError(null)
         await call('stop-chat', { botId: state.binding.mainId, messageId: state.activeTurn.messageId })
@@ -1141,10 +1188,13 @@ export function applyProduct(ctx) {
         : executionTarget === 'remote-only' && !selectedEnvironmentId
           ? t('No remote Environment is available. This work will wait for an eligible device.')
           : t('New work uses this Environment. Active work keeps its original binding.'))) : null
-    const composer = h(MainComposer, { onSend: send, onStop: canCommand && state.activeTurn ? stop : undefined, busy, stopping,
+    const composer = question ? h(MainWorkCard, { work: question, questionOnly: true, key: question.control.attention.id })
+      : h(MainComposer, { onSend: sendText, onStop: canCommand && state.activeTurn ? stop : undefined, busy, stopping,
       directoryBusy: state.directoryBusy, readOnly: !canCommand,
       error: sendError ?? state.error,
       value: state.mainDraft, onValueChange: mainDraft => view.set(current => ({ ...current, mainDraft })),
+      voice: voiceState, onVoiceStart: state.binding ? startVoice : undefined,
+      onVoicePause: () => mainVoice.pause(), onVoiceResume: startVoice, onVoiceClose: mainVoice.close,
       attachments, uploading, onRemoveAttachment: removeAttachment,
       speechRemote: () => ctx.get('remote.speech') ?? undefined,
       onFiles: !state.connection?.connected && executionTarget !== 'auto' && selectedEnvironmentId
@@ -1181,8 +1231,7 @@ export function applyProduct(ctx) {
         unplaced.works.length || unplaced.sources.length || unplaced.preparations.length ? h('details', { className: 'bt-native-turn-cards' },
           h('summary', null, t('Work, sources and preparations')), renderCards(unplaced)) : null,
         h(BoardSurface, { dock: true }),
-        modelChoice,
-        question ? h(MainWorkCard, { work: question, questionOnly: true, key: question.control.attention.id }) : composer)
+        modelChoice, composer)
     }
     return h('section', { className: 'bt-main-conversation', 'aria-label': 'Main' },
       h('header', { className: 'bt-main-header' }, h(Header),
@@ -1221,7 +1270,7 @@ export function applyProduct(ctx) {
                     : message.source.kind === 'schedule' ? `${t('Scheduled occurrence')} · ${message.source.objectId}`
                       : `${t(message.source.kind === 'im' ? 'IM' : message.source.kind === 'feishu' ? 'Feishu' : 'GitHub')} · @${message.source.authorId} · ${message.source.objectId}`) : null,
                 h(ProductChatRow, { kind: message.role === 'main' ? 'bot' : 'user', text: message.text }),
-                message.role === 'main' && message.text && window.speechSynthesis
+                voiceState.phase === 'off' && message.role === 'main' && message.text && window.speechSynthesis
                   ? h('button', { type: 'button', className: 'bt-soft bt-main-read-aloud',
                     onClick: () => speakReply(message) }, t(speakingId === message.id ? 'Stop reading' : 'Read aloud')) : null,
                 message.attachments?.length ? h(MainAttachmentLinks, { attachments: message.attachments }) : null,
@@ -1818,13 +1867,10 @@ export function applyProduct(ctx) {
     ctx.uiWorkspace.openSession(sessionId)
   }
 
-  const pendingQuestion = state => state.works.find(work => work.control?.assignment && work.control.permissions?.canAnswer
-    && work.control.attention?.status === 'waiting')
-
   function NativeComposer({ pendingInteraction }) {
     const state = useView()
     const sessionEvents = useNativeSessionEvents(state.binding?.mainSessionId)
-    return pendingInteraction ? null : h(MainConversation, { composerOnly: true, question: pendingQuestion(state), sessionEvents })
+    return pendingInteraction ? null : h(MainConversation, { composerOnly: true, sessionEvents })
   }
 
   function useNativeSessionEvents(sessionId) {
@@ -1976,7 +2022,7 @@ export function applyProduct(ctx) {
   })
   installSettingsSections(ctx.slots)
   const register = (name, component, options = {}) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200, ...options }, component))
-  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SETTINGS_SHELL_CSS + PRODUCT_SETTINGS_CSS + FOLDER_CSS + PRODUCT_CSS + MODEL_ONBOARDING_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + CHAT_SECRET_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_COMPUTER_CSS + PRODUCT_EXECUTION_CSS + PRODUCT_OPERATIONS_CSS + USAGE_HEATMAP_CSS + WORK_BOARD_CSS, 'main'), 'superagent: existing chat styles')
+  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SETTINGS_SHELL_CSS + PRODUCT_SETTINGS_CSS + FOLDER_CSS + PRODUCT_CSS + MODEL_ONBOARDING_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + CHAT_SECRET_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_COMPUTER_CSS + PRODUCT_EXECUTION_CSS + PRODUCT_OPERATIONS_CSS + USAGE_HEATMAP_CSS + WORK_BOARD_CSS + MAIN_VOICE_CSS, 'main'), 'superagent: existing chat styles')
   ctx.effect(() => installAppearance(ctx.get('theme')), 'superagent: appearance')
   if (!nativeSession) register('main.conversation', ProductSurface)
   else {

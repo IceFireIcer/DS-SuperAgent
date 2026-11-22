@@ -74,7 +74,7 @@ const captureError = (kind, cause) => Object.assign(new Error(kind), { kind, cau
 
 // One microphone recording. level() reads the live loudness (0–1); finish() returns
 // the WAV, or null when nothing was recorded; cancel() drops it.
-export async function openCapture() {
+export async function openCapture(signal) {
   const devices = navigator.mediaDevices
   if (!devices?.getUserMedia || typeof MediaRecorder === 'undefined') throw captureError('unavailable')
   let stream
@@ -86,6 +86,7 @@ export async function openCapture() {
   let audio
   let recorder
   try {
+    signal?.throwIfAborted()
     audio = new AudioContext()
     const analyser = audio.createAnalyser()
     analyser.fftSize = 512
@@ -111,7 +112,7 @@ function captureHandle(stream, audio, analyser, frame, recorder, chunks) {
   const close = () => {
     if (closed) return
     closed = true
-    if (recorder.state !== 'inactive') recorder.stop()
+    try { if (recorder.state !== 'inactive') recorder.stop() } catch {}
     stream.getTracks().forEach(track => track.stop())
     void audio.close().catch(() => {})
   }
