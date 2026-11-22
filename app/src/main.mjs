@@ -35,6 +35,7 @@ import { pickDirectory, readImportFile } from './native-place.mjs'
 import { ARTIFACT_PREFIX, PRODUCT_NAME, configureIdentity, formerDataFolders } from './product.mjs'
 import { SUPERAGENT_PROFILE, assertLocalBackupProfile, profileHome } from './profile.mjs'
 import { RemoteProductClient } from './remote-product-client.mjs'
+import { createDesktopClassicAgent } from './classic-agent.mjs'
 import { createShell, SHELL_TEXT } from './shell.mjs'
 import { handoffMain, waitForMainView } from './startup-handoff.mjs'
 import { createComputerIndicator, createStartupScreen, statusPage } from './status-window.mjs'
@@ -65,6 +66,7 @@ const IPC = {
   notificationTake: 'ds-superagent:notification-take', notificationOpen: 'ds-superagent:notification-open',
   productConnect: 'ds-superagent:client-connect', productDisconnect: 'ds-superagent:client-disconnect',
   productStatus: 'ds-superagent:client-status', productCall: 'ds-superagent:client-call', productEvents: 'ds-superagent:client-events',
+  classicAgent: 'ds-superagent:classic-agent',
 }
 // A cookie export larger than this is not a cookie export.
 const IMPORT_FILE_MAX = 32 * 1024 * 1024
@@ -151,6 +153,7 @@ const cookieImports = new CookieImports()
 const productCookieImports = new ProductCookieImports()
 const credentialImports = new CredentialImports()
 const remoteProduct = new RemoteProductClient()
+const classicAgent = createDesktopClassicAgent({ window: () => mainWindow, remote: () => remoteProduct.status().connected })
 const operationsLog = createOperationsLog(join(app.getPath('userData'), 'logs', 'operations.jsonl'))
 const productBackupRoot = join(app.getPath('userData'), 'backups')
 const note = (area, code, version) => void operationsLog.record(area, code, version).catch(() => {})
@@ -555,7 +558,10 @@ function launchHost(instance) {
     hostLockPid = instance.pid()
     writeHostLock(hostLock, { pid: hostLockPid, port: hostPortNumber })
   }
-  return starting
+  return starting.then(answer => {
+    if (host === instance && answer?.url) classicAgent.replaceHost(instance, answer.url)
+    return answer
+  })
 }
 
 function startProductHost(home, { rollback = false } = {}) {
@@ -646,7 +652,14 @@ async function start() {
     return fixed ? false : moveData(typeof workspace === 'string' && isAbsolute(workspace) ? workspace : places.workspace)
   })
   ipcMain.handle(IPC.directoryPick, pickWorkspace)
-  ipcMain.handle(IPC.productConnect, (event, connection) => { assertWindow(event); clearComputer(true); return remoteProduct.connect(connection) })
+  classicAgent.install(session.defaultSession)
+  ipcMain.handle(IPC.classicAgent, (event, endpoint, payload) => { assertWindow(event); return classicAgent.call(event.sender, endpoint, payload) })
+  ipcMain.handle(IPC.productConnect, (event, connection) => {
+    assertWindow(event)
+    clearComputer(true)
+    classicAgent.revoke()
+    return remoteProduct.connect(connection)
+  })
   ipcMain.handle(IPC.productDisconnect, (event) => { assertWindow(event); return remoteProduct.disconnect() })
   ipcMain.handle(IPC.productStatus, (event) => { assertWindow(event); return remoteProduct.status() })
   ipcMain.handle(IPC.productCall, (event, endpoint, payload) => { assertWindow(event); return remoteProduct.call(endpoint, payload) })
@@ -1117,6 +1130,7 @@ function createWindow() {
   win.on('page-title-updated', (event) => { event.preventDefault() })
   win.on('closed', () => {
     if (mainWindow !== win) return
+    classicAgent.revoke({ navigation: true })
     mainWindow = undefined
     // Browser resource tabs belonged to this window; they wait for the next one.
     botViews.release()
@@ -1127,6 +1141,10 @@ function createWindow() {
   // The tabs that outlived the last window join this one.
   botViews.attach(win)
   const contents = win.webContents
+  contents.on('did-start-navigation', event => {
+    if (mainWindow === win && event.isMainFrame && !event.isSameDocument) classicAgent.revoke({ navigation: true })
+  })
+  contents.on('render-process-gone', () => { if (mainWindow === win) classicAgent.revoke({ navigation: true }) })
   // The session is the same for every window of the app, so the handler is bound once.
   if (!downloadsBound) {
     downloadsBound = true

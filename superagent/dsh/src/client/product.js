@@ -26,8 +26,9 @@ import { SettingsSectionState } from './settings-sections.js'
 import { FeedbackSettings } from './settings-feedback.js'
 import { BuiltinPluginSettings } from './settings-builtin-plugins.js'
 import { installProductShell } from './product-shell.js'
+import { ClassicReturn, RETURN_CSS, surfaceGroups } from './product-surface.js'
 import { DEEPSEEK_SIGN_IN_SLOT, mainModelSetup, MODEL_ONBOARDING_CSS, SuperagentModelChoice } from './product-model-onboarding.js'
-import { SHELL_CSS, CONVERSATION_CSS, installCompiledStyles } from './styles.js'
+import { SHELL_CSS, CONVERSATION_CSS, installCompiledStyles, installStyles } from './styles.js'
 import { ProductMcpSettings } from './product-mcp-settings.js'
 import { CapabilitySettings } from './capability-settings.js'
 import { ConnectorSettings } from './connector-settings.js'
@@ -46,6 +47,7 @@ import { call, productCall } from './api.js'
 export { productCall } from './api.js'
 
 const clientBridge = () => window.dsSuperagentApp?.productClient
+const classicBridge = () => window.dsSuperagentApp?.classicAgent
 const focusMainInput = () => document.getElementById('main-message')?.focus()
 const returnTo = trigger => { if (trigger?.isConnected) trigger.focus(); else focusMainInput() }
 
@@ -65,6 +67,7 @@ const rolesNeedingModels = ({ roles, providers }) => ['main', 'router', 'worker'
 export function applyProduct(ctx) {
   ctx.effect(() => installLocale(ctx.get('locale')), 'superagent: interface copy')
   const nativeSession = Boolean(ctx.sessions?.binding && ctx.uiWorkspace?.openSession)
+  const nativeWorkspaces = ctx.get('workspaces')?.list
   const view = createSource({
     binding: null,
     messages: [],
@@ -93,6 +96,9 @@ export function applyProduct(ctx) {
     messagesComplete: false,
     messagesLoading: false,
     route: 'main',
+    surface: 'product',
+    surfaceChanging: false,
+    restoreMainFocus: false,
     observations: [],
     observationCursor: null,
     observationQuery: '',
@@ -214,7 +220,7 @@ export function applyProduct(ctx) {
       if (!stopped) view.set(state => {
         const messages = mergeMessages(state.messages, page.messages)
         const lastReply = messages.findLast(message => message.role === 'main')
-        const reading = state.route === 'main' && document.hasFocus() && document.visibilityState !== 'hidden'
+        const reading = state.surface === 'product' && state.route === 'main' && document.hasFocus() && document.visibilityState !== 'hidden'
         const nextBinding = page.mainSessionId ? { ...binding, mainSessionId: page.mainSessionId, generation: page.generation,
           mainSessionMode: page.mainSessionMode ?? binding.mainSessionMode } : binding
         return { ...state, binding: nextBinding, messages, readReplyId: reading ? lastReply?.id ?? null : state.readReplyId,
@@ -273,7 +279,7 @@ export function applyProduct(ctx) {
   const mainVoice = createMainVoice({ speechRemote: () => ctx.get('remote.speech'), readMain: () => {
     const state = view.getSnapshot()
     return { messages: state.messages, question: nativeQuestion(state) || pendingQuestion(state),
-      active: state.route === 'main' && (!state.connection?.connected || state.connection.capabilities.includes('command')),
+      active: state.surface === 'product' && state.route === 'main' && (!state.connection?.connected || state.connection.capabilities.includes('command')),
       busy: mainBusy(state) || state.directoryBusy || state.mainUploading }
   } })
   ctx.effect(() => {
@@ -1005,6 +1011,14 @@ export function applyProduct(ctx) {
     const canCommand = !state.connection?.connected || state.connection.capabilities.includes('command')
     const question = canCommand && pendingQuestion(state)
     const voiceState = useSyncExternalStore(mainVoice.subscribe, mainVoice.getSnapshot)
+    useEffect(() => {
+      if (!state.restoreMainFocus) return
+      const input = document.getElementById('main-message')
+        ?? document.querySelector('.bt-q-dock :is(textarea, button):enabled, [data-main-question] button:enabled')
+      if (!input) return
+      input.focus({ preventScroll: true, focusVisible: true })
+      view.set(current => ({ ...current, restoreMainFocus: false }))
+    }, [state.restoreMainFocus, question])
     const turnCards = projectTurnCards(state)
     const renderCards = cards => cards ? h(Fragment, null,
       cards.sources.map(source => h(MainSourceCard, { key: source.id, source, instanceId: state.binding?.instanceId, onRefresh: refresh, canCommand })),
@@ -1999,14 +2013,108 @@ export function applyProduct(ctx) {
       state.connectOpen && clientBridge() ? h(ConnectionDialog, { connection: state.connection,
         onClose: () => view.set(current => ({ ...current, connectOpen: false })) }) : null)
   }
+
+  const classicAvailable = state => Boolean(nativeSession && nativeWorkspaces && classicBridge()?.call && state.binding && !state.connection?.connected)
+  let classicTimer
+  async function callClassic(endpoint, instanceId) {
+    const response = await classicBridge()?.call(endpoint, { instanceId })
+    if (response?.ok === true) return response.value
+    throw new Error(t(response?.error?.message ?? 'Classic Agent mode is unavailable here.'))
+  }
+
+  async function returnToMain() {
+    await Promise.resolve(ctx.sessions.refresh?.()).catch(() => {})
+    if (stopped) return
+    view.set(current => ({ ...current, surface: 'product', route: 'main', restoreMainFocus: true }))
+    void refresh()
+  }
+
+  function renewClassic(instanceId, sessionId) {
+    classicTimer = setTimeout(async () => {
+      try {
+        const renewed = await callClassic('classic-renew', instanceId)
+        if (renewed.sessionId !== sessionId) throw new Error(t('No authorized classic Agent Session is available.'))
+        if (!stopped && view.getSnapshot().surface === 'classic' && !view.getSnapshot().surfaceChanging) renewClassic(instanceId, sessionId)
+      } catch (error) {
+        if (!stopped && view.getSnapshot().surface === 'classic' && !view.getSnapshot().surfaceChanging) {
+          void setSurface('product', error)
+        }
+      }
+    }, 20_000)
+  }
+
+  function waitForClassicWorkspace(sessionId, workspaceId) {
+    const listed = () => nativeWorkspaces.getSnapshot().items.some(workspace =>
+      workspace.workspaceId === workspaceId && workspace.sessionIds.includes(sessionId))
+    if (listed()) return Promise.resolve(true)
+    return new Promise(resolve => {
+      const finish = found => { clearTimeout(timer); unsubscribe(); resolve(found) }
+      const unsubscribe = nativeWorkspaces.subscribe(() => { if (listed()) finish(true) })
+      const timer = setTimeout(() => finish(false), 5000)
+    })
+  }
+
+  async function setSurface(surface, failure) {
+    const state = view.getSnapshot()
+    if (!state.binding || state.surfaceChanging || state.surface === surface) return
+    view.set(current => ({ ...current, surfaceChanging: true }))
+    const instanceId = state.binding.instanceId
+    let granted = false
+    try {
+      if (surface === 'classic') {
+        if (!classicAvailable(state)) throw new Error(t('Classic Agent mode is unavailable here.'))
+        const { sessionId, workspaceId } = await callClassic('classic-open', instanceId)
+        granted = true
+        if (typeof sessionId !== 'string' || !sessionId || typeof workspaceId !== 'string' || !workspaceId
+          || sessionId === state.binding.mainSessionId) {
+          throw new Error(t('No authorized classic Agent Session is available.'))
+        }
+        const [, hasWorkspace] = await Promise.all([ctx.sessions.refresh?.(), waitForClassicWorkspace(sessionId, workspaceId)])
+        const current = view.getSnapshot()
+        if (stopped || current.binding?.instanceId !== instanceId || !classicAvailable(current)) {
+          throw new Error(t('Classic Agent mode is unavailable here.'))
+        }
+        if (!hasWorkspace || !ctx.sessions.list.getSnapshot().byId?.[sessionId]) {
+          throw new Error(t('No authorized classic Agent Session is available.'))
+        }
+        mainVoice.close()
+        closeOverlays()
+        ctx.layout.beginNavigation()
+        ctx.uiWorkspace.openSession(sessionId)
+        view.set(latest => ({ ...latest, surface, settingsOpen: false, settingsPage: null, nativeModelsOpen: false, signInOpen: false,
+          connectOpen: false, mainEvidence: null, mainEvidenceWorkItemId: null, restoreMainFocus: false }))
+        renewClassic(instanceId, sessionId)
+      } else {
+        clearTimeout(classicTimer)
+        await callClassic('classic-close', instanceId).catch(error => { failure ??= error })
+        if (stopped) return
+        await returnToMain()
+        if (failure && !stopped) reportError(failure)
+      }
+    } catch (error) {
+      if (granted) void callClassic('classic-close', instanceId).then(() => ctx.sessions.refresh?.()).catch(() => {})
+      if (!stopped) reportError(error)
+    } finally {
+      if (!stopped) view.set(current => ({ ...current, surfaceChanging: false }))
+    }
+  }
+
+  function ReturnToProduct({ wide }) {
+    const state = useView()
+    if (state.surface !== 'classic') return null
+    return h(ClassicReturn, { wide, onReturn: () => void setSurface('product'), busy: state.surfaceChanging })
+  }
+
   const shellActions = {
     openMain() {
+      if (view.getSnapshot().surface === 'classic') { void setSurface('product'); return }
       view.set(current => ({ ...current, route: 'main', selectedObservation: null, observationGeneration: null,
         observation: null, observationError: null, observationDetail: null, observationDetailError: null }))
       void refresh()
       const state = view.getSnapshot()
       if (nativeSession && !usesProductHistory(state) && state.binding?.mainSessionId) openNativeMain(state.binding.mainSessionId)
     },
+    openClassic() { void setSurface('classic') },
     openActivity() {
       const state = view.getSnapshot()
       view.set(current => ({ ...current, route: 'observe' }))
@@ -2021,7 +2129,9 @@ export function applyProduct(ctx) {
     },
     openConnection() { if (clientBridge()) view.set(current => ({ ...current, connectOpen: true })) },
   }
-  const { Header } = installProductShell(ctx, { actions: shellActions, Overlay,
+  const shellSteps = []
+  const { Header, closeOverlays, reportError } = installProductShell(ctx, { actions: shellActions, Overlay,
+    collect: step => shellSteps.push(step),
     WorkDirectory: ({ wide }) => h(MainWorkDirectory, { sidebar: true, wide }),
     overlayChildren: { ...SETTINGS_CHILDREN, [DEEPSEEK_SIGN_IN_SLOT]: { kind: 'single', scope: 'root' } },
     useShell() {
@@ -2034,47 +2144,71 @@ export function applyProduct(ctx) {
         notificationScope: state.binding?.instanceId,
         connectLabel: clientBridge() ? (state.connection?.connected ? t('Connection') : t('Connect to Host')) : null,
         settingsAvailable: Boolean(state.binding && !state.connection?.connected), signIn: canSignIn() ? openSignIn : undefined,
+        classicAvailable: classicAvailable(state),
         modalOpen: state.settingsOpen || state.connectOpen || state.signInOpen }
     },
   })
-  installSettingsSections(ctx.slots)
+  shellSteps.push(() => installSettingsSections(ctx.slots), () => installAppearance(ctx.get('theme')))
   const register = (name, component, options = {}) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200, ...options }, component))
-  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SETTINGS_SHELL_CSS + PRODUCT_SETTINGS_CSS + FOLDER_CSS + PRODUCT_CSS + MODEL_ONBOARDING_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + CHAT_SECRET_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_COMPUTER_CSS + PRODUCT_EXECUTION_CSS + PRODUCT_OPERATIONS_CSS + USAGE_HEATMAP_CSS + WORK_BOARD_CSS + MAIN_VOICE_CSS, 'main'), 'superagent: existing chat styles')
-  ctx.effect(() => installAppearance(ctx.get('theme')), 'superagent: appearance')
-  if (!nativeSession) register('main.conversation', ProductSurface)
+  const conversationSteps = [() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SETTINGS_SHELL_CSS + PRODUCT_SETTINGS_CSS + FOLDER_CSS + PRODUCT_CSS + MODEL_ONBOARDING_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + CHAT_SECRET_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_COMPUTER_CSS + PRODUCT_EXECUTION_CSS + PRODUCT_OPERATIONS_CSS + USAGE_HEATMAP_CSS + WORK_BOARD_CSS + MAIN_VOICE_CSS, 'main')]
+  if (!nativeSession) conversationSteps.push(() => register('main.conversation', ProductSurface))
   else {
-    ctx.effect(() => installMainCells(ctx), 'superagent: native Main cells')
-    register('conversation.header.leading', NativeMainActions)
-    register('conversation.composer', NativeComposer, { select: owner => {
+    conversationSteps.push(() => installMainCells(ctx), () => register('conversation.header.leading', NativeMainActions))
+    conversationSteps.push(() => register('conversation.composer', NativeComposer, { select: owner => {
       const state = view.getSnapshot()
       return !usesProductHistory(state) && state.binding?.mainSessionId === owner.sessionId && !owner.pendingInteraction ? true : null
-    } })
-    register('conversation.chat.turnTail', NativeTurnCards, { id: 'superagent-cards', order: 900 })
-    register('conversation.view', NativeActivity, { id: 'superagent-activity', order: 30, label: t('Activity') })
-    register('conversation.view', BoardSurface, { id: 'superagent-work', order: 31, label: t('Work') })
-    register('main', () => h(ObservationConversation, { onBack: shellActions.openMain }), { key: 'superagent-activity' })
-    ctx.effect(() => {
+    } }),
+    () => register('conversation.chat.turnTail', NativeTurnCards, { id: 'superagent-cards', order: 900 }),
+    () => register('conversation.view', NativeActivity, { id: 'superagent-activity', order: 30, label: t('Activity') }),
+    () => register('conversation.view', BoardSurface, { id: 'superagent-work', order: 31, label: t('Work') }),
+    () => register('main', () => h(ObservationConversation, { onBack: shellActions.openMain }), { key: 'superagent-activity' }))
+    conversationSteps.push(() => {
       let sessionId
       let fallback
       const sync = () => {
         const state = view.getSnapshot()
+        if (state.surface !== 'product') return
         if (usesProductHistory(state)) {
           fallback ??= register('main.conversation', ProductSurface)
           sessionId = undefined
-        } else if (state.binding?.mainSessionId && sessionId !== state.binding.mainSessionId
-          && ctx.sessions.list.getSnapshot().phase === 'ready') {
+        } else {
+          const nextSessionId = state.binding?.mainSessionId
+          const catalog = ctx.sessions.list.getSnapshot()
+          if (!nextSessionId || nextSessionId === sessionId || catalog.phase !== 'ready' || !catalog.byId?.[nextSessionId]) return
           fallback?.()
           fallback = undefined
-          sessionId = state.binding.mainSessionId
-          openNativeMain(sessionId)
+          openNativeMain(nextSessionId)
+          sessionId = nextSessionId
         }
       }
       sync()
       const unsubscribe = view.subscribe(sync)
       const unsubscribeSessions = ctx.sessions.list.subscribe(sync)
       return () => { unsubscribe(); unsubscribeSessions(); fallback?.() }
-    }, 'superagent: follow the native Main Session')
+    })
   }
+  register('sidebar.footer.action', ReturnToProduct, { id: 'superagent-return', order: -300 })
+  ctx.effect(() => {
+    const style = installStyles(RETURN_CSS, 'classic-return')
+    const groups = surfaceGroups({ shell: shellSteps, conversation: conversationSteps }, reportError)
+    let surface
+    const sync = () => {
+      const current = view.getSnapshot().surface
+      if (surface === current) return
+      surface = current
+      groups.reconcile(surface === 'product')
+    }
+    const unsubscribe = view.subscribe(sync)
+    sync()
+    return () => {
+      clearTimeout(classicTimer)
+      const state = view.getSnapshot()
+      if (state.surface === 'classic') void callClassic('classic-close', state.binding.instanceId).catch(() => {})
+      unsubscribe()
+      groups.dispose()
+      style.remove()
+    }
+  }, 'superagent: active surface')
 }
 
 const noopSubscribe = () => () => {}

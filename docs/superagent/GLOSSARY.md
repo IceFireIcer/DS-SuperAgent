@@ -11,6 +11,8 @@ _Avoid_：旧主代理、Router 的界面别名、把所有 Worker 细节塞进�
 **主对话（Main conversation）**：同一授权工作空间内用户与主 Agent 的连续讨论；切换执行观察页面不改变其身份，上下文换代不切断讨论的连续性。
 _Avoid_：某个 Worker 的执行日志、一个永不换代的原生 Session。
 
+**经典 Agent 模式（Classic Agent mode）**：DS SuperAgent 桌面中的 DSH 原生会话界面，供本机 Host 所有者使用已获授权的独立原生会话。
+
 **工作委托（Work brief）**：主 Agent 交给 Router、基于用户意图和授权的一项工作请求；它保留目标与约束，具体分解由 Router 组织。
 _Avoid_：用户原文的替代、Router 的实施规格、直接创建的 Ticket。
 

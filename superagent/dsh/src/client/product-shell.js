@@ -34,7 +34,7 @@ export function ProductShellHeader({ activity = false, markState, onMain, onActi
 }
 
 function ShellSidebar({ wide = true, useShell, actions, openPalette, WorkDirectory }) {
-  const { activity, markState, preview, pending, unread, connectLabel, settingsAvailable, modalOpen, signIn } = useShell()
+  const { activity, markState, preview, pending, unread, connectLabel, settingsAvailable, modalOpen, signIn, classicAvailable } = useShell()
   const mainLabel = [t('Main'), pending ? t('Waiting for your answer') : unread ? t('Unread activity') : ''].filter(Boolean).join(', ')
   const row = (label, icon, onClick, selected) => h('button', {
     type: 'button', className: 'bt-row', 'aria-current': selected ? 'page' : undefined,
@@ -57,10 +57,11 @@ function ShellSidebar({ wide = true, useShell, actions, openPalette, WorkDirecto
       actions.openActivity ? row(t('Activity'), h(GaugeIcon), actions.openActivity, activity) : null,
       actions.openConnection && connectLabel ? row(connectLabel, h(GlobeIcon), actions.openConnection) : null),
     actions.openSettings && settingsAvailable !== false
-      ? h(SuperagentAccountFooter, { wide, modalOpen, signIn, openSettings: actions.openSettings }) : null)
+      ? h(SuperagentAccountFooter, { wide, modalOpen, signIn, openSettings: actions.openSettings,
+        openClassic: classicAvailable ? actions.openClassic : undefined }) : null)
 }
 
-export function installProductShell(ctx, { useShell, actions, Overlay, overlayChildren, WorkDirectory, settingsInSidebar = true, nativeHeader = false }) {
+export function installProductShell(ctx, { useShell, actions, Overlay, overlayChildren, WorkDirectory, collect, settingsInSidebar = true, nativeHeader = false }) {
   const palette = createSource(false)
   const toast = createSource(null)
   const openPalette = () => palette.set(true)
@@ -101,15 +102,19 @@ export function installProductShell(ctx, { useShell, actions, Overlay, overlayCh
       } }), document.body) : null)
   }
 
-  const register = (name, component, options = { priority: -200 }) =>
-    ctx.slots.inject(name, () => ctx.slots.register({ name, ...options }, component))
-  ctx.effect(() => installCompiledStyles(PRODUCT_SHELL_CSS, 'product-shell'), 'superagent: product shell styles')
+  const register = (name, component, options = { priority: -200 }) => {
+    const install = () => ctx.slots.inject(name, () => ctx.slots.register({ name, ...options }, component))
+    return collect ? collect(install) : install()
+  }
+  const installStyles = () => installCompiledStyles(PRODUCT_SHELL_CSS, 'product-shell')
+  if (collect) collect(installStyles)
+  else ctx.effect(installStyles, 'superagent: product shell styles')
   register('sidebar.workspaces', Sidebar)
   register('sidebar.brand.mark', ProductBrandMark)
   register('sidebar.brand.name', ShellBrandName)
   if (nativeHeader) register('conversation.session.header', ({ hideChrome }) => hideChrome ? null : h(Header))
   register('shell.overlay', Overlays, { id: 'superagent-shell', order: 50, ...(overlayChildren ? { children: overlayChildren } : {}) })
-  return { Header, openPalette, reportError }
+  return { Header, openPalette, reportError, closeOverlays() { palette.set(false); toast.set(null) } }
 }
 
 const PRODUCT_SHELL_CSS = `

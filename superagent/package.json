@@ -68,6 +68,10 @@
       "types": "./dist/session-reader.d.ts",
       "default": "./dist/session-reader.js"
     },
+    "./desktop-session-gate": {
+      "types": "./dist/desktop-session-gate.d.ts",
+      "default": "./dist/desktop-session-gate.js"
+    },
     "./watchdog": {
       "types": "./dist/watchdog.d.ts",
       "default": "./dist/watchdog.js"

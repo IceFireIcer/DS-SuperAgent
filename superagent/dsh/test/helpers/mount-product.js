@@ -2,14 +2,14 @@ import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
-import { createElement as h } from 'react'
+import { createElement as h, useSyncExternalStore } from 'react'
 import { JSDOM } from 'jsdom'
 
 export const official = { id: 'deepseek-official', key: { configured: false, writable: true }, models: [{ model: 'chat' }] }
 export const main = { model: { provider: official.id, model: 'chat' } }
 const require = createRequire(import.meta.url)
 
-export async function mountProduct(context, { connection = { connected: false }, settings, extensions, responses: overrides, remotes = {} } = {}) {
+export async function mountProduct(context, { connection = { connected: false }, settings, native, extensions, responses: overrides, remotes = {} } = {}) {
   const dom = new JSDOM('<main></main>', { url: 'http://localhost/', pretendToBeVisual: true })
   const { window } = dom
   const { document } = window
@@ -77,6 +77,19 @@ export async function mountProduct(context, { connection = { connected: false },
     }
   }
   window.dsSuperagentApp = { productClient: { status: async () => connection, call, events: async () => [] } }
+  let visibleSession = sessionId
+  let classicWorkspace
+  if (native) window.dsSuperagentApp.classicAgent = { async call(endpoint, payload) {
+    try {
+      const value = await call(endpoint, payload)
+      if (endpoint === 'classic-open') {
+        visibleSession = value.sessionId
+        classicWorkspace = value.workspaceId
+      }
+      if (endpoint === 'classic-close') visibleSession = sessionId
+      return { ok: true, value }
+    } catch (error) { return { ok: false, error: { message: error.message } } }
+  } }
   const { outputFiles } = await build({ entryPoints: [fileURLToPath(new URL('../../src/client/product.js', import.meta.url))],
     bundle: true, format: 'cjs', platform: 'browser', write: false, external: ['react', 'react-dom', '@deepseek-ai/*'] })
   const module = { exports: {} }
@@ -90,26 +103,64 @@ export async function mountProduct(context, { connection = { connected: false },
   const entries = new Map()
   const versions = new Map()
   const listeners = new Set()
+  let version = 0
+  let selectedSession
+  const navigations = []
+  const notify = () => { version += 1; for (const listener of listeners) listener() }
+  const subscribe = listener => { listeners.add(listener); return () => listeners.delete(listener) }
   const slots = {
     entries: name => entries.get(name) ?? [],
     getVersion: name => versions.get(name) ?? 0,
-    subscribe(_name, listener) { listeners.add(listener); return () => listeners.delete(listener) },
-    inject(_name, install) { cleanups.push(install()) },
+    subscribe(_name, listener) { return subscribe(listener) },
+    inject(_name, install) { return install() },
     register(options, component) {
       entries.set(options.name, [...slots.entries(options.name), { options, component }])
       versions.set(options.name, slots.getVersion(options.name) + 1)
-      for (const listener of listeners) listener()
-      return () => entries.set(options.name, slots.entries(options.name).filter(entry => entry.component !== component))
+      notify()
+      return () => {
+        entries.set(options.name, slots.entries(options.name).filter(entry => entry.component !== component))
+        versions.set(options.name, slots.getVersion(options.name) + 1)
+        notify()
+      }
     },
   }
   const renderSlot = (name, props, options) => {
-    const entry = slots.entries(name).find(item => !options?.only || item.options.id === options.only)
+    const entry = slots.entries(name).find(item => (!options?.only || item.options.id === options.only)
+      && (!item.options.select || item.options.select(props)))
     return entry ? h(entry.component, { ...props, renderSlot }) : options?.fallback
   }
-  const render = wide => root.render(h('div', null, renderSlot('sidebar.workspaces', { wide }),
-    renderSlot('main.conversation'), renderSlot('shell.overlay')))
+  function Surface({ wide }) {
+    useSyncExternalStore(subscribe, () => version)
+    return h('div', null, renderSlot('sidebar.workspaces', { wide }), renderSlot('sidebar.footer.action', { wide }),
+      renderSlot('main.conversation') ?? (selectedSession ? renderSlot('conversation.composer', { sessionId: selectedSession }, {
+        fallback: h('section', { 'aria-label': `Native session ${selectedSession}` }),
+      }) : null), renderSlot('shell.overlay'))
+  }
+  const render = wide => root.render(h(Surface, { wide }))
+  let listedSession = sessionId
+  const sessionListeners = new Set()
+  const nativeContext = native ? {
+    sessions: { binding: () => undefined, list: { getSnapshot: () => ({ phase: 'ready', byId: { [listedSession]: {} } }),
+      subscribe(listener) { sessionListeners.add(listener); return () => sessionListeners.delete(listener) } },
+      async refresh() {
+        await Promise.resolve()
+        if (listedSession === visibleSession) return
+        listedSession = visibleSession
+        for (const listener of sessionListeners) listener()
+      } },
+    uiWorkspace: { openSession(id) {
+      if (id !== listedSession) throw new Error('The native Session is still absent from the catalog.')
+      selectedSession = id
+      navigations.push(id)
+      notify()
+    } },
+    layout: { beginNavigation() {}, selectPanel() {} },
+  } : {}
+  const workspaceList = { getSnapshot: () => ({ items: classicWorkspace ? [{ workspaceId: classicWorkspace, sessionIds: [visibleSession] }] : [] }),
+    subscribe: () => () => {} }
   await act(async () => {
-    module.exports.applyProduct({ get: name => remotes[name], effect: effect => cleanups.push(effect()), slots })
+    module.exports.applyProduct({ get: name => name === 'workspaces' && native ? { list: workspaceList } : remotes[name],
+      effect: effect => cleanups.push(effect()), slots, ...nativeContext })
     render(true)
   })
 
@@ -124,5 +175,5 @@ export async function mountProduct(context, { connection = { connected: false },
     target.dispatchEvent(new window.Event('input', { bubbles: true }))
   })
   const setWide = wide => act(async () => render(wide))
-  return { act, click, document, fill, findButton, key, requests, responses, setWide, slots, snapshot, window }
+  return { act, click, document, fill, findButton, key, requests, responses, setWide, slots, snapshot, window, navigations }
 }

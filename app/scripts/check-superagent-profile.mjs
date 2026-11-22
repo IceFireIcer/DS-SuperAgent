@@ -10,7 +10,10 @@ import { INSTALL_ANCHOR, SUPERAGENT_PROFILE, assertLocalBackupProfile, loadAppPr
 import { reconcileSuperagentProfile } from '../src/superagent-patch.mjs'
 import { LlmAdapter } from '@deepseek-ai/dsh-llm'
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { mkdir, readFile, realpath, rmdir } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
+import { once } from 'node:events'
+import WebSocket from 'ws'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { routerResponse, textResponse, toolResponse } from '../../superagent/dev/native-mock.mjs'
 import { backupBeforeProfileChange, completeProductRestore, restoreProductBackup } from '../src/product-backups.mjs'
@@ -20,9 +23,11 @@ console.log = (...values) => log(...values.map(value => typeof value === 'string
 
 const sandbox = mkdtempSync(join(tmpdir(), 'ds-superagent-profile-check-'))
 const home = join(sandbox, 'profile-home')
+const checkClassic = process.argv.includes('--check-classic')
 // The smoke always supplies its own profile and routes.
 for (const name of Object.keys(process.env)) if (name.startsWith('DS_SUPERAGENT_') || name.startsWith('DSH_')) delete process.env[name]
 process.env.DSH_HOME = home
+if (checkClassic) process.env.DS_SUPERAGENT_APP = '1'
 const workspace = join(home, 'workspace')
 process.env.DS_SUPERAGENT_WORKSPACE = workspace
 mkdirSync(join(home, 'profiles'), { recursive: true })
@@ -33,19 +38,20 @@ writeFileSync(routePatch, [
   '    main: { provider: mock, model: main }',
   '    router: { provider: mock, model: router }',
   '    worker: { provider: mock, model: worker }',
+  ...(checkClassic ? ['- id: agent-default-model', '  config: { provider: mock, model: classic }'] : []),
   '',
 ].join('\n'))
 
 let application
 async function boot() {
   const profile = loadAppProfile()
-  const patchFiles = [reconcileSuperagentProfile(profile, true)[0], routePatch]
+  const patchFiles = [reconcileSuperagentProfile(profile, true, { desktop: checkClassic })[0], routePatch]
   return runProfile({
     environment: loadLayeredEnv('dsh'),
     profile: SUPERAGENT_PROFILE,
     resolvedProfile: { profile, installAnchor: INSTALL_ANCHOR },
     patchFiles,
-    args: ['--no-open', '--port', '0'],
+    args: ['--no-open', ...(checkClassic ? ['--host', '127.0.0.1'] : []), '--port', '0'],
   })
 }
 
@@ -56,14 +62,26 @@ try {
   const missing = services.filter(name => ctx.get(name) === undefined)
   if (missing.length) throw new Error(`The ds-superagent profile did not start: ${missing.join(', ')}`)
   const modelCalls = []
+  const classicMainEntered = Promise.withResolvers()
+  const classicMainRelease = Promise.withResolvers()
   class MockRoleAdapter extends LlmAdapter {
     async *stream(request) {
       modelCalls.push({ model: request.model,
         text: request.messages.filter(message => message.role === 'user').at(-1)?.content?.filter(block => block.type === 'text').map(block => block.text).join(''),
         tools: request.tools?.map(tool => tool.name) })
+      if (request.model === 'classic') {
+        yield* textResponse('The independent Classic Agent answered.')
+        return
+      }
       if (request.model === 'main') {
         const user = request.messages.filter(message => message.role === 'user').at(-1)
         const text = user?.content?.filter(block => block.type === 'text').map(block => block.text).join('') ?? ''
+        if (text === 'Finish while Classic Agent is open.') {
+          classicMainEntered.resolve()
+          await classicMainRelease.promise
+          yield* textResponse('Main completed without resubmission.')
+          return
+        }
         if (text === 'Hello from the browser check.') {
           const reasoning = 'Consider the browser fixture.'
           yield { type: 'block-start', index: 0, blockType: 'reasoning' }
@@ -198,6 +216,155 @@ try {
     instanceId: binding.instanceId, observationId: workerObservation.id, detailId: 'guessed-detail', write: true,
   }), { code: 'INVALID_INPUT' })
   if (ctx.get('botExecutionAdapter') !== undefined) throw new Error('The old execution adapter must not mount in the product profile.')
+  if (checkClassic) {
+    const { instanceId, mainSessionId, routerSessionId } = binding
+    const origin = `http://127.0.0.1:${ctx.webServer.port}`
+    const connect = async () => {
+      const url = new URL(ctx.connection.authenticatedUrl(origin))
+      url.pathname = '/connect'
+      url.searchParams.set('interactions', 'answer')
+      const response = await fetch(url, { redirect: 'manual' })
+      assert.equal(response.status, 302)
+      const cookie = response.headers.get('set-cookie')?.split(';', 1)[0]
+      const admission = ctx.connection.admit({ headers: { host: new URL(origin).host, cookie } })
+      assert.ok(admission.peer)
+      assert.notEqual(admission.peer, ctx.connection.browserPeer)
+      return { peer: admission.peer, cookie }
+    }
+    const desktop = await connect()
+    const otherOwner = await connect()
+    const browserLogin = await fetch(ctx.connection.authenticatedUrl(origin), { redirect: 'manual' })
+    assert.equal(browserLogin.status, 303)
+    const browserCookie = browserLogin.headers.get('set-cookie')?.split(';', 1)[0]
+    const desktopGate = ctx.get('superagentDesktopSessionGate')
+    assert.ok(desktopGate)
+    const proof = randomUUID()
+    assert.equal(desktopGate.bindDesktop(desktop.peer, proof), true)
+    const muxUrl = new URL('/api/remote.mux', origin)
+    muxUrl.protocol = 'ws:'
+    const openMux = cookie => new WebSocket(muxUrl, { headers: { cookie }, handshakeTimeout: 4000 })
+    for (const cookie of [browserCookie, otherOwner.cookie]) {
+      const socket = openMux(cookie)
+      const [, response] = await once(socket, 'unexpected-response')
+      assert.equal(response.statusCode, 403)
+      response.resume()
+    }
+    const desktopMux = openMux(desktop.cookie)
+    const notifications = []
+    const workspaceFrames = []
+    const workspaceStreamId = randomUUID()
+    desktopMux.on('message', data => {
+      const frame = JSON.parse(data.toString())
+      if (frame.streamId === workspaceStreamId) workspaceFrames.push(frame.value)
+      else notifications.push(frame.value)
+    })
+    await once(desktopMux, 'open')
+    desktopMux.send(JSON.stringify({ type: 'open', streamId: randomUUID(), endpoint: '$events', payload: { args: {} } }))
+    const awaitNotification = async (predicate, after = 0) => {
+      const deadline = Date.now() + 4000
+      while (Date.now() < deadline) {
+        if (notifications.slice(after).some(predicate)) return
+        await sleep(20)
+      }
+      assert.fail('The desktop stream did not publish the expected notification.')
+    }
+    await awaitNotification(event => event?.type === 'ready')
+    const requestClassic = async (endpoint, desktopProof = proof, caller = desktop) => {
+      const response = await fetch(`${origin}/api/product`, { method: 'POST', headers: { 'content-type': 'application/json',
+        cookie: caller.cookie, 'x-ds-superagent-desktop-proof': desktopProof }, body: JSON.stringify({ endpoint, payload: { instanceId } }) })
+      return response.json()
+    }
+    const invoke = (method, args, peer = desktop.peer) => ctx.typertGateway.invoke({ namespace: 'session', method, args, peer })
+    const sessionRequest = async (method, args, cookie = desktop.cookie) => {
+      const response = await fetch(`${origin}/api/session/${method}`, { method: 'POST', headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify({ type: 'client-request', rpcId: randomUUID(), method: `session/${method}`, payload: { args } }) })
+      return (await response.json()).result
+    }
+    const sessionEvents = sessionId => ({ request: { address: { kind: 'session', sessionId } } })
+    const prompt = sessionId => ({ request: { sessionId, requestId: randomUUID(), mode: 'queue', content: [{ type: 'text', text: 'Native Classic input.' }] } })
+    const list = async peer => (await invoke('list', { _request: {} }, peer)).items.map(item => item.sessionId)
+    const mainInput = { instanceId, commandId: 'classic-roundtrip-main', text: 'Finish while Classic Agent is open.' }
+    const inFlight = ctx.superagentProduct.dispatch('send', mainInput)
+    try {
+      await Promise.race([classicMainEntered.promise, sleep(8000, undefined, { ref: false }).then(() => { throw new Error('Main did not start.') })])
+      assert.equal((await requestClassic('classic-open', '')).error.code, 'CLASSIC_DENIED')
+      assert.equal((await requestClassic('classic-open', proof, otherOwner)).error.code, 'CLASSIC_DENIED')
+      const open = await requestClassic('classic-open')
+      assert.equal(open.ok, true, JSON.stringify(open.error))
+      const { sessionId, workspaceId } = open.value
+      assert.ok(sessionId && sessionId !== mainSessionId && sessionId !== routerSessionId)
+      const classicWorkspace = ctx.workspaceRegistry.get(workspaceId)
+      assert.equal(classicWorkspace.path, await realpath(workspace))
+      assert.ok(classicWorkspace.sessionIds.includes(sessionId))
+      assert.deepEqual(ctx.agents.get(sessionId).model.current(), ctx.agentDefaultModel.currentSelection())
+      desktopMux.send(JSON.stringify({ type: 'open', streamId: workspaceStreamId, endpoint: 'workspace/follow', payload: { args: {} } }))
+      const workspaceDeadline = Date.now() + 4000
+      while (workspaceFrames.length === 0 && Date.now() < workspaceDeadline) await sleep(20)
+      const classicWorkspaceRow = workspaceFrames[0]?.value?.items.find(item => item.workspaceId === workspaceId)
+      assert.ok(classicWorkspaceRow?.sessionIds.includes(sessionId), 'the Workspace stream must show the Classic Agent landing Session')
+      assert.deepEqual(await list(desktop.peer), [sessionId])
+      for (const peer of [ctx.connection.browserPeer, otherOwner.peer]) {
+        assert.deepEqual(await list(peer), [mainSessionId])
+        await assert.rejects(invoke('events', sessionEvents(sessionId), peer))
+        await assert.rejects(invoke('prompt', prompt(sessionId), peer))
+      }
+      for (const forbiddenId of [mainSessionId, routerSessionId]) {
+        await assert.rejects(invoke('prompt', prompt(forbiddenId)))
+        await assert.rejects(invoke('events', sessionEvents(forbiddenId)))
+      }
+      const archive = await fetch(`${origin}/api/workspace/archiveSession`, { method: 'POST', headers: { cookie: desktop.cookie },
+        body: JSON.stringify({ type: 'client-request', rpcId: randomUUID(), method: 'workspace/archiveSession',
+          payload: { args: { request: { sessionId: mainSessionId, stopActivity: true } } } }) })
+      assert.equal(archive.status, 403)
+      assert.equal((await sessionRequest('prompt', prompt(sessionId), browserCookie)).ok, false)
+      assert.equal((await sessionRequest('prompt', prompt(sessionId))).value.accepted, true)
+      await awaitNotification(event => event?.event === 'api-session/status' && event.args[0] === sessionId)
+      const start = notifications.length
+      ctx.emit('api-session/status', routerSessionId, true)
+      ctx.emit('api-session/status', sessionId, true)
+      await awaitNotification(event => event?.event === 'api-session/status' && event.args[0] === sessionId && event.args[1] === true, start)
+      assert.equal(notifications.slice(start).some(event => event?.event === 'api-session/status' && event.args[0] === routerSessionId), false)
+      await assert.rejects(invoke('attachment', { request: { sessionId, attachment: {} } }))
+      const deadline = Date.now() + 8000
+      let classicHistory
+      while (Date.now() < deadline) {
+        classicHistory = await invoke('events', sessionEvents(sessionId))
+        if (JSON.stringify(classicHistory.records).includes('The independent Classic Agent answered.')) break
+        await sleep(50)
+      }
+      assert.ok(JSON.stringify(classicHistory?.records).includes('The independent Classic Agent answered.'))
+      assert.equal((await requestClassic('classic-renew')).value.sessionId, sessionId)
+      assert.equal((await requestClassic('classic-close')).value.closed, true)
+      assert.deepEqual(await list(desktop.peer), [mainSessionId])
+      await assert.rejects(invoke('events', sessionEvents(sessionId)))
+      const initialDirectory = (await ctx.superagentProduct.dispatch('directory-options', { instanceId })).default
+      const newDirectory = join(sandbox, 'classic-unavailable')
+      await mkdir(newDirectory)
+      const registered = await ctx.superagentProduct.dispatch('directory-register', { instanceId, path: newDirectory, commandId: 'classic-fixture-register' })
+      const unavailable = await ctx.superagentProduct.dispatch('directory-default-save', { instanceId,
+        commandId: 'classic-fixture-directory', environmentId: registered.id, expectedRevision: initialDirectory.revision })
+      await rmdir(newDirectory)
+      assert.equal((await requestClassic('classic-open')).error.code, 'CLASSIC_UNAVAILABLE')
+      await ctx.superagentProduct.dispatch('directory-default-save', { instanceId, commandId: 'classic-fixture-directory-restore',
+        environmentId: initialDirectory.environmentId, expectedRevision: unavailable.revision })
+      assert.deepEqual((await requestClassic('classic-open')).value, { sessionId, workspaceId })
+      const desktopClosed = once(desktopMux, 'close')
+      desktopMux.close()
+      await desktopClosed
+      if (!desktop.peer.signal.aborted) await once(desktop.peer.signal, 'abort', { signal: AbortSignal.timeout(4000) })
+      assert.equal((await requestClassic('classic-renew', proof, otherOwner)).error.code, 'CLASSIC_DENIED')
+      assert.deepEqual(await list(otherOwner.peer), [mainSessionId])
+      await otherOwner.peer.dispose()
+      assert.equal((await ctx.superagentProduct.dispatch('open')).mainSessionId, mainSessionId)
+    } finally {
+      desktopMux.close()
+      classicMainRelease.resolve()
+    }
+    await inFlight
+    await ctx.superagentProduct.dispatch('send', mainInput)
+    assert.equal(modelCalls.filter(call => call.text === mainInput.text && call.model === 'main').length, 1)
+    console.log('Classic Agent used one independent native Session, revoked the Desktop peer, and preserved the original Main receipt.')
+  }
   if (process.argv.includes('--check-ui')) {
     const im = await ctx.superagentProduct.dispatch('im-accounts', { instanceId: binding.instanceId, operation: 'list' })
     assert.equal(im.accounts.length, 8)

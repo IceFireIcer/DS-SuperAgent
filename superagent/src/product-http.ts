@@ -1,4 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { classicEndpoints, classicProofHeader, type ClassicSessionAccess } from './classic-session.js'
+import { CoreError } from './model.js'
 import type { ProductHost } from './product-host.js'
 
 interface NativeRequest { url?: string }
@@ -12,6 +14,7 @@ interface NativeResponse {
 interface ProductScope {
   superagentProduct: ProductHost
   connection: {
+    admit?(request: { headers: Headers }): { peer?: object }
     fetch: {
       register(route: {
         path: string
@@ -28,6 +31,8 @@ interface ProductScope {
 }
 
 const errorResponses: Record<string, { status: number; message?: string; detail?: boolean }> = {
+  CLASSIC_DENIED: { status: 403, detail: true },
+  CLASSIC_UNAVAILABLE: { status: 400, detail: true },
   SOURCE_NOT_AUTHORIZED: { status: 403, message: 'This conversation is outside the authorized workspace.' },
   MEMORY_DENIED: { status: 403, detail: true },
   NOT_FOUND: { status: 404, message: 'The requested work activity is unavailable.' },
@@ -44,6 +49,11 @@ const errorResponses: Record<string, { status: number; message?: string; detail?
   INVALID_INPUT: { status: 400, message: 'Check the request fields.', detail: true },
   UNAVAILABLE: { status: 400, message: 'This product capability is not connected yet.' },
 }
+
+const classicNativePaths = new Set(['prompt', 'cancel', 'updateQueue', 'rename', 'selectModel', 'modelCatalog', 'projections']
+  .map(method => `/api/session/${method}`))
+const workspaceSessionWrites = new Set(['insertSessionBefore', 'archiveSession', 'unarchiveSession', 'pinSession', 'unpinSession']
+  .map(method => `/api/workspace/${method}`))
 
 function productError(endpoint: unknown, error: unknown) {
   const value = error as { code?: unknown; message?: unknown }
@@ -69,10 +79,13 @@ export function apply(context: Context) {
   const ctx = context as unknown as ProductScope
   return ctx.inject(['connection', 'superagentProduct'], scope => {
     const productScope = scope as unknown as ProductScope
+    const classic = () => scope.get('superagentClassicSession') as ClassicSessionAccess | undefined
     productScope.effect(() => productScope.on('connection/request', async (request, response, next) => {
       const path = new URL(request.url ?? '/', 'http://localhost').pathname
-      if (!path.startsWith('/api/session/') && path !== '/api/session.export') return next()
+      const desktopWorkspaceWrite = workspaceSessionWrites.has(path) && classic()
+      if (!path.startsWith('/api/session/') && path !== '/api/session.export' && !desktopWorkspaceWrite) return next()
       if (path === '/api/session/list' || path === '/api/session/events') return next()
+      if (classicNativePaths.has(path) && classic()) return next()
       response.statusCode = 403
       response.setHeader('content-type', 'application/json')
       response.end(JSON.stringify({ type: 'server-response', result: { ok: false, error: {
@@ -95,8 +108,15 @@ export function apply(context: Context) {
           } }, { status: 400 })
         }
         try {
-          const value = await (productScope.superagentProduct as ProductHost)
-            .dispatch(String(body?.endpoint ?? ''), body?.payload ?? {})
+          const endpoint = String(body?.endpoint ?? '')
+          const payload = body?.payload ?? {}
+          let value
+          if (classicEndpoints.has(endpoint)) {
+            const access = classic()
+            if (!access) throw new CoreError('CLASSIC_DENIED', 'Classic Agent mode is available from the local desktop window only.')
+            const peer = productScope.connection.admit?.({ headers: request.headers }).peer
+            value = await access.dispatch(endpoint, payload, request.headers.get(classicProofHeader), peer)
+          } else value = await productScope.superagentProduct.dispatch(endpoint, payload)
           return Response.json({ ok: true, value })
         } catch (error) {
           const { code, message, status } = productError(body?.endpoint, error)

@@ -2,7 +2,7 @@
 // send a message, wait for the reply, then close the window the way a user does: the window hides
 // and the app goes on. The window comes back when the app is started again, and the app ends the
 // way the tray's Quit ends it. Fails on a page error or a non-zero exit.
-// Usage: node scripts/check-packed.mjs [app executable or AppImage] [screenshot.png | --coexistence | --controls | --upgrade-to next executable | --upgrade-with NSIS installer | --update-feed folder next-app.asar]
+// Usage: node scripts/check-packed.mjs [app executable or AppImage] [screenshot.png | --coexistence | --controls | --classic | --upgrade-to next executable | --upgrade-with NSIS installer | --update-feed folder next-app.asar]
 // The executable defaults to the one that `npm run pack` or `npm run dist` writes into dist-pack/.
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
@@ -26,8 +26,9 @@ const installUpgrade = option === '--upgrade-with'
 const updateFeed = option === '--update-feed'
 const upgrade = option === '--upgrade-to' || installUpgrade || updateFeed
 const controls = option === '--controls'
+const classic = option === '--classic'
 const coexistence = option === '--coexistence'
-const shotFile = upgrade || controls || coexistence ? undefined : option
+const shotFile = upgrade || controls || classic || coexistence ? undefined : option
 const executable = given || packedExecutable()
 const appImage = process.platform === 'linux' && executable.endsWith('.AppImage')
 
@@ -105,6 +106,17 @@ function cleanup() {
   stopChildren()
   feed?.close()
   rmSync(work, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 })
+}
+
+function operationCodes() {
+  const log = join(work, 'shell', 'logs', 'operations.jsonl')
+  if (!existsSync(log)) return []
+  return readFileSync(log, 'utf8').split(/\r?\n/u).filter(Boolean).slice(-12).flatMap(line => {
+    try {
+      const { code } = JSON.parse(line)
+      return typeof code === 'string' && /^[A-Z][A-Z0-9_]{0,79}$/u.test(code) ? [code] : []
+    } catch { return [] }
+  })
 }
 
 // An app that hangs, for example behind its error box, must not hold up CI.
@@ -197,7 +209,8 @@ async function fingerprint(payload) {
 
 function startMock() {
   const mock = spawn(process.execPath, [join(root, '..', 'superagent', 'dsh', 'dev', 'mock-llm.mjs')], {
-    env: { ...process.env, MOCK_PORT: '0', MOCK_LOG: join(work, 'mock.log'), MOCK_T55_CONTROLS: controls ? '1' : '0' },
+    env: { ...process.env, MOCK_PORT: '0', MOCK_LOG: join(work, 'mock.log'), MOCK_T55_CONTROLS: controls || classic ? '1' : '0',
+      MOCK_CLASSIC_ROUND_TRIP: classic ? '1' : '0' },
     stdio: ['ignore', 'pipe', 'inherit'],
   })
   children.push(mock)
@@ -575,6 +588,31 @@ async function checkWorkControls(cdp) {
   }, 'one question while the other work executes')
   const firstAlpha = card(working, 'alpha').control.assignment
   const firstBeta = card(working, 'beta').control.assignment
+  const visualDir = process.env.DESKTOP_CONTROLS_VISUAL_DIR
+  if (visualDir) {
+    mkdirSync(visualDir, { recursive: true })
+    await cdp.call('Emulation.setFocusEmulationEnabled', { enabled: true })
+    await cdp.call('Emulation.setDeviceMetricsOverride', { width: 580, height: 780, deviceScaleFactor: 1, mobile: false })
+    await cdp.call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
+    try {
+      await wait(() => evaluate(`(() => {
+        const choice = [...document.querySelectorAll('.bt-q-opt:not(:disabled)')].find(button => button.textContent.trim() === 'Yes');
+        choice?.focus({ focusVisible: true });
+        const bounds = choice?.closest('.bt-q')?.getBoundingClientRect();
+        return bounds && document.activeElement === choice && bounds.x >= 0 && bounds.right <= innerWidth && bounds.y >= 0 && bounds.bottom <= innerHeight;
+      })()`), 'the focused question card inside the narrow window')
+      await cdp.call('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 })
+      await cdp.call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 })
+      assert.equal(await evaluate("document.activeElement.matches('.bt-q-opt:focus-visible') && document.activeElement.textContent.trim() === 'No'"), true)
+      const { data } = await cdp.call('Page.captureScreenshot', { format: 'png' })
+      writeFileSync(join(visualDir, '580-question-reduced-motion.png'), Buffer.from(data, 'base64'))
+      console.log('check-packed: the narrow question card fits and supports Tab with visible focus')
+    } finally {
+      await cdp.call('Emulation.setEmulatedMedia', { features: [] })
+      await cdp.call('Emulation.clearDeviceMetricsOverride')
+      await cdp.call('Emulation.setFocusEmulationEnabled', { enabled: false })
+    }
+  }
   await wait(() => click('.bt-q-dock .bt-q-opt, .bt-main-work-options button', '/^Yes$/u'), 'the approved answer choice')
   await wait(() => click('.bt-q-dock .bt-q-submit, .bt-main-work-answer button[type=submit]', '/^(Send answer|提交回答)$/u'), 'the question send button')
   const answered = await wait(async () => {
@@ -610,6 +648,128 @@ async function checkWorkControls(cdp) {
   assert.equal(resumed.control.assignment.sessionId, firstBeta.sessionId)
   console.log(`check-packed: ${JSON.stringify({ controls: 'passed', alphaTicketId: answered.control.ticketId, betaTicketId: betaId,
     alphaSessionId: firstAlpha.sessionId, betaSessionId: firstBeta.sessionId })}`)
+}
+
+async function checkClassicRoundTrip(cdp) {
+  const evaluate = async expression => {
+    const result = await cdp.call('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })
+    if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text)
+    return result.result.value
+  }
+  const wait = async (check, label) => {
+    const deadline = Date.now() + 30_000
+    do {
+      const result = await check()
+      if (result) return result
+      await sleep(150)
+    } while (Date.now() < deadline)
+    const feedback = await evaluate(`JSON.stringify({
+      focus: document.activeElement?.id || document.activeElement?.tagName,
+      inputs: [...document.querySelectorAll('textarea, [role=textbox], [data-composer-card]')].map(node => ({
+        tag: node.tagName, editable: node.getAttribute('contenteditable'), role: node.getAttribute('role'),
+        phase: node.getAttribute('data-phase'), disabled: node.getAttribute('aria-disabled'),
+      })),
+      text: document.body.innerText.slice(-280),
+      alerts: [...document.querySelectorAll('[role=alert]')].map(node => node.textContent.slice(0, 160)),
+    })`)
+    throw new Error(`Classic probe timed out waiting for ${label}${feedback ? `. ${feedback}` : '.'}`)
+  }
+  const key = async (key, windowsVirtualKeyCode, text) => {
+    const fields = { key, code: key, windowsVirtualKeyCode }
+    await cdp.call('Input.dispatchKeyEvent', text ? { type: 'keyDown', text, ...fields } : { type: 'rawKeyDown', ...fields })
+    await cdp.call('Input.dispatchKeyEvent', { type: 'keyUp', ...fields })
+  }
+  const clickByKeyboard = async (selector, label) => {
+    await wait(() => evaluate(`(() => {
+      const button = [...document.querySelectorAll(${JSON.stringify(selector)})].find(node => node.getClientRects().length && !node.disabled);
+      button?.focus(); return button === document.activeElement;
+    })()`), label)
+    await key('Enter', 13, '\r')
+  }
+  const history = async () => evaluate(`(async () => {
+    const call = async (endpoint, payload) => {
+      const response = await fetch('/api/product', { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ endpoint, payload }) });
+      const result = await response.json();
+      if (!result.ok) throw new Error(result.error.message);
+      return result.value;
+    };
+    const { instanceId } = await call('open', {});
+    return call('history', { instanceId });
+  })()`)
+  const send = async (selector, text) => {
+    await wait(() => evaluate(`(() => { const input = document.querySelector(${JSON.stringify(selector)});
+      input?.focus(); return input === document.activeElement })()`), `focus on ${selector}`)
+    await cdp.call('Input.insertText', { text })
+    await key('Enter', 13)
+  }
+  const initial = await history()
+  await cdp.call('Emulation.setFocusEmulationEnabled', { enabled: true })
+  await cdp.call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
+  await send('#main-message', t55Request)
+  const work = await wait(async () => {
+    const page = await history()
+    const beta = page.works.find(item => item.brief.goal === 'T55 beta note' && item.control?.assignment?.state === 'running')
+    const alpha = page.works.find(item => item.brief.goal === 'T55 alpha note')
+    return alpha?.control?.attention?.question === t55Question && beta && { alpha, beta }
+  }, 'the running Ticket')
+  await wait(() => evaluate(`Boolean([...document.querySelectorAll('.bt-q-opt')].find(option => {
+    if (option.textContent.trim() !== 'Yes') return false;
+    option.click(); return true;
+  }))`), 'the approved answer choice')
+  await wait(() => evaluate(`Boolean([...document.querySelectorAll('.bt-q-submit:not(:disabled)')].find(button => {
+    button.click(); return true;
+  }))`), 'the question send button')
+  await send('#main-message', t55SlowReply)
+  const working = await wait(async () => {
+    const page = await history()
+    return page.messages.find(message => message.text === t55SlowReply && message.status === 'running')
+  }, 'the active Main reply')
+  const account = '.bt-product-side .bt-account[aria-haspopup=menu]'
+  const activeMenu = '.bt-account-menu:not([data-leaving])'
+  await clickByKeyboard(account, 'the product account button')
+  await wait(() => evaluate(`document.activeElement?.matches('${activeMenu} [role=menuitem]')`), 'keyboard focus in the product account menu')
+  await key('Escape', 27)
+  await wait(() => evaluate(`document.activeElement?.matches('${account}') && !document.querySelector('${activeMenu}')`), 'Escape to restore Account focus')
+  await key('Enter', 13, '\r')
+  await wait(() => evaluate(`document.activeElement?.matches('${activeMenu} [role=menuitem]')`), 'the reopened product account menu')
+  for (let index = 0; index < 7; index += 1) {
+    if (await evaluate('/^(Classic Agent mode|经典 Agent 模式)$/u.test(document.activeElement?.textContent.trim())')) break
+    await key('ArrowDown', 40)
+  }
+  assert.equal(await evaluate('/^(Classic Agent mode|经典 Agent 模式)$/u.test(document.activeElement?.textContent.trim())'), true)
+  assert.equal(await evaluate("getComputedStyle(document.activeElement).outlineStyle !== 'none'"), true)
+  await key('Enter', 13, '\r')
+  const back = 'button.bt-return'
+  const nativeComposer = '[role=textbox][contenteditable=true]'
+  await wait(() => evaluate(`Boolean(document.querySelector('${back}')) && !document.querySelector('#main-message, [role=menu]')
+    && document.activeElement?.matches('${back}, ${nativeComposer}')`), 'Classic with focus in the new surface')
+  console.log('check-packed: keyboard entered Classic with focus in the native surface')
+  assert.equal(await evaluate(`getComputedStyle(document.querySelector('${back}')).transitionDuration`), '0s')
+  const during = await history()
+  assert.equal(during.messages.find(message => message.id === working.id).status, 'running')
+  assert.notEqual(during.works.find(item => item.receipt?.ticketId === work.alpha.receipt.ticketId).status, 'success')
+  const nativeText = 'Classic fixture prompt'
+  await send(nativeComposer, nativeText)
+  await wait(() => evaluate(`document.body.innerText.includes(${JSON.stringify(`收到：${nativeText}`)})`), 'the native reply')
+  await wait(async () => {
+    const { messages } = await history()
+    return messages.some(message => message.id === `reply:${working.id}` && message.status === 'completed'
+      && message.text.includes(t55SlowReply))
+  }, 'Main to finish in the background')
+  const finished = await wait(async () => (await history()).works.find(item => item.receipt?.ticketId === work.alpha.receipt.ticketId
+    && item.status === 'success'), 'the original alpha Ticket to finish in the background')
+  assert.equal(finished.control.assignment.sessionId, work.alpha.control.assignment.sessionId)
+  await clickByKeyboard(back, 'the sidebar return')
+  await wait(() => evaluate("document.activeElement?.id === 'main-message'"), 'focus on the original Main')
+  const result = await history()
+  assert.equal(result.mainSessionId, initial.mainSessionId)
+  assert.equal(result.messages.filter(message => message.text === t55SlowReply).length, 1)
+  assert.equal(result.messages.find(message => message.text === t55SlowReply).id, working.id)
+  assert.equal(result.messages.some(message => message.text.includes(nativeText)), false)
+  assert.equal(result.works.find(item => item.receipt?.ticketId === work.beta.receipt.ticketId).control.assignment.sessionId, work.beta.control.assignment.sessionId)
+  await cdp.call('Emulation.setFocusEmulationEnabled', { enabled: false })
+  console.log('check-packed: Classic Agent round trip kept the original Main reply, receipt, and running Ticket')
 }
 
 async function checkOperations(cdp, facts) {
@@ -744,6 +904,7 @@ try {
     '    main: { provider: deepseek-official, model: deepseek-flash }',
     '    router: { provider: deepseek-official, model: deepseek-flash }',
     '    worker: { provider: deepseek-official, model: deepseek-flash }',
+    ...(classic ? ['- id: agent-default-model', '  config: { provider: deepseek-official, model: deepseek-flash }'] : []),
     '',
   ].join('\n'))
   const port = await freePort()
@@ -812,6 +973,7 @@ try {
   if (chatError) throw chatError
   if (process.env.DESKTOP_VISUAL_DIR) await checkPackedVisuals(cdp, process.env.DESKTOP_VISUAL_DIR)
   if (controls) await checkWorkControls(cdp)
+  if (classic) await checkClassicRoundTrip(cdp)
   const before = upgrade ? await productFacts(cdp, true) : undefined
   if (before) {
     assert.ok(before.mainTokens > 0 && before.messages.length >= 2)
@@ -855,8 +1017,7 @@ try {
   if (!feed) await browserClose(port)
   const outcome = await Promise.race([exited, sleep(40_000).then(() => undefined)])
   if (outcome === undefined) {
-    const log = join(work, 'shell', 'logs', 'operations.jsonl')
-    const codes = existsSync(log) ? readFileSync(log, 'utf8').split(/\r?\n/u).filter(Boolean).slice(-12).map(line => JSON.parse(line).code) : []
+    const codes = operationCodes()
     throw new Error(`the app did not exit after the quit (${codes.join(', ') || 'no operations events'})`)
   }
   console.log(`check-packed: app exited (code ${String(outcome.code)}, signal ${String(outcome.signal)})`)
@@ -872,6 +1033,8 @@ try {
 } catch (error) {
   failed = true
   console.error(`check-packed: FAILED: ${error instanceof Error ? error.message : String(error)}`)
+  const codes = operationCodes()
+  if (codes.length > 0) console.error(`check-packed: app events ${codes.join(', ')}`)
 }
 clearTimeout(watchdog)
 cleanup()

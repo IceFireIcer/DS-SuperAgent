@@ -20,7 +20,7 @@ test('Main work cards keep an answerable view separate from a read-only result v
   globalThis.HTMLElement = dom.window.HTMLElement
   globalThis.IS_REACT_ACT_ENVIRONMENT = true
   dom.window.HTMLElement.prototype.scrollIntoView = () => {}
-  let cleanup
+  const cleanups = []
   let root
   try {
     const React = requireHarness('react')
@@ -91,12 +91,13 @@ test('Main work cards keep an answerable view separate from a read-only result v
       require: id => id === 'react' ? React : id === '@deepseek-ai/dsh-client-ui-primitives' ? {} : requireHarness(id),
       window: dom.window, document: dom.window.document, navigator: dom.window.navigator, fetch,
       crypto: globalThis.crypto, sessionStorage: dom.window.sessionStorage, setTimeout, clearTimeout,
-      setInterval, clearInterval, structuredClone, Blob, URL, console })
+      setInterval, clearInterval, structuredClone, Blob, URL, console, MutationObserver: dom.window.MutationObserver })
     let surface
     module.exports.applyProduct({ get: name => name === 'locale' ? 'en-US' : undefined, effect: (effect, label) => {
-      if (label === 'superagent: follow the shared Main') cleanup = effect()
+      if (['superagent: follow the shared Main', 'superagent: active surface'].includes(label)) cleanups.push(effect())
     }, slots: { inject: (_name, register) => register(), register: ({ name }, component) => {
       if (name === 'main.conversation') surface = component
+      return () => {}
     } } })
     root = createRoot(dom.window.document.querySelector('#root'))
     await React.act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); root.render(React.createElement(surface)) })
@@ -126,7 +127,7 @@ test('Main work cards keep an answerable view separate from a read-only result v
     assert.equal([...dom.window.document.querySelectorAll('button')].some(button => button.textContent.includes('Detailed')), false,
       'an answered view is read-only in Main as well')
   } finally {
-    cleanup?.()
+    for (const cleanup of cleanups.reverse()) cleanup?.()
     if (root) await requireHarness('react').act(async () => root.unmount())
     globalThis.window = previous.window
     globalThis.document = previous.document

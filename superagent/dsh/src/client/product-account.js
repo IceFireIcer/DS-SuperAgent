@@ -1,6 +1,6 @@
 import { createElement as h, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ClockIcon, ConnectorIcon, GaugeIcon, GearIcon, SlidersIcon } from './icons.js'
+import { ClockIcon, ConnectorIcon, GaugeIcon, GearIcon, SlidersIcon, SwitchIcon } from './icons.js'
 import { t } from './i18n.js'
 import { reducedMotion, useLinger, useViewport, viewBottom } from './motion.js'
 
@@ -12,7 +12,7 @@ const destinations = [
   ['Settings', GearIcon, 'general'],
 ]
 
-export function SuperagentAccountFooter({ wide, modalOpen, signIn, openSettings }) {
+export function SuperagentAccountFooter({ wide, modalOpen, signIn, openClassic, openSettings }) {
   const [open, setOpen] = useState(false)
   const [placement, setPlacement] = useState(null)
   const [kept, leaving] = useLinger(open && placement, 120)
@@ -83,6 +83,7 @@ export function SuperagentAccountFooter({ wide, modalOpen, signIn, openSettings 
       'aria-label': t('Account'), inert: leaving, 'aria-hidden': leaving || undefined,
       'data-leaving': leaving ? '' : undefined, style: shown, onKeyDown },
     destinations.map(([label, Icon, page]) => item(label, Icon, () => openSettings(page))),
-    signIn ? h('div', { className: 'bt-menu-sep', role: 'separator' }) : null,
+    openClassic || signIn ? h('div', { className: 'bt-menu-sep', role: 'separator' }) : null,
+    openClassic ? item('Classic Agent mode', SwitchIcon, openClassic) : null,
     signIn ? item('Sign in to DeepSeek', SlidersIcon, signIn) : null), document.body) : null)
 }

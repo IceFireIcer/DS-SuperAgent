@@ -20,7 +20,8 @@ async function main() {
   const profile = loadAppProfile()
   reportSkippedBundles('dsh', profile)
   const office = reconcileOfficeRuntime(profile)
-  const superagent = reconcileSuperagentProfile(profile, true)
+  const desktop = process.env.DS_SUPERAGENT_APP === '1'
+  const superagent = reconcileSuperagentProfile(profile, true, { desktop })
   if (office.node !== undefined) process.env.DS_SUPERAGENT_OFFICE_NODE = office.node
   const computer = process.env.DS_SUPERAGENT_APP === '1' && process.connected ? createDesktopComputer(send) : undefined
   if (computer) globalThis[computerAdapter] = computer
@@ -29,7 +30,7 @@ async function main() {
     profile: SUPERAGENT_PROFILE,
     resolvedProfile: { profile, installAnchor: INSTALL_ANCHOR },
     patchFiles: [...reconcileSearchSelector(profile), ...office.patchFiles, ...superagent],
-    args: ['--no-open', '--port', process.env.DS_SUPERAGENT_PORT || '0'],
+    args: ['--no-open', '--host', '127.0.0.1', '--port', process.env.DS_SUPERAGENT_PORT || '0'],
     ...(pnpm === undefined ? {} : {
       packageManager: { command: process.execPath, args: ['--expose-internals', pnpm], env: { ELECTRON_RUN_AS_NODE: '1' } },
     }),
@@ -64,7 +65,21 @@ async function main() {
   const missing = ['superagentProduct', 'workspaceRegistry'].filter(name => ctx.get(name) === undefined)
   if (missing.length > 0) throw new Error(`The profile in ${profile.dir} did not start ${missing.join(', ')}; the engine log has the cause`)
   const product = ctx.get('superagentProduct')
+  const desktopGate = ctx.get('superagentDesktopSessionGate')
+  if (desktop && !desktopGate) throw new Error('The profile did not start the desktop Session gate.')
   process.on('message', message => {
+    if (message?.type === 'ds-superagent:classic-bind') {
+      const { id, cookie, proof } = message
+      if (typeof id !== 'string' || typeof cookie !== 'string' || typeof proof !== 'string' || !/^[\da-f-]{36}$/u.test(proof)) return
+      const admission = connection.admit({ headers: { host: `127.0.0.1:${webServer.port}`, cookie } })
+      const bound = desktopGate?.bindDesktop(admission.peer, proof) ?? false
+      void send({ type: 'ds-superagent:classic-bound', id, bound }).catch(() => {})
+      return
+    }
+    if (message?.type === 'ds-superagent:classic-revoke') {
+      desktopGate?.revoke(message.detach === true)
+      return
+    }
     if (message?.type !== 'ds-superagent:workspace-read' || typeof message.id !== 'string' || !/^[\da-f-]{36}$/u.test(message.id)) return
     void (async () => {
       const { instanceId } = await product.dispatch('open')

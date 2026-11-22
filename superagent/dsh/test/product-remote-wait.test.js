@@ -27,7 +27,7 @@ test('Main submits remote-only work and keeps a restarted device stop pending', 
     stop() { this.onend?.() }
     abort() { this.onend?.() }
   }
-  let cleanup
+  const cleanups = []
   let root
   try {
     const React = requireHarness('react')
@@ -95,12 +95,14 @@ test('Main submits remote-only work and keeps a restarted device stop pending', 
       require: id => id === 'react' ? React : id === '@deepseek-ai/dsh-client-ui-primitives' ? {} : requireHarness(id),
       window: dom.window, document: dom.window.document,
       navigator: dom.window.navigator, fetch, crypto: globalThis.crypto, sessionStorage: dom.window.sessionStorage,
-      setTimeout, clearTimeout, setInterval, clearInterval, structuredClone, Blob, URL, console })
+      setTimeout, clearTimeout, setInterval, clearInterval, structuredClone, Blob, URL, console,
+      MutationObserver: dom.window.MutationObserver })
     let surface
     module.exports.applyProduct({ get: name => name === 'locale' ? 'en-US' : undefined, effect: (effect, label) => {
-      if (label === 'superagent: follow the shared Main') cleanup = effect()
+      if (['superagent: follow the shared Main', 'superagent: active surface'].includes(label)) cleanups.push(effect())
     }, slots: { inject: (_name, register) => register(), register: ({ name }, component) => {
       if (name === 'main.conversation') surface = component
+      return () => {}
     } } })
     root = createRoot(dom.window.document.querySelector('#root'))
     await React.act(async () => { await new Promise(resolve => setTimeout(resolve, 40)); root.render(React.createElement(surface)) })
@@ -163,7 +165,7 @@ test('Main submits remote-only work and keeps a restarted device stop pending', 
       targetEnvironmentId: 'remote-work', reason: 'Hand off from the Main work card.',
     })
   } finally {
-    cleanup?.()
+    for (const cleanup of cleanups.reverse()) cleanup?.()
     if (root) await requireHarness('react').act(async () => root.unmount())
     globalThis.window = previous.window
     globalThis.document = previous.document

@@ -183,7 +183,12 @@ export async function apply(context: Context, config: SuperagentProfileConfig = 
     ...(postgres ? { postgres } : { databasePath: paths.databasePath }),
   })
   context.provide('superagentProduct', host)
-  exposeMainSession(context, host)
+  const desktop = process.env.DS_SUPERAGENT_APP === '1'
+  if (desktop) context.inject(['webServer', 'typertGateway'], scope => {
+    scope.provide('superagentDesktopWebServer', scope.get('webServer'))
+    scope.provide('superagentDesktopGateway', scope.get('typertGateway'))
+  })
+  exposeMainSession(context, host, desktop)
   context.effect(() => () => host.close())
   applyProductHttp(context)
 }

@@ -235,7 +235,7 @@ const cookieJar = {
 }
 
 export const session = {
-  defaultSession: Object.assign(new EventEmitter(), { cookies: cookieJar }),
+  defaultSession: Object.assign(new EventEmitter(), { cookies: cookieJar, webRequest: { onBeforeSendHeaders() {} } }),
   fromPartition: () => Object.assign(new EventEmitter(), { cookies: cookieJar }),
 }
 

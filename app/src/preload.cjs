@@ -23,6 +23,7 @@ if (process.isMainFrame && host !== undefined && location.origin === host) {
       call: (endpoint, payload) => ipcRenderer.invoke('ds-superagent:client-call', endpoint, payload),
       events: () => ipcRenderer.invoke('ds-superagent:client-events'),
     },
+    classicAgent: { call: (endpoint, payload) => ipcRenderer.invoke('ds-superagent:classic-agent', endpoint, payload) },
     // The app's own updater, for the About row's state and buttons.
     updates: updatesBridge(),
     backups: {

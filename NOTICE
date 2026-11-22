@@ -132,6 +132,10 @@ Apache License, Version 2.0 (see LICENSE)
   ds-bot/src/host/computer/{index,leases,catalog}.js. The computer settings and
   cursor adapt ds-bot/src/client/computer.js and app/src/computer-cursor.mjs.
 
+  The Classic Agent switch and sidebar return adapt the account launcher and
+  BotReturn from ds-bot/src/client/sidebar.js, setSurface from index.js, and
+  slot lifecycle from surface.js at the same revision.
+
   Upstream attribution applicable to the synchronized client:
 
   - connector-marks.js uses single-color brand paths from Simple Icons 16.36.0
