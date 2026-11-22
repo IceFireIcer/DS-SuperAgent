@@ -14,8 +14,13 @@ const settings = 'button.bt-main-settings'
 const dialog = '.bt-superagent-settings'
 const folder = '.bt-main-composer .bt-folder-trigger'
 const account = '.bt-product-side .bt-account[aria-haspopup="menu"]'
+const accountConnectors = '.bt-leftcol-foot button.bt-account:not([aria-haspopup])'
 const activeMenu = '.bt-menu[role="menu"]:not([data-leaving])'
 const choice = `${activeMenu} :is([role="menuitem"],[role="menuitemradio"])`
+const voiceStart = '.bt-main-voice-toggle:enabled'
+const voiceStage = '.bt-main-voice .bt-voice-stage'
+const voiceEnd = '.bt-main-voice .bt-voice-end'
+const visibleFocus = "document.activeElement.matches(':focus-visible') && getComputedStyle(document.activeElement).outlineStyle !== 'none'"
 
 export async function checkPackedVisuals(cdp, output) {
   const evaluate = async expression => {
@@ -59,6 +64,65 @@ export async function checkPackedVisuals(cdp, output) {
     const { data } = await cdp.call('Page.captureScreenshot', { format: 'png' })
     if (output) await writeFile(join(output, `${name}.png`), Buffer.from(data, 'base64'))
   }
+  const openModels = async name => {
+    assert.match(await evaluate('document.activeElement.textContent.trim()'), /^(Models and API keys|模型与 API Key)$/u)
+    await evaluate('document.activeElement.click()')
+    const providers = `${dialog} .bt-main-provider`
+    await wait(`Boolean(${query(providers)})`, 'the selected Models settings page')
+    await layout(dialog)
+    await layout(providers)
+    await key('Tab', 9)
+    await wait(`document.activeElement.matches('${dialog} button.bt-settings-item') && ${visibleFocus}`, 'keyboard focus in Models settings')
+    await screenshot(`${name}-models`)
+    await key('Escape', 27)
+    await wait(`!${query(dialog)} && ${active(account)}`, 'focus to return to the account button')
+  }
+  const checkVoice = async (name, reducedMotion) => {
+    await evaluate(`(${installDeniedMicrophone.toString()})()`)
+    try {
+      await focus(voiceStart)
+      await click(voiceStart)
+      const status = `${voiceStage} [role="status"]`
+      await wait(`Boolean(${query(`${voiceStage}[data-phase="paused"] [role="alert"]`)}?.textContent.trim())`, 'paused voice and a readable capture error')
+      await layout(status)
+      await layout(`${voiceStage} [role="alert"]`)
+      await key('Tab', 9)
+      await wait(`${active(voiceEnd)} && ${visibleFocus}`, 'Tab focus on End voice chat')
+      if (reducedMotion) {
+        assert.equal(await evaluate(`getComputedStyle(${query(`${voiceStage} .bt-voice-ring`)}).animationName`), 'none')
+      }
+      await screenshot(`${name}-voice`)
+      await key('Escape', 27)
+      await wait(`!${query(voiceStage)} && ${active(voiceStart)}`, 'focus to return to the Main voice button')
+    } finally { await evaluate('window.__packedRestoreMicrophone()') }
+  }
+  const checkRoles = async name => {
+    const statuses = '.bt-work-members [data-role-status]'
+    await wait(`document.querySelectorAll(${JSON.stringify(statuses)}).length >= 2`, 'Main and Router role status')
+    const labels = await evaluate(`Array.from(document.querySelectorAll(${JSON.stringify(statuses)}), node => node.textContent.trim())`)
+    assert.match(labels[0], /^(Ready|就绪)$/u)
+    assert.match(labels[1], /^(Ready|就绪)$/u)
+    await layout('.bt-work-members')
+    await screenshot(`${name}-roles`)
+  }
+  const openConversationTab = label => evaluate(`(() => {
+    const tab = [...document.querySelectorAll('[role="tab"]')].find(node => node.getClientRects().length && ${label}.test(node.textContent.trim()));
+    if (!tab) return false;
+    tab.click();
+    return true;
+  })()`)
+  const checkEmptyWork = async name => {
+    assert.equal(await openConversationTab('/^(Work|工作)$/u'), true, 'the Work view is reachable from Main')
+    await wait(`Boolean(${query('.bt-work-board .bt-work-group .bt-empty')}?.textContent.trim())`, 'the empty Work view')
+    const filter = '.bt-work-board .bt-work-filter'
+    await evaluate(`${query(filter)}?.scrollIntoView({ block: 'start', behavior: 'instant' })`)
+    await focus(`${filter} select`)
+    await layout(filter)
+    await layout('.bt-work-board .bt-work-group .bt-empty')
+    await screenshot(`${name}-work`)
+    assert.equal(await openConversationTab('/^(Chat|Conversation|对话)$/u'), true, 'the conversation tab returns to Main')
+    await wait(`Boolean(${query('#main-message')})`, 'the Main input after closing Work')
+  }
 
   if (output) await mkdir(output, { recursive: true })
   const cases = []
@@ -94,18 +158,36 @@ export async function checkPackedVisuals(cdp, output) {
           const first = await evaluate('document.activeElement.textContent.trim()')
           await key('ArrowDown', 40)
           assert.notEqual(await evaluate('document.activeElement.textContent.trim()'), first)
-          await wait(`document.activeElement.matches(':focus-visible') && getComputedStyle(document.activeElement).outlineStyle !== 'none'`,
-            'a visible keyboard focus ring')
+          await wait(visibleFocus, 'a visible keyboard focus ring')
           await sleep(reducedMotion ? 0 : 300)
           await layout(activeMenu)
           await layout('the focused menu item', 'document.activeElement')
           if (reducedMotion) {
             assert.equal(await evaluate(`getComputedStyle(${query(activeMenu)}).animationName`), 'none')
           }
-          await screenshot(`${width}-${theme}-${mode}`)
-          await key('Escape', 27)
-          await wait(`!${query(activeMenu)} && ${active(trigger)}`, 'Escape and menu focus restoration')
-          cases.push({ width, theme, mode, reducedMotion, path: trigger === folder ? 'work directory' : 'account' })
+          const name = `${width}-${theme}-${mode}`
+          const paths = [trigger === folder ? 'work directory' : 'account']
+          await screenshot(name)
+          if (trigger === account && theme === 'mono') {
+            await openModels(name)
+            paths.push('models settings')
+          } else {
+            await key('Escape', 27)
+            await wait(`!${query(activeMenu)} && ${active(trigger)}`, 'Escape and menu focus restoration')
+          }
+          if (theme === 'paper') {
+            await checkVoice(name, reducedMotion)
+            paths.push('voice activation feedback and focus return')
+          }
+          if (theme === 'moonlight') {
+            await checkRoles(name)
+            paths.push('Main and Router ready')
+            if (reducedMotion === (width < 640)) {
+              await checkEmptyWork(name)
+              paths.push('empty Work view')
+            }
+          }
+          cases.push({ width, theme, mode, reducedMotion, paths })
         }
       }
     }
@@ -113,6 +195,11 @@ export async function checkPackedVisuals(cdp, output) {
     await wait(`Boolean(${query(activeMenu)})`, 'the account menu to reopen')
     await evaluate('document.body.click()')
     await wait(`!${query(activeMenu)} && ${active(account)}`, 'outside click and account focus restoration')
+    await click(account)
+    await wait(active(choice), 'keyboard focus in the reopened account menu')
+    await key('Tab', 9)
+    await wait(`!${query(activeMenu)} && ${active(accountConnectors)} && ${visibleFocus}`, 'Tab to leave Account for Connectors')
+    await screenshot('1120-moonlight-dark-account-tab')
 
     await focus(settings)
     await click(settings)
@@ -131,5 +218,28 @@ export async function checkPackedVisuals(cdp, output) {
     await cdp.call('Emulation.clearDeviceMetricsOverride')
   }
   if (output) await writeFile(join(output, 'visual-cases.json'), `${JSON.stringify(cases, null, 2)}\n`)
-  console.log(`check-packed: ${JSON.stringify({ visuals: cases, nestedEscape: 'passed', focus: 'passed', outsideClick: 'passed' })}`)
+  console.log(`check-packed: ${JSON.stringify({ visuals: cases, nestedEscape: 'passed', focus: 'passed', accountTab: 'passed', outsideClick: 'passed' })}`)
+}
+
+function installDeniedMicrophone() {
+  const restore = []
+  const replace = (target, key, value) => {
+    const previous = Object.getOwnPropertyDescriptor(target, key)
+    Object.defineProperty(target, key, { configurable: true, value })
+    restore.push(() => {
+      if (previous) Object.defineProperty(target, key, previous)
+      else delete target[key]
+    })
+  }
+  replace(window, 'SpeechRecognition', class {
+    start() { queueMicrotask(() => this.onerror?.({ error: 'not-allowed' })) }
+    abort() {}
+  })
+  if (navigator.mediaDevices) {
+    replace(navigator.mediaDevices, 'getUserMedia', async () => { throw new DOMException('Fixture microphone is unavailable.', 'NotAllowedError') })
+  }
+  window.__packedRestoreMicrophone = () => {
+    for (const undo of restore.reverse()) undo()
+    delete window.__packedRestoreMicrophone
+  }
 }

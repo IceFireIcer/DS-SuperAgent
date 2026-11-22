@@ -273,14 +273,18 @@ jobs:
         run: |
           sha256sum dist-pack/DS-SuperAgent-*-win-x64.exe
           DESKTOP_VISUAL_DIR="$RUNNER_TEMP/desktop-visuals" node scripts/check-packed.mjs 'dist-pack/win-unpacked/DS SuperAgent.exe' --coexistence
+      - name: Check packaged startup recovery and reduced-motion handoff
+        run: |
+          node scripts/check-packed-startup.mjs 'dist-pack/win-unpacked/DS SuperAgent.exe' "$RUNNER_TEMP/desktop-visuals/startup-normal"
+          node scripts/check-packed-startup.mjs 'dist-pack/win-unpacked/DS SuperAgent.exe' "$RUNNER_TEMP/desktop-visuals/startup-reduced" --reduce-motion
+      - name: Check work questions, Main stop and Work stop in the Windows package
+        run: DESKTOP_CONTROLS_VISUAL_DIR="$RUNNER_TEMP/desktop-visuals" node scripts/check-packed.mjs 'dist-pack/win-unpacked/DS SuperAgent.exe' --controls
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: desktop-visuals-windows-x64-${{ github.sha }}
           path: ${{ runner.temp }}/desktop-visuals
           if-no-files-found: ignore
-      - name: Check work questions, Main stop and Work stop in the Windows package
-        run: node scripts/check-packed.mjs 'dist-pack/win-unpacked/DS SuperAgent.exe' --controls
       # The runner is a fresh machine, so the installer may run here. It must install for the
       # current user only, the installed app must pass the same check, and the uninstaller must
       # remove it again.
@@ -489,7 +493,10 @@ jobs:
           cp dist-pack/DS-SuperAgent-*-linux-x86_64.AppImage "$tmp/ds-superagent.AppImage"
           chmod +x "$tmp/ds-superagent.AppImage"
           xvfb-run -a node scripts/check-update.mjs "$tmp/ds-superagent.AppImage" dist-next
-          pkill -f "$tmp/ds-superagent" || true
+          if pgrep -f -- "$tmp/ds-superagent.AppImage"; then
+            echo 'The AppImage restarted after an ordinary quit.' >&2
+            exit 1
+          fi
           next="$(ls dist-next/DS-SuperAgent-*-linux-x86_64.AppImage)"
           test "$(sha512sum "$tmp/ds-superagent.AppImage" | cut -d' ' -f1)" = "$(sha512sum "$next" | cut -d' ' -f1)"
       - name: Uninstall
