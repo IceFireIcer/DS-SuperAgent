@@ -270,7 +270,7 @@ if (identityError !== undefined) {
     }
     if (installOnQuit && !stopping && hostState === HOST_STATE.running && updates?.install && updates.state().phase === 'downloaded') {
       event.preventDefault()
-      void installUpdate().catch(() => { shell.cancelQuit(); showUpdateFailure() })
+      void installUpdate({ restart: false }).catch(() => { shell.cancelQuit(); showUpdateFailure() })
       return
     }
     // The app is on its way out: the window may close for good.
@@ -988,7 +988,7 @@ async function askDownloadNow(version) {
 
 // What the updater does when the user says yes. The answer may come later, when the window
 // is shown again; then the work is done here.
-async function installUpdate() { await updates?.install() }
+async function installUpdate(options) { await updates?.install(options) }
 
 function showUpdateFailure() {
   const message = localeText(UPDATE_TEXT).installFailed

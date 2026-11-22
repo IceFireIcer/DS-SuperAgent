@@ -476,6 +476,17 @@ describe('watchUpdates', () => {
     }
   })
 
+  test('an install on quit keeps the app closed after the backup and installer handoff', async (t) => {
+    const updater = new FakeUpdater()
+    const steps = []
+    const updates = watchUpdates({ updater, log: quietLog(), beforeInstall: async () => { steps.push('host stopped') } })
+    t.after(updates.stop)
+    updater.quitAndInstall = (...args) => { steps.push(['install', ...args]) }
+    updater.emit('update-downloaded', { version: '0.1.9' })
+    await updates.install({ restart: false })
+    assert.deepEqual(steps, ['host stopped', ['install', true, false]])
+  })
+
   test('logs a failed check and does not throw', async (t) => {
     const updater = new FakeUpdater()
     updater.failCheck = true

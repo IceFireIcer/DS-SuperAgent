@@ -2,12 +2,13 @@
 // send a message, wait for the reply, then close the window the way a user does: the window hides
 // and the app goes on. The window comes back when the app is started again, and the app ends the
 // way the tray's Quit ends it. Fails on a page error or a non-zero exit.
-// Usage: node scripts/check-packed.mjs [app executable] [screenshot.png | --coexistence | --controls | --upgrade-to next executable | --upgrade-with NSIS installer]
+// Usage: node scripts/check-packed.mjs [app executable or AppImage] [screenshot.png | --coexistence | --controls | --upgrade-to next executable | --upgrade-with NSIS installer | --update-feed folder next-app.asar]
 // The executable defaults to the one that `npm run pack` or `npm run dist` writes into dist-pack/.
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { connect, createServer } from 'node:net'
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, createReadStream, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -16,15 +17,19 @@ import { hostExecutable } from '../src/host-process.mjs'
 import { PRODUCT_NAME, PRODUCT_SLUG } from '../src/product.mjs'
 import { isNewer } from '../src/updates.mjs'
 import { t55Question, t55Request, t55SlowReply } from '../../superagent/dsh/dev/t55-controls-model.mjs'
+import { checkPackedVisuals } from './check-packed-visuals.mjs'
+import { fileUpdateFeed } from './update-fixture-feed.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const [given, option, nextExecutable] = process.argv.slice(2)
+const [given, option, nextExecutable, nextPayload] = process.argv.slice(2)
 const installUpgrade = option === '--upgrade-with'
-const upgrade = option === '--upgrade-to' || installUpgrade
+const updateFeed = option === '--update-feed'
+const upgrade = option === '--upgrade-to' || installUpgrade || updateFeed
 const controls = option === '--controls'
 const coexistence = option === '--coexistence'
 const shotFile = upgrade || controls || coexistence ? undefined : option
 const executable = given || packedExecutable()
+const appImage = process.platform === 'linux' && executable.endsWith('.AppImage')
 
 if (coexistence && process.platform !== 'win32') throw new Error('The coexistence check targets the Windows unpacked app.')
 if (upgrade && (!nextExecutable || !existsSync(nextExecutable))) {
@@ -38,6 +43,9 @@ if (installUpgrade) {
     || dirname(root) !== realpathSync.native(tmpdir())) {
     throw new Error('Run --upgrade-with only on the temporary Windows installation prepared for T55.')
   }
+}
+if (updateFeed && (process.platform !== 'win32' || process.env.GITHUB_ACTIONS !== 'true' || !nextPayload || !existsSync(nextPayload))) {
+  throw new Error('Run --update-feed with the installed Windows fixture, update feed and next app.asar on a GitHub Actions runner.')
 }
 
 function packedExecutable() {
@@ -56,7 +64,7 @@ if (!existsSync(executable)) {
 
 // The Office payload sits next to the asar as extraResources, and the LibreOffice Kit CLI is a
 // plain file in the unpacked tree; without them the app's Office skills and tools cannot run.
-{
+function checkResources(executable) {
   const resources = process.platform === 'darwin' ? join(dirname(executable), '..', 'Resources') : join(dirname(executable), 'resources')
   const windows = process.platform === 'win32'
   const unpacked = process.platform === 'linux' ? 'app' : 'app.asar.unpacked'
@@ -73,10 +81,7 @@ if (!existsSync(executable)) {
     join('node_modules', '@ubjs', 'node', 'package.json'),
   ]
   const missing = required.filter((entry) => !existsSync(join(resources, entry)))
-  if (missing.length > 0) {
-    console.error(`check-packed: FAILED: missing from ${resources}:\n  ${missing.join('\n  ')}`)
-    process.exit(1)
-  }
+  if (missing.length > 0) throw new Error(`missing from ${resources}:\n  ${missing.join('\n  ')}`)
 }
 
 const work = realpathSync.native(mkdtempSync(join(realpathSync.native(tmpdir()), 'ds-superagent-packed-')))
@@ -96,11 +101,16 @@ function stopChildren() {
   }
 }
 
-// An app that hangs, for example behind its error box, must not hold up CI.
-setTimeout(() => {
-  console.error('check-packed: FAILED: gave up after 8 minutes')
+function cleanup() {
   stopChildren()
-  process.exit(1)
+  feed?.close()
+  rmSync(work, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 })
+}
+
+// An app that hangs, for example behind its error box, must not hold up CI.
+const watchdog = setTimeout(() => {
+  console.error('check-packed: FAILED: gave up after 8 minutes')
+  try { cleanup() } finally { process.exit(1) }
 }, 8 * 60_000).unref()
 
 // Run from inside this checkout, the app would find a module that the build left out in the
@@ -108,6 +118,11 @@ setTimeout(() => {
 function outsideCheckout(file) {
   const fromCheckout = relative(resolve(root, '..'), file)
   if (fromCheckout.startsWith('..') || isAbsolute(fromCheckout)) return file
+  if (appImage) {
+    const installed = join(mkdtempSync(join(work, 'program-')), basename(file))
+    cpSync(file, installed)
+    return installed
+  }
   const appDir = process.platform === 'darwin' ? resolve(file, '..', '..', '..') : dirname(file)
   const copy = mkdtempSync(join(work, 'program-'))
   const installed = join(copy, basename(appDir))
@@ -116,11 +131,18 @@ function outsideCheckout(file) {
   return join(installed, relative(appDir, file))
 }
 
-function checkSharp(app) {
+function appImageContents(app) {
+  const result = spawnSync(app, ['--appimage-extract'], { cwd: work, stdio: ['ignore', 'ignore', 'inherit'], timeout: 60_000 })
+  if (result.error || result.status !== 0) throw new Error('The AppImage could not extract its packaged payload.', { cause: result.error })
+  return join(work, 'squashfs-root', PRODUCT_SLUG)
+}
+
+async function checkSharp(app, launched) {
   const resources = process.platform === 'darwin' ? resolve(app, '..', '..', 'Resources') : join(dirname(app), 'resources')
   const linux = process.platform === 'linux'
   const script = `
     const assert = require('node:assert/strict')
+    const { createHash } = require('node:crypto')
     const { createRequire } = require('node:module')
     const { readFileSync } = require('node:fs')
     const { join } = require('node:path')
@@ -137,6 +159,11 @@ function checkSharp(app) {
       assert.equal(info.width, 2)
       assert.equal(info.height, 2)
       assert.deepEqual([...data], Array.from({ length: 4 }, () => [255, 0, 0]).flat())
+      const sha256 = bytes => createHash('sha256').update(bytes).digest('hex')
+      console.log('check-packed: ' + JSON.stringify({ package: {
+        version: appRequire('./package.json').version, platform: process.platform, arch: process.arch,
+        clientSha256: sha256(readFileSync(appRequire.resolve('ds-superagent/client'))),
+      }}))
       console.log('check-packed: sharp image processing passed (libvips ' + sharp.versions.vips + ')')
     })().catch(error => { console.error(error); process.exitCode = 1 })
   `
@@ -146,7 +173,26 @@ function checkSharp(app) {
     encoding: 'utf8', timeout: 30_000,
   })
   if (result.error || result.status !== 0) throw new Error(`packaged sharp failed (exit ${String(result.status)}, signal ${String(result.signal)}): ${result.error?.message ?? ''}\n${result.stderr ?? ''}`)
+  if (process.env.GITHUB_SHA) {
+    const candidate = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' })
+    assert.equal(candidate.stdout?.trim(), process.env.GITHUB_SHA, 'the package probe must run from the candidate checkout')
+    const client = spawnSync('git', ['show', 'HEAD:superagent/dsh/client.js'], { cwd: root, maxBuffer: 8 * 1024 * 1024 })
+    assert.ifError(client.error)
+    assert.equal(client.status, 0, 'read the candidate client bundle from Git')
+    const expectedClient = createHash('sha256').update(client.stdout).digest('hex')
+    const identity = result.stdout.split(/\r?\n/u).find(line => line.startsWith('check-packed: {"package":'))
+    assert.equal(JSON.parse(identity?.slice('check-packed: '.length) ?? '{}').package?.clientSha256, expectedClient,
+      'the package must contain the candidate client bundle')
+  }
   console.log(result.stdout.trim())
+  const payload = appImage ? launched : linux ? app : join(resources, 'app.asar')
+  console.log(`check-packed: ${JSON.stringify({ candidate: process.env.GITHUB_SHA, payload: basename(payload), sha256: await fingerprint(payload) })}`)
+}
+
+async function fingerprint(payload) {
+  const hash = createHash('sha256')
+  for await (const chunk of createReadStream(payload)) hash.update(chunk)
+  return hash.digest('hex')
 }
 
 function startMock() {
@@ -215,6 +261,24 @@ async function browserClose(port) {
   })
   socket.send(JSON.stringify({ id: 1, method: 'Browser.close' }))
   socket.close()
+}
+
+async function waitForDownloadedUpdate(cdp, version, feed) {
+  const deadline = Date.now() + 5 * 60_000
+  while (Date.now() < deadline) {
+    const result = await cdp.call('Runtime.evaluate', { expression: 'window.dsSuperagentApp.updates.state()',
+      returnByValue: true, awaitPromise: true })
+    const update = result.result?.value
+    if (update?.phase === 'failed') throw new Error('The app reported a failed update download.')
+    if (update?.phase === 'downloaded' && update.version === version) {
+      assert.ok(feed.served.includes('latest.yml'), 'the update must come from the isolated feed')
+      assert.ok(feed.served.includes(`DS-SuperAgent-${version}-win-x64.exe`), 'the installed app must download the fixture installer')
+      console.log(`check-packed: ${JSON.stringify({ downloadedUpdate: version, files: feed.served })}`)
+      return
+    }
+    await sleep(250)
+  }
+  throw new Error('The app did not download the update from the isolated feed.')
 }
 
 function devtools(url, problems) {
@@ -336,6 +400,7 @@ async function chat(cdp) {
   await cdp.call('Runtime.enable')
   await cdp.call('Log.enable')
   await until("document.querySelector('#main-message')", 'the Main conversation')
+  await waitForLocalEnvironment(cdp)
   const stale = await evaluate(`(() => {
     const sheet = new CSSStyleSheet()
     sheet.replaceSync(${JSON.stringify(micaCss)})
@@ -407,6 +472,42 @@ async function chat(cdp) {
   console.log(`check-packed: chat ${JSON.stringify(await evaluate('document.body.innerText.slice(-200)'))}`)
 }
 
+async function waitForLocalEnvironment(cdp) {
+  const expression = `(async () => {
+    const call = async (endpoint, payload = {}) => {
+      const request = await fetch('/api/product', {method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({endpoint,payload})});
+      const result = await request.json();
+      return result.ok ? result.value : null;
+    };
+    const binding = await call('open');
+    if (!binding) return null;
+    const payload = {instanceId:binding.instanceId};
+    const [directories, execution] = await Promise.all([call('directory-options', payload), call('execution-options', payload)]);
+    const selected = directories?.default;
+    const environment = execution?.environments?.find(item => item.id === selected?.environmentId);
+    return {
+      selected: selected?.environmentId, environment: environment?.id,
+      matchesFixture: selected?.root === ${JSON.stringify(realpathSync.native(join(work, 'workspace')))},
+      eligible: environment?.eligible === true && environment.kind === 'local',
+      target: document.querySelector('.bt-main-composer select[aria-label="Execution target"], .bt-main-composer select[aria-label="执行目标"]')?.value,
+      visible: Array.from(document.querySelectorAll('.bt-main-composer .bt-main-directory-note'))
+        .some(note => /^(Eligible|符合条件|可用)(?:$| · )/u.test(note.textContent.trim())),
+    };
+  })()`
+  let last
+  const end = Date.now() + 30_000
+  while (Date.now() < end) {
+    const result = await cdp.call('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })
+    last = result.result?.value
+    if (last?.eligible && last.matchesFixture && last.target === 'local-only' && last.visible) {
+      console.log(`check-packed: ${JSON.stringify({ executionEnvironment: 'authorized fixture ready', environmentId: last.environment })}`)
+      return
+    }
+    await sleep(250)
+  }
+  throw new Error(`the authorized local fixture Environment did not become ready: ${JSON.stringify(last ?? null)}`)
+}
+
 async function productFacts(cdp, prepare = false) {
   const result = await cdp.call('Runtime.evaluate', { expression: `(async () => {
     const call = async (endpoint, payload = {}) => {
@@ -423,7 +524,7 @@ async function productFacts(cdp, prepare = false) {
       call('history', { instanceId }), call('schedule-source-read', { instanceId }), call('product-usage', { instanceId }),
       window.dsSuperagentApp.diagnostics(), window.dsSuperagentApp.backups.list(),
     ]);
-    return { binding, messages: history.messages.map(message => ({ id: message.id, role: message.role })), enabled: source.enabled,
+    return { binding, messages: history.messages.map(({ id, role, status, text }) => ({ id, role, status, text })), enabled: source.enabled,
       mainTokens: usage.roles.main.totalTokens, version: diagnostics.appVersion,
       upgradeBackups: backups.filter(backup => backup.purpose === 'upgrade'), events: diagnostics.events.map(event => event.code) };
   })()`, returnByValue: true, awaitPromise: true })
@@ -474,13 +575,14 @@ async function checkWorkControls(cdp) {
   }, 'one question while the other work executes')
   const firstAlpha = card(working, 'alpha').control.assignment
   const firstBeta = card(working, 'beta').control.assignment
-  await wait(() => click('.bt-main-work-options button', '/^Yes$/u'), 'the approved answer choice')
-  await wait(() => click('.bt-main-work-answer button[type=submit]', '/^(Send answer|提交回答)$/u'), 'the question send button')
+  await wait(() => click('.bt-q-dock .bt-q-opt, .bt-main-work-options button', '/^Yes$/u'), 'the approved answer choice')
+  await wait(() => click('.bt-q-dock .bt-q-submit, .bt-main-work-answer button[type=submit]', '/^(Send answer|提交回答)$/u'), 'the question send button')
   const answered = await wait(async () => {
     const alpha = card(await read(), 'alpha')
     return alpha?.status === 'success' && alpha
   }, 'the answered work result')
   assert.equal(answered.control.attention.sessionId, firstAlpha.sessionId)
+  console.log('check-packed: the work question was answered in its original Assignment')
   await send(t55SlowReply)
   await wait(() => click('button', '/^(Stop reply|停止本轮回复)$/u'), 'the Main stop control')
   const stoppedReply = await wait(async () => {
@@ -489,6 +591,7 @@ async function checkWorkControls(cdp) {
   }, 'only the Main turn to stop')
   assert.equal(card(stoppedReply, 'beta').control.assignment.generation, firstBeta.generation)
   assert.equal(card(stoppedReply, 'beta').control.stop, undefined)
+  console.log('check-packed: stopping the Main reply preserved the other Work')
   const betaId = card(stoppedReply, 'beta').control.ticketId
   const betaButtons = `.bt-main-work[data-ticket-id="${betaId}"] .bt-main-work-controls button`
   await wait(() => click(betaButtons, '/^(Stop work|停止工作)$/u'), 'the beta work stop control')
@@ -496,6 +599,7 @@ async function checkWorkControls(cdp) {
     const beta = card(await read(), 'beta')
     return beta?.control?.stop?.state === 'stopped' && beta.control.stop.cancellationConfirmedAt !== undefined
   }, 'the original beta range to stop')
+  console.log('check-packed: stopping Work confirmed cancellation of the selected range')
   await wait(() => click(betaButtons, '/^(Resume work|恢复工作)$/u'), 'the beta resume control')
   const resumed = await wait(async () => {
     const beta = card(await read(), 'beta')
@@ -540,7 +644,28 @@ async function checkOperations(cdp, facts) {
 
 async function checkColdUpgrade(before, env) {
   let packedApp
-  if (installUpgrade) {
+  if (updateFeed) {
+    packedApp = resolve(executable)
+    const installed = join(dirname(packedApp), 'resources', 'app.asar')
+    const expected = await fingerprint(nextPayload)
+    let actual
+    let installation
+    const deadline = Date.now() + 240_000
+    while (Date.now() < deadline) {
+      installation = windowsInstallation(nextVersion)
+      if (!installation.installerRunning && installation.version === nextVersion) {
+        actual = await fingerprint(installed).catch(error => {
+          if (['ENOENT', 'EPERM', 'EBUSY'].includes(error.code)) return null
+          throw error
+        })
+        if (actual === expected) break
+      }
+      await sleep(1000)
+    }
+    assert.deepEqual(installation, { version: nextVersion, installerRunning: false }, 'the current-user installer must finish before relaunch')
+    assert.equal(actual, expected, 'the updater must replace app.asar with the next build')
+    console.log(`check-packed: ${JSON.stringify({ installedUpdate: nextVersion, payload: 'app.asar', sha256: actual })}`)
+  } else if (installUpgrade) {
     packedApp = resolve(executable)
     const setup = spawnSync(resolve(nextExecutable), ['/S', '--updated', '/no-desktop-shortcut', `/D=${dirname(packedApp)}`], {
       env, windowsHide: true, windowsVerbatimArguments: true, timeout: 300_000,
@@ -550,7 +675,9 @@ async function checkColdUpgrade(before, env) {
     console.log('check-packed: native installer completed')
   } else packedApp = outsideCheckout(resolve(nextExecutable))
   const port = await freePort()
-  const app = spawn(packedApp, [`--remote-debugging-port=${port}`], { env, stdio: 'inherit' })
+  const reopenedEnv = { ...env }
+  delete reopenedEnv.DS_SUPERAGENT_UPDATE_URL
+  const app = spawn(packedApp, [`--remote-debugging-port=${port}`], { env: reopenedEnv, stdio: 'inherit' })
   children.push(app)
   const exited = new Promise(done => app.once('exit', done))
   const cdp = devtools((await appPage(port, Date.now() + 120_000)).webSocketDebuggerUrl, [])
@@ -558,6 +685,11 @@ async function checkColdUpgrade(before, env) {
   try {
     const after = await productFacts(cdp)
     assert.ok(isNewer(after.version, before.version), 'the next packaged version must be newer')
+    if (updateFeed) {
+      assert.equal(after.version, nextVersion)
+      assert.ok(after.events.includes('UPDATE_INSTALLED'), 'the reopened app confirms the downloaded update')
+      assert.ok(after.events.includes('UPDATE_INSTALL_REQUESTED'), 'the old app launched the downloaded installer')
+    }
     assert.deepEqual(after.binding, before.binding)
     assert.deepEqual(after.messages, before.messages)
     assert.equal(after.enabled, false)
@@ -570,14 +702,39 @@ async function checkColdUpgrade(before, env) {
       businessRecords: after.upgradeBackups[0].business.recordCount, sessions: after.upgradeBackups[0].sessions.sessionCount })}`)
   } finally { cdp.close() }
   await browserClose(port)
-  assert.equal(await Promise.race([exited, sleep(40_000).then(() => null)]), 0, 'the upgraded app must shut down normally')
+  const exit = await Promise.race([exited, sleep(40_000).then(() => null)])
+  assert.equal(exit, 0, 'the upgraded app must shut down normally')
+  console.log(`check-packed: upgraded app exited (code ${exit})`)
+}
+
+function windowsInstallation(version) {
+  const script = `
+    $ErrorActionPreference = 'Stop'
+    $entry = Get-ChildItem -LiteralPath 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall' |
+      ForEach-Object { Get-ItemProperty -LiteralPath $_.PSPath } |
+      Where-Object { $_.DisplayName -like 'DS SuperAgent*' } |
+      Select-Object -First 1
+    $installer = Get-Process -Name 'DS-SuperAgent-${version}-win-x64' -ErrorAction SilentlyContinue
+    @{ version = $entry.DisplayVersion; installerRunning = [bool]$installer } | ConvertTo-Json -Compress
+  `
+  const status = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+    encoding: 'utf8', timeout: 10_000, windowsHide: true,
+  })
+  assert.ifError(status.error)
+  assert.equal(status.status, 0, 'read the current-user installation result')
+  return JSON.parse(status.stdout)
 }
 
 let failed = false
+let feed
+let nextVersion
 const problems = []
 try {
   const packedApp = outsideCheckout(resolve(executable))
-  checkSharp(packedApp)
+  const resourceApp = appImage ? appImageContents(packedApp) : packedApp
+  checkResources(resourceApp)
+  await checkSharp(resourceApp, packedApp)
+  mkdirSync(join(work, 'workspace'))
   const modelUrl = await startMock()
   const profileDir = join(work, 'home', 'superagent', 'profiles', 'ds-superagent')
   mkdirSync(profileDir, { recursive: true })
@@ -592,14 +749,20 @@ try {
   const port = await freePort()
   const mainPort = await freePort()
   // A terminal inside an Electron-based editor may set ELECTRON_RUN_AS_NODE, which turns the app into plain Node.
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^ELECTRON_RUN_AS_NODE$/iu.test(key)
-    && (!coexistence || !/^(?:DS_SUPERAGENT_|DS_BOT_|DSH_|DEEPSEEK_|NODE_OPTIONS$|NODE_PATH$)/iu.test(key))))
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
+    !/^(?:ELECTRON_RUN_AS_NODE$|DS_SUPERAGENT_|DS_BOT_|DSH_|DEEPSEEK_|NODE_OPTIONS$|NODE_PATH$)/iu.test(key)))
   Object.assign(env, {
     DS_SUPERAGENT_HOME: join(work, 'home'), DS_SUPERAGENT_SHELL_DATA: join(work, 'shell'),
     DS_SUPERAGENT_WORKSPACE: join(work, 'workspace'),
     DSH_HOME: join(work, 'personal-dsh'),
     DEEPSEEK_BASE_URL: modelUrl, DEEPSEEK_API_KEY: 'mock-key',
   })
+  if (updateFeed) {
+    nextVersion = /^version:[ \t]*(\d+\.\d+\.\d+)[ \t]*\r?$/mu.exec(readFileSync(join(nextExecutable, 'latest.yml'), 'utf8'))?.[1]
+    assert.ok(nextVersion, 'the fixture feed must have a next version')
+    feed = await fileUpdateFeed(nextExecutable)
+    env.DS_SUPERAGENT_UPDATE_URL = feed.url
+  }
   const former = join(work, 'former-product')
   const oldShell = join(former, 'shell')
   const oldSettings = join(oldShell, 'locations.json')
@@ -647,12 +810,14 @@ try {
     console.log(`check-packed: saved ${resolve(shotFile)}`)
   }
   if (chatError) throw chatError
+  if (process.env.DESKTOP_VISUAL_DIR) await checkPackedVisuals(cdp, process.env.DESKTOP_VISUAL_DIR)
   if (controls) await checkWorkControls(cdp)
   const before = upgrade ? await productFacts(cdp, true) : undefined
   if (before) {
     assert.ok(before.mainTokens > 0 && before.messages.length >= 2)
     assert.equal(before.enabled, false)
   }
+  if (feed) await waitForDownloadedUpdate(cdp, nextVersion, feed)
   // Close the native window: a renderer-initiated close can stop page CDP evaluations even
   // when Electron prevents the close. Read visibility from the main process as well.
   await windowState('win.close()')
@@ -679,11 +844,21 @@ try {
   // target to close, which ends the app gracefully.
   // Stopping the Host closes its event stream; that expected shutdown is not a page failure.
   if (problems.length > 0) throw new Error(`page problems:\n  ${problems.join('\n  ')}`)
+  if (feed) {
+    await windowState(`(() => {
+      const { app } = process.getBuiltinModule('module').createRequire(process.execPath)('electron');
+      setTimeout(() => app.quit(), 100);
+    })()`)
+  }
   cdp.close()
   main.close()
-  await browserClose(port)
+  if (!feed) await browserClose(port)
   const outcome = await Promise.race([exited, sleep(40_000).then(() => undefined)])
-  if (outcome === undefined) throw new Error('the app did not exit after the quit')
+  if (outcome === undefined) {
+    const log = join(work, 'shell', 'logs', 'operations.jsonl')
+    const codes = existsSync(log) ? readFileSync(log, 'utf8').split(/\r?\n/u).filter(Boolean).slice(-12).map(line => JSON.parse(line).code) : []
+    throw new Error(`the app did not exit after the quit (${codes.join(', ') || 'no operations events'})`)
+  }
   console.log(`check-packed: app exited (code ${String(outcome.code)}, signal ${String(outcome.signal)})`)
   if (outcome.code !== 0) throw new Error(`the app exited with code ${String(outcome.code)}`)
   if (coexistence) {
@@ -698,7 +873,6 @@ try {
   failed = true
   console.error(`check-packed: FAILED: ${error instanceof Error ? error.message : String(error)}`)
 }
-stopChildren()
-await sleep(500)
-rmSync(work, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 })
+clearTimeout(watchdog)
+cleanup()
 process.exit(failed ? 1 : 0)

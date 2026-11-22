@@ -109,8 +109,9 @@ jobs:
           cache: npm
           cache-dependency-path: superagent/package-lock.json
       - run: npm ci --no-fund --no-audit
+      - name: Check committed client and Office bundles
+        run: node dsh/scripts/build-client.mjs --check
       - run: npm run build
-      - run: node dsh/scripts/build-client.mjs --check
       - run: npm run typecheck
       - run: npm run lint
       - name: Run all product-client tests for daily changes
@@ -122,6 +123,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.superagent == 'true'
     runs-on: windows-latest
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -244,8 +246,18 @@ jobs:
           npm run build --prefix ../superagent
       - run: npm ci --no-fund --no-audit
       - run: npm run dist
-      - name: Check the packaged app
-        run: node scripts/check-packed.mjs
+      - name: Check Windows package coexistence and capture desktop visual cases
+        run: |
+          sha256sum dist-pack/DS-SuperAgent-*-win-x64.exe
+          DESKTOP_VISUAL_DIR="$RUNNER_TEMP/desktop-visuals" node scripts/check-packed.mjs 'dist-pack/win-unpacked/DS SuperAgent.exe' --coexistence
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-visuals-windows-x64-${{ github.sha }}
+          path: ${{ runner.temp }}/desktop-visuals
+          if-no-files-found: ignore
+      - name: Check work questions, Main stop and Work stop in the Windows package
+        run: node scripts/check-packed.mjs 'dist-pack/win-unpacked/DS SuperAgent.exe' --controls
       # The runner is a fresh machine, so the installer may run here. It must install for the
       # current user only, the installed app must pass the same check, and the uninstaller must
       # remove it again.
@@ -297,21 +309,18 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $exe = Join-Path $env:LOCALAPPDATA 'Programs\DS SuperAgent\DS SuperAgent.exe'
-          node scripts/check-update.mjs $exe dist-next
-          if ($LASTEXITCODE -ne 0) { throw 'The installed app did not take the update' }
-          # The installer goes on after the app has quit.
+          node scripts/check-packed.mjs $exe --update-feed dist-next dist-next/win-unpacked/resources/app.asar
+          if ($LASTEXITCODE -ne 0) { throw 'The installed app did not preserve the isolated profile during the update' }
           function Installed-Version {
             Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' |
               ForEach-Object { Get-ItemProperty $_.PSPath } |
               Where-Object { $_.DisplayName -like 'DS SuperAgent*' } |
               Select-Object -ExpandProperty DisplayVersion
           }
-          $deadline = (Get-Date).AddSeconds(240)
-          while ((Installed-Version) -ne $env:NEXT_VERSION -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 3 }
           if ((Installed-Version) -ne $env:NEXT_VERSION) { throw "The installed version is $(Installed-Version), not $env:NEXT_VERSION" }
-          while ((Get-Process | Where-Object { $_.Path -like '*ds-superagent-desktop-updater*' }) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 2 }
-          node scripts/check-packed.mjs $exe
-          if ($LASTEXITCODE -ne 0) { throw 'The updated app failed its check' }
+          foreach ($file in ($env:KEPT_FILES -split '\|')) {
+            if ((Get-Content -LiteralPath $file -Raw).Trim() -ne 'kept') { throw "Update changed $file" }
+          }
 
       - name: Uninstall
         shell: pwsh
@@ -374,6 +383,7 @@ jobs:
         run: |
           zip="dist-pack/DS-SuperAgent-$(node -p "require('./package.json').version")-mac-${{ matrix.arch }}.zip"
           test -f "$zip"
+          shasum -a 256 "$zip"
       - name: Check the packaged app
         run: node scripts/check-packed.mjs
       - name: Install from the zip and check
@@ -423,14 +433,17 @@ jobs:
           test -f "dist-pack/DS-SuperAgent-$version-linux-x86_64.AppImage"
           test -f "dist-pack/DS-SuperAgent-$version-linux-amd64.deb"
           test -f dist-pack/latest-linux.yml
+          sha256sum "dist-pack/DS-SuperAgent-$version-linux-x86_64.AppImage" "dist-pack/DS-SuperAgent-$version-linux-amd64.deb"
       # An AppImage mounts through FUSE 2, and Ubuntu 24.04's AppArmor blocks the unprivileged
       # user namespaces that Chromium's sandbox needs; a throwaway runner may lift that.
       - name: Prepare to run the app
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq libfuse2t64 xvfb
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-      - name: Check the packaged app
-        run: xvfb-run -a node scripts/check-packed.mjs
+      - name: Check Main from the released AppImage
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          xvfb-run -a node scripts/check-packed.mjs "dist-pack/DS-SuperAgent-$version-linux-x86_64.AppImage"
       # apt-get, not dpkg: it also installs the deb's dependencies. The ./ prefix makes apt-get
       # read a file; without it the path is taken for a package name.
       - name: Install the deb and check
