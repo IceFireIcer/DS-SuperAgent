@@ -45,9 +45,9 @@ export async function checkPackedVisuals(cdp, output) {
   const click = async selector => evaluate(`${query(selector)}?.click()`)
   const active = selector => `document.activeElement?.matches(${JSON.stringify(selector)}) === true`
   const key = async (name, code) => {
-    for (const type of ['rawKeyDown', 'keyUp']) {
-      await cdp.call('Input.dispatchKeyEvent', { type, key: name, code: name, windowsVirtualKeyCode: code })
-    }
+    const binding = { key: name, code: name, windowsVirtualKeyCode: code }
+    await cdp.call('Input.dispatchKeyEvent', { ...binding, ...(name === 'Enter' ? { type: 'keyDown', text: '\r' } : { type: 'rawKeyDown' }) })
+    await cdp.call('Input.dispatchKeyEvent', { ...binding, type: 'keyUp' })
   }
   const layout = async (selector, elementExpression = query(selector)) => {
     const bounds = await evaluate(`(() => {
@@ -66,7 +66,7 @@ export async function checkPackedVisuals(cdp, output) {
   }
   const openModels = async name => {
     assert.match(await evaluate('document.activeElement.textContent.trim()'), /^(Models and API keys|模型与 API Key)$/u)
-    await evaluate('document.activeElement.click()')
+    await key('Enter', 13)
     const providers = `${dialog} .bt-main-provider`
     await wait(`Boolean(${query(providers)})`, 'the selected Models settings page')
     await layout(dialog)

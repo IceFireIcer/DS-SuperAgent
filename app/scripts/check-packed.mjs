@@ -31,6 +31,9 @@ const coexistence = option === '--coexistence'
 const shotFile = upgrade || controls || classic || coexistence ? undefined : option
 const executable = given || packedExecutable()
 const appImage = process.platform === 'linux' && executable.endsWith('.AppImage')
+const mainPrompt = 'packaged app check'
+const mainReply = `收到：${mainPrompt}`
+const writableMainInput = '.bt-main-composer[data-main-input-ready] #main-message:enabled:not([readonly])'
 
 if (coexistence && process.platform !== 'win32') throw new Error('The coexistence check targets the Windows unpacked app.')
 if (upgrade && (!nextExecutable || !existsSync(nextExecutable))) {
@@ -86,6 +89,7 @@ function checkResources(executable) {
 }
 
 const work = realpathSync.native(mkdtempSync(join(realpathSync.native(tmpdir()), 'ds-superagent-packed-')))
+const mockLog = join(work, 'mock.log')
 mkdirSync(join(work, 'home'))
 mkdirSync(join(work, 'shell'))
 // CDP cannot answer the native first-close dialog. The notice has its own tests; this check
@@ -110,8 +114,9 @@ function cleanup() {
 
 function operationCodes() {
   const log = join(work, 'shell', 'logs', 'operations.jsonl')
-  if (!existsSync(log)) return []
-  return readFileSync(log, 'utf8').split(/\r?\n/u).filter(Boolean).slice(-12).flatMap(line => {
+  let lines
+  try { lines = readFileSync(log, 'utf8').split(/\r?\n/u) } catch { return [] }
+  return lines.filter(Boolean).slice(-12).flatMap(line => {
     try {
       const { code } = JSON.parse(line)
       return typeof code === 'string' && /^[A-Z][A-Z0-9_]{0,79}$/u.test(code) ? [code] : []
@@ -209,7 +214,7 @@ async function fingerprint(payload) {
 
 function startMock() {
   const mock = spawn(process.execPath, [join(root, '..', 'superagent', 'dsh', 'dev', 'mock-llm.mjs')], {
-    env: { ...process.env, MOCK_PORT: '0', MOCK_LOG: join(work, 'mock.log'), MOCK_T55_CONTROLS: controls || classic ? '1' : '0',
+    env: { ...process.env, MOCK_PORT: '0', MOCK_LOG: mockLog, MOCK_T55_CONTROLS: controls || classic ? '1' : '0',
       MOCK_CLASSIC_ROUND_TRIP: classic ? '1' : '0' },
     stdio: ['ignore', 'pipe', 'inherit'],
   })
@@ -319,12 +324,12 @@ function devtools(url, problems) {
     socket.addEventListener('open', done, { once: true })
     socket.addEventListener('error', reject, { once: true })
   })
-  const call = (method, params = {}) => new Promise((done, reject) => {
+  const call = (method, params = {}, timeout = 30_000) => new Promise((done, reject) => {
     const id = next++
     const timer = setTimeout(() => {
       pending.delete(id)
       reject(new Error(`the window did not answer ${method}`))
-    }, 30_000)
+    }, timeout)
     const settle = action => (value) => { clearTimeout(timer); action(value) }
     pending.set(id, { resolve: settle(done), reject: settle(reject) })
     socket.send(JSON.stringify({ id, method, params }))
@@ -413,7 +418,7 @@ async function chat(cdp) {
   await cdp.call('Runtime.enable')
   await cdp.call('Log.enable')
   await until("document.querySelector('#main-message')", 'the Main conversation')
-  await waitForLocalEnvironment(cdp)
+  const instanceId = await waitForLocalEnvironment(cdp)
   const stale = await evaluate(`(() => {
     const sheet = new CSSStyleSheet()
     sheet.replaceSync(${JSON.stringify(micaCss)})
@@ -425,8 +430,9 @@ async function chat(cdp) {
   await dismissNotice()
   // Click the composer through the input pipeline. A bare focus() is not enough where no window
   // manager gives the window focus (xvfb in CI): the text and the Enter would go nowhere.
-  const box = "document.querySelector('#main-message')"
-  const focusCheck = "document.activeElement?.id === 'main-message'"
+  const writableInput = JSON.stringify(writableMainInput)
+  const box = `document.querySelector(${writableInput})`
+  const focusCheck = `document.activeElement?.matches(${writableInput})`
   // Notices and renders can cover the field between round trips; click only where it is on top.
   const probe = `(() => {
     const el = ${box}
@@ -439,50 +445,80 @@ async function chat(cdp) {
     }
     return null
   })()`
-  let shot = null
-  const deadline = Date.now() + 30_000
-  while (Date.now() < deadline && !(await evaluate(`Boolean(${focusCheck})`))) {
-    // The preview notice can mount after Main is ready, so dismiss it when it appears.
-    await dismissNotice()
-    const point = await evaluate(probe)
-    if (point !== null && point !== undefined) {
-      shot = point
-      await cdp.call('Input.dispatchMouseEvent', { type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 })
-      await cdp.call('Input.dispatchMouseEvent', { type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 })
-      await sleep(300)
-    } else await sleep(250)
-  }
-  if (!(await evaluate(`Boolean(${focusCheck})`))) {
-    // Say what was under the cursor, what held the focus and how large the window was.
-    const state = await evaluate(`(() => {
-      const el = ${box}
-      const rect = el === null ? null : el.getBoundingClientRect().toJSON()
-      const point = rect === null ? null : { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
-      const hit = point === null ? null : document.elementFromPoint(point.x, point.y)
-      const cover = hit?.closest?.('[role=dialog],[aria-modal=true],[data-slot]')
-      const brief = node => (node === null || node === undefined ? null : { tag: node.tagName ?? null, class: String(node.getAttribute?.('class') ?? '').slice(0, 160) })
-      return JSON.stringify({
-        inner: [innerWidth, innerHeight], outer: [outerWidth, outerHeight], screen: [screen.width, screen.height], dpr: devicePixelRatio, focused: document.hasFocus(),
-        click: ${JSON.stringify(shot)}, probe: point, box: rect,
-        hit: brief(hit),
-        cover: cover === null || cover === undefined ? null : { tag: cover.tagName, slot: cover.getAttribute('data-slot'), role: cover.getAttribute('role'), modal: cover.getAttribute('aria-modal') },
-        active: brief(document.activeElement),
-      })
-    })()`)
-    throw new Error(`timed out waiting for the focused composer; page state: ${state}`)
-  }
-  await cdp.call('Input.insertText', { text: 'packaged app check' })
-  await until("document.querySelector('#main-message')?.value === 'packaged app check'", 'the typed message', 10_000)
-  for (const type of ['keyDown', 'keyUp']) await cdp.call('Input.dispatchKeyEvent', { type, key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 })
-  // The mock model starts its reply with 收到： and the message.
   try {
-    await until(text('收到：packaged app check'), 'the reply')
-  } catch (error) {
-    const state = await evaluate("JSON.stringify({ active: document.activeElement?.tagName ?? null, editable: document.activeElement?.isContentEditable ?? null, tail: document.body.innerText.slice(-300) })")
-    throw new Error(`${error.message}; page state: ${state}`)
+    const deadline = Date.now() + 30_000
+    while (Date.now() < deadline && !(await evaluate(`Boolean(${focusCheck})`))) {
+      await dismissNotice()
+      const point = await evaluate(probe)
+      if (point) {
+        await cdp.call('Input.dispatchMouseEvent', { type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 })
+        await cdp.call('Input.dispatchMouseEvent', { type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 })
+        await sleep(300)
+      } else await sleep(250)
+    }
+    if (!(await evaluate(`Boolean(${focusCheck})`))) throw new Error('timed out waiting for the writable, focused Main composer')
+    await cdp.call('Input.insertText', { text: mainPrompt })
+    await until(`${focusCheck} && ${box}?.value === ${JSON.stringify(mainPrompt)} &&
+      document.querySelector('.bt-main-composer[data-main-input-ready] button[type="submit"]:enabled')`, 'a focused, sendable Main draft', 10_000)
+    for (const type of ['keyDown', 'keyUp']) await cdp.call('Input.dispatchKeyEvent', { type, key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 })
+    await until(text(mainReply), 'the visible Main reply')
+    await sleep(1000)
+  } finally {
+    console.log(`check-packed: ${JSON.stringify({ mainSend: await mainSendEvidence(cdp, instanceId) })}`)
   }
-  await sleep(1000)
-  console.log(`check-packed: chat ${JSON.stringify(await evaluate('document.body.innerText.slice(-200)'))}`)
+}
+
+async function mainSendEvidence(cdp, instanceId) {
+  const result = await cdp.call('Runtime.evaluate', {
+    expression: `(${inspectMainSend.toString()})(${JSON.stringify(instanceId)}, ${JSON.stringify(mainPrompt)}, ${JSON.stringify(mainReply)})`,
+    returnByValue: true, awaitPromise: true,
+  }, 4000).catch(() => undefined)
+  let mockPrompt = 'unavailable'
+  try {
+    const records = readFileSync(mockLog, 'utf8').split(/\r?\n/u)
+    mockPrompt = records.some(line => {
+      try { return JSON.parse(line)?.reply?.startsWith(mainReply) === true } catch { return false }
+    }) ? 'seen' : 'not-seen'
+  } catch (error) {
+    if (error.code === 'ENOENT') mockPrompt = 'not-seen'
+  }
+  return { mockPrompt, renderer: result?.result?.value?.renderer ?? 'unavailable', history: result?.result?.value?.history ?? 'unavailable' }
+}
+
+async function inspectMainSend(instanceId, prompt, reply) {
+  const form = document.querySelector('.bt-main-composer')
+  const field = form?.querySelector('#main-message')
+  const flow = document.querySelector('[data-chat-flow]')
+  const flowText = flow?.innerText ?? ''
+  const renderer = {
+    visibility: document.visibilityState, windowFocused: document.hasFocus(), composerFocused: Boolean(field && document.activeElement === field),
+    composerReady: Boolean(form?.hasAttribute('data-main-input-ready')),
+    composerWritable: Boolean(field && !field.disabled && !field.readOnly), fixtureDraft: field?.value === prompt,
+    composerError: Boolean(form?.querySelector('[role="alert"]')), sendEnabled: Boolean(form?.querySelector('button[type="submit"]:enabled')),
+    nativeHistoryPresent: Boolean(flow), nativeHistoryLoading: /^(?:Loading history…|载入历史…)$/mu.test(flowText),
+    nativeHistoryError: /^(?:Failed to load history:|载入历史失败)/mu.test(flowText),
+    fixtureInputInNativeHistory: flowText.split('\n').some(line => line.trim() === prompt),
+    replyVisible: document.body.innerText.includes(reply),
+  }
+  let history = 'unavailable'
+  try {
+    if (!instanceId) return { renderer, history }
+    const result = await fetch('/api/product', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, signal: AbortSignal.timeout(2500),
+      body: JSON.stringify({ endpoint: 'history', payload: { instanceId, limit: 20 } }),
+    }).then(response => response.json())
+    if (result.ok && Array.isArray(result.value?.messages)) {
+      const page = result.value
+      const statuses = ['queued', 'running', 'stopping', 'stopped', 'completed', 'interrupted', 'failed']
+      const status = record => record ? (statuses.includes(record.status) ? record.status : 'unknown') : 'missing'
+      const input = page.messages.find(record => record.role === 'user' && record.text === prompt)
+      const answer = input && page.messages.find(record => record.role === 'main' && record.id === `reply:${input.id}`)
+      const mode = ['native', 'product-history'].includes(page.mainSessionMode) ? page.mainSessionMode : 'unknown'
+      history = { mode, input: status(input), reply: status(answer),
+        active: Boolean(input && page.activeTurn?.messageId === input.id), expectedReply: Boolean(answer?.text.includes(reply)) }
+    }
+  } catch {}
+  return { renderer, history }
 }
 
 async function waitForLocalEnvironment(cdp) {
@@ -499,6 +535,7 @@ async function waitForLocalEnvironment(cdp) {
     const selected = directories?.default;
     const environment = execution?.environments?.find(item => item.id === selected?.environmentId);
     return {
+      instanceId: binding.instanceId,
       selected: selected?.environmentId, environment: environment?.id,
       matchesFixture: selected?.root === ${JSON.stringify(realpathSync.native(join(work, 'workspace')))},
       eligible: environment?.eligible === true && environment.kind === 'local',
@@ -514,7 +551,7 @@ async function waitForLocalEnvironment(cdp) {
     last = result.result?.value
     if (last?.eligible && last.matchesFixture && last.target === 'local-only' && last.visible) {
       console.log(`check-packed: ${JSON.stringify({ executionEnvironment: 'authorized fixture ready', environmentId: last.environment })}`)
-      return
+      return last.instanceId
     }
     await sleep(250)
   }
@@ -573,6 +610,16 @@ async function checkWorkControls(cdp) {
     button?.click();
     return Boolean(button);
   })()`)
+  const activate = async (selector, label) => {
+    await wait(() => evaluate(`(() => {
+      const button = [...document.querySelectorAll(${JSON.stringify(selector)})].find(item =>
+        !item.disabled && item.getClientRects().length && ${label}.test(item.textContent.trim()));
+      button?.focus();
+      return Boolean(button && document.activeElement === button);
+    })()`), `keyboard focus on ${selector}`)
+    await cdp.call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r' })
+    await cdp.call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 })
+  }
   const send = async text => {
     await evaluate("document.querySelector('#main-message').focus()")
     await cdp.call('Input.insertText', { text })
@@ -613,14 +660,14 @@ async function checkWorkControls(cdp) {
       await cdp.call('Emulation.setFocusEmulationEnabled', { enabled: false })
     }
   }
-  await wait(() => click('.bt-q-dock .bt-q-opt, .bt-main-work-options button', '/^Yes$/u'), 'the approved answer choice')
-  await wait(() => click('.bt-q-dock .bt-q-submit, .bt-main-work-answer button[type=submit]', '/^(Send answer|提交回答)$/u'), 'the question send button')
+  await activate('.bt-q-dock .bt-q-opt, .bt-main-work-options button', '/^Yes$/u')
+  await activate('.bt-q-dock .bt-q-submit, .bt-main-work-answer button[type=submit]', '/^(Send answer|提交回答)$/u')
   const answered = await wait(async () => {
     const alpha = card(await read(), 'alpha')
     return alpha?.status === 'success' && alpha
   }, 'the answered work result')
   assert.equal(answered.control.attention.sessionId, firstAlpha.sessionId)
-  console.log('check-packed: the work question was answered in its original Assignment')
+  console.log('check-packed: the work question was answered by keyboard in its original Assignment')
   await send(t55SlowReply)
   await wait(() => click('button', '/^(Stop reply|停止本轮回复)$/u'), 'the Main stop control')
   const stoppedReply = await wait(async () => {
@@ -843,6 +890,7 @@ async function checkColdUpgrade(before, env) {
   const cdp = devtools((await appPage(port, Date.now() + 120_000)).webSocketDebuggerUrl, [])
   await cdp.opened
   try {
+    await checkRestoredMain(cdp)
     const after = await productFacts(cdp)
     assert.ok(isNewer(after.version, before.version), 'the next packaged version must be newer')
     if (updateFeed) {
@@ -865,6 +913,21 @@ async function checkColdUpgrade(before, env) {
   const exit = await Promise.race([exited, sleep(40_000).then(() => null)])
   assert.equal(exit, 0, 'the upgraded app must shut down normally')
   console.log(`check-packed: upgraded app exited (code ${exit})`)
+}
+
+async function checkRestoredMain(cdp) {
+  const expression = `Boolean(document.querySelector(${JSON.stringify(writableMainInput)}) &&
+    document.body.innerText.includes(${JSON.stringify(mainReply)}))`
+  const deadline = Date.now() + 60_000
+  while (Date.now() < deadline) {
+    const result = await cdp.call('Runtime.evaluate', { expression, returnByValue: true })
+    if (result.result?.value) {
+      console.log('check-packed: the upgraded window shows the original Main reply and a ready composer')
+      return
+    }
+    await sleep(250)
+  }
+  throw new Error('the upgraded window did not show the original Main reply and a ready composer')
 }
 
 function windowsInstallation(version) {
@@ -1035,7 +1098,8 @@ try {
   console.error(`check-packed: FAILED: ${error instanceof Error ? error.message : String(error)}`)
   const codes = operationCodes()
   if (codes.length > 0) console.error(`check-packed: app events ${codes.join(', ')}`)
+} finally {
+  clearTimeout(watchdog)
+  cleanup()
 }
-clearTimeout(watchdog)
-cleanup()
 process.exit(failed ? 1 : 0)
