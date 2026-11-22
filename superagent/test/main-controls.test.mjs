@@ -19,10 +19,15 @@ const source = { sourceInstanceId: 'product-desktop', actorId: 'alice', allowedA
 
 async function until(check, label) {
   const deadline = Date.now() + 20_000
-  while (!await check()) {
-    if (Date.now() >= deadline) throw new Error(`Main controls did not reach ${label}.`)
-    await sleep(20)
+  while (Date.now() < deadline) {
+    try {
+      if (await check()) return
+    } catch (error) {
+      if (error?.code !== 'QUEUE_FULL') throw error
+    }
+    await sleep(100)
   }
+  throw new Error(`Main controls did not reach ${label}.`)
 }
 
 async function seedAcceptedCard({ storage, binding, ticketId, suffix }) {
@@ -103,7 +108,7 @@ test('stopping the current Main reply leaves the committed delegated work runnin
     allowedActorIds: ['alice'], permissions: ['read', 'write'], commands: {} })
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   const sessions = new NativeSessions(native, routes)
-  const engine = new Engine(storage, 'personal', source, { scanIntervalMs: 10, retryDelayMs: 10 }, sessions, [environment])
+  const engine = new Engine(storage, 'personal', source, {}, sessions, [environment])
   t.after(async () => {
     await engine.effects.stop(); await engine.shutdown(); await sessions.close()
     await native.fiber.dispose(); await environment.close(); await storage.close()

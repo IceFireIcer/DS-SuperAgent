@@ -236,11 +236,14 @@ test('a Ticket inserted behind the checkpoint cannot turn a partial inspection i
     host = await createProductHost(native, config)
   }
   await open()
+  const startup = await host.dispatch('supervision-inspect', { instanceId: 'private' })
+  assert.equal(startup.status, 'completed', JSON.stringify(startup))
+  assert.deepEqual(startup.coverage, { inspected: 0, batches: 1 })
   const storage = await SqliteStorage.open(databasePath)
   try {
     await seedPendingTickets(storage, Array.from({ length: 101 }, (_, index) => `ticket-${String(index).padStart(4, '0')}`))
     const first = await host.dispatch('supervision-inspect', { instanceId: 'private' })
-    assert.equal(first.status, 'partial')
+    assert.equal(first.status, 'partial', JSON.stringify(first))
     await host.close(); host = undefined
     await native.fiber.dispose(); native = undefined
     await seedPendingTickets(storage, ['ticket-0000a'])
@@ -285,11 +288,14 @@ test('trusted product inspection resumes 1001 Tickets across Host restart and re
     host = await createProductHost(native, config)
   }
   await open()
+  const startup = await host.dispatch('supervision-inspect', { instanceId: 'private' })
+  assert.equal(startup.status, 'completed', JSON.stringify(startup))
+  assert.deepEqual(startup.coverage, { inspected: 0, batches: 1 })
   const storage = await SqliteStorage.open(databasePath)
   try {
     await seedPendingTickets(storage, Array.from({ length: 1001 }, (_, index) => `ticket-${String(index).padStart(4, '0')}`))
     const first = await host.dispatch('supervision-inspect', { instanceId: 'private' })
-    assert.equal(first.status, 'partial')
+    assert.equal(first.status, 'partial', JSON.stringify(first))
     assert.deepEqual(first.coverage, { inspected: 100, batches: 1 })
     await host.close(); host = undefined
     await native.fiber.dispose(); native = undefined

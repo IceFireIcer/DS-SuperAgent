@@ -312,7 +312,11 @@ function devtools(url, problems) {
     }
     if (message.method === 'Log.entryAdded' && message.params.entry.level === 'error') {
       const entry = message.params.entry
-      if (!(entry.url?.includes('/api/session/') && entry.text.includes('403'))) problems.push(`log: ${entry.text} ${entry.url ?? ''}`)
+      const optionalFileManagerIcon = process.platform === 'linux' && entry.source === 'network'
+        && entry.text === 'Failed to load resource: the server responded with a status of 404 (Not Found)'
+        && /^http:\/\/127\.0\.0\.1:\d+\/open-in-app\/icon\/filemanager$/u.test(entry.url ?? '')
+      if (optionalFileManagerIcon) console.log('check-packed: DSH uses the generic Linux file manager icon')
+      else if (!(entry.url?.includes('/api/session/') && entry.text.includes('403'))) problems.push(`log: ${entry.text} ${entry.url ?? ''}`)
     }
     const entry = pending.get(message.id)
     if (entry === undefined) return
@@ -825,28 +829,41 @@ async function checkOperations(cdp, facts) {
     if (result.exceptionDetails) throw new Error(result.exceptionDetails.text)
     return result.result.value
   }
-  const end = Date.now() + 15_000
-  while (Date.now() < end) {
-    const ready = await evaluate(`(() => {
-      const page = document.querySelector('.bt-product-operations');
-      if (!page) {
-        const button = [...document.querySelectorAll('button')].find(item => /^(Status and usage|状态与用量)$/u.test(item.textContent.trim()));
-        if (button) button.click();
-        else if (!document.querySelector('.bt-settings-close')) document.querySelector('.bt-main-settings')?.click();
-        return false;
-      }
-      const text = page.textContent;
-      return text.includes(${JSON.stringify(facts.version)}) && text.includes('HOST_READY')
-        && /Token usage by role|各角色 Token 用量/u.test(text)
-        && /Download diagnostic summary|下载诊断摘要/u.test(text);
-    })()`)
-    if (ready) {
-      console.log('check-packed: Windows Status and usage loaded tokens and diagnostics')
-      return
+  const open = async (tab, verify) => {
+    const panel = JSON.stringify(`[role="tabpanel"][id$="-panel-${tab}"]:not([hidden]) .bt-product-operations`)
+    const tabButton = JSON.stringify(`button[role="tab"][id$="-tab-${tab}"]`)
+    const deadline = Date.now() + 15_000
+    while (Date.now() < deadline) {
+      const ready = await evaluate(`(() => {
+        const settings = document.querySelector('.bt-superagent-settings');
+        if (!settings) {
+          document.querySelector('.bt-main-settings')?.click();
+          return false;
+        }
+        const page = settings.querySelector(${panel});
+        if (!page) {
+          const button = settings.querySelector(${tabButton}) ?? [...settings.querySelectorAll('button.bt-settings-item')]
+            .find(item => /^(Usage|用量)$/u.test(item.textContent.trim()));
+          button?.click();
+          return false;
+        }
+        return (${verify})(page);
+      })()`)
+      if (ready) return
+      await sleep(150)
     }
-    await sleep(150)
+    throw new Error(`Settings did not load the preserved data on the ${tab} tab.`)
   }
-  throw new Error('Settings did not show product usage and diagnostic history.')
+  await open('status', `page => {
+    const events = page.querySelector('details');
+    if (events && !events.open) events.querySelector('summary')?.click();
+    return page.innerText.includes(${JSON.stringify(facts.version)}) && Boolean(events?.innerText.includes('HOST_READY'))
+      && /Download diagnostic summary|下载诊断摘要|下載診斷摘要/u.test(page.innerText);
+  }`)
+  await open('usage-overview', `page => [...page.querySelectorAll('.bt-ps-stat')].some(stat =>
+    /^(Main|主角色)$/u.test(stat.querySelector('dt')?.textContent.trim())
+      && stat.querySelector('dd')?.textContent.trim() === (${JSON.stringify(facts.mainTokens)}).toLocaleString())`)
+  console.log('check-packed: Windows Status and Usage show the preserved diagnostics and Main token count')
 }
 
 async function checkColdUpgrade(before, env) {

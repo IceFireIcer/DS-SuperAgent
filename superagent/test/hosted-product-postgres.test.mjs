@@ -181,11 +181,17 @@ async function completeRecoveredWork({ client, recovered, workerDetail, persiste
     attentionVersion: recovered.control.attention.version,
     text: 'Continue after replacement.',
   })
+  let lastWork
   const completed = await until(async () => {
     const history = await client.call('history', { instanceId, limit: 100 })
-    const work = history.works?.find(item => item.brief.workItemId === recovered.brief.workItemId)
-    return work?.outcome?.status === 'success' ? { history, work } : undefined
-  }, 'the recovered Worker result', 15_000)
+    lastWork = history.works?.find(item => item.brief.workItemId === recovered.brief.workItemId)
+    return lastWork?.outcome?.status === 'success' ? { history, work: lastWork } : undefined
+  }, 'the recovered Worker result', 15_000).catch(async error => {
+    const observation = await client.call('observe-read', { instanceId, observationId: workerDetail.id,
+      generation: recovered.control.assignment.generation, limit: 100 }).catch(failure => ({ error: failure.message }))
+    const timeline = observation.events?.filter(event => ['tool-call', 'tool-result', 'turn'].includes(event.kind))
+    throw new Error(`${error.message}: ${JSON.stringify({ work: lastWork, timeline, observationError: observation.error })}`, { cause: error })
+  })
   assert.equal(completed.work.outcome.summary, 'The Worker resumed after Host replacement.')
   assert.equal(completed.work.outcome.artifacts[0].path, 'recovered.txt')
   await until(async () => {

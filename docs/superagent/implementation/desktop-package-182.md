@@ -15,6 +15,8 @@ Windows 视觉探针覆盖 580 和 1120 像素视口、四套主题及浅深模�
 - Windows x64 `0.2.5` 本机解包构件实测两种动效下的启动重试，以及窄窗问题卡的焦点与工作控制。应用自然退出，退出码为 0。
 - Node `24.22.3` 下，桌面测试 255 项通过、1 项跳过，进程正常退出。
 - 含 #181 导航修正的 Windows x64 `0.2.5` 构件复跑 16 组视觉检查和工作控制。通过 Enter 打开模型页、选择并提交问题答案，验证停止 Main 回复与停止选定工作。`app.asar` SHA-256 为 `8c5e955de59f6055fefc838533e56b500ed4c3c0eedfc26a3570fe6a2c10fa7b`，应用退出码为 `0`。61 项定向打包与更新测试通过。
+- 使用 `--upgrade-to` 让 Windows x64 `0.2.5` 和 `0.2.6` 解包构件先后使用同一个隔离 Profile。新版 Main 显示原回复与可用输入区。`Usage` 页显示原 Main Token 用量，`Status` 页显示新版版本号与 `HOST_READY` 诊断。两个进程均自然退出，退出码为 `0`。
+- Windows Node `24.22.3` 下复跑 8 项服务端定向测试，覆盖远端进程收尾、Main 停止、监督检查点和 PostgreSQL 恢复，测试进程自然退出。远端验证的 Windows 夹具给进程表采集留出 2 秒，仍要求进程范围已静止和退出码为 `0`。单独的截止时间和取消探针继续检查后代进程回收。
 
 ## 远端验收
 
@@ -28,3 +30,9 @@ Windows 视觉探针覆盖 580 和 1120 像素视口、四套主题及浅深模�
 - macOS `0.2.5` 的 arm64 和 x64 解包版均确认目录授权，随后等待界面回复超时。[macOS arm64](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/44998347033/job/137134237206#step:8:1) · [macOS x64](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/44998347033/job/137134237292#step:8:1)
 - Linux x64 `0.2.5` 的 AppImage 确认目录授权后等待界面回复超时。AppImage SHA-256 为 `bc78b2fa775a03585595fba02ae35fafda18d95f04b57d171ae2cc3eb8ae694b`。deb 安装步骤未执行。[Linux 桌面包](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/44998347033/job/137134237242#step:9:1)
 - 服务端分片 1 和 3 自然退出，共有四项失败，分别涉及远端验证命令、监督检查点、PostgreSQL 恢复和停止 Main 回复。客户端分片 2 和 4 的 bundle 测试未包含新增的 `workspaces` 注入。[分片 1](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/44998347033/job/137134237199#step:6:1) · [分片 3](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/44998347033/job/137134237194#step:6:1)
+
+### 桌面定向候选 `7bebe150e1109024711bcd1657947e87e697b089`
+
+- macOS arm64 和 x64 的 ZIP 安装、Main 收发、更新提示和正常退出均通过。[arm64](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45000477473/job/137140726440#step:9:1) · [x64](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45000477473/job/137140726425#step:9:1)
+- Windows x64 通过新装、视觉检查、启动重试、工作控制和 `0.2.6` 下载。旧进程以 `0` 退出，覆盖安装后的 `app.asar` SHA-256 匹配下一版构件 `d0dc239cf4a07d608970513e787128625c02c6a4d1163165b2a78cc4992ae66f`，重开后原回复与备份保留。设置探针仍查找旧的合并入口，故整项更新检查失败。探针已改用 `Usage` 和 `Status` 两个实际标签页。[Windows 更新](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45000477473/job/137140726391#step:14:1)
+- Linux AppImage 的 mock 回复已显示，产品历史中的输入与回复为 `completed`。探针把 DSH 文件管理器图标的预期 404 视为错误并提前退出。Linux 的 `xdg-open` 项会显示通用图标，探针据此仅调整这一条回退记录。[Linux 收发](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45000477473/job/137140726389#step:9:1) · [图标回退说明](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.1/packages/host/open-in-app/README.md#application-catalog)

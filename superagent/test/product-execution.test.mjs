@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import LocalCredentials from '@deepseek-ai/dsh-credentials-local'
 import { execFile } from 'node:child_process'
-import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -36,7 +36,19 @@ async function initializeRepository(root) {
   await git(root, 'commit', '-m', 'base')
 }
 
+async function inspectVerificationJobs(jobsPath) {
+  const records = await readdir(jobsPath)
+  const jobs = await Promise.all(records.filter(file => file.endsWith('.json')).map(async file => {
+    const job = JSON.parse(await readFile(join(jobsPath, file), 'utf8'))
+    const { id, name, state, startedAt, deadlineAt, settled, exitCode, cancelled, reason, process: identity } = job
+    return { id, name, state, startedAt, deadlineAt, settled, exitCode, cancelled, reason,
+      processIdentityKind: identity?.kind }
+  }))
+  return jobs.filter(job => job.name === 'verify')
+}
+
 test('the product pairs a device and binds remote-only work to its own filesystem across Host restart', { timeout: 120000 }, async t => {
+  const windowsObservationAllowanceMs = process.platform === 'win32' ? 2_000 : 0
   const directory = await mkdtemp(join(tmpdir(), 'r5-product-execution-'))
   const workspace = join(directory, 'workspace')
   const deviceRootPath = join(directory, 'device-work')
@@ -45,6 +57,7 @@ test('the product pairs a device and binds remote-only work to its own filesyste
   await mkdir(deviceRootPath)
   const assetsPath = join(directory, 'device-assets')
   const skillsPath = join(directory, 'device-skills')
+  const jobsPath = join(directory, 'device-jobs')
   await mkdir(assetsPath)
   await mkdir(join(skillsPath, 'remote-demo'), { recursive: true })
   await writeFile(join(skillsPath, 'remote-demo', 'SKILL.md'), '# Remote demo\n\nUse the device workspace.\n')
@@ -52,10 +65,10 @@ test('the product pairs a device and binds remote-only work to its own filesyste
   const device = await core.RemoteDevice.open({ deviceId: 'execution-device', root: deviceRoot,
     grants: [{ instanceId: 'private', environmentId: 'remote-project', allowedActorIds: ['owner'],
       permissions: ['read', 'write', 'search', 'command'] }], assetsPath, skillsPath,
-    jobsPath: join(directory, 'device-jobs'), statePath: join(directory, 'device-state.json'),
+    jobsPath, statePath: join(directory, 'device-state.json'),
     commands: { verify: { argv: [process.execPath, '-e',
       "const fs=require('node:fs');if(fs.readFileSync('remote-result.txt','utf8')!=='remote execution\\n')process.exit(1)"],
-    timeoutMs: 5000 } } })
+    timeoutMs: 5_000 + windowsObservationAllowanceMs } } })
   const endpoint = await device.start()
   const mainToolResults = []
   const workerToolNames = []
@@ -134,13 +147,17 @@ test('the product pairs a device and binds remote-only work to its own filesyste
     target: 'remote-only' })
   let work
   let lastHistory
+  let verificationJobs
   try {
     await until(async () => {
       lastHistory = await call('history', { limit: 100 })
       work = lastHistory.works?.[0]
-      return work?.status === 'success'
-    }, 'a successful remote work report')
+      if (work?.status !== 'success') return false
+      verificationJobs = await inspectVerificationJobs(jobsPath)
+      return verificationJobs.some(job => job.settled)
+    }, 'a successful remote work report and settled verification', 8_000 + windowsObservationAllowanceMs)
   } catch (error) {
+    const lastVerificationJobs = await inspectVerificationJobs(jobsPath).catch(failure => ({ error: failure.message }))
     const observations = work?.receipt?.ticketId
       ? await call('observe-list', { query: work.receipt.ticketId, limit: 100 }).catch(failure => ({ error: failure.message }))
       : undefined
@@ -148,7 +165,8 @@ test('the product pairs a device and binds remote-only work to its own filesyste
     const observation = observationItem
       ? await call('observe-read', { observationId: observationItem.id, generation: observationItem.generation, limit: 100 })
         .catch(failure => ({ error: failure.message })) : undefined
-    throw new Error(`${error.message}: ${JSON.stringify({ lastHistory, mainToolResults, observations, observation })}`, { cause: error })
+    throw new Error(`${error.message}: ${JSON.stringify({ verificationJobs: lastVerificationJobs, lastHistory,
+      mainToolResults, observations, observation })}`, { cause: error })
   }
   assert.equal(work.brief.target, 'remote-only')
   assert.equal(work.executionLocation.kind, 'remote')
@@ -172,6 +190,11 @@ test('the product pairs a device and binds remote-only work to its own filesyste
     && item.value.includes(': blocked; target remote-only excludes local Environments')), true)
   assert.equal(fact('Device'), 'execution-device')
   assert.equal(fact('Directory'), deviceRoot)
+  const [verificationJob, ...extraJobs] = verificationJobs
+  assert.deepEqual(extraJobs, [])
+  assert.ok(verificationJob, 'the device recorded the verification command')
+  assert.deepEqual({ state: verificationJob.state, settled: verificationJob.settled, exitCode: verificationJob.exitCode,
+    cancelled: verificationJob.cancelled }, { state: 'exited', settled: true, exitCode: 0, cancelled: false })
   await assert.rejects(call('work-reconcile-stop', { commandId: 'guess-stop', workItemId: 'guessed',
     ticketId: work.receipt.ticketId }), { code: 'NOT_FOUND' })
   assert.equal((await call('work-reconcile-stop', { commandId: 'inspect-stop', workItemId: work.brief.workItemId,
