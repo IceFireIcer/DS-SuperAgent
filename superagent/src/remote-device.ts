@@ -126,7 +126,7 @@ const maxJobs = 64
 interface WindowsProcess {
   pid: number
   parent: number
-  startedAt: string
+  startedAt?: string
 }
 
 interface DeviceProcessIdentity {
@@ -380,19 +380,22 @@ function groupAlive(pid: number) {
 const runWindowsUtility = promisify(execFile)
 
 async function windowsProcesses(): Promise<Map<number, WindowsProcess> | undefined> {
-  const script = "[string]::Join(' ', @($_.ProcessId, $_.ParentProcessId, $_.CreationDate.ToFileTimeUtc()))"
-  const result = await runWindowsUtility('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
-    `Get-CimInstance Win32_Process -ErrorAction Stop | ForEach-Object { ${script} }`],
+  const script = `$ErrorActionPreference = 'Stop'
+    Get-CimInstance -Query 'SELECT ProcessId, ParentProcessId, CreationDate FROM Win32_Process' | ForEach-Object {
+      $started = if ($null -ne $_.CreationDate) { $_.CreationDate.ToFileTimeUtc() } else { '-' }
+      '{0} {1} {2}' -f $_.ProcessId, $_.ParentProcessId, $started
+    }`
+  const result = await runWindowsUtility('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script],
     { encoding: 'utf8', windowsHide: true, timeout: 5000, maxBuffer: 4 * 1024 * 1024 }).catch(() => undefined)
-  if (!result) return undefined
+  if (!result || result.stderr.trim()) return undefined
   const table = new Map<number, WindowsProcess>()
-  for (const line of result.stdout.split(/\r?\n/u)) {
-    const match = /^(\d+)\s+(\d+)\s+(\d+)$/u.exec(line.trim())
-    if (!match) continue
+  for (const line of result.stdout.trim().split(/\r?\n/u)) {
+    const match = /^(\d+)\s+(\d+)\s+(\d+|-)$/u.exec(line.trim())
+    if (!match) return undefined
     const pid = Number(match[1])
     const parent = Number(match[2])
-    if (!Number.isSafeInteger(pid) || !Number.isSafeInteger(parent)) continue
-    table.set(pid, { pid, parent, startedAt: match[3]! })
+    if (!Number.isSafeInteger(pid) || !Number.isSafeInteger(parent) || table.has(pid)) return undefined
+    table.set(pid, { pid, parent, ...(match[3] === '-' ? {} : { startedAt: match[3]! }) })
   }
   return table.size ? table : undefined
 }
@@ -1435,9 +1438,10 @@ export class RemoteDevice {
       }
       const table = await windowsProcesses()
       if (!table) return false
-      this.rememberWindowsDescendants(job, table)
+      if (!this.rememberWindowsDescendants(job, table)) return false
       for (const [pid, startedAt] of job.descendants) {
-        if (table.get(pid)?.startedAt === startedAt) return false
+        const current = table.get(pid)
+        if (current && (!current.startedAt || current.startedAt === startedAt)) return false
       }
       return true
     }
@@ -1450,7 +1454,12 @@ export class RemoteDevice {
   }
 
   private rememberWindowsDescendants(job: DeviceJob, table: Map<number, WindowsProcess>) {
-    for (const entry of windowsDescendants(job.pid!, table).values()) job.descendants.set(entry.pid, entry.startedAt)
+    let complete = true
+    for (const entry of windowsDescendants(job.pid!, table).values()) {
+      if (entry.startedAt) job.descendants.set(entry.pid, entry.startedAt)
+      else complete = false
+    }
+    return complete
   }
 
   private async killRange(job: DeviceJob, signal: NodeJS.Signals = 'SIGTERM') {

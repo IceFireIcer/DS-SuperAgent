@@ -22,14 +22,28 @@ await Promise.all([
 
 let native
 let product
-let stopping
 let replacementWorkerPhase = 0
-const stop = async () => {
-  stopping ??= (async () => {
-    await product?.close().catch(() => {})
-    await native?.fiber.dispose().catch(() => {})
-  })()
-  return stopping
+
+async function stop() {
+  try { await product?.close() }
+  finally { await native?.fiber.dispose() }
+}
+
+function waitForShutdown() {
+  return new Promise(resolve => {
+    const shutdown = () => {
+      process.off('message', onMessage)
+      process.off('disconnect', shutdown)
+      process.off('SIGINT', shutdown)
+      process.off('SIGTERM', shutdown)
+      resolve()
+    }
+    const onMessage = message => { if (message?.type === 'shutdown') shutdown() }
+    process.on('message', onMessage)
+    process.once('disconnect', shutdown)
+    process.once('SIGINT', shutdown)
+    process.once('SIGTERM', shutdown)
+  })
 }
 
 async function* respond(options) {
@@ -117,6 +131,7 @@ try {
       grants: [{ instanceId: 'hosted-product', capabilities: ['read', 'command'] }],
     })
   }
+  const shutdown = waitForShutdown()
   process.send?.({
     type: 'ready',
     pid: process.pid,
@@ -126,14 +141,11 @@ try {
     routerSessionId: binding.routerSessionId,
     ...(enrollment ? { credential: enrollment.token, clientId: enrollment.client.id } : {}),
   })
-  process.on('message', message => {
-    if (message?.type === 'shutdown') void stop().finally(() => process.exit(0))
-  })
-  process.once('SIGINT', () => { void stop().finally(() => process.exit(0)) })
-  process.once('SIGTERM', () => { void stop().finally(() => process.exit(0)) })
-  await new Promise(() => {})
+  await shutdown
 } catch (error) {
-  process.send?.({ type: 'failed', message: error instanceof Error ? error.message : String(error) })
-  await stop()
+  if (process.connected) process.send?.({ type: 'failed', message: error instanceof Error ? error.message : String(error) })
   process.exitCode = 1
+} finally {
+  try { await stop() }
+  finally { if (process.connected) process.disconnect() }
 }

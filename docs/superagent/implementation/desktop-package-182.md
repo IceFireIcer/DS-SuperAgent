@@ -54,4 +54,6 @@ Windows 视觉归档的 SHA-256 为 `9410e0877c1ef367f94986e3ac6ff93f4d64adfb7b2
 
 MCP 测试改用一个只读 SQLite 连接检查持久记录，避免测试的读取操作申请写锁。Windows Node `24.22.3` 下原用例通过，进程自然退出。[MCP 夹具](../../../superagent/test/worker-mcp-credential.test.mjs) · [原分片失败](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45002104539/job/137145733342#step:6:1)
 
-PostgreSQL 恢复夹具固定在旧 Host 持有首轮 Worker 投递租约时中断。等待预算覆盖实际租约到期以及后续执行。断言答复只写入原 Worker Session 一次，已验证的结果回到同一个 Main。Windows Node `24.22.3` 下定向用例通过，测试进程自然退出。[PostgreSQL 恢复夹具](../../../superagent/test/hosted-product-postgres.test.mjs) · [原分片失败](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45002104539/job/137145733317#step:6:1)
+PostgreSQL 恢复夹具固定在旧 Host 持有首轮 Worker 投递租约时中断。等待预算覆盖实际租约到期以及后续执行。回归验证三个原 Session、答复只写入原 Worker Session 一次、可验证结果回到原 Main，并要求替换 Host 和测试进程以 `0` 自然退出。Windows Node `24.22.3` 下定向用例通过。[PostgreSQL 恢复夹具](../../../superagent/test/hosted-product-postgres.test.mjs) · [远端定向恢复](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45007533861/job/137162387191#step:5:1)
+
+远端前台命令在既有总期限内等待设备确认进程范围静止。Windows 用一次查询核实 PID、父 PID 和创建时间。定向回归确认根进程退出后仍等待存活后代、调用方取消后回收原进程范围，以及故意让首轮 Windows 查询超时后仍能获得真实的结算证据。6 项定向测试自然退出。[远端命令夹具](../../../superagent/test/remote-command.test.mjs) · [原分片失败](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45002104539/job/137145733320#step:6:1)
