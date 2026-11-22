@@ -3,12 +3,12 @@ import { createServer } from 'node:http'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { test } from 'node:test'
 import LocalCredentials from '@deepseek-ai/dsh-credentials-local'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { createProductHost } from '../dist/index.js'
-import { SqliteStorage } from '../dist/storage.js'
 import { completedToolCount, lastUserText } from './input-support.mjs'
 import { nativeContext, routerResponse, textResponse, toolResponse } from '../dev/native-mock.mjs'
 
@@ -127,10 +127,12 @@ test('the product Worker calls only its approved MCP tool through the live tool 
     instanceId: 'personal', actorId: 'alice', main: { provider: 'mock', model: 'main' },
     router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } }
   let host
+  let database
   t.after(async () => {
     releaseList()
     releaseCall()
     unregisterGlobal()
+    database?.close()
     await host?.close(); await native.fiber.dispose()
     await new Promise(resolve => server.close(resolve))
     await rm(base, { recursive: true, force: true })
@@ -186,10 +188,17 @@ test('the product Worker calls only its approved MCP tool through the live tool 
     approvedWork = history.works.find(work => work.receipt?.status === 'accepted' && work.brief?.goal === 'Check work-3.')
     return Boolean(approvedWork?.receipt?.ticketId)
   })
-  const raw = await SqliteStorage.open(config.databasePath)
+  database = new DatabaseSync(config.databasePath, { readOnly: true })
+  const recordQuery = database.prepare('SELECT body FROM records WHERE instance_id = ? AND kind = ? AND id = ?')
+  const listQuery = database.prepare('SELECT body FROM records WHERE instance_id = ? AND kind = ? ORDER BY id LIMIT ?')
+  const readRecord = (kind, id) => {
+    const row = recordQuery.get('personal', kind, id)
+    return row && JSON.parse(row.body)
+  }
+  const readRecords = (kind, limit) => listQuery.all('personal', kind, limit).map(row => JSON.parse(row.body))
   let report
-  await until(async () => {
-    report = await raw.transaction('personal', tx => tx.get('report', approvedWork.receipt.ticketId))
+  await until(() => {
+    report = readRecord('report', approvedWork.receipt.ticketId)
     return report?.toolFacts?.some(fact => fact.tool === 'mcp__approved__check')
   })
   const mcpFact = report.toolFacts.filter(fact => fact.tool === 'mcp__approved__check')
@@ -197,11 +206,7 @@ test('the product Worker calls only its approved MCP tool through the live tool 
   assert.equal(mcpFact[0].outcome, 'success')
   assert.equal(mcpFact[0].output.text, 'checked fixture')
   assert.match(mcpFact[0].output.requestId, /^[a-f0-9-]{36}$/u)
-  const durableCall = await raw.transaction('personal', async tx => {
-    const calls = await tx.scan('worker-mcp-call', { limit: 10 })
-    return calls.items.find(entry => entry.value.requestId === mcpFact[0].output.requestId)?.value
-  })
-  await raw.close()
+  const durableCall = readRecords('worker-mcp-call', 10).find(entry => entry.requestId === mcpFact[0].output.requestId)
   assert.equal(durableCall?.state, 'confirmed')
   assert.equal(durableCall?.outcome, 'success')
   assert.equal(JSON.stringify(durableCall).includes(secret), false)
@@ -246,13 +251,8 @@ test('the product Worker calls only its approved MCP tool through the live tool 
   const deniedWork = (await host.dispatch('history', { instanceId: 'personal' })).works
     .find(work => work.brief?.goal === 'Check child-7.')
   assert.ok(deniedWork?.receipt?.ticketId)
-  const childStore = await SqliteStorage.open(config.databasePath)
-  await until(async () => childStore.transaction('personal', async tx => {
-    const page = await tx.scan('subagent', { limit: 100 })
-    return page.items.some(entry => entry.value.ticketId === deniedWork.receipt.ticketId
-      && ['completed', 'failed', 'cancelled'].includes(entry.value.state))
-  }))
-  await childStore.close()
+  await until(() => readRecords('subagent', 100).some(entry => entry.ticketId === deniedWork.receipt.ticketId
+    && ['completed', 'failed', 'cancelled'].includes(entry.state)))
   await assertNotDispatched(deniedWork.receipt.ticketId, 'GRANT_DENIED')
   const afterChild = await host.dispatch('resource-read', { instanceId: 'personal', resourceId: resource.id })
   await host.dispatch('resource-grant', { instanceId: 'personal', commandId: 'grant-echo', resourceId: resource.id,
@@ -282,15 +282,12 @@ test('the product Worker calls only its approved MCP tool through the live tool 
     expectedGeneration: interrupted.control.assignment.generation, expectedTicketVersion: interrupted.control.ticketVersion,
     reason: 'MCP request interrupted after dispatch.' })
   releaseCall()
-  const interruptedStore = await SqliteStorage.open(config.databasePath)
   let unknown
-  await until(async () => {
-    const block = await interruptedStore.transaction('personal', tx => tx.get('worker-mcp-block',
-      JSON.stringify(['worker-mcp-block', interrupted.receipt.ticketId])))
-    unknown = block && await interruptedStore.transaction('personal', tx => tx.get('worker-mcp-call', block.callId))
+  await until(() => {
+    const block = readRecord('worker-mcp-block', JSON.stringify(['worker-mcp-block', interrupted.receipt.ticketId]))
+    unknown = block && readRecord('worker-mcp-call', block.callId)
     return unknown?.state === 'unknown'
   })
-  await interruptedStore.close()
   assert.equal(unknown.toolName, 'check')
   assert.equal(JSON.stringify(unknown).includes(secret), false)
   assert.equal(JSON.stringify(unknown).includes('child'), false, 'the original child input is not stored')

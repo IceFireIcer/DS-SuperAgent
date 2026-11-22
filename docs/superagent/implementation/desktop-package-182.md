@@ -36,3 +36,20 @@ Windows 视觉探针覆盖 580 和 1120 像素视口、四套主题及浅深模�
 - macOS arm64 和 x64 的 ZIP 安装、Main 收发、更新提示和正常退出均通过。[arm64](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45000477473/job/137140726440#step:9:1) · [x64](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45000477473/job/137140726425#step:9:1)
 - Windows x64 通过新装、视觉检查、启动重试、工作控制和 `0.2.6` 下载。旧进程以 `0` 退出，覆盖安装后的 `app.asar` SHA-256 匹配下一版构件 `d0dc239cf4a07d608970513e787128625c02c6a4d1163165b2a78cc4992ae66f`，重开后原回复与备份保留。设置探针仍查找旧的合并入口，故整项更新检查失败。探针已改用 `Usage` 和 `Status` 两个实际标签页。[Windows 更新](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45000477473/job/137140726391#step:14:1)
 - Linux AppImage 的 mock 回复已显示，产品历史中的输入与回复为 `completed`。探针把 DSH 文件管理器图标的预期 404 视为错误并提前退出。Linux 的 `xdg-open` 项会显示通用图标，探针据此仅调整这一条回退记录。[Linux 收发](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45000477473/job/137140726389#step:9:1) · [图标回退说明](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.1/packages/host/open-in-app/README.md#application-catalog)
+
+### 全量候选 `898630edb689a7a37d941565af791a3f84b63587`
+
+`full=true` 的 `headSha` 与候选一致。四个桌面包任务通过，原版和新版应用探针均记录退出码 `0`。服务端分片 1 至 3 分别在远端验证结算、MCP 夹具 SQLite 锁和 PostgreSQL 等待任务恢复处失败，整体未通过。[全量运行](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45002104539) · [汇总检查](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45002104539/job/137148748046)
+
+| 构件 | SHA-256 | 通过项 |
+| --- | --- | --- |
+| Windows x64 `0.2.5` 安装器 | `06e1149140ed3df10241a1d8cae03fd1f45177c8f13e5e9d3842985f50f93648` | [共存与 16 组视觉](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45002104539/job/137145733313#step:7:1)、[启动交接](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45002104539/job/137145733313#step:8:1)、[工作控制](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45002104539/job/137145733313#step:9:1)、[新装](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45002104539/job/137145733313#step:12:1) |
+| Windows x64 `0.2.6` 安装后 `app.asar` | `d0dc239cf4a07d608970513e787128625c02c6a4d1163165b2a78cc4992ae66f` | [下载、旧进程自然退出、覆盖安装、重开与数据保留](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45002104539/job/137145733313#step:14:1) |
+| macOS arm64 `0.2.5` ZIP | `ddc7a8afc9dff932588a19b6b9bc328221a6cd295e7fe7953fa9499b6afa2681` | [安装、Main 收发及更新提示](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45002104539/job/137145733338#step:9:1) |
+| macOS x64 `0.2.5` ZIP | `83b6903bdb5f2cfd285813f21ba22a7d28823372c6bcc6966f1dd024635fb59a` | [安装、Main 收发及更新提示](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45002104539/job/137145733290#step:9:1) |
+| Linux x64 `0.2.5` AppImage | `713e497fa2c844b23116d7e8b80f494dfa5c21fcf7b78f76130a5b42e3ab2001` | [目录授权及 Main 收发](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45002104539/job/137145733387#step:9:1) |
+| Linux amd64 `0.2.5` deb | `669d7121096d4ed96ceeebfd78b98359840cc3c8eaba166e4223876b4f4c5fe0` | [安装、目录授权及 Main 收发](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45002104539/job/137145733387#step:10:1) |
+
+Windows 视觉归档的 SHA-256 为 `9410e0877c1ef367f94986e3ac6ff93f4d64adfb7b226780e4d9e28c2f69e419`。[视觉归档](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45002104539/artifacts/14746092538)
+
+MCP 测试改用一个只读 SQLite 连接检查持久记录，避免测试的读取操作申请写锁。Windows Node `24.22.3` 下原用例通过，进程自然退出。[MCP 夹具](../../../superagent/test/worker-mcp-credential.test.mjs) · [原分片失败](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45002104539/job/137145733342#step:6:1)
