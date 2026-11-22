@@ -1,5 +1,6 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import { setTimeout as sleep } from 'node:timers/promises'
 import LocalCredentials from '@deepseek-ai/dsh-credentials-local'
 import * as Profile from '../../dist/profile.js'
 import * as PostgresSessionPersistence from '../../dist/session-persistence-postgres.js'
@@ -31,7 +32,7 @@ const stop = async () => {
   return stopping
 }
 
-function* respond(options) {
+async function* respond(options) {
   const text = lastUserText(options)
   const completed = completedToolCount(options)
   if (options.model === 'router') {
@@ -86,6 +87,7 @@ function* respond(options) {
       options: 'Continue\nStop',
     })
   } else {
+    await sleep(60_000, undefined, { signal: options.signal })
     yield* textResponse('The Worker is waiting for the replacement proof.')
   }
 }

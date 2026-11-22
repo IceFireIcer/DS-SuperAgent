@@ -22,6 +22,7 @@ const instanceId = 'hosted-product'
 const hostId = 'hosted-product-host'
 const leaseMs = 30_000
 const goal = 'Recover this work after a Host replacement.'
+const answerText = 'Continue after replacement.'
 
 after(async () => {
   for (const child of children) if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
@@ -97,7 +98,7 @@ async function readSession(persistence, sessionId) {
   const handle = await persistence.open(SessionId(sessionId), 'read')
   try {
     const value = await handle.read()
-    return value.events.map(event => event.seq)
+    return value.events
   } finally {
     await handle.close()
   }
@@ -142,6 +143,12 @@ async function replaceAndReconnect({ holder, client, first, waiting, sessionIds,
   client.disconnect()
   holder.child.kill('SIGKILL')
   await holder.exited
+  const relays = await ticketRelayEffects(storage, waiting.work.receipt.ticketId)
+  assert.equal(relays.length, 1)
+  const [originalRelay] = relays
+  assert.equal(originalRelay.state, 'running')
+  assert.equal(originalRelay.followup, false)
+  assert.equal(originalRelay.attempts, 1)
   await sleep(leaseMs + 1_000)
   const replacement = startHost({ postgres: pg, home, workspace, port, replacement: true })
   const second = await replacement.ready
@@ -154,6 +161,7 @@ async function replaceAndReconnect({ holder, client, first, waiting, sessionIds,
   assert.ok(recovered)
   assert.equal(recovered.receipt.ticketId, waiting.work.receipt.ticketId)
   assert.equal(recovered.status, 'waiting')
+  assert.equal(recovered.control.assignment.id, waiting.work.control.assignment.id)
   assert.equal(recovered.control.assignment.generation, waiting.work.control.assignment.generation)
   assert.equal(recovered.control.attention.id, waiting.work.control.attention.id)
   const sessionsAfter = await Promise.all(sessionIds.map(id => readSession(persistence, id)))
@@ -165,12 +173,25 @@ async function replaceAndReconnect({ holder, client, first, waiting, sessionIds,
   assert.equal(takeover?.previousHostId, hostId)
   assert.equal(takeover?.tickets.some(ticket =>
     ticket.ticketId === waiting.work.receipt.ticketId && ticket.outcome === 'waiting-human'), true)
-  return { replacement, reconnected, recovered }
+  return { replacement, recovered, originalRelay }
 }
 
-async function completeRecoveredWork({ client, recovered, workerDetail, persistence }) {
+async function ticketRelayEffects(storage, ticketId) {
+  return storage.transaction(instanceId, async transaction => {
+    const page = await transaction.scan('effect', { limit: 100 })
+    assert.equal(page.cursor, undefined, 'the fixture should retain only one page of pending effects')
+    return page.items.map(item => item.value).filter(effect => effect.stream === 'relay' && effect.scope === ticketId)
+      .map(({ id, generation, state, attempts, leaseUntil, reason, payload }) => ({ id, generation, state, attempts, leaseUntil, reason,
+        followup: typeof payload.inputId === 'string' }))
+  })
+}
+
+async function completeRecoveredWork({ client, recovered, workerDetail, originalRelay, persistence, storage }) {
   const writer = await persistence.open(SessionId(workerDetail.sessionId), 'write')
   await writer.close()
+  const ticketId = recovered.receipt.ticketId
+  const remainingRelayLeaseMs = originalRelay.leaseUntil - Date.now()
+  assert.ok(remainingRelayLeaseMs > 0 && remainingRelayLeaseMs <= 61_000, 'the answer must arrive before the interrupted relay lease expires')
   await client.call('work-answer', {
     instanceId,
     commandId: 'answer-after-host-replacement',
@@ -179,21 +200,33 @@ async function completeRecoveredWork({ client, recovered, workerDetail, persiste
     expectedGeneration: recovered.control.assignment.generation,
     attentionId: recovered.control.attention.id,
     attentionVersion: recovered.control.attention.version,
-    text: 'Continue after replacement.',
+    text: answerText,
   })
   let lastWork
   const completed = await until(async () => {
     const history = await client.call('history', { instanceId, limit: 100 })
     lastWork = history.works?.find(item => item.brief.workItemId === recovered.brief.workItemId)
     return lastWork?.outcome?.status === 'success' ? { history, work: lastWork } : undefined
-  }, 'the recovered Worker result', 15_000).catch(async error => {
+  }, 'the recovered Worker result', remainingRelayLeaseMs + 15_000).catch(async error => {
     const observation = await client.call('observe-read', { instanceId, observationId: workerDetail.id,
       generation: recovered.control.assignment.generation, limit: 100 }).catch(failure => ({ error: failure.message }))
     const timeline = observation.events?.filter(event => ['tool-call', 'tool-result', 'turn'].includes(event.kind))
-    throw new Error(`${error.message}: ${JSON.stringify({ work: lastWork, timeline, observationError: observation.error })}`, { cause: error })
+    const relayEffects = await ticketRelayEffects(storage, ticketId).catch(failure => ({ error: failure.message }))
+    throw new Error(`${error.message}: ${JSON.stringify({ relayEffects, work: lastWork, timeline, observationError: observation.error })}`, { cause: error })
   })
   assert.equal(completed.work.outcome.summary, 'The Worker resumed after Host replacement.')
   assert.equal(completed.work.outcome.artifacts[0].path, 'recovered.txt')
+  assert.equal(completed.work.control.assignment.sessionId, workerDetail.sessionId)
+  assert.notEqual(completed.work.control.assignment.generation, recovered.control.assignment.generation)
+  const receipt = await storage.transaction(instanceId, transaction =>
+    transaction.get('effect-receipt', JSON.stringify([originalRelay.id, originalRelay.generation])))
+  assert.equal(receipt?.state, 'done')
+  assert.equal(receipt?.attempts, 2)
+  const events = await readSession(persistence, workerDetail.sessionId)
+  const answers = events.filter(event => event.type === 'user/message'
+    && event.data.content.some(block => block.type === 'text' && block.text === answerText))
+  assert.equal(answers.length, 1)
+  assert.ok(answers[0].time >= originalRelay.leaseUntil)
   await until(async () => {
     const history = await client.call('history', { instanceId, limit: 100 })
     return history.messages.some(message =>
@@ -233,6 +266,8 @@ test('a hosted product replacement restores the same PostgreSQL-backed Main, Rou
     client: openedProduct.client,
     recovered: recovered.recovered,
     workerDetail: openedProduct.workerDetail,
+    originalRelay: recovered.originalRelay,
     persistence,
+    storage,
   })
 })

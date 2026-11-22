@@ -53,3 +53,5 @@ Windows 视觉探针覆盖 580 和 1120 像素视口、四套主题及浅深模�
 Windows 视觉归档的 SHA-256 为 `9410e0877c1ef367f94986e3ac6ff93f4d64adfb7b226780e4d9e28c2f69e419`。[视觉归档](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45002104539/artifacts/14746092538)
 
 MCP 测试改用一个只读 SQLite 连接检查持久记录，避免测试的读取操作申请写锁。Windows Node `24.22.3` 下原用例通过，进程自然退出。[MCP 夹具](../../../superagent/test/worker-mcp-credential.test.mjs) · [原分片失败](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45002104539/job/137145733342#step:6:1)
+
+PostgreSQL 恢复夹具固定在旧 Host 持有首轮 Worker 投递租约时中断。等待预算覆盖实际租约到期以及后续执行。断言答复只写入原 Worker Session 一次，已验证的结果回到同一个 Main。Windows Node `24.22.3` 下定向用例通过，测试进程自然退出。[PostgreSQL 恢复夹具](../../../superagent/test/hosted-product-postgres.test.mjs) · [原分片失败](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/45002104539/job/137145733317#step:6:1)
