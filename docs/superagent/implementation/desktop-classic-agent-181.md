@@ -23,3 +23,11 @@ Windows x64、Node `24.22.3`、DSH `0.2.2-rc.1`，基线 `d346c7f6`。
 
 - `node app/scripts/check-superagent-profile.mjs --check-classic` 通过。探针检查原生 Workspace 实际成员、独立原生收发、无可用目录和未授权 Peer 拒绝、产品 Session 原生写入拒绝、关闭和断连撤权。原 Main 的在途回复正常完成，相同命令重复提交只触发一次模型调用。[Profile 探针](../../../app/scripts/check-superagent-profile.mjs)
 - 桌面传输、回调生命周期、启动握手、Profile 装配和 Session Reader 的 9 项定向测试通过。[桌面传输测试](../../../app/test/classic-agent.test.mjs)
+
+## Windows 打包往返
+
+Windows x64 `0.2.5` 解包构件在隔离 Profile 下使用 mock 模型运行 `node app/scripts/check-packed.mjs <exe> --classic`。`app.asar` SHA-256 为 `8c5e955de59f6055fefc838533e56b500ed4c3c0eedfc26a3570fe6a2c10fa7b`，包内客户端 SHA-256 为 `c0b7c0a11403ecbf9def371aaf090958daa74af541ab43b3e1443fba2ab5b031`。
+
+- `Tab` 和方向键可操作账户菜单，`Esc` 将焦点交还账户按钮。开启减少动态效果后，可以用键盘切入 Classic。产品弹层卸下，原生输入区可收发，侧栏返回按钮即时显示。[打包探针](../../../app/scripts/check-packed.mjs)
+- 原 Main 的回复和 Ticket 在 Classic 期间完成。返回同一窗口后，焦点回到原 Main 输入框，保留原 Session、输入回执和 Assignment。探针确认原输入只出现一次，Classic 消息保留在独立会话。应用正常退出，退出码为 `0`。[打包探针](../../../app/scripts/check-packed.mjs)
+- 主视图切换等产品槽位完成卸载后再打开原生 Session。挂载测试覆盖授权拒绝、导航失败后撤回授权和恢复 Main，以及远端已配对客户端不提供入口。客户端 bundle 与相关挂载共 7 项测试通过。[Classic 挂载测试](../../../superagent/dsh/test/product-classic-agent.test.js)

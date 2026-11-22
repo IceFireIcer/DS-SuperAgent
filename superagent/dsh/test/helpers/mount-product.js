@@ -9,7 +9,8 @@ export const official = { id: 'deepseek-official', key: { configured: false, wri
 export const main = { model: { provider: official.id, model: 'chat' } }
 const require = createRequire(import.meta.url)
 
-export async function mountProduct(context, { connection = { connected: false }, settings, native, extensions, responses: overrides, remotes = {} } = {}) {
+export async function mountProduct(context, { connection = { connected: false }, settings, native, classicNavigationError, extensions,
+  responses: overrides, remotes = {} } = {}) {
   const dom = new JSDOM('<main></main>', { url: 'http://localhost/', pretendToBeVisual: true })
   const { window } = dom
   const { document } = window
@@ -105,6 +106,7 @@ export async function mountProduct(context, { connection = { connected: false },
   const listeners = new Set()
   let version = 0
   let selectedSession
+  let withdrawnViews = 0
   const navigations = []
   const notify = () => { version += 1; for (const listener of listeners) listener() }
   const subscribe = listener => { listeners.add(listener); return () => listeners.delete(listener) }
@@ -119,6 +121,10 @@ export async function mountProduct(context, { connection = { connected: false },
       notify()
       return () => {
         entries.set(options.name, slots.entries(options.name).filter(entry => entry.component !== component))
+        if (options.name === 'conversation.view') {
+          withdrawnViews += 1
+          void Promise.resolve().then(() => { withdrawnViews -= 1 })
+        }
         versions.set(options.name, slots.getVersion(options.name) + 1)
         notify()
       }
@@ -150,8 +156,13 @@ export async function mountProduct(context, { connection = { connected: false },
       } },
     uiWorkspace: { openSession(id) {
       if (id !== listedSession) throw new Error('The native Session is still absent from the catalog.')
+      if (id === visibleSession && id !== sessionId && (withdrawnViews || slots.entries('conversation.view').length)) {
+        throw new Error('The product views must finish detaching before native navigation.')
+      }
+      if (id !== sessionId && classicNavigationError) throw classicNavigationError
       selectedSession = id
       navigations.push(id)
+      for (const listener of sessionListeners) listener()
       notify()
     } },
     layout: { beginNavigation() {}, selectPanel() {} },

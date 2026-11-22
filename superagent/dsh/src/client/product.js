@@ -2079,10 +2079,12 @@ export function applyProduct(ctx) {
         }
         mainVoice.close()
         closeOverlays()
-        ctx.layout.beginNavigation()
-        ctx.uiWorkspace.openSession(sessionId)
         view.set(latest => ({ ...latest, surface, settingsOpen: false, settingsPage: null, nativeModelsOpen: false, signInOpen: false,
           connectOpen: false, mainEvidence: null, mainEvidenceWorkItemId: null, restoreMainFocus: false }))
+        await Promise.resolve()
+        if (stopped) return
+        ctx.layout.beginNavigation()
+        ctx.uiWorkspace.openSession(sessionId)
         renewClassic(instanceId, sessionId)
       } else {
         clearTimeout(classicTimer)
@@ -2092,7 +2094,11 @@ export function applyProduct(ctx) {
         if (failure && !stopped) reportError(failure)
       }
     } catch (error) {
-      if (granted) void callClassic('classic-close', instanceId).then(() => ctx.sessions.refresh?.()).catch(() => {})
+      if (granted) {
+        await callClassic('classic-close', instanceId).catch(() => {})
+        if (view.getSnapshot().surface === 'classic') await returnToMain()
+        else if (!stopped) void Promise.resolve(ctx.sessions.refresh?.()).catch(() => {})
+      }
       if (!stopped) reportError(error)
     } finally {
       if (!stopped) view.set(current => ({ ...current, surfaceChanging: false }))
@@ -2175,16 +2181,29 @@ export function applyProduct(ctx) {
           const nextSessionId = state.binding?.mainSessionId
           const catalog = ctx.sessions.list.getSnapshot()
           if (!nextSessionId || nextSessionId === sessionId || catalog.phase !== 'ready' || !catalog.byId?.[nextSessionId]) return
+          sessionId = nextSessionId
           fallback?.()
           fallback = undefined
-          openNativeMain(nextSessionId)
-          sessionId = nextSessionId
+          void Promise.resolve().then(() => {
+            if (sessionId !== nextSessionId || stopped) return
+            const latest = view.getSnapshot()
+            const latestCatalog = ctx.sessions.list.getSnapshot()
+            if (latest.surface !== 'product' || usesProductHistory(latest) || latest.binding?.mainSessionId !== nextSessionId
+              || latestCatalog.phase !== 'ready' || !latestCatalog.byId?.[nextSessionId]) {
+              sessionId = undefined
+              return
+            }
+            openNativeMain(nextSessionId)
+          }).catch(error => {
+            if (sessionId === nextSessionId) sessionId = undefined
+            if (!stopped) reportError(error)
+          })
         }
       }
       sync()
       const unsubscribe = view.subscribe(sync)
       const unsubscribeSessions = ctx.sessions.list.subscribe(sync)
-      return () => { unsubscribe(); unsubscribeSessions(); fallback?.() }
+      return () => { sessionId = undefined; unsubscribe(); unsubscribeSessions(); fallback?.() }
     })
   }
   register('sidebar.footer.action', ReturnToProduct, { id: 'superagent-return', order: -300 })

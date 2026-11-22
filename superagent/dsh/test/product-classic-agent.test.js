@@ -72,3 +72,22 @@ test('a paired client has no Classic Agent mode menu entry', async context => {
   assert.equal(findButton('Classic Agent mode'), undefined)
   assert.equal(requests.some(request => request.endpoint === 'classic-open'), false)
 })
+
+test('a failed native navigation releases its grant and restores Main', async context => {
+  const { click, document, findButton, navigations, requests } = await mountProduct(context, {
+    native: true,
+    classicNavigationError: new Error('The authorized native Session is no longer available.'),
+    responses: {
+      'classic-open': () => ({ sessionId: 'classic-fixture', workspaceId: 'classic-workspace-fixture' }),
+      'classic-close': () => ({ closed: true }),
+    },
+  })
+  await click(findButton('Account'))
+  await click(findButton('Classic Agent mode'))
+  assert.equal(document.activeElement.id, 'main-message')
+  assert.equal(findButton('Back to DS SuperAgent'), undefined)
+  assert.match(document.querySelector('[role="alert"]').textContent, /no longer available/u)
+  assert.deepEqual(navigations, ['main-fixture', 'main-fixture'])
+  assert.deepEqual(requests.filter(request => request.endpoint.startsWith('classic-'))
+    .map(request => request.endpoint), ['classic-open', 'classic-close'])
+})
