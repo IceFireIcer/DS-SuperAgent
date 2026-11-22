@@ -15,12 +15,6 @@ test('a failed restore boot can undo the swap under the data lock and load the p
   let database
   const backupRoot = join(paths.userData, 'backups')
   hostState.fail = true
-  state.dialogAnswer = options => {
-    const rollback = options.buttons?.indexOf('Undo unfinished restore')
-    if (!(rollback >= 0)) return { response: 1 }
-    hostState.fail = false
-    return { response: rollback }
-  }
   await startApp({ packaged: false, async prepare(home) {
     await mkdir(join(home, 'core'))
     database = join(home, 'core', 'state.sqlite')
@@ -36,6 +30,11 @@ test('a failed restore boot can undo the swap under the data lock and load the p
   } })
   t.after(() => app.quit())
   hostState.release()
+  const restorePrompt = () => state.windows.find(win => win.visible && win.url.includes('Undo%20unfinished%20restore'))
+  await waitFor(() => restorePrompt() !== undefined, 'offer to undo the interrupted restore')
+  const { webContents } = restorePrompt()
+  hostState.fail = false
+  state.ipc.get('ds-superagent:startup-action')({ sender: webContents, senderFrame: webContents.mainFrame }, 'rollback')
   await waitFor(() => hostState.starts === 2 && window().loaded.some(url => url.includes('token=')), 'load the previous Host state')
   using db = new DatabaseSync(database, { readOnly: true })
   assert.equal(JSON.parse(db.prepare('SELECT body FROM records').get().body).version, 2)

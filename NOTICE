@@ -103,6 +103,8 @@ Apache License, Version 2.0 (see LICENSE)
   and the voice input controls from ds-bot/src/client/composer.js.
   The work role dock uses the member marks and status presentation from
   ds-bot/src/client/member-status.js and mark.js.
+  app/src/startup-handoff.mjs adapts the 220 ms startup crossfade and
+  inactive underlay from app/src/start-window.mjs at the same revision.
   superagent/dsh/src/client/main-cells.js adapts the reasoning body, failure
   copy and turn separators from ds-bot/src/client/cells.js, turn-error.js
   and text.js.

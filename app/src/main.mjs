@@ -36,7 +36,8 @@ import { ARTIFACT_PREFIX, PRODUCT_NAME, configureIdentity, formerDataFolders } f
 import { SUPERAGENT_PROFILE, assertLocalBackupProfile, profileHome } from './profile.mjs'
 import { RemoteProductClient } from './remote-product-client.mjs'
 import { createShell, SHELL_TEXT } from './shell.mjs'
-import { createComputerIndicator, statusPage, statusWindow } from './status-window.mjs'
+import { handoffMain, waitForMainView } from './startup-handoff.mjs'
+import { createComputerIndicator, createStartupScreen, statusPage } from './status-window.mjs'
 import { UPDATE_TEXT, isNewer, watchReleases, watchUpdates } from './updates.mjs'
 import { createDeferredPrompt } from './update-prompt.mjs'
 import { CAPTION_HEIGHT, cssColor, micaAvailable, nativeThemeSource } from './window-frame.mjs'
@@ -91,7 +92,6 @@ try { configureIdentity(app) }
 catch (error) { identityError = error }
 
 let mainWindow
-let startupWindow
 const loadedWindows = new WeakSet()
 let host
 // The Host's loopback origin, which the window loads.
@@ -178,15 +178,16 @@ const shell = createShell({
   platform: process.platform,
   messages: () => localeText(SHELL_TEXT),
   trayImage: () => trayImage(),
-  window: () => startupWindow ?? mainWindow,
+  window: () => !failed && loadedWindows.has(mainWindow) ? mainWindow : startupScreen.window() ?? mainWindow,
   build: () => rebuildWindow(),
   reveal: (target) => {
-    if (failed || target !== startupWindow && !loadedWindows.has(target)) return
+    const start = startupScreen.window()
+    if (target !== start && (failed || !loadedWindows.has(target))) return
     // macOS: the application menu's Hide hides the app itself, so it comes back first.
     if (process.platform === 'darwin') app.show()
     target.show()
     target.focus()
-    if (target === startupWindow && !mainWindow && bootstrap) rebuildWindow()
+    if (target === start && !failed && !mainWindow && bootstrap) rebuildWindow()
   },
   quit: () => { app.quit() },
   locations: () => {
@@ -206,8 +207,11 @@ const shell = createShell({
   // Without a tray the close asks whether the app should end.
   fallback: { show: (options) => dialog.showMessageBox(options) },
 })
+const startupScreen = createStartupScreen({ BrowserWindow, ipcMain, icon: iconFile, lang: language,
+  image: () => nativeImage.createFromPath(join(assets, 'icon.png')).resize({ width: 96 }).toPNG().toString('base64'),
+  quitting: shell.isQuitting, quit: shell.quit })
 // The tray icon goes away with the app, and a late answer to the close notice hides nothing.
-app.once('will-quit', () => { closeStartupWindow(); clearComputer(true); notifications.dispose(); shell.dispose(); botViews.dispose(); updates?.stop() })
+app.once('will-quit', () => { startupScreen.close(); clearComputer(true); notifications.dispose(); shell.dispose(); botViews.dispose(); updates?.stop() })
 
 // A packaged app started through an 8.3 short path or a junction restarts once on the
 // canonical path: the lock below and every path the Host sees then agree with the long
@@ -587,10 +591,10 @@ function startProductHost(home, { rollback = false } = {}) {
 }
 
 async function start() {
-  showStartupWindow()
+  void startupScreen.show(text().starting)
   choosing = new AbortController()
-  const where = await chooseLocations(choosing.signal, startupWindow).finally(() => { choosing = undefined })
-  if (where.quit) { closeStartupWindow(); app.quit(); return }
+  const where = await chooseLocations(choosing.signal, startupScreen.window()).finally(() => { choosing = undefined })
+  if (where.quit) { startupScreen.close(); app.quit(); return }
   const hostHome = profileHome(where.dataDir)
   const workspace = where.workspace ?? join(hostHome, 'workspace')
   // A link can be made after the first run's check: the folders the Host will write to are
@@ -961,7 +965,8 @@ function startUpdates() {
 // A prompt that belongs to a window is not asked while the window is hidden or minimized: it
 // waits for the window to be on the screen again.
 function windowShown() {
-  return loadedWindows.has(mainWindow) && !mainWindow.isDestroyed() && mainWindow.isVisible() && !mainWindow.isMinimized()
+  return startupScreen.window() === undefined && loadedWindows.has(mainWindow)
+    && !mainWindow.isDestroyed() && mainWindow.isVisible() && !mainWindow.isMinimized()
 }
 
 async function askRestartNow(version) {
@@ -1077,23 +1082,6 @@ const downloadPrompt = createDeferredPrompt({ ask: askDownloadNow, shown: window
 async function flushDeferredUpdate() {
   await restartPrompt.flush()
   await downloadPrompt.flush()
-}
-
-function showStartupWindow() {
-  if (startupWindow) return
-  const win = statusWindow(BrowserWindow, { title: PRODUCT_NAME, icon: iconFile, width: 392, height: 204, autoHideMenuBar: true })
-  startupWindow = win
-  win.on('close', event => { event.preventDefault(); shell.quit() })
-  const image = nativeImage.createFromPath(join(assets, 'icon.png')).resize({ width: 96 }).toPNG().toString('base64')
-  void win.loadURL(statusPage(text().starting, { image, lang: language() })).then(() => {
-    if (startupWindow === win && !win.isDestroyed() && !shell.isQuitting()) win.show()
-  }).catch(() => { if (startupWindow === win) closeStartupWindow() })
-}
-
-function closeStartupWindow() {
-  const win = startupWindow
-  startupWindow = undefined
-  if (win && !win.isDestroyed()) win.destroy()
 }
 
 function updateBadge(win) {
@@ -1215,10 +1203,25 @@ async function loadProductPage(win, url) {
   }
   if (win.isDestroyed() || win !== mainWindow || shell.isQuitting()) return false
   const firstLoad = !loadedWindows.has(win)
-  loadedWindows.add(win)
-  if (firstLoad && !shell.isHidden(win)) win.show()
-  closeStartupWindow()
+  const start = startupScreen.window()
+  if (start && !shell.isHidden(win)) {
+    const current = () => !failed && !win.isDestroyed() && win === mainWindow && !shell.isQuitting()
+    const state = await waitForMainView(win.webContents).catch(error => { if (current()) throw error })
+    if (!current()) return false
+    loadedWindows.add(win)
+    if (!shell.isHidden(win)) {
+      if (state && start === startupScreen.window()) {
+        await handoffMain(win, start, state.reducedMotion, () => current() && !shell.isHidden(win))
+      } else win.show()
+    }
+    if (!current()) return false
+  } else {
+    loadedWindows.add(win)
+    if (firstLoad && !shell.isHidden(win)) win.show()
+  }
+  startupScreen.close()
   updateBadge(win)
+  if (start) void flushDeferredUpdate().catch(error => console.error(error))
   return true
 }
 
@@ -1358,7 +1361,7 @@ async function relaunchHost(cause, { rollback = false } = {}) {
   failed = false
   hostState = HOST_STATE.starting
   shell.refresh()
-  if (!loadedWindows.has(mainWindow)) showStartupWindow()
+  if (startupScreen.window() || !loadedWindows.has(mainWindow)) void startupScreen.show(text().starting)
   hostReady = false
   tokenSpent = false
   launchUrl = undefined
@@ -1384,16 +1387,18 @@ async function askStartupAction(error, next) {
     && await pendingProductRestore({ home: profileHome(places.dataDir) }).catch(() => false)
   const log = (await operationsLog.read().catch(() => [])).slice(-6)
   const diagnostics = log.map(event => `${new Date(event.at).toLocaleString()}  ${event.code}${event.version ? ` · ${event.version}` : ''}`)
-  const buttons = hostFactory ? [t.tryAgain, t.quit] : [t.quit]
-  if (canRollback) buttons.push(localeText(UPDATE_TEXT).rollbackRestore)
+  const actions = []
+  if (hostFactory) actions.push({ action: 'retry', label: t.tryAgain })
+  actions.push({ action: 'quit', label: t.quit })
+  if (canRollback) actions.push({ action: 'rollback', label: localeText(UPDATE_TEXT).rollbackRestore })
+  const detail = [String(error?.message ?? error) + next, diagnostics.join('\n')].filter(Boolean).join('\n\n')
+  const action = await startupScreen.show(t.notStarted, { detail, actions })
+  if (action || shell.isQuitting()) return action ?? 'quit'
   const { response } = await dialog.showMessageBox({
     type: 'error', title: PRODUCT_NAME, noLink: true,
-    message: t.notStarted,
-    detail: [String(error?.message ?? error) + next, diagnostics.join('\n')].filter(Boolean).join('\n\n'),
-    buttons, defaultId: 0, cancelId: hostFactory ? 1 : 0,
+    message: t.notStarted, detail, buttons: actions.map(choice => choice.label), defaultId: 0, cancelId: hostFactory ? 1 : 0,
   })
-  if (canRollback && response === 2) return 'rollback'
-  return hostFactory && response === 0 ? 'retry' : 'quit'
+  return actions[response]?.action ?? 'quit'
 }
 
 async function fail(error) {
@@ -1421,6 +1426,7 @@ async function fail(error) {
     }
   }
   const action = await askStartupAction(error, next)
+  if (shell.isQuitting()) return
   if (action !== 'quit') { await relaunchHost(undefined, { rollback: action === 'rollback' }); return }
   app.quit()
 }

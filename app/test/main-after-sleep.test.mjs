@@ -1,5 +1,3 @@
-// A sleep must not leave the app thinking it still sleeps: a Host that dies after the wake is
-// the user's now, with the try-again box, instead of being stored away forever.
 import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'
 import { powerMonitor, state } from './helpers/fake-electron.mjs'
@@ -26,10 +24,11 @@ test('a Host that dies after the wake is reported, not deferred as a sleep', asy
   powerMonitor.emit('suspend')
   powerMonitor.emit('resume')
   await waitFor(() => win.loaded.length > loads, 'read the Host after the wake')
-  const asked = []
-  state.dialogAnswer = (options) => { asked.push(options); return { response: 0 } }
   hostState.die(new Error('the Host stopped after the wake'))
-  await waitFor(() => asked.some(options => options.buttons?.includes('Try again')), 'ask for another try')
+  const retryScreen = () => state.windows.find(target => target.visible && target.url.includes('Try%20again'))
+  await waitFor(() => retryScreen() !== undefined, 'ask for another try')
+  const { webContents } = retryScreen()
+  state.ipc.get('ds-superagent:startup-action')({ sender: webContents, senderFrame: webContents.mainFrame }, 'retry')
   await waitFor(() => hostState.starts === 2, 'start the Host again')
   assert.equal(state.quits, 0, 'the app goes on')
 })

@@ -69,6 +69,8 @@ export class FakeWindow extends EventEmitter {
   showInactive() { this.show() }
   hide() { this.visible = false; this.emit('hide') }
   focus() { this.focused += 1 }
+  isFocused() { return this.visible && !this.minimized }
+  setOpacity(value) { (this.opacities ??= []).push(value) }
   restore() { this.minimized = false; this.visible = true; this.emit('restore') }
   minimize() { this.minimized = true }
   destroy() { this.destroyed = true; this.emit('closed') }
@@ -112,6 +114,8 @@ class FakeWebContents extends EventEmitter {
     this.send = (...message) => this.messages.push(message)
     this.setWindowOpenHandler = () => {}
     this.insertCSS = async () => {}
+    this.focus = () => { this.focused = true }
+    this.executeJavaScript = async () => ({ ready: true, reducedMotion: state.reducedMotion === true })
     this.toggleDevTools = () => {}
     this.loadURL = async url => { await this.win.loadURL(url) }
   }

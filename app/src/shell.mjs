@@ -201,10 +201,9 @@ export function createShell(options) {
    * The window's close: it hides, unless the app is really leaving.
    * @param {{ preventDefault: () => void }} event the window's close event
    */
-  const close = (event) => {
+  const close = (event, target = current()) => {
     if (quitting || sessionEnding) return
     event.preventDefault()
-    const target = current()
     if (target === undefined) return
     // An import or a data move is under way: the close cancels it, as it did before.
     if (options.busy()) { quit(); return }
@@ -217,7 +216,7 @@ export function createShell(options) {
 
   /** The window's own listeners. */
   const watch = (target) => {
-    target.on('close', (event) => { close(event) })
+    target.on('close', (event) => { close(event, target) })
     if (platform === 'win32') {
       // The session ends for good: the window may close.
       target.on('session-end', () => { sessionEnding = true })

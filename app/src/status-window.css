@@ -18,17 +18,58 @@ main {
   font-size: 14px;
   text-align: center;
 }
-body[data-loading="false"] main {
+body[data-status="notice"] main {
   grid-auto-flow: column;
   align-items: center;
   gap: 10px;
 }
-body[data-loading="false"] main::before {
+body[data-status="notice"] main::before {
   content: '';
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: Highlight;
+}
+body[data-status="failure"] {
+  place-content: center stretch;
+}
+body[data-status="failure"] main {
+  min-width: 0;
+  max-width: 35ch;
+  justify-self: center;
+  margin: 0 auto;
+}
+body[data-status="failure"] #status-label {
+  font-weight: 600;
+}
+.status-detail {
+  margin: 0;
+  max-height: 31vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.status-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.status-actions button {
+  padding: 6px 12px;
+  border: 1px solid color-mix(in srgb, CanvasText 20%, Canvas);
+  border-radius: 8px;
+  background: Canvas;
+  color: CanvasText;
+  font: inherit;
+}
+.status-actions button[autofocus] {
+  background: Highlight;
+  color: HighlightText;
+}
+.status-actions button:focus-visible, .status-detail:focus-visible {
+  outline: 2px solid Highlight;
+  outline-offset: 2px;
 }
 progress {
   width: 148px;
