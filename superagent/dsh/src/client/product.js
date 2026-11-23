@@ -1248,11 +1248,18 @@ export function applyProduct(ctx) {
         signIn: canSignIn() ? openSignIn : undefined,
         openModels: event => shellActions.openSettings('models', { trigger: event.currentTarget }),
         openCustomModels: hasNativeSettings('models') ? openCustomModels : undefined,
-        openRoles: event => shellActions.openSettings('roles', { trigger: event.currentTarget }) })
+        openRoles: event => shellActions.openSettings('roles', { trigger: event.currentTarget, modelGuide: true }) })
     } else if (showModelSetup && state.modelSettingsError) {
       modelChoice = h('div', { className: 'bt-superagent-model-dock' },
         h('p', { className: 'bt-main-error', role: 'alert' }, t('Could not check which models are available.')),
-        h('button', { className: 'bt-model-chip', type: 'button', onClick: () => { void refreshModelSettings() } }, t('Retry')))
+        h('button', { className: 'bt-model-chip', type: 'button', onClick: () => {
+          focusMainInput()
+          view.set(current => ({ ...current, modelSettingsError: false }))
+          void refreshModelSettings()
+        } }, t('Retry')))
+    } else if (showModelSetup && state.modelsNeedSetup === null) {
+      modelChoice = h('div', { className: 'bt-superagent-model-dock' },
+        h('p', { className: 'bt-main-status', role: 'status' }, t('Checking model setup…')))
     }
     if (composerOnly) {
       const entries = sessionEvents?.entries ?? []
@@ -1546,7 +1553,7 @@ export function applyProduct(ctx) {
           onClick: () => { void revoke(client) } }, t('Revoke')))))
   }
 
-  function SettingsDialog({ binding, onClose, open, initialPage, renderSlot, returnFocus }) {
+  function SettingsDialog({ binding, onClose, onModelReady, open, initialPage, renderSlot, returnFocus }) {
     const viewState = useView()
     const [snapshot, setSnapshot] = useState(null)
     const [draft, setDraft] = useState(null)
@@ -1558,6 +1565,12 @@ export function applyProduct(ctx) {
     const [conflict, setConflict] = useState(false)
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
+    const [refreshFailed, setRefreshFailed] = useState(false)
+    const [providerRefreshFailed, setProviderRefreshFailed] = useState(false)
+    const mainModelField = useRef(null)
+    const rolesRetry = useRef(null)
+    const guideLanding = useRef(Boolean(onModelReady))
+    const guideRoles = useRef(Boolean(onModelReady))
     const draftRef = useRef(draft)
     const draftVersion = useRef(0)
     const savingRef = useRef(false)
@@ -1600,6 +1613,12 @@ export function applyProduct(ctx) {
       }
     }
     useEffect(() => { void load() }, [binding.instanceId])
+    useEffect(() => {
+      if (open && guideLanding.current && mainModelField.current) {
+        guideLanding.current = false
+        mainModelField.current.focus()
+      }
+    }, [open, loading, draft])
     const updateRole = (role, change) => {
       if (savingRef.current) return
       draftVersion.current += 1
@@ -1639,6 +1658,24 @@ export function applyProduct(ctx) {
       }
       return null
     }
+    const refreshSavedRoles = async () => {
+      try {
+        const latest = await readModelSettings(binding, 50)
+        if (rolesRetry.current?.matches(':focus')) rolesRetry.current.closest('[role=dialog]')?.querySelector('[aria-current=page]')?.focus()
+        applySnapshot(latest, true)
+        setRefreshFailed(false)
+        if (guideRoles.current && !mainModelSetup(latest)) onModelReady()
+      } catch {
+        setRefreshFailed(true)
+      }
+    }
+    const retrySavedRoles = async () => {
+      if (savingRef.current) return
+      savingRef.current = true
+      setSaving(true)
+      try { await refreshSavedRoles() }
+      finally { savingRef.current = false; setSaving(false) }
+    }
     const save = async () => {
       if (savingRef.current) return
       const problem = validate()
@@ -1657,8 +1694,7 @@ export function applyProduct(ctx) {
         draftVersion.current += 1
         setConflict(false)
         setNotice(t('Configuration v{revision} is active for new turns.', { revision: value.revision }))
-        const latest = await readModelSettings(binding, 50)
-        applySnapshot(latest, true)
+        await refreshSavedRoles()
       } catch (failure) {
         if (failure.code === 'CONFIG_REVISION_CONFLICT') {
           setConflict(true)
@@ -1685,8 +1721,27 @@ export function applyProduct(ctx) {
       setConflict(false)
       setError(null)
     }
+    const refreshSavedProvider = async event => {
+      const retry = event?.currentTarget
+      if (savingRef.current) return
+      savingRef.current = true
+      setSaving(true)
+      try {
+        const latest = await readModelSettings(binding, 50)
+        if (retry?.matches(':focus')) retry.closest('[role=dialog]')?.querySelector('[aria-current=page]')?.focus()
+        applySnapshot(latest, true)
+        setProviderRefreshFailed(false)
+      } catch {
+        setProviderRefreshFailed(true)
+      } finally {
+        savingRef.current = false
+        setSaving(false)
+      }
+    }
     const saveKey = async (provider, value) => {
-      if (value === undefined) return
+      if (value === undefined || savingRef.current) return
+      savingRef.current = true
+      setSaving(true)
       setError(null); setNotice(null)
       try {
         const result = await productCall('provider-key', { instanceId: binding.instanceId, provider, value })
@@ -1694,11 +1749,15 @@ export function applyProduct(ctx) {
         setSnapshot(current => ({ ...current, providers: current.providers.map(item => item.id === provider
           ? { ...item, key: { ...item.key, configured: result.configured } } : item) }))
         setNotice(value === null ? t('Provider key removed.') : t('Provider key saved.'))
-        void refreshModelSettings(binding)
-      } catch (failure) {
+      } catch {
         setKeyDrafts(current => ({ ...current, [provider]: '' }))
-        setError(failure.message)
+        setError(t(value === null ? 'Could not remove the API key.' : 'Could not save the API key. Enter it again to retry.'))
+        return
+      } finally {
+        savingRef.current = false
+        setSaving(false)
       }
+      await refreshSavedProvider()
     }
     const chooseDefaultDirectory = async path => {
       if (!path || viewState.directoryBusy) return
@@ -1736,6 +1795,10 @@ export function applyProduct(ctx) {
               h('p', null, t('Newer settings exist. Rebase only your changed fields, then review and save.')),
               h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: saving, onClick: () => { void rebase() } }, t('Rebase my edits'))) : null,
             notice ? h('p', { className: 'bt-main-status', role: 'status' }, notice) : null,
+            refreshFailed ? h('div', null,
+              h('p', { className: 'bt-main-status', role: 'status' }, t('Configuration saved. Could not refresh model settings.')),
+              h('button', { type: 'button', className: 'bt-soft', ref: rolesRetry, 'aria-disabled': saving,
+                onClick: () => { void retrySavedRoles() } }, t('Retry'))) : null,
             models.length === 0 ? h('p', { className: 'bt-main-health-warning', role: 'alert' },
               t('No models are available. Configure a provider in DSH settings, then reopen this panel to select the role models.'))
               : rolesNeedingModels({ roles: draft, providers: snapshot.providers }).length ? h('p', { className: 'bt-main-health-warning', role: 'alert' },
@@ -1748,6 +1811,7 @@ export function applyProduct(ctx) {
               return h(Card, { key: role, title: label },
                 h(Row, { label: t('Model'), hint: t('The provider and model this role uses. New turns use the saved version.') },
                   h('select', { className: 'bt-select bt-main-settings-select', 'aria-label': t('{role} model', { role: label }), value: ref,
+                    ref: role === 'main' ? mainModelField : undefined,
                     disabled: saving,
                     onChange: event => { void updateModel(role, event.target.value) } },
                   !models.some(model => model.ref === ref) ? h('option', { value: ref }, ref) : null,
@@ -1779,6 +1843,10 @@ export function applyProduct(ctx) {
     const providers = snapshot ? h(Fragment, null,
             error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
             notice ? h('p', { className: 'bt-main-status', role: 'status' }, notice) : null,
+            providerRefreshFailed ? h('div', null,
+              h('p', { className: 'bt-main-status', role: 'status' }, t('Could not refresh model settings.')),
+              h('button', { type: 'button', className: 'bt-soft', 'aria-disabled': saving,
+                onClick: event => { void refreshSavedProvider(event) } }, t('Retry'))) : null,
             h(Card, { title: t('Providers') },
               snapshot.providers.length ? snapshot.providers.map(provider => h('div', { key: provider.id, className: 'bt-main-provider' },
                 h('div', { className: 'bt-main-provider-copy' }, h('strong', null, provider.name), h('span', null, t('{count} models', { count: provider.models.length }))),
@@ -1838,7 +1906,13 @@ export function applyProduct(ctx) {
     sections.feedback = { render: ({ navigate }) => h(FeedbackSettings, { ...pageProps, onNavigate: navigate,
       ...(viewState.connection?.connected ? { app: null } : {}) }) }
     return h(SettingsShell, { open, onClose, returnFocus, initialPage, renderSlot, sections,
-      onNavigate: useNativeModels ? previous => { if (previous === 'models') void load({ preserve: draft !== null }) } : undefined })
+      onNavigate: previous => {
+        if (previous === 'roles') {
+          guideLanding.current = false
+          guideRoles.current = false
+        }
+        if (useNativeModels && previous === 'models') void load({ preserve: draft !== null })
+      } })
   }
 
   function ConnectionDialog({ connection, onClose }) {
@@ -2018,6 +2092,13 @@ export function applyProduct(ctx) {
     return h(Fragment, null,
       state.binding && !state.connection?.connected && state.settingsPage ? h(SettingsDialog, { binding: state.binding,
         key: state.settingsVisit, open: state.settingsOpen, initialPage: state.settingsPage, renderSlot,
+        onModelReady: state.settingsFromModelGuide ? () => {
+          const current = view.getSnapshot()
+          if (current.settingsOpen && current.settingsVisit === state.settingsVisit && !current.connection?.connected
+            && current.binding?.instanceId === state.binding.instanceId && !current.mainModelSetup) {
+            view.set({ ...current, settingsOpen: false })
+          }
+        } : undefined,
         returnFocus: () => { if (!view.getSnapshot().settingsOpen) returnTo(trigger) },
         onClose: () => {
           view.set(current => ({ ...current, settingsOpen: false }))
@@ -2141,14 +2222,15 @@ export function applyProduct(ctx) {
       if (nativeSession && !usesProductHistory(state)) ctx.layout.selectPanel('superagent-activity')
       if (state.binding) void loadObservations(state.binding, { reset: true })
     },
-    openSettings(settingsPage = 'general', { nativeModels = false, trigger = document.activeElement } = {}) {
+    openSettings(settingsPage = 'general', { nativeModels = false, trigger = document.activeElement, modelGuide = false } = {}) {
       const state = view.getSnapshot()
       if (!state.binding || state.connection?.connected || !settingsTarget(settingsPage)) {
         reportError(t('This setting is unavailable here.'))
         return
       }
       settingsTrigger = trigger
-      view.set({ ...state, settingsOpen: true, settingsVisit: state.settingsVisit + 1, settingsPage, nativeModelsOpen: nativeModels })
+      view.set({ ...state, settingsOpen: true, settingsVisit: state.settingsVisit + 1, settingsPage,
+        nativeModelsOpen: nativeModels, settingsFromModelGuide: modelGuide })
     },
     openConnection() { if (clientBridge()) view.set(current => ({ ...current, connectOpen: true })) },
   }

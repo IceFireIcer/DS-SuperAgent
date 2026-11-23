@@ -31,12 +31,14 @@ test('settings shortcuts select their destination and return focus to their laun
     const menu = document.querySelector('[role=menu]')
     await openAndClose(findButton(label, menu), account, page, tab)
   }
+  await click(findButton('Set up a model'))
   const guide = findButton('Open Models settings')
   await openAndClose(guide, guide, 'Models')
 })
 
 test('closing settings returns to the Main composer when the initiating control becomes disabled', async context => {
   const { act, click, document, findButton, key } = await mountProduct(context)
+  await click(findButton('Set up a model'))
   const guide = findButton('Open Models settings')
   await click(guide)
   guide.disabled = true
@@ -55,8 +57,8 @@ test('the model chooser opens Roles for an instance with a usable catalog', asyn
   await click(chooser)
   const selected = document.querySelector('[role=dialog] [aria-current=page]')
   assert.equal(selected.textContent, 'Roles')
-  assert.ok(document.activeElement === selected)
-  await key(selected, 'Escape')
+  assert.equal(document.activeElement.getAttribute('aria-label'), 'Main model')
+  await key(document.activeElement, 'Escape')
   await act(async () => delay(5))
   assert.ok(document.activeElement === chooser)
 })

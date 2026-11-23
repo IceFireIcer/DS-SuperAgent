@@ -27,23 +27,38 @@ async function checkAccountOnboarding(page, settings, composer) {
   await page.locator('.bt-settings-layer .bt-scrim').click({ position: { x: 3, y: 3 } })
   await settings.waitFor({ state: 'hidden' })
 
-  let saved = false
+  let keyWrites = 0
+  let roleWrites = 0
+  let selected = false
+  let failRead = false
+  const sampleKey = 'fixture-provider-value'
+  const draft = 'Keep the draft across model setup.'
   const setupRoute = async route => {
     const { endpoint, payload } = route.request().postDataJSON()
     if (endpoint === 'provider-key') {
-      assert.ok(payload.provider === 'deepseek-official' && payload.value === 'fixture-provider-value')
-      saved = true
+      assert.ok(payload.provider === 'deepseek-official' && payload.value === sampleKey)
+      keyWrites++
+      failRead = true
       return route.fulfill({ json: { ok: true, value: { provider: payload.provider, configured: true } } })
     }
+    if (endpoint === 'settings-save') {
+      roleWrites++
+      const response = await route.fetch()
+      selected = (await response.json()).ok
+      if (selected) failRead = true
+      return route.fulfill({ response })
+    }
     if (endpoint !== 'settings') return route.continue()
+    if (failRead) {
+      failRead = false
+      return route.fulfill({ json: { ok: false, error: { message: 'Synthetic catalog read failure' } } })
+    }
     const response = await route.fetch()
     const body = await response.json()
-    if (body.ok) {
+    if (body.ok && !selected) {
       const provider = 'deepseek-official'
-      const model = 'fixture-model'
-      body.value.roles.main.model = { provider, model }
-      body.value.providers = [{ id: provider, name: 'DeepSeek', key: { configured: saved, writable: true },
-        models: [{ provider, model, ref: `${provider}/${model}`, name: 'Fixture model' }] }, ...body.value.providers]
+      body.value.roles.main.model = { provider, model: 'not-configured' }
+      if (!keyWrites) body.value.providers = [{ id: provider, name: 'DeepSeek', key: { configured: false, writable: true }, models: [] }]
     }
     return route.fulfill({ response, json: body })
   }
@@ -51,6 +66,7 @@ async function checkAccountOnboarding(page, settings, composer) {
   await page.emulateMedia({ reducedMotion: 'reduce' })
   try {
     await page.reload()
+    await page.getByRole('button', { name: /^(Set up a model|配置模型)$/u }).press('Enter')
     const keyAction = page.getByRole('button', { name: /^(Enter a DeepSeek API key|填入 DeepSeek API key)$/u })
     await keyAction.waitFor()
     const login = page.locator('.bt-superagent-model-dock').getByRole('button', { name: /^(Sign in to DeepSeek|登录 DeepSeek 账号)$/u })
@@ -61,7 +77,6 @@ async function checkAccountOnboarding(page, settings, composer) {
     await page.keyboard.press('Escape')
     await signInDialog.waitFor({ state: 'hidden' })
     assert.equal(await login.evaluate(element => document.activeElement === element), true)
-    const draft = 'Keep the draft across model setup.'
     await composer.fill(draft)
     await keyAction.press('Enter')
     const keyField = page.locator('.bt-main-model-key input')
@@ -70,15 +85,39 @@ async function checkAccountOnboarding(page, settings, composer) {
     await keyField.waitFor({ state: 'hidden' })
     assert.equal(await keyAction.evaluate(element => document.activeElement === element), true)
     await keyAction.press('Enter')
-    await keyField.fill('fixture-provider-value')
+    assert.equal(await keyField.getAttribute('type'), 'password')
+    await keyField.fill(sampleKey)
+    const masked = await keyField.screenshot({ animations: 'disabled', caret: 'hide' })
+    await keyField.fill('x'.repeat(sampleKey.length))
+    assert.ok(masked.equals(await keyField.screenshot({ animations: 'disabled', caret: 'hide' })), 'the screenshot masks the key value')
+    await keyField.fill(sampleKey)
     await keyField.press('Enter')
-    await keyAction.waitFor({ state: 'hidden' })
-    assert.equal(saved, true)
+    const dock = page.locator('.bt-superagent-model-dock')
+    await dock.getByText(/Provider key saved\. Could not refresh|密钥已保存，但无法刷新/u).waitFor()
+    await dock.getByRole('button', { name: /^(Retry|重试)$/u }).press('Enter')
+    const choose = dock.getByRole('button', { name: /^(Choose a model|选择模型)$/u })
+    await choose.waitFor({ timeout: 5000 }).catch(async () => {
+      throw new Error(`Model selection was not offered after the catalog refresh: ${await dock.innerText({ timeout: 1000 })}`)
+    })
+    await choose.press('Enter')
+    const picker = settings.getByRole('combobox', { name: /^(Main model|Main 模型)$/u })
+    await picker.waitFor()
+    assert.ok(await picker.evaluate(element => document.activeElement === element), 'the guide focuses the Main model control')
+    await picker.selectOption('mock/main')
+    await settings.getByRole('button', { name: /^(Save configuration|保存配置)$/u }).press('Enter')
+    await settings.getByText(/Configuration saved\. Could not refresh|配置已保存，但无法刷新/u).waitFor()
+    await settings.getByRole('button', { name: /^(Retry|重试)$/u }).press('Enter')
+    await settings.waitFor({ state: 'hidden' })
+    await dock.waitFor({ state: 'hidden' })
+    assert.equal(keyWrites, 1)
+    assert.equal(roleWrites, 1)
     assert.equal(await composer.inputValue(), draft)
     assert.equal(await composer.evaluate(element => document.activeElement === element), true)
+    assert.ok(await page.evaluate(value => !JSON.stringify([Object.entries(localStorage), Object.entries(sessionStorage)]).includes(value), sampleKey))
   } finally {
     await page.unroute('**/api/product', setupRoute)
   }
+  return { draft, sampleKey }
 }
 
 export async function checkProductUi(ctx) {
@@ -240,7 +279,20 @@ export async function checkProductUi(ctx) {
     await composer.fill('Fail this browser fixture turn.')
     await composer.press('Enter')
     await transcript.locator('[data-chat-flow-kind="turn-error"] .bt-main-system-fact').first().waitFor()
-    await checkAccountOnboarding(page, settings, composer)
+    const onboarding = await checkAccountOnboarding(page, settings, composer)
+    const accepted = page.waitForResponse(response => response.url().endsWith('/api/product') && response.request().method() === 'POST'
+      && response.request().postDataJSON().endpoint === 'send' && response.request().postDataJSON().payload.text === onboarding.draft)
+    await composer.press('Enter')
+    const receipt = await (await accepted).json()
+    assert.equal(receipt.ok, true)
+    await transcript.getByText('Main received the draft after model setup.', { exact: true }).waitFor()
+    const sameMain = await ctx.superagentProduct.dispatch('open')
+    assert.equal(sameMain.mainSessionId, binding.mainSessionId)
+    const afterSetup = await ctx.superagentProduct.dispatch('history', { instanceId: binding.instanceId, limit: 50 })
+    assert.deepEqual(afterSetup.messages.filter(item => item.role === 'user' && item.text === onboarding.draft).map(item => item.id), [receipt.value.messageId])
+    assert.equal(afterSetup.messages.find(item => item.id === `reply:${receipt.value.messageId}`)?.text, 'Main received the draft after model setup.')
+    const status = await ctx.superagentProduct.dispatch('product-status', { instanceId: binding.instanceId })
+    assert.ok(!JSON.stringify([status, errors]).includes(onboarding.sampleKey))
     assert.deepEqual(errors.filter(error => !error.startsWith(
       '[session-controller] control stream failed: RemoteError: typert gateway: session/control: active Service "sessionController" is unavailable')), [])
     console.log('Product UI passed in Chromium.')

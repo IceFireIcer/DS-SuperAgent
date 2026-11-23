@@ -3490,9 +3490,20 @@ var ZH = {
   "Open Models settings": "打开模型设置",
   "Models and API keys": "模型与 API Key",
   "I need a model before I can reply.": "配置模型后，我才能回复。",
+  "Set up a model": "配置模型",
+  "Set up another model": "配置其他模型",
+  "Model setup methods": "模型配置方式",
+  "Checking model setup…": "正在检查模型配置…",
+  "Show API key": "显示 API Key",
+  "Hide API key": "隐藏 API Key",
   "Could not save the API key.": "无法保存 API Key。",
+  "Could not save the API key. Enter it again to retry.": "无法保存 API Key。请重新输入后重试。",
+  "Could not remove the API key.": "无法移除 API Key。",
   "Could not check which models are available.": "无法检查可用的模型。",
+  "Could not refresh model settings.": "无法刷新模型设置。",
   "Provider key saved. Could not refresh model settings.": "密钥已保存，但无法刷新模型设置。",
+  "Provider key saved. Checking model setup…": "密钥已保存，正在检查模型配置…",
+  "Configuration saved. Could not refresh model settings.": "配置已保存，但无法刷新模型设置。",
   "DS SuperAgent": "DS SuperAgent",
   // Header
   "Message {name}": "给 {name} 发消息",
@@ -14038,41 +14049,90 @@ function mainModelSetup({ roles: roles2, providers }) {
   };
 }
 function SuperagentModelChoice({ setup: setup2, signIn, saveKey, refreshModels, focusMain, openModels, openCustomModels, openRoles }) {
+  const [expanded, setExpanded] = (0, import_react32.useState)(false);
   const [editingKey, setEditingKey] = (0, import_react32.useState)(false);
-  const [busy, setBusy] = (0, import_react32.useState)(false);
+  const [visibleKey, setVisibleKey] = (0, import_react32.useState)(false);
+  const [progress, setProgress] = (0, import_react32.useState)("idle");
   const [key, setKey] = (0, import_react32.useState)("");
   const [error, setError] = (0, import_react32.useState)(null);
-  const [notice, setNotice] = (0, import_react32.useState)(null);
   const keyTrigger = (0, import_react32.useRef)(null);
   const keyInput = (0, import_react32.useRef)(null);
-  const cancelKey = () => {
+  const retryButton = (0, import_react32.useRef)(null);
+  const restoreKeyTrigger = (0, import_react32.useRef)(false);
+  const editedProvider = (0, import_react32.useRef)(null);
+  const pending = (0, import_react32.useRef)(false);
+  const methodsId = (0, import_react32.useId)();
+  const busy = progress === "saving" || progress === "refreshing";
+  (0, import_react32.useEffect)(() => {
+    if (!editingKey && restoreKeyTrigger.current) {
+      restoreKeyTrigger.current = false;
+      keyTrigger.current?.focus();
+    }
+  }, [editingKey]);
+  (0, import_react32.useEffect)(() => {
+    if (!editingKey || setup2.keyProvider === editedProvider.current) return;
     setKey("");
+    setVisibleKey(false);
     setError(null);
     setEditingKey(false);
-    keyTrigger.current?.focus();
+  }, [editingKey, setup2.keyProvider]);
+  const cancelKey = () => {
+    setKey("");
+    setVisibleKey(false);
+    setError(null);
+    restoreKeyTrigger.current = true;
+    setEditingKey(false);
+  };
+  const refresh = async () => {
+    setProgress("refreshing");
+    try {
+      setProgress(await refreshModels() ? "saved" : "retry");
+    } finally {
+      pending.current = false;
+    }
+  };
+  const retry = () => {
+    if (pending.current) return;
+    pending.current = true;
+    if (retryButton.current?.matches(":focus")) focusMain();
+    void refresh();
   };
   const submit = async (event) => {
     event.preventDefault();
-    if (busy || !key.trim()) return;
+    if (pending.current || !key.trim()) return;
     const form = event.currentTarget;
+    pending.current = true;
     keyInput.current?.focus();
     setKey("");
-    setBusy(true);
+    setVisibleKey(false);
+    setProgress("saving");
     setError(null);
-    setNotice(null);
     try {
       await saveKey(setup2.keyProvider, key);
-      if (form.contains(form.ownerDocument.activeElement)) focusMain();
-      setEditingKey(false);
-      const refreshed = await refreshModels();
-      setNotice(refreshed ? t("Provider key saved.") : t("Provider key saved. Could not refresh model settings."));
     } catch {
-      setError(t("Could not save the API key."));
-    } finally {
-      setBusy(false);
+      pending.current = false;
+      setProgress("idle");
+      setError(t("Could not save the API key. Enter it again to retry."));
+      return;
     }
+    if (form.contains(form.ownerDocument.activeElement)) focusMain();
+    setEditingKey(false);
+    setExpanded(false);
+    await refresh();
   };
   const choice = (label, action, ref) => (0, import_react32.createElement)("button", { className: "bt-model-chip", type: "button", disabled: busy, onClick: action, ref }, t(label));
+  const toggleMethods = (primary) => (0, import_react32.createElement)(
+    "button",
+    {
+      className: primary ? "bt-model-chip bt-model-primary" : "bt-model-chip",
+      type: "button",
+      "aria-expanded": expanded,
+      "aria-controls": methodsId,
+      onClick: () => setExpanded(!expanded)
+    },
+    t(primary ? "Set up a model" : "Set up another model")
+  );
+  const showActions = !editingKey && progress !== "retry" && progress !== "refreshing";
   return (0, import_react32.createElement)(
     "div",
     { className: "bt-superagent-model-dock" },
@@ -14086,16 +14146,22 @@ function SuperagentModelChoice({ setup: setup2, signIn, saveKey, refreshModels, 
         (0, import_react32.createElement)("div", { className: "bt-bubble" }, t("I need a model before I can reply."))
       )
     )),
+    showActions ? (0, import_react32.createElement)(
+      "div",
+      { className: "bt-model-chips" },
+      setup2.canChooseModel ? (0, import_react32.createElement)("button", { className: "bt-model-chip bt-model-primary", type: "button", onClick: openRoles }, t("Choose a model")) : null,
+      toggleMethods(!setup2.canChooseModel)
+    ) : null,
     (0, import_react32.createElement)(
       "div",
-      { className: "bt-model-chips", role: "group", "aria-label": t("Models need setup") },
+      { id: methodsId, className: "bt-model-chips", role: "group", "aria-label": t("Model setup methods"), hidden: !showActions || !expanded },
       signIn ? choice("Sign in to DeepSeek", signIn) : null,
       setup2.keyProvider ? choice("Enter a DeepSeek API key", () => {
-        setNotice(null);
+        editedProvider.current = setup2.keyProvider;
+        setProgress("idle");
         setEditingKey(true);
       }, keyTrigger) : null,
-      choice(openCustomModels ? "Open settings to set up a custom model" : "Open Models settings", openCustomModels ?? openModels),
-      setup2.canChooseModel ? choice("Choose a model", openRoles) : null
+      choice(openCustomModels ? "Open settings to set up a custom model" : "Open Models settings", openCustomModels ?? openModels)
     ),
     editingKey && setup2.keyProvider ? (0, import_react32.createElement)(
       "form",
@@ -14117,7 +14183,7 @@ function SuperagentModelChoice({ setup: setup2, signIn, saveKey, refreshModels, 
         t("{provider} API key", { provider: "DeepSeek" }),
         (0, import_react32.createElement)("input", {
           ref: keyInput,
-          type: "password",
+          type: visibleKey ? "text" : "password",
           autoComplete: "new-password",
           autoFocus: true,
           value: key,
@@ -14130,18 +14196,32 @@ function SuperagentModelChoice({ setup: setup2, signIn, saveKey, refreshModels, 
       (0, import_react32.createElement)(
         "div",
         { className: "bt-q-foot" },
+        (0, import_react32.createElement)(
+          "button",
+          { type: "button", className: "bt-q-btn", disabled: busy, onClick: () => setVisibleKey(!visibleKey) },
+          t(visibleKey ? "Hide API key" : "Show API key")
+        ),
         (0, import_react32.createElement)("button", { type: "button", className: "bt-q-btn", disabled: busy, onClick: cancelKey }, t("Cancel")),
         (0, import_react32.createElement)("button", { type: "submit", className: "bt-q-submit", disabled: busy || !key.trim() }, t(busy ? "Saving…" : "Save key"))
       )
     ) : null,
-    notice ? (0, import_react32.createElement)("p", { role: "status", className: "bt-main-status" }, notice) : null
+    progress === "refreshing" ? (0, import_react32.createElement)("p", { role: "status", className: "bt-main-status" }, t("Provider key saved. Checking model setup…")) : null,
+    progress === "saved" ? (0, import_react32.createElement)("p", { role: "status", className: "bt-main-status" }, t("Provider key saved.")) : null,
+    progress === "retry" ? (0, import_react32.createElement)(
+      "div",
+      { className: "bt-model-chips" },
+      (0, import_react32.createElement)("p", { role: "status", className: "bt-main-status" }, t("Provider key saved. Could not refresh model settings.")),
+      choice("Retry", retry, retryButton)
+    ) : null
   );
 }
 var MODEL_ONBOARDING_CSS = `
 .bt-superagent-model-dock{width:min(100% - 32px,var(--dsh-chat-content-width,748px));margin:0 auto;display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding-block:8px;animation:bt-model-appear ${SPRING_POP.duration}ms ${SPRING_POP.easing} backwards}
 .bt-superagent-model-dock .bt-model-chips{display:flex;flex-wrap:wrap;gap:6px;margin-inline-start:30px;max-width:calc(100% - 30px)}
+.bt-superagent-model-dock .bt-model-chips[hidden]{display:none}
 .bt-superagent-model-dock .bt-model-chip{min-height:30px;padding:5px 12px;border:.5px solid var(--bt-line-2);border-radius:var(--bt-radius-pill);background:var(--bt-main);color:var(--bt-ink);font:inherit;font-size:var(--bt-font-body);text-align:start;cursor:pointer}
-.bt-superagent-model-dock .bt-model-chip:hover:not(:disabled){background:var(--bt-hover)}
+.bt-superagent-model-dock .bt-model-chip:hover:not(:disabled,.bt-model-primary){background:var(--bt-hover)}
+.bt-superagent-model-dock .bt-model-primary,.bt-superagent-model-dock .bt-model-primary:hover{background:var(--bt-accent);color:var(--bt-accent-ink);border-color:transparent}
 .bt-superagent-model-dock :is(button,input):focus-visible{outline:2px solid var(--bt-accent);outline-offset:1px}
 .bt-main-model-key{margin-inline-start:30px;max-width:calc(100% - 30px);box-sizing:border-box}
 .bt-main-model-key input{display:block;margin-top:6px;width:100%;min-height:36px;padding-inline:8px;box-sizing:border-box;border:1px solid var(--bt-line);border-radius:var(--bt-radius-input);background:var(--bt-main);color:var(--bt-ink);font:inherit}
@@ -22614,7 +22694,7 @@ function applyProduct(ctx) {
         signIn: canSignIn() ? openSignIn : void 0,
         openModels: (event) => shellActions.openSettings("models", { trigger: event.currentTarget }),
         openCustomModels: hasNativeSettings("models") ? openCustomModels : void 0,
-        openRoles: (event) => shellActions.openSettings("roles", { trigger: event.currentTarget })
+        openRoles: (event) => shellActions.openSettings("roles", { trigger: event.currentTarget, modelGuide: true })
       });
     } else if (showModelSetup && state.modelSettingsError) {
       modelChoice = (0, import_react51.createElement)(
@@ -22622,8 +22702,16 @@ function applyProduct(ctx) {
         { className: "bt-superagent-model-dock" },
         (0, import_react51.createElement)("p", { className: "bt-main-error", role: "alert" }, t("Could not check which models are available.")),
         (0, import_react51.createElement)("button", { className: "bt-model-chip", type: "button", onClick: () => {
+          focusMainInput();
+          view.set((current) => ({ ...current, modelSettingsError: false }));
           void refreshModelSettings();
         } }, t("Retry"))
+      );
+    } else if (showModelSetup && state.modelsNeedSetup === null) {
+      modelChoice = (0, import_react51.createElement)(
+        "div",
+        { className: "bt-superagent-model-dock" },
+        (0, import_react51.createElement)("p", { className: "bt-main-status", role: "status" }, t("Checking model setup…"))
       );
     }
     if (composerOnly) {
@@ -23174,7 +23262,7 @@ function applyProduct(ctx) {
       ))
     );
   }
-  function SettingsDialog2({ binding, onClose, open, initialPage, renderSlot, returnFocus }) {
+  function SettingsDialog2({ binding, onClose, onModelReady, open, initialPage, renderSlot, returnFocus }) {
     const viewState = useView();
     const [snapshot, setSnapshot] = (0, import_react51.useState)(null);
     const [draft, setDraft] = (0, import_react51.useState)(null);
@@ -23186,6 +23274,12 @@ function applyProduct(ctx) {
     const [conflict, setConflict] = (0, import_react51.useState)(false);
     const [loading, setLoading] = (0, import_react51.useState)(true);
     const [saving, setSaving] = (0, import_react51.useState)(false);
+    const [refreshFailed, setRefreshFailed] = (0, import_react51.useState)(false);
+    const [providerRefreshFailed, setProviderRefreshFailed] = (0, import_react51.useState)(false);
+    const mainModelField = (0, import_react51.useRef)(null);
+    const rolesRetry = (0, import_react51.useRef)(null);
+    const guideLanding = (0, import_react51.useRef)(Boolean(onModelReady));
+    const guideRoles = (0, import_react51.useRef)(Boolean(onModelReady));
     const draftRef = (0, import_react51.useRef)(draft);
     const draftVersion = (0, import_react51.useRef)(0);
     const savingRef = (0, import_react51.useRef)(false);
@@ -23233,6 +23327,12 @@ function applyProduct(ctx) {
     (0, import_react51.useEffect)(() => {
       void load();
     }, [binding.instanceId]);
+    (0, import_react51.useEffect)(() => {
+      if (open && guideLanding.current && mainModelField.current) {
+        guideLanding.current = false;
+        mainModelField.current.focus();
+      }
+    }, [open, loading, draft]);
     const updateRole = (role, change) => {
       if (savingRef.current) return;
       draftVersion.current += 1;
@@ -23273,6 +23373,28 @@ function applyProduct(ctx) {
       }
       return null;
     };
+    const refreshSavedRoles = async () => {
+      try {
+        const latest = await readModelSettings(binding, 50);
+        if (rolesRetry.current?.matches(":focus")) rolesRetry.current.closest("[role=dialog]")?.querySelector("[aria-current=page]")?.focus();
+        applySnapshot(latest, true);
+        setRefreshFailed(false);
+        if (guideRoles.current && !mainModelSetup(latest)) onModelReady();
+      } catch {
+        setRefreshFailed(true);
+      }
+    };
+    const retrySavedRoles = async () => {
+      if (savingRef.current) return;
+      savingRef.current = true;
+      setSaving(true);
+      try {
+        await refreshSavedRoles();
+      } finally {
+        savingRef.current = false;
+        setSaving(false);
+      }
+    };
     const save = async () => {
       if (savingRef.current) return;
       const problem = validate();
@@ -23302,8 +23424,7 @@ function applyProduct(ctx) {
         draftVersion.current += 1;
         setConflict(false);
         setNotice(t("Configuration v{revision} is active for new turns.", { revision: value.revision }));
-        const latest = await readModelSettings(binding, 50);
-        applySnapshot(latest, true);
+        await refreshSavedRoles();
       } catch (failure) {
         if (failure.code === "CONFIG_REVISION_CONFLICT") {
           setConflict(true);
@@ -23339,8 +23460,27 @@ function applyProduct(ctx) {
       setConflict(false);
       setError(null);
     };
+    const refreshSavedProvider = async (event) => {
+      const retry = event?.currentTarget;
+      if (savingRef.current) return;
+      savingRef.current = true;
+      setSaving(true);
+      try {
+        const latest = await readModelSettings(binding, 50);
+        if (retry?.matches(":focus")) retry.closest("[role=dialog]")?.querySelector("[aria-current=page]")?.focus();
+        applySnapshot(latest, true);
+        setProviderRefreshFailed(false);
+      } catch {
+        setProviderRefreshFailed(true);
+      } finally {
+        savingRef.current = false;
+        setSaving(false);
+      }
+    };
     const saveKey = async (provider, value) => {
-      if (value === void 0) return;
+      if (value === void 0 || savingRef.current) return;
+      savingRef.current = true;
+      setSaving(true);
       setError(null);
       setNotice(null);
       try {
@@ -23348,11 +23488,15 @@ function applyProduct(ctx) {
         setKeyDrafts((current) => ({ ...current, [provider]: "" }));
         setSnapshot((current) => ({ ...current, providers: current.providers.map((item) => item.id === provider ? { ...item, key: { ...item.key, configured: result.configured } } : item) }));
         setNotice(value === null ? t("Provider key removed.") : t("Provider key saved."));
-        void refreshModelSettings(binding);
-      } catch (failure) {
+      } catch {
         setKeyDrafts((current) => ({ ...current, [provider]: "" }));
-        setError(failure.message);
+        setError(t(value === null ? "Could not remove the API key." : "Could not save the API key. Enter it again to retry."));
+        return;
+      } finally {
+        savingRef.current = false;
+        setSaving(false);
       }
+      await refreshSavedProvider();
     };
     const chooseDefaultDirectory = async (path) => {
       if (!path || viewState.directoryBusy) return;
@@ -23410,6 +23554,20 @@ function applyProduct(ctx) {
         } }, t("Rebase my edits"))
       ) : null,
       notice ? (0, import_react51.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
+      refreshFailed ? (0, import_react51.createElement)(
+        "div",
+        null,
+        (0, import_react51.createElement)("p", { className: "bt-main-status", role: "status" }, t("Configuration saved. Could not refresh model settings.")),
+        (0, import_react51.createElement)("button", {
+          type: "button",
+          className: "bt-soft",
+          ref: rolesRetry,
+          "aria-disabled": saving,
+          onClick: () => {
+            void retrySavedRoles();
+          }
+        }, t("Retry"))
+      ) : null,
       models.length === 0 ? (0, import_react51.createElement)(
         "p",
         { className: "bt-main-health-warning", role: "alert" },
@@ -23436,6 +23594,7 @@ function applyProduct(ctx) {
                 className: "bt-select bt-main-settings-select",
                 "aria-label": t("{role} model", { role: label }),
                 value: ref,
+                ref: role === "main" ? mainModelField : void 0,
                 disabled: saving,
                 onChange: (event) => {
                   void updateModel(role, event.target.value);
@@ -23516,6 +23675,19 @@ function applyProduct(ctx) {
       null,
       error ? (0, import_react51.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
       notice ? (0, import_react51.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
+      providerRefreshFailed ? (0, import_react51.createElement)(
+        "div",
+        null,
+        (0, import_react51.createElement)("p", { className: "bt-main-status", role: "status" }, t("Could not refresh model settings.")),
+        (0, import_react51.createElement)("button", {
+          type: "button",
+          className: "bt-soft",
+          "aria-disabled": saving,
+          onClick: (event) => {
+            void refreshSavedProvider(event);
+          }
+        }, t("Retry"))
+      ) : null,
       (0, import_react51.createElement)(
         SectionCard,
         { title: t("Providers") },
@@ -23645,9 +23817,13 @@ function applyProduct(ctx) {
       initialPage,
       renderSlot,
       sections,
-      onNavigate: useNativeModels ? (previous) => {
-        if (previous === "models") void load({ preserve: draft !== null });
-      } : void 0
+      onNavigate: (previous) => {
+        if (previous === "roles") {
+          guideLanding.current = false;
+          guideRoles.current = false;
+        }
+        if (useNativeModels && previous === "models") void load({ preserve: draft !== null });
+      }
     });
   }
   function ConnectionDialog({ connection, onClose }) {
@@ -23904,6 +24080,12 @@ function applyProduct(ctx) {
         open: state.settingsOpen,
         initialPage: state.settingsPage,
         renderSlot,
+        onModelReady: state.settingsFromModelGuide ? () => {
+          const current = view.getSnapshot();
+          if (current.settingsOpen && current.settingsVisit === state.settingsVisit && !current.connection?.connected && current.binding?.instanceId === state.binding.instanceId && !current.mainModelSetup) {
+            view.set({ ...current, settingsOpen: false });
+          }
+        } : void 0,
         returnFocus: () => {
           if (!view.getSnapshot().settingsOpen) returnTo(trigger);
         },
@@ -24058,14 +24240,21 @@ function applyProduct(ctx) {
       if (nativeSession && !usesProductHistory(state)) ctx.layout.selectPanel("superagent-activity");
       if (state.binding) void loadObservations(state.binding, { reset: true });
     },
-    openSettings(settingsPage = "general", { nativeModels = false, trigger = document.activeElement } = {}) {
+    openSettings(settingsPage = "general", { nativeModels = false, trigger = document.activeElement, modelGuide = false } = {}) {
       const state = view.getSnapshot();
       if (!state.binding || state.connection?.connected || !settingsTarget(settingsPage)) {
         reportError(t("This setting is unavailable here."));
         return;
       }
       settingsTrigger = trigger;
-      view.set({ ...state, settingsOpen: true, settingsVisit: state.settingsVisit + 1, settingsPage, nativeModelsOpen: nativeModels });
+      view.set({
+        ...state,
+        settingsOpen: true,
+        settingsVisit: state.settingsVisit + 1,
+        settingsPage,
+        nativeModelsOpen: nativeModels,
+        settingsFromModelGuide: modelGuide
+      });
     },
     openConnection() {
       if (clientBridge()) view.set((current) => ({ ...current, connectOpen: true }));
