@@ -6,9 +6,13 @@ import { CoreError, identifier, type Work } from './model.js'
 import { credentialLike } from './product-memory-import.js'
 import type { AsyncTx, Storage } from './storage.js'
 import type { MainWorkBrief, MainWorkItem } from './work-delegation.js'
+import { browserMode, browserModes, BrowserStepRejected, parseBrowserStep,
+  type BrowserAdapterRequest, type BrowserMode, type BrowserPluginSetting, type BrowserStep } from './product-browser-plugins/protocol.js'
+import { createBrowserPluginTools, type BrowserToolOptions } from './product-browser-plugins/tools.js'
 
 export interface BrowserAdapter {
-  execute(request: { profileKey: string; action: 'open' | 'snapshot'; url?: string }, signal: AbortSignal): Promise<string>
+  execute(request: BrowserAdapterRequest, signal: AbortSignal, authorize?: () => Promise<void>): Promise<string>
+  linkReferences?: boolean
   hold?(profileKey: string, held: boolean, controlId: string): Promise<void>
   importProfile?(request: { profileKey: string; pendingImportId: string; importId: string }): Promise<unknown>
   close?(): Promise<void>
@@ -58,8 +62,8 @@ export interface BrowserOperation {
   assignmentId: string
   generation: string
   ownerRuntime: string
-  action: 'open' | 'snapshot'
-  state: 'pending' | 'succeeded' | 'unknown' | 'resolved'
+  action: BrowserStep['action']
+  state: 'pending' | 'succeeded' | 'denied' | 'unknown' | 'resolved'
   code?: string
   createdAt: number
   settledAt?: number
@@ -127,6 +131,7 @@ interface BrowserImportCommand { fingerprint: string; importId: string }
 interface BrowserImportSource { importId: string; sourceKey: string }
 
 const grantKey = (resourceId: string, workItemId: string) => canonicalJson([resourceId, workItemId])
+const browserPluginSettingKey = 'instance-browser-plugin'
 const browserObservations = ['UNCHANGED', 'CHANGED', 'CLOSED', 'INSPECTED'] as const
 const browserImportId = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu
 
@@ -710,6 +715,47 @@ export class BrowserResources {
     })
   }
 
+  private async pluginIn(tx: AsyncTx): Promise<BrowserPluginSetting> {
+    const stored = await tx.get<BrowserPluginSetting>('browser-command', browserPluginSettingKey)
+    return stored ?? { mode: 'off', revision: 0 }
+  }
+
+  async plugin(input: { instanceId: string }): Promise<BrowserPluginSetting & { modes: readonly BrowserMode[] }> {
+    this.identity(input.instanceId)
+    return this.storage.transaction(this.instanceId, async tx => {
+      await this.authorizeHost(tx)
+      return { ...await this.pluginIn(tx), modes: this.adapter.linkReferences ? [...browserModes] : ['off'] }
+    })
+  }
+
+  async setPlugin(input: { instanceId: string; commandId: string; expectedRevision: number; mode: unknown }) {
+    this.identity(input.instanceId)
+    const mode = browserMode(input.mode)
+    if (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 0) throw new CoreError('INVALID_INPUT', 'Choose a current browser plugin revision.')
+    if (mode !== 'off' && !this.adapter.linkReferences) throw new CoreError('UNAVAILABLE', 'The Host bridge does not expose browser link references.')
+    return this.command(input.commandId, ['set-browser-plugin', mode, input.expectedRevision], async tx => {
+      const current = await this.pluginIn(tx)
+      if (current.revision !== input.expectedRevision) throw new CoreError('CONFIG_REVISION_CONFLICT', 'The browser plugin changed. Reload before saving.')
+      const updated = { mode, revision: current.revision + 1 }
+      if (!await tx.replace('browser-command', browserPluginSettingKey, updated)) await tx.insert('browser-command', browserPluginSettingKey, updated)
+      return { ...updated, modes: this.adapter.linkReferences ? [...browserModes] : ['off'] }
+    })
+  }
+
+  async workerTools(workScope: () => Promise<BrowserWork>, options: BrowserToolOptions = {}) {
+    const setting = await this.plugin({ instanceId: this.instanceId })
+    if (!setting.modes.includes(setting.mode)) return []
+    return createBrowserPluginTools(this, workScope, setting, options)
+  }
+
+  private async authorizePlugin(tx: AsyncTx, selected: BrowserPluginSetting | undefined) {
+    if (!selected) return
+    const current = await this.pluginIn(tx)
+    if (current.mode !== selected.mode || current.revision !== selected.revision) {
+      throw new CoreError('BROWSER_PLUGIN_CHANGED', 'The browser plugin changed. Use the current mode in the next Worker turn.')
+    }
+  }
+
   /** The lease index is authoritative even when its operation has fallen out of the bounded display history. */
   async unconfirmed(tx: AsyncTx, ticketId: string) {
     const resources = await tx.list<BrowserResource>('browser-resource', 101)
@@ -724,21 +770,19 @@ export class BrowserResources {
     return pending
   }
 
-  async use(scope: BrowserWork, input: { resourceId: string; action: 'open' | 'snapshot'; url?: string }, signal: AbortSignal) {
+  async use(scope: BrowserWork, input: { resourceId: string; action: BrowserStep['action']; url?: string; ref?: string },
+    signal: AbortSignal, setting?: BrowserPluginSetting) {
     this.identity(scope.instanceId)
-    if (input.action !== 'open' && input.action !== 'snapshot') throw new CoreError('INVALID_INPUT', 'Choose browser open or snapshot.')
-    if (input.action === 'open') {
-      let url: URL
-      try { url = new URL(input.url ?? '') } catch { throw new CoreError('INVALID_INPUT', 'Open an HTTP or HTTPS page.') }
-      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || Buffer.byteLength(input.url ?? '') > 2048) {
-        throw new CoreError('INVALID_INPUT', 'Open an HTTP or HTTPS page without embedded credentials.')
-      }
-    } else if (input.url !== undefined) throw new CoreError('INVALID_INPUT', 'A snapshot does not accept a URL.')
+    const { resourceId, ...value } = input
+    const step = parseBrowserStep(value)
+    const usesReferences = Boolean(setting && setting.mode !== 'off' && this.adapter.linkReferences)
+    if (step.action === 'follow' && !usesReferences) throw new CoreError('BROWSER_DENIED', 'Select an available browser plugin before following a link reference.')
     signal.throwIfAborted()
     const operationId = randomUUID()
     const started = await commandTransaction(this.storage, this.instanceId, async tx => {
       await this.authorizeHost(tx)
-      const resource = await this.resource(tx, input.resourceId)
+      await this.authorizePlugin(tx, setting)
+      const resource = await this.resource(tx, resourceId)
       await this.authorized(tx, scope, resource)
       const existing = await tx.get<BrowserLease>('browser-lease', resource.id)
       const resumed = await tx.get<BrowserOperation>('browser-operation', operationId)
@@ -762,7 +806,7 @@ export class BrowserResources {
       }
       const operation: BrowserOperation = { id: operationId, resourceId: resource.id, ticketId: scope.ticketId,
         workItemId: scope.workItemId, assignmentId: scope.assignmentId, generation: scope.generation,
-        ownerRuntime: this.runtimeId, action: input.action, state: 'pending', createdAt: Date.now() }
+        ownerRuntime: this.runtimeId, action: step.action, state: 'pending', createdAt: Date.now() }
       await tx.insert('browser-operation', operation.id, operation)
       const lease: BrowserLease = { ...scope, resourceId: resource.id, acquiredAt: existing?.assignmentId === scope.assignmentId
         ? existing.acquiredAt : Date.now(), operationId: operation.id }
@@ -771,19 +815,28 @@ export class BrowserResources {
       return { operation, profileKey: resource.profileKey }
     })
     let text: string | undefined
+    let dispatched = false
+    const authorize = () => this.storage.transaction(this.instanceId, async tx => {
+      await this.authorizeHost(tx)
+      await this.authorizePlugin(tx, setting)
+      const resource = await this.resource(tx, resourceId)
+      await this.authorized(tx, scope, resource)
+      const lease = await tx.get<BrowserLease>('browser-lease', resource.id)
+      if (lease?.operationId !== started.operation.id) throw new CoreError('BROWSER_RECONCILE_REQUIRED', 'The browser lease changed.')
+    })
     try {
-      await this.storage.transaction(this.instanceId, async tx => {
-        await this.authorizeHost(tx)
-        await this.authorized(tx, scope, await this.resource(tx, input.resourceId))
-      })
-      text = await this.adapter.execute({ profileKey: started.profileKey, action: input.action,
-        ...(input.action === 'open' ? { url: input.url } : {}) }, signal)
+      await authorize()
+      signal.throwIfAborted()
+      dispatched = true
+      text = await this.adapter.execute({ profileKey: started.profileKey, ...step,
+        ...(usesReferences ? { referenceScope: canonicalJson([scope.assignmentId, scope.generation, setting!.revision]) } : {}) }, signal, authorize)
       if (typeof text !== 'string' || Buffer.byteLength(text) > 8192 || signal.aborted) throw new Error('Browser result unconfirmed')
       await commandTransaction(this.storage, this.instanceId, async tx => {
         await this.authorizeHost(tx)
         const operation = await tx.get<BrowserOperation>('browser-operation', started.operation.id)
         if (operation?.state === 'succeeded') return
-        const resource = await this.resource(tx, input.resourceId)
+        const resource = await this.resource(tx, resourceId)
+        await this.authorizePlugin(tx, setting)
         await this.authorized(tx, scope, resource)
         const lease = await tx.get<BrowserLease>('browser-lease', resource.id)
         if (lease?.operationId !== started.operation.id) throw new CoreError('BROWSER_RECONCILE_REQUIRED', 'The browser lease changed.')
@@ -792,7 +845,21 @@ export class BrowserResources {
         await tx.replace('browser-lease', resource.id, released)
       })
       return { operationId: started.operation.id, text }
-    } catch {
+    } catch (error) {
+      if (!dispatched || error instanceof BrowserStepRejected) {
+        const rejected = error instanceof CoreError ? error : new CoreError('BROWSER_DENIED', 'The browser step was denied before dispatch.')
+        const settled = await commandTransaction(this.storage, this.instanceId, async tx => {
+          const current = await tx.get<BrowserOperation>('browser-operation', started.operation.id)
+          const lease = await tx.get<BrowserLease>('browser-lease', resourceId)
+          if (current?.state === 'denied') return true
+          if (current?.state !== 'pending' || lease?.operationId !== current.id) return false
+          await tx.replace('browser-operation', current.id, { ...current, state: 'denied', code: rejected.code, settledAt: Date.now() })
+          const { operationId: _operationId, ...released } = lease
+          await tx.replace('browser-lease', resourceId, released)
+          return true
+        }).catch(() => false)
+        if (settled) throw rejected
+      }
       // If a committed success lost its database acknowledgement, read the original operation before reporting unknown.
       const committed = await this.storage.transaction(this.instanceId, tx =>
         tx.get<BrowserOperation>('browser-operation', started.operation.id)).catch(() => undefined)

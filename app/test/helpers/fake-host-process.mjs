@@ -27,6 +27,7 @@ export const state = {
   held: false,
   release: () => { if (open !== undefined) { open(); open = undefined } },
   die: (error = new Error('the Host stopped')) => { current?.fail(error) },
+  emit: message => current?.receive(message),
 }
 
 let current
@@ -39,6 +40,7 @@ export const hold = () => {
 
 export class HostProcess {
   #options
+  #stopping = false
   #messageListeners = new Set()
 
   constructor(options) { this.#options = options; state.options = options }
@@ -47,6 +49,7 @@ export class HostProcess {
     state.starts += 1
     current = this
     if (state.held) await gate
+    if (this.#stopping) throw new Error('The Host start was canceled.')
     if (state.fail) { state.running = false; throw new Error('the Host did not start') }
     state.running = true
     return { url: `http://127.0.0.1:${port()}/?token=test-token`, injections: [] }
@@ -58,9 +61,18 @@ export class HostProcess {
 
   onMessage(listener) { this.#messageListeners.add(listener); return () => this.#messageListeners.delete(listener) }
 
-  send() {}
+  receive(message) { for (const listener of this.#messageListeners) listener(message) }
+
+  send(message) {
+    state.sent ??= []
+    state.sent.push(message)
+    if (message?.type === 'ds-superagent:workspace-read') this.receive({ type: 'ds-superagent:workspace-read-result',
+      id: message.id, path: state.workspace ?? this.#options.env.DS_SUPERAGENT_WORKSPACE })
+  }
 
   stop({ forBackup = false } = {}) {
+    this.#stopping = true
+    if (current === this) state.release()
     state.stops += 1
     state.running = false
     if (state.stopFails) throw new Error('the Host could not stop')

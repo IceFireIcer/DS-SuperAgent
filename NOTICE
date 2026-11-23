@@ -1,4 +1,5 @@
 DS SuperAgent
+Author: IceFireIcer
 Copyright 2026 IceFireIcer and the DS SuperAgent contributors
 
 This product is licensed under the Apache License, Version 2.0 (see LICENSE).
@@ -78,6 +79,85 @@ Apache License, Version 2.0, Copyright (c) Microsoft Corporation
 
   The license is the same Apache License, Version 2.0 that covers this
   repository; see LICENSE for the text.
+
+DS Bot (https://github.com/Fei2411/DS-Bot)
+Copyright 2026 Fei2411 and the DS Bot contributors
+Apache License, Version 2.0 (see LICENSE)
+
+  The client sync inventory records the source of files derived from version
+  0.3.8, commit 5e9b7da8882da3b68d8a0624342708c2150a9156. The generated
+  superagent/dsh/src/client/upstream/ files carry per-file provenance. They
+  are modified for product naming, storage isolation and API integration.
+  Reference copies use a text extension and are excluded from runtime imports.
+  superagent/dsh/src/client/settings-shell.js adapts the settings slot and
+  dialog composition from ds-bot/src/client/settings-shell.js.
+  superagent/dsh/src/client/themes.js adapts theme tokens from
+  ds-bot/src/client/themes.js. The product shell, palette and notification
+  modules adapt ds-bot/src/client/sidebar.js, header.js, overlays.js,
+  palette.js, notifications.js, notify.js and feedback.js.
+  The account footer and first-model guide adapt AccountLauncher and
+  ModelChoiceDock from ds-bot/src/client/sidebar.js and model-menu.js.
+  The shared work-directory menu adapts FolderMenu and its anchored menu
+  styling from ds-bot/src/client/folder-menu.js and model-menu.js.
+  Main continuous voice adapts VoiceMode from ds-bot/src/client/voice.js
+  and the voice input controls from ds-bot/src/client/composer.js.
+  The work role dock uses the member marks and status presentation from
+  ds-bot/src/client/member-status.js and mark.js.
+  app/src/startup-handoff.mjs adapts the 220 ms startup crossfade and
+  inactive underlay from app/src/start-window.mjs at the same revision.
+  superagent/dsh/src/client/main-cells.js adapts the reasoning body, failure
+  copy and turn separators from ds-bot/src/client/cells.js, turn-error.js
+  and text.js.
+  superagent/dsh/src/client/main-question.js adapts the question presentation
+  from ds-bot/src/client/questions.js.
+  The runtime dictionaries in superagent/dsh/src/client/locales/ adapt
+  relevant strings from ds-bot/src/client/locales/.
+  superagent/src/phone-link/ adapts link/src/ and link/server/ from the same
+  revision; product-phone-settings.js adapts the settings flow in
+  ds-bot/src/client/phone-page.js. DS SuperAgent uses a separate pairing
+  scheme, Noise prologue and Product Host command adapter.
+  The mobile companion adapts the pairing screen, token styles, secure
+  storage, connection setup and crypto initialization from mobile/src/.
+  Its runtime imports the same portable link implementation as the Host.
+  The settings feedback page and memory query dialog adapt the corresponding
+  ds-bot/src/client/feedback.js and ds-bot/src/client/memory-panel.js surfaces.
+  superagent/dsh/src/client/usage-heatmap.js adapts the activity chart from
+  ds-bot/src/client/usage-page.js. The scheduled task and credential settings
+  adapt the timing and masked input components from ds-bot/src/client/schedules.js
+  and ds-bot/src/client/secret-card.js.
+  superagent/src/product-browser-plugins/ adapts browser-plugins/{refs,script,task}
+  and ds-bot/src/host/browser/session.js. The step tools use the SuperAgent
+  Browser resource and its existing desktop bridge.
+  superagent/src/product-computer.ts and app/src/computer-driver.mjs adapt
+  ds-bot/src/host/computer/{index,leases,catalog}.js. The computer settings and
+  cursor adapt ds-bot/src/client/computer.js and app/src/computer-cursor.mjs.
+
+  The Classic Agent switch and sidebar return adapt the account launcher and
+  BotReturn from ds-bot/src/client/sidebar.js, setSurface from index.js, and
+  slot lifecycle from surface.js at the same revision.
+
+  Upstream attribution applicable to the synchronized client:
+
+  - connector-marks.js uses single-color brand paths from Simple Icons 16.36.0
+    (https://simpleicons.org), CC0 1.0 Universal, the Simple Icons contributors.
+  - connector-marks.js also uses the Context7 connector mark from
+    public/context7-icon.svg (https://github.com/upstash/context7),
+    MIT License, Copyright (c) Upstash.
+  - im-page.js and phone-page.js use qrcode-generator from npm
+    (https://github.com/kazuhikoarase/qrcode-generator),
+    MIT License, Copyright (c) 2009 Kazuhiko Arase.
+
+  The MIT terms above apply to Context7 and qrcode-generator with their
+  respective copyright lines.
+
+DSH Remote (https://github.com/liguobao/deepseek-harness-remote)
+MIT License, Copyright (c) 2026 DSH Remote contributors
+
+  The Noise IK, key utilities, message framing, relay and secure transports,
+  RPC client, relay server gateway and Host link in superagent/src/phone-link/
+  are derived from DSH Remote commit 4d888ad via DS Bot 0.3.8's link/.
+  The MIT terms printed under DeepSeek Harness apply with the DSH Remote
+  copyright line above.
 
 No other third-party code is copied into this repository. At run time the
 plugin uses the @deepseek-ai/* packages of the DeepSeek Harness install it

@@ -17,24 +17,24 @@ export function createSource(initial) {
 }
 
 export const EMPTY_ROSTER = { revision: -1, mainBotId: null, mainBotIds: [], bots: [], rooms: [], agents: [], exchangeTurns: {}, questions: {}, btwCards: {}, sideChats: {}, learning: {}, secrets: [], capabilities: [], capabilityStatuses: {}, secretRequests: {}, models: [], defaultModel: null, modelsKey: null, prefs: {}, byId: {}, roomsById: {}, agentsById: {}, agentOf: {}, ready: false }
-// Any Main Bot holds the Main Bot powers; `mainBotId`, the first one, is the sidebar tile.
+// Legacy roster compatibility: any main identity holds the main powers; `mainBotId` is the sidebar tile.
 export const isMainOf = (roster, id) => id !== undefined && (roster.mainBotIds ?? []).includes(id)
 
-// A Bot's chat is a chain of Sessions ("parts"): the Bot id is its first part's id
-// and `sessionId` its current one. Every part id finds the Bot; Session state
-// (running, unread, turns) is read from the current part, team state from the Bot id.
+// A legacy identity's chat is a chain of Sessions ("parts"): its id is the first part's id
+// and `sessionId` its current one. Every part id finds the identity; Session state
+// (running, unread, turns) is read from the current part, roster state from the identity.
 export function indexRoster(value) {
   const byId = {}
   for (const bot of value.bots) {
     for (const id of [...(bot.parts ?? []), bot.sessionId ?? bot.id, bot.id]) byId[id] = bot
   }
   const roomsById = {}
-  // A group's own Session is a chain of parts like a Bot's chat: `room.id` is its
+  // A group's own Session is a chain of parts like a legacy identity's chat: `room.id` is its
   // first part's id and `sessionId` its current one; every part id finds the room.
   for (const room of value.rooms) {
     for (const id of [room.id, room.sessionId, ...(room.ownParts ?? [])]) roomsById[id] = room
   }
-  // The DSH Agent is not a Bot: it indexes by its own id and by each Session it owns.
+  // The DSH Agent indexes by its own id and by each Session it owns.
   const agentsById = {}
   const agentOf = {}
   for (const agent of value.agents ?? []) {

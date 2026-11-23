@@ -1,4 +1,5 @@
-import { execFile } from 'node:child_process'
+import { spawn } from 'node:child_process'
+import { once } from 'node:events'
 import { access, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
@@ -9,13 +10,10 @@ let started = false
 let stopRequested = false
 let failed = false
 
-function command(file, args, timeout = 180_000) {
-  return new Promise((resolve, reject) => {
-    execFile(file, args, { timeout, windowsHide: true, env: { ...process.env, LC_MESSAGES: 'C' } }, error => {
-      if (error) reject(new Error('The isolated PostgreSQL lifecycle command failed.', { cause: error.code }))
-      else resolve()
-    })
-  })
+async function command(file, args, timeout = 180_000) {
+  const child = spawn(file, args, { timeout, stdio: 'ignore', windowsHide: true, env: { ...process.env, LC_MESSAGES: 'C' } })
+  const [code, signal] = await once(child, 'exit')
+  if (code !== 0) throw new Error('The isolated PostgreSQL lifecycle command failed.', { cause: code ?? signal })
 }
 
 async function stop() {

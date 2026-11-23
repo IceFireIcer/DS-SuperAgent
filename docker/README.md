@@ -149,7 +149,7 @@ destinations `/data` and `/workspace` unchanged when you rebuild or move the
 host directories; the product records those destinations, not the host paths.
 An existing `/data/profiles/web` from a pre-R5 image does not contain
 `ds-superagent`; the entrypoint refuses to start and asks for a new or archived
-`DATA_DIR` instead of silently running the removed Bot team.
+`DATA_DIR` instead of silently running the removed legacy team runtime.
 
 **Backup**: stop the container, then copy both `DATA_DIR` and `WORKSPACE_DIR`.
 Restore by putting both folders back and starting again.
@@ -170,9 +170,8 @@ docker compose up -d
 
 A rebuild changes the image and the DSH it contains. An existing persisted
 profile is reused, and the entrypoint does not manage plugin upgrades. The
-image is built and tested with dsh `0.2.1-rc.4`, the version
-The product is verified with; a `DSH_VERSION` build arg exists, but other releases
-are untested and newer ones change how the server binds.
+image defaults to DSH `0.2.2-rc.1` to match the SuperAgent package. If you set
+the `DSH_VERSION` build argument, keep it aligned with that package's DSH peers.
 
 ## Prebuilt image
 

@@ -5,7 +5,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 
 export const within = (inner, outer) => {
   const path = relative(resolve(outer), resolve(inner))
-  return path === '' || (!path.startsWith('..') && !path.startsWith(sep) && !/^[a-z]:/iu.test(path))
+  return path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path)
 }
 
 /**
@@ -28,7 +28,7 @@ export function isolationProblem(dataDir, workspace, { dshHomes = [], program, f
   const former = formerData.map(real)
   for (const path of [data, ...(space === undefined ? [] : [space])]) {
     if (dsh.some(root => within(path, root) || within(root, path))) return 'inDsh'
-    if (app !== undefined && within(path, app)) return 'inProgram'
+    if (app !== undefined && (within(path, app) || within(app, path))) return 'inProgram'
     if (former.some(root => within(path, root) || within(root, path))) return 'inFormerData'
   }
   return undefined
@@ -73,12 +73,12 @@ async function relink(source, path, roots, to) {
  * fails the copy.
  * @param {string} from
  * @param {string} into
- * @param {{ force?: boolean, skip?: boolean, leave?: (path: string) => boolean, as?: string, signal?: AbortSignal }} [options]
+ * @param {{ force?: boolean, skip?: boolean, leave?: (path: string) => boolean, as?: string, signal?: AbortSignal, beforeCopy?: () => void }} [options]
  *   force: false keeps what is there already; leave: relative paths not to copy; as: where the
  *   copy will end up, when `into` is a staging folder that takes that name later
  * @returns {Promise<string[]>} the relative paths that were skipped
  */
-export async function copyTree(from, into, { force = true, skip = false, leave = () => false, as = into, signal } = {}) {
+export async function copyTree(from, into, { force = true, skip = false, leave = () => false, as = into, signal, beforeCopy } = {}) {
   // The folder can itself be a link; its contents are what is copied.
   const origin = real(from)
   const links = []
@@ -88,10 +88,12 @@ export async function copyTree(from, into, { force = true, skip = false, leave =
     force,
     filter: async (source) => {
       signal?.throwIfAborted()
+      beforeCopy?.()
       const path = relative(origin, source)
       if (path !== '' && leave(path)) return false
       if (path === '') return true
       const info = await lstat(source).catch((error) => { if (!skip) throw error })
+      beforeCopy?.()
       if (info === undefined) skipped.push(path)
       else if (info.isSymbolicLink()) links.push(path)
       return info?.isSymbolicLink() === false
@@ -100,6 +102,7 @@ export async function copyTree(from, into, { force = true, skip = false, leave =
   const roots = [...new Set([resolve(from), origin])]
   for (const path of links) {
     signal?.throwIfAborted()
+    beforeCopy?.()
     const at = join(into, path)
     if (!force && await lstat(at).then(() => true, () => false)) continue
     await relink(join(origin, path), at, roots, resolve(as)).catch((error) => {

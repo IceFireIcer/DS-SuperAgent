@@ -11,8 +11,7 @@ const BLANK = 'about:blank#'
 const LOOPBACK = new Set(['localhost', '0.0.0.0', '[::1]', '[::]', '[::ffff:7f00:1]'])
 
 /** The persistent partition of a storage key: the same key keeps the same storage across restarts. */
-// Keep this identifier stable so existing browser sessions remain available after app updates.
-export const partitionOf = key => `persist:ds-bot-browser-${createHash('sha256').update(key).digest('hex').slice(0, 32)}`
+export const partitionOf = key => `persist:ds-superagent-browser-${createHash('sha256').update(key).digest('hex').slice(0, 32)}`
 
 /** Whether a URL reaches the app's own Host: its port answers under every loopback name. */
 export function isAppHost(url, origin) {
@@ -100,7 +99,7 @@ export class BotBrowserGuests {
     }
   }
 
-  /** Close the key's guests and clear its storage, as when its Bot is deleted. */
+/** Close the key's guests and clear its storage, as when its browser resource is deleted. */
   async forget(owner, key) {
     const partition = partitionOf(keyOf(key))
     const own = [...this.#leases].filter(([, lease]) => lease.owner === owner && lease.partition === partition)

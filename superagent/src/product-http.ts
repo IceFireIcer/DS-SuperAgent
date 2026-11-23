@@ -1,10 +1,9 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { classicEndpoints, classicProofHeader, type ClassicSessionAccess } from './classic-session.js'
+import { CoreError } from './model.js'
 import type { ProductHost } from './product-host.js'
 
-interface NativeRequest {
-  url?: string
-  [Symbol.asyncIterator](): AsyncIterator<Uint8Array | string>
-}
+interface NativeRequest { url?: string }
 
 interface NativeResponse {
   statusCode: number
@@ -15,6 +14,7 @@ interface NativeResponse {
 interface ProductScope {
   superagentProduct: ProductHost
   connection: {
+    admit?(request: { headers: Headers }): { peer?: object }
     fetch: {
       register(route: {
         path: string
@@ -31,6 +31,8 @@ interface ProductScope {
 }
 
 const errorResponses: Record<string, { status: number; message?: string; detail?: boolean }> = {
+  CLASSIC_DENIED: { status: 403, detail: true },
+  CLASSIC_UNAVAILABLE: { status: 400, detail: true },
   SOURCE_NOT_AUTHORIZED: { status: 403, message: 'This conversation is outside the authorized workspace.' },
   MEMORY_DENIED: { status: 403, detail: true },
   NOT_FOUND: { status: 404, message: 'The requested work activity is unavailable.' },
@@ -38,10 +40,20 @@ const errorResponses: Record<string, { status: number; message?: string; detail?
   COMMIT_UNKNOWN: { status: 503, detail: true },
   IDENTITY_CONFLICT: { status: 409, message: 'This message identity was already used for different text.' },
   CONFIG_REVISION_CONFLICT: { status: 409, message: 'The configuration changed elsewhere. Your draft is still here.' },
+  CAPABILITY_REVISION_CONFLICT: { status: 409, message: 'The capability changed. Reload it before saving.' },
+  CAPABILITY_BUDGET: { status: 400, message: 'The capability library or execution scope has reached its limit.' },
+  RESOURCE_UNAVAILABLE: { status: 400, message: 'The credential resource is unavailable.' },
+  TICKET_VERSION_CONFLICT: { status: 409, message: 'The work changed. Review its current state and try again.' },
+  DELEGATION_UNAVAILABLE: { status: 400, message: 'Work follow-up is unavailable in this Host.' },
   INVALID_CONFIG: { status: 400, message: 'Check the role configuration.', detail: true },
   INVALID_INPUT: { status: 400, message: 'Check the request fields.', detail: true },
   UNAVAILABLE: { status: 400, message: 'This product capability is not connected yet.' },
 }
+
+const classicNativePaths = new Set(['prompt', 'cancel', 'updateQueue', 'rename', 'selectModel', 'modelCatalog', 'projections']
+  .map(method => `/api/session/${method}`))
+const workspaceSessionWrites = new Set(['insertSessionBefore', 'archiveSession', 'unarchiveSession', 'pinSession', 'unpinSession']
+  .map(method => `/api/workspace/${method}`))
 
 function productError(endpoint: unknown, error: unknown) {
   const value = error as { code?: unknown; message?: unknown }
@@ -67,25 +79,13 @@ export function apply(context: Context) {
   const ctx = context as unknown as ProductScope
   return ctx.inject(['connection', 'superagentProduct'], scope => {
     const productScope = scope as unknown as ProductScope
+    const classic = () => scope.get('superagentClassicSession') as ClassicSessionAccess | undefined
     productScope.effect(() => productScope.on('connection/request', async (request, response, next) => {
       const path = new URL(request.url ?? '/', 'http://localhost').pathname
-      if (!path.startsWith('/api/session/') && path !== '/api/session.export') return next()
-      if (path === '/api/session/list') {
-        let text = ''
-        for await (const chunk of request) {
-          text += chunk.toString()
-          if (Buffer.byteLength(text) > 4096) {
-            response.statusCode = 413
-            response.end()
-            return
-          }
-        }
-        let rpcId: unknown
-        try { rpcId = JSON.parse(text)?.rpcId } catch { /* Invalid envelopes receive the same bounded refusal. */ }
-        response.setHeader('content-type', 'application/json')
-        response.end(JSON.stringify({ type: 'server-response', rpcId, result: { ok: true, value: { items: [] } } }))
-        return
-      }
+      const desktopWorkspaceWrite = workspaceSessionWrites.has(path) && classic()
+      if (!path.startsWith('/api/session/') && path !== '/api/session.export' && !desktopWorkspaceWrite) return next()
+      if (path === '/api/session/list' || path === '/api/session/events') return next()
+      if (classicNativePaths.has(path) && classic()) return next()
       response.statusCode = 403
       response.setHeader('content-type', 'application/json')
       response.end(JSON.stringify({ type: 'server-response', result: { ok: false, error: {
@@ -108,8 +108,15 @@ export function apply(context: Context) {
           } }, { status: 400 })
         }
         try {
-          const value = await (productScope.superagentProduct as ProductHost)
-            .dispatch(String(body?.endpoint ?? ''), body?.payload ?? {})
+          const endpoint = String(body?.endpoint ?? '')
+          const payload = body?.payload ?? {}
+          let value
+          if (classicEndpoints.has(endpoint)) {
+            const access = classic()
+            if (!access) throw new CoreError('CLASSIC_DENIED', 'Classic Agent mode is available from the local desktop window only.')
+            const peer = productScope.connection.admit?.({ headers: request.headers }).peer
+            value = await access.dispatch(endpoint, payload, request.headers.get(classicProofHeader), peer)
+          } else value = await productScope.superagentProduct.dispatch(endpoint, payload)
           return Response.json({ ok: true, value })
         } catch (error) {
           const { code, message, status } = productError(body?.endpoint, error)

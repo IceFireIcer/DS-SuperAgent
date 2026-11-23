@@ -16,15 +16,15 @@ import { startPostgres } from './fixtures/postgres-harness.mjs'
 
 const fixture = fileURLToPath(new URL('./fixtures/hosted-product-postgres.mjs', import.meta.url))
 const postgres = await startPostgres('ds-superagent-hosted-product-')
-const children = new Set()
+const children = new Map()
 const opened = []
 const instanceId = 'hosted-product'
 const hostId = 'hosted-product-host'
 const leaseMs = 30_000
 const goal = 'Recover this work after a Host replacement.'
+const answerText = 'Continue after replacement.'
 
 after(async () => {
-  for (const child of children) if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
   await Promise.allSettled(opened.map(storage => storage.close()))
   await postgres.close()
 })
@@ -70,7 +70,6 @@ function startHost({ postgres: pg, home, workspace, port, enroll = false, replac
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     windowsHide: true,
   })
-  children.add(child)
   let stderr = ''
   child.stderr.setEncoding('utf8')
   child.stderr.on('data', chunk => { stderr += chunk })
@@ -81,23 +80,33 @@ function startHost({ postgres: pg, home, workspace, port, enroll = false, replac
       if (message?.type === 'ready') resolve(message)
       else reject(new Error(`The hosted product failed: ${message?.message ?? 'unknown error'}${stderr ? `\n${stderr}` : ''}`))
     })
-    child.once('exit', code => {
+    child.once('error', error => { clearTimeout(timer); reject(error) })
+    child.once('close', code => {
       clearTimeout(timer)
       reject(new Error(`The hosted product exited before it was ready (${code}): ${stderr}`))
     })
   })
-  const exited = new Promise(resolve => child.once('exit', (code, signal) => {
+  const exited = new Promise(resolve => child.once('close', (code, signal) => {
     children.delete(child)
     resolve({ code, signal })
   }))
+  children.set(child, exited)
   return { child, ready, exited, stderr: () => stderr }
+}
+
+async function shutdownHost(host) {
+  await new Promise((resolve, reject) => {
+    host.child.send({ type: 'shutdown' }, error => error ? reject(error) : resolve())
+  })
+  const exit = await Promise.race([host.exited, sleep(30_000, undefined, { ref: false })])
+  assert.deepEqual(exit, { code: 0, signal: null }, `The replacement Host must shut down normally. ${host.stderr()}`)
 }
 
 async function readSession(persistence, sessionId) {
   const handle = await persistence.open(SessionId(sessionId), 'read')
   try {
     const value = await handle.read()
-    return value.events.map(event => event.seq)
+    return value.events
   } finally {
     await handle.close()
   }
@@ -142,18 +151,29 @@ async function replaceAndReconnect({ holder, client, first, waiting, sessionIds,
   client.disconnect()
   holder.child.kill('SIGKILL')
   await holder.exited
+  const relays = await ticketRelayEffects(storage, waiting.work.receipt.ticketId)
+  assert.equal(relays.length, 1)
+  const [originalRelay] = relays
+  assert.equal(originalRelay.state, 'running')
+  assert.equal(originalRelay.followup, false)
+  assert.equal(originalRelay.attempts, 1)
   await sleep(leaseMs + 1_000)
   const replacement = startHost({ postgres: pg, home, workspace, port, replacement: true })
   const second = await replacement.ready
   assert.equal(second.mainId, first.mainId)
+  assert.equal(second.mainSessionId, first.mainSessionId)
+  assert.equal(second.routerSessionId, first.routerSessionId)
   const reconnected = await client.connect({ address: second.address, instanceId, credential: first.credential })
   assert.equal(reconnected.binding.mainId, first.mainId)
+  assert.equal(reconnected.binding.mainSessionId, first.mainSessionId)
+  assert.equal(reconnected.binding.routerSessionId, first.routerSessionId)
   assert.equal(reconnected.history.messages.some(message => message.role === 'user' && message.text === goal), true)
   const recovered = reconnected.history.works?.find(work =>
     work.brief.workItemId === waiting.work.brief.workItemId)
   assert.ok(recovered)
   assert.equal(recovered.receipt.ticketId, waiting.work.receipt.ticketId)
   assert.equal(recovered.status, 'waiting')
+  assert.equal(recovered.control.assignment.id, waiting.work.control.assignment.id)
   assert.equal(recovered.control.assignment.generation, waiting.work.control.assignment.generation)
   assert.equal(recovered.control.attention.id, waiting.work.control.attention.id)
   const sessionsAfter = await Promise.all(sessionIds.map(id => readSession(persistence, id)))
@@ -165,12 +185,25 @@ async function replaceAndReconnect({ holder, client, first, waiting, sessionIds,
   assert.equal(takeover?.previousHostId, hostId)
   assert.equal(takeover?.tickets.some(ticket =>
     ticket.ticketId === waiting.work.receipt.ticketId && ticket.outcome === 'waiting-human'), true)
-  return { replacement, reconnected, recovered }
+  return { replacement, recovered, originalRelay }
 }
 
-async function completeRecoveredWork({ client, recovered, workerDetail, persistence }) {
+async function ticketRelayEffects(storage, ticketId) {
+  return storage.transaction(instanceId, async transaction => {
+    const page = await transaction.scan('effect', { limit: 100 })
+    assert.equal(page.cursor, undefined, 'the fixture should retain only one page of pending effects')
+    return page.items.map(item => item.value).filter(effect => effect.stream === 'relay' && effect.scope === ticketId)
+      .map(({ id, generation, state, attempts, leaseUntil, reason, payload }) => ({ id, generation, state, attempts, leaseUntil, reason,
+        followup: typeof payload.inputId === 'string' }))
+  })
+}
+
+async function completeRecoveredWork({ client, recovered, workerDetail, originalRelay, persistence, storage }) {
   const writer = await persistence.open(SessionId(workerDetail.sessionId), 'write')
   await writer.close()
+  const ticketId = recovered.receipt.ticketId
+  const remainingRelayLeaseMs = originalRelay.leaseUntil - Date.now()
+  assert.ok(remainingRelayLeaseMs > 0 && remainingRelayLeaseMs <= 61_000, 'the answer must arrive before the interrupted relay lease expires')
   await client.call('work-answer', {
     instanceId,
     commandId: 'answer-after-host-replacement',
@@ -179,15 +212,33 @@ async function completeRecoveredWork({ client, recovered, workerDetail, persiste
     expectedGeneration: recovered.control.assignment.generation,
     attentionId: recovered.control.attention.id,
     attentionVersion: recovered.control.attention.version,
-    text: 'Continue after replacement.',
+    text: answerText,
   })
+  let lastWork
   const completed = await until(async () => {
     const history = await client.call('history', { instanceId, limit: 100 })
-    const work = history.works?.find(item => item.brief.workItemId === recovered.brief.workItemId)
-    return work?.outcome?.status === 'success' ? { history, work } : undefined
-  }, 'the recovered Worker result', 15_000)
+    lastWork = history.works?.find(item => item.brief.workItemId === recovered.brief.workItemId)
+    return lastWork?.outcome?.status === 'success' ? { history, work: lastWork } : undefined
+  }, 'the recovered Worker result', remainingRelayLeaseMs + 15_000).catch(async error => {
+    const observation = await client.call('observe-read', { instanceId, observationId: workerDetail.id,
+      generation: recovered.control.assignment.generation, limit: 100 }).catch(failure => ({ error: failure.message }))
+    const timeline = observation.events?.filter(event => ['tool-call', 'tool-result', 'turn'].includes(event.kind))
+    const relayEffects = await ticketRelayEffects(storage, ticketId).catch(failure => ({ error: failure.message }))
+    throw new Error(`${error.message}: ${JSON.stringify({ relayEffects, work: lastWork, timeline, observationError: observation.error })}`, { cause: error })
+  })
   assert.equal(completed.work.outcome.summary, 'The Worker resumed after Host replacement.')
   assert.equal(completed.work.outcome.artifacts[0].path, 'recovered.txt')
+  assert.equal(completed.work.control.assignment.sessionId, workerDetail.sessionId)
+  assert.notEqual(completed.work.control.assignment.generation, recovered.control.assignment.generation)
+  const receipt = await storage.transaction(instanceId, transaction =>
+    transaction.get('effect-receipt', JSON.stringify([originalRelay.id, originalRelay.generation])))
+  assert.equal(receipt?.state, 'done')
+  assert.equal(receipt?.attempts, 2)
+  const events = await readSession(persistence, workerDetail.sessionId)
+  const answers = events.filter(event => event.type === 'user/message'
+    && event.data.content.some(block => block.type === 'text' && block.text === answerText))
+  assert.equal(answers.length, 1)
+  assert.ok(answers[0].time >= originalRelay.leaseUntil)
   await until(async () => {
     const history = await client.call('history', { instanceId, limit: 100 })
     return history.messages.some(message =>
@@ -201,32 +252,34 @@ test('a hosted product replacement restores the same PostgreSQL-backed Main, Rou
   const database = await postgres.createDatabase()
   const pg = { ...postgres.configuration, database }
   const root = await mkdtemp(join(tmpdir(), 'r5-hosted-product-process-'))
+  let persistence
+  t.after(async () => {
+    for (const child of children.keys()) {
+      if (child.pid && child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+    }
+    await Promise.all(children.values())
+    await persistence?.close().catch(() => {})
+    await rm(root, { recursive: true, force: true })
+  })
   const home = join(root, 'home')
   const workspace = join(root, 'work')
   const port = await freePort()
   const storage = await PostgresStorage.open(pg)
   opened.push(storage)
-  const persistence = new StorageSessionPersistence(new Context(), storage)
-  let holder
-  let replacement
-  t.after(async () => {
-    for (const child of [holder, replacement]) {
-      if (child && child.child.exitCode === null && child.child.signalCode === null) child.child.kill('SIGKILL')
-    }
-    await persistence.close().catch(() => {})
-    await rm(root, { recursive: true, force: true })
-  })
+  persistence = new StorageSessionPersistence(new Context(), storage)
 
   const openedProduct = await openWaitingProduct({ pg, home, workspace, port, persistence })
-  holder = openedProduct.holder
   const recovered = await replaceAndReconnect({
     ...openedProduct, persistence, storage, pg, home, workspace, port,
   })
-  replacement = recovered.replacement
   await completeRecoveredWork({
     client: openedProduct.client,
     recovered: recovered.recovered,
     workerDetail: openedProduct.workerDetail,
+    originalRelay: recovered.originalRelay,
     persistence,
+    storage,
   })
+  openedProduct.client.disconnect()
+  await shutdownHost(recovered.replacement)
 })

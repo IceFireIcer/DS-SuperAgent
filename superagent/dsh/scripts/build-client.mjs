@@ -16,6 +16,12 @@ const PLUGIN = dirname(dirname(fileURLToPath(import.meta.url)))
 const OUTPUT = join(PLUGIN, 'client.js')
 const PLATFORM_MODULES = ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives']
 
+function stableDependencyLabels(text) {
+  return text
+    .replace(/^(\/\/ )\.\.\/(?=node_modules\/)/gmu, '$1')
+    .replace(/^([ \t]+")\.\.\/(?=node_modules\/[^"\r\n]+"\((?:exports(?:, module)?)?\) \{$)/gmu, '$1')
+}
+
 export async function bundleClient() {
   const result = await build({
     // Region comments name sources relative to the plugin, wherever the script runs from.
@@ -41,7 +47,7 @@ export async function bundleClient() {
     '  id: \'ds-superagent\',',
     '  factory: (require) => {',
     'const module = { exports: {} }',
-    result.outputFiles[0].text.trimEnd().replace(/[ \t]+$/gmu, ''),
+    stableDependencyLabels(result.outputFiles[0].text).trimEnd().replace(/[ \t]+$/gmu, ''),
     // The loader gets a plain exports object tagged as a module, as the tsdown preset
     // emits, rather than esbuild's getter-based `__esModule` object.
     'return Object.defineProperty({ ...module.exports }, Symbol.toStringTag, { value: \'Module\' })',
@@ -70,7 +76,7 @@ export async function bundleOffice() {
     },
   })
   if (result.warnings.length > 0) throw new Error(`esbuild warnings:\n${result.warnings.map(warning => warning.text).join('\n')}`)
-  return result.outputFiles[0].text
+  return stableDependencyLabels(result.outputFiles[0].text)
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

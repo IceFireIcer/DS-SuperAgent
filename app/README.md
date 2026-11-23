@@ -1,6 +1,6 @@
 # DS SuperAgent desktop app
 
-The Electron app for Windows, macOS and Linux. It installs a pinned DeepSeek Harness (DSH 0.2.1-rc.4), boots the
+The Electron app for Windows, macOS and Linux. It installs a pinned DeepSeek Harness (DSH 0.2.2-rc.1), boots the
 single `ds-superagent` profile through `@deepseek-ai/dsh/profile-boot`, and keeps its data in its own `DSH_HOME`. It
 never writes to `~/.dsh`. Its window shows DSH's existing Web front end with the single `ds-superagent` product
 surface. The design is in [docs/plans/2026-10-16-desktop-app.md](../docs/plans/2026-10-16-desktop-app.md).
@@ -29,11 +29,11 @@ npm installs `ds-superagent` from `../superagent` as a copy of its package files
 | `DS_SUPERAGENT_UPDATE_URL` | A test feed that overrides the GitHub release lookup (see [Updates](#updates)) | The newest DS SuperAgent release |
 
 Windows uses `%APPDATA%\DS SuperAgent` for shell settings. On macOS it is `~/Library/Application Support/DS SuperAgent`.
-The app starts with its own settings and leaves data from previous product installs, browser logins and saved locations in place.
+The app starts with its own settings and leaves data from previous product installs, browser logins and saved locations in place. Browser resources use only the product's own partition namespace; an older partition is not opened, migrated, or deleted, so it may be necessary to sign in again.
 
 ## Run from source (Windows)
 
-From the repository root, run in PowerShell (Node.js 24 or later and npm required):
+From the repository root, run in PowerShell (Node.js 24.9+ within the Node.js 24 series and npm required):
 
 ```powershell
 .\start.ps1
@@ -53,11 +53,13 @@ Use `.\start.ps1 -DataRoot <folder>` for a different data root (relative paths a
 At its first start the app asks for a data location (`~/.ds-superagent` by default) and workspace (`~/DS SuperAgent`).
 It checks that both can be written and offers to change a location if it fails. The choices go into the app's own
 `locations.json`. Keep the folders outside each other, the program folder, personal DSH data and data from previous product installs.
+The startup window stays up while the Host starts and closes once the local product page loads.
 
-Both change later in DS SuperAgent's Settings > General > Locations. The app names the user's DSH data to the
+Use **Desktop locations** in the tray to review both paths and move the data folder. Change the default workspace in
+**Settings → General → Work directories**. The app names the user's DSH data to the
 product (`DS_SUPERAGENT_USER_DSH_HOME`), so neither the workspace nor an execution directory can be set there. The data
 location moves through the app (`src/move-data.mjs`): the new folder must be empty or new and apart from the old
-data, the workspace, the user's DSH data and the program folder. The app stops the Host, copies the data into a
+data, the workspace, the desktop settings, the user's DSH data and the program folder. The app stops the Host, copies the data into a
 staging folder beside the new one, renames it to the new folder once it is whole, writes `locations.json` and starts
 again. A failed or interrupted copy leaves the old location in use and removes the staging folder; the old folder
 always stays. A run on throwaway folders (`DS_SUPERAGENT_HOME`) keeps its data location.
@@ -65,6 +67,9 @@ always stays. A run on throwaway folders (`DS_SUPERAGENT_HOME`) keeps its data l
 The app does not import or activate a legacy team runtime. Existing DSH files and data from previous product installs remain untouched.
 Optional browser, credential and memory import are product actions inside the running SuperAgent profile and use
 their own isolated import contracts.
+Choose a supported export stored outside the product, personal DSH and former product data folders. The file chooser
+checks the resolved path and size before reading. Cookie and credential previews keep values in the app until the
+product Host authorizes an import.
 
 The Host reads model settings through DSH. If a model call fails, Main points to Settings so you can check the role model and provider credentials. Settings shows when the provider has no models or a key is missing. Provider and credential files belong to the product's own DSH home.
 
@@ -120,6 +125,7 @@ npm run check-packed   # starts the packaged app on throwaway folders with the m
 macOS produces one zip per architecture. Build arm64 on an Apple chip Mac and x64 on an Intel Mac, or under Rosetta with an x64 Node that also ran `npm ci`. Do not cross-build: it packages native modules from `node_modules`; a combined build put 12 arm64-only native modules in its x64 app. `scripts/before-pack.mjs` stops a build whose architecture is not the one of the Node that runs it. The app is ad-hoc signed so downloaded copies are sealed. It ships as a zip, not a dmg: macOS 26 calls a downloaded unsigned dmg damaged and does not open it, and an ad-hoc signature on the dmg does not help (#351). Safari unzips the download. Move DS SuperAgent to Applications. On first open, use System Settings → Privacy & Security → Open Anyway. Do not disable Gatekeeper.
 
 `check-packed` takes another executable as its first argument, and a file for a screenshot of the window as its second. It runs an app that lies inside this checkout from a copy in its throwaway folder: from inside the checkout, Node would find a module that the package left out in the checkout's own `node_modules`.
+On Windows, use `node scripts/check-packed.mjs "dist-pack/win-unpacked/DS SuperAgent.exe" --coexistence` to check Settings and the desktop bridge while preserving synthetic former-product files and browser storage keys. This check does not install either product or access a real legacy profile.
 
 electron-builder packs only the packages that it finds through `dependencies` and `optionalDependencies`. The DSH packages ask for many packages as peers, which npm installs but electron-builder would leave out, so `package.json` lists them as dependencies. `npm test` fails when one is missing and names it.
 
@@ -183,6 +189,14 @@ The application menu of macOS has no Quit and no ⌘Q, for the same reason: the 
 Without a tray (some Linux desktops have none), closing the window asks whether the app should end, and minimizes it when the answer is no: the window stays reachable, and the app does not vanish. This is the one exceptional path, and it is the only place where the app asks before it ends.
 
 The launch URL of the Host is good for one use only. When the first load never came through (the window died while it loaded), no window carries the token again: the new window loads the Host's plain address, and the Host refuses it when the cookie is not there. Starting the app again then gives a new token.
+
+New replies and questions can show a system notification and a desktop badge. A notification opens Main, and its text
+contains only the event type. Downloads from the product window ask for a save location. Settings exposes recent shell
+event codes alongside Host and update events for diagnostics. Computer control starts off. The local user must enable
+it, allow a running application, then approve its exact current Worker in a native dialog. One 60-second lease can
+operate at a time. A screen indicator stays visible, and the tray can stop control. Take over to abort actions;
+release to allow a fresh request. Input already sent is not undone. The driver refuses unsupported systems or
+missing permissions. The settings page can show the last window snapshot while its lease is active.
 
 `scripts/check-lifecycle.mjs` (`npm run check-lifecycle`) checks this in a real Electron with a fake Host: no DSH, no model, no data of the user. It keeps its data in `app/.dsh-test-tray-lifecycle` and removes it afterwards. It checks that the Host keeps working while the window is hidden, that the window reads what it missed when it comes back, that a window that is gone is built anew against the same Host, the sleep status, and the explicit quit. It needs a desktop; the unit tests cover the same rules without one.
 

@@ -1,5 +1,5 @@
 import type { Assignment } from './execution.js'
-import type { NativeSessions, SessionTokenUsage } from './native-sessions.js'
+import type { NativeSessions, SessionTokenUsage, SessionUsageSnapshot } from './native-sessions.js'
 import type { RecordKind } from './model.js'
 import type { Storage } from './storage.js'
 import type { MainWorkBrief, MainWorkItem } from './work-delegation.js'
@@ -26,6 +26,7 @@ export interface ProductUsageReport {
   planning: { id: string; title: string; total: SessionTokenUsage }[]
   works: { id: string; title: string; total: SessionTokenUsage }[]
   unattributed: SessionTokenUsage
+  hourly?: ProductUsageBucket[]
   cost: { status: 'unavailable'; reason: string }
   coverage: {
     status: 'available' | 'partial' | 'unavailable' | 'none'
@@ -44,6 +45,15 @@ export interface ProductUsageReport {
     workRecordsTruncated: boolean
     limits: { roleUses: number; sessions: number; eventsPerSession: number }
   }
+}
+
+export interface ProductUsageBucket {
+  at: number
+  owner: RoleConfigUse['role']
+  provider: string
+  model: string
+  kind: 'conversation' | 'planning' | 'execution'
+  usage: SessionTokenUsage
 }
 
 type UsageRange = { id: string; startSeq: number; endSeq: number; kind: 'planning' | 'worker'; workId: string; title: string }
@@ -93,7 +103,7 @@ export class ProductUsage {
     }
   }
 
-  async read(): Promise<ProductUsageReport> {
+  async read(hourly = false): Promise<ProductUsageReport> {
     const useIndex = await readRecentRoleUses(this.storage, this.instanceId, this.maxRoleUses)
     const [briefRows, itemRows, ticketRows, turnRows, assignmentRows, currentRows] = await Promise.all([
       scanRows<MainWorkBrief>(this.storage, this.instanceId, 'work-brief', maxWorkPages),
@@ -147,6 +157,7 @@ export class ProductUsage {
     const workTotals = new Map<string, { title: string; usage: SessionTokenUsage }>()
     const planningTotals = new Map<string, { title: string; usage: SessionTokenUsage }>()
     const unattributed = emptyUsage()
+    const buckets = new Map<string, ProductUsageBucket>()
     let missingSessions = 0
     let overBudgetSessions = 0
     let omittedEvents = 0
@@ -160,8 +171,8 @@ export class ProductUsage {
         || mapping.role === 'worker' && range.kind === 'worker')
       if (ranges.length > 1000) truncated = true
       const attribution = new Map((ranges.length <= 1000 ? ranges : []).map(range => [range.id, range]))
-      let snapshot
-      try { snapshot = this.sessions ? await this.sessions.readUsageSnapshot(sessionId, { maxEvents: this.maxSessionEvents, ranges: [...attribution.values()] })
+      let snapshot: SessionUsageSnapshot
+      try { snapshot = this.sessions ? await this.sessions.readUsageSnapshot(sessionId, { maxEvents: this.maxSessionEvents, ranges: [...attribution.values()], hourly })
         : { status: 'missing' as const, eventCount: 0, usage: emptyUsage(), ranges: [] }}
       catch { snapshot = { status: 'missing' as const, eventCount: 0, usage: emptyUsage(), ranges: [] } }
       if (snapshot.status !== 'available') {
@@ -171,6 +182,17 @@ export class ProductUsage {
         continue
       }
       add(role, snapshot.usage)
+      for (const { at, provider, model, usage } of snapshot.buckets ?? []) {
+        const owner = mapping.role
+        const key = JSON.stringify([at, owner, provider, model])
+        let bucket = buckets.get(key)
+        if (!bucket) {
+          if (buckets.size >= 10_000) { truncated = true; continue }
+          bucket = { at, owner, provider, model, kind: owner === 'main' ? 'conversation' : owner === 'router' ? 'planning' : 'execution', usage: emptyUsage() }
+          buckets.set(key, bucket)
+        }
+        add(bucket.usage, usage)
+      }
       const attributed = emptyUsage()
       for (const result of snapshot.ranges) {
         const descriptor = attribution.get(result.id)
@@ -208,6 +230,7 @@ export class ProductUsage {
     const rank = (values: Map<string, { title: string; usage: SessionTokenUsage }>) => [...values].map(([id, value]) => ({ id, title: value.title, total: value.usage }))
       .sort((left, right) => right.total.totalTokens - left.total.totalTokens || left.title.localeCompare(right.title))
     return { createdAt: this.now(), roles, planning: rank(planningTotals).slice(0, 100), works: rank(workTotals).slice(0, 100),
+      ...(hourly ? { hourly: [...buckets.values()].sort((left, right) => left.at - right.at) } : {}),
       unattributed, cost: { status: 'unavailable', reason: 'No model price catalog is configured.' }, coverage }
   }
 }

@@ -1,5 +1,6 @@
 {
   "env": { "browser": true, "node": true, "es2024": true },
+  "ignorePatterns": ["dsh/src/client/upstream/**"],
   "rules": {
     "no-undef": "error",
     "no-unused-vars": ["error", { "ignoreRestSiblings": true }]

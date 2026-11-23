@@ -16,6 +16,8 @@ export const SHELL_TEXT = {
     running: 'Host running',
     starting: 'Starting the Host…',
     stopped: 'Host not running',
+    locations: 'Desktop locations…',
+    computerStop: 'Stop computer control',
     failed: 'Host could not start',
     suspended: 'Paused while this computer sleeps',
     notice: `${PRODUCT_NAME} keeps running in the system tray. Main, Router and Worker continue while the window is closed, as long as this computer is awake.`,
@@ -30,6 +32,8 @@ export const SHELL_TEXT = {
     running: 'Host 正在运行',
     starting: 'Host 正在启动…',
     stopped: 'Host 未运行',
+    locations: '桌面数据位置…',
+    computerStop: '停止电脑操控',
     failed: 'Host 未能启动',
     suspended: '电脑休眠时暂停',
     notice: `${PRODUCT_NAME} 会留在系统托盘里继续运行。只要电脑没有休眠，关掉窗口时 Main、Router 和 Worker 照常工作。`,
@@ -161,6 +165,9 @@ export function createShell(options) {
         Tray: electron.Tray, Menu: electron.Menu, platform,
         image, tooltip: text().tooltip, status: statusText,
         open: { label: text().open, run: () => { open() } },
+        ...(options.locations ? { locations: { label: text().locations,
+          enabled: () => options.status() === 'running' && !suspended, run: options.locations } } : {}),
+        ...(options.computerStop ? { computerStop: { label: text().computerStop, ...options.computerStop } } : {}),
         quit: { label: text().quit, run: () => { quit() } },
         log,
       })
@@ -194,10 +201,9 @@ export function createShell(options) {
    * The window's close: it hides, unless the app is really leaving.
    * @param {{ preventDefault: () => void }} event the window's close event
    */
-  const close = (event) => {
+  const close = (event, target = current()) => {
     if (quitting || sessionEnding) return
     event.preventDefault()
-    const target = current()
     if (target === undefined) return
     // An import or a data move is under way: the close cancels it, as it did before.
     if (options.busy()) { quit(); return }
@@ -210,7 +216,7 @@ export function createShell(options) {
 
   /** The window's own listeners. */
   const watch = (target) => {
-    target.on('close', (event) => { close(event) })
+    target.on('close', (event) => { close(event, target) })
     if (platform === 'win32') {
       // The session ends for good: the window may close.
       target.on('session-end', () => { sessionEnding = true })

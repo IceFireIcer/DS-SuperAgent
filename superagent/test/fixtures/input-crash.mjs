@@ -5,7 +5,7 @@ import { Engine } from '../../dist/index.js'
 import { SqliteStorage } from '../../dist/storage.js'
 import * as SqlitePersistence from '../../dist/session-persistence.js'
 import { nativeContext, routerResponse, textResponse, toolResponse } from '../../dev/native-mock.mjs'
-import { completedToolCount, lastUserText, sourceConfig } from '../input-support.mjs'
+import { completedToolCount, initialWorkReady, lastUserText, sourceConfig } from '../input-support.mjs'
 
 const [databasePath, sessionDatabasePath, phase, markerPath] = process.argv.slice(2)
 const directory = dirname(databasePath)
@@ -70,15 +70,6 @@ const failingPlugin = {
   },
 }
 
-async function waitForReceipt() {
-  for (let attempt = 0; attempt < 200; attempt++) {
-    const delivery = (await engine.getTicketDirection(ticketId))?.inputs[0]?.delivery
-    if (delivery?.persistedAt !== undefined) return
-    await new Promise(resolve => setTimeout(resolve, 5))
-  }
-  throw new Error('the persisted receipt was never recorded')
-}
-
 async function waitForMessage() {
   const current = (await engine.getTicketDirection(ticketId))?.inputs[0]?.delivery
   if (!current) throw new Error('the follow-up delivery claim is missing')
@@ -111,7 +102,7 @@ async function* respond(options) {
   const text = lastUserText(options)
   if (text.includes('Follow-up change.')) {
     if (phase === 'after-append') { await waitForMessage(); process.exit(23) }
-    if (phase === 'after-receipt') { await waitForReceipt(); process.exit(25) }
+    if (phase === 'flush-failure' || phase === 'after-receipt') { yield* textResponse('Follow-up not yet worked.'); return }
     yield* toolResponse('report_ready', { result: 'Follow-up complete.', evidence: 'Recovered the follow-up.' })
     return
   }
@@ -124,7 +115,16 @@ async function* respond(options) {
 
 const storage = await SqliteStorage.open(databasePath)
 native = await nativeContext(directory, respond, { persistence: failingPlugin, persistenceConfig: { databasePath: sessionDatabasePath } })
-const sessions = new core.NativeSessions(native, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
+class CrashSessions extends core.NativeSessions {
+  run(request) {
+    if (phase !== 'after-receipt' || !request.onMessagePersisted) return super.run(request)
+    return super.run({ ...request, onMessagePersisted: async sequence => {
+      await request.onMessagePersisted(sequence)
+      process.exit(25)
+    } })
+  }
+}
+const sessions = new CrashSessions(native, { router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' } })
 engine = new Engine(storage, 'private', sourceConfig(), {}, sessions, [], {}, {}, {}, {}, { hostId: 'input-crash', leaseMs: 10 })
 await engine.acquireHost()
 const initial = await engine.receiveSource({ commandId: 'initial', threadId: 'room', objectId: 'message-1', type: 'created', version: '1',
@@ -132,7 +132,7 @@ const initial = await engine.receiveSource({ commandId: 'initial', threadId: 'ro
 const accepted = await engine.assessSourceBatch({ commandId: 'eval-initial', threadId: 'room', eventIds: [initial.eventId] })
 ticketId = accepted.receipts[0].ticketId
 engine.effects.wake()
-await settle(async () => (await engine.getTicketDirection(ticketId))?.state === 'ended')
+await settle(() => initialWorkReady(engine, ticketId))
 await log('initial-done')
 if (phase === 'before-claim') {
   await engine.effects.stop()

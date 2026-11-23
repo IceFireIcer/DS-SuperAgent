@@ -35,7 +35,7 @@ const react = {
 const tick = () => new Promise(resolve => setImmediate(resolve))
 // The product's style tags in a document, all of them or those of one group.
 const tagged = (document, tag) => [...document.head.querySelectorAll('style')]
-  .filter(style => style.dataset.dshBot !== undefined && (tag === undefined || style.dataset.dshBot === tag))
+  .filter(style => style.dataset.dshSuperagent !== undefined && (tag === undefined || style.dataset.dshSuperagent === tag))
 
 // The client-modules bundle registers itself through the page's __ModuleLoader__
 // facade when it loads; capture that registration once to reach its exports.
@@ -108,7 +108,7 @@ test('every product style is owned by the ds-superagent client module', async ()
   stray.textContent = 'stray{}'
   document.head.appendChild(stray)
   for (const style of [plain, compiled]) {
-    assert.equal(style.dataset.dshBot !== undefined, true)
+    assert.equal(style.dataset.dshSuperagent !== undefined, true)
     assert.equal(style.dataset.plugin, 'ds-superagent')
     assert.equal(style.matches('style:not([data-plugin])'), false)
   }

@@ -25,5 +25,5 @@ test('the application menu of macOS carries a Quit when there is no tray', async
   assert.equal(quit.label, 'Quit DS SuperAgent', 'the menu ends the app')
   assert.equal(typeof quit.click, 'function', 'the entry works')
   quit.click()
-  await waitFor(() => state.quits > 0, 'end the app')
+  await waitFor(() => state.windows[0]?.isDestroyed(), 'close the startup window after quit')
 })

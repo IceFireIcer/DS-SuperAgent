@@ -1,4 +1,4 @@
-// Import cookies into a Bot's browser partition. A file or a harvested browser profile is
+// Import cookies into a browser resource partition. A file or a harvested browser profile is
 // parsed first and held in memory under a pending id (cookie values never leave the main
 // process); the page sees a value-free preview, and applying writes the cookies into the
 // partition's session and verifies what the store actually kept.

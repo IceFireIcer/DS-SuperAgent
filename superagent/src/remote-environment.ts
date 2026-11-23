@@ -840,8 +840,10 @@ class RemoteBoundEnvironment implements PreparedEnvironment {
             : new CoreError('COMMAND_FAILED', 'The device command could not complete; provider diagnostics are withheld to protect credentials.')
         }
       }
-      const settled = await handle.waitForExit(AbortSignal.timeout(5000)).catch(() => false)
+      let settled = !combined.aborted && await handle.waitForExit(combined).catch(() => false)
+      if (!settled && combined.aborted) settled = await handle.waitForExit(AbortSignal.timeout(5000)).catch(() => false)
       if (!settled) throw new CoreError('COMMAND_UNKNOWN', 'The device command did not confirm exit; no retry is authorized.')
+      if (combined.aborted && !handle.cancelled) throw new CoreError('COMMAND_ABORTED', 'The command caller stopped waiting for the device.')
       const stdout = handle.collected.stdout!.readFrom(0)
       const stderr = handle.collected.stderr!.readFrom(0)
       return { exitCode: outcome?.exitCode ?? null, cancelled: handle.cancelled,

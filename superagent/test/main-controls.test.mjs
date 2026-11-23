@@ -19,10 +19,15 @@ const source = { sourceInstanceId: 'product-desktop', actorId: 'alice', allowedA
 
 async function until(check, label) {
   const deadline = Date.now() + 20_000
-  while (!await check()) {
-    if (Date.now() >= deadline) throw new Error(`Main controls did not reach ${label}.`)
-    await sleep(20)
+  while (Date.now() < deadline) {
+    try {
+      if (await check()) return
+    } catch (error) {
+      if (error?.code !== 'QUEUE_FULL') throw error
+    }
+    await sleep(100)
   }
+  throw new Error(`Main controls did not reach ${label}.`)
 }
 
 async function seedAcceptedCard({ storage, binding, ticketId, suffix }) {
@@ -103,7 +108,7 @@ test('stopping the current Main reply leaves the committed delegated work runnin
     allowedActorIds: ['alice'], permissions: ['read', 'write'], commands: {} })
   const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
   const sessions = new NativeSessions(native, routes)
-  const engine = new Engine(storage, 'personal', source, { scanIntervalMs: 10, retryDelayMs: 10 }, sessions, [environment])
+  const engine = new Engine(storage, 'personal', source, {}, sessions, [environment])
   t.after(async () => {
     await engine.effects.stop(); await engine.shutdown(); await sessions.close()
     await native.fiber.dispose(); await environment.close(); await storage.close()
@@ -343,6 +348,13 @@ test('a Main work card answers only the exact current Attention and records the 
   assert.equal(control?.attention?.version, 1)
   const assignment = control.assignment
   const attention = control.attention
+  const board = async () => (await engine.listMainWork({ instanceId: 'personal' })).items
+    .find(item => item.ticketId === waiting.receipt.ticketId)
+  const boardWaiting = await board()
+  assert.equal(boardWaiting.status, waiting.status)
+  assert.equal(boardWaiting.question.attention.question, 'Continue beta?')
+  assert.equal(boardWaiting.question.assignment.generation, assignment.generation)
+  assert.equal(boardWaiting.question.permissions.canAnswer, true)
   const command = { instanceId: 'personal', commandId: 'answer-card-yes', workItemId: waiting.brief.workItemId,
     ticketId: waiting.receipt.ticketId, expectedGeneration: assignment.generation, attentionId: attention.id,
     attentionVersion: attention.version, text: 'Yes' }
@@ -371,6 +383,10 @@ test('a Main work card answers only the exact current Attention and records the 
   assert.equal(final?.control?.attention?.status, 'answered')
   assert.equal(final?.control?.attention?.answerText, 'Yes')
   assert.equal(final?.control?.permissions.canAnswer, false)
+  const boardAnswered = await board()
+  assert.equal(boardAnswered.status, final.status)
+  assert.equal(boardAnswered.question.attention.answerText, 'Yes')
+  assert.equal(boardAnswered.question.permissions.canAnswer, false)
   assert.match(final?.update?.summary ?? '', /Authorized answer v1/u)
   await engine.retryMainWork({ instanceId: 'personal', commandId: 'answer-card-rollover', workItemId: waiting.brief.workItemId,
     ticketId: waiting.receipt.ticketId, expectedGeneration: assignment.generation, reason: 'Advance the answered Assignment.' })

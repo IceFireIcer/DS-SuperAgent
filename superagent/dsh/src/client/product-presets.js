@@ -1,5 +1,6 @@
 import { createElement as h, useCallback, useEffect, useRef, useState } from 'react'
 import { Card, CharacterGrid, Row } from './product-card.js'
+import { EmptyState, InlineNotice, StatusChip } from './product-settings-components.js'
 import { productAvatarImage } from './product-avatar.js'
 import { lookOf, BotMark } from './mark.js'
 import { t } from './i18n.js'
@@ -295,17 +296,17 @@ export function ProductPresetSettings({ binding, call, settingsRevision, roleSet
     })
   }
 
-  return h('section', { className: 'bt-product-presets', 'aria-label': t('Role presets') },
+  return h('section', { className: 'bt-ps-content bt-product-presets', 'aria-label': t('Role presets') },
     h(Card, { title: t('Role presets') },
       h('div', { className: 'bt-set-row bt-product-preset-actions' },
         h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: Boolean(busy) || items === null || Boolean(listError) || Boolean(mode),
           onClick: () => { setDraft(emptyDraft()); setMode('new'); setError(''); setNotice('') } }, t('New preset')),
         h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: Boolean(busy) || items === null || Boolean(listError) || Boolean(mode),
           onClick: () => { setMode('import'); setError(''); setNotice('') } }, t('Review old configuration'))),
-      listError ? h('div', { className: 'bt-set-row' }, h('p', { className: 'bt-main-error', role: 'alert' }, listError),
-        h('button', { type: 'button', className: 'bt-soft bt-soft-sm', onClick: () => { void refresh() } }, t('Retry'))) : null,
+      listError ? h(InlineNotice, { tone: 'danger', action:
+        h('button', { type: 'button', className: 'bt-soft bt-soft-sm', onClick: () => { void refresh() } }, t('Retry')) }, listError) : null,
       items === null && !listError ? h('p', { className: 'bt-set-row bt-main-status', role: 'status' }, t('Loading…')) : null,
-      items?.length === 0 ? h('p', { className: 'bt-set-row bt-main-status' }, t('No role presets yet.')) : null,
+      items?.length === 0 ? h(EmptyState, { title: t('No role presets yet.') }) : null,
       items?.length ? h('div', { className: 'bt-set-row bt-product-preset-target' },
         h('label', null, t('Apply to'), h('select', { className: 'bt-select', 'aria-label': t('Apply to'), value: applyRole,
           disabled: Boolean(busy), onChange: event => setApplyRole(event.target.value) },
@@ -318,25 +319,25 @@ export function ProductPresetSettings({ binding, call, settingsRevision, roleSet
           entry.origin ? h('span', { className: 'bt-set-hint' }, `${t('From')} ${entry.origin.source.identity} / ${entry.origin.source.botId} → ${entry.origin.targetRole}`) : null),
         entry.status === 'active' ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm',
           disabled: Boolean(busy) || Boolean(listError) || stale || !Number.isSafeInteger(revision), onClick: () => apply(entry.id) }, t('Apply preset'))
-          : h('span', { className: 'bt-set-hint' }, t('Deleted')))),
+          : h(StatusChip, null, t('Deleted')))),
       cursor ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: Boolean(busy),
         onClick: () => { void refresh(cursor, true) } }, t('Load more')) : null,
       h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: activityBusy,
         onClick: () => { void loadActivity() } }, t('Preset activity'))),
-    activityError ? h('p', { role: 'alert', className: 'bt-main-error' }, activityError) : null,
+    activityError ? h(InlineNotice, { tone: 'danger' }, activityError) : null,
     activity ? h(Card, { title: t('Preset activity') },
       activity.imports.map(item => h('p', { key: item.id, className: 'bt-set-row bt-set-hint' },
         `${item.source.identity} / ${item.source.botId} → ${item.targetRole}: ${t(item.status)}${item.reason ? ` (${t(item.reason)})` : ''}`)),
       activity.applications.map(item => h('p', { key: `${item.sourceInstanceId}:${item.actorId}:${item.commandId}`, className: 'bt-set-row bt-set-hint' },
         `${item.presetId} v${item.presetRevision} → ${item.targetRole}: ${t('Configuration')} v${item.revision}`)),
-      !activity.imports.length && !activity.applications.length ? h('p', { className: 'bt-set-row bt-set-hint' }, t('No preset activity yet.')) : null,
+      !activity.imports.length && !activity.applications.length ? h(EmptyState, { title: t('No preset activity yet.') }) : null,
       activity.importsCursor || activity.applicationsCursor ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm',
         disabled: activityBusy, onClick: () => { void loadActivity(activity) } }, t('Load more')) : null) : null,
     stale ? h('div', { className: 'bt-set-row' },
       h('p', { role: 'alert', className: 'bt-main-error' }, t('Role settings changed. Reload settings before applying a preset.')),
       onReload ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: Boolean(busy),
         onClick: () => { void reloadSettings() } }, t('Reload settings')) : null) : null,
-    error ? h('p', { role: 'alert', className: 'bt-main-error' }, error) : null,
+    error ? h(InlineNotice, { tone: 'danger' }, error) : null,
     notice ? h('p', { role: 'status', className: 'bt-main-status' }, notice) : null,
     mode === 'import' && !preview ? h('form', { className: 'bt-product-preset-form', onSubmit: prepare },
       h(Card, { title: t('Review old configuration') },
@@ -390,7 +391,6 @@ export function ProductPresetSettings({ binding, call, settingsRevision, roleSet
 }
 
 export const PRODUCT_PRESET_CSS = `
-.bt-product-presets{display:flex;flex-direction:column;gap:16px}
 .bt-product-presets .bt-set-row{min-width:0;overflow-wrap:anywhere}
 .bt-product-preset-actions,.bt-product-preset-target,.bt-product-preset-appearance{display:flex;align-items:center;flex-wrap:wrap;gap:12px}
 .bt-product-preset-target label{display:flex;align-items:center;gap:8px}

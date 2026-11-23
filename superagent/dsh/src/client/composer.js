@@ -1,16 +1,28 @@
 import { createElement as h, useEffect, useRef, useState } from 'react'
-import { MicIcon, PaperclipIcon } from './icons.js'
+import { MicIcon, PaperclipIcon, WaveIcon } from './icons.js'
 import { openCapture, speechCatalog, transcribeWave } from './speech.js'
 import { t } from './i18n.js'
+import { VoiceMode } from './main-voice.js'
 
-export function MainComposer({ onSend, onStop, busy, stopping, readOnly = false, error, value, onValueChange, directoryControl,
-  attachments = [], onFiles, onRemoveAttachment, uploading = false, speechRemote }) {
+export function MainComposer({ onSend, onStop, busy, stopping, ready = true, readOnly = false, error, value, onValueChange, directoryControl,
+  directoryBusy = false, attachments = [], onFiles, onRemoveAttachment, uploading = false, speechRemote,
+  voice, onVoiceStart, onVoicePause, onVoiceResume, onVoiceClose }) {
   const [draft, setDraft] = useState('')
   const [voiceState, setVoiceState] = useState('idle')
   const [voiceError, setVoiceError] = useState(null)
   const fileInput = useRef(null)
   const capture = useRef(null)
   const voiceGeneration = useRef(0)
+  const voiceStart = useRef(null)
+  const textInput = useRef(null)
+  const restoreFocus = useRef(false)
+  const voiceOpen = Boolean(voice && voice.phase !== 'off')
+  useEffect(() => {
+    if (!voiceOpen && restoreFocus.current) {
+      restoreFocus.current = false
+      ;(voiceStart.current ?? textInput.current)?.focus()
+    }
+  }, [voiceOpen])
   const text = value ?? draft
   const setText = next => onValueChange ? onValueChange(next) : setDraft(next)
   const latestText = useRef(text)
@@ -72,17 +84,21 @@ export function MainComposer({ onSend, onStop, busy, stopping, readOnly = false,
     }
   }
   const hasContent = Boolean(text.trim() || attachments.length)
+  const showVoiceStart = onVoiceStart && !hasContent && !readOnly && !busy
   const submit = async event => {
     event.preventDefault()
-    if (busy || uploading || voiceState !== 'idle' || dictation.listening || readOnly || !hasContent) return
+    if (!ready || busy || directoryBusy || uploading || voiceState !== 'idle' || dictation.listening || readOnly || !hasContent) return
     if (await onSend(text)) setText('')
   }
-  return h('form', { className: 'bt-main-composer', onSubmit: submit },
+  if (voiceOpen) return h(VoiceMode, { state: voice, error, onPause: onVoicePause, onResume: onVoiceResume,
+    onClose: () => { restoreFocus.current = true; onVoiceClose() }, busy: busy || directoryBusy || uploading, onStop, stopping })
+
+  return h('form', { className: 'bt-main-composer', 'data-main-input-ready': ready ? '' : undefined, onSubmit: submit },
     error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
     voiceError || dictation.note ? h('p', { className: 'bt-main-error', role: 'status' }, voiceError ?? dictation.note) : null,
     h('label', { className: 'bt-main-label', htmlFor: 'main-message' }, t('Message Main')),
     h('textarea', {
-      id: 'main-message', value: text, rows: 2, maxLength: 32768, placeholder: readOnly ? t('Read-only connection') : t('Message Main'), disabled: readOnly,
+      id: 'main-message', ref: textInput, value: text, rows: 2, maxLength: 32768, placeholder: readOnly ? t('Read-only connection') : t('Message Main'), disabled: readOnly,
       onChange: event => setText(event.target.value),
       onKeyDown: event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(event) } },
     }),
@@ -100,12 +116,15 @@ export function MainComposer({ onSend, onStop, busy, stopping, readOnly = false,
       onFiles && !readOnly ? h('span', null,
         h('input', { type: 'file', ref: fileInput, multiple: true, hidden: true,
           onChange: event => { const files = [...(event.target.files ?? [])]; event.target.value = ''; if (files.length) onFiles(files) } }),
-        h('button', { type: 'button', className: 'bt-soft', disabled: busy || uploading,
+        h('button', { type: 'button', className: 'bt-soft', disabled: busy || directoryBusy || uploading,
           'aria-label': t('Add files'), title: t('Add files'), onClick: () => fileInput.current?.click() }, h(PaperclipIcon))) : null,
-      busy && onStop && !readOnly ? h('button', { className: 'bt-soft', type: 'button', disabled: stopping, onClick: onStop },
+      busy && onStop && !readOnly ? h('button', { className: 'bt-soft', type: 'button', 'data-action': 'stop-main', disabled: stopping, onClick: onStop },
         stopping ? t('Stopping…') : t('Stop reply')) : null,
-      h('button', { className: 'bt-soft', type: 'submit', disabled: busy || uploading || voiceState !== 'idle' || dictation.listening || readOnly || !hasContent },
-        readOnly ? t('Read-only') : uploading ? t('Uploading…') : busy ? t('Sending…') : t('Send'))))
+      showVoiceStart ? h('button', { className: 'bt-soft bt-main-voice-toggle', type: 'button', ref: voiceStart,
+        disabled: !ready || directoryBusy || uploading || voiceState !== 'idle' || dictation.listening, 'aria-label': t('Start voice chat'),
+        onClick: onVoiceStart }, h(WaveIcon), t('Voice chat'))
+        : h('button', { className: 'bt-soft', type: 'submit', disabled: !ready || busy || directoryBusy || uploading || voiceState !== 'idle' || dictation.listening || readOnly || !hasContent },
+          readOnly ? t('Read-only') : uploading ? t('Uploading…') : busy ? t('Sending…') : t('Send'))))
 }
 
 // -------------------------------------------------------------------------

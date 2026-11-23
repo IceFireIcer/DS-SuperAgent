@@ -1,6 +1,7 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": true
+    "strict": true,
+    "paths": { "@phone-link": ["../superagent/src/phone-link/src/mobile-client.ts"] }
   }
 }

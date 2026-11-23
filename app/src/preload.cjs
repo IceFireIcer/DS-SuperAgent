@@ -6,11 +6,12 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 const host = process.argv.find(value => value.startsWith('--ds-superagent-origin='))?.slice('--ds-superagent-origin='.length)
-if (host !== undefined && location.origin === host) {
+if (process.isMainFrame && host !== undefined && location.origin === host) {
   // Product settings show and move the app's data location through this.
   contextBridge.exposeInMainWorld('dsSuperagentApp', {
     dataLocation: () => ipcRenderer.invoke('ds-superagent:data-location'),
     moveData: (workspace) => ipcRenderer.invoke('ds-superagent:move-data', typeof workspace === 'string' ? workspace : undefined),
+    pickDirectory: () => ipcRenderer.invoke('ds-superagent:directory-pick'),
     teamWorkspaceChanged: (path) => { ipcRenderer.send('ds-superagent:team-workspace', String(path)) },
     // Product browsers, in the shape of DSH Desktop's browser bridge so the same client works in both
     // alike; `forget` clears a key's storage, which here outlives the app.
@@ -22,6 +23,7 @@ if (host !== undefined && location.origin === host) {
       call: (endpoint, payload) => ipcRenderer.invoke('ds-superagent:client-call', endpoint, payload),
       events: () => ipcRenderer.invoke('ds-superagent:client-events'),
     },
+    classicAgent: { call: (endpoint, payload) => ipcRenderer.invoke('ds-superagent:classic-agent', endpoint, payload) },
     // The app's own updater, for the About row's state and buttons.
     updates: updatesBridge(),
     backups: {
@@ -30,6 +32,19 @@ if (host !== undefined && location.origin === host) {
       restore: id => ipcRenderer.invoke('ds-superagent:backup-restore', id),
     },
     diagnostics: () => ipcRenderer.invoke('ds-superagent:diagnostics-read'),
+    notify: notice => ipcRenderer.invoke('ds-superagent:notify', notice),
+    setBadge: count => ipcRenderer.send('ds-superagent:badge', count),
+    onOpenSession(listener) {
+      let active = true
+      const open = () => {
+        void ipcRenderer.invoke('ds-superagent:notification-take').then(id => {
+          if (active && id === 'main') listener(id)
+        }).catch(() => {})
+      }
+      ipcRenderer.on('ds-superagent:notification-open', open)
+      open()
+      return () => { active = false; ipcRenderer.removeListener('ds-superagent:notification-open', open) }
+    },
   })
   const caption = process.argv.find(value => value.startsWith('--ds-superagent-caption='))
   if (caption !== undefined) {
@@ -80,7 +95,6 @@ function browserBridge() {
     importSources: () => ipcRenderer.invoke('ds-superagent:browser-import-sources'),
     importPick: () => ipcRenderer.invoke('ds-superagent:browser-import-pick'),
     importLive: (source, close) => ipcRenderer.invoke('ds-superagent:browser-import-live', String(source), close === true),
-    importApply: (key, pending) => ipcRenderer.invoke('ds-superagent:browser-import-apply', String(key), String(pending)),
     importCancel: (pending) => ipcRenderer.invoke('ds-superagent:browser-import-cancel', String(pending)),
     credentialImport: {
       pick: () => ipcRenderer.invoke('ds-superagent:credential-import-pick'),

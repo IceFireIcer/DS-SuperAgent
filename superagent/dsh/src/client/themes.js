@@ -1,3 +1,4 @@
+// Derived from DS Bot 0.3.8 (Apache-2.0), ds-bot/src/client/themes.js.
 import { ACCENT_INKS, INKS, isHex, luminance } from './inks.js'
 import { SHAPES, markupCache, maskCache } from './characters.js'
 import { createSource } from './sources.js'
@@ -38,26 +39,95 @@ function themeVars(mode, dark, accent = mode.accent) {
   return {
     '--bt-ink': mode.text, '--bt-ink-2': rgba(mode.text, 0.6), '--bt-ink-3': rgba(mode.text, 0.36),
     '--bt-bubble': mode.bubble, '--bt-sidebar': mode.sidebar, '--bt-main': mode.bg, '--bt-card': mode.card,
-    '--bt-line': rgba(mode.text, 0.08), '--bt-line-2': rgba(mode.text, 0.15),
+    '--bt-line': rgba(mode.text, 0.08), '--bt-line-2': rgba(mode.text, 0.15), '--bt-line-weak': rgba(mode.text, 0.1),
     '--bt-hover': dark ? 'rgba(160,160,160,.12)' : 'rgba(119,119,119,.09)',
     '--bt-active': dark ? 'rgba(160,160,160,.2)' : 'rgba(119,119,119,.17)',
     '--bt-accent': accent, '--bt-accent-ink': accentInk(accent),
     '--bt-user': mode.user, '--bt-user-ink': mode.userText,
     '--bt-tag-bg': rgba(mode.text, dark ? 0.09 : 0.06), '--bt-tag-ink': rgba(mode.text, 0.58),
+    '--bt-warn': dark ? '#f0b84a' : '#8a5a00',
+    '--bt-glass-bg': `color-mix(in srgb,var(--bt-main) ${dark ? 74 : 78}%,transparent)`,
+    '--bt-glass-border': dark ? 'rgba(255,255,255,.13)' : 'rgba(255,255,255,.72)',
+    '--bt-glass-rim': dark ? 'rgba(255,255,255,.11)' : 'rgba(20,20,20,.09)',
+    '--bt-glass-shadow': dark
+      ? '0 12px 32px -6px rgba(0,0,0,.42),0 2px 8px -1px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.12)'
+      : '0 8px 28px -6px rgba(0,0,0,.08),0 2px 6px -1px rgba(0,0,0,.04),inset 0 1px 0 rgba(255,255,255,.82)',
+    '--bt-dialog-shadow': dark ? '0 24px 70px rgba(0,0,0,.55),0 2px 8px rgba(0,0,0,.3)' : '0 24px 70px rgba(0,0,0,.18),0 2px 8px rgba(0,0,0,.06)',
+    '--bt-card-shadow': dark ? '0 1px 2px rgba(0,0,0,.35)' : '0 1px 2px rgba(0,0,0,.03)',
+    '--bt-nav-thumb-bg': 'color-mix(in srgb,var(--bt-card) 82%,var(--bt-active))',
+    '--bt-nav-thumb-shadow': dark ? '0 1px 3px rgba(0,0,0,.28)' : '0 1px 3px rgba(0,0,0,.08)',
+    '--bt-accent-soft': `color-mix(in srgb,var(--bt-accent) ${dark ? 18 : 14}%,transparent)`,
+    '--bt-danger-soft': `color-mix(in srgb,var(--bt-danger) ${dark ? 18 : 14}%,transparent)`,
+    '--bt-danger-glow': `color-mix(in srgb,var(--bt-danger) ${dark ? 28 : 24}%,transparent)`,
+    '--bt-q-edge': rgba(mode.text, dark ? 0.16 : 0.1),
+    '--bt-q-rule': rgba(mode.text, dark ? 0.12 : 0.08),
+    '--bt-q-rule-2': rgba(mode.text, dark ? 0.08 : 0.05),
+    ...Object.fromEntries(Object.entries(INKS).map(([id, colors]) => [`--bt-ink-${id}`, colors[Number(dark)]])),
   }
 }
 const declarations = vars => Object.entries(vars).map(([name, value]) => `${name}:${value}`).join(';')
 // A preset accent is saved as its light value; in dark mode it takes the preset's dark
-// value, as Bot names do, so Charcoal does not vanish on a dark background. A custom
+// value, as role names do, so Charcoal does not vanish on a dark background. A custom
 // accent is the same in both modes. A preset is matched the way Settings marks it.
 const darkAccent = (accent) => {
   const ink = ACCENT_INKS.find(id => INKS[id][0] === accent)
   return ink === undefined ? accent : INKS[ink][1]
 }
-// `html body` outranks the base sheet's `body` rules without !important.
-export const themeCss = (theme, accent) => `html body{${declarations(themeVars(theme.light, false, accent ?? theme.light.accent))}}
-html body[data-ds-dark-theme]{${declarations(themeVars(theme.dark, true, darkAccent(accent) ?? theme.dark.accent))}}
+const DARK_ROOT = ':root:has(> body[data-ds-dark-theme])'
+export const themeCss = (theme, accent, { fallback = false } = {}) => {
+  const selected = isHex(accent) ? accent : undefined
+  const selector = root => fallback ? `:where(${root})` : root
+  return `${selector(':root')}{${declarations(themeVars(theme.light, false, selected))}}
+${selector(DARK_ROOT)}{${declarations(themeVars(theme.dark, true, darkAccent(selected)))}}
 ${theme.css ?? ''}`
+}
+
+export const FOUNDATION_TOKENS_CSS = `
+:root{
+  --bt-danger:#e02135;
+  --bt-green:#00c972;
+  --bt-star:#ff9800;
+  --bt-knob:#ffffff;
+  --bt-static-light:#ffffff;
+  --bt-recording:#ff3e51;
+  --bt-recording-ring:color-mix(in srgb,var(--bt-recording) 35%,transparent);
+  --bt-hairline:rgba(228,228,228,.04);
+  --bt-shadow-ink:#000;
+  --bt-scrim:rgba(0,0,0,.32);
+  --bt-font-fallback:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --bt-font:var(--dsw-font-family,var(--bt-font-fallback));
+  --bt-font-hidden:0;
+  --bt-font-badge:8.5px;
+  --bt-font-caption:11px;
+  --bt-font-small:12px;
+  --bt-font-body:13px;
+  --bt-font-control:14px;
+  --bt-font-heading:15px;
+  --bt-font-large:16px;
+  --bt-font-title:17px;
+  --bt-font-display:18px;
+  --bt-line-caption:16px;
+  --bt-line-body:18px;
+  --bt-line-heading:20px;
+  --bt-line-control:22px;
+  --bt-radius-none:0;
+  --bt-radius-hairline:1px;
+  --bt-radius-tag:4px;
+  --bt-radius-menu-item:6px;
+  --bt-radius-input:8px;
+  --bt-radius-row:10px;
+  --bt-radius-card:12px;
+  --bt-radius-popover:16px;
+  --bt-radius-bubble:18px;
+  --bt-radius-dialog:20px;
+  --bt-radius-composer:22px;
+  --bt-radius-pill:999px;
+  --bt-radius-round:50%;
+  --bt-msg-w:.8;
+  --bt-flat-w:1;
+}
+${DARK_ROOT}{--bt-scrim:rgba(0,0,0,.5)}
+${themeCss(THEMES.deepseek, undefined, { fallback: true })}`
 export const shellTokens = ({ light, dark }) => ({
   '--dsw-alias-bg-base': { light: light.bg, dark: dark.bg },
   '--dsw-specific-sidebar-fill': { light: light.sidebar, dark: dark.sidebar },
@@ -67,9 +137,6 @@ export const shellTokens = ({ light, dark }) => ({
   '--dsw-alias-label-tertiary': { light: rgba(light.text, 0.6), dark: rgba(dark.text, 0.6) },
 })
 
-// Other plugins add character shapes and themes through `window.dshBot`, or queue
-// calls on `window.dshBotQueue` before this plugin loads. A shape draws only its
-// body; the eyes are cut out where `eyes.at` says, so it gets every state motion free.
 const customThemes = {}
 export const registry = createSource(0)
 const isPoint = point => Array.isArray(point) && point.length === 2 && point.every(Number.isFinite)

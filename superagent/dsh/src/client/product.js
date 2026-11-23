@@ -1,55 +1,61 @@
 import { Fragment, createElement as h, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { ProductChatRow } from './product-chat.js'
 import { MainComposer } from './composer.js'
+import { installMainCells } from './main-cells.js'
+import { MainQuestion } from './main-question.js'
 import { plainSpeech } from './product-speech.js'
+import { createMainVoice, MAIN_VOICE_CSS } from './main-voice.js'
 import { readProductArtifact, readProductAttachment, uploadPayload, uploadWithRetry } from './product-attachments.js'
 import { FeishuSourceStatus } from './product-feishu.js'
-import { ProductBrandMark } from './product-brand.js'
 import { Card, Row } from './product-card.js'
-import { ClockIcon, CloseIcon, GaugeIcon, GlobeIcon, MemoryIcon, SlidersIcon } from './icons.js'
+import { CloseIcon, SlidersIcon } from './icons.js'
 import { ProductScheduleSettings, PRODUCT_SCHEDULE_CSS } from './product-schedules.js'
 import { ProductProactiveSettings, ProactiveReview, PRODUCT_PROACTIVE_CSS } from './product-proactive.js'
 import { ProductPresetSettings, PRODUCT_PRESET_CSS } from './product-presets.js'
 import { ProductCredentialSettings, PRODUCT_CREDENTIAL_CSS } from './product-credentials.js'
+import { ChatSecrets, CHAT_SECRET_CSS } from './chat-secrets.js'
 import { ProductMemorySettings, PRODUCT_MEMORY_CSS } from './product-memory.js'
 import { ProductSupervisionSettings, PRODUCT_SUPERVISION_CSS } from './product-supervision.js'
 import { FolderMenu, FOLDER_CSS } from './folder-menu.js'
 import { createSource } from './sources.js'
-import { mergeMessages, mergeObservationItems, rebaseRoleDraft } from './product-state.js'
+import { mergeMessages, mergeObservationItems, projectNativeTurnCards, projectTurnCards, rebaseRoleDraft } from './product-state.js'
 import { installLocale, t } from './i18n.js'
-import { allThemes, themeCss } from './themes.js'
+import { AppearanceSettings, installAppearance } from './appearance.js'
+import { SettingsShell, SETTINGS_CHILDREN, SETTINGS_SHELL_CSS, installSettingsSections } from './settings-shell.js'
+import { SettingsSectionState } from './settings-sections.js'
+import { FeedbackSettings } from './settings-feedback.js'
+import { BuiltinPluginSettings } from './settings-builtin-plugins.js'
+import { installProductShell } from './product-shell.js'
+import { ClassicReturn, RETURN_CSS, surfaceGroups } from './product-surface.js'
+import { DEEPSEEK_SIGN_IN_SLOT, mainModelSetup, MODEL_ONBOARDING_CSS, SuperagentModelChoice } from './product-model-onboarding.js'
 import { SHELL_CSS, CONVERSATION_CSS, installCompiledStyles, installStyles } from './styles.js'
 import { ProductMcpSettings } from './product-mcp-settings.js'
-import { ProductBrowserSettings, PRODUCT_BROWSER_CSS } from './product-browser-settings.js'
+import { CapabilitySettings } from './capability-settings.js'
+import { ConnectorSettings } from './connector-settings.js'
+import { ProductImSettings } from './im-settings.js'
+import { ProductPhoneSettings } from './product-phone-settings.js'
+import { ProductComputerSettings, PRODUCT_COMPUTER_CSS } from './product-computer-settings.js'
+import { WorkBoard, WorkMemberDock, WORK_BOARD_CSS } from './work-board.js'
+import { workStatusCopy as statusCopy } from './work-feedback.js'
+import { ProductBrowserSettings, ProductBrowserPluginSettings, PRODUCT_BROWSER_CSS } from './product-browser-settings.js'
 import { ProductExecutionSettings, PRODUCT_EXECUTION_CSS } from './product-execution.js'
 import { ProductWorkView } from './product-work-view.js'
 import { ProductOperationsSettings, PRODUCT_OPERATIONS_CSS } from './product-operations.js'
+import { USAGE_HEATMAP_CSS } from './usage-heatmap.js'
+import { PRODUCT_SETTINGS_CSS } from './product-settings-css.js'
+import { call, productCall } from './api.js'
+export { productCall } from './api.js'
 
 const clientBridge = () => window.dsSuperagentApp?.productClient
-let activeHost = 'local'
+const classicBridge = () => window.dsSuperagentApp?.classicAgent
+const focusMainInput = () => document.getElementById('main-message')?.focus()
+const returnTo = trigger => { if (trigger?.isConnected) trigger.focus(); else focusMainInput() }
 
 function offerDownload(data, name, mediaType = 'application/octet-stream') {
   const url = URL.createObjectURL(new Blob([data], { type: mediaType }))
   const link = document.createElement('a')
   link.href = url; link.download = name; link.click()
   setTimeout(() => URL.revokeObjectURL(url), 10000)
-}
-
-export async function productCall(endpoint, payload = {}) {
-  const bridge = clientBridge()
-  if (activeHost === 'remote') {
-    if (!bridge) throw new Error(t('The remote Host connection is unavailable.'))
-    return bridge.call(endpoint, payload)
-  }
-  if (bridge && (await bridge.status()).connected) {
-    activeHost = 'remote'
-    return bridge.call(endpoint, payload)
-  }
-  const response = await fetch('api/product', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint, payload }) })
-  let result
-  try { result = await response.json() } catch { throw new Error(t('Could not reach Main. Check that the app is running.')) }
-  if (!response.ok || !result.ok) throw Object.assign(new Error(t(result.error?.message ?? 'Main is unavailable.')), { code: result.error?.code })
-  return result.value
 }
 
 const rolesNeedingModels = ({ roles, providers }) => ['main', 'router', 'worker'].filter(role => {
@@ -60,24 +66,39 @@ const rolesNeedingModels = ({ roles, providers }) => ['main', 'router', 'worker'
 
 export function applyProduct(ctx) {
   ctx.effect(() => installLocale(ctx.get('locale')), 'superagent: interface copy')
+  const nativeSession = Boolean(ctx.sessions?.binding && ctx.uiWorkspace?.openSession)
+  const nativeWorkspaces = ctx.get('workspaces')?.list
   const view = createSource({
     binding: null,
     messages: [],
+    readReplyId: null,
     works: [],
+    boardItems: null,
+    workerMembers: [],
+    boardError: '',
     activeTurn: null,
     health: null,
     modelsNeedSetup: null,
+    mainModelSetup: null,
+    modelSettingsError: false,
     sources: [],
     preparations: [],
     mainEvidence: null,
+    mainEvidenceWorkItemId: null,
     mainEvidenceLoading: false,
     mainEvidenceError: null,
     error: null,
     mainDraft: '',
+    mainAttachments: [],
+    mainUploading: false,
+    mainSending: false,
     messageBefore: null,
     messagesComplete: false,
     messagesLoading: false,
     route: 'main',
+    surface: 'product',
+    surfaceChanging: false,
+    restoreMainFocus: false,
     observations: [],
     observationCursor: null,
     observationQuery: '',
@@ -92,6 +113,9 @@ export function applyProduct(ctx) {
     activityLoading: false,
     activityError: null,
     settingsOpen: false,
+    settingsPage: null,
+    nativeModelsOpen: false,
+    signInOpen: false,
     connection: null,
     connectOpen: false,
     directoryOptions: null,
@@ -103,16 +127,103 @@ export function applyProduct(ctx) {
     directoryError: null,
   })
   const useView = () => useSyncExternalStore(view.subscribe, view.getSnapshot)
+  let settingsTrigger
+  let signInTrigger
   let stopped = false
+  let modelSettingsRequest = 0
   let observationListRequest = 0
   let observationRequest = 0
   let observationDetailRequest = 0
+  let boardFlight
+  let nextBoardPoll = 0
+  let nextMemberPoll = 0
+  let memberRequest = 0
+
+  async function refreshMembers(binding) {
+    const request = ++memberRequest
+    nextMemberPoll = Number.POSITIVE_INFINITY
+    try {
+      const { workers } = await productCall('work-members', { instanceId: binding.instanceId })
+      if (!stopped && request === memberRequest) view.set(state => ({ ...state, workerMembers: workers }))
+    } catch { /* Hold the last confirmed membership until the next successful read. */ }
+    finally { if (request === memberRequest) nextMemberPoll = Date.now() + 2000 }
+  }
+
+  function refreshBoard(binding) {
+    if (boardFlight) return boardFlight
+    boardFlight = (async () => {
+      try {
+        const items = new Map()
+        const visited = new Set()
+        let after
+        do {
+          if (stopped) return
+          const page = await productCall('work-board', { instanceId: binding.instanceId, ...(after ? { after } : {}) })
+          for (const item of page.items) items.set(item.id, item)
+          after = page.cursor
+          if (after && visited.has(after)) throw new Error(t('Could not refresh Work.'))
+          if (after) visited.add(after)
+        } while (after)
+        if (!stopped) view.set(state => ({ ...state, boardItems: [...items.values()], boardError: '' }))
+      } catch (error) {
+        if (!stopped) view.set(state => ({ ...state, boardError: error.message }))
+      } finally {
+        boardFlight = undefined
+        nextBoardPoll = Date.now() + 2000
+      }
+    })()
+    return boardFlight
+  }
+
+  function BoardSurface({ dock = false }) {
+    const state = useView()
+    const instanceId = state.binding?.instanceId
+    useEffect(() => {
+      if (dock || !instanceId) return
+      view.set(current => ({ ...current, route: 'work' }))
+      void refreshBoard({ instanceId })
+      return () => view.set(current => current.route === 'work' ? { ...current, route: 'main' } : current)
+    }, [dock, instanceId])
+    const allowed = !state.connection?.connected || state.connection.capabilities.includes('command')
+    const execute = state.binding && allowed ? async (endpoint, input) => {
+      const result = await productCall(endpoint, { ...input, instanceId: state.binding.instanceId })
+      if (dock) await refreshMembers(state.binding)
+      else {
+        if (boardFlight) await boardFlight
+        await Promise.all([refreshMain(state.binding), refreshBoard(state.binding), refreshMembers(state.binding)])
+      }
+      return result
+    } : undefined
+    const workers = new Map(state.workerMembers.map(worker => [worker.sessionId, worker]))
+    const questions = dock ? state.works.map(work => ({ goal: work.brief.goal, question: work.control })) : state.boardItems ?? []
+    for (const { goal, question } of questions) {
+      const attention = question?.attention
+      if (attention?.status === 'waiting' && attention.sessionId && !workers.get(attention.sessionId)?.item?.stop) {
+        workers.set(attention.sessionId, { sessionId: attention.sessionId, state: 'waiting', item: { goal } })
+      }
+    }
+    const members = h(WorkMemberDock, { workers: [...workers.values()], mainHealth: state.health,
+      routing: state.works.some(work => work.receipt?.status === 'routing'), activeTurn: state.activeTurn,
+      execute: dock ? execute : undefined })
+    if (dock) return members
+    return h(WorkBoard, { items: state.boardItems, error: state.boardError, execute, members, renderQuestion: item => item.question
+      && h(MainWorkCard, { key: `${item.question.attention.id}:${item.question.attention.version}`, questionOnly: true,
+        work: { brief: { goal: item.goal }, control: item.question }, onQuestionSettled: async () => {
+          if (boardFlight) await boardFlight
+          await Promise.all([refreshBoard(state.binding), refreshMembers(state.binding)])
+        } }) })
+  }
 
   const refreshMain = async binding => {
     try {
       const page = await productCall('history', { instanceId: binding.instanceId, limit: 100 })
       if (!stopped) view.set(state => {
-        return { ...state, binding, messages: mergeMessages(state.messages, page.messages),
+        const messages = mergeMessages(state.messages, page.messages)
+        const lastReply = messages.findLast(message => message.role === 'main')
+        const reading = state.surface === 'product' && state.route === 'main' && document.hasFocus() && document.visibilityState !== 'hidden'
+        const nextBinding = page.mainSessionId ? { ...binding, mainSessionId: page.mainSessionId, generation: page.generation,
+          mainSessionMode: page.mainSessionMode ?? binding.mainSessionMode } : binding
+        return { ...state, binding: nextBinding, messages, readReplyId: reading ? lastReply?.id ?? null : state.readReplyId,
           works: page.works ?? state.works,
           activeTurn: page.activeTurn ?? null,
           health: page.health ?? state.health,
@@ -155,6 +266,68 @@ export function applyProduct(ctx) {
     instanceId: binding.instanceId, commandId: crypto.randomUUID(), path,
   })
 
+  const effectiveTarget = state => {
+    const target = state.directoryOptions?.execution?.policy?.defaultTarget
+    return state.executionTarget ?? (target === 'remote-only' || target === 'auto' ? target : 'local-only')
+  }
+  const mainBusy = state => state.mainSending || Boolean(state.activeTurn)
+    || state.messages.some(message => ['queued', 'running', 'stopping'].includes(message.status))
+  const pendingQuestion = state => state.works.find(work => work.control?.assignment && work.control.permissions?.canAnswer
+    && work.control.attention?.status === 'waiting')
+  const nativeStatus = ctx.uiSession?.sessionStatus
+  const nativeQuestion = state => nativeStatus?.getSnapshot().get(state.binding?.mainSessionId)?.pendingInteraction
+  const mainVoice = createMainVoice({ speechRemote: () => ctx.get('remote.speech'), readMain: () => {
+    const state = view.getSnapshot()
+    return { messages: state.messages, question: nativeQuestion(state) || pendingQuestion(state),
+      active: state.surface === 'product' && state.route === 'main' && (!state.connection?.connected || state.connection.capabilities.includes('command')),
+      busy: mainBusy(state) || state.directoryBusy || state.mainUploading }
+  } })
+  ctx.effect(() => {
+    const stopView = view.subscribe(mainVoice.sync)
+    const stopNative = nativeStatus?.subscribe(mainVoice.sync)
+    document.addEventListener('visibilitychange', mainVoice.sync)
+    window.addEventListener('pagehide', mainVoice.close)
+    return () => {
+      stopView()
+      stopNative?.()
+      document.removeEventListener('visibilitychange', mainVoice.sync)
+      window.removeEventListener('pagehide', mainVoice.close)
+      mainVoice.close()
+    }
+  }, 'superagent: Main voice lifecycle')
+  const directoryError = error => view.set(current => ({ ...current, directoryError: error ? t(error.message) : null }))
+  const changeWorkDirectory = async pick => {
+    const state = view.getSnapshot()
+    if (!state.binding || state.connection?.connected || effectiveTarget(state) !== 'local-only'
+      || state.directoryBusy || state.mainUploading || mainBusy(state)) return
+    view.set(current => ({ ...current, directoryBusy: true, directoryError: null }))
+    try {
+      const path = await pick(state.binding)
+      if (path === null || path === undefined || path === state.directoryOverride?.root) return
+      if (view.getSnapshot().mainAttachments.length) throw new Error('Remove attached files before changing directories.')
+      const selected = path ? await registerDirectory(state.binding, path) : null
+      await loadDirectories(state.binding)
+      view.set(current => ({ ...current, directoryOverride: selected }))
+    } catch (error) { directoryError(error) }
+    finally { view.set(current => ({ ...current, directoryBusy: false })) }
+  }
+
+  function MainWorkDirectory({ sidebar = false, wide = true }) {
+    const state = useView()
+    if (!state.binding || !state.directoryOptions || state.connection?.connected || effectiveTarget(state) !== 'local-only') return null
+    const actions = directoryActions(state.binding)
+    const fallback = state.directoryOptions.default?.root
+    return h('div', { className: sidebar ? 'bt-sidebar-directory' : 'bt-main-directory' },
+      sidebar ? null : h('span', { className: 'bt-main-label' }, t('Work directory')),
+      h(FolderMenu, { value: state.directoryOverride?.root, defaultPath: fallback,
+        label: t('Work directory'), fallbackLabel: t(fallback ? 'Instance default' : 'No directory selected'),
+        actions, onNativePick: () => changeWorkDirectory(() => actions.folderPick()),
+        onPick: path => changeWorkDirectory(() => path), compact: sidebar && !wide,
+        dismiss: state.settingsOpen || state.connectOpen || state.signInOpen,
+        disabled: mainBusy(state) || state.directoryBusy || state.mainUploading }),
+      state.directoryError ? h('p', { className: 'bt-main-error', role: 'alert' }, state.directoryError) : null)
+  }
+
   const loadEarlierMessages = async binding => {
     const current = view.getSnapshot()
     if (!current.messageBefore || current.messagesLoading) return
@@ -176,18 +349,20 @@ export function applyProduct(ctx) {
     const same = current?.workItemId === work.brief.workItemId
     if (append && (!same || !current.pagination?.truncated || !current.pagination?.cursor)) return
     try {
-      view.set(state => ({ ...state, mainEvidenceLoading: true, mainEvidenceError: null }))
+      view.set(state => ({ ...state, mainEvidenceWorkItemId: work.brief.workItemId,
+        mainEvidenceLoading: true, mainEvidenceError: null, mainEvidence: same ? state.mainEvidence : null }))
       const page = await productCall('evidence', { instanceId: binding.instanceId, workItemId: work.brief.workItemId,
         ref: { kind: 'trigger' }, maxBytes: 4096, ...(append && same ? { after: current.pagination.cursor } : {}) })
       if (stopped) return
-      view.set(state => ({ ...state,
+      view.set(state => state.mainEvidenceWorkItemId !== work.brief.workItemId ? state : ({ ...state,
         mainEvidence: { ...page, workItemId: work.brief.workItemId, goal: work.brief.goal,
           text: append && state.mainEvidence?.workItemId === work.brief.workItemId
             ? state.mainEvidence.text + page.text : page.text },
         mainEvidenceLoading: false, mainEvidenceError: null,
       }))
     } catch (error) {
-      if (!stopped) view.set(state => ({ ...state, mainEvidenceLoading: false, mainEvidenceError: error.message }))
+      if (!stopped) view.set(state => state.mainEvidenceWorkItemId !== work.brief.workItemId ? state
+        : { ...state, mainEvidenceLoading: false, mainEvidenceError: error.message })
     }
   }
 
@@ -268,6 +443,42 @@ export function applyProduct(ctx) {
     }
   }
 
+  const applyModelSettings = snapshot => {
+    const setup = mainModelSetup(snapshot)
+    if ((!setup || view.getSnapshot().modelSettingsError) && document.activeElement?.closest('.bt-superagent-model-dock')) focusMainInput()
+    view.set(state => ({ ...state, modelsNeedSetup: Boolean(setup) || rolesNeedingModels(snapshot).length > 0,
+      mainModelSetup: setup, modelSettingsError: false }))
+  }
+  const readModelSettings = async (binding, limit) => {
+    const request = ++modelSettingsRequest
+    const isCurrent = () => {
+      const state = view.getSnapshot()
+      return !stopped && request === modelSettingsRequest && !state.connection?.connected && state.binding?.instanceId === binding.instanceId
+    }
+    try {
+      const snapshot = await productCall('settings', { instanceId: binding.instanceId, limit })
+      if (isCurrent()) applyModelSettings(snapshot)
+      return snapshot
+    } catch (failure) {
+      if (isCurrent() && view.getSnapshot().modelsNeedSetup === null) view.set(state => ({ ...state, modelSettingsError: true }))
+      throw failure
+    }
+  }
+  const refreshModelSettings = async (binding = view.getSnapshot().binding) => {
+    if (!binding || view.getSnapshot().connection?.connected) return false
+    try {
+      await readModelSettings(binding, 1)
+      return true
+    } catch { return false }
+  }
+  const saveSetupKey = async (provider, value) => {
+    const state = view.getSnapshot()
+    if (!state.binding || state.connection?.connected || state.mainModelSetup?.keyProvider !== provider) {
+      throw new Error(t('This setting is unavailable here.'))
+    }
+    await productCall('provider-key', { instanceId: state.binding.instanceId, provider, value })
+  }
+
   const refresh = async () => {
     try {
       const bridge = clientBridge()
@@ -276,21 +487,18 @@ export function applyProduct(ctx) {
       if (previous && (previous.connected !== connection.connected
         || previous.connected && (previous.address !== connection.address || previous.instanceId !== connection.instanceId
           || previous.client.id !== connection.client.id))) { location.reload(); return }
-      if (connection.connected) activeHost = 'remote'
       if (!stopped) view.set(state => ({ ...state, connection }))
       if (connection.connected) await bridge.events()
       const current = view.getSnapshot()
       const binding = current.binding ?? await productCall('open')
-      if (current.route === 'main') await refreshMain(binding)
-      if (!connection.connected && !current.binding) {
-        void productCall('settings', { instanceId: binding.instanceId, limit: 1 }).then(snapshot => {
-          if (!stopped) view.set(state => ({ ...state, modelsNeedSetup: state.modelsNeedSetup ?? (rolesNeedingModels(snapshot).length > 0) }))
-        }).catch(() => {})
-      }
+      if (Date.now() >= nextMemberPoll) void refreshMembers(binding)
+      if ((current.route === 'work' || current.settingsOpen) && !boardFlight && Date.now() >= nextBoardPoll) void refreshBoard(binding)
+      await refreshMain(binding)
+      if (!connection.connected && !current.binding) void refreshModelSettings(binding)
       if (!connection.connected && !view.getSnapshot().directoryOptions) await loadDirectories(binding)
       else if (connection.connected && !view.getSnapshot().directoryOptions?.execution) {
         const execution = await productCall('execution-options', { instanceId: binding.instanceId })
-        if (!stopped) view.set(state => ({ ...state, directoryOptions: { ...state.directoryOptions, execution } }))
+        if (!stopped) view.set(state => ({ ...state, directoryOptions: { directories: [], ...state.directoryOptions, execution } }))
       }
       await loadObservations(binding)
       const selected = view.getSnapshot().route === 'observe' ? view.getSnapshot().selectedObservation : null
@@ -307,10 +515,6 @@ export function applyProduct(ctx) {
     return () => { stopped = true; clearTimeout(timer) }
   }, 'superagent: follow the shared Main')
 
-  const statusCopy = status => ({ routing: t('Routing work'), pending: t('Pending work'), running: t('Running work'),
-    waiting: t('Waiting for an answer'), blocked: t('Blocked work'), stopped: t('Stopped work'), success: t('Work complete'),
-    failed: t('Work failed'), rejected: t('Work declined'), accepted: t('Accepted by Router'), ended: t('Generation ended'),
-    unknown: t('Work result unknown') })[status] ?? status
   const followUpCopy = status => ({ queued: t('Follow-up queued'), persisted: t('Follow-up persisted'),
     delivering: t('Follow-up delivery started'), ready: t('Direction completed'), waiting: t('Direction waiting'),
     'handed-back': t('Direction handed back'), stopped: t('Direction blocked by stop'),
@@ -458,7 +662,7 @@ export function applyProduct(ctx) {
         !targets.length ? h('p', { className: 'bt-main-work-detail' },
           t('No other Environment is available for handoff.')) : null) : null)
   }
-  function MainWorkCard({ work, onEvidence }) {
+  function MainWorkCard({ work, onEvidence, questionOnly = false, questionInComposer = false, showEvidence = false, onQuestionSettled }) {
     const state = useView()
     const canCommand = !state.connection?.connected || state.connection.capabilities.includes('command')
     const [controlBusy, setControlBusy] = useState(null)
@@ -534,15 +738,15 @@ export function applyProduct(ctx) {
         view.set(current => ({ ...current, route: 'observe', selectedObservation: item,
           observationGeneration: item.generation ?? null, observation: null, observationError: null,
           observationDetail: null, observationDetailError: null }))
+        if (nativeSession && !usesProductHistory(state)) ctx.layout.selectPanel('superagent-activity')
         await loadObservation(state.binding, item, { reset: true })
       } catch (error) { setToolFactsError(error.message) }
       finally { setToolFactsBusy(false) }
     }
     const attention = control?.attention
-    const answer = async event => {
-      event.preventDefault()
-      const text = attentionDraft.trim()
-      if (!state.binding || !control || !assignment || !attention || attention.status !== 'waiting' || !text) return
+    const canAnswer = attention?.status === 'waiting' && canCommand && control.permissions.canAnswer && assignment
+    const answer = async text => {
+      if (!state.binding || !canAnswer || controlBusy || !text) return
       setControlBusy('work-answer')
       setControlError(null)
       try {
@@ -555,6 +759,7 @@ export function applyProduct(ctx) {
         setControlError(error.message)
         await refreshMain(state.binding)
       } finally {
+        await onQuestionSettled?.()
         setControlBusy(null)
       }
     }
@@ -571,9 +776,34 @@ export function applyProduct(ctx) {
         setViewError(error.message)
         await refreshMain(state.binding)
       } finally {
+        await onQuestionSettled?.()
         setControlBusy(null)
       }
     }
+    const questionView = attention ? h('div', { className: 'bt-main-work-attention' },
+      h('p', { className: 'bt-main-work-id' }, `${t(attention.view ? 'View version' : 'Question version')} ${attention.version} · ${attention.status}`),
+      attention.view ? h(ProductWorkView, { title: attention.view.title, view: attention.view.view,
+        answer: attention.answerView ?? null, busy: controlBusy === 'work-answer-view',
+        ...(canAnswer && !questionInComposer ? { onSubmit: answerView } : {}) }) : h('p', null, attention.question),
+      !attention.view && canAnswer && !questionInComposer ? h('form', { className: 'bt-main-work-answer', onSubmit: event => {
+        event.preventDefault(); void answer(attentionDraft.trim())
+      } },
+        attention.options.length ? h('div', { className: 'bt-main-work-options' }, attention.options.map(option =>
+          h('button', { key: option, type: 'button', className: 'bt-soft', onClick: () => setAttentionDraft(option) }, option))) : null,
+        h('label', { htmlFor: `work-answer-${attention.id}` }, t('Answer this work question')),
+        h('textarea', { id: `work-answer-${attention.id}`, value: attentionDraft, maxLength: 65536, rows: 2,
+          placeholder: t('Type an answer…'), onChange: event => setAttentionDraft(event.currentTarget.value) }),
+        h('button', { type: 'submit', className: 'bt-soft', disabled: Boolean(controlBusy) || !attentionDraft.trim() },
+          controlBusy === 'work-answer' ? t('Sending answer…') : t('Send answer')))
+        : attention.status === 'answered' ? h('p', { className: 'bt-main-work-detail' },
+          `${t('Answered by')} ${attention.answeredBy ?? control.permissions.actorId}${attention.answerText ? `: ${attention.answerText}` : ''}`)
+          : attention.status === 'waiting' && attention.view ? h('p', { className: 'bt-main-work-detail' }, t('Answer this view to continue the same work.'))
+            : attention.status !== 'waiting' ? h('p', { className: 'bt-main-work-detail' }, t('This question is no longer active.')) : null) : null
+    if (questionOnly) return canAnswer && !attention.view
+      ? h(MainQuestion, { attention, goal: work.brief.goal, draft: attentionDraft, onDraft: setAttentionDraft, onSubmit: answer,
+        busy: Boolean(controlBusy), error: controlError })
+      : h('section', { className: 'bt-main-composer', 'data-main-question': '', 'aria-label': t('Question') }, questionView,
+        viewError ? h('p', { className: 'bt-main-error', role: 'alert' }, viewError) : null)
     return h('article', { className: 'bt-main-work', 'aria-label': t('Work item: {goal}', { goal: work.brief.goal }),
       'data-ticket-id': control?.ticketId ?? work.receipt.ticketId, 'data-work-brief-id': work.brief.id, tabIndex: -1 },
       h('div', { className: 'bt-main-work-head' }, h('div', { className: 'bt-main-work-title' },
@@ -614,31 +844,7 @@ export function applyProduct(ctx) {
       stop?.pendingDeviceConfirmation && canCommand ? h('button', { type: 'button', className: 'bt-soft',
         disabled: Boolean(controlBusy), onClick: () => runControl('work-reconcile-stop') },
       controlBusy === 'work-reconcile-stop' ? t('Checking device stop…') : t('Check device stop')) : null,
-      attention?.view ? h('div', { className: 'bt-main-work-attention' },
-        h('p', { className: 'bt-main-work-id' }, `${t('View version')} ${attention.version} · ${attention.status}`),
-        h(ProductWorkView, { title: attention.view.title, view: attention.view.view,
-          answer: attention.answerView ?? null, busy: controlBusy === 'work-answer-view',
-          ...(attention.status === 'waiting' && canCommand && control.permissions.canAnswer && assignment
-            ? { onSubmit: answerView } : {}) }),
-        attention.status === 'waiting' ? h('p', { className: 'bt-main-work-detail' },
-          t('Answer this view to continue the same work.'))
-          : attention.status === 'answered' ? h('p', { className: 'bt-main-work-detail' },
-            `${t('Answered by')} ${attention.answeredBy ?? control.permissions.actorId}`)
-            : h('p', { className: 'bt-main-work-detail' }, t('This view is no longer active.'))) : attention ? h('div', { className: 'bt-main-work-attention' },
-        h('p', { className: 'bt-main-work-id' }, `${t('Question version')} ${attention.version} · ${attention.status}`),
-        h('p', null, attention.question),
-        attention.status === 'waiting' && canCommand && control.permissions.canAnswer && assignment
-          ? h('form', { className: 'bt-main-work-answer', onSubmit: answer },
-            attention.options.length ? h('div', { className: 'bt-main-work-options' }, attention.options.map(option =>
-              h('button', { key: option, type: 'button', className: 'bt-soft', onClick: () => setAttentionDraft(option) }, option))) : null,
-            h('label', { htmlFor: `work-answer-${attention.id}` }, t('Answer this work question')),
-            h('textarea', { id: `work-answer-${attention.id}`, value: attentionDraft, maxLength: 65536, rows: 2,
-              placeholder: t('Type an answer…'), onChange: event => setAttentionDraft(event.currentTarget.value) }),
-            h('button', { type: 'submit', className: 'bt-soft', disabled: Boolean(controlBusy) || !attentionDraft.trim() },
-              controlBusy === 'work-answer' ? t('Sending answer…') : t('Send answer')))
-          : h('p', { className: 'bt-main-work-detail' }, attention.status === 'answered'
-            ? `${t('Answered by')} ${attention.answeredBy ?? control.permissions.actorId}${attention.answerText ? `: ${attention.answerText}` : ''}`
-            : t('This question is no longer active.'))) : null,
+      questionView,
       controlError ? h('p', { className: 'bt-main-error', role: 'alert' }, controlError) : null,
       viewError ? h('p', { className: 'bt-main-error', role: 'alert' }, viewError) : null,
       work.receipt.reason ? h('p', { className: 'bt-main-error' }, `${t('Work receipt')}: ${work.receipt.reason}`) : null,
@@ -678,7 +884,41 @@ export function applyProduct(ctx) {
       work.receipt.status === 'accepted' ? h('div', { className: 'bt-main-work-evidence-actions' },
         h('button', { type: 'button', className: 'bt-soft', onClick: () => onEvidence(work) }, t('View original request')),
         h('button', { type: 'button', className: 'bt-soft', disabled: toolFactsBusy, onClick: () => void openToolFacts() },
-          toolFactsBusy ? t('Loading…') : t('View tool facts'))) : null)
+          toolFactsBusy ? t('Loading…') : t('View tool facts'))) : null,
+      showEvidence && state.mainEvidenceWorkItemId === work.brief.workItemId ? h(MainEvidence) : null)
+  }
+
+  function MainEvidence() {
+    const state = useView()
+    const evidence = state.mainEvidence
+    if (!evidence) return state.mainEvidenceError ? h('p', { role: 'alert', className: 'bt-main-error' }, state.mainEvidenceError)
+      : state.mainEvidenceLoading ? h('p', { role: 'status' }, t('Loading…')) : null
+    return h('section', { className: 'bt-main-evidence', 'aria-label': t('Original request evidence') },
+      h('div', { className: 'bt-main-evidence-head' }, h('div', null,
+        h('strong', null, t('Original request evidence')), h('p', null, t(evidence.goal))),
+      h('span', null, t(evidence.pagination.truncated ? 'Partial evidence' : 'Complete evidence'))),
+      h('pre', null, redactObservationText(evidence.text)),
+      state.mainEvidenceError ? h('p', { role: 'alert', className: 'bt-main-error' }, state.mainEvidenceError) : null,
+      evidence.pagination.truncated ? h('button', { type: 'button', className: 'bt-soft', disabled: state.mainEvidenceLoading,
+        onClick: () => void loadMainEvidence(state.binding, { brief: evidence }, { append: true }) },
+      state.mainEvidenceLoading ? t('Loading…') : t('Load more evidence')) : null)
+  }
+
+  function MainAttachmentLinks({ attachments }) {
+    const state = useView()
+    const [error, setError] = useState(null)
+    const download = async attachment => {
+      setError(null)
+      try {
+        const data = await readProductAttachment(productCall, state.binding.instanceId, attachment.id)
+        offerDownload(data, attachment.name, attachment.mediaType)
+      } catch (failure) { setError(failure.message) }
+    }
+    return h('div', { className: 'bt-main-message-attachments', 'aria-label': t('Attached files') },
+      attachments.map(attachment => h('button', { key: attachment.id, type: 'button', className: 'bt-soft',
+        disabled: Boolean(state.connection?.connected), onClick: () => void download(attachment) },
+      `${t('Download')} ${attachment.name} · ${attachment.bytes} ${t('bytes')}`)),
+      error ? h('p', { role: 'alert', className: 'bt-main-error' }, error) : null)
   }
 
   function MainPreparationCard({ preparation }) {
@@ -740,8 +980,9 @@ export function applyProduct(ctx) {
     }
     const scheduled = source.sourceInstanceId.startsWith('schedule:')
     const feishu = source.sourceInstanceId.startsWith('feishu:')
-    return h('article', { className: 'bt-main-source', 'aria-label': t(scheduled ? 'Scheduled occurrence' : feishu ? 'Feishu source request' : 'GitHub source request') },
-      h('div', { className: 'bt-main-work-head' }, h('strong', null, t(scheduled ? 'Scheduled occurrence' : feishu ? 'Feishu request' : 'GitHub request')),
+    const im = source.sourceInstanceId.startsWith('im:')
+    return h('article', { className: 'bt-main-source', 'aria-label': t(im ? 'Paired IM message' : scheduled ? 'Scheduled occurrence' : feishu ? 'Feishu source request' : 'GitHub source request') },
+      h('div', { className: 'bt-main-work-head' }, h('strong', null, t(im ? 'Paired IM message' : scheduled ? 'Scheduled occurrence' : feishu ? 'Feishu request' : 'GitHub request')),
         h('span', { className: 'bt-main-work-status', role: 'status' }, sourceStatusCopy(source.state))),
       h('p', { className: 'bt-main-work-detail' }, `${source.objectId} · @${source.authorId}`),
       h('p', { className: 'bt-main-work-detail' }, source.text),
@@ -764,29 +1005,66 @@ export function applyProduct(ctx) {
           `#${condition.number}: ${conditionCopy(condition.state)}${condition.reason ? ` · ${condition.reason}` : ''}`))) : null)
   }
 
-  function MainConversation() {
+  function MainConversation({ composerOnly = false, sessionEvents } = {}) {
+    useModelSlots()
     const state = useView()
     const canCommand = !state.connection?.connected || state.connection.capabilities.includes('command')
-    const [sending, setSending] = useState(false)
+    const question = canCommand && pendingQuestion(state)
+    const voiceState = useSyncExternalStore(mainVoice.subscribe, mainVoice.getSnapshot)
+    useEffect(() => {
+      if (!state.restoreMainFocus) return
+      const input = document.getElementById('main-message')
+        ?? document.querySelector('.bt-q-dock :is(textarea, button):enabled, [data-main-question] button:enabled')
+      if (!input) return
+      input.focus({ preventScroll: true, focusVisible: true })
+      view.set(current => ({ ...current, restoreMainFocus: false }))
+    }, [state.restoreMainFocus, question])
+    const turnCards = projectTurnCards(state)
+    const renderCards = cards => cards ? h(Fragment, null,
+      cards.sources.map(source => h(MainSourceCard, { key: source.id, source, instanceId: state.binding?.instanceId, onRefresh: refresh, canCommand })),
+      cards.preparations.map(preparation => h(MainPreparationCard, { key: preparation.id, preparation })),
+      cards.works.map(work => h(MainWorkCard, { key: work.brief.workItemId ?? work.brief.id, work,
+        questionInComposer: work === question,
+        onEvidence: selected => { if (state.binding) void loadMainEvidence(state.binding, selected) } }))) : null
     const [sendError, setSendError] = useState(null)
-    const [attachments, setAttachments] = useState([])
-    const [uploading, setUploading] = useState(false)
+    const { mainAttachments: attachments, mainUploading: uploading } = state
+    const setAttachments = update => view.set(current => ({ ...current,
+      mainAttachments: typeof update === 'function' ? update(current.mainAttachments) : update }))
+    const setUploading = mainUploading => view.set(current => ({ ...current, mainUploading }))
     const [speakingId, setSpeakingId] = useState(null)
-    useEffect(() => () => window.speechSynthesis?.cancel(), [])
+    useEffect(() => () => {
+      if (composerOnly && nativeQuestion(view.getSnapshot())) mainVoice.pause()
+      else mainVoice.close()
+      window.speechSynthesis?.cancel()
+    }, [composerOnly, state.binding?.mainSessionId])
+    useEffect(() => {
+      const acknowledge = () => {
+        if (!document.hasFocus() || document.visibilityState === 'hidden') return
+        view.set(current => {
+          const readReplyId = current.messages.findLast(message => message.role === 'main')?.id ?? null
+          return current.readReplyId === readReplyId ? current : { ...current, readReplyId }
+        })
+      }
+      acknowledge()
+      window.addEventListener('focus', acknowledge)
+      document.addEventListener('visibilitychange', acknowledge)
+      return () => {
+        window.removeEventListener('focus', acknowledge)
+        document.removeEventListener('visibilitychange', acknowledge)
+      }
+    }, [])
     const bottom = useRef(null)
     const pending = useRef(null)
     const scroll = useRef(null)
     const follow = useRef(true)
     const restoreHeight = useRef(null)
     const execution = state.directoryOptions?.execution
-    const policyTarget = execution?.policy?.defaultTarget === 'remote-only' ? 'remote-only'
-      : execution?.policy?.defaultTarget === 'auto' ? 'auto' : 'local-only'
-    const executionTarget = state.executionTarget ?? policyTarget
+    const executionTarget = effectiveTarget(state)
     const localEnvironments = execution?.environments?.filter(environment => environment.kind === 'local') ?? []
     const remoteEnvironments = execution?.environments?.filter(environment => environment.kind === 'remote') ?? []
     const selectedRemoteEnvironment = remoteEnvironments.find(environment =>
       environment.id === state.remoteEnvironmentOverride) ?? remoteEnvironments[0]
-    const selectedLocalEnvironmentId = state.directoryOverride ?? state.directoryOptions?.default?.environmentId
+    const selectedLocalEnvironmentId = state.directoryOverride?.id ?? state.directoryOptions?.default?.environmentId
       ?? state.localEnvironmentOverride ?? (state.connection?.connected ? localEnvironments[0]?.id : undefined)
     const selectedEnvironmentId = executionTarget === 'remote-only' ? selectedRemoteEnvironment?.id
       : executionTarget === 'local-only' ? selectedLocalEnvironmentId : undefined
@@ -798,6 +1076,7 @@ export function applyProduct(ctx) {
       } else if (follow.current) bottom.current?.scrollIntoView({ block: 'end', behavior: 'instant' })
     }, [state.messages.length])
     const uploadFiles = async files => {
+      if (view.getSnapshot().directoryBusy) return
       if (executionTarget === 'auto') { setSendError(t('Choose Local or Remote only before adding files.')); return }
       const environmentId = selectedEnvironmentId
       if (!state.binding || !environmentId) { setSendError(t('Choose a work directory before adding files.')); return }
@@ -822,13 +1101,6 @@ export function applyProduct(ctx) {
         setAttachments(current => current.filter(item => item.id !== attachment.id))
       } catch (error) { setSendError(t(error.message)) }
     }
-    const downloadAttachment = async attachment => {
-      if (!state.binding) return
-      try {
-        const data = await readProductAttachment(productCall, state.binding.instanceId, attachment.id)
-        offerDownload(data, attachment.name, attachment.mediaType)
-      } catch (error) { setSendError(t(error.message)) }
-    }
     const speakReply = message => {
       if (speakingId === message.id) { window.speechSynthesis.cancel(); setSpeakingId(null); return }
       const text = plainSpeech(message.text)
@@ -842,19 +1114,21 @@ export function applyProduct(ctx) {
       setSpeakingId(message.id)
     }
     const send = async text => {
-      if (!state.binding) return false
+      const current = view.getSnapshot()
+      if (!state.binding) throw new Error(t('Main is unavailable.'))
+      if (current.directoryBusy || current.mainSending) throw new Error(t('Wait for the current action before sending.'))
       const attachmentIds = attachments.map(attachment => attachment.id)
       const environmentId = attachments[0]?.environmentId ?? selectedEnvironmentId
       if (executionTarget === 'local-only' && !environmentId || attachmentIds.length && !environmentId) {
-        setSendError(t('Choose an authorized Environment for this execution target.')); return false
+        throw new Error(t('Choose an authorized Environment for this execution target.'))
       }
       if (executionTarget === 'auto' && attachmentIds.length) {
-        setSendError(t('Remove attached files before using automatic target selection.')); return false
+        throw new Error(t('Remove attached files before using automatic target selection.'))
       }
       const storageKey = `superagent:pending:${state.connection?.connected
         ? `${state.connection.address}:${state.connection.client.id}` : 'local'}:${state.binding.instanceId}`
       try {
-        setSending(true); setSendError(null)
+        view.set(current => ({ ...current, mainSending: true })); setSendError(null)
         if (!pending.current) {
           try { pending.current = JSON.parse(sessionStorage.getItem(storageKey) ?? 'null') } catch { /* Draft storage is optional. */ }
         }
@@ -870,39 +1144,43 @@ export function applyProduct(ctx) {
         const result = await productCall('send', { instanceId: state.binding.instanceId, ...pending.current })
         pending.current = null
         try { sessionStorage.removeItem(storageKey) } catch { /* Draft storage is optional. */ }
-        await refreshMain(state.binding)
         setAttachments([])
-        view.set(current => ({ ...current, directoryOverride: null, localEnvironmentOverride: null, remoteEnvironmentOverride: null }))
-        if (result.status === 'failed') { setSendError(t('Main could not finish this reply. Your message is saved.')); return false }
-        return true
-      } catch (error) { setSendError(error.message); await refreshMain(state.binding); return false }
-      finally { setSending(false) }
+        view.set(current => ({ ...current, ...(executionTarget === 'local-only' ? { directoryOverride: null } : {}),
+          localEnvironmentOverride: null, remoteEnvironmentOverride: null, directoryError: null }))
+        await refreshMain(state.binding)
+        return result
+      } catch (error) { await refreshMain(state.binding); throw error }
+      finally { view.set(current => ({ ...current, mainSending: false })) }
     }
-    const busy = sending || Boolean(state.activeTurn) || state.messages.some(message => ['queued', 'running', 'stopping'].includes(message.status))
+    const sendText = async text => {
+      try {
+        const receipt = await send(text)
+        if (receipt.status === 'failed') throw new Error(t('Main could not finish this reply. Your message is saved.'))
+        return true
+      } catch (error) { setSendError(error.message); return false }
+    }
+    const latestSend = useRef(send)
+    latestSend.current = send
+    const startVoice = () => {
+      setSendError(null)
+      if (speakingId) {
+        window.speechSynthesis?.cancel()
+        setSpeakingId(null)
+      }
+      mainVoice.start(text => latestSend.current(text))
+    }
+    const busy = mainBusy(state)
     const stopping = state.activeTurn?.status === 'stopping'
     const stop = async () => {
       if (!state.binding || !state.activeTurn) return
-      const commandId = crypto.randomUUID()
+      mainVoice.pause()
       try {
         setSendError(null)
-        await productCall('stop-main', { instanceId: state.binding.instanceId, commandId, messageId: state.activeTurn.messageId })
+        await call('stop-chat', { botId: state.binding.mainId, messageId: state.activeTurn.messageId })
         await refreshMain(state.binding)
       } catch (error) {
         setSendError(error.message)
       }
-    }
-    const options = state.directoryOptions
-    const override = options?.directories.find(directory => directory.id === state.directoryOverride)
-    const chooseWorkDirectory = async path => {
-      if (!state.binding) return
-      if (attachments.length) { setSendError(t('Remove attached files before changing directories.')); return }
-      view.set(current => ({ ...current, directoryBusy: true, directoryError: null }))
-      try {
-        const selected = path ? await registerDirectory(state.binding, path) : null
-        await loadDirectories(state.binding)
-        view.set(current => ({ ...current, directoryOverride: selected?.id ?? null }))
-      } catch (error) { view.set(current => ({ ...current, directoryError: error.message })) }
-      finally { view.set(current => ({ ...current, directoryBusy: false })) }
     }
     const chooseTarget = value => {
       if (attachments.length) { setSendError(t('Remove attached files before changing execution targets.')); return }
@@ -911,7 +1189,7 @@ export function applyProduct(ctx) {
     const targetControl = execution ? h('div', { className: 'bt-main-directory' },
       h('span', { className: 'bt-main-label' }, t('Execution target')),
       h('select', { className: 'bt-select', 'aria-label': t('Execution target'), value: executionTarget,
-        onChange: event => chooseTarget(event.target.value), disabled: busy },
+        onChange: event => chooseTarget(event.target.value), disabled: busy || state.directoryBusy },
       h('option', { value: 'local-only' }, t('Local')),
       h('option', { value: 'remote-only' }, t('Remote only')),
       h('option', { value: 'auto' }, t('Auto'))),
@@ -939,18 +1217,64 @@ export function applyProduct(ctx) {
         : executionTarget === 'remote-only' && !selectedEnvironmentId
           ? t('No remote Environment is available. This work will wait for an eligible device.')
           : t('New work uses this Environment. Active work keeps its original binding.'))) : null
+    const composer = question ? h(MainWorkCard, { work: question, questionOnly: true, key: question.control.attention.id })
+      : h(MainComposer, { onSend: sendText, onStop: canCommand && state.activeTurn ? stop : undefined, busy, stopping,
+      directoryBusy: state.directoryBusy, ready: Boolean(state.binding && execution), readOnly: !canCommand,
+      error: sendError ?? state.error,
+      value: state.mainDraft, onValueChange: mainDraft => view.set(current => ({ ...current, mainDraft })),
+      voice: voiceState, onVoiceStart: state.binding ? startVoice : undefined,
+      onVoicePause: () => mainVoice.pause(), onVoiceResume: startVoice, onVoiceClose: mainVoice.close,
+      attachments, uploading, onRemoveAttachment: removeAttachment,
+      speechRemote: () => ctx.get('remote.speech') ?? undefined,
+      onFiles: !state.connection?.connected && executionTarget !== 'auto' && selectedEnvironmentId
+        ? files => void uploadFiles(files) : undefined,
+      directoryControl: execution ? h('div', { className: 'bt-main-directory' },
+        targetControl, h(MainWorkDirectory)) : null })
+    const showModelSetup = !question && state.binding && !state.connection?.connected
+    let modelChoice
+    if (showModelSetup && state.mainModelSetup) {
+      modelChoice = h(SuperagentModelChoice, { setup: state.mainModelSetup, saveKey: saveSetupKey,
+        refreshModels: refreshModelSettings, focusMain: focusMainInput,
+        signIn: canSignIn() ? openSignIn : undefined, openModels: () => shellActions.openSettings('models'),
+        openCustomModels: hasNativeSettings('models') ? openCustomModels : undefined,
+        openRoles: () => shellActions.openSettings('roles') })
+    } else if (showModelSetup && state.modelSettingsError) {
+      modelChoice = h('div', { className: 'bt-superagent-model-dock' },
+        h('p', { className: 'bt-main-error', role: 'alert' }, t('Could not check which models are available.')),
+        h('button', { className: 'bt-model-chip', type: 'button', onClick: () => { void refreshModelSettings() } }, t('Retry')))
+    }
+    if (composerOnly) {
+      const entries = sessionEvents?.entries ?? []
+      const userEvents = entries.filter(({ event }) => event.type === 'user/message')
+      const visible = new Set(userEvents.map(({ event }) => event.data.id))
+      const cutoff = sessionEvents?.hasMore ? entries[0]?.event.time : 0
+      const pending = cutoff === undefined ? [] : state.messages.filter(message => message.role === 'user'
+        && message.status !== 'completed' && message.createdAt >= cutoff && !visible.has(message.id))
+      const unplaced = projectNativeTurnCards(state, visible, true)
+      return h('div', { className: 'bt-native-main-input' },
+        h(FeishuSourceStatus, { instanceId: state.binding?.instanceId, call: productCall }),
+        state.binding && !state.connection?.connected ? h(ChatSecrets, { binding: state.binding, call: productCall }) : null,
+        pending.map(message => h('details', { key: message.id, className: 'bt-main-status' },
+          h('summary', null, `${t('Input')} · ${mainInputStatus(message.status)}`), h('p', null, message.text),
+          message.attachments?.length ? h(MainAttachmentLinks, { attachments: message.attachments }) : null)),
+        unplaced.works.length || unplaced.sources.length || unplaced.preparations.length ? h('details', { className: 'bt-native-turn-cards' },
+          h('summary', null, t('Work, sources and preparations')), renderCards(unplaced)) : null,
+        h(BoardSurface, { dock: true }),
+        modelChoice, composer)
+    }
     return h('section', { className: 'bt-main-conversation', 'aria-label': 'Main' },
-      h('header', { className: 'bt-main-header' }, h(ProductBrandMark, { size: 28 }), h('span', null, 'Main'),
+      h('header', { className: 'bt-main-header' }, h(Header),
         h('span', { className: `bt-main-health bt-main-health-${state.health?.state ?? 'ready'}`, role: 'status' },
           state.modelsNeedSetup && state.health?.state !== 'running' ? t('Models need setup') : mainHealthCopy(state.health)),
         state.health?.queuedInputs ? h('span', { className: 'bt-main-health-detail' },
           t('{count} inputs queued', { count: state.health.queuedInputs })) : null,
         state.connection?.connected ? h('span', { className: 'bt-main-remote', title: state.connection.address },
           `${t('Remote Host')} · ${state.connection.client.label}`) : null,
+        h('button', { type: 'button', className: 'bt-soft', onClick: () => view.set(current => ({ ...current, route: 'work' })) }, t('Work')),
         clientBridge() ? h('button', { type: 'button', className: 'bt-soft', onClick: () => view.set(current => ({ ...current, connectOpen: true })) },
           state.connection?.connected ? t('Connection') : t('Connect to Host')) : null,
         !state.connection?.connected ? h('button', { type: 'button', className: 'bt-icon-btn bt-main-settings', title: t('Settings'),
-          'aria-label': t('Settings'), onClick: () => view.set(current => ({ ...current, settingsOpen: true })) }, h(SlidersIcon)) : null),
+          'aria-label': t('Settings'), onClick: () => shellActions.openSettings() }, h(SlidersIcon)) : null),
       state.modelsNeedSetup ? h('p', { className: 'bt-main-health-warning', role: 'alert' },
         t('Open Settings to select models for Main, Router and Worker.'))
         : state.health?.state === 'degraded' ? h('p', { className: 'bt-main-health-warning', role: 'alert' },
@@ -973,57 +1297,26 @@ export function applyProduct(ctx) {
                 message.source ? h('p', { className: 'bt-main-source-label' },
                   message.source.kind === 'client' ? `${t('Client')} · ${message.source.clientId}`
                     : message.source.kind === 'schedule' ? `${t('Scheduled occurrence')} · ${message.source.objectId}`
-                      : `${t(message.source.kind === 'feishu' ? 'Feishu' : 'GitHub')} · @${message.source.authorId} · ${message.source.objectId}`) : null,
+                      : `${t(message.source.kind === 'im' ? 'IM' : message.source.kind === 'feishu' ? 'Feishu' : 'GitHub')} · @${message.source.authorId} · ${message.source.objectId}`) : null,
                 h(ProductChatRow, { kind: message.role === 'main' ? 'bot' : 'user', text: message.text }),
-                message.role === 'main' && message.text && window.speechSynthesis
+                voiceState.phase === 'off' && message.role === 'main' && message.text && window.speechSynthesis
                   ? h('button', { type: 'button', className: 'bt-soft bt-main-read-aloud',
                     onClick: () => speakReply(message) }, t(speakingId === message.id ? 'Stop reading' : 'Read aloud')) : null,
-                message.attachments?.length ? h('div', { className: 'bt-main-message-attachments', 'aria-label': t('Attached files') },
-                  message.attachments.map(attachment => h('button', { key: attachment.id, type: 'button', className: 'bt-soft',
-                    disabled: Boolean(state.connection?.connected), onClick: () => void downloadAttachment(attachment) },
-                  `${t('Download')} ${attachment.name} · ${attachment.bytes} ${t('bytes')}`))) : null,
+                message.attachments?.length ? h(MainAttachmentLinks, { attachments: message.attachments }) : null,
                 message.status === 'failed' ? h('p', { className: 'bt-main-error', role: 'status' },
-                  t('Main could not finish this reply. Your message is saved.')) : null))),
+                  t('Main could not finish this reply. Your message is saved.')) : null),
+            renderCards(turnCards.byMessage.get(message.id)))),
           !state.connection?.connected ? h(FeishuSourceStatus, { instanceId: state.binding?.instanceId, call: productCall }) : null,
-          state.sources.map(source => h(MainSourceCard, { key: source.id, source, instanceId: state.binding?.instanceId,
-            onRefresh: refresh, canCommand })),
-          state.preparations.map(preparation => h(MainPreparationCard, { key: preparation.id, preparation })),
-          state.works.map(work => h(MainWorkCard, { key: work.brief.workItemId ?? work.brief.id, work,
-            onEvidence: selected => { if (state.binding) void loadMainEvidence(state.binding, selected) } })),
-          state.mainEvidenceError && !state.mainEvidence
-            ? h('p', { role: 'alert', className: 'bt-main-error' }, state.mainEvidenceError) : null,
-          state.mainEvidence ? h('section', { className: 'bt-main-evidence', 'aria-label': t('Original request evidence') },
-            h('div', { className: 'bt-main-evidence-head' }, h('div', null,
-              h('strong', null, t('Original request evidence')), h('p', null, t(state.mainEvidence.goal))),
-              h('span', null, t(state.mainEvidence.pagination.truncated ? 'Partial evidence' : 'Complete evidence'))),
-            h('pre', null, redactObservationText(state.mainEvidence.text)),
-            state.mainEvidenceError ? h('p', { role: 'alert', className: 'bt-main-error' }, state.mainEvidenceError) : null,
-            state.mainEvidence.pagination.truncated ? h('button', { type: 'button', className: 'bt-soft',
-              disabled: state.mainEvidenceLoading, onClick: () => { if (state.binding) void loadMainEvidence(state.binding,
-                { brief: { workItemId: state.mainEvidence.workItemId, goal: state.mainEvidence.goal } }, { append: true }) } },
-            state.mainEvidenceLoading ? t('Loading…') : t('Load more evidence')) : null) : null,
+          state.binding && !state.connection?.connected ? h(ChatSecrets, { binding: state.binding, call: productCall }) : null,
+          renderCards(turnCards.unplaced),
+          h(MainEvidence),
           stopping ? h('p', { className: 'bt-main-status', role: 'status' }, t('Stopping this Main reply…')) : busy
             ? h('p', { className: 'bt-main-status', role: 'status' }, t('Main is replying…')) : null,
           h('div', { ref: bottom }))),
-      h(MainComposer, { onSend: send, onStop: canCommand && state.activeTurn ? stop : undefined, busy, stopping, readOnly: !canCommand,
-        error: sendError ?? state.error,
-        value: state.mainDraft, onValueChange: mainDraft => view.set(current => ({ ...current, mainDraft })),
-        attachments, uploading, onRemoveAttachment: removeAttachment,
-        speechRemote: () => ctx.get('remote.speech') ?? undefined,
-        onFiles: !state.connection?.connected && executionTarget !== 'auto' && selectedEnvironmentId
-          ? files => void uploadFiles(files) : undefined,
-        directoryControl: execution ? h('div', { className: 'bt-main-directory' },
-          targetControl,
-          !state.connection?.connected && executionTarget === 'local-only' && options?.default ? h(Fragment, null,
-            h('span', { className: 'bt-main-label' }, t('Work directory')),
-            h(FolderMenu, { value: override?.root, label: t('Work directory'), fallbackLabel: t('Instance default'),
-              actions: directoryActions(state.binding), run: promise => void Promise.resolve(promise).catch(error =>
-                view.set(current => ({ ...current, directoryError: error.message }))), onPick: chooseWorkDirectory,
-              disabled: busy || state.directoryBusy })) : null,
-          state.directoryError ? h('p', { className: 'bt-main-error', role: 'alert' }, state.directoryError) : null) : null }))
+      h(BoardSurface, { dock: true }), modelChoice, composer)
   }
 
-  function ObservationConversation() {
+  function ObservationConversation({ onBack } = {}) {
     const state = useView()
     const [copyState, setCopyState] = useState('idle')
     const [detailCopyState, setDetailCopyState] = useState('idle')
@@ -1032,12 +1325,6 @@ export function applyProduct(ctx) {
       if (state.binding && state.selectedObservation) {
         void loadObservationDetail(state.binding, state.selectedObservation, detailId, { append })
       }
-    }
-    const backToMain = () => {
-      view.set(current => ({ ...current, route: 'main', selectedObservation: null, observationGeneration: null,
-        observation: null, observationError: null, observationDetail: null, observationDetailError: null }))
-      void refresh()
-      setTimeout(() => document.querySelector('#main-message, .bt-main-composer textarea')?.focus(), 0)
     }
     const copy = async () => {
       if (!observation || !state.binding) return
@@ -1061,14 +1348,15 @@ export function applyProduct(ctx) {
     }
     return h('section', { className: 'bt-observation', 'aria-label': t('Read-only work activity') },
       h('header', { className: 'bt-observation-header' },
-        h('button', { type: 'button', className: 'bt-soft', onClick: backToMain }, t('Back to Main')),
+        onBack ? h('button', { type: 'button', className: 'bt-soft', onClick: onBack }, t('Back to Main')) : h(Header),
         h('div', { className: 'bt-observation-heading' },
           h('span', { className: 'bt-observation-role' }, observation?.role === 'router' ? 'Router' : 'Worker'),
           h('strong', null, observation?.title ?? state.selectedObservation?.title ?? '')),
         h('span', { className: 'bt-observation-readonly' }, t('Read-only')),
         !state.connection?.connected ? h('button', { type: 'button', className: 'bt-icon-btn', title: t('Settings'), 'aria-label': t('Settings'),
-          onClick: () => view.set(current => ({ ...current, settingsOpen: true })) }, h(SlidersIcon)) : null),
+          onClick: () => shellActions.openSettings() }, h(SlidersIcon)) : null),
       h('div', { className: 'bt-observation-body' },
+        h(ActivityNavigation),
         state.observationLoading && !observation ? h('p', { role: 'status', className: 'bt-main-status' }, t('Loading history…')) : null,
         state.observationError ? h('p', { role: 'alert', className: 'bt-main-error' }, state.observationError) : null,
         observation ? h('div', { className: 'bt-observation-content' },
@@ -1141,7 +1429,7 @@ export function applyProduct(ctx) {
             } }, t('Load more history')) : null)) : null))
   }
 
-  function MainNavigation() {
+  function ActivityNavigation() {
     const state = useView()
     const [search, setSearch] = useState(state.observationQuery)
     const timer = useRef(null)
@@ -1155,17 +1443,7 @@ export function applyProduct(ctx) {
         void loadObservations(state.binding, { reset: true })
       }, 180)
     }
-    return h('nav', { className: 'bt-main-nav', 'aria-label': t('Work navigation') },
-      h('button', { type: 'button', className: 'bt-soft', 'aria-current': state.route === 'main' ? 'page' : undefined,
-        onClick: () => {
-          view.set(current => ({ ...current, route: 'main', selectedObservation: null, observationGeneration: null,
-            observation: null, observationError: null, observationDetail: null, observationDetailError: null }))
-          void refresh()
-          setTimeout(() => document.querySelector('#main-message, .bt-main-composer textarea')?.focus(), 0)
-        } }, h(ProductBrandMark, { size: 24 }), 'Main'),
-      clientBridge() ? h('button', { type: 'button', className: 'bt-soft',
-        onClick: () => view.set(current => ({ ...current, connectOpen: true })) },
-        state.connection?.connected ? `${t('Remote Host')} · ${state.connection.client.label}` : t('Connect to Host')) : null,
+    return h('nav', { className: 'bt-main-nav', 'aria-label': t('Work activity') },
       h('div', { className: 'bt-observation-search' },
         h('label', { htmlFor: 'work-observation-search' }, t('Find activity')),
         h('input', { id: 'work-observation-search', type: 'search', value: search, placeholder: t('Search Router and Worker history'),
@@ -1255,8 +1533,7 @@ export function applyProduct(ctx) {
           onClick: () => { void revoke(client) } }, t('Revoke')))))
   }
 
-  function SettingsDialog({ binding, onClose }) {
-    const [page, setPage] = useState('roles')
+  function SettingsDialog({ binding, onClose, open, initialPage, renderSlot, returnFocus }) {
     const viewState = useView()
     const [snapshot, setSnapshot] = useState(null)
     const [draft, setDraft] = useState(null)
@@ -1271,6 +1548,7 @@ export function applyProduct(ctx) {
     const draftRef = useRef(draft)
     const draftVersion = useRef(0)
     const savingRef = useRef(false)
+    const loadRequest = useRef(0)
     const clone = value => JSON.parse(JSON.stringify(value))
     const roleRows = [['main', 'Main'], ['router', 'Router'], ['worker', 'Worker']]
     const refOf = model => `${model.provider}/${model.model}`
@@ -1285,7 +1563,6 @@ export function applyProduct(ctx) {
     }
     const applySnapshot = (value, preserve = false) => {
       setSnapshot(value)
-      view.set(current => ({ ...current, modelsNeedSetup: rolesNeedingModels(value).length > 0 }))
       if (!preserve) {
         const nextDraft = clone(value.roles)
         draftRef.current = nextDraft
@@ -1296,20 +1573,20 @@ export function applyProduct(ctx) {
       }
     }
     const load = async ({ preserve = false } = {}) => {
+      const request = ++loadRequest.current
       setLoading(true)
       try {
-        const value = await productCall('settings', { instanceId: binding.instanceId, limit: 50 })
+        const value = await readModelSettings(binding, 50)
+        if (request !== loadRequest.current) return
         applySnapshot(value, preserve)
         setError(null)
-      } catch (failure) { setError(failure.message) }
-      finally { setLoading(false) }
+      } catch (failure) {
+        if (request === loadRequest.current) setError(failure.message)
+      } finally {
+        if (request === loadRequest.current) setLoading(false)
+      }
     }
     useEffect(() => { void load() }, [binding.instanceId])
-    useEffect(() => {
-      const close = event => { if (event.key === 'Escape') onClose() }
-      window.addEventListener('keydown', close)
-      return () => window.removeEventListener('keydown', close)
-    }, [onClose])
     const updateRole = (role, change) => {
       if (savingRef.current) return
       draftVersion.current += 1
@@ -1367,7 +1644,7 @@ export function applyProduct(ctx) {
         draftVersion.current += 1
         setConflict(false)
         setNotice(t('Configuration v{revision} is active for new turns.', { revision: value.revision }))
-        const latest = await productCall('settings', { instanceId: binding.instanceId, limit: 50 })
+        const latest = await readModelSettings(binding, 50)
         applySnapshot(latest, true)
       } catch (failure) {
         if (failure.code === 'CONFIG_REVISION_CONFLICT') {
@@ -1379,7 +1656,7 @@ export function applyProduct(ctx) {
     const rebase = async () => {
       setSaving(true); setError(null)
       try {
-        const latest = await productCall('settings', { instanceId: binding.instanceId, limit: 50 })
+        const latest = await readModelSettings(binding, 50)
         const merged = rebaseRoleDraft(base, draft, latest.roles)
         applySnapshot(latest)
         draftRef.current = merged
@@ -1390,7 +1667,7 @@ export function applyProduct(ctx) {
       finally { setSaving(false) }
     }
     const refreshAfterPreset = async () => {
-      const latest = await productCall('settings', { instanceId: binding.instanceId, limit: 50 })
+      const latest = await readModelSettings(binding, 50)
       applySnapshot(latest)
       setConflict(false)
       setError(null)
@@ -1404,6 +1681,7 @@ export function applyProduct(ctx) {
         setSnapshot(current => ({ ...current, providers: current.providers.map(item => item.id === provider
           ? { ...item, key: { ...item.key, configured: result.configured } } : item) }))
         setNotice(value === null ? t('Provider key removed.') : t('Provider key saved.'))
+        void refreshModelSettings(binding)
       } catch (failure) {
         setKeyDrafts(current => ({ ...current, [provider]: '' }))
         setError(failure.message)
@@ -1420,20 +1698,7 @@ export function applyProduct(ctx) {
       } catch (failure) { view.set(current => ({ ...current, directoryError: failure.message })); await loadDirectories(binding).catch(() => {}) }
       finally { view.set(current => ({ ...current, directoryBusy: false })) }
     }
-    const close = h('button', { type: 'button', className: 'bt-settings-close', 'aria-label': t('Close settings'), onClick: onClose }, h(CloseIcon))
-    if (loading && !draft) return h('div', { className: 'bt-settings-layer' },
-      h('div', { className: 'bt-scrim', onMouseDown: onClose }),
-      h('div', { className: 'bt-settings bt-main-settings-dialog', role: 'dialog', 'aria-modal': true, 'aria-label': t('Super-agent settings') },
-        h('div', { className: 'bt-settings-main' }, h('div', { className: 'bt-settings-head' }, h('h2', null, t('Super-agent settings'))),
-          h('div', { className: 'bt-settings-scroll' }, h('p', { className: 'bt-main-status', role: 'status' }, t('Loading configuration…')))),
-        close))
-    if (!draft) return h('div', { className: 'bt-settings-layer' },
-      h('div', { className: 'bt-scrim', onMouseDown: onClose }),
-      h('div', { className: 'bt-settings bt-main-settings-dialog', role: 'dialog', 'aria-modal': true, 'aria-label': t('Super-agent settings') },
-        h('div', { className: 'bt-settings-main' }, h('div', { className: 'bt-settings-head' }, h('h2', null, t('Super-agent settings'))),
-          h('div', { className: 'bt-settings-scroll' }, h('p', { className: 'bt-main-error', role: 'alert' }, error ?? t('Configuration is unavailable.')))),
-        close))
-    const models = snapshot.providers.flatMap(provider => provider.models)
+    const models = snapshot?.providers.flatMap(provider => provider.models) ?? []
     const viewWork = ({ ticketIds = [], workBriefId } = {}) => {
       onClose()
       view.set(current => ({ ...current, route: 'main' }))
@@ -1448,62 +1713,16 @@ export function applyProduct(ctx) {
         })
       })
     }
-    return h('div', { className: 'bt-settings-layer' },
-      h('div', { className: 'bt-scrim', onMouseDown: onClose }),
-      h('div', { className: 'bt-settings bt-main-settings-dialog', role: 'dialog', 'aria-modal': true, 'aria-label': t('Super-agent settings') },
-        h('nav', { className: 'bt-settings-nav', 'aria-label': t('Settings pages') },
-          h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
-            'aria-current': page === 'roles' ? 'page' : undefined, onClick: () => setPage('roles') }, h(SlidersIcon), t('Roles and providers')),
-          h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
-            'aria-current': page === 'execution' ? 'page' : undefined, onClick: () => setPage('execution') }, h(GlobeIcon), t('Execution')),
-          h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
-            'aria-current': page === 'schedules' ? 'page' : undefined, onClick: () => setPage('schedules') }, h(ClockIcon), t('Scheduled tasks')),
-          h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
-            'aria-current': page === 'preparations' ? 'page' : undefined, onClick: () => setPage('preparations') }, h(ClockIcon), t('Proactive preparation')),
-          h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
-            'aria-current': page === 'presets' ? 'page' : undefined, onClick: () => setPage('presets') }, h(SlidersIcon), t('Role presets')),
-          h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
-            'aria-current': page === 'memory' ? 'page' : undefined, onClick: () => setPage('memory') }, h(MemoryIcon), t('Memory')),
-          !viewState.connection?.connected ? h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
-            'aria-current': page === 'browser' ? 'page' : undefined, onClick: () => setPage('browser') }, h(GlobeIcon), t('Browser resources')) : null,
-          !viewState.connection?.connected ? h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
-            'aria-current': page === 'supervision' ? 'page' : undefined, onClick: () => setPage('supervision') }, h(SlidersIcon), t('Supervision')) : null,
-          h('button', { type: 'button', className: 'bt-settings-item bt-main-settings-nav-item',
-            'aria-current': page === 'operations' ? 'page' : undefined, onClick: () => setPage('operations') }, h(GaugeIcon), t('Status and usage')),
-          h('span', { className: 'bt-main-settings-revision' }, `${t('Configuration')} v${snapshot.revision}`)),
-        h('div', { className: 'bt-settings-main' },
-          h('div', { className: 'bt-settings-head' }, h('h2', null, page === 'execution' ? t('Execution')
-            : page === 'schedules' ? t('Scheduled tasks')
-            : page === 'presets' ? t('Role presets') : page === 'preparations' ? t('Proactive preparation')
-              : page === 'memory' ? t('Memory') : page === 'browser' ? t('Browser resources')
-                : page === 'supervision' ? t('Supervision') : page === 'operations' ? t('Status and usage') : t('Super-agent settings'))),
-          h('div', { className: 'bt-settings-scroll' },
-            page === 'execution' ? h(ProductExecutionSettings, { binding, call: productCall,
-              onChanged: () => { void loadDirectories(binding) } })
-              : page === 'schedules' ? h(ProductScheduleSettings, { binding, works: view.getSnapshot().works, call: productCall,
-              onViewWork: viewWork })
-              : page === 'preparations' ? h(ProductProactiveSettings, { binding, call: productCall })
-              : page === 'presets' ? h(ProductPresetSettings, { binding, call: productCall,
-                settingsRevision: snapshot.revision, roleSettings: snapshot, onApplied: refreshAfterPreset, onReload: refreshAfterPreset })
-                : page === 'memory' ? h(ProductMemorySettings, { key: binding.instanceId, binding, works: view.getSnapshot().works, call: productCall })
-                : page === 'browser' ? h(ProductBrowserSettings, { binding, works: view.getSnapshot().works,
-                  directoryOptions: viewState.directoryOptions, call: productCall, browserBridge: globalThis.dsSuperagentApp?.browser })
-                : page === 'supervision' ? h(ProductSupervisionSettings, { binding, call: productCall })
-                  : page === 'operations' ? h(ProductOperationsSettings, { binding, call: productCall,
-                    onNavigate: next => setPage(next) }) : h(Fragment, null,
+    const loadingSettings = loading ? h(SettingsSectionState, { status: 'loading' }) : h(Fragment, null,
+      h(SettingsSectionState, { status: 'error', message: error }),
+      h('button', { type: 'button', className: 'bt-soft', onClick: () => { void load() } }, t('Retry')))
+    const roles = draft && !loading ? h(Fragment, null,
             error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
             viewState.directoryError ? h('p', { className: 'bt-main-error', role: 'alert' }, viewState.directoryError) : null,
             conflict ? h('div', { className: 'bt-main-settings-conflict', role: 'status' },
               h('p', null, t('Newer settings exist. Rebase only your changed fields, then review and save.')),
               h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: saving, onClick: () => { void rebase() } }, t('Rebase my edits'))) : null,
             notice ? h('p', { className: 'bt-main-status', role: 'status' }, notice) : null,
-            viewState.directoryOptions?.default ? h(Card, { title: t('Work directories') },
-              h(Row, { label: t('Instance default directory'), hint: t('New work starts here unless you choose a work directory in Main.') },
-                h(FolderMenu, { value: viewState.directoryOptions.default.root, team: true,
-                  label: t('Instance default directory'), actions: directoryActions(binding),
-                  run: promise => void Promise.resolve(promise).catch(failure =>
-                    view.set(current => ({ ...current, directoryError: failure.message }))),
-                  onPick: chooseDefaultDirectory, disabled: viewState.directoryBusy }))) : null,
             models.length === 0 ? h('p', { className: 'bt-main-health-warning', role: 'alert' },
               t('No models are available. Configure a provider in DSH settings, then reopen this panel to select the role models.'))
               : rolesNeedingModels({ roles: draft, providers: snapshot.providers }).length ? h('p', { className: 'bt-main-health-warning', role: 'alert' },
@@ -1537,6 +1756,16 @@ export function applyProduct(ctx) {
               h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: saving, onClick: onClose }, t('Cancel')),
               h('button', { type: 'button', className: 'bt-send bt-soft bt-soft-sm', disabled: saving, onClick: () => { void save() } },
                 saving ? t('Saving…') : t('Save configuration'))),
+            h(Card, { title: t('Recent configuration uses') },
+              snapshot.uses.length ? snapshot.uses.slice(0, 20).map(use => h('div', { key: use.id, className: 'bt-main-settings-use' },
+                h('span', { className: 'bt-observation-role' }, use.role),
+                h('span', null, `${t('Configuration')} v${use.revision}`),
+                h('span', null, refOf(use[use.role] ?? use.worker ?? use.router)),
+                h('span', { className: 'bt-main-settings-use-session', title: use.sessionId }, use.sessionId),
+                h('time', null, new Date(use.createdAt).toLocaleString()))) : h('p', { className: 'bt-main-status' }, t('No role turn has recorded a configuration version yet.')))) : loadingSettings
+    const providers = snapshot ? h(Fragment, null,
+            error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
+            notice ? h('p', { className: 'bt-main-status', role: 'status' }, notice) : null,
             h(Card, { title: t('Providers') },
               snapshot.providers.length ? snapshot.providers.map(provider => h('div', { key: provider.id, className: 'bt-main-provider' },
                 h('div', { className: 'bt-main-provider-copy' }, h('strong', null, provider.name), h('span', null, t('{count} models', { count: provider.models.length }))),
@@ -1549,19 +1778,54 @@ export function applyProduct(ctx) {
                       onClick: () => { void saveKey(provider.id, keyDrafts[provider.id]) } }, t('Save key')),
                     provider.key.configured ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm bt-bs-danger',
                       disabled: saving, onClick: () => { void saveKey(provider.id, null) } }, t('Remove key')) : null) : h('span', null, t('Set outside this product'))) : null))
-                : h('p', { className: 'bt-main-status' }, t('No provider catalog is available. Configure providers in DSH settings.'))),
-            h(ProductCredentialSettings, { binding, call: productCall, credentialImportBridge: globalThis.dsSuperagentApp?.browser?.credentialImport }),
-            h(ProductMcpSettings, { binding, call: productCall }),
-            h(ClientSettings, { binding }),
-            h(Card, { title: t('Recent configuration uses') },
-              snapshot.uses.length ? snapshot.uses.slice(0, 20).map(use => h('div', { key: use.id, className: 'bt-main-settings-use' },
-                h('span', { className: 'bt-observation-role' }, use.role),
-                h('span', null, `${t('Configuration')} v${use.revision}`),
-                h('span', null, refOf(use[use.role] ?? use.worker ?? use.router)),
-                h('span', { className: 'bt-main-settings-use-session', title: use.sessionId }, use.sessionId),
-                h('time', null, new Date(use.createdAt).toLocaleString()))) : h('p', { className: 'bt-main-status' }, t('No role turn has recorded a configuration version yet.'))),
-            h('p', { className: 'bt-main-status' }, t('Configuration versions apply at request boundaries. A turn already running keeps the version it started with.')))),
-          close)))
+                : h('p', { className: 'bt-main-status' }, t('No provider catalog is available. Configure providers in DSH settings.')))) : loadingSettings
+    const pageProps = { binding, call: productCall }
+    const pages = {
+      general: h(Fragment, null, h(AppearanceSettings, { ctx }),
+        viewState.directoryError ? h('p', { className: 'bt-main-error', role: 'alert' }, viewState.directoryError) : null,
+        viewState.directoryOptions ? h(Card, { title: t('Work directories') },
+          viewState.directoryOptions.default?.unavailable ? h('p', { role: 'alert', className: 'bt-main-error' },
+            t('The saved work directory is unavailable. Choose another directory.')) : null,
+          h(Row, { label: t('Instance default directory'), hint: t('New work starts here unless you choose a work directory in Main.') },
+            h(FolderMenu, { value: viewState.directoryOptions.default?.root, team: true,
+              label: t('Instance default directory'), actions: directoryActions(binding),
+              run: promise => void Promise.resolve(promise).catch(failure =>
+                view.set(current => ({ ...current, directoryError: failure.message }))),
+              onPick: chooseDefaultDirectory, disabled: viewState.directoryBusy }))) : null),
+      roles,
+      models: providers,
+      'built-in-plugins': h(BuiltinPluginSettings, pageProps),
+      execution: h(ProductExecutionSettings, { ...pageProps, onChanged: () => { void loadDirectories(binding) } }),
+      calendar: h(ProductScheduleSettings, { ...pageProps, works: viewState.works, onViewWork: viewWork }),
+      'scheduled-tasks': h(ProductScheduleSettings, { ...pageProps, onViewWork: viewWork, taskMode: true }),
+      preparations: h(ProductProactiveSettings, pageProps),
+      presets: snapshot ? h(ProductPresetSettings, { ...pageProps,
+        settingsRevision: snapshot.revision, roleSettings: snapshot, onApplied: refreshAfterPreset, onReload: refreshAfterPreset }) : loadingSettings,
+      memory: h(ProductMemorySettings, { ...pageProps, key: binding.instanceId, works: viewState.works }),
+      'browser-resources': h(ProductBrowserSettings, { ...pageProps, works: viewState.works,
+        directoryOptions: viewState.directoryOptions, browserBridge: globalThis.dsSuperagentApp?.browser }),
+      'browser-plugin': h(ProductBrowserPluginSettings, pageProps),
+      supervision: h(ProductSupervisionSettings, pageProps),
+      'credential-resources': h(ProductCredentialSettings, { ...pageProps, credentialImportBridge: globalThis.dsSuperagentApp?.browser?.credentialImport }),
+      'chat-secrets': h(ChatSecrets, { ...pageProps, settings: true }),
+      connectors: h(ConnectorSettings, pageProps),
+      im: h(ProductImSettings, pageProps),
+      phone: h(ProductPhoneSettings, pageProps),
+      computer: h(ProductComputerSettings, pageProps),
+      capabilities: h(Fragment, null, h(CapabilitySettings, { ...pageProps, works: viewState.boardItems,
+        environments: viewState.directoryOptions?.execution?.environments }), h(ProductMcpSettings, pageProps)),
+      'remote-clients': h(ClientSettings, { binding }),
+    }
+    const sections = Object.fromEntries(Object.entries(pages).map(([id, content]) => [id, { render: () => content }]))
+    const useNativeModels = viewState.nativeModelsOpen && renderSlot && hasNativeSettings('models')
+    if (useNativeModels) sections.models = { render: ({ close }) =>
+      renderSlot('settings.section', { close }, { only: 'models', fallback: providers }) }
+    sections['usage-overview'] = { render: ({ navigate }) => h(ProductOperationsSettings, { ...pageProps, section: 'usage', onNavigate: navigate }) }
+    sections.status = { render: ({ navigate }) => h(ProductOperationsSettings, { ...pageProps, section: 'status', onNavigate: navigate }) }
+    sections.feedback = { render: ({ navigate }) => h(FeedbackSettings, { ...pageProps, onNavigate: navigate,
+      ...(viewState.connection?.connected ? { app: null } : {}) }) }
+    return h(SettingsShell, { open, onClose, returnFocus, initialPage, renderSlot, sections,
+      onNavigate: useNativeModels ? previous => { if (previous === 'models') void load({ preserve: draft !== null }) } : undefined })
   }
 
   function ConnectionDialog({ connection, onClose }) {
@@ -1619,21 +1883,355 @@ export function applyProduct(ctx) {
 
   function ProductSurface() {
     const state = useView()
+    if (state.route === 'work') return h('section', { className: 'bt-main-conversation' },
+      h('header', { className: 'bt-main-header' }, h(Header),
+        h('button', { type: 'button', className: 'bt-soft', onClick: shellActions.openMain }, t('Main'))),
+      h(BoardSurface))
+    return state.route === 'observe' ? h(ObservationConversation) : h(MainConversation)
+  }
+
+  const usesProductHistory = state => state.connection?.connected || state.binding?.mainSessionMode === 'product-history'
+  const openNativeMain = sessionId => {
+    ctx.layout.beginNavigation()
+    ctx.uiWorkspace.openSession(sessionId)
+  }
+
+  function NativeComposer({ pendingInteraction }) {
+    const state = useView()
+    const sessionEvents = useNativeSessionEvents(state.binding?.mainSessionId)
+    return pendingInteraction ? null : h(MainConversation, { composerOnly: true, sessionEvents })
+  }
+
+  function useNativeSessionEvents(sessionId) {
+    const source = sessionId && ctx.sessions.binding(sessionId)?.eventSource
+    return useSyncExternalStore(source ? listener => source.subscribe(listener) : noopSubscribe,
+      source ? () => source.getSnapshot() : noEvents)
+  }
+
+  const mainInputStatus = status => ({ queued: t('Queued'), running: t('Running'), stopping: t('Stopping'),
+    stopped: t('Stopped'), interrupted: t('Interrupted'), failed: t('Failed') })[status] ?? status
+
+  function NativeTurnCards({ turn, seq }) {
+    const state = useView()
+    const events = useNativeSessionEvents(state.binding?.mainSessionId)
+    const status = useSyncExternalStore(ctx.uiSession.sessionStatus.subscribe, ctx.uiSession.sessionStatus.getSnapshot)
+    if (!events || state.connection?.connected) return null
+    const ids = new Set(events.entries.flatMap(({ event }) => event.type === 'user/message' && event.seq > (turn.start?.seq ?? -1)
+      && event.seq <= seq ? [event.data.id] : []))
+    const { works, sources, preparations } = projectNativeTurnCards(state, ids)
+    const attachments = state.messages.filter(message => ids.has(message.id)).flatMap(message => message.attachments ?? [])
+    if (!works.length && !sources.length && !preparations.length && !attachments.length) return null
+    const pending = status.get(state.binding.mainSessionId)?.pendingInteraction
+    const question = pendingQuestion(state)
+    return h('div', { className: 'bt-native-turn-cards' },
+      sources.map(source => h(MainSourceCard, { key: source.id, source, instanceId: state.binding.instanceId, onRefresh: refresh, canCommand: true })),
+      preparations.map(preparation => h(MainPreparationCard, { key: preparation.id, preparation })),
+      attachments.length ? h(MainAttachmentLinks, { attachments }) : null,
+      works.map(work => h(MainWorkCard, { key: work.brief.workItemId ?? work.brief.id, work,
+        questionInComposer: !pending && work === question, showEvidence: true,
+        onEvidence: selected => void loadMainEvidence(state.binding, selected) })))
+  }
+
+  function NativeActivity({ openView }) {
+    const state = useView()
+    const instanceId = state.binding?.instanceId
+    useEffect(() => {
+      if (!instanceId) return
+      view.set(current => ({ ...current, route: 'observe' }))
+      return () => {
+        if (ctx.layout.panelInfo.getSnapshot().activePanelId !== 'superagent-activity') {
+          view.set(current => ({ ...current, route: 'main' }))
+        }
+      }
+    }, [instanceId])
+    return instanceId ? h(ObservationConversation, { onBack: () => openView('chat', '') }) : null
+  }
+
+  function NativeMainActions() {
+    const state = useView()
+    const sessionState = useSyncExternalStore(nativeStatus?.subscribe ?? noopSubscribe, nativeStatus?.getSnapshot ?? noEvents)
+    return h('div', { className: 'bt-native-main-actions',
+      'data-native-main-question': sessionState?.get(state.binding?.mainSessionId)?.pendingInteraction ? '' : undefined },
+      h('span', { role: 'status' }, state.modelsNeedSetup ? t('Models need setup') : mainHealthCopy(state.health)),
+      h('button', { type: 'button', className: 'bt-icon-btn bt-main-settings', 'aria-label': t('Settings'),
+        onClick: () => shellActions.openSettings() }, h(SlidersIcon)))
+  }
+
+  const slotEntries = name => ctx.slots.entries?.(name) ?? []
+  const modelSlots = ['settings.section', DEEPSEEK_SIGN_IN_SLOT]
+  const subscribeModelSlots = listener => {
+    const subscriptions = modelSlots.map(name => ctx.slots.subscribe?.(name, listener))
+    return () => { for (const unsubscribe of subscriptions) unsubscribe?.() }
+  }
+  const modelSlotVersion = () => modelSlots.map(name => ctx.slots.getVersion?.(name) ?? 0).join(':')
+  const useModelSlots = () => useSyncExternalStore(subscribeModelSlots, modelSlotVersion)
+  const hasNativeSettings = id => slotEntries('settings.section').some(entry => entry.options?.id === id)
+  const canSignIn = () => slotEntries(DEEPSEEK_SIGN_IN_SLOT).length > 0 && !hasNativeSettings('account')
+  const openSignIn = () => {
+    const state = view.getSnapshot()
+    if (!state.binding || state.connection?.connected || !canSignIn()) return
+    signInTrigger = document.activeElement
+    view.set({ ...state, signInOpen: true })
+  }
+  const closeSignIn = () => {
+    view.set(state => ({ ...state, signInOpen: false }))
+    void refreshModelSettings()
+  }
+  const openCustomModels = () => shellActions.openSettings('models', { nativeModels: true })
+
+  function SignInDialog({ renderSlot }) {
+    useEffect(() => {
+      const trigger = signInTrigger
+      return () => { if (!view.getSnapshot().settingsOpen) returnTo(trigger) }
+    }, [])
+    return renderSlot(DEEPSEEK_SIGN_IN_SLOT, {
+      complete: closeSignIn,
+      useApiKey: () => {
+        shellActions.openSettings('models', { trigger: signInTrigger })
+        closeSignIn()
+      },
+    })
+  }
+
+  function Overlay({ renderSlot }) {
+    useModelSlots()
+    const state = useView()
+    const signInAvailable = slotEntries(DEEPSEEK_SIGN_IN_SLOT).length > 0
+    useEffect(() => {
+      if (state.signInOpen && (!signInAvailable || state.connection?.connected)) closeSignIn()
+    }, [state.signInOpen, signInAvailable, state.connection?.connected])
+    const trigger = settingsTrigger
     return h(Fragment, null,
-      state.route === 'observe' ? h(ObservationConversation) : h(MainConversation),
-      state.settingsOpen && state.binding && !state.connection?.connected ? h(SettingsDialog, { binding: state.binding,
-        onClose: () => view.set(current => ({ ...current, settingsOpen: false })) }) : null,
+      state.binding && !state.connection?.connected && state.settingsPage ? h(SettingsDialog, { binding: state.binding,
+        key: `${state.settingsPage}:${state.nativeModelsOpen}`, open: state.settingsOpen, initialPage: state.settingsPage, renderSlot,
+        returnFocus: () => returnTo(trigger),
+        onClose: () => {
+          view.set(current => ({ ...current, settingsOpen: false }))
+          void refreshModelSettings()
+        } }) : null,
+      state.signInOpen && signInAvailable && !state.connection?.connected && renderSlot ? h(SignInDialog, { renderSlot }) : null,
       state.connectOpen && clientBridge() ? h(ConnectionDialog, { connection: state.connection,
         onClose: () => view.set(current => ({ ...current, connectOpen: false })) }) : null)
   }
-  const shadow = (name, component) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200 }, component))
-  ctx.effect(() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + FOLDER_CSS + PRODUCT_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_EXECUTION_CSS + PRODUCT_OPERATIONS_CSS, 'main'), 'superagent: existing chat styles')
-  ctx.effect(() => { const style = installStyles(themeCss(allThemes().deepseek), 'main-theme'); return () => style.remove() }, 'superagent: existing theme')
-  shadow('main.conversation', ProductSurface)
-  shadow('sidebar.workspaces', MainNavigation)
-  shadow('sidebar.brand.name', () => h('span', null, 'DS-SuperAgent'))
-  shadow('sidebar.brand.mark', ProductBrandMark)
+
+  const classicAvailable = state => Boolean(nativeSession && nativeWorkspaces && classicBridge()?.call && state.binding && !state.connection?.connected)
+  let classicTimer
+  async function callClassic(endpoint, instanceId) {
+    const response = await classicBridge()?.call(endpoint, { instanceId })
+    if (response?.ok === true) return response.value
+    throw new Error(t(response?.error?.message ?? 'Classic Agent mode is unavailable here.'))
+  }
+
+  async function returnToMain() {
+    await Promise.resolve(ctx.sessions.refresh?.()).catch(() => {})
+    if (stopped) return
+    view.set(current => ({ ...current, surface: 'product', route: 'main', restoreMainFocus: true }))
+    void refresh()
+  }
+
+  function renewClassic(instanceId, sessionId) {
+    classicTimer = setTimeout(async () => {
+      try {
+        const renewed = await callClassic('classic-renew', instanceId)
+        if (renewed.sessionId !== sessionId) throw new Error(t('No authorized classic Agent Session is available.'))
+        if (!stopped && view.getSnapshot().surface === 'classic' && !view.getSnapshot().surfaceChanging) renewClassic(instanceId, sessionId)
+      } catch (error) {
+        if (!stopped && view.getSnapshot().surface === 'classic' && !view.getSnapshot().surfaceChanging) {
+          void setSurface('product', error)
+        }
+      }
+    }, 20_000)
+  }
+
+  function waitForClassicWorkspace(sessionId, workspaceId) {
+    const listed = () => nativeWorkspaces.getSnapshot().items.some(workspace =>
+      workspace.workspaceId === workspaceId && workspace.sessionIds.includes(sessionId))
+    if (listed()) return Promise.resolve(true)
+    return new Promise(resolve => {
+      const finish = found => { clearTimeout(timer); unsubscribe(); resolve(found) }
+      const unsubscribe = nativeWorkspaces.subscribe(() => { if (listed()) finish(true) })
+      const timer = setTimeout(() => finish(false), 5000)
+    })
+  }
+
+  async function setSurface(surface, failure) {
+    const state = view.getSnapshot()
+    if (!state.binding || state.surfaceChanging || state.surface === surface) return
+    view.set(current => ({ ...current, surfaceChanging: true }))
+    const instanceId = state.binding.instanceId
+    let granted = false
+    try {
+      if (surface === 'classic') {
+        if (!classicAvailable(state)) throw new Error(t('Classic Agent mode is unavailable here.'))
+        const { sessionId, workspaceId } = await callClassic('classic-open', instanceId)
+        granted = true
+        if (typeof sessionId !== 'string' || !sessionId || typeof workspaceId !== 'string' || !workspaceId
+          || sessionId === state.binding.mainSessionId) {
+          throw new Error(t('No authorized classic Agent Session is available.'))
+        }
+        const [, hasWorkspace] = await Promise.all([ctx.sessions.refresh?.(), waitForClassicWorkspace(sessionId, workspaceId)])
+        const current = view.getSnapshot()
+        if (stopped || current.binding?.instanceId !== instanceId || !classicAvailable(current)) {
+          throw new Error(t('Classic Agent mode is unavailable here.'))
+        }
+        if (!hasWorkspace || !ctx.sessions.list.getSnapshot().byId?.[sessionId]) {
+          throw new Error(t('No authorized classic Agent Session is available.'))
+        }
+        mainVoice.close()
+        closeOverlays()
+        view.set(latest => ({ ...latest, surface, settingsOpen: false, settingsPage: null, nativeModelsOpen: false, signInOpen: false,
+          connectOpen: false, mainEvidence: null, mainEvidenceWorkItemId: null, restoreMainFocus: false }))
+        await Promise.resolve()
+        if (stopped) return
+        ctx.layout.beginNavigation()
+        ctx.uiWorkspace.openSession(sessionId)
+        renewClassic(instanceId, sessionId)
+      } else {
+        clearTimeout(classicTimer)
+        await callClassic('classic-close', instanceId).catch(error => { failure ??= error })
+        if (stopped) return
+        await returnToMain()
+        if (failure && !stopped) reportError(failure)
+      }
+    } catch (error) {
+      if (granted) {
+        await callClassic('classic-close', instanceId).catch(() => {})
+        if (view.getSnapshot().surface === 'classic') await returnToMain()
+        else if (!stopped) void Promise.resolve(ctx.sessions.refresh?.()).catch(() => {})
+      }
+      if (!stopped) reportError(error)
+    } finally {
+      if (!stopped) view.set(current => ({ ...current, surfaceChanging: false }))
+    }
+  }
+
+  function ReturnToProduct({ wide }) {
+    const state = useView()
+    if (state.surface !== 'classic') return null
+    return h(ClassicReturn, { wide, onReturn: () => void setSurface('product'), busy: state.surfaceChanging })
+  }
+
+  const shellActions = {
+    openMain() {
+      if (view.getSnapshot().surface === 'classic') { void setSurface('product'); return }
+      view.set(current => ({ ...current, route: 'main', selectedObservation: null, observationGeneration: null,
+        observation: null, observationError: null, observationDetail: null, observationDetailError: null }))
+      void refresh()
+      const state = view.getSnapshot()
+      if (nativeSession && !usesProductHistory(state) && state.binding?.mainSessionId) openNativeMain(state.binding.mainSessionId)
+    },
+    openClassic() { void setSurface('classic') },
+    openActivity() {
+      const state = view.getSnapshot()
+      view.set(current => ({ ...current, route: 'observe' }))
+      if (nativeSession && !usesProductHistory(state)) ctx.layout.selectPanel('superagent-activity')
+      if (state.binding) void loadObservations(state.binding, { reset: true })
+    },
+    openSettings(settingsPage = 'general', { nativeModels = false, trigger = document.activeElement } = {}) {
+      const state = view.getSnapshot()
+      if (!state.binding || state.connection?.connected) return
+      settingsTrigger = trigger
+      view.set({ ...state, settingsOpen: true, settingsPage, nativeModelsOpen: nativeModels })
+    },
+    openConnection() { if (clientBridge()) view.set(current => ({ ...current, connectOpen: true })) },
+  }
+  const shellSteps = []
+  const { Header, closeOverlays, reportError } = installProductShell(ctx, { actions: shellActions, Overlay,
+    collect: step => shellSteps.push(step),
+    WorkDirectory: ({ wide }) => h(MainWorkDirectory, { sidebar: true, wide }),
+    overlayChildren: { ...SETTINGS_CHILDREN, [DEEPSEEK_SIGN_IN_SLOT]: { kind: 'single', scope: 'root' } },
+    useShell() {
+      useModelSlots()
+      const state = useView()
+      const lastReply = state.messages.findLast(message => message.role === 'main')
+      const question = state.works.find(work => work.control?.attention?.status === 'waiting')
+      return { activity: state.route === 'observe', markState: state.activeTurn ? 'run' : 'idle',
+        preview: lastReply?.text, unread: lastReply?.id === state.readReplyId ? undefined : lastReply?.id, pending: question?.control?.attention?.id,
+        notificationScope: state.binding?.instanceId,
+        connectLabel: clientBridge() ? (state.connection?.connected ? t('Connection') : t('Connect to Host')) : null,
+        settingsAvailable: Boolean(state.binding && !state.connection?.connected), signIn: canSignIn() ? openSignIn : undefined,
+        classicAvailable: classicAvailable(state),
+        modalOpen: state.settingsOpen || state.connectOpen || state.signInOpen }
+    },
+  })
+  shellSteps.push(() => installSettingsSections(ctx.slots), () => installAppearance(ctx.get('theme')))
+  const register = (name, component, options = {}) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200, ...options }, component))
+  const conversationSteps = [() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SETTINGS_SHELL_CSS + PRODUCT_SETTINGS_CSS + FOLDER_CSS + PRODUCT_CSS + MODEL_ONBOARDING_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + CHAT_SECRET_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_COMPUTER_CSS + PRODUCT_EXECUTION_CSS + PRODUCT_OPERATIONS_CSS + USAGE_HEATMAP_CSS + WORK_BOARD_CSS + MAIN_VOICE_CSS, 'main')]
+  if (!nativeSession) conversationSteps.push(() => register('main.conversation', ProductSurface))
+  else {
+    conversationSteps.push(() => installMainCells(ctx), () => register('conversation.header.leading', NativeMainActions))
+    conversationSteps.push(() => register('conversation.composer', NativeComposer, { select: owner => {
+      const state = view.getSnapshot()
+      return !usesProductHistory(state) && state.binding?.mainSessionId === owner.sessionId && !owner.pendingInteraction ? true : null
+    } }),
+    () => register('conversation.chat.turnTail', NativeTurnCards, { id: 'superagent-cards', order: 900 }),
+    () => register('conversation.view', NativeActivity, { id: 'superagent-activity', order: 30, label: t('Activity') }),
+    () => register('conversation.view', BoardSurface, { id: 'superagent-work', order: 31, label: t('Work') }),
+    () => register('main', () => h(ObservationConversation, { onBack: shellActions.openMain }), { key: 'superagent-activity' }))
+    conversationSteps.push(() => {
+      let sessionId
+      let fallback
+      const sync = () => {
+        const state = view.getSnapshot()
+        if (state.surface !== 'product') return
+        if (usesProductHistory(state)) {
+          fallback ??= register('main.conversation', ProductSurface)
+          sessionId = undefined
+        } else {
+          const nextSessionId = state.binding?.mainSessionId
+          const catalog = ctx.sessions.list.getSnapshot()
+          if (!nextSessionId || nextSessionId === sessionId || catalog.phase !== 'ready' || !catalog.byId?.[nextSessionId]) return
+          sessionId = nextSessionId
+          fallback?.()
+          fallback = undefined
+          void Promise.resolve().then(() => {
+            if (sessionId !== nextSessionId || stopped) return
+            const latest = view.getSnapshot()
+            const latestCatalog = ctx.sessions.list.getSnapshot()
+            if (latest.surface !== 'product' || usesProductHistory(latest) || latest.binding?.mainSessionId !== nextSessionId
+              || latestCatalog.phase !== 'ready' || !latestCatalog.byId?.[nextSessionId]) {
+              sessionId = undefined
+              return
+            }
+            openNativeMain(nextSessionId)
+          }).catch(error => {
+            if (sessionId === nextSessionId) sessionId = undefined
+            if (!stopped) reportError(error)
+          })
+        }
+      }
+      sync()
+      const unsubscribe = view.subscribe(sync)
+      const unsubscribeSessions = ctx.sessions.list.subscribe(sync)
+      return () => { sessionId = undefined; unsubscribe(); unsubscribeSessions(); fallback?.() }
+    })
+  }
+  register('sidebar.footer.action', ReturnToProduct, { id: 'superagent-return', order: -300 })
+  ctx.effect(() => {
+    const style = installStyles(RETURN_CSS, 'classic-return')
+    const groups = surfaceGroups({ shell: shellSteps, conversation: conversationSteps }, reportError)
+    let surface
+    const sync = () => {
+      const current = view.getSnapshot().surface
+      if (surface === current) return
+      surface = current
+      groups.reconcile(surface === 'product')
+    }
+    const unsubscribe = view.subscribe(sync)
+    sync()
+    return () => {
+      clearTimeout(classicTimer)
+      const state = view.getSnapshot()
+      if (state.surface === 'classic') void callClassic('classic-close', state.binding.instanceId).catch(() => {})
+      unsubscribe()
+      groups.dispose()
+      style.remove()
+    }
+  }, 'superagent: active surface')
 }
+
+const noopSubscribe = () => () => {}
+const noEvents = () => undefined
 
 function redactObservationText(value) {
   return String(value).replace(/\b(Bearer\s+)[A-Za-z0-9._~+\x2f-]+=*/giu, '$1[redacted]')
@@ -1641,6 +2239,7 @@ function redactObservationText(value) {
 }
 
 const PRODUCT_CSS = `
+.bt-native-main-input{width:100%}.bt-native-turn-cards{display:flex;flex-direction:column;gap:var(--bt-font-small);width:100%}.bt-native-main-actions{display:flex;align-items:center;gap:8px}
 .bt-product-message{display:flex;margin:10px 0}.bt-product-message-bot{justify-content:flex-start}.bt-product-message-user{justify-content:flex-end}.bt-product-message .bt-bubble{max-width:min(720px,88%);box-sizing:border-box;padding:12px 14px;border-radius:16px;background:var(--bt-bubble);color:var(--bt-ink)}.bt-product-message-user .bt-bubble{background:var(--bt-user);color:var(--bt-user-ink)}
 .bt-main-settings-nav-item{display:flex;width:100%;border:0;text-align:left;cursor:pointer;font:inherit}
 .bt-main-settings-nav-item:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
@@ -1659,12 +2258,12 @@ const PRODUCT_CSS = `
 .bt-main-connect-body input:focus-visible{outline:2px solid var(--bt-accent);outline-offset:1px}
 .bt-main-connect-body p{margin:4px 0;overflow-wrap:anywhere}
 .bt-main-connect-body button{min-height:36px}
-.bt-main-client-form{display:flex;align-items:flex-end;flex-wrap:wrap;gap:8px;padding:10px 12px;font-size:12px}
+.bt-main-client-form{display:flex;align-items:flex-end;flex-wrap:wrap;gap:8px;padding:10px 12px;font-size:var(--bt-font-small)}
 .bt-main-client-form label{align-self:center;color:var(--bt-ink-2)}
 .bt-main-client-form input{max-width:190px}.bt-main-client-form select{max-width:170px}
-.bt-main-client-issued{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 12px;border-top:1px solid var(--bt-line);font-size:12px}
-.bt-main-client-issued p{width:100%;margin:0}.bt-main-client-issued input{max-width:300px;min-width:0;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card);color:var(--bt-ink);padding:8px}
-.bt-main-client-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border-top:1px solid var(--bt-line);font-size:12px}
+.bt-main-client-issued{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 12px;border-top:1px solid var(--bt-line);font-size:var(--bt-font-small)}
+.bt-main-client-issued p{width:100%;margin:0}.bt-main-client-issued input{max-width:300px;min-width:0;border:1px solid var(--bt-line);border-radius:var(--bt-radius-input);background:var(--bt-card);color:var(--bt-ink);padding:8px}
+.bt-main-client-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border-top:1px solid var(--bt-line);font-size:var(--bt-font-small)}
 .bt-main-client-row>div{min-width:0;display:flex;flex-direction:column;gap:2px}.bt-main-client-row span{color:var(--bt-ink-2);overflow-wrap:anywhere}
 .bt-main-health-warning{margin:0;padding:8px 24px;border-bottom:.5px solid var(--bt-line-2);background:var(--bt-card);color:var(--bt-danger);font-size:12px;line-height:18px}
 .bt-main-settings{margin-left:2px}
@@ -1777,21 +2376,20 @@ const PRODUCT_CSS = `
 .bt-observation-event-head{display:flex;justify-content:space-between;gap:12px;color:var(--bt-ink-2);font-size:11px;line-height:16px}
 .bt-observation-event-head>span{font-weight:600;text-transform:uppercase;letter-spacing:.04em}
 .bt-observation-event p{margin:5px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:20px}
-.bt-main-settings-revision{margin-top:auto;padding:12px 8px 4px;color:var(--bt-ink-2);font-size:11px;line-height:16px}
 .bt-main-settings-select{max-width:min(100%,360px)}
-.bt-main-settings-prompt{width:100%;min-height:120px;box-sizing:border-box;resize:vertical;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-main);color:var(--bt-ink);padding:9px;font:inherit;font-size:13px;line-height:19px}
+.bt-main-settings-prompt{width:100%;min-height:120px;box-sizing:border-box;resize:vertical;border:1px solid var(--bt-line);border-radius:var(--bt-radius-input);background:var(--bt-main);color:var(--bt-ink);padding:9px;font:inherit;font-size:var(--bt-font-body);line-height:19px}
 .bt-main-settings-prompt:focus-visible{outline:2px solid var(--bt-accent);outline-offset:1px}
-.bt-main-settings-route{max-width:58%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--bt-ink-2);font-size:12px}
+.bt-main-settings-route{max-width:58%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--bt-ink-2);font-size:var(--bt-font-small)}
 .bt-main-settings-save{justify-content:flex-end;gap:8px}
-.bt-main-settings-conflict{margin:0;padding:10px 12px;border:1px solid var(--bt-danger);border-radius:10px;background:color-mix(in srgb,var(--bt-danger) 7%,transparent);font-size:13px;line-height:19px}
+.bt-main-settings-conflict{margin:0;padding:10px 12px;border:1px solid var(--bt-danger);border-radius:var(--bt-radius-row);background:color-mix(in srgb,var(--bt-danger) 7%,transparent);font-size:var(--bt-font-body);line-height:19px}
 .bt-main-settings-conflict p{margin:0 0 8px}
 .bt-main-provider{padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px}
 .bt-main-provider+.bt-main-provider{border-top:.5px solid var(--bt-line)}
 .bt-main-provider-copy{min-width:0;display:flex;flex-direction:column;gap:2px}
-.bt-main-provider-copy strong{font-size:13px}.bt-main-provider-copy span,.bt-main-provider-key>span{color:var(--bt-ink-2);font-size:11px;line-height:16px}
+.bt-main-provider-copy strong{font-size:var(--bt-font-body)}.bt-main-provider-copy span,.bt-main-provider-key>span{color:var(--bt-ink-2);font-size:var(--bt-font-caption);line-height:16px}
 .bt-main-provider-key{min-width:0;display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}
-.bt-main-provider-key input{width:160px;height:32px;box-sizing:border-box;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-main);color:var(--bt-ink);padding:0 8px;font:inherit;font-size:12px}
-.bt-main-settings-use{display:grid;grid-template-columns:auto auto minmax(0,1fr) minmax(80px,1.5fr) auto;align-items:center;gap:8px;padding:8px 12px;font-size:11px;line-height:16px;color:var(--bt-ink-2)}
+.bt-main-provider-key input{width:160px;height:32px;box-sizing:border-box;border:1px solid var(--bt-line);border-radius:var(--bt-radius-input);background:var(--bt-main);color:var(--bt-ink);padding:0 8px;font:inherit;font-size:var(--bt-font-small)}
+.bt-main-settings-use{display:grid;grid-template-columns:auto auto minmax(0,1fr) minmax(80px,1.5fr) auto;align-items:center;gap:8px;padding:8px 12px;font-size:var(--bt-font-caption);line-height:16px;color:var(--bt-ink-2)}
 .bt-main-settings-use+.bt-main-settings-use{border-top:.5px solid var(--bt-line)}
 .bt-main-settings-use-session{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media(max-width:640px){.bt-main-history,.bt-observation-body{padding:16px}.bt-main-header,.bt-observation-header{padding-left:16px;padding-right:16px}.bt-main-header{flex-wrap:wrap;height:auto;min-height:56px}.bt-main-health-detail{width:100%;margin-left:38px}.bt-main-health-warning{padding-left:16px;padding-right:16px}.bt-observation-header{align-items:flex-start;flex-wrap:wrap}.bt-observation-heading{order:3;width:100%}.bt-observation-summary{flex-direction:column}.bt-observation-facts{grid-template-columns:1fr}.bt-observation-generation{grid-template-columns:1fr}.bt-main-settings-dialog .bt-settings-nav{height:auto}.bt-main-settings-revision{padding:4px 8px}.bt-main-provider{align-items:stretch;flex-direction:column}.bt-main-provider-key{justify-content:flex-start}.bt-main-settings-use{grid-template-columns:auto auto minmax(0,1fr)}.bt-main-settings-use-session,.bt-main-settings-use time{grid-column:1/-1}.bt-main-settings-route{max-width:100%}}

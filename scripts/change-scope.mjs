@@ -19,8 +19,10 @@ export function classifyChanges(paths, { full = false } = {}) {
     if (!path) continue
     if (docs(path)) continue
     docsOnly = false
-    if (path.startsWith('superagent/')) result.superagent = true
-    else if (path.startsWith('app/')) {
+    if (path.startsWith('superagent/')) {
+      result.superagent = true
+      if (path.startsWith('superagent/src/phone-link/') || path === 'superagent/package.json' || path === 'superagent/package-lock.json') result.mobile = true
+    } else if (path.startsWith('app/')) {
       result.app = true
     } else if (path.startsWith('mobile/')) result.mobile = true
     else if (path.startsWith('docker/') || path === 'docker-compose.yml' || path === '.dockerignore') result.docker = true

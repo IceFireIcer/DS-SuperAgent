@@ -1,10 +1,72 @@
-// Interface copy follows the DSH language. Keys are the English text; `zh` maps them.
+// Interface copy follows the DSH language. Keys are the English fallback text.
 // Copy is looked up at render time and every slot outlet re-renders on a language
 // switch, so nothing caches a translated string.
+
+import de from './locales/de.js'
+import es from './locales/es.js'
+import fr from './locales/fr.js'
+import ja from './locales/ja.js'
+import ko from './locales/ko.js'
+import zhTW from './locales/zh-tw.js'
+import { CONNECTOR_ZH } from './connector-settings-zh.js'
+import { IM_ZH } from './im-settings-zh.js'
 
 export const NAMESPACE = 'ds-superagent'
 
 const ZH = {
+  ...CONNECTOR_ZH,
+  ...IM_ZH,
+  'Paired IM message': '已配对的 IM 消息',
+  'All work': '全部工作', 'Filter work': '筛选工作', 'Waiting for delivery': '等待交付',
+  'Waiting for a person': '等待人工', Delivered: '已交付', 'Work members': '工作成员', 'Worker stopping': 'Worker 正在停止',
+  'Confirm stop': '确认停止', 'Confirm stop for {goal}': '确认停止：{goal}', 'Stop work: {goal}': '停止工作：{goal}',
+  'Add note': '添加备注', 'Close note': '收起备注', 'Work follow-up': '工作跟进', 'Send follow-up': '发送跟进',
+  'Follow-up saved.': '跟进已保存。', 'No work in this group.': '此分组没有工作。', 'Could not refresh Work.': '无法刷新工作。',
+  Capability: '能力', 'Capability bundle': '能力包', 'New capability': '新建能力', Kind: '类型', 'MCP tool': 'MCP 工具',
+  'MCP server name': 'MCP 服务名称', 'MCP tool name': 'MCP 工具名称', 'MCP endpoint': 'MCP 地址', 'Bundle members': '能力包成员',
+  'Save capability': '保存能力', 'Confirm delete': '确认删除', 'Capability deleted.': '能力已删除。', 'Capability saved.': '能力已保存。',
+  'Execution bindings': '执行绑定', Approval: '审批', Approved: '已批准', 'Revoke approval': '撤销批准', Binding: '绑定',
+  'Bind capability': '绑定能力', Unbind: '解除绑定', Any: '不限', 'Work item': '工作项', 'Execution environment': '执行环境',
+  'The capability changed. Reload it before saving.': '能力已发生变化，请重新加载后再保存。',
+  'The capability library or execution scope has reached its limit.': '能力库或执行作用域已达到上限。',
+  'The work changed. Review its current state and try again.': '该工作已发生变化，请核对当前状态后重试。',
+  'Work follow-up is unavailable in this Host.': '此 Host 不支持工作跟进。',
+  Roles: '角色', 'Agent presets': '智能体预设', 'Built-in plugins': '内置插件',
+  'Connections and capabilities': '连接与能力', IM: '即时通信', Phone: '手机',
+  'Phone access': '手机访问', 'Relay server': '中继服务器', 'Relay not connected': '中继服务器未连接',
+  'Phone app': '手机应用', 'Mobile build instructions': '手机端构建说明', 'Pair a phone': '配对手机',
+  'Copy pairing link': '复制配对链接', 'Pairing link copied': '已复制配对链接', 'Could not copy the pairing link.': '无法复制配对链接。',
+  'The saved work directory is unavailable. Choose another directory.': '已保存的工作目录不可用，请另选一个目录。',
+  'Pairing QR code': '配对二维码', 'The code works once. It stops working in {count} min.': '二维码仅可用一次，{count} 分钟后失效。',
+  'Allow this phone to send messages': '允许此手机发送消息', Phones: '已配对手机', 'No phones yet': '还没有配对手机',
+  Disconnected: '已断开连接', 'Confirm removal': '确认移除', 'Activity (UTC)': '活动（UTC）',
+  'Activity filters': '活动筛选', 'Daily usage (UTC)': '每日用量（UTC）', 'Totals across all included Sessions': '本次纳入统计的全部会话总量',
+  'Credential request': '凭据申请', 'Credential resource': '凭据资源', 'Add credential': '添加凭据',
+  'Allow this work to use {name}?': '允许此工作使用「{name}」？', 'No pending credential requests.': '没有待处理的凭据申请。',
+  'This credential request no longer belongs to a current local work assignment.': '此凭据申请已不属于当前本机执行安排。',
+  'Browser plugin': '浏览器插件', 'Computer control': '电脑操控', 'Capability library': '能力库',
+  'Basic browsing': '基础浏览', 'Link references': '链接引用', 'Step script': '步骤脚本', 'Task plan': '任务计划',
+  'Worker browser mode': 'Worker 浏览模式', 'Active mode': '当前模式', 'Browser plugin saved.': '浏览器插件已保存。',
+  'This Host bridge supports only basic browsing.': '当前桌面桥仅支持基础浏览。',
+  'Desktop permission required': '需要桌面权限', 'Waiting for local approval': '等待本机确认', 'Worker control': 'Worker 操控中',
+  'Enable computer control': '开启电脑操控', 'Native driver': '本机驱动', 'Check permissions': '检查权限',
+  'Allowed applications': '允许的应用', 'Running application': '运行中的应用', 'Select an application': '选择应用',
+  'Refresh applications': '刷新应用列表', 'Access level': '操控级别', 'View only': '仅查看',
+  'Background control': '后台操控', 'Foreground control': '前台操控', 'Allow application': '允许该应用',
+  'Current computer session': '当前操控会话', 'Release control': '解除接管', 'Last window snapshot': '最近窗口截图',
+  'Pending computer actions': '待核对的电脑操作',
+  'No current computer session': '当前没有操控会话',
+  SuperAgent: 'SuperAgent', Calendar: '日程', 'Remote clients': '远程客户端', Help: '帮助',
+  'Plugin version': '插件版本', License: '许可协议', 'Project on GitHub': '在 GitHub 查看项目',
+  Package: '包名', Author: '作者',
+  'Loading settings…': '正在加载设置…', 'This setting is unavailable here.': '此处暂不可用。',
+  'Could not load this setting.': '无法加载此设置。',
+  'No built-in plugins are listed.': '暂无内置插件。',
+  Active: '运行中', Inactive: '未运行', Disabled: '已禁用', Unloading: '正在卸载',
+  'Content font size': '内容字号', 'Display appearance': '显示外观', 'Color mode': '颜色模式',
+  'Light mode': '浅色模式', 'Dark mode': '深色模式', 'Follow system': '跟随系统',
+  'View activity': '查看活动', 'Open Main': '打开主对话', 'Search commands': '搜索命令', 'Close search': '关闭搜索',
+  'A new reply is waiting': '有一条新回复',
   'Proactive preparation': '主动准备',
   'Pause proactive preparation': '暂停主动准备',
   'Paused preparations cannot submit a result. Existing work continues.': '暂停后准备结果无法提交，已有工作继续。',
@@ -545,6 +607,7 @@ const ZH = {
   'This question is no longer active.': '这个问题已不再有效。',
   'What would you like to discuss?': '想聊些什么？',
   'Main is replying…': 'Main 正在回复…',
+  Replying: '正在回复',
   'Main ready': 'Main 就绪',
   'Main running': 'Main 处理中',
   'Main degraded': 'Main 异常',
@@ -868,6 +931,9 @@ const ZH = {
   'This DSH cannot load connectors': '这个 DSH 不能加载连接器',
   'No such connector': '没有这个连接器',
   'Classic Agent mode': '经典 Agent 模式',
+  'Back to DS SuperAgent': '返回 DS SuperAgent',
+  'Classic Agent mode is unavailable here.': '此处无法使用经典 Agent 模式。',
+  'No authorized classic Agent Session is available.': '没有可用的已授权经典 Agent 会话。',
   'Switch': '切换',
   'Switch to classic Agent mode': '切换经典 Agent 模式',
   '{model} is not available anymore. Pick another model for me.': '{model} 已经不可用了。给我换一个模型吧。',
@@ -922,6 +988,12 @@ const ZH = {
   'Sign in to DeepSeek': '登录 DeepSeek 账号',
   'Enter a DeepSeek API key': '填入 DeepSeek API key',
   'Open settings to set up a custom model': '打开设置配置自定义模型',
+  'Open Models settings': '打开模型设置',
+  'Models and API keys': '模型与 API Key',
+  'I need a model before I can reply.': '配置模型后，我才能回复。',
+  'Could not save the API key.': '无法保存 API Key。',
+  'Could not check which models are available.': '无法检查可用的模型。',
+  'Provider key saved. Could not refresh model settings.': '密钥已保存，但无法刷新模型设置。',
   'DS SuperAgent': 'DS SuperAgent',
 
   // Header
@@ -1275,6 +1347,10 @@ const ZH = {
   // Time and usage
   'Today {time}': '今天 {time}',
   'Yesterday {time}': '昨天 {time}',
+  'Technical details': '技术详情',
+  'Work, sources and preparations': '工作、来源与准备事项',
+  Queued: '排队中',
+  Interrupted: '已中断',
   'Ran for {duration}': '本次用时 {duration}',
   '{tokens} tok · Cache hit {hit}%': '{tokens} tok · 缓存命中 {hit}%',
   '1 turn': '1 轮',
@@ -1636,6 +1712,15 @@ const ZH = {
   'Start voice chat': '开始语音对话',
   'Voice chat': '语音对话',
   Listening: '在听',
+  'Waiting for Main…': '等待 Main 回复…',
+  'Pause voice chat': '暂停语音对话',
+  'Resume voice chat': '继续语音对话',
+  'Could not submit voice input.': '无法提交语音输入。',
+  'Reading aloud is unavailable.': '无法使用朗读。',
+  'Could not read the reply aloud.': '无法朗读这条回复。',
+  'The reply was interrupted.': '回复已中断。',
+  'The reply was stopped.': '回复已停止。',
+  'Wait for the current action before sending.': '请等待当前操作完成后发送。',
   Thinking: '思考中',
   'Thinking…': '思考中…',
   Speaking: '在说',
@@ -1759,6 +1844,16 @@ const ZH = {
   Open: '打开',
   // Feedback and errors
   Feedback: '反馈',
+  'The issue opens blank. Paste only what you want to share.': '打开的是空白 issue，请只粘贴你想分享的内容。',
+  'Copy draft': '复制草稿', 'Feedback draft': '反馈草稿', 'Feedback draft copied.': '反馈草稿已复制。',
+  'Host diagnostics are unavailable.': 'Host 诊断信息不可用。',
+  'Desktop diagnostics are available in the desktop app.': '桌面诊断信息仅在桌面应用中可用。',
+  'Desktop diagnostics could not be loaded.': '无法加载桌面诊断信息。',
+  'Review diagnostic summary': '审阅诊断摘要', 'Refresh diagnostics': '刷新诊断信息', 'Open product status': '打开产品状态',
+  'Open memory dialog': '打开记忆对话框', 'Close memory dialog': '关闭记忆对话框',
+  'This window cannot open the memory dialog.': '此窗口无法打开记忆对话框。', 'No matching memories.': '没有匹配的记忆。',
+  'Could not load: {sections}': '无法加载：{sections}',
+  'Rules changed elsewhere. Close this draft and reopen the rule before saving.': '规则已在别处修改，请关闭此草稿并重新打开规则后再保存。',
   'Report a problem': '报告问题',
   'What happened?': '发生了什么？',
   'What you did, what you expected, and what happened instead. It goes into the issue.': '你做了什么、期望什么、实际发生了什么。会写进 issue。',
@@ -1890,6 +1985,7 @@ const ZH = {
   'Work directory': '工作目录',
   'Work directories': '工作目录',
   'Instance default': '实例默认目录',
+  'No directory selected': '未选择工作目录',
   'Instance default directory': '实例默认工作目录',
   'New work starts here unless you choose a work directory in Main.': '新工作默认从这里开始，也可在 Main 中为本次工作选择目录。',
   'New work uses this directory. Active work keeps its own directory.': '新工作使用此目录，在途工作继续使用各自的目录。',
@@ -1907,13 +2003,13 @@ const ZH = {
   'Remove protection': '解除保护',
   'Click again to remove. Other Bots can then read its folder, memory and chats.': '再点一次解除。其他 Bot 之后可以读取它的文件夹、记忆和对话。',
   'Nothing kept closed for this Bot': '这个 Bot 没有保留的保护',
-  'Team workspace': '总工作区',
-  'Team workspace: {folder}': '总工作区：{folder}',
-  'Where Bots without a folder of their own work.': '没有单独设置文件夹的 Bot 在这里工作。',
+  'SuperAgent workspace': 'SuperAgent 工作区',
+  'SuperAgent workspace: {folder}': 'SuperAgent 工作区：{folder}',
+  'Where Workers without a folder of their own work.': '没有单独设置文件夹的 Worker 在这里工作。',
   Locations: '位置',
   'Data location': '数据位置',
   'Change…': '更改…',
-  "Each Bot's own folder": '各 Bot 自己的文件夹',
+  "Each Worker's own folder": '各 Worker 自己的文件夹',
   'Choose a folder…': '选择文件夹…',
   'Browse folders…': '浏览文件夹…',
   'Enter a path…': '输入路径…',
@@ -2161,6 +2257,14 @@ const HOST_ZH = {
 }
 Object.assign(ZH, HOST_ZH)
 
+const ADDITIONAL_LANGUAGES = [
+  { id: 'ko', label: '한국어', fallback: 'en' },
+  { id: 'zh-TW', label: '繁體中文', fallback: 'zh' },
+]
+
+export const DICTIONARY = { zh: ZH, 'zh-TW': zhTW, de, es, fr, ja, ko }
+const DATE_LOCALES = { zh: 'zh-CN', 'zh-tw': 'zh-TW', de: 'de-DE', es: 'es-ES', fr: 'fr-FR', ja: 'ja-JP', ko: 'ko-KR' }
+
 const fill = (text, params) => (params
   ? text.replace(/\{(\w+)\}/g, (match, name) => (name in params ? String(params[name]) : match))
   : text)
@@ -2171,12 +2275,28 @@ let bound = null
 // `locale` is the DSH locale service; without one, copy stays English.
 export function installLocale(locale) {
   if (!locale || typeof locale.register !== 'function' || typeof locale.bind !== 'function') return () => {}
+  const disposers = []
+  const add = (dispose) => { if (typeof dispose === 'function') disposers.push(dispose) }
+  const disposeAll = () => { for (const dispose of disposers.splice(0).reverse()) dispose() }
+  let translate
+  try {
+    for (const [id, dictionary] of Object.entries(DICTIONARY)) add(locale.register(NAMESPACE, id, dictionary))
+    if (typeof locale.addLanguage === 'function') {
+      const existing = new Set((locale.getLocale?.()?.locales ?? []).map(({ id }) => id.toLowerCase()))
+      for (const definition of ADDITIONAL_LANGUAGES) {
+        if (!existing.has(definition.id.toLowerCase())) add(locale.addLanguage(definition))
+      }
+    }
+    translate = locale.bind(NAMESPACE)
+  } catch (error) {
+    disposeAll()
+    throw error
+  }
   service = locale
-  bound = locale.bind(NAMESPACE)
-  const off = locale.register(NAMESPACE, 'zh', ZH)
+  bound = translate
   return () => {
     if (service === locale) { service = null; bound = null }
-    if (typeof off === 'function') off()
+    disposeAll()
   }
 }
 
@@ -2196,11 +2316,11 @@ export function hostText(message) {
 
 // The active DSH language tag, for dates and times.
 export function language() {
-  const active = service?.getLocale?.().active
+  const active = service?.getLocale?.()?.active
   return typeof active === 'string' ? active : 'en'
 }
 
-export const dateLocale = () => (language().startsWith('zh') ? 'zh-CN' : 'en-US')
-
-// Translations for the tests: the Chinese dictionary itself.
-export const DICTIONARY = { zh: ZH }
+export function dateLocale() {
+  const active = language().toLowerCase()
+  return Object.hasOwn(DATE_LOCALES, active) ? DATE_LOCALES[active] : 'en-US'
+}

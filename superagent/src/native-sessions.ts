@@ -1,9 +1,12 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { AdmittedPromptContentPart } from '@deepseek-ai/dsh-attachment'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
+import { isDeepStrictEqual } from 'node:util'
 import type { Agent, AgentHandle, AgentOptions } from '@deepseek-ai/dsh-agent'
 import { MessageId, ReasoningEffortId, type TokenUsage } from '@deepseek-ai/dsh-llm'
 import { buildForkSeed, SessionId, SessionLogOffset, type SessionEvent } from '@deepseek-ai/dsh-session'
+import { SessionAlreadyExistsError, SessionAlreadyOwnedError } from '@deepseek-ai/dsh-session-persistence'
+import type {} from '@deepseek-ai/dsh-session-title'
 import { defineTool, type ParameterSchemaSpec, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { CoreError, type IntakeAssessment } from './model.js'
 import type { RoleModel } from './config.js'
@@ -17,7 +20,7 @@ export interface NativeTool {
   execute(args: Record<string, any>, signal: AbortSignal, agent?: Agent): Promise<string>
 }
 export interface NativeSessionRequest { sessionId: string; role: 'main' | 'router' | 'worker'; text: string; content?: AdmittedPromptContentPart[]; tools: NativeTool[]; cwd?: string; signal?: AbortSignal; onBeforeModel?: () => Promise<void>; onDelivered?: () => Promise<void>; coalesce?: boolean; messageId?: string; onMessagePersisted?: (seq: number) => Promise<void>; onForkPrepared?: (sessionId: string) => Promise<void>; instructions?: string; skills?: string[]; profile?: RoleProfile; stepBudget?: number }
-export interface NativeSessionsOptions { main?: AgentOptions; router: AgentOptions; worker: AgentOptions; timeoutMs?: number }
+export interface NativeSessionsOptions { main?: AgentOptions; mainCwd?: string; router: AgentOptions; worker: AgentOptions; timeoutMs?: number }
 interface NativeSessionResult { sessionId: string; status: string; events: readonly unknown[]; forkedSessionId?: string
   turnStartSeq?: number; turnEndSeq?: number; stepCount: number }
 export interface SessionTokenUsage {
@@ -40,6 +43,7 @@ export interface SessionUsageSnapshot {
   eventCount: number
   usage: SessionTokenUsage
   ranges: { id: string; usage: SessionTokenUsage }[]
+  buckets?: { at: number; provider: string; model: string; usage: SessionTokenUsage }[]
 }
 interface RouterTask { request: NativeSessionRequest; resolve: (value: NativeSessionResult) => void; reject: (error: unknown) => void }
 const maxCoalescedRouterTools = 7
@@ -140,6 +144,78 @@ export class NativeSessions {
   /** The live Agent for one Session id, for DSH's `parentAgent` ownership seam. */
   agentOf(sessionId: string) { return this.agents.get(sessionId) }
 
+  async initializeMainSession(sessionId: string) {
+    const cwd = this.options.mainCwd
+    const persistence = this.context.get('sessionPersistence')
+    const id = SessionId(sessionId)
+    if (!cwd || !persistence || await persistence.stat(id)) return
+    const handle = await this.context.agents.create({ sessionId: id, meta: { cwd }, setup(_scope, agent) {
+      agent.session.append('session/title', { title: 'Main', messageSeqs: [], source: { kind: 'user' } })
+    } })
+    try {
+      if (!await this.context.sessions.flush(handle.agent.session)) {
+        throw new CoreError('PERSISTENCE_REQUIRED', 'No persistence provider confirmed the Main Session flush.')
+      }
+    } finally { await handle.dispose() }
+  }
+
+  async mainSessionMode(sessionId: string): Promise<'native' | 'product-history'> {
+    const snapshot = await this.context.get('sessionPersistence')?.stat(SessionId(sessionId))
+    return snapshot?.header.cwd === undefined ? 'product-history' : 'native'
+  }
+
+  async upgradeLegacyMainSession(sessionId: string, publish: (childId: string) => Promise<void>) {
+    const cwd = this.options.mainCwd
+    const persistence = this.context.get('sessionPersistence')
+    if (!cwd || !persistence) return
+    const parentId = SessionId(sessionId)
+    const snapshot = await persistence.stat(parentId)
+    if (!snapshot || snapshot.header.cwd || snapshot.formatStatus === 'migration-required') return
+
+    const parent = await persistence.open(parentId, 'write').catch(error => {
+      if (error instanceof SessionAlreadyOwnedError) {
+        throw new CoreError('MAIN_SESSION_UPGRADE_BUSY', 'Close the active legacy Main Session before upgrading its transcript.')
+      }
+      throw error
+    })
+    try {
+      const { events } = await parent.read(0, 50_001)
+      if (events.length > 50_000) return
+      const last = events.at(-1)
+      const seed = last ? buildForkSeed(events, last.seq) : []
+      if (last && seed.length !== events.length + 1) return
+
+      const childId = SessionId(`main-session-cwd-${createHash('sha256').update(JSON.stringify([parentId, cwd, events.length])).digest('hex')}`)
+      const inheritedEventCount = SessionLogOffset(events.length)
+      const { version, createdAt, agentPreset } = parent.header
+      const header = { id: childId, version, createdAt, cwd, parentSession: parentId, isSeeded: Boolean(last),
+        ...(agentPreset === undefined ? {} : { agentPreset }) }
+      try {
+        const existing = await persistence.stat(childId)
+        const child = existing ? await persistence.open(childId, 'write')
+          : await persistence.create(header, { inheritedEventCount })
+        try {
+          const { events: saved } = await child.read(0, seed.length + 1)
+          const actual = { ...child.header, delegationDepth: child.header.delegationDepth ?? 0 }
+          if (!isDeepStrictEqual(actual, { ...header, delegationDepth: 0 }) || child.inheritedEventCount !== inheritedEventCount) {
+            throw new CoreError('MAIN_SESSION_UPGRADE_CONFLICT', 'The prepared Main Session has different metadata.')
+          }
+          if (saved.length > seed.length || saved.some((event, index) => !isDeepStrictEqual(event, seed[index]))) {
+            throw new CoreError('MAIN_SESSION_UPGRADE_CONFLICT', 'The prepared Main Session has different events.')
+          }
+          if (saved.length < seed.length) await child.append(seed.slice(saved.length))
+          await child.flush()
+          await publish(childId)
+        } finally { await child.close() }
+      } catch (error) {
+        if (error instanceof SessionAlreadyOwnedError || error instanceof SessionAlreadyExistsError) {
+          throw new CoreError('MAIN_SESSION_UPGRADE_BUSY', 'Close the active legacy Main Session before upgrading its transcript.')
+        }
+        throw error
+      }
+    } finally { await parent.close() }
+  }
+
   run(request: NativeSessionRequest) {
     if (request.role !== 'router') return this.execute(request)
     return new Promise<NativeSessionResult>((resolve, reject) => {
@@ -210,10 +286,13 @@ export class NativeSessions {
     const baseOptions = this.options[request.role]
     if (!baseOptions) throw new CoreError('ROLE_NOT_CONFIGURED', `The ${request.role} role has no Session options.`)
     const { reasoningEffort: _existingEffort, ...agentOptions } = baseOptions
+    const modelSelection = { provider: route.provider, model: route.model,
+      ...(route.effort ? { reasoningEffort: ReasoningEffortId(route.effort) } : {}) }
+    const persisted = await this.context.sessionPersistence.stat(SessionId(request.sessionId))
+    const cwd = request.cwd ?? (request.role === 'main' ? persisted?.header.cwd ?? this.options.mainCwd : undefined)
     const creation = {
-      sessionId: SessionId(request.sessionId), agentOptions: { ...agentOptions, provider: route.provider, model: route.model,
-        ...(route.effort ? { reasoningEffort: ReasoningEffortId(route.effort) } : {}) },
-      ...(request.cwd ? { meta: { cwd: request.cwd } } : {}),
+      sessionId: SessionId(request.sessionId), agentOptions: { ...agentOptions, ...modelSelection },
+      ...(cwd ? { meta: { cwd } } : {}),
       setup: ((scoped, agent) => {
         scoped.on('agent/request', async (_payload, next) => {
           steps++
@@ -243,7 +322,6 @@ export class NativeSessions {
         }) satisfies ToolDefinition)
       }) satisfies NonNullable<Parameters<Context['agents']['create']>[0]['setup']>,
     }
-    const persisted = await this.context.sessionPersistence!.stat(SessionId(request.sessionId))
     const handle = persisted
       ? await this.context.agents.resume({ resumeSessionId: creation.sessionId, agentOptions: creation.agentOptions, setup: creation.setup })
       : await this.context.agents.create(creation)
@@ -276,6 +354,7 @@ export class NativeSessions {
     try {
       request.signal?.throwIfAborted()
       await request.onBeforeModel?.()
+      if (persisted) handle.agent.model.select(modelSelection)
       await request.onDelivered?.()
       handle.agent.followup({ id: MessageId(messageId), role: 'user', content: request.content ?? [{ type: 'text', text: request.text }], source: { kind: 'user' } })
       await handle.agent.whenIdle()
@@ -299,7 +378,7 @@ export class NativeSessions {
         if (last) {
           const child = await this.context.agents.create({ sessionId: SessionId(childSessionId), agentOptions: creation.agentOptions,
             seed: buildForkSeed(events, last.seq), inheritedEventCount: SessionLogOffset(Number(last.seq) + 1),
-            meta: { ...(request.cwd ? { cwd: request.cwd } : {}), parentSession: SessionId(request.sessionId), isSeeded: true },
+            meta: { ...(cwd ? { cwd } : {}), parentSession: SessionId(request.sessionId), isSeeded: true },
             setup: creation.setup })
           try {
             if (!await this.context.sessions.flush(child.agent.session)) {
@@ -363,7 +442,7 @@ export class NativeSessions {
     } finally { await handle.close() }
   }
 
-  async readUsageSnapshot(sessionId: string, options: { maxEvents?: number; ranges?: SessionUsageRange[] } = {}): Promise<SessionUsageSnapshot> {
+  async readUsageSnapshot(sessionId: string, options: { maxEvents?: number; ranges?: SessionUsageRange[]; hourly?: boolean } = {}): Promise<SessionUsageSnapshot> {
     const persistence = this.context.get('sessionPersistence')
     const ranges = options.ranges ?? []
     const maxEvents = options.maxEvents ?? 20_000
@@ -396,11 +475,29 @@ export class NativeSessions {
       const rangeTotals = new Map(ranges.map(range => [range.id, emptySessionUsage()]))
       const total = emptySessionUsage()
       const active = new Set<string>()
+      const hourly = new Map<string, NonNullable<SessionUsageSnapshot['buckets']>[number]>()
+      let route = { provider: '', model: '' }
       let start = 0, end = 0
       for (const raw of events) {
-        const event = raw as { type?: unknown; seq?: unknown; data?: { usage?: TokenUsage } }
+        const event = raw as { type?: unknown; seq?: unknown; time?: number; data?: {
+          usage?: TokenUsage; provider?: unknown; model?: unknown; header?: { config?: { provider?: unknown; model?: unknown } }
+        } }
+        if (options.hourly && (event.type === 'request/header' || event.type === 'request/context')) {
+          const model = event.type === 'request/header' ? event.data?.header?.config : event.data
+          if (typeof model?.provider === 'string' && typeof model.model === 'string') {
+            route = { provider: model.provider.slice(0, 120), model: model.model.slice(0, 160) }
+          }
+        }
         if (event.type !== 'assistant/message') continue
         addSessionUsage(total, event.data?.usage)
+        if (options.hourly && event.data?.usage && typeof event.time === 'number'
+          && Number.isFinite(event.time) && event.time > 0 && event.time <= 253402300799999) {
+          const at = Math.floor(event.time / 3_600_000) * 3_600_000
+          const key = JSON.stringify([at, route.provider, route.model])
+          const bucket = hourly.get(key) ?? { at, ...route, usage: emptySessionUsage() }
+          addSessionUsage(bucket.usage, event.data.usage)
+          hourly.set(key, bucket)
+        }
         if (!Number.isSafeInteger(event.seq)) continue
         const sequence = Number(event.seq)
         while (starts[start] && starts[start]!.startSeq <= sequence) active.add(starts[start++]!.id)
@@ -408,7 +505,8 @@ export class NativeSessions {
         if (active.size === 1) addSessionUsage(rangeTotals.get(active.values().next().value!)!, event.data?.usage)
       }
       return { status: 'available', eventCount: first + events.length, usage: total,
-        ranges: Array.from(rangeTotals, ([id, usage]) => ({ id, usage })) }
+        ranges: Array.from(rangeTotals, ([id, usage]) => ({ id, usage })),
+        ...(options.hourly ? { buckets: [...hourly.values()] } : {}) }
     } finally { await handle.close() }
   }
 

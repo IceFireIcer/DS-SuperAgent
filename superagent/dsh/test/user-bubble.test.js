@@ -50,8 +50,10 @@ test('the product leaves host bubble variables to the host and its skins', () =>
   }
 })
 
-const themeVars = (theme, dark) => {
-  const block = themeCss(theme).split('\n').find(line => line.startsWith(dark ? 'html body[data-ds-dark-theme]{' : 'html body{'))
+const varsOf = (theme, accent, dark) => {
+  const selector = dark ? ':root:has(> body[data-ds-dark-theme])' : ':root'
+  const block = themeCss(theme, accent).split('\n').find(line => line.startsWith(`${selector}{`))
+  assert.ok(block, `missing theme tokens on ${selector}`)
   return Object.fromEntries(block.slice(block.indexOf('{') + 1, -1).split(';').map(item => item.split(':')))
 }
 const parse = color => {
@@ -73,7 +75,7 @@ const contrast = (ink, paper) => {
 test('the user ink reads on the user surface in every built-in theme and mode', () => {
   for (const id of ['deepseek', 'mono', 'paper', 'moonlight']) {
     for (const dark of [false, true]) {
-      const vars = themeVars(allThemes()[id], dark)
+      const vars = varsOf(allThemes()[id], undefined, dark)
       const ratio = contrast(over(vars['--bt-user-ink'], vars['--bt-user']), over(vars['--bt-user'], vars['--bt-main']))
       assert.ok(ratio >= 4.5, `${id} ${dark ? 'dark' : 'light'}: ${ratio.toFixed(2)}:1`)
     }
@@ -82,12 +84,6 @@ test('the user ink reads on the user surface in every built-in theme and mode', 
 
 // Text on the accent (send key, new-message pill, primary buttons) takes whichever
 // of the two inks reads better: white on Tangerine was 2.89:1, near-black is 6.38:1.
-// The variables themeCss sets for one mode.
-const varsOf = (theme, accent, dark) => {
-  const block = themeCss(theme, accent).split('\n').find(line => line.startsWith(dark ? 'html body[data-ds-dark-theme]{' : 'html body{'))
-  return Object.fromEntries(block.slice(block.indexOf('{') + 1, -1).split(';').map(item => item.split(':')))
-}
-
 test('the accent ink is the more readable of the two inks for every accent', () => {
   const cases = []
   for (const id of ['deepseek', 'mono', 'paper', 'moonlight']) {
@@ -148,7 +144,7 @@ const resolve = (value, vars) => {
 
 test('the product user bubble stays readable in every built-in theme', () => {
   for (const id of ['deepseek', 'mono', 'paper', 'moonlight']) {
-    const vars = themeVars(allThemes()[id], true)
+    const vars = varsOf(allThemes()[id], undefined, true)
     const page = vars['--bt-main']
     const selector = '.bt-product-message-user .bt-bubble'
     const { body } = ruleFor(selector)

@@ -1,5 +1,6 @@
 import { createElement as h, useEffect, useState } from 'react'
 import { Card } from './product-card.js'
+import { DetailList, FieldRow, InlineNotice, StatusChip } from './product-settings-components.js'
 import { t } from './i18n.js'
 
 const targets = [['local', 'Local'], ['remote-only', 'Remote only'], ['auto', 'Auto']]
@@ -171,10 +172,10 @@ export function ProductExecutionSettings({ binding, call, onChanged }) {
     target[path.at(-1)] = value
     return next
   })
-  if (!snapshot || !draft) return h('p', { role: 'status' }, error || t('Loading…'))
-  return h('section', { className: 'bt-product-execution', 'aria-label': t('Execution targets') },
-    error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
-    notice ? h('p', { className: 'bt-main-status', role: 'status' }, notice) : null,
+  if (!snapshot || !draft) return h(InlineNotice, { tone: error ? 'danger' : 'neutral' }, error || t('Loading…'))
+  return h('section', { className: 'bt-ps-content bt-product-execution', 'aria-label': t('Execution targets') },
+    error ? h(InlineNotice, { tone: 'danger' }, error) : null,
+    notice ? h(InlineNotice, { tone: 'success' }, notice) : null,
     cleanup ? h('div', { className: 'bt-product-execution-cleanup' },
       h('p', { className: 'bt-main-error' }, t('Credential cleanup is pending for a device operation.')),
       h('button', { type: 'button', className: 'bt-soft bt-danger', disabled: busy, onClick: retryCleanup },
@@ -182,15 +183,14 @@ export function ProductExecutionSettings({ binding, call, onChanged }) {
     snapshot.remoteLoadErrors?.length ? h(Card, { title: t('Unavailable remote devices') },
       snapshot.remoteLoadErrors.map(item => h('p', { key: item.id, className: 'bt-main-error' },
         `${item.id}: ${capabilityReadErrorCopy(item.reason)}`))) : null,
-    h(Card, { title: t('Execution policy') },
-      h('p', null, t('This policy chooses a target for new work. Active assignments keep their original Environment.')),
-      h('label', null, t('Default target'), h('select', { className: 'bt-select', value: draft.defaultTarget,
+    h(Card, { title: t('Execution policy'), description: t('This policy chooses a target for new work. Active assignments keep their original Environment.') },
+      h(FieldRow, { label: t('Default target'), control: h('select', { className: 'bt-select', value: draft.defaultTarget,
         onChange: event => update(['defaultTarget'], event.target.value) }, targets.map(([value, label]) =>
-        h('option', { key: value, value }, t(label))))),
-      h('label', null, t('Preferred Environment'), h('select', { className: 'bt-select',
+        h('option', { key: value, value }, t(label)))) }),
+      h(FieldRow, { label: t('Preferred Environment'), control: h('select', { className: 'bt-select',
         value: draft.preferredEnvironmentId ?? '', onChange: event => update(['preferredEnvironmentId'], event.target.value || undefined) },
       h('option', { value: '' }, t('No preference')), snapshot.environments.map(environment =>
-        h('option', { key: environment.id, value: environment.id }, environmentLabel(environment))))),
+        h('option', { key: environment.id, value: environment.id }, environmentLabel(environment)))) }),
       h('fieldset', null, h('legend', null, t('Required capabilities')),
         permissions.map(permission => h('label', { key: permission },
           h('input', { type: 'checkbox', checked: draft.requiredPermissions.includes(permission),
@@ -202,10 +202,13 @@ export function ProductExecutionSettings({ binding, call, onChanged }) {
     h(Card, { title: t('Devices and Environments') },
       snapshot.environments.map(environment => h('article', { key: environment.id, className: 'bt-product-execution-row' },
         h('strong', null, environmentLabel(environment)),
-        h('p', null, `${t('Status')}: ${environment.kind === 'remote'
-          ? environment.online === false ? t('Offline') : t('Configured')
-          : t('Local')} · ${t('Permissions')}: ${permissionCopy(environment.permissions)}`),
-        h('p', null, `${t('Device')}: ${environment.deviceId ?? t('This Host')} · ${t('Directory')}: ${environment.root}`),
+        h(StatusChip, { tone: environment.online === false ? 'warn' : 'neutral' }, environment.kind === 'remote'
+          ? t(environment.online === false ? 'Offline' : 'Configured') : t('Local')),
+        h(DetailList, { items: [
+          { label: t('Permissions'), value: permissionCopy(environment.permissions) },
+          { label: t('Device'), value: environment.deviceId ?? t('This Host') },
+          { label: t('Directory'), value: environment.root, mono: true },
+        ] }),
         environment.reasons?.length ? h('p', { className: 'bt-main-work-detail' },
           `${t('Selection issues')}: ${environment.reasons.map(candidateReasonCopy).join('; ')}`) : null,
         environment.capabilities?.unavailable ? h('p', { className: 'bt-main-error' },
@@ -254,13 +257,12 @@ export function ProductExecutionSettings({ binding, call, onChanged }) {
 }
 
 export const PRODUCT_EXECUTION_CSS = `
-.bt-product-execution{display:grid;gap:12px}
-.bt-product-execution label{display:grid;gap:6px;font-size:13px}
-.bt-product-execution fieldset{display:flex;gap:12px;flex-wrap:wrap;border:1px solid var(--bt-line);border-radius:12px}
+.bt-product-execution label:not(.bt-ps-row){display:grid;gap:6px}
+.bt-product-execution fieldset{display:flex;gap:12px;flex-wrap:wrap;border:1px solid var(--bt-line);border-radius:var(--bt-ps-radius-control);margin:8px 16px}
 .bt-product-execution fieldset label{display:flex;align-items:center;gap:6px}
 .bt-product-execution-row{display:grid;gap:5px;padding:12px 0;border-top:1px solid var(--bt-line);overflow-wrap:anywhere}
 .bt-product-execution-row button{justify-self:start}
 .bt-product-execution-form{display:grid;gap:12px}
-.bt-product-execution-pair-issue{display:grid;gap:8px;padding:10px 12px;border:1px solid var(--bt-line);border-radius:12px}
+.bt-product-execution-pair-issue{display:grid;gap:8px;padding:10px 12px;border:1px solid var(--bt-line);border-radius:var(--bt-ps-radius-card)}
 .bt-product-execution-cleanup{display:grid;gap:8px;justify-items:start}
 `

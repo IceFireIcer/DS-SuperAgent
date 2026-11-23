@@ -1,5 +1,6 @@
 import { createElement as h, useEffect, useRef, useState } from 'react'
 import { Card, Row } from './product-card.js'
+import { InlineNotice } from './product-settings-components.js'
 import { t } from './i18n.js'
 
 const credentialImportStatusText = status => t(({ pending: 'Credential import pending', importing: 'Credential import in progress',
@@ -465,7 +466,7 @@ export function ProductCredentialSettings({ binding, call, credentialImportBridg
         ? resources?.find(item => item.id === github.resourceId)?.label ?? t('Unavailable resource')
         : t('No GitHub resource selected')} · ${github.state}${github.lastError ? ` · ${github.lastError}` : ''}`),
       github.resourceId ? h('button', { className: 'bt-soft', type: 'button', disabled: Boolean(busy), onClick: () => selectGithub(null) }, t('Clear GitHub selection')) : null) : null,
-    error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
+    error ? h(InlineNotice, { tone: 'danger' }, error) : null,
     notice ? h('p', { className: 'bt-main-status', role: 'status' }, notice) : null,
     requestError ? h('div', { className: 'bt-product-resource-row' },
       h('p', { className: 'bt-main-error', role: 'alert' }, requestError),
@@ -556,19 +557,19 @@ export function ProductCredentialSettings({ binding, call, credentialImportBridg
 }
 
 export const PRODUCT_CREDENTIAL_CSS = `
-.bt-product-resource-note{margin:0 0 10px;color:var(--bt-ink-2);font-size:12px;line-height:18px}
+.bt-product-resource-note{margin:0 0 10px;color:var(--bt-ink-2);font-size:var(--bt-ps-small);line-height:18px}
 .bt-product-resource-create,.bt-product-resource-selected{display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin:12px 0}
 .bt-product-resource-list{display:flex;flex-direction:column;gap:6px;margin:12px 0;max-height:220px;overflow:auto}
-.bt-product-resource-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:6px 0;border-bottom:1px solid var(--bt-line-2);font-size:12px}
+.bt-product-resource-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:6px 0;border-bottom:1px solid var(--bt-line-2);font-size:var(--bt-ps-small)}
 .bt-product-resource-row>span{min-width:0;overflow-wrap:anywhere;color:var(--bt-ink-2)}
 .bt-product-resource-grant{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%}
-.bt-product-resource-grant label{display:flex;flex-direction:column;gap:4px;min-width:0;font-size:12px;color:var(--bt-ink-2)}
-.bt-product-resource-grant input,.bt-product-resource-grant select{height:32px;min-width:0;box-sizing:border-box;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-main);color:var(--bt-ink);font:inherit;padding:0 8px}
+.bt-product-resource-grant label{display:flex;flex-direction:column;gap:4px;min-width:0;font-size:var(--bt-ps-small);color:var(--bt-ink-2)}
+.bt-product-resource-grant input,.bt-product-resource-grant select{height:32px;min-width:0;box-sizing:border-box;border:1px solid var(--bt-line);border-radius:var(--bt-ps-radius-control);background:var(--bt-card);color:var(--bt-ink);font:inherit;padding:0 8px}
 .bt-product-resource-grant button{justify-self:start}.bt-product-resource-create button:focus-visible,.bt-product-resource-row button:focus-visible,.bt-product-resource-selected button:focus-visible,.bt-product-resource-grant button:focus-visible,.bt-product-resource-create input:focus-visible,.bt-product-resource-selected input:focus-visible,.bt-product-resource-grant input:focus-visible,.bt-product-resource-grant select:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 .bt-product-resource-request-actions{display:flex;flex-wrap:wrap;gap:8px}
 .bt-product-credential-import{display:flex;flex-direction:column;gap:8px;margin:14px 0;padding:10px 0;border-top:1px solid var(--bt-line-2)}
 .bt-product-credential-import>button:focus-visible,.bt-product-credential-import-preview>button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
-.bt-product-credential-import h3{margin:0;font-size:13px}
+.bt-product-credential-import h3{margin:0;font-size:var(--bt-ps-text)}
 .bt-product-credential-import-preview{display:flex;flex-direction:column;gap:6px;margin-top:8px}
 .bt-product-credential-import-item{padding:8px 0;border-top:1px solid var(--bt-line-2)}
 @media(max-width:640px){.bt-product-resource-grant{grid-template-columns:minmax(0,1fr)}}

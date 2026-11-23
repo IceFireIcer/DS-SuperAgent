@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { canonicalJson, commandTransaction } from './commands.js'
-import { CoreError, identifier } from './model.js'
+import { CoreError, identifier, type Work } from './model.js'
+import type { Assignment } from './execution.js'
 import type { AsyncTx, Storage } from './storage.js'
 
 export type CredentialRole = 'main' | 'router' | 'worker'
@@ -50,6 +51,8 @@ export interface CredentialVault {
 }
 
 interface StoredResource extends CredentialResourceView { vaultReference?: string }
+interface StoredRequest extends CredentialRequest { assignment?: Pick<Assignment, 'ticketId' | 'id' | 'generation'> }
+export type CredentialApproval = (tx: AsyncTx, ticketId: string, request: CredentialRequest) => Promise<void>
 interface CommandReceipt { fingerprint: string; result: CredentialResourceView | CredentialRequest }
 interface RotationIntentRecord { resourceId: string; expectedRevision: number; previousReference: string;
   nextReference: string; status: 'pending' | 'committed' | 'abandoned' }
@@ -117,10 +120,26 @@ function view(record: StoredResource): CredentialResourceView {
 
 function fingerprint(value: unknown): string { return createHash('sha256').update(canonicalJson(value)).digest('hex') }
 
+function requestView({ assignment, ...request }: StoredRequest): CredentialRequest { return request }
+
+async function assertRequestAssignment(tx: AsyncTx, target: CredentialScope, binding: NonNullable<StoredRequest['assignment']>) {
+  const [active, ticket, link] = await Promise.all([
+    tx.get<Assignment>('assignment', binding.ticketId), tx.get<Work['ticket']>('ticket', binding.ticketId),
+    tx.get<{ workItemId?: string }>('work-ticket', binding.ticketId),
+  ])
+  if (active?.id !== binding.id || active.generation !== binding.generation || active.state !== 'running'
+    || active.environment?.kind !== 'local' || active.environment.id !== target.environmentId
+    || target.role !== 'worker' || !target.workItemId || link?.workItemId !== target.workItemId
+    || ticket?.state !== 'open' || ticket.constraint) {
+    throw new CoreError('REQUEST_UNAVAILABLE', 'This credential request no longer belongs to a current local work assignment.')
+  }
+}
+
 /** Only a trusted Host can construct this store or supply its vault and use callback. */
 export class ResourceCredentials {
   constructor(private readonly storage: Storage, private readonly instanceId: string,
-    private readonly vault: CredentialVault, private readonly now: () => number = Date.now) {
+    private readonly vault: CredentialVault, private readonly now: () => number = Date.now,
+    private readonly notifyApproval?: CredentialApproval) {
     identifier(instanceId, 'instanceId')
   }
 
@@ -248,18 +267,20 @@ export class ResourceCredentials {
   }
 
   async request(input: { instanceId: string; commandId: string; resourceId: string; scope: CredentialScope;
-    purpose: CredentialPurpose }): Promise<CredentialRequest> {
+    purpose: CredentialPurpose }, assignment?: StoredRequest['assignment']): Promise<CredentialRequest> {
     fields(input, ['instanceId', 'commandId', 'resourceId', 'scope', 'purpose'], 'resource request')
     this.assertInstance(input.instanceId); identifier(input.resourceId, 'resourceId')
     const target = scope(input.scope)
     const requestedPurpose = purpose(input.purpose)
     grantPurposes([requestedPurpose], target)
-    return this.command(input.commandId, ['request', input.resourceId, target, requestedPurpose], async tx => {
+    const receipt = ['request', input.resourceId, target, requestedPurpose, ...(assignment ? [assignment] : [])]
+    return this.command(input.commandId, receipt, async tx => {
+      if (assignment) await assertRequestAssignment(tx, target, assignment)
       await this.active(tx, input.resourceId)
       const at = this.now()
       const request: CredentialRequest = { id: randomUUID(), resourceId: input.resourceId, scope: target,
         purpose: requestedPurpose, status: 'pending', createdAt: at, updatedAt: at }
-      await tx.insert('resource-request', request.id, request)
+      await tx.insert('resource-request', request.id, { ...request, ...(assignment ? { assignment } : {}) })
       return request
     })
   }
@@ -268,11 +289,11 @@ export class ResourceCredentials {
     fields(input, ['instanceId', 'commandId', 'requestId'], 'request cancellation')
     this.assertInstance(input.instanceId); identifier(input.requestId, 'requestId')
     return this.command(input.commandId, ['cancel', input.requestId], async tx => {
-      const current = await tx.get<CredentialRequest>('resource-request', input.requestId)
+      const current = await tx.get<StoredRequest>('resource-request', input.requestId)
       if (!current || current.status !== 'pending') throw new CoreError('REQUEST_UNAVAILABLE', 'The pending request is unavailable.')
       const next: CredentialRequest = { ...current, status: 'cancelled', updatedAt: this.now() }
       await tx.replace('resource-request', input.requestId, next)
-      return next
+      return requestView(next)
     })
   }
 
@@ -289,10 +310,14 @@ export class ResourceCredentials {
       if (current.grants.some(grant => canonicalJson(grant.scope) === canonicalJson(target)
         && grant.purposes.some(item => allowed.includes(item)))) throw new CoreError('GRANT_CONFLICT', 'The resource is already granted for this scope and purpose.')
       if (input.requestId !== undefined) {
-        const request = await tx.get<CredentialRequest>('resource-request', input.requestId)
+        const request = await tx.get<StoredRequest>('resource-request', input.requestId)
         if (!request || request.status !== 'pending' || request.resourceId !== current.id
           || canonicalJson(request.scope) !== canonicalJson(target) || allowed.length !== 1 || request.purpose !== allowed[0]) {
           throw new CoreError('REQUEST_UNAVAILABLE', 'The pending request is unavailable.')
+        }
+        if (request.assignment) {
+          await assertRequestAssignment(tx, target, request.assignment)
+          await this.notifyApproval?.(tx, request.assignment.ticketId, requestView(request))
         }
         await tx.replace('resource-request', request.id, { ...request, status: 'granted', updatedAt: this.now() })
       }
@@ -389,7 +414,10 @@ export class ResourceCredentials {
   async getRequest(input: { instanceId: string; requestId: string }): Promise<CredentialRequest | undefined> {
     fields(input, ['instanceId', 'requestId'], 'request query')
     this.assertInstance(input.instanceId); identifier(input.requestId, 'requestId')
-    return this.storage.transaction(this.instanceId, tx => tx.get<CredentialRequest>('resource-request', input.requestId))
+    return this.storage.transaction(this.instanceId, async tx => {
+      const request = await tx.get<StoredRequest>('resource-request', input.requestId)
+      return request && requestView(request)
+    })
   }
 
   async listRequests(input: { instanceId: string; after?: string; limit?: number }): Promise<{ items: CredentialRequest[]; cursor?: string }> {
@@ -399,8 +427,8 @@ export class ResourceCredentials {
     const limit = input.limit ?? 50
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new CoreError('INVALID_INPUT', 'Request page limit must be between 1 and 100.')
     return this.storage.transaction(this.instanceId, async tx => {
-      const page = await tx.scan<CredentialRequest>('resource-request', { limit, ...(input.after ? { after: input.after } : {}) })
-      return { items: page.items.map(item => item.value), ...(page.cursor ? { cursor: page.cursor } : {}) }
+      const page = await tx.scan<StoredRequest>('resource-request', { limit, ...(input.after ? { after: input.after } : {}) })
+      return { items: page.items.map(item => requestView(item.value)), ...(page.cursor ? { cursor: page.cursor } : {}) }
     })
   }
 

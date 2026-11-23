@@ -224,12 +224,12 @@ export function watchReleases({ current, arch, fetch = globalThis.fetch, ask, op
  * @returns {{
  *   stop: () => void,
  *   latest: () => Promise<{ version: string, downloaded: Promise<boolean> } | null>,
- *   install: () => Promise<void>,
+ *   install: (options?: { restart?: boolean }) => Promise<void>,
  *   state: () => { phase: string, version?: string, page?: string },
  *   subscribe: (listener: (state: { phase: string }) => void) => () => void,
  *   check: () => void,
  * }} `latest` is what the newest check found: the version and whether its download finished.
- *   `install` stops the Host and runs the installer, which opens the app again. `state` is
+ *   `install` stops the Host and runs the installer. By default the installer opens the app again. `state` is
  *   the phase the About row shows; `check` runs the same check the timer does and does
  *   nothing while a check, a download or a ready install is on.
  */
@@ -252,7 +252,7 @@ export function watchUpdates({ updater, beforeInstall, beforeLaunch, onInstallFa
       log.error(`${PRODUCT_NAME}: could not restart the Host after an update error`)
     }).then(() => { throw error })
   }
-  const install = () => {
+  const install = ({ restart = true } = {}) => {
     if (installing) return installing
     if (launchFailure) return launchFailure
     const { phase, version } = holder.state()
@@ -263,7 +263,7 @@ export function watchUpdates({ updater, beforeInstall, beforeLaunch, onInstallFa
         await beforeInstall()
         await beforeLaunch?.(version)
         launching = true
-        updater.quitAndInstall(true, true)
+        updater.quitAndInstall(true, restart)
         if (launchFailure) await launchFailure
       } catch (error) {
         if (holder.state().phase === 'installing') await failedInstall(version, error)

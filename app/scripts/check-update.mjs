@@ -156,7 +156,7 @@ try {
     await exited
     console.log('check-update: ended the app, so nothing was installed')
   } else {
-    await quitApp(port)
+    await quitApp(port, true)
     const code = await Promise.race([exited, sleep(60_000).then(() => 'timeout')])
     if (code === 'timeout') throw new Error('the app did not exit after its window closed')
     if (code !== 0) throw new Error(`the app exited with code ${String(code)}, so it does not install the update`)

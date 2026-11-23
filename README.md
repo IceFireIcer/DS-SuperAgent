@@ -9,7 +9,9 @@
 
 English | [中文](README.zh.md)
 
-![version](https://img.shields.io/badge/version-R5_preview-blue) ![DSH](https://img.shields.io/badge/DSH-0.2.1--rc.4-4D6BFE) ![license](https://img.shields.io/badge/license-Apache_2.0-green)
+Created and maintained by [IceFireIcer](https://github.com/IceFireIcer).
+
+![version](https://img.shields.io/badge/version-R5_preview-blue) ![DSH](https://img.shields.io/badge/DSH-0.2.2--rc.1-4D6BFE) ![license](https://img.shields.io/badge/license-Apache_2.0-green)
 
 DS SuperAgent is a three-layer agent product for
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH). One **Main** stays in the conversation and
@@ -28,6 +30,12 @@ tickets with verified results. The existing DSH client interface presents this p
 - The app keeps one `ds-superagent` DSH profile, its own data root and an existing DSH Web front end. It never writes
   to the user's `~/.dsh`.
 
+## Connect a phone
+
+The [Expo companion](mobile/README.md) connects to Main through an encrypted relay. Pairing is read-only unless the
+computer explicitly grants message sending. The phone cannot manage desktop controls, credentials or files.
+Build the companion from source; this repository does not provide a mobile store release.
+
 ## Run the desktop app
 
 The [desktop packages](app/README.md) install **DS SuperAgent** on Windows, macOS and Linux. On Windows you can also launch from source:
@@ -38,11 +46,15 @@ The [desktop packages](app/README.md) install **DS SuperAgent** on Windows, macO
 
 The first start asks for a data location and workspace, defaulting to `~/.ds-superagent` and `~/DS SuperAgent`, then
 opens Main. In Settings, configure the provider credentials and select models for Main, Router and Worker before
-sending work. Data from previous product installs and personal DSH files stay in their original locations.
+sending work. The desktop app works independently of the phone companion and uses its own browser storage keys and
+data folders. Data from previous product installs and personal DSH files stay in their original locations.
+
+See the [release checklist](docs/dev/release-checklist.md) for desktop release requirements and the
+[desktop migration record](docs/superagent/implementation/dsbot-port-162-164.md) for the status of Windows verification.
 
 ## Run from this checkout
 
-Use Node.js 24. The app installs the single `ds-superagent` product package from this repository:
+Use Node.js 24.9 or later within the Node.js 24 series. The app installs the single `ds-superagent` product package from this repository:
 
 ```powershell
 npm --prefix superagent ci
@@ -81,6 +93,7 @@ gates. Mock UI or unit results do not replace those checks.
 |---|---|
 | `superagent/` | The single DSH package: Engine, durable business store, Host, product HTTP bridge, existing client UI, Office tools and web-search provider |
 | `app/` | Electron shell, single product profile, data isolation, process lifecycle and packaging |
+| `mobile/` | Expo companion for pairing, Main chat and read-only work status |
 | `docs/superagent/` | R5 specification, implementation records and environment evidence |
 
 R5-34 removed the former roster, group/round, peer-agent, team governance, native-history, activation/reversal and

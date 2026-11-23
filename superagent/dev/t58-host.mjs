@@ -12,6 +12,7 @@ import LlmRuntime from '@deepseek-ai/dsh-llm'
 import { SessionStore } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import {
   Engine, LocalEnvironment, NativeSessions, RemoteEnvironment, createClientGateway,
@@ -89,7 +90,8 @@ try {
   await context.plugin(SessionProjectionRegistry)
   await context.plugin(AgentRegistry)
   await context.plugin(SystemPrompt, {})
-  await context.plugin(ToolRuntime, { mode: 'native' })
+  await context.plugin(ToolRuntime)
+  await context.plugin(NativeToolExecutor)
   await context.plugin(LlmRuntime)
   await context.plugin(PostgresSessionPersistence, pg)
   await context.plugin(AgentLoop, { agents: [], maxParallelToolCalls: 1 })

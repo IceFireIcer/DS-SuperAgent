@@ -11,7 +11,7 @@ export const SUPERAGENT_PATCH_NAME = 'superagent.patch.yml'
  * @param {boolean} enabled - whether this launch uses the Super-agent profile
  * @returns {string[]} the patchFiles addition for this launch
  */
-export function reconcileSuperagentProfile(profile, enabled) {
+export function reconcileSuperagentProfile(profile, enabled, { desktop = false } = {}) {
   const file = join(dirname(profile.dir), SUPERAGENT_PATCH_NAME)
   if (!enabled) {
     rmSync(file, { force: true })
@@ -21,6 +21,12 @@ export function reconcileSuperagentProfile(profile, enabled) {
     { id: 'session-log-download', disabled: true },
     { id: 'session-reference', disabled: true },
     { id: 'ui-reference', disabled: true },
+    ...(desktop ? [
+      { insert: [{ id: 'superagent-desktop-session-gate', name: 'ds-superagent/desktop-session-gate',
+        isolate: { webServer: 'superagent-desktop-gateway', typertGateway: 'superagent-desktop-events' } }] },
+      { id: 'typert-gateway', isolate: { webServer: 'superagent-desktop-gateway' } },
+      { id: 'api-remotes', isolate: { typertGateway: 'superagent-desktop-events' } },
+    ] : []),
   ]), 'utf8')
   return [file]
 }

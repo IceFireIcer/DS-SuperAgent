@@ -25,7 +25,13 @@ import { ProductAttachments } from './product-attachments.js'
 import { productProactivePreparation } from './product-proactive.js'
 import { ProactiveWork } from './proactive-work.js'
 import type { ProactiveRule } from './proactive.js'
-import type { ProductCredentialRecords } from './product-credential-vault.js'
+import { ProductCredentialVault, type ProductCredentialRecords } from './product-credential-vault.js'
+import { capabilityFields } from './capability-library.js'
+import { ProductConnectors, connectorFields, type ProductConnectorOptions } from './product-connectors/index.js'
+import { ImAccounts, type ImTransport } from './im-accounts/index.js'
+import { ImMainRelay, imMainBinding, imSource } from './im-main-relay.js'
+import { ProductPhone, phoneFields } from './product-phone.js'
+import { ProductComputer, computerFields, type ComputerAdapter } from './product-computer.js'
 import type { ProductCredentialManager } from './product-credential-manager.js'
 import { ProductCredentialImports, type CredentialImportAdapter } from './product-credential-imports.js'
 import { HostCredentialImportAdapter } from './credential-import-host.js'
@@ -56,13 +62,17 @@ export interface ProductHostConfig { databasePath?: string; postgres?: PostgresO
   workerMcpTool?: WorkerMcpConfig;
   /** Trusted Host seam; tests may supply a fake bridge without touching a user browser. */
   browserAdapter?: BrowserAdapter;
+  computerAdapter?: ComputerAdapter;
   /** Trusted local App bridge for one-item credential reads from an explicitly selected export. */
   credentialImportAdapter?: CredentialImportAdapter;
+  connectors?: ProductConnectorOptions;
+  im?: ImTransport;
   feishuConfigurationError?: 'INVALID_CONFIG';
   github?: Omit<GitHubRuntimeOptions, 'storage' | 'instanceId'>;
   githubConfigurationError?: 'INVALID_CONFIG' }
 export interface ProductHost {
-  dispatch(endpoint: string, payload?: Record<string, unknown>, client?: ClientIdentity): Promise<unknown>
+  dispatch(endpoint: string, payload?: Record<string, unknown>, client?: ClientIdentity,
+    authorizeMainSend?: (tx: import('./storage.js').AsyncTx) => Promise<void>): Promise<unknown>
   clients: ClientAccess
   clientGateway?: { url: string; secure: boolean }
   close(): Promise<void>
@@ -124,6 +134,7 @@ const credentialImportFields: Record<string, string[]> = {
 
 const browserFields: Record<string, string[]> = {
   'browser-list': ['instanceId'], 'browser-read': ['instanceId', 'resourceId'],
+  'browser-plugin': ['instanceId', 'scope'], 'browser-plugin-save': ['instanceId', 'scope', 'commandId', 'expectedRevision', 'mode'],
   'browser-import-list': ['instanceId', 'limit'], 'browser-import-read': ['instanceId', 'importId'],
   'browser-import': ['instanceId', 'commandId', 'sourceRef', 'pendingId', 'preview', 'environmentId', 'label'],
   'browser-import-cancel': ['instanceId', 'commandId', 'importId'],
@@ -155,7 +166,43 @@ const memoryFields: Record<string, string[]> = {
   'memory-proposals': ['instanceId'],
   'memory-decide': ['instanceId', 'commandId', 'proposalId', 'approve'],
 }
-const statusFields: Record<string, string[]> = { 'product-usage': ['instanceId'], 'product-status': ['instanceId'] }
+const statusFields: Record<string, string[]> = { 'product-usage': ['instanceId'], 'usage-breakdown': ['instanceId'],
+  'product-status': ['instanceId'], 'builtin-plugins': ['instanceId'] }
+const workBoardFields: Record<string, string[]> = {
+  'work-board': ['instanceId', 'after', 'limit'],
+  'work-members': ['instanceId'],
+  'work-follow-up': ['instanceId', 'commandId', 'workItemId', 'ticketId', 'text'],
+}
+const scheduledTaskFields: Record<string, readonly string[]> = {
+  'scheduled-task-list': ['instanceId'],
+  'scheduled-task-read': ['instanceId', 'ruleId'],
+  'scheduled-task-create': ['instanceId', 'commandId', 'title', 'text', 'timezone', 'when'],
+  'scheduled-task-cancel': ['instanceId', 'commandId', 'ruleId'],
+  'scheduled-task-source-read': ['instanceId'],
+  'scheduled-task-source-set': ['instanceId', 'commandId', 'enabled'],
+}
+
+interface PluginInventoryRow {
+  entryId: string
+  moduleName: string
+  enabled: boolean
+  fiberPhase: 'pending' | 'loading' | 'active' | 'failed' | 'unloading' | null
+}
+
+async function builtinPlugins(context: Context) {
+  const peer = (context.get('connection') as { browserPeer?: object } | undefined)?.browserPeer
+  const gateway = context.get('typertGateway') as {
+    invoke(request: { namespace: string; method: string; args: Record<string, never>; peer: object }): Promise<{ entries: PluginInventoryRow[] }>
+  } | undefined
+  if (!gateway || !peer) throw new CoreError('UNAVAILABLE', 'The Host does not expose its plugin inventory.')
+  try {
+    const { entries } = await gateway.invoke({ namespace: 'pluginInventory', method: 'list', args: {}, peer })
+    return { entries: entries.filter(entry => entry.moduleName.startsWith('@deepseek-ai/') || entry.moduleName === 'ds-superagent')
+      .map(({ entryId, moduleName, enabled, fiberPhase }) => ({ id: entryId, name: moduleName, enabled, phase: fiberPhase })) }
+  } catch {
+    throw new CoreError('UNAVAILABLE', 'The Host does not expose its plugin inventory.')
+  }
+}
 
 export async function createProductHost(context: Context, config: ProductHostConfig): Promise<ProductHost> {
   const instanceId = config.instanceId ?? 'personal'
@@ -175,6 +222,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
   const desktopIpc = process.env.DS_SUPERAGENT_APP === '1' && typeof process.send === 'function'
   const browserAdapter = config.browserAdapter ?? (desktopIpc
     ? new HostBrowserAdapter() : undefined)
+  const computerAdapter = () => config.computerAdapter ?? (desktopIpc
+    ? (globalThis as typeof globalThis & { [key: symbol]: ComputerAdapter | undefined })[Symbol.for('ds-superagent.computer-adapter')]
+    : undefined)
   const credentialImportAdapter = config.credentialImportAdapter
     ?? (desktopIpc ? new HostCredentialImportAdapter() : undefined)
   if (config.office && (![config.office.node, config.office.cli, config.office.skillsPath].every(isAbsolute)
@@ -188,7 +238,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
     if (!value?.provider || !value.model) return { provider: 'unconfigured', model: 'unconfigured' }
     return { provider: value.provider, model: value.model }
   }
-  const sessions = new NativeSessions(context, { main: route(config.main), router: route(config.router), worker: route(config.worker), ...(config.timeoutMs === undefined ? {} : { timeoutMs: config.timeoutMs }) })
+  const sessions = new NativeSessions(context, { main: route(config.main), mainCwd: config.workspaceRoot ?? stateRoot,
+    router: route(config.router), worker: route(config.worker), ...(config.timeoutMs === undefined ? {} : { timeoutMs: config.timeoutMs }) })
   const storage = config.postgres
     ? await PostgresStorage.open(config.postgres)
     : await SqliteStorage.open(config.databasePath!)
@@ -207,6 +258,12 @@ export async function createProductHost(context: Context, config: ProductHostCon
   let feishuEngine: Engine | undefined
   let githubRuntime: GitHubRuntime | undefined
   let githubEngine: Engine | undefined
+  let imEngine: Engine | undefined
+  let imAccounts: ImAccounts | undefined
+  let phone: ProductPhone | undefined
+  let computer: ProductComputer | undefined
+  let imMain: ImMainRelay | undefined
+  let connectors: ProductConnectors | undefined
   let workRouter: ProactiveWork | undefined
   let feishuLegacyConflict = false
   let feishuSelectionActive = false
@@ -222,6 +279,10 @@ export async function createProductHost(context: Context, config: ProductHostCon
     authorizeWork: async (tx: import('./storage.js').AsyncTx, run: import('./proactive.js').ProactiveRun) => {
       if (run.sourceInstanceId !== feishuRuntime?.sourceBinding.sourceInstanceId || config.feishu?.api.appSecret) return
       const selected = await tx.get<{ resourceId: string | null }>('product-feishu-credential', run.sourceInstanceId)
+      if (!selected?.resourceId && connectors && config.feishu) {
+        return connectors.assertAuthorizationIn(tx, { provider: 'feishu', appId: config.feishu.api.appId,
+          tenantKey: config.feishu.tenantKey, purpose: 'source' })
+      }
       const resource = selected?.resourceId ? await tx.get<{ status: string; grants: { scope: { role: string; workItemId?: string;
         environmentId?: string; sourceInstanceId?: string }; purposes: string[] }[] }>('resource-credential', selected.resourceId) : undefined
       if (resource?.status !== 'active' || !resource.grants.some(grant => grant.scope.role === 'main'
@@ -265,6 +326,15 @@ export async function createProductHost(context: Context, config: ProductHostCon
     } catch { return undefined }
   }
   const directoryId = (root: string) => `product-dir-${createHash('sha256').update(process.platform === 'win32' ? root.toLowerCase() : root).digest('hex').slice(0, 32)}`
+  const protectedDesktopPaths = (): string[] => {
+    const raw = process.env.DS_SUPERAGENT_PROTECTED_PATHS
+    if (raw === undefined) return []
+    try {
+      const paths: unknown = JSON.parse(raw)
+      if (Array.isArray(paths) && paths.length <= 16 && paths.every(path => typeof path === 'string' && isAbsolute(path))) return paths
+    } catch { /* An invalid protection list cannot authorize a directory. */ }
+    throw new CoreError('INVALID_CONFIG', 'The desktop protected directory list is invalid.')
+  }
   const directoryRoot = async (path: unknown) => {
     if (typeof path !== 'string' || !isAbsolute(path) || Buffer.byteLength(path) > 2048) {
       throw new CoreError('INVALID_INPUT', 'Choose an absolute working directory.')
@@ -276,14 +346,15 @@ export async function createProductHost(context: Context, config: ProductHostCon
     } catch { throw new CoreError('PATH_DENIED', 'The selected working directory does not exist or cannot be read.') }
     const core = await realpath(stateRoot)
     const configuredUserHome = process.env.DS_SUPERAGENT_USER_DSH_HOME?.trim()
-    const protectedRoots = await Promise.all([join(homedir(), '.dsh'), join(homedir(), '.ds-bot'), ...(configuredUserHome ? [configuredUserHome] : [])]
+    const protectedRoots = await Promise.all([join(homedir(), '.dsh'), join(homedir(), '.ds-bot'),
+      ...(configuredUserHome ? [configuredUserHome] : []), ...protectedDesktopPaths()]
       .map(path => realpath(path).catch(() => path)))
     const overlap = (left: string, right: string) => {
       const path = relative(left, right)
       return path === '' || path !== '..' && !path.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(path)
     }
     if ([core, ...protectedRoots].some(path => overlap(path, root) || overlap(root, path))) {
-      throw new CoreError('PATH_DENIED', 'Choose a directory outside the product state and personal DSH data.')
+      throw new CoreError('PATH_DENIED', 'Choose a directory outside protected product and personal data.')
     }
     return root
   }
@@ -400,8 +471,11 @@ export async function createProductHost(context: Context, config: ProductHostCon
     if (statusTimer) clearInterval(statusTimer)
     engine?.abortProactiveRuns(); feishuEngine?.abortProactiveRuns(); githubEngine?.abortProactiveRuns()
     const failures: unknown[] = []
-    for (const close of [() => supervision?.close(), () => statusPublisher?.close(), () => gateway?.close(), () => feishuRuntime?.stop(), () => githubRuntime?.stop(), () => engine?.effects.stop(),
-      () => feishuEngine?.effects.stop(), () => githubEngine?.effects.stop(), () => engine?.shutdown(), () => feishuEngine?.shutdown(), () => githubEngine?.shutdown(),
+    for (const close of [() => supervision?.close(), () => statusPublisher?.close(), () => gateway?.close(),
+      () => connectors?.close(), () => phone?.close(), () => computer?.close(), () => imAccounts?.close(),
+      () => feishuRuntime?.stop(), () => githubRuntime?.stop(), () => engine?.effects.stop(),
+      () => feishuEngine?.effects.stop(), () => githubEngine?.effects.stop(), () => imEngine?.effects.stop(),
+      () => engine?.shutdown(), () => feishuEngine?.shutdown(), () => githubEngine?.shutdown(), () => imEngine?.shutdown(),
       () => engine?.closeBrowserResources(), () => workRouter?.close(), () => sessions.close(),
       ...environments.map(environment => () => environment.close()), () => storage.close()]) {
       try { await close() } catch (error) { failures.push(error) }
@@ -420,11 +494,17 @@ export async function createProductHost(context: Context, config: ProductHostCon
       if (page === 9) throw new CoreError('DIRECTORY_BUDGET', 'The product directory registry exceeds 1000 entries.')
       after = slice.cursor
     }
-    const roots = [
-      ...(config.workspaceRoot ? [await directoryRoot(config.workspaceRoot)] : []),
-      ...saved.map(item => item.root),
-    ]
-    for (const root of new Set(roots)) environments.push(await openDirectory(root))
+    const initialWorkDirectory = config.workspaceRoot ? await openDirectory(await directoryRoot(config.workspaceRoot)) : null
+    if (initialWorkDirectory) environments.push(initialWorkDirectory)
+    for (const item of saved) {
+      try {
+        const root = await directoryRoot(item.root)
+        if (directoryId(root) !== item.id) throw new CoreError('ENVIRONMENT_CHANGED', 'A saved working directory now resolves to a different location.')
+        if (!environments.some(environment => environment.config.id === item.id)) environments.push(await openDirectory(root))
+      } catch (error) {
+        if (!(error instanceof CoreError) || !['PATH_DENIED', 'ENVIRONMENT_CHANGED'].includes(error.code)) throw error
+      }
+    }
     const pendingRevocations = new Set<string>()
     let commandAfter: string | undefined
     for (let page = 0; page < 10; page++) {
@@ -483,11 +563,13 @@ export async function createProductHost(context: Context, config: ProductHostCon
         ...api, withCredential: async (purpose, consume) => {
           const manager = resourceManager
           const sourceInstanceId = feishuRuntime?.sourceBinding.sourceInstanceId
-          if (!manager || !sourceInstanceId) throw new CoreError('RESOURCE_UNAVAILABLE', 'No Feishu credential resource is available.')
-          const resourceId = await manager.selectedFeishuCredential(sourceInstanceId)
-          if (!resourceId) throw new CoreError('RESOURCE_UNAVAILABLE', 'Select a Feishu credential resource in product settings.')
-          return manager.use({ instanceId, resourceId, sourceInstanceId,
-            role: purpose === 'source' ? 'main' : 'router', purpose }, consume)
+          const resourceId = sourceInstanceId ? await manager?.selectedFeishuCredential(sourceInstanceId) : undefined
+          if (manager && sourceInstanceId && resourceId) {
+            return manager.use({ instanceId, resourceId, sourceInstanceId,
+              role: purpose === 'source' ? 'main' : 'router', purpose }, consume)
+          }
+          if (!connectors) throw new CoreError('RESOURCE_UNAVAILABLE', 'Authorize Feishu in Connectors settings.')
+          return connectors.withAuthorization({ provider: 'feishu', appId: api.appId, tenantKey: config.feishu!.tenantKey, purpose }, consume)
         },
       }, storage, instanceId, mainIntake: true,
       ...(attachments ? { attachmentIntake: { upload: (request: import('./product-attachments.js').ProductAttachmentUpload) => attachments.upload(request),
@@ -504,8 +586,11 @@ export async function createProductHost(context: Context, config: ProductHostCon
       const sourceInstanceId = `github:${owner}/${repo}`
       const withCredential: GitHubCredentialConsumer = async (purpose, consume) => {
         const manager = resourceManager
-        if (!manager) throw new CoreError('RESOURCE_UNAVAILABLE', 'No GitHub credential resource is available.')
-        return manager.useSelectedGitHubCredential(sourceInstanceId, purpose, consume)
+        if (manager && await manager.selectedGitHubCredential(sourceInstanceId)) {
+          return manager.useSelectedGitHubCredential(sourceInstanceId, purpose, consume)
+        }
+        if (!connectors) throw new CoreError('RESOURCE_UNAVAILABLE', 'Authorize GitHub in Connectors settings.')
+        return connectors.withAuthorization({ provider: 'github', owner, repo, purpose }, consume)
       }
       const githubCli = new GitHubCliTransport({ ...cli, withCredential })
       githubRuntime = new GitHubRuntime({ ...github, transport: trustedTransport ?? githubCli, storage, instanceId })
@@ -526,6 +611,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
       if (sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId) return feishuRuntime.channel
       if (sourceInstanceId === githubRuntime?.sourceBinding.sourceInstanceId) return githubDelivery
       if (sourceInstanceId === 'product-desktop') return localDeliveryChannel
+      if (sourceInstanceId === imSource && imMain) return { deliver: (delivery, context) => imMain!.deliver(delivery.destination, delivery.text, context) }
     }
     const channel: ProductDeliveryChannel = {
       deliver: async (delivery, context) => channelFor(delivery.destination.sourceInstanceId)?.deliver(delivery, context)
@@ -537,26 +623,47 @@ export async function createProductHost(context: Context, config: ProductHostCon
       },
       deliverSourceReply: (reply, context) => reply.destination.sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId
         ? feishuRuntime!.channel.deliverSourceReply(reply, context)
-        : Promise.resolve({ type: 'unknown', reason: 'DESTINATION_SOURCE_DISABLED' }),
+        : reply.destination.sourceInstanceId === imSource && imMain ? imMain.deliver(reply.destination, reply.text, context)
+          : Promise.resolve({ type: 'unknown', reason: 'DESTINATION_SOURCE_DISABLED' }),
       reconcileSourceReply: (reply, context) => reply.destination.sourceInstanceId === feishuRuntime?.sourceBinding.sourceInstanceId
         ? feishuRuntime!.channel.reconcileSourceReply(reply, context)
         : Promise.resolve({ type: 'unknown', reason: 'DESTINATION_SOURCE_DISABLED' }),
     }
     engine = new Engine(storage, instanceId, { sourceInstanceId: 'product-desktop', actorId, allowedActorIds: [actorId],
-      ...(config.workerMcpTool || browserAdapter ? { hostCapabilities: {
-        ...(config.workerMcpTool ? { mcp: true } : {}), ...(browserAdapter ? { browser: true } : {}),
+      ...(config.workerMcpTool || remoteSecrets || browserAdapter ? { hostCapabilities: {
+        ...(config.workerMcpTool || remoteSecrets ? { mcp: true } : {}), ...(browserAdapter ? { browser: true } : {}),
       } } : {}) }, {}, sessions,
       environments, {}, {}, {}, { channel },
-      { ...(config.hostId === undefined ? {} : { hostId: config.hostId }),
+      { initialWorkDirectoryId: initialWorkDirectory?.config.id ?? null,
+        ...(config.hostId === undefined ? {} : { hostId: config.hostId }),
         ...(config.leaseMs === undefined ? {} : { leaseMs: config.leaseMs }) }, proactive, attachments)
-    await engine.acquireHost()
+    await engine.acquireHost({ initializeMain: true })
     workRouter = new ProactiveWork(storage, instanceId, engine, sessions, actorId)
+    const extensionStorage = engine.productExtensionStorage()
+    computer = new ProductComputer({ instanceId, storage: extensionStorage, adapter: computerAdapter })
+    if (computerAdapter()) engine.configureWorkerComputer(computer)
     const records = credentialRecords as ProductCredentialRecords | undefined
     if (records && typeof records.readRecord === 'function' && typeof records.modifyRecord === 'function'
       && typeof records.deleteRecord === 'function') {
       resourceManager = engine.createProductCredentialManager(records)
       if (credentialImportAdapter) credentialImportManager = engine.createProductCredentialImports(records, credentialImportAdapter)
+      imEngine = new Engine(storage, instanceId, imMainBinding(actorId),
+        { claimUnowned: false, streamOwners: { notice: 'product-desktop', relay: 'product-desktop' } },
+        sessions, [], {}, {}, {}, {}, { ...(config.hostId ? { hostId: config.hostId } : {}), ...(config.leaseMs ? { leaseMs: config.leaseMs } : {}) })
+      imAccounts = new ImAccounts({ ...config.im, instanceId, storage: extensionStorage, vault: new ProductCredentialVault(records),
+        onMessage: message => imMain!.receive(message) })
+      imMain = new ImMainRelay(extensionStorage, instanceId, actorId, event => imEngine!.receiveSourceForMain(event), imAccounts)
+      engine.configureImSourceAuthority((tx, event) => event.source.sourceInstanceId === imSource
+        ? imMain!.authorizedIn(tx, event.threadId, event.objectId) : Promise.resolve(false))
+      await imAccounts.restore()
     }
+    connectors = new ProductConnectors({ ...config.connectors, instanceId, storage: extensionStorage,
+      sources: {
+        ...(config.github ? { github: { owner: config.github.owner, repo: config.github.repo } } : {}),
+        ...(config.feishu && !config.feishu.api.appSecret ? { feishu: { appId: config.feishu.api.appId, tenantKey: config.feishu.tenantKey } } : {}),
+      },
+      ...(remoteSecrets && records ? { records } : {}), ...(credentialImportAdapter ? { importAdapter: credentialImportAdapter } : {}) })
+    const capabilities = engine.configureCapabilityLibrary(resourceManager)
     if (config.workerMcpTool) {
       if (!resourceManager) throw new CoreError('UNAVAILABLE', 'The approved MCP tool requires a durable DSH record service.')
       mcpConfiguration = engine.createProductMcpConfiguration(config.workerMcpTool)
@@ -573,8 +680,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
       } })
     }
     if (browserAdapter) engine.configureWorkerBrowser(browserAdapter)
-    if (environments[0] && config.workspaceRoot) await engine.addWorkDirectory({ instanceId,
-      commandId: `bootstrap:${environments[0].config.id}`, environment: environments[0] })
+    if (initialWorkDirectory) await engine.addWorkDirectory({ instanceId,
+      commandId: `bootstrap:${initialWorkDirectory.config.id}`, environment: initialWorkDirectory })
     if (feishuRuntime && config.feishu?.api.appSecret) {
       const selected = await storage.transaction(instanceId, tx => tx.get<{ resourceId: string | null }>(
         'product-feishu-credential', feishuRuntime!.sourceBinding.sourceInstanceId))
@@ -583,7 +690,6 @@ export async function createProductHost(context: Context, config: ProductHostCon
     await engine.recoverProactiveRuns()
     await workRouter.recover()
     await recoverCredentials()
-    await engine.openMain({ instanceId })
     supervision = createProductSupervision(engine, sessions, storage, instanceId,
       { watchdogConfigured: Boolean(config.watchdogStatusPath) })
     if (config.watchdogStatusPath) {
@@ -624,15 +730,27 @@ export async function createProductHost(context: Context, config: ProductHostCon
     const clients = engine.createClientAccess()
     const product: ProductHost = {
       clients,
-      async dispatch(endpoint, payload = {}, client) {
+      async dispatch(endpoint, payload = {}, client, authorizeMainSend) {
         if (closing) throw new CoreError('RUNTIME_CLOSED', 'The product Host is closed.')
         // The Host supplies identity; a window can only address this authorization scope.
         if (endpoint === 'open') {
           if (Object.keys(payload).length !== 0) throw new CoreError('INVALID_INPUT', 'Opening the product Main accepts no fields.')
-          return engine!.openMain({ instanceId })
+          const binding = await engine!.openMain({ instanceId })
+          return { ...binding, mainSessionMode: await sessions.mainSessionMode(binding.mainSessionId) }
         }
         if (payload.instanceId !== instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This request is outside the authorized Instance.')
-        const fields = statusFields[endpoint] ?? memoryFields[endpoint] ?? resourceFields[endpoint] ?? credentialImportFields[endpoint] ?? browserFields[endpoint]
+        const capabilityEndpoint = Object.hasOwn(capabilityFields, endpoint) ? endpoint as keyof typeof capabilityFields : undefined
+        const connectorEndpoint = Object.hasOwn(connectorFields, endpoint)
+        const imEndpoint = endpoint === 'im-accounts'
+        const phoneEndpoint = Object.hasOwn(phoneFields, endpoint)
+        const computerEndpoint = Object.hasOwn(computerFields, endpoint) ? endpoint as keyof typeof computerFields : undefined
+        const fields: readonly string[] | undefined = (capabilityEndpoint ? capabilityFields[capabilityEndpoint] : undefined)
+          ?? (connectorEndpoint ? connectorFields[endpoint] : undefined)
+          ?? (imEndpoint ? ['instanceId', 'operation', 'platform', 'credentials', 'proposalId', 'code'] : undefined)
+          ?? (phoneEndpoint ? phoneFields[endpoint] : undefined)
+          ?? (computerEndpoint ? computerFields[computerEndpoint] : undefined)
+          ?? (Object.hasOwn(scheduledTaskFields, endpoint) ? scheduledTaskFields[endpoint] : undefined)
+          ?? workBoardFields[endpoint] ?? statusFields[endpoint] ?? memoryFields[endpoint] ?? resourceFields[endpoint] ?? credentialImportFields[endpoint] ?? browserFields[endpoint]
           ?? (endpoint === 'proactive-rules' || endpoint === 'proactive-control' ? ['instanceId']
           : endpoint === 'proactive-list' ? ['instanceId', 'before']
           : endpoint === 'proactive-read' ? ['instanceId', 'runId']
@@ -708,7 +826,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
                                         : undefined)
         if (!fields) throw new CoreError('UNAVAILABLE', 'This product capability is not connected yet.')
         if (Object.keys(payload).some(key => !fields.includes(key))) throw new CoreError('INVALID_INPUT', 'The product request contains unsupported fields.')
-        if (client && endpoint.startsWith('schedule-')) {
+        if (client && (endpoint.startsWith('schedule-') || endpoint.startsWith('scheduled-task-'))) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Schedule administration requires the local authorized product settings.')
         }
         if (client && (endpoint === 'execution-policy-save' || endpoint.startsWith('remote-environment-'))) {
@@ -728,6 +846,34 @@ export async function createProductHost(context: Context, config: ProductHostCon
         }
         if (client && (endpoint.startsWith('resource-') || endpoint.startsWith('credential-import-') || endpoint.startsWith('mcp-'))) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Credential and MCP settings require the local authorized product settings.')
+        }
+        if (capabilityEndpoint) {
+          if (client && (client.revokedAt !== undefined || !client.grants.some(grant => grant.instanceId === instanceId && grant.capabilities.includes('read')))) {
+            throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This client cannot read capability settings.')
+          }
+          return capabilities.dispatch(capabilityEndpoint, payload, Boolean(client))
+        }
+        if (connectorEndpoint || imEndpoint) {
+          await engine!.assertProductAdmission()
+          if (connectorEndpoint) return connectors!.dispatch(endpoint, payload, client)
+          if (client && (client.revokedAt !== undefined || payload.operation !== 'list'
+            || Object.keys(payload).some(key => key !== 'instanceId' && key !== 'operation')
+            || !client.grants.some(grant => grant.instanceId === instanceId && grant.capabilities.includes('read')))) {
+            throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Messaging administration requires the local product window.')
+          }
+          if (!imAccounts) throw new CoreError('UNAVAILABLE', 'Messaging accounts require the Host credential store.')
+          return client ? imAccounts.statusSummary() : imAccounts.dispatch(payload)
+        }
+        if (phoneEndpoint) {
+          if (client) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Phone management requires the local product window.')
+          if (!phone) throw new CoreError('UNAVAILABLE', 'Phone pairing requires the Host credential store.')
+          await engine!.assertProductAdmission()
+          return phone.dispatch(endpoint, payload)
+        }
+        if (computerEndpoint) {
+          if (client) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Computer control requires the local product window.')
+          await engine!.assertProductAdmission()
+          return computer!.dispatch(computerEndpoint, payload, false)
         }
         if (client && endpoint.startsWith('browser-')) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Browser resources require the local authorized product window.')
@@ -765,6 +911,14 @@ export async function createProductHost(context: Context, config: ProductHostCon
             sourceRef: payload.sourceRef as string, ...(payload.pendingId === undefined ? {} : { pendingId: payload.pendingId as string }) })
         }
         if (endpoint.startsWith('browser-')) {
+          if (endpoint === 'browser-plugin' || endpoint === 'browser-plugin-save') {
+            const scope = payload.scope as { role?: unknown } | undefined
+            if (!scope || scope.role !== 'main' || Object.keys(scope).length !== 1) {
+              throw new CoreError('INVALID_INPUT', 'Browser plugin settings require Main scope.')
+            }
+            return endpoint === 'browser-plugin' ? engine!.getBrowserPlugin({ instanceId })
+              : engine!.setBrowserPlugin({ instanceId, commandId, expectedRevision: payload.expectedRevision as number, mode: payload.mode })
+          }
           if (endpoint === 'browser-list') return engine!.listBrowserResources({ instanceId })
           if (endpoint === 'browser-read') return engine!.readBrowserResource({ instanceId, resourceId: payload.resourceId as string })
           if (endpoint === 'browser-import-list') return engine!.listBrowserImports({ instanceId,
@@ -1034,6 +1188,16 @@ export async function createProductHost(context: Context, config: ProductHostCon
           if (endpoint === 'mcp-retry') return mcpConfiguration.connect(request, true)
         }
         if (endpoint === 'schedule-list') return engine!.listSchedules({ instanceId })
+        if (endpoint === 'scheduled-task-list') return engine!.listSchedules({ instanceId }, 'task')
+        if (endpoint === 'scheduled-task-read') return engine!.getSchedule({ instanceId, ruleId: payload.ruleId as string }, 'task')
+        if (endpoint === 'scheduled-task-source-read') return engine!.getScheduleSource({ instanceId }, 'task')
+        if (endpoint === 'scheduled-task-source-set') return engine!.setScheduleSource({ instanceId,
+          commandId, enabled: payload.enabled as boolean }, 'task')
+        if (endpoint === 'scheduled-task-create') return engine!.createSchedule({ instanceId, commandId,
+          title: payload.title as string, text: payload.text as string, timezone: payload.timezone as string,
+          when: payload.when as import('./product-schedules.js').ScheduleWhen, target: { kind: 'main' } }, 'task')
+        if (endpoint === 'scheduled-task-cancel') return engine!.cancelSchedule({ instanceId,
+          commandId, ruleId: payload.ruleId as string }, 'task')
         if (endpoint === 'supervision') return supervision!.state(payload.ticketId as string | undefined)
         if (endpoint === 'supervision-inspect') {
           if (payload.restart !== undefined && payload.restart !== true) throw new CoreError('INVALID_INPUT', 'Restarting an inspection requires an explicit true value.')
@@ -1115,7 +1279,8 @@ export async function createProductHost(context: Context, config: ProductHostCon
           const rules = await engine!.getProactiveRules()
           const current = new Map(rules.rules.filter(rule => rule.enabled && rule.communication === 'notify').map(rule => [rule.id, rule]))
           const runs = current.size ? await engine!.getRecentProactiveNotices() : []
-          return { ...page, preparations: runs.filter(run => run.state === 'prepared' && run.ruleRevision === rules.revision
+          return { ...page, mainSessionMode: await sessions.mainSessionMode(page.mainSessionId),
+            preparations: runs.filter(run => run.state === 'prepared' && run.ruleRevision === rules.revision
             && current.has(run.ruleId)).map(run => ({ id: run.id, ruleId: run.ruleId,
               sourceInstanceId: run.sourceInstanceId, eventId: run.eventId, summary: run.summary, createdAt: run.createdAt })) }
         }
@@ -1435,8 +1600,15 @@ export async function createProductHost(context: Context, config: ProductHostCon
           ...(payload.environmentId === undefined ? {} : { environmentId: payload.environmentId as string }),
           ...(payload.target === undefined ? {} : { target: payload.target as import('./execution-target.js').ExecutionTarget }),
           ...(payload.attachments === undefined ? {} : { attachments: payload.attachments as string[] }),
-          ...(client ? { clientId: client.id } : {}) })
+          ...(client ? { clientId: client.id } : {}) }, authorizeMainSend)
         if (endpoint === 'stop-main') return engine!.stopMainTurn({ instanceId, commandId, messageId: payload.messageId as string })
+        if (endpoint === 'work-board') return engine!.listMainWork({ instanceId,
+          ...(payload.after === undefined ? {} : { after: payload.after as string }),
+          ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
+        if (endpoint === 'work-members') return engine!.mainWorkMembers({ instanceId })
+        if (endpoint === 'work-follow-up') return engine!.directMainWork({ instanceId, commandId,
+          workItemId: payload.workItemId as string, ticketId: payload.ticketId as string, text: payload.text as string,
+          ...(client ? { clientId: client.id } : {}) })
         if (endpoint === 'work-stop') return engine!.stopMainWork({ instanceId, commandId,
           workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
           ...(payload.expectedGeneration === undefined ? {} : { expectedGeneration: payload.expectedGeneration as string }),
@@ -1470,6 +1642,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
           workItemId: payload.workItemId as string, ticketId: payload.ticketId as string,
           expectedGeneration: payload.expectedGeneration as string, reason: payload.reason as string })
         if (endpoint === 'settings') return roleSettings(payload.limit === undefined ? 50 : payload.limit as number)
+        if (endpoint === 'builtin-plugins') return builtinPlugins(context)
         if (endpoint === 'preset-list') return engine!.listRolePresets({ instanceId,
           ...(payload.after === undefined ? {} : { after: payload.after as string }),
           ...(payload.limit === undefined ? {} : { limit: payload.limit as number }) })
@@ -1510,7 +1683,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
           return { efforts: (info?.reasoning?.efforts ?? []).map(effort => ({ id: effort.id, name: effort.name ?? effort.id,
             ...(effort.description ? { description: effort.description } : {}) })), ...(info?.reasoning?.defaultEffort ? { defaultEffort: info.reasoning.defaultEffort } : {}) }
         }
-        if (endpoint === 'product-usage') return engine!.getProductUsage({ instanceId })
+        if (endpoint === 'product-usage' || endpoint === 'usage-breakdown') return engine!.getProductUsage({ instanceId }, endpoint === 'usage-breakdown')
         if (endpoint === 'product-status') {
           const [status, inspection] = await Promise.all([engine!.getProductStatus({ instanceId }), supervision!.state()])
           const latest = inspection.run?.last
@@ -1553,6 +1726,10 @@ export async function createProductHost(context: Context, config: ProductHostCon
     if (config.clientGateway) {
       gateway = await createClientGateway(engine, clients, { ...config.clientGateway, product })
       product.clientGateway = { url: gateway.url, secure: gateway.secure }
+    }
+    if (remoteSecrets && records) {
+      phone = new ProductPhone(extensionStorage, instanceId, new ProductCredentialVault(records), product.dispatch)
+      await phone.restore().catch(() => {})
     }
     return product
   } catch (error) {

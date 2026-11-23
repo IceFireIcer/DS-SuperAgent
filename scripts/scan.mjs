@@ -118,6 +118,10 @@ if (!files.includes('superagent/package.json')) add(MUST, 'plugin-folder', '.', 
 else {
   const pkg = JSON.parse(readFileSync(join(root, 'superagent/package.json'), 'utf8'))
   if (pkg.name !== 'ds-superagent') add(MUST, 'package', 'superagent/package.json', 0, `name is "${pkg.name}", expected "ds-superagent"`)
+  if (pkg.author !== 'IceFireIcer') add(MUST, 'package', 'superagent/package.json', 0, 'author must be IceFireIcer')
+  if (!/DS SuperAgent/u.test(pkg.description ?? '') || /ds[- ]?bot|\bbot\b/iu.test(pkg.description ?? '')) {
+    add(MUST, 'package', 'superagent/package.json', 0, 'description must name DS SuperAgent without the retired Bot product')
+  }
   if (!files.includes('superagent/LICENSE')) add(MUST, 'package', 'superagent/LICENSE', 0, 'the package has no LICENSE file')
   if (!(pkg.files ?? []).includes('LICENSE')) add(MUST, 'package', 'superagent/package.json', 0, '"files" does not list LICENSE')
   if (pkg.exports?.['./client'] !== './dsh/client.js') add(MUST, 'package', 'superagent/package.json', 0, 'the client export is missing')
@@ -127,6 +131,14 @@ else {
   for (const field of ['repository', 'homepage', 'bugs']) {
     if (!pkg[field]) add(MUST, 'package', 'superagent/package.json', 0, `no "${field}" field`)
   }
+}
+if (files.includes('app/package.json')) {
+  const pkg = JSON.parse(readFileSync(join(root, 'app/package.json'), 'utf8'))
+  if (pkg.author !== 'IceFireIcer') add(MUST, 'package', 'app/package.json', 0, 'author must be IceFireIcer')
+}
+if (files.includes('mobile/package.json')) {
+  const pkg = JSON.parse(readFileSync(join(root, 'mobile/package.json'), 'utf8'))
+  if (pkg.author !== 'IceFireIcer') add(MUST, 'package', 'mobile/package.json', 0, 'author must be IceFireIcer')
 }
 if (files.some(file => file === 'ds-bot/package.json')) add(MUST, 'legacy-package', 'ds-bot/package.json', 0, 'the retired package remains')
 for (const name of ['README.md', 'README.zh.md', 'CONTRIBUTING.md', 'CHANGELOG.md', 'AGENTS.md', '.gitignore']) {

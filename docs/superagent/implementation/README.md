@@ -16,6 +16,12 @@
 
 ## 当前进展
 
+DS Bot 0.3.8 迁移的客户端同步、视觉、协议、外壳、会话与设置切片见[实施记录](client-port-phase-one.md)（#144–#150）。
+
+#151–#155 在现有产品上实现 Work、桌面壳、连接器与邮箱、IM 和能力库。各张工单的实现与验收边界见[第二阶段记录](client-port-phase-two.md)。
+
+DSH `0.2.2-rc.1` 升级的版本矩阵、Windows 本地验证和已知限制见[基线记录](dsh-0.2.2-rc.1.md)（#143）。
+
 T55/#83 的 R5 本机四目标验收门槛已完成，包含权限/恢复、真实本机 Qwen3.5 9B 语义验收、真实 GitHub 回执及最新 Windows 原生升级与工作控制。T58/#92 的跨机和实体设备验收按维护者决定取消；真实飞书租户 deferred。[验收记录](t55-r5-local.md) · [真实模型报告](t55-r5-real-model-run.json) · [GitHub 外发](github-product-delivery.md)
 
 R5-28/#120 的[选择导入凭据引用并重新授权](r5-28.md)已完成代码验收：只读取用户明确选定的 JSON 导出；secret 留在 Electron main process 与 DSH credential record，业务库仅保存稳定来源引用和新授权目标；精确 scope、取消/重放/未知结果恢复均由 Host 和凭据资源管理器处理。[复核记录](reviews/r5-28.md)与定向验证已更新。真实飞书租户、用户 DSH profile、PostgreSQL 运行及全量 CI 未作为本票验收。
@@ -46,6 +52,10 @@ profile、第二 package/loader 和未接线独立 UI/engine 已删除。当前�
 R5-35/#127 的[独立安装包与冷启动](r5-35.md)使用 DS SuperAgent 桌面身份、自有状态目录与唯一产品 profile。目录和模型通过现有设置修复，平台安装证据与[复核](reviews/r5-35.md)见记录。
 
 R5-36/#128 的[升级、备份与产品状态观测](r5-36.md)接通现有状态/用量页和 Electron 更新器：安装前必须有经公开 DSH JSONL provider 校验且可恢复的业务库与 Session 备份；恢复保留 stop、授权、外部副作用和 Host fencing，失败启动能在数据锁下重试或撤销未提交恢复。双轴复核及隔离 `profile-boot` smoke 通过。真实安装包升级、托管 PostgreSQL、外部模型/信道、真实系统断电和 T55 四目标验收仍未完成。
+
+DS-Bot 0.3.8 迁移切片 [#156–#161](dsbot-port-156-161.md) 记录手机中继、浏览器、电脑操控、定时任务、用量与密钥的产品接线和验收范围。
+
+[迁移收尾 #162–#164](dsbot-port-162-164.md) 记录设置接线、Expo 手机端、命名与数据隔离、Windows 解包构件实测和剩余发布门槛。
 
 R5-24/#116 的产品健康快照、独立 Watchdog CLI 和受信语义监督入口见[实施记录](r5-24.md)及[双轴自检](reviews/r5-24.md)；语义巡检已接超单轮上限的持久续查、覆盖核对和受信重启入口，默认桌面 Host 自动替换与真实服务器仍缺验收，工单保持开放。
 

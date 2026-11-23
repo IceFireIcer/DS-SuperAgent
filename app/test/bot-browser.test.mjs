@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import { test } from 'node:test'
 import { allowedNavigation, BotBrowserGuests, partitionOf, requestAllowed } from '../src/bot-browser.mjs'
@@ -8,7 +9,7 @@ const ORIGIN = 'http://127.0.0.1:43117'
 test('a storage key keeps its own partition on disk', () => {
   assert.equal(partitionOf('bot:a'), partitionOf('bot:a'))
   assert.notEqual(partitionOf('bot:a'), partitionOf('bot:b'))
-  assert.match(partitionOf('bot:../../x'), /^persist:ds-bot-browser-[\da-f]{32}$/u)
+  assert.match(partitionOf('bot:../../x'), /^persist:ds-superagent-browser-[\da-f]{32}$/u)
 })
 
 test('pages go anywhere on http(s) but the app’s own Host', () => {
@@ -62,6 +63,21 @@ function fakeGuest(url) {
     setWindowOpenHandler(handler) { this.openHandler = handler },
   })
 }
+
+test('a browser resource cannot attach to or clear its former product partition', async () => {
+  const electron = fakeElectron()
+  const guests = new BotBrowserGuests({ session: electron.session, origin: () => ORIGIN, devTools: false })
+  const key = 'bot:coexistence-fixture'
+  const legacy = `persist:ds-bot-browser-${createHash('sha256').update(key).digest('hex').slice(0, 32)}`
+  const former = electron.session.fromPartition(legacy)
+  guests.bind(electron.window)
+  const { lease, partition } = guests.acquire(electron.owner, key)
+  assert.notEqual(partition, legacy)
+  assert.equal(attach(electron.owner, `about:blank#${lease}`, legacy).event.prevented, true)
+  await guests.forget(electron.owner, key)
+  assert.equal(former.beforeRequest, undefined)
+  assert.equal(former.cleared, 0)
+})
 
 function attach(owner, src, partition) {
   const event = { prevented: false, preventDefault() { this.prevented = true } }

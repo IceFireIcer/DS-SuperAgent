@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url'
 const port = Number(process.env.MOCK_PORT ?? 8765)
 const logPath = process.env.MOCK_LOG ?? fileURLToPath(new URL('../../.dsh-test/mock.jsonl', import.meta.url))
 const controls = process.env.MOCK_T55_CONTROLS === '1'
+const classicRoundTrip = process.env.MOCK_CLASSIC_ROUND_TRIP === '1'
 mkdirSync(dirname(logPath), { recursive: true })
 
 const textOf = content => typeof content === 'string' ? content
@@ -58,9 +59,10 @@ const server = createServer(async (request, response) => {
   const id = `mock-${Date.now()}-${Math.random().toString(16).slice(2)}`
   const block = (controls ? t55ControlsReply(body, user, id) : undefined) ?? { type: 'text', text: reply }
   const stop_reason = block.type === 'tool_use' ? 'tool_use' : 'end_turn'
-  if (controls && user === t55SlowReply) {
+  const classicWork = classicRoundTrip && block.type === 'tool_use' && block.name === 'write_file' && block.input.path === 'alpha.txt'
+  if (controls && (user === t55SlowReply || classicWork)) {
     await new Promise(done => {
-      const timer = setTimeout(done, 10_000)
+      const timer = setTimeout(done, classicWork ? 9000 : 10_000)
       response.once('close', () => { clearTimeout(timer); done() })
     })
     if (response.destroyed) return

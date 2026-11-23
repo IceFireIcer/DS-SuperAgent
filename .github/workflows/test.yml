@@ -84,6 +84,8 @@ jobs:
         run: node --test scripts/*.test.mjs
       - name: Check implementation evidence records
         run: node scripts/check-implementation-records.mjs
+      - name: Check runtime product naming
+        run: node scripts/check-product-naming.mjs
       # Scan exactly the tracked files, as they would be published.
       - run: mkdir -p "$RUNNER_TEMP/tree" && git archive HEAD | tar -x -C "$RUNNER_TEMP/tree"
       - run: node scripts/scan.mjs "$RUNNER_TEMP/tree"
@@ -107,8 +109,9 @@ jobs:
           cache: npm
           cache-dependency-path: superagent/package-lock.json
       - run: npm ci --no-fund --no-audit
+      - name: Check committed client and Office bundles
+        run: node dsh/scripts/build-client.mjs --check
       - run: npm run build
-      - run: node dsh/scripts/build-client.mjs --check
       - run: npm run typecheck
       - run: npm run lint
       - name: Run all product-client tests for daily changes
@@ -120,6 +123,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.superagent == 'true'
     runs-on: windows-latest
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -143,16 +147,36 @@ jobs:
         env:
           CI_TEST_BASE: ${{ needs.changes.outputs.base }}
         run: node ../scripts/superagent-ci-tests.mjs
-      - name: Run every Server test for release validation
+      - name: Run the Windows Server shard for release validation
         if: needs.changes.outputs.full == 'true'
-        run: node scripts/test.mjs --test-shard=${{ matrix.shard }}/4
+        run: node ../scripts/superagent-ci-tests.mjs --full --test-shard=${{ matrix.shard }}/4
       - name: Run every product-client test for release validation
         if: needs.changes.outputs.full == 'true'
         run: npm run test:client -- --test-shard=${{ matrix.shard }}/4
 
+  superagent-pty:
+    name: Super-agent Server PTY lifecycle · Ubuntu
+    needs: changes
+    if: needs.changes.outputs.full == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: superagent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: superagent/package-lock.json
+      - run: npm ci --no-fund --no-audit
+      - name: Run the native Server PTY fixture through natural exit
+        run: node ../scripts/superagent-ci-tests.mjs --full
+
   superagent:
     name: Super-agent CI
-    needs: [changes, superagent-check, superagent-tests]
+    needs: [changes, superagent-check, superagent-tests, superagent-pty]
     if: always() && needs.changes.result == 'success' && needs.changes.outputs.superagent == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -160,9 +184,12 @@ jobs:
         env:
           CHECK_RESULT: ${{ needs.superagent-check.result }}
           TEST_RESULT: ${{ needs.superagent-tests.result }}
+          FULL: ${{ needs.changes.outputs.full }}
+          PTY_RESULT: ${{ needs.superagent-pty.result }}
         run: |
           test "$CHECK_RESULT" = success
           test "$TEST_RESULT" = success
+          if [ "$FULL" = true ]; then test "$PTY_RESULT" = success; fi
 
   app:
     name: Desktop app profile
@@ -207,7 +234,11 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: mobile/package-lock.json
+          cache-dependency-path: |
+            mobile/package-lock.json
+            superagent/package-lock.json
+      - name: Install shared link dependencies
+        run: npm ci --prefix ../superagent --no-fund --no-audit
       - run: npm ci --no-fund --no-audit
       - run: npm run typecheck
 
@@ -238,8 +269,22 @@ jobs:
           npm run build --prefix ../superagent
       - run: npm ci --no-fund --no-audit
       - run: npm run dist
-      - name: Check the packaged app
-        run: node scripts/check-packed.mjs
+      - name: Check Windows package coexistence and capture desktop visual cases
+        run: |
+          sha256sum dist-pack/DS-SuperAgent-*-win-x64.exe
+          DESKTOP_VISUAL_DIR="$RUNNER_TEMP/desktop-visuals" node scripts/check-packed.mjs 'dist-pack/win-unpacked/DS SuperAgent.exe' --coexistence
+      - name: Check packaged startup recovery and reduced-motion handoff
+        run: |
+          node scripts/check-packed-startup.mjs 'dist-pack/win-unpacked/DS SuperAgent.exe' "$RUNNER_TEMP/desktop-visuals/startup-normal"
+          node scripts/check-packed-startup.mjs 'dist-pack/win-unpacked/DS SuperAgent.exe' "$RUNNER_TEMP/desktop-visuals/startup-reduced" --reduce-motion
+      - name: Check work questions, Main stop and Work stop in the Windows package
+        run: DESKTOP_CONTROLS_VISUAL_DIR="$RUNNER_TEMP/desktop-visuals" node scripts/check-packed.mjs 'dist-pack/win-unpacked/DS SuperAgent.exe' --controls
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-visuals-windows-x64-${{ github.sha }}
+          path: ${{ runner.temp }}/desktop-visuals
+          if-no-files-found: ignore
       # The runner is a fresh machine, so the installer may run here. It must install for the
       # current user only, the installed app must pass the same check, and the uninstaller must
       # remove it again.
@@ -291,21 +336,18 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $exe = Join-Path $env:LOCALAPPDATA 'Programs\DS SuperAgent\DS SuperAgent.exe'
-          node scripts/check-update.mjs $exe dist-next
-          if ($LASTEXITCODE -ne 0) { throw 'The installed app did not take the update' }
-          # The installer goes on after the app has quit.
+          node scripts/check-packed.mjs $exe --update-feed dist-next dist-next/win-unpacked/resources/app.asar
+          if ($LASTEXITCODE -ne 0) { throw 'The installed app did not preserve the isolated profile during the update' }
           function Installed-Version {
             Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' |
               ForEach-Object { Get-ItemProperty $_.PSPath } |
               Where-Object { $_.DisplayName -like 'DS SuperAgent*' } |
               Select-Object -ExpandProperty DisplayVersion
           }
-          $deadline = (Get-Date).AddSeconds(240)
-          while ((Installed-Version) -ne $env:NEXT_VERSION -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 3 }
           if ((Installed-Version) -ne $env:NEXT_VERSION) { throw "The installed version is $(Installed-Version), not $env:NEXT_VERSION" }
-          while ((Get-Process | Where-Object { $_.Path -like '*ds-superagent-desktop-updater*' }) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 2 }
-          node scripts/check-packed.mjs $exe
-          if ($LASTEXITCODE -ne 0) { throw 'The updated app failed its check' }
+          foreach ($file in ($env:KEPT_FILES -split '\|')) {
+            if ((Get-Content -LiteralPath $file -Raw).Trim() -ne 'kept') { throw "Update changed $file" }
+          }
 
       - name: Uninstall
         shell: pwsh
@@ -368,6 +410,7 @@ jobs:
         run: |
           zip="dist-pack/DS-SuperAgent-$(node -p "require('./package.json').version")-mac-${{ matrix.arch }}.zip"
           test -f "$zip"
+          shasum -a 256 "$zip"
       - name: Check the packaged app
         run: node scripts/check-packed.mjs
       - name: Install from the zip and check
@@ -417,14 +460,17 @@ jobs:
           test -f "dist-pack/DS-SuperAgent-$version-linux-x86_64.AppImage"
           test -f "dist-pack/DS-SuperAgent-$version-linux-amd64.deb"
           test -f dist-pack/latest-linux.yml
+          sha256sum "dist-pack/DS-SuperAgent-$version-linux-x86_64.AppImage" "dist-pack/DS-SuperAgent-$version-linux-amd64.deb"
       # An AppImage mounts through FUSE 2, and Ubuntu 24.04's AppArmor blocks the unprivileged
       # user namespaces that Chromium's sandbox needs; a throwaway runner may lift that.
       - name: Prepare to run the app
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq libfuse2t64 xvfb
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-      - name: Check the packaged app
-        run: xvfb-run -a node scripts/check-packed.mjs
+      - name: Check Main from the released AppImage
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          xvfb-run -a node scripts/check-packed.mjs "dist-pack/DS-SuperAgent-$version-linux-x86_64.AppImage"
       # apt-get, not dpkg: it also installs the deb's dependencies. The ./ prefix makes apt-get
       # read a file; without it the path is taken for a package name.
       - name: Install the deb and check
@@ -447,7 +493,10 @@ jobs:
           cp dist-pack/DS-SuperAgent-*-linux-x86_64.AppImage "$tmp/ds-superagent.AppImage"
           chmod +x "$tmp/ds-superagent.AppImage"
           xvfb-run -a node scripts/check-update.mjs "$tmp/ds-superagent.AppImage" dist-next
-          pkill -f "$tmp/ds-superagent" || true
+          if pgrep -f -- "$tmp/ds-superagent.AppImage"; then
+            echo 'The AppImage restarted after an ordinary quit.' >&2
+            exit 1
+          fi
           next="$(ls dist-next/DS-SuperAgent-*-linux-x86_64.AppImage)"
           test "$(sha512sum "$tmp/ds-superagent.AppImage" | cut -d' ' -f1)" = "$(sha512sum "$next" | cut -d' ' -f1)"
       - name: Uninstall

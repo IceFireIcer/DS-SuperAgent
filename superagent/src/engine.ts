@@ -29,8 +29,10 @@ import { ProductCredentialManager } from './product-credential-manager.js'
 import { ProductCredentialImports, type CredentialImportAdapter } from './product-credential-imports.js'
 import type { WorkerMcpBinding } from './worker-mcp-tool.js'
 import { ProductMcpConfiguration } from './product-mcp-configuration.js'
+import { CapabilityLibrary } from './capability-library.js'
 import type { WorkerMcpConfig } from './worker-mcp-tool.js'
 import { BrowserResources, type BrowserAdapter, type BrowserImportPreview } from './browser-resources.js'
+import type { ProductComputer } from './product-computer.js'
 import type { ProductCredentialRecords } from './product-credential-vault.js'
 import type { ProductAttachments } from './product-attachments.js'
 import { validateProductViewAnswer, type ProductViewAnswer } from './product-views.js'
@@ -52,10 +54,10 @@ import { compareWorkCopy, WorkCopyUnsupported, workCopyGaps,
   uniqueBlockers, type HandoffCopyView, type WorkCopyBlocker, type WorkCopyComparison, type WorkCopyFile, type WorkCopySnapshot } from './work-copy.js'
 import { MainConversation, type MainAddress, type MainSend } from './main-conversation.js'
 import { WorkDelegation, type MainEvidenceCard, type MainWorkCard, type MainWorkControl,
-  type MainWorkHandoffProjection, type MainWorkItem } from './work-delegation.js'
+  type MainWorkHandoffProjection, type MainWorkBrief, type MainWorkItem } from './work-delegation.js'
 import { WorkObservations } from './work-observations.js'
 import { MainSourceHandoffs, type MainSourceDeliveryPage, type MainSourceDeliveryView, type MainSourceHandoff, type MainSourceView } from './main-source.js'
-import { ProductSchedules, authorizedScheduleEvent, scheduledOccurrenceKey,
+import { ProductSchedules, authorizedScheduleEvent, scheduledOccurrenceKey, type ScheduleFamily,
   type ProductSchedule, type ScheduleCreate, type ScheduleTarget, type ScheduledOccurrence } from './product-schedules.js'
 import type { ProactiveWorkRecord } from './proactive-work.js'
 import { ProductMemory, memoryToolsFor, type MemoryReader, type MemoryScope, type MemorySideTarget } from './product-memory.js'
@@ -91,7 +93,10 @@ export class Engine {
   private readonly context: ContextReader
   private readonly sessions: NativeSessions | undefined
   private readonly roleConfig: RoleConfigStore
+  private capabilityLibrary: CapabilityLibrary | undefined
+  private imSourceAuthority: ((tx: AsyncTx, event: SourceEvent) => Promise<boolean>) | undefined
   private readonly productUsage: ProductUsage
+  private readonly initialWorkDirectoryId: string | undefined
   private readonly rolePresets: RolePresetStore
   private readonly executionPolicy: ExecutionPolicyStore
   private readonly hostCapabilities: HostCapabilities
@@ -248,7 +253,8 @@ export class Engine {
       if (!config.roles.main) throw new CoreError('ROLE_NOT_CONFIGURED', 'Main needs its own role profile.')
       await storage.transaction(instanceId, tx => this.roleConfig.recordUse(tx, { sessionId, role: 'main', revision: config.revision,
         main: config.roles.main!.model, router: config.roles.router.model, worker: config.roles.worker.model }))
-      return { profile: structuredClone(config.roles.main), revision: config.revision }
+      const profile = structuredClone(config.roles.main)
+      return { profile: await this.capabilityLibrary?.profile(profile, { role: 'main' }) ?? profile, revision: config.revision }
     }, () => this.environments.some(candidate => candidate.kind === 'local' && candidate.config.instanceId === instanceId
       && candidate.config.allowedActorIds.includes(source.actorId) && candidate.config.permissions.includes('read')
       && candidate.config.permissions.includes('write')) ? this.workDelegation : undefined,
@@ -347,7 +353,8 @@ export class Engine {
           }
         },
         (ticketId, assignment) => source.sourceInstanceId === 'product-desktop'
-          ? memoryToolsFor(this.memory, { role: 'worker', ticketId, assignmentId: assignment.id, sessionId: assignment.sessionId }) : [])
+          ? [...memoryToolsFor(this.memory, { role: 'worker', ticketId, assignmentId: assignment.id, sessionId: assignment.sessionId }),
+            ...this.secretTools(ticketId, assignment)] : [])
       this.effects.setStartup(async () => {
         try { await this.execution!.reconcileRemoteWork() }
         catch { /* Keep the independent Input recovery scan running when the remote recovery budget is exhausted. */ }
@@ -358,9 +365,11 @@ export class Engine {
     }
     const environment = this.environments.find(candidate => candidate.kind === 'local' && candidate.config.instanceId === instanceId
       && candidate.config.allowedActorIds.includes(source.actorId) && candidate.config.permissions.includes('read') && candidate.config.permissions.includes('write'))
+    this.initialWorkDirectoryId = hostOptions.initialWorkDirectoryId === undefined ? environment?.config.id
+      : hostOptions.initialWorkDirectoryId ?? undefined
     if (sessions?.mainRoute && this.execution) {
       this.workDelegation = new WorkDelegation({ storage, instanceId, source, sessions, effects: this.effects,
-        environmentId: environment?.config.id ?? 'unconfigured',
+        environmentId: this.initialWorkDirectoryId ?? 'unconfigured',
         defaultEnvironmentId: async transaction => (await this.instanceDirectoryIn(transaction))?.environmentId,
         environmentRoot: id => this.environments.find(candidate => candidate.config.id === id
           && candidate.config.instanceId === instanceId && candidate.config.allowedActorIds.includes(source.actorId)
@@ -487,7 +496,10 @@ export class Engine {
             control }
         },
         routerProfile: async () => {
-          return this.roleConfig.currentView()
+          const config = await this.roleConfig.currentView()
+          if (!this.capabilityLibrary) return config
+          const router = await this.capabilityLibrary.profile(config.roles.router, { role: 'router' })
+          return { ...config, roles: { ...config.roles, router } }
         },
         recordRouterUse: async (sessionId, config) => {
           await storage.transaction(instanceId, tx => this.roleConfig.recordUse(tx, { sessionId, role: 'router', revision: config.revision,
@@ -495,6 +507,7 @@ export class Engine {
         },
         notifyMain: (notification, signal, isCurrent) => this.main.notify(notification, signal, isCurrent),
         notifyMainSource: (handoff, signal) => this.main.notifySource(handoff, signal),
+        authorizeImSource: async (tx, event) => await this.imSourceAuthority?.(tx, event) ?? false,
         applyFollowUp: (tx, request) => this.inputs.attachMainFollowUp(tx, request),
         readContext: request => this.context.read(request),
       })
@@ -835,6 +848,12 @@ export class Engine {
       const existing = await transaction.get<CommandRecord>('command', commandId)
       if (existing) return this.replay(existing, fingerprint, 'command')
       await this.assertHostAdmissionIn(transaction)
+      if (deliveryOrigin?.source.kind === 'im') {
+        const event = await transaction.get<SourceEvent>('source-event', deliveryOrigin.sourceEventId)
+        if (!event || !await this.imSourceAuthority?.(transaction, event)) {
+          throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The messaging conversation was unpaired before the Ticket could be established.')
+        }
+      }
       return this.accept(transaction, commandId, trigger, fingerprint, { mandateScope: item.goal,
         linkTicket: async (tx, receipt) => {
           await tx.insert('work-ticket', receipt.ticketId, { workBriefId: brief.id, workItemId: item.id, ticketId: receipt.ticketId })
@@ -1538,8 +1557,9 @@ export class Engine {
    * Explicitly acquires or renews the instance lease. Taking over another Host advances the epoch, then
    * reconciles every Assignment left by the previous runtime before new input is accepted.
    */
-  async acquireHost() {
+  async acquireHost({ initializeMain = false } = {}) {
     const acquired = await this.host.acquireWithPrevious()
+    if (initializeMain) await this.main.initializeSession(await this.openMain({ instanceId: this.instanceId }))
     if (!acquired.previous && !await this.storage.transaction(this.instanceId, transaction => this.hostTakeoverPending(transaction))) {
       return acquired.lease
     }
@@ -1578,6 +1598,31 @@ export class Engine {
 
   private async assertHostAdmission() {
     await this.storage.transaction(this.instanceId, transaction => this.assertHostAdmissionIn(transaction))
+  }
+
+  assertProductAdmission() {
+    return this.assertHostAdmission()
+  }
+
+  configureImSourceAuthority(authorize: (tx: AsyncTx, event: SourceEvent) => Promise<boolean>) {
+    this.imSourceAuthority = authorize
+  }
+
+  productExtensionStorage(): Storage {
+    const guard = (storage: Storage, ownsConnection: boolean): Storage => ({
+      transaction: (instanceId, operation) => {
+        if (instanceId !== this.instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The connection belongs to another Instance.')
+        return storage.transaction(instanceId, async tx => {
+          await this.assertHostAdmissionIn(tx)
+          return operation(tx)
+        })
+      },
+      reconnect: async () => guard(await storage.reconnect(), true),
+      close: async () => {
+        if (ownsConnection) await storage.close()
+      },
+    })
+    return guard(this.storage, false)
   }
 
   /**
@@ -1757,8 +1802,34 @@ export class Engine {
       throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Only an authorized product actor can manage credential resources.')
     }
     this.assertAuthoringActor()
-    this.productCredentialManager ??= new ProductCredentialManager(this.storage, this.instanceId, records)
+    this.productCredentialManager ??= new ProductCredentialManager(this.productExtensionStorage(), this.instanceId, records,
+      async (tx, ticketId, request) => {
+        const receipt = await this.inputs.attachMainFollowUp(tx, { ticketId, followUpId: `credential:${request.id}`, authorId: this.source.actorId,
+          text: `The local user approved credential resource ${request.resourceId} for this work. Continue with the approved tool; never ask for the value.`,
+          reason: 'The local operator approved the Worker credential request.' })
+        if (receipt.status !== 'attached') throw new CoreError('REQUEST_UNAVAILABLE', 'This credential request cannot resume the current work.')
+      })
     return this.productCredentialManager
+  }
+
+  private secretTools(ticketId: string, assignment: Assignment): import('./native-sessions.js').NativeTool[] {
+    const manager = this.productCredentialManager
+    const environment = assignment.environment
+    if (!manager || environment?.kind !== 'local') return []
+    return [{ name: 'request_secret', description: 'Ask the person to approve use of an existing credential resource for this work. Never ask for or return its value in chat.',
+      parameters: { resourceId: { type: 'string', required: true } }, execute: async ({ resourceId }, signal) => {
+        signal.throwIfAborted()
+        identifier(resourceId, 'resourceId')
+        const link = await this.storage.transaction(this.instanceId, tx => tx.get<{ workItemId?: string }>('work-ticket', ticketId))
+        if (!link?.workItemId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'A current local work assignment is required for a credential request.')
+        signal.throwIfAborted()
+        const intent = createHash('sha256').update(JSON.stringify([assignment.id, resourceId])).digest('hex')
+        const result = await manager.request({ instanceId: this.instanceId, commandId: `secret-request:${intent}`, resourceId,
+          scope: { role: 'worker', workItemId: link.workItemId, environmentId: environment.id }, purpose: 'tool' },
+        { ticketId, id: assignment.id, generation: assignment.generation })
+        const current = await manager.getRequest({ instanceId: this.instanceId, requestId: result.id })
+        return JSON.stringify({ requestId: result.id, status: current?.status ?? result.status })
+      } }]
   }
 
   createProductCredentialImports(records: ProductCredentialRecords, adapter: CredentialImportAdapter) {
@@ -1772,6 +1843,17 @@ export class Engine {
     }
     this.assertAuthoringActor()
     return new ProductMcpConfiguration(this.storage, this.instanceId, config, tx => this.assertHostAdmissionIn(tx))
+  }
+
+  configureCapabilityLibrary(credentials?: WorkerMcpBinding['credentials']) {
+    if ((this.source.kind ?? 'desktop') !== 'desktop' || !this.source.allowedActorIds.includes(this.source.actorId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Capability settings require an authorized product actor.')
+    }
+    this.assertAuthoringActor()
+    if (this.capabilityLibrary) return this.capabilityLibrary
+    this.capabilityLibrary = new CapabilityLibrary(this.storage, this.instanceId, tx => this.assertHostAdmissionIn(tx), credentials)
+    this.execution?.configureCapabilities(this.capabilityLibrary)
+    return this.capabilityLibrary
   }
 
   /** Host-only configuration of one approved Worker tool; never part of the model command surface. */
@@ -1788,6 +1870,13 @@ export class Engine {
     this.browserResources = new BrowserResources(this.storage, this.instanceId, this.source.actorId, this.environments,
       adapter, tx => this.assertHostAdmissionIn(tx))
     this.execution.configureWorkerBrowser(this.browserResources)
+  }
+
+  configureWorkerComputer(computer: ProductComputer) {
+    if (!this.execution || (this.source.kind ?? 'desktop') !== 'desktop') {
+      throw new CoreError('UNAVAILABLE', 'A product Worker computer bridge is unavailable for this Instance.')
+    }
+    this.execution.configureWorkerComputer(computer)
   }
 
   private browser() {
@@ -1831,6 +1920,11 @@ export class Engine {
     return operation
   }
   listBrowserResources(request: { instanceId: string }) { return this.browser().list(request) }
+  getBrowserPlugin(request: { instanceId: string }) { return this.browser().plugin(request) }
+  setBrowserPlugin(command: Parameters<BrowserResources['setPlugin']>[0]) {
+    this.assertAuthoringActor()
+    return this.browser().setPlugin(command)
+  }
   readBrowserResource(request: { instanceId: string; resourceId: string }) { return this.browser().read(request) }
   importBrowserData(command: { instanceId: string; commandId: string; sourceRef: string; pendingId: string; preview: BrowserImportPreview;
     environmentId: string; label: string }) {
@@ -1845,16 +1939,18 @@ export class Engine {
   }
   closeBrowserResources() { return this.browserResources?.close() ?? Promise.resolve() }
 
-  async createSchedule(request: ScheduleCreate) {
+  async createSchedule(request: ScheduleCreate, family: ScheduleFamily = 'calendar') {
     this.requireProductScheduleActor()
     await this.main.open({ instanceId: request?.instanceId })
-    return this.schedules.create(request)
+    return this.schedules.create(request, family)
   }
-  cancelSchedule(request: { instanceId: string; commandId: string; ruleId: string }) { this.requireProductScheduleActor(); return this.schedules.cancel(request) }
-  listSchedules(request: { instanceId: string }) { this.requireProductScheduleActor(); return this.schedules.list(request) }
-  getSchedule(request: { instanceId: string; ruleId: string }) { this.requireProductScheduleActor(); return this.schedules.get(request) }
-  getScheduleSource(request: { instanceId: string }) { this.requireProductScheduleActor(); return this.schedules.sourceState(request) }
-  setScheduleSource(request: { instanceId: string; commandId: string; enabled: boolean }) { this.requireProductScheduleActor(); return this.schedules.setSource(request) }
+  cancelSchedule(request: { instanceId: string; commandId: string; ruleId: string }, family: ScheduleFamily = 'calendar') { this.requireProductScheduleActor(); return this.schedules.cancel(request, family) }
+  listSchedules(request: { instanceId: string }, family: ScheduleFamily = 'calendar') { this.requireProductScheduleActor(); return this.schedules.list(request, family) }
+  getSchedule(request: { instanceId: string; ruleId: string }, family: ScheduleFamily = 'calendar') {
+    this.requireProductScheduleActor(); return this.schedules.get(request, family)
+  }
+  getScheduleSource(request: { instanceId: string }, family: ScheduleFamily = 'calendar') { this.requireProductScheduleActor(); return this.schedules.sourceState(request, family) }
+  setScheduleSource(request: { instanceId: string; commandId: string; enabled: boolean }, family: ScheduleFamily = 'calendar') { this.requireProductScheduleActor(); return this.schedules.setSource(request, family) }
   tickSchedules(now?: number) { this.requireProductScheduleActor(); return this.schedules.tick(now) }
 
   private async receiveScheduledOccurrence(rule: ProductSchedule, occurrence: ScheduledOccurrence): Promise<Partial<ScheduledOccurrence>> {
@@ -1905,10 +2001,7 @@ export class Engine {
   private async instanceDirectoryIn(transaction: AsyncTx) {
     const current = await transaction.get<{ revision: number; environmentId: string; updatedAt: number }>('instance-directory', 'default')
     if (current) return current
-    const first = this.environments.find(candidate => candidate.kind === 'local' && candidate.config.instanceId === this.instanceId
-      && candidate.config.allowedActorIds.includes(this.source.actorId) && candidate.config.permissions.includes('read')
-      && candidate.config.permissions.includes('write'))
-    return first ? { revision: 0, environmentId: first.config.id, updatedAt: 0 } : undefined
+    return this.initialWorkDirectoryId ? { revision: 0, environmentId: this.initialWorkDirectoryId, updatedAt: 0 } : undefined
   }
 
   private directoryEnvironment(id: string) {
@@ -1983,7 +2076,11 @@ export class Engine {
     }
     const current = await this.storage.transaction(this.instanceId, transaction => this.instanceDirectoryIn(transaction))
     if (!current) throw new CoreError('DELEGATION_UNAVAILABLE', 'No authorized local work directory is configured.')
-    return { ...current, root: this.directoryEnvironment(current.environmentId).config.root }
+    try { return { ...current, root: this.directoryEnvironment(current.environmentId).config.root } }
+    catch (error) {
+      if (!(error instanceof CoreError) || error.code !== 'ENVIRONMENT_DENIED') throw error
+      return { ...current, root: null, unavailable: true as const }
+    }
   }
 
   async setInstanceDirectory(command: MainAddress & { commandId: string; expectedRevision: number; environmentId: string }) {
@@ -2006,7 +2103,7 @@ export class Engine {
         return prior.value
       }
       const current = await this.instanceDirectoryIn(transaction)
-      if (current?.revision !== command.expectedRevision) throw new CoreError('DIRECTORY_REVISION_CONFLICT', 'The default work directory changed; refresh before saving.')
+      if ((current?.revision ?? 0) !== command.expectedRevision) throw new CoreError('DIRECTORY_REVISION_CONFLICT', 'The default work directory changed; refresh before saving.')
       const value = { revision: command.expectedRevision + 1, environmentId: environment.config.id, updatedAt: Date.now() }
       if (!await transaction.replace('instance-directory', 'default', value)) await transaction.insert('instance-directory', 'default', value)
       await transaction.insert('instance-directory-command', key, { fingerprint, value })
@@ -2015,7 +2112,7 @@ export class Engine {
     return { ...result, root: environment.config.root }
   }
 
-  sendMainMessage(request: MainSend) {
+  sendMainMessage(request: MainSend, authorize?: (tx: AsyncTx) => Promise<void>) {
     if (request.target !== undefined && !['local-only', 'remote-only', 'auto'].includes(request.target)) {
       throw new CoreError('INVALID_INPUT', 'A Main message target is local-only, remote-only or auto.')
     }
@@ -2032,10 +2129,82 @@ export class Engine {
       }
       if (target === undefined) target = environment.kind === 'remote' ? 'remote-only' : 'local-only'
     }
-    return this.main.send({ ...request, ...(target === undefined ? {} : { target }) })
+    return this.main.send({ ...request, ...(target === undefined ? {} : { target }) }, authorize)
   }
   stopMainTurn(request: MainAddress & { commandId: string; messageId: string }) { return this.main.stop(request) }
   resumeMainInputs(request: MainAddress) { return this.main.resume(request) }
+  async directMainWork(request: import('./main-conversation.js').MainWorkDirection) {
+    await this.assertHostAdmission()
+    return this.main.directWork(request)
+  }
+
+  async listMainWork(request: MainAddress & { after?: string; limit?: number }) {
+    const { instanceId, after, limit } = request
+    const binding = await this.main.open({ instanceId })
+    const page = await this.workDelegation?.boardPage(binding.mainId, {
+      ...(after === undefined ? {} : { after }), ...(limit === undefined ? {} : { limit }),
+    })
+    if (!page) return { items: [] }
+    const items = await this.storage.transaction(instanceId, async tx => {
+      const records = []
+      for (const card of page.items) {
+        const ticketId = card.receipt.ticketId
+        const reportId = card.outcome?.reportId
+        const result = card.status === 'success' && ticketId && reportId
+          ? (await this.deliveries.list(tx, ticketId)).findLast(delivery =>
+            delivery.reportId === reportId && ['result', 'answer'].includes(delivery.purpose))
+          : undefined
+        const state = card.status === 'stopped' ? 'stopped'
+          : card.status === 'success' && result?.state === 'sent' ? 'delivered'
+            : card.status === 'success' && (!result || result.state === 'pending') ? 'waiting-delivery'
+              : ['running', 'routing', 'accepted', 'pending'].includes(card.status) ? 'running' : 'waiting-human'
+        const assignment = card.control?.assignment
+        const detail = assignment?.state === 'stopping' || card.control?.stop?.state === 'stopping' ? 'stopping'
+          : result?.state === 'unknown' || result?.state === 'dropped' ? result.state : card.status
+        records.push({ id: card.brief.workItemId, goal: card.brief.goal, createdAt: card.brief.createdAt,
+          summary: card.update?.summary ?? card.outcome?.summary ?? card.receipt.nextStep, state, detail, status: card.status,
+          ...(ticketId ? { ticketId } : {}),
+          ...(card.control?.attention ? { question: { workItemId: card.control.workItemId, ticketId: card.control.ticketId,
+            assignment: card.control.assignment, attention: card.control.attention,
+            permissions: { actorId: card.control.permissions.actorId, canAnswer: card.control.permissions.canAnswer } } } : {}),
+          ...(ticketId && card.control?.permissions.canStop ? { stop: { expectedTicketVersion: card.control.ticketVersion,
+            ...(assignment ? { expectedGeneration: assignment.generation } : {}) } } : {}),
+          ...(card.followUps?.length ? { notes: card.followUps.map(({ id, text }) => ({ id, text })) } : {}),
+        })
+      }
+      return records
+    })
+    return { items, ...(page.cursor ? { cursor: page.cursor } : {}) }
+  }
+
+  async mainWorkMembers(request: MainAddress) {
+    const binding = await this.main.open(request)
+    return this.storage.transaction(this.instanceId, async tx => {
+      const members = new Map<string, { sessionId: string; state: string; item?: { id: string; ticketId: string; goal: string;
+        stop: { expectedTicketVersion: number; expectedGeneration: string } } }>()
+      let after: string | undefined
+      do {
+        const page = await tx.scan<Assignment>('assignment', { limit: 100, ...(after ? { after } : {}) })
+        for (const { value: assignment } of page.items) {
+          if (assignment.state !== 'running' && assignment.state !== 'stopping') continue
+          const worker = { sessionId: assignment.sessionId, state: assignment.state }
+          const link = await tx.get<{ workBriefId: string; workItemId: string }>('work-ticket', assignment.ticketId)
+          const brief = link && await tx.get<MainWorkBrief>('work-brief', link.workBriefId)
+          const item = link && await tx.get<MainWorkItem>('work-item', link.workItemId)
+          const ticket = item && await tx.get<Work['ticket']>('ticket', assignment.ticketId)
+          const target = assignment.state === 'running' && brief?.mainId === binding.mainId
+            && item && ticket?.state === 'open' && !ticket.constraint ? {
+              id: item.id, goal: item.goal, ticketId: assignment.ticketId,
+              stop: { expectedTicketVersion: ticket.directionVersion ?? 1, expectedGeneration: assignment.generation },
+            } : undefined
+          if (!members.has(worker.sessionId) || target) members.set(worker.sessionId, { ...worker, ...(target ? { item: target } : {}) })
+        }
+        after = page.cursor
+      } while (after)
+      return { workers: [...members.values()] }
+    })
+  }
+
   async getMainConversation(request: MainAddress & { limit?: number; after?: number }) {
     const page = await this.main.page(request)
     return { ...page, works: this.workDelegation ? await this.workDelegation.list(page.mainId) : [] as MainWorkCard[],
@@ -2301,9 +2470,9 @@ export class Engine {
     }
   }
 
-  async getProductUsage(request: { instanceId: string }): Promise<ProductUsageReport> {
+  async getProductUsage(request: { instanceId: string }, hourly = false): Promise<ProductUsageReport> {
     this.assertProductStatusAccess(request?.instanceId)
-    return this.productUsage.read()
+    return this.productUsage.read(hourly)
   }
 
   async getProductStatus(request: { instanceId: string }) {

@@ -1,25 +1,28 @@
 // Electron main process: one window for DS SuperAgent, served by the app's own DSH Host.
 // The window loads the Host's loopback address as DSH Web does: DSH's sign-in sends the page's
 // origin as the address the browser comes back to, and accepts only a loopback one.
-import { app, autoUpdater as nativeUpdater, BrowserWindow, WebContentsView, dialog, ipcMain, Menu, nativeImage, nativeTheme, powerMonitor, session, shell as electronShell, Tray } from 'electron'
+import { app, autoUpdater as nativeUpdater, BrowserWindow, WebContentsView, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, powerMonitor, screen, session, shell as electronShell, Tray } from 'electron'
+import { randomUUID } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { readFile, rm, stat } from 'node:fs/promises'
+import { stat } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { release } from 'node:os'
-import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { backupBeforeProfileChange, completeProductRestore, createProductBackup, listProductBackups, pendingProductRestore, recordProfileVersion,
   recoverInterruptedProductRestore, restoreProductBackup } from './product-backups.mjs'
 import { createOperationsLog } from './operations-log.mjs'
+import { createComputerCursor } from './computer-cursor.mjs'
 import electronUpdater from 'electron-updater'
 import { BotBrowserGuests, partitionOf } from './bot-browser.mjs'
 import { BotViews, isBotId } from './bot-views.mjs'
 import { importFromBrowser, listSources } from './browser-sources.mjs'
-import { applyCookies, CookieImports, isProductBrowserImportId, ProductCookieImports } from './cookie-import.mjs'
+import { CookieImports, isProductBrowserImportId, ProductCookieImports } from './cookie-import.mjs'
 import { CredentialImports } from './credential-import.mjs'
 import { parseCookieFile } from './cookie-parse.mjs'
-import { userDshHome } from './dsh-home.mjs'
+import { userDshHome, userDshHomes } from './dsh-home.mjs'
+import { real, within } from './copy-tree.mjs'
 import { downloadSaver } from './downloads.mjs'
 import { canonicalExecPath } from './canonical-path.mjs'
 import { chooseLocations, localeText, placeProblem, programFolder, saveLocations, text } from './first-run.mjs'
@@ -27,10 +30,15 @@ import { hostPort } from './host-port.mjs'
 import { assertHostLockFree, hostLockPath, releaseHostLock, writeHostLock } from './host-lock.mjs'
 import { HostProcess } from './host-process.mjs'
 import { copyData, moveProblem } from './move-data.mjs'
-import { ARTIFACT_PREFIX, PRODUCT_NAME, configureIdentity } from './product.mjs'
+import { createNativeNotifications } from './native-notifications.mjs'
+import { pickDirectory, readImportFile } from './native-place.mjs'
+import { ARTIFACT_PREFIX, PRODUCT_NAME, configureIdentity, formerDataFolders } from './product.mjs'
 import { SUPERAGENT_PROFILE, assertLocalBackupProfile, profileHome } from './profile.mjs'
 import { RemoteProductClient } from './remote-product-client.mjs'
+import { createDesktopClassicAgent } from './classic-agent.mjs'
 import { createShell, SHELL_TEXT } from './shell.mjs'
+import { handoffMain, waitForMainView } from './startup-handoff.mjs'
+import { createComputerIndicator, createStartupScreen, statusPage } from './status-window.mjs'
 import { UPDATE_TEXT, isNewer, watchReleases, watchUpdates } from './updates.mjs'
 import { createDeferredPrompt } from './update-prompt.mjs'
 import { CAPTION_HEIGHT, cssColor, micaAvailable, nativeThemeSource } from './window-frame.mjs'
@@ -38,6 +46,7 @@ import { CAPTION_HEIGHT, cssColor, micaAvailable, nativeThemeSource } from './wi
 const IPC = {
   caption: 'ds-superagent:caption-colors', nativeTheme: 'ds-superagent:native-theme', fullscreen: 'ds-superagent:fullscreen',
   dataLocation: 'ds-superagent:data-location', moveData: 'ds-superagent:move-data', teamWorkspace: 'ds-superagent:team-workspace',
+  directoryPick: 'ds-superagent:directory-pick',
   browserAcquire: 'ds-superagent:browser-acquire', browserRelease: 'ds-superagent:browser-release', browserForget: 'ds-superagent:browser-forget',
   browserViewChanged: 'ds-superagent:browser-view-changed', browserViewCreate: 'ds-superagent:browser-view-create',
   browserViewSync: 'ds-superagent:browser-view-sync', browserViewPlace: 'ds-superagent:browser-view-place',
@@ -45,7 +54,7 @@ const IPC = {
   browserViewFocus: 'ds-superagent:browser-view-focus', browserViewRead: 'ds-superagent:browser-view-read',
   browserViewClose: 'ds-superagent:browser-view-close', browserViewHold: 'ds-superagent:browser-view-hold',
   browserImportSources: 'ds-superagent:browser-import-sources', browserImportPick: 'ds-superagent:browser-import-pick',
-  browserImportLive: 'ds-superagent:browser-import-live', browserImportApply: 'ds-superagent:browser-import-apply',
+  browserImportLive: 'ds-superagent:browser-import-live',
   browserImportCancel: 'ds-superagent:browser-import-cancel',
   credentialImportPick: 'ds-superagent:credential-import-pick', credentialImportCancel: 'ds-superagent:credential-import-cancel',
   appUpdateState: 'ds-superagent:app-update-state', appUpdateCheck: 'ds-superagent:app-update-check',
@@ -53,8 +62,11 @@ const IPC = {
   appUpdateChanged: 'ds-superagent:app-update-changed',
   backupList: 'ds-superagent:backup-list', backupCreate: 'ds-superagent:backup-create',
   backupRestore: 'ds-superagent:backup-restore', diagnosticsRead: 'ds-superagent:diagnostics-read',
+  notify: 'ds-superagent:notify', setBadge: 'ds-superagent:badge',
+  notificationTake: 'ds-superagent:notification-take', notificationOpen: 'ds-superagent:notification-open',
   productConnect: 'ds-superagent:client-connect', productDisconnect: 'ds-superagent:client-disconnect',
   productStatus: 'ds-superagent:client-status', productCall: 'ds-superagent:client-call', productEvents: 'ds-superagent:client-events',
+  classicAgent: 'ds-superagent:classic-agent',
 }
 // A cookie export larger than this is not a cookie export.
 const IMPORT_FILE_MAX = 32 * 1024 * 1024
@@ -82,6 +94,7 @@ try { configureIdentity(app) }
 catch (error) { identityError = error }
 
 let mainWindow
+const loadedWindows = new WeakSet()
 let host
 // The Host's loopback origin, which the window loads.
 let origin
@@ -121,6 +134,9 @@ let bootstrap
 let tokenSpent = false
 // The download handler of the app's session is bound once, not once per window.
 let downloadsBound = false
+let badge = false
+let directoryDialog = false
+let moveDialog = false
 // Quitting while a first-run dialog is open stops the first run, and during the copy (of the
 // first run or of a data move) it waits for the copy to stop at a safe point, so that it leaves
 // no half team and no temporary copy.
@@ -137,10 +153,21 @@ const cookieImports = new CookieImports()
 const productCookieImports = new ProductCookieImports()
 const credentialImports = new CredentialImports()
 const remoteProduct = new RemoteProductClient()
+const classicAgent = createDesktopClassicAgent({ window: () => mainWindow, remote: () => remoteProduct.status().connected })
 const operationsLog = createOperationsLog(join(app.getPath('userData'), 'logs', 'operations.jsonl'))
 const productBackupRoot = join(app.getPath('userData'), 'backups')
 const note = (area, code, version) => void operationsLog.record(area, code, version).catch(() => {})
 const managed = () => Boolean(process.env.DS_SUPERAGENT_POSTGRES?.trim())
+const language = () => app.getLocale().toLowerCase().startsWith('zh') ? 'zh' : 'en'
+const indicator = createComputerIndicator({ BrowserWindow, screen, icon: iconFile, lang: language, message: () => text().computerActive })
+const computerCursor = createComputerCursor({ BrowserWindow, screen, platform: process.platform })
+let activeComputer
+const computerApprovals = new Map()
+const computerControlId = value => typeof value === 'string' && /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/u.test(value)
+const notifications = createNativeNotifications({ Notification, icon: iconFile, onOpen: () => {
+  shell.open()
+  if (loadedWindows.has(mainWindow)) mainWindow.webContents.send(IPC.notificationOpen)
+} })
 
 function assertBackupLocation() {
   const problem = placeProblem(text(), productBackupRoot)
@@ -154,29 +181,40 @@ const shell = createShell({
   platform: process.platform,
   messages: () => localeText(SHELL_TEXT),
   trayImage: () => trayImage(),
-  window: () => mainWindow,
+  window: () => !failed && loadedWindows.has(mainWindow) ? mainWindow : startupScreen.window() ?? mainWindow,
   build: () => rebuildWindow(),
   reveal: (target) => {
-    if (failed) return
+    const start = startupScreen.window()
+    if (target !== start && (failed || !loadedWindows.has(target))) return
     // macOS: the application menu's Hide hides the app itself, so it comes back first.
     if (process.platform === 'darwin') app.show()
     target.show()
     target.focus()
+    if (target === start && !failed && !mainWindow && bootstrap) rebuildWindow()
   },
   quit: () => { app.quit() },
+  locations: () => {
+    if (!places || !loadedWindows.has(mainWindow) || hostState !== HOST_STATE.running) return
+    shell.open()
+    void showLocations().catch(() => note('shell', 'LOCATIONS_UNAVAILABLE'))
+  },
+  computerStop: { active: () => activeComputer !== undefined, run: () => clearComputer(true) },
   status: () => hostState,
-  onSuspend: () => { suspended = true },
+  onSuspend: () => { suspended = true; clearComputer(true) },
   onResume: () => resumeHost(),
   busy: () => choosing !== undefined || copying !== undefined,
   // Before the first run has chosen its places there is no window to show, and before the
   // first load of the Host there is no address to load.
-  ready: () => places !== undefined && origin !== undefined && bootstrap !== undefined,
+  ready: () => places !== undefined && origin !== undefined && (bootstrap !== undefined || hostState === HOST_STATE.running),
   notice: { marker: () => join(app.getPath('userData'), 'tray-close-acknowledged'), show: (options) => dialog.showMessageBox(options) },
   // Without a tray the close asks whether the app should end.
   fallback: { show: (options) => dialog.showMessageBox(options) },
 })
+const startupScreen = createStartupScreen({ BrowserWindow, ipcMain, icon: iconFile, lang: language,
+  image: () => nativeImage.createFromPath(join(assets, 'icon.png')).resize({ width: 96 }).toPNG().toString('base64'),
+  quitting: shell.isQuitting, quit: shell.quit })
 // The tray icon goes away with the app, and a late answer to the close notice hides nothing.
-app.once('will-quit', () => { shell.dispose(); botViews.dispose(); updates?.stop() })
+app.once('will-quit', () => { startupScreen.close(); clearComputer(true); notifications.dispose(); shell.dispose(); botViews.dispose(); updates?.stop() })
 
 // A packaged app started through an 8.3 short path or a junction restarts once on the
 // canonical path: the lock below and every path the Host sees then agree with the long
@@ -226,12 +264,16 @@ if (identityError !== undefined) {
     }
     if (maintenance || startup) {
       event.preventDefault()
-      if (startup) void startup.finally(() => app.quit()).catch(() => {})
+      if (startup) {
+        shell.beginQuit()
+        if (host) void stopHost().catch(() => {})
+        void startup.catch(() => {}).then(() => hostStop).catch(() => {}).then(() => app.quit())
+      }
       return
     }
     if (installOnQuit && !stopping && hostState === HOST_STATE.running && updates?.install && updates.state().phase === 'downloaded') {
       event.preventDefault()
-      void installUpdate().catch(() => { shell.cancelQuit(); showUpdateFailure() })
+      void installUpdate({ restart: false }).catch(() => { shell.cancelQuit(); showUpdateFailure() })
       return
     }
     // The app is on its way out: the window may close for good.
@@ -243,7 +285,11 @@ if (identityError !== undefined) {
     if (stopping) { void (hostStop ?? Promise.resolve()).then(() => { app.quit() }, leave); return }
     void stopHost().then(() => { app.quit() }, leave)
   })
-  app.whenReady().then(async () => { shell.install(); await start() }).catch(fail)
+  app.whenReady().then(async () => {
+    shell.install()
+    powerMonitor.on('lock-screen', () => clearComputer(true))
+    await start()
+  }).catch(fail)
 }
 
 function lockProductData() {
@@ -259,6 +305,7 @@ function unlockProductData() {
 
 function stopHost({ forBackup = false, holdLock = forBackup } = {}) {
   stopping = true
+  clearComputer(true)
   const confirmedExit = () => {
     stopped = true
     hostState = HOST_STATE.stopped
@@ -285,14 +332,33 @@ function stopHost({ forBackup = false, holdLock = forBackup } = {}) {
 // The Host is gone while the computer sleeps: the app hears it when it wakes, and replaces it
 // then. Outside a sleep the failure is the user's now, with a chance to try again.
 function hostFailure(error) {
+  clearComputer(false)
   note('host', 'HOST_FAILED', app.getVersion())
   if (suspended) { deferredFailure = error; return }
   void fail(error)
 }
 
-// A Host that the shell listens to: the Bot browser's endpoint and a failure both arrive here.
+// A Host that the shell listens to: the browser resource endpoint and a failure both arrive here.
 function wireHost(instance) {
   instance.onMessage(message => {
+    if (instance !== host || stopping) return
+    if (message?.type === 'ds-superagent:computer-shell-cancel' && computerControlId(message.id)) {
+      computerApprovals.get(message.id)?.abort()
+      return
+    }
+    const indicatorRequest = message?.type === 'ds-superagent:computer-indicator'
+    if ((message?.type === 'ds-superagent:computer-shell' || indicatorRequest && message.active === true) && computerControlId(message.id)) {
+      void computerRequest(indicatorRequest ? { ...message, kind: 'indicator' } : message).catch(() => false).then(ok => {
+        if (instance === host && !stopping && instance.isRunning()) {
+          instance.send({ type: 'ds-superagent:computer-shell-response', id: message.id, ok })
+        }
+      }).catch(() => {})
+      return
+    }
+    if (indicatorRequest) {
+      if (message.active === false && message.controlId === activeComputer) clearComputer(false)
+      return
+    }
     if (message?.type === 'ds-superagent:credential-import-read' && typeof message.id === 'string'
       && typeof message.pendingId === 'string' && /^[\da-f-]{36}$/iu.test(message.pendingId)
       && typeof message.credentialId === 'string' && typeof message.sourceRef === 'string'
@@ -354,6 +420,134 @@ function wireHost(instance) {
   })
 }
 
+function clearComputer(notify) {
+  const id = activeComputer
+  activeComputer = undefined
+  for (const approval of computerApprovals.values()) approval.abort()
+  indicator.hide()
+  computerCursor.clear()
+  if (id !== undefined) {
+    if (notify) {
+      try { host?.send({ type: 'ds-superagent:computer-stop', controlId: id }) } catch {}
+    }
+    shell.refresh()
+  }
+}
+
+async function computerRequest(message) {
+  if (suspended || hostState !== HOST_STATE.running || stopping || shell.isQuitting() || remoteProduct.status().connected) return false
+  const idle = powerMonitor.getSystemIdleState(3)
+  if (idle !== 'active' && idle !== 'idle') return false
+  if (message.kind === 'approve' || message.kind === 'reconcile') {
+    const reconcile = message.kind === 'reconcile'
+    if (!windowShown() || !reconcile && !shell.hasTray() || activeComputer || computerApprovals.size || busyWithData()) return false
+    const { app: target, level, workItemId, generation } = message.request ?? {}
+    if (!/^[\w-]{1,128}$/u.test(workItemId)) return false
+    if (reconcile) {
+      if (!computerControlId(message.request.operationId) || !/^app-[a-f0-9]{64}$/u.test(message.request.appId)
+        || typeof message.request.appName !== 'string' || !message.request.appName.length || message.request.appName.length > 100
+        || /[\p{C}]/u.test(message.request.appName)
+        || !['click', 'type', 'activate'].includes(message.request.action)) return false
+    } else if (!/^[\w-]{1,128}$/u.test(generation) || !/^app-[a-f0-9]{64}$/u.test(target?.id)
+      || typeof target.name !== 'string' || target.name.length > 100 || /[\p{C}]/u.test(target.name)
+      || !['view', 'background', 'foreground'].includes(level)) return false
+    const owner = mainWindow
+    const controller = new AbortController()
+    computerApprovals.set(message.id, controller)
+    const t = text()
+    try {
+      const { response } = await dialog.showMessageBox(owner, { type: 'warning', title: PRODUCT_NAME,
+        message: reconcile ? t.computerReconcile : t.computerApproval(target.name),
+        detail: reconcile ? t.computerReconcileDetail(message.request.appName, workItemId) : t.computerApprovalDetail(level, workItemId, generation),
+        buttons: reconcile ? [t.cancel, t.computerReviewed] : [t.computerDeny, t.computerAllow],
+        defaultId: 0, cancelId: 0, noLink: true, signal: controller.signal })
+      return response === 1 && !controller.signal.aborted && owner === mainWindow && windowShown() && !stopping && !suspended
+        && !shell.isQuitting() && !remoteProduct.status().connected
+    } finally { computerApprovals.delete(message.id) }
+  }
+  const id = message.controlId
+  if (!computerControlId(id)) return false
+  if (message.kind === 'indicator') {
+    if (activeComputer || !shell.hasTray()) return false
+    activeComputer = id
+    const shown = await indicator.show().catch(() => false)
+    if (!shown || activeComputer !== id || suspended || stopping) {
+      if (activeComputer === id) clearComputer(false)
+      note('shell', 'COMPUTER_INDICATOR_UNAVAILABLE')
+      return false
+    }
+    shell.refresh()
+    return true
+  }
+  if (activeComputer !== id) return false
+  if (message.kind === 'active') return true
+  if (message.kind === 'foreground') return idle === 'idle'
+  if (message.kind === 'cursor') return computerCursor.show(message.point)
+  return false
+}
+
+function busyWithData() { return choosing || copying || maintenance || startup || stopping || moveDialog }
+
+function workspaceProblem(path) {
+  const t = text()
+  const shellData = real(app.getPath('userData'))
+  if (within(path, shellData) || within(shellData, path)) return t.inDesktopData
+  return path === real(places.workspace) ? placeProblem(t, path) : placeProblem(t, places.dataDir, path)
+}
+
+function readWorkspace() {
+  const instance = host
+  if (!instance || hostState !== HOST_STATE.running) return Promise.resolve(null)
+  const id = randomUUID()
+  return new Promise(resolve => {
+    const finish = path => { clearTimeout(timer); unlisten(); resolve(path) }
+    const timer = setTimeout(() => finish(null), 2000)
+    const unlisten = instance.onMessage(message => {
+      if (message?.type === 'ds-superagent:workspace-read-result' && message.id === id) {
+        finish(typeof message.path === 'string' && isAbsolute(message.path) ? message.path : null)
+      }
+    })
+    try { instance.send({ type: 'ds-superagent:workspace-read', id }) }
+    catch { finish(null) }
+  })
+}
+
+async function pickWorkspace(event) {
+  assertLocalWindow(event)
+  if (!windowShown() || directoryDialog || busyWithData()) return null
+  directoryDialog = true
+  try {
+    const path = await pickDirectory(dialog, mainWindow, { title: text().pickWorkspace, defaultPath: places.workspace })
+    if (!path || !fromWindow(event) || remoteProduct.status().connected || busyWithData()) return null
+    const message = workspaceProblem(path)
+    if (message) {
+      await dialog.showMessageBox(mainWindow, { type: 'warning', title: PRODUCT_NAME, message, buttons: ['OK'] })
+      return null
+    }
+    return path
+  } finally { directoryDialog = false }
+}
+
+async function chooseImport(event, limit, options) {
+  assertLocalWindow(event)
+  if (!windowShown() || busyWithData()) return { canceled: true }
+  try {
+    const picked = await dialog.showOpenDialog(mainWindow, options)
+    const path = picked.filePaths[0]
+    if (picked.canceled || typeof path !== 'string' || !isAbsolute(path) || !fromWindow(event)
+      || remoteProduct.status().connected || busyWithData()) return { canceled: true }
+    const roots = [...userDshHomes(), ...formerDataFolders(app), places.dataDir, app.getPath('userData')]
+    if (app.isPackaged) roots.push(programFolder())
+    const result = await readImportFile(path, limit, roots)
+    if (!fromWindow(event) || remoteProduct.status().connected || busyWithData()) return { canceled: true }
+    if (result.error) note('shell', 'IMPORT_FILE_REJECTED')
+    return result.bytes ? { ...result, label: basename(path) } : result
+  } catch {
+    note('shell', 'IMPORT_FILE_REJECTED')
+    return { error: 'unreadable' }
+  }
+}
+
 // A new Host takes the data lock before it starts. The lock names the Host child, not the
 // shell, so a Host that outlives its shell still blocks a second Router.
 function launchHost(instance) {
@@ -364,7 +558,10 @@ function launchHost(instance) {
     hostLockPid = instance.pid()
     writeHostLock(hostLock, { pid: hostLockPid, port: hostPortNumber })
   }
-  return starting
+  return starting.then(answer => {
+    if (host === instance && answer?.url) classicAgent.replaceHost(instance, answer.url)
+    return answer
+  })
 }
 
 function startProductHost(home, { rollback = false } = {}) {
@@ -386,6 +583,7 @@ function startProductHost(home, { rollback = false } = {}) {
       note('backup', error?.code === 'UNSUPPORTED_SCHEMA' ? 'BACKUP_SCHEMA_UNSUPPORTED' : 'PROFILE_PREPARATION_FAILED', app.getVersion())
       throw error
     }
+    if (shell.isQuitting() && !maintenance) { unlockProductData(); return undefined }
     const answer = await launchHost(hostFactory())
     if (answer?.url !== undefined) {
       await finishProfileStart(home)
@@ -399,9 +597,10 @@ function startProductHost(home, { rollback = false } = {}) {
 }
 
 async function start() {
+  void startupScreen.show(text().starting)
   choosing = new AbortController()
-  const where = await chooseLocations(choosing.signal).finally(() => { choosing = undefined })
-  if (where.quit) { app.exit(0); return }
+  const where = await chooseLocations(choosing.signal, startupScreen.window()).finally(() => { choosing = undefined })
+  if (where.quit) { startupScreen.close(); app.quit(); return }
   const hostHome = profileHome(where.dataDir)
   const workspace = where.workspace ?? join(hostHome, 'workspace')
   // A link can be made after the first run's check: the folders the Host will write to are
@@ -412,6 +611,7 @@ async function start() {
   }
   places = { dataDir: where.dataDir, workspace }
   const port = await hostPort(join(app.getPath('userData'), 'host-port.json'))
+  if (shell.isQuitting()) return
   hostPortNumber = port
   origin = `http://127.0.0.1:${String(port)}`
   const pnpm = join(app.getAppPath(), 'node_modules', 'pnpm', 'bin', 'pnpm.mjs')
@@ -419,12 +619,15 @@ async function start() {
   const profileDir = join(hostHome, 'profiles', SUPERAGENT_PROFILE)
   hostLock = hostLockPath(hostHome)
   const newHost = () => {
+    const problem = placeProblem(text(), profileDir)
+    if (problem !== undefined) throw new Error(problem)
     mkdirSync(profileDir, { recursive: true })
     return new HostProcess({
       entry: join(here, 'host.mjs'),
       cwd: profileDir,
       env: { ...process.env, DSH_HOME: hostHome, DS_SUPERAGENT_PORT: String(port), DS_SUPERAGENT_APP: '1',
-        DS_SUPERAGENT_RUNTIME_DIR: runtimeDir, DS_SUPERAGENT_USER_DSH_HOME: userDshHome(), DS_SUPERAGENT_WORKSPACE: workspace },
+        DS_SUPERAGENT_RUNTIME_DIR: runtimeDir, DS_SUPERAGENT_USER_DSH_HOME: userDshHome(), DS_SUPERAGENT_WORKSPACE: places.workspace,
+        DS_SUPERAGENT_PROTECTED_PATHS: JSON.stringify([app.getPath('userData'), ...formerDataFolders(app)]) },
       pnpm,
       onFailure: hostFailure,
     })
@@ -445,10 +648,18 @@ async function start() {
     return { path: places.dataDir, fixed }
   })
   ipcMain.handle(IPC.moveData, (event, workspace) => {
-    assertWindow(event)
+    assertLocalWindow(event)
     return fixed ? false : moveData(typeof workspace === 'string' && isAbsolute(workspace) ? workspace : places.workspace)
   })
-  ipcMain.handle(IPC.productConnect, (event, connection) => { assertWindow(event); return remoteProduct.connect(connection) })
+  ipcMain.handle(IPC.directoryPick, pickWorkspace)
+  classicAgent.install(session.defaultSession)
+  ipcMain.handle(IPC.classicAgent, (event, endpoint, payload) => { assertWindow(event); return classicAgent.call(event.sender, endpoint, payload) })
+  ipcMain.handle(IPC.productConnect, (event, connection) => {
+    assertWindow(event)
+    clearComputer(true)
+    classicAgent.revoke()
+    return remoteProduct.connect(connection)
+  })
   ipcMain.handle(IPC.productDisconnect, (event) => { assertWindow(event); return remoteProduct.disconnect() })
   ipcMain.handle(IPC.productStatus, (event) => { assertWindow(event); return remoteProduct.status() })
   ipcMain.handle(IPC.productCall, (event, endpoint, payload) => { assertWindow(event); return remoteProduct.call(endpoint, payload) })
@@ -483,26 +694,23 @@ async function start() {
   ipcMain.handle(IPC.browserViewClose, (event, botId, tabId) => { assertWindow(event); return botViews.operate(String(botId), 'close', { tabId: String(tabId) }) })
   ipcMain.handle(IPC.browserViewHold, (event, botId, held) => { assertWindow(event); return botViews.hold(String(botId), held === true) })
   // Cookie imports: a file or an installed browser's profile is parsed or harvested into a
-  // pending set first; only apply (the user's confirm) writes into the Bot's partition.
+  // pending set first; only apply (the user's confirm) writes into the resource partition.
   ipcMain.handle(IPC.browserImportSources, (event) => {
-    assertWindow(event)
+    assertLocalWindow(event)
     return listSources()
   })
   ipcMain.handle(IPC.browserImportPick, async (event) => {
-    assertWindow(event)
-    const picked = await dialog.showOpenDialog(mainWindow, {
+    const picked = await chooseImport(event, IMPORT_FILE_MAX, {
       properties: ['openFile'],
       filters: [{ name: 'Cookie files', extensions: ['txt', 'json', 'cookies'] }, { name: 'All files', extensions: ['*'] }],
     })
-    if (picked.canceled || !picked.filePaths[0]) return { canceled: true }
-    const buffer = await readFile(picked.filePaths[0])
-    if (buffer.length > IMPORT_FILE_MAX) return { error: 'too-large' }
-    const parsed = parseCookieFile(buffer)
+    if (!picked.bytes) return picked
+    const parsed = parseCookieFile(picked.bytes)
     if (!parsed.ok) return { error: parsed.error ?? 'unreadable', format: parsed.format }
-    return cookieImports.store(parsed, { kind: 'file', label: basename(picked.filePaths[0]) })
+    return cookieImports.store(parsed, { kind: 'file', label: picked.label })
   })
   ipcMain.handle(IPC.browserImportLive, async (event, sourceId, close) => {
-    assertWindow(event)
+    assertLocalWindow(event)
     const source = (await listSources()).find((item) => item.id === sourceId)
     if (!source) throw new Error(`${PRODUCT_NAME}: an unknown browser profile`)
     let outcome
@@ -513,36 +721,23 @@ async function start() {
       throw error
     }
     if (outcome.running) return { running: true, label: source.label, kind: source.kind }
+    if (!fromWindow(event) || remoteProduct.status().connected) return { canceled: true }
     const result = {
       format: 'live', entries: outcome.result.cookies.length + outcome.result.skipped.length,
       cookies: outcome.result.cookies, skipped: outcome.result.skipped, warnings: [], info: {},
     }
     return { ...cookieImports.store(result, { kind: source.kind, label: source.label }), restarted: outcome.restarted }
   })
-  ipcMain.handle(IPC.browserImportApply, async (event, key, id) => {
-    assertWindow(event)
-    if (typeof key !== 'string' || !key.startsWith('bot:')) throw new Error(`${PRODUCT_NAME}: a Bot storage key is required`)
-    const pending = cookieImports.take(typeof id === 'string' ? id : '')
-    if (!pending) throw new Error(`${PRODUCT_NAME}: this import is no longer pending`)
-    const storage = session.fromPartition(partitionOf(key))
-    return applyCookies(storage, pending.cookies)
-  })
   ipcMain.handle(IPC.browserImportCancel, (event, id) => {
     assertWindow(event)
     if (typeof id === 'string') cookieImports.drop(id)
   })
   ipcMain.handle(IPC.credentialImportPick, async event => {
-    assertWindow(event)
-    const picked = await dialog.showOpenDialog(mainWindow, { properties: ['openFile'],
+    const picked = await chooseImport(event, CREDENTIAL_IMPORT_FILE_MAX, { properties: ['openFile'],
       filters: [{ name: 'Credential export', extensions: ['json'] }] })
-    if (picked.canceled || !picked.filePaths[0]) return { canceled: true }
+    if (!picked.bytes) return picked
     try {
-      const path = picked.filePaths[0]
-      if ((await stat(path)).size > CREDENTIAL_IMPORT_FILE_MAX) return { error: 'too-large' }
-      const bytes = await readFile(path)
-      if (bytes.length > CREDENTIAL_IMPORT_FILE_MAX) return { error: 'too-large' }
-      const pending = credentialImports.store(bytes, basename(picked.filePaths[0]))
-      return pending
+      return credentialImports.store(picked.bytes, picked.label)
     } catch {
       return { error: 'unreadable' }
     }
@@ -558,15 +753,15 @@ async function start() {
     return updates?.state() ?? null
   })
   ipcMain.handle(IPC.appUpdateCheck, (event) => {
-    assertWindow(event)
+    assertLocalWindow(event)
     updates?.check()
   })
   ipcMain.handle(IPC.appUpdateInstall, async (event) => {
-    assertWindow(event)
+    assertLocalWindow(event)
     if (updates?.state().phase === 'downloaded') await installUpdate()
   })
   ipcMain.handle(IPC.appUpdateOpen, (event) => {
-    assertWindow(event)
+    assertLocalWindow(event)
     return openUpdatePage()
   })
   ipcMain.handle(IPC.backupList, event => {
@@ -588,11 +783,23 @@ async function start() {
     return { product: PRODUCT_NAME, appVersion: app.getVersion(), dshVersion, platform: process.platform, arch: process.arch,
       hostState, backupsAvailable: !managed(), events: (await operationsLog.read()).slice(-50).reverse() }
   })
+  ipcMain.handle(IPC.notify, (event, notice) => { assertWindow(event); notifications.show(notice) })
+  ipcMain.handle(IPC.notificationTake, event => { assertWindow(event); return notifications.takeOpen() })
+  ipcMain.on(IPC.setBadge, (event, count) => {
+    if (!fromWindow(event) || count !== 0 && count !== 1) return
+    badge = count === 1
+    updateBadge(mainWindow)
+  })
   // The product keeps the workspace; the app remembers it for path and data-move checks.
   ipcMain.on(IPC.teamWorkspace, (event, path) => {
-    if (fixed || !fromWindow(event) || typeof path !== 'string' || !isAbsolute(path)) return
-    places = { ...places, workspace: path }
-    saveLocations(places)
+    if (fixed || !fromWindow(event) || remoteProduct.status().connected || typeof path !== 'string' || !isAbsolute(path)) return
+    try {
+      const workspace = real(path)
+      if (workspaceProblem(workspace)) return
+      const next = { ...places, workspace }
+      saveLocations(next)
+      places = next
+    } catch { note('shell', 'WORKSPACE_LOCATION_NOT_SAVED') }
   })
   if (process.platform === 'win32') {
     // Windows ignores the alpha of the caption buttons' color, so they take the opaque color
@@ -617,31 +824,52 @@ async function start() {
   // is there once that load came through. The token is good for one browser only: it is spent
   // as soon as a window carries it.
   bootstrap = (async () => {
-    const { url } = await ready
+    const { url } = await ready ?? {}
+    if (!url) return false
     launchUrl = url
     const win = mainWindow
     if (win === undefined) return false
     tokenSpent = true
-    await win.loadURL(url)
-    hostReady = true
-    return true
-  })().catch(() => false)
+    hostReady = await loadProductPage(win, url)
+    return hostReady
+  })().catch(error => {
+    if (hostState === HOST_STATE.running && !shell.isQuitting()) void fail(error)
+    return false
+  })
+}
+
+async function showLocations() {
+  if (busyWithData() || remoteProduct.status().connected || !windowShown()) return
+  const t = text()
+  const fixed = Boolean(process.env.DS_SUPERAGENT_HOME)
+  const owner = mainWindow
+  const current = await readWorkspace()
+  if (!windowShown() || mainWindow !== owner) return
+  const buttons = fixed || !current ? [t.closeLocations] : [t.closeLocations, t.changeData]
+  const { response } = await dialog.showMessageBox(owner, { type: 'info', title: PRODUCT_NAME, message: t.locations,
+    detail: t.places(places.dataDir, current ?? places.workspace), buttons, defaultId: 0, cancelId: 0, noLink: true })
+  if (response === 1 && buttons.length > 1 && mainWindow === owner) await moveData(current)
 }
 
 // The data moves as a copy while the Host is stopped, and the app starts again on the new
 // folder; after a failed copy it starts again on the old one. The old folder stays.
 async function moveData(workspace) {
-  if (copying !== undefined || maintenance || stopping || mainWindow === undefined) return false
+  if (busyWithData() || !windowShown() || remoteProduct.status().connected) return false
+  moveDialog = true
+  try { return await chooseDataMove(workspace) }
+  finally { moveDialog = false }
+}
+
+async function chooseDataMove(workspace) {
   const t = text()
   const owner = mainWindow
-  const { canceled, filePaths } = await dialog.showOpenDialog(owner, { title: t.pickMove, defaultPath: dirname(places.dataDir), properties: ['openDirectory', 'createDirectory', 'promptToCreate'] })
-  if (canceled || filePaths[0] === undefined) return false
-  const to = resolve(filePaths[0])
+  const to = await pickDirectory(dialog, owner, { title: t.pickMove, defaultPath: dirname(places.dataDir), create: true })
+  if (!to || owner !== mainWindow || stopping || shell.isQuitting() || remoteProduct.status().connected) return false
   const dshHome = userDshHome()
-  // The workspace can move while a dialog is open; the window tells the latest one.
-  const refused = async () => {
-    for (const current of new Set([workspace, places.workspace])) {
-      const isolation = placeProblem(t, to)
+  const refused = async actual => {
+    const shellData = real(app.getPath('userData'))
+    for (const current of new Set([workspace, places.workspace, actual])) {
+      const isolation = within(to, shellData) || within(shellData, to) ? t.inDesktopData : placeProblem(t, to)
       const problem = isolation === undefined ? moveProblem({ from: places.dataDir, to, workspace: current,
         dshHome, program: app.isPackaged ? programFolder() : undefined }) : undefined
       const message = isolation ?? (problem === 'dsh' ? t.inDsh : t[MOVE_PROBLEMS[problem]])
@@ -651,40 +879,40 @@ async function moveData(workspace) {
     }
     return false
   }
-  if (await refused()) return false
+  const current = await readWorkspace()
+  if (!current || await refused(current)) return false
   const { response } = await dialog.showMessageBox(owner, { type: 'question', title: PRODUCT_NAME, noLink: true, message: t.moveConfirm(to), detail: t.moveDetail(places.dataDir), buttons: [t.move, t.cancel], defaultId: 0, cancelId: 1 })
-  if (response !== 0 || stopping || await refused()) return false
+  if (response !== 0) return false
+  const latest = await readWorkspace()
+  if (!latest || await refused(latest) || owner !== mainWindow || stopping || shell.isQuitting() || remoteProduct.status().connected) return false
   const signal = copyAbort.signal
   copying = (async () => {
     // The settings go away first, so that nothing moves the workspace from here on.
-    void mainWindow?.loadURL(notePage(t.moving)).catch(() => {})
+    void mainWindow?.loadURL(statusPage(t.moving, { lang: language() })).catch(() => {})
     try {
-      await stopHost()
+      await stopHost({ holdLock: true })
     } catch (error) {
       await dialog.showMessageBox({ type: 'warning', title: PRODUCT_NAME, message: t.moveFailed(error instanceof Error ? error.message : String(error)) })
       return
     }
     // The app may have heard of a workspace change while the Host stopped.
-    if (await refused()) {
+    if (await refused(latest)) {
+      unlockProductData()
       app.relaunch()
       return
     }
     mainWindow?.setProgressBar(2)
     try {
-      await copyData(places.dataDir, to, signal)
-      try {
-        saveLocations({ dataDir: to, workspace: places.workspace ?? workspace })
-      } catch (error) {
-        // Unused, the copy would only keep the folder from being chosen again.
-        await rm(to, { recursive: true, force: true, maxRetries: 5 }).catch((failure) => { console.error(failure) })
-        throw error
-      }
+      await copyData(places.dataDir, to, signal, () => saveLocations({ dataDir: to, workspace: latest }))
+      note('shell', 'DATA_LOCATION_MOVED')
     } catch (error) {
       if (signal.aborted) return
+      note('shell', 'DATA_LOCATION_MOVE_FAILED')
       console.error(error)
       await dialog.showMessageBox({ type: 'warning', title: PRODUCT_NAME, message: t.moveFailed(error instanceof Error ? error.message : String(error)) })
     } finally {
       mainWindow?.setProgressBar(-1)
+      unlockProductData()
     }
     app.relaunch()
   })()
@@ -693,9 +921,6 @@ async function moveData(workspace) {
   app.quit()
   return true
 }
-
-const notePage = message => `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html><meta charset="utf-8"><meta name="color-scheme" content="light dark">
-<body style="margin:0;height:100vh;display:grid;place-items:center;font:14px system-ui,sans-serif;background:Canvas;color:CanvasText">${message.replace(/[&<>]/gu, char => `&#${String(char.charCodeAt(0))};`)}</body>`)}`
 
 // Windows and a Linux AppImage update themselves; macOS and a Linux deb ask to download the new
 // version. Throwaway runs check only a given feed and never ask.
@@ -753,7 +978,8 @@ function startUpdates() {
 // A prompt that belongs to a window is not asked while the window is hidden or minimized: it
 // waits for the window to be on the screen again.
 function windowShown() {
-  return mainWindow !== undefined && !mainWindow.isDestroyed() && mainWindow.isVisible() && !mainWindow.isMinimized()
+  return startupScreen.window() === undefined && loadedWindows.has(mainWindow)
+    && !mainWindow.isDestroyed() && mainWindow.isVisible() && !mainWindow.isMinimized()
 }
 
 async function askRestartNow(version) {
@@ -775,7 +1001,7 @@ async function askDownloadNow(version) {
 
 // What the updater does when the user says yes. The answer may come later, when the window
 // is shown again; then the work is done here.
-async function installUpdate() { await updates?.install() }
+async function installUpdate(options) { await updates?.install(options) }
 
 function showUpdateFailure() {
   const message = localeText(UPDATE_TEXT).installFailed
@@ -871,6 +1097,14 @@ async function flushDeferredUpdate() {
   await downloadPrompt.flush()
 }
 
+function updateBadge(win) {
+  if (process.platform !== 'win32') {
+    app.setBadgeCount(badge ? 1 : 0)
+  } else if (win && !win.isDestroyed()) {
+    win.setOverlayIcon(badge ? nativeImage.createFromPath(trayIconFile()) : null, badge ? text().unread : '')
+  }
+}
+
 function createWindow() {
   const dark = nativeTheme.shouldUseDarkColors
   const win32 = process.platform === 'win32'
@@ -893,14 +1127,10 @@ function createWindow() {
     },
   })
   mainWindow = win
-  // A window that the shell has hidden, or that the app is leaving, stays out of sight.
-  win.once('ready-to-show', () => {
-    if (win.isDestroyed() || shell.isQuitting() || shell.isHidden(win)) return
-    win.show()
-  })
   win.on('page-title-updated', (event) => { event.preventDefault() })
   win.on('closed', () => {
     if (mainWindow !== win) return
+    classicAgent.revoke({ navigation: true })
     mainWindow = undefined
     // Browser resource tabs belonged to this window; they wait for the next one.
     botViews.release()
@@ -911,10 +1141,15 @@ function createWindow() {
   // The tabs that outlived the last window join this one.
   botViews.attach(win)
   const contents = win.webContents
+  contents.on('did-start-navigation', event => {
+    if (mainWindow === win && event.isMainFrame && !event.isSameDocument) classicAgent.revoke({ navigation: true })
+  })
+  contents.on('render-process-gone', () => { if (mainWindow === win) classicAgent.revoke({ navigation: true }) })
   // The session is the same for every window of the app, so the handler is bound once.
   if (!downloadsBound) {
     downloadsBound = true
-    contents.session.on('will-download', downloadSaver({ window: () => mainWindow, dialog, downloads: app.getPath('downloads') }))
+    contents.session.on('will-download', downloadSaver({ window: () => mainWindow, dialog, downloads: app.getPath('downloads'),
+      report: code => note('shell', code) }))
   }
   if (win32) {
     // Fullscreen hides the caption buttons, and the page drops its band meanwhile. A reload
@@ -926,10 +1161,14 @@ function createWindow() {
   }
   if (mica) {
     const css = readFileSync(join(here, 'mica.css'), 'utf8')
-    contents.on('dom-ready', () => { void contents.insertCSS(css) })
+    contents.on('dom-ready', () => {
+      if (trustedPage(contents.getURL())) void contents.insertCSS(css).catch(() => {})
+    })
   }
   const fonts = readFileSync(join(here, 'fonts.css'), 'utf8')
-  contents.on('dom-ready', () => { void contents.insertCSS(fonts) })
+  contents.on('dom-ready', () => {
+    if (trustedPage(contents.getURL())) void contents.insertCSS(fonts).catch(() => {})
+  })
   contents.setWindowOpenHandler(({ url }) => {
     // DSH's sign-in opens a blank window during the click and sends it to the sign-in page later.
     if (url === 'about:blank') return { action: 'allow', overrideBrowserWindowOptions: { show: false, webPreferences: { sandbox: true, webviewTag: false } } }
@@ -947,10 +1186,11 @@ function createWindow() {
     child.webContents.on('will-redirect', away)
   })
   contents.on('will-navigate', (event, url) => {
-    if (url.startsWith(`${origin}/`)) return
+    if (trustedPage(url)) return
     event.preventDefault()
     openOutside(url)
   })
+  contents.on('will-redirect', (event, url) => { if (!trustedPage(url)) event.preventDefault() })
   if (!app.isPackaged) {
     contents.on('before-input-event', (_event, input) => {
       if (input.type === 'keyDown' && (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i'))) contents.toggleDevTools()
@@ -960,40 +1200,67 @@ function createWindow() {
   // minimized asks for it when it comes back.
   win.on('show', () => { void flushDeferredUpdate().catch((error) => { console.error(error) }) })
   win.on('restore', () => { void flushDeferredUpdate().catch((error) => { console.error(error) }) })
-  void win.loadURL(notePage(text().starting)).catch(() => {})
   return win
 }
 
 // The window is gone for good: a new one takes its place and talks to the Host that runs.
 function rebuildWindow() {
   const win = createWindow()
-  void connectHost(win).catch((error) => { console.error(error) })
+  void connectHost(win).catch(fail)
   return win
+}
+
+async function loadProductPage(win, url) {
+  if (win.isDestroyed() || shell.isQuitting()) return false
+  if (!trustedPage(url)) throw new Error('The Host returned an invalid local launch address.')
+  try { await win.loadURL(url) }
+  catch {
+    if (win.isDestroyed() || win !== mainWindow || shell.isQuitting()) return false
+    note('shell', 'PRODUCT_WINDOW_LOAD_FAILED')
+    throw new Error('The product window could not load. Check the local Host and try again.')
+  }
+  if (win.isDestroyed() || win !== mainWindow || shell.isQuitting()) return false
+  const firstLoad = !loadedWindows.has(win)
+  const start = startupScreen.window()
+  if (start && !shell.isHidden(win)) {
+    const current = () => !failed && !win.isDestroyed() && win === mainWindow && !shell.isQuitting()
+    const state = await waitForMainView(win.webContents).catch(error => { if (current()) throw error })
+    if (!current()) return false
+    loadedWindows.add(win)
+    if (!shell.isHidden(win)) {
+      if (state && start === startupScreen.window()) {
+        await handoffMain(win, start, state.reducedMotion, () => current() && !shell.isHidden(win))
+      } else win.show()
+    }
+    if (!current()) return false
+  } else {
+    loadedWindows.add(win)
+    if (firstLoad && !shell.isHidden(win)) win.show()
+  }
+  startupScreen.close()
+  updateBadge(win)
+  if (start) void flushDeferredUpdate().catch(error => console.error(error))
+  return true
 }
 
 // The window talks to the Host that runs. The first one trades the launch URL for the Host's
 // cookie; the later ones use the plain address, which that cookie carries. The launch URL is
 // used again only when no browser carried it at all, so that a token is never spent twice.
 async function connectHost(win) {
-  if (hostReady) { await win.loadURL(`${origin}/`); return }
-  // The first load of the Host decides how this window comes in.
   if (bootstrap !== undefined) await bootstrap
-  if (hostReady) { await win.loadURL(`${origin}/`); return }
-  // The first load never came through. The cookie may be there anyway: it belongs to the
-  // session of the browser, which outlives the window.
-  if (await hostCookie()) {
-    hostReady = true
-    await win.loadURL(`${origin}/`)
+  if (win.isDestroyed() || win !== mainWindow) return
+  if (hostReady) {
+    await loadProductPage(win, `${origin}/`)
     return
   }
-  // There is no cookie: the launch URL is the one way in, and only while it was not used.
   if (launchUrl !== undefined && !tokenSpent) {
     tokenSpent = true
-    await win.loadURL(launchUrl)
-    hostReady = true
+    hostReady = await loadProductPage(win, launchUrl)
     return
   }
-  await win.loadURL(`${origin}/`)
+  const hasCookie = await hostCookie()
+  const loaded = await loadProductPage(win, `${origin}/`)
+  hostReady = hasCookie && loaded
 }
 
 // The Host's cookie: the launch URL trades its token for it. The app does not need to know
@@ -1050,7 +1317,14 @@ function setMenu() {
 function assertWindow(event) {
   const contents = mainWindow?.webContents
   if (contents === undefined || event.sender !== contents || event.senderFrame !== contents.mainFrame
-    || !event.senderFrame.url.startsWith(`${origin}/`)) throw new Error(`${PRODUCT_NAME}: rejected IPC from an unknown page`)
+    || !trustedPage(event.senderFrame?.url)) throw new Error(`${PRODUCT_NAME}: rejected IPC from an unknown page`)
+}
+
+function trustedPage(url) { return origin !== undefined && typeof url === 'string' && url.startsWith(`${origin}/`) }
+
+function assertLocalWindow(event) {
+  assertWindow(event)
+  if (remoteProduct.status().connected) throw new Error('This action is available on the local desktop Host only.')
 }
 
 function fromWindow(event) {
@@ -1062,7 +1336,7 @@ function openOutside(url) {
 }
 
 // The computer woke: the Host may have survived, or it may have to be replaced. A window that
-// was closed while the Bots worked loads what it missed.
+// was closed while SuperAgent worked loads what it missed.
 async function resumeHost() {
   suspended = false
   if (stopping || failed || host === undefined) return
@@ -1105,6 +1379,7 @@ async function relaunchHost(cause, { rollback = false } = {}) {
   failed = false
   hostState = HOST_STATE.starting
   shell.refresh()
+  if (startupScreen.window() || !loadedWindows.has(mainWindow)) void startupScreen.show(text().starting)
   hostReady = false
   tokenSpent = false
   launchUrl = undefined
@@ -1130,21 +1405,23 @@ async function askStartupAction(error, next) {
     && await pendingProductRestore({ home: profileHome(places.dataDir) }).catch(() => false)
   const log = (await operationsLog.read().catch(() => [])).slice(-6)
   const diagnostics = log.map(event => `${new Date(event.at).toLocaleString()}  ${event.code}${event.version ? ` · ${event.version}` : ''}`)
-  const buttons = hostFactory ? [t.tryAgain, t.quit] : [t.quit]
-  if (canRollback) buttons.push(localeText(UPDATE_TEXT).rollbackRestore)
+  const actions = []
+  if (hostFactory) actions.push({ action: 'retry', label: t.tryAgain })
+  actions.push({ action: 'quit', label: t.quit })
+  if (canRollback) actions.push({ action: 'rollback', label: localeText(UPDATE_TEXT).rollbackRestore })
+  const detail = [String(error?.message ?? error) + next, diagnostics.join('\n')].filter(Boolean).join('\n\n')
+  const action = await startupScreen.show(t.notStarted, { detail, actions })
+  if (action || shell.isQuitting()) return action ?? 'quit'
   const { response } = await dialog.showMessageBox({
     type: 'error', title: PRODUCT_NAME, noLink: true,
-    message: t.notStarted,
-    detail: [String(error?.message ?? error) + next, diagnostics.join('\n')].filter(Boolean).join('\n\n'),
-    buttons, defaultId: 0, cancelId: hostFactory ? 1 : 0,
+    message: t.notStarted, detail, buttons: actions.map(choice => choice.label), defaultId: 0, cancelId: hostFactory ? 1 : 0,
   })
-  if (canRollback && response === 2) return 'rollback'
-  return hostFactory && response === 0 ? 'retry' : 'quit'
+  return actions[response]?.action ?? 'quit'
 }
 
 async function fail(error) {
+  if (failed || stopping || shell.isQuitting()) return
   console.error(error)
-  if (failed || stopping) return
   failed = true
   hostState = HOST_STATE.failed
   shell.refresh()
@@ -1166,8 +1443,8 @@ async function fail(error) {
       catch { showUpdateFailure() }
     }
   }
-  if (hostState === HOST_STATE.running) return
   const action = await askStartupAction(error, next)
+  if (shell.isQuitting()) return
   if (action !== 'quit') { await relaunchHost(undefined, { rollback: action === 'rollback' }); return }
   app.quit()
 }

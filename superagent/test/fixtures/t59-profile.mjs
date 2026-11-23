@@ -1,4 +1,6 @@
 import * as Profile from '../../dist/profile.js'
+import { join } from 'node:path'
+import LocalCredentials from '@deepseek-ai/dsh-credentials-local'
 import { nativeContext, textResponse } from '../../dev/native-mock.mjs'
 
 const args = process.argv.slice(2)
@@ -13,6 +15,7 @@ try {
     if (request.model !== 'main') throw new Error('Ordinary chat must call Main.')
     yield* textResponse('Hello from the independent Main.')
   })
+  await native.plugin(LocalCredentials, { path: join(home, 'fixture-credentials.yaml'), watch: false })
   await native.plugin(Profile, {
     main: { provider: 'mock', model: 'main' },
     router: { provider: 'mock', model: 'router' },

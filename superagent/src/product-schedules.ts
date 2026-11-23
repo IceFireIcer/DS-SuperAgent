@@ -8,6 +8,7 @@ import type { AsyncTx, Storage } from './storage.js'
 export type ScheduleWhen = { kind: 'at'; at: number } | { kind: 'every'; minutes: number }
   | { kind: 'daily'; time: string } | { kind: 'weekly'; time: string; weekdays: number[] }
 export type ScheduleTarget = { kind: 'main' } | { kind: 'work'; workItemId: string; ticketId: string }
+export type ScheduleFamily = 'calendar' | 'task'
 export interface ProductSchedule {
   ruleId: string
   instanceId: string
@@ -53,7 +54,8 @@ const occurrenceKey = (ruleId: string, dueAt: number) => `${occurrencePrefix(rul
 export const scheduledOccurrenceKey = occurrenceKey
 const dayMs = 86_400_000
 const catchUpMs = dayMs
-const sourceKey = 'product-schedule-source'
+const sourceKey = (family: ScheduleFamily) => family === 'task' ? 'product-task-source' : 'product-schedule-source'
+const familyOf = (ruleId: string): ScheduleFamily => ruleId.startsWith('task-') ? 'task' : 'calendar'
 
 function timeMinutes(time: string): number {
   if (typeof time !== 'string' || !/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/u.test(time)) {
@@ -121,11 +123,15 @@ function latestDue(rule: ProductSchedule, now: number): number {
   return rule.nextAt!
 }
 
+export async function scheduleSourceEnabled(tx: AsyncTx, event: SourceEvent) {
+  const ruleId = event.source.sourceInstanceId.startsWith('schedule:') ? event.source.sourceInstanceId.slice('schedule:'.length) : ''
+  return (await tx.get<{ enabled: boolean }>('product-schedule-source', sourceKey(familyOf(ruleId))))?.enabled !== false
+}
+
 export async function authorizedScheduleEvent(tx: AsyncTx, event: SourceEvent, authorizedBy: string, target: ScheduleTarget['kind']) {
-  const source = await tx.get<{ enabled: boolean }>('product-schedule-source', sourceKey)
   const ruleId = event.source.sourceInstanceId.startsWith('schedule:') ? event.source.sourceInstanceId.slice('schedule:'.length) : ''
   const rule = ruleId && await tx.get<ProductSchedule>('product-schedule', key(ruleId))
-  if (source?.enabled === false || !rule || rule.instanceId !== tx.instanceId || rule.authorizedBy !== authorizedBy || rule.target.kind !== target
+  if (!rule || !await scheduleSourceEnabled(tx, event) || rule.instanceId !== tx.instanceId || rule.authorizedBy !== authorizedBy || rule.target.kind !== target
     || rule.status === 'cancelled' || event.source.kind !== 'schedule' || event.source.actorId !== 'schedule'
     || event.authorKind !== 'system' || event.authorId !== 'schedule' || event.addressing !== 'direct'
     || event.threadId !== `schedule:${ruleId}` || event.objectId !== `occurrence:${event.version.value}`
@@ -149,32 +155,33 @@ export class ProductSchedules {
     if (instanceId !== this.instanceId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The schedule belongs to a different Instance.')
   }
 
-  async sourceState(request: { instanceId: string }) {
+  async sourceState(request: { instanceId: string }, family: ScheduleFamily = 'calendar') {
     this.authorize(request?.instanceId)
     return this.storage.transaction(this.instanceId, async tx => ({ enabled:
-      (await tx.get<{ enabled: boolean }>('product-schedule-source', sourceKey))?.enabled !== false }))
+      (await tx.get<{ enabled: boolean }>('product-schedule-source', sourceKey(family)))?.enabled !== false }))
   }
 
-  async setSource(command: { instanceId: string; commandId: string; enabled: boolean }) {
+  async setSource(command: { instanceId: string; commandId: string; enabled: boolean }, family: ScheduleFamily = 'calendar') {
     if (!command || Object.keys(command).some(field => !['instanceId', 'commandId', 'enabled'].includes(field))
       || typeof command.enabled !== 'boolean') throw new CoreError('INVALID_INPUT', 'Schedule source control needs an enabled state.')
     this.authorize(command.instanceId); identifier(command.commandId, 'commandId')
     return commandTransaction(this.storage, this.instanceId, async tx => {
       const fingerprint = createHash('sha256').update(canonicalJson(['schedule-source-v1', command.enabled])).digest('hex')
-      const prior = await tx.get<{ fingerprint: string; enabled: boolean }>('product-schedule-command', `source:${command.commandId}`)
+      const receiptKey = `${family === 'task' ? 'task-source' : 'source'}:${command.commandId}`
+      const prior = await tx.get<{ fingerprint: string; enabled: boolean }>('product-schedule-command', receiptKey)
       if (prior) {
         if (prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'This source control was reused for another state.')
         return { enabled: prior.enabled }
       }
-      if (!await tx.replace('product-schedule-source', sourceKey, { enabled: command.enabled, updatedAt: this.now() })) {
-        await tx.insert('product-schedule-source', sourceKey, { enabled: command.enabled, updatedAt: this.now() })
+      if (!await tx.replace('product-schedule-source', sourceKey(family), { enabled: command.enabled, updatedAt: this.now() })) {
+        await tx.insert('product-schedule-source', sourceKey(family), { enabled: command.enabled, updatedAt: this.now() })
       }
-      await tx.insert('product-schedule-command', `source:${command.commandId}`, { fingerprint, enabled: command.enabled })
+      await tx.insert('product-schedule-command', receiptKey, { fingerprint, enabled: command.enabled })
       return { enabled: command.enabled }
     })
   }
 
-  async create(command: ScheduleCreate): Promise<ProductSchedule> {
+  async create(command: ScheduleCreate, family: ScheduleFamily = 'calendar'): Promise<ProductSchedule> {
     if (!command || Object.keys(command).some(field => !['instanceId', 'commandId', 'title', 'text', 'timezone', 'when', 'target'].includes(field))) {
       throw new CoreError('INVALID_INPUT', 'Creating a schedule accepts a title, request, timezone, timing and target.')
     }
@@ -194,10 +201,12 @@ export class ProductSchedules {
       throw new CoreError('INVALID_INPUT', 'Choose Main or one exact authorized work item.')
     }
     if (target.kind === 'work') { identifier(target.workItemId, 'workItemId'); identifier(target.ticketId, 'ticketId') }
-    const id = `schedule-${createHash('sha256').update(JSON.stringify([this.instanceId, this.actorId, command.commandId])).digest('hex')}`
+    if (family === 'task' && target.kind !== 'main') throw new CoreError('INVALID_INPUT', 'A scheduled task must target Main.')
+    const id = `${family === 'task' ? 'task' : 'schedule'}-${createHash('sha256').update(JSON.stringify([this.instanceId, this.actorId, command.commandId])).digest('hex')}`
+    const receiptKey = `${family === 'task' ? 'task-create' : 'create'}:${command.commandId}`
     const fingerprint = createHash('sha256').update(canonicalJson(command)).digest('hex')
     return commandTransaction(this.storage, this.instanceId, async tx => {
-      const prior = await tx.get<{ fingerprint: string; ruleId: string }>('product-schedule-command', `create:${command.commandId}`)
+      const prior = await tx.get<{ fingerprint: string; ruleId: string }>('product-schedule-command', receiptKey)
       if (prior) {
         if (prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'This schedule command was reused for different input.')
         const existing = await tx.get<ProductSchedule>('product-schedule', key(prior.ruleId))
@@ -212,21 +221,21 @@ export class ProductSchedules {
         status: 'active', createdAt, updatedAt: createdAt,
         nextAt: nextAt({ when, timezone: command.timezone, createdAt }, createdAt) }
       await tx.insert('product-schedule', key(id), rule)
-      await tx.insert('product-schedule-command', `create:${command.commandId}`, { fingerprint, ruleId: id })
+      await tx.insert('product-schedule-command', receiptKey, { fingerprint, ruleId: id })
       return rule
     })
   }
 
-  async cancel(command: { instanceId: string; commandId: string; ruleId: string }) {
+  async cancel(command: { instanceId: string; commandId: string; ruleId: string }, family: ScheduleFamily = 'calendar') {
     if (!command || Object.keys(command).some(field => !['instanceId', 'commandId', 'ruleId'].includes(field))) throw new CoreError('INVALID_INPUT', 'Cancel one schedule by ID.')
     this.authorize(command.instanceId); identifier(command.commandId, 'commandId'); identifier(command.ruleId, 'ruleId')
     return commandTransaction(this.storage, this.instanceId, async tx => {
-      const commandKey = `cancel:${command.commandId}`
+      const commandKey = `${family === 'task' ? 'task-cancel' : 'cancel'}:${command.commandId}`
       const fingerprint = createHash('sha256').update(canonicalJson(['schedule-cancel-v1', command.ruleId])).digest('hex')
       const prior = await tx.get<{ fingerprint: string }>('product-schedule-command', commandKey)
       if (prior && prior.fingerprint !== fingerprint) throw new CoreError('IDENTITY_CONFLICT', 'This schedule cancellation was reused for a different rule.')
       const rule = await tx.get<ProductSchedule>('product-schedule', key(command.ruleId))
-      if (!rule || rule.authorizedBy !== this.actorId) throw new CoreError('NOT_FOUND', 'This schedule is unavailable.')
+      if (!rule || rule.authorizedBy !== this.actorId || familyOf(rule.ruleId) !== family) throw new CoreError('NOT_FOUND', 'This schedule is unavailable.')
       if (rule.status === 'cancelled') {
         if (!prior) await tx.insert('product-schedule-command', commandKey, { fingerprint, ruleId: rule.ruleId })
         return rule
@@ -238,14 +247,15 @@ export class ProductSchedules {
     })
   }
 
-  async list(request: { instanceId: string }) {
+  async list(request: { instanceId: string }, family: ScheduleFamily | 'all' = 'calendar') {
     this.authorize(request?.instanceId)
     return this.storage.transaction(this.instanceId, async tx => {
       const items: ProductSchedule[] = []
       let after = ''
       for (let page = 0; page < 10; page++) {
         const batch = await tx.scan<ProductSchedule>('product-schedule', { limit: 100, after })
-        items.push(...batch.items.map(entry => entry.value).filter(rule => rule.authorizedBy === this.actorId))
+        items.push(...batch.items.map(entry => entry.value).filter(rule => rule.authorizedBy === this.actorId
+          && (family === 'all' || familyOf(rule.ruleId) === family)))
         if (!batch.cursor) return { items }
         after = batch.cursor
       }
@@ -253,11 +263,11 @@ export class ProductSchedules {
     })
   }
 
-  async get(request: { instanceId: string; ruleId: string }) {
+  async get(request: { instanceId: string; ruleId: string }, family: ScheduleFamily = 'calendar') {
     this.authorize(request?.instanceId); identifier(request.ruleId, 'ruleId')
     return this.storage.transaction(this.instanceId, async tx => {
       const rule = await tx.get<ProductSchedule>('product-schedule', key(request.ruleId))
-      if (!rule || rule.authorizedBy !== this.actorId) throw new CoreError('NOT_FOUND', 'This schedule is unavailable.')
+      if (!rule || rule.authorizedBy !== this.actorId || familyOf(rule.ruleId) !== family) throw new CoreError('NOT_FOUND', 'This schedule is unavailable.')
       const occurrences: ScheduledOccurrence[] = []
       let after = occurrencePrefix(rule.ruleId)
       for (let page = 0; page < 10; page++) {
@@ -295,13 +305,16 @@ export class ProductSchedules {
 
   async tick(now = this.now()) {
     if (!Number.isSafeInteger(now)) throw new CoreError('INVALID_INPUT', 'A schedule tick needs a safe millisecond timestamp.')
-    if (!(await this.sourceState({ instanceId: this.instanceId })).enabled) return { occurrences: [] }
-    const { items } = await this.list({ instanceId: this.instanceId })
+    const enabled = new Map(await Promise.all((['calendar', 'task'] as const).map(async family =>
+      [family, (await this.sourceState({ instanceId: this.instanceId }, family)).enabled] as const)))
+    const { items: all } = await this.list({ instanceId: this.instanceId }, 'all')
+    const items = all.filter(rule => enabled.get(familyOf(rule.ruleId)))
     const processed: ScheduledOccurrence[] = []
     for (const item of items.filter(rule => rule.status === 'active')) {
       const occurrence = await commandTransaction(this.storage, this.instanceId, async tx => {
         const rule = await tx.get<ProductSchedule>('product-schedule', key(item.ruleId))
         if (!rule || rule.status !== 'active' || rule.nextAt === undefined || rule.nextAt > now) return undefined
+        if ((await tx.get<{ enabled: boolean }>('product-schedule-source', sourceKey(familyOf(rule.ruleId))))?.enabled === false) return undefined
         const latest = latestDue(rule, now)
         if (latest > rule.nextAt) {
           const missed: ScheduledOccurrence = { ruleId: rule.ruleId, dueAt: rule.nextAt, throughAt: latest,
@@ -355,7 +368,7 @@ export class ProductSchedules {
         } catch (error) {
           const latest = await this.storage.transaction(this.instanceId, async tx => ({
             rule: await tx.get<ProductSchedule>('product-schedule', key(rule.ruleId)),
-            source: await tx.get<{ enabled: boolean }>('product-schedule-source', sourceKey),
+            source: await tx.get<{ enabled: boolean }>('product-schedule-source', sourceKey(familyOf(rule.ruleId))),
           }))
           const patch: Partial<ScheduledOccurrence> = latest.rule?.status === 'cancelled'
             ? { status: 'cancelled', reason: 'SCHEDULE_CANCELLED' }

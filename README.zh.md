@@ -9,7 +9,9 @@
 
 [English](README.md) | 中文
 
-![版本](https://img.shields.io/badge/版本-R5_预览-blue) ![DSH](https://img.shields.io/badge/DSH-0.2.1--rc.4-4D6BFE) ![许可](https://img.shields.io/badge/许可-Apache_2.0-green)
+作者与维护者：[IceFireIcer](https://github.com/IceFireIcer)。
+
+![版本](https://img.shields.io/badge/版本-R5_预览-blue) ![DSH](https://img.shields.io/badge/DSH-0.2.2--rc.1-4D6BFE) ![许可](https://img.shields.io/badge/许可-Apache_2.0-green)
 
 DS SuperAgent 是面向 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的三层 Agent
 产品。一个 **Main** 留在主对话中并拥有用户意图；**Router** 把已接受工作转成持久 Ticket；独立 **Worker**
@@ -24,6 +26,11 @@ DS SuperAgent 是面向 [DeepSeek Harness](https://github.com/deepseek-ai/deepse
 - 执行目标可为本机 Host 或已配对远端设备；选择使用明确的候选能力探测，不会在两类执行世界之间静默回退。
 - 桌面应用只使用一个 `ds-superagent` DSH profile、自己的数据目录和现有 DSH Web 前端，不写用户的 `~/.dsh`。
 
+## 连接手机
+
+[Expo 手机端](mobile/README.md)通过加密中继连接 Main。默认配对只能查看；发送消息需要在电脑上显式授权。
+手机端不能管理桌面操控、凭据或文件。目前从源码构建，未提供应用商店版本。
+
 ## 启动桌面应用
 
 [桌面安装包](app/README.md)在 Windows、macOS 和 Linux 上安装 **DS SuperAgent**。Windows 也可以从源码启动：
@@ -33,11 +40,15 @@ DS SuperAgent 是面向 [DeepSeek Harness](https://github.com/deepseek-ai/deepse
 ```
 
 首次启动会询问数据目录和工作区，默认分别为 `~/.ds-superagent` 和 `~/DS SuperAgent`，随后打开 Main。
-发送工作前，在设置中配置服务商凭据，并为 Main、Router 和 Worker 选择模型。旧版产品资料和个人 DSH 文件保留在原处。
+发送工作前，在设置中配置服务商凭据，并为 Main、Router 和 Worker 选择模型。桌面版可独立使用，拥有自己的浏览器存储键和数据目录。
+旧版产品资料和个人 DSH 文件保留在原处。
+
+桌面版发布要求见[发版清单](docs/dev/release-checklist.md)，Windows 验收进度见
+[桌面迁移记录](docs/superagent/implementation/dsbot-port-162-164.md)。
 
 ## 从当前仓库运行
 
-使用 Node.js 24。应用从本仓库安装唯一的 `ds-superagent` 产品包：
+使用 Node.js 24 系列的 24.9 或更新版本。应用从本仓库安装唯一的 `ds-superagent` 产品包：
 
 ```powershell
 npm --prefix superagent ci
@@ -76,6 +87,7 @@ node app/scripts/check-superagent-profile.mjs
 |---|---|
 | `superagent/` | 唯一的 DSH 包：Engine、持久业务库、Host、产品 HTTP 桥、现有客户端 UI、Office 工具和 Web 搜索 provider |
 | `app/` | Electron 外壳、单一产品 profile、数据隔离、进程生命周期与打包 |
+| `mobile/` | Expo 手机端：配对、Main 对话和只读工作状态 |
 | `docs/superagent/` | R5 规格、实施记录与环境证据 |
 
 R5-34 已删除旧 roster、群/round、Agent 互派、团队治理、原生历史写入口、activation/reversal 与双 profile

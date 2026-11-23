@@ -1,5 +1,6 @@
 import { createElement as h, useEffect, useState } from 'react'
 import { Card, SwitchRow } from './product-card.js'
+import { EmptyState, FieldRow, InlineNotice, StatusChip } from './product-settings-components.js'
 import { t } from './i18n.js'
 
 const stateText = { running: 'Preparing', observed: 'Would prepare', prepared: 'Ready for review',
@@ -144,10 +145,12 @@ export function ProductProactiveSettings({ binding, call }) {
   const [runs, setRuns] = useState([])
   const [before, setBefore] = useState(null)
   const [draft, setDraft] = useState(null)
+  const [draftRevision, setDraftRevision] = useState(null)
   const [selected, setSelected] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [readError, setReadError] = useState('')
   const refresh = async () => {
     const [rules, history] = await Promise.all([
       call('proactive-rules', { instanceId: binding.instanceId }), call('proactive-list', { instanceId: binding.instanceId }),
@@ -156,7 +159,7 @@ export function ProductProactiveSettings({ binding, call }) {
     setRuns(current => [...new Map([...current, ...history.items].map(run => [run.id, run])).values()]
       .sort((left, right) => right.createdAt - left.createdAt || right.id.localeCompare(left.id)))
     setBefore(current => current ?? history.before ?? null)
-    setError('')
+    setReadError('')
   }
   const loadOlder = async () => {
     if (!before || busy) return
@@ -169,15 +172,16 @@ export function ProductProactiveSettings({ binding, call }) {
   }
   useEffect(() => {
     let live = true
-    void refresh().catch(failure => { if (live) setError(failure.message) })
-    const timer = setInterval(() => { void refresh().catch(() => {}) }, 15_000)
+    const load = () => refresh().catch(failure => { if (live) setReadError(failure.message) })
+    void load()
+    const timer = setInterval(() => { void load() }, 15_000)
     return () => { live = false; clearInterval(timer) }
   }, [binding.instanceId])
-  const save = async rules => {
+  const save = async (rules, expectedRevision = snapshot.revision) => {
     setBusy(true); setError('')
     try {
       await call('proactive-save', { instanceId: binding.instanceId, commandId: crypto.randomUUID(),
-        expectedRevision: snapshot.revision, rules })
+        expectedRevision, rules })
       setDraft(null); await refresh()
     } catch (failure) {
       setError(failure.code === 'CONFIG_REVISION_CONFLICT' ? t('Rules changed elsewhere. Review the latest version and save again.') : failure.message)
@@ -198,12 +202,15 @@ export function ProductProactiveSettings({ binding, call }) {
     void save(snapshot.rules.filter(rule => rule.id !== ruleId))
   }
   const sourceFor = id => snapshot.sources.find(source => source.sourceInstanceId === id)
-  const edit = rule => setDraft(rule ? structuredClone(rule) : {
-    id: `review-${crypto.randomUUID().slice(0, 8)}`, name: '', mode: 'observe', enabled: true,
-    match: { actorKinds: snapshot.sources[0].kind === 'github' ? ['bot', 'ci'] : ['bot'],
-      addressing: ['direct', 'mention'], sourceInstanceIds: [snapshot.sources[0].sourceInstanceId] },
-    scope: '', communication: 'silent', budget: { maxRuns: 2, windowMs: 3_600_000, maxArtifactBytes: 65_536 },
-  })
+  const edit = rule => {
+    setDraftRevision(snapshot.revision)
+    setDraft(rule ? structuredClone(rule) : {
+      id: `review-${crypto.randomUUID().slice(0, 8)}`, name: '', mode: 'observe', enabled: true,
+      match: { actorKinds: snapshot.sources[0].kind === 'github' ? ['bot', 'ci'] : ['bot'],
+        addressing: ['direct', 'mention'], sourceInstanceIds: [snapshot.sources[0].sourceInstanceId] },
+      scope: '', communication: 'silent', budget: { maxRuns: 2, windowMs: 3_600_000, maxArtifactBytes: 65_536 },
+    })
+  }
   const update = (path, value) => setDraft(current => {
     const next = structuredClone(current)
     let part = next
@@ -216,20 +223,24 @@ export function ProductProactiveSettings({ binding, call }) {
     const next = { ...draft, name: draft.name.trim(), scope: draft.scope?.trim() || undefined,
       match: { ...draft.match, textPattern: draft.match.textPattern?.trim() || undefined } }
     const rules = snapshot.rules.filter(rule => rule.id !== next.id)
-    void save([...rules, next])
+    void save([...rules, next], draftRevision)
   }
-  return h('section', { className: 'bt-product-preparations', 'aria-label': t('Proactive preparation') },
+  const staleDraft = draft && draftRevision !== snapshot?.revision
+  return h('section', { className: 'bt-ps-content bt-product-preparations', 'aria-label': t('Proactive preparation') },
     h(Card, { title: t('Proactive preparation') },
       h(SwitchRow, { label: t('Pause proactive preparation'), on: snapshot?.control.paused ?? false,
         hint: t('Paused preparations cannot submit a result. Existing work continues.'), disabled: busy || !snapshot,
         onChange: value => { void pause(value) } }),
       h('p', null, t('Rules use an authenticated source event. Preparation cannot send messages, create PRs or merge changes.')),
       snapshot?.sources.length ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: busy,
-        onClick: () => edit(null) }, t('New rule')) : h('p', null, t('Configure a source to enable preparation rules.'))),
-    error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
+        onClick: () => edit(null) }, t('New rule')) : snapshot ? h(InlineNotice, { tone: 'warn' }, t('Configure a source to enable preparation rules.')) : null),
+    error || readError ? h(InlineNotice, { tone: 'danger', action: readError ? h('button', { type: 'button', className: 'bt-soft',
+      onClick: () => { void refresh().catch(failure => setReadError(failure.message)) } }, t('Retry')) : null }, error || readError)
+      : !snapshot ? h(InlineNotice, { tone: 'neutral' }, t('Loading…')) : null,
     snapshot?.rules.map(rule => h(Card, { key: rule.id, title: rule.name },
-      h('p', null, `${rule.enabled ? t(rule.mode === 'auto' ? 'Auto' : 'Observe') : t('Off')} · ${rule.match.sourceInstanceIds?.join(', ') ?? ''}`),
-      h('p', null, `${t('Run budget')}: ${rule.budget.maxRuns} / ${rule.budget.windowMs / 3_600_000} h`),
+      h(FieldRow, { label: rule.match.sourceInstanceIds?.join(', '),
+        control: h(StatusChip, { tone: rule.enabled ? 'accent' : 'neutral' }, rule.enabled ? t(rule.mode === 'auto' ? 'Auto' : 'Observe') : t('Off')) }),
+      h(FieldRow, { label: t('Run budget'), control: `${rule.budget.maxRuns} / ${rule.budget.windowMs / 3_600_000} h` }),
       h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: busy, onClick: () => edit(rule) }, t('Edit rule')),
       h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: busy,
         onClick: () => { void save(snapshot.rules.map(item => item.id === rule.id ? { ...item, enabled: !item.enabled } : item)) } },
@@ -264,14 +275,15 @@ export function ProductProactiveSettings({ binding, call }) {
       h('label', null, t('Max file bytes'), h('input', { type: 'number', min: 1024, max: 10485760, required: true,
         className: 'bt-bs-input', value: draft.budget.maxArtifactBytes,
         onChange: event => update(['budget', 'maxArtifactBytes'], Number(event.target.value)) })),
-      h('div', { className: 'bt-actions' }, h('button', { type: 'submit', className: 'bt-soft', disabled: busy || !draft.match.actorKinds.length }, t('Save rule')),
+      staleDraft ? h(InlineNotice, { tone: 'warn' }, t('Rules changed elsewhere. Close this draft and reopen the rule before saving.')) : null,
+      h('div', { className: 'bt-actions' }, h('button', { type: 'submit', className: 'bt-soft', disabled: busy || staleDraft || !draft.match.actorKinds.length }, t('Save rule')),
         h('button', { type: 'button', className: 'bt-soft', onClick: () => setDraft(null) }, t('Cancel')))) : null,
     h(Card, { title: t('Preparation history') },
       runs.length ? runs.map(run => h('div', { key: run.id, className: 'bt-product-preparation-row' },
         h('strong', null, `${run.ruleId} · ${t(stateText[run.state] ?? run.state)}`),
         h('span', null, run.summary || run.reason || run.eventId),
         h('button', { type: 'button', className: 'bt-soft bt-soft-sm', onClick: () => setSelected(run.id) }, t('Review'))))
-        : h('p', null, t('No preparations yet.')),
+        : snapshot ? h(EmptyState, { title: t('No preparations yet.') }) : null,
       before ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: busy,
         onClick: () => { void loadOlder() } }, t('Load earlier preparations')) : null,
       selected ? h(ProactiveReview, { key: selected, runId: selected, instanceId: binding.instanceId,
@@ -279,17 +291,16 @@ export function ProductProactiveSettings({ binding, call }) {
 }
 
 export const PRODUCT_PROACTIVE_CSS = `
-.bt-product-preparations{display:grid;gap:12px}
-.bt-product-preparations p{margin:8px 0;font-size:13px;line-height:18px}
+.bt-product-preparations p{font-size:var(--bt-ps-text);line-height:18px}
 .bt-product-preparation-form{display:grid;gap:12px}
-.bt-product-preparation-form label{display:grid;gap:6px;font-size:13px}
+.bt-product-preparation-form label{display:grid;gap:6px;font-size:var(--bt-ps-text)}
 .bt-product-preparation-form fieldset{border:1px solid var(--bt-line);display:flex;gap:12px;flex-wrap:wrap}
 .bt-product-preparation-form fieldset label{display:flex;align-items:center}
-.bt-product-preparation-row{display:grid;gap:4px;padding:12px 0;border-top:1px solid var(--bt-line);font-size:13px;overflow-wrap:anywhere}
+.bt-product-preparation-row{display:grid;gap:4px;overflow-wrap:anywhere}
 .bt-product-preparation-row button{justify-self:start}
-.bt-product-preparation-detail{border-top:1px solid var(--bt-line);padding-top:12px;overflow-wrap:anywhere;font-size:13px}
+.bt-product-preparation-detail{border-top:1px solid var(--bt-line);padding-top:12px;overflow-wrap:anywhere;font-size:var(--bt-ps-text)}
 .bt-product-preparation-file{white-space:pre-wrap;overflow-wrap:anywhere;max-height:280px;overflow:auto}
-.bt-product-preparation-work{margin:14px 0;padding:12px;border:1px solid var(--bt-line);border-radius:12px}
+.bt-product-preparation-work{margin:14px 0;padding:12px;border:1px solid var(--bt-line);border-radius:var(--bt-ps-radius-card)}
 .bt-product-preparation-usage{display:grid;gap:6px;padding:0;list-style:none}
 .bt-product-preparation-usage li{display:flex;justify-content:space-between;gap:12px}
 .bt-product-preparation-hint{color:var(--bt-muted)}

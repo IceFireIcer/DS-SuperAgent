@@ -8,6 +8,8 @@ files:
   - package.json
   - src/**
   - assets/**
+  - '!node_modules/@trycua{,/**/*}'
+  - '!node_modules/@ubjs{,/**/*}'
 # The Host runs pnpm as a separate Node process to install plugins, and the Office payload's
 # plain Node runs the LibreOffice Kit CLI: both must be plain files outside the asar.
 asarUnpack:
@@ -24,6 +26,10 @@ extraResources:
     to: primary-runtime
   - from: build/runtime/office-skills
     to: office-skills
+  - from: node_modules/@trycua
+    to: node_modules/@trycua
+  - from: node_modules/@ubjs
+    to: node_modules/@ubjs
 # node-pty, sharp and koffi ship prebuilt binaries for each platform. A rebuild would compile
 # node-pty from source and needs a C++ toolchain.
 npmRebuild: false

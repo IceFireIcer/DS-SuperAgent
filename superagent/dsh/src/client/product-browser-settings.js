@@ -2,6 +2,7 @@ import { createElement as h, Fragment, useEffect, useRef, useState } from 'react
 import { Card, Row } from './product-card.js'
 import { t } from './i18n.js'
 import { ProductBrowserImport, PRODUCT_BROWSER_IMPORT_CSS } from './product-browser-import.js'
+import { EmptyState, FieldRow, InlineNotice, SectionCard, StatusChip } from './product-settings-components.js'
 
 const BROWSER_STATES = {
   available: 'Available',
@@ -14,6 +15,7 @@ const BROWSER_STATES = {
 const OPERATION_STATES = {
   pending: 'Pending',
   succeeded: 'Succeeded',
+  denied: 'Denied',
   unknown: 'Outcome unknown',
   resolved: 'Checked',
 }
@@ -25,6 +27,63 @@ const OBSERVATIONS = {
 }
 const DETERMINISTIC = new Set(['INVALID_INPUT', 'RESOURCE_STALE', 'SOURCE_NOT_AUTHORIZED', 'ENVIRONMENT_DENIED',
   'RESOURCE_LIMIT', 'IDENTITY_CONFLICT', 'BROWSER_RECONCILE_REQUIRED', 'BROWSER_DENIED', 'BROWSER_HUMAN_CONTROL', 'NOT_FOUND', 'UNAVAILABLE'])
+
+const BROWSER_MODES = { off: 'Basic browsing', refs: 'Link references', script: 'Step script', task: 'Task plan' }
+
+export function ProductBrowserPluginSettings({ binding, call }) {
+  const instanceId = binding.instanceId
+  const [setting, setSetting] = useState(null)
+  const [mode, setMode] = useState('off')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+  const [notice, setNotice] = useState(null)
+  const pending = useRef(null)
+  const unavailableText = 'The local Host has no CDP browser bridge. Browser work remains unavailable.'
+  const read = async signal => {
+    const value = await call('browser-plugin', { instanceId, scope: { role: 'main' } }, signal)
+    if (!signal?.aborted) {
+      setSetting(value)
+      setMode(value.mode)
+      setError(null)
+    }
+  }
+  const problem = failure => failure.code === 'UNAVAILABLE' ? t(unavailableText) : failure.message
+  useEffect(() => {
+    const controller = new AbortController()
+    pending.current = null
+    void read(controller.signal).catch(failure => { if (!controller.signal.aborted) setError(problem(failure)) })
+    return () => controller.abort()
+  }, [instanceId, call])
+  const save = async () => {
+    if (busy || !setting?.modes.includes(mode)) return
+    const next = pending.current ?? { commandId: crypto.randomUUID(), expectedRevision: setting.revision, mode }
+    pending.current = next
+    setBusy(true); setError(null); setNotice(null)
+    try {
+      const value = await call('browser-plugin-save', { instanceId, scope: { role: 'main' }, ...next })
+      pending.current = null
+      setSetting(value); setMode(value.mode); setNotice(t('Browser plugin saved.'))
+    } catch (failure) {
+      if (DETERMINISTIC.has(failure.code) || failure.code === 'CONFIG_REVISION_CONFLICT') pending.current = null
+      if (failure.code === 'CONFIG_REVISION_CONFLICT') await read().catch(() => {})
+      setError(problem(failure))
+    } finally { setBusy(false) }
+  }
+  const interactive = setting && setting.modes.some(value => value !== 'off')
+  return h(SectionCard, { title: t('Browser plugin') },
+    error ? h(InlineNotice, { tone: 'danger' }, error) : null,
+    notice ? h(InlineNotice, { tone: 'success' }, notice) : null,
+    !setting && !error ? h('p', { role: 'status' }, t('Loading…')) : null,
+    setting && !interactive ? h(InlineNotice, { tone: 'warn' }, t('This Host bridge supports only basic browsing.')) : null,
+    setting ? h(FieldRow, { label: t('Worker browser mode'), control: h('select', { className: 'bt-bs-input',
+      value: mode, disabled: busy || Boolean(pending.current) || !interactive, onChange: event => setMode(event.target.value) },
+    Object.entries(BROWSER_MODES).map(([value, label]) => h('option', { key: value, value,
+      disabled: !setting.modes.includes(value) }, t(label)))) }) : null,
+    setting ? h(FieldRow, { label: t('Active mode'), control: h('div', { className: 'bt-ps-actions' },
+      h(StatusChip, null, t(BROWSER_MODES[setting.mode] ?? 'Unavailable')),
+      h('button', { className: 'bt-soft', type: 'button', disabled: busy || !setting.modes.includes(mode) || setting.mode === mode && !pending.current,
+        onClick: () => void save() }, t(pending.current ? 'Retry' : 'Save'))) }) : null)
+}
 
 export function ProductBrowserSettings({ binding, works = [], directoryOptions, call, browserBridge }) {
   const instanceId = binding.instanceId
@@ -208,7 +267,7 @@ export function ProductBrowserSettings({ binding, works = [], directoryOptions, 
   }
 
   if (unavailable) return h(Card, { title: t('Browser resources') },
-    h('p', { className: 'bt-product-resource-note' }, t('The local Host has no CDP browser bridge. Browser work remains unavailable.')))
+    h(InlineNotice, { tone: 'warn' }, t('The local Host has no CDP browser bridge. Browser work remains unavailable.')))
 
   return h(Fragment, null,
     h(Card, { title: t('Browser resources') },
@@ -219,15 +278,16 @@ export function ProductBrowserSettings({ binding, works = [], directoryOptions, 
       h('button', { type: 'button', className: 'bt-product-browser-refresh bt-soft bt-soft-sm', disabled: Boolean(busy),
         onClick: () => { void refresh() } }, t('Refresh browser resources')),
       !resources ? h('p', { role: 'status' }, t('Loading…'))
-        : resources.length === 0 ? h('p', { className: 'bt-main-status' }, t('No browser resources yet.'))
+        : resources.length === 0 ? h(EmptyState, { title: t('No browser resources yet.') })
           : h('div', { className: 'bt-product-resource-list' }, resources.map(resource => h('div', {
             key: resource.id, className: 'bt-product-browser-resource',
           },
           h('button', { type: 'button', className: 'bt-soft', disabled: Boolean(busy),
             'aria-pressed': selectedId === resource.id, onClick: () => setSelectedId(resource.id) }, resource.label),
-          h('span', { role: 'status' }, `${t(BROWSER_STATES[resource.state] ?? 'Unavailable')} · v${resource.revision} · ${resource.environmentId}`)))),
-      error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
-      notice ? h('p', { className: 'bt-main-status', role: 'status' }, notice) : null,
+          h(StatusChip, { tone: BROWSER_STATES[resource.state] ? 'neutral' : 'warn' },
+            `${t(BROWSER_STATES[resource.state] ?? 'Unavailable')} · v${resource.revision} · ${resource.environmentId}`)))),
+      error ? h(InlineNotice, { tone: 'danger' }, error) : null,
+      notice ? h(InlineNotice, { tone: 'success' }, notice) : null,
       Object.values(pending).map(attempt => h('div', { key: attempt.commandId, className: 'bt-product-resource-row', role: 'status' },
         h('span', null, `${actionLabel(attempt)} · ${t('pending confirmation. Retry the same command.')}`),
         h('button', { className: 'bt-soft', type: 'button', disabled: Boolean(busy),
@@ -369,17 +429,16 @@ function ManualBrowserView({ browserBridge, profile, label }) {
 
 export const PRODUCT_BROWSER_CSS = PRODUCT_BROWSER_IMPORT_CSS + `
 .bt-product-browser-resource{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.bt-product-browser-control{margin-top:10px;padding:10px;border:1px solid var(--bt-line-2);border-radius:8px;background:var(--bt-hover)}
-.bt-product-browser-control>p{margin:0 0 8px;font-size:12px;color:var(--bt-ink-2)}
+.bt-product-browser-control{margin-top:10px;padding:10px;border:1px solid var(--bt-line-2);border-radius:var(--bt-ps-radius-control);background:var(--bt-hover)}
+.bt-product-browser-control>p{margin:0 0 8px;font-size:var(--bt-ps-small);color:var(--bt-ink-2)}
 .bt-product-manual-browser{margin:10px 0}
 .bt-product-manual-browser-form{display:flex;gap:6px;margin-bottom:8px}
 .bt-product-manual-browser-form input{flex:1;min-width:0}
-.bt-product-manual-browser-frame{height:280px;min-height:160px;border:1px solid var(--bt-line-2);border-radius:8px;overflow:hidden;background:var(--bt-main)}
-.bt-product-browser-resource>span{color:var(--bt-ink-2);font-size:12px}
+.bt-product-manual-browser-frame{height:280px;min-height:160px;border:1px solid var(--bt-line-2);border-radius:var(--bt-ps-radius-control);overflow:hidden;background:var(--bt-main)}
 .bt-product-browser-create{display:flex;flex-direction:column;align-items:stretch;gap:8px;margin-top:12px}
 .bt-product-browser-operations{margin-top:12px}
-.bt-product-browser-operations summary{cursor:pointer;font-size:12px;color:var(--bt-ink-2)}
-.bt-product-browser-operation{padding:9px 0;border-top:1px solid var(--bt-line-2);font-size:12px}
+.bt-product-browser-operations summary{cursor:pointer;font-size:var(--bt-ps-small);color:var(--bt-ink-2)}
+.bt-product-browser-operation{padding:9px 0;border-top:1px solid var(--bt-line-2);font-size:var(--bt-ps-small)}
 .bt-product-browser-operation>p{margin:3px 0;overflow-wrap:anywhere}
 .bt-product-browser-resolve{display:flex;gap:8px;align-items:center;margin-top:8px}
 .bt-product-browser-resolve input{flex:1;min-width:0}

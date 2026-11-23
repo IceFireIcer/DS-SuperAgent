@@ -1,0 +1,62 @@
+{
+  "source": {
+    "repository": "https://github.com/Fei2411/DS-Bot",
+    "version": "0.3.8",
+    "commit": "5e9b7da8882da3b68d8a0624342708c2150a9156",
+    "license": "Apache-2.0",
+    "directory": "ds-bot/src/client"
+  },
+  "modules": [
+    "about.js", "activity-row.js", "agent-badge.js", "agent-routes.js",
+    "approval-notices.js", "at-menu.js", "bot-browsers.js", "browser-overlap.js",
+    "browser-settings.js", "btw-model.js", "btw.js", "capability-settings.js",
+    "card-hold.js", "cell-empty.js", "cells.js", "changes-card.js", "changes-review.js",
+    "characters.js", "command-actions.js", "composer.js", "computer.js", "connector-marks.js",
+    "connectors-page.js", "connectors.js", "context-menu.js", "diagnostics.js", "dsh-offer.js",
+    "dsh-primitives.js", "enter-key.js", "enter-steer.js", "exchange.js", "feedback.js",
+    "file-save.js", "file-target.js", "fold.js", "folder-menu.js", "frame-layout.js",
+    "frame-watch.js", "goal.js", "handoff-card.js", "header-navigation.js", "header.js",
+    "i18n.js", "icons.js", "im-page.js", "inks.js", "kept-private.js",
+    "learning-card-model.js", "learning-card.js", "locales/de.js", "locales/es.js",
+    "locales/fr.js", "locales/ja.js", "locales/ko.js", "locales/zh-tw.js",
+    "mark-flight.js", "mark.js", "member-status.js", "memory-panel.js", "mention-source.js",
+    "model-menu.js", "motion-rest.js", "motion.js", "notifications.js", "notify.js", "open-listed.js",
+    "open-window.js", "opening.js", "overlay-hooks.js", "palette.js", "paste-card.js",
+    "phone-page.js", "polling.js", "providers-page.js", "questions.js", "queue-dock.js",
+    "read-only-dock.js", "read-page.js", "reading.js", "right-panel.js", "schedules.js",
+    "secret-card.js", "shared-map.js", "side-chat.js", "side-model.js", "sidebar.js", "skin.js",
+    "sources.js", "speech.js", "styles.js", "surface.js", "task-board.js", "team-actions.js",
+    "text-annotation.js", "text.js", "themes.js", "turn-error.js", "turn-reasoning.js",
+    "usage-data.js", "usage-page.js", "user-message.js", "user-text-rule.js", "voice.js",
+    "widget-cell.js"
+  ],
+  "adapted": {
+    "agent-logos.js": "omit-unlicensed-marks",
+    "bot-settings.js": "shared-settings-controls",
+    "storage.js": "namespaced-keys-only"
+  },
+  "referenceOnly": {
+    "agent-cards.js": "Local Agent UI",
+    "agent-new.js": "Legacy Agent session bootstrap",
+    "api.js": "Retired HTTP transport. Runtime imports target the product adapter.",
+    "avatar-library.js": "Legacy avatar library",
+    "bot-draft.js": "Legacy Bot creation state",
+    "bot-model-batch.js": "Legacy Bot models",
+    "bot-models-page.js": "Legacy Bot models",
+    "browser-pane.js": "Requires a product-owned alternative to the legacy details drawer",
+    "create-bot.js": "Legacy Bot creation",
+    "details-drawer.js": "Legacy Bot and team settings",
+    "group-search.js": "Legacy group search",
+    "group-settings.js": "Legacy group settings",
+    "index.js": "Retired entry point and roster runtime",
+    "local-agents-page.js": "Local Agent UI",
+    "new-chat.js": "Legacy Bot and group creation",
+    "overlays.js": "Requires product-owned replacements for legacy team overlays",
+    "permission-picker.js": "Legacy team permissions",
+    "settings-shell.js": "Requires product-owned settings navigation",
+    "settings.js": "Legacy settings navigation and team pages"
+  },
+  "sharedDependencies": [
+    "changes-patch.js", "file-chunks.js", "group-replies.js", "im-platforms.js", "mentions.js"
+  ]
+}

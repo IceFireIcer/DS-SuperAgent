@@ -161,7 +161,7 @@ test('CDP relay limits targets and created tabs to the token Bot', async t => {
   const rootInfo = await request(socketA, 3, 'Target.getTargetInfo')
   assert.equal(rootInfo.result.targetInfo.targetId, targetsA.result.targetInfos[0].targetId)
   const foreignInfo = await request(socketA, 4, 'Target.getTargetInfo', { targetId: targetsB.result.targetInfos[0].targetId })
-  assert.equal(foreignInfo.error.message, 'Browser tab does not belong to this Bot')
+  assert.equal(foreignInfo.error.message, 'Browser tab does not belong to this browser resource')
   const attached = await request(socketA, 5, 'Target.attachToTarget', { targetId: targetsA.result.targetInfos[0].targetId, flatten: true })
   const sessionId = attached.result.sessionId
   const pageEnabled = await request(socketA, 6, 'Page.enable', {}, sessionId)

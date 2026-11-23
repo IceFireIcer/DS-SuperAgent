@@ -1,10 +1,11 @@
 import { createElement as h, useEffect, useRef, useState } from 'react'
 import { fnv1a, lookOf, shapeId, shapeOf, MASK_ID, nextMarkSerial, characterMarkup } from './characters.js'
+import { mascotInteraction } from './motion.js'
 
 export { lookOf } from './characters.js'
 
 // -------------------------------------------------------------------------
-// Bot mark: the Bot's character (or its uploaded photo), looked up by lookOf.
+// SuperAgent mark: the role's character (or its uploaded photo), looked up by lookOf.
 
 // Uploaded images only bob or hop because they have no character parts to move.
 const STATES = ['idle', 'thinking', 'searching', 'working', 'sending', 'orbit', 'waiting', 'alert', 'done']
@@ -18,13 +19,17 @@ function useGaze(ref, enabled) {
     const place = () => {
       frame = 0
       const node = ref.current
-      if (!node || !point) return
+      if (!node || !point || !mascotInteraction()) return
       const box = node.getBoundingClientRect()
       const clamp = value => Math.max(-1, Math.min(1, value))
       node.style.setProperty('--bt-gx', clamp((point.x - box.left - box.width / 2) / 160).toFixed(2))
       node.style.setProperty('--bt-gy', clamp((point.y - box.top - box.height / 2) / 160).toFixed(2))
     }
-    const onMove = (event) => { point = { x: event.clientX, y: event.clientY }; if (!frame) frame = requestAnimationFrame(place) }
+    const onMove = (event) => {
+      if (!mascotInteraction()) return
+      point = { x: event.clientX, y: event.clientY }
+      if (!frame) frame = requestAnimationFrame(place)
+    }
     const onLeave = () => { point = null; ref.current?.style.setProperty('--bt-gx', '0'); ref.current?.style.setProperty('--bt-gy', '0') }
     window.addEventListener('pointermove', onMove, { passive: true })
     document.documentElement.addEventListener('pointerleave', onLeave)
@@ -37,7 +42,7 @@ function useGaze(ref, enabled) {
 }
 
 // A mark moves for its state. `live` marks (sidebar, header, details) also answer the
-// pointer, and at the lively motion level blink and fidget at rest (each Bot its own
+// pointer, and at the lively motion level blink and fidget at rest (each role its own
 // fidget and moment); transcript marks stay still so a long chat does not run dozens
 // of animations.
 const FIDGETS = ['hop', 'sway', 'stretch', 'look']
@@ -47,6 +52,13 @@ export function BotMark({ bot, look: given, size = 36, state = 'idle', live = fa
   const maskId = useRef('')
   if (maskId.current === '') maskId.current = `bt-mark-${nextMarkSerial()}`
   const [poked, setPoked] = useState(false)
+  useEffect(() => {
+    if (!poked) return undefined
+    const node = ref.current
+    const reset = (event) => { if (event.animationName.startsWith('bt-poke')) setPoked(false) }
+    node?.addEventListener('animationcancel', reset)
+    return () => node?.removeEventListener('animationcancel', reset)
+  }, [poked])
   // A photo that does not load shows the character instead; a new photo is tried again.
   const [broken, setBroken] = useState('')
   const image = look.image && look.image !== broken ? look.image : undefined
@@ -64,8 +76,8 @@ export function BotMark({ bot, look: given, size = 36, state = 'idle', live = fa
     role: label ? 'img' : undefined,
     'aria-label': label,
     'aria-hidden': label ? undefined : true,
-    onClick: pokeable ? () => setPoked(true) : undefined,
-    onAnimationEnd: poked ? (event) => { if (/^bt-poke/.test(event.animationName)) setPoked(false) } : undefined,
+    onClick: pokeable ? () => { if (mascotInteraction()) setPoked(true) } : undefined,
+    onAnimationEnd: poked ? (event) => { if (event.animationName.startsWith('bt-poke')) setPoked(false) } : undefined,
   }
   if (image) return h('span', common, h('img', { className: 'bt-mark-img', src: image, alt: '', draggable: false, onError: () => setBroken(image) }))
   const box = shapeOf(look.shape).size

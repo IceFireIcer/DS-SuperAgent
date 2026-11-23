@@ -10,8 +10,8 @@ import * as core from '../dist/index.js'
 import { Engine } from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
 import * as SqlitePersistence from '../dist/session-persistence.js'
-import { nativeContext, textResponse, toolResponse } from '../dev/native-mock.mjs'
-import { completedToolCount, lastUserText, sourceConfig } from './input-support.mjs'
+import { nativeContext, routerResponse, textResponse, toolResponse } from '../dev/native-mock.mjs'
+import { completedToolCount, initialWorkReady, lastUserText, sourceConfig } from './input-support.mjs'
 
 const execute = promisify(execFile)
 const fixture = fileURLToPath(new URL('./fixtures/input-crash.mjs', import.meta.url))
@@ -24,6 +24,7 @@ const phases = [
 ]
 
 function respond(options) {
+  if (options.model === 'router') return routerResponse(options)
   const text = lastUserText(options)
   if (completedToolCount(options)) return textResponse('Recorded.')
   if (text.includes('Follow-up change.') || text.includes('persisted follow-up')) {
@@ -131,6 +132,7 @@ test('an idle turn keeps the Input unworked and a restart continues with a recov
   const sessionDatabasePath = join(directory, 'sessions.sqlite')
   const storage = await SqliteStorage.open(databasePath)
   const native = await nativeContext(directory, options => {
+    if (options.model === 'router') return routerResponse(options)
     const text = lastUserText(options)
     if (completedToolCount(options)) return textResponse('Recorded.')
     if (text === 'Initial request.') return toolResponse('report_ready', { result: 'Initial complete.', evidence: 'Completed the initial request.' })
@@ -147,10 +149,11 @@ test('an idle turn keeps the Input unworked and a restart continues with a recov
     text: 'Initial request.', authorId: 'alice', authorKind: 'human', addressing: 'direct' })
   const accepted = await engine.assessSourceBatch({ commandId: 'eval-idle', threadId: 'room', eventIds: [initial.eventId] })
   const ticketId = accepted.receipts[0].ticketId
-  for (let attempt = 0; attempt < 300 && (await engine.getTicketDirection(ticketId))?.state !== 'ended'; attempt++) {
+  for (let attempt = 0; attempt < 300 && !await initialWorkReady(engine, ticketId); attempt++) {
     await engine.effects.drain()
     await new Promise(resolve => setTimeout(resolve, 20))
   }
+  assert.ok(await initialWorkReady(engine, ticketId), 'the first Assignment must finish before the follow-up')
   await engine.receiveSource({ commandId: 'followup-idle', threadId: 'room', objectId: 'idle-2', type: 'created', version: '1',
     text: 'Follow-up change.', authorId: 'alice', authorKind: 'human', addressing: 'direct' })
   let input
@@ -199,6 +202,7 @@ test('a handed-back Input stays unowned across a restart and is never re-attache
   const sessionDatabasePath = join(directory, 'sessions.sqlite')
   const storage = await SqliteStorage.open(databasePath)
   const native = await nativeContext(directory, options => {
+    if (options.model === 'router') return routerResponse(options)
     const text = lastUserText(options)
     if (completedToolCount(options)) return textResponse('Recorded.')
     if (text === 'Initial request.') return toolResponse('report_ready', { result: 'Initial complete.', evidence: 'Completed the initial request.' })
@@ -215,10 +219,11 @@ test('a handed-back Input stays unowned across a restart and is never re-attache
     text: 'Initial request.', authorId: 'alice', authorKind: 'human', addressing: 'direct' })
   const accepted = await engine.assessSourceBatch({ commandId: 'eval-handback', threadId: 'room', eventIds: [initial.eventId] })
   const ticketId = accepted.receipts[0].ticketId
-  for (let attempt = 0; attempt < 300 && (await engine.getTicketDirection(ticketId))?.state !== 'ended'; attempt++) {
+  for (let attempt = 0; attempt < 300 && !await initialWorkReady(engine, ticketId); attempt++) {
     await engine.effects.drain()
     await new Promise(resolve => setTimeout(resolve, 20))
   }
+  assert.ok(await initialWorkReady(engine, ticketId), 'the first Assignment must finish before the follow-up')
   await engine.receiveSource({ commandId: 'followup-handback', threadId: 'room', objectId: 'handback-2', type: 'created', version: '1',
     text: 'Follow-up change.', authorId: 'alice', authorKind: 'human', addressing: 'direct' })
   let input

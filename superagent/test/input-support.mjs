@@ -16,3 +16,8 @@ export function completedToolCount(options) {
   const user = options.messages.filter(message => message.role === 'user').at(-1)
   return options.messages.slice(options.messages.lastIndexOf(user) + 1).filter(message => message.role === 'tool').length
 }
+
+export async function initialWorkReady(engine, ticketId) {
+  const { stage, assignments } = await engine.conversation(ticketId)
+  return stage === 'ready' && assignments[0]?.state === 'ended'
+}

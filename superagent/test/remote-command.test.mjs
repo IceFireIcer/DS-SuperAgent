@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { createServer, request as httpRequest } from 'node:http'
 import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { isAbsolute, join } from 'node:path'
+import { basename, delimiter, dirname, extname, isAbsolute, join } from 'node:path'
 import { test } from 'node:test'
 import * as core from '../dist/index.js'
 import { SqliteStorage } from '../dist/storage.js'
@@ -24,6 +24,16 @@ const scripts = {
   count: "require('node:fs').appendFileSync('starts.txt','x');console.log('started')",
 }
 
+const releaseRangeCommand = `const { spawn } = require('node:child_process')
+  const child = spawn(process.execPath, ['-e', ${JSON.stringify(`const { existsSync } = require('node:fs')
+    const timer = setInterval(() => {
+      if (existsSync('release-range.txt')) clearInterval(timer)
+    }, 20)
+    setTimeout(() => clearInterval(timer), 10_000).unref()`)}], {
+    detached: process.platform === 'win32', stdio: 'ignore', windowsHide: true,
+  })
+  child.unref()`
+
 const commands = {
   inspect: { argv: ['node', '-e', scripts.inspect], timeoutMs: 5000, backgroundTimeoutMs: 15000, env: { SA_REMOTE_MARKER: 'device-env' } },
   hold: { argv: ['node', '-e', scripts.hold], timeoutMs: 5000, backgroundTimeoutMs: 15000 },
@@ -35,6 +45,7 @@ const commands = {
   orphan: { argv: [process.execPath, '-e',
     "const fs=require('node:fs');const {spawn}=require('node:child_process');const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{detached:process.platform==='win32',stdio:'ignore',windowsHide:true});fs.writeFileSync('orphan.pid',String(child.pid));child.unref();process.exit(0)"],
   timeoutMs: 5000, backgroundTimeoutMs: 15000 },
+  releaseRange: { argv: [process.execPath, '-e', releaseRangeCommand], timeoutMs: 10_000 },
   lossy: { argv: [process.execPath, '-e',
     "process.stdout.write('a'.repeat(8192));process.stdout.write(Buffer.from([0xe4]));setTimeout(()=>process.stdout.write(Buffer.from([0xb8,0xad])),500)"],
   timeoutMs: 5000, backgroundTimeoutMs: 15000 },
@@ -323,6 +334,22 @@ test('the durable Engine job record uses the device-stable job identity', async 
   }
 })
 
+test('Windows devices skip extensionless shims when resolving a native command', { skip: process.platform !== 'win32', timeout: 20000 }, async context => {
+  const shimDirectory = await mkdtemp(join(tmpdir(), 'ds-superagent-command-shim-'))
+  context.after(() => rm(shimDirectory, { recursive: true, force: true }))
+  const name = basename(process.execPath, extname(process.execPath))
+  await writeFile(join(shimDirectory, name), '#!/bin/sh\nexit 1\n')
+  const quick = {
+    ...commands.quick, argv: [name, ...commands.quick.argv.slice(1)],
+    env: { PATH: [shimDirectory, dirname(process.execPath)].join(delimiter), PATHEXT: '.COM;.EXE' },
+  }
+  const { bound } = await fixture(context, { open: { commands: { quick } } })
+  assert.equal(await bound.resolveExecutable('quick'), await realpath(process.execPath))
+  const result = await bound.invoke('run_command', { name: 'quick' })
+  assert.equal(result.exitCode, 0)
+  assert.equal(result.stdout.trim(), 'quick-done')
+})
+
 test('a fresh paired client observes the same job by its stable ID after reconnecting', { timeout: 20000 }, async context => {
   const { root, environment, bound } = await fixture(context)
   const job = await bound.startCommand('hold')
@@ -395,6 +422,44 @@ test('a root exit does not settle a range while a descendant keeps it alive', { 
     const observed = await bound.inspectRange(job.jobId)
     return observed.settled && observed.state === 'cancelled'
   }, 'the cancelled range to settle')
+})
+
+test('a foreground command waits for its range within the configured deadline after its root exits', { timeout: 20000 }, async context => {
+  const { bound, root } = await fixture(context)
+  const { jobId } = bound.planCommand('releaseRange', 'foreground')
+  let finished = false
+  const running = bound.invoke('run_command', { name: 'releaseRange', jobId }).finally(() => { finished = true })
+  void running.catch(() => {})
+  try {
+    await until(async () => (await bound.inspectRange(jobId)).exitCode === 0, 'the foreground root to exit')
+    await sleep(5250)
+    assert.equal(finished, false, 'the foreground command still waits for its descendant')
+    assert.equal((await bound.inspectRange(jobId)).settled, false)
+  } finally {
+    await writeFile(join(root, 'release-range.txt'), '')
+  }
+  const result = await running
+  assert.equal(result.exitCode, 0)
+  assert.equal(result.cancelled, false)
+  assert.equal((await bound.inspectRange(jobId)).settled, true)
+})
+
+test('caller abort stops a foreground range after its root exits', { timeout: 20000 }, async context => {
+  const { bound } = await fixture(context)
+  const { jobId } = bound.planCommand('releaseRange', 'foreground')
+  const controller = new AbortController()
+  const running = bound.invoke('run_command', { name: 'releaseRange', jobId }, controller.signal)
+  void running.catch(() => {})
+  await until(async () => (await bound.inspectRange(jobId)).exitCode === 0, 'the foreground root to exit')
+  assert.equal((await bound.inspectRange(jobId)).settled, false)
+  const abortedAt = Date.now()
+  controller.abort()
+  const result = await running
+  assert.equal(result.cancelled, true)
+  assert.ok(Date.now() - abortedAt < 7_000, 'the caller abort does not wait for the command deadline')
+  const range = await bound.inspectRange(jobId)
+  assert.equal(range.settled, true)
+  assert.equal(range.state, 'cancelled')
 })
 
 test('a lossy output window continues from a complete UTF-8 character boundary', { timeout: 20000 }, async context => {

@@ -49,6 +49,27 @@ async function drain(engine) {
   for (let index = 0; index < 16; index++) await engine.effects.drain()
 }
 
+test('scheduled tasks and Calendar rules have separate lists, commands and source switches', async t => {
+  const { engine } = await fixture(t)
+  const instance = { instanceId: 'personal' }
+  const draft = { ...instance, commandId: 'shared-id', title: 'Review', text: 'Check work.', timezone: 'UTC',
+    when: { kind: 'at', at: Date.now() + 60_000 }, target: { kind: 'main' } }
+  const calendar = await engine.createSchedule(draft)
+  const task = await engine.createSchedule(draft, 'task')
+  assert.notEqual(calendar.ruleId, task.ruleId)
+  assert.deepEqual((await engine.listSchedules(instance)).items, [calendar])
+  assert.deepEqual((await engine.listSchedules(instance, 'task')).items, [task])
+  await engine.setScheduleSource({ ...instance, commandId: 'pause', enabled: false }, 'task')
+  assert.equal((await engine.getScheduleSource(instance)).enabled, true)
+  assert.equal((await engine.getScheduleSource(instance, 'task')).enabled, false)
+  const result = await engine.tickSchedules(draft.when.at)
+  assert.deepEqual(result.occurrences.map(item => item.ruleId), [calendar.ruleId])
+  assert.deepEqual((await engine.getSchedule({ ...instance, ruleId: task.ruleId }, 'task')).occurrences, [])
+  await assert.rejects(engine.getSchedule({ ...instance, ruleId: task.ruleId }), { code: 'NOT_FOUND' })
+  await assert.rejects(engine.cancelSchedule({ ...instance, commandId: 'wrong-view', ruleId: task.ruleId }), { code: 'NOT_FOUND' })
+  assert.equal((await engine.cancelSchedule({ ...instance, commandId: 'cancel', ruleId: task.ruleId }, 'task')).status, 'cancelled')
+})
+
 test('an authorized schedule enters Main once and links its occurrence to a work receipt', { timeout: 45000 }, async t => {
   const { engine } = await fixture(t)
   const at = Date.now() + 60_000

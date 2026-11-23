@@ -3,6 +3,7 @@ import { createRequire } from 'node:module'
 import { dirname, join, sep } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { createProductHost, type ProductHostConfig } from './product-host.js'
+import { exposeMainSession } from './session-reader.js'
 import { CoreError } from './model.js'
 import type { PostgresOptions } from './postgres-storage.js'
 import { apply as applyProductHttp } from './product-http.js'
@@ -120,7 +121,7 @@ export function githubProfileConfig(env: NodeJS.ProcessEnv = process.env): Produ
 }
 
 export const name = 'ds-superagent'
-export const inject = ['sessionPersistence', 'agents', 'sessions']
+export const inject = ['sessionPersistence', 'agents', 'sessions', 'credentials']
 
 export async function apply(context: Context, config: SuperagentProfileConfig = {}) {
   const paths = profilePaths()
@@ -182,6 +183,12 @@ export async function apply(context: Context, config: SuperagentProfileConfig = 
     ...(postgres ? { postgres } : { databasePath: paths.databasePath }),
   })
   context.provide('superagentProduct', host)
+  const desktop = process.env.DS_SUPERAGENT_APP === '1'
+  if (desktop) context.inject(['webServer', 'typertGateway'], scope => {
+    scope.provide('superagentDesktopWebServer', scope.get('webServer'))
+    scope.provide('superagentDesktopGateway', scope.get('typertGateway'))
+  })
+  exposeMainSession(context, host, desktop)
   context.effect(() => () => host.close())
   applyProductHttp(context)
 }

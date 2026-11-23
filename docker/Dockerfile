@@ -7,7 +7,7 @@
 FROM node:24-bookworm-slim AS build
 
 ARG NPM_REGISTRY=https://registry.npmjs.org/
-ARG DSH_VERSION=0.2.1-rc.4
+ARG DSH_VERSION=0.2.2-rc.1
 
 RUN corepack enable \
     && npm config set registry "$NPM_REGISTRY" --global \

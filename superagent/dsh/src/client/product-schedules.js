@@ -1,8 +1,10 @@
 import { createElement as h, Fragment, useEffect, useRef, useState } from 'react'
 import { ClockIcon, PlusIcon, TrashIcon } from './icons.js'
-import { Segmented, spring, SPRING_SHAPE, SPRING_TAP } from './motion.js'
+import { Segmented } from './motion.js'
 import { SwitchRow } from './product-card.js'
-import { dateLocale, t } from './i18n.js'
+import { EmptyState, FieldRow, InlineNotice, SectionCard, StatusChip } from './product-settings-components.js'
+import { t } from './i18n.js'
+import { timingText } from './schedule-timing.js'
 
 const pad = value => String(value).padStart(2, '0')
 const nextHour = () => {
@@ -12,39 +14,6 @@ const nextHour = () => {
 }
 const localZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone
 const kinds = [['at', 'Once'], ['daily', 'Every day'], ['weekly', 'Every week'], ['every', 'Repeat']]
-const clock = value => String(value ?? '').slice(0, 5)
-const formatDate = (ms, options) => new Intl.DateTimeFormat(dateLocale(), options).format(ms)
-const dayAndTime = (ms) => {
-  const sameYear = new Date(ms).getFullYear() === new Date().getFullYear()
-  return formatDate(ms, { ...(sameYear ? {} : { year: 'numeric' }), month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit' })
-}
-const weekdayNames = days => days.map(day => formatDate(Date.UTC(2024, 0, day), {
-  weekday: 'short', timeZone: 'UTC',
-})).join(dateLocale().startsWith('zh') ? '、' : ', ')
-const everyText = (seconds) => {
-  if (seconds % 86400 === 0) return seconds === 86400 ? t('Every day') : t('Every {count} days', { count: seconds / 86400 })
-  if (seconds % 3600 === 0) return seconds === 3600 ? t('Every hour') : t('Every {count} hours', { count: seconds / 3600 })
-  return t('Every {count} minutes', { count: Math.round(seconds / 60) })
-}
-
-function timingText(task) {
-  const zone = task.timeZone && task.timeZone !== localZone() ? ` (${task.timeZone})` : ''
-  if (task.kind === 'after' || task.kind === 'at') return t('Once, {time}', { time: dayAndTime(Date.parse(task.scheduledAt)) })
-  if (task.kind === 'every') return everyText(task.everySeconds)
-  if (task.kind === 'daily') return `${t('Every day at {time}', { time: clock(task.time) })}${zone}`
-  if (task.kind === 'weekly') {
-    const days = (task.weekdays ?? []).join()
-    const text = days === '1,2,3,4,5' ? t('Every weekday at {time}', { time: clock(task.time) })
-      : days === '6,7' ? t('Every weekend at {time}', { time: clock(task.time) })
-        : days === '1,2,3,4,5,6,7' ? t('Every day at {time}', { time: clock(task.time) })
-          : t('Every {days} at {time}', { days: weekdayNames(task.weekdays ?? []), time: clock(task.time) })
-    return `${text}${zone}`
-  }
-  if (task.kind === 'cron') return `${t('On the schedule {expression}', { expression: task.expression })}${zone}`
-  return ''
-}
-
 function whenText(rule) {
   const when = rule.when
   return timingText({ kind: when.kind, scheduledAt: new Date(when.at ?? rule.nextAt ?? rule.createdAt).toISOString(),
@@ -91,7 +60,8 @@ function occurrenceHistory(occurrences, visibleOccurrences, loadEarlier, onViewW
     h('div', { className: 'bt-product-schedule-history-list' }, rows), loadEarlierButton)
 }
 
-export function ProductScheduleSettings({ binding, works, call, onViewWork }) {
+export function ProductScheduleSettings({ binding, works = [], call, onViewWork, taskMode = false }) {
+  const family = taskMode ? 'scheduled-task' : 'schedule'
   const [rules, setRules] = useState(null)
   const [sourceEnabled, setSourceEnabled] = useState(true)
   const [details, setDetails] = useState({})
@@ -113,10 +83,10 @@ export function ProductScheduleSettings({ binding, works, call, onViewWork }) {
   const refresh = async () => {
     try {
       const [list, source] = await Promise.all([
-        call('schedule-list', { instanceId: binding.instanceId }), call('schedule-source-read', { instanceId: binding.instanceId }),
+        call(`${family}-list`, { instanceId: binding.instanceId }), call(`${family}-source-read`, { instanceId: binding.instanceId }),
       ])
       const rows = await Promise.all(list.items.map(async rule => {
-        try { return [rule.ruleId, await call('schedule-read', { instanceId: binding.instanceId, ruleId: rule.ruleId })] }
+        try { return [rule.ruleId, await call(`${family}-read`, { instanceId: binding.instanceId, ruleId: rule.ruleId })] }
         catch { return [rule.ruleId, null] }
       }))
       setRules(list.items)
@@ -149,12 +119,12 @@ export function ProductScheduleSettings({ binding, works, call, onViewWork }) {
       setError(t(kind === 'at' ? 'Pick a time in the future' : 'Choose an authorized work item.'))
       return
     }
-    const request = { instanceId: binding.instanceId, title, text, timezone: localZone(), when, target }
+    const request = { instanceId: binding.instanceId, title, text, timezone: localZone(), when, ...(taskMode ? {} : { target }) }
     const fingerprint = JSON.stringify(request)
     if (pending.current?.fingerprint !== fingerprint) pending.current = { fingerprint, commandId: crypto.randomUUID() }
     setBusy(true); setError('')
     try {
-      await call('schedule-create', { ...request, commandId: pending.current.commandId })
+      await call(`${family}-create`, { ...request, commandId: pending.current.commandId })
       pending.current = null
       setAdding(false); setTitle(''); setText('')
       await refresh()
@@ -165,7 +135,7 @@ export function ProductScheduleSettings({ binding, works, call, onViewWork }) {
     if (confirming !== ruleId) { setConfirming(ruleId); return }
     setBusy(true); setError('')
     try {
-      await call('schedule-cancel', { instanceId: binding.instanceId, commandId: `cancel:${ruleId}`, ruleId })
+      await call(`${family}-cancel`, { instanceId: binding.instanceId, commandId: `cancel:${ruleId}`, ruleId })
       setConfirming(null)
       await refresh()
     } catch (failure) { setError(failure.message) }
@@ -174,28 +144,27 @@ export function ProductScheduleSettings({ binding, works, call, onViewWork }) {
   const setSource = async enabled => {
     setBusy(true); setError('')
     try {
-      await call('schedule-source-set', { instanceId: binding.instanceId, commandId: crypto.randomUUID(), enabled })
+      await call(`${family}-source-set`, { instanceId: binding.instanceId, commandId: crypto.randomUUID(), enabled })
       setSourceEnabled(enabled)
       await refresh()
     } catch (failure) { setError(failure.message) }
     finally { setBusy(false) }
   }
 
-  return h('section', { className: 'bt-product-schedules', 'aria-label': t('Scheduled tasks') },
-    h('div', { className: 'bt-set-card' }, h(SwitchRow, { label: t('Schedule source'),
+  return h('section', { className: 'bt-ps-content bt-product-schedules', 'aria-label': t('Scheduled tasks') },
+    h(SectionCard, null, h(SwitchRow, { label: t('Schedule source'),
       hint: sourceEnabled ? null : t('Scheduled tasks are paused; existing work continues.'),
       on: sourceEnabled, disabled: busy, onChange: value => { void setSource(value) } })),
     h('div', { className: 'bt-actions' }, h('button', { type: 'button', className: 'bt-soft bt-soft-sm bt-with-icon',
       onClick: () => setAdding(value => !value) }, h(PlusIcon), t('New task'))),
     adding ? h('form', { className: 'bt-set-card bt-task-form', onSubmit: submit },
-      h('label', { className: 'bt-set-row bt-bs-row' }, h('span', { className: 'bt-set-copy' }, t('Send to')),
-        h('select', { className: 'bt-select bt-task-bot', value: targetId, 'aria-label': t('Send to'), onChange: event => setTargetId(event.target.value) },
-          h('option', { value: 'main' }, 'Main'), available.map(work => h('option', { key: work.brief.workItemId, value: work.brief.workItemId }, work.brief.goal)))),
-      h('label', { className: 'bt-set-row bt-bs-row' }, h('span', { className: 'bt-set-copy' }, t('Name')),
-        h('input', { className: 'bt-bs-input', value: title, maxLength: 120, required: true, onChange: event => setTitle(event.target.value) })),
-      h('label', { className: 'bt-set-row bt-bs-row bt-bs-stack' }, h('span', { className: 'bt-set-copy' }, t('What to do')),
-        h('textarea', { className: 'bt-bs-input bt-bs-area', value: text, maxLength: 32768, required: true, rows: 3,
-          onChange: event => setText(event.target.value) })),
+      h(FieldRow, { label: t('Send to'), control: h('select', { className: 'bt-select bt-task-bot', value: targetId,
+        'aria-label': t('Send to'), onChange: event => setTargetId(event.target.value) },
+      h('option', { value: 'main' }, 'Main'), available.map(work => h('option', { key: work.brief.workItemId, value: work.brief.workItemId }, work.brief.goal))) }),
+      h(FieldRow, { label: t('Name'), control: h('input', { className: 'bt-bs-input', value: title, maxLength: 120,
+        required: true, onChange: event => setTitle(event.target.value) }) }),
+      h(FieldRow, { label: t('What to do'), layout: 'stack', control: h('textarea', { className: 'bt-bs-input bt-bs-area', value: text,
+        maxLength: 32768, required: true, rows: 3, onChange: event => setText(event.target.value) }) }),
       h('div', { className: 'bt-set-row bt-bs-row bt-bs-stack' }, h('span', { className: 'bt-set-copy' }, t('When')),
         h(Segmented, { label: t('When'), value: kind }, kinds.map(([value, label]) => h('button', {
           key: value, type: 'button', 'aria-pressed': kind === value, onClick: () => setKind(value),
@@ -218,10 +187,10 @@ export function ProductScheduleSettings({ binding, works, call, onViewWork }) {
         h('button', { type: 'button', className: 'bt-soft bt-soft-sm', onClick: () => setAdding(false) }, t('Cancel')),
         h('button', { type: 'submit', className: 'bt-send bt-soft-sm', disabled: busy || !title.trim() || !text.trim()
           || kind === 'weekly' && weekdays.length === 0 }, busy ? t('Creating…') : t('Create task')))) : null,
-    error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
-    !rules ? h('p', { className: 'bt-main-status', role: 'status' }, t('Loading…')) : rules.length === 0
-      ? h('p', { className: 'bt-main-status' }, t('No scheduled tasks yet.'))
-        : h('div', { className: 'bt-set-card' }, rules.map(rule => {
+    error ? h(InlineNotice, { tone: 'danger' }, error) : null,
+    !rules ? !error && h(InlineNotice, { tone: 'neutral' }, t('Loading…')) : rules.length === 0
+      ? h(SectionCard, null, h(EmptyState, { title: t('No scheduled tasks yet.') }))
+        : h(SectionCard, null, rules.map(rule => {
           const occurrences = [...(details[rule.ruleId]?.occurrences ?? [])].sort((left, right) => left.dueAt - right.dueAt)
           const last = occurrences.at(-1)
           const visibleCount = Math.min(occurrences.length, historyCounts[rule.ruleId] ?? 20)
@@ -232,7 +201,7 @@ export function ProductScheduleSettings({ binding, works, call, onViewWork }) {
           return h('div', { key: rule.ruleId, className: 'bt-set-row bt-task bt-product-schedule-row' },
             h(ClockIcon), h('span', { className: 'bt-set-copy' },
               h('strong', { className: 'bt-task-title' }, rule.title),
-              h('span', { className: 'bt-set-hint' }, `${whenText(rule)} · ${rule.timezone} · ${rule.target.kind === 'main' ? 'Main' : work?.brief.goal ?? rule.target.ticketId}`),
+              h('span', { className: 'bt-set-hint' }, `${whenText(rule)} · ${rule.timezone} · ${rule.target.kind === 'main' ? t('Main') : work?.brief.goal ?? rule.target.ticketId}`),
               h('span', { className: 'bt-task-prompt' }, rule.text),
               last ? h('span', { className: 'bt-task-prompt', role: 'status' }, occurrenceText(last),
                 last.executionStatus ? ` · ${executionText(last.executionStatus)}` : null,
@@ -243,7 +212,7 @@ export function ProductScheduleSettings({ binding, works, call, onViewWork }) {
                     'aria-label': t('View work brief {id}', { id: last.workBriefId }),
                     onClick: () => onViewWork?.({ workBriefId: last.workBriefId, ticketIds: [] }) }, t('View work')) : null) : null),
             history,
-            h('span', { className: 'bt-task-next' }, rule.status === 'active' && rule.nextAt
+            h(StatusChip, { tone: rule.status === 'active' ? 'accent' : 'neutral' }, rule.status === 'active' && rule.nextAt
               ? t('Next: {time}', { time: new Date(rule.nextAt).toLocaleString() }) : t(rule.status === 'cancelled' ? 'Cancelled' : 'Finished')),
             rule.status === 'active' ? h('button', { type: 'button', className: 'bt-mini bt-task-remove',
               'data-confirm': confirming === rule.ruleId || undefined, 'aria-label': confirming === rule.ruleId ? t('Click again to delete') : t('Delete task'),
@@ -252,14 +221,6 @@ export function ProductScheduleSettings({ binding, works, call, onViewWork }) {
 }
 
 export const PRODUCT_SCHEDULE_CSS = `
-.bt-product-schedules{display:flex;flex-direction:column;gap:12px}
-.bt-product-schedules .bt-switch{position:relative;flex:none;width:36px;height:20px;padding:0;border:0;border-radius:999px;background:var(--bt-line-2);cursor:pointer;transition:background-color .2s ease}
-.bt-product-schedules .bt-switch[aria-checked=true]{background:var(--bt-accent)}
-.bt-product-schedules .bt-switch:disabled{opacity:.45;cursor:default}
-.bt-product-schedules .bt-switch-knob{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:999px;background:var(--bt-main);box-shadow:0 1px 2px rgba(0,0,0,.2);transition:${spring(SPRING_SHAPE, 'transform')},${spring(SPRING_TAP, 'width')}}
-.bt-product-schedules .bt-switch[aria-checked=true] .bt-switch-knob{transform:translateX(16px)}
-.bt-product-schedules .bt-switch:active:not(:disabled) .bt-switch-knob{width:21px}
-.bt-product-schedules .bt-switch[aria-checked=true]:active:not(:disabled) .bt-switch-knob{transform:translateX(11px)}
 .bt-product-schedule-row{gap:10px;align-items:flex-start;flex-wrap:wrap}
 .bt-product-schedule-row>svg{width:18px;height:18px;flex:none;color:var(--bt-ink-2)}
 .bt-product-schedule-row .bt-set-copy{min-width:0;display:flex;flex-direction:column;gap:4px}
@@ -269,9 +230,5 @@ export const PRODUCT_SCHEDULE_CSS = `
 .bt-product-schedule-history-list{padding-left:12px}
 .bt-product-schedule-occurrence{padding:8px 0;border-top:1px solid var(--bt-line-2)}
 .bt-product-schedule-occurrence p{overflow-wrap:anywhere}
-.bt-product-schedule-row .bt-task-next{white-space:normal;max-width:180px;text-align:right}
-.bt-product-schedules button:focus-visible,.bt-product-schedules input:focus-visible,.bt-product-schedules textarea:focus-visible,
-.bt-product-schedules select:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
-@media(max-width:640px){.bt-product-schedule-row .bt-task-next{max-width:none;text-align:left}}
-@media(prefers-reduced-motion:reduce){.bt-product-schedules .bt-task-form{animation:none}.bt-product-schedules .bt-switch,.bt-product-schedules .bt-switch-knob{transition:none}}
+@media(prefers-reduced-motion:reduce){.bt-product-schedules .bt-task-form{animation:none}}
 `

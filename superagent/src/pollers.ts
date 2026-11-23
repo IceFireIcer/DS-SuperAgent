@@ -97,6 +97,7 @@ export class GitHubPoller {
         failedItems: result.failed, ...(result.cursor === undefined ? {} : { cursor: result.cursor }) }
       return result
     } catch (error) {
+      if (signal.aborted) throw error
       const failure = bound.expired() ? new CoreError('SOURCE_TIMEOUT', 'This GitHub poll exceeded its declared deadline.') : error
       this.healthState = { ...this.healthState, state: 'failed', lastError: failure instanceof CoreError ? failure.code : 'SOURCE_FAILED', ...(await this.cursorSafe()) }
       throw failure

@@ -12,7 +12,7 @@ export const INKS = {
 // above is the text color. Aurora is the first star mascot's gradient.
 export const GRADIENTS = { aurora: [[0, '#A4FFB0'], [0.42, '#00F0E4'], [1, '#2E9EF7']] }
 export const ACCENT_INKS = ['deepseek', 'charcoal', 'graphite', 'rose', 'sky', 'tangerine', 'cobalt']
-// Renamed ink ids still found in saved Bots and Bot-to-Bot replies (LEGACY: old id → new id).
+// Renamed ink ids still found in saved legacy identities and replies (LEGACY: old id → new id).
 const LEGACY_INKS = { kimi: 'charcoal', zai: 'graphite', minimax: 'rose', stepfun: 'sky', mimo: 'tangerine', qwen: 'cobalt' }
 export const isHex = color => typeof color === 'string' && /^#[0-9a-f]{6}$/i.test(color)
 export const luminance = hex => [1, 3, 5]
@@ -21,7 +21,7 @@ export const luminance = hex => [1, 3, 5]
   .reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0)
 const inkName = color => (INKS[color] ? color : INKS[LEGACY_INKS[color]] ? LEGACY_INKS[color] : 'gray')
 export const inkFill = color => (isHex(color) ? color : `var(--bt-ink-${inkName(color)})`)
-// Text in a Bot's color; pure black reads as a heading, so it falls back to gray.
+// Text in a role's color; pure black reads as a heading, so it falls back to gray.
 export const inkText = color => (color === 'black' ? 'var(--bt-ink-gray)' : inkFill(color))
 // A color as a CSS background, for swatches and masked marks.
 export const paintCss = color => (GRADIENTS[color] ? `linear-gradient(135deg,${GRADIENTS[color].map(([offset, value]) => `${value} ${offset * 100}%`).join(',')})` : inkFill(color))

@@ -8,7 +8,7 @@ import type { Effect, EffectHandler, EffectResult, Effects } from './effects.js'
 import type { InputDelivery, MainFollowUpAttachment, MainFollowUpAttachmentRequest, WorkInput, WorkOwnership } from './work-inputs.js'
 import type { MainSourceHandoff } from './main-source.js'
 import { isCurrentSourceEvent, type SourceEvent } from './source-events.js'
-import { authorizedScheduleEvent } from './product-schedules.js'
+import { authorizedScheduleEvent, scheduleSourceEnabled } from './product-schedules.js'
 import type { ContextCard, ContextRef, ContextRequest } from './context.js'
 import { assertReferenceShape, type EnvironmentAssetReference } from './environment-assets.js'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
@@ -412,6 +412,7 @@ export interface WorkDelegationOptions {
   recordRouterUse(sessionId: string, config: RoleConfigView): Promise<void>
   notifyMain(notification: MainWorkNotification, signal: AbortSignal, isCurrent: (transaction?: AsyncTx) => Promise<boolean>): Promise<void>
   notifyMainSource(handoff: MainSourceHandoff, signal: AbortSignal): Promise<void>
+  authorizeImSource?(tx: AsyncTx, event: SourceEvent): Promise<boolean>
   applyFollowUp(tx: AsyncTx, request: MainFollowUpAttachmentRequest): Promise<MainFollowUpAttachment>
   readContext(request: ContextRequest): Promise<ContextCard>
 }
@@ -629,7 +630,8 @@ export class WorkDelegation {
         const scheduled = sourceEvent?.source.kind === 'schedule'
           ? await authorizedScheduleEvent(transaction, sourceEvent, this.options.source.actorId, 'main').catch(() => undefined) : undefined
         if (!sourceEvent || !await isCurrentSourceEvent(transaction, sourceEvent) || sourceEvent.authorId !== sourceHandoff.authorId || sourceEvent.source.sourceInstanceId !== sourceHandoff.sourceInstanceId
-          || (sourceEvent.source.kind === 'schedule' ? !scheduled : !policy?.configuration.allowedRequesterIds.includes(sourceEvent.authorId))) {
+          || (sourceEvent.source.kind === 'schedule' ? !scheduled : !policy?.configuration.allowedRequesterIds.includes(sourceEvent.authorId))
+          || sourceEvent.source.kind === 'im' && !await this.options.authorizeImSource?.(transaction, sourceEvent)) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The Main source handoff is no longer current and authorized.')
         }
         if (attachments?.length && !sourceHandoff.attachments?.length) {
@@ -774,14 +776,14 @@ export class WorkDelegation {
             const sourceEvent = await tx.get<SourceEvent>('source-event', current.sourceEventId)
             const policy = await tx.get<{ configuration: { allowedRequesterIds: string[] } }>('policy-state',
               JSON.stringify(['policy-state', current.sourceInstanceId]))
-            const scheduleSource = sourceEvent?.source.kind === 'schedule'
-              ? await tx.get<{ enabled: boolean }>('product-schedule-source', 'product-schedule-source') : undefined
+            const sourcePaused = sourceEvent?.source.kind === 'schedule' && !await scheduleSourceEnabled(tx, sourceEvent)
             const scheduled = sourceEvent?.source.kind === 'schedule'
-              ? await authorizedScheduleEvent(tx, sourceEvent, this.options.source.actorId, 'main').catch(() => undefined) : undefined
+              && !sourcePaused ? await authorizedScheduleEvent(tx, sourceEvent, this.options.source.actorId, 'main').catch(() => undefined) : undefined
             const staleReason = !sourceEvent ? 'SOURCE_EVENT_MISSING'
               : !await isCurrentSourceEvent(tx, sourceEvent) ? 'SOURCE_EVENT_SUPERSEDED'
               : sourceEvent.authorId !== current.authorId || sourceEvent.source.sourceInstanceId !== current.sourceInstanceId ? 'SOURCE_ACTOR_CHANGED'
-                : scheduleSource?.enabled === false ? 'SCHEDULE_SOURCE_CLOSED'
+                : sourcePaused ? 'SCHEDULE_SOURCE_CLOSED'
+                  : sourceEvent.source.kind === 'im' && !await this.options.authorizeImSource?.(tx, sourceEvent) ? 'IM_PAIR_REVOKED'
                   : sourceEvent.type === 'deleted' || sourceEvent.addressing === 'ambient'
                     || (sourceEvent.source.kind === 'schedule' ? !scheduled : sourceEvent.authorKind !== 'human') ? 'SOURCE_NOT_AUTHORIZED'
                     : scheduled ? undefined : !policy ? 'SOURCE_POLICY_MISSING'
@@ -1196,6 +1198,26 @@ export class WorkDelegation {
       .slice(-20)
   }
 
+  async boardPage(mainId: string, options: { after?: string; limit?: number }) {
+    const limit = options.limit ?? 25
+    if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+      throw new CoreError('INVALID_INPUT', 'The Work board page size is between 1 and 50.')
+    }
+    if (options.after !== undefined) identifier(options.after, 'after')
+    const page = await this.options.storage.transaction(this.options.instanceId,
+      transaction => transaction.scan<MainWorkBrief>('work-brief', { ...options, limit }))
+    const items: MainWorkCard[] = []
+    for (const { value: brief } of page.items) {
+      if (brief.mainId !== mainId || brief.instanceId !== this.options.instanceId) continue
+      const split = await this.readSplit(brief.id)
+      for (const item of split?.items ?? [this.legacyItem(brief)]) {
+        const card = await this.card(brief, item)
+        if (card) items.push(card)
+      }
+    }
+    return { items, cursor: page.cursor }
+  }
+
   async handoff(mainId: string): Promise<MainWorkHandoff> {
     identifier(mainId, 'mainId')
     const briefs: MainWorkBrief[] = []
@@ -1340,6 +1362,12 @@ export class WorkDelegation {
   }
 
   async followUp(request: MainWorkFollowUpRequest): Promise<MainWorkFollowUpView> {
+    return commandTransaction(this.options.storage, this.options.instanceId,
+      transaction => this.followUpIn(transaction, request))
+  }
+
+  async followUpIn(transaction: AsyncTx, request: MainWorkFollowUpRequest,
+    origin?: { sequence: number; ticketId: string }): Promise<MainWorkFollowUpView> {
     if (!request || Object.keys(request).some(key => !['commandId', 'mainId', 'mainSessionId', 'mainMessageId',
       'originalUserText', 'workItemId', 'text', 'reason'].includes(key))) {
       throw new CoreError('INVALID_INPUT', 'A Main follow-up accepts only its source and one exact work item.')
@@ -1357,32 +1385,29 @@ export class WorkDelegation {
     const reason = request.reason === undefined ? 'The user explicitly directed this work item from its Main conversation.'
       : boundedText(request.reason, 'The Main follow-up reason', 2048)
     const key = commandKey(this.options.source, request.commandId)
-    return commandTransaction(this.options.storage, this.options.instanceId, async transaction => {
-      await this.verifyFollowUpSource(transaction, request, originalUserText)
-      const { item, brief, ticketId } = await this.followUpTarget(transaction, request)
-      const fingerprint = this.followUpFingerprint(request, originalUserText, item, ticketId, text, reason)
-      const prior = await transaction.get<{ fingerprint: string; followUpId: string }>('work-follow-up-command', key)
-      if (prior) {
-        if (prior.fingerprint !== fingerprint) {
-          throw new CoreError('IDENTITY_CONFLICT', 'This Main follow-up identity was already used for different direction.')
-        }
-        const record = await transaction.get<MainWorkFollowUp>('work-follow-up', followUpKey(item.id, prior.followUpId))
-        if (!record) throw new CoreError('INCOMPLETE_STATE', 'The accepted Main follow-up is missing.')
-        return this.followUpView(transaction, record)
+    await this.verifyFollowUpSource(transaction, request, originalUserText, origin?.sequence)
+    const { item, brief, ticketId } = await this.followUpTarget(transaction, request)
+    if (origin && ticketId !== origin.ticketId) {
+      throw new CoreError('TICKET_VERSION_CONFLICT', 'The accepted Ticket changed. Refresh the Work board.')
+    }
+    const fingerprint = this.followUpFingerprint(request, originalUserText, item, ticketId, text, reason)
+    const prior = await transaction.get<{ fingerprint: string; followUpId: string }>('work-follow-up-command', key)
+    if (prior) {
+      if (prior.fingerprint !== fingerprint) {
+        throw new CoreError('IDENTITY_CONFLICT', 'This Main follow-up identity was already used for different direction.')
       }
-      const followUpId = randomUUID()
-      const attachment = await this.options.applyFollowUp(transaction, {
-        ticketId,
-        followUpId,
-        text,
-        authorId: this.options.source.actorId,
-        reason,
-      })
-      const record = this.followUpRecord(followUpId, request, originalUserText, item, brief, ticketId, text, reason, attachment)
-      await transaction.insert('work-follow-up', followUpKey(item.id, record.id), record)
-      await transaction.insert('work-follow-up-command', key, { fingerprint, followUpId: record.id })
+      const record = await transaction.get<MainWorkFollowUp>('work-follow-up', followUpKey(item.id, prior.followUpId))
+      if (!record) throw new CoreError('INCOMPLETE_STATE', 'The accepted Main follow-up is missing.')
       return this.followUpView(transaction, record)
+    }
+    const followUpId = randomUUID()
+    const attachment = await this.options.applyFollowUp(transaction, {
+      ticketId, followUpId, text, authorId: this.options.source.actorId, reason,
     })
+    const record = this.followUpRecord(followUpId, request, originalUserText, item, brief, ticketId, text, reason, attachment)
+    await transaction.insert('work-follow-up', followUpKey(item.id, record.id), record)
+    await transaction.insert('work-follow-up-command', key, { fingerprint, followUpId: record.id })
+    return this.followUpView(transaction, record)
   }
 
   async recordAttentionAnswer(event: { ticketId: string; attentionId: string; attentionVersion: number;
@@ -1441,22 +1466,24 @@ export class WorkDelegation {
     return fact
   }
 
-  private async verifyFollowUpSource(transaction: AsyncTx, request: MainWorkFollowUpRequest, originalUserText: string) {
+  private async verifyFollowUpSource(transaction: AsyncTx, request: MainWorkFollowUpRequest, originalUserText: string, sequence?: number) {
     const mainState = await transaction.get<{ mainId: string; mainSessionId: string }>('main-state', 'main')
     if (mainState?.mainId !== request.mainId || mainState.mainSessionId !== request.mainSessionId) {
       throw new CoreError('SOURCE_NOT_AUTHORIZED', 'The Main follow-up source does not belong to the current Main conversation.')
     }
-    let sourceMessage: { role: 'user' | 'main'; text: string } | undefined
+    type SourceMessage = { id: string; role: 'user' | 'main'; text: string }
+    let sourceMessage = sequence === undefined ? undefined
+      : await transaction.get<SourceMessage>('main-message', String(sequence).padStart(16, '0'))
     let cursor: string | undefined
-    for (let pageCount = 0; pageCount < 10; pageCount++) {
-      const page = await transaction.scan<{ id: string; role: 'user' | 'main'; text: string }>('main-message',
+    for (let pageCount = 0; sequence === undefined && pageCount < 10; pageCount++) {
+      const page = await transaction.scan<SourceMessage>('main-message',
         { limit: 100, ...(cursor === undefined ? {} : { after: cursor }) })
       sourceMessage = page.items.find(entry => entry.value.id === request.mainMessageId)?.value
       if (sourceMessage || !page.cursor) break
       cursor = page.cursor
       if (pageCount === 9) throw new CoreError('MAIN_HISTORY_BUDGET', 'The Main follow-up source scan exceeded its 1000-message budget.')
     }
-    if (!sourceMessage || sourceMessage.role !== 'user' || sourceMessage.text.trim() !== originalUserText) {
+    if (sourceMessage?.id !== request.mainMessageId || sourceMessage.role !== 'user' || sourceMessage.text.trim() !== originalUserText) {
       throw new CoreError('SOURCE_NOT_AUTHORIZED', 'A Main follow-up must cite the exact current Main user message.')
     }
   }
