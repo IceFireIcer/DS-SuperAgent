@@ -47,9 +47,9 @@ export const SETTINGS_GROUPS = [
 const pages = SETTINGS_GROUPS.flatMap(group => group.pages)
 export const SETTINGS_SECTIONS = pages.flatMap(page => page.tabs ?? [page])
 
-export function settingsTarget(id) {
+export function settingsTarget(id, available = () => true) {
   for (const page of pages) {
-    if (page.id === id) return { page, section: page.tabs?.[0] ?? page }
+    if (page.id === id) return { page, section: page.tabs?.find(available) ?? page.tabs?.[0] ?? page }
     const tab = page.tabs?.find(section => section.id === id)
     if (tab) return { page, section: tab }
   }

@@ -22,6 +22,7 @@ import { mergeMessages, mergeObservationItems, projectNativeTurnCards, projectTu
 import { installLocale, t } from './i18n.js'
 import { AppearanceSettings, installAppearance } from './appearance.js'
 import { SettingsShell, SETTINGS_CHILDREN, SETTINGS_SHELL_CSS, installSettingsSections } from './settings-shell.js'
+import { settingsTarget } from './settings-navigation.js'
 import { SettingsSectionState } from './settings-sections.js'
 import { FeedbackSettings } from './settings-feedback.js'
 import { BuiltinPluginSettings } from './settings-builtin-plugins.js'
@@ -49,7 +50,15 @@ export { productCall } from './api.js'
 const clientBridge = () => window.dsSuperagentApp?.productClient
 const classicBridge = () => window.dsSuperagentApp?.classicAgent
 const focusMainInput = () => document.getElementById('main-message')?.focus()
-const returnTo = trigger => { if (trigger?.isConnected) trigger.focus(); else focusMainInput() }
+const focusAvailable = element => {
+  if (!element?.isConnected || element.matches(':disabled') || element.closest('[hidden], [inert]')) return false
+  element.focus()
+  return element.ownerDocument.activeElement === element
+}
+const returnTo = trigger => {
+  if (focusAvailable(trigger) || focusAvailable(document.getElementById('main-message'))) return
+  Array.from(document.querySelectorAll('[data-superagent-settings-trigger]')).some(focusAvailable)
+}
 
 function offerDownload(data, name, mediaType = 'application/octet-stream') {
   const url = URL.createObjectURL(new Blob([data], { type: mediaType }))
@@ -113,6 +122,7 @@ export function applyProduct(ctx) {
     activityLoading: false,
     activityError: null,
     settingsOpen: false,
+    settingsVisit: 0,
     settingsPage: null,
     nativeModelsOpen: false,
     signInOpen: false,
@@ -1235,9 +1245,10 @@ export function applyProduct(ctx) {
     if (showModelSetup && state.mainModelSetup) {
       modelChoice = h(SuperagentModelChoice, { setup: state.mainModelSetup, saveKey: saveSetupKey,
         refreshModels: refreshModelSettings, focusMain: focusMainInput,
-        signIn: canSignIn() ? openSignIn : undefined, openModels: () => shellActions.openSettings('models'),
+        signIn: canSignIn() ? openSignIn : undefined,
+        openModels: event => shellActions.openSettings('models', { trigger: event.currentTarget }),
         openCustomModels: hasNativeSettings('models') ? openCustomModels : undefined,
-        openRoles: () => shellActions.openSettings('roles') })
+        openRoles: event => shellActions.openSettings('roles', { trigger: event.currentTarget }) })
     } else if (showModelSetup && state.modelSettingsError) {
       modelChoice = h('div', { className: 'bt-superagent-model-dock' },
         h('p', { className: 'bt-main-error', role: 'alert' }, t('Could not check which models are available.')),
@@ -1274,7 +1285,8 @@ export function applyProduct(ctx) {
         clientBridge() ? h('button', { type: 'button', className: 'bt-soft', onClick: () => view.set(current => ({ ...current, connectOpen: true })) },
           state.connection?.connected ? t('Connection') : t('Connect to Host')) : null,
         !state.connection?.connected ? h('button', { type: 'button', className: 'bt-icon-btn bt-main-settings', title: t('Settings'),
-          'aria-label': t('Settings'), onClick: () => shellActions.openSettings() }, h(SlidersIcon)) : null),
+          'aria-label': t('Settings'), 'data-superagent-settings-trigger': '',
+          onClick: event => shellActions.openSettings('general', { trigger: event.currentTarget }) }, h(SlidersIcon)) : null),
       state.modelsNeedSetup ? h('p', { className: 'bt-main-health-warning', role: 'alert' },
         t('Open Settings to select models for Main, Router and Worker.'))
         : state.health?.state === 'degraded' ? h('p', { className: 'bt-main-health-warning', role: 'alert' },
@@ -1354,7 +1366,8 @@ export function applyProduct(ctx) {
           h('strong', null, observation?.title ?? state.selectedObservation?.title ?? '')),
         h('span', { className: 'bt-observation-readonly' }, t('Read-only')),
         !state.connection?.connected ? h('button', { type: 'button', className: 'bt-icon-btn', title: t('Settings'), 'aria-label': t('Settings'),
-          onClick: () => shellActions.openSettings() }, h(SlidersIcon)) : null),
+          'data-superagent-settings-trigger': '',
+          onClick: event => shellActions.openSettings('general', { trigger: event.currentTarget }) }, h(SlidersIcon)) : null),
       h('div', { className: 'bt-observation-body' },
         h(ActivityNavigation),
         state.observationLoading && !observation ? h('p', { role: 'status', className: 'bt-main-status' }, t('Loading history…')) : null,
@@ -1954,7 +1967,8 @@ export function applyProduct(ctx) {
       'data-native-main-question': sessionState?.get(state.binding?.mainSessionId)?.pendingInteraction ? '' : undefined },
       h('span', { role: 'status' }, state.modelsNeedSetup ? t('Models need setup') : mainHealthCopy(state.health)),
       h('button', { type: 'button', className: 'bt-icon-btn bt-main-settings', 'aria-label': t('Settings'),
-        onClick: () => shellActions.openSettings() }, h(SlidersIcon)))
+        'data-superagent-settings-trigger': '',
+        onClick: event => shellActions.openSettings('general', { trigger: event.currentTarget }) }, h(SlidersIcon)))
   }
 
   const slotEntries = name => ctx.slots.entries?.(name) ?? []
@@ -1977,7 +1991,7 @@ export function applyProduct(ctx) {
     view.set(state => ({ ...state, signInOpen: false }))
     void refreshModelSettings()
   }
-  const openCustomModels = () => shellActions.openSettings('models', { nativeModels: true })
+  const openCustomModels = event => shellActions.openSettings('models', { nativeModels: true, trigger: event.currentTarget })
 
   function SignInDialog({ renderSlot }) {
     useEffect(() => {
@@ -2003,8 +2017,8 @@ export function applyProduct(ctx) {
     const trigger = settingsTrigger
     return h(Fragment, null,
       state.binding && !state.connection?.connected && state.settingsPage ? h(SettingsDialog, { binding: state.binding,
-        key: `${state.settingsPage}:${state.nativeModelsOpen}`, open: state.settingsOpen, initialPage: state.settingsPage, renderSlot,
-        returnFocus: () => returnTo(trigger),
+        key: state.settingsVisit, open: state.settingsOpen, initialPage: state.settingsPage, renderSlot,
+        returnFocus: () => { if (!view.getSnapshot().settingsOpen) returnTo(trigger) },
         onClose: () => {
           view.set(current => ({ ...current, settingsOpen: false }))
           void refreshModelSettings()
@@ -2129,9 +2143,12 @@ export function applyProduct(ctx) {
     },
     openSettings(settingsPage = 'general', { nativeModels = false, trigger = document.activeElement } = {}) {
       const state = view.getSnapshot()
-      if (!state.binding || state.connection?.connected) return
+      if (!state.binding || state.connection?.connected || !settingsTarget(settingsPage)) {
+        reportError(t('This setting is unavailable here.'))
+        return
+      }
       settingsTrigger = trigger
-      view.set({ ...state, settingsOpen: true, settingsPage, nativeModelsOpen: nativeModels })
+      view.set({ ...state, settingsOpen: true, settingsVisit: state.settingsVisit + 1, settingsPage, nativeModelsOpen: nativeModels })
     },
     openConnection() { if (clientBridge()) view.set(current => ({ ...current, connectOpen: true })) },
   }

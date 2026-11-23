@@ -12871,9 +12871,9 @@ var SETTINGS_GROUPS = [
 ];
 var pages = SETTINGS_GROUPS.flatMap((group) => group.pages);
 var SETTINGS_SECTIONS = pages.flatMap((page) => page.tabs ?? [page]);
-function settingsTarget(id) {
+function settingsTarget(id, available = () => true) {
   for (const page of pages) {
-    if (page.id === id) return { page, section: page.tabs?.[0] ?? page };
+    if (page.id === id) return { page, section: page.tabs?.find(available) ?? page.tabs?.[0] ?? page };
     const tab = page.tabs?.find((section) => section.id === id);
     if (tab) return { page, section: tab };
   }
@@ -13010,15 +13010,18 @@ function keepFocusInDialog(event) {
   }
 }
 function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate, returnFocus, leaving }) {
-  const [target, setTarget] = (0, import_react23.useState)(() => settingsTarget(initialPage) ?? settingsTarget("general"));
+  const resolveTarget = (targetId) => settingsTarget(targetId, (tab) => Object.hasOwn(sections, tab.id) && sections[tab.id]?.status !== "unavailable");
+  const [target, setTarget] = (0, import_react23.useState)(() => resolveTarget(initialPage) ?? settingsTarget("general"));
+  const [unavailable2, setUnavailable] = (0, import_react23.useState)(() => initialPage != null && !settingsTarget(initialPage));
   const [usageTabs, setUsageTabs] = (0, import_react23.useState)(() => /* @__PURE__ */ new Set());
   const { page, section } = target;
   const id = (0, import_react23.useId)();
   const dialog = (0, import_react23.useRef)(null);
   const scroll = (0, import_react23.useRef)(null);
+  const selectedPage = (0, import_react23.useRef)(null);
+  const focusDestination = (0, import_react23.useRef)(true);
   (0, import_react23.useEffect)(() => {
     const previous = dialog.current.ownerDocument.activeElement;
-    dialog.current.focus();
     return () => {
       if (returnFocus) returnFocus();
       else if (previous?.isConnected) previous.focus();
@@ -13026,6 +13029,10 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
   }, []);
   (0, import_react23.useEffect)(() => {
     if (scroll.current) scroll.current.scrollTop = 0;
+    if (focusDestination.current) {
+      selectedPage.current?.focus();
+      focusDestination.current = false;
+    }
   }, [section.id]);
   (0, import_react23.useEffect)(() => {
     if (page.id === "usage") setUsageTabs((tabs) => tabs.has(section.id) ? tabs : /* @__PURE__ */ new Set([...tabs, section.id]));
@@ -13033,18 +13040,16 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
   const close = () => {
     if (!leaving) onClose();
   };
-  const navigate = (targetId) => {
-    const next = settingsTarget(targetId);
-    if (!leaving && next && next.section !== section) {
-      onNavigate?.(section.id);
-      setTarget(next);
-    }
+  const navigate = (targetId, focusPage = false) => {
+    if (leaving) return;
+    const next = resolveTarget(targetId);
+    setUnavailable(!next);
+    if (!next || next.section === section) return;
+    focusDestination.current = focusPage;
+    onNavigate?.(section.id);
+    setTarget(next);
   };
-  const navigateFromSection = (targetId) => {
-    if (leaving || !settingsTarget(targetId)) return;
-    dialog.current?.focus();
-    navigate(targetId);
-  };
+  const navigateFromSection = (targetId) => navigate(targetId, true);
   const onKeyDown = (event) => {
     if (event.defaultPrevented || leaving) return;
     if (event.key === "Escape") {
@@ -13093,9 +13098,11 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
                 key: item.id,
                 className: "bt-settings-item",
                 type: "button",
+                ref: item === page ? selectedPage : void 0,
                 "aria-current": item === page ? "page" : void 0,
                 onClick: () => {
                   if (item !== page) navigate(item.id);
+                  else setUnavailable(false);
                 }
               },
               (0, import_react23.createElement)(pageIcons[item.id]),
@@ -13118,7 +13125,7 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
             hidden: tab !== section
           },
           tab === section || page.id === "usage" && usageTabs.has(tab.id) ? content(tab) : null
-        )) : content(section)),
+        )) : content(section), unavailable2 ? (0, import_react23.createElement)(SettingsSectionState) : null),
         (0, import_react23.createElement)("button", { type: "button", className: "bt-settings-close", "aria-label": t("Close settings"), onClick: close }, (0, import_react23.createElement)(CloseIcon))
       )
     )
@@ -13608,7 +13615,7 @@ function ShellToast({ toast, onDismiss, onOpenMain }) {
 var import_react29 = require("react");
 var import_react_dom3 = require("react-dom");
 var destinations = [
-  ["Usage", GaugeIcon, "usage"],
+  ["Usage", GaugeIcon, "usage-overview"],
   ["Models and API keys", SlidersIcon, "models"],
   ["Connectors", ConnectorIcon, "connectors"],
   ["Automation tasks", ClockIcon, "scheduled-tasks"],
@@ -13716,7 +13723,7 @@ function SuperagentAccountFooter({ wide, modalOpen, signIn, openClassic, openSet
       "aria-controls": menuId,
       onClick: () => open ? close() : setOpen(true)
     }),
-    iconButton("Connectors", ConnectorIcon, { onClick: () => openSettings("connectors") }),
+    iconButton("Connectors", ConnectorIcon, { onClick: (event) => openSettings("connectors", { trigger: event.currentTarget }) }),
     shown ? (0, import_react_dom3.createPortal)((0, import_react29.createElement)(
       "div",
       {
@@ -13731,7 +13738,7 @@ function SuperagentAccountFooter({ wide, modalOpen, signIn, openClassic, openSet
         style: shown,
         onKeyDown
       },
-      destinations.map(([label, Icon, page]) => item(label, Icon, () => openSettings(page))),
+      destinations.map(([label, Icon, page]) => item(label, Icon, () => openSettings(page, { trigger: trigger.current }))),
       openClassic || signIn ? (0, import_react29.createElement)("div", { className: "bt-menu-sep", role: "separator" }) : null,
       openClassic ? item("Classic Agent mode", SwitchIcon, openClassic) : null,
       signIn ? item("Sign in to DeepSeek", SlidersIcon, signIn) : null
@@ -20910,9 +20917,14 @@ var import_react51 = require("react");
 var clientBridge = () => window.dsSuperagentApp?.productClient;
 var classicBridge = () => window.dsSuperagentApp?.classicAgent;
 var focusMainInput = () => document.getElementById("main-message")?.focus();
+var focusAvailable = (element) => {
+  if (!element?.isConnected || element.matches(":disabled") || element.closest("[hidden], [inert]")) return false;
+  element.focus();
+  return element.ownerDocument.activeElement === element;
+};
 var returnTo = (trigger) => {
-  if (trigger?.isConnected) trigger.focus();
-  else focusMainInput();
+  if (focusAvailable(trigger) || focusAvailable(document.getElementById("main-message"))) return;
+  Array.from(document.querySelectorAll("[data-superagent-settings-trigger]")).some(focusAvailable);
 };
 function offerDownload(data, name, mediaType = "application/octet-stream") {
   const url = URL.createObjectURL(new Blob([data], { type: mediaType }));
@@ -20975,6 +20987,7 @@ function applyProduct(ctx) {
     activityLoading: false,
     activityError: null,
     settingsOpen: false,
+    settingsVisit: 0,
     settingsPage: null,
     nativeModelsOpen: false,
     signInOpen: false,
@@ -22599,9 +22612,9 @@ function applyProduct(ctx) {
         refreshModels: refreshModelSettings,
         focusMain: focusMainInput,
         signIn: canSignIn() ? openSignIn : void 0,
-        openModels: () => shellActions.openSettings("models"),
+        openModels: (event) => shellActions.openSettings("models", { trigger: event.currentTarget }),
         openCustomModels: hasNativeSettings("models") ? openCustomModels : void 0,
-        openRoles: () => shellActions.openSettings("roles")
+        openRoles: (event) => shellActions.openSettings("roles", { trigger: event.currentTarget })
       });
     } else if (showModelSetup && state.modelSettingsError) {
       modelChoice = (0, import_react51.createElement)(
@@ -22676,7 +22689,8 @@ function applyProduct(ctx) {
           className: "bt-icon-btn bt-main-settings",
           title: t("Settings"),
           "aria-label": t("Settings"),
-          onClick: () => shellActions.openSettings()
+          "data-superagent-settings-trigger": "",
+          onClick: (event) => shellActions.openSettings("general", { trigger: event.currentTarget })
         }, (0, import_react51.createElement)(SlidersIcon)) : null
       ),
       state.modelsNeedSetup ? (0, import_react51.createElement)(
@@ -22801,7 +22815,8 @@ function applyProduct(ctx) {
           className: "bt-icon-btn",
           title: t("Settings"),
           "aria-label": t("Settings"),
-          onClick: () => shellActions.openSettings()
+          "data-superagent-settings-trigger": "",
+          onClick: (event) => shellActions.openSettings("general", { trigger: event.currentTarget })
         }, (0, import_react51.createElement)(SlidersIcon)) : null
       ),
       (0, import_react51.createElement)(
@@ -23829,7 +23844,8 @@ function applyProduct(ctx) {
         type: "button",
         className: "bt-icon-btn bt-main-settings",
         "aria-label": t("Settings"),
-        onClick: () => shellActions.openSettings()
+        "data-superagent-settings-trigger": "",
+        onClick: (event) => shellActions.openSettings("general", { trigger: event.currentTarget })
       }, (0, import_react51.createElement)(SlidersIcon))
     );
   }
@@ -23855,7 +23871,7 @@ function applyProduct(ctx) {
     view.set((state) => ({ ...state, signInOpen: false }));
     void refreshModelSettings();
   };
-  const openCustomModels = () => shellActions.openSettings("models", { nativeModels: true });
+  const openCustomModels = (event) => shellActions.openSettings("models", { nativeModels: true, trigger: event.currentTarget });
   function SignInDialog({ renderSlot }) {
     (0, import_react51.useEffect)(() => {
       const trigger = signInTrigger;
@@ -23884,11 +23900,13 @@ function applyProduct(ctx) {
       null,
       state.binding && !state.connection?.connected && state.settingsPage ? (0, import_react51.createElement)(SettingsDialog2, {
         binding: state.binding,
-        key: `${state.settingsPage}:${state.nativeModelsOpen}`,
+        key: state.settingsVisit,
         open: state.settingsOpen,
         initialPage: state.settingsPage,
         renderSlot,
-        returnFocus: () => returnTo(trigger),
+        returnFocus: () => {
+          if (!view.getSnapshot().settingsOpen) returnTo(trigger);
+        },
         onClose: () => {
           view.set((current) => ({ ...current, settingsOpen: false }));
           void refreshModelSettings();
@@ -24042,9 +24060,12 @@ function applyProduct(ctx) {
     },
     openSettings(settingsPage = "general", { nativeModels = false, trigger = document.activeElement } = {}) {
       const state = view.getSnapshot();
-      if (!state.binding || state.connection?.connected) return;
+      if (!state.binding || state.connection?.connected || !settingsTarget(settingsPage)) {
+        reportError(t("This setting is unavailable here."));
+        return;
+      }
       settingsTrigger = trigger;
-      view.set({ ...state, settingsOpen: true, settingsPage, nativeModelsOpen: nativeModels });
+      view.set({ ...state, settingsOpen: true, settingsVisit: state.settingsVisit + 1, settingsPage, nativeModelsOpen: nativeModels });
     },
     openConnection() {
       if (clientBridge()) view.set((current) => ({ ...current, connectOpen: true }));

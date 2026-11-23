@@ -10,7 +10,7 @@ import { useLinger } from './motion.js'
 import { ABOUT_SETTINGS_SECTION } from './settings-about.js'
 import { SettingsPage } from './product-settings-components.js'
 import { SETTINGS_GROUPS, settingsTarget } from './settings-navigation.js'
-import { SETTINGS_SECTION_SLOT, SettingsSectionContext, SettingsSectionOutlet } from './settings-sections.js'
+import { SETTINGS_SECTION_SLOT, SettingsSectionContext, SettingsSectionOutlet, SettingsSectionState } from './settings-sections.js'
 
 export { installSettingsSections } from './settings-sections.js'
 
@@ -59,39 +59,47 @@ function keepFocusInDialog(event) {
 }
 
 function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate, returnFocus, leaving }) {
-  const [target, setTarget] = useState(() => settingsTarget(initialPage) ?? settingsTarget('general'))
+  const resolveTarget = targetId => settingsTarget(targetId, tab =>
+    Object.hasOwn(sections, tab.id) && sections[tab.id]?.status !== 'unavailable')
+  const [target, setTarget] = useState(() => resolveTarget(initialPage) ?? settingsTarget('general'))
+  const [unavailable, setUnavailable] = useState(() => initialPage != null && !settingsTarget(initialPage))
   const [usageTabs, setUsageTabs] = useState(() => new Set())
   const { page, section } = target
   const id = useId()
   const dialog = useRef(null)
   const scroll = useRef(null)
+  const selectedPage = useRef(null)
+  const focusDestination = useRef(true)
 
   useEffect(() => {
     const previous = dialog.current.ownerDocument.activeElement
-    dialog.current.focus()
     return () => {
       if (returnFocus) returnFocus()
       else if (previous?.isConnected) previous.focus()
     }
   }, [])
-  useEffect(() => { if (scroll.current) scroll.current.scrollTop = 0 }, [section.id])
+  useEffect(() => {
+    if (scroll.current) scroll.current.scrollTop = 0
+    if (focusDestination.current) {
+      selectedPage.current?.focus()
+      focusDestination.current = false
+    }
+  }, [section.id])
   useEffect(() => {
     if (page.id === 'usage') setUsageTabs(tabs => tabs.has(section.id) ? tabs : new Set([...tabs, section.id]))
   }, [page.id, section.id])
 
   const close = () => { if (!leaving) onClose() }
-  const navigate = targetId => {
-    const next = settingsTarget(targetId)
-    if (!leaving && next && next.section !== section) {
-      onNavigate?.(section.id)
-      setTarget(next)
-    }
+  const navigate = (targetId, focusPage = false) => {
+    if (leaving) return
+    const next = resolveTarget(targetId)
+    setUnavailable(!next)
+    if (!next || next.section === section) return
+    focusDestination.current = focusPage
+    onNavigate?.(section.id)
+    setTarget(next)
   }
-  const navigateFromSection = targetId => {
-    if (leaving || !settingsTarget(targetId)) return
-    dialog.current?.focus()
-    navigate(targetId)
-  }
+  const navigateFromSection = targetId => navigate(targetId, true)
   const onKeyDown = event => {
     if (event.defaultPrevented || leaving) return
     if (event.key === 'Escape') {
@@ -114,14 +122,15 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
         SETTINGS_GROUPS.map(group => h('div', { key: group.id, className: 'bt-settings-group', role: 'group', 'aria-labelledby': `${id}-${group.id}` },
           h('span', { id: `${id}-${group.id}`, className: 'bt-settings-group-label' }, t(group.label)),
           group.pages.map(item => h('button', { key: item.id, className: 'bt-settings-item', type: 'button',
-            'aria-current': item === page ? 'page' : undefined, onClick: () => { if (item !== page) navigate(item.id) } },
+            ref: item === page ? selectedPage : undefined, 'aria-current': item === page ? 'page' : undefined,
+            onClick: () => { if (item !== page) navigate(item.id); else setUnavailable(false) } },
           h(pageIcons[item.id]), t(item.label)))))),
       h(SettingsPage, { title: t(page.label), scrollRef: scroll,
         tabs: page.tabs ? h(SettingsTabs, { page, section, navigate, id }) : null }, page.tabs
           ? page.tabs.map(tab => h('div', { key: tab.id, role: 'tabpanel', id: `${id}-panel-${tab.id}`,
             'aria-labelledby': `${id}-tab-${tab.id}`, tabIndex: tab === section ? 0 : -1, hidden: tab !== section },
           tab === section || page.id === 'usage' && usageTabs.has(tab.id) ? content(tab) : null))
-          : content(section)),
+          : content(section), unavailable ? h(SettingsSectionState) : null),
       h('button', { type: 'button', className: 'bt-settings-close', 'aria-label': t('Close settings'), onClick: close }, h(CloseIcon)))))
 }
 

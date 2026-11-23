@@ -171,7 +171,7 @@ export async function mountProduct(context, { connection = { connected: false },
     subscribe: () => () => {} }
   await act(async () => {
     module.exports.applyProduct({ get: name => name === 'workspaces' && native ? { list: workspaceList } : remotes[name],
-      effect: effect => cleanups.push(effect()), slots, ...nativeContext })
+      effect: effect => cleanups.push(effect()), on: () => () => {}, slots, ...nativeContext })
     render(true)
   })
 

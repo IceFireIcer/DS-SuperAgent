@@ -138,8 +138,11 @@ test('routes through settings.section and leaves page chrome usable after sectio
   await render({ sections, renderSlot, initialPage: 'models', onClose: () => { closes++ } })
   await click('Provider catalog')
   assert.match(document.querySelector('.bt-settings-scroll').textContent, /^Main, Router and Worker$/u)
+  assert.equal(document.activeElement.textContent, 'Roles')
   assert.deepEqual(requests.slice(0, 2), ['superagent-models', 'superagent-roles'])
   await click('Browser', 'nav')
+  assert.equal(document.querySelector('[role=status]').textContent, 'Loading settings…')
+  await click('Browser resources', '[role=tablist]')
   assert.match(document.querySelector('[role=status]').textContent, /unavailable/u)
   await click('Browser plugin', '[role=tablist]')
   assert.equal(document.querySelector('[role=status]').textContent, 'Loading settings…')
@@ -177,4 +180,25 @@ test('a direct section can change readiness independently of the other pages', a
   await click('Roles', 'nav')
   await render({ sections: { ...sections, roles: { render: () => h('span', null, 'Main, Router and Worker') } } })
   assert.equal(document.querySelector('.bt-settings-scroll').textContent, 'Main, Router and Worker')
+}))
+
+test('a parent selects the first available tab while an explicit unavailable tab explains itself', async () => withShell(async ({ document, click, render }) => {
+  await render({ initialPage: 'browser', sections: {
+    'browser-resources': { status: 'unavailable' },
+    'browser-plugin': { render: () => h('span', null, 'Browser mode') },
+  } })
+  assert.equal(document.querySelector('nav [aria-current=page]').textContent, 'Browser')
+  assert.equal(document.querySelector('[role=tab][aria-selected=true]').textContent, 'Browser plugin')
+  await click('Browser resources', '[role=tablist]')
+  assert.equal(document.querySelector('[role=tab][aria-selected=true]').textContent, 'Browser resources')
+  assert.match(document.querySelector('[role=tabpanel]:not([hidden])').textContent, /unavailable/u)
+}))
+
+test('an invalid section link reports the unavailable destination without leaving the current page', async () => withShell(async ({ document, click, render }) => {
+  await render({ initialPage: 'models', sections: {
+    models: { render: ({ navigate }) => h('button', { onClick: () => navigate('missing-setting') }, 'Open setting') },
+  } })
+  await click('Open setting')
+  assert.equal(document.querySelector('nav [aria-current=page]').textContent, 'Models')
+  assert.equal(document.querySelector('[role=status]').textContent, 'This setting is unavailable here.')
 }))
