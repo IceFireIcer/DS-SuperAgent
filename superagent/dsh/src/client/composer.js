@@ -89,7 +89,7 @@ export function MainComposer({ onSend, onStop, busy, stopping, ready = true, rea
   const submit = async event => {
     event.preventDefault()
     if (!ready || busy || directoryBusy || uploading || voiceState !== 'idle' || dictation.listening || readOnly || !hasContent) return
-    if (await onSend(text)) setText('')
+    if (await onSend(text) && !onValueChange) setDraft(current => current === text ? '' : current)
   }
   if (voiceOpen) return h(VoiceMode, { state: voice, error, onPause: onVoicePause, onResume: onVoiceResume,
     onClose: () => { restoreFocus.current = true; onVoiceClose() }, busy: busy || directoryBusy || uploading, onStop, stopping })

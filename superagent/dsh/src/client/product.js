@@ -97,7 +97,7 @@ export function applyProduct(ctx) {
     mainEvidenceLoading: false,
     mainEvidenceError: null,
     error: null,
-    mainDraft: '',
+    mainDraft: { text: '' },
     mainAttachments: [],
     mainUploading: false,
     mainSending: false,
@@ -1165,13 +1165,14 @@ export function applyProduct(ctx) {
       finally { view.set(current => ({ ...current, mainSending: false })) }
     }
     const sendText = async text => {
+      const submittedDraft = view.getSnapshot().mainDraft
       try {
         const receipt = await send(text)
+        if (submittedDraft.text === text) view.set(current => current.mainDraft === submittedDraft
+          ? { ...current, mainDraft: { text: '' } } : current)
         if (receipt.status === 'failed') {
           setSendError(t('Main could not finish this reply. Your message is saved.'))
           setSendErrorCode(null)
-          view.set(current => ({ ...current, mainDraft: '' }))
-          return true
         }
         return true
       } catch (error) { setSendError(error.message); setSendErrorCode(error.code ?? null); return false }
@@ -1243,7 +1244,7 @@ export function applyProduct(ctx) {
       directoryBusy: state.directoryBusy, ready: Boolean(state.binding && execution), readOnly: !canCommand,
       error: sendError ?? state.error,
       errorAction: sendError && pending.current && ['NETWORK', 'STORAGE_UNAVAILABLE'].includes(sendErrorCode) ? retryPending : undefined,
-      value: state.mainDraft, onValueChange: mainDraft => view.set(current => ({ ...current, mainDraft })),
+      value: state.mainDraft.text, onValueChange: text => view.set(current => ({ ...current, mainDraft: { text } })),
       voice: voiceState, onVoiceStart: state.binding ? startVoice : undefined,
       onVoicePause: () => mainVoice.pause(), onVoiceResume: startVoice, onVoiceClose: mainVoice.close,
       attachments, uploading, onRemoveAttachment: removeAttachment,

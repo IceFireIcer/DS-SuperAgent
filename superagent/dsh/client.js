@@ -6106,7 +6106,7 @@ function MainComposer({
   const submit = async (event) => {
     event.preventDefault();
     if (!ready || busy || directoryBusy || uploading || voiceState !== "idle" || dictation.listening || readOnly || !hasContent) return;
-    if (await onSend(text)) setText("");
+    if (await onSend(text) && !onValueChange) setDraft((current) => current === text ? "" : current);
   };
   if (voiceOpen) return (0, import_react6.createElement)(VoiceMode, {
     state: voice,
@@ -6124,7 +6124,7 @@ function MainComposer({
   return (0, import_react6.createElement)(
     "form",
     { className: "bt-main-composer", "data-main-input-ready": ready ? "" : void 0, onSubmit: submit },
-    error ? (0, import_react6.createElement)("div", { className: "bt-main-error", role: "alert" }, (0, import_react6.createElement)("p", null, error), errorAction ? (0, import_react6.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: errorAction }, t("Send again")) : null) : null,
+    error ? (0, import_react6.createElement)("div", { className: `bt-main-error${errorAction ? " bt-main-error-action" : ""}`, role: "alert" }, (0, import_react6.createElement)("p", null, error), errorAction ? (0, import_react6.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: errorAction }, t("Send again")) : null) : null,
     voiceError || dictation.note ? (0, import_react6.createElement)("p", { className: "bt-main-error", role: "status" }, voiceError ?? dictation.note) : null,
     (0, import_react6.createElement)("label", { className: "bt-main-label", htmlFor: "main-message" }, t("Message Main")),
     (0, import_react6.createElement)("textarea", {
@@ -21249,7 +21249,7 @@ function applyProduct(ctx) {
     mainEvidenceLoading: false,
     mainEvidenceError: null,
     error: null,
-    mainDraft: "",
+    mainDraft: { text: "" },
     mainAttachments: [],
     mainUploading: false,
     mainSending: false,
@@ -22599,6 +22599,7 @@ function applyProduct(ctx) {
       }))
     ) : null;
     const [sendError, setSendError] = (0, import_react51.useState)(null);
+    const [sendErrorCode, setSendErrorCode] = (0, import_react51.useState)(null);
     const { mainAttachments: attachments, mainUploading: uploading } = state;
     const setAttachments = (update) => view.set((current) => ({
       ...current,
@@ -22763,16 +22764,18 @@ function applyProduct(ctx) {
       }
     };
     const sendText = async (text) => {
+      const submittedDraft = view.getSnapshot().mainDraft;
       try {
         const receipt = await send(text);
+        if (submittedDraft.text === text) view.set((current) => current.mainDraft === submittedDraft ? { ...current, mainDraft: { text: "" } } : current);
         if (receipt.status === "failed") {
           setSendError(t("Main could not finish this reply. Your message is saved."));
-          view.set((current) => ({ ...current, mainDraft: "" }));
-          return true;
+          setSendErrorCode(null);
         }
         return true;
       } catch (error) {
         setSendError(error.message);
+        setSendErrorCode(error.code ?? null);
         return false;
       }
     };
@@ -22880,9 +22883,9 @@ function applyProduct(ctx) {
       ready: Boolean(state.binding && execution),
       readOnly: !canCommand,
       error: sendError ?? state.error,
-      errorAction: sendError && pending.current ? retryPending : void 0,
-      value: state.mainDraft,
-      onValueChange: (mainDraft) => view.set((current) => ({ ...current, mainDraft })),
+      errorAction: sendError && pending.current && ["NETWORK", "STORAGE_UNAVAILABLE"].includes(sendErrorCode) ? retryPending : void 0,
+      value: state.mainDraft.text,
+      onValueChange: (text) => view.set((current) => ({ ...current, mainDraft: { text } })),
       voice: voiceState,
       onVoiceStart: state.binding ? startVoice : void 0,
       onVoicePause: () => mainVoice.pause(),
@@ -24681,6 +24684,7 @@ var PRODUCT_CSS = `
 .bt-main-label{display:block;margin:0 0 6px;font-size:12px;color:var(--bt-ink-2)}
 .bt-main-empty{margin:48px 0;color:var(--bt-ink-2);font-size:14px;line-height:22px;text-align:center}
 .bt-main-error{margin:8px 0;color:var(--bt-danger);font-size:13px;line-height:18px}
+.bt-main-error-action{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}.bt-main-error-action p{margin:0;min-width:0}.bt-main-error-action button{flex:none}
 .bt-main-status{color:var(--bt-ink-2);font-size:13px;line-height:18px}
 .bt-main-system-fact{padding:10px 12px;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card);color:var(--bt-ink-2);font-size:12px;line-height:18px}
 .bt-main-system-fact>span{display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.05em;font-size:10px}.bt-main-system-fact p{margin:0;color:var(--bt-ink)}
