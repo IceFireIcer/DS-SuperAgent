@@ -1,5 +1,5 @@
 import { createElement as h, useEffect, useRef, useState } from 'react'
-import { MicIcon, PaperclipIcon, WaveIcon } from './icons.js'
+import { ArrowUpIcon, MicIcon, PaperclipIcon, WaveIcon } from './icons.js'
 import { openCapture, speechCatalog, transcribeWave } from './speech.js'
 import { t } from './i18n.js'
 import { VoiceMode } from './main-voice.js'
@@ -28,6 +28,14 @@ export function MainComposer({ onSend, onStop, busy, stopping, ready = true, rea
   const setText = next => onValueChange ? onValueChange(next) : setDraft(next)
   const latestText = useRef(text)
   latestText.current = text
+  useEffect(() => {
+    const input = textInput.current
+    if (!input) return
+    input.style.height = '0px'
+    const height = Math.max(32, Math.min(144, input.scrollHeight))
+    input.style.height = `${height}px`
+    input.style.overflowY = input.scrollHeight > 144 ? 'auto' : 'hidden'
+  }, [text])
   const insertTranscript = words => {
     const current = latestText.current
     const next = `${current}${current && !/\s$/u.test(current) ? ' ' : ''}${words}`
@@ -94,38 +102,41 @@ export function MainComposer({ onSend, onStop, busy, stopping, ready = true, rea
   if (voiceOpen) return h(VoiceMode, { state: voice, error, onPause: onVoicePause, onResume: onVoiceResume,
     onClose: () => { restoreFocus.current = true; onVoiceClose() }, busy: busy || directoryBusy || uploading, onStop, stopping })
 
-  return h('form', { className: 'bt-main-composer', 'data-main-input-ready': ready ? '' : undefined, onSubmit: submit },
+  const sendLabel = t(readOnly ? 'Read-only' : uploading ? 'Uploading…' : busy ? 'Sending…' : 'Send')
+  return h('form', { className: 'bt-main-composer bt-main-composer-form', 'data-main-input-ready': ready ? '' : undefined, onSubmit: submit },
     error ? h('div', { className: `bt-main-error${errorAction ? ' bt-main-error-action' : ''}`, role: 'alert' }, h('p', null, error), errorAction ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm', onClick: errorAction }, t('Send again')) : null) : null,
     voiceError || dictation.note ? h('p', { className: 'bt-main-error', role: 'status' }, voiceError ?? dictation.note) : null,
-    h('label', { className: 'bt-main-label', htmlFor: 'main-message' }, t('Message Main')),
+    h('label', { className: 'bt-main-label bt-main-input-label', htmlFor: 'main-message' }, t('Message Main')),
     h('textarea', {
-      id: 'main-message', ref: textInput, value: text, rows: 2, maxLength: 32768, placeholder: readOnly ? t('Read-only connection') : t('Message Main'), disabled: readOnly,
+      id: 'main-message', ref: textInput, value: text, rows: 1, maxLength: 32768, placeholder: readOnly ? t('Read-only connection') : t('Message Main'), disabled: readOnly,
       onChange: event => setText(event.target.value),
       onKeyDown: event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(event) } },
     }),
-    directoryControl,
     attachments.length ? h('div', { className: 'bt-main-attachments', 'aria-label': t('Attached files') },
       attachments.map(attachment => h('span', { className: 'bt-main-attachment', key: attachment.id },
         `${attachment.name} · ${attachment.bytes} ${t('bytes')}`,
         onRemoveAttachment ? h('button', { type: 'button', disabled: busy || uploading,
           'aria-label': t('Remove {name}', { name: attachment.name }), onClick: () => onRemoveAttachment(attachment) }, '×') : null))) : null,
     h('div', { className: 'bt-main-send' },
-      !readOnly ? h('button', { type: 'button', className: 'bt-soft', disabled: busy || uploading || voiceState === 'preparing' || voiceState === 'transcribing',
+      h('div', { className: 'bt-main-tools' },
+      directoryControl,
+      !readOnly ? h('button', { type: 'button', className: 'bt-soft bt-main-icon-btn', disabled: busy || uploading || voiceState === 'preparing' || voiceState === 'transcribing',
         'aria-pressed': voiceState === 'recording' || dictation.listening,
         'aria-label': t(voiceState === 'recording' || dictation.listening ? 'Stop dictation' : 'Start dictation'),
         title: t(voiceState === 'recording' ? 'Stop dictation' : 'Start dictation'), onClick: () => void toggleVoice() }, h(MicIcon)) : null,
       onFiles && !readOnly ? h('span', null,
         h('input', { type: 'file', ref: fileInput, multiple: true, hidden: true,
           onChange: event => { const files = [...(event.target.files ?? [])]; event.target.value = ''; if (files.length) onFiles(files) } }),
-        h('button', { type: 'button', className: 'bt-soft', disabled: busy || directoryBusy || uploading,
+        h('button', { type: 'button', className: 'bt-soft bt-main-icon-btn', disabled: busy || directoryBusy || uploading,
           'aria-label': t('Add files'), title: t('Add files'), onClick: () => fileInput.current?.click() }, h(PaperclipIcon))) : null,
+      showVoiceStart ? h('button', { className: 'bt-soft bt-main-icon-btn bt-main-voice-toggle', type: 'button', ref: voiceStart,
+        disabled: !ready || directoryBusy || uploading || voiceState !== 'idle' || dictation.listening,
+        'aria-label': t('Start voice chat'), title: t('Voice chat'), onClick: onVoiceStart }, h(WaveIcon)) : null),
       busy && onStop && !readOnly ? h('button', { className: 'bt-soft', type: 'button', 'data-action': 'stop-main', disabled: stopping, onClick: onStop },
         stopping ? t('Stopping…') : t('Stop reply')) : null,
-      showVoiceStart ? h('button', { className: 'bt-soft bt-main-voice-toggle', type: 'button', ref: voiceStart,
-        disabled: !ready || directoryBusy || uploading || voiceState !== 'idle' || dictation.listening, 'aria-label': t('Start voice chat'),
-        onClick: onVoiceStart }, h(WaveIcon), t('Voice chat'))
-        : h('button', { className: 'bt-soft', type: 'submit', disabled: !ready || busy || directoryBusy || uploading || voiceState !== 'idle' || dictation.listening || readOnly || !hasContent },
-          readOnly ? t('Read-only') : uploading ? t('Uploading…') : busy ? t('Sending…') : t('Send'))))
+      h('button', { className: 'bt-main-submit', type: 'submit', disabled: !ready || busy || directoryBusy || uploading || voiceState !== 'idle' || dictation.listening || readOnly || !hasContent,
+        'aria-label': sendLabel, title: sendLabel }, h(ArrowUpIcon)))
+  )
 }
 
 // -------------------------------------------------------------------------

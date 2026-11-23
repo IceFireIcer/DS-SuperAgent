@@ -1209,7 +1209,7 @@ export function applyProduct(ctx) {
       view.set(current => ({ ...current, executionTarget: value, localEnvironmentOverride: null, remoteEnvironmentOverride: null }))
     }
     const targetControl = execution ? h('div', { className: 'bt-main-directory' },
-      h('span', { className: 'bt-main-label' }, t('Execution target')),
+      h('span', { className: 'bt-main-label bt-main-context-label' }, t('Execution target')),
       h('select', { className: 'bt-select', 'aria-label': t('Execution target'), value: executionTarget,
         onChange: event => chooseTarget(event.target.value), disabled: busy || state.directoryBusy },
       h('option', { value: 'local-only' }, t('Local')),
@@ -1251,7 +1251,7 @@ export function applyProduct(ctx) {
       speechRemote: () => ctx.get('remote.speech') ?? undefined,
       onFiles: !state.connection?.connected && executionTarget !== 'auto' && selectedEnvironmentId
         ? files => void uploadFiles(files) : undefined,
-      directoryControl: execution ? h('div', { className: 'bt-main-directory' },
+      directoryControl: execution ? h('div', { className: 'bt-main-context' },
         targetControl, h(MainWorkDirectory)) : null })
     const showModelSetup = !question && state.binding && !state.connection?.connected
     let modelChoice
@@ -2422,6 +2422,15 @@ const PRODUCT_CSS = `
 .bt-main-composer{width:min(800px,100% - 32px);margin:16px auto 20px;padding:12px;border:1px solid var(--bt-line);border-radius:16px;background:var(--bt-card)}
 .bt-main-composer textarea{display:block;width:100%;resize:vertical;min-height:80px;max-height:200px;padding:4px;border:0;background:transparent;color:var(--bt-ink);font:inherit;font-size:14px;line-height:22px;box-sizing:border-box}
 .bt-main-composer textarea:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px;border-radius:4px}
+.bt-main-composer-form{display:flex;flex-direction:column;gap:6px;padding:8px 12px;margin:12px auto 16px;border-radius:18px}
+.bt-main-composer-form .bt-main-input-label,.bt-main-context .bt-main-label{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.bt-main-composer-form textarea{min-height:32px;max-height:144px;resize:none;overflow-y:hidden;padding:5px 6px}
+.bt-main-context{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0}
+.bt-main-context>.bt-main-directory{min-width:0;margin:0;gap:6px}
+.bt-main-context .bt-select{width:auto;min-width:112px;max-width:min(180px,40vw);height:32px;padding:4px 24px 4px 8px;font-size:12px}
+.bt-main-context .bt-model-trigger{min-height:32px;max-width:min(260px,52vw);padding:4px 8px}
+.bt-main-context .bt-model-provider{display:none}
+.bt-main-context .bt-main-directory-note{font-size:11px;line-height:15px}
 .bt-main-attachments,.bt-main-message-attachments{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
 .bt-main-attachment{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:4px 7px;border:1px solid var(--bt-line);border-radius:6px;color:var(--bt-ink-2);font-size:12px;overflow-wrap:anywhere}
 .bt-main-attachment button{border:0;background:transparent;color:var(--bt-ink);cursor:pointer;font:inherit}
@@ -2429,8 +2438,17 @@ const PRODUCT_CSS = `
 .bt-main-read-aloud{margin:4px 0 4px 12px}.bt-main-read-aloud:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 .bt-main-send button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 .bt-main-directory{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}.bt-main-directory .bt-main-label{margin:0}.bt-main-directory-note{color:var(--bt-ink-2);font-size:11px;line-height:16px}.bt-main-directory .bt-main-error{width:100%;margin:0}
-.bt-main-send{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
+.bt-main-send{display:flex;align-items:center;gap:8px;margin-top:0}
+.bt-main-tools{display:flex;align-items:center;flex:1 1 auto;flex-wrap:wrap;gap:6px;min-width:0}
+.bt-main-tools>.bt-main-context{flex:1 1 280px;gap:6px}
+.bt-main-context .bt-main-directory-note{font-size:10px;line-height:14px}
 .bt-main-send button{height:36px;min-width:64px}
+.bt-main-send .bt-main-icon-btn,.bt-main-send .bt-main-submit{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;min-width:36px;padding:0;border:0;border-radius:50%;cursor:pointer}
+.bt-main-send .bt-main-icon-btn{background:var(--bt-hover);color:var(--bt-ink-2)}
+.bt-main-send .bt-main-icon-btn:hover:not(:disabled){background:var(--bt-active);color:var(--bt-ink)}
+.bt-main-send .bt-main-voice-toggle{background:var(--bt-accent);color:var(--bt-accent-ink)}
+.bt-main-send .bt-main-submit{background:var(--bt-accent);color:var(--bt-accent-ink)}
+.bt-main-send .bt-main-submit:disabled{opacity:.42;cursor:default}
 .bt-main-label{display:block;margin:0 0 6px;font-size:12px;color:var(--bt-ink-2)}
 .bt-main-empty{margin:48px 0;color:var(--bt-ink-2);font-size:14px;line-height:22px;text-align:center}
 .bt-main-error{margin:8px 0;color:var(--bt-danger);font-size:13px;line-height:18px}
@@ -2543,5 +2561,5 @@ const PRODUCT_CSS = `
 .bt-main-settings-use{display:grid;grid-template-columns:auto auto minmax(0,1fr) minmax(80px,1.5fr) auto;align-items:center;gap:8px;padding:8px 12px;font-size:var(--bt-font-caption);line-height:16px;color:var(--bt-ink-2)}
 .bt-main-settings-use+.bt-main-settings-use{border-top:.5px solid var(--bt-line)}
 .bt-main-settings-use-session{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-@media(max-width:640px){.bt-main-history,.bt-observation-body{padding:16px}.bt-main-header,.bt-observation-header{padding-left:16px;padding-right:16px}.bt-main-header{flex-wrap:wrap;height:auto;min-height:56px}.bt-main-health-detail{width:100%;margin-left:38px}.bt-main-health-warning{padding-left:16px;padding-right:16px}.bt-observation-header{align-items:flex-start;flex-wrap:wrap}.bt-observation-heading{order:3;width:100%}.bt-observation-summary{flex-direction:column}.bt-observation-facts{grid-template-columns:1fr}.bt-observation-generation{grid-template-columns:1fr}.bt-main-settings-dialog .bt-settings-nav{height:auto}.bt-main-settings-revision{padding:4px 8px}.bt-main-provider{align-items:stretch;flex-direction:column}.bt-main-provider-key{justify-content:flex-start}.bt-main-settings-use{grid-template-columns:auto auto minmax(0,1fr)}.bt-main-settings-use-session,.bt-main-settings-use time{grid-column:1/-1}.bt-main-settings-route{max-width:100%}}
+@media(max-width:640px){.bt-main-history,.bt-observation-body{padding:16px}.bt-main-header,.bt-observation-header{padding-left:16px;padding-right:16px}.bt-main-header{flex-wrap:wrap;height:auto;min-height:56px}.bt-main-health-detail{width:100%;margin-left:38px}.bt-main-health-warning{padding-left:16px;padding-right:16px}.bt-main-context{gap:4px}.bt-main-context .bt-select{min-width:96px}.bt-main-context .bt-model-trigger{max-width:56vw}.bt-main-context .bt-main-directory-note{flex:1 0 100%}.bt-main-composer-form{width:calc(100% - 24px);padding:8px 10px;margin:8px auto 10px}.bt-main-send{gap:6px}.bt-main-send .bt-main-icon-btn,.bt-main-send .bt-main-submit{width:34px;height:34px;min-width:34px}.bt-main-tools>.bt-main-context{flex-basis:100%}.bt-observation-header{align-items:flex-start;flex-wrap:wrap}.bt-observation-heading{order:3;width:100%}.bt-observation-summary{flex-direction:column}.bt-observation-facts{grid-template-columns:1fr}.bt-observation-generation{grid-template-columns:1fr}.bt-main-settings-dialog .bt-settings-nav{height:auto}.bt-main-settings-revision{padding:4px 8px}.bt-main-provider{align-items:stretch;flex-direction:column}.bt-main-provider-key{justify-content:flex-start}.bt-main-settings-use{grid-template-columns:auto auto minmax(0,1fr)}.bt-main-settings-use-session,.bt-main-settings-use time{grid-column:1/-1}.bt-main-settings-route{max-width:100%}}
 `

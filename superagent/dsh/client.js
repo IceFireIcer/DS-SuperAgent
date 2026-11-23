@@ -6030,6 +6030,14 @@ function MainComposer({
   const setText = (next) => onValueChange ? onValueChange(next) : setDraft(next);
   const latestText = (0, import_react6.useRef)(text);
   latestText.current = text;
+  (0, import_react6.useEffect)(() => {
+    const input = textInput.current;
+    if (!input) return;
+    input.style.height = "0px";
+    const height = Math.max(32, Math.min(144, input.scrollHeight));
+    input.style.height = `${height}px`;
+    input.style.overflowY = input.scrollHeight > 144 ? "auto" : "hidden";
+  }, [text]);
   const insertTranscript = (words) => {
     const current = latestText.current;
     const next = `${current}${current && !/\s$/u.test(current) ? " " : ""}${words}`;
@@ -6121,17 +6129,18 @@ function MainComposer({
     onStop,
     stopping
   });
+  const sendLabel = t(readOnly ? "Read-only" : uploading ? "Uploading…" : busy ? "Sending…" : "Send");
   return (0, import_react6.createElement)(
     "form",
-    { className: "bt-main-composer", "data-main-input-ready": ready ? "" : void 0, onSubmit: submit },
+    { className: "bt-main-composer bt-main-composer-form", "data-main-input-ready": ready ? "" : void 0, onSubmit: submit },
     error ? (0, import_react6.createElement)("div", { className: `bt-main-error${errorAction ? " bt-main-error-action" : ""}`, role: "alert" }, (0, import_react6.createElement)("p", null, error), errorAction ? (0, import_react6.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: errorAction }, t("Send again")) : null) : null,
     voiceError || dictation.note ? (0, import_react6.createElement)("p", { className: "bt-main-error", role: "status" }, voiceError ?? dictation.note) : null,
-    (0, import_react6.createElement)("label", { className: "bt-main-label", htmlFor: "main-message" }, t("Message Main")),
+    (0, import_react6.createElement)("label", { className: "bt-main-label bt-main-input-label", htmlFor: "main-message" }, t("Message Main")),
     (0, import_react6.createElement)("textarea", {
       id: "main-message",
       ref: textInput,
       value: text,
-      rows: 2,
+      rows: 1,
       maxLength: 32768,
       placeholder: readOnly ? t("Read-only connection") : t("Message Main"),
       disabled: readOnly,
@@ -6143,7 +6152,6 @@ function MainComposer({
         }
       }
     }),
-    directoryControl,
     attachments.length ? (0, import_react6.createElement)(
       "div",
       { className: "bt-main-attachments", "aria-label": t("Attached files") },
@@ -6162,55 +6170,64 @@ function MainComposer({
     (0, import_react6.createElement)(
       "div",
       { className: "bt-main-send" },
-      !readOnly ? (0, import_react6.createElement)("button", {
-        type: "button",
-        className: "bt-soft",
-        disabled: busy || uploading || voiceState === "preparing" || voiceState === "transcribing",
-        "aria-pressed": voiceState === "recording" || dictation.listening,
-        "aria-label": t(voiceState === "recording" || dictation.listening ? "Stop dictation" : "Start dictation"),
-        title: t(voiceState === "recording" ? "Stop dictation" : "Start dictation"),
-        onClick: () => void toggleVoice()
-      }, (0, import_react6.createElement)(MicIcon)) : null,
-      onFiles && !readOnly ? (0, import_react6.createElement)(
-        "span",
-        null,
-        (0, import_react6.createElement)("input", {
-          type: "file",
-          ref: fileInput,
-          multiple: true,
-          hidden: true,
-          onChange: (event) => {
-            const files = [...event.target.files ?? []];
-            event.target.value = "";
-            if (files.length) onFiles(files);
-          }
-        }),
-        (0, import_react6.createElement)("button", {
+      (0, import_react6.createElement)(
+        "div",
+        { className: "bt-main-tools" },
+        directoryControl,
+        !readOnly ? (0, import_react6.createElement)("button", {
           type: "button",
-          className: "bt-soft",
-          disabled: busy || directoryBusy || uploading,
-          "aria-label": t("Add files"),
-          title: t("Add files"),
-          onClick: () => fileInput.current?.click()
-        }, (0, import_react6.createElement)(PaperclipIcon))
-      ) : null,
+          className: "bt-soft bt-main-icon-btn",
+          disabled: busy || uploading || voiceState === "preparing" || voiceState === "transcribing",
+          "aria-pressed": voiceState === "recording" || dictation.listening,
+          "aria-label": t(voiceState === "recording" || dictation.listening ? "Stop dictation" : "Start dictation"),
+          title: t(voiceState === "recording" ? "Stop dictation" : "Start dictation"),
+          onClick: () => void toggleVoice()
+        }, (0, import_react6.createElement)(MicIcon)) : null,
+        onFiles && !readOnly ? (0, import_react6.createElement)(
+          "span",
+          null,
+          (0, import_react6.createElement)("input", {
+            type: "file",
+            ref: fileInput,
+            multiple: true,
+            hidden: true,
+            onChange: (event) => {
+              const files = [...event.target.files ?? []];
+              event.target.value = "";
+              if (files.length) onFiles(files);
+            }
+          }),
+          (0, import_react6.createElement)("button", {
+            type: "button",
+            className: "bt-soft bt-main-icon-btn",
+            disabled: busy || directoryBusy || uploading,
+            "aria-label": t("Add files"),
+            title: t("Add files"),
+            onClick: () => fileInput.current?.click()
+          }, (0, import_react6.createElement)(PaperclipIcon))
+        ) : null,
+        showVoiceStart ? (0, import_react6.createElement)("button", {
+          className: "bt-soft bt-main-icon-btn bt-main-voice-toggle",
+          type: "button",
+          ref: voiceStart,
+          disabled: !ready || directoryBusy || uploading || voiceState !== "idle" || dictation.listening,
+          "aria-label": t("Start voice chat"),
+          title: t("Voice chat"),
+          onClick: onVoiceStart
+        }, (0, import_react6.createElement)(WaveIcon)) : null
+      ),
       busy && onStop && !readOnly ? (0, import_react6.createElement)(
         "button",
         { className: "bt-soft", type: "button", "data-action": "stop-main", disabled: stopping, onClick: onStop },
         stopping ? t("Stopping…") : t("Stop reply")
       ) : null,
-      showVoiceStart ? (0, import_react6.createElement)("button", {
-        className: "bt-soft bt-main-voice-toggle",
-        type: "button",
-        ref: voiceStart,
-        disabled: !ready || directoryBusy || uploading || voiceState !== "idle" || dictation.listening,
-        "aria-label": t("Start voice chat"),
-        onClick: onVoiceStart
-      }, (0, import_react6.createElement)(WaveIcon), t("Voice chat")) : (0, import_react6.createElement)(
-        "button",
-        { className: "bt-soft", type: "submit", disabled: !ready || busy || directoryBusy || uploading || voiceState !== "idle" || dictation.listening || readOnly || !hasContent },
-        readOnly ? t("Read-only") : uploading ? t("Uploading…") : busy ? t("Sending…") : t("Send")
-      )
+      (0, import_react6.createElement)("button", {
+        className: "bt-main-submit",
+        type: "submit",
+        disabled: !ready || busy || directoryBusy || uploading || voiceState !== "idle" || dictation.listening || readOnly || !hasContent,
+        "aria-label": sendLabel,
+        title: sendLabel
+      }, (0, import_react6.createElement)(ArrowUpIcon))
     )
   );
 }
@@ -22816,7 +22833,7 @@ function applyProduct(ctx) {
     const targetControl = execution ? (0, import_react51.createElement)(
       "div",
       { className: "bt-main-directory" },
-      (0, import_react51.createElement)("span", { className: "bt-main-label" }, t("Execution target")),
+      (0, import_react51.createElement)("span", { className: "bt-main-label bt-main-context-label" }, t("Execution target")),
       (0, import_react51.createElement)(
         "select",
         {
@@ -22898,7 +22915,7 @@ function applyProduct(ctx) {
       onFiles: !state.connection?.connected && executionTarget !== "auto" && selectedEnvironmentId ? (files) => void uploadFiles(files) : void 0,
       directoryControl: execution ? (0, import_react51.createElement)(
         "div",
-        { className: "bt-main-directory" },
+        { className: "bt-main-context" },
         targetControl,
         (0, import_react51.createElement)(MainWorkDirectory)
       ) : null
@@ -24672,6 +24689,15 @@ var PRODUCT_CSS = `
 .bt-main-composer{width:min(800px,100% - 32px);margin:16px auto 20px;padding:12px;border:1px solid var(--bt-line);border-radius:16px;background:var(--bt-card)}
 .bt-main-composer textarea{display:block;width:100%;resize:vertical;min-height:80px;max-height:200px;padding:4px;border:0;background:transparent;color:var(--bt-ink);font:inherit;font-size:14px;line-height:22px;box-sizing:border-box}
 .bt-main-composer textarea:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px;border-radius:4px}
+.bt-main-composer-form{display:flex;flex-direction:column;gap:6px;padding:8px 12px;margin:12px auto 16px;border-radius:18px}
+.bt-main-composer-form .bt-main-input-label,.bt-main-context .bt-main-label{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.bt-main-composer-form textarea{min-height:32px;max-height:144px;resize:none;overflow-y:hidden;padding:5px 6px}
+.bt-main-context{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0}
+.bt-main-context>.bt-main-directory{min-width:0;margin:0;gap:6px}
+.bt-main-context .bt-select{width:auto;min-width:112px;max-width:min(180px,40vw);height:32px;padding:4px 24px 4px 8px;font-size:12px}
+.bt-main-context .bt-model-trigger{min-height:32px;max-width:min(260px,52vw);padding:4px 8px}
+.bt-main-context .bt-model-provider{display:none}
+.bt-main-context .bt-main-directory-note{font-size:11px;line-height:15px}
 .bt-main-attachments,.bt-main-message-attachments{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
 .bt-main-attachment{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:4px 7px;border:1px solid var(--bt-line);border-radius:6px;color:var(--bt-ink-2);font-size:12px;overflow-wrap:anywhere}
 .bt-main-attachment button{border:0;background:transparent;color:var(--bt-ink);cursor:pointer;font:inherit}
@@ -24679,8 +24705,17 @@ var PRODUCT_CSS = `
 .bt-main-read-aloud{margin:4px 0 4px 12px}.bt-main-read-aloud:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 .bt-main-send button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 .bt-main-directory{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}.bt-main-directory .bt-main-label{margin:0}.bt-main-directory-note{color:var(--bt-ink-2);font-size:11px;line-height:16px}.bt-main-directory .bt-main-error{width:100%;margin:0}
-.bt-main-send{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
+.bt-main-send{display:flex;align-items:center;gap:8px;margin-top:0}
+.bt-main-tools{display:flex;align-items:center;flex:1 1 auto;flex-wrap:wrap;gap:6px;min-width:0}
+.bt-main-tools>.bt-main-context{flex:1 1 280px;gap:6px}
+.bt-main-context .bt-main-directory-note{font-size:10px;line-height:14px}
 .bt-main-send button{height:36px;min-width:64px}
+.bt-main-send .bt-main-icon-btn,.bt-main-send .bt-main-submit{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;min-width:36px;padding:0;border:0;border-radius:50%;cursor:pointer}
+.bt-main-send .bt-main-icon-btn{background:var(--bt-hover);color:var(--bt-ink-2)}
+.bt-main-send .bt-main-icon-btn:hover:not(:disabled){background:var(--bt-active);color:var(--bt-ink)}
+.bt-main-send .bt-main-voice-toggle{background:var(--bt-accent);color:var(--bt-accent-ink)}
+.bt-main-send .bt-main-submit{background:var(--bt-accent);color:var(--bt-accent-ink)}
+.bt-main-send .bt-main-submit:disabled{opacity:.42;cursor:default}
 .bt-main-label{display:block;margin:0 0 6px;font-size:12px;color:var(--bt-ink-2)}
 .bt-main-empty{margin:48px 0;color:var(--bt-ink-2);font-size:14px;line-height:22px;text-align:center}
 .bt-main-error{margin:8px 0;color:var(--bt-danger);font-size:13px;line-height:18px}
@@ -24793,7 +24828,7 @@ var PRODUCT_CSS = `
 .bt-main-settings-use{display:grid;grid-template-columns:auto auto minmax(0,1fr) minmax(80px,1.5fr) auto;align-items:center;gap:8px;padding:8px 12px;font-size:var(--bt-font-caption);line-height:16px;color:var(--bt-ink-2)}
 .bt-main-settings-use+.bt-main-settings-use{border-top:.5px solid var(--bt-line)}
 .bt-main-settings-use-session{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-@media(max-width:640px){.bt-main-history,.bt-observation-body{padding:16px}.bt-main-header,.bt-observation-header{padding-left:16px;padding-right:16px}.bt-main-header{flex-wrap:wrap;height:auto;min-height:56px}.bt-main-health-detail{width:100%;margin-left:38px}.bt-main-health-warning{padding-left:16px;padding-right:16px}.bt-observation-header{align-items:flex-start;flex-wrap:wrap}.bt-observation-heading{order:3;width:100%}.bt-observation-summary{flex-direction:column}.bt-observation-facts{grid-template-columns:1fr}.bt-observation-generation{grid-template-columns:1fr}.bt-main-settings-dialog .bt-settings-nav{height:auto}.bt-main-settings-revision{padding:4px 8px}.bt-main-provider{align-items:stretch;flex-direction:column}.bt-main-provider-key{justify-content:flex-start}.bt-main-settings-use{grid-template-columns:auto auto minmax(0,1fr)}.bt-main-settings-use-session,.bt-main-settings-use time{grid-column:1/-1}.bt-main-settings-route{max-width:100%}}
+@media(max-width:640px){.bt-main-history,.bt-observation-body{padding:16px}.bt-main-header,.bt-observation-header{padding-left:16px;padding-right:16px}.bt-main-header{flex-wrap:wrap;height:auto;min-height:56px}.bt-main-health-detail{width:100%;margin-left:38px}.bt-main-health-warning{padding-left:16px;padding-right:16px}.bt-main-context{gap:4px}.bt-main-context .bt-select{min-width:96px}.bt-main-context .bt-model-trigger{max-width:56vw}.bt-main-context .bt-main-directory-note{flex:1 0 100%}.bt-main-composer-form{width:calc(100% - 24px);padding:8px 10px;margin:8px auto 10px}.bt-main-send{gap:6px}.bt-main-send .bt-main-icon-btn,.bt-main-send .bt-main-submit{width:34px;height:34px;min-width:34px}.bt-main-tools>.bt-main-context{flex-basis:100%}.bt-observation-header{align-items:flex-start;flex-wrap:wrap}.bt-observation-heading{order:3;width:100%}.bt-observation-summary{flex-direction:column}.bt-observation-facts{grid-template-columns:1fr}.bt-observation-generation{grid-template-columns:1fr}.bt-main-settings-dialog .bt-settings-nav{height:auto}.bt-main-settings-revision{padding:4px 8px}.bt-main-provider{align-items:stretch;flex-direction:column}.bt-main-provider-key{justify-content:flex-start}.bt-main-settings-use{grid-template-columns:auto auto minmax(0,1fr)}.bt-main-settings-use-session,.bt-main-settings-use time{grid-column:1/-1}.bt-main-settings-route{max-width:100%}}
 `;
 
 // src/client/index.js
