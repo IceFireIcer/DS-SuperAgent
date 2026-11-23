@@ -27,7 +27,7 @@ test('Main and both sidebar widths share the directory for the next accepted inp
       'attachment-revoke': () => ({ revoked: true }),
       send: input => {
         sendRequests.push(input)
-        if (sendRejected) throw Object.assign(new Error('Could not send this message.'), { code: 'INVALID_INPUT' })
+        if (sendRejected) throw Object.assign(new Error('Could not send this message.'), { code: 'NETWORK' })
         return { messageId: 'accepted-work', status: 'completed' }
       },
     },

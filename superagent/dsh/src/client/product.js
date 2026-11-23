@@ -1038,6 +1038,7 @@ export function applyProduct(ctx) {
         questionInComposer: work === question,
         onEvidence: selected => { if (state.binding) void loadMainEvidence(state.binding, selected) } }))) : null
     const [sendError, setSendError] = useState(null)
+    const [sendErrorCode, setSendErrorCode] = useState(null)
     const { mainAttachments: attachments, mainUploading: uploading } = state
     const setAttachments = update => view.set(current => ({ ...current,
       mainAttachments: typeof update === 'function' ? update(current.mainAttachments) : update }))
@@ -1168,11 +1169,12 @@ export function applyProduct(ctx) {
         const receipt = await send(text)
         if (receipt.status === 'failed') {
           setSendError(t('Main could not finish this reply. Your message is saved.'))
+          setSendErrorCode(null)
           view.set(current => ({ ...current, mainDraft: '' }))
           return true
         }
         return true
-      } catch (error) { setSendError(error.message); return false }
+      } catch (error) { setSendError(error.message); setSendErrorCode(error.code ?? null); return false }
     }
     const retryPending = () => {
       const text = pending.current?.text
@@ -1240,7 +1242,7 @@ export function applyProduct(ctx) {
       : h(MainComposer, { onSend: sendText, onStop: canCommand && state.activeTurn ? stop : undefined, busy, stopping,
       directoryBusy: state.directoryBusy, ready: Boolean(state.binding && execution), readOnly: !canCommand,
       error: sendError ?? state.error,
-      errorAction: sendError && pending.current ? retryPending : undefined,
+      errorAction: sendError && pending.current && ['NETWORK', 'STORAGE_UNAVAILABLE'].includes(sendErrorCode) ? retryPending : undefined,
       value: state.mainDraft, onValueChange: mainDraft => view.set(current => ({ ...current, mainDraft })),
       voice: voiceState, onVoiceStart: state.binding ? startVoice : undefined,
       onVoicePause: () => mainVoice.pause(), onVoiceResume: startVoice, onVoiceClose: mainVoice.close,
@@ -2431,6 +2433,7 @@ const PRODUCT_CSS = `
 .bt-main-label{display:block;margin:0 0 6px;font-size:12px;color:var(--bt-ink-2)}
 .bt-main-empty{margin:48px 0;color:var(--bt-ink-2);font-size:14px;line-height:22px;text-align:center}
 .bt-main-error{margin:8px 0;color:var(--bt-danger);font-size:13px;line-height:18px}
+.bt-main-error-action{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}.bt-main-error-action p{margin:0;min-width:0}.bt-main-error-action button{flex:none}
 .bt-main-status{color:var(--bt-ink-2);font-size:13px;line-height:18px}
 .bt-main-system-fact{padding:10px 12px;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card);color:var(--bt-ink-2);font-size:12px;line-height:18px}
 .bt-main-system-fact>span{display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.05em;font-size:10px}.bt-main-system-fact p{margin:0;color:var(--bt-ink)}
