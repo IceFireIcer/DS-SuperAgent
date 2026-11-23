@@ -5997,6 +5997,7 @@ function MainComposer({
   value,
   onValueChange,
   directoryControl,
+  errorAction,
   directoryBusy = false,
   attachments = [],
   onFiles,
@@ -6123,7 +6124,7 @@ function MainComposer({
   return (0, import_react6.createElement)(
     "form",
     { className: "bt-main-composer", "data-main-input-ready": ready ? "" : void 0, onSubmit: submit },
-    error ? (0, import_react6.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
+    error ? (0, import_react6.createElement)("div", { className: "bt-main-error", role: "alert" }, (0, import_react6.createElement)("p", null, error), errorAction ? (0, import_react6.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: errorAction }, t("Send again")) : null) : null,
     voiceError || dictation.note ? (0, import_react6.createElement)("p", { className: "bt-main-error", role: "status" }, voiceError ?? dictation.note) : null,
     (0, import_react6.createElement)("label", { className: "bt-main-label", htmlFor: "main-message" }, t("Message Main")),
     (0, import_react6.createElement)("textarea", {
@@ -22764,12 +22765,20 @@ function applyProduct(ctx) {
     const sendText = async (text) => {
       try {
         const receipt = await send(text);
-        if (receipt.status === "failed") throw new Error(t("Main could not finish this reply. Your message is saved."));
+        if (receipt.status === "failed") {
+          setSendError(t("Main could not finish this reply. Your message is saved."));
+          view.set((current) => ({ ...current, mainDraft: "" }));
+          return true;
+        }
         return true;
       } catch (error) {
         setSendError(error.message);
         return false;
       }
+    };
+    const retryPending = () => {
+      const text = pending.current?.text;
+      if (typeof text === "string" && text) void sendText(text);
     };
     const latestSend = (0, import_react51.useRef)(send);
     latestSend.current = send;
@@ -22871,6 +22880,7 @@ function applyProduct(ctx) {
       ready: Boolean(state.binding && execution),
       readOnly: !canCommand,
       error: sendError ?? state.error,
+      errorAction: sendError && pending.current ? retryPending : void 0,
       value: state.mainDraft,
       onValueChange: (mainDraft) => view.set((current) => ({ ...current, mainDraft })),
       voice: voiceState,

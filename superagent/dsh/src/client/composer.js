@@ -5,6 +5,7 @@ import { t } from './i18n.js'
 import { VoiceMode } from './main-voice.js'
 
 export function MainComposer({ onSend, onStop, busy, stopping, ready = true, readOnly = false, error, value, onValueChange, directoryControl,
+  errorAction,
   directoryBusy = false, attachments = [], onFiles, onRemoveAttachment, uploading = false, speechRemote,
   voice, onVoiceStart, onVoicePause, onVoiceResume, onVoiceClose }) {
   const [draft, setDraft] = useState('')
@@ -94,7 +95,7 @@ export function MainComposer({ onSend, onStop, busy, stopping, ready = true, rea
     onClose: () => { restoreFocus.current = true; onVoiceClose() }, busy: busy || directoryBusy || uploading, onStop, stopping })
 
   return h('form', { className: 'bt-main-composer', 'data-main-input-ready': ready ? '' : undefined, onSubmit: submit },
-    error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
+    error ? h('div', { className: 'bt-main-error', role: 'alert' }, h('p', null, error), errorAction ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm', onClick: errorAction }, t('Send again')) : null) : null,
     voiceError || dictation.note ? h('p', { className: 'bt-main-error', role: 'status' }, voiceError ?? dictation.note) : null,
     h('label', { className: 'bt-main-label', htmlFor: 'main-message' }, t('Message Main')),
     h('textarea', {

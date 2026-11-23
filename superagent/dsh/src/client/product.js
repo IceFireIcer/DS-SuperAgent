@@ -1166,9 +1166,17 @@ export function applyProduct(ctx) {
     const sendText = async text => {
       try {
         const receipt = await send(text)
-        if (receipt.status === 'failed') throw new Error(t('Main could not finish this reply. Your message is saved.'))
+        if (receipt.status === 'failed') {
+          setSendError(t('Main could not finish this reply. Your message is saved.'))
+          view.set(current => ({ ...current, mainDraft: '' }))
+          return true
+        }
         return true
       } catch (error) { setSendError(error.message); return false }
+    }
+    const retryPending = () => {
+      const text = pending.current?.text
+      if (typeof text === 'string' && text) void sendText(text)
     }
     const latestSend = useRef(send)
     latestSend.current = send
@@ -1232,6 +1240,7 @@ export function applyProduct(ctx) {
       : h(MainComposer, { onSend: sendText, onStop: canCommand && state.activeTurn ? stop : undefined, busy, stopping,
       directoryBusy: state.directoryBusy, ready: Boolean(state.binding && execution), readOnly: !canCommand,
       error: sendError ?? state.error,
+      errorAction: sendError && pending.current ? retryPending : undefined,
       value: state.mainDraft, onValueChange: mainDraft => view.set(current => ({ ...current, mainDraft })),
       voice: voiceState, onVoiceStart: state.binding ? startVoice : undefined,
       onVoicePause: () => mainVoice.pause(), onVoiceResume: startVoice, onVoiceClose: mainVoice.close,
