@@ -34,7 +34,7 @@ test('Main and both sidebar widths share the directory for the next accepted inp
   })
   const nav = document.querySelector('nav[aria-label="Work navigation"]')
   const sidebar = () => nav.querySelector('button[aria-haspopup="menu"][aria-label^="Work directory:"]')
-  const composer = () => document.querySelector('.bt-main-composer button[aria-haspopup="menu"]')
+  const composer = () => document.querySelector('.bt-main-composer button[aria-haspopup="menu"][aria-label^="Work directory:"]')
   const menu = () => document.querySelector('[role="menu"][aria-label="Work directory"]:not([inert])')
   const draft = document.querySelector('textarea')
   const send = () => document.querySelector('.bt-main-composer button[type="submit"]')
@@ -136,7 +136,8 @@ test('Main can send its first local input without assigning an instance default'
   assert.equal(requests.find(({ endpoint }) => endpoint === 'send').payload.environmentId, first.id)
   assert.equal(requests.some(({ endpoint }) => endpoint === 'directory-default-save'), false)
   assert.equal(sidebar().getAttribute('aria-label'), 'Work directory: No directory selected')
-  assert.equal(document.querySelector('.bt-main-composer button[aria-haspopup="menu"]').getAttribute('aria-label'), 'Work directory: No directory selected')
+  assert.equal(document.querySelector('.bt-main-composer button[aria-haspopup="menu"][aria-label^="Work directory:"]')
+    .getAttribute('aria-label'), 'Work directory: No directory selected')
 })
 
 test('the desktop composer is ready when the authorized execution options arrive', async context => {

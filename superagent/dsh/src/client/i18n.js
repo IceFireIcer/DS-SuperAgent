@@ -582,6 +582,7 @@ const ZH = {
   Revoked: '已撤销',
   Revoke: '撤销',
   'Sending…': '正在发送…',
+  'Send again': '再次发送',
   'Stop reply': '停止本轮回复',
   'Stopping…': '正在停止…',
   'Resuming…': '正在恢复…',

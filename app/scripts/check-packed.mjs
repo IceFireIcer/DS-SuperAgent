@@ -545,9 +545,9 @@ async function waitForLocalEnvironment(cdp) {
       selected: selected?.environmentId, environment: environment?.id,
       matchesFixture: selected?.root === ${JSON.stringify(realpathSync.native(join(work, 'workspace')))},
       eligible: environment?.eligible === true && environment.kind === 'local',
-      target: document.querySelector('.bt-main-composer select[aria-label="Execution target"], .bt-main-composer select[aria-label="执行目标"]')?.value,
-      visible: Array.from(document.querySelectorAll('.bt-main-composer .bt-main-directory-note'))
-        .some(note => /^(Eligible|符合条件|可用)(?:$| · )/u.test(note.textContent.trim())),
+      target: [...document.querySelectorAll('.bt-main-composer button[aria-haspopup="menu"]')]
+        .find(button => /^(Execution target|执行目标)[:：]/u.test(button.getAttribute('aria-label') ?? ''))?.dataset.value,
+      warning: document.querySelector('.bt-main-composer .bt-main-directory-warning')?.textContent.trim() ?? null,
     };
   })()`
   let last
@@ -555,7 +555,7 @@ async function waitForLocalEnvironment(cdp) {
   while (Date.now() < end) {
     const result = await cdp.call('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })
     last = result.result?.value
-    if (last?.eligible && last.matchesFixture && last.target === 'local-only' && last.visible) {
+    if (last?.eligible && last.matchesFixture && last.target === 'local-only' && !last.warning) {
       console.log(`check-packed: ${JSON.stringify({ executionEnvironment: 'authorized fixture ready', environmentId: last.environment })}`)
       return last.instanceId
     }

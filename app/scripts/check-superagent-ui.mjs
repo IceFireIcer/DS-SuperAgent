@@ -268,6 +268,25 @@ export async function checkProductUi(ctx) {
     const opened = await ctx.superagentProduct.dispatch('open')
     assert.equal(Boolean(ctx.agents.get(opened.mainSessionId)), false, 'Opening Main in the browser does not activate its Agent')
     assert.equal(await page.locator('.bt-main-composer textarea:visible').count(), 1)
+    const executionTarget = main.getByRole('button', { name: /^(Execution target|执行目标)[:：]/u })
+    await executionTarget.click()
+    const executionTargetMenu = page.getByRole('menu', { name: /^(Execution target|执行目标)$/u })
+    await executionTargetMenu.waitFor()
+    const [targetTriggerBox, targetMenuBox, viewportSize] = await Promise.all([
+      executionTarget.boundingBox(), executionTargetMenu.boundingBox(), page.evaluate(() => ({ width: innerWidth, height: innerHeight })),
+    ])
+    assert.ok(targetTriggerBox && targetMenuBox && targetMenuBox.y < targetTriggerBox.y,
+      'the Main execution target menu opens upward at the composer')
+    assert.ok(Math.abs(targetMenuBox.x + targetMenuBox.width - targetTriggerBox.x - targetTriggerBox.width) <= 2,
+      'the Main execution target menu aligns with the trigger like the folder menu')
+    assert.ok(targetMenuBox.y >= 0 && targetMenuBox.x >= 0
+      && targetMenuBox.x + targetMenuBox.width <= viewportSize.width
+      && targetMenuBox.y + targetMenuBox.height <= viewportSize.height,
+    'the Main execution target menu stays inside the window')
+    assert.equal(await executionTargetMenu.getByRole('menuitemradio', { checked: true }).count(), 1)
+    await page.keyboard.press('Escape')
+    await executionTargetMenu.waitFor({ state: 'hidden' })
+    assert.ok(await executionTarget.evaluate(element => document.activeElement === element))
     const members = main.getByRole('group', { name: /^(Work members|工作成员)$/u })
     await members.getByText(/^(Main|主角色)$/u).waitFor()
     await members.getByText(/^(Router|路由角色)$/u).waitFor()

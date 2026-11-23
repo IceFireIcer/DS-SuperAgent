@@ -17,6 +17,8 @@ import { ChatSecrets, CHAT_SECRET_CSS } from './chat-secrets.js'
 import { ProductMemorySettings, PRODUCT_MEMORY_CSS } from './product-memory.js'
 import { ProductSupervisionSettings, PRODUCT_SUPERVISION_CSS } from './product-supervision.js'
 import { FolderMenu, FOLDER_CSS } from './folder-menu.js'
+import { MENU_TRIGGER_CSS } from './anchored-menu.js'
+import { MenuSelect, MENU_SELECT_CSS } from './menu-select.js'
 import { createSource } from './sources.js'
 import { mergeMessages, mergeObservationItems, projectNativeTurnCards, projectTurnCards, rebaseRoleDraft } from './product-state.js'
 import { installLocale, t } from './i18n.js'
@@ -1208,37 +1210,53 @@ export function applyProduct(ctx) {
       if (attachments.length) { setSendError(t('Remove attached files before changing execution targets.')); return }
       view.set(current => ({ ...current, executionTarget: value, localEnvironmentOverride: null, remoteEnvironmentOverride: null }))
     }
+    const environmentDetail = environment => [
+      environment.root,
+      environment.eligible ? null : t('Not eligible'),
+    ].filter(Boolean).join(' · ')
+    const environmentTitle = environment => [
+      environment.root,
+      environment.eligible ? t('Eligible') : t('Not eligible'),
+      environment.version ? `${t('Version')}: ${environment.version}` : null,
+      environment.deviceId ? `${t('Device')}: ${environment.deviceId}` : null,
+      ...(environment.reasons ?? []).map(capabilityReasonCopy),
+    ].filter(Boolean).join(' · ')
+    const environmentOptions = environments => environments.map(environment => ({
+      value: environment.id,
+      label: environment.label || environment.title || environment.id,
+      detail: environmentDetail(environment),
+      title: environmentTitle(environment),
+    }))
+    const contextWarning = selectedEnvironment && !selectedEnvironment.eligible
+      ? [t('Not eligible'), ...(selectedEnvironment.reasons ?? []).map(capabilityReasonCopy)].join(' · ')
+      : executionTarget === 'remote-only' && !selectedEnvironmentId
+        ? t('No remote Environment is available. This work will wait for an eligible device.')
+        : null
     const targetControl = execution ? h('div', { className: 'bt-main-directory' },
-      h('span', { className: 'bt-main-label bt-main-context-label' }, t('Execution target')),
-      h('select', { className: 'bt-select', 'aria-label': t('Execution target'), value: executionTarget,
-        onChange: event => chooseTarget(event.target.value), disabled: busy || state.directoryBusy },
-      h('option', { value: 'local-only' }, t('Local')),
-      h('option', { value: 'remote-only' }, t('Remote only')),
-      h('option', { value: 'auto' }, t('Auto'))),
-      executionTarget === 'remote-only' ? h('select', { className: 'bt-select', 'aria-label': t('Remote Environment'),
-        value: selectedRemoteEnvironment?.id ?? '', onChange: event => {
+      h(MenuSelect, { className: 'bt-choice-target', label: t('Execution target'), value: executionTarget,
+        options: [{ value: 'local-only', label: t('Local') }, { value: 'remote-only', label: t('Remote only') },
+          { value: 'auto', label: t('Auto') }],
+        onChange: chooseTarget, disabled: busy || state.directoryBusy,
+        dismiss: state.settingsOpen || state.connectOpen || state.signInOpen }),
+      executionTarget === 'remote-only' ? h(MenuSelect, {
+        className: 'bt-choice-environment', label: t('Remote Environment'),
+        value: selectedRemoteEnvironment?.id ?? '',
+        options: [{ value: '', label: t('Choose an authorized remote Environment') },
+          ...environmentOptions(remoteEnvironments)],
+        onChange: value => {
           if (attachments.length) { setSendError(t('Remove attached files before changing Environments.')); return }
-          view.set(current => ({ ...current, remoteEnvironmentOverride: event.target.value || null }))
-        }, disabled: busy },
-      h('option', { value: '' }, t('Choose an authorized remote Environment')),
-      remoteEnvironments.map(environment => h('option', { key: environment.id, value: environment.id },
-        `${environment.label || environment.title || environment.id} · ${environment.root}`))) : null,
-      state.connection?.connected && executionTarget === 'local-only' ? h('select', { className: 'bt-select',
-        'aria-label': t('Local Environment'), value: selectedLocalEnvironmentId ?? '',
-        onChange: event => view.set(current => ({ ...current, localEnvironmentOverride: event.target.value || null })) },
-      h('option', { value: '' }, t('Choose an authorized local Environment')),
-      localEnvironments.map(environment => h('option', { key: environment.id, value: environment.id },
-        `${environment.title || environment.id} · ${environment.root}`))) : null,
-      selectedEnvironment ? h('span', { className: 'bt-main-directory-note' },
-        `${selectedEnvironment.eligible ? t('Eligible') : t('Not eligible')}`
-        + `${selectedEnvironment.version ? ` · ${t('Version')}: ${selectedEnvironment.version}` : ''}`
-        + `${selectedEnvironment.deviceId ? ` · ${t('Device')}: ${selectedEnvironment.deviceId}` : ''}`
-        + `${selectedEnvironment.reasons?.length ? ` · ${selectedEnvironment.reasons.map(capabilityReasonCopy).join('; ')}` : ''}`) : null,
-      h('span', { className: 'bt-main-directory-note' }, executionTarget === 'auto'
-        ? t('This work chooses an eligible Environment when its Ticket starts. Attachments need an exact target.')
-        : executionTarget === 'remote-only' && !selectedEnvironmentId
-          ? t('No remote Environment is available. This work will wait for an eligible device.')
-          : t('New work uses this Environment. Active work keeps its original binding.'))) : null
+          view.set(current => ({ ...current, remoteEnvironmentOverride: value || null }))
+        }, disabled: busy, dismiss: state.settingsOpen || state.connectOpen || state.signInOpen,
+      }) : null,
+      state.connection?.connected && executionTarget === 'local-only' ? h(MenuSelect, {
+        className: 'bt-choice-environment', label: t('Local Environment'), value: selectedLocalEnvironmentId ?? '',
+        options: [{ value: '', label: t('Choose an authorized local Environment') },
+          ...environmentOptions(localEnvironments)],
+        onChange: value => view.set(current => ({ ...current, localEnvironmentOverride: value || null })),
+        dismiss: state.settingsOpen || state.connectOpen || state.signInOpen,
+      }) : null,
+      contextWarning ? h('span', { className: 'bt-main-directory-note bt-main-directory-warning', role: 'status' },
+        contextWarning) : null) : null
     const composer = question ? h(MainWorkCard, { work: question, questionOnly: true, key: question.control.attention.id })
       : h(MainComposer, { onSend: sendText, onStop: canCommand && state.activeTurn ? stop : undefined, busy, stopping,
       directoryBusy: state.directoryBusy, ready: Boolean(state.binding && execution), readOnly: !canCommand,
@@ -2306,7 +2324,7 @@ export function applyProduct(ctx) {
   })
   shellSteps.push(() => installSettingsSections(ctx.slots), () => installAppearance(ctx.get('theme')))
   const register = (name, component, options = {}) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200, ...options }, component))
-  const conversationSteps = [() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SETTINGS_SHELL_CSS + PRODUCT_SETTINGS_CSS + FOLDER_CSS + PRODUCT_CSS + MODEL_ONBOARDING_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + CHAT_SECRET_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_COMPUTER_CSS + PRODUCT_EXECUTION_CSS + PRODUCT_OPERATIONS_CSS + USAGE_HEATMAP_CSS + WORK_BOARD_CSS + MAIN_VOICE_CSS, 'main')]
+  const conversationSteps = [() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SETTINGS_SHELL_CSS + PRODUCT_SETTINGS_CSS + MENU_TRIGGER_CSS + FOLDER_CSS + MENU_SELECT_CSS + PRODUCT_CSS + MODEL_ONBOARDING_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + CHAT_SECRET_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_COMPUTER_CSS + PRODUCT_EXECUTION_CSS + PRODUCT_OPERATIONS_CSS + USAGE_HEATMAP_CSS + WORK_BOARD_CSS + MAIN_VOICE_CSS, 'main')]
   if (!nativeSession) conversationSteps.push(() => register('main.conversation', ProductSurface))
   else {
     conversationSteps.push(() => installMainCells(ctx), () => register('conversation.header.leading', NativeMainActions))
@@ -2427,21 +2445,19 @@ const PRODUCT_CSS = `
 .bt-main-composer-form textarea{min-height:32px;max-height:144px;resize:none;overflow-y:hidden;padding:5px 6px}
 .bt-main-context{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0}
 .bt-main-context>.bt-main-directory{min-width:0;margin:0;gap:6px}
-.bt-main-context .bt-select{width:auto;min-width:112px;max-width:min(180px,40vw);height:32px;padding:4px 24px 4px 8px;font-size:12px}
 .bt-main-context .bt-model-trigger{min-height:32px;max-width:min(260px,52vw);padding:4px 8px}
 .bt-main-context .bt-model-provider{display:none}
-.bt-main-context .bt-main-directory-note{font-size:11px;line-height:15px}
+.bt-main-context .bt-choice-target .bt-model-name{max-width:8em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bt-main-attachments,.bt-main-message-attachments{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
 .bt-main-attachment{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:4px 7px;border:1px solid var(--bt-line);border-radius:6px;color:var(--bt-ink-2);font-size:12px;overflow-wrap:anywhere}
 .bt-main-attachment button{border:0;background:transparent;color:var(--bt-ink);cursor:pointer;font:inherit}
 .bt-main-attachment button:focus-visible,.bt-main-message-attachments button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 .bt-main-read-aloud{margin:4px 0 4px 12px}.bt-main-read-aloud:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 .bt-main-send button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
-.bt-main-directory{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}.bt-main-directory .bt-main-label{margin:0}.bt-main-directory-note{color:var(--bt-ink-2);font-size:11px;line-height:16px}.bt-main-directory .bt-main-error{width:100%;margin:0}
+.bt-main-directory{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}.bt-main-directory .bt-main-label{margin:0}.bt-main-directory-note{color:var(--bt-ink-2);font-size:12px;line-height:18px}.bt-main-directory-warning{color:var(--bt-warn)}.bt-main-directory .bt-main-error{width:100%;margin:0}
 .bt-main-send{display:flex;align-items:center;gap:8px;margin-top:0}
 .bt-main-tools{display:flex;align-items:center;flex:1 1 auto;flex-wrap:wrap;gap:6px;min-width:0}
 .bt-main-tools>.bt-main-context{flex:1 1 280px;gap:6px}
-.bt-main-context .bt-main-directory-note{font-size:10px;line-height:14px}
 .bt-main-send button{height:36px;min-width:64px}
 .bt-main-send .bt-main-icon-btn,.bt-main-send .bt-main-submit{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;min-width:36px;padding:0;border:0;border-radius:50%;cursor:pointer}
 .bt-main-send .bt-main-icon-btn{background:var(--bt-hover);color:var(--bt-ink-2)}
@@ -2561,5 +2577,5 @@ const PRODUCT_CSS = `
 .bt-main-settings-use{display:grid;grid-template-columns:auto auto minmax(0,1fr) minmax(80px,1.5fr) auto;align-items:center;gap:8px;padding:8px 12px;font-size:var(--bt-font-caption);line-height:16px;color:var(--bt-ink-2)}
 .bt-main-settings-use+.bt-main-settings-use{border-top:.5px solid var(--bt-line)}
 .bt-main-settings-use-session{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-@media(max-width:640px){.bt-main-history,.bt-observation-body{padding:16px}.bt-main-header,.bt-observation-header{padding-left:16px;padding-right:16px}.bt-main-header{flex-wrap:wrap;height:auto;min-height:56px}.bt-main-health-detail{width:100%;margin-left:38px}.bt-main-health-warning{padding-left:16px;padding-right:16px}.bt-main-context{gap:4px}.bt-main-context .bt-select{min-width:96px}.bt-main-context .bt-model-trigger{max-width:56vw}.bt-main-context .bt-main-directory-note{flex:1 0 100%}.bt-main-composer-form{width:calc(100% - 24px);padding:8px 10px;margin:8px auto 10px}.bt-main-send{gap:6px}.bt-main-send .bt-main-icon-btn,.bt-main-send .bt-main-submit{width:34px;height:34px;min-width:34px}.bt-main-tools>.bt-main-context{flex-basis:100%}.bt-observation-header{align-items:flex-start;flex-wrap:wrap}.bt-observation-heading{order:3;width:100%}.bt-observation-summary{flex-direction:column}.bt-observation-facts{grid-template-columns:1fr}.bt-observation-generation{grid-template-columns:1fr}.bt-main-settings-dialog .bt-settings-nav{height:auto}.bt-main-settings-revision{padding:4px 8px}.bt-main-provider{align-items:stretch;flex-direction:column}.bt-main-provider-key{justify-content:flex-start}.bt-main-settings-use{grid-template-columns:auto auto minmax(0,1fr)}.bt-main-settings-use-session,.bt-main-settings-use time{grid-column:1/-1}.bt-main-settings-route{max-width:100%}}
+@media(max-width:640px){.bt-main-history,.bt-observation-body{padding:16px}.bt-main-header,.bt-observation-header{padding-left:16px;padding-right:16px}.bt-main-header{flex-wrap:wrap;height:auto;min-height:56px}.bt-main-health-detail{width:100%;margin-left:38px}.bt-main-health-warning{padding-left:16px;padding-right:16px}.bt-main-context{gap:4px}.bt-main-context .bt-model-trigger{max-width:56vw}.bt-main-context .bt-main-directory-note{flex:1 0 100%}.bt-main-composer-form{width:calc(100% - 24px);padding:8px 10px;margin:8px auto 10px}.bt-main-send{gap:6px}.bt-main-send .bt-main-icon-btn,.bt-main-send .bt-main-submit{width:34px;height:34px;min-width:34px}.bt-main-tools>.bt-main-context{flex-basis:100%}.bt-observation-header{align-items:flex-start;flex-wrap:wrap}.bt-observation-heading{order:3;width:100%}.bt-observation-summary{flex-direction:column}.bt-observation-facts{grid-template-columns:1fr}.bt-observation-generation{grid-template-columns:1fr}.bt-main-settings-dialog .bt-settings-nav{height:auto}.bt-main-settings-revision{padding:4px 8px}.bt-main-provider{align-items:stretch;flex-direction:column}.bt-main-provider-key{justify-content:flex-start}.bt-main-settings-use{grid-template-columns:auto auto minmax(0,1fr)}.bt-main-settings-use-session,.bt-main-settings-use time{grid-column:1/-1}.bt-main-settings-route{max-width:100%}}
 `
