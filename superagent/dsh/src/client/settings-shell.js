@@ -58,7 +58,7 @@ function keepFocusInDialog(event) {
   }
 }
 
-function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate, returnFocus, leaving }) {
+function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate, returnFocus, leaving, roleDraft, leaveRequest }) {
   const available = entry => Object.hasOwn(sections, entry.id) && sections[entry.id]?.status !== 'unavailable'
   const resolveTarget = targetId => settingsTarget(targetId, available)
   const [target, setTarget] = useState(() => resolveTarget(initialPage) ?? settingsTarget('general'))
@@ -67,6 +67,7 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
   const [compact, setCompact] = useState(() => window.innerWidth < 720)
   const [expanded, setExpanded] = useState(false)
   const [query, setQuery] = useState('')
+  const [confirmation, setConfirmation] = useState(null)
   const { page, section } = target
   const id = useId()
   const dialog = useRef(null)
@@ -75,6 +76,8 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
   const chooser = useRef(null)
   const search = useRef(null)
   const navigation = useRef(null)
+  const keepEditing = useRef(null)
+  const restoredFocus = useRef(null)
   const focusDestination = useRef('page')
   const searching = query.trim() !== ''
   const results = searching ? searchSettings(query, available) : []
@@ -100,7 +103,16 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
     return () => window.removeEventListener('resize', resize)
   }, [compact])
   useLayoutEffect(() => {
-    if (leaving) return
+    if (confirmation && !leaving) keepEditing.current?.focus()
+  }, [confirmation, leaving])
+  useLayoutEffect(() => {
+    if (leaving || confirmation) return
+    const restored = restoredFocus.current
+    restoredFocus.current = null
+    if (restored) {
+      if (restored.isConnected && !restored.closest('[hidden], [inert]') && !restored.matches(':disabled')) restored.focus({ preventScroll: true })
+      if (!dialog.current.contains(dialog.current.ownerDocument.activeElement)) focusDestination.current = 'page'
+    }
     if (focusDestination.current === 'page') {
       const next = (compact ? chooser.current : selectedPage.current) ?? search.current
       next?.focus()
@@ -112,30 +124,55 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
     if (page.id === 'usage') setUsageTabs(tabs => tabs.has(section.id) ? tabs : new Set([...tabs, section.id]))
   }, [page.id, section.id])
 
-  const close = () => { if (!leaving) onClose() }
-  const navigate = (targetId, focusPage = false) => {
-    if (leaving) return
+  const requestLeave = (action, trigger = dialog.current.ownerDocument.activeElement) => {
+    if (leaving || confirmation) return
+    if (section.id !== 'roles' || !roleDraft?.dirty) { action(); return }
+    if (roleDraft.saving()) return
+    const source = dialog.current.contains(trigger) ? trigger : dialog.current
+    setConfirmation({ action, source })
+  }
+  useLayoutEffect(() => {
+    if (!leaveRequest || leaving) return
+    leaveRequest.current = requestLeave
+    return () => { leaveRequest.current = null }
+  })
+  const keep = () => {
+    restoredFocus.current = confirmation.source
+    setConfirmation(null)
+  }
+  const discard = () => {
+    roleDraft.discard()
+    focusDestination.current = 'page'
+    setConfirmation(null)
+    confirmation.action()
+  }
+  const close = event => requestLeave(onClose, event?.currentTarget?.matches('button') ? event.currentTarget : undefined)
+  const navigate = (targetId, { focusPage = false, select = false, trigger } = {}) => {
+    if (leaving || confirmation) return
     const next = resolveTarget(targetId)
     setUnavailable(!next)
-    if (!next || next.section === section) return
-    if (focusPage) focusDestination.current = 'page'
-    onNavigate?.(section.id)
-    setTarget(next)
+    if (!next) return
+    const move = () => {
+      if (select && compact) closeChooser()
+      else if (select && searching) {
+        focusDestination.current = 'page'
+        setQuery('')
+      }
+      if (next.section === section) return
+      if (focusPage) focusDestination.current = 'page'
+      onNavigate?.(section.id)
+      setTarget(next)
+    }
+    if (next.section === section) move()
+    else requestLeave(move, trigger)
   }
-  const navigateFromSection = targetId => navigate(targetId, true)
+  const navigateFromSection = targetId => navigate(targetId, { focusPage: true })
   const closeChooser = () => {
     focusDestination.current = 'page'
     setExpanded(false)
     setQuery('')
   }
-  const selectDestination = targetId => {
-    if (compact) closeChooser()
-    else if (searching) {
-      focusDestination.current = 'page'
-      setQuery('')
-    }
-    navigate(targetId)
-  }
+  const selectDestination = (targetId, event) => navigate(targetId, { select: true, trigger: event.currentTarget })
   const onKeyDown = event => {
     if (event.defaultPrevented || leaving) return
     if (event.key === 'Escape') {
@@ -152,14 +189,14 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
   const destinations = searching
     ? h('div', { role: 'group', 'aria-label': t('Settings search results') }, results.length
       ? results.map(result => h('button', { key: result.id, type: 'button', className: 'bt-settings-item',
-        onClick: () => selectDestination(result.id) }, result.label))
+        onClick: event => selectDestination(result.id, event) }, result.label))
       : h('p', { role: 'status', className: 'bt-main-status' }, t('No matching settings')))
     : SETTINGS_GROUPS.map(group => h('div', { key: group.id, className: 'bt-settings-group', role: 'group', 'aria-labelledby': `${id}-${group.id}` },
       h('span', { id: `${id}-${group.id}`, className: 'bt-settings-group-label' }, t(group.label)),
       group.pages.map(item => h('button', { key: item.id, className: 'bt-settings-item', type: 'button',
         ref: item === page ? selectedPage : undefined, 'aria-current': item === page ? 'page' : undefined,
-        onClick: () => {
-          if (item !== page) selectDestination(item.id)
+        onClick: event => {
+          if (item !== page) selectDestination(item.id, event)
           else {
             setUnavailable(false)
             if (compact) closeChooser()
@@ -168,9 +205,9 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
 
   return h(SettingsSectionContext.Provider, { value: { sections, navigate: navigateFromSection } },
     h('div', { className: 'bt-settings-layer', 'data-leaving': leaving ? '' : undefined, inert: leaving },
-      h('div', { className: 'bt-scrim', onClick: close }),
+      h('div', { className: 'bt-scrim', onMouseDown: event => event.preventDefault(), onClick: close }),
       h('div', { ref: dialog, className: 'bt-settings bt-superagent-settings', 'data-compact': compact || undefined, role: 'dialog', tabIndex: -1,
-        'aria-modal': true, 'aria-label': t('Super-agent settings'), onKeyDown },
+        inert: Boolean(confirmation), 'aria-modal': confirmation ? undefined : true, 'aria-label': t('Super-agent settings'), onKeyDown },
       h('div', { className: 'bt-settings-navigation' },
         compact ? h('button', { ref: chooser, type: 'button', className: 'bt-soft bt-settings-chooser', 'aria-label': t('Choose a page'),
           'aria-controls': `${id}-navigation`, 'aria-expanded': expanded, onClick: () => {
@@ -190,14 +227,29 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
             'aria-labelledby': `${id}-tab-${tab.id}`, tabIndex: tab === section ? 0 : -1, hidden: tab !== section },
           tab === section || page.id === 'usage' && usageTabs.has(tab.id) ? content(tab) : null))
           : content(section), unavailable ? h(SettingsSectionState) : null),
-      h('button', { type: 'button', className: 'bt-settings-close', 'aria-label': t('Close settings'), onClick: close }, h(CloseIcon)))))
+      h('button', { type: 'button', className: 'bt-settings-close', 'aria-label': t('Close settings'), onClick: close }, h(CloseIcon))),
+      confirmation ? h('div', { className: 'bt-settings-confirm-layer' },
+        h('div', { className: 'bt-scrim', onClick: keep }),
+        h('div', { className: 'bt-settings-confirm', role: 'alertdialog', 'aria-modal': true,
+          'aria-labelledby': `${id}-unsaved`, 'aria-describedby': `${id}-discard`, onKeyDown: event => {
+            if (event.key === 'Tab') keepFocusInDialog(event)
+            if (event.key !== 'Escape') return
+            event.preventDefault()
+            event.stopPropagation()
+            keep()
+          } },
+        h('h2', { id: `${id}-unsaved` }, t('Unsaved role changes')),
+        h('p', { id: `${id}-discard` }, t('Keep editing, or discard the changes to continue.')),
+        h('div', { className: 'bt-actions' },
+          h('button', { ref: keepEditing, type: 'button', className: 'bt-soft', onClick: keep }, t('Keep editing')),
+          h('button', { type: 'button', className: 'bt-soft bt-danger', onClick: discard }, t('Discard changes'))))) : null))
 }
 
-export function SettingsShell({ open = true, onClose, onNavigate, returnFocus, sections, renderSlot, initialPage }) {
+export function SettingsShell({ open = true, onClose, onNavigate, returnFocus, sections, renderSlot, initialPage, roleDraft, leaveRequest }) {
   const [kept, leaving] = useLinger(open, 160)
   if (!kept) return null
   return createPortal(h(SettingsDialog, { onClose, onNavigate, returnFocus, sections: { about: ABOUT_SETTINGS_SECTION, ...sections },
-    renderSlot, initialPage, leaving }), document.body)
+    renderSlot, initialPage, leaving, roleDraft, leaveRequest }), document.body)
 }
 
 export const SETTINGS_SHELL_CSS = `
@@ -229,4 +281,10 @@ export const SETTINGS_SHELL_CSS = `
 .bt-superagent-settings[data-compact] .bt-settings-nav{flex:none;max-height:min(40dvh,320px);border:0;padding:4px 12px 8px}
 .bt-superagent-settings[data-compact]>.bt-settings-main{width:100%;flex:1;min-height:0;height:auto}
 .bt-superagent-settings[data-compact] .bt-settings-tabs{flex-wrap:wrap}
+.bt-settings-confirm-layer{position:absolute;inset:0;display:grid;place-items:center;padding:16px}
+.bt-settings-confirm{position:relative;box-sizing:border-box;width:min(100%,420px);padding:20px;border:1px solid var(--bt-line);border-radius:var(--bt-radius-dialog);background:var(--bt-main);color:var(--bt-ink);box-shadow:var(--bt-dialog-shadow)}
+.bt-settings-confirm h2{margin:0;font-size:var(--bt-font-heading)}
+.bt-settings-confirm p{color:var(--bt-ink-2);font-size:var(--bt-font-body)}
+.bt-settings-confirm .bt-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px}
+.bt-settings-confirm button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 `

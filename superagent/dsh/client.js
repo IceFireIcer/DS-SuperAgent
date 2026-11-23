@@ -3810,6 +3810,10 @@ var ZH = {
   "Back to group chats": "返回群聊列表",
   "DS SuperAgent settings": "DS SuperAgent 设置",
   "Settings pages": "设置页面",
+  "Unsaved role changes": "有未保存的角色更改",
+  "Keep editing, or discard the changes to continue.": "可继续编辑，或放弃更改后离开。",
+  "Keep editing": "继续编辑",
+  "Discard changes": "放弃更改",
   "Choose a page": "选择设置页面",
   "Search settings": "搜索设置",
   "Settings search results": "设置搜索结果",
@@ -10968,10 +10972,10 @@ function rebaseRoleDraft(base, draft, latest) {
   const merged = JSON.parse(JSON.stringify(latest));
   for (const role of ["main", "router", "worker"]) {
     if (!draft[role]) continue;
-    for (const field of ["provider", "model", "effort"]) {
-      if (draft[role].model?.[field] === base[role].model?.[field]) continue;
-      if (draft[role].model?.[field] === void 0) delete merged[role].model[field];
-      else merged[role].model[field] = draft[role].model[field];
+    const edited = draft[role].model;
+    const original = base[role].model;
+    if (edited.provider !== original.provider || edited.model !== original.model || edited.effort !== original.effort) {
+      merged[role].model = { ...edited };
     }
     if (draft[role].instructions !== base[role].instructions) merged[role].instructions = draft[role].instructions;
   }
@@ -13042,7 +13046,7 @@ function keepFocusInDialog(event) {
     next?.focus();
   }
 }
-function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate, returnFocus, leaving }) {
+function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate, returnFocus, leaving, roleDraft, leaveRequest }) {
   const available = (entry) => Object.hasOwn(sections, entry.id) && sections[entry.id]?.status !== "unavailable";
   const resolveTarget = (targetId) => settingsTarget(targetId, available);
   const [target, setTarget] = (0, import_react23.useState)(() => resolveTarget(initialPage) ?? settingsTarget("general"));
@@ -13051,6 +13055,7 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
   const [compact, setCompact] = (0, import_react23.useState)(() => window.innerWidth < 720);
   const [expanded, setExpanded] = (0, import_react23.useState)(false);
   const [query, setQuery] = (0, import_react23.useState)("");
+  const [confirmation, setConfirmation] = (0, import_react23.useState)(null);
   const { page, section } = target;
   const id = (0, import_react23.useId)();
   const dialog = (0, import_react23.useRef)(null);
@@ -13059,6 +13064,8 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
   const chooser = (0, import_react23.useRef)(null);
   const search = (0, import_react23.useRef)(null);
   const navigation = (0, import_react23.useRef)(null);
+  const keepEditing = (0, import_react23.useRef)(null);
+  const restoredFocus = (0, import_react23.useRef)(null);
   const focusDestination = (0, import_react23.useRef)("page");
   const searching = query.trim() !== "";
   const results = searching ? searchSettings(query, available) : [];
@@ -13083,7 +13090,16 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
     return () => window.removeEventListener("resize", resize);
   }, [compact]);
   (0, import_react23.useLayoutEffect)(() => {
-    if (leaving) return;
+    if (confirmation && !leaving) keepEditing.current?.focus();
+  }, [confirmation, leaving]);
+  (0, import_react23.useLayoutEffect)(() => {
+    if (leaving || confirmation) return;
+    const restored = restoredFocus.current;
+    restoredFocus.current = null;
+    if (restored) {
+      if (restored.isConnected && !restored.closest("[hidden], [inert]") && !restored.matches(":disabled")) restored.focus({ preventScroll: true });
+      if (!dialog.current.contains(dialog.current.ownerDocument.activeElement)) focusDestination.current = "page";
+    }
     if (focusDestination.current === "page") {
       const next = (compact ? chooser.current : selectedPage.current) ?? search.current;
       next?.focus();
@@ -13096,32 +13112,60 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
   (0, import_react23.useEffect)(() => {
     if (page.id === "usage") setUsageTabs((tabs) => tabs.has(section.id) ? tabs : /* @__PURE__ */ new Set([...tabs, section.id]));
   }, [page.id, section.id]);
-  const close = () => {
-    if (!leaving) onClose();
+  const requestLeave = (action, trigger = dialog.current.ownerDocument.activeElement) => {
+    if (leaving || confirmation) return;
+    if (section.id !== "roles" || !roleDraft?.dirty) {
+      action();
+      return;
+    }
+    if (roleDraft.saving()) return;
+    const source = dialog.current.contains(trigger) ? trigger : dialog.current;
+    setConfirmation({ action, source });
   };
-  const navigate = (targetId, focusPage = false) => {
-    if (leaving) return;
+  (0, import_react23.useLayoutEffect)(() => {
+    if (!leaveRequest || leaving) return;
+    leaveRequest.current = requestLeave;
+    return () => {
+      leaveRequest.current = null;
+    };
+  });
+  const keep = () => {
+    restoredFocus.current = confirmation.source;
+    setConfirmation(null);
+  };
+  const discard = () => {
+    roleDraft.discard();
+    focusDestination.current = "page";
+    setConfirmation(null);
+    confirmation.action();
+  };
+  const close = (event) => requestLeave(onClose, event?.currentTarget?.matches("button") ? event.currentTarget : void 0);
+  const navigate = (targetId, { focusPage = false, select = false, trigger } = {}) => {
+    if (leaving || confirmation) return;
     const next = resolveTarget(targetId);
     setUnavailable(!next);
-    if (!next || next.section === section) return;
-    if (focusPage) focusDestination.current = "page";
-    onNavigate?.(section.id);
-    setTarget(next);
+    if (!next) return;
+    const move = () => {
+      if (select && compact) closeChooser();
+      else if (select && searching) {
+        focusDestination.current = "page";
+        setQuery("");
+      }
+      if (next.section === section) return;
+      if (focusPage) focusDestination.current = "page";
+      onNavigate?.(section.id);
+      setTarget(next);
+    };
+    if (next.section === section) move();
+    else requestLeave(move, trigger);
   };
-  const navigateFromSection = (targetId) => navigate(targetId, true);
+  const navigateFromSection = (targetId) => navigate(targetId, { focusPage: true });
   const closeChooser = () => {
     focusDestination.current = "page";
     setExpanded(false);
     setQuery("");
   };
-  const selectDestination = (targetId) => {
-    if (compact) closeChooser();
-    else if (searching) {
-      focusDestination.current = "page";
-      setQuery("");
-    }
-    navigate(targetId);
-  };
+  const selectDestination = (targetId, event) => navigate(targetId, { select: true, trigger: event.currentTarget });
   const onKeyDown = (event) => {
     if (event.defaultPrevented || leaving) return;
     if (event.key === "Escape") {
@@ -13144,7 +13188,7 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
     key: result.id,
     type: "button",
     className: "bt-settings-item",
-    onClick: () => selectDestination(result.id)
+    onClick: (event) => selectDestination(result.id, event)
   }, result.label)) : (0, import_react23.createElement)("p", { role: "status", className: "bt-main-status" }, t("No matching settings"))) : SETTINGS_GROUPS.map((group) => (0, import_react23.createElement)(
     "div",
     { key: group.id, className: "bt-settings-group", role: "group", "aria-labelledby": `${id}-${group.id}` },
@@ -13155,8 +13199,8 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
       type: "button",
       ref: item === page ? selectedPage : void 0,
       "aria-current": item === page ? "page" : void 0,
-      onClick: () => {
-        if (item !== page) selectDestination(item.id);
+      onClick: (event) => {
+        if (item !== page) selectDestination(item.id, event);
         else {
           setUnavailable(false);
           if (compact) closeChooser();
@@ -13170,7 +13214,7 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
     (0, import_react23.createElement)(
       "div",
       { className: "bt-settings-layer", "data-leaving": leaving ? "" : void 0, inert: leaving },
-      (0, import_react23.createElement)("div", { className: "bt-scrim", onClick: close }),
+      (0, import_react23.createElement)("div", { className: "bt-scrim", onMouseDown: (event) => event.preventDefault(), onClick: close }),
       (0, import_react23.createElement)(
         "div",
         {
@@ -13179,7 +13223,8 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
           "data-compact": compact || void 0,
           role: "dialog",
           tabIndex: -1,
-          "aria-modal": true,
+          inert: Boolean(confirmation),
+          "aria-modal": confirmation ? void 0 : true,
           "aria-label": t("Super-agent settings"),
           onKeyDown
         },
@@ -13247,11 +13292,41 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
           tab === section || page.id === "usage" && usageTabs.has(tab.id) ? content(tab) : null
         )) : content(section), unavailable2 ? (0, import_react23.createElement)(SettingsSectionState) : null),
         (0, import_react23.createElement)("button", { type: "button", className: "bt-settings-close", "aria-label": t("Close settings"), onClick: close }, (0, import_react23.createElement)(CloseIcon))
-      )
+      ),
+      confirmation ? (0, import_react23.createElement)(
+        "div",
+        { className: "bt-settings-confirm-layer" },
+        (0, import_react23.createElement)("div", { className: "bt-scrim", onClick: keep }),
+        (0, import_react23.createElement)(
+          "div",
+          {
+            className: "bt-settings-confirm",
+            role: "alertdialog",
+            "aria-modal": true,
+            "aria-labelledby": `${id}-unsaved`,
+            "aria-describedby": `${id}-discard`,
+            onKeyDown: (event) => {
+              if (event.key === "Tab") keepFocusInDialog(event);
+              if (event.key !== "Escape") return;
+              event.preventDefault();
+              event.stopPropagation();
+              keep();
+            }
+          },
+          (0, import_react23.createElement)("h2", { id: `${id}-unsaved` }, t("Unsaved role changes")),
+          (0, import_react23.createElement)("p", { id: `${id}-discard` }, t("Keep editing, or discard the changes to continue.")),
+          (0, import_react23.createElement)(
+            "div",
+            { className: "bt-actions" },
+            (0, import_react23.createElement)("button", { ref: keepEditing, type: "button", className: "bt-soft", onClick: keep }, t("Keep editing")),
+            (0, import_react23.createElement)("button", { type: "button", className: "bt-soft bt-danger", onClick: discard }, t("Discard changes"))
+          )
+        )
+      ) : null
     )
   );
 }
-function SettingsShell({ open = true, onClose, onNavigate, returnFocus, sections, renderSlot, initialPage }) {
+function SettingsShell({ open = true, onClose, onNavigate, returnFocus, sections, renderSlot, initialPage, roleDraft, leaveRequest }) {
   const [kept, leaving] = useLinger(open, 160);
   if (!kept) return null;
   return (0, import_react_dom2.createPortal)((0, import_react23.createElement)(SettingsDialog, {
@@ -13261,7 +13336,9 @@ function SettingsShell({ open = true, onClose, onNavigate, returnFocus, sections
     sections: { about: ABOUT_SETTINGS_SECTION, ...sections },
     renderSlot,
     initialPage,
-    leaving
+    leaving,
+    roleDraft,
+    leaveRequest
   }), document.body);
 }
 var SETTINGS_SHELL_CSS = `
@@ -13293,6 +13370,12 @@ var SETTINGS_SHELL_CSS = `
 .bt-superagent-settings[data-compact] .bt-settings-nav{flex:none;max-height:min(40dvh,320px);border:0;padding:4px 12px 8px}
 .bt-superagent-settings[data-compact]>.bt-settings-main{width:100%;flex:1;min-height:0;height:auto}
 .bt-superagent-settings[data-compact] .bt-settings-tabs{flex-wrap:wrap}
+.bt-settings-confirm-layer{position:absolute;inset:0;display:grid;place-items:center;padding:16px}
+.bt-settings-confirm{position:relative;box-sizing:border-box;width:min(100%,420px);padding:20px;border:1px solid var(--bt-line);border-radius:var(--bt-radius-dialog);background:var(--bt-main);color:var(--bt-ink);box-shadow:var(--bt-dialog-shadow)}
+.bt-settings-confirm h2{margin:0;font-size:var(--bt-font-heading)}
+.bt-settings-confirm p{color:var(--bt-ink-2);font-size:var(--bt-font-body)}
+.bt-settings-confirm .bt-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px}
+.bt-settings-confirm button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 `;
 
 // src/client/settings-feedback.js
@@ -21206,6 +21289,7 @@ function applyProduct(ctx) {
   });
   const useView = () => (0, import_react51.useSyncExternalStore)(view.subscribe, view.getSnapshot);
   let settingsTrigger;
+  const settingsLeaveRequest = { current: null };
   let signInTrigger;
   let stopped = false;
   let modelSettingsRequest = 0;
@@ -23390,6 +23474,7 @@ function applyProduct(ctx) {
     const [snapshot, setSnapshot] = (0, import_react51.useState)(null);
     const [draft, setDraft] = (0, import_react51.useState)(null);
     const [base, setBase] = (0, import_react51.useState)(null);
+    const [baseRevision, setBaseRevision] = (0, import_react51.useState)(null);
     const [efforts, setEfforts] = (0, import_react51.useState)({});
     const [keyDrafts, setKeyDrafts] = (0, import_react51.useState)({});
     const [error, setError] = (0, import_react51.useState)(null);
@@ -23400,6 +23485,7 @@ function applyProduct(ctx) {
     const [refreshFailed, setRefreshFailed] = (0, import_react51.useState)(false);
     const [providerRefreshFailed, setProviderRefreshFailed] = (0, import_react51.useState)(false);
     const mainModelField = (0, import_react51.useRef)(null);
+    const rebaseFocus = (0, import_react51.useRef)(false);
     const rolesRetry = (0, import_react51.useRef)(null);
     const guideLanding = (0, import_react51.useRef)(Boolean(onModelReady));
     const guideRoles = (0, import_react51.useRef)(Boolean(onModelReady));
@@ -23430,6 +23516,7 @@ function applyProduct(ctx) {
         draftVersion.current += 1;
         setDraft(nextDraft);
         setBase(clone(value.roles));
+        setBaseRevision(value.revision);
         void loadEfforts(value.roles);
       }
     };
@@ -23456,6 +23543,12 @@ function applyProduct(ctx) {
         mainModelField.current.focus();
       }
     }, [open, loading, draft]);
+    (0, import_react51.useEffect)(() => {
+      if (!saving && rebaseFocus.current) {
+        rebaseFocus.current = false;
+        if (open) mainModelField.current?.focus();
+      }
+    }, [open, saving]);
     const updateRole = (role, change) => {
       if (savingRef.current) return;
       draftVersion.current += 1;
@@ -23535,7 +23628,7 @@ function applyProduct(ctx) {
         const value = await productCall("settings-save", {
           instanceId: binding.instanceId,
           commandId: crypto.randomUUID(),
-          expectedRevision: snapshot.revision,
+          expectedRevision: baseRevision,
           roles: submitted
         });
         const editedDuringSave = draftVersion.current !== submittedVersion;
@@ -23544,6 +23637,7 @@ function applyProduct(ctx) {
         setBase(clone(value.roles));
         setDraft(nextDraft);
         draftRef.current = nextDraft;
+        setBaseRevision(value.revision);
         draftVersion.current += 1;
         setConflict(false);
         setNotice(t("Configuration v{revision} is active for new turns.", { revision: value.revision }));
@@ -23558,7 +23652,9 @@ function applyProduct(ctx) {
         setSaving(false);
       }
     };
-    const rebase = async () => {
+    const rebase = async (trigger) => {
+      if (savingRef.current) return;
+      savingRef.current = true;
       setSaving(true);
       setError(null);
       try {
@@ -23570,10 +23666,12 @@ function applyProduct(ctx) {
         setDraft(merged);
         setBase(clone(latest.roles));
         setConflict(false);
+        rebaseFocus.current = trigger.matches(":focus");
         setNotice(t("Your changed fields were applied over configuration v{revision}. Review and save.", { revision: latest.revision }));
       } catch (failure) {
         setError(failure.message);
       } finally {
+        savingRef.current = false;
         setSaving(false);
       }
     };
@@ -23663,7 +23761,22 @@ function applyProduct(ctx) {
         void load();
       } }, t("Retry"))
     );
-    const roles2 = draft && !loading ? (0, import_react51.createElement)(
+    const rolesDirty = Boolean(base && draft && roleRows.some(([role]) => {
+      const original = base[role];
+      const edited = draft[role];
+      return original?.instructions !== edited?.instructions || original?.model?.provider !== edited?.model?.provider || original?.model?.model !== edited?.model?.model || original?.model?.effort !== edited?.model?.effort;
+    }));
+    const discardRoleDraft = () => {
+      const clean = clone(base);
+      draftRef.current = clean;
+      draftVersion.current += 1;
+      setDraft(clean);
+      setConflict(false);
+      setError(null);
+      setNotice(null);
+      setRefreshFailed(false);
+    };
+    const roles2 = (close) => draft && !loading ? (0, import_react51.createElement)(
       import_react51.Fragment,
       null,
       error ? (0, import_react51.createElement)("p", { className: "bt-main-error", role: "alert" }, error) : null,
@@ -23672,9 +23785,14 @@ function applyProduct(ctx) {
         "div",
         { className: "bt-main-settings-conflict", role: "status" },
         (0, import_react51.createElement)("p", null, t("Newer settings exist. Rebase only your changed fields, then review and save.")),
-        (0, import_react51.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", disabled: saving, onClick: () => {
-          void rebase();
-        } }, t("Rebase my edits"))
+        (0, import_react51.createElement)("button", {
+          type: "button",
+          className: "bt-soft bt-soft-sm",
+          "aria-disabled": saving,
+          onClick: (event) => {
+            void rebase(event.currentTarget);
+          }
+        }, t("Rebase my edits"))
       ) : null,
       notice ? (0, import_react51.createElement)("p", { className: "bt-main-status", role: "status" }, notice) : null,
       refreshFailed ? (0, import_react51.createElement)(
@@ -23770,7 +23888,8 @@ function applyProduct(ctx) {
       (0, import_react51.createElement)(
         "div",
         { className: "bt-actions bt-main-settings-save" },
-        (0, import_react51.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", disabled: saving, onClick: onClose }, t("Cancel")),
+        rolesDirty ? (0, import_react51.createElement)("span", { role: "status" }, t("Unsaved role changes")) : null,
+        (0, import_react51.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", disabled: saving, onClick: close }, t("Cancel")),
         (0, import_react51.createElement)(
           "button",
           { type: "button", className: "bt-send bt-soft bt-soft-sm", disabled: saving, onClick: () => {
@@ -23885,7 +24004,6 @@ function applyProduct(ctx) {
           )
         ) : null
       ),
-      roles: roles2,
       models: providers,
       "built-in-plugins": (0, import_react51.createElement)(BuiltinPluginSettings, pageProps),
       execution: (0, import_react51.createElement)(ProductExecutionSettings, { ...pageProps, onChanged: () => {
@@ -23924,6 +24042,7 @@ function applyProduct(ctx) {
       "remote-clients": (0, import_react51.createElement)(ClientSettings, { binding })
     };
     const sections = Object.fromEntries(Object.entries(pages2).map(([id, content]) => [id, { render: () => content }]));
+    sections.roles = { render: ({ close }) => roles2(close) };
     const useNativeModels = viewState.nativeModelsOpen && renderSlot && hasNativeSettings("models");
     if (useNativeModels) sections.models = { render: ({ close }) => renderSlot("settings.section", { close }, { only: "models", fallback: providers }) };
     sections["usage-overview"] = { render: ({ navigate }) => (0, import_react51.createElement)(ProductOperationsSettings, { ...pageProps, section: "usage", onNavigate: navigate }) };
@@ -23940,6 +24059,8 @@ function applyProduct(ctx) {
       initialPage,
       renderSlot,
       sections,
+      roleDraft: { dirty: rolesDirty, saving: () => savingRef.current, discard: discardRoleDraft },
+      leaveRequest: settingsLeaveRequest,
       onNavigate: (previous) => {
         if (previous === "roles") {
           guideLanding.current = false;
@@ -24369,15 +24490,21 @@ function applyProduct(ctx) {
         reportError(t("This setting is unavailable here."));
         return;
       }
-      settingsTrigger = trigger;
-      view.set({
-        ...state,
-        settingsOpen: true,
-        settingsVisit: state.settingsVisit + 1,
-        settingsPage,
-        nativeModelsOpen: nativeModels,
-        settingsFromModelGuide: modelGuide
-      });
+      const open = () => {
+        const current = view.getSnapshot();
+        if (current.binding?.instanceId !== state.binding.instanceId || current.connection?.connected) return;
+        settingsTrigger = trigger;
+        view.set({
+          ...current,
+          settingsOpen: true,
+          settingsVisit: current.settingsVisit + 1,
+          settingsPage,
+          nativeModelsOpen: nativeModels,
+          settingsFromModelGuide: modelGuide
+        });
+      };
+      if (state.settingsOpen && settingsLeaveRequest.current) settingsLeaveRequest.current(open, trigger);
+      else open();
     },
     openConnection() {
       if (clientBridge()) view.set((current) => ({ ...current, connectOpen: true }));

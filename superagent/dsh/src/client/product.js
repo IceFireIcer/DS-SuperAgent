@@ -138,6 +138,7 @@ export function applyProduct(ctx) {
   })
   const useView = () => useSyncExternalStore(view.subscribe, view.getSnapshot)
   let settingsTrigger
+  const settingsLeaveRequest = { current: null }
   let signInTrigger
   let stopped = false
   let modelSettingsRequest = 0
@@ -1558,6 +1559,7 @@ export function applyProduct(ctx) {
     const [snapshot, setSnapshot] = useState(null)
     const [draft, setDraft] = useState(null)
     const [base, setBase] = useState(null)
+    const [baseRevision, setBaseRevision] = useState(null)
     const [efforts, setEfforts] = useState({})
     const [keyDrafts, setKeyDrafts] = useState({})
     const [error, setError] = useState(null)
@@ -1568,6 +1570,7 @@ export function applyProduct(ctx) {
     const [refreshFailed, setRefreshFailed] = useState(false)
     const [providerRefreshFailed, setProviderRefreshFailed] = useState(false)
     const mainModelField = useRef(null)
+    const rebaseFocus = useRef(false)
     const rolesRetry = useRef(null)
     const guideLanding = useRef(Boolean(onModelReady))
     const guideRoles = useRef(Boolean(onModelReady))
@@ -1595,6 +1598,7 @@ export function applyProduct(ctx) {
         draftVersion.current += 1
         setDraft(nextDraft)
         setBase(clone(value.roles))
+        setBaseRevision(value.revision)
         void loadEfforts(value.roles)
       }
     }
@@ -1619,6 +1623,12 @@ export function applyProduct(ctx) {
         mainModelField.current.focus()
       }
     }, [open, loading, draft])
+    useEffect(() => {
+      if (!saving && rebaseFocus.current) {
+        rebaseFocus.current = false
+        if (open) mainModelField.current?.focus()
+      }
+    }, [open, saving])
     const updateRole = (role, change) => {
       if (savingRef.current) return
       draftVersion.current += 1
@@ -1686,11 +1696,12 @@ export function applyProduct(ctx) {
       setSaving(true); setError(null); setNotice(null)
       try {
         const value = await productCall('settings-save', { instanceId: binding.instanceId, commandId: crypto.randomUUID(),
-          expectedRevision: snapshot.revision, roles: submitted })
+          expectedRevision: baseRevision, roles: submitted })
         const editedDuringSave = draftVersion.current !== submittedVersion
         const nextDraft = editedDuringSave ? rebaseRoleDraft(submitted, draftRef.current, value.roles) : clone(value.roles)
         setSnapshot(current => ({ ...current, ...value, providers: current.providers, history: current.history }))
         setBase(clone(value.roles)); setDraft(nextDraft); draftRef.current = nextDraft
+        setBaseRevision(value.revision)
         draftVersion.current += 1
         setConflict(false)
         setNotice(t('Configuration v{revision} is active for new turns.', { revision: value.revision }))
@@ -1702,7 +1713,9 @@ export function applyProduct(ctx) {
         } else setError(failure.message)
       } finally { savingRef.current = false; setSaving(false) }
     }
-    const rebase = async () => {
+    const rebase = async trigger => {
+      if (savingRef.current) return
+      savingRef.current = true
       setSaving(true); setError(null)
       try {
         const latest = await readModelSettings(binding, 50)
@@ -1711,9 +1724,10 @@ export function applyProduct(ctx) {
         draftRef.current = merged
         draftVersion.current += 1
         setDraft(merged); setBase(clone(latest.roles)); setConflict(false)
+        rebaseFocus.current = trigger.matches(':focus')
         setNotice(t('Your changed fields were applied over configuration v{revision}. Review and save.', { revision: latest.revision }))
       } catch (failure) { setError(failure.message) }
-      finally { setSaving(false) }
+      finally { savingRef.current = false; setSaving(false) }
     }
     const refreshAfterPreset = async () => {
       const latest = await readModelSettings(binding, 50)
@@ -1788,12 +1802,29 @@ export function applyProduct(ctx) {
     const loadingSettings = loading ? h(SettingsSectionState, { status: 'loading' }) : h(Fragment, null,
       h(SettingsSectionState, { status: 'error', message: error }),
       h('button', { type: 'button', className: 'bt-soft', onClick: () => { void load() } }, t('Retry')))
-    const roles = draft && !loading ? h(Fragment, null,
+    const rolesDirty = Boolean(base && draft && roleRows.some(([role]) => {
+      const original = base[role]
+      const edited = draft[role]
+      return original?.instructions !== edited?.instructions || original?.model?.provider !== edited?.model?.provider
+        || original?.model?.model !== edited?.model?.model || original?.model?.effort !== edited?.model?.effort
+    }))
+    const discardRoleDraft = () => {
+      const clean = clone(base)
+      draftRef.current = clean
+      draftVersion.current += 1
+      setDraft(clean)
+      setConflict(false)
+      setError(null)
+      setNotice(null)
+      setRefreshFailed(false)
+    }
+    const roles = close => draft && !loading ? h(Fragment, null,
             error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
             viewState.directoryError ? h('p', { className: 'bt-main-error', role: 'alert' }, viewState.directoryError) : null,
             conflict ? h('div', { className: 'bt-main-settings-conflict', role: 'status' },
               h('p', null, t('Newer settings exist. Rebase only your changed fields, then review and save.')),
-              h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: saving, onClick: () => { void rebase() } }, t('Rebase my edits'))) : null,
+              h('button', { type: 'button', className: 'bt-soft bt-soft-sm', 'aria-disabled': saving,
+                onClick: event => { void rebase(event.currentTarget) } }, t('Rebase my edits'))) : null,
             notice ? h('p', { className: 'bt-main-status', role: 'status' }, notice) : null,
             refreshFailed ? h('div', null,
               h('p', { className: 'bt-main-status', role: 'status' }, t('Configuration saved. Could not refresh model settings.')),
@@ -1830,7 +1861,8 @@ export function applyProduct(ctx) {
                   h('span', { className: 'bt-main-settings-route' }, ref)))
             }),
             h('div', { className: 'bt-actions bt-main-settings-save' },
-              h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: saving, onClick: onClose }, t('Cancel')),
+              rolesDirty ? h('span', { role: 'status' }, t('Unsaved role changes')) : null,
+              h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: saving, onClick: close }, t('Cancel')),
               h('button', { type: 'button', className: 'bt-send bt-soft bt-soft-sm', disabled: saving, onClick: () => { void save() } },
                 saving ? t('Saving…') : t('Save configuration'))),
             h(Card, { title: t('Recent configuration uses') },
@@ -1873,7 +1905,6 @@ export function applyProduct(ctx) {
               run: promise => void Promise.resolve(promise).catch(failure =>
                 view.set(current => ({ ...current, directoryError: failure.message }))),
               onPick: chooseDefaultDirectory, disabled: viewState.directoryBusy }))) : null),
-      roles,
       models: providers,
       'built-in-plugins': h(BuiltinPluginSettings, pageProps),
       execution: h(ProductExecutionSettings, { ...pageProps, onChanged: () => { void loadDirectories(binding) } }),
@@ -1898,6 +1929,7 @@ export function applyProduct(ctx) {
       'remote-clients': h(ClientSettings, { binding }),
     }
     const sections = Object.fromEntries(Object.entries(pages).map(([id, content]) => [id, { render: () => content }]))
+    sections.roles = { render: ({ close }) => roles(close) }
     const useNativeModels = viewState.nativeModelsOpen && renderSlot && hasNativeSettings('models')
     if (useNativeModels) sections.models = { render: ({ close }) =>
       renderSlot('settings.section', { close }, { only: 'models', fallback: providers }) }
@@ -1906,6 +1938,7 @@ export function applyProduct(ctx) {
     sections.feedback = { render: ({ navigate }) => h(FeedbackSettings, { ...pageProps, onNavigate: navigate,
       ...(viewState.connection?.connected ? { app: null } : {}) }) }
     return h(SettingsShell, { open, onClose, returnFocus, initialPage, renderSlot, sections,
+      roleDraft: { dirty: rolesDirty, saving: () => savingRef.current, discard: discardRoleDraft }, leaveRequest: settingsLeaveRequest,
       onNavigate: previous => {
         if (previous === 'roles') {
           guideLanding.current = false
@@ -2228,9 +2261,15 @@ export function applyProduct(ctx) {
         reportError(t('This setting is unavailable here.'))
         return
       }
-      settingsTrigger = trigger
-      view.set({ ...state, settingsOpen: true, settingsVisit: state.settingsVisit + 1, settingsPage,
-        nativeModelsOpen: nativeModels, settingsFromModelGuide: modelGuide })
+      const open = () => {
+        const current = view.getSnapshot()
+        if (current.binding?.instanceId !== state.binding.instanceId || current.connection?.connected) return
+        settingsTrigger = trigger
+        view.set({ ...current, settingsOpen: true, settingsVisit: current.settingsVisit + 1, settingsPage,
+          nativeModelsOpen: nativeModels, settingsFromModelGuide: modelGuide })
+      }
+      if (state.settingsOpen && settingsLeaveRequest.current) settingsLeaveRequest.current(open, trigger)
+      else open()
     },
     openConnection() { if (clientBridge()) view.set(current => ({ ...current, connectOpen: true })) },
   }

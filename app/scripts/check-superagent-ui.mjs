@@ -1,5 +1,70 @@
 import assert from 'node:assert/strict'
+import { randomUUID } from 'node:crypto'
 import { chromium } from 'playwright'
+
+async function checkRoleDraft(page, ctx, instanceId) {
+  const launcher = page.locator('.bt-native-main-actions .bt-main-settings')
+  const settings = page.locator('.bt-superagent-settings')
+  await launcher.press('Enter')
+  await settings.getByRole('button', { name: /^(Roles|角色)$/u }).press('Enter')
+  const main = settings.getByRole('textbox', { name: /^(Main instructions|Main 指令)$/u })
+  const worker = settings.getByRole('textbox', { name: /^(Worker instructions|Worker 指令)$/u })
+  const edited = 'Keep the local Main edit.'
+  await main.fill(edited)
+  await main.press('Escape')
+  const confirmation = page.getByRole('alertdialog')
+  const keep = confirmation.getByRole('button', { name: /^(Keep editing|继续编辑)$/u })
+  const discard = confirmation.getByRole('button', { name: /^(Discard changes|放弃更改)$/u })
+  await keep.waitFor()
+  assert.ok(await keep.evaluate(element => document.activeElement === element))
+  await page.keyboard.press('Shift+Tab')
+  assert.ok(await discard.evaluate(element => document.activeElement === element))
+  await page.keyboard.press('Tab')
+  assert.ok(await keep.evaluate(element => document.activeElement === element))
+  await page.keyboard.press('Escape')
+  await confirmation.waitFor({ state: 'hidden' })
+  assert.ok(await main.evaluate(element => document.activeElement === element))
+  const search = settings.getByRole('searchbox', { name: /^(Search settings|搜索设置)$/u })
+  await search.fill('backup')
+  const status = settings.getByRole('button', { name: /^(Usage › Status|用量 › 状态)$/u })
+  await status.press('Enter')
+  await keep.press('Enter')
+  assert.ok(await status.evaluate(element => document.activeElement === element))
+  assert.equal(await main.inputValue(), edited)
+  await search.clear()
+
+  const call = (endpoint, payload = {}) => ctx.superagentProduct.dispatch(endpoint, { instanceId, ...payload })
+  const original = await call('settings', { limit: 1 })
+  const externalInstructions = 'Check {{goal}} and obey {{constraints}}.'
+  const external = await call('settings-save', { commandId: randomUUID(), expectedRevision: original.revision,
+    roles: { ...original.roles, worker: { ...original.roles.worker, instructions: externalInstructions } } })
+  const save = settings.getByRole('button', { name: /^(Save configuration|保存配置)$/u })
+  await save.press('Enter')
+  const rebase = settings.getByRole('button', { name: /^(Rebase my edits|重接我的修改)$/u })
+  await rebase.waitFor({ timeout: 8000 })
+  assert.equal(await main.inputValue(), edited)
+  assert.equal((await call('settings', { limit: 1 })).revision, external.revision)
+  await rebase.press('Enter')
+  await rebase.waitFor({ state: 'hidden' })
+  assert.equal(await main.inputValue(), edited)
+  assert.equal(await worker.inputValue(), externalInstructions)
+  assert.ok(await settings.getByRole('combobox', { name: /^(Main model|Main 模型)$/u }).evaluate(element => document.activeElement === element))
+  assert.equal((await call('settings', { limit: 1 })).revision, external.revision)
+
+  const write = page.waitForResponse(response => response.url().endsWith('/api/product') && response.request().method() === 'POST'
+    && response.request().postDataJSON().endpoint === 'settings-save')
+  await save.press('Enter')
+  const receipt = await (await write).json()
+  assert.equal(receipt.ok, true)
+  await settings.getByText(/^(Configuration v\d+ is active for new turns\.|配置 v\d+ 已对新回合生效。)$/u).waitFor()
+  const persisted = await call('settings', { limit: 1 })
+  assert.equal(persisted.revision, receipt.value.revision)
+  assert.deepEqual(persisted.roles, receipt.value.roles)
+  assert.equal(persisted.roles.main.instructions, edited)
+  assert.equal(persisted.roles.worker.instructions, externalInstructions)
+  await settings.getByRole('button', { name: /^(Close settings|关闭设置)$/u }).press('Enter')
+  await settings.waitFor({ state: 'hidden' })
+}
 
 export async function checkSettingsSearch(page, resize) {
   const settings = page.locator('.bt-superagent-settings')
@@ -355,6 +420,7 @@ export async function checkProductUi(ctx) {
       await page.setViewportSize({ width: Math.floor(width / zoom), height: Math.floor(height / zoom) })
     })
     if (viewport) await page.setViewportSize(viewport)
+    await checkRoleDraft(page, ctx, binding.instanceId)
     assert.deepEqual(errors.filter(error => !error.startsWith(
       '[session-controller] control stream failed: RemoteError: typert gateway: session/control: active Service "sessionController" is unavailable')), [])
     console.log('Product UI passed in Chromium.')
