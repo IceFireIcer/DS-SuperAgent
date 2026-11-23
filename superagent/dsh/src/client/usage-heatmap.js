@@ -55,12 +55,13 @@ export function UsageHeatmap({ now, rows }) {
   const summary = active === 1 ? t('Active on 1 day in the last year') : t('Active on {count} days in the last year', { count: active })
   return h('section', { className: 'bt-us-card bt-us-heat' },
     h('div', { className: 'bt-us-card-head' }, h('h3', null, t('Activity (UTC)')), h('span', { className: 'bt-us-head-note' }, summary)),
-    h('div', { className: 'bt-us-heat-months', 'aria-hidden': true }, months),
-    h('div', { className: 'bt-us-heat-plot', onMouseLeave: () => setHover(null) },
-      h('div', { className: 'bt-us-heat-grid', role: 'img', 'aria-label': summary }, cells),
-      hover ? h('div', { className: 'bt-us-tip bt-us-heat-tip', style: tipSide },
-        h('div', { className: 'bt-us-tip-title' }, dates({ month: 'long', day: 'numeric', weekday: 'short' }).format(hover.ms)),
-        h('div', { className: 'bt-us-tip-total' }, t('{count} tokens', { count: full(daily.get(hover.ms) ?? 0) }))) : null),
+    h('div', { className: 'bt-us-heat-scroll', role: 'region', 'aria-label': t('Activity (UTC)'), tabIndex: 0 },
+      h('div', { className: 'bt-us-heat-months', 'aria-hidden': true }, months),
+      h('div', { className: 'bt-us-heat-plot', onMouseLeave: () => setHover(null) },
+        h('div', { className: 'bt-us-heat-grid', role: 'img', 'aria-label': summary }, cells),
+        hover ? h('div', { className: 'bt-us-tip bt-us-heat-tip', style: tipSide },
+          h('div', { className: 'bt-us-tip-title' }, dates({ month: 'long', day: 'numeric', weekday: 'short' }).format(hover.ms)),
+          h('div', { className: 'bt-us-tip-total' }, t('{count} tokens', { count: full(daily.get(hover.ms) ?? 0) }))) : null)),
     h('div', { className: 'bt-us-heat-scale', 'aria-hidden': true }, t('Light'),
       levels.map(level => h('span', { key: level, className: 'bt-us-cell' }, h('i', { style: { background: soften(paint, level) } }))),
       t('Heavy')),
@@ -75,6 +76,10 @@ export const USAGE_HEATMAP_CSS = `
 .bt-us-card-head{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px}
 .bt-us-card-head h3{margin:0;font-size:var(--bt-font-heading)}
 .bt-us-head-note,.bt-us-tip-title{font-size:var(--bt-font-small);color:var(--bt-ink-2)}
+.bt-us-heat-scroll{min-width:0;overflow-x:auto;overscroll-behavior-inline:contain;scrollbar-width:thin}
+.bt-us-heat-scroll:focus-visible{outline:2px solid var(--bt-accent);outline-offset:-2px}
+.bt-us-heat-scroll>:is(.bt-us-heat-months,.bt-us-heat-plot){min-width:424px}
+.bt-us-heat-scroll>.bt-us-heat-months{margin-bottom:8px}
 .bt-us-heat-months,.bt-us-heat-grid{display:grid;grid-template-columns:repeat(${HEAT_WEEKS},1fr);gap:3px}
 .bt-us-heat-months{height:14px;font-size:var(--bt-font-caption);line-height:14px;color:var(--bt-ink-2)}
 .bt-us-heat-months span{white-space:nowrap}

@@ -23,6 +23,11 @@ function voiceFixture() {
 
 const voiceDirectory = () => ({ directories: [], default: { environmentId: 'local-fixture', root: '/fixture' } })
 
+async function waitForRefresh(act, ready) {
+  const deadline = Date.now() + 3_000
+  while (!ready() && Date.now() < deadline) await act(async () => delay(30))
+}
+
 test('continuous voice reads only the complete Main reply for its accepted input and then listens again', async context => {
   const { recognitions, spoken, extensions } = voiceFixture()
   const receipt = Promise.withResolvers()
@@ -145,15 +150,20 @@ test('a Ticket question owns the input and interrupts speech until the user resu
   await click(findButton('Keep it'))
   await click(findButton('Send answer'))
   assert.equal(requests.find(request => request.endpoint === 'work-answer')?.payload.ticketId, 'ticket')
+  await act(async () => spoken[0].onend())
   assert.equal(recognitions.length, 1)
   await click(findButton('Resume voice chat'))
   assert.equal(recognitions.length, 2)
   await click(findButton('Activity'))
   assert.equal(recognitions[1].aborted, true)
+  await act(async () => recognitions[1].speak('Discarded after leaving Main'))
+  assert.equal(requests.filter(request => request.endpoint === 'send').length, 1)
 })
 
 test('stopping a background Ticket leaves voice waiting, while stopping Main pauses it', async context => {
   const { recognitions, spoken, extensions } = voiceFixture()
+  const messages = []
+  const works = []
   let activeTurn
   let refuseStop = true
   let workers = [{ sessionId: 'worker', state: 'running', item: { id: 'item', ticketId: 'ticket', goal: 'Write a note',
@@ -162,13 +172,20 @@ test('stopping a background Ticket leaves voice waiting, while stopping Main pau
     extensions,
     responses: {
       send: () => { activeTurn = { messageId: 'voice-turn', status: 'running' }; return { messageId: 'voice-turn', status: 'queued' } },
-      history: () => ({ mainSessionId: 'main-fixture', messages: [], works: [], health: { state: 'ready' }, activeTurn }),
+      history: () => ({ mainSessionId: 'main-fixture', messages, works, health: { state: 'ready' }, activeTurn }),
       'work-members': () => ({ workers }),
-      'work-stop': () => { workers = []; return { state: 'stopped' } },
+      'work-stop': () => {
+        workers = []
+        works.push({ brief: { id: 'brief', workItemId: 'item', goal: 'Write a note' },
+          receipt: { status: 'accepted', ticketId: 'ticket' }, status: 'stopped',
+          control: { workItemId: 'item', ticketId: 'ticket', permissions: { canResume: false, canRetry: false },
+            stop: { state: 'stopped', pendingDeviceConfirmation: true } } })
+        return { ticketId: 'ticket', state: 'stopped', pendingDeviceConfirmation: true }
+      },
       'stop-main': () => {
         if (refuseStop) throw new Error('Main did not stop this reply.')
-        activeTurn = undefined
-        return { state: 'stopped' }
+        activeTurn = { messageId: 'voice-turn', status: 'stopping' }
+        return { messageId: 'voice-turn', status: 'stopping' }
       },
       'directory-options': voiceDirectory,
     },
@@ -177,14 +194,27 @@ test('stopping a background Ticket leaves voice waiting, while stopping Main pau
   await act(async () => recognitions[0].speak('Check the note'))
   await click(findButton('Stop work: Write a note'))
   await click(findButton('Confirm stop for Write a note'))
+  const ticket = () => document.querySelector('[data-ticket-id="ticket"]')
+  await waitForRefresh(act, ticket)
   assert.match(document.querySelector('.bt-voice-status').textContent, /Waiting for Main/u)
+  assert.match(ticket().textContent, /Receipt: Accepted by Router/u)
+  assert.match(ticket().textContent, /waiting for device cancellation confirmation/u)
   await click(findButton('Stop reply'))
   assert.match(document.querySelector('.bt-voice-note').textContent, /Main did not stop this reply/u)
   refuseStop = false
   await click(findButton('Stop reply'))
   assert.match(document.querySelector('.bt-voice-status').textContent, /Paused/u)
+  assert.equal(findButton('Stopping…').disabled, true)
+  assert.equal(findButton('Resume voice chat').disabled, true)
+  activeTurn = undefined
+  messages.push({ role: 'user', id: 'voice-turn', sequence: 1, status: 'stopped', text: 'Check the note' },
+    { role: 'main', id: 'reply:voice-turn', sequence: 2, status: 'completed', text: 'Too late to read' })
+  await waitForRefresh(act, () => findButton('Resume voice chat')?.disabled === false)
+  assert.equal(findButton('Resume voice chat').disabled, false)
   assert.equal(spoken.length, 0)
+  assert.match(ticket().textContent, /waiting for device cancellation confirmation/u)
   const stops = requests.filter(request => ['work-stop', 'stop-main'].includes(request.endpoint))
-  assert.equal(stops[0].payload.ticketId, 'ticket')
-  assert.equal(stops[1].payload.messageId, 'voice-turn')
+  assert.deepEqual(stops.map(({ endpoint, payload }) => [endpoint, payload.ticketId ?? payload.messageId]), [
+    ['work-stop', 'ticket'], ['stop-main', 'voice-turn'], ['stop-main', 'voice-turn'],
+  ])
 })

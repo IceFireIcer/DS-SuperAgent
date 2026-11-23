@@ -27,7 +27,7 @@ test('Main and both sidebar widths share the directory for the next accepted inp
       'attachment-revoke': () => ({ revoked: true }),
       send: input => {
         sendRequests.push(input)
-        if (sendRejected) return failure('Could not send this message.')
+        if (sendRejected) throw Object.assign(new Error('Could not send this message.'), { code: 'NETWORK' })
         return { messageId: 'accepted-work', status: 'completed' }
       },
     },
@@ -156,4 +156,32 @@ test('the desktop composer is ready when the authorized execution options arrive
   assert.equal(composer.hasAttribute('data-main-input-ready'), true)
   await click(send)
   assert.equal(requests.find(request => request.endpoint === 'send').payload.environmentId, first.id)
+})
+
+test('an unconfirmed receipt can be retried with the original command and a failed reply stays accepted', async context => {
+  const admitted = new Map()
+  const submitted = []
+  const { click, document, fill, findButton, key } = await mountProduct(context, { responses: {
+    'directory-options': () => ({ default: { environmentId: first.id, root: first.root }, directories: [first] }),
+    'execution-options': () => ({ policy: { defaultTarget: 'local-only' }, environments: [{ ...first, kind: 'local', eligible: true }] }),
+    send: input => {
+      submitted.push(input)
+      if (!admitted.has(input.commandId)) {
+        admitted.set(input.commandId, { messageId: 'accepted-input', status: 'failed' })
+        throw Object.assign(new Error('The response did not arrive.'), { code: 'NETWORK' })
+      }
+      return admitted.get(input.commandId)
+    },
+  } })
+  const draft = document.querySelector('#main-message')
+  await fill(draft, 'Keep my original message.')
+  await key(draft, 'Enter')
+  assert.match(document.querySelector('.bt-main-composer [role=alert]').textContent, /did not arrive/u)
+  assert.equal(draft.value, 'Keep my original message.')
+  await click(findButton('Send again'))
+  assert.equal(admitted.size, 1)
+  assert.equal(submitted.length, 2)
+  assert.deepEqual(submitted[0], submitted[1])
+  assert.equal(draft.value, '')
+  assert.match(document.querySelector('.bt-main-composer [role=alert]').textContent, /Your message is saved/u)
 })

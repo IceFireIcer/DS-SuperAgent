@@ -74,7 +74,7 @@ export async function mountProduct(context, { connection = { connected: false },
       const value = await call(endpoint, payload)
       return { ok: true, json: async () => ({ ok: true, value }) }
     } catch (error) {
-      return { ok: false, json: async () => ({ ok: false, error: { message: error.message } }) }
+      return { ok: false, json: async () => ({ ok: false, error: { code: error.code, message: error.message } }) }
     }
   }
   window.dsSuperagentApp = { productClient: { status: async () => connection, call, events: async () => [] } }
@@ -171,7 +171,7 @@ export async function mountProduct(context, { connection = { connected: false },
     subscribe: () => () => {} }
   await act(async () => {
     module.exports.applyProduct({ get: name => name === 'workspaces' && native ? { list: workspaceList } : remotes[name],
-      effect: effect => cleanups.push(effect()), slots, ...nativeContext })
+      effect: effect => cleanups.push(effect()), on: () => () => {}, slots, ...nativeContext })
     render(true)
   })
 

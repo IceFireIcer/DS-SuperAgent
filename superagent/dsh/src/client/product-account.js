@@ -5,7 +5,7 @@ import { t } from './i18n.js'
 import { reducedMotion, useLinger, useViewport, viewBottom } from './motion.js'
 
 const destinations = [
-  ['Usage', GaugeIcon, 'usage'],
+  ['Usage', GaugeIcon, 'usage-overview'],
   ['Models and API keys', SlidersIcon, 'models'],
   ['Connectors', ConnectorIcon, 'connectors'],
   ['Automation tasks', ClockIcon, 'scheduled-tasks'],
@@ -78,11 +78,11 @@ export function SuperagentAccountFooter({ wide, modalOpen, signIn, openClassic, 
   return h('div', { className: `bt-leftcol-foot${wide ? '' : ' bt-leftcol-foot-rail'}` },
     iconButton('Account', GearIcon, { ref: trigger, 'aria-haspopup': 'menu', 'aria-expanded': open, 'aria-controls': menuId,
       onClick: () => open ? close() : setOpen(true) }),
-    iconButton('Connectors', ConnectorIcon, { onClick: () => openSettings('connectors') }),
+    iconButton('Connectors', ConnectorIcon, { onClick: event => openSettings('connectors', { trigger: event.currentTarget }) }),
     shown ? createPortal(h('div', { ref: menu, id: menuId, className: 'bt-menu bt-menu-up bt-account-menu', role: 'menu',
       'aria-label': t('Account'), inert: leaving, 'aria-hidden': leaving || undefined,
       'data-leaving': leaving ? '' : undefined, style: shown, onKeyDown },
-    destinations.map(([label, Icon, page]) => item(label, Icon, () => openSettings(page))),
+    destinations.map(([label, Icon, page]) => item(label, Icon, () => openSettings(page, { trigger: trigger.current }))),
     openClassic || signIn ? h('div', { className: 'bt-menu-sep', role: 'separator' }) : null,
     openClassic ? item('Classic Agent mode', SwitchIcon, openClassic) : null,
     signIn ? item('Sign in to DeepSeek', SlidersIcon, signIn) : null), document.body) : null)

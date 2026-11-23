@@ -65,6 +65,10 @@ try {
   const classicMainEntered = Promise.withResolvers()
   const classicMainRelease = Promise.withResolvers()
   class MockRoleAdapter extends LlmAdapter {
+    async listModels(provider) {
+      return ['main', 'router', 'worker', 'classic'].map(id => ({ provider, id, name: id }))
+    }
+
     async *stream(request) {
       modelCalls.push({ model: request.model,
         text: request.messages.filter(message => message.role === 'user').at(-1)?.content?.filter(block => block.type === 'text').map(block => block.text).join(''),
@@ -94,6 +98,10 @@ try {
         }
         if (text === 'Wait for the browser to stop this reply.') await sleep(20000, undefined, { signal: request.signal })
         if (text === 'Fail this browser fixture turn.') throw new Error('Browser fixture model failure.')
+        if (text === 'Keep the draft across model setup.') {
+          yield* textResponse('Main received the draft after model setup.')
+          return
+        }
         if (text.startsWith('[Work update]')) {
           const notification = JSON.parse(text.split('\n').at(-1))
           yield* textResponse(notification.outcome?.summary ?? notification.update.summary)

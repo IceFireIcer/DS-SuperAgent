@@ -60,3 +60,12 @@ test('an edit made while a save is pending survives the saved server response', 
   assert.equal(next.main.instructions, 'Edited after Save was pressed.')
   assert.equal(next.worker.instructions, '{{goal}} {{constraints}} Saved newer Worker.')
 })
+
+test('rebasing a model selection keeps its provider and model together', () => {
+  const base = { main: { model: { provider: 'local', model: 'old' }, instructions: 'Original' } }
+  const draft = { main: { model: { provider: 'local', model: 'chosen' }, instructions: 'Original' } }
+  const latest = { main: { model: { provider: 'remote', model: 'latest', effort: 'high' }, instructions: 'Newer instructions' } }
+  assert.deepEqual(rebaseRoleDraft(base, draft, latest), {
+    main: { model: { provider: 'local', model: 'chosen' }, instructions: 'Newer instructions' },
+  })
+})

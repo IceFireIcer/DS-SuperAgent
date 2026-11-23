@@ -2,7 +2,7 @@
 // send a message, wait for the reply, then close the window the way a user does: the window hides
 // and the app goes on. The window comes back when the app is started again, and the app ends the
 // way the tray's Quit ends it. Fails on a page error or a non-zero exit.
-// Usage: node scripts/check-packed.mjs [app executable or AppImage] [screenshot.png | --coexistence | --controls | --classic | --upgrade-to next executable | --upgrade-with NSIS installer | --update-feed folder next-app.asar]
+// Usage: node scripts/check-packed.mjs [app executable or AppImage] [screenshot.png | --coexistence | --controls | --classic | --first-model | --upgrade-to next executable | --upgrade-with NSIS installer | --update-feed folder next-app.asar]
 // The executable defaults to the one that `npm run pack` or `npm run dist` writes into dist-pack/.
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
@@ -18,6 +18,7 @@ import { PRODUCT_NAME, PRODUCT_SLUG } from '../src/product.mjs'
 import { isNewer } from '../src/updates.mjs'
 import { t55Question, t55Request, t55SlowReply } from '../../superagent/dsh/dev/t55-controls-model.mjs'
 import { checkPackedVisuals } from './check-packed-visuals.mjs'
+import { checkPackedP0, checkPackedModelSetup } from './check-packed-p0.mjs'
 import { fileUpdateFeed } from './update-fixture-feed.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -28,7 +29,8 @@ const upgrade = option === '--upgrade-to' || installUpgrade || updateFeed
 const controls = option === '--controls'
 const classic = option === '--classic'
 const coexistence = option === '--coexistence'
-const shotFile = upgrade || controls || classic || coexistence ? undefined : option
+const firstModel = option === '--first-model'
+const shotFile = upgrade || controls || classic || coexistence || firstModel ? undefined : option
 const executable = given || packedExecutable()
 const appImage = process.platform === 'linux' && executable.endsWith('.AppImage')
 const mainPrompt = 'packaged app check'
@@ -981,7 +983,7 @@ try {
   writeFileSync(join(profileDir, 'cordis.patch.yml'), [
     '- id: superagent',
     '  config:',
-    '    main: { provider: deepseek-official, model: deepseek-flash }',
+    `    main: { provider: deepseek-official, model: ${firstModel ? 'unconfigured' : 'deepseek-flash'} }`,
     '    router: { provider: deepseek-official, model: deepseek-flash }',
     '    worker: { provider: deepseek-official, model: deepseek-flash }',
     ...(classic ? ['- id: agent-default-model', '  config: { provider: deepseek-official, model: deepseek-flash }'] : []),
@@ -1040,6 +1042,7 @@ try {
   if (!existsSync(join(work, 'home', 'superagent', 'core', 'state.sqlite'))) throw new Error('the product database did not open')
   if (existsSync(join(work, 'personal-dsh'))) throw new Error('the app wrote outside its own DSH home')
   let chatError
+  if (firstModel) await checkPackedModelSetup(port)
   if (coexistence) {
     assert.equal(await windowState("process.getBuiltinModule('module').createRequire(process.execPath)('electron').app.getPath('sessionData')"), env.DS_SUPERAGENT_SHELL_DATA)
     await checkCoexistence(cdp)
@@ -1051,6 +1054,7 @@ try {
     console.log(`check-packed: saved ${resolve(shotFile)}`)
   }
   if (chatError) throw chatError
+  if (process.env.DESKTOP_P0_EVIDENCE_DIR) await checkPackedP0(port, windowState, process.env.DESKTOP_P0_EVIDENCE_DIR)
   if (process.env.DESKTOP_VISUAL_DIR) await checkPackedVisuals(cdp, process.env.DESKTOP_VISUAL_DIR)
   if (controls) await checkWorkControls(cdp)
   if (classic) await checkClassicRoundTrip(cdp)
