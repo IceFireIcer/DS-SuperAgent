@@ -11679,20 +11679,16 @@ html[data-windows-titlebar]:not([data-fullscreen]) :is(.bt-pane,.bt-panel)::befo
 .bt-settings-head>.bt-icon-btn{animation:bt-back-in ${SPRING_TAP.duration}ms ${SPRING_TAP.easing},bt-veil-in .16s ease-out}
 @keyframes bt-back-in{from{translate:6px 0;scale:.8}}
 .bt-settings-scroll{flex:1;overflow-y:auto;padding:12px 20px 24px;display:flex;flex-direction:column;gap:20px;scrollbar-width:thin}
-.bt-settings-page>:not(.bt-us){animation:bt-page-up ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing} backwards,bt-veil-in .22s ease-out backwards}
-.bt-settings-page[data-move=in]>:not(.bt-us){animation-name:bt-page-in,bt-veil-in}
-.bt-settings-page[data-move=out]>:not(.bt-us){animation-name:bt-page-out,bt-veil-in}
-.bt-settings-page>:nth-child(2){animation-delay:30ms}
-.bt-settings-page>:nth-child(3){animation-delay:60ms}
-.bt-settings-page>:nth-child(4){animation-delay:90ms}
-.bt-settings-page>:nth-child(n+5){animation-delay:120ms}
-@keyframes bt-page-up{from{transform:translateY(10px)}}
+.bt-settings-page>.bt-settings-pane:not([hidden]){animation:bt-page-up ${SPRING_SHAPE.duration}ms ${SPRING_SHAPE.easing} backwards,bt-fade .22s ease-out backwards}
+@media (prefers-reduced-motion:reduce){.bt-settings-page>.bt-settings-pane:not([hidden]){animation:none}}
+@keyframes bt-page-up{from{translate:0 10px}}
 @keyframes bt-page-in{from{transform:translateX(18px)}}
 @keyframes bt-page-out{from{transform:translateX(-18px)}}
 .bt-settings-close{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:var(--bt-radius-round);border:0;background:var(--bt-hover);color:var(--bt-ink-2);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
 .bt-settings-close:hover{background:var(--bt-active);color:var(--bt-ink)}
 .bt-settings-form{display:flex;flex-direction:column;gap:16px}
 .bt-set-section h3{font-size:var(--bt-font-body);line-height:18px;font-weight:600;margin:0 0 8px;padding:0 4px}
+.bt-set-section>h3{font-size:var(--bt-font-control);line-height:20px}
 .bt-set-card{border:.5px solid var(--bt-glass-rim);border-radius:var(--bt-radius-card);background:var(--bt-card);box-shadow:var(--bt-card-shadow);display:flex;flex-direction:column}
 .bt-set-card>*+*{border-top:.5px solid var(--bt-line)}
 .bt-set-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border:0;background:none;color:var(--bt-ink);font:inherit;font-size:var(--bt-font-body);line-height:18px;text-align:left;width:100%;box-sizing:border-box;border-radius:var(--bt-radius-none)}
@@ -13301,6 +13297,7 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
           "div",
           {
             key: tab.id,
+            className: "bt-settings-pane",
             role: "tabpanel",
             id: `${id}-panel-${tab.id}`,
             "aria-labelledby": `${id}-tab-${tab.id}`,
@@ -13308,7 +13305,7 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
             hidden: tab !== section
           },
           tab === section || page.id === "usage" && usageTabs.has(tab.id) ? content(tab) : null
-        )) : content(section), unavailable2 ? (0, import_react23.createElement)(SettingsSectionState) : null),
+        )) : (0, import_react23.createElement)("div", { key: section.id, className: "bt-settings-pane" }, content(section)), unavailable2 ? (0, import_react23.createElement)(SettingsSectionState) : null),
         (0, import_react23.createElement)("button", { type: "button", className: "bt-settings-close", "aria-label": t("Close settings"), onClick: close }, (0, import_react23.createElement)(CloseIcon))
       ),
       confirmation ? (0, import_react23.createElement)(
@@ -13379,8 +13376,8 @@ var SETTINGS_SHELL_CSS = `
 .bt-settings-tabs button[aria-selected=true]{background:var(--bt-card);color:var(--bt-ink)}
 .bt-superagent-settings :is(.bt-settings-item,.bt-settings-close,.bt-settings-chooser,.bt-settings-search input,.bt-settings-search button,[role=tab],[role=tabpanel]):focus-visible{outline:2px solid var(--bt-accent);outline-offset:-2px}
 .bt-superagent-settings:focus{outline:none}
-.bt-superagent-settings [role=tabpanel][hidden]{display:none}
-.bt-superagent-settings [role=tabpanel]:not([hidden]){display:flex;flex-direction:column;gap:20px}
+.bt-settings-pane[hidden]{display:none}
+.bt-settings-pane:not([hidden]){display:flex;width:min(100%,1040px);max-width:100%;box-sizing:border-box;flex-direction:column;gap:inherit;margin-inline:auto}
 .bt-superagent-settings .bt-settings-scroll{overflow-wrap:anywhere;overscroll-behavior:contain}
 .bt-superagent-settings[data-compact]{width:100%;max-height:100%;flex-direction:column}
 .bt-superagent-settings[data-compact] .bt-settings-navigation{width:100%;flex-direction:column;border-bottom:.5px solid var(--bt-line)}
@@ -20553,7 +20550,7 @@ var PRODUCT_OPERATIONS_CSS = `
 var PRODUCT_SETTINGS_CSS = `
 :root {
   --bt-ps-text: var(--bt-font-body);
-  --bt-ps-small: var(--bt-font-small);
+  --bt-ps-small: var(--bt-font-body);
   --bt-ps-caption: var(--bt-font-caption);
   --bt-ps-title: var(--bt-font-title);
   --bt-ps-stat: 22px;

@@ -223,10 +223,10 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
           h('div', { className: 'bt-settings-destinations' }, destinations))),
       h(SettingsPage, { title: t(page.label), scrollRef: scroll,
         tabs: page.tabs ? h(SettingsTabs, { page, section, navigate, id }) : null }, page.tabs
-          ? page.tabs.map(tab => h('div', { key: tab.id, role: 'tabpanel', id: `${id}-panel-${tab.id}`,
+          ? page.tabs.map(tab => h('div', { key: tab.id, className: 'bt-settings-pane', role: 'tabpanel', id: `${id}-panel-${tab.id}`,
             'aria-labelledby': `${id}-tab-${tab.id}`, tabIndex: tab === section ? 0 : -1, hidden: tab !== section },
           tab === section || page.id === 'usage' && usageTabs.has(tab.id) ? content(tab) : null))
-          : content(section), unavailable ? h(SettingsSectionState) : null),
+          : h('div', { key: section.id, className: 'bt-settings-pane' }, content(section)), unavailable ? h(SettingsSectionState) : null),
       h('button', { type: 'button', className: 'bt-settings-close', 'aria-label': t('Close settings'), onClick: close }, h(CloseIcon))),
       confirmation ? h('div', { className: 'bt-settings-confirm-layer' },
         h('div', { className: 'bt-scrim', onClick: keep }),
@@ -272,8 +272,8 @@ export const SETTINGS_SHELL_CSS = `
 .bt-settings-tabs button[aria-selected=true]{background:var(--bt-card);color:var(--bt-ink)}
 .bt-superagent-settings :is(.bt-settings-item,.bt-settings-close,.bt-settings-chooser,.bt-settings-search input,.bt-settings-search button,[role=tab],[role=tabpanel]):focus-visible{outline:2px solid var(--bt-accent);outline-offset:-2px}
 .bt-superagent-settings:focus{outline:none}
-.bt-superagent-settings [role=tabpanel][hidden]{display:none}
-.bt-superagent-settings [role=tabpanel]:not([hidden]){display:flex;flex-direction:column;gap:20px}
+.bt-settings-pane[hidden]{display:none}
+.bt-settings-pane:not([hidden]){display:flex;width:min(100%,1040px);max-width:100%;box-sizing:border-box;flex-direction:column;gap:inherit;margin-inline:auto}
 .bt-superagent-settings .bt-settings-scroll{overflow-wrap:anywhere;overscroll-behavior:contain}
 .bt-superagent-settings[data-compact]{width:100%;max-height:100%;flex-direction:column}
 .bt-superagent-settings[data-compact] .bt-settings-navigation{width:100%;flex-direction:column;border-bottom:.5px solid var(--bt-line)}

@@ -3,7 +3,7 @@ import { spring, SPRING_SHAPE, SPRING_TAP } from './motion.js'
 export const PRODUCT_SETTINGS_CSS = `
 :root {
   --bt-ps-text: var(--bt-font-body);
-  --bt-ps-small: var(--bt-font-small);
+  --bt-ps-small: var(--bt-font-body);
   --bt-ps-caption: var(--bt-font-caption);
   --bt-ps-title: var(--bt-font-title);
   --bt-ps-stat: 22px;

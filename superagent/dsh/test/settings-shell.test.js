@@ -76,6 +76,9 @@ test('opens every approved settings page in order and keeps each conflict inside
     assert.equal(document.querySelector('[role=dialog] h2').textContent, label)
     assert.equal(nav.querySelector('[aria-current=page]').textContent, label)
     assert.deepEqual(tabs.map(tab => tab.textContent), tabPages.get(label) ?? [])
+    const scroll = document.querySelector('.bt-superagent-settings .bt-settings-scroll')
+    const activePane = scroll.querySelector(':scope > .bt-settings-pane:not([hidden])')
+    assert.ok(activePane, `${label} renders its content in a settings pane`)
     if (label === 'About') {
       assert.match(document.querySelector('.bt-settings-scroll').textContent, /DS SuperAgent/u)
       assert.ok(document.querySelector('.bt-settings-scroll').textContent.includes(metadata.name))
