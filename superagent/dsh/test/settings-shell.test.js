@@ -28,10 +28,12 @@ async function withShell(run) {
   const restore = Object.fromEntries(['window', 'document', 'IS_REACT_ACT_ENVIRONMENT'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]))
   Object.assign(globalThis, { window, document, IS_REACT_ACT_ENVIRONMENT: true })
   window.matchMedia = () => ({ matches: true })
+  window.HTMLElement.prototype.attachEvent = () => {}
+  window.HTMLElement.prototype.detachEvent = () => {}
   const errors = []
   const root = createRoot(document.querySelector('#root'), { onCaughtError: error => errors.push(error) })
   const click = async (label, within = '[role=dialog]') => {
-    const button = [...document.querySelectorAll(`${within} button`)].find(item => item.textContent === label)
+    const button = [...document.querySelectorAll(`${within} button`)].find(item => (item.getAttribute('aria-label') ?? item.textContent) === label)
     assert.ok(button, `Missing button: ${label}`)
     await act(async () => button.click())
     return button
@@ -40,6 +42,13 @@ async function withShell(run) {
     await run({ document, errors, click,
       render: props => act(async () => root.render(h(SettingsShell, { onClose: () => {}, ...props }))),
       keyDown: (element, key) => act(async () => element.dispatchEvent(new window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))),
+      resize: width => act(async () => { window.innerWidth = width; window.dispatchEvent(new window.Event('resize')) }),
+      search: value => act(async () => {
+        const input = document.querySelector('input[type=search]')
+        assert.ok(input, 'settings search is available')
+        input.value = value
+        input.dispatchEvent(new window.Event('input', { bubbles: true }))
+      }),
     })
   } finally {
     await act(async () => root.unmount())
@@ -201,4 +210,55 @@ test('an invalid section link reports the unavailable destination without leavin
   await click('Open setting')
   assert.equal(document.querySelector('nav [aria-current=page]').textContent, 'Models')
   assert.equal(document.querySelector('[role=status]').textContent, 'This setting is unavailable here.')
+}))
+
+test('settings search uses bilingual destinations and clears back to all groups', async () => withShell(async ({ document, click, render, search }) => {
+  const ready = { render: () => h('p', null, 'Synthetic editor contents') }
+  await render({ sections: { models: ready, connectors: ready, calendar: ready, 'scheduled-tasks': ready,
+    'usage-overview': ready, status: ready, feedback: { status: 'unavailable' } } })
+  const results = () => [...document.querySelectorAll('[aria-label="Settings search results"] button')].map(button => button.textContent)
+  for (const [query, result] of [['API KEY', 'Models'], ['OAuth', 'Connectors'], ['schedule', 'Scheduled tasks › Scheduled tasks'], ['用量', 'Usage › Usage']]) {
+    await search(query)
+    assert.ok(results().includes(result), query)
+  }
+  document.querySelector('input[type=search]').focus()
+  await search('backup')
+  assert.deepEqual(results(), ['Usage › Status'])
+  await click('Usage › Status')
+  assert.equal(document.querySelector('[aria-current=page]').textContent, 'Usage')
+  assert.equal(document.querySelector('[role=tab][aria-selected=true]').textContent, 'Status')
+  assert.equal(document.activeElement.textContent, 'Usage')
+  for (const query of ['Feedback', 'Synthetic editor contents']) {
+    await search(query)
+    assert.deepEqual(results(), [])
+    assert.ok([...document.querySelectorAll('[role=status]')].some(item => item.textContent === 'No matching settings'))
+  }
+  await click('Clear search')
+  assert.equal(document.querySelectorAll('nav [role=group]').length, 5)
+  assert.equal(document.activeElement.type, 'search')
+}))
+
+test('the compact page chooser returns focus after navigation and Escape', async () => withShell(async ({ document, click, render, resize, search, keyDown }) => {
+  await resize(508)
+  let closes = 0
+  await render({ onClose: () => { closes++ }, sections: { status: { render: () => h('p', null, 'Status contents') } } })
+  const chooser = () => document.querySelector('[aria-label="Choose a page"]')
+  assert.equal(chooser()?.getAttribute('aria-expanded'), 'false')
+  assert.ok(document.activeElement === chooser())
+  await click(chooser().textContent)
+  assert.equal(document.activeElement.type, 'search')
+  await search('备份')
+  await click('Usage › Status')
+  assert.equal(document.querySelector('[aria-selected=true]').textContent, 'Status')
+  assert.equal(chooser().getAttribute('aria-expanded'), 'false')
+  assert.ok(document.activeElement === chooser())
+  await click(chooser().textContent)
+  await keyDown(document.activeElement, 'Escape')
+  assert.equal(closes, 0)
+  assert.ok(document.activeElement === chooser())
+  await keyDown(chooser(), 'Escape')
+  assert.equal(closes, 1)
+  await resize(721)
+  assert.equal(chooser(), null)
+  assert.equal(document.activeElement.textContent, 'Usage')
 }))

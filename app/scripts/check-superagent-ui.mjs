@@ -1,6 +1,62 @@
 import assert from 'node:assert/strict'
 import { chromium } from 'playwright'
 
+export async function checkSettingsSearch(page, resize) {
+  const settings = page.locator('.bt-superagent-settings')
+  const launcher = page.locator('.bt-native-main-actions .bt-main-settings')
+  const chooser = settings.getByRole('button', { name: /^(Choose a page|选择设置页面)$/u })
+  const search = settings.getByRole('searchbox', { name: /^(Search settings|搜索设置)$/u })
+  const clear = settings.getByRole('button', { name: /^(Clear search|清除搜索)$/u })
+  const status = settings.getByRole('tab', { name: /^(Status|状态)$/u, selected: true })
+  const result = settings.getByRole('button', { name: /^(Usage › Status|用量 › 状态)$/u })
+  for (const [width, height, compact, zoom] of [[1120, 760, false, 1], [721, 600, false, 1], [719, 600, true, 1],
+    [508, 480, true, 1], [508, 480, true, 1.5]]) {
+    await resize(width, height, zoom)
+    await launcher.press('Enter')
+    await settings.waitFor()
+    assert.equal(await chooser.isVisible(), compact)
+    if (compact) {
+      assert.ok(await chooser.evaluate(element => document.activeElement === element))
+      await chooser.press('Enter')
+      assert.ok(await search.evaluate(element => document.activeElement === element))
+    }
+    await search.fill('no-such-destination')
+    await settings.getByText(/^(No matching settings|没有匹配的设置)$/u).waitFor()
+    await clear.press('Enter')
+    assert.equal(await settings.locator('.bt-settings-group').count(), 5)
+    await search.fill(width === 508 ? '备份' : 'backup')
+    await result.waitFor()
+    await search.press('Tab')
+    assert.ok(await clear.evaluate(element => document.activeElement === element))
+    await page.keyboard.press('Tab')
+    assert.ok(await result.evaluate(element => document.activeElement === element))
+    await page.keyboard.press('Enter')
+    await status.waitFor()
+    if (compact) assert.ok(await chooser.evaluate(element => document.activeElement === element && element.getAttribute('aria-expanded') === 'false'))
+    const layout = await settings.evaluate(dialog => {
+      const bounds = dialog.getBoundingClientRect()
+      const body = dialog.querySelector('.bt-settings-scroll')
+      const close = dialog.querySelector('.bt-settings-close').getBoundingClientRect()
+      return { width: innerWidth, height: innerHeight, dialogRight: bounds.right, dialogBottom: bounds.bottom,
+        closeRight: close.right, contentWidth: body.clientWidth, contentScrollWidth: body.scrollWidth, contentHeight: body.clientHeight }
+    })
+    assert.ok(layout.dialogRight <= layout.width + 1 && layout.dialogBottom <= layout.height + 1
+      && layout.closeRight <= layout.width && layout.contentHeight > 0 && layout.contentScrollWidth <= layout.contentWidth + 1,
+    `Settings fits ${layout.width}×${layout.height}: ${JSON.stringify(layout)}`)
+    if (zoom > 1) {
+      await settings.getByRole('tab', { name: /^(Usage|用量)$/u }).press('Enter')
+      const chart = settings.locator('.bt-us-heat-scroll')
+      await chart.waitFor()
+      assert.ok(await chart.evaluate(area => area.scrollWidth > area.clientWidth && area.closest('.bt-settings-scroll').scrollLeft === 0))
+      await chart.press('End')
+      assert.ok(await chart.evaluate(area => document.activeElement === area), 'the chart scroll region accepts keyboard focus')
+    }
+    await page.keyboard.press('Escape')
+    await settings.waitFor({ state: 'hidden' })
+    assert.ok(await launcher.evaluate(element => document.activeElement === element))
+  }
+}
+
 async function checkAccountOnboarding(page, settings, composer) {
   const account = page.locator('.bt-product-side').getByRole('button', { name: /^(Account|账户|账号)$/u })
   const menu = page.getByRole('menu', { name: /^(Account|账户|账号)$/u })
@@ -293,6 +349,12 @@ export async function checkProductUi(ctx) {
     assert.equal(afterSetup.messages.find(item => item.id === `reply:${receipt.value.messageId}`)?.text, 'Main received the draft after model setup.')
     const status = await ctx.superagentProduct.dispatch('product-status', { instanceId: binding.instanceId })
     assert.ok(!JSON.stringify([status, errors]).includes(onboarding.sampleKey))
+    const viewport = page.viewportSize()
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await checkSettingsSearch(page, async (width, height, zoom) => {
+      await page.setViewportSize({ width: Math.floor(width / zoom), height: Math.floor(height / zoom) })
+    })
+    if (viewport) await page.setViewportSize(viewport)
     assert.deepEqual(errors.filter(error => !error.startsWith(
       '[session-controller] control stream failed: RemoteError: typert gateway: session/control: active Service "sessionController" is unavailable')), [])
     console.log('Product UI passed in Chromium.')

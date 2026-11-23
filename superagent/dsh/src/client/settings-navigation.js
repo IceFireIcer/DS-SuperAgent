@@ -1,3 +1,5 @@
+import { DICTIONARY, t } from './i18n.js'
+
 export const SETTINGS_GROUPS = [
   { id: 'general', label: 'General', pages: [
     { id: 'general', label: 'General' },
@@ -46,6 +48,27 @@ export const SETTINGS_GROUPS = [
 
 const pages = SETTINGS_GROUPS.flatMap(group => group.pages)
 export const SETTINGS_SECTIONS = pages.flatMap(page => page.tabs ?? [page])
+
+const searchTerms = {
+  models: ['API key', 'model provider', '密钥', '模型供应商'],
+  connectors: ['OAuth', 'authorization', '授权'],
+  'scheduled-tasks': ['schedule', 'automation', '自动化'],
+  status: ['backup', 'restore', 'diagnostics', 'update', '备份', '恢复', '诊断', '更新'],
+  'chat-secrets': ['API key', '凭据'],
+}
+
+const normalizeSearch = text => text.normalize('NFKC').toLowerCase().trim()
+
+export function searchSettings(query, available) {
+  const words = normalizeSearch(query).split(/\s+/u).filter(Boolean)
+  if (!words.length) return []
+  return pages.flatMap(page => [page, ...(page.tabs ?? [])].filter(entry => {
+    if (entry.tabs ? !entry.tabs.some(available) : !available(entry)) return false
+    const labels = [page.label, entry.label].flatMap(label => [label, t(label), DICTIONARY.zh[label], DICTIONARY['zh-TW'][label]].filter(Boolean))
+    const text = normalizeSearch([...labels, ...(searchTerms[entry.id] ?? [])].join(' '))
+    return words.every(word => text.includes(word))
+  }).map(entry => ({ id: entry.id, label: entry === page ? t(page.label) : `${t(page.label)} › ${t(entry.label)}` })))
+}
 
 export function settingsTarget(id, available = () => true) {
   for (const page of pages) {
