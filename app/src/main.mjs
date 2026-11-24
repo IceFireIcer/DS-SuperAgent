@@ -211,8 +211,7 @@ const shell = createShell({
   fallback: { show: (options) => dialog.showMessageBox(options) },
 })
 const startupScreen = createStartupScreen({ BrowserWindow, ipcMain, icon: iconFile, lang: language,
-  image: () => nativeImage.createFromPath(join(assets, 'icon.png')).resize({ width: 96 }).toPNG().toString('base64'),
-  quitting: shell.isQuitting, quit: shell.quit })
+  screen, nativeTheme, mica, quitting: shell.isQuitting, quit: shell.quit })
 // The tray icon goes away with the app, and a late answer to the close notice hides nothing.
 app.once('will-quit', () => { startupScreen.close(); clearComputer(true); notifications.dispose(); shell.dispose(); botViews.dispose(); updates?.stop() })
 

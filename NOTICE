@@ -105,6 +105,10 @@ Apache License, Version 2.0 (see LICENSE)
   ds-bot/src/client/member-status.js and mark.js.
   app/src/startup-handoff.mjs adapts the 220 ms startup crossfade and
   inactive underlay from app/src/start-window.mjs at the same revision.
+  app/src/status-window.mjs, startup-window.html and startup-window.css adapt
+  the start window composition and whale/ring launch visuals from
+  app/src/start-window.mjs and app/src/start/ at the same revision, with status,
+  retry and window lifecycle integrated into DS SuperAgent.
   superagent/dsh/src/client/main-cells.js adapts the reasoning body, failure
   copy and turn separators from ds-bot/src/client/cells.js, turn-error.js
   and text.js.

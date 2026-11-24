@@ -3,8 +3,13 @@ import { fileURLToPath } from 'node:url'
 import { PRODUCT_NAME } from './product.mjs'
 
 const stylesheet = readFileSync(new URL('./status-window.css', import.meta.url), 'utf8')
+const startupStylesheet = readFileSync(new URL('./startup-window.css', import.meta.url), 'utf8')
+const startupTemplate = readFileSync(new URL('./startup-window.html', import.meta.url), 'utf8')
 const startupPreload = fileURLToPath(new URL('./startup-preload.cjs', import.meta.url))
 const escapeHtml = value => value.replace(/[&<>]/gu, character => `&#${character.codePointAt(0)};`)
+export const STARTUP_SIZE = { width: 720, height: 540 }
+export const SHORT_STARTUP_SIZE = { width: 720, height: 500 }
+const SHORT_WORK_AREA = 588
 
 export function statusPage(message, { loading = true, lang = 'en', image = '', detail, actions = [] } = {}) {
   const failure = detail !== undefined
@@ -21,6 +26,40 @@ ${actions.length ? `<div class="status-actions">${actions.map(({ action, label }
   return `data:text/html;charset=utf-8,${encodeURIComponent(markup)}`
 }
 
+export function startupWindowBounds(area) {
+  const size = area.height < SHORT_WORK_AREA ? SHORT_STARTUP_SIZE : STARTUP_SIZE
+  const width = Math.min(size.width, area.width)
+  const height = Math.min(size.height, area.height)
+  return {
+    x: area.x + Math.round((area.width - width) / 2),
+    y: area.y + Math.round((area.height - height) / 2),
+    width,
+    height,
+  }
+}
+
+export function startupPage(message, { loading = true, lang = 'en', detail, actions = [] } = {}) {
+  const failure = detail !== undefined
+  const kind = failure ? 'failure' : loading ? 'loading' : 'notice'
+  const buttons = actions.map(({ action, label }, index) =>
+    `<button type="button" data-startup-action="${escapeHtml(action)}"${index === 0 ? ' autofocus' : ''}>${escapeHtml(label)}</button>`).join('')
+  const status = loading && !failure
+    ? `<p class="sr" role="status">${escapeHtml(message)}</p>
+<section class="status-panel" role="alert" hidden></section>`
+    : `<section class="status-panel" role="${failure ? 'alert' : 'status'}">
+<p class="status-message">${escapeHtml(message)}</p>
+${failure ? `<p class="status-detail">${escapeHtml(detail)}</p>` : ''}
+${buttons ? `<div class="status-actions">${buttons}</div>` : ''}
+</section>`
+  const markup = startupTemplate
+    .replace('__LANG__', lang === 'zh' ? 'zh' : 'en')
+    .replace('__TITLE__', escapeHtml(PRODUCT_NAME))
+    .replace('__STYLE__', startupStylesheet)
+    .replace('__STATUS__', kind)
+    .replace('__STATUS_PANEL__', status)
+  return `data:text/html;charset=utf-8,${encodeURIComponent(markup)}`
+}
+
 export function statusWindow(BrowserWindow, options, preload) {
   const window = new BrowserWindow({ ...options, show: false, resizable: false, maximizable: false, fullscreenable: false,
     webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, devTools: false, ...(preload ? { preload } : {}) } })
@@ -29,7 +68,32 @@ export function statusWindow(BrowserWindow, options, preload) {
   return window
 }
 
-export function createStartupScreen({ BrowserWindow, ipcMain, icon, image, lang, quitting, quit }) {
+function startupWindowOptions({ icon, screen, nativeTheme, mica }) {
+  const area = screen?.getPrimaryDisplay?.().workArea ?? { x: 0, y: 0, ...STARTUP_SIZE }
+  const dark = nativeTheme?.shouldUseDarkColors === true
+  const color = dark ? '#141414' : '#fcfcfc'
+  const ink = dark ? '#f2f2f2' : '#141414'
+  const frame = process.platform === 'win32' ? {
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { height: 40, color: mica ? '#00000000' : color, symbolColor: ink },
+    ...(mica ? { backgroundMaterial: 'mica' } : {}),
+  } : {}
+  return {
+    title: PRODUCT_NAME,
+    icon,
+    ...startupWindowBounds(area),
+    useContentSize: true,
+    resizable: false,
+    maximizable: false,
+    minimizable: true,
+    fullscreenable: false,
+    autoHideMenuBar: true,
+    backgroundColor: mica ? '#00000000' : color,
+    ...frame,
+  }
+}
+
+export function createStartupScreen({ BrowserWindow, ipcMain, icon, lang, quitting, quit, screen, nativeTheme, mica }) {
   let window
   let currentPage
   let loading = Promise.resolve()
@@ -59,7 +123,7 @@ export function createStartupScreen({ BrowserWindow, ipcMain, icon, image, lang,
     async show(message, { detail, actions = [] } = {}) {
       if (quitting()) return undefined
       if (!window) {
-        const active = statusWindow(BrowserWindow, { title: PRODUCT_NAME, icon, width: 424, height: 254, autoHideMenuBar: true }, startupPreload)
+        const active = statusWindow(BrowserWindow, startupWindowOptions({ icon, screen, nativeTheme, mica }), startupPreload)
         window = active
         active.on('close', event => {
           if (quitting()) return
@@ -70,7 +134,7 @@ export function createStartupScreen({ BrowserWindow, ipcMain, icon, image, lang,
       }
       const active = window
       clearPage()
-      const page = { actions, answer: Promise.withResolvers(), url: statusPage(message, { loading: detail === undefined, detail, actions, lang: lang(), image: image() }) }
+      const page = { actions, answer: Promise.withResolvers(), url: startupPage(message, { loading: detail === undefined, detail, actions, lang: lang() }) }
       currentPage = page
       loading = loading.then(async () => {
         if (currentPage !== page || active.isDestroyed() || quitting()) return

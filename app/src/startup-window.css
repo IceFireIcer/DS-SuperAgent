@@ -1,0 +1,180 @@
+/* Adapted from DS Bot's start page (Apache-2.0); see NOTICE. */
+:root {
+  color-scheme: light dark;
+  --bt-main: #fcfcfc;
+  --bt-card: #ffffff;
+  --bt-ink: #141414;
+  --bt-ink-2: rgba(20, 20, 20, .6);
+  --bt-line: rgba(20, 20, 20, .08);
+  --bt-line-2: rgba(20, 20, 20, .15);
+  --bt-hover: rgba(119, 119, 119, .09);
+  --bt-accent: #4d6bfe;
+  --bt-accent-ink: #ffffff;
+  --bt-ink-deepseek: #4d6bfe;
+  --bt-danger: #e02135;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  --spring-shape: linear(0, .051, .1692, .3153, .4639, .6001, .7163, .8102, .8823, .935, .9717, .9955, 1.0098, 1.0171, 1.0198, 1.0195, 1.0175, 1.0147, 1.0117, 1.0089, 1.0064, 1.0044, 1.0028, 1.0016, 1);
+  --spring-shape-ms: 420ms;
+  --spring-tap: linear(0, .0541, .1776, .3279, .4784, .6141, .7281, .8187, .8874, .9369, .9709, .9928, 1.0057, 1.0124, 1.015, 1.0149, 1.0134, 1.0112, 1.0089, 1.0067, 1.0048, 1.0033, 1.0021, 1.0013, 1);
+  --spring-tap-ms: 290ms;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bt-main: #141414;
+    --bt-card: #1f1f1f;
+    --bt-ink: #f2f2f2;
+    --bt-ink-2: rgba(242, 242, 242, .6);
+    --bt-line: rgba(242, 242, 242, .08);
+    --bt-line-2: rgba(242, 242, 242, .15);
+    --bt-hover: rgba(160, 160, 160, .12);
+    --bt-accent: #5b7bff;
+    --bt-accent-ink: #141414;
+    --bt-ink-deepseek: #6a84ff;
+  }
+}
+[hidden] { display: none !important; }
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; }
+body {
+  position: relative;
+  color: var(--bt-ink);
+  font: 14px/22px var(--font);
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(90% 72% at 8% 100%, color-mix(in srgb, var(--bt-accent) 6%, transparent), transparent 64%);
+}
+.band { position: fixed; inset: 0 0 auto; height: 40px; -webkit-app-region: drag; app-region: drag; }
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.stage {
+  position: absolute;
+  left: calc(50% - 360px);
+  top: 0;
+  width: 720px;
+  height: 100%;
+  translate: 0 45px;
+}
+.pond { position: absolute; inset: 0; pointer-events: none; transform-origin: 360px 210px; }
+.ring { position: absolute; left: 250px; top: 100px; width: 220px; height: 220px; overflow: visible; }
+.ring path { fill: none; stroke-width: 2; stroke-linecap: round; }
+.arc-base { stroke: var(--bt-line); }
+.arc-fill { stroke: var(--bt-ink-deepseek); stroke-dasharray: 100 200; stroke-dashoffset: 101; transition: stroke-dashoffset .56s cubic-bezier(.3, .7, .4, 1); }
+.arc-glow { stroke: color-mix(in srgb, var(--bt-ink-deepseek) 75%, transparent); stroke-width: 2.5; stroke-dasharray: 22 200; stroke-dashoffset: 23; opacity: 0; }
+.arc[data-state=active] .arc-base { stroke: color-mix(in srgb, var(--bt-ink-deepseek) 22%, transparent); }
+.arc[data-state=active] .arc-glow { opacity: 1; animation: bt-arc 1.8s cubic-bezier(.4, 0, .2, 1) infinite; }
+.arc[data-state=done] .arc-fill { stroke-dashoffset: 0; }
+@keyframes bt-arc { from { stroke-dashoffset: 23; } to { stroke-dashoffset: -101; } }
+.water {
+  position: absolute;
+  left: 260px;
+  top: 242px;
+  width: 200px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--bt-line-2) 18% 82%, transparent);
+}
+.props { position: absolute; left: 413px; top: 195px; width: 46px; height: 46px; overflow: visible; }
+.props [data-p=team] { transform-box: view-box; transform-origin: 20px 36px; animation: bt-pulse 1.35s ease-in-out infinite; }
+.mate circle { fill: var(--bt-ink-deepseek); }
+.mate rect { fill: var(--bt-card); }
+.mate { transform-origin: 50% 100%; animation: bt-mate 1.8s cubic-bezier(.3, .7, .4, 1) infinite; }
+.props > g > g:nth-child(1) .mate { opacity: .55; }
+.props > g > g:nth-child(2) .mate { animation-delay: .2s; }
+.props > g > g:nth-child(3) .mate { opacity: .75; animation-delay: .4s; }
+@keyframes bt-mate { 0%, 40%, 100% { transform: none; } 15% { transform: translateY(-4px) scale(1.05, .95); } }
+@keyframes bt-pulse { 0%, 100% { transform: none; } 15% { transform: scale(1.07); } 35% { transform: none; } }
+.lane { position: absolute; left: 48px; top: 102px; width: 624px; height: 140px; overflow: clip; pointer-events: none; }
+.whale-x { position: absolute; left: 256px; top: 43px; width: 112px; height: 112px; }
+.whale-gaze, .whale, .whale-move, .whale-loop { width: 100%; height: 100%; transform-origin: 49.95% 79%; }
+.whale-svg { display: block; width: 100%; height: 100%; overflow: visible; }
+#tail, #torso { transform-box: view-box; }
+#tail { transform-origin: 27.9px 61.1px; }
+#eye-pair, #gaze { transform-box: fill-box; transform-origin: center; }
+.whale-move { animation: bt-enter-later var(--spring-tap-ms) var(--spring-tap) backwards, bt-bob 3.2s ease-in-out .7s infinite; }
+#tail { animation: bt-tail-beat 1.6s ease-in-out -.8s infinite alternate; }
+.ripple {
+  position: absolute;
+  left: 326px;
+  top: 236px;
+  width: 68px;
+  height: 12px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--bt-line-2);
+  border-radius: 50%;
+  opacity: .65;
+  animation: bt-ripple-scale 1.8s ease-in-out infinite alternate;
+}
+@keyframes bt-enter-later { from { transform: translateY(84px); } }
+@keyframes bt-bob { 0%, 100% { transform: none; } 30% { transform: translateY(-2px) rotate(-3deg); } 65% { transform: rotate(2deg); } }
+@keyframes bt-tail-beat { from { transform: rotate(-5deg); } to { transform: rotate(5deg); } }
+@keyframes bt-ripple-scale { from { scale: .88; opacity: .42; } to { scale: 1.08; opacity: .7; } }
+.status-panel {
+  position: absolute;
+  left: 50%;
+  bottom: 28px;
+  z-index: 1;
+  box-sizing: border-box;
+  width: min(560px, calc(100% - 64px));
+  max-height: calc(100% - 72px);
+  translate: -50% 0;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: .5px solid var(--bt-line-2);
+  border-radius: 16px;
+  background: var(--bt-card);
+  box-shadow: 0 18px 40px -20px rgba(0, 0, 0, .28), 0 2px 8px -4px rgba(0, 0, 0, .12);
+  animation: bt-panel-in var(--spring-shape-ms) var(--spring-shape), bt-fade .18s ease-out;
+}
+.status-message { margin: 0; font-size: 15px; line-height: 20px; font-weight: 600; }
+.status-detail {
+  margin: 0;
+  max-height: 132px;
+  overflow: auto;
+  color: var(--bt-ink-2);
+  font: 13px/18px var(--font);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.status-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.status-actions button {
+  min-height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--bt-hover);
+  color: var(--bt-ink);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.status-actions button[autofocus] { background: var(--bt-accent); color: var(--bt-accent-ink); }
+.status-actions button:focus-visible { outline: 2px solid var(--bt-accent); outline-offset: 2px; }
+body[data-status=failure] .arc-fill { stroke: var(--bt-danger); }
+body[data-status=failure] .arc-glow { display: none; }
+body[data-status=failure] .whale-move,
+body[data-status=failure] #tail { animation-play-state: paused; }
+@keyframes bt-panel-in { from { translate: -50% 8px; scale: .98; } }
+@keyframes bt-fade { from { opacity: 0; } }
+@media (max-height: 520px) {
+  .stage { translate: 0 25px; }
+  .status-panel { bottom: 18px; padding: 14px 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .arc-glow, .props [data-p=team], .mate, .whale-move, #tail, .ripple { animation: none !important; }
+  .status-panel { animation: none; }
+}
