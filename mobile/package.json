@@ -33,6 +33,7 @@
     "start": "expo start",
     "ios": "expo run:ios",
     "android": "expo run:android",
+    "icons": "node scripts/icons.mjs",
     "typecheck": "tsc --noEmit"
   },
   "private": true,

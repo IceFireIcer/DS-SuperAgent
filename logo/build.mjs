@@ -63,6 +63,8 @@ const PALETTES = {
 }
 
 const template = readFileSync(join(here, 'source', 'whale.template.svg'), 'utf8')
+const silhouetteMask = template.match(/<mask id="mark-mask"[\s\S]*?<\/mask>/u)?.[0]
+if (!silhouetteMask) throw new Error('the logo template has no mark mask')
 
 function paint(tokens) {
   const values = {
@@ -80,6 +82,41 @@ function paint(tokens) {
   return Object.entries(values).reduce((svg, [token, value]) => svg.replaceAll(`@${token}@`, value), template)
 }
 
+function productLogoModule(mark) {
+  let inner = mark.replace(/^<svg[^>]*>\s*/u, '').replace(/<\/svg>\s*$/u, '')
+  inner = inner.replace(/>\s+</gu, '><').trim()
+  for (const id of ['mark-mask', 'body', 'accent', 'belly']) {
+    inner = inner.replaceAll(`id="${id}"`, `id="__PRODUCT_LOGO_ID__-${id}"`)
+      .replaceAll(`url(#${id})`, `url(#__PRODUCT_LOGO_ID__-${id})`)
+  }
+  return `// Generated from logo/whale.svg. Keep the geometry and palette in step with the
+// product logo exports in that directory.
+import { createElement as h, useId } from 'react'
+
+export const PRODUCT_LOGO_VIEWBOX = '0 0 1600 945'
+const PRODUCT_LOGO_MARKUP = \`${inner}\`
+
+function markMarkup(id) {
+  return PRODUCT_LOGO_MARKUP.replaceAll('__PRODUCT_LOGO_ID__', id)
+}
+
+export function ProductLogo({ size = 24, label = 'DS SuperAgent' }) {
+  const id = \`bt-logo-\${useId().replaceAll(':', '')}\`
+  return h('span', {
+    className: 'bt-brand-whale',
+    style: { width: \`\${(size * 1600 / 945).toFixed(2)}px\`, height: \`\${size}px\` },
+    role: label ? 'img' : undefined,
+    'aria-label': label || undefined,
+  }, h('svg', {
+    viewBox: PRODUCT_LOGO_VIEWBOX,
+    focusable: 'false',
+    'aria-hidden': true,
+    dangerouslySetInnerHTML: { __html: markMarkup(id) },
+  }))
+}
+`
+}
+
 function squareIcon(mark) {
   const content = mark
     .replace(/^<svg[^>]*>\s*/u, '')
@@ -90,6 +127,15 @@ function squareIcon(mark) {
   const y = (ICON_SIZE - height) / 2
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${ICON_SIZE}" height="${ICON_SIZE}" viewBox="0 0 ${ICON_SIZE} ${ICON_SIZE}" role="img" aria-label="DS SuperAgent">
 <svg x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${width.toFixed(2)}" height="${height.toFixed(2)}" viewBox="0 0 ${MARK_WIDTH} ${MARK_HEIGHT}">${content}</svg>
+</svg>
+`
+}
+
+function silhouetteSvg() {
+  const mask = silhouetteMask.replace('id="mark-mask"', 'id="silhouette-mask"')
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${MARK_WIDTH}" height="${MARK_HEIGHT}" viewBox="0 0 ${MARK_WIDTH} ${MARK_HEIGHT}" role="img" aria-label="DS SuperAgent">
+<defs>${mask}</defs>
+<g mask="url(#silhouette-mask)"><rect width="${MARK_WIDTH}" height="${MARK_HEIGHT}" fill="#4D6BFE"/></g>
 </svg>
 `
 }
@@ -174,5 +220,7 @@ for (const [name, tokens] of Object.entries(PALETTES)) {
   marks.push({ label: name[0].toUpperCase() + name.slice(1), png })
   console.log(`logo: wrote ${name}`)
 }
+writeFileSync(join(here, 'silhouette.svg'), silhouetteSvg())
+writeFileSync(join(here, '..', 'superagent', 'dsh', 'src', 'client', 'product-logo.js'), productLogoModule(paint(PALETTES.blue)))
 await writePreview(marks)
-console.log('logo: wrote preview.png')
+console.log('logo: wrote silhouette.svg, preview.png and the client brand module')

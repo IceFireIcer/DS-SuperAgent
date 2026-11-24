@@ -1,7 +1,6 @@
 import { createElement as h } from 'react'
-import { MAIN_LOOK } from './characters.js'
-import { BotMark } from './mark.js'
+import { ProductLogo } from './product-logo.js'
 
 export function ProductBrandMark({ size = 24 }) {
-  return h('span', { className: 'bt-brand-whale' }, h(BotMark, { look: MAIN_LOOK, size }))
+  return h(ProductLogo, { size })
 }

@@ -5,8 +5,12 @@ import { PRODUCT_NAME } from './product.mjs'
 const stylesheet = readFileSync(new URL('./status-window.css', import.meta.url), 'utf8')
 const startupStylesheet = readFileSync(new URL('./startup-window.css', import.meta.url), 'utf8')
 const startupTemplate = readFileSync(new URL('./startup-window.html', import.meta.url), 'utf8')
+const startupLogo = readFileSync(new URL('../assets/logo.svg', import.meta.url), 'utf8')
 const startupPreload = fileURLToPath(new URL('./startup-preload.cjs', import.meta.url))
 const escapeHtml = value => value.replace(/[&<>]/gu, character => `&#${character.codePointAt(0)};`)
+const logoMarkup = `<svg class="whale-svg" viewBox="0 0 1600 945" aria-hidden="true" focusable="false">${
+  startupLogo.replace(/^<svg[^>]*>\s*/u, '').replace(/<\/svg>\s*$/u, '')
+}</svg>`
 export const STARTUP_SIZE = { width: 720, height: 540 }
 export const SHORT_STARTUP_SIZE = { width: 720, height: 500 }
 const SHORT_WORK_AREA = 588
@@ -56,6 +60,7 @@ ${buttons ? `<div class="status-actions">${buttons}</div>` : ''}
     .replace('__TITLE__', escapeHtml(PRODUCT_NAME))
     .replace('__STYLE__', startupStylesheet)
     .replace('__STATUS__', kind)
+    .replace('__LOGO__', logoMarkup)
     .replace('__STATUS_PANEL__', status)
   return `data:text/html;charset=utf-8,${encodeURIComponent(markup)}`
 }
