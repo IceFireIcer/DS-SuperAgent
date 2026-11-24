@@ -295,6 +295,7 @@ try {
     const inFlight = ctx.superagentProduct.dispatch('send', mainInput)
     try {
       await Promise.race([classicMainEntered.promise, sleep(8000, undefined, { ref: false }).then(() => { throw new Error('Main did not start.') })])
+      assert.equal((await sessionRequest('create', { request: { cwd: workspace } })).ok, false)
       assert.equal((await requestClassic('classic-open', '')).error.code, 'CLASSIC_DENIED')
       assert.equal((await requestClassic('classic-open', proof, otherOwner)).error.code, 'CLASSIC_DENIED')
       const open = await requestClassic('classic-open')
@@ -304,13 +305,22 @@ try {
       const classicWorkspace = ctx.workspaceRegistry.get(workspaceId)
       assert.equal(classicWorkspace.path, await realpath(workspace))
       assert.ok(classicWorkspace.sessionIds.includes(sessionId))
+      const created = await sessionRequest('create', { request: { workspaceId } })
+      assert.equal(created.ok, true, JSON.stringify(created.error))
+      const createdSessionId = created.value.sessionId
+      assert.ok(createdSessionId && createdSessionId !== sessionId && createdSessionId !== mainSessionId
+        && createdSessionId !== routerSessionId)
+      assert.ok((await list(desktop.peer)).includes(createdSessionId))
+      assert.equal((await sessionRequest('prompt', prompt(createdSessionId))).value.accepted, true)
+      assert.equal((await sessionRequest('create', { request: { workspaceId } }, browserCookie)).ok, false)
       assert.deepEqual(ctx.agents.get(sessionId).model.current(), ctx.agentDefaultModel.currentSelection())
       desktopMux.send(JSON.stringify({ type: 'open', streamId: workspaceStreamId, endpoint: 'workspace/follow', payload: { args: {} } }))
       const workspaceDeadline = Date.now() + 4000
       while (workspaceFrames.length === 0 && Date.now() < workspaceDeadline) await sleep(20)
       const classicWorkspaceRow = workspaceFrames[0]?.value?.items.find(item => item.workspaceId === workspaceId)
       assert.ok(classicWorkspaceRow?.sessionIds.includes(sessionId), 'the Workspace stream must show the Classic Agent landing Session')
-      assert.deepEqual(await list(desktop.peer), [sessionId])
+      assert.ok(classicWorkspaceRow?.sessionIds.includes(createdSessionId), 'the Workspace stream must show the new Classic Agent Session')
+      assert.deepEqual((await list(desktop.peer)).sort(), [sessionId, createdSessionId].sort())
       for (const peer of [ctx.connection.browserPeer, otherOwner.peer]) {
         assert.deepEqual(await list(peer), [mainSessionId])
         await assert.rejects(invoke('events', sessionEvents(sessionId), peer))
@@ -345,6 +355,7 @@ try {
       assert.equal((await requestClassic('classic-close')).value.closed, true)
       assert.deepEqual(await list(desktop.peer), [mainSessionId])
       await assert.rejects(invoke('events', sessionEvents(sessionId)))
+      await assert.rejects(invoke('events', sessionEvents(createdSessionId)))
       const initialDirectory = (await ctx.superagentProduct.dispatch('directory-options', { instanceId })).default
       const newDirectory = join(sandbox, 'classic-unavailable')
       await mkdir(newDirectory)
@@ -371,7 +382,7 @@ try {
     await inFlight
     await ctx.superagentProduct.dispatch('send', mainInput)
     assert.equal(modelCalls.filter(call => call.text === mainInput.text && call.model === 'main').length, 1)
-    console.log('Classic Agent used one independent native Session, revoked the Desktop peer, and preserved the original Main receipt.')
+    console.log('Classic Agent kept native Sessions inside the authorized workspace, revoked the Desktop peer, and preserved the original Main receipt.')
   }
   if (process.argv.includes('--check-ui')) {
     const im = await ctx.superagentProduct.dispatch('im-accounts', { instanceId: binding.instanceId, operation: 'list' })

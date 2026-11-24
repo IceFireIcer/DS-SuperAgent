@@ -2,7 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { SessionController } from '@deepseek-ai/dsh-api-session-controller'
 import type { SessionAddress, SessionCancelRequest, SessionControlFrame, SessionFollowRequest, SessionListRequest,
   SessionPageRequest, SessionPromptRequest, SessionProjectionsRequest, SessionRenameRequest, SessionSelectModelRequest,
-  SessionUpdateQueueRequest } from '@deepseek-ai/dsh-api-session-controller/types'
+  SessionCreateRequest, SessionCreateValue, SessionUpdateQueueRequest } from '@deepseek-ai/dsh-api-session-controller/types'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
@@ -11,7 +11,7 @@ import type { MainBinding } from './main-conversation.js'
 import { CoreError } from './model.js'
 import type { ProductHost } from './product-host.js'
 
-type SessionReads = Pick<SessionController, 'list' | 'events' | 'follow' | 'control'>
+type SessionReads = Pick<SessionController, 'list' | 'events' | 'follow' | 'control' | 'create'>
 
 export const name = 'superagent-session-reader'
 export const inject = ['sessionController']
@@ -46,7 +46,7 @@ export function exposeMainSession(context: Context, host: ProductHost, desktop =
     const classicFor = (context: Context) => classic?.forPeer(context.invocation?.peer)
     const requireClassic = (context: Context, sessionId: SessionId) => {
       const active = classicFor(context)
-      if (active?.sessionId !== sessionId) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Native commands require the active Classic Agent session.')
+      if (!active?.sessions.has(sessionId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Native commands require an active Classic Agent session.')
       return active
     }
     const check = async (address: SessionAddress) => {
@@ -69,7 +69,7 @@ export function exposeMainSession(context: Context, host: ProductHost, desktop =
         const active = classicFor(this.ctx)
         if (active) {
           const { items } = await controller.list(request, AbortSignal.any([signal, active.signal]))
-          return { items: items.filter(item => item.sessionId === active.sessionId) }
+          return { items: items.filter(item => active.sessions.has(item.sessionId)) }
         }
         const { mainSessionId, mainSessionMode } = await current()
         if (mainSessionMode !== 'native') return { items: [] }
@@ -81,7 +81,7 @@ export function exposeMainSession(context: Context, host: ProductHost, desktop =
         requireOwner(this.ctx)
         const active = classicFor(this.ctx)
         if (active) {
-          if (request.address.kind !== 'session' || request.address.sessionId !== active.sessionId) {
+          if (request.address.kind !== 'session' || !active.sessions.has(request.address.sessionId)) {
             throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Only the active Classic Agent session is available.')
           }
           return controller.events(request, AbortSignal.any([signal, active.signal]))
@@ -94,7 +94,7 @@ export function exposeMainSession(context: Context, host: ProductHost, desktop =
         requireOwner(this.ctx)
         const active = classicFor(this.ctx)
         if (active) {
-          if (request.address.kind !== 'session' || request.address.sessionId !== active.sessionId) {
+          if (request.address.kind !== 'session' || !active.sessions.has(request.address.sessionId)) {
             throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Only the active Classic Agent session is available.')
           }
           yield* controller.follow({ ...request, ...(activate === undefined ? {} : { activate }) }, AbortSignal.any([signal, active.signal]))
@@ -113,12 +113,21 @@ export function exposeMainSession(context: Context, host: ProductHost, desktop =
         for await (const frame of controller.control(signal)) {
           const active = classicFor(this.ctx)
           const binding = active ? undefined : await current()
-          const visibleId = active?.sessionId ?? (binding?.mainSessionMode === 'native' ? SessionId(binding.mainSessionId) : undefined)
+          const visible = active?.sessions ?? new Set(binding?.mainSessionMode === 'native' ? [binding.mainSessionId] : [])
           if (frame.type === 'baseline') {
-            const projection = visibleId === undefined ? undefined : frame.value.projections[visibleId]
-            yield { type: 'baseline', value: { projections: visibleId === undefined || projection === undefined ? {} : { [visibleId]: projection } } }
-          } else if (frame.sessionId === visibleId) yield frame
+            const projections = Object.fromEntries(Object.entries(frame.value.projections)
+              .filter(([sessionId]) => visible.has(sessionId)))
+            yield { type: 'baseline', value: { projections } }
+          } else if (visible.has(frame.sessionId)) yield frame
         }
+      }
+
+      async create(request: SessionCreateRequest): Promise<SessionCreateValue> {
+        const access = classic
+        if (!access || !classicFor(this.ctx)) {
+          throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Native Session creation requires Classic Agent mode.')
+        }
+        return access.create(this.ctx.invocation?.peer, request)
       }
 
       async prompt(request: SessionPromptRequest, signal: AbortSignal) {

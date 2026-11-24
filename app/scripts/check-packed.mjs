@@ -802,6 +802,10 @@ async function checkClassicRoundTrip(cdp) {
   const during = await history()
   assert.equal(during.messages.find(message => message.id === working.id).status, 'running')
   assert.notEqual(during.works.find(item => item.receipt?.ticketId === work.alpha.receipt.ticketId).status, 'success')
+  await clickByKeyboard('button[aria-label="New session"], button[aria-label="新建会话"]', 'the native New session button')
+  await sleep(500)
+  await wait(() => evaluate(`Boolean(document.querySelector('${nativeComposer}'))
+    && !/(New session failed|新建会话失败)/u.test(document.body.innerText)`), 'the new native session')
   const nativeText = 'Classic fixture prompt'
   await send(nativeComposer, nativeText)
   await wait(() => evaluate(`document.body.innerText.includes(${JSON.stringify(`收到：${nativeText}`)})`), 'the native reply')

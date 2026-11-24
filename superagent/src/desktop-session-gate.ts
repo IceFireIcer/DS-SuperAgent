@@ -83,7 +83,7 @@ export function apply(context: Context) {
               const peer = desktopPeer
               const grant = classic()?.forPeer(peer)
               const sessionId = event.context.agentId
-              if (peer && grant?.sessionId === sessionId) {
+              if (peer && grant?.sessions.has(sessionId)) {
                 const lifetime = AbortSignal.any([peer.signal, grant.signal, ...(event.request.signal ? [event.request.signal] : [])])
                 if (!lifetime.aborted) {
                   yield { ...event, request: { ...event.request, signal: lifetime } }
@@ -99,9 +99,10 @@ export function apply(context: Context) {
             if (event.event.startsWith('api-session/')) {
               const value = event.args[0]
               const sessionId = value && typeof value === 'object' && 'sessionId' in value ? value.sessionId : value
-              const current = classic()?.forPeer(desktopPeer)?.sessionId ?? await currentMainSessionId()
-              const visible = classic()?.forPeer(desktopPeer)?.sessionId ?? current
-              if (typeof sessionId !== 'string' || sessionId !== visible) continue
+              if (typeof sessionId !== 'string') continue
+              const grant = classic()?.forPeer(desktopPeer)
+              const visible = grant ? grant.sessions.has(sessionId) : sessionId === await currentMainSessionId()
+              if (!visible) continue
             }
             yield event
           }

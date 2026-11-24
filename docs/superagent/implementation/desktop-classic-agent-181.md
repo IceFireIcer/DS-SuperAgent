@@ -6,6 +6,7 @@
 
 - DSH `0.2.2-rc.1` 的 `openSession()` 负责导航。桌面主进程通过公开的 `/connect` 获得独立 Peer，将其凭据用于指定窗口发往本机 Host 的原生 HTTP 和 WebSocket 请求。打开、续期和关闭经典模式通过现有 `/api/product`，由主进程持有的凭据和该 Peer 身份共同验证。[DSH Connection](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.1/packages/client/connection/README.md#browser-authentication-and-request-trust) · [桌面传输](../../../app/src/classic-agent.mjs)
 - 桌面 Host 只接受该 Peer 的 DSH WebSocket。Session 通知按当前界面过滤，原生审批和提问按会话核对，退出 Classic 会取消该会话的待答回调。普通 HTTP Session Reader 仅可读取当前 Main。窗口销毁、重载或 Peer 断开时撤销授权。[桌面 Gateway](../../../superagent/src/desktop-session-gate.ts) · [Session Reader](../../../superagent/src/session-reader.ts)
+- 原生界面的“新会话”只在 Classic 授权期间创建会话，并绑定到当前已授权的 Workspace。Session Reader 只列出和读写该 Workspace 的 Classic 会话；传其他 Workspace、目录或 Main／Router Session 会拒绝。关闭 Classic 或 Peer 断开后，这些额外会话同时失去访问权。
 - 以实例默认工作目录的规范路径登记 DSH Workspace，让原生空白会话获得编辑资格。客户端确认工作区和会话已可用，再关闭产品弹层及语音并切换。Classic 的模型选择只记录在当前会话。同一实例和目录重进可恢复这段原生会话。[会话授权](../../../superagent/src/classic-session.ts) · [切换实现](../../../superagent/dsh/src/client/product.js)
 
 ## 初始接口核对
