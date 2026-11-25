@@ -621,7 +621,7 @@ export class MainConversation {
     }
     return [
       ...this.memoryTools(binding),
-      { name: 'delegate_work', description: 'Create one durable WorkBrief for one to four independent items on the execution target selected by the user. Give every item a clear goal, strict constraints and observable acceptance criteria. When attachments are present, assign their exact IDs to each item with attachmentIds; an item without attachments uses an empty array. Set capabilities to browser, mcp or office when the request requires one. The Router cannot expand these grants. The Router decides and establishes the Tickets; this tool does not mean any Worker started or completed.'
+      { name: 'delegate_work', description: 'Create one durable WorkBrief for one to four independent items on the execution target selected by the user. Give every item a clear goal, strict constraints and observable acceptance criteria. When attachments are present, assign their exact IDs to each item with attachmentIds; an item without attachments uses an empty array. Set capabilities to browser, mcp or office when the request requires one. Use pathGrants only for exact absolute paths and operations the user explicitly authorized for this task; never infer or expand them, and ask before adding access that the user has not granted. The Router cannot expand these grants. The Router decides and establishes the Tickets; this tool does not mean any Worker started or completed.'
           + (command.attachmentIds?.length ? ` Available attachments: ${JSON.stringify(command.attachmentIds.map((id, index) => ({ id, name: command.assets?.[index]?.name ?? '' })))}.` : ''),
         parameters: {
           items: {
@@ -640,6 +640,16 @@ export class MainConversation {
           constraints: { type: 'string' },
           acceptanceCriteria: { type: 'string' },
           capabilities: { type: 'array', items: { type: 'string' } },
+          pathGrants: {
+            type: 'array',
+            items: {
+              type: 'object', additionalProperties: false,
+              properties: {
+                path: { type: 'string', required: true },
+                operations: { type: 'array', items: { type: 'string' } },
+              },
+            },
+          },
         },
         execute: async args => {
           const work = this.work?.()
@@ -674,6 +684,7 @@ export class MainConversation {
             ...(command.clientId ? { attachmentClientId: command.clientId } : {}),
             ...(items ? { items } : { goal: args.goal ?? '', constraints: args.constraints ?? '', acceptanceCriteria: args.acceptanceCriteria ?? '' }),
             configurationRevision, target, ...(capabilities?.length ? { capabilities } : {}),
+            ...(args.pathGrants === undefined ? {} : { pathGrants: args.pathGrants }),
             ...(command.environmentId ? { environmentId: command.environmentId } : {}) })
           return JSON.stringify(await work.query(binding.mainId, { workBriefId: brief.id }))
         } },

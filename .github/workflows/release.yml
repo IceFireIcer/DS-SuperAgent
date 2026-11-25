@@ -55,6 +55,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -117,12 +118,15 @@ jobs:
     needs: publish
     runs-on: windows-latest
     timeout-minutes: 30
+    # Every package job checks out the workflow SHA explicitly so the build record has one candidate commit.
     defaults:
       run:
         shell: bash
         working-directory: app
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -138,8 +142,7 @@ jobs:
       - run: npm run dist
       - name: Check the packaged app
         run: node scripts/check-packed.mjs
-      - name: Keep the installer for real-device checks
-        if: github.event_name == 'workflow_dispatch'
+      - name: Keep the installer for the build record and real-device checks
         uses: actions/upload-artifact@v4
         with:
           name: DS-SuperAgent-win-x64
@@ -174,6 +177,8 @@ jobs:
         working-directory: app
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -189,8 +194,7 @@ jobs:
       - run: npm run dist
       - name: Check the packaged app
         run: node scripts/check-packed.mjs
-      - name: Keep the zip for real-device checks
-        if: github.event_name == 'workflow_dispatch'
+      - name: Keep the zip for the build record and real-device checks
         uses: actions/upload-artifact@v4
         with:
           name: DS-SuperAgent-mac-${{ matrix.arch }}
@@ -218,6 +222,8 @@ jobs:
         working-directory: app
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -242,8 +248,7 @@ jobs:
         run: |
           version="$(node -p "require('./package.json').version")"
           ls -l "dist-pack/DS-SuperAgent-$version-linux-x86_64.AppImage" "dist-pack/DS-SuperAgent-$version-linux-amd64.deb" dist-pack/latest-linux.yml
-      - name: Keep the packages for real-device checks
-        if: github.event_name == 'workflow_dispatch'
+      - name: Keep the packages for the build record and real-device checks
         uses: actions/upload-artifact@v4
         with:
           name: DS-SuperAgent-linux-x64
@@ -262,3 +267,68 @@ jobs:
         run: |
           version="$(node -p "require('./package.json').version")"
           gh release upload "$TAG" "dist-pack/DS-SuperAgent-$version-linux-x86_64.AppImage" "dist-pack/DS-SuperAgent-$version-linux-amd64.deb" dist-pack/latest-linux.yml --clobber
+
+  app-build-record:
+    name: Desktop release-candidate build record
+    needs:
+      - app-windows
+      - app-macos
+      - app-linux
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require every desktop build job
+        if: needs.app-windows.result != 'success' || needs.app-macos.result != 'success' || needs.app-linux.result != 'success'
+        env:
+          WINDOWS_RESULT: ${{ needs.app-windows.result }}
+          MACOS_RESULT: ${{ needs.app-macos.result }}
+          LINUX_RESULT: ${{ needs.app-linux.result }}
+        run: |
+          echo "::error::Desktop build matrix is incomplete: Windows=$WINDOWS_RESULT, macOS=$MACOS_RESULT, Linux=$LINUX_RESULT. A partial output is not a release candidate."
+          exit 1
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Collect the platform packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: DS-SuperAgent-*
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Verify and hash the package matrix
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          head_sha="$(git rev-parse HEAD)"
+          if [ "$head_sha" != "$COMMIT_SHA" ]; then
+            echo "::error::The build record checkout is $head_sha, but the candidate commit is $COMMIT_SHA."
+            exit 1
+          fi
+          version="$(node -p "require('./app/package.json').version")"
+          node scripts/desktop-build-record.mjs \
+            --artifacts release-artifacts \
+            --commit-sha "$COMMIT_SHA" \
+            --version "$version" \
+            --output "release-build-record/DS-SuperAgent-$version-$COMMIT_SHA-build-record.json"
+
+      - name: Keep the build record
+        uses: actions/upload-artifact@v4
+        with:
+          name: DS-SuperAgent-build-record-${{ github.sha }}
+          path: release-build-record/*.json
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Attach the build record to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" release-build-record/*.json --clobber

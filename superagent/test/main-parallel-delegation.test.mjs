@@ -29,6 +29,8 @@ test('one Main request creates two independent work items and lets the fast one 
   const roles = []
   let releaseBeta
   const betaReady = new Promise(resolve => { releaseBeta = resolve })
+  const bothStarted = Promise.withResolvers()
+  const startedWorkers = new Set()
 
   async function* respond(options) {
     const text = lastUserText(options)
@@ -61,7 +63,12 @@ test('one Main request creates two independent work items and lets the fast one 
     const goal = goalFromWorkerPrompt(text)
     const file = goal.includes('alpha') ? 'alpha.txt' : 'beta.txt'
     const value = goal.includes('alpha') ? 'alpha complete\n' : 'beta complete\n'
-    if (calls === 0) yield* toolResponse('write_file', { path: file, text: value })
+    if (calls === 0) {
+      startedWorkers.add(file)
+      if (startedWorkers.size === 2) bothStarted.resolve()
+      await bothStarted.promise
+      yield* toolResponse('write_file', { path: file, text: value })
+    }
     else if (calls === 1) yield* toolResponse('read_file', { path: file })
     else if (calls === 2) {
       if (file === 'beta.txt') await betaReady
@@ -90,6 +97,7 @@ test('one Main request creates two independent work items and lets the fast one 
   await engine.openMain({ instanceId: 'personal' })
   engine.effects.start()
   await engine.sendMainMessage({ instanceId: 'personal', commandId: 'parallel-note', text: 'Prepare A and independently investigate B.' })
+  await Promise.race([bothStarted.promise, sleep(10_000).then(() => { throw new Error('Both Workers did not start together.') })])
   try {
     await until(async () => (await engine.getMainConversation({ instanceId: 'personal' })).works.some(work => work.outcome?.status === 'success'), 'the first verified item')
   } catch (error) {

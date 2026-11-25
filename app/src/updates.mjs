@@ -5,10 +5,10 @@ import { ARTIFACT_PREFIX, PRODUCT_NAME, PRODUCT_SLUG, REPOSITORY } from './produ
 export const UPDATE_TEXT = {
   en: {
     ready: version => `${PRODUCT_NAME} ${version} is ready to install.`,
-    readyDetail: 'Restart now to update, or it is installed the next time you quit.',
+    readyDetail: 'Restart now to install it. If you choose Later, the current version stays installed; installing remains your choice.',
     restart: 'Restart now', later: 'Later',
     installFailed: 'The update could not be installed. Check Diagnostics in Status and usage.',
-    onFailure: version => `${PRODUCT_NAME} ${version} is installed when its download is done, and then ${PRODUCT_NAME} opens again.`,
+    onFailure: version => `${PRODUCT_NAME} ${version} is available. It can finish downloading in the background, but it is not installed unless you confirm.`,
     available: version => `${PRODUCT_NAME} ${version} is available.`,
     availableDetail: `This version cannot update itself. Download the new version from its release page, then replace ${PRODUCT_NAME} in Applications.`,
     download: 'Download',
@@ -17,10 +17,10 @@ export const UPDATE_TEXT = {
   },
   zh: {
     ready: version => `${PRODUCT_NAME} ${version} 已经下载好。`,
-    readyDetail: '现在重启就能更新；不重启的话，下次退出时安装。',
+    readyDetail: '现在重启即可安装；选择「稍后」会继续使用当前版本，是否安装由你决定。',
     restart: '立即重启', later: '稍后',
     installFailed: '更新未能安装。请在「状态与用量」中查看诊断。',
-    onFailure: version => `${PRODUCT_NAME} ${version} 下载完会自动安装，然后重新打开。`,
+    onFailure: version => `${PRODUCT_NAME} ${version} 已可用。下载可在后台继续，但未经你确认不会安装。`,
     available: version => `${PRODUCT_NAME} ${version} 已经发布。`,
     availableDetail: `这个版本不能自己更新。请到发布页下载新版，再用它替换「应用程序」里的 ${PRODUCT_NAME}。`,
     download: '下载',
@@ -217,14 +217,15 @@ export function watchReleases({ current, arch, fetch = globalThis.fetch, ask, op
  *   feed?: string,
  *   timeout?: number,
  *   log?: Pick<Console, 'info' | 'error'>,
- * }} options `ask` answers whether to restart now; without it the update waits for the next
- *   quit. The desktop main process owns both paths through `beforeInstall`.
+ * }} options `ask` answers whether to install now; without it a downloaded update waits for
+ *   an explicit `install()` call. The desktop main process owns the backup through
+ *   `beforeInstall`.
  *   `feed` is a folder URL with a latest.yml, in place of the GitHub releases. A check that
  *   takes longer than `timeout` fails, so that a later check can run.
  * @returns {{
  *   stop: () => void,
  *   latest: () => Promise<{ version: string, downloaded: Promise<boolean> } | null>,
- *   install: (options?: { restart?: boolean }) => Promise<void>,
+ *   install: () => Promise<void>,
  *   state: () => { phase: string, version?: string, page?: string },
  *   subscribe: (listener: (state: { phase: string }) => void) => () => void,
  *   check: () => void,
@@ -252,7 +253,7 @@ export function watchUpdates({ updater, beforeInstall, beforeLaunch, onInstallFa
       log.error(`${PRODUCT_NAME}: could not restart the Host after an update error`)
     }).then(() => { throw error })
   }
-  const install = ({ restart = true } = {}) => {
+  const install = () => {
     if (installing) return installing
     if (launchFailure) return launchFailure
     const { phase, version } = holder.state()
@@ -263,7 +264,7 @@ export function watchUpdates({ updater, beforeInstall, beforeLaunch, onInstallFa
         await beforeInstall()
         await beforeLaunch?.(version)
         launching = true
-        updater.quitAndInstall(true, restart)
+        updater.quitAndInstall(true, true)
         if (launchFailure) await launchFailure
       } catch (error) {
         if (holder.state().phase === 'installing') await failedInstall(version, error)

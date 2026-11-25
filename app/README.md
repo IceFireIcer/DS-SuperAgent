@@ -24,7 +24,7 @@ npm installs `ds-superagent` from `../superagent` as a copy of its package files
 | Variable | What it sets | Default |
 |---|---|---|
 | `DS_SUPERAGENT_HOME` | The outer data location. Its `superagent` folder holds the product profile. This override skips first run folder selection | The folder chosen at the first start |
-| `DS_SUPERAGENT_WORKSPACE` | With `DS_SUPERAGENT_HOME`, the initial product workspace | `superagent/workspace` in the data location |
+| `DS_SUPERAGENT_WORKSPACE` | An explicitly selected product workspace; without it the app starts Main with no project | None |
 | `DS_SUPERAGENT_SHELL_DATA` | Window settings, Chromium storage, browser logins and `locations.json` | `DS SuperAgent` in Electron's app data folder, or `desktop/` under an explicit `DS_SUPERAGENT_HOME` |
 | `DS_SUPERAGENT_UPDATE_URL` | A test feed that overrides the GitHub release lookup (see [Updates](#updates)) | The newest DS SuperAgent release |
 
@@ -42,21 +42,23 @@ From the repository root, run in PowerShell (Node.js 24.9+ within the Node.js 24
 The launcher builds `ds-superagent`, installs dependencies when they change, refreshes the app's copy of the package when its source changes, and starts the desktop app. The first run downloads dependencies and Electron; later runs reuse them. Configure real model providers in the app's Settings.
 
 Data persists across starts under the gitignored `.ds-superagent-local/` in the repository: `data/` holds the product
-profile, model settings, credentials and business store; `workspace` holds Main and Worker files; `shell/` holds
-window and browser storage. The launcher does not clear these folders or read the user's old team. Back up this
+profile, model settings, credentials and business store; `shell/` holds window and browser storage. The launcher
+does not create a project. The launcher does not clear these folders or read the user's old team. Back up this
 directory before removing the checkout. Close the app before updating dependencies or launching changed source.
 
-Use `.\start.ps1 -DataRoot <folder>` for a different data root (relative paths are resolved against the repository root). The launcher always uses `data/`, `workspace` and `shell/` inside that root. It does not use the installed app's data or the user's `~/.dsh`. `-PrepareOnly` installs and builds without opening a window. If script execution is blocked, use `pwsh -NoProfile -ExecutionPolicy Bypass -File .\start.ps1`; this applies only to that process.
+Use `.\start.ps1 -DataRoot <folder>` for a different data root (relative paths are resolved against the repository root). The launcher uses `data/` and `shell/` inside that root and starts without a project. It does not use the installed app's data or the user's `~/.dsh`. `-PrepareOnly` installs and builds without opening a window. If script execution is blocked, use `pwsh -NoProfile -ExecutionPolicy Bypass -File .\start.ps1`; this applies only to that process.
 
 ## First start
 
-At its first start the app asks for a data location (`~/.ds-superagent` by default) and workspace (`~/DS SuperAgent`).
-It checks that both can be written and offers to change a location if it fails. The choices go into the app's own
-`locations.json`. Keep the folders outside each other, the program folder, personal DSH data and data from previous product installs.
+At its first start the app asks only for a data location (`~/.ds-superagent` by default). It checks that the location
+can be written and offers to change it if it fails. The choice goes into the app's own `locations.json`. No default
+project or working folder is created; Main is usable immediately, and Router and Worker start only after the user
+creates a project and selects its folder. Keep the data folder outside the program folder, personal DSH data and data
+from previous product installs.
 The startup window stays up while the Host starts and closes once the local product page loads.
 
-Use **Desktop locations** in the tray to review both paths and move the data folder. Change the default workspace in
-**Settings → General → Work directories**. The app names the user's DSH data to the
+Use **Desktop locations** in the tray to review the data path and move the data folder. Create projects and choose
+their work directories in the product. The app names the user's DSH data to the
 product (`DS_SUPERAGENT_USER_DSH_HOME`), so neither the workspace nor an execution directory can be set there. The data
 location moves through the app (`src/move-data.mjs`): the new folder must be empty or new and apart from the old
 data, the workspace, the desktop settings, the user's DSH data and the program folder. The app stops the Host, copies the data into a
@@ -135,17 +137,17 @@ Linux gets an AppImage and a deb for Debian/Ubuntu. An AppImage mounts through F
 
 ## Updates
 
-The installed app on Windows updates itself with electron-updater (`src/updates.mjs`), and so does an AppImage on Linux (`APPIMAGE` is set then). At its start and every 4 hours it reads `latest.yml` (Windows) or `latest-linux.yml` (AppImage) of the newest GitHub release, which names the installer and its sha512. It downloads that installer in the background and checks its sha512. When the download is done, a dialog on the window asks whether to restart now: then the app stops its Host and runs the installer, which opens the app again. Otherwise the installer runs when the app quits.
+The installed app on Windows updates itself with electron-updater (`src/updates.mjs`), and so does an AppImage on Linux (`APPIMAGE` is set then). At its start and every 4 hours it reads `latest.yml` (Windows) or `latest-linux.yml` (AppImage) of the newest GitHub release, which names the installer and its sha512. It downloads that installer in the background and checks its sha512. When the download is done, a dialog on the window names the candidate version and asks whether to restart now. Only the explicit **Restart now** answer, or **Install and restart** in Settings, stops the Host, writes the restorable backup and runs the installer. **Later**, dismissing the dialog or quitting the app leaves the current version installed; installation remains an explicit choice.
 
 The checks start before the Host, so that a version whose Host does not start can still update. When the start
-fails, the app waits up to 15 seconds for the newest check. When it found a newer version, the error box says so;
-after the box the app waits for the download, then installs it and opens again.
+fails, the app waits up to 15 seconds for the newest check. When it found a newer version, the error box names it.
+It is not installed automatically; the user can retry the Host and then explicitly install it from Settings.
 
 On macOS, the app checks GitHub's releases at start and every 4 hours. It asks once per version, after that release's zip for this Mac is attached. A Linux deb waits for the `linux-amd64` deb (Debian's name for x64). Stable installs ignore prereleases. Download opens the release page for manual installation. `DS_SUPERAGENT_UPDATE_URL` on macOS and for a deb points to a JSON list like the `releases` API response. A release needs `tag_name`, an HTTPS `html_url`, and the machine's package in `assets`.
 
 On Windows and for an AppImage, `app-update.yml` tells the app where its releases are; `npm run dist` writes it from `publish` in `electron-builder.yml`, together with `latest.yml` / `latest-linux.yml` beside the installer (`npm run pack` writes neither). Neither command publishes. The release workflow (`.github/workflows/release.yml`) builds the packages when a release is published and attaches the Windows installer with its `.blockmap` and `latest.yml`, the AppImage with its `.blockmap`, the deb and `latest-linux.yml` to the release. The release tag is the version of `ds-superagent`, and `npm test` checks that the app has the same version. The macOS release job builds each zip on a matching-architecture runner and attaches only the zip.
 
-On throwaway folders (`DS_SUPERAGENT_HOME`) the app checks for updates only from `DS_SUPERAGENT_UPDATE_URL`. Any downloaded update waits until the app quits. `scripts/check-update.mjs` checks the update of a packaged app with such a feed:
+On throwaway folders (`DS_SUPERAGENT_HOME`) the app checks for updates only from `DS_SUPERAGENT_UPDATE_URL`. A downloaded update still waits for an explicit install. `scripts/check-update.mjs` checks the update of a packaged app with such a feed:
 
 ```sh
 npx electron-builder --publish never -c.extraMetadata.version=<next version> -c.directories.output=dist-next   # the feed
@@ -153,7 +155,7 @@ node scripts/check-update.mjs "dist-pack/win-unpacked/DS SuperAgent.exe" dist-ne
 node scripts/check-update.mjs ./ds-superagent.AppImage dist-next --kill                    # a Linux AppImage (latest-linux.yml)
 ```
 
-It serves the feed folder, runs the app on throwaway folders and waits for the update download and its SHA-512 check. Use `--kill` to end the check before installation on your machine. The desktop package workflow runs the install step on disposable runners and checks the updated program.
+It serves the feed folder, runs the app on throwaway folders and waits for the update download and its SHA-512 check. Without `--kill`, the check requests the explicit Settings install, waits for the app to exit, then leaves the installer to run. Use `--kill` to end the check before installation on your machine. The desktop package workflow runs the install step on disposable runners and checks the updated program.
 
 On macOS and for a Linux deb, pass the app executable and a version to mock a newer release:
 
@@ -223,7 +225,7 @@ stay where the Host keeps them; the profile file is the only file the upgrade re
 | `src/host.mjs` | Boots the single product profile with `runProfile()`, verifies its public services and reports the launch URL |
 | `src/profile.mjs` | The one `ds-superagent` profile, its bundles and retired-bundle cleanup |
 | `src/dsh-home.mjs` | Resolves the user's DSH home for read-only path isolation checks |
-| `src/first-run.mjs` | The first start's data and workspace dialogs plus data-move copy |
+| `src/first-run.mjs` | The first start's data dialog plus saved-location checks |
 | `src/move-data.mjs` | The move of the data location: which folders can take it, and the copy through a staging folder |
 | `src/updates.mjs` | The self-updates (Windows installer, Linux AppImage) and the release-page checks (macOS, Linux deb) |
 | `test/` | `npm test`: the composition of the profile, the dependencies that the package needs, and the window and the tray (the main process runs there with the Electron parts as test doubles, in `test/helpers/`) |
