@@ -3,8 +3,7 @@ import { CoreError, identifier, triggerDeliveryTarget, type DesktopSource, type 
 import type { AsyncTx, Storage } from './storage.js'
 import type { SourceEvent, SourceEvents } from './source-events.js'
 import type { EffectRequest } from './effects.js'
-
-const pathGrantOperationOrder = ['read', 'write', 'search', 'command'] as const
+import { mergePathGrants } from './path-grants.js'
 
 export interface ThreadSubscription {
   id: string
@@ -396,6 +395,28 @@ export class WorkInputs {
     return input
   }
 
+  async applyAttentionPathGrants(tx: AsyncTx, request: { ticketId: string; directionVersion: number;
+    previousDirectionVersion: number; grants?: PathGrant[] }) {
+    identifier(request.ticketId, 'ticketId')
+    if (!Number.isSafeInteger(request.directionVersion) || request.directionVersion < 1
+      || !Number.isSafeInteger(request.previousDirectionVersion) || request.previousDirectionVersion < 1) {
+      throw new CoreError('INVALID_INPUT', 'An Attention path grant needs valid Ticket direction versions.')
+    }
+    const ticket = await tx.get<Work['ticket']>('ticket', request.ticketId)
+    const trigger = ticket && await tx.get<Work['trigger']>('trigger', ticket.triggerId)
+    if (!ticket || !trigger) throw new CoreError('NOT_FOUND', 'The Attention Ticket trigger is missing.')
+    const current = trigger.pathGrantVersion === request.previousDirectionVersion ? trigger.pathGrants : undefined
+    const grants = mergePathGrants(current, request.grants ?? [])
+    if (!grants.length) return []
+    trigger.pathGrants = grants
+    trigger.pathGrantVersion = request.directionVersion
+    await tx.replace('trigger', ticket.triggerId, trigger)
+    const link = await tx.get<{ workBriefId: string }>('work-ticket', ticket.id)
+    const brief = link ? await tx.get<{ pathGrants?: PathGrant[] }>('work-brief', link.workBriefId) : undefined
+    if (brief) await tx.replace('work-brief', link!.workBriefId, { ...brief, pathGrants: structuredClone(grants) })
+    return grants
+  }
+
   /**
    * A Main-owned follow-up may continue only the exact original Ticket and Session.
    * Waiting and stop remain constraints; a naturally ended Ticket requires a new recovery decision.
@@ -435,18 +456,7 @@ export class WorkInputs {
     if (!trigger) throw new CoreError('INCOMPLETE_STATE', 'The Main follow-up Ticket trigger is missing.')
     const nextDirectionVersion = directionVersion + 1
     if (request.pathGrants?.length) {
-      const grantKey = (path: string) => process.platform === 'win32' ? path.toLowerCase() : path
-      const grants = new Map((trigger.pathGrants ?? []).map(grant =>
-        [grantKey(grant.path), { path: grant.path, operations: new Set(grant.operations) }]))
-      for (const grant of request.pathGrants) {
-        const key = grantKey(grant.path)
-        const current = grants.get(key)
-        const operations = current?.operations ?? new Set()
-        for (const operation of grant.operations) operations.add(operation)
-        grants.set(key, { path: current?.path ?? grant.path, operations })
-      }
-      trigger.pathGrants = [...grants.values()].map(grant => ({ path: grant.path,
-        operations: pathGrantOperationOrder.filter(operation => grant.operations.has(operation)) }))
+      trigger.pathGrants = mergePathGrants(trigger.pathGrants, request.pathGrants)
       trigger.pathGrantVersion = nextDirectionVersion
       await tx.replace('trigger', ticket.triggerId, trigger)
       const link = await tx.get<{ workBriefId: string }>('work-ticket', ticket.id)

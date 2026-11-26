@@ -3,6 +3,7 @@ import { CoreError, type PathGrant, type PathGrantOperation } from './model.js'
 import { protectedPath } from './path-safety.js'
 
 const pathGrantOperations: readonly PathGrantOperation[] = ['read', 'write', 'search', 'command']
+const pathKey = (path: string) => process.platform === 'win32' ? path.toLowerCase() : path
 
 export function normalizePathGrants(value: unknown): PathGrant[] | undefined {
   if (value === undefined) return undefined
@@ -23,7 +24,7 @@ export function normalizePathGrants(value: unknown): PathGrant[] | undefined {
       throw new CoreError('INVALID_INPUT', 'A path grant needs one absolute path of at most 1024 bytes.')
     }
     const path = resolve(record.path)
-    const key = process.platform === 'win32' ? path.toLowerCase() : path
+    const key = pathKey(path)
     if (protectedPath(path) || paths.has(key)) {
       throw new CoreError('INVALID_INPUT', 'Path grants cannot repeat paths or include protected locations.')
     }
@@ -38,4 +39,18 @@ export function normalizePathGrants(value: unknown): PathGrant[] | undefined {
     const operations = pathGrantOperations.filter(operation => requested.includes(operation))
     return { path, operations: [...operations] }
   })
+}
+
+export function mergePathGrants(existing: readonly PathGrant[] | undefined, added: readonly PathGrant[]): PathGrant[] {
+  const paths = new Map((existing ?? []).map(grant =>
+    [pathKey(grant.path), { path: grant.path, operations: new Set(grant.operations) }]))
+  for (const grant of added) {
+    const key = pathKey(grant.path)
+    const current = paths.get(key)
+    const operations = current?.operations ?? new Set<PathGrantOperation>()
+    for (const operation of grant.operations) operations.add(operation)
+    paths.set(key, { path: current?.path ?? grant.path, operations })
+  }
+  return [...paths.values()].map(grant => ({ path: grant.path,
+    operations: pathGrantOperations.filter(operation => grant.operations.has(operation)) }))
 }

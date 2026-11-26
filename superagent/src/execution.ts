@@ -28,6 +28,7 @@ import { environmentHandoffPrompt, handoffCopyBlockers, isEnvironmentHandoffActi
 import { assertHostTakeoverSettled, hostTakeoverKey, isHostTakeoverPending, loadHostTakeover, type HostTakeoverBlocker, type HostTakeoverRecord,
   type HostTakeoverTicket } from './host-takeover.js'
 import { assertReferenceShape, type EnvironmentAssetReference } from './environment-assets.js'
+import { normalizePathGrants } from './path-grants.js'
 import { mainResultReply, type MainWorkBrief, type MainWorkItem } from './work-delegation.js'
 import { resolveProductAttachments } from './product-attachments.js'
 import { workerMcpName, workerMcpTool, type WorkerMcpBinding } from './worker-mcp-tool.js'
@@ -1785,16 +1786,31 @@ export class Execution {
       }] : []),
       {
         name: 'ask_human',
-        description: 'Ask one concise structured question when a human decision is required. Consequential or ambiguous actions must wait for an authorized answer. When a path or operation is outside this task\'s grants, name the exact path and operation and ask Main to obtain explicit user authorization; never infer it.',
-        parameters: { question: { type: 'string' as const, required: true as const }, options: { type: 'string' as const, required: true as const } },
+        description: 'Ask one concise structured question when a human decision is required. Consequential or ambiguous actions must wait for an authorized answer. When a path or operation is outside this task\'s grants, name the exact path and operation and ask Main to obtain explicit user authorization; never infer it. Set pathGrants to a JSON array of exact {path, operations} entries to add a fixed approval choice; access applies only when the user answers that choice.',
+        parameters: { question: { type: 'string' as const, required: true as const }, options: { type: 'string' as const, required: true as const },
+          pathGrants: { type: 'string' as const } },
         execute: async (args: Record<string, string>) => {
           if (reported || askedAttention) throw new CoreError('ATTENTION_ACTIVE', 'The Worker turn has already completed or asked a question.')
           const options = (args.options ?? '').split('\n').map(option => option.trim()).filter(Boolean)
+          let pathGrants: PathGrant[] | undefined
+          if (args.pathGrants?.trim()) {
+            if (environment?.kind !== 'local') throw new CoreError('PATH_DENIED', 'Task path access can be requested only from a local Environment.')
+            if (Buffer.byteLength(args.pathGrants) > 8192) throw new CoreError('INVALID_INPUT', 'A path access question is too large.')
+            let requested: unknown
+            try { requested = JSON.parse(args.pathGrants) }
+            catch { throw new CoreError('INVALID_INPUT', 'Path grants must be a JSON array of exact paths and operations.') }
+            pathGrants = normalizePathGrants(requested)
+            if (!pathGrants?.length) throw new CoreError('INVALID_INPUT', 'A path access question needs at least one grant.')
+          }
+          const question = pathGrants
+            ? `${args.question ?? ''}\n\nRequested access for this task:\n${pathGrants.map(grant =>
+              `${grant.operations.join(', ')}: ${grant.path}`).join('\n')}`
+            : args.question ?? ''
           askedAttention = await this.storage.transaction(this.instanceId, async transaction => {
             const current = await transaction.get<Assignment>('assignment', ticketId)
             if (current?.id !== assignment.id || current.state !== 'running') throw new CoreError('STALE_ASSIGNMENT', 'The asking Assignment is no longer current.')
             const attention = await this.attentions.ask(transaction, { ticketId, assignmentId: assignment.id, sessionId: assignment.sessionId,
-              question: args.question ?? '', options, ...(input ? { input } : {}) })
+              question, options, ...(input ? { input } : {}), ...(pathGrants ? { pathGrants } : {}) })
             if (input) await this.inputs.completeDelivery(transaction, input.id, 'attention')
             return attention
           })

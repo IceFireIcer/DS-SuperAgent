@@ -1,11 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { CoreError, identifier, triggerDeliveryTarget, type Work } from './model.js'
+import { CoreError, identifier, triggerDeliveryTarget, type PathGrant, type Work } from './model.js'
 import type { AsyncTx, Storage } from './storage.js'
 import type { SourceEvent, SourceEvents } from './source-events.js'
 import type { Effects } from './effects.js'
 import type { WorkInput, WorkInputs } from './work-inputs.js'
 import type { Deliveries } from './deliveries.js'
 import type { ProductViewAnswer, ProductViewCard } from './product-views.js'
+import { normalizePathGrants } from './path-grants.js'
 
 export interface Attention {
   id: string
@@ -27,6 +28,8 @@ export interface Attention {
   answerView?: ProductViewAnswer
   answerCommandId?: string
   answerSourceEventId?: string
+  requestedPathGrants?: PathGrant[]
+  approvedPathGrants?: PathGrant[]
   supersededAt?: number
   supersededBy?: string
 }
@@ -35,6 +38,7 @@ interface AttentionHead { attentionId: string }
 
 const headKey = (ticketId: string) => JSON.stringify(['attention-head', ticketId])
 const historyPrefix = (ticketId: string) => JSON.stringify(['attention', createHash('sha256').update(ticketId).digest('hex')])
+export const attentionPathApproval = 'Allow this path access'
 
 export class Attentions {
   constructor(
@@ -47,15 +51,19 @@ export class Attentions {
     private readonly now: () => number = Date.now,
   ) {}
 
-  ask(tx: AsyncTx, request: { ticketId: string; assignmentId: string; sessionId: string; question: string; options: string[]; input?: WorkInput }) {
-    return this.create(tx, request)
+  ask(tx: AsyncTx, request: { ticketId: string; assignmentId: string; sessionId: string; question: string; options: string[];
+    input?: WorkInput; pathGrants?: PathGrant[] }) {
+    const pathGrants = normalizePathGrants(request.pathGrants)
+    return this.create(tx, { ...request, ...(pathGrants ? { pathGrants } : {}),
+      options: pathGrants ? [...request.options, attentionPathApproval] : request.options })
   }
 
   askView(tx: AsyncTx, request: { ticketId: string; assignmentId: string; sessionId: string; title: string; view: ProductViewCard; input?: WorkInput }) {
     return this.create(tx, { ...request, question: request.title ? `View: ${request.title}` : 'View card', options: [], view: request.view })
   }
 
-  private async create(tx: AsyncTx, request: { ticketId: string; assignmentId: string; sessionId: string; question: string; options: string[]; input?: WorkInput; view?: ProductViewCard }) {
+  private async create(tx: AsyncTx, request: { ticketId: string; assignmentId: string; sessionId: string; question: string;
+    options: string[]; input?: WorkInput; view?: ProductViewCard; pathGrants?: PathGrant[] }) {
     identifier(request.ticketId, 'ticketId'); identifier(request.assignmentId, 'assignmentId'); identifier(request.sessionId, 'sessionId')
     if (!request.question.trim() || Buffer.byteLength(request.question) > 4096) throw new CoreError('INVALID_INPUT', 'A human question needs bounded nonempty text.')
     if (!Array.isArray(request.options) || request.options.length > 10 || request.options.some(option => !option.trim() || Buffer.byteLength(option) > 512)) throw new CoreError('INVALID_ATTENTION', 'Attention options must contain at most ten bounded labels.')
@@ -83,7 +91,8 @@ export class Attentions {
       const options = [...new Set(request.options.map(option => option.trim()).filter(Boolean))]
       if (previous?.status === 'waiting' && previous.question.trim() === request.question.trim()
         && previous.options.length === options.length && previous.options.every((option, index) => option === options[index])
-        && JSON.stringify(previous.view ?? null) === JSON.stringify(request.view ?? null)) {
+        && JSON.stringify(previous.view ?? null) === JSON.stringify(request.view ?? null)
+        && JSON.stringify(previous.requestedPathGrants ?? null) === JSON.stringify(request.pathGrants ?? null)) {
         return previous
       }
       if (previous?.status === 'waiting') await tx.replace('attention', previous.id, { ...previous, status: 'superseded', supersededAt: this.now(), supersededBy: id })
@@ -92,6 +101,7 @@ export class Attentions {
       question: request.question, options: [...new Set(request.options.map(option => option.trim()).filter(Boolean))], destination,
       ...(inputEvent || originalEvent ? { questionSourceEventId: inputEvent?.id ?? originalEvent!.id } : {}), status: 'waiting', sequence, createdAt: this.now() }
     if (request.view) attention.view = structuredClone(request.view)
+    if (request.pathGrants?.length) attention.requestedPathGrants = structuredClone(request.pathGrants)
     await tx.insert('attention', id, attention)
     if (!await tx.replace('attention-head', headKey(request.ticketId), { attentionId: id })) await tx.insert('attention-head', headKey(request.ticketId), { attentionId: id })
     await tx.replace('ticket', ticket.id, { ...ticket, constraint: { kind: 'waiting-human', attentionId: id, reason: request.question } })
@@ -129,10 +139,15 @@ export class Attentions {
     const input = await this.inputs.attachSyntheticInput(tx, { ticketId: request.ticketId, sourceEventId: answerEventId,
       threadId: attention.destination.threadId ?? '__attention__', text: request.text, authorId: request.actorId,
       reason: `Answer to ${attention.id}`, dispatch: true })
+    const approvedPathGrants = request.text.trim() === attentionPathApproval ? attention.requestedPathGrants : undefined
+    const retainedPathGrants = await this.inputs.applyAttentionPathGrants(tx, { ticketId: request.ticketId,
+      directionVersion: input.directionVersion, previousDirectionVersion: input.directionVersion - 1,
+      ...(approvedPathGrants ? { grants: approvedPathGrants } : {}) })
     const answeredAt = this.now()
     const answered: Attention = { ...attention, status: 'answered', answeredAt, answeredBy: request.actorId, answerText: request.text,
       answerCommandId: request.commandId, answerSourceEventId: answerEventId,
-      ...(request.viewAnswer ? { answerView: structuredClone(request.viewAnswer) } : {}) }
+      ...(request.viewAnswer ? { answerView: structuredClone(request.viewAnswer) } : {}),
+      ...(approvedPathGrants && retainedPathGrants?.length ? { approvedPathGrants: structuredClone(retainedPathGrants) } : {}) }
     await tx.replace('attention', attention.id, answered)
     const updatedTicket = (await tx.get<Work['ticket']>('ticket', request.ticketId))!
     const { constraint: _constraint, ...openTicket } = updatedTicket

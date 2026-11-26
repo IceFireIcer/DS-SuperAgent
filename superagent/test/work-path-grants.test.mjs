@@ -208,3 +208,133 @@ test('delegated path grants are Ticket-scoped, operation-specific and expire on 
   assert.deepEqual(afterFollowUpTrigger.pathGrants, [{ path: externalFile, operations: ['read', 'write'] }])
   assert.equal(await readFile(externalFile, 'utf8'), 'outside the project\nauthorized write\n')
 })
+
+test('a waiting Worker can obtain and use a path grant from the exact approval answer', { timeout: 60_000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ds-superagent-attention-path-grant-'))
+  const root = join(directory, 'workspace')
+  const external = join(directory, 'external')
+  await mkdir(root)
+  await mkdir(external)
+  const externalFile = join(external, 'note.txt')
+  await writeFile(externalFile, 'readable\n')
+  function* respond(options) {
+    if (options.model === 'main') {
+      const text = lastUserText(options)
+      if (text.startsWith('[Work update]')) {
+        yield* textResponse('Work update received.')
+        return
+      }
+      if (completedToolCount(options) === 0) {
+        yield* toolResponse('delegate_work', {
+          goal: 'Request write access after reading the granted note.',
+          constraints: 'Ask for the exact missing write operation while the original Ticket waits; do not create another Ticket.',
+          acceptanceCriteria: 'Only the exact approval grants write access; the original Ticket waits for the answer.',
+          pathGrants: [{ path: externalFile, operations: ['read'] }],
+        })
+      } else yield* textResponse('Work accepted.')
+      return
+    }
+    if (options.model === 'router') {
+      yield* routerResponse(options)
+      return
+    }
+    const text = lastUserText(options)
+    const calls = completedToolCount(options)
+    if (text.includes('Request write access after reading the granted note.')) {
+      if (calls === 0) yield* toolResponse('read_file', { path: externalFile }, 'ask-path-read')
+      else if (calls === 1) yield* toolResponse('ask_human', {
+        question: 'The external note is readable. Allow write access for this same task?',
+        options: 'Not now',
+        pathGrants: JSON.stringify([{ path: externalFile, operations: ['write'] }]),
+      }, 'ask-path-write')
+      else yield* textResponse('Waiting for the exact path decision.')
+      return
+    }
+    if (text === 'Not now') {
+      if (calls === 0) yield* toolResponse('write_file', { path: externalFile, text: 'refused write\n' }, 'refused-path-write')
+      else if (calls === 1) yield* toolResponse('read_file', { path: externalFile }, 'refused-path-read-authorized')
+      else if (calls === 2) yield* toolResponse('write_file', { path: 'after-refusal.txt', text: 'unrelated work continued\n' },
+        'refused-path-local-write')
+      else if (calls === 3) yield* toolResponse('read_file', { path: 'after-refusal.txt' }, 'refused-path-local-read')
+      else if (calls === 4) yield* toolResponse('ask_human', {
+        question: 'The refused write is still blocked. Allow the exact write operation now?',
+        options: 'Keep blocked',
+        pathGrants: JSON.stringify([{ path: externalFile, operations: ['write'] }]),
+      }, 'ask-path-write-after-refusal')
+      else yield* textResponse('Waiting for the exact path decision.')
+      return
+    }
+    if (text === 'Allow this path access') {
+      const approved = [
+        ['write_file', { path: externalFile, text: 'readable\napproved write\n' }],
+        ['read_file', { path: externalFile }],
+        ['report_ready', { result: 'The approved external write completed in the original Ticket.',
+          evidence: 'The exact approval answer added write access, then the write and read-back succeeded.',
+          artifacts: externalFile }],
+      ][calls]
+      yield* approved ? toolResponse(approved[0], approved[1], `approved-path-${calls}`) : textResponse('Approved path work done.')
+      return
+    }
+    yield* textResponse('Waiting or complete.')
+  }
+
+  const environment = await LocalEnvironment.open({ id: 'product-workspace', instanceId: 'personal', root,
+    allowedActorIds: ['alice'], permissions: ['read', 'write', 'search'], commands: {} })
+  const native = await nativeContext(join(directory, 'sessions'), respond)
+  const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  const sessions = new NativeSessions(native, {
+    main: { provider: 'mock', model: 'main' }, router: { provider: 'mock', model: 'router' },
+    worker: { provider: 'mock', model: 'worker' },
+  })
+  const engine = new Engine(storage, 'personal', { sourceInstanceId: 'product-desktop', actorId: 'alice', allowedActorIds: ['alice'] },
+    { scanIntervalMs: 10, retryDelayMs: 10 }, sessions, [environment])
+  t.after(async () => {
+    await engine.effects.stop(); await engine.shutdown(); await sessions.close(); await native.fiber.dispose()
+    await environment.close(); await storage.close(); await rm(directory, { recursive: true, force: true })
+  })
+
+  await engine.openMain({ instanceId: 'personal' })
+  engine.effects.start()
+  await engine.sendMainMessage({ instanceId: 'personal', commandId: 'waiting-path-grant',
+    text: 'Read the external note, then ask me before writing to it.' })
+  await until(async () => (await engine.getMainConversation({ instanceId: 'personal' })).works?.[0]?.control?.attention?.status === 'waiting',
+    'the first path approval question')
+  let history = await engine.getMainConversation({ instanceId: 'personal' })
+  const work = history.works[0]
+  const ticketId = work.receipt.ticketId
+  let conversation = await engine.conversation(ticketId)
+  assert.equal(conversation.attention.options.at(-1), 'Allow this path access')
+  assert.match(conversation.attention.question, /write:/u)
+  assert.match(conversation.attention.question, /note\.txt/u)
+
+  await engine.answerMainAttention({ instanceId: 'personal', commandId: 'deny-path-write',
+    workItemId: work.brief.workItemId, ticketId, expectedGeneration: conversation.assignments[0].generation,
+    attentionId: conversation.attention.id, attentionVersion: conversation.attention.sequence, text: 'Not now' })
+  await until(async () => (await engine.conversation(ticketId)).attention?.sequence === 2,
+    'the second path approval question')
+  let storedTicket = await storage.transaction('personal', tx => tx.get('ticket', ticketId))
+  let storedTrigger = await storage.transaction('personal', tx => tx.get('trigger', storedTicket.triggerId))
+  assert.equal(storedTicket.directionVersion, 2)
+  assert.equal(storedTrigger.pathGrantVersion, 2)
+  assert.deepEqual(storedTrigger.pathGrants, [{ path: externalFile, operations: ['read'] }])
+  assert.equal(await readFile(externalFile, 'utf8'), 'readable\n')
+  assert.equal(await readFile(join(root, 'after-refusal.txt'), 'utf8'), 'unrelated work continued\n')
+  conversation = await engine.conversation(ticketId)
+
+  await engine.answerMainAttention({ instanceId: 'personal', commandId: 'approve-path-write',
+    workItemId: work.brief.workItemId, ticketId, expectedGeneration: conversation.assignments[0].generation,
+    attentionId: conversation.attention.id, attentionVersion: conversation.attention.sequence, text: 'Allow this path access' })
+  await until(async () => await readFile(externalFile, 'utf8') === 'readable\napproved write\n',
+    'the approved external write')
+  await until(async () => (await engine.getMainConversation({ instanceId: 'personal' })).works?.[0]?.outcome?.status === 'success',
+    'the approved path result')
+  storedTicket = await storage.transaction('personal', tx => tx.get('ticket', ticketId))
+  storedTrigger = await storage.transaction('personal', tx => tx.get('trigger', storedTicket.triggerId))
+  assert.equal(storedTicket.directionVersion, 3)
+  assert.equal(storedTrigger.pathGrantVersion, 3)
+  assert.deepEqual(storedTrigger.pathGrants, [{ path: externalFile, operations: ['read', 'write'] }])
+  conversation = await engine.conversation(ticketId)
+  assert.deepEqual(conversation.attention.approvedPathGrants, [{ path: externalFile, operations: ['read', 'write'] }])
+  history = await engine.getMainConversation({ instanceId: 'personal' })
+  assert.deepEqual(history.works[0].brief.pathGrants, [{ path: externalFile, operations: ['read', 'write'] }])
+})
