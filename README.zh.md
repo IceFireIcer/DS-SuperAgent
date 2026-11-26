@@ -20,7 +20,7 @@ DS SuperAgent 是基于 [DeepSeek Harness](https://github.com/deepseek-ai/deepse
 <table>
 <tr>
 <td width="180" align="center"><a href="https://git.hhapi.top/register?aff=5Y7LG3DT4UHM"><img src="docs/images/sponsors/xgit.png" alt="XGit" width="120"></a></td>
-<td>XGit 是一个 AI API 网关。注册即送 0.5 元额度，电信、联通、移动三网优化，充值一比一到账。<br>立即注册：<a href="https://git.hhapi.top/register?aff=5Y7LG3DT4UHM">XGit</a></td>
+<td>XGit 是一个 AI API 网关。注册即送 0.5 元额度，电信、联通、移动三网优化，充值一比一到账 QQ群:1136413619。<br>立即注册：<a href="https://git.hhapi.top/register?aff=5Y7LG3DT4UHM">XGit</a></td>
 </tr>
 </table>
 
