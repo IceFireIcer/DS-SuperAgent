@@ -9,53 +9,76 @@
 
 English | [中文](README.zh.md)
 
-Created and maintained by [IceFireIcer](https://github.com/IceFireIcer).
+![version](https://img.shields.io/badge/version-v1.0.1-blue) ![DSH](https://img.shields.io/badge/DSH-0.2.2--rc.1-4D6BFE) ![license](https://img.shields.io/badge/license-Apache_2.0-green)
 
-![version](https://img.shields.io/badge/version-R5_preview-blue) ![DSH](https://img.shields.io/badge/DSH-0.2.2--rc.1-4D6BFE) ![license](https://img.shields.io/badge/license-Apache_2.0-green)
+DS SuperAgent is a desktop agent built on [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH).
+You talk to one assistant. When you hand it a real job, it writes the job down as a ticket, passes it to a worker,
+and brings the checked result back into the same conversation. Work survives restarts, and you can see every step.
 
-DS SuperAgent is a three-layer agent product for
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH). One **Main** stays in the conversation and
-owns user intent. A **Router** turns accepted work into durable tickets, and independent **Workers** execute those
-tickets with verified results. The existing DSH client interface presents this product directly.
+## Sponsors
 
-## What the product does
+<table>
+<tr>
+<td width="180" align="center"><a href="https://git.hhapi.top/register?aff=5Y7LG3DT4UHM"><img src="docs/images/sponsors/xgit.png" alt="XGit" width="120"></a></td>
+<td>XGit is an AI API gateway. Get ¥0.5 in free credit when you sign up, use routes optimized for China Telecom, China Unicom and China Mobile, and top up at a 1:1 rate.<br>Sign up: <a href="https://git.hhapi.top/register?aff=5Y7LG3DT4UHM">XGit</a></td>
+</tr>
+</table>
 
-- Main handles chat, follow-ups, questions, stop/resume and the result in one conversation.
-- Router and Worker Sessions are automatically discoverable but read-only in the product UI.
-- Work keeps a durable Ticket, Assignment, Session and delivery history across Host restarts and reconnects.
-- Files, Office documents, browser resources, memory, MCP tools, credentials, schedules, proactive preparation and
-  supervision are connected through explicit product commands.
-- Execution can use the local Host or a paired remote device with an explicit capability probe. The product never
-  substitutes one world silently.
-- The app keeps one `ds-superagent` DSH profile, its own data root and an existing DSH Web front end. It never writes
-  to the user's `~/.dsh`.
+## How it works
+
+| Layer | What it does |
+|---|---|
+| **Main** | Talks to you. Answers questions, accepts work, asks you when it needs a decision, and reports the result. |
+| **Router** | Turns accepted work into a durable ticket and assigns it. |
+| **Worker** | Runs the ticket in its own session and submits the result with evidence. |
+
+Main, Router and Worker are separate DSH sessions, each with its own model. You only write to Main; Router and Worker
+sessions are visible but read-only. Tickets, assignments, questions and delivery history are stored on disk, so a
+restart or reconnect continues where it stopped.
+
+Workers can use files, Office documents, the browser, memory, MCP tools, saved credentials and schedules. Work runs on
+this computer or on a paired remote device; the product never switches between them without telling you.
+
+## Install
+
+### Desktop app (Windows, macOS, Linux)
+
+The desktop app ships its own DSH, so you don't need to install DSH first. Download the file for your system from
+[Releases](https://github.com/IceFireIcer/DS-SuperAgent/releases/latest):
+
+| System | File |
+|---|---|
+| Windows x64 | `DS-SuperAgent-<version>-win-x64.exe` |
+| macOS Apple silicon | `DS-SuperAgent-<version>-mac-arm64.zip` |
+| macOS Intel | `DS-SuperAgent-<version>-mac-x64.zip` |
+| Linux x64 | `.AppImage` or `.deb` |
+
+If your system warns about an unsigned app: on Windows select **More info** → **Run anyway**; on macOS open
+**System Settings** → **Privacy & Security** and select **Open Anyway**.
+
+### First start
+
+1. Choose a data folder. The default is `~/.ds-superagent`.
+2. Open **Settings** → **Models**, add a provider and its API key, then pick a model for Main, Router and Worker.
+3. Chat with Main right away. Before you hand over work, create a project and choose its folder; Router and Worker
+   stay idle until a project exists.
+
+The app keeps all its data in its own folder. It never writes to your personal `~/.dsh`, and it leaves data from
+older installs where it is.
+
+### Docker (NAS, Linux server)
+
+See [`docker/README.md`](docker/README.md).
 
 ## Connect a phone
 
-The [Expo companion](mobile/README.md) connects to Main through an encrypted relay. Pairing is read-only unless the
-computer explicitly grants message sending. The phone cannot manage desktop controls, credentials or files.
-Build the companion from source; this repository does not provide a mobile store release.
+The [Expo companion](mobile/README.md) connects to Main through an end-to-end encrypted relay. A new pairing can only
+read; sending messages needs explicit permission on the computer. The phone cannot change desktop settings,
+credentials or files. There is no app store release yet; build it from source.
 
-## Run the desktop app
+## Run from source
 
-The [desktop packages](app/README.md) install **DS SuperAgent** on Windows, macOS and Linux. On Windows you can also launch from source:
-
-```powershell
-.\start.ps1
-```
-
-The first start asks only for a data location, defaulting to `~/.ds-superagent`, then opens Main without creating a
-project or working folder. Create a project and choose its folder before delegating work; Router and Worker stay idle
-until then. In Settings, configure the provider credentials and select models for Main, Router and Worker. The desktop
-app works independently of the phone companion and uses its own browser storage keys and data folders. Data from
-previous product installs and personal DSH files stay in their original locations.
-
-See the [release checklist](docs/dev/release-checklist.md) for desktop release requirements and the
-[desktop migration record](docs/superagent/implementation/dsbot-port-162-164.md) for the status of Windows verification.
-
-## Run from this checkout
-
-Use Node.js 24.9 or later within the Node.js 24 series. The app installs the single `ds-superagent` product package from this repository:
+Requires Node.js 24.9 or later in the 24 series.
 
 ```powershell
 npm --prefix superagent ci
@@ -64,43 +87,42 @@ npm --prefix app ci
 npm --prefix app start
 ```
 
-For a DSH profile without the Electron shell, link [`superagent/`](superagent/README.md) and list
-`@deepseek-ai/dsh-base`, `@deepseek-ai/dsh-web-app` and `ds-superagent` as profile bundles.
+On Windows, `.\start.ps1` does the same in one step. Details, environment variables and packaging are in
+[`app/README.md`](app/README.md).
 
-## Validate
+To use the package in your own DSH profile without the desktop app, link [`superagent/`](superagent/README.md) and
+list `@deepseek-ai/dsh-base`, `@deepseek-ai/dsh-web-app` and `ds-superagent` as profile bundles.
 
-The repository uses targeted checks for a changed area:
+## Development
+
+Run checks for the package you changed:
 
 ```powershell
 npm --prefix superagent run typecheck
 npm --prefix superagent run build
-npm --prefix superagent run test:client
+npm --prefix superagent test
 npm --prefix superagent run lint
 npm --prefix app test
+node app/scripts/check-superagent-profile.mjs   # boots the real profile on throwaway data
 ```
 
-The product profile check boots the real package assembly on throwaway data:
+Tests use the mock model in `superagent/dsh/dev/mock-llm.mjs` and need no API key. Read
+[CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request, and [docs/vision.md](docs/vision.md) for the
+product direction.
 
-```powershell
-node app/scripts/check-superagent-profile.mjs
-```
-
-Real model, Feishu tenant, second-device, hosted PostgreSQL and full four-goal acceptance remain separate environment
-gates. Mock UI or unit results do not replace those checks.
-
-## Repository layout
-
-| Directory | Purpose |
+| Directory | Contents |
 |---|---|
-| `superagent/` | The single DSH package: Engine, durable business store, Host, product HTTP bridge, existing client UI, Office tools and web-search provider |
-| `app/` | Electron shell, single product profile, data isolation, process lifecycle and packaging |
-| `mobile/` | Expo companion for pairing, Main chat and read-only work status |
-| `docs/superagent/` | R5 specification, implementation records and environment evidence |
+| `superagent/` | The `ds-superagent` DSH package: Engine, Host, persistence, client UI, Office tools and web search |
+| `app/` | Electron desktop app: product profile, data isolation, lifecycle and packaging |
+| `mobile/` | Expo phone companion |
+| `docker/` | Docker image for NAS and servers |
+| `docs/` | Vision, designs, specifications and release records |
 
-R5-34 removed the former roster, group/round, peer-agent, team governance, native-history, activation/reversal and
-dual-profile paths. The existing client and Office/web-search capabilities now live in the `dsh/` part of `ds-superagent`; this repository
-does not ship a second renderer, standalone app engine or separate DSH plugin.
+## Disclaimer
+
+DS SuperAgent is an independent community project. It is not an official DeepSeek product and is not affiliated with,
+endorsed by or sponsored by DeepSeek. "DeepSeek" and "DeepSeek Harness" are trademarks of their owners.
 
 ## License
 
-[Apache-2.0](LICENSE)
+[Apache-2.0](LICENSE). Created and maintained by [IceFireIcer](https://github.com/IceFireIcer).
