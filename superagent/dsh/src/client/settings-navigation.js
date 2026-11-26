@@ -15,7 +15,7 @@ export const SETTINGS_GROUPS = [
     { id: 'presets', label: 'Agent presets' },
     { id: 'built-in-plugins', label: 'Built-in plugins' },
   ] },
-  { id: 'team', label: 'Team', icon: 'team', pages: [
+  { id: 'roles', label: 'Roles', icon: 'roles', pages: [
     { id: 'roles', label: 'Roles' },
     { id: 'memory', label: 'Memory' },
   ] },

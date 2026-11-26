@@ -2,6 +2,7 @@ import { createElement as h, Fragment, useEffect, useRef, useState } from 'react
 import { Card, Row } from './product-card.js'
 import { DetailList, EmptyState, InlineNotice, StatGrid } from './product-settings-components.js'
 import { t } from './i18n.js'
+import { ROLE_IDS, roleName } from './roles.js'
 import { UsageHeatmap } from './usage-heatmap.js'
 
 function UsageBreakdown({ report }) {
@@ -11,14 +12,14 @@ function UsageBreakdown({ report }) {
   const rows = report.hourly ?? []
   const modelName = row => [row.provider, row.model].filter(Boolean).join('/') || 'Unknown model'
   const models = [...new Set(rows.map(modelName))].sort()
-  const owners = { main: 'Main', router: 'Router', worker: 'Worker' }
+  const owners = Object.fromEntries(ROLE_IDS.map(id => [id, roleName(id)]))
   const kinds = { conversation: 'Conversations', planning: 'Planning usage', execution: 'Work usage' }
   const selected = rows.filter(row => (!owner || row.owner === owner) && (!model || modelName(row) === model) && (!kind || row.kind === kind))
-  const select = (label, value, onChange, entries) => h('label', { className: 'bt-set-copy' }, t(label),
+  const select = (label, value, onChange, entries, format = t) => h('label', { className: 'bt-set-copy' }, t(label),
     h('select', { className: 'bt-select', value, onChange: event => onChange(event.target.value) },
-      h('option', { value: '' }, t('Any')), entries.map(([key, text]) => h('option', { value: key, key }, t(text)))))
+      h('option', { value: '' }, t('Any')), entries.map(([key, text]) => h('option', { value: key, key }, format(text)))))
   return h('div', { className: 'bt-us bt-product-usage-heatmap' },
-    h('div', { className: 'bt-product-operations-actions', role: 'group', 'aria-label': t('Activity filters') }, select('Role', owner, setOwner, Object.entries(owners)),
+    h('div', { className: 'bt-product-operations-actions', role: 'group', 'aria-label': t('Activity filters') }, select('Role', owner, setOwner, Object.entries(owners), value => value),
       select('Model', model, setModel, models.map(value => [value, value])), select('Kind', kind, setKind, Object.entries(kinds))),
     h(UsageHeatmap, { now: report.createdAt, rows: selected }))
 }
@@ -119,7 +120,7 @@ export function ProductOperationsSettings({ binding, call, onNavigate, section =
     setTimeout(() => URL.revokeObjectURL(url), 10000)
   }
   const statusRows = status ? [
-    [t('Main'), `${t({ ready: 'Main ready', running: 'Main running', degraded: 'Main degraded' }[status.main.state])}${status.main.errorCode ? ` · ${status.main.errorCode}` : ''}`],
+    [roleName('main'), `${t({ ready: 'Main ready', running: 'Main running', degraded: 'Main degraded' }[status.main.state])}${status.main.errorCode ? ` · ${status.main.errorCode}` : ''}`],
     [t('Processing'), status?.processingPaused ? t('Paused') : t('Running')],
     [t('Semantic inspection'), status?.supervision?.semanticInspection
       ? `${t(status.supervision.semanticInspection.status)}${status.supervision.semanticInspection.errorCode ? ` · ${status.supervision.semanticInspection.errorCode}` : ''}`
@@ -146,9 +147,9 @@ export function ProductOperationsSettings({ binding, call, onNavigate, section =
     showUsage && usage ? h(UsageBreakdown, { report: usage }) : null,
     showUsage && usage ? h('section', { className: 'bt-set-section bt-ps-section' }, h('h3', null, t('Token usage by role')),
       h('p', { className: 'bt-product-operations-note' }, t('Totals across all included Sessions')),
-      h(StatGrid, { columns: 3, items: ['Main', 'Router', 'Worker'].map(label => {
-        const total = usage.roles?.[label.toLowerCase()]
-        return { label: t(label), value: total?.totalTokens == null ? '—' : number(total.totalTokens), detail: usageLine(total) }
+      h(StatGrid, { columns: 3, items: ROLE_IDS.map(id => {
+        const total = usage.roles?.[id]
+        return { label: roleName(id), value: total?.totalTokens == null ? '—' : number(total.totalTokens), detail: usageLine(total) }
       }) })) : null,
     showUsage && usage ? h(UsageItems, { title: t('Work usage'), items: usage.works }) : null,
     showUsage && usage ? h(UsageItems, { title: t('Planning usage'), items: usage.planning }) : null,

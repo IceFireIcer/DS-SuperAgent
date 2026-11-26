@@ -2041,7 +2041,6 @@ var zh_tw_default = {
   "Work receipt": "接單回執",
   "Work result unknown": "結果待確認",
   "Work stop requested.": "已請求停止工作。",
-  "Worker": "執行角色",
   "Worker activity is unavailable.": "Worker 活動暫時不可用。",
   "Worker assignments included": "已纳入的 Worker 執行安排",
   "Worker ended without a verified report": "Worker 已結束，但沒有核驗報告",
@@ -2660,7 +2659,6 @@ var ZH = {
   "Handoff completed": "交接已完成",
   "Handoff available": "可准备交接",
   Responsible: "责任方",
-  Worker: "Worker",
   Operator: "操作者",
   Host: "Host",
   "Handoff target": "交接目标",
@@ -3476,6 +3474,14 @@ var ZH = {
   Protocol: "协议",
   "Asking…": "获取中…",
   "Fetch models": "获取模型列表",
+  "Refreshing…": "正在刷新…",
+  "Refresh models": "刷新模型",
+  "Models from the endpoint": "接口返回的模型",
+  "The endpoint lists no models.": "接口没有列出模型。",
+  "Upstream didn't return": "上游未返回",
+  "Keep the ids you still want by hand.": "请手动保留仍需要的模型 ID。",
+  "Select at least one model": "请至少选择一个模型",
+  "{added} added · {removed} removed · {count} selected": "新增 {added} · 移除 {removed} · 已选 {count}",
   "The endpoint lists no models. Enter their ids below.": "这个接口没有列出模型，请在下面填写模型 ID。",
   "Model ids": "模型 ID",
   "Model ids, separated by commas": "模型 ID，用逗号分隔",
@@ -3488,6 +3494,8 @@ var ZH = {
   "Sign in to DeepSeek": "登录 DeepSeek 账号",
   "Enter a DeepSeek API key": "填入 DeepSeek API key",
   "Open settings to set up a custom model": "打开设置配置自定义模型",
+  "Needs your attention": "需要你处理",
+  "On this page": "本页内容",
   "Open Models settings": "打开模型设置",
   "Models and API keys": "模型与 API Key",
   "I need a model before I can reply.": "配置模型后，我才能回复。",
@@ -3783,7 +3791,6 @@ var ZH = {
   // Settings dialog
   General: "通用",
   Overview: "概览",
-  Team: "团队",
   Tools: "工具",
   "Look and feel": "外观",
   model: "个模型",
@@ -4728,9 +4735,6 @@ var HOST_ZH = {
   "{role} thinking effort": "{role} 思考强度",
   "{role} instructions": "{role} 指令",
   "Role presets": "角色预设",
-  Main: "主角色",
-  Router: "路由角色",
-  Worker: "执行角色",
   Skills: "技能",
   Preview: "预览",
   Retry: "重试",
@@ -5727,6 +5731,19 @@ function countCards(state, sessionId, callIds, delta) {
   return { ...state, [sessionId]: own };
 }
 
+// src/client/roles.js
+var ROLE_IDS = Object.freeze(["main", "router", "worker"]);
+var ROLE_NAMES = Object.freeze({
+  main: "Main",
+  router: "Router",
+  worker: "Worker"
+});
+function roleName(role) {
+  const id = typeof role === "object" && role !== null ? role.id : role;
+  const key = typeof id === "string" ? id.toLowerCase() : "";
+  return ROLE_NAMES[key] ?? (typeof id === "string" ? id : "");
+}
+
 // src/client/main-voice.js
 var import_react6 = require("react");
 var closed = { phase: "off", caption: "", note: "", level: 0 };
@@ -5980,7 +5997,7 @@ function VoiceMode({ state, error, onPause, onResume, onClose, busy, onStop, sto
     "section",
     {
       className: "bt-main-composer bt-main-voice",
-      "aria-label": t("Voice chat with {name}", { name: "Main" }),
+      "aria-label": t("Voice chat with {name}", { name: roleName("main") }),
       onKeyDown: (event) => {
         if (event.key === "Escape" && !event.defaultPrevented) {
           event.stopPropagation();
@@ -7101,7 +7118,7 @@ function ProductScheduleSettings({ binding, works = [], call: call2, onViewWork,
           "aria-label": t("Send to"),
           onChange: (event) => setTargetId(event.target.value)
         },
-        (0, import_react13.createElement)("option", { value: "main" }, "Main"),
+        (0, import_react13.createElement)("option", { value: "main" }, roleName("main")),
         available.map((work) => (0, import_react13.createElement)("option", { key: work.brief.workItemId, value: work.brief.workItemId }, work.brief.goal))
       ) }),
       (0, import_react13.createElement)(FieldRow, { label: t("Name"), control: (0, import_react13.createElement)("input", {
@@ -7201,7 +7218,7 @@ function ProductScheduleSettings({ binding, works = [], call: call2, onViewWork,
           "span",
           { className: "bt-set-copy" },
           (0, import_react13.createElement)("strong", { className: "bt-task-title" }, rule.title),
-          (0, import_react13.createElement)("span", { className: "bt-set-hint" }, `${whenText(rule)} · ${rule.timezone} · ${rule.target.kind === "main" ? t("Main") : work?.brief.goal ?? rule.target.ticketId}`),
+          (0, import_react13.createElement)("span", { className: "bt-set-hint" }, `${whenText(rule)} · ${rule.timezone} · ${rule.target.kind === "main" ? roleName("main") : work?.brief.goal ?? rule.target.ticketId}`),
           (0, import_react13.createElement)("span", { className: "bt-task-prompt" }, rule.text),
           last ? (0, import_react13.createElement)(
             "span",
@@ -7286,7 +7303,7 @@ var mandateStrengthText = { inferred: "Inferred mandate", explicit: "Explicit ma
 var lifecycleText = { open: "Open", ended: "Ended" };
 var environmentText = { local: "Local", remote: "Remote" };
 var workText = (value, labels2) => t(value === void 0 ? "Unavailable" : labels2[value] ?? value);
-function usageLine(label, usage) {
+function usageLine(label, usage, format = t) {
   const count = Number(usage?.totalTokens ?? 0).toLocaleString();
   const detail = usage?.status === "none" ? t("No model calls.") : usage?.status === "unavailable" ? t("Provider usage was not reported.") : t("{tokens} tok · {reported} of {calls} calls reported", {
     tokens: count,
@@ -7294,7 +7311,7 @@ function usageLine(label, usage) {
     calls: usage?.calls ?? 0
   });
   const unavailable2 = usage?.unavailableSessions ? ` · ${t("{count} Session reads unavailable", { count: usage.unavailableSessions })}` : "";
-  return (0, import_react14.createElement)("li", { key: label }, (0, import_react14.createElement)("span", null, t(label)), (0, import_react14.createElement)("span", null, detail + unavailable2));
+  return (0, import_react14.createElement)("li", { key: label }, (0, import_react14.createElement)("span", null, format(label)), (0, import_react14.createElement)("span", null, detail + unavailable2));
 }
 function ProactiveReview({ runId, instanceId, call: call2, remote = false, canStop = true, onStopped }) {
   const [run2, setRun] = (0, import_react14.useState)(null);
@@ -7399,7 +7416,7 @@ function ProactiveReview({ runId, instanceId, call: call2, remote = false, canSt
       (0, import_react14.createElement)("p", null, `${t("Stage")}: ${workText(work.stage, workStageText)} · ${t("Reason")}: ${workText(work.reason, workReasonText)}`),
       work.mandate ? (0, import_react14.createElement)("p", null, `${t("Mandate")}: ${work.mandate.id} · ${workText(work.mandate.strength, mandateStrengthText)} · ${work.mandate.scope}`) : null,
       work.assignment ? (0, import_react14.createElement)("p", null, `${t("Assignment")}: ${work.assignment.id} · ${t("Generation")}: ${work.assignment.generation} · ${t("State")}: ${workText(work.assignment.state, assignmentStateText)}${work.assignment.environment?.kind ? ` · ${t("Environment")}: ${workText(work.assignment.environment.kind, environmentText)}` : ""}`) : (0, import_react14.createElement)("p", null, t("No Worker assignment yet.")),
-      (0, import_react14.createElement)("p", null, `${t("Step budgets")}: ${t("Preparation")} ${work.budgets?.preparationSteps ?? 0}/${work.budgets?.preparationStepLimit ?? 0} · ${t("Router")} ${work.budgets?.routerSteps ?? 0}/${work.budgets?.routerStepLimit ?? 0} · ${t("Worker turn")} ${work.budgets?.workerLastTurnSteps ?? 0}/${work.budgets?.workerTurnStepLimit ?? 0}`),
+      (0, import_react14.createElement)("p", null, `${t("Step budgets")}: ${t("Preparation")} ${work.budgets?.preparationSteps ?? 0}/${work.budgets?.preparationStepLimit ?? 0} · ${roleName("router")} ${work.budgets?.routerSteps ?? 0}/${work.budgets?.routerStepLimit ?? 0} · ${t("Worker turn")} ${work.budgets?.workerLastTurnSteps ?? 0}/${work.budgets?.workerTurnStepLimit ?? 0}`),
       work.budgets?.workerAssignments > 1 ? (0, import_react14.createElement)("p", null, `${t("Worker assignments included")}: ${work.budgets.workerAssignments}`) : null,
       work.budgets?.ruleRunLimit ? (0, import_react14.createElement)("p", null, `${t("Rule run budget")}: ${work.budgets.ruleRunsUsed ?? t("Unknown")} / ${work.budgets.ruleRunLimit} · ${work.budgets.ruleWindowMs / 36e5} h`) : null,
       work.budgets?.maxArtifactBytes ? (0, import_react14.createElement)("p", null, `${t("Artifact byte budget")}: ${work.budgets.maxArtifactBytes}`) : null,
@@ -7411,8 +7428,8 @@ function ProactiveReview({ runId, instanceId, call: call2, remote = false, canSt
           "ul",
           { className: "bt-product-preparation-usage" },
           usageLine("Preparation", work.usage.roles?.preparation),
-          usageLine("Router", work.usage.roles?.router),
-          usageLine("Worker", work.usage.roles?.worker),
+          usageLine(roleName("router"), work.usage.roles?.router, (value) => value),
+          usageLine(roleName("worker"), work.usage.roles?.worker, (value) => value),
           usageLine("Total", work.usage.total)
         ),
         (0, import_react14.createElement)("p", null, `${t("Cost")}: ${work.usage.cost?.status === "unavailable" ? t("Cost unavailable") : work.usage.cost?.amount}`),
@@ -7837,7 +7854,7 @@ async function productAvatarImage(file) {
 
 // src/client/product-presets.js
 var import_react15 = require("react");
-var roles = [["main", "Main"], ["router", "Router"], ["worker", "Worker"]];
+var roles = ROLE_IDS.map((id) => [id, roleName(id)]);
 var legacyFields = ["name", "model", "effort", "instructions", "skills", "color", "avatar"];
 var emptyDraft = () => ({ id: crypto.randomUUID(), name: "", provider: "", model: "", effort: "", instructions: "", skills: "", appearance: {} });
 var appearanceOf = (preset) => lookOf({ id: preset.id, color: preset.appearance?.color, avatar: preset.appearance });
@@ -8272,7 +8289,7 @@ function ProductPresetSettings({ binding, call: call2, settingsRevision, roleSet
             disabled: Boolean(busy),
             onChange: (event) => setApplyRole(event.target.value)
           },
-          roles.map(([id, name]) => (0, import_react15.createElement)("option", { key: id, value: id }, t(name)))
+          roles.map(([id, name]) => (0, import_react15.createElement)("option", { key: id, value: id }, name))
         )),
         !Number.isSafeInteger(revision) ? (0, import_react15.createElement)("span", { className: "bt-set-hint" }, t("Open role settings to load its current revision.")) : null
       ) : null,
@@ -8285,7 +8302,7 @@ function ProductPresetSettings({ binding, call: call2, settingsRevision, roleSet
           { className: "bt-set-copy" },
           (0, import_react15.createElement)("strong", null, entry.preset.name),
           (0, import_react15.createElement)("span", { className: "bt-set-hint" }, `${entry.preset.model.provider}/${entry.preset.model.model} · ${t("Preset")} v${entry.revision}`),
-          entry.origin ? (0, import_react15.createElement)("span", { className: "bt-set-hint" }, `${t("From")} ${entry.origin.source.identity} / ${entry.origin.source.botId} → ${entry.origin.targetRole}`) : null
+          entry.origin ? (0, import_react15.createElement)("span", { className: "bt-set-hint" }, `${t("From")} ${entry.origin.source.identity} / ${entry.origin.source.botId} → ${roleName(entry.origin.targetRole)}`) : null
         ),
         entry.status === "active" ? (0, import_react15.createElement)("button", {
           type: "button",
@@ -8318,12 +8335,12 @@ function ProductPresetSettings({ binding, call: call2, settingsRevision, roleSet
       activity.imports.map((item) => (0, import_react15.createElement)(
         "p",
         { key: item.id, className: "bt-set-row bt-set-hint" },
-        `${item.source.identity} / ${item.source.botId} → ${item.targetRole}: ${t(item.status)}${item.reason ? ` (${t(item.reason)})` : ""}`
+        `${item.source.identity} / ${item.source.botId} → ${roleName(item.targetRole)}: ${t(item.status)}${item.reason ? ` (${t(item.reason)})` : ""}`
       )),
       activity.applications.map((item) => (0, import_react15.createElement)(
         "p",
         { key: `${item.sourceInstanceId}:${item.actorId}:${item.commandId}`, className: "bt-set-row bt-set-hint" },
-        `${item.presetId} v${item.presetRevision} → ${item.targetRole}: ${t("Configuration")} v${item.revision}`
+        `${item.presetId} v${item.presetRevision} → ${roleName(item.targetRole)}: ${t("Configuration")} v${item.revision}`
       )),
       !activity.imports.length && !activity.applications.length ? (0, import_react15.createElement)(EmptyState, { title: t("No preset activity yet.") }) : null,
       activity.importsCursor || activity.applicationsCursor ? (0, import_react15.createElement)("button", {
@@ -8386,7 +8403,7 @@ function ProductPresetSettings({ binding, call: call2, settingsRevision, roleSet
               avatar: roleSettings?.roles?.[targetRole]?.appearance
             }),
             size: 32,
-            label: t(targetRole === "main" ? "Main" : targetRole === "router" ? "Router" : "Worker")
+            label: roleName(targetRole)
           }),
           (0, import_react15.createElement)(
             "select",
@@ -8397,7 +8414,7 @@ function ProductPresetSettings({ binding, call: call2, settingsRevision, roleSet
               disabled: Boolean(busy),
               onChange: (event) => setTargetRole(event.target.value)
             },
-            roles.map(([id, name]) => (0, import_react15.createElement)("option", { key: id, value: id }, t(name)))
+            roles.map(([id, name]) => (0, import_react15.createElement)("option", { key: id, value: id }, name))
           )
         )),
         (0, import_react15.createElement)(
@@ -8435,7 +8452,7 @@ function ProductPresetSettings({ binding, call: call2, settingsRevision, roleSet
       (0, import_react15.createElement)(
         SectionCard,
         { title: t("Review source and target") },
-        (0, import_react15.createElement)("p", { className: "bt-set-row" }, `${preview.preview.source.identity} / ${preview.preview.source.botId} → ${preview.preview.targetRole}`),
+        (0, import_react15.createElement)("p", { className: "bt-set-row" }, `${preview.preview.source.identity} / ${preview.preview.source.botId} → ${roleName(preview.preview.targetRole)}`),
         (0, import_react15.createElement)("p", { className: "bt-set-row bt-set-hint" }, `${t("Source digest")}: ${preview.preview.source.digest}`),
         preview.preview.fields.map((field) => (0, import_react15.createElement)("p", { key: field.from, className: "bt-set-row bt-set-hint" }, `${field.from} → ${field.to}`)),
         (/* @__PURE__ */ new Set([...preview.preview.ignored, ...ignored])).size ? (0, import_react15.createElement)(
@@ -9117,7 +9134,7 @@ function ProductCredentialSettings({ binding, call: call2, credentialImportBridg
                   onChange: (event) => updateCredentialImportTarget(entry.sourceRef, { role: event.target.value })
                 },
                 (0, import_react16.createElement)("option", { value: "" }, t("Choose target role")),
-                ...["main", "router", "worker"].map((value2) => (0, import_react16.createElement)("option", { key: value2, value: value2 }, t(value2 === "main" ? "Main" : value2 === "router" ? "Router" : "Worker")))
+                ...ROLE_IDS.map((value2) => (0, import_react16.createElement)("option", { key: value2, value: value2 }, roleName(value2)))
               )),
               (0, import_react16.createElement)("label", null, t("New authorization purpose"), (0, import_react16.createElement)(
                 "select",
@@ -9148,7 +9165,7 @@ function ProductCredentialSettings({ binding, call: call2, credentialImportBridg
                 onChange: (event) => updateCredentialImportTarget(entry.sourceRef, { sourceInstanceId: event.target.value })
               })),
               (0, import_react16.createElement)("span", { className: "bt-product-resource-note" }, `${t("New authorization")}: ${[
-                target.role,
+                target.role ? roleName(target.role) : "",
                 target.purpose,
                 target.workItemId,
                 target.environmentId,
@@ -9381,7 +9398,7 @@ function ProductCredentialSettings({ binding, call: call2, credentialImportBridg
         (0, import_react16.createElement)(
           "span",
           null,
-          `${t(request.status === "pending" ? "Pending authorization request" : request.status === "cancelled" ? "Cancelled authorization request" : "Granted authorization request")} · ${request.scope.role} · ${request.purpose}`,
+          `${t(request.status === "pending" ? "Pending authorization request" : request.status === "cancelled" ? "Cancelled authorization request" : "Granted authorization request")} · ${roleName(request.scope.role)} · ${request.purpose}`,
           request.scope.workItemId ? ` · ${t("Work item ID")}: ${request.scope.workItemId}` : "",
           request.scope.environmentId ? ` · ${t("Environment ID")}: ${request.scope.environmentId}` : "",
           request.scope.sourceInstanceId ? ` · ${t("Source Instance ID")}: ${request.scope.sourceInstanceId}` : ""
@@ -9416,7 +9433,7 @@ function ProductCredentialSettings({ binding, call: call2, credentialImportBridg
         "div",
         { className: "bt-product-resource-row", key: grant2.id },
         (0, import_react16.createElement)("span", null, [
-          grant2.scope.role,
+          roleName(grant2.scope.role),
           grant2.purposes.join(", "),
           grant2.scope.workItemId ? `${t("Work item ID")}: ${grant2.scope.workItemId}` : null,
           grant2.scope.environmentId ? `${t("Environment ID")}: ${grant2.scope.environmentId}` : null,
@@ -9626,10 +9643,10 @@ var CHAT_SECRET_CSS = `.bt-secret-input{min-width:0;width:100%;font:inherit;colo
 
 // src/client/product-memory.js
 var import_react18 = require("react");
-var scopeLabel = (scope) => scope.kind === "main" ? t("Main") : scope.kind === "work" ? `${t("Work private")} · ${scope.workItemId}` : `${t("Explicitly shared")} · ${[scope.main ? t("Main") : "", ...scope.workItemIds].filter(Boolean).join(", ") || t("No readers")}`;
+var scopeLabel = (scope) => scope.kind === "main" ? roleName("main") : scope.kind === "work" ? `${t("Work private")} · ${scope.workItemId}` : `${t("Explicitly shared")} · ${[scope.main ? roleName("main") : "", ...scope.workItemIds].filter(Boolean).join(", ") || t("No readers")}`;
 var originalScopeLabel = (scope) => {
-  const kind = scope.kind === "main" ? t("Main") : scope.kind === "work" ? t("Work private") : scope.kind === "shared" ? t("Explicitly shared") : t("Unknown original scope");
-  return [kind, scope.role, scope.work, scope.label, ...scope.sharedWith ?? []].filter(Boolean).join(" · ");
+  const kind = scope.kind === "main" ? roleName("main") : scope.kind === "work" ? t("Work private") : scope.kind === "shared" ? t("Explicitly shared") : t("Unknown original scope");
+  return [kind, scope.role ? roleName(scope.role) : "", scope.work, scope.label, ...scope.sharedWith ?? []].filter(Boolean).join(" · ");
 };
 var importStatusLabel = (status) => t(status === "ready" ? "Ready to import" : status === "partial" ? "Partially imported" : status === "completed" ? "Import completed" : status === "cancelled" ? "Import cancelled" : status === "rejected" ? "Import item rejected" : status === "imported" ? "Import item completed" : status === "conflict" ? "Import conflict" : status);
 var fileBase64 = async (file) => {
@@ -9689,7 +9706,7 @@ function ProductMemoryProposalCard({ proposal, onAnswer }) {
       setBusy(false);
     }
   };
-  const scope = proposal.scope.kind === "main" ? "Main" : `${t("Work private")} · ${proposal.scope.workItemId}`;
+  const scope = proposal.scope.kind === "main" ? roleName("main") : `${t("Work private")} · ${proposal.scope.workItemId}`;
   return (0, import_react18.createElement)(
     "section",
     { className: "bt-product-memory-proposal", "aria-labelledby": titleId, "aria-busy": busy },
@@ -9776,7 +9793,7 @@ function MemorySideQuery({ instanceId, workItems, call: call2, active }) {
           setReader(event.target.value);
           clear();
         } },
-        (0, import_react18.createElement)("option", { value: "main" }, t("Main")),
+        (0, import_react18.createElement)("option", { value: "main" }, roleName("main")),
         (0, import_react18.createElement)("option", { value: "work" }, t("Work"))
       ),
       reader === "work" ? (0, import_react18.createElement)(
@@ -10232,7 +10249,7 @@ function MemorySettings({ binding, works = [], call: call2 }) {
         (0, import_react18.createElement)(
           "div",
           { className: "bt-product-memory-form" },
-          (0, import_react18.createElement)("label", null, (0, import_react18.createElement)("input", { type: "checkbox", checked: mainReader, onChange: (event) => setMainReader(event.target.checked) }), t("Main")),
+          (0, import_react18.createElement)("label", null, (0, import_react18.createElement)("input", { type: "checkbox", checked: mainReader, onChange: (event) => setMainReader(event.target.checked) }), roleName("main")),
           workItems.map((work) => (0, import_react18.createElement)("label", { key: work.id }, (0, import_react18.createElement)("input", {
             type: "checkbox",
             checked: recipients.includes(work.id),
@@ -10345,7 +10362,7 @@ function MemorySettings({ binding, works = [], call: call2 }) {
                   (importBatch.targetRoles ?? ["main", "worker", "shared"]).map((role) => (0, import_react18.createElement)("option", {
                     key: role,
                     value: role
-                  }, t(role === "main" ? "Main" : role === "worker" ? "Worker" : "Explicitly shared")))
+                  }, role === "main" || role === "worker" ? roleName(role) : t("Explicitly shared")))
                 )
               ),
               choice.kind === "worker" ? (0, import_react18.createElement)(
@@ -10372,7 +10389,7 @@ function MemorySettings({ binding, works = [], call: call2 }) {
                   checked: choice.main,
                   "aria-label": `${t("Share with Main")} ${item.sourceId}`,
                   onChange: (event) => updateImportChoice(item.sourceId, { main: event.target.checked })
-                }), t("Main")),
+                }), roleName("main")),
                 workItems.map((work) => (0, import_react18.createElement)("label", { key: work.id }, (0, import_react18.createElement)("input", {
                   type: "checkbox",
                   checked: choice.workIds.includes(work.id),
@@ -10417,7 +10434,7 @@ function MemorySettings({ binding, works = [], call: call2 }) {
         (0, import_react18.createElement)(Row, { label: t("Owner") }, (0, import_react18.createElement)(
           "select",
           { value: kind, onChange: (event) => setKind(event.target.value) },
-          (0, import_react18.createElement)("option", { value: "main" }, t("Main")),
+          (0, import_react18.createElement)("option", { value: "main" }, roleName("main")),
           (0, import_react18.createElement)("option", { value: "work" }, t("Work private")),
           (0, import_react18.createElement)("option", { value: "shared" }, t("Explicitly shared"))
         )),
@@ -10430,7 +10447,7 @@ function MemorySettings({ binding, works = [], call: call2 }) {
         kind === "shared" ? (0, import_react18.createElement)(
           "div",
           { className: "bt-product-memory-form" },
-          (0, import_react18.createElement)("label", null, (0, import_react18.createElement)("input", { type: "checkbox", checked: mainReader, onChange: (event) => setMainReader(event.target.checked) }), t("Main")),
+          (0, import_react18.createElement)("label", null, (0, import_react18.createElement)("input", { type: "checkbox", checked: mainReader, onChange: (event) => setMainReader(event.target.checked) }), roleName("main")),
           workItems.map((work) => (0, import_react18.createElement)("label", { key: work.id }, (0, import_react18.createElement)("input", {
             type: "checkbox",
             checked: recipients.includes(work.id),
@@ -13055,7 +13072,7 @@ var SETTINGS_GROUPS = [
     { id: "presets", label: "Agent presets" },
     { id: "built-in-plugins", label: "Built-in plugins" }
   ] },
-  { id: "team", label: "Team", icon: "team", pages: [
+  { id: "roles", label: "Roles", icon: "roles", pages: [
     { id: "roles", label: "Roles" },
     { id: "memory", label: "Memory" }
   ] },
@@ -13157,7 +13174,7 @@ function RoleCard({ role, onOpen }) {
       { className: "bt-ov-role-face" },
       role.id === "main" ? (0, import_react25.createElement)(ProductLogo, { size: 38 }) : (0, import_react25.createElement)(Icon)
     ),
-    (0, import_react25.createElement)("span", { className: "bt-ov-bot-name" }, t(role.label)),
+    (0, import_react25.createElement)("span", { className: "bt-ov-bot-name" }, roleName(role.id)),
     (0, import_react25.createElement)("span", { className: "bt-ov-bot-model" }, role.model || t("No model selected"))
   );
 }
@@ -13185,11 +13202,7 @@ function SettingsOverview({ overview = {}, onNavigate }) {
   const themes = allThemes();
   const theme = themes[appearance2.theme] ?? themes.deepseek;
   const roles2 = overview.roles ?? [];
-  const shownRoles = roles2.length ? roles2 : [
-    { id: "main", label: "Main" },
-    { id: "router", label: "Router" },
-    { id: "worker", label: "Worker" }
-  ];
+  const shownRoles = roles2.length ? roles2 : ROLE_IDS.map((id) => ({ id }));
   const models = [...new Set(roles2.map((role) => role.model).filter(Boolean))];
   const attention = overview.needsModel ? (0, import_react25.createElement)("section", {
     className: "bt-ov-attention",
@@ -13206,13 +13219,13 @@ function SettingsOverview({ overview = {}, onNavigate }) {
     ),
     (0, import_react25.createElement)("button", { type: "button", className: "bt-send", onClick: () => onNavigate("models") }, t("Set up"))
   )) : null;
-  const team = (0, import_react25.createElement)(
+  const rolesSection = (0, import_react25.createElement)(
     "section",
     { className: "bt-ov-section" },
     (0, import_react25.createElement)(
       "div",
       { className: "bt-ov-head" },
-      (0, import_react25.createElement)("h3", null, t("Team")),
+      (0, import_react25.createElement)("h3", null, t("Roles")),
       (0, import_react25.createElement)(
         "button",
         { type: "button", className: "bt-ov-link", onClick: () => onNavigate("roles") },
@@ -13221,7 +13234,7 @@ function SettingsOverview({ overview = {}, onNavigate }) {
     ),
     (0, import_react25.createElement)(
       "div",
-      { className: "bt-ov-team" },
+      { className: "bt-ov-roles" },
       shownRoles.map((role) => (0, import_react25.createElement)(RoleCard, { key: role.id, role, onOpen: () => onNavigate("roles") })),
       (0, import_react25.createElement)(
         "button",
@@ -13272,7 +13285,7 @@ function SettingsOverview({ overview = {}, onNavigate }) {
       value: t(theme.label)
     }, (0, import_react25.createElement)("span", null, t("Theme, layout and motion")))
   );
-  return (0, import_react25.createElement)("div", { className: "bt-settings-page bt-ov-page", "data-page": "overview" }, attention, team, tiles);
+  return (0, import_react25.createElement)("div", { className: "bt-settings-page bt-ov-page", "data-page": "overview" }, attention, rolesSection, tiles);
 }
 
 // src/client/settings-sections.js
@@ -13347,7 +13360,7 @@ var pageIcons = {
   general: GearIcon,
   appearance: SlidersIcon,
   models: SlidersIcon,
-  team: PeopleIcon,
+  roles: PeopleIcon,
   work: CalendarIcon,
   connect: ConnectorIcon,
   tools: TerminalIcon,
@@ -13485,7 +13498,7 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
     restoredFocus.current = null;
     if (restored.isConnected && !restored.matches(":disabled")) restored.focus({ preventScroll: true });
   }, [confirmation]);
-  const rolesMounted = () => target?.group?.id === "team" && parts.some((part) => part.id === "roles");
+  const rolesMounted = () => target?.group?.id === "roles" && parts.some((part) => part.id === "roles");
   const requestLeave = (action, trigger = dialog.current.ownerDocument.activeElement) => {
     if (leaving || confirmation) return;
     if (!rolesMounted() || !roleDraft?.dirty) {
@@ -13632,7 +13645,7 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
   ) : null;
   const groupStatus = (nextGroup) => {
     if (nextGroup.id === "models" && overview?.needsModel) return (0, import_react27.createElement)("span", { className: "bt-settings-dot", "data-tone": "warn" });
-    if (nextGroup.id === "team") return (0, import_react27.createElement)("span", { className: "bt-settings-count" }, "3");
+    if (nextGroup.id === "roles") return (0, import_react27.createElement)("span", { className: "bt-settings-count" }, "3");
     return null;
   };
   const groupButtons = SETTINGS_GROUPS.flatMap((nextGroup, index) => [
@@ -13893,7 +13906,7 @@ body[data-ds-dark-theme] .bt-set-palette-scrim{background:rgba(0,0,0,.5)}
 .bt-ov-head>h3{margin:0;font-size:13px;line-height:18px;font-weight:600}
 .bt-ov-link{display:inline-flex;gap:12px;border:0;background:none;padding:0;font:inherit;font-size:12px;line-height:16px;color:var(--bt-ink-2);cursor:pointer}
 .bt-ov-link:hover{color:var(--bt-ink)}
-.bt-ov-team{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.bt-ov-roles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
 .bt-ov-bot{min-width:0;display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 8px 12px;border-radius:12px;border:.5px solid var(--bt-glass-rim);background:var(--bt-card);box-shadow:var(--bt-card-shadow);color:var(--bt-ink);font:inherit;cursor:pointer;transition:border-color .14s ease,background-color .14s ease}
 .bt-ov-bot:hover{border-color:var(--bt-line-2)}
 .bt-ov-role-face{height:40px;display:flex;align-items:center;justify-content:center;color:var(--bt-ink)}
@@ -13928,10 +13941,10 @@ body[data-ds-dark-theme] .bt-set-palette-scrim{background:rgba(0,0,0,.5)}
 .bt-superagent-settings[data-compact] .bt-settings-main-wrap{width:100%;flex:1;min-height:0}
 .bt-superagent-settings[data-compact] .bt-settings-main{width:100%;height:auto}
 .bt-superagent-settings[data-compact] .bt-settings-anchors{padding-inline:10px}
-.bt-superagent-settings[data-compact] .bt-ov-team,.bt-superagent-settings[data-compact] .bt-ov-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+.bt-superagent-settings[data-compact] .bt-ov-roles,.bt-superagent-settings[data-compact] .bt-ov-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
 .bt-superagent-settings[data-compact] .bt-settings-head{padding-inline:16px 56px}
 .bt-superagent-settings[data-compact] .bt-settings-scroll{padding-inline:16px}
-@media (max-width:640px){.bt-ov-team,.bt-ov-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.bt-ov-roles,.bt-ov-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (prefers-reduced-motion:reduce){.bt-settings-page>.bt-set-part,.bt-ov-page{animation:bt-fade .12s ease-out!important}.bt-anchor::after{transition:none}}
 `;
 
@@ -14159,7 +14172,7 @@ function ShellPalette({ actions: actions2, connectLabel, settingsAvailable, onCl
   const quiet = document.body.dataset.btMotion === "quiet";
   const wanted = query.trim().toLowerCase();
   const rows2 = [
-    { key: "main", title: t("Main"), avatar: (0, import_react31.createElement)(ProductBrandMark), run: actions2.openMain },
+    { key: "main", title: roleName("main"), avatar: (0, import_react31.createElement)(ProductBrandMark), run: actions2.openMain },
     { key: "activity", title: t("Activity"), icon: (0, import_react31.createElement)(GaugeIcon), run: actions2.openActivity },
     connectLabel ? { key: "connection", title: connectLabel, icon: (0, import_react31.createElement)(GlobeIcon), run: actions2.openConnection } : null,
     settingsAvailable !== false && actions2.openSettings ? { key: "settings", title: t("Settings"), icon: (0, import_react31.createElement)(GearIcon), run: () => actions2.openSettings("overview") } : null
@@ -14531,7 +14544,7 @@ var GoArrow = () => (0, import_react34.createElement)("svg", {
 }, (0, import_react34.createElement)("path", { d: "M-7 0H7M2 -5L7 0L2 5" }));
 function ProductShellHeader({ activity = false, markState, onMain, onActivity, children }) {
   const action = activity ? onMain : onActivity;
-  const label = activity ? t("Back to chat") : t("Main");
+  const label = activity ? t("Back to chat") : roleName("main");
   const contents = (0, import_react34.createElement)(
     import_react34.Fragment,
     null,
@@ -14553,7 +14566,7 @@ function ProductShellHeader({ activity = false, markState, onMain, onActivity, c
 }
 function ShellSidebar({ wide = true, useShell, actions: actions2, openPalette, WorkDirectory }) {
   const { activity, markState, preview, pending, unread, connectLabel, settingsAvailable, modalOpen, signIn, classicAvailable } = useShell();
-  const mainLabel = [t("Main"), pending ? t("Waiting for your answer") : unread ? t("Unread activity") : ""].filter(Boolean).join(", ");
+  const mainLabel = [roleName("main"), pending ? t("Waiting for your answer") : unread ? t("Unread activity") : ""].filter(Boolean).join(", ");
   const row2 = (label, icon, onClick, selected) => (0, import_react34.createElement)("button", {
     type: "button",
     className: "bt-row",
@@ -14592,11 +14605,11 @@ function ShellSidebar({ wide = true, useShell, actions: actions2, openPalette, W
           className: "bt-tile",
           "aria-current": activity ? void 0 : "page",
           "aria-label": mainLabel,
-          title: preview || t("Main"),
+          title: preview || roleName("main"),
           onClick: actions2.openMain
         },
         (0, import_react34.createElement)(MainMark, { size: 60, state: markState }),
-        (0, import_react34.createElement)("span", { className: "bt-tile-name" }, t("Main")),
+        (0, import_react34.createElement)("span", { className: "bt-tile-name" }, roleName("main")),
         (pending || unread) && activity ? (0, import_react34.createElement)("span", { className: "bt-dot", "aria-hidden": true }) : null
       )) : row2(mainLabel, (0, import_react34.createElement)(MainMark, { size: 36, state: markState }), actions2.openMain, !activity),
       actions2.openActivity ? row2(t("Activity"), (0, import_react34.createElement)(GaugeIcon), actions2.openActivity, activity) : null,
@@ -15170,10 +15183,9 @@ function ProductMcpSettings({ binding, call: call2 }) {
 var import_react38 = require("react");
 var blank = { name: "", kind: "skill", instructions: "", serverName: "", toolName: "", url: "", resourceId: "", members: [] };
 var kindLabels = { skill: "Skill", mcp: "MCP tool", bundle: "Capability bundle" };
-var roleLabels = { main: "Main", router: "Router", worker: "Worker" };
 var blankScope = { role: "worker", workItemId: "", environmentId: "" };
 var row = (label, control, layout) => (0, import_react38.createElement)(FieldRow, { label: t(label), control, layout });
-var scopeLabel2 = (scope) => [t(roleLabels[scope.role]), scope.workItemId, scope.environmentId].filter(Boolean).join(" · ");
+var scopeLabel2 = (scope) => [roleName(scope.role), scope.workItemId, scope.environmentId].filter(Boolean).join(" · ");
 function readDraft(item) {
   return {
     ...blank,
@@ -15410,7 +15422,7 @@ function CapabilitySettings({ binding, call: call2, works, environments }) {
           disabled: busy,
           onChange: (event) => setScope({ ...blankScope, role: event.target.value })
         },
-        Object.entries(roleLabels).map(([role, label]) => (0, import_react38.createElement)("option", { value: role, key: role }, t(label)))
+        ROLE_IDS.map((role) => (0, import_react38.createElement)("option", { value: role, key: role }, roleName(role)))
       )),
       scope.role === "worker" ? scopeField("Work item", "workItemId", (works ?? []).map((work) => ({ id: work.id, label: work.goal }))) : null,
       scope.role === "worker" ? scopeField("Execution environment", "environmentId", environments ?? []) : null,
@@ -16805,8 +16817,8 @@ function MemberState({ role, identity, goal, label, mark, children }) {
   return (0, import_react43.createElement)(
     "div",
     { className: "bt-work-member", "data-active": mark !== "idle" },
-    (0, import_react43.createElement)(BotMark, { bot: { id: identity }, look: role === "Main" ? MAIN_LOOK : void 0, size: 20, state: mark }),
-    (0, import_react43.createElement)("span", null, t(role)),
+    (0, import_react43.createElement)(BotMark, { bot: { id: identity }, look: role === "main" ? MAIN_LOOK : void 0, size: 20, state: mark }),
+    (0, import_react43.createElement)("span", { "data-role-name": "" }, roleName(role)),
     (0, import_react43.createElement)("span", { "data-role-status": "", title: goal }, label),
     children
   );
@@ -16817,13 +16829,13 @@ function WorkMemberDock({ workers, routing, activeTurn, mainHealth, execute }) {
   return (0, import_react43.createElement)(
     "div",
     { className: "bt-work-members", role: "group", "aria-label": t("Work members") },
-    (0, import_react43.createElement)(MemberState, { role: "Main", identity: "main", mark: mainMark, label: t(mainLabel) }),
-    (0, import_react43.createElement)(MemberState, { role: "Router", identity: "router", mark: routing ? "orbit" : "idle", label: t(routing ? "Routing work" : "Ready") }),
+    (0, import_react43.createElement)(MemberState, { role: "main", identity: "main", mark: mainMark, label: t(mainLabel) }),
+    (0, import_react43.createElement)(MemberState, { role: "router", identity: "router", mark: routing ? "orbit" : "idle", label: t(routing ? "Routing work" : "Ready") }),
     workers.map(({ sessionId, item, state }) => (0, import_react43.createElement)(
       MemberState,
       {
         key: sessionId,
-        role: "Worker",
+        role: "worker",
         identity: sessionId,
         goal: item?.goal,
         mark: state === "waiting" ? "alert" : state === "stopping" ? "waiting" : "working",
@@ -20743,10 +20755,10 @@ function UsageBreakdown({ report }) {
   const rows2 = report.hourly ?? [];
   const modelName = (row2) => [row2.provider, row2.model].filter(Boolean).join("/") || "Unknown model";
   const models = [...new Set(rows2.map(modelName))].sort();
-  const owners = { main: "Main", router: "Router", worker: "Worker" };
+  const owners = Object.fromEntries(ROLE_IDS.map((id) => [id, roleName(id)]));
   const kinds2 = { conversation: "Conversations", planning: "Planning usage", execution: "Work usage" };
   const selected = rows2.filter((row2) => (!owner || row2.owner === owner) && (!model || modelName(row2) === model) && (!kind || row2.kind === kind));
-  const select = (label, value, onChange, entries) => (0, import_react54.createElement)(
+  const select = (label, value, onChange, entries, format = t) => (0, import_react54.createElement)(
     "label",
     { className: "bt-set-copy" },
     t(label),
@@ -20754,7 +20766,7 @@ function UsageBreakdown({ report }) {
       "select",
       { className: "bt-select", value, onChange: (event) => onChange(event.target.value) },
       (0, import_react54.createElement)("option", { value: "" }, t("Any")),
-      entries.map(([key, text]) => (0, import_react54.createElement)("option", { value: key, key }, t(text)))
+      entries.map(([key, text]) => (0, import_react54.createElement)("option", { value: key, key }, format(text)))
     )
   );
   return (0, import_react54.createElement)(
@@ -20763,7 +20775,7 @@ function UsageBreakdown({ report }) {
     (0, import_react54.createElement)(
       "div",
       { className: "bt-product-operations-actions", role: "group", "aria-label": t("Activity filters") },
-      select("Role", owner, setOwner, Object.entries(owners)),
+      select("Role", owner, setOwner, Object.entries(owners), (value) => value),
       select("Model", model, setModel, models.map((value) => [value, value])),
       select("Kind", kind, setKind, Object.entries(kinds2))
     ),
@@ -20899,7 +20911,7 @@ function ProductOperationsSettings({ binding, call: call2, onNavigate, section =
     setTimeout(() => URL.revokeObjectURL(url), 1e4);
   };
   const statusRows = status ? [
-    [t("Main"), `${t({ ready: "Main ready", running: "Main running", degraded: "Main degraded" }[status.main.state])}${status.main.errorCode ? ` · ${status.main.errorCode}` : ""}`],
+    [roleName("main"), `${t({ ready: "Main ready", running: "Main running", degraded: "Main degraded" }[status.main.state])}${status.main.errorCode ? ` · ${status.main.errorCode}` : ""}`],
     [t("Processing"), status?.processingPaused ? t("Paused") : t("Running")],
     [t("Semantic inspection"), status?.supervision?.semanticInspection ? `${t(status.supervision.semanticInspection.status)}${status.supervision.semanticInspection.errorCode ? ` · ${status.supervision.semanticInspection.errorCode}` : ""}` : t("No inspection recorded")],
     [t("Watchdog"), status?.supervision?.watchdog ? `${t(status.supervision.watchdog.kind)} · ${new Date(status.supervision.watchdog.at).toLocaleString()}` : status?.supervision?.watchdogConfigured ? t("No inspection recorded") : t("Not configured")]
@@ -20941,9 +20953,9 @@ function ProductOperationsSettings({ binding, call: call2, onNavigate, section =
       { className: "bt-set-section bt-ps-section" },
       (0, import_react54.createElement)("h3", null, t("Token usage by role")),
       (0, import_react54.createElement)("p", { className: "bt-product-operations-note" }, t("Totals across all included Sessions")),
-      (0, import_react54.createElement)(StatGrid, { columns: 3, items: ["Main", "Router", "Worker"].map((label) => {
-        const total = usage.roles?.[label.toLowerCase()];
-        return { label: t(label), value: total?.totalTokens == null ? "—" : number(total.totalTokens), detail: usageLine2(total) };
+      (0, import_react54.createElement)(StatGrid, { columns: 3, items: ROLE_IDS.map((id) => {
+        const total = usage.roles?.[id];
+        return { label: roleName(id), value: total?.totalTokens == null ? "—" : number(total.totalTokens), detail: usageLine2(total) };
       }) })
     ) : null,
     showUsage && usage ? (0, import_react54.createElement)(UsageItems, { title: t("Work usage"), items: usage.works }) : null,
@@ -21276,8 +21288,8 @@ function UsedBy({ roles: roles2 }) {
   if (roles2.length === 0) return null;
   return (0, import_react55.createElement)(
     "span",
-    { className: "bt-provider-roles", role: "img", "aria-label": roles2.map((role) => t(role.label)).join(t(", ")) },
-    roles2.map((role) => (0, import_react55.createElement)("span", { key: role.id, className: "bt-provider-role" }, t(role.label)))
+    { className: "bt-provider-roles", role: "img", "aria-label": roles2.map((role) => roleName(role.id)).join(", ") },
+    roles2.map((role) => (0, import_react55.createElement)("span", { key: role.id, className: "bt-provider-role" }, roleName(role.id)))
   );
 }
 function ProviderSettingsPage({ instanceId, call: call2, roles: roles2 = [], onChanged }) {
@@ -21525,7 +21537,7 @@ function ModelDraft({ provider, draft, roles: roles2, onToggle, onSave, onCancel
     affected.map((role) => (0, import_react55.createElement)(
       "div",
       { key: role.id, className: "bt-set-hint", "data-error": "", role: "status" },
-      t("{name} uses a model that will be removed. Update the role after saving.", { name: t(role.label) })
+      t("{name} uses a model that will be removed. Update the role after saving.", { name: roleName(role.id) })
     )),
     (0, import_react55.createElement)(
       "div",
@@ -22052,7 +22064,7 @@ function createUpstreamAdapter(productCall2, storage, appearance2) {
         liveKey,
         mainBotId: mainId,
         mainBotIds: [mainId],
-        bots: [{ id: mainId, sessionId: mainSessionId, name: main?.name ?? "Main", model: refOf(main?.model), avatar: main?.appearance }],
+        bots: [{ id: mainId, sessionId: mainSessionId, name: main?.name ?? roleName("main"), model: refOf(main?.model), avatar: main?.appearance }],
         models,
         defaultModel: refOf(main?.model),
         profileDefaultModel: refOf(main?.model),
@@ -22997,7 +23009,7 @@ function applyProduct(ctx) {
     available: t("Handoff available")
   })[status] ?? status;
   const handoffOwnerCopy = (owner) => ({
-    worker: t("Worker"),
+    worker: roleName("worker"),
     operator: t("Operator"),
     human: t("You"),
     host: t("Host")
@@ -24125,7 +24137,7 @@ function applyProduct(ctx) {
     }
     return (0, import_react56.createElement)(
       "section",
-      { className: "bt-main-conversation", "aria-label": "Main" },
+      { className: "bt-main-conversation", "aria-label": roleName("main") },
       (0, import_react56.createElement)(
         "header",
         { className: "bt-main-header" },
@@ -24273,7 +24285,7 @@ function applyProduct(ctx) {
         (0, import_react56.createElement)(
           "div",
           { className: "bt-observation-heading" },
-          (0, import_react56.createElement)("span", { className: "bt-observation-role" }, observation?.role === "router" ? "Router" : "Worker"),
+          (0, import_react56.createElement)("span", { className: "bt-observation-role" }, roleName(observation?.role === "router" ? "router" : "worker")),
           (0, import_react56.createElement)("strong", null, observation?.title ?? state.selectedObservation?.title ?? "")
         ),
         (0, import_react56.createElement)("span", { className: "bt-observation-readonly" }, t("Read-only")),
@@ -24502,7 +24514,7 @@ function applyProduct(ctx) {
             if (state.binding) void loadObservation(state.binding, item, { reset: true });
           }
         },
-        (0, import_react56.createElement)("span", { className: "bt-observation-role" }, item.role === "router" ? "Router" : "Worker"),
+        (0, import_react56.createElement)("span", { className: "bt-observation-role" }, roleName(item.role === "router" ? "router" : "worker")),
         (0, import_react56.createElement)("span", { className: "bt-observation-nav-copy" }, (0, import_react56.createElement)("strong", null, item.title), (0, import_react56.createElement)("span", null, workStatusCopy(item.status)))
       )) : (0, import_react56.createElement)("p", { className: "bt-observation-empty" }, t("No Router or Worker activity yet.")),
       state.activityError ? (0, import_react56.createElement)("p", { role: "alert", className: "bt-main-error" }, state.activityError) : null,
@@ -24664,7 +24676,7 @@ function applyProduct(ctx) {
     const savingRef = (0, import_react56.useRef)(false);
     const loadRequest = (0, import_react56.useRef)(0);
     const clone = (value) => JSON.parse(JSON.stringify(value));
-    const roleRows = [["main", "Main"], ["router", "Router"], ["worker", "Worker"]];
+    const roleRows = ROLE_IDS.map((id) => [id, roleName(id)]);
     const refOf2 = (model) => `${model.provider}/${model.model}`;
     const loadEfforts = async (roles3) => {
       const refs = [...new Set([roles3.main, roles3.router, roles3.worker].filter(Boolean).map((profile) => refOf2(profile.model)))];
@@ -25036,7 +25048,7 @@ function applyProduct(ctx) {
         snapshot.uses.length ? snapshot.uses.slice(0, 20).map((use) => (0, import_react56.createElement)(
           "div",
           { key: use.id, className: "bt-main-settings-use" },
-          (0, import_react56.createElement)("span", { className: "bt-observation-role" }, use.role),
+          (0, import_react56.createElement)("span", { className: "bt-observation-role" }, roleName(use.role)),
           (0, import_react56.createElement)("span", null, `${t("Configuration")} v${use.revision}`),
           (0, import_react56.createElement)("span", null, refOf2(use[use.role] ?? use.worker ?? use.router)),
           (0, import_react56.createElement)("span", { className: "bt-main-settings-use-session", title: use.sessionId }, use.sessionId),
@@ -25269,7 +25281,7 @@ function applyProduct(ctx) {
         "header",
         { className: "bt-main-header" },
         (0, import_react56.createElement)(Header),
-        (0, import_react56.createElement)("button", { type: "button", className: "bt-soft", onClick: shellActions.openMain }, t("Main"))
+        (0, import_react56.createElement)("button", { type: "button", className: "bt-soft", onClick: shellActions.openMain }, roleName("main"))
       ),
       (0, import_react56.createElement)(BoardSurface)
     );

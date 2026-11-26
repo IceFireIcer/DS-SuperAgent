@@ -1,5 +1,6 @@
 import { t } from './i18n.js'
 import { readAsset, readAssetChunk, stageImage } from './product-api-assets.js'
+import { roleName } from './roles.js'
 
 const unavailable = 'This product capability is not connected yet.'
 const prefsKey = 'ds-superagent:prefs'
@@ -160,7 +161,7 @@ export function createUpstreamAdapter(productCall, storage, appearance) {
       const waiting = attentionRows(history)[0]?.attention
       shownAttention = waiting ? { instanceId: history.instanceId, id: waiting.id, version: waiting.version } : undefined
       return { revision, modelsKey, liveKey, mainBotId: mainId, mainBotIds: [mainId],
-        bots: [{ id: mainId, sessionId: mainSessionId, name: main?.name ?? 'Main', model: refOf(main?.model), avatar: main?.appearance }],
+        bots: [{ id: mainId, sessionId: mainSessionId, name: main?.name ?? roleName('main'), model: refOf(main?.model), avatar: main?.appearance }],
         models, defaultModel: refOf(main?.model), profileDefaultModel: refOf(main?.model), prefs: localPrefs,
         rooms: [], agents: [], sections: [], privateArchives: [], permissions: null, readOnly: null,
         im: { connections: [], platforms: [] }, computer: { enabled: false }, browser: false,

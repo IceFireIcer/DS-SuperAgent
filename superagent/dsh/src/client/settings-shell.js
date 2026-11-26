@@ -22,7 +22,7 @@ export const SETTINGS_CHILDREN = {
 }
 
 const pageIcons = {
-  overview: GaugeIcon, general: GearIcon, appearance: SlidersIcon, models: SlidersIcon, team: PeopleIcon,
+  overview: GaugeIcon, general: GearIcon, appearance: SlidersIcon, models: SlidersIcon, roles: PeopleIcon,
   work: CalendarIcon, connect: ConnectorIcon, tools: TerminalIcon, usage: GaugeIcon, about: InfoIcon,
 }
 
@@ -141,7 +141,7 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
     if (restored.isConnected && !restored.matches(':disabled')) restored.focus({ preventScroll: true })
   }, [confirmation])
 
-  const rolesMounted = () => target?.group?.id === 'team' && parts.some(part => part.id === 'roles')
+  const rolesMounted = () => target?.group?.id === 'roles' && parts.some(part => part.id === 'roles')
   const requestLeave = (action, trigger = dialog.current.ownerDocument.activeElement) => {
     if (leaving || confirmation) return
     if (!rolesMounted() || !roleDraft?.dirty) { action(); return }
@@ -266,7 +266,7 @@ function SettingsDialog({ sections, renderSlot, initialPage, onClose, onNavigate
     : null
   const groupStatus = nextGroup => {
     if (nextGroup.id === 'models' && overview?.needsModel) return h('span', { className: 'bt-settings-dot', 'data-tone': 'warn' })
-    if (nextGroup.id === 'team') return h('span', { className: 'bt-settings-count' }, '3')
+    if (nextGroup.id === 'roles') return h('span', { className: 'bt-settings-count' }, '3')
     return null
   }
   const groupButtons = SETTINGS_GROUPS.flatMap((nextGroup, index) => [
@@ -421,7 +421,7 @@ body[data-ds-dark-theme] .bt-set-palette-scrim{background:rgba(0,0,0,.5)}
 .bt-ov-head>h3{margin:0;font-size:13px;line-height:18px;font-weight:600}
 .bt-ov-link{display:inline-flex;gap:12px;border:0;background:none;padding:0;font:inherit;font-size:12px;line-height:16px;color:var(--bt-ink-2);cursor:pointer}
 .bt-ov-link:hover{color:var(--bt-ink)}
-.bt-ov-team{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.bt-ov-roles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
 .bt-ov-bot{min-width:0;display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 8px 12px;border-radius:12px;border:.5px solid var(--bt-glass-rim);background:var(--bt-card);box-shadow:var(--bt-card-shadow);color:var(--bt-ink);font:inherit;cursor:pointer;transition:border-color .14s ease,background-color .14s ease}
 .bt-ov-bot:hover{border-color:var(--bt-line-2)}
 .bt-ov-role-face{height:40px;display:flex;align-items:center;justify-content:center;color:var(--bt-ink)}
@@ -456,9 +456,9 @@ body[data-ds-dark-theme] .bt-set-palette-scrim{background:rgba(0,0,0,.5)}
 .bt-superagent-settings[data-compact] .bt-settings-main-wrap{width:100%;flex:1;min-height:0}
 .bt-superagent-settings[data-compact] .bt-settings-main{width:100%;height:auto}
 .bt-superagent-settings[data-compact] .bt-settings-anchors{padding-inline:10px}
-.bt-superagent-settings[data-compact] .bt-ov-team,.bt-superagent-settings[data-compact] .bt-ov-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+.bt-superagent-settings[data-compact] .bt-ov-roles,.bt-superagent-settings[data-compact] .bt-ov-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
 .bt-superagent-settings[data-compact] .bt-settings-head{padding-inline:16px 56px}
 .bt-superagent-settings[data-compact] .bt-settings-scroll{padding-inline:16px}
-@media (max-width:640px){.bt-ov-team,.bt-ov-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.bt-ov-roles,.bt-ov-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (prefers-reduced-motion:reduce){.bt-settings-page>.bt-set-part,.bt-ov-page{animation:bt-fade .12s ease-out!important}.bt-anchor::after{transition:none}}
 `

@@ -6,6 +6,7 @@ import { CheckIcon, PlusIcon, TrashIcon } from './icons.js'
 import { hostText, t } from './i18n.js'
 import { Segmented, SPRING_SHAPE } from './motion.js'
 import { InlineNotice } from './product-settings-components.js'
+import { roleName } from './roles.js'
 
 const PROTOCOL_NAMES = {
   'openai-completions': 'OpenAI Chat Completions',
@@ -76,8 +77,8 @@ function keyState(key) {
 
 function UsedBy({ roles }) {
   if (roles.length === 0) return null
-  return h('span', { className: 'bt-provider-roles', role: 'img', 'aria-label': roles.map(role => t(role.label)).join(t(', ')) },
-    roles.map(role => h('span', { key: role.id, className: 'bt-provider-role' }, t(role.label))))
+  return h('span', { className: 'bt-provider-roles', role: 'img', 'aria-label': roles.map(role => roleName(role.id)).join(', ') },
+    roles.map(role => h('span', { key: role.id, className: 'bt-provider-role' }, roleName(role.id))))
 }
 
 export function ProviderSettingsPage({ instanceId, call, roles = [], onChanged }) {
@@ -248,7 +249,7 @@ function ModelDraft({ provider, draft, roles, onToggle, onSave, onCancel, confir
       h('div', { className: 'bt-provider-found' }, unreturned.map(modelButton))) : null,
     selected.length === 0 ? h('div', { className: 'bt-set-hint', 'data-error': '', role: 'status' }, t('Select at least one model')) : null,
     affected.map(role => h('div', { key: role.id, className: 'bt-set-hint', 'data-error': '', role: 'status' },
-      t('{name} uses a model that will be removed. Update the role after saving.', { name: t(role.label) }))),
+      t('{name} uses a model that will be removed. Update the role after saving.', { name: roleName(role.id) }))),
     h('div', { className: 'bt-provider-actions' },
       h('button', { type: 'button', className: 'bt-soft bt-soft-sm', onClick: onCancel }, t('Cancel')),
       h('button', { type: 'button', className: 'bt-send bt-soft-sm', disabled: selected.length === 0, onClick: onSave },

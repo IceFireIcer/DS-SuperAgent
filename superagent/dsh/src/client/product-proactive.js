@@ -2,6 +2,7 @@ import { createElement as h, useEffect, useState } from 'react'
 import { Card, SwitchRow } from './product-card.js'
 import { EmptyState, FieldRow, InlineNotice, StatusChip } from './product-settings-components.js'
 import { t } from './i18n.js'
+import { roleName } from './roles.js'
 
 const stateText = { running: 'Preparing', observed: 'Would prepare', prepared: 'Ready for review',
   silent: 'Ended quietly', suppressed: 'No longer current', 'budget-exhausted': 'Budget exhausted',
@@ -18,7 +19,7 @@ const lifecycleText = { open: 'Open', ended: 'Ended' }
 const environmentText = { local: 'Local', remote: 'Remote' }
 const workText = (value, labels) => t(value === undefined ? 'Unavailable' : labels[value] ?? value)
 
-function usageLine(label, usage) {
+function usageLine(label, usage, format = t) {
   const count = Number(usage?.totalTokens ?? 0).toLocaleString()
   const detail = usage?.status === 'none' ? t('No model calls.')
     : usage?.status === 'unavailable' ? t('Provider usage was not reported.')
@@ -26,7 +27,7 @@ function usageLine(label, usage) {
         tokens: count, reported: usage?.reportedCalls ?? 0, calls: usage?.calls ?? 0 })
   const unavailable = usage?.unavailableSessions
     ? ` · ${t('{count} Session reads unavailable', { count: usage.unavailableSessions })}` : ''
-  return h('li', { key: label }, h('span', null, t(label)), h('span', null, detail + unavailable))
+  return h('li', { key: label }, h('span', null, format(label)), h('span', null, detail + unavailable))
 }
 
 export function ProactiveReview({ runId, instanceId, call, remote = false, canStop = true, onStopped }) {
@@ -98,7 +99,7 @@ export function ProactiveReview({ runId, instanceId, call, remote = false, canSt
       work.assignment ? h('p', null, `${t('Assignment')}: ${work.assignment.id} · ${t('Generation')}: ${work.assignment.generation} · ${t('State')}: ${workText(work.assignment.state, assignmentStateText)}`
         + `${work.assignment.environment?.kind ? ` · ${t('Environment')}: ${workText(work.assignment.environment.kind, environmentText)}` : ''}`) : h('p', null, t('No Worker assignment yet.')),
       h('p', null, `${t('Step budgets')}: ${t('Preparation')} ${work.budgets?.preparationSteps ?? 0}/${work.budgets?.preparationStepLimit ?? 0}`
-        + ` · ${t('Router')} ${work.budgets?.routerSteps ?? 0}/${work.budgets?.routerStepLimit ?? 0}`
+        + ` · ${roleName('router')} ${work.budgets?.routerSteps ?? 0}/${work.budgets?.routerStepLimit ?? 0}`
         + ` · ${t('Worker turn')} ${work.budgets?.workerLastTurnSteps ?? 0}/${work.budgets?.workerTurnStepLimit ?? 0}`),
       work.budgets?.workerAssignments > 1 ? h('p', null, `${t('Worker assignments included')}: ${work.budgets.workerAssignments}`) : null,
       work.budgets?.ruleRunLimit ? h('p', null, `${t('Rule run budget')}: ${work.budgets.ruleRunsUsed ?? t('Unknown')} / ${work.budgets.ruleRunLimit}`
@@ -107,8 +108,8 @@ export function ProactiveReview({ runId, instanceId, call, remote = false, canSt
       work.usage ? h('div', null, h('strong', null, t('Token usage by role')),
         h('ul', { className: 'bt-product-preparation-usage' },
           usageLine('Preparation', work.usage.roles?.preparation),
-          usageLine('Router', work.usage.roles?.router),
-          usageLine('Worker', work.usage.roles?.worker),
+          usageLine(roleName('router'), work.usage.roles?.router, value => value),
+          usageLine(roleName('worker'), work.usage.roles?.worker, value => value),
           usageLine('Total', work.usage.total)),
         h('p', null, `${t('Cost')}: ${work.usage.cost?.status === 'unavailable' ? t('Cost unavailable') : work.usage.cost?.amount}`),
         work.usage.cost?.status === 'unavailable'

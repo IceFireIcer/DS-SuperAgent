@@ -135,8 +135,8 @@ test('preset activity shows decisions and applications, and an unknown apply res
   }
   await withPresets(call, 3, async ({ doc, click, applied }) => {
     await click('Preset activity')
-    assert.match(doc.body.textContent, /copy-one \/ old-bot → worker: skipped/u)
-    assert.match(doc.body.textContent, /preset-one v1 → router: Configuration v3/u)
+    assert.match(doc.body.textContent, /copy-one \/ old-bot → Worker: skipped/u)
+    assert.match(doc.body.textContent, /preset-one v1 → Router: Configuration v3/u)
     await click('Apply preset')
     assert.equal(applied[0].revision, 4)
     assert.match(doc.body.textContent, /Configuration v4 is active for new turns/u)
@@ -180,7 +180,7 @@ test('old copy review excludes permissions and history, reports conflict, and pe
       name: 'Old reviewer', model: 'mock/legacy', instructions: '{{goal}} {{constraints}}', skills: ['review'],
       avatar: { shape: 'star' }, color: 'blue',
     } } })
-    assert.match(doc.body.textContent, /old-export \/ bot-a → worker/u)
+    assert.match(doc.body.textContent, /old-export \/ bot-a → Worker/u)
     assert.match(doc.body.textContent, /bot\.admin/u)
     assert.match(doc.body.textContent, /bot\.history/u)
     assert.match(doc.body.textContent, /bot\.avatar\.secret/u)

@@ -4,6 +4,7 @@ import { CloseIcon, GaugeIcon, GearIcon, GlobeIcon, SearchIcon } from './icons.j
 import { ProductBrandMark } from './product-brand.js'
 import { QUICK_EDGES, reducedMotion, useFlip, useGlide } from './motion.js'
 import { t } from './i18n.js'
+import { roleName } from './roles.js'
 
 const PALETTE_EXIT_MS = 160
 
@@ -18,7 +19,7 @@ export function ShellPalette({ actions, connectLabel, settingsAvailable, onClose
   const quiet = document.body.dataset.btMotion === 'quiet'
   const wanted = query.trim().toLowerCase()
   const rows = [
-    { key: 'main', title: t('Main'), avatar: h(ProductBrandMark), run: actions.openMain },
+    { key: 'main', title: roleName('main'), avatar: h(ProductBrandMark), run: actions.openMain },
     { key: 'activity', title: t('Activity'), icon: h(GaugeIcon), run: actions.openActivity },
     connectLabel ? { key: 'connection', title: connectLabel, icon: h(GlobeIcon), run: actions.openConnection } : null,
     settingsAvailable !== false && actions.openSettings

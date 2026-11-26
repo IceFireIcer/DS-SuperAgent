@@ -4,8 +4,9 @@ import { EmptyState, InlineNotice, StatusChip } from './product-settings-compone
 import { productAvatarImage } from './product-avatar.js'
 import { lookOf, BotMark } from './mark.js'
 import { t } from './i18n.js'
+import { ROLE_IDS, roleName } from './roles.js'
 
-const roles = [['main', 'Main'], ['router', 'Router'], ['worker', 'Worker']]
+const roles = ROLE_IDS.map(id => [id, roleName(id)])
 const legacyFields = ['name', 'model', 'effort', 'instructions', 'skills', 'color', 'avatar']
 const emptyDraft = () => ({ id: crypto.randomUUID(), name: '', provider: '', model: '', effort: '', instructions: '', skills: '', appearance: {} })
 const appearanceOf = preset => lookOf({ id: preset.id, color: preset.appearance?.color, avatar: preset.appearance })
@@ -310,13 +311,13 @@ export function ProductPresetSettings({ binding, call, settingsRevision, roleSet
       items?.length ? h('div', { className: 'bt-set-row bt-product-preset-target' },
         h('label', null, t('Apply to'), h('select', { className: 'bt-select', 'aria-label': t('Apply to'), value: applyRole,
           disabled: Boolean(busy), onChange: event => setApplyRole(event.target.value) },
-        roles.map(([id, name]) => h('option', { key: id, value: id }, t(name))))),
+        roles.map(([id, name]) => h('option', { key: id, value: id }, name)))),
         !Number.isSafeInteger(revision) ? h('span', { className: 'bt-set-hint' }, t('Open role settings to load its current revision.')) : null) : null,
       items?.map(entry => h('div', { key: entry.id, className: 'bt-set-row bt-product-preset-item' },
         h(BotMark, { look: appearanceOf(entry.preset), size: 36, label: entry.preset.name }),
         h('span', { className: 'bt-set-copy' }, h('strong', null, entry.preset.name),
           h('span', { className: 'bt-set-hint' }, `${entry.preset.model.provider}/${entry.preset.model.model} · ${t('Preset')} v${entry.revision}`),
-          entry.origin ? h('span', { className: 'bt-set-hint' }, `${t('From')} ${entry.origin.source.identity} / ${entry.origin.source.botId} → ${entry.origin.targetRole}`) : null),
+          entry.origin ? h('span', { className: 'bt-set-hint' }, `${t('From')} ${entry.origin.source.identity} / ${entry.origin.source.botId} → ${roleName(entry.origin.targetRole)}`) : null),
         entry.status === 'active' ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm',
           disabled: Boolean(busy) || Boolean(listError) || stale || !Number.isSafeInteger(revision), onClick: () => apply(entry.id) }, t('Apply preset'))
           : h(StatusChip, null, t('Deleted')))),
@@ -327,9 +328,9 @@ export function ProductPresetSettings({ binding, call, settingsRevision, roleSet
     activityError ? h(InlineNotice, { tone: 'danger' }, activityError) : null,
     activity ? h(Card, { title: t('Preset activity') },
       activity.imports.map(item => h('p', { key: item.id, className: 'bt-set-row bt-set-hint' },
-        `${item.source.identity} / ${item.source.botId} → ${item.targetRole}: ${t(item.status)}${item.reason ? ` (${t(item.reason)})` : ''}`)),
+        `${item.source.identity} / ${item.source.botId} → ${roleName(item.targetRole)}: ${t(item.status)}${item.reason ? ` (${t(item.reason)})` : ''}`)),
       activity.applications.map(item => h('p', { key: `${item.sourceInstanceId}:${item.actorId}:${item.commandId}`, className: 'bt-set-row bt-set-hint' },
-        `${item.presetId} v${item.presetRevision} → ${item.targetRole}: ${t('Configuration')} v${item.revision}`)),
+        `${item.presetId} v${item.presetRevision} → ${roleName(item.targetRole)}: ${t('Configuration')} v${item.revision}`)),
       !activity.imports.length && !activity.applications.length ? h(EmptyState, { title: t('No preset activity yet.') }) : null,
       activity.importsCursor || activity.applicationsCursor ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm',
         disabled: activityBusy, onClick: () => { void loadActivity(activity) } }, t('Load more')) : null) : null,
@@ -349,10 +350,10 @@ export function ProductPresetSettings({ binding, call, settingsRevision, roleSet
         h(Row, { label: t('Target role') }, h('div', { className: 'bt-product-preset-target' },
           h(BotMark, { look: lookOf({ id: `role-${targetRole}`, color: roleSettings?.roles?.[targetRole]?.appearance?.color,
             avatar: roleSettings?.roles?.[targetRole]?.appearance }), size: 32,
-            label: t(targetRole === 'main' ? 'Main' : targetRole === 'router' ? 'Router' : 'Worker') }),
+            label: roleName(targetRole) }),
           h('select', { className: 'bt-select', 'aria-label': t('Target role'), value: targetRole,
             disabled: Boolean(busy), onChange: event => setTargetRole(event.target.value) },
-          roles.map(([id, name]) => h('option', { key: id, value: id }, t(name)))))),
+          roles.map(([id, name]) => h('option', { key: id, value: id }, name))))),
         h(Row, { label: t('Legacy role configuration'), hint: t('Paste a legacy role profile copy. Only the selected configuration fields are reviewed.'), stack: true },
           h('textarea', { className: 'bt-bs-input bt-bs-area', 'aria-label': t('Legacy role configuration'), rows: 5,
             required: true, value: sourceText, disabled: Boolean(busy), onChange: event => setSourceText(event.target.value) }))),
@@ -361,7 +362,7 @@ export function ProductPresetSettings({ binding, call, settingsRevision, roleSet
       h('button', { type: 'submit', className: 'bt-send bt-soft-sm', disabled: Boolean(busy) }, busy ? t('Loading…') : t('Preview')))) : null,
     preview ? h('div', { className: 'bt-product-preset-form' },
       h(Card, { title: t('Review source and target') },
-        h('p', { className: 'bt-set-row' }, `${preview.preview.source.identity} / ${preview.preview.source.botId} → ${preview.preview.targetRole}`),
+        h('p', { className: 'bt-set-row' }, `${preview.preview.source.identity} / ${preview.preview.source.botId} → ${roleName(preview.preview.targetRole)}`),
         h('p', { className: 'bt-set-row bt-set-hint' }, `${t('Source digest')}: ${preview.preview.source.digest}`),
         preview.preview.fields.map(field => h('p', { key: field.from, className: 'bt-set-row bt-set-hint' }, `${field.from} → ${field.to}`)),
         new Set([...preview.preview.ignored, ...ignored]).size ? h('p', { className: 'bt-set-row bt-set-hint' },

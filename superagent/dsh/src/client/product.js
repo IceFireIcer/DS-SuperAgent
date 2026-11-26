@@ -22,6 +22,7 @@ import { MenuSelect, MENU_SELECT_CSS } from './menu-select.js'
 import { createSource } from './sources.js'
 import { mergeMessages, mergeObservationItems, projectNativeTurnCards, projectTurnCards, rebaseRoleDraft } from './product-state.js'
 import { installLocale, t } from './i18n.js'
+import { ROLE_IDS, roleName } from './roles.js'
 import { AppearanceSettings, installAppearance } from './appearance.js'
 import { SettingsShell, SETTINGS_CHILDREN, SETTINGS_SHELL_CSS, installSettingsSections } from './settings-shell.js'
 import { settingsTarget } from './settings-navigation.js'
@@ -577,7 +578,7 @@ export function applyProduct(ctx) {
     flushing: t('Flushing source Session'), switching: t('Switching execution Environment'),
     completed: t('Handoff completed'), prepared: t('Handoff prepared'), verified: t('Handoff copy verified'),
     'handoff-blocked': t('Handoff blocked'), available: t('Handoff available') })[status] ?? status
-  const handoffOwnerCopy = owner => ({ worker: t('Worker'), operator: t('Operator'), human: t('You'),
+  const handoffOwnerCopy = owner => ({ worker: roleName('worker'), operator: t('Operator'), human: t('You'),
     host: t('Host') })[owner] ?? t('Unknown')
   const handoffNextStepCopy = nextStep => ({ prepare: t('Choose a target Environment and prepare the work copy.'),
     synchronize: t('Synchronize the prepared changes to the target, then verify the copy.'),
@@ -1314,7 +1315,7 @@ export function applyProduct(ctx) {
         h(BoardSurface, { dock: true }),
         modelChoice, composer)
     }
-    return h('section', { className: 'bt-main-conversation', 'aria-label': 'Main' },
+    return h('section', { className: 'bt-main-conversation', 'aria-label': roleName('main') },
       h('header', { className: 'bt-main-header' }, h(Header),
         h('span', { className: `bt-main-health bt-main-health-${state.health?.state ?? 'ready'}`, role: 'status' },
           state.modelsNeedSetup && state.health?.state !== 'running' ? t('Models need setup') : mainHealthCopy(state.health)),
@@ -1403,7 +1404,7 @@ export function applyProduct(ctx) {
       h('header', { className: 'bt-observation-header' },
         onBack ? h('button', { type: 'button', className: 'bt-soft', onClick: onBack }, t('Back to Main')) : h(Header),
         h('div', { className: 'bt-observation-heading' },
-          h('span', { className: 'bt-observation-role' }, observation?.role === 'router' ? 'Router' : 'Worker'),
+          h('span', { className: 'bt-observation-role' }, roleName(observation?.role === 'router' ? 'router' : 'worker')),
           h('strong', null, observation?.title ?? state.selectedObservation?.title ?? '')),
         h('span', { className: 'bt-observation-readonly' }, t('Read-only')),
         !state.connection?.connected ? h('button', { type: 'button', className: 'bt-icon-btn', title: t('Settings'), 'aria-label': t('Settings'),
@@ -1514,7 +1515,7 @@ export function applyProduct(ctx) {
             observation: null, observationError: null, observationDetail: null, observationDetailError: null }))
           if (state.binding) void loadObservation(state.binding, item, { reset: true })
         },
-      }, h('span', { className: 'bt-observation-role' }, item.role === 'router' ? 'Router' : 'Worker'),
+      }, h('span', { className: 'bt-observation-role' }, roleName(item.role === 'router' ? 'router' : 'worker')),
         h('span', { className: 'bt-observation-nav-copy' }, h('strong', null, item.title), h('span', null, statusCopy(item.status)))))
         : h('p', { className: 'bt-observation-empty' }, t('No Router or Worker activity yet.')),
       state.activityError ? h('p', { role: 'alert', className: 'bt-main-error' }, state.activityError) : null,
@@ -1610,7 +1611,7 @@ export function applyProduct(ctx) {
     const savingRef = useRef(false)
     const loadRequest = useRef(0)
     const clone = value => JSON.parse(JSON.stringify(value))
-    const roleRows = [['main', 'Main'], ['router', 'Router'], ['worker', 'Worker']]
+    const roleRows = ROLE_IDS.map(id => [id, roleName(id)])
     const refOf = model => `${model.provider}/${model.model}`
     const loadEfforts = async (roles) => {
       const refs = [...new Set([roles.main, roles.router, roles.worker].filter(Boolean).map(profile => refOf(profile.model)))]
@@ -1860,7 +1861,7 @@ export function applyProduct(ctx) {
                 saving ? t('Saving…') : t('Save configuration'))),
             h(Card, { title: t('Recent configuration uses') },
               snapshot.uses.length ? snapshot.uses.slice(0, 20).map(use => h('div', { key: use.id, className: 'bt-main-settings-use' },
-                h('span', { className: 'bt-observation-role' }, use.role),
+                h('span', { className: 'bt-observation-role' }, roleName(use.role)),
                 h('span', null, `${t('Configuration')} v${use.revision}`),
                 h('span', null, refOf(use[use.role] ?? use.worker ?? use.router)),
                 h('span', { className: 'bt-main-settings-use-session', title: use.sessionId }, use.sessionId),
@@ -1993,7 +1994,7 @@ export function applyProduct(ctx) {
     const state = useView()
     if (state.route === 'work') return h('section', { className: 'bt-main-conversation' },
       h('header', { className: 'bt-main-header' }, h(Header),
-        h('button', { type: 'button', className: 'bt-soft', onClick: shellActions.openMain }, t('Main'))),
+        h('button', { type: 'button', className: 'bt-soft', onClick: shellActions.openMain }, roleName('main'))),
       h(BoardSurface))
     return state.route === 'observe' ? h(ObservationConversation) : h(MainConversation)
   }

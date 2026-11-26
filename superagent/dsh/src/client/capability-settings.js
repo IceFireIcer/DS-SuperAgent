@@ -1,13 +1,13 @@
 import { createElement as h, useEffect, useRef, useState } from 'react'
 import { EmptyState, FieldRow, InlineNotice, SectionCard, StatusChip } from './product-settings-components.js'
 import { t } from './i18n.js'
+import { ROLE_IDS, roleName } from './roles.js'
 
 const blank = { name: '', kind: 'skill', instructions: '', serverName: '', toolName: '', url: '', resourceId: '', members: [] }
 const kindLabels = { skill: 'Skill', mcp: 'MCP tool', bundle: 'Capability bundle' }
-const roleLabels = { main: 'Main', router: 'Router', worker: 'Worker' }
 const blankScope = { role: 'worker', workItemId: '', environmentId: '' }
 const row = (label, control, layout) => h(FieldRow, { label: t(label), control, layout })
-const scopeLabel = scope => [t(roleLabels[scope.role]), scope.workItemId, scope.environmentId].filter(Boolean).join(' · ')
+const scopeLabel = scope => [roleName(scope.role), scope.workItemId, scope.environmentId].filter(Boolean).join(' · ')
 
 function readDraft(item) {
   return { ...blank, id: item.id, name: item.name, revision: item.revision, kind: item.definition.kind,
@@ -150,7 +150,7 @@ export function CapabilitySettings({ binding, call, works, environments }) {
         row(scopeLabel(bindingScope), action('Unbind', () => run('capability-bind', { ...address, enabled: false, scope: bindingScope }))))),
       row('Role', h('select', { className: 'bt-bs-input', value: scope.role, disabled: busy,
         onChange: event => setScope({ ...blankScope, role: event.target.value }) },
-      Object.entries(roleLabels).map(([role, label]) => h('option', { value: role, key: role }, t(label))))),
+      ROLE_IDS.map(role => h('option', { value: role, key: role }, roleName(role))))),
       scope.role === 'worker' ? scopeField('Work item', 'workItemId', (works ?? []).map(work => ({ id: work.id, label: work.goal }))) : null,
       scope.role === 'worker' ? scopeField('Execution environment', 'environmentId', environments ?? []) : null,
       row('Binding', action('Bind capability', bind, current.definition.kind === 'mcp'

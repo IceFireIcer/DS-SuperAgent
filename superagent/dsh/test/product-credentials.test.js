@@ -168,7 +168,7 @@ test('credential settings keep values out of projections and show exact grant an
       assert.equal(calls.find(entry => entry.endpoint === 'resource-grant').payload.requestId, requests[1].id)
       assert.deepEqual(JSON.parse(JSON.stringify(calls.find(entry => entry.endpoint === 'resource-grant').payload.scope)),
         { role: 'worker', workItemId: 'item-one', environmentId: 'work-one', sourceInstanceId: 'source-one' })
-      assert.match(document.body.textContent, /worker · tool/u)
+      assert.match(document.body.textContent, /Worker · tool/u)
       await change(document.querySelector('.bt-product-resource-selected input[type="password"]'), 'fictional-next-value')
       await click([...document.querySelectorAll('button')].find(button => button.textContent === 'Rotate credential'))
       assert.match(document.body.textContent, /Rotation is pending/u)
