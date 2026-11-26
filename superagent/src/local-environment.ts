@@ -677,16 +677,16 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
    * the caller's own cancellation is deliberately not attached, because background work has to outlive
    * the turn that started it and is stopped through the durable job record instead.
    */
-  async startCommand(name: string, jobId = randomUUID()): Promise<LocalJob> {
+  async startCommand(name: string, jobId = randomUUID(), path?: string): Promise<LocalJob> {
     this.permission('command')
     const configured = Object.hasOwn(this.owner.config.commands, name) ? this.owner.config.commands[name] : undefined
     if (!configured) throw new CoreError('UNSUPPORTED_CAPABILITY', 'Only configured command names can run; arbitrary argv, Shell, PTY and remote tools are not enabled.')
     if (name === this.owner.config.setup) throw new CoreError('UNSUPPORTED_CAPABILITY', 'Setup is controlled by preparation and explicit retry, not model tools.')
-    return this.startArgv(configured.argv, configured.backgroundTimeoutMs ?? configured.timeoutMs, jobId)
+    return this.startArgv(configured.argv, configured.backgroundTimeoutMs ?? configured.timeoutMs, jobId, path)
   }
 
-  async startShell(command: string, jobId = randomUUID()): Promise<LocalJob> {
-    return this.startArgv(await this.shellArgv(command), 3600000, jobId)
+  async startShell(command: string, jobId = randomUUID(), path?: string): Promise<LocalJob> {
+    return this.startArgv(await this.shellArgv(command), 3600000, jobId, path)
   }
 
   async startTerminal(command: string, jobId = randomUUID(), path?: string): Promise<LocalJob> {
@@ -705,14 +705,15 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
     } catch (error) { clearTimeout(timer); throw error }
   }
 
-  private async startArgv(argv: readonly string[], timeoutMs: number, jobId: string): Promise<LocalJob> {
+  private async startArgv(argv: readonly string[], timeoutMs: number, jobId: string, path?: string): Promise<LocalJob> {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
     timer.unref()
     try {
+      const cwd = await this.commandWorkdir(path, controller.signal)
       const executable = await this.context.subprocess.resolveExecutable(argv[0]!, {}, controller.signal)
       const collect = this.owner.store ? { maxBytes: 8192, spill: { maxBytes: maxSpillBytes } } : { maxBytes: 8192 }
-      const handle = this.context.subprocess.spawn({ argv: [executable, ...argv.slice(1)], cwd: this.cwd,
+      const handle = this.context.subprocess.spawn({ argv: [executable, ...argv.slice(1)], cwd,
         stdio: { stdin: 'ignore', stdout: collect, stderr: collect }, graceMs: 250, signal: controller.signal })
       const job = new BoundLocalJob(handle, controller.signal, text => this.sanitize(text), jobId,
         (key, stream, path) => this.retainStream(key, stream, path))

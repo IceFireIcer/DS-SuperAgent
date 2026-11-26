@@ -123,6 +123,10 @@ test('explicit task path grants add only their named external operations', async
   const result = await command.invoke('run_command', { name: 'where', path: external })
   assert.equal(result.exitCode, 0)
   assert.equal(result.stdout.trim(), 'external')
+  await assert.rejects(unbound.startCommand('where', 'background-denied', external), { code: 'PATH_DENIED' })
+  const background = await command.startCommand('where', 'background-granted', external)
+  assert.equal((await background.done).settled, true)
+  assert.equal(background.read().stdout.text.trim(), 'external')
 
   await writeFile(join(external, '.env'), 'fixture secret')
   await assert.rejects(environment.prepare(identity, undefined,
