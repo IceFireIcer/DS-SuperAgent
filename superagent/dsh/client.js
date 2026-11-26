@@ -12803,7 +12803,7 @@ function AppearanceSettings({ ctx }) {
 // ../package.json
 var package_default = {
   name: "ds-superagent",
-  version: "1.0.0",
+  version: "1.0.1",
   type: "module",
   main: "./dist/index.js",
   description: "DS SuperAgent (ds-superagent): production engine, DSH host and product client",
