@@ -355,14 +355,23 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
           cache: npm
           cache-dependency-path: superagent/package-lock.json
       - name: Trusted Publishing needs npm 11.5.1 or later
         run: npm install -g npm@11.6.2 --no-fund --no-audit
       - run: npm ci --no-fund --no-audit
+      - name: Build the package
+        run: |
+          npm run build
+          test -f dist/index.js
       - name: Publish the package
-        run: npm publish --provenance --access public --tag latest
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if npm view "ds-superagent@$version" version >/dev/null 2>&1; then
+            echo "ds-superagent@$version is already published; skipping npm publish."
+          else
+            npm publish --provenance --access public --tag latest
+          fi
       - name: Attach the package to the release
         env:
           GH_TOKEN: ${{ github.token }}
