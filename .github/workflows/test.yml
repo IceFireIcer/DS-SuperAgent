@@ -10,6 +10,10 @@ on:
         description: Run the desktop install and update checks on Windows, macOS, and Linux
         type: boolean
         default: false
+      desktop_preview:
+        description: Build and exercise the Windows x64 public preview candidate only
+        type: boolean
+        default: false
       full:
         description: Run all release checks, including compatibility and install/update matrices
         type: boolean
@@ -24,7 +28,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: test-${{ github.event_name }}-${{ github.ref }}-${{ inputs.full || false }}-${{ inputs.desktop_packages || false }}
+  group: test-${{ github.event_name }}-${{ github.ref }}-${{ inputs.full || false }}-${{ inputs.desktop_packages || false }}-${{ inputs.desktop_preview || false }}
   cancel-in-progress: ${{ github.event_name != 'release' }}
 
 jobs:
@@ -36,6 +40,7 @@ jobs:
       app: ${{ steps.scope.outputs.app }}
       mobile: ${{ steps.scope.outputs.mobile }}
       app_package: ${{ steps.scope.outputs.app_package }}
+      desktop_preview: ${{ steps.scope.outputs.desktop_preview }}
       docker: ${{ steps.scope.outputs.docker }}
       full: ${{ steps.scope.outputs.full }}
       base: ${{ steps.scope.outputs.base }}
@@ -53,9 +58,11 @@ jobs:
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
           FULL: ${{ inputs.full || (github.event_name == 'pull_request' && github.base_ref == 'main') }}
           DESKTOP_PACKAGES: ${{ github.event_name == 'workflow_dispatch' && inputs.desktop_packages }}
+          DESKTOP_PREVIEW: ${{ github.event_name == 'workflow_dispatch' && inputs.desktop_preview }}
         run: |
           echo "full=$FULL" >> "$GITHUB_OUTPUT"
           echo "base=$BASE" >> "$GITHUB_OUTPUT"
+          echo "desktop_preview=$DESKTOP_PREVIEW" >> "$GITHUB_OUTPUT"
           if [ "$FULL" = true ]; then
             node scripts/change-scope.mjs --full --github-output
             echo 'shards=[1,2,3,4]' >> "$GITHUB_OUTPUT"
@@ -64,6 +71,8 @@ jobs:
           fi
           if [ "$FULL" = true ]; then
             exit 0
+          elif [ "$DESKTOP_PREVIEW" = true ]; then
+            printf '%s\n' app_package=true app=false superagent=false mobile=false docker=false >> "$GITHUB_OUTPUT"
           elif [ "$DESKTOP_PACKAGES" = true ]; then
             printf '%s\n' app_package=true app=false superagent=false mobile=false docker=false >> "$GITHUB_OUTPUT"
           elif [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
@@ -247,7 +256,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.app_package == 'true'
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
     defaults:
       run:
         shell: bash
@@ -269,6 +278,29 @@ jobs:
           npm run build --prefix ../superagent
       - run: npm ci --no-fund --no-audit
       - run: npm run dist
+      - name: Check the Windows x64 public preview package
+        env:
+          DESKTOP_PREVIEW_EVIDENCE_DIR: ${{ runner.temp }}/desktop-preview
+        run: node scripts/check-packed.mjs 'dist-pack/win-unpacked/DS SuperAgent.exe' --preview
+      - name: Record the Windows x64 preview candidate
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = Get-ChildItem -LiteralPath dist-pack -Filter 'DS-SuperAgent-*-win-x64.exe' |
+            Select-Object -First 1
+          if (-not $installer) { throw 'The Windows installer was not built.' }
+          $output = Join-Path $env:RUNNER_TEMP 'desktop-preview'
+          New-Item -ItemType Directory -Force $output | Out-Null
+          $version = (Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
+          [ordered]@{
+            candidateSha = $env:GITHUB_SHA
+            version = $version
+            platform = 'windows'
+            architecture = 'x64'
+            distributionForm = 'nsis-installer'
+            filename = $installer.Name
+            sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $installer.FullName).Hash.ToLowerInvariant()
+          } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'candidate.json') -Encoding utf8
       - name: Check Windows package coexistence and capture desktop visual cases
         run: |
           sha256sum dist-pack/DS-SuperAgent-*-win-x64.exe
@@ -285,6 +317,18 @@ jobs:
           name: desktop-visuals-windows-x64-${{ github.sha }}
           path: ${{ runner.temp }}/desktop-visuals
           if-no-files-found: ignore
+      - name: Keep the Windows x64 preview candidate and evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: DS-SuperAgent-win-x64-preview-${{ github.sha }}
+          path: |
+            app/dist-pack/DS-SuperAgent-*-win-x64.exe
+            app/dist-pack/DS-SuperAgent-*-win-x64.exe.blockmap
+            app/dist-pack/latest.yml
+            ${{ runner.temp }}/desktop-preview
+          if-no-files-found: warn
+          compression-level: 0
       # The runner is a fresh machine, so the installer may run here. It must install for the
       # current user only, the installed app must pass the same check, and the uninstaller must
       # remove it again.
@@ -373,7 +417,7 @@ jobs:
   app-package-macos:
     name: Desktop app package (macOS ${{ matrix.arch }})
     needs: changes
-    if: needs.changes.outputs.app_package == 'true'
+    if: needs.changes.outputs.app_package == 'true' && needs.changes.outputs.desktop_preview != 'true'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     strategy:
@@ -430,7 +474,7 @@ jobs:
   app-package-linux:
     name: Desktop app package (Linux x64)
     needs: changes
-    if: needs.changes.outputs.app_package == 'true'
+    if: needs.changes.outputs.app_package == 'true' && needs.changes.outputs.desktop_preview != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     defaults:

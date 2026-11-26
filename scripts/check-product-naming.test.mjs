@@ -27,6 +27,13 @@ test('only the attribution line and exact known boundary literals are exempt', (
   assert.deepEqual(namingFindings('app/src/unrelated.mjs', "join(homedir(), '.ds-bot')").rejected, [1])
 })
 
+test('ported desktop source recognizes its versioned attribution line', () => {
+  assert.deepEqual(namingFindings('superagent/dsh/src/client/settings-shell.js', [
+    '// The settings surface follows DS Bot 0.3.10\'s grouped console.',
+    'const label = "DS Bot settings"',
+  ].join('\n')), { rejected: [2], attributions: 1, boundaries: 0 })
+})
+
 test('the CI command requires runtime bundles and rejects legacy names in desktop HTML and asset paths', context => {
   const temp = realpathSync(tmpdir())
   const root = realpathSync(mkdtempSync(join(temp, 'ds-superagent-naming-')))

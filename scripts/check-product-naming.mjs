@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 const legacyName = /(?<![a-z\d])(?:ds[-_ ]?bot|dsh[-_ ]?bot|deepseek[-_ ]?bot|dshdesktop|fei2411)|\/api\/bot\b/giu
 const legacyShellNames = "['DS Bot', 'DeepSeek Bot']"
 const legacyBundleNames = "['ds-bot', 'deepseek-bot-engine', 'dsbot-engine', 'ds-superagent-host', 'ds-superagent-ui']"
-const sourceNote = /^\/\/ (?:(?:Derived|Adapted) from|Adapts .+ from) DS Bot v?0\.3\.8\b/iu
+const sourceNote = /^(?:\/\/|\/\*) (?:(?:Derived|Adapted|Ported) from DS Bot|.*\bDS Bot\b.*\b0\.3\.(?:8|10)\b)/iu
 const runtimeText = /\.(?:[cm]?[jt]s|[jt]sx|jsonc?|ya?ml|css|html?|svg|xml|plist|nsh|ps1|sh|cmd|bat|desktop)$/iu
 const runtimePaths = [
   'app/src', 'app/ui', 'app/assets', 'app/build/installer.nsh', 'app/electron-builder.yml', 'app/package.json', 'start.ps1',
@@ -21,6 +21,7 @@ const boundaryLiterals = new Map([
   ['app/src/product.mjs', [legacyShellNames, "join(homedir(), '.ds-bot')"]],
   ['app/src/profile.mjs', [legacyBundleNames]],
   ['app/src/product-backups.mjs', ["join(homedir(), '.ds-bot')"]],
+  ['superagent/src/local-environment.ts', ["resolve(homedir(), '.ds-bot'),"]],
   ['superagent/src/product-host.ts', ["join(homedir(), '.ds-bot')"]],
   ['superagent/src/product-memory-import.ts', ["root.schema !== 'ds-bot-memory-export'"]],
 ])

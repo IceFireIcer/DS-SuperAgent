@@ -16,6 +16,10 @@ import { fileURLToPath } from 'node:url'
 import { hostExecutable } from '../src/host-process.mjs'
 import { PRODUCT_NAME, PRODUCT_SLUG } from '../src/product.mjs'
 import { isNewer } from '../src/updates.mjs'
+import {
+  previewAlphaGoal, previewAlphaQuestion, previewBetaGoal, previewMainOnly, previewParallel,
+  previewPath, previewPathApproval, previewPathDenial, previewPathQuestion, previewPathRetryQuestion,
+} from '../../superagent/dsh/dev/preview-acceptance-model.mjs'
 import { t55Question, t55Request, t55SlowReply } from '../../superagent/dsh/dev/t55-controls-model.mjs'
 import { checkPackedP0, checkPackedModelSetup } from './check-packed-p0.mjs'
 import { captureApplicationScreenshots, captureInitialMainScreenshot, checkPackedVisuals } from './check-packed-visuals.mjs'
@@ -30,7 +34,8 @@ const controls = option === '--controls'
 const classic = option === '--classic'
 const coexistence = option === '--coexistence'
 const firstModel = option === '--first-model'
-const shotFile = upgrade || controls || classic || coexistence || firstModel ? undefined : option
+const preview = option === '--preview'
+const shotFile = upgrade || controls || classic || coexistence || firstModel || preview ? undefined : option
 const executable = given || packedExecutable()
 const appImage = process.platform === 'linux' && executable.endsWith('.AppImage')
 const mainPrompt = 'packaged app check'
@@ -92,6 +97,9 @@ function checkResources(executable) {
 
 const work = realpathSync.native(mkdtempSync(join(realpathSync.native(tmpdir()), 'ds-superagent-packed-')))
 const mockLog = join(work, 'mock.log')
+const previewWorkspace = join(work, 'workspace')
+const previewExternalDir = join(work, 'external')
+const previewExternalFile = join(previewExternalDir, 'preview-note.txt')
 mkdirSync(join(work, 'home'))
 mkdirSync(join(work, 'shell'))
 // CDP cannot answer the native first-close dialog. The notice has its own tests; this check
@@ -217,7 +225,8 @@ async function fingerprint(payload) {
 function startMock() {
   const mock = spawn(process.execPath, [join(root, '..', 'superagent', 'dsh', 'dev', 'mock-llm.mjs')], {
     env: { ...process.env, MOCK_PORT: '0', MOCK_LOG: mockLog, MOCK_T55_CONTROLS: controls || classic ? '1' : '0',
-      MOCK_CLASSIC_ROUND_TRIP: classic ? '1' : '0' },
+      MOCK_CLASSIC_ROUND_TRIP: classic ? '1' : '0', MOCK_PREVIEW_ACCEPTANCE: preview ? '1' : '0',
+      PREVIEW_EXTERNAL_FILE: previewExternalFile },
     stdio: ['ignore', 'pipe', 'inherit'],
   })
   children.push(mock)
@@ -703,6 +712,248 @@ async function checkWorkControls(cdp) {
     alphaSessionId: firstAlpha.sessionId, betaSessionId: firstBeta.sessionId })}`)
 }
 
+async function checkPreviewAcceptance(cdp, executable) {
+  const evaluate = async expression => {
+    const result = await cdp.call('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })
+    if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text)
+    return result.result.value
+  }
+  const call = async (endpoint, payload = {}) => {
+    const value = await evaluate(`(async () => {
+      const response = await fetch('/api/product', { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ endpoint: ${JSON.stringify(endpoint)}, payload: ${JSON.stringify(payload)} }) });
+      const result = await response.json();
+      if (!result.ok) throw new Error('Product request failed: ' + ${JSON.stringify(endpoint)} + ' (' + response.status + ')');
+      return result.value;
+    })()`)
+    return value
+  }
+  const read = async () => {
+    const binding = await call('open')
+    const history = await call('history', { instanceId: binding.instanceId })
+    return { binding, history }
+  }
+  const waitFor = async (check, label, timeout = 45_000) => {
+    const deadline = Date.now() + timeout
+    let last
+    while (Date.now() < deadline) {
+      try {
+        const value = await check()
+        last = value
+        if (value) return value
+      } catch (error) {
+        last = error.message
+      }
+      await sleep(250)
+    }
+    throw new Error(`timed out waiting for ${label}${last ? ` (${typeof last === 'string' ? last : JSON.stringify(last)})` : ''}`)
+  }
+  const send = async text => {
+    await waitFor(() => evaluate(`Boolean(document.querySelector('#main-message'))`), 'the Main composer')
+    await evaluate(`document.querySelector('#main-message').focus()`)
+    await cdp.call('Input.insertText', { text })
+    await waitFor(() => evaluate(`document.querySelector('#main-message')?.value === ${JSON.stringify(text)}
+      && Boolean(document.querySelector('.bt-main-composer button[type="submit"]:enabled'))`), `the typed Main request ${text}`)
+    await evaluate(`document.querySelector('.bt-main-composer button[type="submit"]').click()`)
+  }
+  const clickOption = async label => {
+    const clicked = await waitFor(() => evaluate(`(() => {
+      const button = [...document.querySelectorAll('.bt-q-dock .bt-q-opt, .bt-main-work-options button')]
+        .find(item => !item.disabled && item.textContent.trim() === ${JSON.stringify(label)});
+      button?.click();
+      return Boolean(button);
+    })()`), `the ${label} answer choice`)
+    assert.equal(clicked, true)
+    await waitFor(() => evaluate(`(() => {
+      const button = [...document.querySelectorAll('.bt-q-dock .bt-q-submit, .bt-main-work-answer button[type="submit"]')]
+        .find(item => !item.disabled);
+      button?.click();
+      return Boolean(button);
+    })()`), `the answer submission for ${label}`)
+  }
+  const card = (history, goal) => (history.works ?? []).find(work => work.brief?.goal === goal)
+  const evidence = {
+    candidate: process.env.GITHUB_SHA ?? null,
+    model: 'mock (deterministic orchestration evidence, not real-model acceptance)',
+    package: {
+      version: JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version,
+      executable: basename(executable),
+      executableSha256: await fingerprint(executable),
+      asarSha256: await fingerprint(join(dirname(executable), 'resources', 'app.asar')),
+    },
+    startedAt: new Date().toISOString(),
+    scenarios: {},
+  }
+  mkdirSync(join(work, 'workspace'), { recursive: true })
+  mkdirSync(previewExternalDir, { recursive: true })
+  writeFileSync(previewExternalFile, 'preview external note\n')
+  await waitFor(() => evaluate(`Boolean(document.querySelector('.bt-main-composer[data-main-input-ready] #main-message'))`),
+    'the Main composer without a project')
+  const noProject = await read()
+  const options = await call('directory-options', { instanceId: noProject.binding.instanceId })
+  assert.equal(options.default, null, 'a fresh isolated profile has no default project')
+  assert.equal((noProject.history.works ?? []).length, 0)
+  await send(previewMainOnly)
+  const mainOnly = await (async () => {
+    const deadline = Date.now() + 45_000
+    let state = await read()
+    let surface
+    while (Date.now() < deadline) {
+      state = await read()
+      const reply = state.history.messages?.find(message => message.role === 'main'
+        && message.text.includes('Main replied without a project.'))
+      if (reply) return state
+      surface = await evaluate(`({
+        alert: [...document.querySelectorAll('[role="alert"]')].map(node => node.textContent.trim()).filter(Boolean),
+        target: [...document.querySelectorAll('.bt-main-directory button[aria-haspopup="menu"]')]
+          .map(node => ({ label: node.getAttribute('aria-label'), value: node.dataset.value })),
+        composer: document.querySelector('.bt-main-composer')?.innerText ?? null,
+      })`)
+      await sleep(250)
+    }
+    throw new Error(`the no-project Main reply did not arrive: ${JSON.stringify({
+      messages: state.history.messages?.map(({ role, status, text }) => ({ role, status, text })),
+      surface,
+    })}`)
+  })()
+  assert.equal((mainOnly.history.works ?? []).length, 0, 'Main-only startup must create no work')
+  const usage = await call('product-usage', { instanceId: mainOnly.binding.instanceId })
+  assert.equal((usage.roles?.router?.totalTokens ?? 0), 0, 'Main-only startup must not start Router')
+  assert.equal((usage.roles?.worker?.totalTokens ?? 0), 0, 'Main-only startup must not start a Worker')
+  evidence.scenarios.mainOnly = {
+    defaultDirectory: null,
+    mainReply: true,
+    works: 0,
+    routerTokens: 0,
+    workerTokens: 0,
+  }
+  console.log('check-packed: preview main-only startup passed')
+
+  const directory = await call('directory-register', {
+    instanceId: mainOnly.binding.instanceId, commandId: 'preview-register-project', path: previewWorkspace,
+  })
+  await call('directory-default-save', {
+    instanceId: mainOnly.binding.instanceId, commandId: 'preview-save-project',
+    expectedRevision: 0, environmentId: directory.id,
+  })
+  await evaluate('location.reload()')
+  await waitFor(async () => (await call('directory-options', { instanceId: mainOnly.binding.instanceId })).default?.root
+    === realpathSync.native(previewWorkspace),
+    'the selected preview project')
+  await waitFor(() => evaluate(`Boolean(document.querySelector('.bt-main-composer[data-main-input-ready] #main-message'))`),
+    'Main after selecting the preview project')
+  await waitFor(() => evaluate(`[...document.querySelectorAll('.bt-main-composer button[aria-haspopup="menu"]')]
+    .some(button => /^(Execution target|执行目标)[:：]/u.test(button.getAttribute('aria-label') ?? '')
+      && button.dataset.value === 'local-only')`), 'the local-only execution target after selecting the project')
+  await send(previewParallel)
+  const parallelWaiting = await (async () => {
+    const deadline = Date.now() + 45_000
+    let state
+    while (Date.now() < deadline) {
+      state = await read()
+      const alpha = card(state.history, previewAlphaGoal)
+      const beta = card(state.history, previewBetaGoal)
+      if (alpha?.control?.attention?.question === previewAlphaQuestion && beta?.control?.assignment?.state === 'running') {
+        return { ...state, alpha, beta }
+      }
+      await sleep(250)
+    }
+    throw new Error(`the two preview Workers did not overlap: ${JSON.stringify({
+      messages: state?.history.messages?.map(({ role, status, text }) => ({ role, status, text })),
+      works: state?.history.works?.map(work => ({ goal: work.brief?.goal, status: work.status,
+        attention: work.control?.attention?.question, assignment: work.control?.assignment?.state, error: work.error })),
+      surface: await evaluate(`({
+        target: [...document.querySelectorAll('.bt-main-composer button[aria-haspopup="menu"]')]
+          .map(button => ({ label: button.getAttribute('aria-label'), value: button.dataset.value })),
+        alerts: [...document.querySelectorAll('[role="alert"]')].map(node => node.textContent.trim()).filter(Boolean),
+      })`),
+      execution: await call('execution-options', { instanceId: mainOnly.binding.instanceId }).catch(error => error.message),
+    })}`)
+  })()
+  const firstAlpha = parallelWaiting.alpha.control.assignment
+  const firstBeta = parallelWaiting.beta.control.assignment
+  assert.notEqual(firstAlpha.sessionId, firstBeta.sessionId)
+  assert.notEqual(parallelWaiting.alpha.control.ticketId, parallelWaiting.beta.control.ticketId)
+  const betaFirst = await waitFor(async () => {
+    const state = await read()
+    const alpha = card(state.history, previewAlphaGoal)
+    const beta = card(state.history, previewBetaGoal)
+    if (beta?.outcome?.status === 'success' && alpha?.control?.attention?.status === 'waiting') {
+      return { ...state, alpha, beta }
+    }
+    return undefined
+  }, 'B to deliver while A waits')
+  const betaOutcome = betaFirst.beta.outcome.summary
+  assert.match(betaOutcome, /Preview B delivered while A waited/u)
+  await clickOption('Approve A')
+  const bothDelivered = await waitFor(async () => {
+    const state = await read()
+    const alpha = card(state.history, previewAlphaGoal)
+    const beta = card(state.history, previewBetaGoal)
+    if (alpha?.outcome?.status === 'success' && beta?.outcome?.status === 'success') return { ...state, alpha, beta }
+    return undefined
+  }, 'both preview Workers to deliver')
+  assert.match(bothDelivered.alpha.outcome.summary, /Preview A completed/u)
+  assert.equal(bothDelivered.alpha.control.assignment.sessionId, firstAlpha.sessionId)
+  assert.equal(bothDelivered.beta.control.assignment.sessionId, firstBeta.sessionId)
+  evidence.scenarios.parallel = {
+    alpha: { ticketId: bothDelivered.alpha.control.ticketId, sessionId: firstAlpha.sessionId, assignmentId: firstAlpha.id },
+    beta: { ticketId: bothDelivered.beta.control.ticketId, sessionId: firstBeta.sessionId, assignmentId: firstBeta.id },
+    distinctTickets: true,
+    distinctSessions: true,
+    betaDeliveredWhileAlphaWaited: true,
+    alphaResumedInOriginalAssignment: bothDelivered.alpha.control.assignment.id === firstAlpha.id,
+    betaOutcome,
+    alphaOutcome: bothDelivered.alpha.outcome.summary,
+  }
+  console.log('check-packed: preview parallel delivery passed')
+
+  await send(previewPath)
+  const pathBefore = await waitFor(async () => {
+    const state = await read()
+    const path = card(state.history, 'PREVIEW read the granted external note.')
+    return path?.control?.attention?.question === previewPathQuestion ? { ...state, path } : undefined
+  }, 'the preview path write question')
+  assert.deepEqual(pathBefore.path.brief.pathGrants, [{ path: previewExternalFile, operations: ['read'] }])
+  assert.equal(readFileSync(previewExternalFile, 'utf8'), 'preview external note\n')
+  await clickOption(previewPathDenial)
+  const pathDenied = await waitFor(async () => {
+    const state = await read()
+    const path = card(state.history, 'PREVIEW read the granted external note.')
+    const local = join(previewWorkspace, 'preview-after-refusal.txt')
+    return path?.control?.attention?.question === previewPathRetryQuestion && existsSync(local) ? { ...state, path } : undefined
+  }, 'the refused write and unrelated local work')
+  assert.equal(readFileSync(previewExternalFile, 'utf8'), 'preview external note\n')
+  assert.equal(readFileSync(join(previewWorkspace, 'preview-after-refusal.txt'), 'utf8'), 'unrelated preview work continued\n')
+  await clickOption(previewPathApproval)
+  const pathApproved = await waitFor(async () => {
+    const state = await read()
+    const path = card(state.history, 'PREVIEW read the granted external note.')
+    return path?.outcome?.status === 'success' && readFileSync(previewExternalFile, 'utf8').includes('approved write')
+      ? { ...state, path } : undefined
+  }, 'the approved external write')
+  assert.match(pathApproved.path.outcome.summary, /Preview external write completed/u)
+  assert.deepEqual(pathApproved.path.brief.pathGrants, [{ path: previewExternalFile, operations: ['read', 'write'] }])
+  evidence.scenarios.pathGrants = {
+    initialOperations: ['read'],
+    refusedOperation: 'write',
+    externalUnchangedAfterRefusal: true,
+    unrelatedLocalFile: 'preview-after-refusal.txt',
+    approvedOperations: ['read', 'write'],
+    finalExternalContent: readFileSync(previewExternalFile, 'utf8'),
+  }
+  console.log('check-packed: preview path grants passed')
+
+  if (process.env.DESKTOP_PREVIEW_EVIDENCE_DIR) {
+    const output = resolve(process.env.DESKTOP_PREVIEW_EVIDENCE_DIR)
+    mkdirSync(output, { recursive: true })
+    writeFileSync(join(output, 'preview-acceptance.json'), `${JSON.stringify(evidence, null, 2)}\n`)
+    const { data } = await cdp.call('Page.captureScreenshot', { format: 'png' })
+    writeFileSync(join(output, 'preview-path-approved.png'), Buffer.from(data, 'base64'))
+  }
+  console.log(`check-packed: ${JSON.stringify({ previewAcceptance: evidence.scenarios })}`)
+}
+
 async function checkClassicRoundTrip(cdp) {
   const evaluate = async expression => {
     const result = await cdp.call('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })
@@ -1000,10 +1251,10 @@ try {
     !/^(?:ELECTRON_RUN_AS_NODE$|DS_SUPERAGENT_|DS_BOT_|DSH_|DEEPSEEK_|NODE_OPTIONS$|NODE_PATH$)/iu.test(key)))
   Object.assign(env, {
     DS_SUPERAGENT_HOME: join(work, 'home'), DS_SUPERAGENT_SHELL_DATA: join(work, 'shell'),
-    DS_SUPERAGENT_WORKSPACE: join(work, 'workspace'),
     DSH_HOME: join(work, 'personal-dsh'),
     DEEPSEEK_BASE_URL: modelUrl, DEEPSEEK_API_KEY: 'mock-key',
   })
+  if (!preview) env.DS_SUPERAGENT_WORKSPACE = join(work, 'workspace')
   if (updateFeed) {
     nextVersion = /^version:[ \t]*(\d+\.\d+\.\d+)[ \t]*\r?$/mu.exec(readFileSync(join(nextExecutable, 'latest.yml'), 'utf8'))?.[1]
     assert.ok(nextVersion, 'the fixture feed must have a next version')
@@ -1034,14 +1285,19 @@ try {
     if (answer.exceptionDetails) throw new Error(answer.exceptionDetails.exception?.description ?? answer.exceptionDetails.text)
     return answer.result?.value
   }
-  const windowDeadline = Date.now() + 30_000
+  const windowDeadline = Date.now() + 90_000
   let title
   do {
     title = await windowState('win?.getTitle() ?? null')
     if (title !== null) break
     await sleep(200)
   } while (Date.now() < windowDeadline)
-  if (title === null) throw new Error('the product window did not finish navigating to the Host')
+  if (title === null) {
+    const windows = await windowState(`JSON.stringify(BrowserWindow.getAllWindows().map(win => ({
+      title: win.getTitle(), url: win.webContents.getURL(), visible: win.isVisible(), destroyed: win.isDestroyed(),
+    })))`)
+    throw new Error(`the product window did not finish navigating to the Host: ${windows}`)
+  }
   if (title !== PRODUCT_NAME) throw new Error('the window has the wrong product name')
   if (!existsSync(join(work, 'home', 'superagent', 'core', 'state.sqlite'))) throw new Error('the product database did not open')
   if (existsSync(join(work, 'personal-dsh'))) throw new Error('the app wrote outside its own DSH home')
@@ -1054,7 +1310,8 @@ try {
   const screenshotDir = process.env.DESKTOP_APPLICATION_SCREENSHOTS_DIR
     ? resolve(process.env.DESKTOP_APPLICATION_SCREENSHOTS_DIR) : undefined
   const initialCapture = screenshotDir ? await captureInitialMainScreenshot(cdp, screenshotDir) : undefined
-  chatError = await chat(cdp).then(() => undefined, error => error)
+  if (preview) await checkPreviewAcceptance(cdp, packedApp)
+  else chatError = await chat(cdp).then(() => undefined, error => error)
   if (shotFile) {
     const { data } = await cdp.call('Page.captureScreenshot', { format: 'png' })
     writeFileSync(resolve(shotFile), Buffer.from(data, 'base64'))

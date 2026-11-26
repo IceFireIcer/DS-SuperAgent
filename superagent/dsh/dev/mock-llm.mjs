@@ -3,6 +3,7 @@
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { dirname } from 'node:path'
+import { previewAcceptanceReply } from './preview-acceptance-model.mjs'
 import { t55ControlsReply, t55SlowReply } from './t55-controls-model.mjs'
 import { fileURLToPath } from 'node:url'
 
@@ -10,6 +11,7 @@ const port = Number(process.env.MOCK_PORT ?? 8765)
 const logPath = process.env.MOCK_LOG ?? fileURLToPath(new URL('../../.dsh-test/mock.jsonl', import.meta.url))
 const controls = process.env.MOCK_T55_CONTROLS === '1'
 const classicRoundTrip = process.env.MOCK_CLASSIC_ROUND_TRIP === '1'
+const previewAcceptance = process.env.MOCK_PREVIEW_ACCEPTANCE === '1'
 mkdirSync(dirname(logPath), { recursive: true })
 
 const textOf = content => typeof content === 'string' ? content
@@ -57,7 +59,8 @@ const server = createServer(async (request, response) => {
   const user = latestUserText(body)
   const reply = user.startsWith('收到：') ? user : `收到：${user}`
   const id = `mock-${Date.now()}-${Math.random().toString(16).slice(2)}`
-  const block = (controls ? t55ControlsReply(body, user, id) : undefined) ?? { type: 'text', text: reply }
+  const block = (controls ? t55ControlsReply(body, user, id)
+    : previewAcceptance ? await previewAcceptanceReply(body, user, id) : undefined) ?? { type: 'text', text: reply }
   const stop_reason = block.type === 'tool_use' ? 'tool_use' : 'end_turn'
   const classicWork = classicRoundTrip && block.type === 'tool_use' && block.name === 'write_file' && block.input.path === 'alpha.txt'
   if (controls && (user === t55SlowReply || classicWork)) {

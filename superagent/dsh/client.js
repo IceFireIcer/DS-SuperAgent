@@ -22596,7 +22596,9 @@ function applyProduct(ctx) {
   });
   const effectiveTarget = (state) => {
     const target = state.directoryOptions?.execution?.policy?.defaultTarget;
-    return state.executionTarget ?? (target === "remote-only" || target === "auto" ? target : "local-only");
+    const configured = target === "remote-only" || target === "auto" ? target : "local-only";
+    if (state.executionTarget) return state.executionTarget;
+    return !state.directoryOptions?.default && !state.connection?.connected ? "auto" : configured;
   };
   const mainBusy = (state) => state.mainSending || Boolean(state.activeTurn) || state.messages.some((message) => ["queued", "running", "stopping"].includes(message.status));
   const pendingQuestion = (state) => state.works.find((work) => work.control?.assignment && work.control.permissions?.canAnswer && work.control.attention?.status === "waiting");
