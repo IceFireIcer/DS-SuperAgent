@@ -41,6 +41,7 @@ const appImage = process.platform === 'linux' && executable.endsWith('.AppImage'
 const mainPrompt = 'packaged app check'
 const mainReply = `收到：${mainPrompt}`
 const writableMainInput = '.bt-main-composer[data-main-input-ready] #main-message:enabled:not([readonly])'
+const candidateSha = process.env.RELEASE_CANDIDATE_SHA || process.env.GITHUB_SHA
 
 if (coexistence && process.platform !== 'win32') throw new Error('The coexistence check targets the Windows unpacked app.')
 if (upgrade && (!nextExecutable || !existsSync(nextExecutable))) {
@@ -200,9 +201,9 @@ async function checkSharp(app, launched) {
     encoding: 'utf8', timeout: 30_000,
   })
   if (result.error || result.status !== 0) throw new Error(`packaged sharp failed (exit ${String(result.status)}, signal ${String(result.signal)}): ${result.error?.message ?? ''}\n${result.stderr ?? ''}`)
-  if (process.env.GITHUB_SHA) {
+  if (candidateSha) {
     const candidate = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' })
-    assert.equal(candidate.stdout?.trim(), process.env.GITHUB_SHA, 'the package probe must run from the candidate checkout')
+    assert.equal(candidate.stdout?.trim(), candidateSha, 'the package probe must run from the candidate checkout')
     const client = spawnSync('git', ['show', 'HEAD:superagent/dsh/client.js'], { cwd: root, maxBuffer: 8 * 1024 * 1024 })
     assert.ifError(client.error)
     assert.equal(client.status, 0, 'read the candidate client bundle from Git')
@@ -213,7 +214,7 @@ async function checkSharp(app, launched) {
   }
   console.log(result.stdout.trim())
   const payload = appImage ? launched : linux ? app : join(resources, 'app.asar')
-  console.log(`check-packed: ${JSON.stringify({ candidate: process.env.GITHUB_SHA, payload: basename(payload), sha256: await fingerprint(payload) })}`)
+  console.log(`check-packed: ${JSON.stringify({ candidate: candidateSha, payload: basename(payload), sha256: await fingerprint(payload) })}`)
 }
 
 async function fingerprint(payload) {
@@ -773,7 +774,7 @@ async function checkPreviewAcceptance(cdp, executable) {
   }
   const card = (history, goal) => (history.works ?? []).find(work => work.brief?.goal === goal)
   const evidence = {
-    candidate: process.env.GITHUB_SHA ?? null,
+    candidate: candidateSha ?? null,
     model: 'mock (deterministic orchestration evidence, not real-model acceptance)',
     package: {
       version: JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version,
