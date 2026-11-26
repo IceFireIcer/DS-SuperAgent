@@ -98,6 +98,11 @@ test('one Main request creates two independent work items and lets the fast one 
   engine.effects.start()
   await engine.sendMainMessage({ instanceId: 'personal', commandId: 'parallel-note', text: 'Prepare A and independently investigate B.' })
   await Promise.race([bothStarted.promise, sleep(10_000).then(() => { throw new Error('Both Workers did not start together.') })])
+  const liveHistory = await Promise.race([
+    engine.getMainConversation({ instanceId: 'personal' }),
+    sleep(5000).then(() => { throw new Error('Main history stopped responding while both Workers were active.') }),
+  ])
+  assert.equal(liveHistory.works.length, 2)
   try {
     await until(async () => (await engine.getMainConversation({ instanceId: 'personal' })).works.some(work => work.outcome?.status === 'success'), 'the first verified item')
   } catch (error) {
