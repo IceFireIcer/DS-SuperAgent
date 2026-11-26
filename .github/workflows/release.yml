@@ -355,7 +355,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
           cache: npm
           cache-dependency-path: superagent/package-lock.json
       - name: Trusted Publishing needs npm 11.5.1 or later
