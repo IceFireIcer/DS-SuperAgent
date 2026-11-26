@@ -13,6 +13,7 @@
 
 - [总体规格 #1（当前以 R5 正式规格为准）](https://github.com/IceFireIcer/DS-SuperAgent/issues/1)
 - 本地正文：[Super-agent 三层独立产品规格 R5](../superagent/spec-r5.md)；它显式替代 v2.1 的 D01、D17、D18、D20 冲突条款。
+- [侧栏角色卡与只读 Router/Worker 上下文 #213](https://github.com/IceFireIcer/DS-SuperAgent/issues/213)；本地正文：[spec-role-cards.md](../superagent/spec-role-cards.md)。它修正 #97 的侧栏验收，并取代 #135 中 composer dock 的放置决定。
 - 标签：ready-for-agent、enhancement。
 - 当前 R5 使用总规格 → R5-01—R5-36 的直接原生子 Issue，不再创建功能聚合父票；具体前置用原生 blocked-by 表达。[拆分正文](../superagent/r5-tickets-draft.md)记录已批准的范围，[r5-publication.json](../superagent/r5-publication.json)记录发布映射与回读状态；只有 `verified: true` 才表示整批发布核对完成。
 - R5 实施票使用 ready-for-agent 和 enhancement；只从本批次已满足具体 blockers 的票开始，不能把总体规格当作单张可一次完成的实现任务。初始入口是 [R5-01 / #93](https://github.com/IceFireIcer/DS-SuperAgent/issues/93)。
