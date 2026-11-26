@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PROTOTYPE — DS-Bot 视觉对齐</title>
+<style>
+  :root {
+    --bt-main: #fcfcfc; --bt-sidebar: #f7f7f7; --bt-card: #ffffff; --bt-bubble: #eeeeee;
+    --bt-ink: #141414; --bt-user: #070707; --bt-user-ink: #fcfcfc; --bt-accent: #4d6bfe;
+    --bt-accent-ink: #ffffff; --bt-ink-2: color-mix(in srgb, var(--bt-ink) 60%, transparent);
+    --bt-ink-3: color-mix(in srgb, var(--bt-ink) 36%, transparent);
+    --bt-line: color-mix(in srgb, var(--bt-ink) 8%, transparent);
+    --bt-line-2: color-mix(in srgb, var(--bt-ink) 15%, transparent);
+    --bt-hover: rgba(119,119,119,.09); --bt-active: rgba(119,119,119,.17);
+    --bt-accent-soft: color-mix(in srgb, var(--bt-accent) 14%, transparent);
+    --bt-tag-bg: color-mix(in srgb, var(--bt-ink) 6%, transparent);
+    --bt-tag-ink: color-mix(in srgb, var(--bt-ink) 58%, transparent);
+    --bt-glass-rim: rgba(20,20,20,.09);
+    --bt-card-shadow: 0 1px 2px rgba(0,0,0,.03);
+    --bt-dialog-shadow: 0 24px 70px rgba(0,0,0,.18), 0 2px 8px rgba(0,0,0,.06);
+    --bt-nav-thumb-bg: color-mix(in srgb, var(--bt-card) 82%, var(--bt-active));
+    --bt-nav-thumb-shadow: 0 1px 3px rgba(0,0,0,.08);
+    --bt-green: #00c972; --bt-star: #ff9800; --bt-danger: #e02135; --bt-warn: #8a5a00;
+    --bt-danger-soft: color-mix(in srgb, var(--bt-danger) 14%, transparent);
+    --bt-knob: #ffffff; --bt-font: var(--dsw-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    --motion: 1; --content-font: 14px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; font-family: var(--bt-font); color: var(--bt-ink); background: var(--bt-main);
+    display: grid; place-items: center; min-height: 100vh; padding: 24px 24px 96px;
+  }
+  body[data-ds-dark-theme] { --bt-glass-rim: rgba(255,255,255,.11); --bt-card-shadow: 0 1px 2px rgba(0,0,0,.35);
+    --bt-dialog-shadow: 0 24px 70px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.3); }
+  .tag-proto { position: fixed; top: 12px; left: 12px; z-index: 60; font-size: 11px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--bt-ink-3); border: .5px solid var(--bt-line-2);
+    border-radius: 999px; padding: 4px 10px; background: color-mix(in srgb, var(--bt-card) 80%, transparent); }
+  .settings { width: min(1100px, 96vw); height: min(780px, calc(100vh - 120px)); display: flex;
+    background: var(--bt-main); border: .5px solid var(--bt-glass-rim); border-radius: 20px;
+    box-shadow: var(--bt-dialog-shadow); overflow: hidden;
+    transition: background calc(var(--motion) * 180ms) ease, border-color calc(var(--motion) * 180ms) ease; }
+  .nav { width: 198px; flex: none; background: color-mix(in srgb, var(--bt-sidebar) 88%, var(--bt-main));
+    border-right: .5px solid var(--bt-line); padding: 16px 10px; display: flex; flex-direction: column; gap: 2px;
+    overflow: auto; }
+  .nav-group { font-size: 11px; line-height: 16px; color: var(--bt-ink-3); padding: 10px 12px 4px; }
+  .nav-item { display: flex; align-items: center; gap: 8px; font-size: 13px; line-height: 20px;
+    padding: 7px 10px; border-radius: 10px; color: var(--bt-ink-2); cursor: pointer; border: 0; background: none;
+    text-align: left; font-family: inherit; transition: background calc(var(--motion) * 160ms) ease,
+      color calc(var(--motion) * 160ms) ease; }
+  .nav-item:hover { background: var(--bt-hover); color: var(--bt-ink); }
+  .nav-item.active { background: var(--bt-nav-thumb-bg); color: var(--bt-ink); box-shadow: var(--bt-nav-thumb-shadow); }
+  .nav-item.removed { opacity: .45; }
+  .nav-item .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--bt-line-2); }
+  .nav-item.active .dot { background: var(--bt-accent); }
+  .nav-badge { margin-left: auto; font-size: 10px; line-height: 14px; padding: 1px 6px; border-radius: 999px;
+    background: var(--bt-tag-bg); color: var(--bt-tag-ink); }
+  .nav-rule { height: .5px; background: var(--bt-line); margin: 8px 10px; }
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .head { display: flex; align-items: center; gap: 12px; padding: 20px 56px 8px 28px; }
+  .head h2 { margin: 0; font-size: 17px; line-height: 24px; font-weight: 600; letter-spacing: -.01em; flex: 1; }
+  .scroll { padding: 12px 28px 28px; display: flex; flex-direction: column; gap: 22px; overflow: auto; }
+  .page { display: flex; flex-direction: column; gap: 22px; animation: page-in calc(var(--motion) * 220ms) ease both; }
+  .page[hidden] { display: none; }
+  @keyframes page-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .section { display: flex; flex-direction: column; gap: 8px; }
+  .section h3 { margin: 0; padding: 0 4px; font-size: 13px; line-height: 18px; font-weight: 600; }
+  .set-card { background: var(--bt-card); border: .5px solid var(--bt-glass-rim); border-radius: 12px;
+    box-shadow: var(--bt-card-shadow); overflow: hidden; }
+  .row { display: flex; align-items: center; gap: 16px; min-height: 48px; padding: 12px 16px; }
+  .row + .row { border-top: .5px solid var(--bt-line); }
+  .row.stack { align-items: stretch; flex-direction: column; gap: 8px; }
+  .copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .label { font-size: 13px; line-height: 18px; font-weight: 500; }
+  .hint { font-size: 12px; line-height: 17px; color: var(--bt-ink-3); }
+  .control { display: flex; align-items: center; gap: 8px; flex: none; }
+  .switch { width: 36px; height: 20px; border-radius: 999px; border: 0; background: var(--bt-line-2);
+    position: relative; cursor: pointer; transition: background calc(var(--motion) * 180ms) ease; }
+  .switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+    background: var(--bt-knob); box-shadow: 0 1px 2px rgba(0,0,0,.18);
+    transition: transform calc(var(--motion) * 220ms) cubic-bezier(.2,.9,.25,1.2); }
+  .switch[aria-checked="true"] { background: var(--bt-accent); }
+  .switch[aria-checked="true"]::after { transform: translateX(16px); }
+  .input, .select { height: 34px; border: .5px solid var(--bt-line-2); border-radius: 8px; background: transparent;
+    color: var(--bt-ink); font-family: inherit; font-size: 13px; padding: 0 10px; min-width: 120px; }
+  .seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: 10px; background: var(--bt-hover); }
+  .seg button { height: 30px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent;
+    color: var(--bt-ink-2); font-family: inherit; font-size: 13px; cursor: pointer;
+    transition: background calc(var(--motion) * 180ms) ease, color calc(var(--motion) * 180ms) ease; }
+  .seg button[aria-pressed="true"] { background: var(--bt-card); color: var(--bt-ink); box-shadow: var(--bt-nav-thumb-shadow); }
+  .chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; line-height: 16px; padding: 1px 7px;
+    border-radius: 999px; background: var(--bt-tag-bg); color: var(--bt-tag-ink); white-space: nowrap; }
+  .chip.accent { background: var(--bt-accent-soft); color: var(--bt-accent); }
+  .chip.success { background: color-mix(in srgb, var(--bt-green) 16%, transparent); color: var(--bt-green); }
+  .chip.warn { background: color-mix(in srgb, var(--bt-star) 16%, transparent); color: var(--bt-warn); }
+  .chip.danger { background: var(--bt-danger-soft); color: var(--bt-danger); }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--bt-line);
+    border-radius: 16px; background: var(--bt-card); overflow: hidden; }
+  .stat { padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; }
+  .stat + .stat { border-left: 1px solid var(--bt-line); }
+  .stat .value { font-size: 22px; line-height: 28px; font-weight: 600; letter-spacing: -.01em; }
+  .stat .name { font-size: 12px; line-height: 16px; color: var(--bt-ink-3); }
+  .detail { display: flex; flex-direction: column; }
+  .detail-row { display: flex; gap: 12px; align-items: baseline; padding: 9px 16px; border-top: .5px solid var(--bt-line); }
+  .detail-row:first-child { border-top: 0; }
+  .detail-row .k { font-size: 13px; line-height: 18px; flex: 1; min-width: 0; }
+  .detail-row .v { font-size: 12px; line-height: 16px; color: var(--bt-ink-3); white-space: nowrap; }
+  .empty { padding: 18px 12px; text-align: center; font-size: 13px; line-height: 18px; color: var(--bt-ink-3); }
+  .notice { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 12px;
+    border: .5px solid var(--bt-line-2); background: var(--bt-accent-soft); }
+  .notice.warn { background: color-mix(in srgb, var(--bt-star) 10%, transparent); }
+  .notice strong { font-size: 13px; line-height: 18px; display: block; margin-bottom: 2px; }
+  .notice p { margin: 0; font-size: 12px; line-height: 17px; color: var(--bt-ink-2); }
+  .soft { height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--bt-hover);
+    color: var(--bt-ink); font-family: inherit; font-size: 13px; cursor: pointer; }
+  .soft:hover { background: var(--bt-active); }
+  .bubble { background: var(--bt-bubble); color: var(--bt-ink); border-radius: 18px; padding: 10px 14px;
+    font-size: var(--content-font); line-height: calc(var(--content-font) + 10px); max-width: 78%; }
+  .bubble.user { background: var(--bt-user); color: var(--bt-user-ink); align-self: flex-end; }
+  .preview { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px 18px; }
+  .spec { width: 100%; border-collapse: collapse; font-size: 12px; line-height: 17px; }
+  .spec th, .spec td { text-align: left; padding: 9px 12px; border-top: .5px solid var(--bt-line); vertical-align: top; }
+  .spec th { color: var(--bt-ink-3); font-weight: 500; }
+  .spec code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px;
+    background: var(--bt-tag-bg); padding: 1px 4px; border-radius: 4px; }
+  .controls { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; align-items: center;
+    gap: 10px; padding: 8px 12px; border-radius: 999px; background: color-mix(in srgb, var(--bt-card) 86%, transparent);
+    border: .5px solid var(--bt-glass-rim); box-shadow: var(--bt-dialog-shadow); backdrop-filter: blur(18px); z-index: 50; }
+  .controls .group { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .controls .cap { font-size: 11px; color: var(--bt-ink-3); white-space: nowrap; }
+  .swatches { display: flex; gap: 4px; }
+  .swatch { width: 18px; height: 18px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
+  .swatch[aria-pressed="true"] { border-color: var(--bt-card); box-shadow: 0 0 0 2px var(--bt-ink-2); }
+  .state { position: fixed; left: 50%; bottom: 4px; transform: translateX(-50%); font-size: 11px; color: var(--bt-ink-3); z-index: 50; }
+  @media (max-width: 760px) {
+    body { padding: 0 0 120px; }
+    .settings { width: 100vw; height: calc(100vh - 110px); border-radius: 0; }
+    .nav { width: 150px; }
+    .head { padding: 16px 16px 8px; }
+    .scroll { padding: 12px 16px 24px; }
+    .row { flex-direction: column; align-items: stretch; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .stat:nth-child(3) { border-left: 0; border-top: 1px solid var(--bt-line); }
+    .stat:nth-child(4) { border-top: 1px solid var(--bt-line); }
+    .controls { flex-wrap: wrap; width: calc(100vw - 24px); justify-content: center; border-radius: 18px; }
+    .controls .cap { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="tag-proto">PROTOTYPE · throwaway · not production</div>
+
+<div class="settings" role="dialog" aria-label="设置原型">
+  <aside class="nav" id="nav">
+    <div class="nav-group">通用</div>
+    <button class="nav-item"><span class="dot"></span>通用</button>
+    <button class="nav-item"><span class="dot"></span>模型</button>
+    <div class="nav-group">连接与能力</div>
+    <button class="nav-item"><span class="dot"></span>连接器</button>
+    <button class="nav-item"><span class="dot"></span>IM</button>
+    <button class="nav-item"><span class="dot"></span>手机</button>
+    <button class="nav-item"><span class="dot"></span>浏览器</button>
+    <button class="nav-item"><span class="dot"></span>电脑操控</button>
+    <button class="nav-item"><span class="dot"></span>能力库</button>
+    <div class="nav-rule"></div>
+    <div class="nav-group">SuperAgent</div>
+    <button class="nav-item"><span class="dot"></span>角色与 Provider</button>
+    <button class="nav-item"><span class="dot"></span>执行策略</button>
+    <button class="nav-item" data-page="schedules"><span class="dot"></span>定时任务</button>
+    <button class="nav-item"><span class="dot"></span>用量</button>
+    <button class="nav-item"><span class="dot"></span>密钥</button>
+    <button class="nav-item active" data-page="memory"><span class="dot"></span>记忆</button>
+    <button class="nav-item"><span class="dot"></span>Agent 预设</button>
+    <div class="nav-rule"></div>
+    <div class="nav-group">帮助</div>
+    <button class="nav-item"><span class="dot"></span>反馈</button>
+    <button class="nav-item"><span class="dot"></span>关于</button>
+    <button class="nav-item" data-page="spec"><span class="dot"></span>组件规格</button>
+  </aside>
+
+  <main class="main">
+    <header class="head">
+      <h2 id="pageTitle">记忆</h2>
+      <button class="soft">打开配置文件</button>
+    </header>
+    <div class="scroll">
+      <div class="page" data-page="memory">
+        <div class="section">
+          <h3>概览</h3>
+          <div class="stats">
+            <div class="stat"><span class="value">128</span><span class="name">条目</span></div>
+            <div class="stat"><span class="value">12</span><span class="name">本周新增</span></div>
+            <div class="stat"><span class="value">3</span><span class="name">待审批</span></div>
+            <div class="stat"><span class="value">4.2 MB</span><span class="name">存储</span></div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h3>自动记忆</h3>
+          <div class="set-card">
+            <div class="row">
+              <div class="copy"><span class="label">自动记录</span><span class="hint">从 Main 会话中提取可复用事实。</span></div>
+              <div class="control"><button class="switch" role="switch" aria-checked="true" aria-label="自动记录"></button></div>
+            </div>
+            <div class="row">
+              <div class="copy"><span class="label">召回范围</span><span class="hint">决定哪些会话可以读取记忆。</span></div>
+              <div class="control"><select class="select"><option>仅当前工作</option><option>全部工作</option><option>仅 Main</option></select></div>
+            </div>
+            <div class="row">
+              <div class="copy"><span class="label">最大条目</span><span class="hint">超过后按最近使用淘汰。</span></div>
+              <div class="control"><input class="input" value="200" inputmode="numeric" style="width:90px"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h3>最近条目 <span class="chip accent">实时</span></h3>
+          <div class="set-card">
+            <div class="detail">
+              <div class="detail-row"><span class="k">部署流程：Windows 先用 PowerShell 跑 .mjs 包装器</span><span class="v">Main · 2 小时前</span></div>
+              <div class="detail-row"><span class="k">用户偏好：提交信息使用英文祈使句</span><span class="v">全部 · 昨天</span></div>
+              <div class="detail-row"><span class="k">仓库约定：不提交 .idea 与 CHANGELOG</span><span class="v">全部 · 3 天前</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h3>需要处理</h3>
+          <div class="notice warn">
+            <div><strong>有 3 条记忆等待审批</strong><p>审批前不会进入召回。来自 Worker 的提案需要人工确认。</p></div>
+            <div class="control"><span class="chip warn">待审批</span></div>
+          </div>
+          <div class="set-card"><div class="empty">没有更多待处理项</div></div>
+        </div>
+
+        <div class="section">
+          <h3>内容字号预览</h3>
+          <div class="set-card"><div class="preview">
+            <div class="bubble">这是 Main 的回复气泡。内容字号应只影响会话正文，不影响设置壳的 11–17px 固定档位。</div>
+            <div class="bubble user">收到，按这个口径验收。</div>
+          </div></div>
+        </div>
+      </div>
+
+      <div class="page" data-page="schedules" hidden>
+        <div class="section">
+          <h3>概览</h3>
+          <div class="stats" style="grid-template-columns:repeat(3,1fr)">
+            <div class="stat"><span class="value">4</span><span class="name">启用任务</span></div>
+            <div class="stat"><span class="value">6</span><span class="name">今日运行</span></div>
+            <div class="stat"><span class="value">1</span><span class="name">失败待重试</span></div>
+          </div>
+        </div>
+        <div class="section">
+          <h3>任务</h3>
+          <div class="set-card">
+            <div class="row">
+              <div class="copy"><span class="label">每日同步 GitHub 议题</span><span class="hint">每天 09:00 · 最近运行 3 小时前</span></div>
+              <div class="control"><span class="chip success">启用</span><button class="soft">编辑</button></div>
+            </div>
+            <div class="row">
+              <div class="copy"><span class="label">周一生成工作摘要</span><span class="hint">每周一 08:30 · 从未运行</span></div>
+              <div class="control"><span class="chip">暂停</span><button class="soft">编辑</button></div>
+            </div>
+          </div>
+        </div>
+        <div class="section">
+          <h3>运行记录</h3>
+          <div class="set-card"><div class="empty">还没有运行记录</div></div>
+        </div>
+      </div>
+
+      <div class="page" data-page="spec" hidden>
+        <div class="section">
+          <h3>共享组件接口草案</h3>
+          <div class="set-card">
+            <table class="spec">
+              <thead><tr><th>组件</th><th>Props</th><th>约束</th></tr></thead>
+              <tbody>
+                <tr><td><code>SettingsPage</code></td><td><code>title, actions?, children</code></td><td>只负责页头和滚动区；不画导航。</td></tr>
+                <tr><td><code>SectionCard</code></td><td><code>title?, description?, children</code></td><td>卡片 + 行分隔；行内容由 FieldRow 提供。</td></tr>
+                <tr><td><code>FieldRow</code></td><td><code>label, hint?, control, layout?</code></td><td>默认横排；窄屏自动 stack。</td></tr>
+                <tr><td><code>EmptyState</code></td><td><code>title, detail?, action?</code></td><td>13/18、ink-3、居中；不画插图。</td></tr>
+                <tr><td><code>StatGrid</code></td><td><code>items: {label,value,detail?}[], columns?</code></td><td>1px line 外框；4 列默认，窄屏 2 列。</td></tr>
+                <tr><td><code>StatusChip</code></td><td><code>tone: neutral|accent|success|warn|danger</code></td><td>11/16 pill；颜色只取 token。</td></tr>
+                <tr><td><code>InlineNotice</code></td><td><code>tone, title?, children, action?</code></td><td>12/17 说明；accent/warn 软底。</td></tr>
+                <tr><td><code>DetailList</code></td><td><code>items: {label,value,mono?}[]</code></td><td>行高 9px 上下；值右对齐、可 mono。</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="section">
+          <h3>验收点</h3>
+          <div class="set-card">
+            <div class="detail">
+              <div class="detail-row"><span class="k">4 主题 × 浅/深</span><span class="v">无硬编码色值</span></div>
+              <div class="detail-row"><span class="k">7 强调色</span><span class="v">accent-ink 自动对比</span></div>
+              <div class="detail-row"><span class="k">3 动效档位</span><span class="v">标准/精简/无</span></div>
+              <div class="detail-row"><span class="k">内容字号 12–18px</span><span class="v">只影响会话正文</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="controls">
+  <div class="group"><span class="cap">主题</span><select class="select" id="theme" style="min-width:100px">
+    <option value="deepseek">DeepSeek</option><option value="mono">Mono</option><option value="paper">Paper</option><option value="moonlight">Moonlight</option>
+  </select></div>
+  <div class="group"><span class="cap">模式</span><div class="seg" id="mode"><button data-mode="light" aria-pressed="true">浅色</button><button data-mode="dark" aria-pressed="false">深色</button></div></div>
+  <div class="group"><span class="cap">强调</span><div class="swatches" id="accents"></div></div>
+  <div class="group"><span class="cap">动效</span><div class="seg" id="motion"><button data-motion="1" aria-pressed="true">标准</button><button data-motion="0.6" aria-pressed="false">精简</button><button data-motion="0" aria-pressed="false">无</button></div></div>
+  <div class="group"><span class="cap">字号</span><input type="range" id="font" min="12" max="18" value="14" step="1" style="width:90px"><span class="cap" id="fontLabel">14px</span></div>
+</div>
+<div class="state" id="state"></div>
+
+<script>
+const THEMES = {
+  deepseek: { label: 'DeepSeek', light: { bg:'#fcfcfc', sidebar:'#f7f7f7', bubble:'#eeeeee', card:'#ffffff', text:'#141414', user:'#070707', userText:'#fcfcfc', accent:'#4d6bfe' }, dark: { bg:'#141414', sidebar:'#1b1b1b', bubble:'#262626', card:'#1f1f1f', text:'#f2f2f2', user:'#f2f2f2', userText:'#141414', accent:'#5b7bff' } },
+  mono: { label: 'Mono', light: { bg:'#ffffff', sidebar:'#f9f9f9', bubble:'#f0f0f0', card:'#ffffff', text:'#0d0d0d', user:'#0d0d0d', userText:'#ffffff', accent:'#0d0d0d' }, dark: { bg:'#0f0f0f', sidebar:'#171717', bubble:'#242424', card:'#1c1c1c', text:'#f4f4f4', user:'#f4f4f4', userText:'#0f0f0f', accent:'#f4f4f4' } },
+  paper: { label: 'Paper', light: { bg:'#faf9f5', sidebar:'#f3f0e8', bubble:'#ebe7dc', card:'#ffffff', text:'#1f1e1b', user:'#2b2a26', userText:'#faf9f5', accent:'#d97757' }, dark: { bg:'#1f1e1b', sidebar:'#262521', bubble:'#34322d', card:'#2a2925', text:'#f3f0e8', user:'#f3f0e8', userText:'#1f1e1b', accent:'#e08a6d' } },
+  moonlight: { label: 'Moonlight', light: { bg:'#f7f9fc', sidebar:'#eef2f8', bubble:'#e5ebf5', card:'#ffffff', text:'#121826', user:'#1e3a8a', userText:'#ffffff', accent:'#1e86ff' }, dark: { bg:'#0b1020', sidebar:'#10172a', bubble:'#1a2340', card:'#141c33', text:'#e8edf7', user:'#3b6fd8', userText:'#ffffff', accent:'#4f9dff' } }
+};
+const ACCENTS = [
+  { id:'deepseek', light:'#4d6bfe', dark:'#6a84ff' }, { id:'charcoal', light:'#141416', dark:'#f1f2f4' },
+  { id:'graphite', light:'#2d2d2d', dark:'#d6d6da' }, { id:'rose', light:'#ec2f6b', dark:'#ff5a7a' },
+  { id:'sky', light:'#0aa8d6', dark:'#2ee6e0' }, { id:'tangerine', light:'#ff6900', dark:'#ff8a2e' },
+  { id:'cobalt', light:'#082dff', dark:'#5c78ff' }
+];
+const query = new URLSearchParams(location.search);
+const state = {
+  theme: THEMES[query.get('theme')] ? query.get('theme') : 'deepseek',
+  mode: query.get('mode') === 'dark' ? 'dark' : 'light',
+  accent: ACCENTS.some(a => a.id === query.get('accent')) ? query.get('accent') : 'deepseek',
+  motion: ['1','0.6','0'].includes(query.get('motion')) ? query.get('motion') : '1',
+  font: Math.min(18, Math.max(12, Number(query.get('font')) || 14)),
+};
+const root = document.documentElement;
+const $ = selector => document.querySelector(selector);
+
+function rgb(hex) {
+  const value = hex.replace('#','');
+  const full = value.length === 3 ? value.split('').map(c => c + c).join('') : value;
+  return [0,2,4].map(i => parseInt(full.slice(i,i+2),16));
+}
+function luminance(hex) {
+  const [r,g,b] = rgb(hex).map(v => { const c = v/255; return c <= .03928 ? c/12.92 : ((c+.055)/1.055) ** 2.4; });
+  return .2126*r + .7152*g + .0722*b;
+}
+function accentInk(hex) {
+  const light = luminance('#f5f5f5'), dark = luminance('#141414'), base = luminance(hex);
+  return Math.abs(base - light) > Math.abs(base - dark) ? '#f5f5f5' : '#141414';
+}
+function apply() {
+  const theme = THEMES[state.theme][state.mode];
+  const accent = ACCENTS.find(a => a.id === state.accent)[state.mode];
+  const isDark = state.mode === 'dark';
+  const vars = {
+    '--bt-main': theme.bg, '--bt-sidebar': theme.sidebar, '--bt-card': theme.card, '--bt-bubble': theme.bubble,
+    '--bt-ink': theme.text, '--bt-user': theme.user, '--bt-user-ink': theme.userText, '--bt-accent': accent,
+    '--bt-accent-ink': accentInk(accent), '--motion': state.motion, '--content-font': state.font + 'px',
+    '--bt-hover': isDark ? 'rgba(160,160,160,.12)' : 'rgba(119,119,119,.09)',
+    '--bt-active': isDark ? 'rgba(160,160,160,.20)' : 'rgba(119,119,119,.17)',
+    '--bt-warn': isDark ? '#f0b84a' : '#8a5a00',
+  };
+  for (const [key, value] of Object.entries(vars)) root.style.setProperty(key, value);
+  document.body.toggleAttribute('data-ds-dark-theme', isDark);
+  $('#state').textContent = `${state.theme} · ${state.mode} · accent=${state.accent} · motion=${state.motion} · font=${state.font}px`;
+  document.querySelectorAll('#mode button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === state.mode)));
+  document.querySelectorAll('#motion button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.motion === state.motion)));
+  document.querySelectorAll('.swatch').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.accent === state.accent)));
+  $('#fontLabel').textContent = state.font + 'px';
+}
+function renderAccents() {
+  const box = $('#accents'); box.innerHTML = '';
+  for (const accent of ACCENTS) {
+    const button = document.createElement('button');
+    button.className = 'swatch'; button.dataset.accent = accent.id;
+    button.style.background = accent[state.mode]; button.title = accent.id;
+    button.setAttribute('aria-label', accent.id);
+    button.addEventListener('click', () => { state.accent = accent.id; apply(); });
+    box.append(button);
+  }
+}
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => { p.hidden = p.dataset.page !== name; });
+  document.querySelectorAll('.nav-item[data-page]').forEach(b => b.classList.toggle('active', b.dataset.page === name));
+  $('#pageTitle').textContent = name === 'memory' ? '记忆' : name === 'schedules' ? '定时任务' : '组件规格';
+}
+if (['memory','schedules','spec'].includes(query.get('page'))) showPage(query.get('page'));
+$('#theme').value = state.theme;
+$('#font').value = state.font;
+$('#theme').addEventListener('change', e => { state.theme = e.target.value; apply(); });
+document.querySelectorAll('#mode button').forEach(b => b.addEventListener('click', () => { state.mode = b.dataset.mode; renderAccents(); apply(); }));
+document.querySelectorAll('#motion button').forEach(b => b.addEventListener('click', () => { state.motion = b.dataset.motion; apply(); }));
+$('#font').addEventListener('input', e => { state.font = Number(e.target.value); apply(); });
+document.querySelectorAll('[data-page]').forEach(b => b.addEventListener('click', () => showPage(b.dataset.page)));
+document.querySelectorAll('.switch').forEach(b => b.addEventListener('click', () => b.setAttribute('aria-checked', String(b.getAttribute('aria-checked') !== 'true'))));
+renderAccents(); apply();
+</script>
+</body>
+</html>

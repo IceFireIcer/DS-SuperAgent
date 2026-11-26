@@ -27,7 +27,7 @@ before(async () => {
   db.exec('CREATE TABLE records(instance_id TEXT NOT NULL, kind TEXT NOT NULL, id TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(instance_id, kind, id)); PRAGMA user_version=2;')
 })
 
-test('the update waits for the window and is installed when the window comes back', async () => {
+test('the update waits for the window, stays uninstalled after Later, and installs once from Settings', async () => {
   await waitFor(() => state.windows.length > 0, 'open the window')
   await waitFor(() => state.tray !== undefined, 'build the tray')
   const win = window()
@@ -40,10 +40,18 @@ test('the update waits for the window and is installed when the window comes bac
   await new Promise(resolve => { setTimeout(resolve, 50) })
   assert.equal(state.dialogs.length, 0, 'the box waits for the window')
 
-  // The user dismisses the deferred prompt and installs from Settings.
+  // The user dismisses the deferred prompt. Later leaves the candidate downloaded and does
+  // not install it.
   state.dialogAnswer = { response: 1 }
   trayOpen().click()
   await waitFor(() => state.dialogs.length === 1, 'ask about the update when the window is back')
+  const readUpdateState = state.ipc.get('ds-superagent:app-update-state')
+  assert.deepEqual(await readUpdateState({ sender: win.webContents, senderFrame: win.webContents.mainFrame }),
+    { phase: 'downloaded', version: '9.9.9' }, 'the downloaded candidate stays visible')
+  assert.equal(updaterState.quitAndInstall.length, 0, 'Later does not install')
+
+  // The Settings action is the explicit install: it backs up, stops the Host once, and hands
+  // the app to the installer once.
   using db = new DatabaseSync(database)
   db.prepare('INSERT INTO records VALUES (?, ?, ?, ?)').run('local', 'effect', 'pending-action', '{"state":"pending"}')
   const install = state.ipc.get('ds-superagent:app-update-install')

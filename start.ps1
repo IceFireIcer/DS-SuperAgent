@@ -79,7 +79,6 @@ try {
     }
 
     $env:DS_SUPERAGENT_HOME = Join-Path $DataRoot 'data'
-    $env:DS_SUPERAGENT_WORKSPACE = Join-Path $DataRoot 'workspace'
     $env:DS_SUPERAGENT_SHELL_DATA = Join-Path $DataRoot 'shell'
     Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
     Write-Host "Persistent data: $DataRoot"

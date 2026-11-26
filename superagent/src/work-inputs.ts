@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { CoreError, identifier, triggerDeliveryTarget, type DesktopSource, type Source, type Work } from './model.js'
+import { CoreError, identifier, triggerDeliveryTarget, type DesktopSource, type PathGrant, type Source, type Work } from './model.js'
 import type { AsyncTx, Storage } from './storage.js'
 import type { SourceEvent, SourceEvents } from './source-events.js'
 import type { EffectRequest } from './effects.js'
+import { mergePathGrants } from './path-grants.js'
 
 export interface ThreadSubscription {
   id: string
@@ -124,6 +125,7 @@ export interface MainFollowUpAttachmentRequest {
   text: string
   authorId: string
   reason: string
+  pathGrants?: PathGrant[]
 }
 
 export interface WorkNote {
@@ -393,6 +395,33 @@ export class WorkInputs {
     return input
   }
 
+  async applyAttentionPathGrants(tx: AsyncTx, request: { ticketId: string; directionVersion: number;
+    previousDirectionVersion: number; grants?: PathGrant[] }) {
+    identifier(request.ticketId, 'ticketId')
+    if (!Number.isSafeInteger(request.directionVersion) || request.directionVersion < 1
+      || !Number.isSafeInteger(request.previousDirectionVersion) || request.previousDirectionVersion < 1) {
+      throw new CoreError('INVALID_INPUT', 'An Attention path grant needs valid Ticket direction versions.')
+    }
+    const ticket = await tx.get<Work['ticket']>('ticket', request.ticketId)
+    const trigger = ticket && await tx.get<Work['trigger']>('trigger', ticket.triggerId)
+    if (!ticket || !trigger) throw new CoreError('NOT_FOUND', 'The Attention Ticket trigger is missing.')
+    const current = trigger.pathGrantVersion === request.previousDirectionVersion ? trigger.pathGrants : undefined
+    const grants = mergePathGrants(current, request.grants ?? [])
+    if (!grants.length) return []
+    await this.saveTaskPathGrants(tx, ticket, trigger, grants, request.directionVersion)
+    return grants
+  }
+
+  private async saveTaskPathGrants(tx: AsyncTx, ticket: Work['ticket'], trigger: Work['trigger'], grants: PathGrant[],
+    directionVersion: number) {
+    trigger.pathGrants = structuredClone(grants)
+    trigger.pathGrantVersion = directionVersion
+    await tx.replace('trigger', ticket.triggerId, trigger)
+    const link = await tx.get<{ workBriefId: string }>('work-ticket', ticket.id)
+    const brief = link ? await tx.get<{ pathGrants?: PathGrant[] }>('work-brief', link.workBriefId) : undefined
+    if (brief) await tx.replace('work-brief', link!.workBriefId, { ...brief, pathGrants: structuredClone(grants) })
+  }
+
   /**
    * A Main-owned follow-up may continue only the exact original Ticket and Session.
    * Waiting and stop remain constraints; a naturally ended Ticket requires a new recovery decision.
@@ -431,6 +460,10 @@ export class WorkInputs {
     const trigger = await tx.get<Work['trigger']>('trigger', ticket.triggerId)
     if (!trigger) throw new CoreError('INCOMPLETE_STATE', 'The Main follow-up Ticket trigger is missing.')
     const nextDirectionVersion = directionVersion + 1
+    if (request.pathGrants?.length) {
+      await this.saveTaskPathGrants(tx, ticket, trigger, mergePathGrants(trigger.pathGrants, request.pathGrants),
+        nextDirectionVersion)
+    }
     const recoveryDecisionId = previousState === 'ended'
       ? await this.recordRecovery(tx, ticket, sourceEventId, id)
       : undefined

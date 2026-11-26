@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 900" role="img" aria-labelledby="title desc">
+  <title id="title">DS-SuperAgent 简化架构</title>
+  <desc id="desc">用户通过 Main 发起工作，Main 委托 Router 拆分 Ticket，Worker 在本地或远端环境执行，结果经 Main 和 Outbox 返回用户。右侧是持久状态、恢复权和监督边界。</desc>
+  <defs>
+    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <path d="M24 0H0V24" fill="none" stroke="#17212b" stroke-opacity=".045" stroke-width="1"/>
+    </pattern>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#687984"/>
+    </marker>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#376f86"/>
+    </marker>
+    <style>
+      .bg { fill:#f7f6f1; }
+      .label { font:600 17px/1.25 "Microsoft YaHei UI","PingFang SC",sans-serif; fill:#1e2a32; }
+      .sub { font:400 13px/1.45 "Microsoft YaHei UI","PingFang SC",sans-serif; fill:#66747d; }
+      .small { font:600 11px/1.3 "Cascadia Mono","SFMono-Regular",Consolas,monospace; fill:#7b878e; letter-spacing:.5px; }
+      .node { fill:#fcfbf7; stroke:#c8cfd1; stroke-width:1.2; }
+      .main { fill:#eaf3f6; stroke:#5d8b9d; }
+      .router { fill:#f6eedf; stroke:#aa803e; }
+      .worker { fill:#eaf2e8; stroke:#668363; }
+      .env { fill:#f7eee9; stroke:#aa6b56; }
+      .side { fill:#f1f1ed; stroke:#c9cfcd; }
+      .flow { fill:none; stroke:#687984; stroke-width:1.8; marker-end:url(#arrow); }
+      .flow-blue { fill:none; stroke:#376f86; stroke-width:1.8; marker-end:url(#arrowBlue); }
+      .dashed { fill:none; stroke:#a76e59; stroke-width:1.4; stroke-dasharray:5 5; marker-end:url(#arrow); }
+      .num { font:700 11px/1 "Cascadia Mono","SFMono-Regular",Consolas,monospace; fill:#f7f6f1; }
+      .num-bg { fill:#26333c; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1280" height="900"/>
+  <rect width="1280" height="900" fill="url(#grid)"/>
+
+  <text x="64" y="46" class="small">当前实现 / 2026-11-24</text>
+  <text x="64" y="78" class="label" style="font-size:26px">DS-SuperAgent 简化架构</text>
+  <text x="64" y="106" class="sub">请求从 Main 进入，Router 负责拆成 Ticket，Worker 在执行环境里完成工作。右侧是可靠性边界。</text>
+
+  <g>
+    <rect x="64" y="142" width="560" height="82" rx="14" class="node"/>
+    <rect x="64" y="252" width="560" height="82" rx="14" class="main"/>
+    <rect x="64" y="362" width="560" height="82" rx="14" class="router"/>
+    <rect x="64" y="472" width="560" height="82" rx="14" class="node"/>
+    <rect x="64" y="582" width="560" height="82" rx="14" class="worker"/>
+    <rect x="64" y="692" width="560" height="82" rx="14" class="env"/>
+  </g>
+
+  <g>
+    <circle cx="92" cy="170" r="15" class="num-bg"/><text x="92" y="174" text-anchor="middle" class="num">1</text>
+    <text x="120" y="173" class="label">用户与渠道</text>
+    <text x="120" y="196" class="sub">桌面 · GitHub · 飞书 · IM · 定时任务</text>
+
+    <circle cx="92" cy="280" r="15" class="num-bg"/><text x="92" y="284" text-anchor="middle" class="num">2</text>
+    <text x="120" y="283" class="label">Main：对话与委托</text>
+    <text x="120" y="306" class="sub">回答、追问、问题卡、结果和工作索引</text>
+
+    <circle cx="92" cy="390" r="15" class="num-bg"/><text x="92" y="394" text-anchor="middle" class="num">3</text>
+    <text x="120" y="393" class="label">Router：拆分工作</text>
+    <text x="120" y="416" class="sub">把 WorkBrief 拆成 1–4 个工作项，不执行文件或命令</text>
+
+    <circle cx="92" cy="500" r="15" class="num-bg"/><text x="92" y="504" text-anchor="middle" class="num">4</text>
+    <text x="120" y="503" class="label">Ticket 与 Assignment</text>
+    <text x="120" y="526" class="sub">工作身份、执行代次、当前 Session 和交付条件</text>
+
+    <circle cx="92" cy="610" r="15" class="num-bg"/><text x="92" y="614" text-anchor="middle" class="num">5</text>
+    <text x="120" y="613" class="label">Worker：执行与验证</text>
+    <text x="120" y="636" class="sub">文件、命令、浏览器、MCP、Office、子 Agent</text>
+
+    <circle cx="92" cy="720" r="15" class="num-bg"/><text x="92" y="724" text-anchor="middle" class="num">6</text>
+    <text x="120" y="723" class="label">执行环境</text>
+    <text x="120" y="746" class="sub">本机目录，或已配对的远端设备</text>
+  </g>
+
+  <path d="M344 224V252" class="flow"/>
+  <path d="M344 334V362" class="flow"/>
+  <path d="M344 444V472" class="flow"/>
+  <path d="M344 554V582" class="flow"/>
+  <path d="M344 664V692" class="flow"/>
+
+  <g>
+    <rect x="740" y="142" width="476" height="220" rx="16" class="side"/>
+    <text x="766" y="175" class="label">状态与恢复</text>
+    <text x="766" y="205" class="sub">SQLite 或 PostgreSQL 业务库</text>
+    <text x="766" y="230" class="sub">DSH Session 日志，独立持久化</text>
+    <text x="766" y="255" class="sub">Effects 和 Outbox 负责外发与回执</text>
+    <text x="766" y="280" class="sub">Host lease、epoch 和 takeover 控制写权</text>
+    <text x="766" y="305" class="sub">Assignment generation 隔离迟到的回调</text>
+    <text x="766" y="330" class="sub">未知结果保留为 unknown，不自动重试</text>
+  </g>
+
+  <g>
+    <rect x="740" y="392" width="476" height="204" rx="16" class="side"/>
+    <text x="766" y="425" class="label">结果怎么回到用户</text>
+    <text x="766" y="456" class="sub">1. Worker 提交结果和验证证据</text>
+    <text x="766" y="486" class="sub">2. Main 写出用户可读的回复</text>
+    <text x="766" y="516" class="sub">3. Router 确认当前结果和交付条件</text>
+    <text x="766" y="546" class="sub">4. Outbox 发回原渠道，并保存回执</text>
+    <path d="M766 562H830" class="flow-blue"/>
+    <text x="842" y="567" class="small">结果不会由 Worker 直接发送</text>
+  </g>
+
+  <g>
+    <rect x="740" y="626" width="476" height="148" rx="16" class="side"/>
+    <text x="766" y="659" class="label">监督与故障</text>
+    <text x="766" y="690" class="sub">Supervisor 检查是否停滞或偏离，只提出建议</text>
+    <text x="766" y="716" class="sub">用户批准后，才能停止工作或追加纠偏指令</text>
+    <text x="766" y="742" class="sub">Watchdog 只处理进程失联和重启，不改工作内容</text>
+  </g>
+
+  <path d="M624 616H690V290H740" class="dashed"/>
+  <text x="630" y="600" class="small">报告 / 问题 / 输出</text>
+
+  <g transform="translate(64 826)">
+    <line x1="0" y1="0" x2="40" y2="0" stroke="#687984" stroke-width="1.8" marker-end="url(#arrow)"/>
+    <text x="50" y="4" class="small">请求路径</text>
+    <line x1="140" y1="0" x2="180" y2="0" stroke="#a76e59" stroke-width="1.4" stroke-dasharray="5 5" marker-end="url(#arrow)"/>
+    <text x="190" y="4" class="small">结果与监督</text>
+    <text x="980" y="4" class="small">详细证据见同目录 evidence/ 目录</text>
+  </g>
+</svg>

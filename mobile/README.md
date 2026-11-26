@@ -14,6 +14,9 @@ npm --prefix mobile run typecheck
 
 In `mobile/`, run `npm run android` with the Android SDK and an emulator or a USB-debugging device, or `npm run ios` on macOS with Xcode. These commands build a native development app; they are not store installs. The generated `android/` and `ios/` directories are not committed.
 
+Run `npm run icons` after the primary logo changes to rebuild the Expo, Android adaptive and splash
+icons from `../logo/whale.svg`.
+
 ## Pair and send
 
 1. Start `ds-superagent-link` from the product package. For a phone on another machine, put the loopback relay behind a trusted TLS reverse proxy and expose its `/v1/link` endpoint as `wss://`. See the [relay deployment notes](../docs/superagent/implementation/dsbot-port-156-161.md#运行手机中继).

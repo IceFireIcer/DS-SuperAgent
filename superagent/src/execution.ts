@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { CoreError, identifier, triggerDeliveryTarget, type Work } from './model.js'
+import { isAbsolute, relative, sep } from 'node:path'
+import { CoreError, identifier, triggerDeliveryTarget, type PathGrant, type Work } from './model.js'
 import type { Storage, AsyncTx } from './storage.js'
 import type { Effects, Effect, EffectHandler, EffectResult } from './effects.js'
 import type { NativeSessions, NativeTool } from './native-sessions.js'
@@ -27,6 +28,7 @@ import { environmentHandoffPrompt, handoffCopyBlockers, isEnvironmentHandoffActi
 import { assertHostTakeoverSettled, hostTakeoverKey, isHostTakeoverPending, loadHostTakeover, type HostTakeoverBlocker, type HostTakeoverRecord,
   type HostTakeoverTicket } from './host-takeover.js'
 import { assertReferenceShape, type EnvironmentAssetReference } from './environment-assets.js'
+import { normalizePathGrants } from './path-grants.js'
 import { mainResultReply, type MainWorkBrief, type MainWorkItem } from './work-delegation.js'
 import { resolveProductAttachments } from './product-attachments.js'
 import { workerMcpName, workerMcpTool, type WorkerMcpBinding } from './worker-mcp-tool.js'
@@ -995,6 +997,35 @@ export class Execution {
     }
   }
 
+  private async currentPathGrants(ticketId: string, trigger: Work['trigger']): Promise<PathGrant[]> {
+    if (!trigger.pathGrants?.length || trigger.pathGrantVersion === undefined) return []
+    const ticket = await this.storage.transaction(this.instanceId, transaction => transaction.get<Work['ticket']>('ticket', ticketId))
+    if (!ticket || ticket.state !== 'open' || (ticket.directionVersion ?? 1) !== trigger.pathGrantVersion) return []
+    return structuredClone(trigger.pathGrants)
+  }
+
+  private async assertTaskPathGrantsCurrent(ticketId: string, trigger: Work['trigger']) {
+    if (!trigger.pathGrants?.length || trigger.pathGrantVersion === undefined) return
+    const ticket = await this.storage.transaction(this.instanceId, transaction => transaction.get<Work['ticket']>('ticket', ticketId))
+    if (!ticket || ticket.state !== 'open' || (ticket.directionVersion ?? 1) !== trigger.pathGrantVersion) {
+      throw new CoreError('PATH_DENIED', 'This task path grant expired when the Ticket direction changed.')
+    }
+  }
+
+  private isExternalPath(path: string | undefined, cwd: string | undefined) {
+    if (!path || !cwd || !isAbsolute(path)) return false
+    const relativePath = relative(cwd, path)
+    return relativePath === '..' || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath)
+  }
+
+  private async assertExternalToolPathCurrent(name: string, args: Record<string, string>,
+    ticketId: string, trigger: Work['trigger'], cwd: string | undefined) {
+    const paths = name === 'run_office' ? [args.input, args.output]
+      : ['read_file', 'write_file', 'glob', 'grep', 'run_command', 'run_shell', 'stage_attachment'].includes(name)
+        ? [args.path] : []
+    if (paths.some(path => this.isExternalPath(path, cwd))) await this.assertTaskPathGrantsCurrent(ticketId, trigger)
+  }
+
   private async runTurn({ ticketId, assignment: initialAssignment, trigger, environment, input, cause, status, job, subagent, configuration,
     profile, bindings }: {
     ticketId: string; assignment: Assignment; trigger: Work['trigger']; environment: ExecutionEnvironment | undefined; input: WorkInput | undefined
@@ -1022,7 +1053,9 @@ export class Execution {
       try {
         if (!sameEnvironment(assignment.environment, environment)) throw new CoreError('ENVIRONMENT_CHANGED', 'The original Assignment device or working directory must be retained for setup retry.')
         if (assignment.environment) await this.verifyEnvironmentLocation(assignment.environment, environment, trigger.source.actorId)
-        bound = await environment.prepare({ instanceId: this.instanceId, actorId: trigger.source.actorId }, controller.signal)
+        const pathGrants = await this.currentPathGrants(ticketId, trigger)
+        bound = await environment.prepare({ instanceId: this.instanceId, actorId: trigger.source.actorId }, controller.signal,
+          environment.kind === 'local' && pathGrants.length ? { pathGrants } : undefined)
         await this.storage.transaction(this.instanceId, async transaction => {
           const setup: SetupState = { assignmentId: assignment.id, state: 'ready' }
           if (!await transaction.replace('setup', ticketId, setup)) await transaction.insert('setup', ticketId, setup)
@@ -1107,6 +1140,15 @@ export class Execution {
     }
     const environmentTool = async (name: string, args: Record<string, string>, signal: AbortSignal) => {
       await checkProactive()
+      try {
+        await this.assertExternalToolPathCurrent(name, args, ticketId, trigger, bound?.cwd)
+      } catch (error) {
+        const code = error instanceof CoreError ? error.code : 'ENVIRONMENT_TOOL_FAILED'
+        toolFacts.push({ tool: name, outcome: 'failed', output: { code } })
+        throw new CoreError(code, code === 'PATH_DENIED' || code === 'PERMISSION_DENIED'
+          ? 'The path or operation is outside this task\'s grants. Ask Main for the exact user authorization before retrying; no mutation was applied.'
+          : 'The bound Environment operation failed; check the tool fact and authorized directory.')
+      }
       if (!bound) throw new CoreError('ENVIRONMENT_DENIED', 'No Environment is bound to this Assignment.')
       if (reported) throw new CoreError('REPORT_SEALED', 'Environment tools are sealed after the ready report; no later mutation is authorized.')
       if (askedAttention) throw new CoreError('ATTENTION_ACTIVE', 'Environment tools are sealed after asking a human question.')
@@ -1157,7 +1199,9 @@ export class Execution {
                 recovery: { observedAt: Date.now(), kind: 'unverifiable', processAlive: 'unknown', rangeAlive: 'unknown',
                   rangeEvidence: 'none', reason } }, reason })).catch(() => undefined)
             toolFacts.push({ tool: name, outcome: 'failed', output: { code } })
-            throw new CoreError(code, 'The bound Environment operation failed; check the tool fact and authorized directory.')
+            throw new CoreError(code, code === 'PATH_DENIED' || code === 'PERMISSION_DENIED'
+              ? 'The path or operation is outside this task\'s grants. Ask Main for the exact user authorization before retrying; no mutation was applied.'
+              : 'The bound Environment operation failed; check the tool fact and authorized directory.')
           }
         } finally {
           this.jobs!.releaseExternal(planned.jobId)
@@ -1194,13 +1238,15 @@ export class Execution {
       } catch (error) {
         const code = error instanceof CoreError ? error.code : 'ENVIRONMENT_TOOL_FAILED'
         toolFacts.push({ tool: name, outcome: 'failed', output: { code } })
-        throw new CoreError(code, 'The bound Environment operation failed; check the tool fact and authorized directory.')
+        throw new CoreError(code, code === 'PATH_DENIED' || code === 'PERMISSION_DENIED'
+          ? 'The path or operation is outside this task\'s grants. Ask Main for the exact user authorization before retrying; no mutation was applied.'
+          : 'The bound Environment operation failed; check the tool fact and authorized directory.')
       }
     }
-    const writeTool: NativeTool = { name: 'write_file', description: 'Write UTF-8 text inside the bound Environment.', parameters: { path: { type: 'string', required: true }, text: { type: 'string', required: true } }, execute: (args, signal) => environmentTool('write_file', args, signal) }
-    const readTool: NativeTool = { name: 'read_file', description: 'Read UTF-8 text inside the bound Environment.', parameters: { path: { type: 'string', required: true } }, execute: (args, signal) => environmentTool('read_file', args, signal) }
-    const globTool: NativeTool = { name: 'glob', description: 'Find files by glob inside the bound Environment.', parameters: { pattern: { type: 'string', required: true } }, execute: (args, signal) => environmentTool('glob', args, signal) }
-    const grepTool: NativeTool = { name: 'grep', description: 'Search for literal text inside the bound Environment.', parameters: { pattern: { type: 'string', required: true } }, execute: (args, signal) => environmentTool('grep', args, signal) }
+    const writeTool: NativeTool = { name: 'write_file', description: 'Write UTF-8 text inside the bound Environment. An absolute path outside the project needs an explicit write grant for this task.', parameters: { path: { type: 'string', required: true }, text: { type: 'string', required: true } }, execute: (args, signal) => environmentTool('write_file', args, signal) }
+    const readTool: NativeTool = { name: 'read_file', description: 'Read UTF-8 text inside the bound Environment. An absolute path outside the project needs an explicit read grant for this task.', parameters: { path: { type: 'string', required: true } }, execute: (args, signal) => environmentTool('read_file', args, signal) }
+    const globTool: NativeTool = { name: 'glob', description: 'Find files by glob inside the bound Environment. Set path to an explicitly search-granted absolute directory to search outside the project.', parameters: { pattern: { type: 'string', required: true }, path: { type: 'string' } }, execute: (args, signal) => environmentTool('glob', args, signal) }
+    const grepTool: NativeTool = { name: 'grep', description: 'Search for literal text inside the bound Environment. Set path to an explicitly search-granted absolute file or directory to search outside the project.', parameters: { pattern: { type: 'string', required: true }, path: { type: 'string' } }, execute: (args, signal) => environmentTool('grep', args, signal) }
     const saveAttachmentTool: NativeTool = { name: 'save_attachment', description: 'Save exact bytes into the bound Environment\'s own attachment store and return a traceable reference. This never writes a Host file for a remote world.',
       parameters: { name: { type: 'string', required: true }, data: { type: 'string', required: true }, encoding: { type: 'string', required: true },
         mediaType: { type: 'string', required: true } },
@@ -1223,9 +1269,9 @@ export class Execution {
       execute: (args, signal) => environmentTool('run_office', args, signal) }
     const commandNames = environment ? environmentCommandNames(environment).filter(name => name !== environment.config.setup && name !== 'office') : []
     const hasCommand = environmentHasCommand(environment)
-    const commandTool: NativeTool = { name: 'run_command', description: `Run one configured command inside the bound Environment: ${commandNames.join(', ')}.`, parameters: { name: { type: 'string', required: true } }, execute: (args, signal) => environmentTool('run_command', args, signal) }
-    const shellTool: NativeTool = { name: 'run_shell', description: 'Run one bounded shell command in this Assignment directory using the public DSH subprocess provider. Its exit and output are facts, not a completed Ticket.',
-      parameters: { command: { type: 'string', required: true } }, execute: (args, signal) => environmentTool('run_shell', args, signal) }
+    const commandTool: NativeTool = { name: 'run_command', description: `Run one configured command inside the bound Environment: ${commandNames.join(', ')}. Set path only to an explicitly command-granted absolute directory.`, parameters: { name: { type: 'string', required: true }, path: { type: 'string' } }, execute: (args, signal) => environmentTool('run_command', args, signal) }
+    const shellTool: NativeTool = { name: 'run_shell', description: 'Run one bounded shell command in this Assignment directory using the public DSH subprocess provider. Set path only to an explicitly command-granted absolute directory. Its exit and output are facts, not a completed Ticket.',
+      parameters: { command: { type: 'string', required: true }, path: { type: 'string' } }, execute: (args, signal) => environmentTool('run_shell', args, signal) }
     const allowed = new Set(environment?.config.permissions ?? [])
     const assets = environment?.assetSupport
     const readAsset = Boolean(environment)
@@ -1303,6 +1349,7 @@ export class Execution {
     const childTools = (): NativeTool[] => bound ? [...environmentTools.map(tool => ({
       name: tool.name, description: tool.description, parameters: tool.parameters,
       execute: async (args: Record<string, string>, signal: AbortSignal) => {
+        await this.assertExternalToolPathCurrent(tool.name, args, ticketId, trigger, bound?.cwd)
         if (tool.name === 'read_asset') await authorizeAssetRead(args)
         const output = await bound!.invoke(tool.name, args, signal)
         if (tool.name === 'read_asset') await authorizeAssetRead(args)
@@ -1312,9 +1359,10 @@ export class Execution {
     })), ...buildMcpTools(false), ...childBrowserTools, ...scopedMemoryTools] : []
     // Background work outlives the turn: the tool returns a job identity at once, and the completion event
     // arrives as a later turn on this same Session instead of holding the Router or this step open.
-    const startLocalJob = async (name: string, start: (jobId: string) => Promise<LocalJob>) => {
+    const startLocalJob = async (name: string, start: (jobId: string) => Promise<LocalJob>, path?: string) => {
       if (reported) throw new CoreError('REPORT_SEALED', 'Background work is sealed after the ready report.')
       if (askedAttention) throw new CoreError('ATTENTION_ACTIVE', 'Background work is sealed after asking a human question.')
+      if (path && isAbsolute(path) && trigger.pathGrants?.length) await this.assertTaskPathGrantsCurrent(ticketId, trigger)
       const jobId = randomUUID()
       this.jobs!.reserveLocalStart(jobId)
       let job: LocalJob | undefined
@@ -1347,7 +1395,7 @@ export class Execution {
       ...(bound.startCommand && commandNames.length ? [{
         name: 'start_command',
         description: `Start one configured command in the background and return its job identity at once: ${commandNames.join(', ')}. Do not wait for it in this turn; its completion arrives as a later event.`,
-        parameters: { name: { type: 'string' as const, required: true as const } },
+        parameters: { name: { type: 'string' as const, required: true as const }, path: { type: 'string' as const } },
         execute: async (args: Record<string, string>) => {
           if (reported) throw new CoreError('REPORT_SEALED', 'Background work is sealed after the ready report; no later mutation is authorized.')
           if (askedAttention) throw new CoreError('ATTENTION_ACTIVE', 'Background work is sealed after asking a human question.')
@@ -1381,18 +1429,18 @@ export class Execution {
             this.jobs!.attach(record)
             return JSON.stringify({ jobId: record.id, command: record.command, state: record.state, startedAt: record.startedAt })
           }
-          return startLocalJob(args.name!, jobId => bound!.startCommand!(args.name!, jobId))
+          return startLocalJob(args.name!, jobId => bound!.startCommand!(args.name!, jobId, args.path), args.path)
         },
       }] : []),
       ...(bound.startShell ? [{
         name: 'start_shell', description: 'Start a bounded shell command as a managed background job in this Assignment directory. Its completion returns to this Worker.',
-        parameters: { command: { type: 'string' as const, required: true as const } },
-        execute: (args: Record<string, string>) => startLocalJob('shell', jobId => bound.startShell!(args.command!, jobId)),
+        parameters: { command: { type: 'string' as const, required: true as const }, path: { type: 'string' as const } },
+        execute: (args: Record<string, string>) => startLocalJob('shell', jobId => bound.startShell!(args.command!, jobId, args.path), args.path),
       }] : []),
       ...(bound.startTerminal ? [{
         name: 'start_terminal', description: 'Start a managed PTY command in this Assignment directory. Its output and confirmed exit return to this Worker as a background job.',
-        parameters: { command: { type: 'string' as const, required: true as const } },
-        execute: (args: Record<string, string>) => startLocalJob('terminal', jobId => bound.startTerminal!(args.command!, jobId)),
+        parameters: { command: { type: 'string' as const, required: true as const }, path: { type: 'string' as const } },
+        execute: (args: Record<string, string>) => startLocalJob('terminal', jobId => bound.startTerminal!(args.command!, jobId, args.path), args.path),
       }] : []),
       {
         name: 'job_status',
@@ -1433,6 +1481,7 @@ export class Execution {
           if (!purpose || Buffer.byteLength(purpose) > 2048) throw new CoreError('INVALID_INPUT', 'A preview needs a bounded nonempty purpose.')
           const path = args.artifact?.trim() ?? ''
           if (!path) throw new CoreError('INVALID_INPUT', 'A preview needs one bounded artifact path.')
+          if (isAbsolute(path)) await this.assertTaskPathGrantsCurrent(ticketId, trigger)
           const artifact = await bound!.artifact(path, signal)
           const preview = await this.storage.transaction(this.instanceId, async transaction => {
             const current = await transaction.get<Assignment>('assignment', ticketId)
@@ -1479,7 +1528,7 @@ export class Execution {
       const inherited = childTools()
       return [{
         name: 'delegate_subagent',
-        description: 'Delegate one bounded subtask to a child Agent that inherits this Assignment\'s working directory, permissions and work tools. It starts at once and its completion arrives as a later event; do not wait in this turn.',
+        description: 'Delegate one bounded subtask to a child Agent that inherits this Assignment\'s working directory, permissions, current task path grants and work tools. It starts at once and its completion arrives as a later event; do not wait in this turn.',
         parameters: { task: { type: 'string', required: true } },
         execute: async (args: Record<string, string>, _signal: AbortSignal, caller?: Agent) => {
           if (reported) throw new CoreError('REPORT_SEALED', 'Delegation is sealed after the ready report; no later mutation is authorized.')
@@ -1737,16 +1786,31 @@ export class Execution {
       }] : []),
       {
         name: 'ask_human',
-        description: 'Ask one concise structured question when a human decision is required. Consequential or ambiguous actions must wait for an authorized answer.',
-        parameters: { question: { type: 'string' as const, required: true as const }, options: { type: 'string' as const, required: true as const } },
+        description: 'Ask one concise structured question when a human decision is required. Consequential or ambiguous actions must wait for an authorized answer. When a path or operation is outside this task\'s grants, name the exact path and operation and ask Main to obtain explicit user authorization; never infer it. Set pathGrants to a JSON array of exact {path, operations} entries to add a fixed approval choice; access applies only when the user answers that choice.',
+        parameters: { question: { type: 'string' as const, required: true as const }, options: { type: 'string' as const, required: true as const },
+          pathGrants: { type: 'string' as const } },
         execute: async (args: Record<string, string>) => {
           if (reported || askedAttention) throw new CoreError('ATTENTION_ACTIVE', 'The Worker turn has already completed or asked a question.')
           const options = (args.options ?? '').split('\n').map(option => option.trim()).filter(Boolean)
+          let pathGrants: PathGrant[] | undefined
+          if (args.pathGrants?.trim()) {
+            if (environment?.kind !== 'local') throw new CoreError('PATH_DENIED', 'Task path access can be requested only from a local Environment.')
+            if (Buffer.byteLength(args.pathGrants) > 8192) throw new CoreError('INVALID_INPUT', 'A path access question is too large.')
+            let requested: unknown
+            try { requested = JSON.parse(args.pathGrants) }
+            catch { throw new CoreError('INVALID_INPUT', 'Path grants must be a JSON array of exact paths and operations.') }
+            pathGrants = normalizePathGrants(requested)
+            if (!pathGrants?.length) throw new CoreError('INVALID_INPUT', 'A path access question needs at least one grant.')
+          }
+          const question = pathGrants
+            ? `${args.question ?? ''}\n\nRequested access for this task:\n${pathGrants.map(grant =>
+              `${grant.operations.join(', ')}: ${grant.path}`).join('\n')}`
+            : args.question ?? ''
           askedAttention = await this.storage.transaction(this.instanceId, async transaction => {
             const current = await transaction.get<Assignment>('assignment', ticketId)
             if (current?.id !== assignment.id || current.state !== 'running') throw new CoreError('STALE_ASSIGNMENT', 'The asking Assignment is no longer current.')
             const attention = await this.attentions.ask(transaction, { ticketId, assignmentId: assignment.id, sessionId: assignment.sessionId,
-              question: args.question ?? '', options, ...(input ? { input } : {}) })
+              question, options, ...(input ? { input } : {}), ...(pathGrants ? { pathGrants } : {}) })
             if (input) await this.inputs.completeDelivery(transaction, input.id, 'attention')
             return attention
           })
@@ -1772,6 +1836,7 @@ export class Execution {
           const rawArtifacts = typeof args.artifacts === 'string' ? args.artifacts : ''
           const paths = [...new Set(rawArtifacts.split('\n').map((path: string) => path.trim()).filter(Boolean))]
           if (!paths.length || paths.length > 10) throw new CoreError('INVALID_REPORT', 'Provide one to ten newline-separated relative artifact paths.')
+          if (paths.some(isAbsolute)) await this.assertTaskPathGrantsCurrent(ticketId, trigger)
           for (const path of paths.filter(path => path.toLowerCase().endsWith('.docx'))) {
             if (!toolFacts.some((fact, index) => index > lastWrite && fact.tool === 'run_office'
               && fact.outcome === 'success' && fact.output.operation === 'check' && fact.output.input === path)) {
@@ -1897,7 +1962,8 @@ export class Execution {
       await transaction.replace('intent', ticketId, { ...intent, state: currentReport ? 'ready' : 'running', reason: currentReport ? 'ready-report' : 'worker-idle' })
       if (currentReport) {
         await this.saveAssignment(transaction, { ...assignment, state: 'ended' })
-        if (!trigger.proactive) await this.effects.enqueue(transaction, { key: currentReport.id, stream: 'notice', scope: 'router', payload: { type: 'report-ready', ticketId, reportId: currentReport.id } })
+        if (!trigger.proactive) await this.effects.enqueue(transaction, { key: currentReport.id, stream: 'notice',
+          scope: `router:${ticketId}`, payload: { type: 'report-ready', ticketId, reportId: currentReport.id } })
         endedJobs = await this.endAssignmentJobs(transaction, ticketId, assignment.id)
         endedSubagents = await this.endAssignmentSubagents(transaction, ticketId, assignment.id)
       }

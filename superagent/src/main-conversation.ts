@@ -621,7 +621,7 @@ export class MainConversation {
     }
     return [
       ...this.memoryTools(binding),
-      { name: 'delegate_work', description: 'Create one durable WorkBrief for one to four independent items on the execution target selected by the user. Give every item a clear goal, strict constraints and observable acceptance criteria. When attachments are present, assign their exact IDs to each item with attachmentIds; an item without attachments uses an empty array. Set capabilities to browser, mcp or office when the request requires one. The Router cannot expand these grants. The Router decides and establishes the Tickets; this tool does not mean any Worker started or completed.'
+      { name: 'delegate_work', description: 'Create one durable WorkBrief for one to four independent items on the execution target selected by the user. Give every item a clear goal, strict constraints and observable acceptance criteria. When attachments are present, assign their exact IDs to each item with attachmentIds; an item without attachments uses an empty array. Set capabilities to browser, mcp or office when the request requires one. Use pathGrants only for exact absolute paths and operations the user explicitly authorized for this task; never infer or expand them, and ask before adding access that the user has not granted. The Router cannot expand these grants. The Router decides and establishes the Tickets; this tool does not mean any Worker started or completed.'
           + (command.attachmentIds?.length ? ` Available attachments: ${JSON.stringify(command.attachmentIds.map((id, index) => ({ id, name: command.assets?.[index]?.name ?? '' })))}.` : ''),
         parameters: {
           items: {
@@ -640,6 +640,16 @@ export class MainConversation {
           constraints: { type: 'string' },
           acceptanceCriteria: { type: 'string' },
           capabilities: { type: 'array', items: { type: 'string' } },
+          pathGrants: {
+            type: 'array',
+            items: {
+              type: 'object', additionalProperties: false,
+              properties: {
+                path: { type: 'string', required: true },
+                operations: { type: 'array', items: { type: 'string' } },
+              },
+            },
+          },
         },
         execute: async args => {
           const work = this.work?.()
@@ -674,6 +684,7 @@ export class MainConversation {
             ...(command.clientId ? { attachmentClientId: command.clientId } : {}),
             ...(items ? { items } : { goal: args.goal ?? '', constraints: args.constraints ?? '', acceptanceCriteria: args.acceptanceCriteria ?? '' }),
             configurationRevision, target, ...(capabilities?.length ? { capabilities } : {}),
+            ...(args.pathGrants === undefined ? {} : { pathGrants: args.pathGrants }),
             ...(command.environmentId ? { environmentId: command.environmentId } : {}) })
           return JSON.stringify(await work.query(binding.mainId, { workBriefId: brief.id }))
         } },
@@ -711,11 +722,21 @@ export class MainConversation {
             ...(args.maxBytes === undefined ? {} : { maxBytes: args.maxBytes }),
           }))
         } },
-      { name: 'follow_up_work', description: 'Send an explicit user follow-up or direction change to exactly one existing workItemId. Use this only when the user unambiguously identifies that displayed work item. Never substitute the current page, focus, recency, a Worker, or another item. If the target is unclear, ask the user which work item they mean.',
+      { name: 'follow_up_work', description: 'Send an explicit user follow-up or direction change to exactly one existing workItemId. Use this only when the user unambiguously identifies that displayed work item. Never substitute the current page, focus, recency, a Worker, or another item. If the target is unclear, ask the user which work item they mean. Add pathGrants only for exact absolute paths and operations the user just authorized for this same task; ask before adding any access the user did not explicitly grant. A follow-up without pathGrants keeps the current direction but retires its previous path grants.',
         parameters: {
           workItemId: { type: 'string', required: true },
           text: { type: 'string', required: true },
           reason: { type: 'string' },
+          pathGrants: {
+            type: 'array',
+            items: {
+              type: 'object', additionalProperties: false,
+              properties: {
+                path: { type: 'string', required: true },
+                operations: { type: 'array', items: { type: 'string' } },
+              },
+            },
+          },
         },
         execute: async args => {
           const work = this.work?.()
@@ -729,6 +750,7 @@ export class MainConversation {
             workItemId: args.workItemId ?? '',
             text: args.text ?? '',
             ...(args.reason ? { reason: args.reason } : {}),
+            ...(args.pathGrants === undefined ? {} : { pathGrants: args.pathGrants }),
           }))
         } },
     ]

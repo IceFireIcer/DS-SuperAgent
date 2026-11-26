@@ -21,9 +21,9 @@ export const waitFor = async (check, what, timeout = 20_000) => {
 /**
  * Start the app on throwaway folders: the places are chosen already and the one-time notice
  * is answered, so that the app asks nothing. The Host answers when the test lets it.
- * @param {{ packaged?: boolean, prepare?: (home: string) => Promise<void> }} options
+ * @param {{ packaged?: boolean, project?: boolean, prepare?: (home: string) => Promise<void> }} options
  */
-export const startApp = async ({ packaged = true, prepare } = {}) => {
+export const startApp = async ({ packaged = true, project = true, prepare } = {}) => {
   const home = mkdtempSync(join(tmpdir(), 'ds-superagent-main-home-'))
   process.once('exit', () => {
     const roots = [home, paths.root]
@@ -38,11 +38,11 @@ export const startApp = async ({ packaged = true, prepare } = {}) => {
     }
     if (failures.length) console.error(`DS SuperAgent app-test cleanup failed: ${failures.map(error => error instanceof Error ? error.message : String(error)).join('; ')}`)
   })
-  const workspace = join(home, 'workspace')
+  const workspace = project ? join(home, 'workspace') : undefined
   mkdirSync(join(home, 'superagent'), { recursive: true })
-  mkdirSync(workspace, { recursive: true })
+  if (workspace !== undefined) mkdirSync(workspace, { recursive: true })
   mkdirSync(paths.userData, { recursive: true })
-  writeFileSync(join(paths.userData, 'locations.json'), JSON.stringify({ dataDir: home, workspace }))
+  writeFileSync(join(paths.userData, 'locations.json'), JSON.stringify({ dataDir: home, ...(workspace === undefined ? {} : { workspace }) }))
   writeFileSync(join(paths.userData, 'tray-close-acknowledged'), '')
   await prepare?.(join(home, 'superagent'))
   hold()

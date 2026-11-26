@@ -39,9 +39,9 @@ DS SuperAgent 是面向 [DeepSeek Harness](https://github.com/deepseek-ai/deepse
 .\start.ps1
 ```
 
-首次启动会询问数据目录和工作区，默认分别为 `~/.ds-superagent` 和 `~/DS SuperAgent`，随后打开 Main。
-发送工作前，在设置中配置服务商凭据，并为 Main、Router 和 Worker 选择模型。桌面版可独立使用，拥有自己的浏览器存储键和数据目录。
-旧版产品资料和个人 DSH 文件保留在原处。
+首次启动只询问数据目录（默认 `~/.ds-superagent`），随后打开 Main，不创建项目或工作文件夹。
+委托工作前，请先创建项目并选择文件夹；在此之前 Router 和 Worker 保持空闲。在设置中配置服务商凭据，并为
+Main、Router 和 Worker 选择模型。桌面版可独立使用，拥有自己的浏览器存储键和数据目录。旧版产品资料和个人 DSH 文件保留在原处。
 
 桌面版发布要求见[发版清单](docs/dev/release-checklist.md)，Windows 验收进度见
 [桌面迁移记录](docs/superagent/implementation/dsbot-port-162-164.md)。

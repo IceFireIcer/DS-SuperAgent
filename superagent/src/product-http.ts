@@ -50,7 +50,7 @@ const errorResponses: Record<string, { status: number; message?: string; detail?
   UNAVAILABLE: { status: 400, message: 'This product capability is not connected yet.' },
 }
 
-const classicNativePaths = new Set(['prompt', 'cancel', 'updateQueue', 'rename', 'selectModel', 'modelCatalog', 'projections']
+const classicNativePaths = new Set(['create', 'prompt', 'cancel', 'updateQueue', 'rename', 'selectModel', 'modelCatalog', 'projections']
   .map(method => `/api/session/${method}`))
 const workspaceSessionWrites = new Set(['insertSessionBefore', 'archiveSession', 'unarchiveSession', 'pinSession', 'unpinSession']
   .map(method => `/api/workspace/${method}`))

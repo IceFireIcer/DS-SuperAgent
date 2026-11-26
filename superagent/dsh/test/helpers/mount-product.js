@@ -47,6 +47,13 @@ export async function mountProduct(context, { connection = { connected: false },
   const role = { ...main, name: 'Main', instructions: '', skills: [] }
   const snapshot = { revision: 1, roles: { main: role, router: role, worker: role }, uses: [], history: [],
     providers: [{ ...official, name: 'DeepSeek', models: [{ ...official.models[0], name: 'Chat', ref: 'deepseek-official/chat' }] }] }
+  const providersView = () => ({ available: true, revision: snapshot.revision, addable: [], protocols: ['openai-completions', 'openai-responses', 'anthropic-messages'],
+    providers: snapshot.providers.map(provider => ({
+      id: provider.id, name: provider.name, key: provider.key,
+      models: provider.models.map(model => ({ id: model.model, ref: model.ref, name: model.name })),
+      declaredModels: provider.models.map(model => ({ id: model.model, ref: model.ref, name: model.name })),
+      refreshable: false, removable: false, custom: false,
+    })) })
   const responses = {
     open: () => ({ instanceId: 'fixture', mainId: 'main', mainSessionId: sessionId }),
     history: () => ({ mainSessionId: sessionId, messages: [], works: [], health: { state: 'ready' } }),
@@ -61,6 +68,7 @@ export async function mountProduct(context, { connection = { connected: false },
     'execution-options': () => ({ policy: { defaultTarget: 'local-only', requiredPermissions: [] }, environments: [] }),
     'observe-list': () => ({ items: [] }),
     'settings-efforts': () => ({ efforts: [] }),
+    providers: () => providersView(),
     ...overrides,
   }
   const call = async (endpoint, payload) => {
@@ -74,7 +82,7 @@ export async function mountProduct(context, { connection = { connected: false },
       const value = await call(endpoint, payload)
       return { ok: true, json: async () => ({ ok: true, value }) }
     } catch (error) {
-      return { ok: false, json: async () => ({ ok: false, error: { message: error.message } }) }
+      return { ok: false, json: async () => ({ ok: false, error: { code: error.code, message: error.message } }) }
     }
   }
   window.dsSuperagentApp = { productClient: { status: async () => connection, call, events: async () => [] } }
@@ -171,7 +179,7 @@ export async function mountProduct(context, { connection = { connected: false },
     subscribe: () => () => {} }
   await act(async () => {
     module.exports.applyProduct({ get: name => name === 'workspaces' && native ? { list: workspaceList } : remotes[name],
-      effect: effect => cleanups.push(effect()), slots, ...nativeContext })
+      effect: effect => cleanups.push(effect()), on: () => () => {}, slots, ...nativeContext })
     render(true)
   })
 

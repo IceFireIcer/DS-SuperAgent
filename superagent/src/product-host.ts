@@ -47,6 +47,7 @@ import type { RoleConfig, RoleModel } from './config.js'
 import type { LegacyPresetCopy, PresetRole } from './role-presets.js'
 import { productStatusPublisher, productWatchdogProbe } from './product-watchdog.js'
 import { createProductSupervision } from './product-supervision.js'
+import { createProductProviders } from './product-providers.js'
 
 export interface ProductHostConfig { databasePath?: string; postgres?: PostgresOptions; stateRoot?: string;
   hostId?: string; leaseMs?: number; workspaceRoot?: string; instanceId?: string; actorId?: string;
@@ -395,6 +396,7 @@ export async function createProductHost(context: Context, config: ProductHostCon
     }
     return providers
   }
+  const productProviders = createProductProviders(context)
   const verifyRoles = async (roles: RoleConfig, signal: AbortSignal) => {
     signal.throwIfAborted()
     const providers = await providerCatalog()
@@ -816,6 +818,11 @@ export async function createProductHost(context: Context, config: ProductHostCon
                                     : endpoint === 'preset-import-read' ? ['instanceId', 'importId']
                       : endpoint === 'settings-efforts' ? ['instanceId', 'provider', 'model']
                         : endpoint === 'provider-key' ? ['instanceId', 'provider', 'value']
+                          : endpoint === 'providers' ? ['instanceId']
+                            : endpoint === 'provider-models' ? ['instanceId', 'provider', 'baseURL', 'api', 'key']
+                              : endpoint === 'provider-add' ? ['instanceId', 'provider', 'custom', 'name', 'baseURL', 'api', 'key', 'models']
+                                : endpoint === 'provider-models-save' ? ['instanceId', 'provider', 'models', 'revision']
+                                  : endpoint === 'provider-remove' ? ['instanceId', 'provider']
                           : endpoint === 'reconcile-delivery' ? ['instanceId', 'commandId', 'ticketId', 'deliveryId']
                             : endpoint === 'source-deliveries' ? ['instanceId', 'sourceId', 'after', 'limit']
                               : endpoint === 'observe-list' ? ['instanceId', 'after', 'limit', 'query']
@@ -828,6 +835,9 @@ export async function createProductHost(context: Context, config: ProductHostCon
         if (Object.keys(payload).some(key => !fields.includes(key))) throw new CoreError('INVALID_INPUT', 'The product request contains unsupported fields.')
         if (client && (endpoint.startsWith('schedule-') || endpoint.startsWith('scheduled-task-'))) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Schedule administration requires the local authorized product settings.')
+        }
+        if (client && new Set(['provider-models', 'provider-add', 'provider-models-save', 'provider-remove']).has(endpoint)) {
+          throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Provider administration requires the local authorized product settings.')
         }
         if (client && (endpoint === 'execution-policy-save' || endpoint.startsWith('remote-environment-'))) {
           throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Execution and device administration requires the local authorized product settings.')
@@ -1694,6 +1704,11 @@ export async function createProductHost(context: Context, config: ProductHostCon
               ...(latest.error ? { errorCode: latest.error } : {}), ...(latest.coverage ? { coverage: latest.coverage } : {}) } } : {}) } }
         }
         if (endpoint === 'provider-key') return setProviderKey(payload.provider as string, payload.value)
+        if (endpoint === 'providers') return productProviders.providersView()
+        if (endpoint === 'provider-models') return productProviders.discoverModels(payload)
+        if (endpoint === 'provider-add') return productProviders.addProvider(payload)
+        if (endpoint === 'provider-models-save') return productProviders.saveProviderModels(payload)
+        if (endpoint === 'provider-remove') return productProviders.removeProvider(payload.provider as string)
         if (endpoint === 'evidence') return engine!.readMainEvidence({ instanceId, workItemId: payload.workItemId as string,
           ref: payload.ref as { kind: 'ticket' | 'trigger' | 'decision' | 'mandate' | 'report' | 'attention' | 'delivery' | 'source-event' | 'source-thread';
             id?: string; threadId?: string; objectId?: string },

@@ -1,31 +1,36 @@
 name: Release
 
-# Publishes ds-superagent to npm when a GitHub release is published, then attaches the desktop app's
-# Windows installer, macOS zips and Linux packages to the release. Windows and the Linux
-# AppImage update from latest.yml / latest-linux.yml; macOS and the Linux deb open the release
-# page for a manual download.
+# Rolling release pipeline. Every run starts from main, optionally merges dev, chooses the next
+# semantic version from the changes since the last v* tag, builds every desktop package, publishes
+# ds-superagent to npm, and only then publishes the draft GitHub release. A daily schedule runs at
+# 04:00 UTC (12:00 UTC+8). Manual runs can force a patch/minor/major bump or stay on dev.
 #
-# npm Trusted Publishing: npm trusts this workflow through GitHub's OIDC token, so the
-# repository keeps no npm token, and every version gets a provenance statement. It is set
-# up once on npmjs.com: package ds-superagent → Settings → Trusted Publisher → GitHub Actions,
-# user IceFireIcer, repository DS-SuperAgent, workflow release.yml, no environment.
-#
-# The release tag must be v<version in superagent/package.json> and must point at a commit on
-# main. A version with a pre-release part (0.2.0-rc.1) goes to the npm tag "next", so that
-# "latest" stays on the last stable version.
+# npm Trusted Publishing: npm trusts this workflow through GitHub's OIDC token, so the repository
+# keeps no npm token and every version gets a provenance statement. Configure it once on npmjs.com:
+# package ds-superagent -> Settings -> Trusted Publisher -> GitHub Actions, user IceFireIcer,
+# repository DS-SuperAgent, workflow release.yml, no environment.
 
 on:
-  release:
-    types: [published]
+  schedule:
+    # GitHub schedules use UTC. 04:00 UTC is 12:00 in UTC+8.
+    - cron: '0 4 * * *'
   workflow_dispatch:
     inputs:
-      dry_run:
-        description: Run every check and pack the package, but do not publish
+      bump:
+        description: Version bump policy
+        type: choice
+        options: [auto, patch, minor, major]
+        default: auto
+      sync_dev:
+        description: Merge origin/dev into main before releasing
         type: boolean
         default: true
+      dry_run:
+        description: Compute the next version without pushing, tagging or publishing
+        type: boolean
+        default: false
 
 permissions:
-  # write: attach the package file to the release.
   contents: write
   id-token: write
   packages: write
@@ -35,94 +40,114 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  validation:
-    name: Full pre-release validation
-    uses: ./.github/workflows/test.yml
-    with:
-      full: true
-    secrets: inherit
-
-  publish:
-    name: Check and publish
-    needs: validation
+  prepare:
+    name: Prepare rolling release
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    defaults:
-      run:
-        shell: bash
-        working-directory: superagent
+    outputs:
+      release: ${{ steps.decision.outputs.release }}
+      version: ${{ steps.decision.outputs.version }}
+      tag: ${{ steps.decision.outputs.tag }}
+      commit: ${{ steps.publish.outputs.commit }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
+          fetch-tags: true
+          token: ${{ github.token }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
           cache: npm
           cache-dependency-path: superagent/package-lock.json
-      # Trusted Publishing needs npm 11.5.1 or later.
-      - run: npm install -g npm@11.6.2 --no-fund --no-audit
 
-      - name: Check the tag and the branch
-        if: github.event_name == 'release'
+      - name: Merge dev into main for the rolling release
+        if: github.event_name == 'schedule' || inputs.sync_dev
+        run: |
+          git config user.name 'IceFireIcer'
+          git config user.email 'icefire_icer@outlook.com'
+          git fetch origin main dev
+          git merge --no-ff --no-edit origin/dev
+
+      - name: Decide the next version
+        id: decision
         env:
-          TAG: ${{ github.event.release.tag_name }}
+          BUMP: ${{ inputs.bump || 'auto' }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
         run: |
-          version="$(node -p "require('./package.json').version")"
-          if [ "$TAG" != "v$version" ]; then
-            echo "::error::The release tag is $TAG, but superagent/package.json has version $version. Tag v$version or change the version."
-            exit 1
-          fi
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "::error::$TAG points at a commit that is not on main. Release from main."
-            exit 1
-          fi
+          git config user.name 'IceFireIcer'
+          git config user.email 'icefire_icer@outlook.com'
+          last_tag="$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)"
+          echo "Last release tag: ${last_tag:-none}"
+          node scripts/release-version.mjs --from "$last_tag" --bump "$BUMP" > release-decision.json
+          cat release-decision.json
+          node - <<'NODE'
+          const fs = require('node:fs')
+          const decision = JSON.parse(fs.readFileSync('release-decision.json', 'utf8'))
+          const output = process.env.GITHUB_OUTPUT
+          const write = (name, value) => fs.appendFileSync(output, `${name}=${value}\n`)
+          write('version', decision.version)
+          write('tag', `v${decision.version}`)
+          write('release', decision.release && process.env.DRY_RUN !== 'true' ? 'true' : 'false')
+          if (!decision.release) console.log('No changes since the last release tag; skipping this run.')
+          else if (process.env.DRY_RUN === 'true') console.log(`Dry run: would release ${decision.version}.`)
+          NODE
+          if ! grep -q '^release=true$' "$GITHUB_OUTPUT"; then exit 0; fi
 
-      - name: Check the app version
+          version="$(node -p "require('./release-decision.json').version")"
+          npm ci --prefix superagent --no-fund --no-audit
+          node scripts/set-release-version.mjs "$version"
+
+      - name: Build and commit the selected version
+        if: steps.decision.outputs.release == 'true'
         run: |
-          version="$(node -p "require('./package.json').version")"
-          app="$(node -p "require('../app/package.json').version")"
-          if [ "$app" != "$version" ]; then
-            echo "::error::app/package.json has version $app, but superagent/package.json has $version. Give both the same version."
-            exit 1
+          version="$(node -p "require('./superagent/package.json').version")"
+          npm --prefix superagent run build
+          git add superagent/package.json superagent/package-lock.json app/package.json app/package-lock.json superagent/dsh/client.js
+          if git diff --cached --quiet; then
+            echo "The selected version is already present in the release commit."
+          else
+            git commit -m "chore(release): v$version" -m "Rolling release selected from the changes since the previous version."
           fi
 
-      - run: npm ci --no-fund --no-audit
-      # The reusable validation already ran the complete test/compatibility/package matrix.
-
-      - name: Pack (dry run)
-        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
-        run: npm pack --dry-run
-
-      - name: Publish
-        if: github.event_name == 'release' || (!inputs.dry_run && github.ref == 'refs/heads/main')
-        run: |
-          tag="$(node -p "require('./package.json').version.includes('-') ? 'next' : 'latest'")"
-          echo "Publishing $(node -p "require('./package.json').version") with the npm tag $tag"
-          npm publish --provenance --access public --tag "$tag"
-
-      # The release keeps the package file for installs without npm.
-      - name: Attach the package to the release
-        if: github.event_name == 'release'
+      - name: Push the release commit and open a draft release
+        id: publish
+        if: steps.decision.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
         run: |
-          npm pack
-          gh release upload "$TAG" "ds-superagent-$(node -p "require('./package.json').version").tgz" --clobber
+          version="$(node -p "require('./superagent/package.json').version")"
+          tag="v$version"
+          commit="$(git rev-parse HEAD)"
+          git push origin HEAD:main
+          last_tag="$(git describe --tags --abbrev=0 --match 'v[0-9]*' "$commit^" 2>/dev/null || true)"
+          {
+            echo "## DS SuperAgent $tag"
+            echo
+            if [ -n "$last_tag" ]; then
+              git log --format='- %s (%h)' "$last_tag..$commit"
+            else
+              git log --format='- %s (%h)' --max-count=50 "$commit"
+            fi
+          } > release-notes.md
+          gh release create "$tag" --draft --title "$tag" --notes-file release-notes.md --target "$commit"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
 
   app-windows:
     name: Desktop app installer (Windows)
-    needs: publish
+    needs: prepare
+    if: needs.prepare.outputs.release == 'true'
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     defaults:
       run:
         shell: bash
         working-directory: app
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -138,8 +163,7 @@ jobs:
       - run: npm run dist
       - name: Check the packaged app
         run: node scripts/check-packed.mjs
-      - name: Keep the installer for real-device checks
-        if: github.event_name == 'workflow_dispatch'
+      - name: Keep the installer for the build record and real-device checks
         uses: actions/upload-artifact@v4
         with:
           name: DS-SuperAgent-win-x64
@@ -147,19 +171,18 @@ jobs:
           retention-days: 7
           if-no-files-found: error
           compression-level: 0
-
-      - name: Attach the installer to the release
-        if: github.event_name == 'release'
+      - name: Attach the installer to the draft release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ needs.prepare.outputs.tag }}
         run: |
           installer="dist-pack/DS-SuperAgent-$(node -p "require('./package.json').version")-win-x64.exe"
           gh release upload "$TAG" "$installer" "$installer.blockmap" dist-pack/latest.yml --clobber
 
   app-macos:
     name: Desktop app zip (macOS ${{ matrix.arch }})
-    needs: publish
+    needs: prepare
+    if: needs.prepare.outputs.release == 'true'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     strategy:
@@ -174,6 +197,8 @@ jobs:
         working-directory: app
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -187,10 +212,11 @@ jobs:
           npm run build --prefix ../superagent
       - run: npm ci --no-fund --no-audit
       - run: npm run dist
+        env:
+          CSC_FOR_PULL_REQUEST: 'true'
       - name: Check the packaged app
         run: node scripts/check-packed.mjs
-      - name: Keep the zip for real-device checks
-        if: github.event_name == 'workflow_dispatch'
+      - name: Keep the zip for the build record and real-device checks
         uses: actions/upload-artifact@v4
         with:
           name: DS-SuperAgent-mac-${{ matrix.arch }}
@@ -198,26 +224,28 @@ jobs:
           retention-days: 7
           if-no-files-found: error
           compression-level: 0
-      - name: Attach the zip to the release
-        if: github.event_name == 'release'
+      - name: Attach the zip to the draft release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ needs.prepare.outputs.tag }}
         run: |
           zip="dist-pack/DS-SuperAgent-$(node -p "require('./package.json').version")-mac-${{ matrix.arch }}.zip"
           gh release upload "$TAG" "$zip" --clobber
 
   app-linux:
     name: Desktop app packages (Linux x64)
-    needs: publish
+    needs: prepare
+    if: needs.prepare.outputs.release == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     defaults:
       run:
         shell: bash
         working-directory: app
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -232,18 +260,14 @@ jobs:
       - run: npm ci --no-fund --no-audit
       - run: npm run dist
       - name: Check the packaged app
-        # Ubuntu 24.04's AppArmor blocks the unprivileged user namespaces that Chromium's
-        # sandbox needs; the release runner may lift that restriction (it is its own machine).
         run: |
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           xvfb-run -a node scripts/check-packed.mjs
       - name: Check the files for the release
-        # The dry run never uploads, so it checks here that every file the release attaches exists.
         run: |
           version="$(node -p "require('./package.json').version")"
           ls -l "dist-pack/DS-SuperAgent-$version-linux-x86_64.AppImage" "dist-pack/DS-SuperAgent-$version-linux-amd64.deb" dist-pack/latest-linux.yml
-      - name: Keep the packages for real-device checks
-        if: github.event_name == 'workflow_dispatch'
+      - name: Keep the packages for the build record and real-device checks
         uses: actions/upload-artifact@v4
         with:
           name: DS-SuperAgent-linux-x64
@@ -253,12 +277,95 @@ jobs:
           retention-days: 7
           if-no-files-found: error
           compression-level: 0
-      - name: Attach the packages to the release
-        if: github.event_name == 'release'
+      - name: Attach the packages to the draft release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
-        # The AppImage carries its block map inside the file, so there is no .blockmap to attach.
+          TAG: ${{ needs.prepare.outputs.tag }}
         run: |
           version="$(node -p "require('./package.json').version")"
           gh release upload "$TAG" "dist-pack/DS-SuperAgent-$version-linux-x86_64.AppImage" "dist-pack/DS-SuperAgent-$version-linux-amd64.deb" dist-pack/latest-linux.yml --clobber
+
+  app-build-record:
+    name: Desktop release build record
+    needs: [prepare, app-windows, app-macos, app-linux]
+    if: needs.prepare.outputs.release == 'true' && needs.app-windows.result == 'success' && needs.app-macos.result == 'success' && needs.app-linux.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Collect the platform packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: DS-SuperAgent-*
+          path: release-artifacts
+          merge-multiple: true
+      - name: Verify and hash the package matrix
+        env:
+          COMMIT_SHA: ${{ needs.prepare.outputs.commit }}
+        run: |
+          head_sha="$(git rev-parse HEAD)"
+          if [ "$head_sha" != "$COMMIT_SHA" ]; then
+            echo "::error::The build record checkout is $head_sha, but the candidate commit is $COMMIT_SHA."
+            exit 1
+          fi
+          version="$(node -p "require('./app/package.json').version")"
+          node scripts/desktop-build-record.mjs \
+            --artifacts release-artifacts \
+            --commit-sha "$COMMIT_SHA" \
+            --version "$version" \
+            --output "release-build-record/DS-SuperAgent-$version-$COMMIT_SHA-build-record.json"
+      - name: Keep the build record
+        uses: actions/upload-artifact@v4
+        with:
+          name: DS-SuperAgent-build-record-${{ needs.prepare.outputs.commit }}
+          path: release-build-record/*.json
+          retention-days: 30
+          if-no-files-found: error
+      - name: Attach the build record to the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: gh release upload "$TAG" release-build-record/*.json --clobber
+
+  publish:
+    name: Publish npm and finalize release
+    needs: [prepare, app-windows, app-macos, app-linux, app-build-record]
+    if: needs.prepare.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+        working-directory: superagent
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: npm
+          cache-dependency-path: superagent/package-lock.json
+      - name: Trusted Publishing needs npm 11.5.1 or later
+        run: npm install -g npm@11.6.2 --no-fund --no-audit
+      - run: npm ci --no-fund --no-audit
+      - name: Publish the package
+        run: npm publish --provenance --access public --tag latest
+      - name: Attach the package to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          npm pack
+          gh release upload "$TAG" "ds-superagent-$(node -p "require('./package.json').version").tgz" --clobber
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: gh release edit "$TAG" --draft=false --latest

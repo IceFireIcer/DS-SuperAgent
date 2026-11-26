@@ -74,7 +74,6 @@ const CREDENTIAL_IMPORT_FILE_MAX = 1024 * 1024
 const PRODUCT_BROWSER_IMPORT_ERRORS = new Set(['BROWSER_IMPORT_NOT_FOUND', 'BROWSER_IMPORT_CONFLICT'])
 const MOVE_PROBLEMS = { drive: 'moveDrive', nested: 'moveNested', workspace: 'moveWorkspace', program: 'inProgram', notEmpty: 'moveNotEmpty' }
 const UPDATE_CHECK_WAIT_MS = 15_000
-const UPDATE_DOWNLOAD_WAIT_MS = 15 * 60_000
 
 const here = dirname(fileURLToPath(import.meta.url))
 const packageInfo = createRequire(import.meta.url)
@@ -106,7 +105,6 @@ let updateLaunchPending = false
 let updateExitAllowed = false
 let updateExitCommitted = false
 let updateExitTimer
-let installOnQuit = true
 let stopping = false
 let stopped = false
 let failed = false
@@ -211,8 +209,7 @@ const shell = createShell({
   fallback: { show: (options) => dialog.showMessageBox(options) },
 })
 const startupScreen = createStartupScreen({ BrowserWindow, ipcMain, icon: iconFile, lang: language,
-  image: () => nativeImage.createFromPath(join(assets, 'icon.png')).resize({ width: 96 }).toPNG().toString('base64'),
-  quitting: shell.isQuitting, quit: shell.quit })
+  screen, nativeTheme, mica, quitting: shell.isQuitting, quit: shell.quit })
 // The tray icon goes away with the app, and a late answer to the close notice hides nothing.
 app.once('will-quit', () => { startupScreen.close(); clearComputer(true); notifications.dispose(); shell.dispose(); botViews.dispose(); updates?.stop() })
 
@@ -269,11 +266,6 @@ if (identityError !== undefined) {
         if (host) void stopHost().catch(() => {})
         void startup.catch(() => {}).then(() => hostStop).catch(() => {}).then(() => app.quit())
       }
-      return
-    }
-    if (installOnQuit && !stopping && hostState === HOST_STATE.running && updates?.install && updates.state().phase === 'downloaded') {
-      event.preventDefault()
-      void installUpdate({ restart: false }).catch(() => { shell.cancelQuit(); showUpdateFailure() })
       return
     }
     // The app is on its way out: the window may close for good.
@@ -492,7 +484,8 @@ function workspaceProblem(path) {
   const t = text()
   const shellData = real(app.getPath('userData'))
   if (within(path, shellData) || within(shellData, path)) return t.inDesktopData
-  return path === real(places.workspace) ? placeProblem(t, path) : placeProblem(t, places.dataDir, path)
+  return places.workspace !== undefined && path === real(places.workspace)
+    ? placeProblem(t, path) : placeProblem(t, places.dataDir, path)
 }
 
 function readWorkspace() {
@@ -602,14 +595,14 @@ async function start() {
   const where = await chooseLocations(choosing.signal, startupScreen.window()).finally(() => { choosing = undefined })
   if (where.quit) { startupScreen.close(); app.quit(); return }
   const hostHome = profileHome(where.dataDir)
-  const workspace = where.workspace ?? join(hostHome, 'workspace')
+  const workspace = where.workspace
   // A link can be made after the first run's check: the folders the Host will write to are
   // checked again, as the file system has them, before anything starts.
-  for (const path of new Set([where.dataDir, hostHome, workspace])) {
+  for (const path of new Set([where.dataDir, hostHome, ...(workspace === undefined ? [] : [workspace])])) {
     const problem = placeProblem(text(), path)
     if (problem !== undefined) throw new Error(problem)
   }
-  places = { dataDir: where.dataDir, workspace }
+  places = { dataDir: where.dataDir, ...(workspace === undefined ? {} : { workspace }) }
   const port = await hostPort(join(app.getPath('userData'), 'host-port.json'))
   if (shell.isQuitting()) return
   hostPortNumber = port
@@ -622,12 +615,15 @@ async function start() {
     const problem = placeProblem(text(), profileDir)
     if (problem !== undefined) throw new Error(problem)
     mkdirSync(profileDir, { recursive: true })
+    const env = { ...process.env, DSH_HOME: hostHome, DS_SUPERAGENT_PORT: String(port), DS_SUPERAGENT_APP: '1',
+      DS_SUPERAGENT_RUNTIME_DIR: runtimeDir, DS_SUPERAGENT_USER_DSH_HOME: userDshHome(),
+      DS_SUPERAGENT_PROTECTED_PATHS: JSON.stringify([app.getPath('userData'), ...formerDataFolders(app)]) }
+    if (places.workspace === undefined) delete env.DS_SUPERAGENT_WORKSPACE
+    else env.DS_SUPERAGENT_WORKSPACE = places.workspace
     return new HostProcess({
       entry: join(here, 'host.mjs'),
       cwd: profileDir,
-      env: { ...process.env, DSH_HOME: hostHome, DS_SUPERAGENT_PORT: String(port), DS_SUPERAGENT_APP: '1',
-        DS_SUPERAGENT_RUNTIME_DIR: runtimeDir, DS_SUPERAGENT_USER_DSH_HOME: userDshHome(), DS_SUPERAGENT_WORKSPACE: places.workspace,
-        DS_SUPERAGENT_PROTECTED_PATHS: JSON.stringify([app.getPath('userData'), ...formerDataFolders(app)]) },
+      env,
       pnpm,
       onFailure: hostFailure,
     })
@@ -845,10 +841,10 @@ async function showLocations() {
   const owner = mainWindow
   const current = await readWorkspace()
   if (!windowShown() || mainWindow !== owner) return
-  const buttons = fixed || !current ? [t.closeLocations] : [t.closeLocations, t.changeData]
+  const buttons = fixed ? [t.closeLocations] : [t.closeLocations, t.changeData]
   const { response } = await dialog.showMessageBox(owner, { type: 'info', title: PRODUCT_NAME, message: t.locations,
     detail: t.places(places.dataDir, current ?? places.workspace), buttons, defaultId: 0, cancelId: 0, noLink: true })
-  if (response === 1 && buttons.length > 1 && mainWindow === owner) await moveData(current)
+  if (response === 1 && buttons.length > 1 && mainWindow === owner) await moveData(current ?? undefined)
 }
 
 // The data moves as a copy while the Host is stopped, and the app starts again on the new
@@ -880,11 +876,11 @@ async function chooseDataMove(workspace) {
     return false
   }
   const current = await readWorkspace()
-  if (!current || await refused(current)) return false
+  if (await refused(current)) return false
   const { response } = await dialog.showMessageBox(owner, { type: 'question', title: PRODUCT_NAME, noLink: true, message: t.moveConfirm(to), detail: t.moveDetail(places.dataDir), buttons: [t.move, t.cancel], defaultId: 0, cancelId: 1 })
   if (response !== 0) return false
   const latest = await readWorkspace()
-  if (!latest || await refused(latest) || owner !== mainWindow || stopping || shell.isQuitting() || remoteProduct.status().connected) return false
+  if ((latest !== null && await refused(latest)) || owner !== mainWindow || stopping || shell.isQuitting() || remoteProduct.status().connected) return false
   const signal = copyAbort.signal
   copying = (async () => {
     // The settings go away first, so that nothing moves the workspace from here on.
@@ -903,7 +899,8 @@ async function chooseDataMove(workspace) {
     }
     mainWindow?.setProgressBar(2)
     try {
-      await copyData(places.dataDir, to, signal, () => saveLocations({ dataDir: to, workspace: latest }))
+      const locations = latest === null ? { dataDir: to } : { dataDir: to, workspace: latest }
+      await copyData(places.dataDir, to, signal, () => saveLocations(locations))
       note('shell', 'DATA_LOCATION_MOVED')
     } catch (error) {
       if (signal.aborted) return
@@ -954,7 +951,6 @@ function startUpdates() {
         shell.beginQuit()
       },
       onInstallFailure: async ({ asynchronous }) => {
-        installOnQuit = false
         clearTimeout(updateExitTimer)
         updateExitTimer = undefined
         updateLaunchPending = false
@@ -983,7 +979,8 @@ function windowShown() {
 }
 
 async function askRestartNow(version) {
-  // After a failed start, fail() installs the update itself.
+  // A failed start reports the candidate without installing it. After a retry, Settings is
+  // the explicit way to install.
   if (failed) return false
   const t = localeText(UPDATE_TEXT)
   const options = { type: 'info', title: PRODUCT_NAME, message: t.ready(version), detail: t.readyDetail, buttons: [t.restart, t.later], defaultId: 0, cancelId: 1, noLink: true }
@@ -1001,12 +998,7 @@ async function askDownloadNow(version) {
 
 // What the updater does when the user says yes. The answer may come later, when the window
 // is shown again; then the work is done here.
-async function installUpdate(options) { await updates?.install(options) }
-
-function showUpdateFailure() {
-  const message = localeText(UPDATE_TEXT).installFailed
-  void dialog.showMessageBox({ type: 'warning', title: PRODUCT_NAME, message }).catch(() => {})
-}
+async function installUpdate() { await updates?.install() }
 
 async function checkLastInstall() {
   const events = await operationsLog.read()
@@ -1425,23 +1417,13 @@ async function fail(error) {
   failed = true
   hostState = HOST_STATE.failed
   shell.refresh()
-  const found = installOnQuit && await Promise.race([updates?.latest() ?? null, sleep(UPDATE_CHECK_WAIT_MS, null, { ref: false })])
+  const found = await Promise.race([updates?.latest() ?? null, sleep(UPDATE_CHECK_WAIT_MS, null, { ref: false })])
   const throwaway = Boolean(process.env.DS_SUPERAGENT_HOME)
   const t = localeText(UPDATE_TEXT)
   const next = found ? `\n\n${found.page ? t.onFailurePage(found.version) : t.onFailure(found.version)}` : ''
-  if (found?.page) {
-    dialog.showErrorBox(PRODUCT_NAME, `${text().notStarted}\n\n${error instanceof Error ? error.message : String(error)}${next}`)
-    if (!throwaway) await electronShell.openExternal(found.page)
-    app.quit()
-    return
-  }
   if (found) {
     dialog.showErrorBox(PRODUCT_NAME, `${text().notStarted}\n\n${error instanceof Error ? error.message : String(error)}${next}`)
-    mainWindow?.hide()
-    if (await Promise.race([found.downloaded, sleep(UPDATE_DOWNLOAD_WAIT_MS, false, { ref: false })])) {
-      try { await installUpdate(); return }
-      catch { showUpdateFailure() }
-    }
+    if (found.page && !throwaway) await electronShell.openExternal(found.page)
   }
   const action = await askStartupAction(error, next)
   if (shell.isQuitting()) return

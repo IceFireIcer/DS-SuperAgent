@@ -1,5 +1,126 @@
 import assert from 'node:assert/strict'
+import { randomUUID } from 'node:crypto'
 import { chromium } from 'playwright'
+
+async function checkRoleDraft(page, ctx, instanceId) {
+  const launcher = page.locator('.bt-native-main-actions .bt-main-settings')
+  const settings = page.locator('.bt-superagent-settings')
+  await launcher.press('Enter')
+  await settings.getByRole('button', { name: /^(Roles|角色)$/u }).press('Enter')
+  const main = settings.getByRole('textbox', { name: /^(Main instructions|Main 指令)$/u })
+  const worker = settings.getByRole('textbox', { name: /^(Worker instructions|Worker 指令)$/u })
+  const edited = 'Keep the local Main edit.'
+  await main.fill(edited)
+  await main.press('Escape')
+  const confirmation = page.getByRole('alertdialog')
+  const keep = confirmation.getByRole('button', { name: /^(Keep editing|继续编辑)$/u })
+  const discard = confirmation.getByRole('button', { name: /^(Discard changes|放弃更改)$/u })
+  await keep.waitFor()
+  assert.ok(await keep.evaluate(element => document.activeElement === element))
+  await page.keyboard.press('Shift+Tab')
+  assert.ok(await discard.evaluate(element => document.activeElement === element))
+  await page.keyboard.press('Tab')
+  assert.ok(await keep.evaluate(element => document.activeElement === element))
+  await page.keyboard.press('Escape')
+  await confirmation.waitFor({ state: 'hidden' })
+  assert.ok(await main.evaluate(element => document.activeElement === element))
+  const search = settings.getByRole('searchbox', { name: /^(Search settings|搜索设置)$/u })
+  await search.fill('backup')
+  const status = settings.getByRole('button', { name: /^(Usage › Status|用量 › 状态)$/u })
+  await status.press('Enter')
+  await keep.press('Enter')
+  assert.ok(await status.evaluate(element => document.activeElement === element))
+  assert.equal(await main.inputValue(), edited)
+  await search.clear()
+
+  const call = (endpoint, payload = {}) => ctx.superagentProduct.dispatch(endpoint, { instanceId, ...payload })
+  const original = await call('settings', { limit: 1 })
+  const externalInstructions = 'Check {{goal}} and obey {{constraints}}.'
+  const external = await call('settings-save', { commandId: randomUUID(), expectedRevision: original.revision,
+    roles: { ...original.roles, worker: { ...original.roles.worker, instructions: externalInstructions } } })
+  const save = settings.getByRole('button', { name: /^(Save configuration|保存配置)$/u })
+  await save.press('Enter')
+  const rebase = settings.getByRole('button', { name: /^(Rebase my edits|重接我的修改)$/u })
+  await rebase.waitFor({ timeout: 8000 })
+  assert.equal(await main.inputValue(), edited)
+  assert.equal((await call('settings', { limit: 1 })).revision, external.revision)
+  await rebase.press('Enter')
+  await rebase.waitFor({ state: 'hidden' })
+  assert.equal(await main.inputValue(), edited)
+  assert.equal(await worker.inputValue(), externalInstructions)
+  assert.ok(await settings.getByRole('combobox', { name: /^(Main model|Main 模型)$/u }).evaluate(element => document.activeElement === element))
+  assert.equal((await call('settings', { limit: 1 })).revision, external.revision)
+
+  const write = page.waitForResponse(response => response.url().endsWith('/api/product') && response.request().method() === 'POST'
+    && response.request().postDataJSON().endpoint === 'settings-save')
+  await save.press('Enter')
+  const receipt = await (await write).json()
+  assert.equal(receipt.ok, true)
+  await settings.getByText(/^(Configuration v\d+ is active for new turns\.|配置 v\d+ 已对新回合生效。)$/u).waitFor()
+  const persisted = await call('settings', { limit: 1 })
+  assert.equal(persisted.revision, receipt.value.revision)
+  assert.deepEqual(persisted.roles, receipt.value.roles)
+  assert.equal(persisted.roles.main.instructions, edited)
+  assert.equal(persisted.roles.worker.instructions, externalInstructions)
+  await settings.getByRole('button', { name: /^(Close settings|关闭设置)$/u }).press('Enter')
+  await settings.waitFor({ state: 'hidden' })
+}
+
+export async function checkSettingsSearch(page, resize) {
+  const settings = page.locator('.bt-superagent-settings')
+  const launcher = page.locator('.bt-native-main-actions .bt-main-settings')
+  const chooser = settings.getByRole('button', { name: /^(Choose a page|选择设置页面)$/u })
+  const search = settings.getByRole('searchbox', { name: /^(Search settings|搜索设置)$/u })
+  const clear = settings.getByRole('button', { name: /^(Clear search|清除搜索)$/u })
+  const status = settings.getByRole('tab', { name: /^(Status|状态)$/u, selected: true })
+  const result = settings.getByRole('button', { name: /^(Usage › Status|用量 › 状态)$/u })
+  for (const [width, height, compact, zoom] of [[1120, 760, false, 1], [721, 600, false, 1], [719, 600, true, 1],
+    [508, 480, true, 1], [508, 480, true, 1.5]]) {
+    await resize(width, height, zoom)
+    await launcher.press('Enter')
+    await settings.waitFor()
+    assert.equal(await chooser.isVisible(), compact)
+    if (compact) {
+      assert.ok(await chooser.evaluate(element => document.activeElement === element))
+      await chooser.press('Enter')
+      assert.ok(await search.evaluate(element => document.activeElement === element))
+    }
+    await search.fill('no-such-destination')
+    await settings.getByText(/^(No matching settings|没有匹配的设置)$/u).waitFor()
+    await clear.press('Enter')
+    assert.equal(await settings.locator('.bt-settings-group').count(), 5)
+    await search.fill(width === 508 ? '备份' : 'backup')
+    await result.waitFor()
+    await search.press('Tab')
+    assert.ok(await clear.evaluate(element => document.activeElement === element))
+    await page.keyboard.press('Tab')
+    assert.ok(await result.evaluate(element => document.activeElement === element))
+    await page.keyboard.press('Enter')
+    await status.waitFor()
+    if (compact) assert.ok(await chooser.evaluate(element => document.activeElement === element && element.getAttribute('aria-expanded') === 'false'))
+    const layout = await settings.evaluate(dialog => {
+      const bounds = dialog.getBoundingClientRect()
+      const body = dialog.querySelector('.bt-settings-scroll')
+      const close = dialog.querySelector('.bt-settings-close').getBoundingClientRect()
+      return { width: innerWidth, height: innerHeight, dialogRight: bounds.right, dialogBottom: bounds.bottom,
+        closeRight: close.right, contentWidth: body.clientWidth, contentScrollWidth: body.scrollWidth, contentHeight: body.clientHeight }
+    })
+    assert.ok(layout.dialogRight <= layout.width + 1 && layout.dialogBottom <= layout.height + 1
+      && layout.closeRight <= layout.width && layout.contentHeight > 0 && layout.contentScrollWidth <= layout.contentWidth + 1,
+    `Settings fits ${layout.width}×${layout.height}: ${JSON.stringify(layout)}`)
+    if (zoom > 1) {
+      await settings.getByRole('tab', { name: /^(Usage|用量)$/u }).press('Enter')
+      const chart = settings.locator('.bt-us-heat-scroll')
+      await chart.waitFor()
+      assert.ok(await chart.evaluate(area => area.scrollWidth > area.clientWidth && area.closest('.bt-settings-scroll').scrollLeft === 0))
+      await chart.press('End')
+      assert.ok(await chart.evaluate(area => document.activeElement === area), 'the chart scroll region accepts keyboard focus')
+    }
+    await page.keyboard.press('Escape')
+    await settings.waitFor({ state: 'hidden' })
+    assert.ok(await launcher.evaluate(element => document.activeElement === element))
+  }
+}
 
 async function checkAccountOnboarding(page, settings, composer) {
   const account = page.locator('.bt-product-side').getByRole('button', { name: /^(Account|账户|账号)$/u })
@@ -27,23 +148,38 @@ async function checkAccountOnboarding(page, settings, composer) {
   await page.locator('.bt-settings-layer .bt-scrim').click({ position: { x: 3, y: 3 } })
   await settings.waitFor({ state: 'hidden' })
 
-  let saved = false
+  let keyWrites = 0
+  let roleWrites = 0
+  let selected = false
+  let failRead = false
+  const sampleKey = 'fixture-provider-value'
+  const draft = 'Keep the draft across model setup.'
   const setupRoute = async route => {
     const { endpoint, payload } = route.request().postDataJSON()
     if (endpoint === 'provider-key') {
-      assert.ok(payload.provider === 'deepseek-official' && payload.value === 'fixture-provider-value')
-      saved = true
+      assert.ok(payload.provider === 'deepseek-official' && payload.value === sampleKey)
+      keyWrites++
+      failRead = true
       return route.fulfill({ json: { ok: true, value: { provider: payload.provider, configured: true } } })
     }
+    if (endpoint === 'settings-save') {
+      roleWrites++
+      const response = await route.fetch()
+      selected = (await response.json()).ok
+      if (selected) failRead = true
+      return route.fulfill({ response })
+    }
     if (endpoint !== 'settings') return route.continue()
+    if (failRead) {
+      failRead = false
+      return route.fulfill({ json: { ok: false, error: { message: 'Synthetic catalog read failure' } } })
+    }
     const response = await route.fetch()
     const body = await response.json()
-    if (body.ok) {
+    if (body.ok && !selected) {
       const provider = 'deepseek-official'
-      const model = 'fixture-model'
-      body.value.roles.main.model = { provider, model }
-      body.value.providers = [{ id: provider, name: 'DeepSeek', key: { configured: saved, writable: true },
-        models: [{ provider, model, ref: `${provider}/${model}`, name: 'Fixture model' }] }, ...body.value.providers]
+      body.value.roles.main.model = { provider, model: 'not-configured' }
+      if (!keyWrites) body.value.providers = [{ id: provider, name: 'DeepSeek', key: { configured: false, writable: true }, models: [] }]
     }
     return route.fulfill({ response, json: body })
   }
@@ -51,6 +187,7 @@ async function checkAccountOnboarding(page, settings, composer) {
   await page.emulateMedia({ reducedMotion: 'reduce' })
   try {
     await page.reload()
+    await page.getByRole('button', { name: /^(Set up a model|配置模型)$/u }).press('Enter')
     const keyAction = page.getByRole('button', { name: /^(Enter a DeepSeek API key|填入 DeepSeek API key)$/u })
     await keyAction.waitFor()
     const login = page.locator('.bt-superagent-model-dock').getByRole('button', { name: /^(Sign in to DeepSeek|登录 DeepSeek 账号)$/u })
@@ -61,7 +198,6 @@ async function checkAccountOnboarding(page, settings, composer) {
     await page.keyboard.press('Escape')
     await signInDialog.waitFor({ state: 'hidden' })
     assert.equal(await login.evaluate(element => document.activeElement === element), true)
-    const draft = 'Keep the draft across model setup.'
     await composer.fill(draft)
     await keyAction.press('Enter')
     const keyField = page.locator('.bt-main-model-key input')
@@ -70,15 +206,39 @@ async function checkAccountOnboarding(page, settings, composer) {
     await keyField.waitFor({ state: 'hidden' })
     assert.equal(await keyAction.evaluate(element => document.activeElement === element), true)
     await keyAction.press('Enter')
-    await keyField.fill('fixture-provider-value')
+    assert.equal(await keyField.getAttribute('type'), 'password')
+    await keyField.fill(sampleKey)
+    const masked = await keyField.screenshot({ animations: 'disabled', caret: 'hide' })
+    await keyField.fill('x'.repeat(sampleKey.length))
+    assert.ok(masked.equals(await keyField.screenshot({ animations: 'disabled', caret: 'hide' })), 'the screenshot masks the key value')
+    await keyField.fill(sampleKey)
     await keyField.press('Enter')
-    await keyAction.waitFor({ state: 'hidden' })
-    assert.equal(saved, true)
+    const dock = page.locator('.bt-superagent-model-dock')
+    await dock.getByText(/Provider key saved\. Could not refresh|密钥已保存，但无法刷新/u).waitFor()
+    await dock.getByRole('button', { name: /^(Retry|重试)$/u }).press('Enter')
+    const choose = dock.getByRole('button', { name: /^(Choose a model|选择模型)$/u })
+    await choose.waitFor({ timeout: 5000 }).catch(async () => {
+      throw new Error(`Model selection was not offered after the catalog refresh: ${await dock.innerText({ timeout: 1000 })}`)
+    })
+    await choose.press('Enter')
+    const picker = settings.getByRole('combobox', { name: /^(Main model|Main 模型)$/u })
+    await picker.waitFor()
+    assert.ok(await picker.evaluate(element => document.activeElement === element), 'the guide focuses the Main model control')
+    await picker.selectOption('mock/main')
+    await settings.getByRole('button', { name: /^(Save configuration|保存配置)$/u }).press('Enter')
+    await settings.getByText(/Configuration saved\. Could not refresh|配置已保存，但无法刷新/u).waitFor()
+    await settings.getByRole('button', { name: /^(Retry|重试)$/u }).press('Enter')
+    await settings.waitFor({ state: 'hidden' })
+    await dock.waitFor({ state: 'hidden' })
+    assert.equal(keyWrites, 1)
+    assert.equal(roleWrites, 1)
     assert.equal(await composer.inputValue(), draft)
     assert.equal(await composer.evaluate(element => document.activeElement === element), true)
+    assert.ok(await page.evaluate(value => !JSON.stringify([Object.entries(localStorage), Object.entries(sessionStorage)]).includes(value), sampleKey))
   } finally {
     await page.unroute('**/api/product', setupRoute)
   }
+  return { draft, sampleKey }
 }
 
 export async function checkProductUi(ctx) {
@@ -108,6 +268,25 @@ export async function checkProductUi(ctx) {
     const opened = await ctx.superagentProduct.dispatch('open')
     assert.equal(Boolean(ctx.agents.get(opened.mainSessionId)), false, 'Opening Main in the browser does not activate its Agent')
     assert.equal(await page.locator('.bt-main-composer textarea:visible').count(), 1)
+    const executionTarget = main.getByRole('button', { name: /^(Execution target|执行目标)[:：]/u })
+    await executionTarget.click()
+    const executionTargetMenu = page.getByRole('menu', { name: /^(Execution target|执行目标)$/u })
+    await executionTargetMenu.waitFor()
+    const [targetTriggerBox, targetMenuBox, viewportSize] = await Promise.all([
+      executionTarget.boundingBox(), executionTargetMenu.boundingBox(), page.evaluate(() => ({ width: innerWidth, height: innerHeight })),
+    ])
+    assert.ok(targetTriggerBox && targetMenuBox && targetMenuBox.y < targetTriggerBox.y,
+      'the Main execution target menu opens upward at the composer')
+    assert.ok(Math.abs(targetMenuBox.x + targetMenuBox.width - targetTriggerBox.x - targetTriggerBox.width) <= 2,
+      'the Main execution target menu aligns with the trigger like the folder menu')
+    assert.ok(targetMenuBox.y >= 0 && targetMenuBox.x >= 0
+      && targetMenuBox.x + targetMenuBox.width <= viewportSize.width
+      && targetMenuBox.y + targetMenuBox.height <= viewportSize.height,
+    'the Main execution target menu stays inside the window')
+    assert.equal(await executionTargetMenu.getByRole('menuitemradio', { checked: true }).count(), 1)
+    await page.keyboard.press('Escape')
+    await executionTargetMenu.waitFor({ state: 'hidden' })
+    assert.ok(await executionTarget.evaluate(element => document.activeElement === element))
     const members = main.getByRole('group', { name: /^(Work members|工作成员)$/u })
     await members.getByText(/^(Main|主角色)$/u).waitFor()
     await members.getByText(/^(Router|路由角色)$/u).waitFor()
@@ -240,7 +419,27 @@ export async function checkProductUi(ctx) {
     await composer.fill('Fail this browser fixture turn.')
     await composer.press('Enter')
     await transcript.locator('[data-chat-flow-kind="turn-error"] .bt-main-system-fact').first().waitFor()
-    await checkAccountOnboarding(page, settings, composer)
+    const onboarding = await checkAccountOnboarding(page, settings, composer)
+    const accepted = page.waitForResponse(response => response.url().endsWith('/api/product') && response.request().method() === 'POST'
+      && response.request().postDataJSON().endpoint === 'send' && response.request().postDataJSON().payload.text === onboarding.draft)
+    await composer.press('Enter')
+    const receipt = await (await accepted).json()
+    assert.equal(receipt.ok, true)
+    await transcript.getByText('Main received the draft after model setup.', { exact: true }).waitFor()
+    const sameMain = await ctx.superagentProduct.dispatch('open')
+    assert.equal(sameMain.mainSessionId, binding.mainSessionId)
+    const afterSetup = await ctx.superagentProduct.dispatch('history', { instanceId: binding.instanceId, limit: 50 })
+    assert.deepEqual(afterSetup.messages.filter(item => item.role === 'user' && item.text === onboarding.draft).map(item => item.id), [receipt.value.messageId])
+    assert.equal(afterSetup.messages.find(item => item.id === `reply:${receipt.value.messageId}`)?.text, 'Main received the draft after model setup.')
+    const status = await ctx.superagentProduct.dispatch('product-status', { instanceId: binding.instanceId })
+    assert.ok(!JSON.stringify([status, errors]).includes(onboarding.sampleKey))
+    const viewport = page.viewportSize()
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await checkSettingsSearch(page, async (width, height, zoom) => {
+      await page.setViewportSize({ width: Math.floor(width / zoom), height: Math.floor(height / zoom) })
+    })
+    if (viewport) await page.setViewportSize(viewport)
+    await checkRoleDraft(page, ctx, binding.instanceId)
     assert.deepEqual(errors.filter(error => !error.startsWith(
       '[session-controller] control stream failed: RemoteError: typert gateway: session/control: active Service "sessionController" is unavailable')), [])
     console.log('Product UI passed in Chromium.')

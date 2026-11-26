@@ -1,0 +1,8 @@
+Mermaid 12.3.0
+Source: https://cdn.jsdelivr.net/npm/mermaid@12.3.0/dist/mermaid.min.js
+License: MIT
+Downloaded: 2026-11-24
+SHA-256: 336DF803D87A38B70A01E736E666C8F7601D2CE42F5E47C8FAFE5D721074B9A3
+
+The bundled Mermaid runtime is used only to render diagrams in this temporary
+architecture report. It is not part of the DS-SuperAgent product package.

@@ -29,6 +29,8 @@ test('one Main request creates two independent work items and lets the fast one 
   const roles = []
   let releaseBeta
   const betaReady = new Promise(resolve => { releaseBeta = resolve })
+  const bothStarted = Promise.withResolvers()
+  const startedWorkers = new Set()
 
   async function* respond(options) {
     const text = lastUserText(options)
@@ -61,7 +63,12 @@ test('one Main request creates two independent work items and lets the fast one 
     const goal = goalFromWorkerPrompt(text)
     const file = goal.includes('alpha') ? 'alpha.txt' : 'beta.txt'
     const value = goal.includes('alpha') ? 'alpha complete\n' : 'beta complete\n'
-    if (calls === 0) yield* toolResponse('write_file', { path: file, text: value })
+    if (calls === 0) {
+      startedWorkers.add(file)
+      if (startedWorkers.size === 2) bothStarted.resolve()
+      await bothStarted.promise
+      yield* toolResponse('write_file', { path: file, text: value })
+    }
     else if (calls === 1) yield* toolResponse('read_file', { path: file })
     else if (calls === 2) {
       if (file === 'beta.txt') await betaReady
@@ -90,6 +97,12 @@ test('one Main request creates two independent work items and lets the fast one 
   await engine.openMain({ instanceId: 'personal' })
   engine.effects.start()
   await engine.sendMainMessage({ instanceId: 'personal', commandId: 'parallel-note', text: 'Prepare A and independently investigate B.' })
+  await Promise.race([bothStarted.promise, sleep(10_000).then(() => { throw new Error('Both Workers did not start together.') })])
+  const liveHistory = await Promise.race([
+    engine.getMainConversation({ instanceId: 'personal' }),
+    sleep(5000).then(() => { throw new Error('Main history stopped responding while both Workers were active.') }),
+  ])
+  assert.equal(liveHistory.works.length, 2)
   try {
     await until(async () => (await engine.getMainConversation({ instanceId: 'personal' })).works.some(work => work.outcome?.status === 'success'), 'the first verified item')
   } catch (error) {
@@ -134,6 +147,169 @@ test('one Main request creates two independent work items and lets the fast one 
     'Prepare the alpha note.', 'Independently investigate the beta note.',
   ]))
   await until(async () => updates.filter(update => update.outcome?.status === 'success').length >= 2, 'two bounded Main result updates')
+})
+
+test('a waiting question on one Worker does not block another result or the later original-Ticket resume', { timeout: 45_000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'r5-main-parallel-attention-'))
+  const root = join(directory, 'workspace')
+  await mkdir(root)
+  const workerStarts = []
+  const bothStarted = Promise.withResolvers()
+  const started = new Set()
+  const bAtReportGate = Promise.withResolvers()
+  const releaseBReport = Promise.withResolvers()
+
+  async function* respond(options) {
+    const text = lastUserText(options)
+    const calls = completedToolCount(options)
+    if (options.model === 'main') {
+      if (text.startsWith('[Work update]')) {
+        yield* textResponse('The independent update was recorded.')
+        return
+      }
+      if (text.includes('Status check')) {
+        yield* textResponse('A is waiting and B is already delivered.')
+        return
+      }
+      if (calls === 0) {
+        yield* toolResponse('delegate_work', {
+          items: [
+            { goal: 'Wait for human approval for A.', constraints: 'Ask one question and stop until it is answered.',
+              acceptanceCriteria: 'Resume only after the exact answer and write a.txt.' },
+            { goal: 'Finish B independently.', constraints: 'Write only b.txt.',
+              acceptanceCriteria: 'Read b.txt back and report it.' },
+          ],
+        })
+        return
+      }
+      yield* textResponse('Both work items were accepted.')
+      return
+    }
+    if (options.model === 'router') {
+      yield* routerResponse(options)
+      return
+    }
+    if (text.includes('Wait for human approval for A.')) {
+      if (calls === 0) {
+        workerStarts.push('A')
+        if (started.add('A').size === 2) bothStarted.resolve()
+        await bothStarted.promise
+        yield* toolResponse('ask_human', { question: 'Approve the A completion now?', options: 'Wait' }, 'parallel-a-question')
+      } else yield* textResponse('A is waiting for the answer.')
+      return
+    }
+    if (text === 'Approve the A completion') {
+      if (calls === 0) workerStarts.push('A')
+      const approved = [
+        ['write_file', { path: 'a.txt', text: 'A approved\n' }],
+        ['read_file', { path: 'a.txt' }],
+        ['report_ready', { result: 'A completed after its own answer.', evidence: 'Wrote and read back a.txt after the answer.',
+          artifacts: 'a.txt' }],
+      ][calls]
+      yield* approved ? toolResponse(approved[0], approved[1], `parallel-a-${calls}`) : textResponse('A is complete.')
+      return
+    }
+    if (text.includes('Finish B independently.')) {
+      if (calls === 0) {
+        workerStarts.push('B')
+        if (started.add('B').size === 2) bothStarted.resolve()
+        await bothStarted.promise
+        yield* toolResponse('write_file', { path: 'b.txt', text: 'B complete\n' }, 'parallel-b-write')
+      } else if (calls === 1) yield* toolResponse('read_file', { path: 'b.txt' }, 'parallel-b-read')
+      else if (calls === 2) {
+        bAtReportGate.resolve()
+        await releaseBReport.promise
+        yield* toolResponse('report_ready', { result: 'B completed independently.',
+          evidence: 'Wrote and read back b.txt while A waited for its question.', artifacts: 'b.txt' }, 'parallel-b-report')
+      }
+      else yield* textResponse('B is complete.')
+      return
+    }
+    yield* textResponse('No result was recorded.')
+  }
+
+  const environment = await LocalEnvironment.open({ id: 'product-workspace', instanceId: 'personal', root,
+    allowedActorIds: ['alice'], permissions: ['read', 'write'], commands: {} })
+  const native = await nativeContext(join(directory, 'sessions'), respond)
+  const storage = await SqliteStorage.open(join(directory, 'state.sqlite'))
+  const sessions = new NativeSessions(native, {
+    main: { provider: 'mock', model: 'main' }, router: { provider: 'mock', model: 'router' }, worker: { provider: 'mock', model: 'worker' },
+  })
+  const engine = new Engine(storage, 'personal', { sourceInstanceId: 'product-desktop', actorId: 'alice', allowedActorIds: ['alice'] },
+    { scanIntervalMs: 10, retryDelayMs: 10 }, sessions, [environment])
+  t.after(async () => {
+    bothStarted.resolve()
+    releaseBReport.resolve()
+    await engine.effects.stop(); await engine.shutdown(); await sessions.close()
+    await native.fiber.dispose(); await environment.close(); await storage.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+
+  await engine.openMain({ instanceId: 'personal' })
+  engine.effects.start()
+  await engine.sendMainMessage({ instanceId: 'personal', commandId: 'parallel-waiting', text: 'Run A and B independently.' })
+  await Promise.race([bothStarted.promise, sleep(10_000).then(() => { throw new Error('Both Workers did not start.') })])
+  await Promise.race([
+    engine.getMainConversation({ instanceId: 'personal' }),
+    sleep(5000).then(() => { throw new Error('Main history stopped responding while A waited.') }),
+  ])
+  await until(async () => {
+    const history = await engine.getMainConversation({ instanceId: 'personal' })
+    return history.works.find(work => work.brief.goal.includes('approval for A'))?.control?.attention?.status === 'waiting'
+  }, 'A waiting for its answer')
+  await bAtReportGate.promise
+  let history = await engine.getMainConversation({ instanceId: 'personal' })
+  const waitingA = history.works.find(work => work.brief.goal.includes('approval for A'))
+  const reportGatedB = history.works.find(work => work.brief.goal.includes('Finish B'))
+  assert.equal(waitingA?.control?.attention?.status, 'waiting')
+  assert.equal(reportGatedB?.outcome, undefined)
+  assert.equal(reportGatedB?.control?.assignment?.state, 'running')
+
+  await engine.sendMainMessage({ instanceId: 'personal', commandId: 'parallel-status', text: 'Status check while A waits.' })
+  await until(async () => (await engine.getMainConversation({ instanceId: 'personal' })).messages
+    .some(message => message.role === 'main' && message.text.includes('B is already delivered')), 'the Main status reply')
+  history = await engine.getMainConversation({ instanceId: 'personal' })
+  assert.equal(history.works.find(work => work.brief.goal.includes('approval for A'))?.control?.attention?.status, 'waiting')
+  assert.equal(history.works.find(work => work.brief.goal.includes('Finish B'))?.outcome, undefined)
+
+  releaseBReport.resolve()
+  await until(async () => (await engine.getMainConversation({ instanceId: 'personal' })).works
+    .find(work => work.brief.goal.includes('Finish B'))?.outcome?.status === 'success', 'B delivered while A waited')
+
+  history = await engine.getMainConversation({ instanceId: 'personal' })
+  const a = history.works.find(work => work.brief.goal.includes('approval for A'))
+  const b = history.works.find(work => work.brief.goal.includes('Finish B'))
+  assert.equal(a?.control?.attention?.status, 'waiting')
+  assert.equal(b?.outcome?.status, 'success')
+  assert.equal(b?.outcome?.summary.includes('B completed'), true)
+  assert.equal(await readFile(join(root, 'b.txt'), 'utf8'), 'B complete\n')
+
+  const generation = a.control.assignment.generation
+  await engine.answerMainAttention({ instanceId: 'personal', commandId: 'parallel-answer-a',
+    workItemId: a.brief.workItemId, ticketId: a.receipt.ticketId, expectedGeneration: generation,
+    attentionId: a.control.attention.id, attentionVersion: a.control.attention.version, text: 'Approve the A completion' })
+  await until(async () => (await engine.getMainConversation({ instanceId: 'personal' })).works
+    .find(work => work.brief.goal.includes('approval for A'))?.outcome?.status === 'success', 'A after its own answer')
+  history = await engine.getMainConversation({ instanceId: 'personal' })
+  const resumedA = history.works.find(work => work.brief.goal.includes('approval for A'))
+  const untouchedB = history.works.find(work => work.brief.goal.includes('Finish B'))
+  assert.equal(await readFile(join(root, 'a.txt'), 'utf8'), 'A approved\n')
+  assert.equal(resumedA?.control?.assignment?.generation, generation)
+  assert.equal(untouchedB?.outcome?.status, 'success')
+  assert.equal(untouchedB?.outcome?.summary, b?.outcome?.summary)
+  assert.deepEqual(workerStarts.sort(), ['A', 'A', 'B'])
+  await until(async () => {
+    const [aDeliveries, bDeliveries] = await Promise.all([
+      engine.getTicketDeliveries(a.receipt.ticketId), engine.getTicketDeliveries(b.receipt.ticketId),
+    ])
+    return aDeliveries.some(delivery => delivery.purpose === 'result')
+      && bDeliveries.some(delivery => delivery.purpose === 'result')
+  }, 'both original Tickets to deliver their own result')
+  const [aDeliveries, bDeliveries] = await Promise.all([
+    engine.getTicketDeliveries(a.receipt.ticketId), engine.getTicketDeliveries(b.receipt.ticketId),
+  ])
+  assert.equal(aDeliveries.filter(delivery => delivery.purpose === 'result').length, 1)
+  assert.equal(bDeliveries.filter(delivery => delivery.purpose === 'result').length, 1)
 })
 
 test('a partial work-plan commit survives restart and fills only the missing item', { timeout: 45000 }, async t => {

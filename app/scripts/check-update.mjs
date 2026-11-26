@@ -59,7 +59,7 @@ const feed = `http://127.0.0.1:${String(server.address().port)}/`
 
 // The tray's Quit ends the app. The check cannot click the tray icon, so it asks the browser
 // target of the debugging port to close. Tray menu dispatch is covered by the main-process tests.
-async function quitApp(port, waitForReady = false) {
+async function findPage(port, waitForReady = false) {
   // Until the Host is ready the window shows a note of its own.
   const find = async () => {
     const targets = await (await fetch(`http://127.0.0.1:${String(port)}/json/list`)).json()
@@ -69,6 +69,11 @@ async function quitApp(port, waitForReady = false) {
   let page = await find()
   for (const end = Date.now() + 120_000; page === undefined && waitForReady && Date.now() < end; page = await find()) await sleep(500)
   if (!page) throw new Error('the app window is not there')
+  return page
+}
+
+async function pageSocket(port, waitForReady = false) {
+  const page = await findPage(port, waitForReady)
   const socket = new WebSocket(page.webSocketDebuggerUrl)
   await new Promise((done, reject) => {
     socket.addEventListener('open', done, { once: true })
@@ -96,6 +101,11 @@ async function quitApp(port, waitForReady = false) {
     })
     if (!ready) throw new Error('the app window did not finish booting')
   }
+  return socket
+}
+
+async function quitApp(port, waitForReady = false) {
+  const socket = await pageSocket(port, waitForReady)
   socket.close()
   const version = await (await fetch(`http://127.0.0.1:${String(port)}/json/version`)).json()
   const browser = new WebSocket(version.webSocketDebuggerUrl)
@@ -105,6 +115,19 @@ async function quitApp(port, waitForReady = false) {
   })
   browser.send(JSON.stringify({ id: 1, method: 'Browser.close' }))
   browser.close()
+}
+
+// The app never installs a downloaded update on its own. The check makes the same explicit
+// request as the Settings action.
+async function installApp(port) {
+  const socket = await pageSocket(port, true)
+  socket.send(JSON.stringify({
+    id: 2,
+    method: 'Runtime.evaluate',
+    params: { expression: 'window.dsSuperagentApp.updates.install()' },
+  }))
+  await sleep(500)
+  socket.close()
 }
 
 // taskkill /T takes the Host and Electron's helpers along; a unix kill ends the tree's root,
@@ -156,11 +179,11 @@ try {
     await exited
     console.log('check-update: ended the app, so nothing was installed')
   } else {
-    await quitApp(port, true)
+    await installApp(port)
     const code = await Promise.race([exited, sleep(60_000).then(() => 'timeout')])
-    if (code === 'timeout') throw new Error('the app did not exit after its window closed')
+    if (code === 'timeout') throw new Error('the app did not exit after the explicit install request')
     if (code !== 0) throw new Error(`the app exited with code ${String(code)}, so it does not install the update`)
-    console.log('check-update: the app quit; its installer runs now')
+    console.log('check-update: the app accepted the explicit install request; its installer runs now')
   }
   console.log('check-update: passed')
 } catch (error) {

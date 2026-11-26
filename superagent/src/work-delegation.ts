@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { canonicalJson, commandTransaction } from './commands.js'
-import { CoreError, identifier, type DesktopSource, type Work } from './model.js'
+import { CoreError, identifier, type DesktopSource, type PathGrant, type Work } from './model.js'
 import type { RoleConfigView } from './config.js'
 import type { NativeSessions, NativeTool } from './native-sessions.js'
 import type { AsyncTx, Storage } from './storage.js'
@@ -21,6 +21,7 @@ import type { HandoffCopyView } from './work-copy.js'
 import type { ExecutionSelectionView } from './execution-target.js'
 import { validateRequiredCapabilities, type CapabilityId } from './capability-locations.js'
 import type { ProductViewAnswer, ProductViewCard } from './product-views.js'
+import { normalizePathGrants } from './path-grants.js'
 
 export interface MainWorkIntent {
   goal: string
@@ -56,6 +57,7 @@ export interface MainWorkBrief {
   sourceEventId?: string
   evidence: { kind: 'main-message'; id: string }
   environmentId?: string
+  pathGrants?: PathGrant[]
   target: ExecutionTarget
   capabilities?: CapabilityId[]
   configurationRevision: number
@@ -146,6 +148,7 @@ export interface MainWorkCardBrief extends MainWorkIntent {
   mainMessageId: string
   configurationRevision?: number
   environmentId?: string
+  pathGrants?: PathGrant[]
   target: ExecutionTarget
   capabilities?: CapabilityId[]
   directory?: string
@@ -206,6 +209,7 @@ export interface MainWorkRequest {
   acceptanceCriteria?: string
   configurationRevision: number
   environmentId?: string
+  pathGrants?: PathGrant[]
   target?: ExecutionTarget
   capabilities?: CapabilityId[]
   sourceHandoffId?: string
@@ -220,6 +224,7 @@ export interface MainWorkFollowUpRequest {
   workItemId: string
   text: string
   reason?: string
+  pathGrants?: PathGrant[]
 }
 
 export interface MainWorkFollowUp {
@@ -240,6 +245,7 @@ export interface MainWorkFollowUp {
   source: { kind: 'main-message'; id: string }
   routing: 'direct-to-original'
   directionVersion: number
+  pathGrants?: PathGrant[]
   attachment: 'attached' | 'waiting' | 'stopped'
   inputId?: string
   ownershipId?: string
@@ -474,7 +480,7 @@ export class WorkDelegation {
 
   async create(request: MainWorkRequest) {
     if (!request || Object.keys(request).some(key => !['commandId', 'mainId', 'mainSessionId', 'routerSessionId', 'mainMessageId', 'originalUserText',
-      'items', 'goal', 'constraints', 'acceptanceCriteria', 'configurationRevision', 'sourceHandoffId', 'environmentId', 'target', 'capabilities',
+      'items', 'goal', 'constraints', 'acceptanceCriteria', 'configurationRevision', 'sourceHandoffId', 'environmentId', 'pathGrants', 'target', 'capabilities',
       'resources', 'images', 'attachments', 'attachmentClientId'].includes(key))) {
       throw new CoreError('INVALID_INPUT', 'A Main delegation accepts only its source and independent work items.')
     }
@@ -488,6 +494,10 @@ export class WorkDelegation {
       throw new CoreError('INVALID_INPUT', 'A delegation target is local-only, remote-only or auto.')
     }
     const capabilities = validateRequiredCapabilities(request.capabilities)
+    const pathGrants = normalizePathGrants(request.pathGrants)
+    if (pathGrants?.length && request.sourceHandoffId !== undefined) {
+      throw new CoreError('INVALID_INPUT', 'Cross-directory access requires an explicit desktop Main request, not a source handoff.')
+    }
     if (request.sourceHandoffId !== undefined) identifier(request.sourceHandoffId, 'sourceHandoffId')
     if (request.attachmentClientId !== undefined) identifier(request.attachmentClientId, 'attachmentClientId')
     if (!this.options.source.allowedActorIds.includes(this.options.source.actorId)) throw new CoreError('SOURCE_NOT_AUTHORIZED', 'This actor cannot delegate work in the Main Instance.')
@@ -584,6 +594,9 @@ export class WorkDelegation {
       if (mismatchedTarget) {
         throw new CoreError('ENVIRONMENT_DENIED', 'The selected Environment does not match the work target.')
       }
+      if (pathGrants?.length && environmentKind !== 'local') {
+        throw new CoreError('ENVIRONMENT_DENIED', 'Path grants apply only to an explicit local execution Environment.')
+      }
       if ((resources?.length || attachments?.length) && !environmentId) {
         throw new CoreError('ATTACHMENT_SCOPE_AMBIGUOUS', 'Attached work needs one exact local or remote Environment.')
       }
@@ -594,7 +607,8 @@ export class WorkDelegation {
       const briefInput = [this.options.instanceId, request.mainId,
         request.mainSessionId, request.routerSessionId, request.mainMessageId, originalUserText, requestedItems,
         environmentId ?? null, target, capabilities, request.configurationRevision, request.sourceHandoffId ?? null, resources ?? [], images ?? [],
-        ...(attachments ? [attachments] : []), ...(request.attachmentClientId ? [request.attachmentClientId] : [])]
+        ...(attachments ? [attachments] : []), ...(request.attachmentClientId ? [request.attachmentClientId] : []),
+        ...(pathGrants?.length ? [pathGrants] : [])]
       const fingerprint = createHash('sha256').update(canonicalJson(['main-work-brief-v3', ...briefInput])).digest('hex')
       if (existing) {
         if (existing.fingerprint !== fingerprint) {
@@ -610,6 +624,7 @@ export class WorkDelegation {
             originalUserText.trim(), formerItems, environmentId, request.configurationRevision,
             request.sourceHandoffId ?? null, formerResources, formerImages])).digest('hex')
           if (requestedItems.length !== 1 || oldBrief?.attachments
+            || pathGrants?.length && !oldBrief?.pathGrants
             || existing.fingerprint !== formerFingerprint && existing.fingerprint !== legacyFingerprint) {
             throw new CoreError('IDENTITY_CONFLICT', 'This Main delegation identity was already used for different work.')
           }
@@ -654,7 +669,7 @@ export class WorkDelegation {
         authorization: { kind: 'authorized-main-actor', sourceInstanceId: this.options.source.sourceInstanceId, actorId: this.options.source.actorId },
         goal, constraints, acceptanceCriteria, requestedItems, sourceEventId: `main-work-source:${id}`,
         evidence: { kind: 'main-message', id: request.mainMessageId }, target, ...(capabilities.length ? { capabilities } : {}),
-        ...(environmentId ? { environmentId } : {}),
+        ...(environmentId ? { environmentId } : {}), ...(pathGrants?.length ? { pathGrants } : {}),
         configurationRevision: request.configurationRevision, ...(sourceHandoff ? { sourceHandoffId: sourceHandoff.id } : {}), createdAt: this.now() }
       const receipt: MainWorkReceipt = { version: 1, workBriefId: brief.id, status: 'routing',
         nextStep: 'Router is deciding the independent work items.', createdAt: this.now() }
@@ -1369,7 +1384,7 @@ export class WorkDelegation {
   async followUpIn(transaction: AsyncTx, request: MainWorkFollowUpRequest,
     origin?: { sequence: number; ticketId: string }): Promise<MainWorkFollowUpView> {
     if (!request || Object.keys(request).some(key => !['commandId', 'mainId', 'mainSessionId', 'mainMessageId',
-      'originalUserText', 'workItemId', 'text', 'reason'].includes(key))) {
+      'originalUserText', 'workItemId', 'text', 'reason', 'pathGrants'].includes(key))) {
       throw new CoreError('INVALID_INPUT', 'A Main follow-up accepts only its source and one exact work item.')
     }
     identifier(request.commandId, 'commandId')
@@ -1384,13 +1399,17 @@ export class WorkDelegation {
     const text = boundedText(request.text, 'The Main follow-up direction', 32768)
     const reason = request.reason === undefined ? 'The user explicitly directed this work item from its Main conversation.'
       : boundedText(request.reason, 'The Main follow-up reason', 2048)
+    const pathGrants = normalizePathGrants(request.pathGrants)
     const key = commandKey(this.options.source, request.commandId)
     await this.verifyFollowUpSource(transaction, request, originalUserText, origin?.sequence)
     const { item, brief, ticketId } = await this.followUpTarget(transaction, request)
+    if (pathGrants?.length && brief.environmentId && this.options.environmentKind?.(brief.environmentId) !== 'local') {
+      throw new CoreError('ENVIRONMENT_DENIED', 'Path grants apply only to a local work item.')
+    }
     if (origin && ticketId !== origin.ticketId) {
       throw new CoreError('TICKET_VERSION_CONFLICT', 'The accepted Ticket changed. Refresh the Work board.')
     }
-    const fingerprint = this.followUpFingerprint(request, originalUserText, item, ticketId, text, reason)
+    const fingerprint = this.followUpFingerprint(request, originalUserText, item, ticketId, text, reason, pathGrants)
     const prior = await transaction.get<{ fingerprint: string; followUpId: string }>('work-follow-up-command', key)
     if (prior) {
       if (prior.fingerprint !== fingerprint) {
@@ -1402,9 +1421,9 @@ export class WorkDelegation {
     }
     const followUpId = randomUUID()
     const attachment = await this.options.applyFollowUp(transaction, {
-      ticketId, followUpId, text, authorId: this.options.source.actorId, reason,
+      ticketId, followUpId, text, authorId: this.options.source.actorId, reason, ...(pathGrants ? { pathGrants } : {}),
     })
-    const record = this.followUpRecord(followUpId, request, originalUserText, item, brief, ticketId, text, reason, attachment)
+    const record = this.followUpRecord(followUpId, request, originalUserText, item, brief, ticketId, text, reason, attachment, pathGrants)
     await transaction.insert('work-follow-up', followUpKey(item.id, record.id), record)
     await transaction.insert('work-follow-up-command', key, { fingerprint, followUpId: record.id })
     return this.followUpView(transaction, record)
@@ -1505,14 +1524,15 @@ export class WorkDelegation {
   }
 
   private followUpFingerprint(request: MainWorkFollowUpRequest, originalUserText: string, item: MainWorkItem,
-    ticketId: string, text: string, reason: string) {
-    return createHash('sha256').update(canonicalJson(['main-work-follow-up-v1', this.options.instanceId,
+    ticketId: string, text: string, reason: string, pathGrants?: PathGrant[]) {
+    return createHash('sha256').update(canonicalJson([pathGrants ? 'main-work-follow-up-v2' : 'main-work-follow-up-v1', this.options.instanceId,
       request.mainId, request.mainSessionId, request.mainMessageId, originalUserText, item.id, item.workBriefId,
-      item.sourceEventId, ticketId, text, reason])).digest('hex')
+      item.sourceEventId, ticketId, text, reason, ...(pathGrants ? [pathGrants] : [])])).digest('hex')
   }
 
   private followUpRecord(followUpId: string, request: MainWorkFollowUpRequest, originalUserText: string, item: MainWorkItem,
-    brief: MainWorkBrief, ticketId: string, text: string, reason: string, attachment: MainFollowUpAttachment): MainWorkFollowUp {
+    brief: MainWorkBrief, ticketId: string, text: string, reason: string, attachment: MainFollowUpAttachment,
+    pathGrants?: PathGrant[]): MainWorkFollowUp {
     return {
       id: followUpId,
       version: 1,
@@ -1532,6 +1552,7 @@ export class WorkDelegation {
       source: { kind: 'main-message', id: request.mainMessageId },
       routing: 'direct-to-original',
       directionVersion: attachment.directionVersion,
+      ...(pathGrants ? { pathGrants: structuredClone(pathGrants) } : {}),
       attachment: attachment.status,
       ...(attachment.inputId ? { inputId: attachment.inputId } : {}),
       ...(attachment.ownershipId ? { ownershipId: attachment.ownershipId } : {}),
@@ -1604,6 +1625,7 @@ export class WorkDelegation {
       ...(item.attachmentIds ? { attachmentIds: item.attachmentIds } : {}),
       configurationRevision: brief.configurationRevision, target: brief.target ?? 'local-only',
       ...(brief.capabilities ? { capabilities: [...brief.capabilities] } : {}),
+      ...(brief.pathGrants?.length ? { pathGrants: structuredClone(brief.pathGrants) } : {}),
       ...(brief.environmentId ? { environmentId: brief.environmentId } : {}),
       ...(brief.environmentId && this.options.environmentRoot?.(brief.environmentId)
         ? { directory: this.options.environmentRoot(brief.environmentId)! } : {}),

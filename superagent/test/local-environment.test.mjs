@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, rm, writeFile, symlink, rename, readFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, writeFile, symlink, rename, readFile, realpath } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { test } from 'node:test'
@@ -82,6 +82,61 @@ test('read-only environments and failed preparation cannot enable writes or sile
   await assert.rejects(bound.invoke('run_command', { name: 'verify' }), { code: 'PERMISSION_DENIED' })
   const failed = await fixture(context, { setup: 'setup', commands: { setup: { argv: [process.execPath, '-e', "console.error('setup failed'); process.exit(7)"], timeoutMs: 2000 } } })
   await assert.rejects(failed.environment.prepare({ instanceId: 'private', actorId: 'user' }), error => error.code === 'SETUP_FAILED' && error.output.exitCode === 7 && error.output.stderr.includes('setup failed'))
+})
+
+test('explicit task path grants add only their named external operations', async context => {
+  const { environment, root, directory } = await fixture(context, {
+    allowShell: true,
+    commands: { where: { argv: [process.execPath, '-e', "console.log(require('node:path').basename(process.cwd()))"], timeoutMs: 2000 } },
+  })
+  const external = join(directory, 'external')
+  await mkdir(external)
+  const externalFile = join(external, 'note.txt')
+  await writeFile(externalFile, 'outside\n')
+  const canonicalExternalFile = await realpath(externalFile)
+  const identity = { instanceId: 'private', actorId: 'user' }
+
+  const unbound = await environment.prepare(identity)
+  await assert.rejects(unbound.invoke('read_file', { path: externalFile }), { code: 'PATH_DENIED' })
+
+  const readOnly = await environment.prepare(identity, undefined,
+    { pathGrants: [{ path: externalFile, operations: ['read'] }] })
+  assert.deepEqual(readOnly.pathGrants, [{ path: canonicalExternalFile, operations: ['read'] }])
+  assert.equal((await readOnly.invoke('read_file', { path: externalFile })).text, 'outside\n')
+  await assert.rejects(readOnly.invoke('write_file', { path: externalFile, text: 'changed' }), { code: 'PERMISSION_DENIED' })
+  assert.equal(await readFile(externalFile, 'utf8'), 'outside\n')
+  await assert.rejects(readOnly.invoke('run_command', { name: 'where', path: external }), { code: 'PATH_DENIED' })
+
+  const searched = await environment.prepare(identity, undefined,
+    { pathGrants: [{ path: external, operations: ['search'] }] })
+  assert.deepEqual((await searched.invoke('glob', { pattern: '*.txt', path: external })).paths, [canonicalExternalFile])
+  await assert.rejects(searched.invoke('read_file', { path: externalFile }), { code: 'PERMISSION_DENIED' })
+
+  const writable = await environment.prepare(identity, undefined,
+    { pathGrants: [{ path: external, operations: ['write'] }] })
+  await writable.invoke('write_file', { path: join(external, 'created.txt'), text: 'created\n' })
+  assert.equal(await readFile(join(external, 'created.txt'), 'utf8'), 'created\n')
+  await assert.rejects(writable.invoke('read_file', { path: join(external, 'created.txt') }), { code: 'PERMISSION_DENIED' })
+
+  const command = await environment.prepare(identity, undefined,
+    { pathGrants: [{ path: external, operations: ['command'] }] })
+  const result = await command.invoke('run_command', { name: 'where', path: external })
+  assert.equal(result.exitCode, 0)
+  assert.equal(result.stdout.trim(), 'external')
+  await assert.rejects(unbound.startCommand('where', 'background-denied', external), { code: 'PATH_DENIED' })
+  const background = await command.startCommand('where', 'background-granted', external)
+  assert.equal((await background.done).settled, true)
+  assert.equal(background.read().stdout.text.trim(), 'external')
+
+  await writeFile(join(external, '.env'), 'fixture secret')
+  await assert.rejects(environment.prepare(identity, undefined,
+    { pathGrants: [{ path: join(external, '.env'), operations: ['read'] }] }), { code: 'INVALID_INPUT' })
+
+  const linked = join(external, 'linked')
+  await symlink(root, linked, process.platform === 'win32' ? 'junction' : 'dir')
+  const linkedGrant = await environment.prepare(identity, undefined,
+    { pathGrants: [{ path: external, operations: ['read'] }] })
+  await assert.rejects(linkedGrant.invoke('read_file', { path: join(linked, 'answer.txt') }), { code: 'PATH_DENIED' })
 })
 
 test('truncated command diagnostics cannot expose a secret tail whose label was discarded', async context => {

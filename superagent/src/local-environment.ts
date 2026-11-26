@@ -7,9 +7,11 @@ import type { FsTarget } from '@deepseek-ai/dsh-fs'
 import type { SubprocessHandle, SubprocessTerminalHandle } from '@deepseek-ai/dsh-subprocess'
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, open, stat } from 'node:fs/promises'
-import { isAbsolute, relative, resolve, matchesGlob, sep, parse } from 'node:path'
-import { CoreError, identifier } from './model.js'
-import type { EnvironmentConfig, ExecutionEnvironment, PreparedEnvironment } from './environment.js'
+import { homedir } from 'node:os'
+import { basename, isAbsolute, relative, resolve, matchesGlob, sep, parse } from 'node:path'
+import { CoreError, identifier, type PathGrant, type PathGrantOperation } from './model.js'
+import type { EnvironmentConfig, EnvironmentPrepareOptions, ExecutionEnvironment, PreparedEnvironment } from './environment.js'
+import { normalizePathGrants } from './path-grants.js'
 import { protectedPath } from './path-safety.js'
 import { inspectWorkCopy } from './work-copy.js'
 import { sanitizeSecrets } from './sanitize.js'
@@ -21,7 +23,7 @@ import { defaultAssetPageBytes, environmentAssetGaps, environmentFingerprint, Fi
   spillAssetId, UnsupportedEnvironmentCombination, unsupportedAssetCapabilities, type EnvironmentAssetCapabilities,
   type EnvironmentAssetPage, type EnvironmentAssetReference, type EnvironmentSkillSummary, type SpillStream } from './environment-assets.js'
 
-export type LocalPermission = 'read' | 'write' | 'search' | 'command'
+export type LocalPermission = PathGrantOperation
 export interface LocalCommand { argv: string[]; timeoutMs: number; backgroundTimeoutMs?: number }
 export type LocalEnvironmentConfig = EnvironmentConfig
 export interface Artifact { path: string; bytes: number; sha256: string; reference?: EnvironmentAssetReference }
@@ -145,6 +147,61 @@ class BoundLocalTerminalJob implements LocalJob {
   }
 }
 
+interface BoundPathGrant {
+  path: string
+  operations: readonly PathGrantOperation[]
+  target: FsTarget
+  kind: 'file' | 'directory'
+}
+
+async function assertNoSymbolicLinks(fs: Context['fs'], path: string, signal?: AbortSignal) {
+  const root = parse(path).root
+  let prefix = root
+  for (const part of path.slice(root.length).split(/[\\/]/u).filter(Boolean)) {
+    prefix = resolve(prefix, part)
+    const observed = await fs.lstat(prefix, {}, signal).catch(() => undefined)
+    if (observed?.type === 'symlink') {
+      throw new CoreError('PATH_DENIED', 'Task path grants and the paths they contain must not use symbolic links or junctions.')
+    }
+  }
+}
+
+function overlaps(left: string, right: string) {
+  const caseFold = (path: string) => process.platform === 'win32' ? path.toLowerCase() : path
+  const relativePath = relative(caseFold(resolve(left)), caseFold(resolve(right)))
+  return relativePath === '' || relativePath !== '..' && !relativePath.startsWith(`..${sep}`) && !isAbsolute(relativePath)
+}
+
+function samePath(left: string, right: string) {
+  return process.platform === 'win32' ? left.toLowerCase() === right.toLowerCase() : left === right
+}
+
+function protectedGrantRoots(config: LocalEnvironmentConfig): string[] {
+  const configured = process.env.DS_SUPERAGENT_PROTECTED_PATHS
+  let desktop: string[] = []
+  if (configured !== undefined) {
+    try {
+      const parsed: unknown = JSON.parse(configured)
+      if (Array.isArray(parsed) && parsed.length <= 16 && parsed.every(path => typeof path === 'string' && isAbsolute(path))) {
+        desktop = parsed
+      } else {
+        throw new Error('invalid shape')
+      }
+    } catch {
+      throw new CoreError('INVALID_CONFIG', 'The desktop protected directory list is invalid.')
+    }
+  }
+  return [
+    config.assetsPath,
+    config.skillsPath,
+    process.env.DSH_HOME,
+    process.env.DS_SUPERAGENT_USER_DSH_HOME,
+    resolve(homedir(), '.dsh'),
+    resolve(homedir(), '.ds-bot'),
+    ...desktop,
+  ].filter((path): path is string => Boolean(path))
+}
+
 export class LocalEnvironment implements ExecutionEnvironment {
   readonly kind = 'local' as const
   readonly config: Readonly<LocalEnvironmentConfig>
@@ -219,7 +276,8 @@ export class LocalEnvironment implements ExecutionEnvironment {
     this.rootIdentity = identity
   }
 
-  async prepare(identity: { instanceId: string; actorId: string }, signal?: AbortSignal): Promise<BoundLocalEnvironment> {
+  async prepare(identity: { instanceId: string; actorId: string }, signal?: AbortSignal,
+    options?: EnvironmentPrepareOptions): Promise<BoundLocalEnvironment> {
     signal?.throwIfAborted()
     this.authorize(identity)
     try {
@@ -227,7 +285,8 @@ export class LocalEnvironment implements ExecutionEnvironment {
       await this.verifyRoot()
       const root = await fs.resolve(this.config.root)
       if ((await fs.stat(root))?.type !== 'directory' || (await fs.lstat(this.config.root))?.type === 'symlink') throw new CoreError('SETUP_FAILED', 'The configured working directory must exist and be a real directory.')
-      const bound = new BoundLocalEnvironment(this, this.context, root, { ...identity })
+      const pathGrants = await this.bindPathGrants(options?.pathGrants, signal)
+      const bound = new BoundLocalEnvironment(this, this.context, root, { ...identity }, pathGrants)
       for (const command of Object.values(this.config.commands)) await this.context.subprocess.resolveExecutable(command.argv[0]!)
       if (this.config.setup) {
         const result = await bound.command(this.config.setup, signal)
@@ -238,6 +297,32 @@ export class LocalEnvironment implements ExecutionEnvironment {
       if (error instanceof LocalSetupError || error instanceof CoreError) throw error
       throw new CoreError('SETUP_FAILED', 'The directory or executable checks failed in this local environment.')
     }
+  }
+
+  private async bindPathGrants(grants: readonly PathGrant[] | undefined, signal?: AbortSignal): Promise<BoundPathGrant[]> {
+    const normalized = normalizePathGrants(grants)
+    if (!normalized) return []
+    const fs = this.context.fs
+    const protectedRoots = await Promise.all(protectedGrantRoots(this.config).map(async root => {
+      try { return fs.processPath(await fs.resolve(root)) } catch { return resolve(root) }
+    }))
+    const bound: BoundPathGrant[] = []
+    for (const grant of normalized) {
+      signal?.throwIfAborted()
+      const path = resolve(grant.path)
+      await assertNoSymbolicLinks(fs, path, signal)
+      const target = await fs.resolve(path, signal ? { signal } : {})
+      const actual = fs.processPath(target)
+      if (protectedRoots.some(root => overlaps(actual, root))) {
+        throw new CoreError('PATH_DENIED', 'A task path grant cannot include protected personal or product data.')
+      }
+      const observed = await fs.stat(target, signal)
+      if (observed?.type !== 'file' && observed?.type !== 'directory') {
+        throw new CoreError('PATH_DENIED', 'A task path grant must name an existing file or directory.')
+      }
+      bound.push({ path: actual, operations: [...grant.operations], target, kind: observed.type })
+    }
+    return bound
   }
 
   async probe(identity: { instanceId: string; actorId: string }, signal?: AbortSignal) {
@@ -289,7 +374,13 @@ export class LocalSetupError extends CoreError {
 
 export class BoundLocalEnvironment implements PreparedEnvironment {
   readonly cwd: string
-  constructor(private readonly owner: LocalEnvironment, private readonly context: Context, private readonly root: FsTarget, private readonly identity: { instanceId: string; actorId: string }) { this.cwd = context.fs.processPath(root) }
+  readonly pathGrants: readonly PathGrant[]
+  constructor(private readonly owner: LocalEnvironment, private readonly context: Context, private readonly root: FsTarget,
+    private readonly identity: { instanceId: string; actorId: string }, private readonly pathGrantRoots: readonly BoundPathGrant[]) {
+    this.cwd = context.fs.processPath(root)
+    this.pathGrants = pathGrantRoots.map(grant => ({ path: grant.path, operations: [...grant.operations] }))
+    Object.freeze(this.pathGrants)
+  }
 
   private environmentIdentity() {
     return { id: this.owner.config.id, kind: this.owner.kind, fingerprint: environmentFingerprint('local', { local: this.owner.fingerprint }) }
@@ -358,7 +449,7 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
       return pageOf(reference, read.data, offset, maxBytes, text => this.sanitize(text))
     }
     if (!reference.path) throw new CoreError('INVALID_INPUT', 'An artifact reference needs its working-directory-relative path.')
-    const target = await this.target(reference.path)
+    const target = await this.target(reference.path, undefined, 'read')
     const prefix = await this.context.fs.readByteRange(target, { offset: 0, length: reference.bytes }, undefined)
     if (prefix.length !== reference.bytes || createHash('sha256').update(prefix).digest('hex') !== reference.sha256) {
       throw new CoreError('REFERENCE_STALE', 'The artifact no longer matches the referenced bytes.')
@@ -408,19 +499,36 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
     return this.assetReference('spill', { id: spillAssetId(jobId, stream), bytes: info.bytes, sha256: info.sha256 })
   }
 
-  private async target(path: string, signal?: AbortSignal) {
-    if (typeof path !== 'string' || !path || path.length > 1024 || isAbsolute(path) || path.includes(':') || path.split(/[\\/]/u).includes('..') || protectedPath(path)) throw new CoreError('PATH_DENIED', 'Use a relative non-sensitive path inside the bound working directory.')
+  private async target(path: string, signal: AbortSignal | undefined, operation: LocalPermission) {
+    if (typeof path !== 'string' || !path || Buffer.byteLength(path) > 1024 || path.includes('\0')) {
+      throw new CoreError('PATH_DENIED', 'Use a non-sensitive path inside the bound working directory or an explicitly granted absolute path.')
+    }
+    const absolute = isAbsolute(path)
+    if (path.split(/[\\/]/u).includes('..') || protectedPath(path) || !absolute && path.includes(':')) {
+      throw new CoreError('PATH_DENIED', 'Use a non-sensitive path inside the bound working directory or an explicitly granted absolute path.')
+    }
     const fs = this.context.fs
     await this.owner.verifyRoot(signal)
     const currentRoot = await fs.resolve(this.owner.config.root, signal ? { signal } : {})
     if (!fs.contains(this.root, currentRoot) || !fs.contains(currentRoot, this.root)) throw new CoreError('ENVIRONMENT_CHANGED', 'The working directory identity changed; setup must be checked again.')
-    let prefix = this.cwd
-    for (const part of path.split(/[\\/]/u).filter(part => part !== '.')) {
-      prefix = resolve(prefix, part)
-      if ((await fs.lstat(prefix, {}, signal))?.type === 'symlink') throw new CoreError('PATH_DENIED', 'Symbolic links are not enabled in this local tool combination.')
+    await assertNoSymbolicLinks(fs, absolute ? path : resolve(this.cwd, path), signal)
+    const target = absolute ? await fs.resolve(path, signal ? { signal } : {})
+      : await fs.resolve(path, { cwd: this.cwd, ...(signal ? { signal } : {}) })
+    const actual = fs.processPath(target)
+    if (fs.contains(this.root, target)) {
+      if (protectedPath(relative(this.cwd, actual))) throw new CoreError('PATH_DENIED', 'The path resolves to protected working-directory data.')
+      await assertNoSymbolicLinks(fs, actual, signal)
+      return target
     }
-    const target = await fs.resolve(path, { cwd: this.cwd, ...(signal ? { signal } : {}) })
-    if (!fs.contains(this.root, target) || protectedPath(relative(this.cwd, fs.processPath(target)))) throw new CoreError('PATH_DENIED', 'The path resolves outside the authorized working directory.')
+    if (!absolute) throw new CoreError('PATH_DENIED', 'The path resolves outside the authorized working directory and task path grants.')
+    const grant = this.pathGrantRoots.find(candidate => candidate.kind === 'file'
+      ? samePath(candidate.path, actual) : fs.contains(candidate.target, target))
+    if (!grant) throw new CoreError('PATH_DENIED', 'The absolute path is outside the task path grants for this Ticket.')
+    if (!grant.operations.includes(operation)) {
+      throw new CoreError('PERMISSION_DENIED', `The task path grant does not include ${operation} access.`)
+    }
+    await assertNoSymbolicLinks(fs, actual, signal)
+    if (protectedPath(relative(grant.path, actual))) throw new CoreError('PATH_DENIED', 'The path resolves to protected granted-directory data.')
     return target
   }
 
@@ -431,7 +539,8 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
 
   sanitize(text: string) {
     let safe = sanitizeSecrets(text)
-    for (const root of new Set([this.cwd, this.owner.config.root, resolve(this.owner.config.root)].filter(Boolean))) {
+    for (const root of new Set([this.cwd, this.owner.config.root, resolve(this.owner.config.root),
+      ...this.pathGrantRoots.map(grant => grant.path)].filter(Boolean))) {
       safe = safe.split(root).join('<workdir>')
     }
     return safe
@@ -445,12 +554,15 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
 
   async artifact(path: string, signal?: AbortSignal): Promise<Artifact> {
     this.permission('read')
-    const target = await this.target(path, signal)
+    const target = await this.target(path, signal, 'read')
     const bytes = await this.context.fs.readBytes(target, signal, maxProductAttachmentBytes)
-    const relativePath = relative(this.cwd, this.context.fs.processPath(target)).split(sep).join('/')
+    const processPath = this.context.fs.processPath(target)
+    const relativePath = relative(this.cwd, processPath)
+    const artifactPath = relativePath !== '..' && !relativePath.startsWith(`..${sep}`) && !isAbsolute(relativePath)
+      ? relativePath.split(sep).join('/') : processPath
     const sha256 = createHash('sha256').update(bytes).digest('hex')
-    return { path: relativePath, bytes: bytes.length, sha256,
-      reference: this.assetReference('artifact', { id: fileAssetId(sha256), path: relativePath, bytes: bytes.length, sha256 }) }
+    return { path: artifactPath, bytes: bytes.length, sha256,
+      reference: this.assetReference('artifact', { id: fileAssetId(sha256), path: artifactPath, bytes: bytes.length, sha256 }) }
   }
 
   async stageAttachment(reference: EnvironmentAssetReference, path: string, signal?: AbortSignal) {
@@ -460,7 +572,7 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
     if (!reference.name?.toLowerCase().endsWith('.docx') || !path?.toLowerCase().endsWith('.docx')) {
       throw new CoreError('INVALID_INPUT', 'Stage a Word document at a new .docx path.')
     }
-    const target = await this.target(path, signal)
+    const target = await this.target(path, signal, 'write')
     const read = await this.store().read(reference.id, 0, reference.bytes)
     if (read.bytes !== reference.bytes || read.sha256 !== reference.sha256 || read.data.length !== reference.bytes) {
       throw new CoreError('REFERENCE_STALE', 'The original attachment bytes changed.')
@@ -480,8 +592,9 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
     if (!operation || !['check', 'docx-read', 'docx-edit'].includes(operation) || !args.input?.toLowerCase().endsWith('.docx')) {
       throw new CoreError('INVALID_INPUT', 'Choose check, docx-read or docx-edit with a .docx path.')
     }
-    const input = this.context.fs.processPath(await this.target(args.input, signal))
-    if ((await this.context.fs.stat(await this.target(args.input, signal)))?.type !== 'file') throw new CoreError('NOT_FOUND', 'The Office input file is unavailable.')
+    const inputTarget = await this.target(args.input, signal, 'read')
+    const input = this.context.fs.processPath(inputTarget)
+    if ((await this.context.fs.stat(inputTarget, signal))?.type !== 'file') throw new CoreError('NOT_FOUND', 'The Office input file is unavailable.')
     if (operation !== 'docx-edit' && (args.output !== undefined || args.ops !== undefined)) throw new CoreError('INVALID_INPUT', 'This Office operation is read-only.')
     let argv: string[]
     if (operation === 'docx-edit') {
@@ -489,7 +602,8 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
       let operations: unknown
       try { operations = JSON.parse(args.ops) } catch { throw new CoreError('INVALID_INPUT', 'Word edit operations must be JSON.') }
       if (!Array.isArray(operations) || !operations.length || operations.length > 20) throw new CoreError('INVALID_INPUT', 'Provide one to twenty Word edit operations.')
-      const target = await this.target(args.output!, signal)
+      this.permission('write')
+      const target = await this.target(args.output!, signal, 'write')
       const output = this.context.fs.processPath(target)
       if (output === input || await this.context.fs.stat(target, signal)) throw new CoreError('PATH_DENIED', 'Write a new Office file inside this work directory.')
       argv = ['docx', 'edit', input, '-o', output, '--ops', args.ops]
@@ -500,11 +614,19 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
     return { operation, input: args.input, ...(args.output ? { output: args.output } : {}), ...result }
   }
 
-  async command(name: string, signal?: AbortSignal) {
+  private async commandWorkdir(path: string | undefined, signal?: AbortSignal) {
+    const target = await this.target(path ?? '.', signal, 'command')
+    if ((await this.context.fs.stat(target, signal))?.type !== 'directory') {
+      throw new CoreError('PATH_DENIED', 'A command working directory must be an existing authorized directory.')
+    }
+    return this.context.fs.processPath(target)
+  }
+
+  async command(name: string, signal?: AbortSignal, path?: string) {
     this.permission('command')
     const configured = Object.hasOwn(this.owner.config.commands, name) ? this.owner.config.commands[name] : undefined
     if (!configured) throw new CoreError('UNSUPPORTED_CAPABILITY', 'Only configured command names can run; arbitrary argv, Shell, PTY and remote tools are not enabled.')
-    return this.runArgv(configured.argv, configured.timeoutMs, signal)
+    return this.runArgv(configured.argv, configured.timeoutMs, signal, path)
   }
 
   private async shellArgv(command: string, signal?: AbortSignal) {
@@ -521,17 +643,17 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
       : [executable, '-c', command]
   }
 
-  async runShell(command: string, signal?: AbortSignal) {
-    return this.runArgv(await this.shellArgv(command, signal), 10000, signal)
+  async runShell(command: string, signal?: AbortSignal, path?: string) {
+    return this.runArgv(await this.shellArgv(command, signal), 10000, signal, path)
   }
 
-  private async runArgv(argv: readonly string[], timeoutMs: number, signal?: AbortSignal) {
-    await this.target('.', signal)
+  private async runArgv(argv: readonly string[], timeoutMs: number, signal?: AbortSignal, path?: string) {
+    const cwd = await this.commandWorkdir(path, signal)
     const deadline = AbortSignal.timeout(timeoutMs)
     const combined = signal ? AbortSignal.any([signal, deadline]) : deadline
     const executable = await this.context.subprocess.resolveExecutable(argv[0]!, {}, combined)
     const collect = this.owner.store ? { maxBytes: 8192, spill: { maxBytes: maxSpillBytes } } : { maxBytes: 8192 }
-    const handle = this.context.subprocess.spawn({ argv: [executable, ...argv.slice(1)], cwd: this.cwd, stdio: { stdin: 'ignore', stdout: collect, stderr: collect }, graceMs: 250, signal: combined })
+    const handle = this.context.subprocess.spawn({ argv: [executable, ...argv.slice(1)], cwd, stdio: { stdin: 'ignore', stdout: collect, stderr: collect }, graceMs: 250, signal: combined })
     const operationKey = randomUUID()
     try {
       const outcome = await handle.done
@@ -555,26 +677,26 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
    * the caller's own cancellation is deliberately not attached, because background work has to outlive
    * the turn that started it and is stopped through the durable job record instead.
    */
-  async startCommand(name: string, jobId = randomUUID()): Promise<LocalJob> {
+  async startCommand(name: string, jobId = randomUUID(), path?: string): Promise<LocalJob> {
     this.permission('command')
     const configured = Object.hasOwn(this.owner.config.commands, name) ? this.owner.config.commands[name] : undefined
     if (!configured) throw new CoreError('UNSUPPORTED_CAPABILITY', 'Only configured command names can run; arbitrary argv, Shell, PTY and remote tools are not enabled.')
     if (name === this.owner.config.setup) throw new CoreError('UNSUPPORTED_CAPABILITY', 'Setup is controlled by preparation and explicit retry, not model tools.')
-    return this.startArgv(configured.argv, configured.backgroundTimeoutMs ?? configured.timeoutMs, jobId)
+    return this.startArgv(configured.argv, configured.backgroundTimeoutMs ?? configured.timeoutMs, jobId, path)
   }
 
-  async startShell(command: string, jobId = randomUUID()): Promise<LocalJob> {
-    return this.startArgv(await this.shellArgv(command), 3600000, jobId)
+  async startShell(command: string, jobId = randomUUID(), path?: string): Promise<LocalJob> {
+    return this.startArgv(await this.shellArgv(command), 3600000, jobId, path)
   }
 
-  async startTerminal(command: string, jobId = randomUUID()): Promise<LocalJob> {
+  async startTerminal(command: string, jobId = randomUUID(), path?: string): Promise<LocalJob> {
     const argv = await this.shellArgv(command)
-    await this.target('.')
+    const cwd = await this.commandWorkdir(path)
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), 3600000)
     timer.unref()
     try {
-      const handle = await this.context.subprocess.spawnTerminal({ argv, cwd: this.cwd, rows: 24, cols: 100,
+      const handle = await this.context.subprocess.spawnTerminal({ argv, cwd, rows: 24, cols: 100,
         terminalType: 'xterm-256color', graceMs: 250, signal: controller.signal })
       const job = new BoundLocalTerminalJob(handle, controller.signal, text => this.sanitize(text), jobId,
         (id, data) => this.owner.store?.storeSpillBytes(id, 'stdout', data).then(() => undefined) ?? Promise.resolve())
@@ -583,15 +705,15 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
     } catch (error) { clearTimeout(timer); throw error }
   }
 
-  private async startArgv(argv: readonly string[], timeoutMs: number, jobId: string): Promise<LocalJob> {
-    await this.target('.')
+  private async startArgv(argv: readonly string[], timeoutMs: number, jobId: string, path?: string): Promise<LocalJob> {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
     timer.unref()
     try {
+      const cwd = await this.commandWorkdir(path, controller.signal)
       const executable = await this.context.subprocess.resolveExecutable(argv[0]!, {}, controller.signal)
       const collect = this.owner.store ? { maxBytes: 8192, spill: { maxBytes: maxSpillBytes } } : { maxBytes: 8192 }
-      const handle = this.context.subprocess.spawn({ argv: [executable, ...argv.slice(1)], cwd: this.cwd,
+      const handle = this.context.subprocess.spawn({ argv: [executable, ...argv.slice(1)], cwd,
         stdio: { stdin: 'ignore', stdout: collect, stderr: collect }, graceMs: 250, signal: controller.signal })
       const job = new BoundLocalJob(handle, controller.signal, text => this.sanitize(text), jobId,
         (key, stream, path) => this.retainStream(key, stream, path))
@@ -634,54 +756,79 @@ export class BoundLocalEnvironment implements PreparedEnvironment {
     if (name === 'save_attachment') return this.saveAttachmentTool(args)
     if (name === 'read_asset') return this.readAssetTool(args)
     if (name === 'list_skills') return { skills: await this.listSkills() }
-    if (name === 'run_shell') return this.runShell(args.command!, signal)
+    if (name === 'run_shell') return this.runShell(args.command!, signal, args.path)
     if (name === 'run_command') {
       if (args.name === this.owner.config.setup) throw new CoreError('UNSUPPORTED_CAPABILITY', 'Setup is controlled by preparation and explicit retry, not model tools.')
-      return this.command(args.name!, signal)
+      return this.command(args.name!, signal, args.path)
     }
     if (name === 'read_file') {
       this.permission('read')
-      const target = await this.target(args.path!, signal)
+      const target = await this.target(args.path!, signal, 'read')
       const bytes = await this.context.fs.readBytes(target, signal, 65536)
       return { text: this.sanitize(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) }
     }
     if (name === 'write_file') {
       this.permission('write')
       if (typeof args.text !== 'string' || Buffer.byteLength(args.text) > 65536) throw new CoreError('INVALID_INPUT', 'File writes are limited to 65536 UTF-8 bytes.')
-      const target = await this.target(args.path!, signal)
+      const target = await this.target(args.path!, signal, 'write')
       const observed = await this.context.fs.stat(target, signal)
       await this.context.fs.writeText(target, args.text, observed ? { kind: 'replaceIfVersion', version: observed.version } : { kind: 'createIfAbsent' }, signal)
       return { path: args.path!, bytes: Buffer.byteLength(args.text) }
     }
     if (name !== 'glob' && name !== 'grep') throw new CoreError('UNSUPPORTED_CAPABILITY', 'This local tool combination is not enabled.')
     this.permission('search')
-    if (!args.pattern || args.pattern.length > 256) throw new CoreError('INVALID_INPUT', 'Search needs a bounded nonempty pattern.')
+    const pattern = args.pattern
+    if (!pattern || pattern.length > 256) throw new CoreError('INVALID_INPUT', 'Search needs a bounded nonempty pattern.')
+    const external = isAbsolute(args.path?.trim() || '.')
+    const base = args.path?.trim() || '.'
+    const baseTarget = await this.target(base, signal, 'search')
+    const baseStat = await this.context.fs.stat(baseTarget, signal)
+    if (baseStat?.type !== 'file' && baseStat?.type !== 'directory') throw new CoreError('NOT_FOUND', 'The search path is unavailable.')
+    const baseProcess = this.context.fs.processPath(baseTarget)
     const paths: string[] = []
     const matches: { path: string; line: number; text: string }[] = []
-    const pending = ['.']
+    const pending = baseStat.type === 'directory' ? [base] : []
     let visited = 0
     let bytesRead = 0
+    const inspect = async (path: string, target: FsTarget, type: 'file' | 'directory' | 'other', requestedName?: string) => {
+      if (++visited > 500) throw new CoreError('SEARCH_LIMIT', 'The bounded search exceeded 500 entries.')
+      if (type === 'directory') {
+        pending.push(path)
+        return
+      }
+      if (type !== 'file') return
+      const processPath = this.context.fs.processPath(target)
+      const outputPath = external ? processPath : relative(this.cwd, processPath).split(sep).join('/')
+      const matchPath = external ? relative(baseProcess, processPath).split(sep).join('/') : outputPath
+      const entryName = requestedName ?? basename(processPath)
+      if (name === 'glob') {
+        if (matchesGlob(matchPath, pattern) || !pattern.includes('/') && matchesGlob(entryName, pattern)) paths.push(outputPath)
+      } else {
+        this.permission('read')
+        const bytes = await this.context.fs.readBytes(target, signal, 65536)
+        bytesRead += bytes.length
+        if (bytesRead > 1048576) throw new CoreError('SEARCH_LIMIT', 'The bounded search exceeded one MiB.')
+        const text = new TextDecoder().decode(bytes)
+        if (text.includes('\0')) return
+        for (const [index, line] of text.split(/\r?\n/u).entries()) {
+          if (line.includes(pattern)) matches.push({ path: outputPath, line: index + 1, text: this.sanitize(line).slice(0, 1000) })
+        }
+      }
+      if (paths.length > 100 || matches.length > 100) throw new CoreError('SEARCH_LIMIT', 'Narrow the search to at most 100 results.')
+    }
+    if (baseStat.type === 'file') await inspect(base, baseTarget, 'file')
     while (pending.length) {
       const directory = pending.shift()!
-      const entries = await this.context.fs.listDir(await this.target(directory, signal), signal)
+      const directoryTarget = await this.target(directory, signal, 'search')
+      const entries = await this.context.fs.listDir(directoryTarget, signal)
       for (const entry of entries) {
-        if (++visited > 500) throw new CoreError('SEARCH_LIMIT', 'The bounded search exceeded 500 entries.')
-        const path = directory === '.' ? entry.name : `${directory}/${entry.name}`
-        if (protectedPath(path) || (await this.context.fs.lstat(resolve(this.cwd, path), {}, signal))?.type === 'symlink') continue
-        await this.target(path, signal)
-        if (entry.type === 'directory') { pending.push(path); continue }
-        if (entry.type !== 'file') continue
-        if (name === 'glob') { if (matchesGlob(path, args.pattern) || !args.pattern.includes('/') && matchesGlob(entry.name, args.pattern)) paths.push(path) }
-        else {
-          this.permission('read')
-          const bytes = await this.context.fs.readBytes(entry.target, signal, 65536)
-          bytesRead += bytes.length
-          if (bytesRead > 1048576) throw new CoreError('SEARCH_LIMIT', 'The bounded search exceeded one MiB.')
-          const text = new TextDecoder().decode(bytes)
-          if (text.includes('\0')) continue
-          for (const [index, line] of text.split(/\r?\n/u).entries()) if (line.includes(args.pattern)) matches.push({ path, line: index + 1, text: this.sanitize(line).slice(0, 1000) })
-        }
-        if (paths.length > 100 || matches.length > 100) throw new CoreError('SEARCH_LIMIT', 'Narrow the search to at most 100 results.')
+        const path = directory === '.' ? entry.name
+          : isAbsolute(directory) ? resolve(directory, entry.name) : `${directory}/${entry.name}`
+        if (protectedPath(path)) continue
+        const lexical = isAbsolute(path) ? path : resolve(this.cwd, path)
+        if ((await this.context.fs.lstat(lexical, {}, signal).catch(() => undefined))?.type === 'symlink') continue
+        const target = await this.target(path, signal, 'search')
+        await inspect(path, target, entry.type === 'directory' ? 'directory' : entry.type === 'file' ? 'file' : 'other', entry.name)
       }
     }
     return name === 'glob' ? { paths: paths.sort() } : { matches }

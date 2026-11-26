@@ -1,0 +1,124 @@
+{
+  "repository": "IceFireIcer/DS-SuperAgent",
+  "specification": 1,
+  "destination_confirmed": true,
+  "status": "complete",
+  "baseline": "e77b2397",
+  "nodes": {
+    "map": {
+      "number": 131,
+      "id": 6482915777,
+      "title": "[Wayfinder] DS-Bot 0.3.8 前端与功能迁移",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/131",
+      "file": "map.md",
+      "label": "wayfinder:map"
+    },
+    "dsh_upgrade": {
+      "number": 132,
+      "id": 6482921626,
+      "title": "升级 DSH 到官方 0.2.2-rc.1 并记录验证事实",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/132",
+      "file": "decisions/dsh-upgrade.md",
+      "label": "wayfinder:task",
+      "resolution_file": "resolutions/dsh-upgrade.md"
+    },
+    "conversation_prototype": {
+      "number": 133,
+      "id": 6482921957,
+      "title": "原型验证会话根、cell 渲染与 MainComposer 接管",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/133",
+      "file": "decisions/conversation-composer.md",
+      "label": "wayfinder:prototype",
+      "resolution_file": "resolutions/conversation-composer.md"
+    },
+    "style_prototype": {
+      "number": 134,
+      "id": 6482922462,
+      "title": "原型验证产品页与 DS-Bot 视觉系统的一致性",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/134",
+      "file": "decisions/style-parity.md",
+      "label": "wayfinder:prototype",
+      "resolution_file": "resolutions/style-parity.md"
+    },
+    "roster": {
+      "number": 135,
+      "id": 6482925514,
+      "title": "确定 roster 与团队/群聊页的语义映射",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/135",
+      "file": "decisions/roster-semantics.md",
+      "label": "wayfinder:grilling",
+      "resolution_file": "resolutions/roster-semantics.md"
+    },
+    "scope": {
+      "number": 136,
+      "id": 6482925929,
+      "title": "确定首版与全量 C 域范围及里程碑",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/136",
+      "file": "decisions/scope-milestones.md",
+      "label": "wayfinder:grilling",
+      "resolution_file": "resolutions/scope-milestones.md"
+    },
+    "settings_nav": {
+      "number": 137,
+      "id": 6482926384,
+      "title": "确定设置导航树与冲突页归属",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/137",
+      "file": "decisions/settings-navigation.md",
+      "label": "wayfinder:grilling",
+      "resolution_file": "resolutions/settings-navigation.md"
+    },
+    "naming": {
+      "number": 138,
+      "id": 6482926843,
+      "title": "敲定命名、存储键与桥名的迁移边界",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/138",
+      "file": "decisions/naming-migration.md",
+      "label": "wayfinder:grilling",
+      "resolution_file": "resolutions/naming-migration.md"
+    },
+    "peripherals": {
+      "number": 139,
+      "id": 6482930068,
+      "title": "确定桌面壳、手机/link、浏览器插件与电脑操控的搬迁顺序",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/139",
+      "file": "decisions/peripherals-order.md",
+      "label": "wayfinder:grilling",
+      "resolution_file": "resolutions/peripherals-order.md"
+    },
+    "endpoint_families": {
+      "number": 140,
+      "id": 6482930445,
+      "title": "设计 C 类 product endpoint 族边界与首批样板",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/140",
+      "file": "decisions/endpoint-families.md",
+      "label": "wayfinder:grilling",
+      "resolution_file": "resolutions/endpoint-families.md"
+    },
+    "remote_write": {
+      "number": 141,
+      "id": 6483984467,
+      "title": "确定远程客户端执行写命令与设备操控的授权边界",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/141",
+      "file": "decisions/remote-write-authority.md",
+      "label": "wayfinder:grilling",
+      "resolution_file": "resolutions/remote-write-authority.md"
+    }
+  },
+  "blocking": {
+    "conversation_prototype": [
+      "dsh_upgrade"
+    ],
+    "roster": [
+      "conversation_prototype"
+    ],
+    "settings_nav": [
+      "roster"
+    ],
+    "peripherals": [
+      "scope"
+    ],
+    "endpoint_families": [
+      "scope"
+    ]
+  }
+}

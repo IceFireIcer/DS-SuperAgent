@@ -412,7 +412,7 @@ export async function backupBeforeProfileChange({ home, backupRoot, version, ass
   const previous = await readJson(join(core, 'profile-version.json'), 4096)
   if (previous?.version === version || !await inspectPath(join(core, 'state.sqlite'))) return undefined
   await assertProfile?.()
-  return createProductBackup({ home, backupRoot, purpose: 'upgrade' })
+  return createProductBackup({ home, backupRoot, purpose: 'upgrade', requireRestorable: true })
 }
 
 export function recordProfileVersion(home, version) {

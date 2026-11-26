@@ -462,7 +462,7 @@ describe('watchUpdates', () => {
     assert.deepEqual(steps, ['host stopped', ['install', true, true]])
   })
 
-  test('leaves the update for the next quit when the user says later, or when it may not ask', async (t) => {
+  test('leaves the update uninstalled when the user says later, or when it may not ask', async (t) => {
     for (const ask of [async () => false, undefined]) {
       const updater = new FakeUpdater()
       const log = quietLog()
@@ -474,17 +474,6 @@ describe('watchUpdates', () => {
       assert.equal(stopped, false)
       assert.deepEqual(log.lines, ['DS SuperAgent: update 0.1.9 downloaded'])
     }
-  })
-
-  test('an install on quit keeps the app closed after the backup and installer handoff', async (t) => {
-    const updater = new FakeUpdater()
-    const steps = []
-    const updates = watchUpdates({ updater, log: quietLog(), beforeInstall: async () => { steps.push('host stopped') } })
-    t.after(updates.stop)
-    updater.quitAndInstall = (...args) => { steps.push(['install', ...args]) }
-    updater.emit('update-downloaded', { version: '0.1.9' })
-    await updates.install({ restart: false })
-    assert.deepEqual(steps, ['host stopped', ['install', true, false]])
   })
 
   test('logs a failed check and does not throw', async (t) => {

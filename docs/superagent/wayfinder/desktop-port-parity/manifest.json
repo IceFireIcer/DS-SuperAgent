@@ -1,0 +1,116 @@
+{
+  "repository": "IceFireIcer/DS-SuperAgent",
+  "specification": 142,
+  "destination_confirmed": true,
+  "baseline": {
+    "upstream": "5e9b7da8",
+    "product": "50491ff160ccf1a5bc86226d52d2a3e0162ed31f",
+    "dsh": "0.2.2-rc.1"
+  },
+  "nodes": {
+    "map": {
+      "number": 165,
+      "id": 6522974846,
+      "title": "[Wayfinder] 桌面迁移等价与验收",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/165",
+      "file": "map.md",
+      "label": "wayfinder:map"
+    },
+    "path_inventory": {
+      "number": 166,
+      "id": 6522977401,
+      "title": "核对桌面用户路径与实际接线",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/166",
+      "file": "decisions/path-inventory.md",
+      "label": "wayfinder:task",
+      "resolution_file": "resolutions/path-inventory.md",
+      "resolution_url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/166#issuecomment-7055595551"
+    },
+    "classic_dsh_api": {
+      "number": 167,
+      "id": 6522977792,
+      "title": "核查 DSH 公开 API 能否支撑经典 Agent 模式",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/167",
+      "file": "decisions/classic-dsh-api.md",
+      "label": "wayfinder:research",
+      "disposition": "out_of_scope"
+    },
+    "release_evidence": {
+      "number": 168,
+      "id": 6522978339,
+      "title": "确定独立桌面验收的证据与门槛",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/168",
+      "file": "decisions/release-evidence.md",
+      "label": "wayfinder:grilling",
+      "resolution_file": "resolutions/release-evidence.md",
+      "resolution_url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/168#issuecomment-7055697055"
+    },
+    "workspace_menu": {
+      "number": 169,
+      "id": 6522978734,
+      "title": "确定侧栏文件夹与工作目录的关系",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/169",
+      "file": "decisions/workspace-menu.md",
+      "label": "wayfinder:grilling",
+      "resolution_file": "resolutions/workspace-menu.md",
+      "resolution_url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/169#issuecomment-7055825360"
+    },
+    "account_and_model_onboarding": {
+      "number": 170,
+      "id": 6522980982,
+      "title": "确定底栏账户、连接器与模型引导的分工",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/170",
+      "file": "decisions/account-and-model-onboarding.md",
+      "label": "wayfinder:grilling",
+      "resolution_file": "resolutions/account-and-model-onboarding.md",
+      "resolution_url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/170#issuecomment-7056204160"
+    },
+    "continuous_voice": {
+      "number": 171,
+      "id": 6522981327,
+      "title": "确定 Main 连续语音的暂停与恢复规则",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/171",
+      "file": "decisions/continuous-voice.md",
+      "label": "wayfinder:grilling",
+      "resolution_file": "resolutions/continuous-voice.md",
+      "resolution_url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/171#issuecomment-7060119743"
+    },
+    "interaction_parity": {
+      "number": 172,
+      "id": 6522981712,
+      "title": "用交互样板核定桌面动效与键盘验收",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/172",
+      "file": "decisions/interaction-parity.md",
+      "label": "wayfinder:prototype",
+      "resolution_file": "resolutions/interaction-parity.md",
+      "resolution_url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/172#issuecomment-7063742924"
+    },
+    "classic_roundtrip_probe": {
+      "number": 173,
+      "id": 6522982059,
+      "title": "隔离验证经典 Agent 与 Main 的往返",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/173",
+      "file": "decisions/classic-roundtrip-probe.md",
+      "label": "wayfinder:task",
+      "disposition": "out_of_scope"
+    },
+    "classic_mode_disposition": {
+      "number": 174,
+      "id": 6522982509,
+      "title": "裁定经典 Agent 模式的入口与权限边界",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/174",
+      "file": "decisions/classic-mode-disposition.md",
+      "label": "wayfinder:grilling",
+      "resolution_file": "resolutions/classic-mode-disposition.md",
+      "resolution_url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/174#issuecomment-7060652881"
+    }
+  },
+  "blocking": {
+    "workspace_menu": ["path_inventory"],
+    "account_and_model_onboarding": ["path_inventory"],
+    "continuous_voice": ["path_inventory"],
+    "interaction_parity": ["workspace_menu", "account_and_model_onboarding", "continuous_voice"],
+    "classic_roundtrip_probe": ["classic_dsh_api"],
+    "classic_mode_disposition": ["path_inventory"]
+  }
+}

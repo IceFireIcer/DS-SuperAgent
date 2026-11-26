@@ -4,6 +4,12 @@ All notable changes to DS Bot are listed here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-26
+
+### Changed
+
+- DS SuperAgent now uses rolling semantic releases. The release workflow merges `dev`, selects the next version from the change scope, builds every desktop package, and publishes the GitHub release and npm package.
+
 ## [0.2.5] - 2026-11-01
 
 ### Changed

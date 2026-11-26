@@ -1,0 +1,63 @@
+flowchart LR
+    subgraph IN["输入与来源"]
+        U["Main 对话"]
+        GH["GitHub"]
+        FS["Feishu"]
+        SCH["Schedule"]
+        IM["IM / Mail / Phone"]
+    end
+
+    subgraph CTRL["控制平面"]
+        MAIN["Main Agent<br/>连续对话 + 委托"]
+        ROUTER["Router Agent<br/>分解 + 协调"]
+        ENGINE["Domain Engine<br/>授权 · 状态 · 回执"]
+        SUP["Supervisor<br/>语义巡检 + 提案"]
+    end
+
+    subgraph WORK["工作平面"]
+        WRK["Worker Sessions<br/>隔离执行"]
+        SUB["Jobs / PTY / Subagents"]
+        CAP["Browser · MCP · Office<br/>Memory · Credentials"]
+    end
+
+    subgraph EXEC["执行世界"]
+        LOCAL["Local Environment"]
+        REMOTE["Remote Device<br/>paired daemon"]
+    end
+
+    subgraph STATE["状态与证据"]
+        DB["SQLite / PostgreSQL<br/>业务事实"]
+        SESS["DSH Session Store<br/>SQLite / PostgreSQL"]
+        OUT["Effects / Outbox<br/>幂等 + 回执"]
+        EVID["Context Cards<br/>4–16 KiB 分页"]
+    end
+
+    subgraph OBS["外部控制"]
+        WD["Watchdog<br/>进程恢复"]
+    end
+
+    U --> MAIN
+    GH --> ENGINE
+    FS --> ENGINE
+    SCH --> ENGINE
+    IM --> MAIN
+    MAIN -->|"WorkBrief"| ENGINE
+    ENGINE --> ROUTER
+    ROUTER -->|"Ticket / Assignment"| ENGINE
+    ENGINE --> WRK
+    WRK --> SUB
+    WRK --> CAP
+    SUB --> LOCAL
+    SUB --> REMOTE
+    WRK -->|"report / question"| ENGINE
+    ENGINE -->|"WorkOutcome"| MAIN
+    MAIN -->|"result reply"| OUT
+    OUT --> U
+    OUT --> GH
+    OUT --> FS
+    OUT --> IM
+    ENGINE <--> DB
+    WRK <--> SESS
+    ENGINE --> EVID
+    SUP -.->|"pause / correct 提案"| ENGINE
+    WD -.->|"restart / takeover"| ENGINE

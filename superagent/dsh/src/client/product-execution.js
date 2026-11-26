@@ -35,9 +35,12 @@ function candidateReasonCopy(reason) {
   return t(reason)
 }
 
+function environmentName(environment) {
+  return environment.label || environment.title || t(environment.kind === 'remote' ? 'Remote Environment' : 'This Host')
+}
+
 function environmentLabel(environment) {
-  const name = environment.label || environment.title
-  return `${name || environment.id} · ${environment.kind === 'remote' ? t('Remote') : t('Local')}`
+  return `${environmentName(environment)} · ${environment.kind === 'remote' ? t('Remote') : t('Local')}`
 }
 
 function capabilityReadErrorCopy(reason) {
@@ -201,10 +204,11 @@ export function ProductExecutionSettings({ binding, call, onChanged }) {
         onClick: savePolicy }, t('Save execution policy'))),
     h(Card, { title: t('Devices and Environments') },
       snapshot.environments.map(environment => h('article', { key: environment.id, className: 'bt-product-execution-row' },
-        h('strong', null, environmentLabel(environment)),
+        h('strong', { title: environment.id }, environmentName(environment)),
         h(StatusChip, { tone: environment.online === false ? 'warn' : 'neutral' }, environment.kind === 'remote'
           ? t(environment.online === false ? 'Offline' : 'Configured') : t('Local')),
         h(DetailList, { items: [
+          { label: t('Environment ID'), value: environment.id, mono: true },
           { label: t('Permissions'), value: permissionCopy(environment.permissions) },
           { label: t('Device'), value: environment.deviceId ?? t('This Host') },
           { label: t('Directory'), value: environment.root, mono: true },
@@ -257,9 +261,10 @@ export function ProductExecutionSettings({ binding, call, onChanged }) {
 }
 
 export const PRODUCT_EXECUTION_CSS = `
-.bt-product-execution label:not(.bt-ps-row){display:grid;gap:6px}
-.bt-product-execution fieldset{display:flex;gap:12px;flex-wrap:wrap;border:1px solid var(--bt-line);border-radius:var(--bt-ps-radius-control);margin:8px 16px}
-.bt-product-execution fieldset label{display:flex;align-items:center;gap:6px}
+.bt-product-execution-form>label{display:grid;gap:6px}
+.bt-product-execution fieldset{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px;border:0;margin:0;padding:12px 16px}
+.bt-product-execution fieldset legend{grid-column:1/-1;padding:0;font:inherit;font-size:var(--bt-ps-text);line-height:18px;font-weight:500}
+.bt-product-execution fieldset label{display:inline-flex;align-items:center;gap:8px;min-height:24px}
 .bt-product-execution-row{display:grid;gap:5px;padding:12px 0;border-top:1px solid var(--bt-line);overflow-wrap:anywhere}
 .bt-product-execution-row button{justify-self:start}
 .bt-product-execution-form{display:grid;gap:12px}

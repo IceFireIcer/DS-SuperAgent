@@ -1,62 +1,9 @@
 // Adapted from DS Bot v0.3.8 (Apache-2.0), ds-bot/src/client/{folder-menu,model-menu}.js.
-import { createElement as h, Fragment, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { createElement as h, Fragment, useId, useLayoutEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, FolderIcon, PencilIcon } from './icons.js'
+import { focusMenuItem, useAnchoredMenu } from './anchored-menu.js'
+import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, FolderIcon, PencilIcon } from './icons.js'
 import { t } from './i18n.js'
-import { reducedMotion, SPRING_SHAPE, spring, useLinger, useViewport, viewBottom } from './motion.js'
-
-const MENU_EXIT_MS = 120
-const Caret = () => h('svg', {
-  className: 'bt-model-caret', width: 12, height: 12, viewBox: '0 0 20 20', fill: 'none',
-  stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true,
-}, h('path', { d: 'M5.5 8l4.5 4.5L14.5 8' }))
-
-function useAnchoredMenu(compact, dismiss) {
-  const [isOpen, setOpen] = useState(false)
-  const [place, setPlace] = useState(null)
-  const [kept, leaving] = useLinger(isOpen && place, MENU_EXIT_MS)
-  const shownPlace = reducedMotion() || document.body?.dataset.btMotion === 'quiet' ? isOpen && place : kept
-  const button = useRef(null)
-  const menu = useRef(null)
-  const tick = useViewport()
-  const open = () => { setPlace(null); setOpen(true) }
-  const close = () => { setOpen(false); button.current?.focus() }
-  const anchor = () => {
-    if (!button.current) return
-    const rect = button.current.getBoundingClientRect()
-    const viewport = window.visualViewport
-    const viewLeft = viewport?.offsetLeft ?? 0
-    const viewWidth = viewport?.width ?? window.innerWidth
-    const width = Math.min(Math.max(240, rect.width), viewWidth - 16)
-    const left = Math.max(viewLeft + 8, Math.min(rect.right - width, viewLeft + viewWidth - width - 8))
-    const below = viewBottom() - rect.bottom - 4
-    const above = rect.top - (viewport?.offsetTop ?? 0) - 4
-    setPlace(below >= 260 || below >= above
-      ? { left, width, top: rect.bottom + 4, maxHeight: Math.max(0, below - 8), '--bt-origin': 'top right' }
-      : { left, width, bottom: window.innerHeight - rect.top + 4, maxHeight: Math.max(0, above - 8), '--bt-origin': 'bottom right' })
-  }
-  useLayoutEffect(() => { if (isOpen) anchor() }, [isOpen, compact, tick])
-  useEffect(() => { if (dismiss) setOpen(false) }, [dismiss])
-  useEffect(() => {
-    if (!isOpen) return undefined
-    const outside = event => {
-      if (menu.current?.contains(event.target) || button.current?.contains(event.target)) return
-      const active = document.activeElement
-      if (active === document.body || menu.current?.contains(active)) close()
-      else setOpen(false)
-    }
-    const scroll = event => { if (!menu.current?.contains(event.target)) anchor() }
-    window.addEventListener('click', outside)
-    window.addEventListener('resize', anchor)
-    window.addEventListener('scroll', scroll, true)
-    return () => {
-      window.removeEventListener('click', outside)
-      window.removeEventListener('resize', anchor)
-      window.removeEventListener('scroll', scroll, true)
-    }
-  }, [isOpen])
-  return { isOpen, shownPlace, leaving, button, menu, open, close }
-}
 
 // The last segment of a host path, Windows or POSIX; a root keeps its own spelling.
 export const folderName = path => String(path).replace(/[\\/]+$/, '').split(/[\\/]/).pop() || String(path)
@@ -69,7 +16,7 @@ const Tick = ({ on }) => h('span', { className: 'bt-model-tick', 'aria-hidden': 
 // itself, which has no default.
 export function FolderMenu({ value, defaultPath, group = false, team = false, actions, run, onPick, onNativePick,
   wide = false, compact = false, disabled = false, dismiss = false, fallbackLabel, label }) {
-  const { isOpen, shownPlace, leaving, button, menu, open, close } = useAnchoredMenu(compact, dismiss || disabled)
+  const { isOpen, shownPlace, leaving, button, menu, open, close } = useAnchoredMenu({ compact, dismiss: dismiss || disabled })
   const id = useId()
   const [info, setInfo] = useState(null)
   const [view, setView] = useState('list')
@@ -103,15 +50,7 @@ export function FolderMenu({ value, defaultPath, group = false, team = false, ac
       close()
       return
     }
-    if (event.target.tagName === 'INPUT') return
-    const items = menuItems()
-    const current = items.indexOf(event.target)
-    const last = items.length - 1
-    const targets = { Home: 0, End: last, ArrowDown: current < last ? current + 1 : 0,
-      ArrowUp: current > 0 ? current - 1 : last }
-    if (!Object.hasOwn(targets, event.key)) return
-    event.preventDefault()
-    items[targets[event.key]]?.focus()
+    focusMenuItem(event, menu.current)
   }
   const toggle = () => {
     if (disabled || dismiss) return
@@ -191,7 +130,7 @@ export function FolderMenu({ value, defaultPath, group = false, team = false, ac
     },
     compact ? h(FolderIcon) : h(Fragment, null, h('span', { className: 'bt-model-copy' },
       h('span', { className: 'bt-model-name' }, currentPath ? folderName(currentPath) : fallback),
-      currentPath ? h('span', { className: 'bt-model-provider' }, currentPath) : null), h(Caret))),
+      currentPath ? h('span', { className: 'bt-model-provider' }, currentPath) : null), h(ChevronDownIcon, { className: 'bt-model-caret' }))),
     shownPlace ? createPortal(h('div', { ref: menu, id, className: `bt-menu bt-folder-menu${shownPlace.bottom !== undefined ? ' bt-menu-up' : ''}`,
       role: 'menu', tabIndex: -1, 'aria-label': menuLabel, style: shownPlace, 'data-leaving': leaving || undefined,
       'aria-hidden': leaving || undefined, inert: leaving, onKeyDown },
@@ -200,20 +139,11 @@ export function FolderMenu({ value, defaultPath, group = false, team = false, ac
 }
 
 export const FOLDER_CSS = `
-.bt-model-trigger{display:inline-flex;align-items:center;gap:8px;max-width:100%;min-width:0;min-height:32px;padding:4px 8px 4px 10px;border:0;border-radius:var(--bt-radius-input);background:var(--bt-hover);color:var(--bt-ink);font:inherit;text-align:left;cursor:pointer;transition:background-color .12s ease}
-.bt-model-trigger:hover,.bt-model-trigger[aria-expanded=true]{background:var(--bt-active)}
-.bt-model-trigger[data-wide]{width:100%;justify-content:space-between}
-.bt-model-copy{display:flex;flex-direction:column;min-width:0}
-.bt-model-name{font-size:var(--bt-font-body);line-height:18px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bt-model-provider{font-size:var(--bt-font-small);line-height:14px;color:var(--bt-ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bt-menu.bt-folder-menu{min-width:0;overflow:auto;scrollbar-width:thin}
 .bt-folder-trigger:focus-visible,.bt-menu.bt-folder-menu :is(button,input):focus-visible{outline:2px solid var(--bt-accent);outline-offset:-2px}
 .bt-folder-view{display:flex;flex-direction:column;gap:2px;animation:bt-veil-in .14s ease-out}
-.bt-model-caret{flex:none;color:var(--bt-ink-3);transition:${spring(SPRING_SHAPE, 'transform')}}
-[aria-expanded=true]>.bt-model-caret{transform:rotate(180deg)}
 .bt-model-group{flex:none;padding:8px 8px 2px;font-size:11px;line-height:14px;font-weight:500;color:var(--bt-ink-3)}
 .bt-model-group:first-child{padding-top:2px}
-.bt-model-tick{flex:none;width:16px;height:16px;display:inline-flex;color:var(--bt-ink-2)}
 .bt-model-none{padding:8px;font-size:13px;line-height:18px;color:var(--bt-ink-2)}
 .bt-folder-copy{flex:1;display:flex;flex-direction:column;min-width:0}
 .bt-folder-copy .bt-menu-label{flex:none}

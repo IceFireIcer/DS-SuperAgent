@@ -60,10 +60,10 @@ export function rebaseRoleDraft(base, draft, latest) {
   const merged = JSON.parse(JSON.stringify(latest))
   for (const role of ['main', 'router', 'worker']) {
     if (!draft[role]) continue
-    for (const field of ['provider', 'model', 'effort']) {
-      if (draft[role].model?.[field] === base[role].model?.[field]) continue
-      if (draft[role].model?.[field] === undefined) delete merged[role].model[field]
-      else merged[role].model[field] = draft[role].model[field]
+    const edited = draft[role].model
+    const original = base[role].model
+    if (edited.provider !== original.provider || edited.model !== original.model || edited.effort !== original.effort) {
+      merged[role].model = { ...edited }
     }
     if (draft[role].instructions !== base[role].instructions) merged[role].instructions = draft[role].instructions
   }

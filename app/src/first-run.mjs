@@ -1,5 +1,5 @@
-// The first start: where the app keeps its SuperAgent data and workspace. The answers are
-// kept in the app's own data.
+// The first start: where the app keeps its SuperAgent data, and the project an earlier start
+// selected. The answers are kept in the app's own data.
 import { app, dialog } from 'electron'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -14,7 +14,7 @@ import { profileHome } from './profile.mjs'
 const TEXT = {
   en: {
     welcome: `Welcome to ${PRODUCT_NAME}`,
-    places: (data, workspace) => `Data: ${data}\nWorkspace: ${workspace}`,
+    places: (data, workspace) => `Data: ${data}${workspace ? `\nWorkspace: ${workspace}` : ''}`,
     absoluteFolder: 'Choose an absolute path for each folder.',
     folderMissing: folder => `${folder} is missing. Restore the location, choose another folder, or select Start to create it.`,
     folderUnavailable: folder => `Cannot write to ${folder}. Restore write access or choose another folder.`,
@@ -53,7 +53,7 @@ const TEXT = {
   },
   zh: {
     welcome: `欢迎使用 ${PRODUCT_NAME}`,
-    places: (data, workspace) => `数据：${data}\n工作区：${workspace}`,
+    places: (data, workspace) => `数据：${data}${workspace ? `\n工作区：${workspace}` : ''}`,
     absoluteFolder: '请为每个文件夹选择绝对路径。',
     folderMissing: folder => `${folder} 不存在。请恢复原位置、选择其他文件夹，或点击「开始使用」新建。`,
     folderUnavailable: folder => `无法写入 ${folder}。请恢复写入权限或选择其他文件夹。`,
@@ -149,8 +149,9 @@ function checkLocations(t, dataDir, workspace, { saved = false } = {}) {
     const layoutProblem = placeProblem(t, dataDir, workspace, { layout: !saved })
     if (layoutProblem !== undefined) return layoutProblem
     const shellData = real(app.getPath('userData'))
-    if ([dataDir, workspace].map(real).some(path => within(path, shellData) || within(shellData, path))) return t.inDesktopData
-    const folders = [profileHome(dataDir), workspace]
+    if ([dataDir, ...(workspace === undefined ? [] : [workspace])].map(real)
+      .some(path => within(path, shellData) || within(shellData, path))) return t.inDesktopData
+    const folders = [profileHome(dataDir), ...(workspace === undefined ? [] : [workspace])]
     for (folder of folders) {
       const problem = placeProblem(t, folder)
       if (problem !== undefined) return problem
@@ -162,27 +163,30 @@ function checkLocations(t, dataDir, workspace, { saved = false } = {}) {
 }
 
 /**
- * Where the app keeps its data and SuperAgent files, asked at the first start.
+ * Where the app keeps its data, and the project an earlier start selected, asked at the first start.
  * A run on throwaway folders (DS_SUPERAGENT_HOME, for development and tests) asks nothing and copies nothing.
  * @returns {Promise<{ dataDir: string, workspace?: string, quit?: true }>}
  */
 export async function chooseLocations(signal, owner) {
   const home = process.env.DS_SUPERAGENT_HOME
-  if (home) return { dataDir: home, workspace: process.env.DS_SUPERAGENT_WORKSPACE || undefined }
+  if (home) {
+    const workspace = process.env.DS_SUPERAGENT_WORKSPACE || undefined
+    return { dataDir: home, ...(workspace === undefined ? {} : { workspace }) }
+  }
   const t = text()
   const file = locationsFile()
   let dataDir = join(homedir(), DATA_DIRECTORY)
-  let workspace = join(homedir(), PRODUCT_NAME)
+  let workspace
   let problem
   if (existsSync(file)) {
     let saved
     try { saved = JSON.parse(readFileSync(file, 'utf8')) } catch {}
     if (typeof saved?.dataDir === 'string' && isAbsolute(saved.dataDir)
-      && typeof saved.workspace === 'string' && isAbsolute(saved.workspace)) {
+      && (saved.workspace === undefined || (typeof saved.workspace === 'string' && isAbsolute(saved.workspace)))) {
       dataDir = saved.dataDir
       workspace = saved.workspace
       problem = checkLocations(t, dataDir, workspace, { saved: true })
-      if (problem === undefined) return { dataDir, workspace }
+      if (problem === undefined) return { dataDir, ...(workspace === undefined ? {} : { workspace }) }
     }
   }
   try {
@@ -192,7 +196,7 @@ export async function chooseLocations(signal, owner) {
       if (choice !== 0 && choice !== 1) return { quit: true }
       if (choice === 1) {
         dataDir = await pick(t.pickData, dataDir, signal, owner)
-        workspace = await pick(t.pickWorkspace, workspace, signal, owner)
+        if (workspace !== undefined) workspace = await pick(t.pickWorkspace, workspace, signal, owner)
         problem = undefined
         continue
       }
@@ -200,7 +204,7 @@ export async function chooseLocations(signal, owner) {
       if (problem !== undefined) continue
       try { saveLocations({ dataDir, workspace }) }
       catch { throw new Error(t.locationsUnavailable(dirname(file))) }
-      return { dataDir, workspace }
+      return { dataDir, ...(workspace === undefined ? {} : { workspace }) }
     }
   } catch (error) {
     if (error instanceof Quit) return { quit: true }

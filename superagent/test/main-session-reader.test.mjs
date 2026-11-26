@@ -179,3 +179,80 @@ test('the reader uses a boot-provisioned Session and refuses legacy or unrelated
   assert.equal(requests.length, 2)
   assert.equal(await native.sessionPersistence.stat(SessionId('unrelated')), undefined)
 })
+
+test('Classic desktop mode creates new Sessions only inside its authorized workspace', async context => {
+  const temp = await realpath(tmpdir())
+  const root = await mkdtemp(join(temp, 'superagent-classic-reader-'))
+  const native = await nativeContext(join(root, 'sessions'), () => assert.fail('Session creation must not call the model'))
+  const abort = new AbortController()
+  let host
+  let desktopPeer
+  context.after(async () => {
+    await host?.close()
+    abort.abort()
+    await native.fiber.dispose()
+    assert.equal(dirname(await realpath(root)), temp)
+    await rm(root, { recursive: true, force: true })
+  })
+  host = await createProductHost(native, { databasePath: join(root, 'state.sqlite'), instanceId, actorId, ...routes })
+  const binding = await host.dispatch('open')
+  const { mainSessionId } = binding
+  const sessions = new Map([[mainSessionId, { sessionId: SessionId(mainSessionId), cwd: root }]])
+  let createdCount = 0
+  const controller = {
+    async list() { return { items: [...sessions.values()] } },
+    async create(request) {
+      const sessionId = request.sessionId ?? SessionId(`classic-created-${++createdCount}`)
+      sessions.set(sessionId, { sessionId, cwd: root })
+      return { sessionId }
+    },
+    async events() { return { events: [] } },
+    async *follow() { yield { type: 'snapshot', records: [], assistantStream: { revision: 0 } } },
+    async *control() { yield { type: 'baseline', value: { projections: {} } } },
+    async prompt() { return { accepted: true } },
+    async cancel() { return { cancelled: true } },
+    async updateQueue() { return { accepted: true } },
+    async rename() { return { renamed: true } },
+    async selectModel() { return { selected: true } },
+    async modelCatalog() { return { groups: [] } },
+    async projections() { return { values: {} } },
+  }
+  native.provide('superagentSessionReader', controller)
+  const browserPeer = { principal: { kind: 'owner' } }
+  native.provide('connection', { browserPeer, allowsRemoteAuthorities: false })
+  const workspace = { id: 'classic-workspace', sessionIds: [], attachSession: async sessionId => { workspace.sessionIds.push(sessionId) } }
+  native.provide('workspaceRegistry', { create: async () => workspace })
+  const hostFacade = { dispatch: async (endpoint, payload) => {
+    if (endpoint === 'open') return binding
+    if (endpoint === 'directory-options') {
+      assert.equal(payload.instanceId, instanceId)
+      return { default: { root } }
+    }
+    assert.fail(`Unexpected host call: ${endpoint}`)
+  } }
+  await exposeMainSession(native, hostFacade, true)
+  const classic = native.get('superagentClassicSession')
+  desktopPeer = { signal: abort.signal, principal: { kind: 'owner' }, interactions: 'answer' }
+  classic.bindDesktop(desktopPeer, 'desktop-proof')
+  const opened = await classic.dispatch('classic-open', { instanceId }, 'desktop-proof', desktopPeer)
+  const readerFor = peer => native.extend({ invocation: { peer } }).get('sessionController')
+  const reader = readerFor(desktopPeer)
+  const signal = abort.signal
+  assert.equal(opened.workspaceId, workspace.id)
+  assert.deepEqual((await reader.list({}, signal)).items.map(item => item.sessionId), [opened.sessionId])
+  const created = await reader.create({ workspaceId: workspace.id })
+  assert.ok(created.sessionId !== opened.sessionId && created.sessionId !== mainSessionId)
+  assert.deepEqual((await reader.list({}, signal)).items.map(item => item.sessionId).sort(),
+    [opened.sessionId, created.sessionId].sort())
+  assert.equal((await reader.prompt({ sessionId: created.sessionId }, signal)).accepted, true)
+  const denied = { code: 'SOURCE_NOT_AUTHORIZED' }
+  await assert.rejects(reader.create({ workspaceId: 'another-workspace' }), denied)
+  await assert.rejects(reader.create({ cwd: join(root, 'outside') }), denied)
+  await assert.rejects(reader.create({ sessionId: SessionId(mainSessionId) }), denied)
+  const browserReader = readerFor(browserPeer)
+  await assert.rejects(browserReader.create({ workspaceId: workspace.id }), denied)
+  await assert.rejects(browserReader.events({ address: { kind: 'session', sessionId: created.sessionId } }, signal), denied)
+  await classic.dispatch('classic-close', { instanceId }, 'desktop-proof', desktopPeer)
+  assert.deepEqual((await reader.list({}, signal)).items.map(item => item.sessionId), [mainSessionId])
+  await assert.rejects(reader.create({ workspaceId: workspace.id }), denied)
+})

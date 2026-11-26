@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto'
 import { realpath, stat } from 'node:fs/promises'
 import type { SessionController } from '@deepseek-ai/dsh-api-session-controller'
+import type { SessionCreateRequest, SessionCreateValue } from '@deepseek-ai/dsh-api-session-controller/types'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { CoreError } from './model.js'
 import type { ProductHost } from './product-host.js'
@@ -8,7 +9,8 @@ import type { ProductHost } from './product-host.js'
 type ClassicController = Pick<SessionController, 'create' | 'list'>
 type WorkspaceId = NonNullable<Parameters<ClassicController['create']>[0]['workspaceId']>
 type ClassicLanding = { sessionId: SessionId; workspaceId: WorkspaceId }
-type ActiveSession = ClassicLanding & { lifetime: AbortController; expires: NodeJS.Timeout }
+type ActiveSession = ClassicLanding & { cwd: string; sessions: Set<string>;
+  lifetime: AbortController; expires: NodeJS.Timeout }
 export interface ClassicWorkspaces {
   create(path: string): Promise<{ id: WorkspaceId; sessionIds: readonly SessionId[]; attachSession(id: SessionId): Promise<void> }>
 }
@@ -23,7 +25,7 @@ export class ClassicSessionAccess {
   #proof: Buffer | undefined
   #active: ActiveSession | undefined
   #request = 0
-  #opening: Promise<ClassicLanding> | undefined
+  #opening: Promise<ClassicLanding & { cwd: string; sessions: Set<string> }> | undefined
 
   constructor(private readonly host: Pick<ProductHost, 'dispatch'>,
     private readonly controller: ClassicController, private readonly workspaces: ClassicWorkspaces,
@@ -49,9 +51,10 @@ export class ClassicSessionAccess {
     return current() ?? (binding.mainSessionMode === 'native' ? binding.mainSessionId : undefined)
   }
 
-  forPeer(peer: object | undefined) {
+  forPeer(peer: object | undefined): { sessionId: string; sessions: Set<string>; signal: AbortSignal } | undefined {
     if (!this.#active || !this.isDesktopPeer(peer)) return undefined
-    return { sessionId: this.#active.sessionId, signal: this.#active.lifetime.signal }
+    return { sessionId: this.#active.sessionId, sessions: this.#active.sessions,
+      signal: this.#active.lifetime.signal }
   }
 
   revoke() {
@@ -81,16 +84,58 @@ export class ClassicSessionAccess {
       return { closed: true }
     }
     if (endpoint === 'classic-renew' && !this.#active) throw new CoreError('CLASSIC_UNAVAILABLE', 'The Classic Agent session has expired. Open it again from Main.')
-    const { sessionId, workspaceId } = this.#active ?? await this.#open(binding)
+    const opened = this.#active ?? await this.#open(binding)
     if (request !== this.#request) throw new CoreError('CLASSIC_UNAVAILABLE', 'The Classic Agent request ended. Open it again from Main.')
     clearTimeout(this.#active?.expires)
     const expires = setTimeout(() => this.revoke(), leaseMs)
     expires.unref()
-    this.#active = { sessionId, workspaceId, lifetime: this.#active?.lifetime ?? new AbortController(), expires }
-    return { sessionId, workspaceId }
+    this.#active = { sessionId: opened.sessionId, workspaceId: opened.workspaceId, cwd: opened.cwd,
+      sessions: opened.sessions, lifetime: this.#active?.lifetime ?? new AbortController(), expires }
+    return { sessionId: opened.sessionId, workspaceId: opened.workspaceId }
   }
 
-  async #open(binding: { instanceId: string; mainSessionId: string; routerSessionId: string }) {
+  async create(peer: object | undefined, request: SessionCreateRequest): Promise<SessionCreateValue> {
+    const active = this.#active
+    if (!active || !this.isDesktopPeer(peer) || active.lifetime.signal.aborted) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Native Session creation requires Classic Agent mode.')
+    }
+    if (request.workspaceId !== undefined && request.workspaceId !== active.workspaceId) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Only the active Classic Agent workspace is available.')
+    }
+    if (request.cwd !== undefined) {
+      const cwd = await realpath(request.cwd).catch(() => undefined)
+      if (cwd !== active.cwd) {
+        throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Only the active Classic Agent workspace is available.')
+      }
+    }
+    if (request.sessionId !== undefined && !active.sessions.has(request.sessionId)) {
+      throw new CoreError('SOURCE_NOT_AUTHORIZED', 'Only the active Classic Agent Sessions are available.')
+    }
+    const binding = await this.host.dispatch('open') as { mainSessionId: string; routerSessionId: string }
+    if (request.sessionId === binding.mainSessionId || request.sessionId === binding.routerSessionId) {
+      throw new CoreError('CLASSIC_DENIED', 'Classic Agent needs an independent Session.')
+    }
+    active.lifetime.signal.throwIfAborted()
+    const created = await this.controller.create({
+      workspaceId: active.workspaceId,
+      ...(request.sessionId === undefined ? {} : { sessionId: request.sessionId }),
+      ...(request.agentPreset === undefined ? {} : { agentPreset: request.agentPreset }),
+    })
+    if (created.sessionId === binding.mainSessionId || created.sessionId === binding.routerSessionId) {
+      throw new CoreError('CLASSIC_DENIED', 'Classic Agent needs an independent Session.')
+    }
+    active.lifetime.signal.throwIfAborted()
+    const fresh = !active.sessions.has(created.sessionId)
+    active.sessions.add(created.sessionId)
+    if (fresh) this.recordInitialModel(created.sessionId)
+    clearTimeout(active.expires)
+    active.expires = setTimeout(() => this.revoke(), leaseMs)
+    active.expires.unref()
+    return created
+  }
+
+  async #open(binding: { instanceId: string; mainSessionId: string; routerSessionId: string }): Promise<ClassicLanding & {
+    cwd: string; sessions: Set<string> }> {
     this.#opening ??= this.#locate(binding).finally(() => { this.#opening = undefined })
     return this.#opening
   }
@@ -118,7 +163,7 @@ export class ClassicSessionAccess {
         if (created.sessionId !== sessionId) throw new Error('The native session identity changed.')
         this.recordInitialModel(sessionId)
       }
-      return { sessionId, workspaceId: workspace.id }
+      return { sessionId, workspaceId: workspace.id, cwd, sessions: new Set([sessionId]) }
     } catch {
       throw new CoreError('CLASSIC_UNAVAILABLE', 'The Host could not open an independent Classic Agent session in the authorized work directory.')
     }

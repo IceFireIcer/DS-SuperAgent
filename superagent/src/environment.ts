@@ -1,4 +1,5 @@
-import type { Artifact, LocalCommand, LocalJob, LocalPermission, RemoteJobObservation } from './local-environment.js'
+import type { Artifact, LocalCommand, LocalJob, RemoteJobObservation } from './local-environment.js'
+import type { PathGrant, PathGrantOperation } from './model.js'
 import type { RemoteJobRecovery } from './remote-protocol.js'
 import type { EnvironmentAssetCapabilities, EnvironmentAssetPage, EnvironmentAssetReference, EnvironmentAssetSupport, EnvironmentSkillSummary, SpillStream } from './environment-assets.js'
 import type { CapabilityId } from './capability-locations.js'
@@ -11,7 +12,7 @@ export interface EnvironmentConfig {
   instanceId: string
   root: string
   allowedActorIds: string[]
-  permissions: LocalPermission[]
+  permissions: PathGrantOperation[]
   commands: Record<string, LocalCommand>
   /** Explicitly permits Worker-owned shell and PTY commands in this local execution world. */
   allowShell?: boolean
@@ -39,7 +40,7 @@ export interface EnvironmentProbe {
   root: string
   version: string
   fingerprint: string
-  capabilities: LocalPermission[]
+  capabilities: PathGrantOperation[]
   capacity: 'available' | 'unknown' | { active: number; max: number }
   /** Product capabilities this exact execution world can serve. Absent means undeclared, not available. */
   productCapabilities?: Partial<Record<CapabilityId, boolean>>
@@ -48,6 +49,7 @@ export interface EnvironmentProbe {
 
 export interface PreparedEnvironment {
   readonly cwd: string
+  readonly pathGrants?: readonly PathGrant[]
   invoke(name: string, args: Record<string, string>, signal?: AbortSignal): Promise<Record<string, unknown>>
   artifact(path: string, signal?: AbortSignal): Promise<Artifact>
   stageAttachment?(reference: EnvironmentAssetReference, path: string, signal?: AbortSignal): Promise<{ path: string; bytes: number; sha256: string }>
@@ -64,15 +66,19 @@ export interface PreparedEnvironment {
   /** Host-side preflight view of the bound worktree; it never mutates the Environment. */
   inspectWorkCopy?(signal?: AbortSignal): Promise<WorkCopySnapshot>
   planCommand?(name: string, mode?: 'foreground' | 'background'): { jobId: string; remote: RemoteJobObservation }
-  startCommand?(name: string, jobId?: string): Promise<LocalJob>
-  startShell?(command: string, jobId?: string): Promise<LocalJob>
-  startTerminal?(command: string, jobId?: string): Promise<LocalJob>
+  startCommand?(name: string, jobId?: string, path?: string): Promise<LocalJob>
+  startShell?(command: string, jobId?: string, path?: string): Promise<LocalJob>
+  startTerminal?(command: string, jobId?: string, path?: string): Promise<LocalJob>
   attachCommand?(jobId: string): Promise<LocalJob>
   inspectRange?(jobId: string): Promise<{ jobId: string; state: string; settled: boolean; cancelled: boolean
     ownerId: string | null; deadlineAt: number | null; recovery?: RemoteJobRecovery
     exitCode: number | null; signal: string | null
     stdout: { text: string; nextOffset: number; lossy: boolean }; stderr: { text: string; nextOffset: number; lossy: boolean } }>
   cancelRange?(jobId: string): Promise<void>
+}
+
+export interface EnvironmentPrepareOptions {
+  pathGrants?: readonly PathGrant[]
 }
 
 export interface ExecutionEnvironment {
@@ -85,7 +91,8 @@ export interface ExecutionEnvironment {
   probe?(identity: { instanceId: string; actorId: string }, signal?: AbortSignal): Promise<EnvironmentProbe>
   assetCapabilities?(identity: { instanceId: string; actorId: string }): Promise<EnvironmentAssetCapabilities>
   authorize(identity: { instanceId: string; actorId: string }): void
-  prepare(identity: { instanceId: string; actorId: string }, signal?: AbortSignal): Promise<PreparedEnvironment>
+  prepare(identity: { instanceId: string; actorId: string }, signal?: AbortSignal,
+    options?: EnvironmentPrepareOptions): Promise<PreparedEnvironment>
   close(): Promise<void>
 }
 

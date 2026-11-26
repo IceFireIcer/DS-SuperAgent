@@ -1,17 +1,19 @@
 # 发版验收清单
 
-本清单用于候选版本。日常票据只运行定向检查；发版时执行完整必需 CI 和平台打包矩阵。每项记录通过、不通过或备注，不通过项附上脱敏日志或截图，并在 Release PR 汇总。
+滚动发布由 `.github/workflows/release.yml` 执行：每天 UTC 04:00（UTC+8 12:00）自动运行，也可手动指定 `patch`、`minor`、`major` 或 `auto`。工作流会合并 `dev` 到 `main`、选定版本、更新两个包和服务端客户端、创建 draft release、构建全部桌面包、发布 npm，最后公开 release。一个候选版本只有在所有打包和检查 job 成功后才公开。
+
+本清单用于发布前复核。日常票据只运行定向检查；发布流程不运行完整 CI，完整测试矩阵仍可通过 **DS-SuperAgent CI → full** 单独执行。每项记录通过、不通过或备注，失败项附上脱敏日志或截图。
 
 ## 构建前
 
-- 在发版 PR 合并前，用已验证的 `dev` 提交构建候选包并做真机检查。发布时确认 tag 指向 `main` 上的合并提交。
-- 确认 `superagent/package.json` 与 `app/package.json` 版本一致；应用 ID 为 `io.github.icefireicer.ds-superagent`，产品包为 `ds-superagent`。
+- 确认 `dev` 与 `main` 的合并无冲突。发布工作流会从 `main` 创建版本提交和 `v<version>` tag；不需要手工改版本或手工打 tag。
+- 确认 `superagent/package.json`、`app/package.json` 及两个 lock 文件由工作流同步到同一版本；应用 ID 为 `io.github.icefireicer.ds-superagent`，产品包为 `ds-superagent`。
 - 使用 Node.js 24。测试和打包使用临时 DSH、工作区及数据目录，不指向个人 DSH 或桌面应用的常用数据。
 - 自动化检查只用 mock 凭据。日志和制品不得包含真实密钥、令牌、Cookie、租户资料或用户路径。
 
 ## 自动化与核心流程
 
-- 发版工作流的所有必需检查、泄漏扫描和平台打包 job 均通过；必需 job 被跳过不算通过。
+- Release 工作流的全部平台打包、包检查和 build record job 通过；任何必需 job 失败或被跳过时不公开 draft release。
 - 构建并检查唯一的 `ds-superagent` 包；确认 `dsh/client.js` 与 `dsh/office.js` 和源码生成结果一致。
 - 使用临时数据启动产品 profile，验证 Main 可创建工作、Router 可分派、Worker 可返回可核验结果。
 - 验证原生 Session 写入被拒绝；等待或停止的工作不会显示为已完成；缺少模型、目录或权限时提供明确的修复入口。

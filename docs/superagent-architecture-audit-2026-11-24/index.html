@@ -1,0 +1,770 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1280">
+  <title>DS-SuperAgent 架构审计</title>
+  <meta name="description" content="对照 Claude 的 Super-agent 报告，说明 DS-SuperAgent 当前架构、已实现机制、完成度和主要缺口。">
+  <link rel="icon" href="assets/mark.svg" type="image/svg+xml">
+  <style>
+    :root {
+      --bg: #f4f2ec;
+      --surface: #fbfaf6;
+      --surface-2: #eeebe3;
+      --ink: #18242b;
+      --ink-2: #35434b;
+      --muted: #65727a;
+      --line: #d7d2c7;
+      --line-strong: #b8b1a3;
+      --red: #bf4d3b;
+      --red-bg: #f6e5df;
+      --blue: #3c7188;
+      --blue-bg: #e8f0f3;
+      --green: #4f7558;
+      --green-bg: #e7efe7;
+      --amber: #9a6b25;
+      --amber-bg: #f4ead7;
+      --dark: #131b21;
+      --white: #f8f7f1;
+      --sans: "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", Arial, sans-serif;
+      --mono: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      min-width: 1180px;
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--sans);
+      font-size: 15px;
+      line-height: 1.72;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-underline-offset: .2em; }
+    a:hover { color: var(--red); }
+    code {
+      padding: .1em .34em;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: #f7f5ef;
+      color: var(--ink-2);
+      font: 500 .88em/1.4 var(--mono);
+    }
+    h1, h2, h3, p, figure { margin: 0; }
+    ::selection { background: var(--red); color: #fff; }
+
+    .topline {
+      height: 4px;
+      background: linear-gradient(90deg, var(--red) 0 18%, var(--blue) 18% 42%, var(--green) 42% 58%, #c8c1b4 58% 100%);
+    }
+    .page { width: 1160px; margin: 0 auto; }
+    .mono {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .hero {
+      background:
+        linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px),
+        var(--dark);
+      background-size: 44px 44px;
+      color: var(--white);
+    }
+    .hero-inner {
+      width: 1160px;
+      margin: 0 auto;
+      padding: 34px 0 38px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 340px;
+      gap: 58px;
+    }
+    .hero-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #8d9aa1;
+      margin-bottom: 42px;
+    }
+    .hero-top .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #d8e0e3;
+      text-decoration: none;
+    }
+    .brand img { width: 26px; height: 26px; }
+    .brand b { font-size: 13px; letter-spacing: .03em; }
+    .hero h1 {
+      max-width: 700px;
+      font-size: 48px;
+      line-height: 1.18;
+      letter-spacing: -.035em;
+      font-weight: 650;
+      color: #f4f2ea;
+      margin-bottom: 18px;
+    }
+    .hero h1 span { color: #9ea9ae; font-weight: 450; }
+    .hero-lede {
+      max-width: 720px;
+      color: #aeb9be;
+      font-size: 17px;
+      line-height: 1.8;
+    }
+    .hero-lede strong { color: #eef0ed; font-weight: 600; }
+    .hero-meta {
+      display: flex;
+      gap: 26px;
+      margin-top: 30px;
+      color: #819097;
+    }
+    .verdict-box {
+      align-self: end;
+      border: 1px solid rgba(255,255,255,.16);
+      background: rgba(255,255,255,.035);
+      padding: 22px;
+    }
+    .verdict-box .box-label {
+      color: #8f9fa6;
+      padding-bottom: 13px;
+      border-bottom: 1px solid rgba(255,255,255,.12);
+      margin-bottom: 15px;
+    }
+    .verdict-row {
+      display: grid;
+      grid-template-columns: 74px 1fr;
+      gap: 13px;
+      align-items: baseline;
+      padding: 9px 0;
+    }
+    .verdict-row b {
+      color: #f0e9d9;
+      font-size: 25px;
+      line-height: 1;
+      font-weight: 550;
+    }
+    .verdict-row span {
+      color: #9ca9af;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+    .verdict-note {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255,255,255,.12);
+      color: #c4cdd1;
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .snapshot {
+      border-bottom: 1px solid var(--line);
+      background: #ede9df;
+    }
+    .snapshot-inner {
+      width: 1160px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+    }
+    .snapshot-item {
+      padding: 20px 22px;
+      border-left: 1px solid var(--line);
+    }
+    .snapshot-item:first-child { border-left: 0; padding-left: 0; }
+    .snapshot-item b {
+      display: block;
+      font-size: 22px;
+      line-height: 1.2;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .snapshot-item span {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .section { padding: 62px 0; border-bottom: 1px solid var(--line); }
+    .section-head {
+      display: grid;
+      grid-template-columns: 150px minmax(0, 1fr);
+      gap: 34px;
+      margin-bottom: 30px;
+    }
+    .section-no { color: var(--muted); padding-top: 4px; }
+    .section-no::before {
+      content: "";
+      display: block;
+      width: 28px;
+      height: 2px;
+      margin-bottom: 10px;
+      background: var(--red);
+    }
+    .section h2 {
+      font-size: 32px;
+      line-height: 1.3;
+      letter-spacing: -.025em;
+      font-weight: 650;
+      margin-bottom: 12px;
+    }
+    .section-lede {
+      max-width: 850px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.8;
+    }
+    .section-lede strong { color: var(--ink); font-weight: 600; }
+    .section-body { padding-left: 184px; }
+
+    .lead {
+      border-left: 3px solid var(--red);
+      background: var(--surface);
+      padding: 20px 24px;
+      margin-bottom: 24px;
+      font-size: 18px;
+      line-height: 1.7;
+      color: var(--ink-2);
+    }
+    .lead strong { color: var(--ink); font-weight: 650; }
+
+    .findings {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px 40px;
+      margin-top: 24px;
+    }
+    .finding { padding-top: 14px; border-top: 1px solid var(--line); }
+    .finding b { display: block; margin-bottom: 6px; font-size: 15px; }
+    .finding p { color: var(--muted); font-size: 13px; line-height: 1.75; }
+
+    .arch-figure {
+      border: 1px solid var(--line);
+      background: var(--surface);
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+    .arch-figure img { display: block; width: 100%; height: auto; }
+    .figure-caption {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      padding-top: 12px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .figure-caption a { color: var(--ink-2); }
+
+    .diagram {
+      border: 1px solid var(--line);
+      background: var(--surface);
+      padding: 20px 24px;
+    }
+    .diagram-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      padding-bottom: 14px;
+      margin-bottom: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .diagram-head h3 { font-size: 15px; }
+    .diagram-head span { color: var(--muted); }
+    .diagram pre.mermaid {
+      margin: 0;
+      text-align: center;
+      background: transparent !important;
+      font-family: var(--sans) !important;
+    }
+    .diagram pre.mermaid svg {
+      display: block;
+      width: 100% !important;
+      max-width: 100% !important;
+      height: auto !important;
+      margin: 0 auto;
+    }
+    .diagram-note { margin-top: 12px; color: var(--muted); font-size: 11px; }
+
+    .table-wrap {
+      border: 1px solid var(--line);
+      background: var(--surface);
+      overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    th, td {
+      padding: 13px 15px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid var(--line);
+    }
+    th {
+      color: var(--muted);
+      background: var(--surface-2);
+      font: 600 10px/1.4 var(--mono);
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+    td { color: var(--ink-2); font-size: 13px; line-height: 1.65; }
+    tr:last-child td { border-bottom: 0; }
+    td:first-child { color: var(--ink); font-weight: 600; }
+
+    .status {
+      display: inline-block;
+      white-space: nowrap;
+      padding: 3px 7px;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      font: 600 10px/1.3 var(--sans);
+    }
+    .done { color: var(--green); background: var(--green-bg); border-color: #cadbcb; }
+    .partial { color: var(--amber); background: var(--amber-bg); border-color: #e4d4b5; }
+    .missing { color: var(--red); background: var(--red-bg); border-color: #ebcbc2; }
+
+    .completion-grid {
+      display: grid;
+      grid-template-columns: 330px minmax(0, 1fr);
+      gap: 30px;
+      align-items: start;
+    }
+    .score-card {
+      border: 1px solid var(--line);
+      background: var(--surface);
+      padding: 22px;
+    }
+    .score-card .score-label { color: var(--muted); margin-bottom: 12px; }
+    .score-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      padding: 11px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .score-row:last-child { border-bottom: 0; }
+    .score-row b {
+      font-size: 40px;
+      line-height: 1;
+      font-weight: 600;
+      letter-spacing: -.04em;
+    }
+    .score-row span { color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .score-note {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.7;
+    }
+    .completion-copy p {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.8;
+      margin-bottom: 16px;
+    }
+    .completion-copy strong { color: var(--ink); }
+    .level-table td { font-size: 12.5px; }
+
+    .gaps {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 28px;
+      margin-top: 22px;
+    }
+    .gap {
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 12px;
+      padding: 12px 0;
+      border-top: 1px solid var(--line);
+    }
+    .gap .g-no { color: var(--red); font: 600 10px/1.7 var(--mono); }
+    .gap b { display: block; font-size: 13px; margin-bottom: 3px; }
+    .gap p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.65; }
+
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+    .plain-box { border-top: 2px solid var(--ink); padding-top: 16px; }
+    .plain-box h3 { font-size: 16px; margin-bottom: 10px; }
+    .plain-box ul {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.9;
+    }
+    .plain-box li { padding-left: 2px; }
+
+    .downloads { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .download {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 13px 15px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      text-decoration: none;
+    }
+    .download:hover { border-color: var(--line-strong); color: var(--ink); }
+    .download b { display: block; font-size: 13px; }
+    .download span { display: block; color: var(--muted); font-size: 10px; margin-top: 2px; }
+    .download .arrow { color: var(--red); font-size: 16px; }
+
+    .method-note {
+      margin-top: 22px;
+      padding: 16px 18px;
+      border: 1px solid var(--line);
+      background: var(--surface-2);
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.75;
+    }
+    .method-note b { color: var(--ink); }
+    .footer {
+      width: 1160px;
+      margin: 0 auto;
+      padding: 24px 0 38px;
+      display: flex;
+      justify-content: space-between;
+      gap: 30px;
+      color: var(--muted);
+      font-size: 10px;
+    }
+    .footer a { text-decoration: none; }
+
+    @media print {
+      body { min-width: 0; background: #fff; }
+      .topline, .footer { display: none; }
+      .page, .hero-inner, .snapshot-inner { width: 100%; }
+      .section { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topline" aria-hidden="true"></div>
+
+  <header class="hero">
+    <div class="hero-inner">
+      <div>
+        <div class="hero-top">
+          <a class="brand" href="#top">
+            <img src="assets/mark.svg" alt="">
+            <b>DS-SuperAgent 架构审计</b>
+          </a>
+          <span class="mono">2026-11-24 / dev @ d03bb434</span>
+        </div>
+        <h1>现在做到哪一步<br><span>对照 Claude 的 Super-agent 报告</span></h1>
+        <p class="hero-lede">
+          当前代码已经<strong>不是报告里的两层研究原型</strong>。产品采用 Main、Router、Worker 三层，
+          工作身份、执行代次、持久交付和 Host 恢复都有独立实现。主要缺口在真实渠道验证、全双工交互和托管部署。
+        </p>
+        <div class="hero-meta mono">
+          <span>静态代码审计</span>
+          <span>未重跑全量测试</span>
+          <span>当前工作树含未提交改动</span>
+        </div>
+      </div>
+      <aside class="verdict-box">
+        <div class="box-label mono">结论摘要</div>
+        <div class="verdict-row"><b>79%</b><span>机制覆盖：22 完整、11 部分、2 未完成</span></div>
+        <div class="verdict-row"><b>≈35%</b><span>真实生产证据：真实模型、渠道、设备和部署组合</span></div>
+        <div class="verdict-row"><b>3 层</b><span>Main 负责对话，Router 负责拆单，Worker 负责执行</span></div>
+        <div class="verdict-note">代码层面，核心流程已经跑通。产品层面，本机桌面可用。生产层面，外部环境验证仍不完整。</div>
+      </aside>
+    </div>
+  </header>
+
+  <div class="snapshot">
+    <div class="snapshot-inner">
+      <div class="snapshot-item"><b>42,553</b><span>领域核心代码行</span></div>
+      <div class="snapshot-item"><b>54,502</b><span>DSH 产品面代码行</span></div>
+      <div class="snapshot-item"><b>242</b><span>测试文件，本次未重跑</span></div>
+      <div class="snapshot-item"><b>174</b><span>产品接口</span></div>
+    </div>
+  </div>
+
+  <main class="page" id="top">
+    <section class="section" id="summary">
+      <div class="section-head">
+        <div class="section-no mono">01 / 结论</div>
+        <div>
+          <h2>先看四件事</h2>
+          <p class="section-lede">后面的表和图都在展开这四点，细节可以暂时跳过。</p>
+        </div>
+      </div>
+      <div class="section-body">
+        <div class="lead">
+          如果只看代码，<strong>核心工作流程已经贯通</strong>；如果看真实产品，仍处在“本机可用，外部环境验证不足”的阶段。
+        </div>
+        <div class="findings">
+          <article class="finding">
+            <b>1. 架构从两层变成三层</b>
+            <p>报告里的旧原型是 Router 直接面对用户，再加 Worker 执行。当前拆出了独立 Main，用户只和 Main 对话。</p>
+          </article>
+          <article class="finding">
+            <b>2. 工具权限已经隔离</b>
+            <p>Main 和 Router 没有文件、Shell 工具，Worker 才拿到执行工具。旧报告里“Router 靠提示词不执行”的判断已过时。</p>
+          </article>
+          <article class="finding">
+            <b>3. 可靠性实现比较完整</b>
+            <p>Ticket 和 Session 解耦，执行有代次，外部结果未知会保留，Host 重启需要重新取得写权。</p>
+          </article>
+          <article class="finding">
+            <b>4. 产品层还有明显缺口</b>
+            <p>Main 忙碌时不能继续发消息，没有 100 词 IM 硬限制，渠道能力不齐，单 Host 也没有水平扩展。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="architecture">
+      <div class="section-head">
+        <div class="section-no mono">02 / 架构</div>
+        <div>
+          <h2>现在的请求路径</h2>
+          <p class="section-lede">
+            用户只和 Main 说话。Main 把任务交给 Router，Router 拆成 Ticket，Worker 在指定环境中执行。
+            Worker 完成后先提交结果和证据，Main 再写给用户，最后由 Outbox 发回原渠道。
+          </p>
+        </div>
+      </div>
+      <div class="section-body">
+        <figure class="arch-figure">
+          <img src="assets/architecture-simple.svg" alt="DS-SuperAgent 简化架构：用户、Main、Router、Ticket、Worker、执行环境，以及右侧的状态、结果和监督模块。">
+          <figcaption class="figure-caption">
+            <span>简化为 6 个执行步骤，右侧是可靠性和回复路径。</span>
+            <span><a href="assets/architecture-simple.svg">打开 SVG</a> · <a href="archive/detailed-v1.html">查看旧版详细图</a></span>
+          </figcaption>
+        </figure>
+
+        <article class="diagram">
+          <div class="diagram-head">
+            <h3>请求怎么流动</h3>
+            <span class="mono">diagrams/simplified-workflow.mmd</span>
+          </div>
+          <pre class="mermaid">
+flowchart LR
+    U["用户 / 渠道"] --> M["Main<br/>对话与委托"]
+    M -->|"WorkBrief"| R["Router<br/>拆解任务"]
+    R -->|"Ticket"| W["Worker<br/>执行与验证"]
+    W -->|"结果 + 证据"| D["Delivery / Outbox"]
+    D -->|"Main 生成回复后发送"| U
+          </pre>
+          <p class="diagram-note">Mermaid 源文件在同目录 <code>diagrams/simplified-workflow.mmd</code>。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="mechanisms">
+      <div class="section-head">
+        <div class="section-no mono">03 / 核心机制</div>
+        <div>
+          <h2>关键机制只列 13 项</h2>
+          <p class="section-lede">完整 35 项评分在 <code>evidence/01-domain-runtime.md</code>。这里只保留判断完成度时最需要的部分。</p>
+        </div>
+      </div>
+      <div class="section-body">
+        <div class="table-wrap">
+          <table>
+            <colgroup><col style="width:23%"><col style="width:61%"><col style="width:16%"></colgroup>
+            <thead><tr><th>机制</th><th>当前做法</th><th>状态</th></tr></thead>
+            <tbody>
+              <tr><td>三层角色</td><td>Main 是唯一用户入口，Router 拆解任务，Worker 执行。三者有独立模型和 Session。</td><td><span class="status done">完成</span></td></tr>
+              <tr><td>工具边界</td><td>每个 Session 先清空默认工具，再按角色注册。Main 和 Router 没有文件、Shell 权限。</td><td><span class="status done">完成</span></td></tr>
+              <tr><td>工单与执行代次</td><td>Ticket 是业务单位，Assignment 是一次执行尝试。迟到回调带代次，不能唤醒新执行。</td><td><span class="status done">完成</span></td></tr>
+              <tr><td>Thread 与订阅</td><td>新事件先进入来源处理；已有 Worker 订阅的 Thread 直接生成 WorkInput，不再经过 Router。</td><td><span class="status done">完成</span></td></tr>
+              <tr><td>两级过滤</td><td>确定性的 Gate 先过滤来源、身份和 @ 关系；没有明确规则的候选再交给 Router 语义判断。</td><td><span class="status done">完成</span></td></tr>
+              <tr><td>结果交付</td><td>Worker 只提交 report，Main 生成用户可见文字，Router 核对后写 Delivery，Outbox 负责发送和回执。</td><td><span class="status done">完成</span></td></tr>
+              <tr><td>后台执行</td><td>Worker 支持后台命令、PTY 和子 Agent。完成事件回到原 Assignment，不阻塞主回合。</td><td><span class="status done">完成</span></td></tr>
+              <tr><td>上下文读取</td><td>ContextCard 提供 4–16 KiB 分页和下一跳引用。局部性组装仍需模型主动调用。</td><td><span class="status partial">部分</span></td></tr>
+              <tr><td>主动与监督</td><td>Proactive rules 支持 observe / auto；Supervisor 只提出暂停或纠偏建议，需要用户批准。</td><td><span class="status partial">部分</span></td></tr>
+              <tr><td>远端执行 / BYOM</td><td>已配对设备可执行文件、搜索、命令和资产操作，身份用密钥固定。设备入口仍是开发脚本。</td><td><span class="status partial">代码完成</span></td></tr>
+              <tr><td>算存分离</td><td>业务库和 Session 都能切 PostgreSQL，但每个 Instance 仍只有一个 Host 和一个 Router。</td><td><span class="status partial">部分</span></td></tr>
+              <tr><td>长期记忆</td><td>Main 可查询和提议记忆，Worker 需授权。缺少跨月摘要、归档和回收策略。</td><td><span class="status partial">部分</span></td></tr>
+              <tr><td>真实模型实验</td><td>有 Qwen3.5 9B 小样本和 mock 等负载测试，没有文章级真实模型、token 和延迟消融。</td><td><span class="status missing">缺</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="comparison">
+      <div class="section-head">
+        <div class="section-no mono">04 / 对照报告</div>
+        <div>
+          <h2>哪些结论仍然成立，哪些已经过时</h2>
+          <p class="section-lede">Claude 的报告准确描述了文章和旧原型，但旧原型不等于当前仓库。</p>
+        </div>
+      </div>
+      <div class="section-body">
+        <div class="table-wrap">
+          <table>
+            <colgroup><col style="width:20%"><col style="width:34%"><col style="width:46%"></colgroup>
+            <thead><tr><th>项目</th><th>Claude 报告里的旧原型</th><th>当前 DS-SuperAgent</th></tr></thead>
+            <tbody>
+              <tr><td>角色结构</td><td>Router / Worker 两层，Router 面对用户。</td><td>Main / Router / Worker 三层，Main 面对用户。</td></tr>
+              <tr><td>Router 工具</td><td>仍有 Bash 和 read，只能靠提示词约束。</td><td>没有文件和 Shell 工具，DSH 工具白名单强制限制。</td></tr>
+              <tr><td>订阅单位</td><td>Ticket 订阅 Thread，不绑定 Session。</td><td>继续保留，并增加了 WorkItem、Assignment 代次和所有权。</td></tr>
+              <tr><td>Worker 对外</td><td>Executor 可以直接确认、开 PR、回评论。</td><td>Worker 只提交结果和问题；最终回复由 Main 和 Outbox 发出。</td></tr>
+              <tr><td>异步执行</td><td>前台命令超时转后台，完成时唤醒。</td><td>使用显式后台命令、PTY 和子 Agent；Main UI 仍不能在忙碌时插入新消息。</td></tr>
+              <tr><td>存储</td><td>单机 SQLite。</td><td>SQLite 或 PostgreSQL；Session 也有独立持久化实现。</td></tr>
+              <tr><td>执行环境</td><td>与主 Session 同机运行。</td><td>本地目录或已配对远端设备，选择后不会静默回退。</td></tr>
+              <tr><td>Watchdog</td><td>另一个 profile 每小时检查退出码。</td><td>外部 Watchdog 负责进程恢复，Host 内 Supervisor 负责语义巡检和提案。</td></tr>
+              <tr><td>多信道</td><td>飞书和 GitHub。</td><td>UI、飞书、GitHub、8 类配对 IM、定时任务；邮箱仍是手动收件箱，不是 Source。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="two-col" style="margin-top:26px">
+          <div class="plain-box">
+            <h3>报告仍然准确</h3>
+            <ul>
+              <li>Router 和 Worker 的职责拆分仍然成立。</li>
+              <li>Thread 订阅、上下文预算和链式读取仍是核心。</li>
+              <li>当前桌面默认仍是单机 Host，因此“没有云端无状态计算”仍部分成立。</li>
+            </ul>
+          </div>
+          <div class="plain-box">
+            <h3>报告已经过时</h3>
+            <ul>
+              <li>当前是 Main / Router / Worker 三层架构。</li>
+              <li>当前 Worker 只提交结果和问题，最终回复由 Main 和 Outbox 发出。</li>
+              <li>当前支持 PostgreSQL、远端设备和 Supervisor，不再是单机 SQLite 原型。</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="completion">
+      <div class="section-head">
+        <div class="section-no mono">05 / 完成度</div>
+        <div>
+          <h2>两个百分比，分别代表什么</h2>
+          <p class="section-lede">79% 衡量文章机制在代码中是否有对应实现；35% 是真实生产证据的粗略估计，不是测试通过率。</p>
+        </div>
+      </div>
+      <div class="section-body">
+        <div class="completion-grid">
+          <aside class="score-card">
+            <div class="score-label mono">当前评估</div>
+            <div class="score-row"><b>79%</b><span>机制覆盖<br>22 完成 / 11 部分 / 2 缺口</span></div>
+            <div class="score-row"><b>≈35%</b><span>生产证据<br>真实模型、渠道、设备、部署组合</span></div>
+            <p class="score-note">机制覆盖按 35 项等权评分，完整 1 分，部分 0.5 分。真实证据没有统一分母，只作强弱判断。</p>
+          </aside>
+          <div class="completion-copy">
+            <p><strong>代码层：</strong>Main、Router、Worker，WorkBrief、Ticket、Assignment，Delivery、Outbox、Host lease 都已经落到代码和测试入口。</p>
+            <p><strong>产品层：</strong>桌面默认路径可用，支持本地工作、问题卡、停止、恢复、设置和只读执行记录。远端设备、托管数据库和独立 Watchdog 需要额外部署。</p>
+            <p><strong>生产层：</strong>已有本地 Qwen3.5 9B、真实 GitHub 回执、Windows 安装升级和 Ubuntu 远端设备证据。真实飞书、8 类 IM、托管 PostgreSQL、离线 stop/resume 和同 SHA 全量 CI 仍未闭合。</p>
+            <div class="table-wrap">
+              <table class="level-table">
+                <thead><tr><th>层级</th><th>结果</th><th>说明</th></tr></thead>
+                <tbody>
+                  <tr><td>核心领域逻辑</td><td><span class="status done">基本完成</span></td><td>有代码、有测试入口；本次没有重跑全量。</td></tr>
+                  <tr><td>桌面默认路径</td><td><span class="status done">可用</span></td><td>仅限本机 Host；外部渠道和远端需要配置。</td></tr>
+                  <tr><td>生产组合验收</td><td><span class="status partial">部分</span></td><td>真实环境证据分散，尚未形成同版本连续链路。</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="gaps">
+          <div class="gap"><span class="g-no">P0</span><div><b>Main 还是半双工</b><p>Main 正在回复时输入框禁止提交，只能停止回复；工作可以并行，但对话不能随时插入。</p></div></div>
+          <div class="gap"><span class="g-no">P0</span><div><b>真实渠道覆盖不足</b><p>飞书、8 类 IM、邮件和部分 GitHub 路径仍缺真实账号、配额、限流和重连验收。</p></div></div>
+          <div class="gap"><span class="g-no">P0</span><div><b>没有无状态计算平面</b><p>状态可以外置到 PostgreSQL，但每个 Instance 仍是单 Host、单 Router，没有水平扩展方案。</p></div></div>
+          <div class="gap"><span class="g-no">P1</span><div><b>100 词限制没有落地</b><p>当前只有字符上限和“简短”提示，没有按词数执行的硬约束。</p></div></div>
+          <div class="gap"><span class="g-no">P1</span><div><b>渠道问答能力不一致</b><p>飞书有 Q-code 结构化回答，GitHub 和多数 IM 没有等价解析。</p></div></div>
+          <div class="gap"><span class="g-no">P1</span><div><b>长期记忆没有归档策略</b><p>历史读取有上限，但没有跨月摘要、冷存、回收和统一成本控制。</p></div></div>
+          <div class="gap"><span class="g-no">P1</span><div><b>BYOM 还不是产品级 daemon</b><p>设备端入口是开发脚本，没有安装、开机自启、自动升级和生产网络加固。</p></div></div>
+          <div class="gap"><span class="g-no">P1</span><div><b>发布证据需要同一 SHA 收口</b><p>历史 CI 有成功也有失败，当前工作树还有未提交改动。</p></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="docs">
+      <div class="section-head">
+        <div class="section-no mono">06 / 证据</div>
+        <div>
+          <h2>材料位置与范围</h2>
+          <p class="section-lede">页面只做摘要。领域、UI、桌面三份审计保留了路径、行号和边界条件。</p>
+        </div>
+      </div>
+      <div class="section-body">
+        <div class="table-wrap" style="margin-bottom:18px">
+          <table>
+            <thead><tr><th>项目</th><th>数据</th><th>备注</th></tr></thead>
+            <tbody>
+              <tr><td>领域核心</td><td>138 个文件，42,553 行</td><td><code>superagent/src/</code></td></tr>
+              <tr><td>DSH 产品面</td><td>201 个文件，54,502 行</td><td><code>superagent/dsh/src/</code></td></tr>
+              <tr><td>桌面主进程</td><td>6,805 行</td><td><code>app/src/</code></td></tr>
+              <tr><td>测试</td><td>242 个测试文件</td><td>149 domain + 48 DSH + 45 desktop；未重跑</td></tr>
+              <tr><td>设置页</td><td>10 组，27 个分区</td><td>由 <code>settings-navigation.js</code> 导出</td></tr>
+              <tr><td>外部 IM</td><td>8 个平台</td><td>真实账号未验收</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="downloads">
+          <a class="download" href="evidence/01-domain-runtime.md"><span><b>领域与运行时审计</b><span>436 行，含代码路径和 35 项评分</span></span><span class="arrow">↗</span></a>
+          <a class="download" href="evidence/02-dsh-product-surface.md"><span><b>DSH / UI 产品面审计</b><span>544 行，含 UI、协议和渠道差异</span></span><span class="arrow">↗</span></a>
+          <a class="download" href="evidence/03-desktop-delivery.md"><span><b>桌面与部署审计</b><span>189 行，含启动、隔离、远端和 Watchdog</span></span><span class="arrow">↗</span></a>
+          <a class="download" href="assets/architecture-simple.svg"><span><b>简化架构 SVG</b><span>页面主图源文件</span></span><span class="arrow">↗</span></a>
+          <a class="download" href="diagrams/simplified-workflow.mmd"><span><b>工作流程 Mermaid</b><span>页面时序图源文件</span></span><span class="arrow">↗</span></a>
+          <a class="download" href="audit-data.json"><span><b>机器可读数据</b><span>指标、评分和主要风险</span></span><span class="arrow">↗</span></a>
+        </div>
+        <div class="method-note">
+          <b>边界：</b>本报告是静态代码审计和现有实施记录核对，不是全量测试结果。真实模型、真实渠道、第二设备、托管数据库和发布验收仍需在同一候选版本上单独执行。
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>DS-SuperAgent 架构审计 · 2026-11-24 · 快照 d03bb434</span>
+    <span><a href="README.md">目录说明</a> · <a href="archive/detailed-v1.html">旧版详细报告</a> · <a href="#top">回到顶部 ↑</a></span>
+  </footer>
+
+  <script src="assets/mermaid.min.js"></script>
+  <script>
+    if (globalThis.mermaid) {
+      globalThis.mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: 'loose',
+        theme: 'base',
+        themeVariables: {
+          background: '#fbfaf6',
+          primaryColor: '#e8f0f3',
+          primaryTextColor: '#1c2b33',
+          primaryBorderColor: '#6f929f',
+          secondaryColor: '#f4ead7',
+          secondaryTextColor: '#392e1d',
+          secondaryBorderColor: '#b08a4b',
+          tertiaryColor: '#e7efe7',
+          tertiaryTextColor: '#28392d',
+          tertiaryBorderColor: '#78927b',
+          lineColor: '#5f747d',
+          textColor: '#28353c',
+          fontFamily: '"Microsoft YaHei UI", "PingFang SC", sans-serif',
+          fontSize: '14px',
+          actorBkg: '#e8f0f3',
+          actorBorder: '#6f929f',
+          actorTextColor: '#1c2b33',
+          signalColor: '#5f747d',
+          signalTextColor: '#25343b',
+          noteBkgColor: '#f4ead7',
+          noteTextColor: '#392e1d',
+          noteBorderColor: '#b08a4b'
+        },
+        flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis', nodeSpacing: 44, rankSpacing: 58 }
+      });
+      globalThis.mermaid.run({ nodes: document.querySelectorAll('pre.mermaid') }).catch(error => {
+        console.error('Mermaid render failed', error);
+      });
+    }
+  </script>
+</body>
+</html>

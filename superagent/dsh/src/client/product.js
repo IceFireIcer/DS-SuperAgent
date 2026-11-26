@@ -17,11 +17,14 @@ import { ChatSecrets, CHAT_SECRET_CSS } from './chat-secrets.js'
 import { ProductMemorySettings, PRODUCT_MEMORY_CSS } from './product-memory.js'
 import { ProductSupervisionSettings, PRODUCT_SUPERVISION_CSS } from './product-supervision.js'
 import { FolderMenu, FOLDER_CSS } from './folder-menu.js'
+import { MENU_TRIGGER_CSS } from './anchored-menu.js'
+import { MenuSelect, MENU_SELECT_CSS } from './menu-select.js'
 import { createSource } from './sources.js'
 import { mergeMessages, mergeObservationItems, projectNativeTurnCards, projectTurnCards, rebaseRoleDraft } from './product-state.js'
 import { installLocale, t } from './i18n.js'
 import { AppearanceSettings, installAppearance } from './appearance.js'
 import { SettingsShell, SETTINGS_CHILDREN, SETTINGS_SHELL_CSS, installSettingsSections } from './settings-shell.js'
+import { settingsTarget } from './settings-navigation.js'
 import { SettingsSectionState } from './settings-sections.js'
 import { FeedbackSettings } from './settings-feedback.js'
 import { BuiltinPluginSettings } from './settings-builtin-plugins.js'
@@ -43,13 +46,22 @@ import { ProductWorkView } from './product-work-view.js'
 import { ProductOperationsSettings, PRODUCT_OPERATIONS_CSS } from './product-operations.js'
 import { USAGE_HEATMAP_CSS } from './usage-heatmap.js'
 import { PRODUCT_SETTINGS_CSS } from './product-settings-css.js'
+import { ProviderSettingsPage, PROVIDER_SETTINGS_CSS } from './provider-settings.js'
 import { call, productCall } from './api.js'
 export { productCall } from './api.js'
 
 const clientBridge = () => window.dsSuperagentApp?.productClient
 const classicBridge = () => window.dsSuperagentApp?.classicAgent
 const focusMainInput = () => document.getElementById('main-message')?.focus()
-const returnTo = trigger => { if (trigger?.isConnected) trigger.focus(); else focusMainInput() }
+const focusAvailable = element => {
+  if (!element?.isConnected || element.matches(':disabled') || element.closest('[hidden], [inert]')) return false
+  element.focus()
+  return element.ownerDocument.activeElement === element
+}
+const returnTo = trigger => {
+  if (focusAvailable(trigger) || focusAvailable(document.getElementById('main-message'))) return
+  Array.from(document.querySelectorAll('[data-superagent-settings-trigger]')).some(focusAvailable)
+}
 
 function offerDownload(data, name, mediaType = 'application/octet-stream') {
   const url = URL.createObjectURL(new Blob([data], { type: mediaType }))
@@ -88,7 +100,7 @@ export function applyProduct(ctx) {
     mainEvidenceLoading: false,
     mainEvidenceError: null,
     error: null,
-    mainDraft: '',
+    mainDraft: { text: '' },
     mainAttachments: [],
     mainUploading: false,
     mainSending: false,
@@ -113,6 +125,7 @@ export function applyProduct(ctx) {
     activityLoading: false,
     activityError: null,
     settingsOpen: false,
+    settingsVisit: 0,
     settingsPage: null,
     nativeModelsOpen: false,
     signInOpen: false,
@@ -128,6 +141,7 @@ export function applyProduct(ctx) {
   })
   const useView = () => useSyncExternalStore(view.subscribe, view.getSnapshot)
   let settingsTrigger
+  const settingsLeaveRequest = { current: null }
   let signInTrigger
   let stopped = false
   let modelSettingsRequest = 0
@@ -268,7 +282,9 @@ export function applyProduct(ctx) {
 
   const effectiveTarget = state => {
     const target = state.directoryOptions?.execution?.policy?.defaultTarget
-    return state.executionTarget ?? (target === 'remote-only' || target === 'auto' ? target : 'local-only')
+    const configured = target === 'remote-only' || target === 'auto' ? target : 'local-only'
+    if (state.executionTarget) return state.executionTarget
+    return !state.directoryOptions?.default && !state.connection?.connected ? 'auto' : configured
   }
   const mainBusy = state => state.mainSending || Boolean(state.activeTurn)
     || state.messages.some(message => ['queued', 'running', 'stopping'].includes(message.status))
@@ -1027,6 +1043,7 @@ export function applyProduct(ctx) {
         questionInComposer: work === question,
         onEvidence: selected => { if (state.binding) void loadMainEvidence(state.binding, selected) } }))) : null
     const [sendError, setSendError] = useState(null)
+    const [sendErrorCode, setSendErrorCode] = useState(null)
     const { mainAttachments: attachments, mainUploading: uploading } = state
     const setAttachments = update => view.set(current => ({ ...current,
       mainAttachments: typeof update === 'function' ? update(current.mainAttachments) : update }))
@@ -1153,11 +1170,21 @@ export function applyProduct(ctx) {
       finally { view.set(current => ({ ...current, mainSending: false })) }
     }
     const sendText = async text => {
+      const submittedDraft = view.getSnapshot().mainDraft
       try {
         const receipt = await send(text)
-        if (receipt.status === 'failed') throw new Error(t('Main could not finish this reply. Your message is saved.'))
+        if (submittedDraft.text === text) view.set(current => current.mainDraft === submittedDraft
+          ? { ...current, mainDraft: { text: '' } } : current)
+        if (receipt.status === 'failed') {
+          setSendError(t('Main could not finish this reply. Your message is saved.'))
+          setSendErrorCode(null)
+        }
         return true
-      } catch (error) { setSendError(error.message); return false }
+      } catch (error) { setSendError(error.message); setSendErrorCode(error.code ?? null); return false }
+    }
+    const retryPending = () => {
+      const text = pending.current?.text
+      if (typeof text === 'string' && text) void sendText(text)
     }
     const latestSend = useRef(send)
     latestSend.current = send
@@ -1186,62 +1213,87 @@ export function applyProduct(ctx) {
       if (attachments.length) { setSendError(t('Remove attached files before changing execution targets.')); return }
       view.set(current => ({ ...current, executionTarget: value, localEnvironmentOverride: null, remoteEnvironmentOverride: null }))
     }
+    const environmentDetail = environment => [
+      environment.root,
+      environment.eligible ? null : t('Not eligible'),
+    ].filter(Boolean).join(' · ')
+    const environmentTitle = environment => [
+      environment.root,
+      environment.eligible ? t('Eligible') : t('Not eligible'),
+      environment.version ? `${t('Version')}: ${environment.version}` : null,
+      environment.deviceId ? `${t('Device')}: ${environment.deviceId}` : null,
+      ...(environment.reasons ?? []).map(capabilityReasonCopy),
+    ].filter(Boolean).join(' · ')
+    const environmentOptions = environments => environments.map(environment => ({
+      value: environment.id,
+      label: environment.label || environment.title || environment.id,
+      detail: environmentDetail(environment),
+      title: environmentTitle(environment),
+    }))
+    const contextWarning = selectedEnvironment && !selectedEnvironment.eligible
+      ? [t('Not eligible'), ...(selectedEnvironment.reasons ?? []).map(capabilityReasonCopy)].join(' · ')
+      : executionTarget === 'remote-only' && !selectedEnvironmentId
+        ? t('No remote Environment is available. This work will wait for an eligible device.')
+        : null
     const targetControl = execution ? h('div', { className: 'bt-main-directory' },
-      h('span', { className: 'bt-main-label' }, t('Execution target')),
-      h('select', { className: 'bt-select', 'aria-label': t('Execution target'), value: executionTarget,
-        onChange: event => chooseTarget(event.target.value), disabled: busy || state.directoryBusy },
-      h('option', { value: 'local-only' }, t('Local')),
-      h('option', { value: 'remote-only' }, t('Remote only')),
-      h('option', { value: 'auto' }, t('Auto'))),
-      executionTarget === 'remote-only' ? h('select', { className: 'bt-select', 'aria-label': t('Remote Environment'),
-        value: selectedRemoteEnvironment?.id ?? '', onChange: event => {
+      h(MenuSelect, { className: 'bt-choice-target', label: t('Execution target'), value: executionTarget,
+        options: [{ value: 'local-only', label: t('Local') }, { value: 'remote-only', label: t('Remote only') },
+          { value: 'auto', label: t('Auto') }],
+        onChange: chooseTarget, disabled: busy || state.directoryBusy,
+        dismiss: state.settingsOpen || state.connectOpen || state.signInOpen }),
+      executionTarget === 'remote-only' ? h(MenuSelect, {
+        className: 'bt-choice-environment', label: t('Remote Environment'),
+        value: selectedRemoteEnvironment?.id ?? '',
+        options: [{ value: '', label: t('Choose an authorized remote Environment') },
+          ...environmentOptions(remoteEnvironments)],
+        onChange: value => {
           if (attachments.length) { setSendError(t('Remove attached files before changing Environments.')); return }
-          view.set(current => ({ ...current, remoteEnvironmentOverride: event.target.value || null }))
-        }, disabled: busy },
-      h('option', { value: '' }, t('Choose an authorized remote Environment')),
-      remoteEnvironments.map(environment => h('option', { key: environment.id, value: environment.id },
-        `${environment.label || environment.title || environment.id} · ${environment.root}`))) : null,
-      state.connection?.connected && executionTarget === 'local-only' ? h('select', { className: 'bt-select',
-        'aria-label': t('Local Environment'), value: selectedLocalEnvironmentId ?? '',
-        onChange: event => view.set(current => ({ ...current, localEnvironmentOverride: event.target.value || null })) },
-      h('option', { value: '' }, t('Choose an authorized local Environment')),
-      localEnvironments.map(environment => h('option', { key: environment.id, value: environment.id },
-        `${environment.title || environment.id} · ${environment.root}`))) : null,
-      selectedEnvironment ? h('span', { className: 'bt-main-directory-note' },
-        `${selectedEnvironment.eligible ? t('Eligible') : t('Not eligible')}`
-        + `${selectedEnvironment.version ? ` · ${t('Version')}: ${selectedEnvironment.version}` : ''}`
-        + `${selectedEnvironment.deviceId ? ` · ${t('Device')}: ${selectedEnvironment.deviceId}` : ''}`
-        + `${selectedEnvironment.reasons?.length ? ` · ${selectedEnvironment.reasons.map(capabilityReasonCopy).join('; ')}` : ''}`) : null,
-      h('span', { className: 'bt-main-directory-note' }, executionTarget === 'auto'
-        ? t('This work chooses an eligible Environment when its Ticket starts. Attachments need an exact target.')
-        : executionTarget === 'remote-only' && !selectedEnvironmentId
-          ? t('No remote Environment is available. This work will wait for an eligible device.')
-          : t('New work uses this Environment. Active work keeps its original binding.'))) : null
+          view.set(current => ({ ...current, remoteEnvironmentOverride: value || null }))
+        }, disabled: busy, dismiss: state.settingsOpen || state.connectOpen || state.signInOpen,
+      }) : null,
+      state.connection?.connected && executionTarget === 'local-only' ? h(MenuSelect, {
+        className: 'bt-choice-environment', label: t('Local Environment'), value: selectedLocalEnvironmentId ?? '',
+        options: [{ value: '', label: t('Choose an authorized local Environment') },
+          ...environmentOptions(localEnvironments)],
+        onChange: value => view.set(current => ({ ...current, localEnvironmentOverride: value || null })),
+        dismiss: state.settingsOpen || state.connectOpen || state.signInOpen,
+      }) : null,
+      contextWarning ? h('span', { className: 'bt-main-directory-note bt-main-directory-warning', role: 'status' },
+        contextWarning) : null) : null
     const composer = question ? h(MainWorkCard, { work: question, questionOnly: true, key: question.control.attention.id })
       : h(MainComposer, { onSend: sendText, onStop: canCommand && state.activeTurn ? stop : undefined, busy, stopping,
       directoryBusy: state.directoryBusy, ready: Boolean(state.binding && execution), readOnly: !canCommand,
       error: sendError ?? state.error,
-      value: state.mainDraft, onValueChange: mainDraft => view.set(current => ({ ...current, mainDraft })),
+      errorAction: sendError && pending.current && ['NETWORK', 'STORAGE_UNAVAILABLE'].includes(sendErrorCode) ? retryPending : undefined,
+      value: state.mainDraft.text, onValueChange: text => view.set(current => ({ ...current, mainDraft: { text } })),
       voice: voiceState, onVoiceStart: state.binding ? startVoice : undefined,
       onVoicePause: () => mainVoice.pause(), onVoiceResume: startVoice, onVoiceClose: mainVoice.close,
       attachments, uploading, onRemoveAttachment: removeAttachment,
       speechRemote: () => ctx.get('remote.speech') ?? undefined,
       onFiles: !state.connection?.connected && executionTarget !== 'auto' && selectedEnvironmentId
         ? files => void uploadFiles(files) : undefined,
-      directoryControl: execution ? h('div', { className: 'bt-main-directory' },
+      directoryControl: execution ? h('div', { className: 'bt-main-context' },
         targetControl, h(MainWorkDirectory)) : null })
     const showModelSetup = !question && state.binding && !state.connection?.connected
     let modelChoice
     if (showModelSetup && state.mainModelSetup) {
       modelChoice = h(SuperagentModelChoice, { setup: state.mainModelSetup, saveKey: saveSetupKey,
         refreshModels: refreshModelSettings, focusMain: focusMainInput,
-        signIn: canSignIn() ? openSignIn : undefined, openModels: () => shellActions.openSettings('models'),
+        signIn: canSignIn() ? openSignIn : undefined,
+        openModels: event => shellActions.openSettings('models', { trigger: event.currentTarget }),
         openCustomModels: hasNativeSettings('models') ? openCustomModels : undefined,
-        openRoles: () => shellActions.openSettings('roles') })
+        openRoles: event => shellActions.openSettings('roles', { trigger: event.currentTarget, modelGuide: true }) })
     } else if (showModelSetup && state.modelSettingsError) {
       modelChoice = h('div', { className: 'bt-superagent-model-dock' },
         h('p', { className: 'bt-main-error', role: 'alert' }, t('Could not check which models are available.')),
-        h('button', { className: 'bt-model-chip', type: 'button', onClick: () => { void refreshModelSettings() } }, t('Retry')))
+        h('button', { className: 'bt-model-chip', type: 'button', onClick: () => {
+          focusMainInput()
+          view.set(current => ({ ...current, modelSettingsError: false }))
+          void refreshModelSettings()
+        } }, t('Retry')))
+    } else if (showModelSetup && state.modelsNeedSetup === null) {
+      modelChoice = h('div', { className: 'bt-superagent-model-dock' },
+        h('p', { className: 'bt-main-status', role: 'status' }, t('Checking model setup…')))
     }
     if (composerOnly) {
       const entries = sessionEvents?.entries ?? []
@@ -1274,7 +1326,8 @@ export function applyProduct(ctx) {
         clientBridge() ? h('button', { type: 'button', className: 'bt-soft', onClick: () => view.set(current => ({ ...current, connectOpen: true })) },
           state.connection?.connected ? t('Connection') : t('Connect to Host')) : null,
         !state.connection?.connected ? h('button', { type: 'button', className: 'bt-icon-btn bt-main-settings', title: t('Settings'),
-          'aria-label': t('Settings'), onClick: () => shellActions.openSettings() }, h(SlidersIcon)) : null),
+          'aria-label': t('Settings'), 'data-superagent-settings-trigger': '',
+          onClick: event => shellActions.openSettings('overview', { trigger: event.currentTarget }) }, h(SlidersIcon)) : null),
       state.modelsNeedSetup ? h('p', { className: 'bt-main-health-warning', role: 'alert' },
         t('Open Settings to select models for Main, Router and Worker.'))
         : state.health?.state === 'degraded' ? h('p', { className: 'bt-main-health-warning', role: 'alert' },
@@ -1354,7 +1407,8 @@ export function applyProduct(ctx) {
           h('strong', null, observation?.title ?? state.selectedObservation?.title ?? '')),
         h('span', { className: 'bt-observation-readonly' }, t('Read-only')),
         !state.connection?.connected ? h('button', { type: 'button', className: 'bt-icon-btn', title: t('Settings'), 'aria-label': t('Settings'),
-          onClick: () => shellActions.openSettings() }, h(SlidersIcon)) : null),
+          'data-superagent-settings-trigger': '',
+          onClick: event => shellActions.openSettings('overview', { trigger: event.currentTarget }) }, h(SlidersIcon)) : null),
       h('div', { className: 'bt-observation-body' },
         h(ActivityNavigation),
         state.observationLoading && !observation ? h('p', { role: 'status', className: 'bt-main-status' }, t('Loading history…')) : null,
@@ -1533,18 +1587,24 @@ export function applyProduct(ctx) {
           onClick: () => { void revoke(client) } }, t('Revoke')))))
   }
 
-  function SettingsDialog({ binding, onClose, open, initialPage, renderSlot, returnFocus }) {
+  function SettingsDialog({ binding, onClose, onModelReady, open, initialPage, renderSlot, returnFocus }) {
     const viewState = useView()
     const [snapshot, setSnapshot] = useState(null)
     const [draft, setDraft] = useState(null)
     const [base, setBase] = useState(null)
+    const [baseRevision, setBaseRevision] = useState(null)
     const [efforts, setEfforts] = useState({})
-    const [keyDrafts, setKeyDrafts] = useState({})
     const [error, setError] = useState(null)
     const [notice, setNotice] = useState(null)
     const [conflict, setConflict] = useState(false)
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
+    const [refreshFailed, setRefreshFailed] = useState(false)
+    const mainModelField = useRef(null)
+    const rebaseFocus = useRef(false)
+    const rolesRetry = useRef(null)
+    const guideLanding = useRef(Boolean(onModelReady))
+    const guideRoles = useRef(Boolean(onModelReady))
     const draftRef = useRef(draft)
     const draftVersion = useRef(0)
     const savingRef = useRef(false)
@@ -1569,6 +1629,7 @@ export function applyProduct(ctx) {
         draftVersion.current += 1
         setDraft(nextDraft)
         setBase(clone(value.roles))
+        setBaseRevision(value.revision)
         void loadEfforts(value.roles)
       }
     }
@@ -1587,6 +1648,18 @@ export function applyProduct(ctx) {
       }
     }
     useEffect(() => { void load() }, [binding.instanceId])
+    useEffect(() => {
+      if (open && guideLanding.current && mainModelField.current) {
+        guideLanding.current = false
+        mainModelField.current.focus()
+      }
+    }, [open, loading, draft])
+    useEffect(() => {
+      if (!saving && rebaseFocus.current) {
+        rebaseFocus.current = false
+        if (open) mainModelField.current?.focus()
+      }
+    }, [open, saving])
     const updateRole = (role, change) => {
       if (savingRef.current) return
       draftVersion.current += 1
@@ -1626,6 +1699,24 @@ export function applyProduct(ctx) {
       }
       return null
     }
+    const refreshSavedRoles = async () => {
+      try {
+        const latest = await readModelSettings(binding, 50)
+        if (rolesRetry.current?.matches(':focus')) rolesRetry.current.closest('[role=dialog]')?.querySelector('[aria-current=page]')?.focus()
+        applySnapshot(latest, true)
+        setRefreshFailed(false)
+        if (guideRoles.current && !mainModelSetup(latest)) onModelReady()
+      } catch {
+        setRefreshFailed(true)
+      }
+    }
+    const retrySavedRoles = async () => {
+      if (savingRef.current) return
+      savingRef.current = true
+      setSaving(true)
+      try { await refreshSavedRoles() }
+      finally { savingRef.current = false; setSaving(false) }
+    }
     const save = async () => {
       if (savingRef.current) return
       const problem = validate()
@@ -1636,16 +1727,16 @@ export function applyProduct(ctx) {
       setSaving(true); setError(null); setNotice(null)
       try {
         const value = await productCall('settings-save', { instanceId: binding.instanceId, commandId: crypto.randomUUID(),
-          expectedRevision: snapshot.revision, roles: submitted })
+          expectedRevision: baseRevision, roles: submitted })
         const editedDuringSave = draftVersion.current !== submittedVersion
         const nextDraft = editedDuringSave ? rebaseRoleDraft(submitted, draftRef.current, value.roles) : clone(value.roles)
         setSnapshot(current => ({ ...current, ...value, providers: current.providers, history: current.history }))
         setBase(clone(value.roles)); setDraft(nextDraft); draftRef.current = nextDraft
+        setBaseRevision(value.revision)
         draftVersion.current += 1
         setConflict(false)
         setNotice(t('Configuration v{revision} is active for new turns.', { revision: value.revision }))
-        const latest = await readModelSettings(binding, 50)
-        applySnapshot(latest, true)
+        await refreshSavedRoles()
       } catch (failure) {
         if (failure.code === 'CONFIG_REVISION_CONFLICT') {
           setConflict(true)
@@ -1653,7 +1744,9 @@ export function applyProduct(ctx) {
         } else setError(failure.message)
       } finally { savingRef.current = false; setSaving(false) }
     }
-    const rebase = async () => {
+    const rebase = async trigger => {
+      if (savingRef.current) return
+      savingRef.current = true
       setSaving(true); setError(null)
       try {
         const latest = await readModelSettings(binding, 50)
@@ -1662,30 +1755,16 @@ export function applyProduct(ctx) {
         draftRef.current = merged
         draftVersion.current += 1
         setDraft(merged); setBase(clone(latest.roles)); setConflict(false)
+        rebaseFocus.current = trigger.matches(':focus')
         setNotice(t('Your changed fields were applied over configuration v{revision}. Review and save.', { revision: latest.revision }))
       } catch (failure) { setError(failure.message) }
-      finally { setSaving(false) }
+      finally { savingRef.current = false; setSaving(false) }
     }
     const refreshAfterPreset = async () => {
       const latest = await readModelSettings(binding, 50)
       applySnapshot(latest)
       setConflict(false)
       setError(null)
-    }
-    const saveKey = async (provider, value) => {
-      if (value === undefined) return
-      setError(null); setNotice(null)
-      try {
-        const result = await productCall('provider-key', { instanceId: binding.instanceId, provider, value })
-        setKeyDrafts(current => ({ ...current, [provider]: '' }))
-        setSnapshot(current => ({ ...current, providers: current.providers.map(item => item.id === provider
-          ? { ...item, key: { ...item.key, configured: result.configured } } : item) }))
-        setNotice(value === null ? t('Provider key removed.') : t('Provider key saved.'))
-        void refreshModelSettings(binding)
-      } catch (failure) {
-        setKeyDrafts(current => ({ ...current, [provider]: '' }))
-        setError(failure.message)
-      }
     }
     const chooseDefaultDirectory = async path => {
       if (!path || viewState.directoryBusy) return
@@ -1716,13 +1795,34 @@ export function applyProduct(ctx) {
     const loadingSettings = loading ? h(SettingsSectionState, { status: 'loading' }) : h(Fragment, null,
       h(SettingsSectionState, { status: 'error', message: error }),
       h('button', { type: 'button', className: 'bt-soft', onClick: () => { void load() } }, t('Retry')))
-    const roles = draft && !loading ? h(Fragment, null,
+    const rolesDirty = Boolean(base && draft && roleRows.some(([role]) => {
+      const original = base[role]
+      const edited = draft[role]
+      return original?.instructions !== edited?.instructions || original?.model?.provider !== edited?.model?.provider
+        || original?.model?.model !== edited?.model?.model || original?.model?.effort !== edited?.model?.effort
+    }))
+    const discardRoleDraft = () => {
+      const clean = clone(base)
+      draftRef.current = clean
+      draftVersion.current += 1
+      setDraft(clean)
+      setConflict(false)
+      setError(null)
+      setNotice(null)
+      setRefreshFailed(false)
+    }
+    const roles = close => draft && !loading ? h(Fragment, null,
             error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
             viewState.directoryError ? h('p', { className: 'bt-main-error', role: 'alert' }, viewState.directoryError) : null,
             conflict ? h('div', { className: 'bt-main-settings-conflict', role: 'status' },
               h('p', null, t('Newer settings exist. Rebase only your changed fields, then review and save.')),
-              h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: saving, onClick: () => { void rebase() } }, t('Rebase my edits'))) : null,
+              h('button', { type: 'button', className: 'bt-soft bt-soft-sm', 'aria-disabled': saving,
+                onClick: event => { void rebase(event.currentTarget) } }, t('Rebase my edits'))) : null,
             notice ? h('p', { className: 'bt-main-status', role: 'status' }, notice) : null,
+            refreshFailed ? h('div', null,
+              h('p', { className: 'bt-main-status', role: 'status' }, t('Configuration saved. Could not refresh model settings.')),
+              h('button', { type: 'button', className: 'bt-soft', ref: rolesRetry, 'aria-disabled': saving,
+                onClick: () => { void retrySavedRoles() } }, t('Retry'))) : null,
             models.length === 0 ? h('p', { className: 'bt-main-health-warning', role: 'alert' },
               t('No models are available. Configure a provider in DSH settings, then reopen this panel to select the role models.'))
               : rolesNeedingModels({ roles: draft, providers: snapshot.providers }).length ? h('p', { className: 'bt-main-health-warning', role: 'alert' },
@@ -1735,6 +1835,7 @@ export function applyProduct(ctx) {
               return h(Card, { key: role, title: label },
                 h(Row, { label: t('Model'), hint: t('The provider and model this role uses. New turns use the saved version.') },
                   h('select', { className: 'bt-select bt-main-settings-select', 'aria-label': t('{role} model', { role: label }), value: ref,
+                    ref: role === 'main' ? mainModelField : undefined,
                     disabled: saving,
                     onChange: event => { void updateModel(role, event.target.value) } },
                   !models.some(model => model.ref === ref) ? h('option', { value: ref }, ref) : null,
@@ -1753,7 +1854,8 @@ export function applyProduct(ctx) {
                   h('span', { className: 'bt-main-settings-route' }, ref)))
             }),
             h('div', { className: 'bt-actions bt-main-settings-save' },
-              h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: saving, onClick: onClose }, t('Cancel')),
+              rolesDirty ? h('span', { role: 'status' }, t('Unsaved role changes')) : null,
+              h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: saving, onClick: close }, t('Cancel')),
               h('button', { type: 'button', className: 'bt-send bt-soft bt-soft-sm', disabled: saving, onClick: () => { void save() } },
                 saving ? t('Saving…') : t('Save configuration'))),
             h(Card, { title: t('Recent configuration uses') },
@@ -1763,25 +1865,15 @@ export function applyProduct(ctx) {
                 h('span', null, refOf(use[use.role] ?? use.worker ?? use.router)),
                 h('span', { className: 'bt-main-settings-use-session', title: use.sessionId }, use.sessionId),
                 h('time', null, new Date(use.createdAt).toLocaleString()))) : h('p', { className: 'bt-main-status' }, t('No role turn has recorded a configuration version yet.')))) : loadingSettings
-    const providers = snapshot ? h(Fragment, null,
-            error ? h('p', { className: 'bt-main-error', role: 'alert' }, error) : null,
-            notice ? h('p', { className: 'bt-main-status', role: 'status' }, notice) : null,
-            h(Card, { title: t('Providers') },
-              snapshot.providers.length ? snapshot.providers.map(provider => h('div', { key: provider.id, className: 'bt-main-provider' },
-                h('div', { className: 'bt-main-provider-copy' }, h('strong', null, provider.name), h('span', null, t('{count} models', { count: provider.models.length }))),
-                provider.key ? h('div', { className: 'bt-main-provider-key' },
-                  h('span', { role: 'status' }, provider.key.configured ? t('API key configured') : t('API key missing')),
-                  provider.key.writable ? h(Fragment, null,
-                    h('input', { type: 'password', value: keyDrafts[provider.id] ?? '', autoComplete: 'off', 'aria-label': t('{provider} API key', { provider: provider.name }),
-                      disabled: saving, placeholder: t('Paste a new key'), onChange: event => setKeyDrafts(current => ({ ...current, [provider.id]: event.target.value })) }),
-                    h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: saving || !(keyDrafts[provider.id] ?? '').trim(),
-                      onClick: () => { void saveKey(provider.id, keyDrafts[provider.id]) } }, t('Save key')),
-                    provider.key.configured ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm bt-bs-danger',
-                      disabled: saving, onClick: () => { void saveKey(provider.id, null) } }, t('Remove key')) : null) : h('span', null, t('Set outside this product'))) : null))
-                : h('p', { className: 'bt-main-status' }, t('No provider catalog is available. Configure providers in DSH settings.')))) : loadingSettings
+    const providers = h(ProviderSettingsPage, {
+      instanceId: binding.instanceId,
+      call: productCall,
+      roles: snapshot ? roleRows.map(([id, label]) => ({ id, label, model: snapshot.roles[id]?.model })) : [],
+      onChanged: () => { void load({ preserve: draft !== null }) },
+    })
     const pageProps = { binding, call: productCall }
     const pages = {
-      general: h(Fragment, null, h(AppearanceSettings, { ctx }),
+      general: h(Fragment, null,
         viewState.directoryError ? h('p', { className: 'bt-main-error', role: 'alert' }, viewState.directoryError) : null,
         viewState.directoryOptions ? h(Card, { title: t('Work directories') },
           viewState.directoryOptions.default?.unavailable ? h('p', { role: 'alert', className: 'bt-main-error' },
@@ -1792,7 +1884,7 @@ export function applyProduct(ctx) {
               run: promise => void Promise.resolve(promise).catch(failure =>
                 view.set(current => ({ ...current, directoryError: failure.message }))),
               onPick: chooseDefaultDirectory, disabled: viewState.directoryBusy }))) : null),
-      roles,
+      appearance: h(AppearanceSettings, { ctx }),
       models: providers,
       'built-in-plugins': h(BuiltinPluginSettings, pageProps),
       execution: h(ProductExecutionSettings, { ...pageProps, onChanged: () => { void loadDirectories(binding) } }),
@@ -1817,6 +1909,7 @@ export function applyProduct(ctx) {
       'remote-clients': h(ClientSettings, { binding }),
     }
     const sections = Object.fromEntries(Object.entries(pages).map(([id, content]) => [id, { render: () => content }]))
+    sections.roles = { render: ({ close }) => roles(close) }
     const useNativeModels = viewState.nativeModelsOpen && renderSlot && hasNativeSettings('models')
     if (useNativeModels) sections.models = { render: ({ close }) =>
       renderSlot('settings.section', { close }, { only: 'models', fallback: providers }) }
@@ -1824,8 +1917,23 @@ export function applyProduct(ctx) {
     sections.status = { render: ({ navigate }) => h(ProductOperationsSettings, { ...pageProps, section: 'status', onNavigate: navigate }) }
     sections.feedback = { render: ({ navigate }) => h(FeedbackSettings, { ...pageProps, onNavigate: navigate,
       ...(viewState.connection?.connected ? { app: null } : {}) }) }
-    return h(SettingsShell, { open, onClose, returnFocus, initialPage, renderSlot, sections,
-      onNavigate: useNativeModels ? previous => { if (previous === 'models') void load({ preserve: draft !== null }) } : undefined })
+    const overviewModels = snapshot?.providers.flatMap(provider => provider.models) ?? []
+    const overview = {
+      loading,
+      needsModel: !loading && snapshot !== null && overviewModels.length === 0,
+      modelCount: overviewModels.length,
+      roles: snapshot ? roleRows.map(([role, label]) => ({ id: role, label,
+        model: snapshot.roles[role]?.model ? refOf(snapshot.roles[role].model) : '' })) : [],
+    }
+    return h(SettingsShell, { open, onClose, returnFocus, initialPage, renderSlot, sections, overview,
+      roleDraft: { dirty: rolesDirty, saving: () => savingRef.current, discard: discardRoleDraft }, leaveRequest: settingsLeaveRequest,
+      onNavigate: previous => {
+        if (previous === 'roles') {
+          guideLanding.current = false
+          guideRoles.current = false
+        }
+        if (useNativeModels && previous === 'models') void load({ preserve: draft !== null })
+      } })
   }
 
   function ConnectionDialog({ connection, onClose }) {
@@ -1954,7 +2062,8 @@ export function applyProduct(ctx) {
       'data-native-main-question': sessionState?.get(state.binding?.mainSessionId)?.pendingInteraction ? '' : undefined },
       h('span', { role: 'status' }, state.modelsNeedSetup ? t('Models need setup') : mainHealthCopy(state.health)),
       h('button', { type: 'button', className: 'bt-icon-btn bt-main-settings', 'aria-label': t('Settings'),
-        onClick: () => shellActions.openSettings() }, h(SlidersIcon)))
+        'data-superagent-settings-trigger': '',
+        onClick: event => shellActions.openSettings('overview', { trigger: event.currentTarget }) }, h(SlidersIcon)))
   }
 
   const slotEntries = name => ctx.slots.entries?.(name) ?? []
@@ -1977,7 +2086,7 @@ export function applyProduct(ctx) {
     view.set(state => ({ ...state, signInOpen: false }))
     void refreshModelSettings()
   }
-  const openCustomModels = () => shellActions.openSettings('models', { nativeModels: true })
+  const openCustomModels = event => shellActions.openSettings('models', { nativeModels: true, trigger: event.currentTarget })
 
   function SignInDialog({ renderSlot }) {
     useEffect(() => {
@@ -2003,8 +2112,15 @@ export function applyProduct(ctx) {
     const trigger = settingsTrigger
     return h(Fragment, null,
       state.binding && !state.connection?.connected && state.settingsPage ? h(SettingsDialog, { binding: state.binding,
-        key: `${state.settingsPage}:${state.nativeModelsOpen}`, open: state.settingsOpen, initialPage: state.settingsPage, renderSlot,
-        returnFocus: () => returnTo(trigger),
+        key: state.settingsVisit, open: state.settingsOpen, initialPage: state.settingsPage, renderSlot,
+        onModelReady: state.settingsFromModelGuide ? () => {
+          const current = view.getSnapshot()
+          if (current.settingsOpen && current.settingsVisit === state.settingsVisit && !current.connection?.connected
+            && current.binding?.instanceId === state.binding.instanceId && !current.mainModelSetup) {
+            view.set({ ...current, settingsOpen: false })
+          }
+        } : undefined,
+        returnFocus: () => { if (!view.getSnapshot().settingsOpen) returnTo(trigger) },
         onClose: () => {
           view.set(current => ({ ...current, settingsOpen: false }))
           void refreshModelSettings()
@@ -2127,11 +2243,21 @@ export function applyProduct(ctx) {
       if (nativeSession && !usesProductHistory(state)) ctx.layout.selectPanel('superagent-activity')
       if (state.binding) void loadObservations(state.binding, { reset: true })
     },
-    openSettings(settingsPage = 'general', { nativeModels = false, trigger = document.activeElement } = {}) {
+    openSettings(settingsPage = 'overview', { nativeModels = false, trigger = document.activeElement, modelGuide = false } = {}) {
       const state = view.getSnapshot()
-      if (!state.binding || state.connection?.connected) return
-      settingsTrigger = trigger
-      view.set({ ...state, settingsOpen: true, settingsPage, nativeModelsOpen: nativeModels })
+      if (!state.binding || state.connection?.connected || !settingsTarget(settingsPage)) {
+        reportError(t('This setting is unavailable here.'))
+        return
+      }
+      const open = () => {
+        const current = view.getSnapshot()
+        if (current.binding?.instanceId !== state.binding.instanceId || current.connection?.connected) return
+        settingsTrigger = trigger
+        view.set({ ...current, settingsOpen: true, settingsVisit: current.settingsVisit + 1, settingsPage,
+          nativeModelsOpen: nativeModels, settingsFromModelGuide: modelGuide })
+      }
+      if (state.settingsOpen && settingsLeaveRequest.current) settingsLeaveRequest.current(open, trigger)
+      else open()
     },
     openConnection() { if (clientBridge()) view.set(current => ({ ...current, connectOpen: true })) },
   }
@@ -2156,7 +2282,7 @@ export function applyProduct(ctx) {
   })
   shellSteps.push(() => installSettingsSections(ctx.slots), () => installAppearance(ctx.get('theme')))
   const register = (name, component, options = {}) => ctx.slots.inject(name, () => ctx.slots.register({ name, priority: -200, ...options }, component))
-  const conversationSteps = [() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SETTINGS_SHELL_CSS + PRODUCT_SETTINGS_CSS + FOLDER_CSS + PRODUCT_CSS + MODEL_ONBOARDING_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + CHAT_SECRET_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_COMPUTER_CSS + PRODUCT_EXECUTION_CSS + PRODUCT_OPERATIONS_CSS + USAGE_HEATMAP_CSS + WORK_BOARD_CSS + MAIN_VOICE_CSS, 'main')]
+  const conversationSteps = [() => installCompiledStyles(SHELL_CSS + CONVERSATION_CSS + SETTINGS_SHELL_CSS + PRODUCT_SETTINGS_CSS + PROVIDER_SETTINGS_CSS + MENU_TRIGGER_CSS + FOLDER_CSS + MENU_SELECT_CSS + PRODUCT_CSS + MODEL_ONBOARDING_CSS + PRODUCT_SCHEDULE_CSS + PRODUCT_CREDENTIAL_CSS + CHAT_SECRET_CSS + PRODUCT_PRESET_CSS + PRODUCT_PROACTIVE_CSS + PRODUCT_SUPERVISION_CSS + PRODUCT_MEMORY_CSS + PRODUCT_BROWSER_CSS + PRODUCT_COMPUTER_CSS + PRODUCT_EXECUTION_CSS + PRODUCT_OPERATIONS_CSS + USAGE_HEATMAP_CSS + WORK_BOARD_CSS + MAIN_VOICE_CSS, 'main')]
   if (!nativeSession) conversationSteps.push(() => register('main.conversation', ProductSurface))
   else {
     conversationSteps.push(() => installMainCells(ctx), () => register('conversation.header.leading', NativeMainActions))
@@ -2272,18 +2398,35 @@ const PRODUCT_CSS = `
 .bt-main-composer{width:min(800px,100% - 32px);margin:16px auto 20px;padding:12px;border:1px solid var(--bt-line);border-radius:16px;background:var(--bt-card)}
 .bt-main-composer textarea{display:block;width:100%;resize:vertical;min-height:80px;max-height:200px;padding:4px;border:0;background:transparent;color:var(--bt-ink);font:inherit;font-size:14px;line-height:22px;box-sizing:border-box}
 .bt-main-composer textarea:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px;border-radius:4px}
+.bt-main-composer-form{display:flex;flex-direction:column;gap:8px;padding:8px 12px;margin:12px auto 16px;border-radius:18px}
+.bt-main-composer-form .bt-main-input-label,.bt-main-context .bt-main-label{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.bt-main-composer-form textarea{min-height:32px;max-height:144px;resize:none;overflow-y:hidden;padding:5px 6px}
+.bt-main-context{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0}
+.bt-main-context>.bt-main-directory{min-width:0;margin:0;gap:6px}
+.bt-main-context .bt-model-trigger{min-height:32px;max-width:min(260px,52vw);padding:4px 8px}
+.bt-main-context .bt-model-provider{display:none}
+.bt-main-context .bt-choice-target .bt-model-name{max-width:8em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bt-main-attachments,.bt-main-message-attachments{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
 .bt-main-attachment{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:4px 7px;border:1px solid var(--bt-line);border-radius:6px;color:var(--bt-ink-2);font-size:12px;overflow-wrap:anywhere}
 .bt-main-attachment button{border:0;background:transparent;color:var(--bt-ink);cursor:pointer;font:inherit}
 .bt-main-attachment button:focus-visible,.bt-main-message-attachments button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 .bt-main-read-aloud{margin:4px 0 4px 12px}.bt-main-read-aloud:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 .bt-main-send button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
-.bt-main-directory{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}.bt-main-directory .bt-main-label{margin:0}.bt-main-directory-note{color:var(--bt-ink-2);font-size:11px;line-height:16px}.bt-main-directory .bt-main-error{width:100%;margin:0}
-.bt-main-send{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
+.bt-main-directory{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}.bt-main-directory .bt-main-label{margin:0}.bt-main-directory-note{color:var(--bt-ink-2);font-size:12px;line-height:18px}.bt-main-directory-warning{color:var(--bt-warn)}.bt-main-directory .bt-main-error{width:100%;margin:0}
+.bt-main-send{display:flex;align-items:center;gap:8px;margin-top:2px}
+.bt-main-tools{display:flex;align-items:center;flex:1 1 auto;flex-wrap:wrap;gap:6px;min-width:0}
+.bt-main-tools>.bt-main-context{flex:1 1 280px;gap:6px}
 .bt-main-send button{height:36px;min-width:64px}
+.bt-main-send .bt-main-icon-btn,.bt-main-send .bt-main-submit{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;min-width:36px;padding:0;border:0;border-radius:50%;cursor:pointer}
+.bt-main-send .bt-main-icon-btn{background:var(--bt-hover);color:var(--bt-ink-2)}
+.bt-main-send .bt-main-icon-btn:hover:not(:disabled){background:var(--bt-active);color:var(--bt-ink)}
+.bt-main-send .bt-main-voice-toggle{background:var(--bt-accent);color:var(--bt-accent-ink)}
+.bt-main-send .bt-main-submit{background:var(--bt-accent);color:var(--bt-accent-ink)}
+.bt-main-send .bt-main-submit:disabled{opacity:.42;cursor:default}
 .bt-main-label{display:block;margin:0 0 6px;font-size:12px;color:var(--bt-ink-2)}
 .bt-main-empty{margin:48px 0;color:var(--bt-ink-2);font-size:14px;line-height:22px;text-align:center}
 .bt-main-error{margin:8px 0;color:var(--bt-danger);font-size:13px;line-height:18px}
+.bt-main-error-action{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}.bt-main-error-action p{margin:0;min-width:0}.bt-main-error-action button{flex:none}
 .bt-main-status{color:var(--bt-ink-2);font-size:13px;line-height:18px}
 .bt-main-system-fact{padding:10px 12px;border:1px solid var(--bt-line);border-radius:8px;background:var(--bt-card);color:var(--bt-ink-2);font-size:12px;line-height:18px}
 .bt-main-system-fact>span{display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.05em;font-size:10px}.bt-main-system-fact p{margin:0;color:var(--bt-ink)}
@@ -2392,5 +2535,5 @@ const PRODUCT_CSS = `
 .bt-main-settings-use{display:grid;grid-template-columns:auto auto minmax(0,1fr) minmax(80px,1.5fr) auto;align-items:center;gap:8px;padding:8px 12px;font-size:var(--bt-font-caption);line-height:16px;color:var(--bt-ink-2)}
 .bt-main-settings-use+.bt-main-settings-use{border-top:.5px solid var(--bt-line)}
 .bt-main-settings-use-session{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-@media(max-width:640px){.bt-main-history,.bt-observation-body{padding:16px}.bt-main-header,.bt-observation-header{padding-left:16px;padding-right:16px}.bt-main-header{flex-wrap:wrap;height:auto;min-height:56px}.bt-main-health-detail{width:100%;margin-left:38px}.bt-main-health-warning{padding-left:16px;padding-right:16px}.bt-observation-header{align-items:flex-start;flex-wrap:wrap}.bt-observation-heading{order:3;width:100%}.bt-observation-summary{flex-direction:column}.bt-observation-facts{grid-template-columns:1fr}.bt-observation-generation{grid-template-columns:1fr}.bt-main-settings-dialog .bt-settings-nav{height:auto}.bt-main-settings-revision{padding:4px 8px}.bt-main-provider{align-items:stretch;flex-direction:column}.bt-main-provider-key{justify-content:flex-start}.bt-main-settings-use{grid-template-columns:auto auto minmax(0,1fr)}.bt-main-settings-use-session,.bt-main-settings-use time{grid-column:1/-1}.bt-main-settings-route{max-width:100%}}
+@media(max-width:640px){.bt-main-history,.bt-observation-body{padding:16px}.bt-main-header,.bt-observation-header{padding-left:16px;padding-right:16px}.bt-main-header{flex-wrap:wrap;height:auto;min-height:56px}.bt-main-health-detail{width:100%;margin-left:38px}.bt-main-health-warning{padding-left:16px;padding-right:16px}.bt-main-context{gap:4px}.bt-main-context .bt-model-trigger{max-width:56vw}.bt-main-context .bt-main-directory-note{flex:1 0 100%}.bt-main-composer-form{width:calc(100% - 24px);padding:8px 10px;margin:8px auto 10px}.bt-main-send{gap:6px}.bt-main-send .bt-main-icon-btn,.bt-main-send .bt-main-submit{width:34px;height:34px;min-width:34px}.bt-main-tools>.bt-main-context{flex-basis:100%}.bt-observation-header{align-items:flex-start;flex-wrap:wrap}.bt-observation-heading{order:3;width:100%}.bt-observation-summary{flex-direction:column}.bt-observation-facts{grid-template-columns:1fr}.bt-observation-generation{grid-template-columns:1fr}.bt-main-settings-dialog .bt-settings-nav{height:auto}.bt-main-settings-revision{padding:4px 8px}.bt-main-provider{align-items:stretch;flex-direction:column}.bt-main-provider-key{justify-content:flex-start}.bt-main-settings-use{grid-template-columns:auto auto minmax(0,1fr)}.bt-main-settings-use-session,.bt-main-settings-use time{grid-column:1/-1}.bt-main-settings-route{max-width:100%}}
 `
