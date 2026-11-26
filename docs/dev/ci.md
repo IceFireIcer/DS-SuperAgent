@@ -14,8 +14,18 @@ Full validation also runs the product-client suite, app and mobile checks, Windo
 
 The desktop checks log the candidate SHA, package version, architecture, and fingerprints. They compare the packaged client bundle with the candidate checkout before launching Main. The Linux AppImage and installed deb must both find the authorized fixture workspace before submitting to the mock model. On Windows, the installed app uses a local feed to download the next build, quits normally, and starts again with the same Main, messages, settings, and usage. A separate Windows probe exercises work questions and the two stop actions. The Windows job uploads the desktop visual cases and logs keyboard, focus, and reduced-motion results.
 
-Full validation runs automatically for pull requests into `main` and as a required dependency of `release.yml` for both pre-releases and stable releases, including manual release dry runs. The release workflow cannot publish npm packages or upload release artifacts unless this gate succeeds. The GitHub `release: published` trigger means the release page already exists at that point; the release PR checks provide the validation before that page is published.
+Full validation remains an explicit **full** run. It is not part of the rolling release schedule: the release workflow builds and checks every desktop package before it publishes the draft release, while the complete test matrix remains available from **DS-SuperAgent CI → Run workflow → full**.
 
 For an extra full check on any branch, open **DS-SuperAgent CI → Run workflow**, and enable **full**. A normal manual run uses the daily smoke selection. In both modes, **Test result** fails if a required job fails, is cancelled or is skipped. Release validation requires all jobs in the full matrix to pass.
 
-For a Windows x64 public preview candidate, run the same workflow with **desktop_preview** instead of **full**. It builds only the Windows package, runs the packaged preview probe, and keeps the installer, SHA-256 identity, and probe evidence as artifacts. This path is for candidate acceptance, not a replacement for complete release validation.
+## Rolling releases
+
+The **Release** workflow runs every day at `04:00 UTC` (`12:00 UTC+8`) and can also be started manually. Each run starts from `main`, merges `origin/dev` unless **sync_dev** is disabled, and chooses the next version from the commits and diff since the last `v*` release tag:
+
+- the first release is `1.0.0`;
+- a breaking-change marker, at least 250 changed files, or at least 12,000 changed lines requests a major bump;
+- a `feat` commit, at least 30 changed files, or at least 2,000 changed lines requests a minor bump;
+- every other change requests a patch bump;
+- a manual **patch**, **minor**, or **major** choice overrides the automatic scale.
+
+An unchanged tree skips the run. The workflow commits the selected version to `main`, creates a draft GitHub release, builds Windows, macOS arm64/x64, and Linux packages, writes the build record, publishes the npm package, and only then makes the release public. A dry run only prints the selected version.

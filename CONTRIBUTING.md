@@ -25,7 +25,7 @@ Anyone on the team can do any kind of work: triage, bug fixes, features, the int
 | Branch | What it is | Who merges |
 |---|---|---|
 | `dev` | Integration branch. Daily work is committed here; all fixes and features land here first | Every collaborator, when CI passes |
-| `main` | Released code only. It changes when the maintainer merges `dev` for a release, or merges a hotfix | The maintainer |
+| `main` | Released code only. The rolling Release workflow merges `dev` for each release; hotfixes merge directly | The maintainer |
 | `fix/<issue>-<name>`, `feat/<issue>-<name>`, `docs/<name>`, `chore/<name>` | Optional short-lived branch when a change needs isolation or review. Start it from the latest `dev` | Delete it after merge |
 
 - Keep the branch list short: only `dev` and `main` stay long-lived. After a temporary branch is merged, delete it locally and on `origin`.
@@ -72,9 +72,9 @@ Keep one pull request to one issue. Split a large change into several pull reque
 ### Releases (maintainer)
 
 1. In a pull request into `dev`, set the version in `superagent/package.json` and write the `CHANGELOG.md` section from the Changelog sentences of the merged pull requests.
-2. Open a pull request from `dev` into `main` titled `release: vX.Y.Z`. List every `Fixes #<number>` of the release in its description, so that these issues close when it is merged.
-3. Before you merge it, run the [release checklist](docs/dev/release-checklist.md) (in Chinese) on a real Windows machine, and on macOS when the change touches it, and post the result in the pull request. Merge it with a merge commit and publish a GitHub release `vX.Y.Z` on `main`. The Release workflow checks that the tag matches the version and is on `main`, runs the checks and publishes the package to npm (a pre-release version under the npm tag `next`). Do not run `npm publish` by hand.
-4. For a hotfix, start `fix/hot-<name>` from `main`, open the pull request into `main`, release a patch version, then merge `main` into `dev`.
+2. Do not edit versions or publish by hand. The **Release** workflow runs daily at 12:00 UTC+8 and can also be started manually with `auto`, `patch`, `minor` or `major`. It merges `dev` into `main`, chooses the version, builds every desktop package, publishes npm and the draft GitHub release, then makes the release public only after every job succeeds.
+3. Use the [release checklist](docs/dev/release-checklist.md) (in Chinese) to review a draft release. A manual dry run prints the selected version without pushing or publishing.
+4. For a hotfix, start `fix/hot-<name>` from `main`, open the pull request into `main`, then start Release manually with `sync_dev` disabled and `patch`. Merge `main` into `dev` afterwards.
 
 ## Set up
 
