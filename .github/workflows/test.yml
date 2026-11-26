@@ -278,10 +278,6 @@ jobs:
           npm run build --prefix ../superagent
       - run: npm ci --no-fund --no-audit
       - run: npm run dist
-      - name: Check the Windows x64 public preview package
-        env:
-          DESKTOP_PREVIEW_EVIDENCE_DIR: ${{ runner.temp }}/desktop-preview
-        run: node scripts/check-packed.mjs 'dist-pack/win-unpacked/DS SuperAgent.exe' --preview
       - name: Record the Windows x64 preview candidate
         shell: pwsh
         run: |
@@ -301,6 +297,10 @@ jobs:
             filename = $installer.Name
             sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $installer.FullName).Hash.ToLowerInvariant()
           } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'candidate.json') -Encoding utf8
+      - name: Check the Windows x64 public preview package
+        env:
+          DESKTOP_PREVIEW_EVIDENCE_DIR: ${{ runner.temp }}/desktop-preview
+        run: node scripts/check-packed.mjs 'dist-pack/win-unpacked/DS SuperAgent.exe' --preview
       - name: Check Windows package coexistence and capture desktop visual cases
         run: |
           sha256sum dist-pack/DS-SuperAgent-*-win-x64.exe
