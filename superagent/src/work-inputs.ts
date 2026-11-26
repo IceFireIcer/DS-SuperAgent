@@ -1,8 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { CoreError, identifier, triggerDeliveryTarget, type DesktopSource, type Source, type Work } from './model.js'
+import { CoreError, identifier, triggerDeliveryTarget, type DesktopSource, type PathGrant, type Source, type Work } from './model.js'
 import type { AsyncTx, Storage } from './storage.js'
 import type { SourceEvent, SourceEvents } from './source-events.js'
 import type { EffectRequest } from './effects.js'
+
+const pathGrantOperationOrder = ['read', 'write', 'search', 'command'] as const
 
 export interface ThreadSubscription {
   id: string
@@ -124,6 +126,7 @@ export interface MainFollowUpAttachmentRequest {
   text: string
   authorId: string
   reason: string
+  pathGrants?: PathGrant[]
 }
 
 export interface WorkNote {
@@ -431,6 +434,25 @@ export class WorkInputs {
     const trigger = await tx.get<Work['trigger']>('trigger', ticket.triggerId)
     if (!trigger) throw new CoreError('INCOMPLETE_STATE', 'The Main follow-up Ticket trigger is missing.')
     const nextDirectionVersion = directionVersion + 1
+    if (request.pathGrants?.length) {
+      const grantKey = (path: string) => process.platform === 'win32' ? path.toLowerCase() : path
+      const grants = new Map((trigger.pathGrants ?? []).map(grant =>
+        [grantKey(grant.path), { path: grant.path, operations: new Set(grant.operations) }]))
+      for (const grant of request.pathGrants) {
+        const key = grantKey(grant.path)
+        const current = grants.get(key)
+        const operations = current?.operations ?? new Set()
+        for (const operation of grant.operations) operations.add(operation)
+        grants.set(key, { path: current?.path ?? grant.path, operations })
+      }
+      trigger.pathGrants = [...grants.values()].map(grant => ({ path: grant.path,
+        operations: pathGrantOperationOrder.filter(operation => grant.operations.has(operation)) }))
+      trigger.pathGrantVersion = nextDirectionVersion
+      await tx.replace('trigger', ticket.triggerId, trigger)
+      const link = await tx.get<{ workBriefId: string }>('work-ticket', ticket.id)
+      const brief = link ? await tx.get<{ pathGrants?: PathGrant[] }>('work-brief', link.workBriefId) : undefined
+      if (brief) await tx.replace('work-brief', link!.workBriefId, { ...brief, pathGrants: structuredClone(trigger.pathGrants) })
+    }
     const recoveryDecisionId = previousState === 'ended'
       ? await this.recordRecovery(tx, ticket, sourceEventId, id)
       : undefined

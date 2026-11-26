@@ -27,11 +27,23 @@ test('delegated path grants are Ticket-scoped, operation-specific and expire on 
   await writeFile(externalFile, 'outside the project\n')
   const canonicalExternalFile = await realpath(externalFile)
   let firstGrantRead = false
+  let grantedWorkItemId
   function* respond(options) {
     if (options.model === 'main') {
       const text = lastUserText(options)
       if (text.startsWith('[Work update]')) {
         yield* textResponse('Work update received.')
+        return
+      }
+      if (text.includes('Authorize external write')) {
+        if (completedToolCount(options) === 0) {
+          yield* toolResponse('follow_up_work', {
+            workItemId: grantedWorkItemId,
+            text: 'Append the authorized line to the external note and report it.',
+            reason: 'The user explicitly authorized the external path for this task.',
+            pathGrants: [{ path: externalFile, operations: ['read', 'write'] }],
+          })
+        } else yield* textResponse('The authorized write was directed to the original work item.')
         return
       }
       if (completedToolCount(options) === 0) {
@@ -75,6 +87,18 @@ test('delegated path grants are Ticket-scoped, operation-specific and expire on 
           artifacts: externalFile }],
       ][calls]
       yield* resumed ? toolResponse(resumed[0], resumed[1], `resumed-${calls}`) : textResponse('Parent finished after its child.')
+      return
+    }
+    if (text.includes('Append the authorized line')) {
+      const expanded = [
+        ['read_file', { path: externalFile }],
+        ['write_file', { path: externalFile, text: 'outside the project\nauthorized write\n' }],
+        ['read_file', { path: externalFile }],
+        ['report_ready', { result: 'The authorized external file was updated.',
+          evidence: 'Read the newly granted path, wrote it, and read the result back.',
+          artifacts: externalFile }],
+      ][calls]
+      yield* expanded ? toolResponse(expanded[0], expanded[1], `expanded-${calls}`) : textResponse('Expanded work done.')
       return
     }
     if (text.includes('without path grant')) {
@@ -128,6 +152,7 @@ test('delegated path grants are Ticket-scoped, operation-specific and expire on 
 
   let history = await engine.getMainConversation({ instanceId: 'personal' })
   const granted = history.works[0]
+  grantedWorkItemId = granted.brief.workItemId
   assert.deepEqual(granted.brief.pathGrants, [{ path: externalFile, operations: ['read'] }])
   assert.equal(granted.outcome.artifacts[0].path, canonicalExternalFile)
   const firstTicket = await storage.transaction('personal', tx => tx.get('ticket', granted.receipt.ticketId))
@@ -139,6 +164,20 @@ test('delegated path grants are Ticket-scoped, operation-specific and expire on 
   assert.match(child.result.text, /outside the project/u)
   await until(async () => (await storage.transaction('personal', tx => tx.get('ticket', granted.receipt.ticketId)))?.state === 'ended',
     'the first Ticket to end')
+
+  await engine.sendMainMessage({ instanceId: 'personal', commandId: 'authorize-external-write',
+    text: 'Authorize external write for this work item and append a line.' })
+  await until(async () => await readFile(externalFile, 'utf8') === 'outside the project\nauthorized write\n',
+    'the authorized external write')
+  const expandedTicket = await storage.transaction('personal', tx => tx.get('ticket', granted.receipt.ticketId))
+  const expandedTrigger = await storage.transaction('personal', tx => tx.get('trigger', firstTicket.triggerId))
+  assert.equal(expandedTicket.directionVersion, 2)
+  assert.equal(expandedTrigger.pathGrantVersion, 2)
+  assert.deepEqual(expandedTrigger.pathGrants, [{ path: externalFile, operations: ['read', 'write'] }])
+  history = await engine.getMainConversation({ instanceId: 'personal' })
+  const expandedCard = history.works.find(work => work.brief.workItemId === granted.brief.workItemId)
+  assert.deepEqual(expandedCard.brief.pathGrants, [{ path: externalFile, operations: ['read', 'write'] }])
+  assert.deepEqual(expandedCard.followUps.at(-1).pathGrants, [{ path: externalFile, operations: ['read', 'write'] }])
 
   await engine.sendMainMessage({ instanceId: 'personal', commandId: 'ungranted-read',
     text: 'Read the external note without path grant and finish unrelated project work.' })
@@ -152,20 +191,20 @@ test('delegated path grants are Ticket-scoped, operation-specific and expire on 
   assert.equal(secondConversation.reports[0].toolFacts[0].outcome, 'failed')
   assert.equal(secondConversation.reports[0].toolFacts[0].output.code, 'PATH_DENIED')
   assert.equal(await readFile(join(root, 'second-note.txt'), 'utf8'), 'second task\n')
-  assert.equal(await readFile(externalFile, 'utf8'), 'outside the project\n')
+  assert.equal(await readFile(externalFile, 'utf8'), 'outside the project\nauthorized write\n')
 
   await engine.directMainWork({ instanceId: 'personal', commandId: 'follow-up-path-check',
     workItemId: granted.brief.workItemId, ticketId: granted.receipt.ticketId,
     text: 'follow-up path check: read the external note again and stay within this task.' })
-  await until(async () => (await engine.conversation(granted.receipt.ticketId)).reports[0]?.directionVersion === 2,
+  await until(async () => (await engine.conversation(granted.receipt.ticketId)).reports[0]?.directionVersion === 3,
     'the follow-up report')
   const followed = await engine.conversation(granted.receipt.ticketId)
   assert.ok(followed.reports[0].toolFacts.some(fact => fact.tool === 'read_file'
     && fact.outcome === 'failed' && fact.output.code === 'PATH_DENIED'))
   const afterFollowUpTicket = await storage.transaction('personal', tx => tx.get('ticket', granted.receipt.ticketId))
   const afterFollowUpTrigger = await storage.transaction('personal', tx => tx.get('trigger', firstTicket.triggerId))
-  assert.equal(afterFollowUpTicket.directionVersion, 2)
-  assert.equal(afterFollowUpTrigger.pathGrantVersion, 1)
-  assert.deepEqual(afterFollowUpTrigger.pathGrants, [{ path: externalFile, operations: ['read'] }])
-  assert.equal(await readFile(externalFile, 'utf8'), 'outside the project\n')
+  assert.equal(afterFollowUpTicket.directionVersion, 3)
+  assert.equal(afterFollowUpTrigger.pathGrantVersion, 2)
+  assert.deepEqual(afterFollowUpTrigger.pathGrants, [{ path: externalFile, operations: ['read', 'write'] }])
+  assert.equal(await readFile(externalFile, 'utf8'), 'outside the project\nauthorized write\n')
 })

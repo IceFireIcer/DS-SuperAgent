@@ -224,6 +224,7 @@ export interface MainWorkFollowUpRequest {
   workItemId: string
   text: string
   reason?: string
+  pathGrants?: PathGrant[]
 }
 
 export interface MainWorkFollowUp {
@@ -244,6 +245,7 @@ export interface MainWorkFollowUp {
   source: { kind: 'main-message'; id: string }
   routing: 'direct-to-original'
   directionVersion: number
+  pathGrants?: PathGrant[]
   attachment: 'attached' | 'waiting' | 'stopped'
   inputId?: string
   ownershipId?: string
@@ -1382,7 +1384,7 @@ export class WorkDelegation {
   async followUpIn(transaction: AsyncTx, request: MainWorkFollowUpRequest,
     origin?: { sequence: number; ticketId: string }): Promise<MainWorkFollowUpView> {
     if (!request || Object.keys(request).some(key => !['commandId', 'mainId', 'mainSessionId', 'mainMessageId',
-      'originalUserText', 'workItemId', 'text', 'reason'].includes(key))) {
+      'originalUserText', 'workItemId', 'text', 'reason', 'pathGrants'].includes(key))) {
       throw new CoreError('INVALID_INPUT', 'A Main follow-up accepts only its source and one exact work item.')
     }
     identifier(request.commandId, 'commandId')
@@ -1397,13 +1399,17 @@ export class WorkDelegation {
     const text = boundedText(request.text, 'The Main follow-up direction', 32768)
     const reason = request.reason === undefined ? 'The user explicitly directed this work item from its Main conversation.'
       : boundedText(request.reason, 'The Main follow-up reason', 2048)
+    const pathGrants = normalizePathGrants(request.pathGrants)
     const key = commandKey(this.options.source, request.commandId)
     await this.verifyFollowUpSource(transaction, request, originalUserText, origin?.sequence)
     const { item, brief, ticketId } = await this.followUpTarget(transaction, request)
+    if (pathGrants?.length && brief.environmentId && this.options.environmentKind?.(brief.environmentId) !== 'local') {
+      throw new CoreError('ENVIRONMENT_DENIED', 'Path grants apply only to a local work item.')
+    }
     if (origin && ticketId !== origin.ticketId) {
       throw new CoreError('TICKET_VERSION_CONFLICT', 'The accepted Ticket changed. Refresh the Work board.')
     }
-    const fingerprint = this.followUpFingerprint(request, originalUserText, item, ticketId, text, reason)
+    const fingerprint = this.followUpFingerprint(request, originalUserText, item, ticketId, text, reason, pathGrants)
     const prior = await transaction.get<{ fingerprint: string; followUpId: string }>('work-follow-up-command', key)
     if (prior) {
       if (prior.fingerprint !== fingerprint) {
@@ -1415,9 +1421,9 @@ export class WorkDelegation {
     }
     const followUpId = randomUUID()
     const attachment = await this.options.applyFollowUp(transaction, {
-      ticketId, followUpId, text, authorId: this.options.source.actorId, reason,
+      ticketId, followUpId, text, authorId: this.options.source.actorId, reason, ...(pathGrants ? { pathGrants } : {}),
     })
-    const record = this.followUpRecord(followUpId, request, originalUserText, item, brief, ticketId, text, reason, attachment)
+    const record = this.followUpRecord(followUpId, request, originalUserText, item, brief, ticketId, text, reason, attachment, pathGrants)
     await transaction.insert('work-follow-up', followUpKey(item.id, record.id), record)
     await transaction.insert('work-follow-up-command', key, { fingerprint, followUpId: record.id })
     return this.followUpView(transaction, record)
@@ -1518,14 +1524,15 @@ export class WorkDelegation {
   }
 
   private followUpFingerprint(request: MainWorkFollowUpRequest, originalUserText: string, item: MainWorkItem,
-    ticketId: string, text: string, reason: string) {
-    return createHash('sha256').update(canonicalJson(['main-work-follow-up-v1', this.options.instanceId,
+    ticketId: string, text: string, reason: string, pathGrants?: PathGrant[]) {
+    return createHash('sha256').update(canonicalJson([pathGrants ? 'main-work-follow-up-v2' : 'main-work-follow-up-v1', this.options.instanceId,
       request.mainId, request.mainSessionId, request.mainMessageId, originalUserText, item.id, item.workBriefId,
-      item.sourceEventId, ticketId, text, reason])).digest('hex')
+      item.sourceEventId, ticketId, text, reason, ...(pathGrants ? [pathGrants] : [])])).digest('hex')
   }
 
   private followUpRecord(followUpId: string, request: MainWorkFollowUpRequest, originalUserText: string, item: MainWorkItem,
-    brief: MainWorkBrief, ticketId: string, text: string, reason: string, attachment: MainFollowUpAttachment): MainWorkFollowUp {
+    brief: MainWorkBrief, ticketId: string, text: string, reason: string, attachment: MainFollowUpAttachment,
+    pathGrants?: PathGrant[]): MainWorkFollowUp {
     return {
       id: followUpId,
       version: 1,
@@ -1545,6 +1552,7 @@ export class WorkDelegation {
       source: { kind: 'main-message', id: request.mainMessageId },
       routing: 'direct-to-original',
       directionVersion: attachment.directionVersion,
+      ...(pathGrants ? { pathGrants: structuredClone(pathGrants) } : {}),
       attachment: attachment.status,
       ...(attachment.inputId ? { inputId: attachment.inputId } : {}),
       ...(attachment.ownershipId ? { ownershipId: attachment.ownershipId } : {}),

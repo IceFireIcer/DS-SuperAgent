@@ -722,11 +722,21 @@ export class MainConversation {
             ...(args.maxBytes === undefined ? {} : { maxBytes: args.maxBytes }),
           }))
         } },
-      { name: 'follow_up_work', description: 'Send an explicit user follow-up or direction change to exactly one existing workItemId. Use this only when the user unambiguously identifies that displayed work item. Never substitute the current page, focus, recency, a Worker, or another item. If the target is unclear, ask the user which work item they mean.',
+      { name: 'follow_up_work', description: 'Send an explicit user follow-up or direction change to exactly one existing workItemId. Use this only when the user unambiguously identifies that displayed work item. Never substitute the current page, focus, recency, a Worker, or another item. If the target is unclear, ask the user which work item they mean. Add pathGrants only for exact absolute paths and operations the user just authorized for this same task; ask before adding any access the user did not explicitly grant. A follow-up without pathGrants keeps the current direction but retires its previous path grants.',
         parameters: {
           workItemId: { type: 'string', required: true },
           text: { type: 'string', required: true },
           reason: { type: 'string' },
+          pathGrants: {
+            type: 'array',
+            items: {
+              type: 'object', additionalProperties: false,
+              properties: {
+                path: { type: 'string', required: true },
+                operations: { type: 'array', items: { type: 'string' } },
+              },
+            },
+          },
         },
         execute: async args => {
           const work = this.work?.()
@@ -740,6 +750,7 @@ export class MainConversation {
             workItemId: args.workItemId ?? '',
             text: args.text ?? '',
             ...(args.reason ? { reason: args.reason } : {}),
+            ...(args.pathGrants === undefined ? {} : { pathGrants: args.pathGrants }),
           }))
         } },
     ]
