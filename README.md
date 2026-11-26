@@ -20,7 +20,7 @@ and brings the checked result back into the same conversation. Work survives res
 <table>
 <tr>
 <td width="180" align="center"><a href="https://git.hhapi.top/register?aff=5Y7LG3DT4UHM"><img src="docs/images/sponsors/xgit.png" alt="XGit" width="120"></a></td>
-<td>XGit is an AI API gateway. Get ¥0.5 in free credit when you sign up, use routes optimized for China Telecom, China Unicom and China Mobile, and top up at a 1:1 rate.<br>Sign up: <a href="https://git.hhapi.top/register?aff=5Y7LG3DT4UHM">XGit</a></td>
+<td>XGit is an AI API gateway. Get ¥0.5 in free credit when you sign up, use routes optimized for China Telecom, China Unicom and China Mobile, and top up at a 1:1 rate. QQ Group Number:1136413619 <br>Sign up: <a href="https://git.hhapi.top/register?aff=5Y7LG3DT4UHM">XGit</a></td>
 </tr>
 </table>
 
