@@ -52,6 +52,9 @@ async function fixture(t) {
 
 test('restores a verified business and Session pair without rewinding stop, authorization or Host fencing', async t => {
   const { home, backupRoot, put, get } = await fixture(t)
+  const project = join(home, '..', 'project')
+  await mkdir(project)
+  await writeFile(join(project, 'notes.txt'), 'keep project files')
   const expectedSessions = await sessionStore(home, sessionInventory)
   const saved = await createProductBackup({ home, backupRoot, expectedSessions })
   assert.equal(saved.business.schemaVersion, 2)
@@ -76,6 +79,7 @@ test('restores a verified business and Session pair without rewinding stop, auth
   assert.deepEqual(get('host-lease', 'host-a'), { epoch: 8 })
   assert.deepEqual(await sessionStore(home, sessionInventory), expectedSessions)
   assert.equal(await completeProductRestore({ home }), true)
+  assert.equal(await readFile(join(project, 'notes.txt'), 'utf8'), 'keep project files')
 })
 
 test('restore refuses changed authorization and external effects without altering either store', async t => {
@@ -97,6 +101,14 @@ test('a profile upgrade refuses an unsupported SQLite version without publishing
   const { home, backupRoot, database } = await fixture(t)
   { using db = new DatabaseSync(database); db.exec('PRAGMA user_version=99') }
   await assert.rejects(backupBeforeProfileChange({ home, backupRoot, version: '2' }), { code: 'UNSUPPORTED_SCHEMA' })
+  assert.deepEqual(await listProductBackups(backupRoot), [])
+})
+
+test('a profile upgrade refuses to migrate when its product backup cannot be restored', async t => {
+  const { home, backupRoot, put } = await fixture(t)
+  await writeFile(join(home, 'core', 'profile-version.json'), JSON.stringify({ version: '1' }))
+  put('effect', 'external-action', { state: 'pending' })
+  await assert.rejects(backupBeforeProfileChange({ home, backupRoot, version: '2' }), { code: 'BACKUP_UNRESOLVED_WORK' })
   assert.deepEqual(await listProductBackups(backupRoot), [])
 })
 
