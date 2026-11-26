@@ -162,6 +162,8 @@ jobs:
       - run: npm ci --no-fund --no-audit
       - run: npm run dist
       - name: Check the packaged app
+        env:
+          GITHUB_SHA: ${{ needs.prepare.outputs.commit }}
         run: node scripts/check-packed.mjs
       - name: Keep the installer for the build record and real-device checks
         uses: actions/upload-artifact@v4
@@ -215,6 +217,8 @@ jobs:
         env:
           CSC_FOR_PULL_REQUEST: 'true'
       - name: Check the packaged app
+        env:
+          GITHUB_SHA: ${{ needs.prepare.outputs.commit }}
         run: node scripts/check-packed.mjs
       - name: Keep the zip for the build record and real-device checks
         uses: actions/upload-artifact@v4
@@ -260,6 +264,8 @@ jobs:
       - run: npm ci --no-fund --no-audit
       - run: npm run dist
       - name: Check the packaged app
+        env:
+          GITHUB_SHA: ${{ needs.prepare.outputs.commit }}
         run: |
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           xvfb-run -a node scripts/check-packed.mjs
