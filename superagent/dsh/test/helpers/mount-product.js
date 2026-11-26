@@ -47,6 +47,13 @@ export async function mountProduct(context, { connection = { connected: false },
   const role = { ...main, name: 'Main', instructions: '', skills: [] }
   const snapshot = { revision: 1, roles: { main: role, router: role, worker: role }, uses: [], history: [],
     providers: [{ ...official, name: 'DeepSeek', models: [{ ...official.models[0], name: 'Chat', ref: 'deepseek-official/chat' }] }] }
+  const providersView = () => ({ available: true, revision: snapshot.revision, addable: [], protocols: ['openai-completions', 'openai-responses', 'anthropic-messages'],
+    providers: snapshot.providers.map(provider => ({
+      id: provider.id, name: provider.name, key: provider.key,
+      models: provider.models.map(model => ({ id: model.model, ref: model.ref, name: model.name })),
+      declaredModels: provider.models.map(model => ({ id: model.model, ref: model.ref, name: model.name })),
+      refreshable: false, removable: false, custom: false,
+    })) })
   const responses = {
     open: () => ({ instanceId: 'fixture', mainId: 'main', mainSessionId: sessionId }),
     history: () => ({ mainSessionId: sessionId, messages: [], works: [], health: { state: 'ready' } }),
@@ -61,6 +68,7 @@ export async function mountProduct(context, { connection = { connected: false },
     'execution-options': () => ({ policy: { defaultTarget: 'local-only', requiredPermissions: [] }, environments: [] }),
     'observe-list': () => ({ items: [] }),
     'settings-efforts': () => ({ efforts: [] }),
+    providers: () => providersView(),
     ...overrides,
   }
   const call = async (endpoint, payload) => {

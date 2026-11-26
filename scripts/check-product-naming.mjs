@@ -7,8 +7,9 @@ const legacyName = /(?<![a-z\d])(?:ds[-_ ]?bot|dsh[-_ ]?bot|deepseek[-_ ]?bot|ds
 const legacyShellNames = "['DS Bot', 'DeepSeek Bot']"
 const legacyBundleNames = "['ds-bot', 'deepseek-bot-engine', 'dsbot-engine', 'ds-superagent-host', 'ds-superagent-ui']"
 const sourceNote = /^\/\/ (?:(?:Derived|Adapted) from|Adapts .+ from) DS Bot v?0\.3\.8\b/iu
+const runtimeText = /\.(?:[cm]?[jt]s|[jt]sx|jsonc?|ya?ml|css|html?|svg|xml|plist|nsh|ps1|sh|cmd|bat|desktop)$/iu
 const runtimePaths = [
-  'app/src', 'app/assets', 'app/build/installer.nsh', 'app/electron-builder.yml', 'app/package.json', 'start.ps1',
+  'app/src', 'app/ui', 'app/assets', 'app/build/installer.nsh', 'app/electron-builder.yml', 'app/package.json', 'start.ps1',
   'superagent/src', 'superagent/dsh/src', 'superagent/dsh/client.js', 'superagent/dsh/office.js',
   'superagent/dsh/web-search.js', 'superagent/cordis.patch.yml', 'superagent/dsh.client.cordis.yml',
   'superagent/package.json', 'mobile',
@@ -46,19 +47,20 @@ function main() {
   const paths = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', ...runtimePaths], {
     cwd: root, encoding: 'utf8', timeout: 10_000,
   }).split('\0').filter(Boolean)
-  const files = [...new Set(paths)].filter(file => /\.(?:[cm]?js|tsx?|json|ya?ml|css|svg|nsh|ps1)$/u.test(file)
-    && (file === 'app/build/installer.nsh' || !/(?:^|\/)(?:node_modules|dist|build|test|tests)\//u.test(file)))
-  if (!files.includes('superagent/dsh/client.js')) throw new Error('The generated client is missing from the naming scan.')
+  const files = [...new Set(paths)].filter(file => file === 'app/build/installer.nsh'
+    || !/(?:^|\/)(?:node_modules|dist|build|test|tests)\//u.test(file))
+  for (const bundle of ['superagent/dsh/client.js', 'superagent/dsh/office.js', 'superagent/dsh/web-search.js']) {
+    if (!files.includes(bundle) || !existsSync(join(root, bundle))) throw new Error(`Missing runtime bundle: ${bundle}`)
+  }
   let scanned = 0
   let attributions = 0
   const fixedBoundaries = []
   const rejected = []
   for (const file of files) {
     const path = join(root, file)
-    if (!existsSync(path)) {
-      if (file === 'superagent/dsh/client.js') throw new Error('Build the client before checking the generated bundle.')
-      continue
-    }
+    if (!existsSync(path)) continue
+    if (file.search(legacyName) !== -1) rejected.push(`${file} (filename)`)
+    if (!runtimeText.test(file)) continue
     const findings = namingFindings(file, readFileSync(path, 'utf8'))
     scanned++
     attributions += findings.attributions
@@ -69,7 +71,7 @@ function main() {
     console.error(`Unexpected legacy names:\n${rejected.join('\n')}`)
     process.exitCode = 1
   }
-  console.log(`Checked ${scanned} runtime files: ${rejected.length} unexpected hits, ${attributions} attribution lines.`)
+  console.log(`Checked ${scanned} runtime text files and product paths: ${rejected.length} unexpected hits, ${attributions} attribution lines.`)
   if (fixedBoundaries.length) console.log(`Explicit compatibility and denial literals:\n${fixedBoundaries.join('\n')}`)
 }
 

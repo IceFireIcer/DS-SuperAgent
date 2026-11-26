@@ -1,0 +1,6 @@
+flowchart LR
+    U["用户 / 渠道"] --> M["Main<br/>对话与委托"]
+    M -->|"WorkBrief"| R["Router<br/>拆解任务"]
+    R -->|"Ticket"| W["Worker<br/>执行与验证"]
+    W -->|"结果 + 证据"| D["Delivery / Outbox"]
+    D -->|"Main 生成回复后发送"| U

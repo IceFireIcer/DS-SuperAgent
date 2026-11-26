@@ -11,7 +11,16 @@ test('leaving a changed Roles form asks before losing the draft or its destinati
   const launcher = findButton('Settings')
   await click(launcher)
   const dialog = () => document.querySelector('[role=dialog]')
-  await click(findButton('Roles', dialog()))
+  const openGroup = async label => {
+    const button = [...dialog().querySelectorAll('.bt-settings-item')]
+      .find(item => item.querySelector('.bt-settings-label')?.textContent === label)
+    await click(button)
+  }
+  const openRoles = async () => {
+    await openGroup('Team')
+    await click(findButton('Roles', dialog().querySelector('.bt-settings-anchors')))
+  }
+  await openRoles()
   const field = () => dialog().querySelector('[aria-label="Main instructions"]')
   await fill(field(), 'Review the draft before leaving.')
   const scrim = document.querySelector('.bt-settings-layer > .bt-scrim')
@@ -20,7 +29,7 @@ test('leaving a changed Roles form asks before losing the draft or its destinati
     () => click(scrim),
     () => key(field(), 'Escape'),
     () => click(findButton('Cancel', dialog())),
-    () => click(findButton('Models', dialog())),
+    () => openGroup('Models'),
     () => click(launcher),
   ]) {
     await leave()
@@ -32,26 +41,28 @@ test('leaving a changed Roles form asks before losing the draft or its destinati
     assert.equal(field().value, 'Review the draft before leaving.')
     assert.ok(dialog().contains(document.activeElement))
   }
-  const search = dialog().querySelector('input[type=search]')
+  await click(findButton('Search', dialog().querySelector('.bt-settings-rail')))
+  const search = dialog().querySelector('.bt-set-palette .bt-set-search-input')
   await act(async () => {
-    search.value = 'backup'
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set.call(search, 'backup')
     search.dispatchEvent(new window.Event('input', { bubbles: true }))
   })
-  const result = findButton('Usage › Status', dialog())
+  const result = [...dialog().querySelectorAll('.bt-set-search-hit')]
+    .find(item => /Status|状态/u.test(item.textContent))
   await click(result)
   await click(findButton('Keep editing'))
   assert.ok(document.activeElement === result)
   assert.equal(search.value, 'backup')
   await click(result)
   await click(findButton('Discard changes'))
-  assert.equal(dialog().querySelector('[aria-selected=true]').textContent, 'Status')
-  await click(findButton('Roles', dialog()))
+  assert.equal(dialog().querySelector('.bt-anchor[aria-current=location]').textContent, 'Status')
+  await openRoles()
   assert.equal(field().value, '')
   await fill(field(), 'Draft before a sidebar jump.')
-  await click(findButton('Models', dialog()))
+  await openGroup('Models')
   await click(findButton('Discard changes'))
   assert.equal(document.activeElement.textContent, 'Models')
-  await click(findButton('Roles', dialog()))
+  await openRoles()
   assert.equal(field().value, '')
   await key(field(), 'Escape')
   await act(async () => delay(5))

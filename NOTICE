@@ -140,6 +140,13 @@ Apache License, Version 2.0 (see LICENSE)
   BotReturn from ds-bot/src/client/sidebar.js, setSurface from index.js, and
   slot lifecycle from surface.js at the same revision.
 
+  The desktop-interactions documentation prototype reuses the adapted client
+  styles and components and follows the desktop voice and startup surfaces in
+  ds-bot/src/client/voice.js and app/src/start/start.css at the same revision.
+  The standalone preview embeds React, React DOM, and Scheduler (MIT License,
+  Copyright (c) Meta Platforms, Inc. and affiliates); their license is included
+  in the generated HTML.
+
   Upstream attribution applicable to the synchronized client:
 
   - connector-marks.js uses single-color brand paths from Simple Icons 16.36.0

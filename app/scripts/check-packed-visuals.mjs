@@ -22,6 +22,138 @@ const voiceStage = '.bt-main-voice .bt-voice-stage'
 const voiceEnd = '.bt-main-voice .bt-voice-end'
 const visibleFocus = "document.activeElement.matches(':focus-visible') && getComputedStyle(document.activeElement).outlineStyle !== 'none'"
 
+export async function captureInitialMainScreenshot(cdp, output) {
+  await mkdir(output, { recursive: true })
+  const evaluate = async expression => {
+    const result = await cdp.call('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })
+    if (result.exceptionDetails) throw new Error(result.exceptionDetails.text)
+    return result.result.value
+  }
+  const viewport = await evaluate(`({ width: innerWidth, height: innerHeight, devicePixelRatio,
+    visualScale: visualViewport?.scale ?? 1 })`)
+  const file = '01-main-chat-default.png'
+  const { data } = await cdp.call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })
+  await writeFile(join(output, file), Buffer.from(data, 'base64'))
+  return { viewport, screenshots: [{ file, section: 'main-chat', page: 'Main', state: 'default empty conversation' }] }
+}
+
+export async function captureApplicationScreenshots(cdp, output, initialCapture) {
+  await mkdir(output, { recursive: true })
+  const evaluate = async expression => {
+    const result = await cdp.call('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })
+    if (result.exceptionDetails) throw new Error(result.exceptionDetails.text)
+    return result.result.value
+  }
+  const wait = async (expression, label) => {
+    const deadline = Date.now() + 10_000
+    while (Date.now() < deadline) {
+      if (await evaluate(expression)) return
+      await sleep(100)
+    }
+    throw new Error(`The application screenshot did not show ${label}.`)
+  }
+  const settle = async () => {
+    await evaluate(`Promise.all(Array.from(document.querySelector('.bt-settings-scroll > .bt-settings-pane:not([hidden])')?.getAnimations() ?? [])
+      .filter(animation => /^bt-page-/.test(animation.animationName))
+      .map(animation => animation.finished.catch(() => undefined)))`)
+    await sleep(200)
+  }
+  const capture = async (file, section, page, tab) => {
+    await settle()
+    const { data } = await cdp.call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })
+    await writeFile(join(output, file), Buffer.from(data, 'base64'))
+    return { file, section, ...(page ? { page } : {}), ...(tab ? { tab } : {}) }
+  }
+
+  const screenshots = [...(initialCapture?.screenshots ?? [])]
+  let index = screenshots.length
+  const captureNext = async (section, page, tab) => {
+    index++
+    const name = [section, page, tab].filter(Boolean).join('-').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-')
+    const file = `${String(index).padStart(2, '0')}-${name}.png`
+    screenshots.push(await capture(file, section, page, tab))
+  }
+  const visibleTabs = () => `Array.from(document.querySelectorAll('[role="tab"]')).filter(button => button.getClientRects().length)
+    .map(button => ({ label: button.textContent.trim(), selected: button.getAttribute('aria-selected') === 'true' }))`
+  const clickTab = async patterns => {
+    const candidates = await evaluate(visibleTabs())
+    const candidate = candidates.find(({ label }) => patterns.some(pattern => pattern.test(label)))
+    if (!candidate || candidate.selected) return candidate ?? null
+    await evaluate(`(() => [...document.querySelectorAll('[role="tab"]')].find(button => button.getClientRects().length
+      && button.textContent.trim() === ${JSON.stringify(candidate.label)})?.click())()`)
+    await wait(`Array.from(document.querySelectorAll('[role="tab"]')).some(button => button.getClientRects().length
+      && button.textContent.trim() === ${JSON.stringify(candidate.label)} && button.getAttribute('aria-selected') === 'true')`, candidate.label)
+    await sleep(250)
+    return candidate
+  }
+
+  const mainViews = [{ label: 'Main chat', view: 'chat', selected: true }]
+  const mainTabs = await evaluate(visibleTabs())
+  const mainPageTabs = mainTabs.filter(({ label }) => /^(Activity|活跃度|活動|Work|工作|Trace|轨迹|軌跡)$/iu.test(label))
+  for (const tab of mainPageTabs) {
+    if (tab.selected) continue
+    const selected = await clickTab([new RegExp(`^${tab.label}$`, 'u')])
+    if (!selected) continue
+    const section = /^Activity|活跃度|活動$/iu.test(tab.label) ? 'main-activity'
+      : /^Work|工作$/iu.test(tab.label) ? 'main-work' : 'main-trace'
+    await captureNext(section, tab.label)
+    mainViews.push({ label: tab.label, view: tab.label, selected: true })
+  }
+  const chatTab = await clickTab([/^(Chat|Conversation|对话|對話|聊天)$/iu])
+  if (chatTab) await sleep(100)
+  const boardButton = await evaluate(`Array.from(document.querySelectorAll('.bt-main-header button')).find(button =>
+    button.getClientRects().length && /^(Work|工作)$/iu.test(button.textContent.trim()))?.textContent.trim() ?? null`)
+  if (boardButton) {
+    await evaluate(`Array.from(document.querySelectorAll('.bt-main-header button')).find(button =>
+      button.getClientRects().length && button.textContent.trim() === ${JSON.stringify(boardButton)})?.click()`)
+    await wait(`Boolean(document.querySelector('.bt-work-board'))`, 'the full Work board')
+    await captureNext('work-board', 'Work board')
+    const returnButton = await evaluate(`Array.from(document.querySelectorAll('.bt-main-header button')).find(button =>
+      button.getClientRects().length && /^(Main|主对话|主對話)$/iu.test(button.textContent.trim()))?.textContent.trim() ?? null`)
+    if (returnButton) {
+      await evaluate(`Array.from(document.querySelectorAll('.bt-main-header button')).find(button =>
+        button.getClientRects().length && button.textContent.trim() === ${JSON.stringify(returnButton)})?.click()`)
+      await wait(`Boolean(document.querySelector('.bt-main-conversation'))`, 'Main chat after Work')
+    }
+  }
+
+  await evaluate(`document.querySelector(${JSON.stringify(settings)})?.click()`)
+  await wait(`Boolean(document.querySelector(${JSON.stringify(dialog)}))`, 'the settings dialog')
+  const pages = await evaluate(`Array.from(document.querySelectorAll(${JSON.stringify(`${dialog} .bt-settings-nav .bt-settings-item`)}), button => ({
+    label: button.textContent.trim(),
+  }))`)
+  if (!pages.length) throw new Error('No settings navigation pages were found.')
+  const viewport = initialCapture?.viewport ?? await evaluate(`({ width: innerWidth, height: innerHeight, devicePixelRatio,
+    visualScale: visualViewport?.scale ?? 1 })`)
+  for (let pageIndex = 0; pageIndex < pages.length; pageIndex++) {
+    const page = pages[pageIndex]
+    await evaluate(`document.querySelectorAll(${JSON.stringify(`${dialog} .bt-settings-nav .bt-settings-item`)})[${pageIndex}]?.click()`)
+    await wait(`document.querySelectorAll(${JSON.stringify(`${dialog} .bt-settings-nav .bt-settings-item`)})[${pageIndex}]?.getAttribute('aria-current') === 'page' &&
+      Boolean(document.querySelector('.bt-settings-scroll > .bt-settings-pane:not([hidden])'))`, page.label)
+    const tabs = await evaluate(`Array.from(document.querySelectorAll(${JSON.stringify(`${dialog} .bt-settings-tabs [role=tab]`)}), button => ({
+      label: button.textContent.trim(),
+    }))`)
+    if (tabs.length) {
+      for (let tabIndex = 0; tabIndex < tabs.length; tabIndex++) {
+        const tabSelector = `${dialog} .bt-settings-tabs [role=tab]`
+        await evaluate(`document.querySelectorAll(${JSON.stringify(tabSelector)})[${tabIndex}]?.click()`)
+        await wait(`document.querySelectorAll(${JSON.stringify(tabSelector)})[${tabIndex}]?.getAttribute('aria-selected') === 'true' &&
+          Boolean(document.querySelector('.bt-settings-scroll > .bt-settings-pane:not([hidden])'))`, tabs[tabIndex].label)
+        await captureNext('settings', page.label, tabs[tabIndex].label)
+      }
+    } else {
+      await captureNext('settings', page.label)
+    }
+  }
+  await evaluate(`document.querySelector(${JSON.stringify(`${dialog} .bt-settings-close`)})?.click()`)
+  await wait(`!document.querySelector(${JSON.stringify(dialog)})`, 'Settings to close after capture')
+  await clickTab([/^(Chat|Conversation|对话|對話|聊天)$/iu])
+  await writeFile(join(output, 'manifest.json'), `${JSON.stringify({ source: 'Windows x64 unpacked package',
+    data: 'isolated mock-model profile', viewport, pageZoomChanged: false,
+    captureArea: 'full application window', mainViews, screenshots }, null, 2)}\n`)
+  console.log(`check-packed: captured ${screenshots.length} full-application views at ${viewport.width}x${viewport.height} (scale ${viewport.visualScale})`)
+}
+
 export async function checkPackedVisuals(cdp, output) {
   const evaluate = async expression => {
     const result = await cdp.call('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })
@@ -124,8 +256,29 @@ export async function checkPackedVisuals(cdp, output) {
     await wait(`Boolean(${query('#main-message')})`, 'the Main input after closing Work')
   }
 
+  const checkSettingsMotion = async reducedMotion => {
+    await focus(settings)
+    await click(settings)
+    await wait(`Boolean(${query(`${dialog} .bt-appearance select`)})`, 'Appearance settings')
+    const results = await evaluate(`(${settingsMotionCases.toString()})()`)
+    for (const { label, animation, delta, active, display, box } of results) {
+      assert.notEqual(display, 'contents', `${label} settings pane needs a layout box`)
+      assert.ok(box.width > 0 && box.height > 0, `${label} settings pane has no visible box`)
+      if (reducedMotion) assert.equal(animation, null, `${label} must not slide with reduced motion`)
+      else {
+        assert.ok(animation?.startsWith('bt-page-'), `${label} has no settings page animation`)
+        assert.equal(active, true, `${label} page animation was not playing after navigation`)
+        assert.ok(delta >= 2, `${label} did not visibly move during natural playback (${JSON.stringify({ animation, delta, box })})`)
+      }
+    }
+    await key('Escape', 27)
+    await wait(`!${query(dialog)} && ${active(settings)}`, 'focus to return from Settings')
+    return results.map(({ label, animation, delta }) => ({ label, animation, delta }))
+  }
+
   if (output) await mkdir(output, { recursive: true })
   const cases = []
+  const settingsMotion = {}
   try {
     for (const width of [580, 1120]) {
       await cdp.call('Emulation.setDeviceMetricsOverride', { width, height: 780, deviceScaleFactor: 1, mobile: false })
@@ -135,6 +288,14 @@ export async function checkPackedVisuals(cdp, output) {
           const trigger = width < 640 || theme === 'deepseek' || theme === 'paper' ? folder : account
           const features = [{ name: 'prefers-reduced-motion', value: reducedMotion ? 'reduce' : 'no-preference' }]
           await cdp.call('Emulation.setEmulatedMedia', { features })
+          if (theme === 'deepseek') {
+            const results = await checkSettingsMotion(reducedMotion)
+            settingsMotion[`${width}-${mode}`] = { count: results.length,
+              browser: results.find(({ label }) => label === 'page:Browser'),
+              browserTabs: results.filter(({ label }) => label.startsWith('Browser tab:')),
+              pages: results.filter(({ label }) => label.startsWith('page:')),
+              tabs: results.filter(({ label }) => label.startsWith('tab:')) }
+          }
           await focus(settings)
           await click(settings)
           await wait(`Boolean(${query(`${dialog} .bt-appearance select`)})`, 'Appearance settings')
@@ -218,7 +379,52 @@ export async function checkPackedVisuals(cdp, output) {
     await cdp.call('Emulation.clearDeviceMetricsOverride')
   }
   if (output) await writeFile(join(output, 'visual-cases.json'), `${JSON.stringify(cases, null, 2)}\n`)
-  console.log(`check-packed: ${JSON.stringify({ visuals: cases, nestedEscape: 'passed', focus: 'passed', accountTab: 'passed', outsideClick: 'passed' })}`)
+  console.log(`check-packed: ${JSON.stringify({ visuals: cases, settingsMotion, nestedEscape: 'passed', focus: 'passed', accountTab: 'passed', outsideClick: 'passed' })}`)
+}
+
+async function settingsMotionCases() {
+  const dialog = document.querySelector('.bt-superagent-settings')
+  const scroll = dialog.querySelector('.bt-settings-scroll')
+  const frames = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+  const results = []
+  async function select(button, kind) {
+    if (button.getAttribute('aria-current') === 'page' || button.getAttribute('aria-selected') === 'true') return
+    button.click()
+    await frames()
+    const pane = [...scroll.children].find(node => !node.hidden)
+    if (!pane) throw new Error(`${button.textContent.trim()} did not select a settings content pane`)
+    const box = pane.getBoundingClientRect()
+    const movement = pane.getAnimations().find(animation => /^bt-page-(up|in|out)$/.test(animation.animationName))
+    const start = pane.getBoundingClientRect()
+    const startTime = movement?.currentTime
+    await new Promise(resolve => setTimeout(resolve, 100))
+    const end = pane.getBoundingClientRect()
+    const endTime = movement?.currentTime
+    const delta = Math.abs(start.top - end.top)
+    const label = kind === 'Browser page' ? 'page:Browser' : `${kind}:${button.textContent.trim()}`
+    results.push({ label, animation: movement?.animationName ?? null,
+      active: movement?.playState === 'running' && typeof startTime === 'number' && typeof endTime === 'number' && endTime > startTime,
+      delta, display: getComputedStyle(pane).display,
+      box: { width: box.width, height: box.height } })
+  }
+  const pages = [...dialog.querySelectorAll('.bt-settings-nav .bt-settings-item')]
+  const browser = pages.find(button => /^(?:Browser|浏览器|瀏覽器)$/u.test(button.textContent.trim()))
+  if (!browser) throw new Error('The Browser settings navigation item is missing')
+  await select(browser, 'Browser page')
+  const browserTabs = [...dialog.querySelectorAll('.bt-settings-tabs [role=tab]')]
+  if (browserTabs.length < 2) throw new Error('Browser settings must expose both child pages')
+  await select(browserTabs[1], 'Browser tab')
+  await select(browserTabs[0], 'Browser tab')
+  for (const page of pages) {
+    if (page === browser) continue
+    await select(page, 'page')
+    const tabs = [...dialog.querySelectorAll('.bt-settings-tabs [role=tab]')]
+    if (tabs.length > 1) {
+      await select(tabs[1], 'tab')
+      await select(tabs[0], 'tab')
+    }
+  }
+  return results
 }
 
 function installDeniedMicrophone() {

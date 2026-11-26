@@ -9,7 +9,7 @@ const destinations = [
   ['Models and API keys', SlidersIcon, 'models'],
   ['Connectors', ConnectorIcon, 'connectors'],
   ['Automation tasks', ClockIcon, 'scheduled-tasks'],
-  ['Settings', GearIcon, 'general'],
+  ['Settings', GearIcon, 'overview'],
 ]
 
 export function SuperagentAccountFooter({ wide, modalOpen, signIn, openClassic, openSettings }) {

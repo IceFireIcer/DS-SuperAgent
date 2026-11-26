@@ -1,0 +1,91 @@
+{
+  "repository": "IceFireIcer/DS-SuperAgent",
+  "spec": {
+    "number": 202,
+    "id": 6585912336,
+    "title": "DS SuperAgent 桌面多平台公开预览与稳定版发布规格",
+    "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/202",
+    "labels": ["ready-for-agent", "enhancement"],
+    "file": "../../spec-desktop-release.md"
+  },
+  "destination_confirmed": true,
+  "baseline": {
+    "report": "docs/superagent-architecture-audit-2026-11-24/index.html",
+    "date": "2026-11-24",
+    "r5_used": false,
+    "runtime_verification": "Not performed for this planning map; do not infer candidate acceptance"
+  },
+  "nodes": {
+    "map": {
+      "number": 195,
+      "id": 6582515976,
+      "title": "[Wayfinder] DS SuperAgent 桌面多平台发布路径",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/195",
+      "file": "map.md",
+      "label": "wayfinder:map"
+    },
+    "desktop_build_matrix": {
+      "number": 201,
+      "id": 6585419014,
+      "title": "明确桌面多平台构建与逐平台放行的边界",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/201",
+      "file": "decisions/desktop-build-matrix.md",
+      "label": "wayfinder:grilling",
+      "status": "closed"
+    },
+    "preview_package": {
+      "number": 196,
+      "id": 6582530018,
+      "title": "确定 Windows x64 首发形态、分发与回滚边界",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/196",
+      "file": "decisions/preview-package.md",
+      "label": "wayfinder:grilling",
+      "status": "closed"
+    },
+    "launch_commitment": {
+      "number": 200,
+      "id": 6584603291,
+      "title": "确定桌面首发是否跳过内测以及承诺级别",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/200",
+      "file": "decisions/launch-commitment.md",
+      "label": "wayfinder:grilling",
+      "status": "closed"
+    },
+    "preview_gate": {
+      "number": 197,
+      "id": 6582530032,
+      "title": "确定 Windows 桌面首发的放行门槛与证据记录",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/197",
+      "file": "decisions/preview-gate.md",
+      "label": "wayfinder:grilling",
+      "status": "closed"
+    },
+    "cross_directory_authority": {
+      "number": 199,
+      "id": 6583359364,
+      "title": "确定 Worker 跨项目目录工作的授权与拒绝规则",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/199",
+      "file": "decisions/cross-directory-authority.md",
+      "label": "wayfinder:grilling",
+      "status": "closed"
+    },
+    "stable_promotion": {
+      "number": 198,
+      "id": 6582530268,
+      "title": "确定桌面稳定版的 Go/No-Go 门槛",
+      "url": "https://github.com/IceFireIcer/DS-SuperAgent/issues/198",
+      "file": "decisions/stable-promotion.md",
+      "label": "wayfinder:grilling",
+      "status": "closed"
+    }
+  },
+  "dependencies": {
+    "desktop_build_matrix": [],
+    "preview_package": ["launch_commitment"],
+    "preview_gate": ["preview_package", "cross_directory_authority", "launch_commitment"],
+    "cross_directory_authority": [],
+    "stable_promotion": ["preview_package", "preview_gate", "launch_commitment"]
+  },
+  "frontier_at_creation": ["preview_package", "preview_gate"],
+  "map_status": "closed"
+}

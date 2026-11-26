@@ -2,13 +2,13 @@ import { createElement as h, useEffect, useRef, useState } from 'react'
 import { SectionCard, FieldRow, InlineNotice } from './product-settings-components.js'
 import { t } from './i18n.js'
 
-const KeyIcon = () => h('svg', { width: 15, height: 15, viewBox: '0 0 20 20', fill: 'none', stroke: 'currentColor',
+export const KeyIcon = () => h('svg', { width: 15, height: 15, viewBox: '0 0 20 20', fill: 'none', stroke: 'currentColor',
   strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
   h('path', { d: 'M7 9.5a3.5 3.5 0 1 1 0 .01z' }), h('path', { d: 'M10.4 10.6L17 10.6M14.5 10.6v2.4M16.6 10.6v1.8' }))
 
 const maskByCss = typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('-webkit-text-security', 'disc')
 
-function MaskedInput({ value, onChange, onEnter, label, disabled }) {
+export function MaskedInput({ value, onChange, onEnter, label, disabled }) {
   return h('input', { className: 'bt-secret-input', type: maskByCss ? 'text' : 'password', value, disabled,
     'data-masked': maskByCss ? '' : undefined, autoComplete: maskByCss ? 'off' : 'new-password',
     autoCorrect: 'off', autoCapitalize: 'off', spellCheck: false, 'data-1p-ignore': '', 'data-lpignore': 'true', 'data-bwignore': '',

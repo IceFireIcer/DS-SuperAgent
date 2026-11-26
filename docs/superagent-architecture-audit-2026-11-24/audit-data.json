@@ -1,0 +1,113 @@
+{
+  "version": 1,
+  "generatedAt": "2026-11-24T16:17:30+08:00",
+  "snapshot": {
+    "branch": "dev",
+    "commit": "d03bb4349a27752a032284c78790f53737bb5ab8",
+    "commitSubject": "Replace product branding with the new whale logo",
+    "workingTreeDirty": true,
+    "referenceReport": "super-agent-references/claude-analysis/superagent-report.md",
+    "referenceReportSha256": "6784E43984FFFCFF338514DA4EA4AB48ABA85D47DCEF9A7EB9C20DDBF9B20297"
+  },
+  "metrics": {
+    "domainFiles": 138,
+    "domainLines": 42553,
+    "dshSourceFiles": 201,
+    "dshSourceLines": 54502,
+    "clientSourceFiles": 74,
+    "clientSourceLines": 15521,
+    "generatedClientBytes": 1440034,
+    "generatedClientLines": 25792,
+    "desktopSourceLines": 6805,
+    "testFiles": 242,
+    "testFilesByPackage": {
+      "domain": 149,
+      "dsh": 48,
+      "desktop": 45
+    },
+    "productEndpoints": 174,
+    "settingsGroups": 10,
+    "settingsSections": 27,
+    "imPlatforms": 8,
+    "r5ImplementationRecords": 36,
+    "r5Reviews": 35,
+    "openIssues": [194, 163]
+  },
+  "completion": {
+    "rubric": "35 mechanism checkpoints; complete=1, partial=0.5, not-complete=0",
+    "complete": 22,
+    "partial": 11,
+    "notComplete": 2,
+    "score": 0.786,
+    "scorePercent": 79,
+    "productionEvidencePercentEstimate": 35,
+    "note": "Mechanism coverage is not release acceptance. Production evidence is a qualitative estimate based on real model/channel/deployment combinations."
+  },
+  "report": {
+    "mode": "concise-desktop",
+    "desktopOnly": true,
+    "archive": "archive/detailed-v1.html"
+  },
+  "keyConclusions": [
+    "The current runtime is a three-tier Main / Router / Worker product, not the report's two-tier prototype.",
+    "Role tools are enforced by DSH tool allowlists, not router prompt discipline.",
+    "Worker reports are verified; Main writes the user-visible result and Router delivers it through the durable Outbox.",
+    "Ticket, Assignment generation, Host lease, Effects and Delivery form the reliability core.",
+    "Remote BYOM, PostgreSQL storage, semantic supervision and an external watchdog exist, but their production deployment is incomplete.",
+    "Main remains half-duplex during a running reply; the 100-word IM rule is not enforced; channel parity is uneven.",
+    "State can be externalized, but compute is still single-host and single-Router per Instance."
+  ],
+  "topRisks": [
+    {
+      "priority": "P0",
+      "area": "interaction",
+      "title": "Main is half-duplex",
+      "evidence": "superagent/dsh/src/client/composer.js:97-137"
+    },
+    {
+      "priority": "P0",
+      "area": "scale",
+      "title": "No stateless horizontal compute plane",
+      "evidence": "superagent/src/host.ts; superagent/src/postgres-storage.ts"
+    },
+    {
+      "priority": "P0",
+      "area": "acceptance",
+      "title": "Real channel and same-SHA full-matrix evidence remains incomplete",
+      "evidence": "docs/superagent/implementation/t55-r5-local.md; docs/superagent/implementation/t58.md"
+    },
+    {
+      "priority": "P1",
+      "area": "interaction",
+      "title": "No hard 100-word IM limit",
+      "evidence": "superagent/src/feishu-delivery.ts:18-80"
+    },
+    {
+      "priority": "P1",
+      "area": "context",
+      "title": "No unified archive, compaction or retention policy",
+      "evidence": "superagent/src/product-memory.ts; superagent/src/execution.ts"
+    },
+    {
+      "priority": "P1",
+      "area": "operations",
+      "title": "Remote device entry is still a dev script",
+      "evidence": "superagent/dev/remote-device.mjs; superagent/README.md"
+    }
+  ],
+  "artifacts": [
+    "index.html",
+    "assets/concise-hero.png",
+    "assets/concise-desktop.png",
+    "assets/architecture-simple.svg",
+    "diagrams/simplified-workflow.mmd",
+    "archive/detailed-v1.html",
+    "assets/architecture-map.svg",
+    "diagrams/work-lifecycle.mmd",
+    "diagrams/authority-recovery.mmd",
+    "diagrams/logical-flow.mmd",
+    "evidence/01-domain-runtime.md",
+    "evidence/02-dsh-product-surface.md",
+    "evidence/03-desktop-delivery.md"
+  ]
+}

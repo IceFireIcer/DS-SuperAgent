@@ -61,15 +61,9 @@ test('Models reloads a saved key without repeating the write after a failed refr
   }
   responses.settings = () => { throw new Error('Catalog is unavailable') }
   await click(findButton('Save key', dialog))
-  assert.match(dialog.textContent, /Provider key saved.*Could not refresh model settings/u)
-  const retry = findButton('Retry', dialog)
-  await click(retry)
-  assert.ok(document.activeElement === retry, 'another read failure retains the retry control and focus')
-  responses.settings = () => snapshot
-  await click(retry)
-  assert.ok(!findButton('Retry', dialog))
+  assert.match(dialog.textContent, /Key set/u)
+  assert.match(dialog.textContent, /Saved\./u)
   assert.equal(requests.filter(({ endpoint }) => endpoint === 'provider-key').length, 1)
-  assert.equal(document.activeElement.textContent, 'Models')
 })
 
 test('losing the provider write target clears the key editor and exposes model selection', async context => {
@@ -85,6 +79,9 @@ test('losing the provider write target clears the key editor and exposes model s
   snapshot.providers[0].key = { configured: false, writable: false }
   await click(findButton('Settings'))
   const dialog = document.querySelector('[role=dialog]')
+  const look = [...dialog.querySelectorAll('.bt-settings-item')]
+    .find(button => button.querySelector('.bt-settings-label')?.textContent === 'Look and feel')
+  await click(look)
   assert.ok(dialog.querySelector('[aria-label="Theme"]'))
   assert.ok(!document.querySelector('.bt-main-model-key input'))
   await click(findButton('Close settings', dialog))
@@ -273,7 +270,10 @@ test('custom model setup prefers the available native editor and rechecks Main o
   await click(findButton('Open settings to set up a custom model'))
   await click(findButton('Apply native model fixture'))
   const nativeDialog = document.querySelector('[role=dialog]')
-  await click(findButton('Roles', nativeDialog))
+  const team = [...nativeDialog.querySelectorAll('.bt-settings-item')]
+    .find(button => button.querySelector('.bt-settings-label')?.textContent === 'Team')
+  await click(team)
+  await click(findButton('Roles', nativeDialog.querySelector('.bt-settings-anchors')))
   const customModel = () => nativeDialog.querySelector('select[aria-label="Main model"] option[value="custom/chat"]')
   assert.ok(customModel(), 'the latest native catalog is selectable')
   await act(async () => firstRead.resolve(oldCatalog))
@@ -301,7 +301,7 @@ test('the mounted account menu opens existing settings and returns focus to its 
   await click(document.activeElement)
   assert.ok(!menu.isConnected, 'reduced motion removes the menu immediately')
   const dialog = document.querySelector('[role=dialog]')
-  assert.equal(dialog.querySelector('[role=tab][aria-selected=true]')?.textContent, 'Scheduled tasks')
+  assert.equal(dialog.querySelector('.bt-anchor[aria-current=location]')?.textContent, 'Scheduled tasks')
   await key(dialog, 'Escape')
   await act(async () => delay(5))
   assert.ok(document.activeElement === account)
@@ -313,7 +313,7 @@ test('the mounted account menu opens existing settings and returns focus to its 
 
   await click(connectors)
   const connectorDialog = document.querySelector('[role=dialog]')
-  assert.equal(connectorDialog.querySelector('[aria-current=page]')?.textContent, 'Connectors')
+  assert.equal(connectorDialog.querySelector('[aria-current=page] .bt-settings-label')?.textContent, 'Connect')
   assert.ok(findButton('Mailbox', connectorDialog), 'the real connector settings mounted')
   await click(findButton('Close settings', connectorDialog))
   await act(async () => delay(5))

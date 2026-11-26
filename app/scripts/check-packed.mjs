@@ -17,8 +17,8 @@ import { hostExecutable } from '../src/host-process.mjs'
 import { PRODUCT_NAME, PRODUCT_SLUG } from '../src/product.mjs'
 import { isNewer } from '../src/updates.mjs'
 import { t55Question, t55Request, t55SlowReply } from '../../superagent/dsh/dev/t55-controls-model.mjs'
-import { checkPackedVisuals } from './check-packed-visuals.mjs'
 import { checkPackedP0, checkPackedModelSetup } from './check-packed-p0.mjs'
+import { captureApplicationScreenshots, captureInitialMainScreenshot, checkPackedVisuals } from './check-packed-visuals.mjs'
 import { fileUpdateFeed } from './update-fixture-feed.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -1051,6 +1051,9 @@ try {
     assert.equal(await windowState("process.getBuiltinModule('module').createRequire(process.execPath)('electron').app.getPath('sessionData')"), env.DS_SUPERAGENT_SHELL_DATA)
     await checkCoexistence(cdp)
   }
+  const screenshotDir = process.env.DESKTOP_APPLICATION_SCREENSHOTS_DIR
+    ? resolve(process.env.DESKTOP_APPLICATION_SCREENSHOTS_DIR) : undefined
+  const initialCapture = screenshotDir ? await captureInitialMainScreenshot(cdp, screenshotDir) : undefined
   chatError = await chat(cdp).then(() => undefined, error => error)
   if (shotFile) {
     const { data } = await cdp.call('Page.captureScreenshot', { format: 'png' })
@@ -1059,6 +1062,7 @@ try {
   }
   if (chatError) throw chatError
   if (process.env.DESKTOP_P0_EVIDENCE_DIR) await checkPackedP0(port, windowState, process.env.DESKTOP_P0_EVIDENCE_DIR)
+  if (screenshotDir) await captureApplicationScreenshots(cdp, screenshotDir, initialCapture)
   if (process.env.DESKTOP_VISUAL_DIR) await checkPackedVisuals(cdp, process.env.DESKTOP_VISUAL_DIR)
   if (controls) await checkWorkControls(cdp)
   if (classic) await checkClassicRoundTrip(cdp)

@@ -36,4 +36,8 @@
 - 最后一轮本机全量因并行误启动的构建清空 `dist`，出现 8 项模块缺失，不作为全量证据。确认构建完成后独立复跑受影响 7 个文件和轮询回归：**46 通过、0 失败、3 跳过**；不将两轮结果拼成一次全量通过。
 - [完整 CI](https://github.com/IceFireIcer/DS-SuperAgent/actions/runs/44777356955) 的 macOS arm64/x64 打包检查、桌面 profile、Docker、手机类型检查和发布扫描通过。Windows 新装启动通过，但安装版下载更新后未在时限内退出；Linux 在免安装包的 Main 发送/回复检查失败。两个 Windows 服务端分片分别在远端验证命令和 Main 跟进的初始结果上失败。
 - 同一次 CI 的客户端生成失败可在隔离的干净 npm 安装上复现：仅 esbuild 依赖路径注释和内部工厂标签受安装位置影响。构建脚本统一标签后，干净安装直接生成的 `client.js` 和 `office.js` 与 Git 中的产物逐字节一致。未手改或更新生成文件。
-- 最终验收由 [#164](https://github.com/IceFireIcer/DS-SuperAgent/issues/164) 跟踪；完整发布验证未通过，原生依赖 [#163](https://github.com/IceFireIcer/DS-SuperAgent/issues/163) 暂缓。未发布安装包或合并至 `main`。
+- 当时由 #164 跟踪最终验收。完整发布验证未通过，原生依赖 [#163](https://github.com/IceFireIcer/DS-SuperAgent/issues/163) 暂缓。未发布安装包或合并至 `main`。
+
+## 工单结项
+
+维护者决定以 `Not planned` 关闭 #164。日常 CI 自动检查旧名称，命中白名单以外的名称会使 `Test result` 失败。Windows 打包流程接入隔离共存探针。候选包的安装、升级和 Main 用户路径由 #182 跟踪。正式发布仍要求同一候选提交通过完整 CI。[#164 结项记录](https://github.com/IceFireIcer/DS-SuperAgent/issues/164#issuecomment-7066780149) · [候选包验收 #182](https://github.com/IceFireIcer/DS-SuperAgent/issues/182)

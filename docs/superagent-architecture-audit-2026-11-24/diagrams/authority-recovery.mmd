@@ -1,0 +1,12 @@
+flowchart TD
+    A["旧 Host · epoch e<br/>持有 live lease"] --> B{"第二个 Host 到达"}
+    B -->|"lease 未过期"| C["HOST_LEASED<br/>拒绝所有业务写"]
+    B -->|"lease 过期 / 显式接管"| D["获取 epoch e+1<br/>写入 takeover pending"]
+    D --> E["恢复闸门打开<br/>新提交暂时拒绝"]
+    E --> F["逐 Ticket 对账<br/>Session · 目录 · 外部动作 · stop"]
+    F --> G{"外部结果可证明？"}
+    G -->|"否"| H["waiting-human / unknown<br/>不盲重试、不伪报完成"]
+    G -->|"是"| I["结束旧 Assignment 代次"]
+    I --> J["创建 successor Assignment<br/>同一 Ticket / 保留证据"]
+    J --> K["只有新代次可唤醒 Worker<br/>旧回调仅审计"]
+    H --> K

@@ -6,7 +6,8 @@ const productEndpoints = new Set(`
   open history send stop-main evidence observe-list observe-read observe-detail
   work-stop work-reconcile-stop work-handoff-prepare work-handoff-verify work-handoff work-retry work-resume
   work-answer work-answer-view work-board work-members work-follow-up supervision supervision-inspect supervision-decide
-  settings settings-save settings-efforts provider-key builtin-plugins directory-options directory-pick directory-list
+  settings settings-save settings-efforts providers provider-key provider-models provider-add provider-models-save
+  provider-remove builtin-plugins directory-options directory-pick directory-list
   directory-register directory-default-save execution-options execution-policy-save
   remote-environment-pair remote-environment-pair-read remote-environment-pair-abandon remote-environment-revoke
   artifact-read attachment-read attachment-upload attachment-revoke product-status product-usage

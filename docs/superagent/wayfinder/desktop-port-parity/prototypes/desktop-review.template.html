@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DS SuperAgent 桌面交互样板</title>
+<!-- REACT_LICENSE -->
+<style>
+  :root { color-scheme: light; font: 14px/1.55 system-ui, "Segoe UI", sans-serif; color: #262723; background: #f5f5f2; --review-ink: #262723; --review-muted: #575b56; --review-line: #dedfd8; --review-paper: #fff; --review-focus: #3659d2; }
+  *, *::before, *::after { box-sizing: border-box; }
+  body { max-width: 1760px; margin: 0 auto; padding: 24px clamp(14px, 2.6vw, 44px) 20px; }
+  [hidden] { display: none !important; }
+  .review-top { display: flex; align-items: end; justify-content: space-between; gap: 16px 30px; flex-wrap: wrap; margin-bottom: 18px; }
+  .review-top h1 { margin: 0; font-size: clamp(22px, 2vw, 29px); line-height: 1.2; font-weight: 650; letter-spacing: -.025em; }
+  .review-top p { margin: 7px 0 0; color: var(--review-muted); font-size: 13px; }
+  .review-preferences { display: flex; flex-wrap: wrap; gap: 8px; }
+  .review-preferences label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--review-muted); }
+  select, button { font: inherit; color: inherit; }
+  select { min-height: 34px; background: var(--review-paper); border: 1px solid var(--review-line); border-radius: 8px; padding: 5px 24px 5px 9px; }
+  button { cursor: pointer; }
+  :is(button, select, a, iframe):focus-visible { outline: 2px solid var(--review-focus); outline-offset: 2px; }
+  .review-grid { display: grid; grid-template-columns: minmax(0, 1fr) 248px; gap: 20px; align-items: start; }
+  .review-stage { min-width: 0; padding: 0; display: flex; justify-content: center; }
+  .review-frame { display: block; width: 100%; height: clamp(520px, calc(100dvh - 158px), 920px); background: #fcfcfc; border: 1px solid #d6d8d2; border-radius: 14px; box-shadow: 0 16px 34px -24px #20252261, 0 2px 6px #242a2310; transition: width .28s ease, background-color .12s ease; }
+  .review-stage[data-size="narrow"] .review-frame { width: min(600px, 100%); }
+  .review-stage[data-reduced] .review-frame { transition: none; }
+  .review-rail { border-left: 1px solid var(--review-line); padding: 4px 0 8px 16px; min-width: 0; }
+  .review-scenario { display: grid; gap: 6px; font-weight: 600; }
+  .review-scenario select { width: 100%; font-weight: 500; }
+  .review-rail h2 { font-size: 13px; margin: 18px 0 6px; }
+  .review-rail p { margin: 5px 0; }
+  .review-rail ol { margin: 12px 0 0; padding-left: 21px; }
+  .review-rail li { padding-inline-start: 2px; margin-bottom: 7px; font-size: 13px; color: var(--review-muted); }
+  .review-events { display: flex; flex-wrap: wrap; gap: 6px; }
+  .review-events button, .review-reset { min-height: 32px; border: 1px solid var(--review-line); border-radius: 8px; background: var(--review-paper); padding: 4px 8px; font-size: 12px; text-align: left; }
+  .review-events button:hover:not(:disabled), .review-reset:hover { background: #e9eae4; }
+  .review-events button:disabled { cursor: default; opacity: .5; }
+  .review-state { padding: 10px 0 0; margin-top: 14px; border-top: 1px solid var(--review-line); font-size: 12px; overflow-wrap: anywhere; }
+  .review-state strong { font-weight: 600; }
+  .review-state p { color: var(--review-muted); }
+  .review-reset { margin-top: 12px; }
+  .review-source { color: var(--review-muted); font-size: 12px; margin: 13px 0 0; }
+  @media (max-width: 830px) {
+    .review-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+    .review-rail { border-left: 0; border-top: 1px solid var(--review-line); padding: 12px 0 0; }
+    .review-frame { height: max(560px, 72dvh); }
+  }
+  @media (prefers-reduced-motion: reduce) { .review-frame { transition: none; } }
+</style>
+<body>
+  <header class="review-top">
+    <div>
+      <h1>桌面交互样板</h1>
+      <p>DS SuperAgent · 离线模拟</p>
+    </div>
+    <div class="review-preferences" role="group" aria-label="预览条件">
+      <label>窗口 <select id="size"><option value="wide">宽窗</option><option value="narrow">窄窗</option></select></label>
+      <label>主题 <select id="theme"><option value="deepseek">DeepSeek</option><option value="mono">Mono</option><option value="paper">Paper</option><option value="moonlight">Moonlight</option></select></label>
+      <label>外观 <select id="scheme"><option value="light">浅色</option><option value="dark">深色</option></select></label>
+      <label>动效 <select id="motion"><option value="system">跟随系统</option><option value="normal">普通</option><option value="reduce">减少</option></select></label>
+    </div>
+  </header>
+  <main class="review-grid">
+    <div id="stage" class="review-stage">
+      <iframe id="desktop" class="review-frame" title="DS SuperAgent 桌面预览" sandbox="allow-scripts allow-forms"></iframe>
+    </div>
+    <aside class="review-rail" aria-label="验收场景">
+      <label class="review-scenario">验收路径
+        <select id="scenario">
+          <option value="workspace">侧栏目录与输入框</option>
+          <option value="settings">账户、设置与模型</option>
+          <option value="voice">连续语音与提问</option>
+          <option value="activity">角色状态与工作回执</option>
+          <option value="boot">启动交接与重试</option>
+        </select>
+      </label>
+      <ol id="steps"></ol>
+      <div id="event-group" hidden><h2>模拟事件</h2><div class="review-events" id="events"></div></div>
+      <div class="review-state" role="status"><strong id="state-title">正在载入</strong><p id="state-detail"></p></div>
+      <button class="review-reset" id="reset" type="button">重置场景</button>
+    </aside>
+  </main>
+  <p class="review-source">参考 DS-Bot v0.3.8（5e9b7da8）与 DS SuperAgent UI 设计标准。场景使用样例数据。</p>
+  <script>
+    const previewHtml = /* PREVIEW_HTML */ null
+    const get = id => document.getElementById(id)
+    const desktop = get('desktop')
+    const systemMotion = matchMedia('(prefers-reduced-motion: reduce)')
+    const scenarios = {
+      workspace: ['在侧栏用方向键选择 Release notes，再从输入框核对选中项。', '发送一条消息，观察下一条的目录复位。Activity 中的在途工作仍使用原目录。', '重开目录菜单，用 Esc 或点击空白处关闭，检查焦点。'],
+      settings: ['打开左下角 Account，用方向键进入 Models and API keys。', '打开模型菜单。按一次 Esc 回到模型按钮，再按一次回到 Account。', '试 Connectors 快捷入口和 Main 的模型引导。密钥演示使用 sample-key。'],
+      voice: ['在空输入框点右侧波形，再提交一条模拟转录。收到别的回复时仍等待本轮。', '对照收到本轮回复、朗读完成、停止回复这几种状态。', '问题卡出现或隐藏窗口后要手动继续。停止后台工作不会暂停语音。'],
+      activity: ['用模拟事件观察角色磁贴、工作项与 Main 回复之间的状态差别。', '收到问题时输入位由问题卡接管。切到减少动态效果，核对状态仍然可读。'],
+      boot: ['点 Main 就绪，观察鲸鱼进入顶部胶囊，随后可直接输入。', '模拟启动失败后点 Retry。切换到减少动态效果，再走一遍交接。'],
+    }
+    const eventCopy = {
+      transcript: '提交模拟转录', otherReply: '收到别的回复', mainReply: '收到本轮回复', speechEnded: '朗读完成',
+      question: '收到问题', hide: '隐藏窗口', show: '恢复窗口', stopWork: '停止后台工作', deny: '麦克风被拒',
+      sendError: '发送失败', workStart: 'Worker 开始', workDone: 'Worker 完成', workFail: 'Worker 失败',
+      mainReady: 'Main 就绪', bootFail: '启动失败',
+    }
+    const dispatch = data => desktop.contentWindow?.postMessage({ preview: 'desktop', ...data }, '*')
+    function changeAppearance() {
+      const motion = get('motion').value
+      const reduced = motion === 'reduce' || motion === 'system' && systemMotion.matches
+      get('stage').dataset.size = get('size').value
+      get('stage').toggleAttribute('data-reduced', reduced)
+      dispatch({ type: 'appearance', theme: get('theme').value, dark: get('scheme').value === 'dark', reduced })
+    }
+    function startScenario() {
+      const choice = get('scenario').value
+      get('steps').replaceChildren(...scenarios[choice].map(text => Object.assign(document.createElement('li'), { textContent: text })))
+      dispatch({ type: 'scenario', choice })
+    }
+    function showEvents(events) {
+      const panel = get('events')
+      get('event-group').hidden = events.length === 0
+      const active = document.activeElement
+      const current = Array.from(panel.children, button => button.dataset.event)
+      if (current.join(',') !== events.map(event => event.name).join(',')) {
+        panel.replaceChildren(...events.map(({ name }) => {
+          const button = document.createElement('button')
+          button.type = 'button'
+          button.dataset.event = name
+          button.textContent = eventCopy[name]
+          button.addEventListener('click', () => dispatch({ type: 'event', name }))
+          return button
+        }))
+        if (active.dataset.event && !active.isConnected) panel.querySelector('button')?.focus()
+      }
+      events.forEach(({ enabled }, index) => { panel.children[index].disabled = !enabled })
+    }
+    window.addEventListener('message', event => {
+      if (event.source !== desktop.contentWindow || event.data?.preview !== 'desktop') return
+      if (event.data.type === 'ready') { changeAppearance(); startScenario() }
+      if (event.data.type === 'state') {
+        get('state-title').textContent = event.data.title
+        get('state-detail').textContent = event.data.detail
+        showEvents(event.data.events)
+      }
+    })
+    for (const id of ['size', 'theme', 'scheme', 'motion']) get(id).addEventListener('change', changeAppearance)
+    get('scenario').addEventListener('change', startScenario)
+    get('reset').addEventListener('click', startScenario)
+    systemMotion.addEventListener('change', changeAppearance)
+    desktop.srcdoc = previewHtml
+  </script>
+</body>
+</html>

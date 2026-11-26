@@ -96,7 +96,7 @@ import { createElement as h, useId } from 'react'
 export const PRODUCT_LOGO_VIEWBOX = '0 0 1600 945'
 const PRODUCT_LOGO_MARKUP = \`${inner}\`
 
-function markMarkup(id) {
+export function productLogoMarkup(id) {
   return PRODUCT_LOGO_MARKUP.replaceAll('__PRODUCT_LOGO_ID__', id)
 }
 
@@ -111,7 +111,7 @@ export function ProductLogo({ size = 24, label = 'DS SuperAgent' }) {
     viewBox: PRODUCT_LOGO_VIEWBOX,
     focusable: 'false',
     'aria-hidden': true,
-    dangerouslySetInnerHTML: { __html: markMarkup(id) },
+    dangerouslySetInnerHTML: { __html: productLogoMarkup(id) },
   }))
 }
 `

@@ -1,0 +1,31 @@
+sequenceDiagram
+    autonumber
+    actor U as 用户
+    participant M as Main Agent
+    participant C as Domain Core
+    participant R as Router Agent
+    participant W as Worker Agent
+    participant O as Outbox / Channels
+
+    U->>M: 自然语言、附件、执行目标
+    M->>C: delegate_work(WorkBrief)
+    C-->>M: 持久回执 routing / accepted
+    C->>R: 受权 WorkBrief + 原始证据
+    R->>C: establish_work_plan(1–4 items)
+    C->>C: Ticket + Mandate + Assignment + Subscription
+    C->>W: Assignment + 目标 / 约束 / 验收 / 有界上下文
+    W->>W: 工具执行 + 验证证据
+
+    alt 需要人决定
+        W->>C: ask_human(Attention)
+        C-->>M: 工作卡与结构化问题
+        U->>M: 明确回答
+        M->>C: answerMainAttention
+        C->>W: 稳定 WorkInput / 同一工作恢复
+    else 形成结果
+        W->>C: report_ready(evidence, artifacts)
+        C->>M: WorkUpdate / WorkOutcome
+        M->>C: 当前结果对应的 completed Main reply
+        C->>O: purpose-bound result delivery
+        O-->>U: Main / GitHub / Feishu / IM
+    end

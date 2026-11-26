@@ -22,7 +22,7 @@ export function ShellPalette({ actions, connectLabel, settingsAvailable, onClose
     { key: 'activity', title: t('Activity'), icon: h(GaugeIcon), run: actions.openActivity },
     connectLabel ? { key: 'connection', title: connectLabel, icon: h(GlobeIcon), run: actions.openConnection } : null,
     settingsAvailable !== false && actions.openSettings
-      ? { key: 'settings', title: t('Settings'), icon: h(GearIcon), run: () => actions.openSettings('general') } : null,
+      ? { key: 'settings', title: t('Settings'), icon: h(GearIcon), run: () => actions.openSettings('overview') } : null,
   ].filter(row => row?.run && row.title.toLowerCase().includes(wanted))
   const active = Math.min(cursor, Math.max(rows.length - 1, 0))
   const shown = rows.map(row => row.key).join('\n')
