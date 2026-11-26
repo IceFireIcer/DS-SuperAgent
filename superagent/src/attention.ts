@@ -29,6 +29,7 @@ export interface Attention {
   answerCommandId?: string
   answerSourceEventId?: string
   requestedPathGrants?: PathGrant[]
+  pathGrantApproval?: string
   approvedPathGrants?: PathGrant[]
   supersededAt?: number
   supersededBy?: string
@@ -55,7 +56,8 @@ export class Attentions {
     input?: WorkInput; pathGrants?: PathGrant[] }) {
     const pathGrants = normalizePathGrants(request.pathGrants)
     return this.create(tx, { ...request, ...(pathGrants ? { pathGrants } : {}),
-      options: pathGrants ? [...request.options, attentionPathApproval] : request.options })
+      options: pathGrants ? [...request.options, attentionPathApproval] : request.options,
+      ...(pathGrants ? { pathGrantApproval: attentionPathApproval } : {}) })
   }
 
   askView(tx: AsyncTx, request: { ticketId: string; assignmentId: string; sessionId: string; title: string; view: ProductViewCard; input?: WorkInput }) {
@@ -63,7 +65,7 @@ export class Attentions {
   }
 
   private async create(tx: AsyncTx, request: { ticketId: string; assignmentId: string; sessionId: string; question: string;
-    options: string[]; input?: WorkInput; view?: ProductViewCard; pathGrants?: PathGrant[] }) {
+    options: string[]; input?: WorkInput; view?: ProductViewCard; pathGrants?: PathGrant[]; pathGrantApproval?: string }) {
     identifier(request.ticketId, 'ticketId'); identifier(request.assignmentId, 'assignmentId'); identifier(request.sessionId, 'sessionId')
     if (!request.question.trim() || Buffer.byteLength(request.question) > 4096) throw new CoreError('INVALID_INPUT', 'A human question needs bounded nonempty text.')
     if (!Array.isArray(request.options) || request.options.length > 10 || request.options.some(option => !option.trim() || Buffer.byteLength(option) > 512)) throw new CoreError('INVALID_ATTENTION', 'Attention options must contain at most ten bounded labels.')
@@ -92,7 +94,8 @@ export class Attentions {
       if (previous?.status === 'waiting' && previous.question.trim() === request.question.trim()
         && previous.options.length === options.length && previous.options.every((option, index) => option === options[index])
         && JSON.stringify(previous.view ?? null) === JSON.stringify(request.view ?? null)
-        && JSON.stringify(previous.requestedPathGrants ?? null) === JSON.stringify(request.pathGrants ?? null)) {
+        && JSON.stringify(previous.requestedPathGrants ?? null) === JSON.stringify(request.pathGrants ?? null)
+        && previous.pathGrantApproval === request.pathGrantApproval) {
         return previous
       }
       if (previous?.status === 'waiting') await tx.replace('attention', previous.id, { ...previous, status: 'superseded', supersededAt: this.now(), supersededBy: id })
@@ -102,6 +105,7 @@ export class Attentions {
       ...(inputEvent || originalEvent ? { questionSourceEventId: inputEvent?.id ?? originalEvent!.id } : {}), status: 'waiting', sequence, createdAt: this.now() }
     if (request.view) attention.view = structuredClone(request.view)
     if (request.pathGrants?.length) attention.requestedPathGrants = structuredClone(request.pathGrants)
+    if (request.pathGrantApproval) attention.pathGrantApproval = request.pathGrantApproval
     await tx.insert('attention', id, attention)
     if (!await tx.replace('attention-head', headKey(request.ticketId), { attentionId: id })) await tx.insert('attention-head', headKey(request.ticketId), { attentionId: id })
     await tx.replace('ticket', ticket.id, { ...ticket, constraint: { kind: 'waiting-human', attentionId: id, reason: request.question } })
@@ -139,7 +143,8 @@ export class Attentions {
     const input = await this.inputs.attachSyntheticInput(tx, { ticketId: request.ticketId, sourceEventId: answerEventId,
       threadId: attention.destination.threadId ?? '__attention__', text: request.text, authorId: request.actorId,
       reason: `Answer to ${attention.id}`, dispatch: true })
-    const approvedPathGrants = request.text.trim() === attentionPathApproval ? attention.requestedPathGrants : undefined
+    const approvedPathGrants = request.text.trim() === (attention.pathGrantApproval ?? attentionPathApproval)
+      ? attention.requestedPathGrants : undefined
     const retainedPathGrants = await this.inputs.applyAttentionPathGrants(tx, { ticketId: request.ticketId,
       directionVersion: input.directionVersion, previousDirectionVersion: input.directionVersion - 1,
       ...(approvedPathGrants ? { grants: approvedPathGrants } : {}) })

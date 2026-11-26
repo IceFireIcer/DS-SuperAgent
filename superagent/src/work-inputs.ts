@@ -408,13 +408,18 @@ export class WorkInputs {
     const current = trigger.pathGrantVersion === request.previousDirectionVersion ? trigger.pathGrants : undefined
     const grants = mergePathGrants(current, request.grants ?? [])
     if (!grants.length) return []
-    trigger.pathGrants = grants
-    trigger.pathGrantVersion = request.directionVersion
+    await this.saveTaskPathGrants(tx, ticket, trigger, grants, request.directionVersion)
+    return grants
+  }
+
+  private async saveTaskPathGrants(tx: AsyncTx, ticket: Work['ticket'], trigger: Work['trigger'], grants: PathGrant[],
+    directionVersion: number) {
+    trigger.pathGrants = structuredClone(grants)
+    trigger.pathGrantVersion = directionVersion
     await tx.replace('trigger', ticket.triggerId, trigger)
     const link = await tx.get<{ workBriefId: string }>('work-ticket', ticket.id)
     const brief = link ? await tx.get<{ pathGrants?: PathGrant[] }>('work-brief', link.workBriefId) : undefined
     if (brief) await tx.replace('work-brief', link!.workBriefId, { ...brief, pathGrants: structuredClone(grants) })
-    return grants
   }
 
   /**
@@ -456,12 +461,8 @@ export class WorkInputs {
     if (!trigger) throw new CoreError('INCOMPLETE_STATE', 'The Main follow-up Ticket trigger is missing.')
     const nextDirectionVersion = directionVersion + 1
     if (request.pathGrants?.length) {
-      trigger.pathGrants = mergePathGrants(trigger.pathGrants, request.pathGrants)
-      trigger.pathGrantVersion = nextDirectionVersion
-      await tx.replace('trigger', ticket.triggerId, trigger)
-      const link = await tx.get<{ workBriefId: string }>('work-ticket', ticket.id)
-      const brief = link ? await tx.get<{ pathGrants?: PathGrant[] }>('work-brief', link.workBriefId) : undefined
-      if (brief) await tx.replace('work-brief', link!.workBriefId, { ...brief, pathGrants: structuredClone(trigger.pathGrants) })
+      await this.saveTaskPathGrants(tx, ticket, trigger, mergePathGrants(trigger.pathGrants, request.pathGrants),
+        nextDirectionVersion)
     }
     const recoveryDecisionId = previousState === 'ended'
       ? await this.recordRecovery(tx, ticket, sourceEventId, id)

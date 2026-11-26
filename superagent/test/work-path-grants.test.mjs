@@ -304,6 +304,7 @@ test('a waiting Worker can obtain and use a path grant from the exact approval a
   const ticketId = work.receipt.ticketId
   let conversation = await engine.conversation(ticketId)
   assert.equal(conversation.attention.options.at(-1), 'Allow this path access')
+  assert.equal(conversation.attention.pathGrantApproval, 'Allow this path access')
   assert.match(conversation.attention.question, /write:/u)
   assert.match(conversation.attention.question, /note\.txt/u)
 
