@@ -1,7 +1,7 @@
 {
   "name": "ds-superagent-desktop",
   "productName": "DS SuperAgent",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "engines": {
     "node": ">=24.9.0"
   },
