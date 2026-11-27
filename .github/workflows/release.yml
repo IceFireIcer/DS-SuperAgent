@@ -1,9 +1,9 @@
 name: Release
 
-# Rolling release pipeline. Every run starts from main, optionally merges dev, chooses the next
-# semantic version from the changes since the last v* tag, builds every desktop package, publishes
-# ds-superagent to npm, and only then publishes the draft GitHub release. A daily schedule runs at
-# 04:00 UTC (12:00 UTC+8). Manual runs can force a patch/minor/major bump or stay on dev.
+# Rolling releases start from main and optionally merge dev. The daily run at 04:00 UTC (12:00 UTC+8)
+# first checks main for commits since the last published scheduled release. The pipeline selects a
+# version, builds the desktop packages, publishes ds-superagent to npm, and publishes the GitHub
+# release. Manual runs can force a patch/minor/major bump or skip merging dev.
 #
 # npm Trusted Publishing: npm trusts this workflow through GitHub's OIDC token, so the repository
 # keeps no npm token and every version gets a provenance statement. Configure it once on npmjs.com:
@@ -45,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
-      release: ${{ steps.decision.outputs.release }}
+      release: ${{ steps.decision.outputs.release || 'false' }}
       version: ${{ steps.decision.outputs.version }}
       tag: ${{ steps.decision.outputs.tag }}
       commit: ${{ steps.publish.outputs.commit }}
@@ -56,14 +56,42 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
           token: ${{ github.token }}
+      - name: Check for new main commits since the last scheduled release
+        id: scheduled-release
+        if: github.event_name == 'schedule'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          last_tag="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" |
+            jq -r '
+              flatten
+              | map(select(.draft == false and .prerelease == false
+                  and (.body // "" | split("\n") | index("<!-- release-trigger: schedule -->") != null)))
+              | max_by(.published_at)
+              | .tag_name // empty
+            ')"
+          # v1.0.2 was the last scheduled release before release notes recorded the trigger.
+          if [ -z "$last_tag" ] && git show-ref --verify --quiet refs/tags/v1.0.2; then
+            last_tag=v1.0.2
+          fi
+          if [ -z "$last_tag" ]; then exit 0; fi
+
+          new_commits="$(git rev-list --count "refs/tags/$last_tag..HEAD")"
+          if [ "$new_commits" = 0 ]; then
+            echo "No new commits on main since $last_tag. Skipping the scheduled release."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/setup-node@v4
+        if: steps.scheduled-release.outputs.skip != 'true'
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: superagent/package-lock.json
 
       - name: Merge dev into main for the rolling release
-        if: github.event_name == 'schedule' || inputs.sync_dev
+        if: steps.scheduled-release.outputs.skip != 'true' && (github.event_name == 'schedule' || inputs.sync_dev)
         run: |
           git config user.name 'IceFireIcer'
           git config user.email '40514884+IceFireIcer@users.noreply.github.com'
@@ -72,6 +100,7 @@ jobs:
 
       - name: Decide the next version
         id: decision
+        if: steps.scheduled-release.outputs.skip != 'true'
         env:
           BUMP: ${{ inputs.bump || 'auto' }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
@@ -129,6 +158,10 @@ jobs:
               git log --format='- %s (%h)' "$last_tag..$commit"
             else
               git log --format='- %s (%h)' --max-count=50 "$commit"
+            fi
+            if [ "$GITHUB_EVENT_NAME" = schedule ]; then
+              echo
+              echo '<!-- release-trigger: schedule -->'
             fi
           } > release-notes.md
           gh release create "$tag" --draft --title "$tag" --notes-file release-notes.md --target "$commit"
