@@ -973,7 +973,6 @@ export default {
   "Work receipt": "接單回執",
   "Work result unknown": "結果待確認",
   "Work stop requested.": "已請求停止工作。",
-  "Worker": "執行角色",
   "Worker activity is unavailable.": "Worker 活動暫時不可用。",
   "Worker assignments included": "已纳入的 Worker 執行安排",
   "Worker ended without a verified report": "Worker 已結束，但沒有核驗報告",

@@ -65,7 +65,7 @@ test('product shell offers Main and Activity in the sidebar, header and command 
     const actions = {
       openMain: () => update({ activity: false }),
       openActivity: () => update({ activity: true }),
-      openSettings: page => { opened.push(page); if (page === 'general') throw new Error('Settings unavailable') },
+      openSettings: page => { opened.push(page); if (page === 'overview') throw new Error('Settings unavailable') },
     }
     installProductShell(ctx, { actions, useShell: () => useSyncExternalStore(subscribe, snapshot), nativeHeader: true })
     assert.deepEqual([...slots.keys()], ['sidebar.workspaces', 'sidebar.brand.mark', 'sidebar.brand.name', 'conversation.session.header', 'shell.overlay'])

@@ -2,6 +2,7 @@ import { createElement as h, useEffect, useRef, useState } from 'react'
 import { Card, Row } from './product-card.js'
 import { InlineNotice } from './product-settings-components.js'
 import { t } from './i18n.js'
+import { ROLE_IDS, roleName } from './roles.js'
 
 const credentialImportStatusText = status => t(({ pending: 'Credential import pending', importing: 'Credential import in progress',
   unknown: 'Credential import result unknown', applied: 'Credential import completed', conflict: 'Credential import conflict',
@@ -425,7 +426,7 @@ export function ProductCredentialSettings({ binding, call, credentialImportBridg
               h('label', null, t('New authorization role'), h('select', { value: target.role ?? '', disabled: credentialImportBusy,
                 onChange: event => updateCredentialImportTarget(entry.sourceRef, { role: event.target.value }) },
                 h('option', { value: '' }, t('Choose target role')),
-                ...['main', 'router', 'worker'].map(value => h('option', { key: value, value }, t(value === 'main' ? 'Main' : value === 'router' ? 'Router' : 'Worker'))))),
+                ...ROLE_IDS.map(value => h('option', { key: value, value }, roleName(value))))),
               h('label', null, t('New authorization purpose'), h('select', { value: target.purpose ?? '', disabled: credentialImportBusy,
                 onChange: event => updateCredentialImportTarget(entry.sourceRef, { purpose: event.target.value }) },
                 h('option', { value: '' }, t('Choose purpose')),
@@ -436,7 +437,7 @@ export function ProductCredentialSettings({ binding, call, credentialImportBridg
                 disabled: credentialImportBusy, onChange: event => updateCredentialImportTarget(entry.sourceRef, { environmentId: event.target.value }) })),
               h('label', null, t('Target source Instance ID'), h('input', { value: target.sourceInstanceId ?? '', maxLength: 512,
                 disabled: credentialImportBusy, onChange: event => updateCredentialImportTarget(entry.sourceRef, { sourceInstanceId: event.target.value }) })),
-              h('span', { className: 'bt-product-resource-note' }, `${t('New authorization')}: ${[target.role, target.purpose,
+              h('span', { className: 'bt-product-resource-note' }, `${t('New authorization')}: ${[target.role ? roleName(target.role) : '', target.purpose,
                 target.workItemId, target.environmentId, target.sourceInstanceId].filter(Boolean).join(' · ') || t('Not selected')}`),
               h('button', { className: 'bt-soft', type: 'button', disabled: credentialImportBusy,
                 onClick: () => void commitCredentialImport(entry) }, t(status.status === 'unknown' ? 'Retry import' : 'Create resource and grant')),
@@ -530,7 +531,7 @@ export function ProductCredentialSettings({ binding, call, credentialImportBridg
       requests.filter(request => request.resourceId === selected.id).sort((left, right) => (right.createdAt ?? 0) - (left.createdAt ?? 0))
         .map(request => h('div', { className: 'bt-product-resource-row', key: request.id },
           h('span', null, `${t(request.status === 'pending' ? 'Pending authorization request'
-            : request.status === 'cancelled' ? 'Cancelled authorization request' : 'Granted authorization request')} · ${request.scope.role} · ${request.purpose}`,
+            : request.status === 'cancelled' ? 'Cancelled authorization request' : 'Granted authorization request')} · ${roleName(request.scope.role)} · ${request.purpose}`,
             request.scope.workItemId ? ` · ${t('Work item ID')}: ${request.scope.workItemId}` : '',
             request.scope.environmentId ? ` · ${t('Environment ID')}: ${request.scope.environmentId}` : '',
             request.scope.sourceInstanceId ? ` · ${t('Source Instance ID')}: ${request.scope.sourceInstanceId}` : ''),
@@ -545,7 +546,7 @@ export function ProductCredentialSettings({ binding, call, credentialImportBridg
       requestCursor ? h('button', { className: 'bt-soft', type: 'button', disabled: Boolean(busy) || Boolean(requestError),
         onClick: () => { void loadMoreRequests() } }, t('Load more requests')) : null,
       selected.grants.map(grant => h('div', { className: 'bt-product-resource-row', key: grant.id },
-        h('span', null, [grant.scope.role, grant.purposes.join(', '),
+        h('span', null, [roleName(grant.scope.role), grant.purposes.join(', '),
           grant.scope.workItemId ? `${t('Work item ID')}: ${grant.scope.workItemId}` : null,
           grant.scope.environmentId ? `${t('Environment ID')}: ${grant.scope.environmentId}` : null,
           grant.scope.sourceInstanceId ? `${t('Source Instance ID')}: ${grant.scope.sourceInstanceId}` : null]

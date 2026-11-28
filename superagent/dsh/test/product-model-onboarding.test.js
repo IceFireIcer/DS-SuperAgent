@@ -270,9 +270,9 @@ test('custom model setup prefers the available native editor and rechecks Main o
   await click(findButton('Open settings to set up a custom model'))
   await click(findButton('Apply native model fixture'))
   const nativeDialog = document.querySelector('[role=dialog]')
-  const team = [...nativeDialog.querySelectorAll('.bt-settings-item')]
-    .find(button => button.querySelector('.bt-settings-label')?.textContent === 'Team')
-  await click(team)
+  const roles = [...nativeDialog.querySelectorAll('.bt-settings-item')]
+    .find(button => button.querySelector('.bt-settings-label')?.textContent === 'Roles')
+  await click(roles)
   await click(findButton('Roles', nativeDialog.querySelector('.bt-settings-anchors')))
   const customModel = () => nativeDialog.querySelector('select[aria-label="Main model"] option[value="custom/chat"]')
   assert.ok(customModel(), 'the latest native catalog is selectable')

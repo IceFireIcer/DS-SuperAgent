@@ -7,6 +7,7 @@ import { SPRING_POP } from './motion.js'
 import { createSource } from './sources.js'
 import { openCapture, speechCatalog, transcribeWave, turnDetector } from './speech.js'
 import { t } from './i18n.js'
+import { roleName } from './roles.js'
 
 const closed = { phase: 'off', caption: '', note: '', level: 0 }
 const captureNotes = { blocked: 'Microphone access is blocked', unavailable: 'Voice chat is not available in this browser',
@@ -191,7 +192,7 @@ export function VoiceMode({ state, error, onPause, onResume, onClose, busy, onSt
   const toggle = useRef(null)
   useEffect(() => { toggle.current?.focus() }, [])
   const paused = state.phase === 'paused'
-  return h('section', { className: 'bt-main-composer bt-main-voice', 'aria-label': t('Voice chat with {name}', { name: 'Main' }),
+  return h('section', { className: 'bt-main-composer bt-main-voice', 'aria-label': t('Voice chat with {name}', { name: roleName('main') }),
     onKeyDown: event => {
       if (event.key === 'Escape' && !event.defaultPrevented) { event.stopPropagation(); onClose() }
     } },

@@ -4,6 +4,7 @@ import { Segmented } from './motion.js'
 import { SwitchRow } from './product-card.js'
 import { EmptyState, FieldRow, InlineNotice, SectionCard, StatusChip } from './product-settings-components.js'
 import { t } from './i18n.js'
+import { roleName } from './roles.js'
 import { timingText } from './schedule-timing.js'
 
 const pad = value => String(value).padStart(2, '0')
@@ -160,7 +161,7 @@ export function ProductScheduleSettings({ binding, works = [], call, onViewWork,
     adding ? h('form', { className: 'bt-set-card bt-task-form', onSubmit: submit },
       h(FieldRow, { label: t('Send to'), control: h('select', { className: 'bt-select bt-task-bot', value: targetId,
         'aria-label': t('Send to'), onChange: event => setTargetId(event.target.value) },
-      h('option', { value: 'main' }, 'Main'), available.map(work => h('option', { key: work.brief.workItemId, value: work.brief.workItemId }, work.brief.goal))) }),
+      h('option', { value: 'main' }, roleName('main')), available.map(work => h('option', { key: work.brief.workItemId, value: work.brief.workItemId }, work.brief.goal))) }),
       h(FieldRow, { label: t('Name'), control: h('input', { className: 'bt-bs-input', value: title, maxLength: 120,
         required: true, onChange: event => setTitle(event.target.value) }) }),
       h(FieldRow, { label: t('What to do'), layout: 'stack', control: h('textarea', { className: 'bt-bs-input bt-bs-area', value: text,
@@ -201,7 +202,7 @@ export function ProductScheduleSettings({ binding, works = [], call, onViewWork,
           return h('div', { key: rule.ruleId, className: 'bt-set-row bt-task bt-product-schedule-row' },
             h(ClockIcon), h('span', { className: 'bt-set-copy' },
               h('strong', { className: 'bt-task-title' }, rule.title),
-              h('span', { className: 'bt-set-hint' }, `${whenText(rule)} · ${rule.timezone} · ${rule.target.kind === 'main' ? t('Main') : work?.brief.goal ?? rule.target.ticketId}`),
+              h('span', { className: 'bt-set-hint' }, `${whenText(rule)} · ${rule.timezone} · ${rule.target.kind === 'main' ? roleName('main') : work?.brief.goal ?? rule.target.ticketId}`),
               h('span', { className: 'bt-task-prompt' }, rule.text),
               last ? h('span', { className: 'bt-task-prompt', role: 'status' }, occurrenceText(last),
                 last.executionStatus ? ` · ${executionText(last.executionStatus)}` : null,

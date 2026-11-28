@@ -2,6 +2,7 @@ import { createElement as h, useEffect, useRef, useState } from 'react'
 import { t } from './i18n.js'
 import { BotMark } from './mark.js'
 import { MAIN_LOOK } from './characters.js'
+import { roleName } from './roles.js'
 import { workStatusCopy } from './work-feedback.js'
 
 const groups = [
@@ -49,8 +50,8 @@ function StopWork({ item, execute }) {
 
 function MemberState({ role, identity, goal, label, mark, children }) {
   return h('div', { className: 'bt-work-member', 'data-active': mark !== 'idle' },
-    h(BotMark, { bot: { id: identity }, look: role === 'Main' ? MAIN_LOOK : undefined, size: 20, state: mark }),
-    h('span', null, t(role)), h('span', { 'data-role-status': '', title: goal }, label), children)
+    h(BotMark, { bot: { id: identity }, look: role === 'main' ? MAIN_LOOK : undefined, size: 20, state: mark }),
+    h('span', { 'data-role-name': '' }, roleName(role)), h('span', { 'data-role-status': '', title: goal }, label), children)
 }
 
 export function WorkMemberDock({ workers, routing, activeTurn, mainHealth, execute }) {
@@ -60,9 +61,9 @@ export function WorkMemberDock({ workers, routing, activeTurn, mainHealth, execu
       : mainHealth?.state === 'degraded' ? ['Main degraded', 'alert']
         : mainHealth?.queuedInputs ? ['Queued', 'waiting'] : ['Ready', 'idle']
   return h('div', { className: 'bt-work-members', role: 'group', 'aria-label': t('Work members') },
-    h(MemberState, { role: 'Main', identity: 'main', mark: mainMark, label: t(mainLabel) }),
-    h(MemberState, { role: 'Router', identity: 'router', mark: routing ? 'orbit' : 'idle', label: t(routing ? 'Routing work' : 'Ready') }),
-    workers.map(({ sessionId, item, state }) => h(MemberState, { key: sessionId, role: 'Worker', identity: sessionId, goal: item?.goal,
+    h(MemberState, { role: 'main', identity: 'main', mark: mainMark, label: t(mainLabel) }),
+    h(MemberState, { role: 'router', identity: 'router', mark: routing ? 'orbit' : 'idle', label: t(routing ? 'Routing work' : 'Ready') }),
+    workers.map(({ sessionId, item, state }) => h(MemberState, { key: sessionId, role: 'worker', identity: sessionId, goal: item?.goal,
       mark: state === 'waiting' ? 'alert' : state === 'stopping' ? 'waiting' : 'working', label: workStatusCopy(state) },
       execute && item?.stop ? h(StopWork, { item, execute }) : null)))
 }

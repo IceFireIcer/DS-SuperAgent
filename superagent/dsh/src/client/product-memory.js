@@ -5,16 +5,17 @@ import { EmptyState, InlineNotice, StatusChip } from './product-settings-compone
 import { CloseIcon } from './icons.js'
 import { t } from './i18n.js'
 import { useLinger } from './motion.js'
+import { roleName } from './roles.js'
 
-const scopeLabel = scope => scope.kind === 'main' ? t('Main')
+const scopeLabel = scope => scope.kind === 'main' ? roleName('main')
   : scope.kind === 'work' ? `${t('Work private')} · ${scope.workItemId}`
-    : `${t('Explicitly shared')} · ${[scope.main ? t('Main') : '', ...scope.workItemIds].filter(Boolean).join(', ') || t('No readers')}`
+    : `${t('Explicitly shared')} · ${[scope.main ? roleName('main') : '', ...scope.workItemIds].filter(Boolean).join(', ') || t('No readers')}`
 
 const originalScopeLabel = scope => {
-  const kind = scope.kind === 'main' ? t('Main')
+  const kind = scope.kind === 'main' ? roleName('main')
     : scope.kind === 'work' ? t('Work private')
       : scope.kind === 'shared' ? t('Explicitly shared') : t('Unknown original scope')
-  return [kind, scope.role, scope.work, scope.label, ...(scope.sharedWith ?? [])].filter(Boolean).join(' · ')
+  return [kind, scope.role ? roleName(scope.role) : '', scope.work, scope.label, ...(scope.sharedWith ?? [])].filter(Boolean).join(' · ')
 }
 
 const importStatusLabel = status => t(status === 'ready' ? 'Ready to import'
@@ -67,7 +68,7 @@ function ProductMemoryProposalCard({ proposal, onAnswer }) {
     catch (failure) { setError(failure?.message ?? String(failure)) }
     finally { setBusy(false) }
   }
-  const scope = proposal.scope.kind === 'main' ? 'Main' : `${t('Work private')} · ${proposal.scope.workItemId}`
+  const scope = proposal.scope.kind === 'main' ? roleName('main') : `${t('Work private')} · ${proposal.scope.workItemId}`
   return h('section', { className: 'bt-product-memory-proposal', 'aria-labelledby': titleId, 'aria-busy': busy },
     h('h4', { id: titleId }, t('Learning proposal')),
     h('p', null, `${scope} · ${proposal.reason}`),
@@ -129,7 +130,7 @@ function MemorySideQuery({ instanceId, workItems, call, active }) {
   return h(Card, { title: t('Side query') },
     h('form', { className: 'bt-product-memory-form', onSubmit: search },
       h('select', { value: reader, 'aria-label': t('Reader'), onChange: event => { setReader(event.target.value); clear() } },
-        h('option', { value: 'main' }, t('Main')), h('option', { value: 'work' }, t('Work'))),
+        h('option', { value: 'main' }, roleName('main')), h('option', { value: 'work' }, t('Work'))),
       reader === 'work' ? h('select', { value: workItemId, 'aria-label': t('Work'),
         onChange: event => { setWorkItemId(event.target.value); clear() } },
         h('option', { value: '' }, t('Choose work')),
@@ -423,7 +424,7 @@ function MemorySettings({ binding, works = [], call }) {
         full ? h('pre', null, full.text) : null,
         full?.pagination.truncated ? h('button', { type: 'button', className: 'bt-soft', onClick: () => void moreText() }, t('Load more detail')) : null,
         h('div', { className: 'bt-product-memory-form' },
-          h('label', null, h('input', { type: 'checkbox', checked: mainReader, onChange: event => setMainReader(event.target.checked) }), t('Main')),
+          h('label', null, h('input', { type: 'checkbox', checked: mainReader, onChange: event => setMainReader(event.target.checked) }), roleName('main')),
           workItems.map(work => h('label', { key: work.id }, h('input', { type: 'checkbox', checked: recipients.includes(work.id),
             onChange: () => toggleRecipient(work.id) }), work.goal)),
           h('button', { type: 'button', className: 'bt-soft', disabled: busy, onClick: share }, t('Update sharing')))) : null),
@@ -472,7 +473,7 @@ function MemorySettings({ binding, works = [], call }) {
                   h('option', { value: '' }, t('Choose target')),
                   (importBatch.targetRoles ?? ['main', 'worker', 'shared']).map(role => h('option', {
                     key: role, value: role,
-                  }, t(role === 'main' ? 'Main' : role === 'worker' ? 'Worker' : 'Explicitly shared'))))),
+                  }, role === 'main' || role === 'worker' ? roleName(role) : t('Explicitly shared'))))),
             choice.kind === 'worker' ? h('label', null, `${t('Target work')} `,
                 h('select', { value: choice.workId, 'aria-label': `${t('Target work')} ${item.sourceId}`,
                   onChange: event => updateImportChoice(item.sourceId, { workId: event.target.value }) },
@@ -482,7 +483,7 @@ function MemorySettings({ binding, works = [], call }) {
                 h('legend', null, t('Choose shared recipients')),
                 h('label', null, h('input', { type: 'checkbox', checked: choice.main,
                   'aria-label': `${t('Share with Main')} ${item.sourceId}`,
-                  onChange: event => updateImportChoice(item.sourceId, { main: event.target.checked }) }), t('Main')),
+                  onChange: event => updateImportChoice(item.sourceId, { main: event.target.checked }) }), roleName('main')),
                 workItems.map(work => h('label', { key: work.id }, h('input', { type: 'checkbox',
                   checked: choice.workIds.includes(work.id),
                   'aria-label': `${t('Share with work')} ${work.id} ${item.sourceId}`,
@@ -502,13 +503,13 @@ function MemorySettings({ binding, works = [], call }) {
     h(Card, { title: t('Save memory') },
       h('form', { className: 'bt-product-memory-form', onSubmit: save },
         h(Row, { label: t('Owner') }, h('select', { value: kind, onChange: event => setKind(event.target.value) },
-          h('option', { value: 'main' }, t('Main')), h('option', { value: 'work' }, t('Work private')),
+          h('option', { value: 'main' }, roleName('main')), h('option', { value: 'work' }, t('Work private')),
           h('option', { value: 'shared' }, t('Explicitly shared')))),
         kind === 'work' ? h('select', { value: workId, 'aria-label': t('Work'), onChange: event => setWorkId(event.target.value) },
           h('option', { value: '' }, t('Choose work')),
           workItems.map(work => h('option', { key: work.id, value: work.id }, work.goal))) : null,
         kind === 'shared' ? h('div', { className: 'bt-product-memory-form' },
-          h('label', null, h('input', { type: 'checkbox', checked: mainReader, onChange: event => setMainReader(event.target.checked) }), t('Main')),
+          h('label', null, h('input', { type: 'checkbox', checked: mainReader, onChange: event => setMainReader(event.target.checked) }), roleName('main')),
           workItems.map(work => h('label', { key: work.id }, h('input', { type: 'checkbox', checked: recipients.includes(work.id),
             onChange: () => toggleRecipient(work.id) }), work.goal))) : null,
         h('textarea', { value: text, maxLength: 4096, 'aria-label': t('Memory text'), placeholder: t('One lasting fact'),

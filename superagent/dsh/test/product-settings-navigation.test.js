@@ -56,7 +56,7 @@ test('the model chooser opens Roles for an instance with a usable catalog', asyn
   const chooser = findButton('Choose a model')
   await click(chooser)
   const selected = document.querySelector('[role=dialog] [aria-current=page]')
-  assert.equal(selected.querySelector('.bt-settings-label').textContent, 'Team')
+  assert.equal(selected.querySelector('.bt-settings-label').textContent, 'Roles')
   assert.equal(document.querySelector('.bt-anchor[aria-current=location]').textContent, 'Roles')
   assert.equal(document.activeElement.getAttribute('aria-label'), 'Main model')
   await key(document.activeElement, 'Escape')
@@ -72,9 +72,9 @@ test('reopening settings during its exit starts a new visit and restores the new
   const account = findButton('Account')
   await click(settings)
   const dialog = () => document.querySelector('[role=dialog]')
-  const team = [...dialog().querySelectorAll('.bt-settings-item')]
-    .find(button => button.querySelector('.bt-settings-label')?.textContent === 'Team')
-  await click(team)
+  const roles = [...dialog().querySelectorAll('.bt-settings-item')]
+    .find(button => button.querySelector('.bt-settings-label')?.textContent === 'Roles')
+  await click(roles)
   await key(dialog(), 'Escape')
   assert.ok(dialog()?.closest('[data-leaving]'), 'the exit animation is still active')
   await click(account)

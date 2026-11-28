@@ -63,7 +63,7 @@ test('opens on Overview and keeps a domain and all of its parts together', async
   const dialog = document.querySelector('.bt-superagent-settings')
   assert.equal(dialog.querySelector('h2').textContent, 'Overview')
   assert.deepEqual([...dialog.querySelectorAll('.bt-settings-item .bt-settings-label')].map(node => node.textContent),
-    ['Overview', 'General', 'Look and feel', 'Models', 'Team', 'Work', 'Connect', 'Tools', 'Usage', 'About DS SuperAgent'])
+    ['Overview', 'General', 'Look and feel', 'Models', 'Roles', 'Work', 'Connect', 'Tools', 'Usage', 'About DS SuperAgent'])
   assert.equal(dialog.querySelector('[aria-current=page] .bt-settings-label').textContent, 'Overview')
   assert.ok(dialog.querySelector('.bt-ov-page'))
 
@@ -81,8 +81,8 @@ test('opens on Overview and keeps a domain and all of its parts together', async
 test('deep links select their group and part', async () => withShell(async ({ document, render }) => {
   await render({ initialPage: 'roles', sections: readySections() })
   const dialog = document.querySelector('.bt-superagent-settings')
-  assert.equal(dialog.querySelector('h2').textContent, 'Team')
-  assert.equal(dialog.querySelector('[aria-current=page] .bt-settings-label').textContent, 'Team')
+  assert.equal(dialog.querySelector('h2').textContent, 'Roles')
+  assert.equal(dialog.querySelector('[aria-current=page] .bt-settings-label').textContent, 'Roles')
   assert.equal(dialog.querySelector('.bt-anchor[aria-current=location]').textContent, 'Roles')
   assert.match(dialog.querySelector('[data-part=roles]').textContent, /Section roles/u)
   assert.match(dialog.querySelector('[data-part=memory]').textContent, /Section memory/u)
@@ -139,14 +139,14 @@ test('compact settings use the chooser and keep focus on it after a group change
   assert.equal(closes, 1)
 }))
 
-test('leaving Team preserves or discards an edited role draft', async () => withShell(async ({ document, clickLabel, clickNav, render }) => {
+test('leaving Roles preserves or discards an edited role draft', async () => withShell(async ({ document, clickLabel, clickNav, render }) => {
   let discarded = 0
   await render({ initialPage: 'roles', sections: readySections(),
     roleDraft: { dirty: true, saving: () => false, discard: () => { discarded++ } } })
   await clickNav('General')
   assert.ok(document.querySelector('[role=alertdialog]'))
   await clickLabel('Keep editing')
-  assert.equal(document.querySelector('.bt-superagent-settings h2').textContent, 'Team')
+  assert.equal(document.querySelector('.bt-superagent-settings h2').textContent, 'Roles')
   assert.equal(discarded, 0)
   await clickNav('General')
   await clickLabel('Discard changes')

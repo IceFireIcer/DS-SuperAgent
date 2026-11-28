@@ -6,6 +6,7 @@ import {
 } from './icons.js'
 import { t } from './i18n.js'
 import { ProductLogo } from './product-logo.js'
+import { ROLE_IDS, roleName } from './roles.js'
 import { allThemes } from './themes.js'
 
 function RoleCard({ role, onOpen }) {
@@ -13,7 +14,7 @@ function RoleCard({ role, onOpen }) {
   return h('button', { type: 'button', className: 'bt-ov-bot', onClick: onOpen },
     h('span', { className: 'bt-ov-role-face' },
       role.id === 'main' ? h(ProductLogo, { size: 38 }) : h(Icon)),
-    h('span', { className: 'bt-ov-bot-name' }, t(role.label)),
+    h('span', { className: 'bt-ov-bot-name' }, roleName(role.id)),
     h('span', { className: 'bt-ov-bot-model' }, role.model || t('No model selected')))
 }
 
@@ -31,11 +32,7 @@ export function SettingsOverview({ overview = {}, onNavigate }) {
   const themes = allThemes()
   const theme = themes[appearance.theme] ?? themes.deepseek
   const roles = overview.roles ?? []
-  const shownRoles = roles.length ? roles : [
-    { id: 'main', label: 'Main' },
-    { id: 'router', label: 'Router' },
-    { id: 'worker', label: 'Worker' },
-  ]
+  const shownRoles = roles.length ? roles : ROLE_IDS.map(id => ({ id }))
   const models = [...new Set(roles.map(role => role.model).filter(Boolean))]
   const attention = overview.needsModel ? h('section', {
     className: 'bt-ov-attention', 'aria-label': t('Needs your attention'),
@@ -45,12 +42,12 @@ export function SettingsOverview({ overview = {}, onNavigate }) {
       h('span', { className: 'bt-ov-alert-title' }, t('Add a model provider')),
       h('span', { className: 'bt-ov-alert-meta' }, t('Set up a provider and choose the models used by Main, Router and Worker.'))),
     h('button', { type: 'button', className: 'bt-send', onClick: () => onNavigate('models') }, t('Set up')))) : null
-  const team = h('section', { className: 'bt-ov-section' },
+  const rolesSection = h('section', { className: 'bt-ov-section' },
     h('div', { className: 'bt-ov-head' },
-      h('h3', null, t('Team')),
+      h('h3', null, t('Roles')),
       h('button', { type: 'button', className: 'bt-ov-link', onClick: () => onNavigate('roles') },
         h('span', null, t('Main, Router and Worker')))),
-    h('div', { className: 'bt-ov-team' },
+    h('div', { className: 'bt-ov-roles' },
       shownRoles.map(role => h(RoleCard, { key: role.id, role, onOpen: () => onNavigate('roles') })),
       h('button', { type: 'button', className: 'bt-ov-bot bt-ov-new', onClick: () => onNavigate('models') },
         h(PlusIcon), h('span', { className: 'bt-ov-bot-name' }, t('Configure models')))))
@@ -68,5 +65,5 @@ export function SettingsOverview({ overview = {}, onNavigate }) {
       h('span', null, t('Calendar and automation'))),
     h(Tile, { icon: SlidersIcon, title: t('Look and feel'), onOpen: () => onNavigate('appearance'),
       value: t(theme.label) }, h('span', null, t('Theme, layout and motion'))))
-  return h('div', { className: 'bt-settings-page bt-ov-page', 'data-page': 'overview' }, attention, team, tiles)
+  return h('div', { className: 'bt-settings-page bt-ov-page', 'data-page': 'overview' }, attention, rolesSection, tiles)
 }

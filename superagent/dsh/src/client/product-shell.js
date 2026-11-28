@@ -6,6 +6,7 @@ import { MAIN_LOOK } from './characters.js'
 import { ProductBrandMark } from './product-brand.js'
 import { GaugeIcon, GlobeIcon, SearchIcon } from './icons.js'
 import { t } from './i18n.js'
+import { roleName } from './roles.js'
 import { createSource } from './sources.js'
 import { ShellPalette } from './shell-palette.js'
 import { ShellNotificationWatcher, ShellToast } from './shell-notifications.js'
@@ -21,7 +22,7 @@ const GoArrow = () => h('svg', { width: 14, height: 14, viewBox: '-12 -12 24 24'
 
 export function ProductShellHeader({ activity = false, markState, onMain, onActivity, children }) {
   const action = activity ? onMain : onActivity
-  const label = activity ? t('Back to chat') : t('Main')
+  const label = activity ? t('Back to chat') : roleName('main')
   const contents = h(Fragment, null,
     h(MainMark, { size: 24, state: markState }),
     h('span', { className: 'bt-pill-name' }, label),
@@ -35,7 +36,7 @@ export function ProductShellHeader({ activity = false, markState, onMain, onActi
 
 function ShellSidebar({ wide = true, useShell, actions, openPalette, WorkDirectory }) {
   const { activity, markState, preview, pending, unread, connectLabel, settingsAvailable, modalOpen, signIn, classicAvailable } = useShell()
-  const mainLabel = [t('Main'), pending ? t('Waiting for your answer') : unread ? t('Unread activity') : ''].filter(Boolean).join(', ')
+  const mainLabel = [roleName('main'), pending ? t('Waiting for your answer') : unread ? t('Unread activity') : ''].filter(Boolean).join(', ')
   const row = (label, icon, onClick, selected) => h('button', {
     type: 'button', className: 'bt-row', 'aria-current': selected ? 'page' : undefined,
     'aria-label': label, title: wide ? undefined : label, onClick,
@@ -50,8 +51,8 @@ function ShellSidebar({ wide = true, useShell, actions, openPalette, WorkDirecto
     h('div', { className: 'bt-list' },
       wide ? h('div', { className: 'bt-tile-wrap' }, h('button', {
         type: 'button', className: 'bt-tile', 'aria-current': activity ? undefined : 'page',
-        'aria-label': mainLabel, title: preview || t('Main'), onClick: actions.openMain,
-      }, h(MainMark, { size: 60, state: markState }), h('span', { className: 'bt-tile-name' }, t('Main')),
+        'aria-label': mainLabel, title: preview || roleName('main'), onClick: actions.openMain,
+      }, h(MainMark, { size: 60, state: markState }), h('span', { className: 'bt-tile-name' }, roleName('main')),
       (pending || unread) && activity ? h('span', { className: 'bt-dot', 'aria-hidden': true }) : null))
         : row(mainLabel, h(MainMark, { size: 36, state: markState }), actions.openMain, !activity),
       actions.openActivity ? row(t('Activity'), h(GaugeIcon), actions.openActivity, activity) : null,

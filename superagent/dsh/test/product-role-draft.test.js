@@ -17,7 +17,7 @@ test('leaving a changed Roles form asks before losing the draft or its destinati
     await click(button)
   }
   const openRoles = async () => {
-    await openGroup('Team')
+    await openGroup('Roles')
     await click(findButton('Roles', dialog().querySelector('.bt-settings-anchors')))
   }
   await openRoles()
